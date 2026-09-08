@@ -1,0 +1,235 @@
+{
+	"eraIndex": 3,
+	"name": "Metropolis",
+	"slots": [
+		{
+			"id": "foodTruck",
+			"type": "building",
+			"name": "Food Truck",
+			"modelName": "FoodTruck",
+			"description": "food truck with serving hatch and rooftop menu",
+			"baseCost": 0,
+			"baseIncome": 30000
+		},
+		{
+			"id": "coffeeShop",
+			"type": "building",
+			"name": "Coffee Shop",
+			"modelName": "CoffeeShop",
+			"description": "glass-front coffee shop with sidewalk tables",
+			"baseCost": 9000000,
+			"baseIncome": 120000
+		},
+		{
+			"id": "cornerShop",
+			"type": "building",
+			"name": "Corner Shop",
+			"modelName": "CornerShop",
+			"description": "small corner convenience store with green awning",
+			"baseCost": 36000000,
+			"baseIncome": 300000
+		},
+		{
+			"id": "apartmentBlockA",
+			"type": "building",
+			"name": "Apartment Block",
+			"modelName": "ApartmentBlockA",
+			"description": "mid-rise apartment block with balconies",
+			"baseCost": 95000000,
+			"baseIncome": 600000
+		},
+		{
+			"id": "officeLowRise",
+			"type": "building",
+			"name": "Low-Rise Office",
+			"modelName": "OfficeLowRise",
+			"description": "four-story office building with blue glass",
+			"baseCost": 270000000,
+			"baseIncome": 1100000
+		},
+		{
+			"id": "cityGrid",
+			"type": "unlock",
+			"name": "Lay the City Grid",
+			"modelName": "RoadIntersection",
+			"description": "four-way road intersection with crosswalks",
+			"baseCost": 600000000,
+			"baseIncome": 0,
+			"multiplier": 0.05
+		},
+		{
+			"id": "supermarket",
+			"type": "building",
+			"name": "Supermarket",
+			"modelName": "Supermarket",
+			"description": "wide supermarket with cart corral and big sign",
+			"baseCost": 1200000000,
+			"baseIncome": 3300000
+		},
+		{
+			"id": "busStop",
+			"type": "decor",
+			"name": "Bus Stop",
+			"modelName": "BusStop",
+			"description": "glass bus shelter with bench",
+			"baseCost": 480000000,
+			"baseIncome": 0,
+			"requires": "supermarket",
+			"multiplier": 0.01
+		},
+		{
+			"id": "apartmentBlockB",
+			"type": "building",
+			"name": "High-Rise Apartments",
+			"modelName": "ApartmentBlockB",
+			"description": "tall apartment tower with rooftop water tank",
+			"baseCost": 2500000000,
+			"baseIncome": 5000000,
+			"requires": "supermarket"
+		},
+		{
+			"id": "parkingGarage",
+			"type": "building",
+			"name": "Parking Garage",
+			"modelName": "ParkingGarage",
+			"description": "multi-level parking garage with ramp",
+			"baseCost": 5400000000,
+			"baseIncome": 7800000
+		},
+		{
+			"id": "shoppingMall",
+			"type": "building",
+			"name": "Shopping Mall",
+			"modelName": "ShoppingMall",
+			"description": "shopping mall with glass atrium entrance",
+			"baseCost": 21000000000,
+			"baseIncome": 12000000
+		},
+		{
+			"id": "subwayLine",
+			"type": "unlock",
+			"name": "Dig the Subway Line",
+			"modelName": "SubwayEntrance",
+			"description": "subway stair entrance with railing and sign",
+			"baseCost": 40000000000,
+			"baseIncome": 0,
+			"multiplier": 0.08
+		},
+		{
+			"id": "hospital",
+			"type": "building",
+			"name": "Hospital",
+			"modelName": "Hospital",
+			"description": "white hospital block with red cross and helipad",
+			"baseCost": 66000000000,
+			"baseIncome": 24000000
+		},
+		{
+			"id": "cityPark",
+			"type": "decor",
+			"name": "City Park",
+			"modelName": "ParkTrees",
+			"description": "small green park square with trees and path",
+			"baseCost": 27000000000,
+			"baseIncome": 0,
+			"requires": "hospital",
+			"multiplier": 0.01
+		},
+		{
+			"id": "officeTowerA",
+			"type": "building",
+			"name": "Office Tower",
+			"modelName": "OfficeTowerA",
+			"description": "steel and glass office tower",
+			"baseCost": 115000000000,
+			"baseIncome": 34000000,
+			"requires": "hospital"
+		},
+		{
+			"id": "hotelTower",
+			"type": "building",
+			"name": "Hotel Tower",
+			"modelName": "HotelTower",
+			"description": "tall hotel with porte-cochere and rooftop sign",
+			"baseCost": 180000000000,
+			"baseIncome": 48000000
+		},
+		{
+			"id": "highwayRamp",
+			"type": "unlock",
+			"name": "Build the Highway Ramp",
+			"modelName": "HighwayRamp",
+			"description": "elevated highway on-ramp on concrete pylons",
+			"baseCost": 300000000000,
+			"baseIncome": 0,
+			"multiplier": 0.1
+		},
+		{
+			"id": "stadium",
+			"type": "building",
+			"name": "Stadium",
+			"modelName": "Stadium",
+			"description": "open-bowl stadium with floodlight masts",
+			"baseCost": 470000000000,
+			"baseIncome": 87000000
+		},
+		{
+			"id": "conventionCenter",
+			"type": "building",
+			"name": "Convention Center",
+			"modelName": "ConventionCenter",
+			"description": "long glass convention hall with curved roof",
+			"baseCost": 660000000000,
+			"baseIncome": 115000000
+		},
+		{
+			"id": "rooftopGarden",
+			"type": "decor",
+			"name": "Rooftop Garden",
+			"modelName": "RooftopGarden",
+			"description": "green rooftop terrace with hedges and benches",
+			"baseCost": 210000000000,
+			"baseIncome": 0,
+			"requires": "conventionCenter",
+			"multiplier": 0.02
+		},
+		{
+			"id": "bankTower",
+			"type": "building",
+			"name": "Bank Tower",
+			"modelName": "BankTower",
+			"description": "dark glass bank headquarters tower",
+			"baseCost": 900000000000,
+			"baseIncome": 155000000,
+			"requires": "conventionCenter"
+		},
+		{
+			"id": "broadcastTower",
+			"type": "building",
+			"name": "Broadcast Tower",
+			"modelName": "BroadcastTower",
+			"description": "TV station with tall red-and-white antenna",
+			"baseCost": 1000000000000,
+			"baseIncome": 200000000
+		},
+		{
+			"id": "financeDistrict",
+			"type": "unlock",
+			"name": "Open the Finance District",
+			"modelName": "OfficeTowerB",
+			"description": "pair of twin glass office towers",
+			"baseCost": 1150000000000,
+			"baseIncome": 0,
+			"multiplier": 0.12
+		},
+		{
+			"id": "skyscraper",
+			"type": "monument",
+			"name": "Skyscraper",
+			"modelName": "SkyscraperA",
+			"description": "landmark skyscraper with spire and lit crown",
+			"baseCost": 1250000000000,
+			"baseIncome": 0
+		}
+	]
+}

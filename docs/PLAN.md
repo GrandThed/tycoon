@@ -1,0 +1,237 @@
+# Era City Tycoon — Delivery Plan
+
+Source of truth: `docs/SPEC.md`. This plan maps the spec's milestones (§12) onto the subagent
+team, with file ownership and the contracts each wave shares. Detailed, frozen contracts for a
+milestone are written into `docs/INTERFACES.md` by the lead at the *start* of that milestone;
+this document only sketches them so the shape of the work is visible up front.
+
+Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested.
+
+- [~] M0 — Scaffold (QA-green; Rojo connect verified. Studio playtest deferred by Ben — folded into the M1 gate)
+- [~] M1 — Playable loop (built, review SHIP after fixes, QA green — awaiting combined M0+M1 playtest)
+- [~] M2 — Persistence & eras (built, review SHIP after exploit fix, QA+sim green — awaiting combined M0–M2 playtest)
+- [ ] M3 — Presentation (approved by Ben 2026-09-03 to start in a fresh session; no playtest gate has run yet — the combined M0–M2 checklist in PLAYTEST.md is still pending and can happen before or alongside M3)
+- [ ] M4 — Monetization & analytics
+- [ ] M5 — Hardening
+
+---
+
+## 1. Environment (verified 2026-09-02)
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| rojo | ✅ `~/.rokit/bin/rojo.exe` | Rokit-managed; on the **PowerShell** PATH only |
+| wally | ✅ `~/.rokit/bin/wally.exe` | ProfileStore via Wally is the plan of record |
+| stylua | ✅ `~/.rokit/bin/stylua.exe` | |
+| selene | ✅ `~/.rokit/bin/selene.exe` | |
+| luau-lsp | ✅ `~/.rokit/bin/luau-lsp.exe` | available for typecheck if useful |
+| python | ✅ 3.12.5 as `python` | **no `python3` alias on this machine** — tools/docs must invoke `python` |
+| Roblox type defs | ✅ `tools/types/globalTypes.d.luau` | committed at end of M2 session; use for `luau-lsp analyze --definitions=...` — do NOT re-download (the obvious URL 404s) |
+
+Agent note: the Git-Bash environment does not have `~/.rokit/bin` on PATH. Subagents running
+toolchain commands must either use PowerShell or prefix Bash commands with
+`export PATH="$HOME/.rokit/bin:$PATH"`.
+
+## 2. Standing assumptions & defaults
+
+Chosen per spec §12.1 ("choose sensible defaults and document them"). None of these block M0–M1;
+flag disagreement at any playtest gate and we adjust.
+
+1. **Data layer (resolved at M0):** ProfileStore exists on Wally as
+   `lm-loleris/profilestore@1.0.3` but is `realm = "server"`, so it cannot sit in the shared
+   `[dependencies]` table. Plan of record for M2: add it under `[server-dependencies]` in
+   `wally.toml` and map `ServerPackages/` into ServerScriptService in `default.project.json`.
+   No vendoring, no DataStore fallback needed.
+2. **Studio playtest levers:** eras take hours by design, which makes playtesting M2+ impractical.
+   `Game.json` gets a `debug` block (income multiplier + free-buy toggle) that the server honors
+   **only** when `RunService:IsStudio()` is true. Documented in `PLAYTEST.md` per milestone.
+3. **Income formula rollout:** `Economy.luau` implements the full §4 formula from M1, with every
+   multiplier defaulting to 1. Legacy and neighbors multipliers activate in M2, pass/Premium
+   multipliers in M4. The formula itself never changes shape after M1.
+4. **Era 1 slot mix** (of the ~24 slots): 16 `building`, 4 `unlock`, 3 `decor`, 1 `monument`.
+   Same proportions for later eras unless balancing says otherwise.
+5. **Rate limit default:** 10 calls/s per player per remote, drop on overflow (spec §7).
+6. **Placeholder visuals:** per-era tinted 8×8×8 Part + BillboardGui with `modelName` (spec §5);
+   plot base is a plain part tinted per era.
+7. **Welcome-back UI timing:** a bare functional toast ships in M2 (so offline progress is
+   playtestable), polished into the real card in M3.
+8. **Root tool configs** (`default.project.json`, `wally.toml`, `stylua.toml`, `selene.toml`)
+   are owned by luau-engineer even though they sit outside `src/` — they are inseparable from
+   the scaffold.
+9. **`tools/gen_asset_manifest.py`** is owned by economy-designer (same skill set and inputs as
+   `sim_economy.py`); docs-keeper only *runs* it to regenerate the manifest.
+
+## 3. Ownership map (steady state)
+
+No two agents touch the same file in the same wave. Cross-boundary needs are reported to the
+lead and routed, never edited directly.
+
+| Owner | Files |
+|-------|-------|
+| **lead (this conversation)** | `docs/INTERFACES.md`, `docs/PLAN.md` (structure), trivial one-file fixes routed from review |
+| **luau-engineer** | `src/server/**`, `src/shared/Types.luau`, `src/shared/Economy.luau`, `src/shared/Format.luau`, `default.project.json`, `wally.toml`, `stylua.toml`, `selene.toml`, `rokit.toml` |
+| **ui-engineer** | `src/client/**` |
+| **economy-designer** | `src/shared/Config/**`, `src/shared/Layouts/**`, `tools/sim_economy.py`, `tools/gen_asset_manifest.py`, `docs/BALANCE.md` |
+| **docs-keeper** | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `docs/ASSET_MANIFEST.md` (generated), `README.md`, status ticks in `docs/PLAN.md` |
+| **roblox-reviewer** | read-only; findings routed by lead to owners |
+| **qa-runner** | runs stylua/selene/rojo build/sim; reports failures only |
+
+## 4. Shared contracts (sketch — frozen per milestone in INTERFACES.md)
+
+1. **`Types.luau`** (luau-engineer authors, everyone consumes): `SlotConfig`, `EraConfig`,
+   `SlotState`, `PlayerState`, `StateDelta`, profile schema type.
+2. **Remotes** (server creates, client consumes; names fixed now, payloads frozen at M1):
+   - Client → server intents: `RequestBuy(slotId)`, `RequestLevelUp(slotId, count)`,
+     `RequestAdvanceEra()`, `RequestRebirth()`, `RequestPrompt(productKey)`. No amounts, ever.
+   - Server → client: single `StateChanged` (full snapshot on join, batched deltas ≤ 4/s),
+     plus fire-and-forget FX events added in M3 (reveal, level-up, era-advance, welcome-back).
+3. **Era config JSON schema** (economy-designer authors files, luau-engineer + Python consume):
+   per era `{ eraIndex, name, slots: [{ id, type, name, modelName, description, baseCost,
+   baseIncome, requires?, multiplier? }] }` — exact schema frozen in INTERFACES.md at M1 start.
+4. **Layout module shape** (economy-designer authors, PlotService + client visuals consume):
+   per era, `slotId → { position, rotationY }` relative to `PlotRoot`, plus pad placement rule.
+5. **`Economy.luau` pure API** mirrored function-for-function by `sim_economy.py`:
+   `slotIncome`, `incomePerSecond`, `levelUpCost`, `milestoneMult`, `legacyGain`, `offlineGrant`.
+   Any change to one side must land with the matching change to the other in the same milestone.
+6. **Profile schema v1 + `Migrations` table** (spec §7 Data) — owned by luau-engineer, frozen at M2.
+
+## 5. Per-milestone process
+
+Every milestone runs the same wave sequence (CLAUDE.md “Orchestration”):
+
+1. Lead updates `docs/INTERFACES.md` (contracts + ownership for this milestone).
+2. Fan out to engineers/designer in parallel (tasks below are already disjoint).
+3. `roblox-reviewer` on the diff → Critical findings routed back to owners.
+4. `qa-runner`: stylua, selene, `rojo build -o build/test.rbxl`, sim (M2+).
+5. `docs-keeper`: PLAYTEST.md, MANUAL_STEPS.md, ASSET_MANIFEST.md (M3+), status tick here.
+6. Lead reports to Ben; **stop for Studio playtest**.
+
+---
+
+## M0 — Scaffold
+
+**Goal:** repo builds and boots empty. `rojo build` succeeds; syncing into Studio and pressing
+Play produces zero errors and a "services booted" log line.
+
+**Contracts frozen first:** folder tree, service names, remote *names*, `Game.json` schema,
+Types.luau skeleton.
+
+| Owner | Tasks |
+|-------|-------|
+| luau-engineer | `default.project.json` (incl. `$ignoreUnknownInstances: true` on ServerStorage), `wally.toml` (ProfileStore + Signal), `stylua.toml`, `selene.toml`, `Main.server.luau`, empty-but-booting `Services/{Data,Plot,Economy,Monetization,Remote}Service.luau`, stub `Types.luau` / `Economy.luau` / `Format.luau` |
+| ui-engineer | `Main.client.luau` + stub `Controllers/{UI,Sound,PlotVisuals}Controller.luau` that boot silently |
+| economy-designer | `Config/Game.json`: tick rate, plotCount=10, offline cap/efficiency, rate limits, maxLevel=100, milestone levels, neighbors params, `debug` block |
+| docs-keeper | README refresh, PLAYTEST.md (M0 checks), MANUAL_STEPS.md (install Rojo plugin, `wally install`, Rojo connect) |
+
+**Done when:** `wally install` + `rojo build -o build/test.rbxl` succeed; stylua/selene clean;
+Studio boots error-free. **Playtest gate:** Ben syncs and confirms clean boot.
+
+## M1 — Playable loop
+
+**Goal:** full Era 1 loop with zero Kenney assets: claim plot → buy via pads or panel →
+placeholder buildings appear → income ticks → level-ups work → all 24 slots ownable.
+
+**Contracts frozen first:** era config JSON schema, layout module shape, `StateChanged`
+payload, `Economy.luau` signatures, buy-pad behavior (visibility follows `requires`).
+
+| Owner | Tasks |
+|-------|-------|
+| luau-engineer | Real `Types.luau`; pure `Economy.luau` (full §4 formula, multipliers default 1); `Format.luau` (suffixes incl. aa/ab…); `RemoteService` (creation, type validation, rate limiting); `PlotService` (claim/release on join/leave, pad generation from config, `RequestBuy`/`RequestLevelUp` validation incl. `requires` chain, placeholder spawn with tween+sound hook, ProximityPrompt level-up); `EconomyService` (1 Hz accumulated-delta tick, cash attribute mirror, snapshot + batched deltas). In-memory state only — persistence is M2. |
+| ui-engineer | Top bar (cash, income/s, era badge); Build panel v1 (slot list, cost, income delta, Buy, next-affordable highlight); `StateChanged` consumption; insufficient-funds feedback |
+| economy-designer | `Eras/1_Village.json` (24 slots per assumption #4, draft numbers aimed at 30–45 min), `Layouts/Village.luau` (grid + monument placement) |
+| docs-keeper | PLAYTEST.md M1 (incl. mobile emulation at 375×667), MANUAL_STEPS.md updates |
+
+**Done when:** end-to-end loop playable in Studio with placeholders only; build/lint clean.
+**Playtest gate:** Ben completes a sped-up Era 1 (debug multiplier) on desktop + mobile emu.
+
+## M2 — Persistence & eras
+
+**Goal:** leave/return persists everything; offline earnings; all four eras; Advance Era,
+Rebirth, and Legacy working; economy simulated and first-pass balanced.
+
+**Contracts frozen first:** profile schema v1 + migrations, offline formula I/O, Advance/Rebirth
+flow (what resets vs persists), eras 2–4 config schemas (same as era 1), sim CLI interface.
+
+| Owner | Tasks |
+|-------|-------|
+| luau-engineer | `DataService` (ProfileStore, session lock, migrations, pcall+retry, `BindToClose`); offline calc on join (`lastSeen`/`incomeAtSave`); `RequestAdvanceEra` + `RequestRebirth` (validate all-slots-owned; reset/persist per spec §3); legacy multiplier + neighbors multiplier live in income; stats tracking |
+| economy-designer | `Eras/{2_Boomtown,3_Metropolis,4_OrbitalColony}.json`, `Layouts/{Boomtown,Metropolis,OrbitalColony}.luau`, `tools/sim_economy.py` (greedy player, 1 s resolution, per-era time + longest-wait table), tune all four eras to §4 pacing targets, initial `docs/BALANCE.md`. Carry-over from M1: narrow the slot-rusher spread (slots-only run finishes Era 1 in 10.7 min vs 40.5 greedy) |
+| ui-engineer | Legacy count in top bar; Advance Era confirm dialog (minimal — full screen is M3); bare welcome-back toast (assumption #7); rebirth confirm |
+| docs-keeper | PLAYTEST.md M2 (persistence, offline, advance, rebirth — using debug levers), MANUAL_STEPS.md |
+
+**Done when:** rejoin restores state; offline grant correct and capped; player can reach Era 4
+and rebirth (debug-accelerated); `sim_economy.py` output meets pacing targets and is committed
+to BALANCE.md. **Playtest gate:** Ben verifies persistence + a full accelerated prestige loop.
+
+## M3 — Presentation
+
+**Goal:** looks and sounds like a real game on a phone. Full mobile UI, feedback for every
+action, era-advance ceremony, welcome-back card, asset manifest for the Kenney import.
+
+**Contracts frozen first:** FX remote events (reveal/level-up/era-advance payloads),
+`Sounds.json` schema, VIP skin folder convention + fallback rule, manifest generator I/O,
+and a `displayName` era-schema field (M2 nit: "OrbitalColony" reads unspaced in UI copy;
+ids/module names stay frozen, only display strings change).
+
+| Owner | Tasks |
+|-------|-------|
+| ui-engineer | Full mobile-first pass (bottom bar Build/Legacy/Shop/Settings, ≥44 px targets, UIScale + aspect constraints, 375×667 and 1920×1080); Build panel ×1/×10/Max; era-advance screen (next-era preview, resets-vs-persists, legacy gain, explicit confirm); welcome-back card (polished, non-blocking); `SoundController` (SoundGroups SFX/Music/UI, settings toggles, ID-0 = silent); `PlotVisualsController` (reveal tween, level-up + milestone feedback, reduce-motion per spec §10); `Format.luau` used everywhere. Carry-over from M1: a real landscape layout (M1 only guarantees 44 px targets + on-screen panel at 667×375; the aspect-ratio constraint was removed to allow viewport-derived panel height) |
+| luau-engineer | Server-side FX event firing; VIP skin resolution (`Assets/<Era>_VIP/` with normal-model fallback); settings persistence; any server support the UI contract needs. Carry-over from M1: `Format` decimal mode so sub-1/s income deltas don't render as "+0/s" |
+| economy-designer | `Config/Sounds.json` (all IDs 0 until upload); `tools/gen_asset_manifest.py` (era configs → `docs/ASSET_MANIFEST.md` with kit suggestions + descriptions); ensure every slot's `modelName`/`description` is manifest-ready |
+| docs-keeper | Run manifest generator; MANUAL_STEPS.md Kenney import guide (3D Importer, colormap, ~8-stud house scale recorded, PrimaryPart at base-center, anchoring/collision rules, audio upload + ID pasting); PLAYTEST.md M3 |
+
+**Done when:** game is presentable with *or without* imported assets; manifest lists every model
+per era. **Playtest gate:** Ben plays on mobile emulation, then optionally starts Kenney imports.
+
+## M4 — Monetization & analytics
+
+**Goal:** passes, dev products, Premium, and analytics — all optional, all restrained per §6.
+
+**Contracts frozen first:** `Monetization.json` schema (IDs default 0 = hidden), receipt
+idempotency rule, time-priced grant computation, analytics event taxonomy.
+
+| Owner | Tasks |
+|-------|-------|
+| luau-engineer | `MonetizationService`: cached `UserOwnsGamePassAsync` + `PromptGamePassPurchaseFinished`; idempotent `ProcessReceipt` (processedReceipts in profile, `NotProcessedYet` until data loaded); time-priced cash grants computed server-side at purchase time; `DoubleOffline` (welcome-back only); Premium 1.1×; `RequestPrompt` remote; AnalyticsService source/sink events |
+| economy-designer | `Config/Monetization.json` (pass/product keys, IDs 0, pack minutes); verify paid multiplier stack ≤ 2.4×; document analytics taxonomy in BALANCE.md. Carry-over from M2 (BALANCE.md flag): `Cash8h` (480 min of income) exceeds the length of eras 1–2 — hide big packs before Era 3 or cap the grant |
+| ui-engineer | Shop UI (quiet bottom-bar entry, items with ID 0 hidden, no join prompts); "Double it" button on welcome-back card (only when ID set); pass/VIP/Premium indicators; neighbors-bonus display |
+| docs-keeper | MANUAL_STEPS.md: create passes/products on Creator Hub, paste IDs into Monetization.json; PLAYTEST.md M4 (incl. test purchases) |
+
+**Done when:** with all IDs 0 the game shows no monetization anywhere and errors nowhere; with
+IDs set, purchases grant correctly and receipts are idempotent. **Playtest gate:** Ben creates
+real passes/products and test-buys in Studio.
+
+## M5 — Hardening
+
+**Goal:** ship-ready. Edge cases, exploit surface, load-failure UX, final balance.
+
+| Owner | Tasks |
+|-------|-------|
+| luau-engineer | Edge cases: leave mid-purchase, server shutdown flush, data-load failure (safe mode, no writes, clear player messaging), session-lock contention; rate-limit audit fixes; receipt replay defense. Carry-over from M2: replace DataService's per-frame duplicate-load busy-wait with a completion signal |
+| ui-engineer | Data-load-failure client UX; feedback audit (every action has success/failure feedback); low-end reduce-motion verification |
+| economy-designer | Second balance pass with sim; final `docs/BALANCE.md` (sim output tables per §4). Carry-over from M2: add `--rebirth N` to sim_economy.py (currently hardcodes rebirthCount 0, so second-lap balance has no tooling) |
+| roblox-reviewer | Full-codebase audit (not just diff): server authority, exploit surface, DataStore/receipt safety, mobile UI, Rojo compat |
+| qa-runner | Full suite |
+| docs-keeper | Final PLAYTEST.md sweep against the spec §12 definition of done |
+
+**Done when:** the spec's MVP definition of done holds end-to-end.
+
+---
+
+## 6. Risks & watch items (non-blocking)
+
+- **ProfileStore on Wally:** resolved — see assumption #1. The M2 INTERFACES update must
+  unfreeze `wally.toml` and `default.project.json` shapes for the `[server-dependencies]` +
+  `ServerPackages/` change. A repo-root `rokit.toml` (added at M0) pins toolchain versions so
+  Rokit shims resolve from any shell.
+- **Pacing targets vs playtest reality:** sim models a greedy player, not a human. Expect a
+  tuning round after Ben's M2 playtest; constants live only in config, so tuning is data-only.
+- **OneDrive path:** the repo lives under OneDrive; if file-lock/sync issues bite the toolchain,
+  consider pausing sync for the folder (Ben's call — flagged only if it actually bites).
+- **Era art direction:** manifest quality (kit suggestions per model) drives Ben's import effort;
+  reviewed at M3 gate before any importing starts.
+
+## 7. Blocking questions
+
+**None.** The spec is complete enough to start M0 with the defaults in §2. If any default above
+is wrong, say so at the M0 gate and it's a config/doc change, not a rework.

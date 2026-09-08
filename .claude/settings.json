@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(stylua:*)",
+      "Bash(selene:*)",
+      "Bash(rojo build:*)",
+      "Bash(wally install:*)",
+      "Bash(python3 tools/:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)"
+    ]
+  }
+}

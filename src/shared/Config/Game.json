@@ -1,0 +1,27 @@
+{
+	"tickRate": 1,
+	"plotCount": 10,
+	"plotMargin": 20,
+	"hubRadius": 30,
+	"maxLevel": 100,
+	"levelIncomeBonus": 0.12,
+	"milestoneLevels": [10, 25, 50, 100],
+	"milestoneMultiplier": 2,
+	"levelCost": { "factor": 0.22, "growth": 1.15, "minBase": 100 },
+	"legacy": {
+		"incomePerPoint": 0.01,
+		"gainBase": 10,
+		"gainLevelsDivisor": 100,
+		"gainRebirthBonus": 0.5
+	},
+	"offline": {
+		"capSeconds": 28800,
+		"capSecondsOfflinePro": 86400,
+		"efficiency": 0.5,
+		"efficiencyOfflinePro": 1.0,
+		"welcomeBackMinSeconds": 60
+	},
+	"neighbors": { "perPlayer": 0.03, "maxBonus": 0.27 },
+	"remotes": { "callsPerSecond": 10, "stateDeltaHz": 4, "padTouchDebounce": 0.5 },
+	"debug": { "studioIncomeMultiplier": 100, "studioFreeBuy": false }
+}

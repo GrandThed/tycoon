@@ -1,0 +1,235 @@
+{
+	"eraIndex": 2,
+	"name": "Boomtown",
+	"slots": [
+		{
+			"id": "newsstand",
+			"type": "building",
+			"name": "Newsstand",
+			"modelName": "Newsstand",
+			"description": "corner newsstand with striped awning and paper racks",
+			"baseCost": 0,
+			"baseIncome": 300
+		},
+		{
+			"id": "hotDogStand",
+			"type": "building",
+			"name": "Hot Dog Stand",
+			"modelName": "HotDogStand",
+			"description": "small hot dog cart with umbrella and menu board",
+			"baseCost": 15000,
+			"baseIncome": 1200
+		},
+		{
+			"id": "diner",
+			"type": "building",
+			"name": "Diner",
+			"modelName": "Diner",
+			"description": "chrome retro diner with neon sign and big windows",
+			"baseCost": 60000,
+			"baseIncome": 3000
+		},
+		{
+			"id": "gasStation",
+			"type": "building",
+			"name": "Gas Station",
+			"modelName": "GasStation",
+			"description": "retro gas station with canopy and twin pumps",
+			"baseCost": 160000,
+			"baseIncome": 6000
+		},
+		{
+			"id": "motel",
+			"type": "building",
+			"name": "Motel",
+			"modelName": "Motel",
+			"description": "single-story roadside motel with tall vacancy sign",
+			"baseCost": 450000,
+			"baseIncome": 11000
+		},
+		{
+			"id": "paveMainStreet",
+			"type": "unlock",
+			"name": "Pave Main Street",
+			"modelName": "RoadStraight",
+			"description": "asphalt road segment with painted center line",
+			"baseCost": 1000000,
+			"baseIncome": 0,
+			"multiplier": 0.05
+		},
+		{
+			"id": "barberShop",
+			"type": "building",
+			"name": "Barber Shop",
+			"modelName": "BarberShop",
+			"description": "small barber shop with spiral pole and awning",
+			"baseCost": 2000000,
+			"baseIncome": 33000
+		},
+		{
+			"id": "fireHydrant",
+			"type": "decor",
+			"name": "Fire Hydrant",
+			"modelName": "FireHydrant",
+			"description": "red curbside fire hydrant",
+			"baseCost": 800000,
+			"baseIncome": 0,
+			"requires": "barberShop",
+			"multiplier": 0.01
+		},
+		{
+			"id": "groceryStore",
+			"type": "building",
+			"name": "Grocery Store",
+			"modelName": "GroceryStore",
+			"description": "corner grocery store with produce crates out front",
+			"baseCost": 4200000,
+			"baseIncome": 50000,
+			"requires": "barberShop"
+		},
+		{
+			"id": "laundromat",
+			"type": "building",
+			"name": "Laundromat",
+			"modelName": "Laundromat",
+			"description": "storefront laundromat with washer row visible inside",
+			"baseCost": 9000000,
+			"baseIncome": 78000
+		},
+		{
+			"id": "carDealership",
+			"type": "building",
+			"name": "Car Dealership",
+			"modelName": "CarDealership",
+			"description": "showroom with big glass front and pennant flags",
+			"baseCost": 35000000,
+			"baseIncome": 120000
+		},
+		{
+			"id": "trafficLights",
+			"type": "unlock",
+			"name": "Install Traffic Lights",
+			"modelName": "TrafficLight",
+			"description": "hanging traffic light on a curved pole",
+			"baseCost": 68000000,
+			"baseIncome": 0,
+			"multiplier": 0.08
+		},
+		{
+			"id": "cinema",
+			"type": "building",
+			"name": "Cinema",
+			"modelName": "Cinema",
+			"description": "movie theater with marquee and ticket booth",
+			"baseCost": 110000000,
+			"baseIncome": 240000
+		},
+		{
+			"id": "streetlampRow",
+			"type": "decor",
+			"name": "Streetlamp Row",
+			"modelName": "Streetlamp",
+			"description": "pair of curved metal streetlamps",
+			"baseCost": 45000000,
+			"baseIncome": 0,
+			"requires": "cinema",
+			"multiplier": 0.01
+		},
+		{
+			"id": "autoRepair",
+			"type": "building",
+			"name": "Auto Repair Shop",
+			"modelName": "AutoRepairShop",
+			"description": "garage with rolling door, lift and tire stack",
+			"baseCost": 190000000,
+			"baseIncome": 340000,
+			"requires": "cinema"
+		},
+		{
+			"id": "bowlingAlley",
+			"type": "building",
+			"name": "Bowling Alley",
+			"modelName": "BowlingAlley",
+			"description": "bowling alley with giant pin sign on the roof",
+			"baseCost": 300000000,
+			"baseIncome": 480000
+		},
+		{
+			"id": "busLine",
+			"type": "unlock",
+			"name": "Open the Bus Line",
+			"modelName": "BusYellow",
+			"description": "yellow city bus parked at a small bus stop",
+			"baseCost": 500000000,
+			"baseIncome": 0,
+			"multiplier": 0.1
+		},
+		{
+			"id": "bank",
+			"type": "building",
+			"name": "Bank",
+			"modelName": "Bank",
+			"description": "stone bank facade with columns and brass doors",
+			"baseCost": 900000000,
+			"baseIncome": 870000
+		},
+		{
+			"id": "departmentStore",
+			"type": "building",
+			"name": "Department Store",
+			"modelName": "DepartmentStore",
+			"description": "two-story department store with display windows",
+			"baseCost": 1300000000,
+			"baseIncome": 1150000
+		},
+		{
+			"id": "billboardSign",
+			"type": "decor",
+			"name": "Billboard",
+			"modelName": "Billboard",
+			"description": "large rooftop billboard on steel legs",
+			"baseCost": 400000000,
+			"baseIncome": 0,
+			"requires": "departmentStore",
+			"multiplier": 0.02
+		},
+		{
+			"id": "radioStation",
+			"type": "building",
+			"name": "Radio Station",
+			"modelName": "RadioStation",
+			"description": "brick radio station with lattice antenna tower",
+			"baseCost": 1800000000,
+			"baseIncome": 1550000,
+			"requires": "departmentStore"
+		},
+		{
+			"id": "fireStation",
+			"type": "building",
+			"name": "Fire Station",
+			"modelName": "FireStation",
+			"description": "fire station with red doors and a garage bay",
+			"baseCost": 2100000000,
+			"baseIncome": 2000000
+		},
+		{
+			"id": "neonDistrict",
+			"type": "unlock",
+			"name": "Light the Neon District",
+			"modelName": "NeonSign",
+			"description": "big glowing neon arrow sign",
+			"baseCost": 2400000000,
+			"baseIncome": 0,
+			"multiplier": 0.12
+		},
+		{
+			"id": "clockTower",
+			"type": "monument",
+			"name": "Clock Tower",
+			"modelName": "ClockTower",
+			"description": "brick town hall clock tower with four-faced clock",
+			"baseCost": 2600000000,
+			"baseIncome": 0
+		}
+	]
+}

@@ -1,0 +1,9 @@
+# Pins the toolchain for this repo so Rokit's shims resolve from any shell.
+# Versions match what is installed in ~/.rokit/tool-storage; `rokit install` restores them.
+
+[tools]
+rojo = "rojo-rbx/rojo@7.7.0"
+wally = "UpliftGames/wally@0.3.2"
+stylua = "JohnnyMorganz/StyLua@2.5.2"
+selene = "Kampfkarren/selene@0.31.0"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"

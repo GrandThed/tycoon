@@ -1,0 +1,235 @@
+{
+	"eraIndex": 4,
+	"name": "OrbitalColony",
+	"slots": [
+		{
+			"id": "landingPad",
+			"type": "building",
+			"name": "Landing Pad",
+			"modelName": "LandingPad",
+			"description": "round landing pad with light strip markings",
+			"baseCost": 0,
+			"baseIncome": 3000000
+		},
+		{
+			"id": "solarArray",
+			"type": "building",
+			"name": "Solar Array",
+			"modelName": "SolarArray",
+			"description": "row of angled solar panels on a rack",
+			"baseCost": 3300000000,
+			"baseIncome": 12000000
+		},
+		{
+			"id": "habitatPod",
+			"type": "building",
+			"name": "Habitat Pod",
+			"modelName": "HabitatPod",
+			"description": "small white living pod with round porthole",
+			"baseCost": 13000000000,
+			"baseIncome": 30000000
+		},
+		{
+			"id": "hydroponicsDome",
+			"type": "building",
+			"name": "Hydroponics Dome",
+			"modelName": "HydroponicsDome",
+			"description": "glass dome full of green crop racks",
+			"baseCost": 35000000000,
+			"baseIncome": 60000000
+		},
+		{
+			"id": "oxygenGenerator",
+			"type": "building",
+			"name": "Oxygen Generator",
+			"modelName": "OxygenGenerator",
+			"description": "machine block with tanks and vent stacks",
+			"baseCost": 100000000000,
+			"baseIncome": 110000000
+		},
+		{
+			"id": "walkwayNetwork",
+			"type": "unlock",
+			"name": "Connect the Walkways",
+			"modelName": "WalkwayTube",
+			"description": "pressurized walkway tube between pads",
+			"baseCost": 220000000000,
+			"baseIncome": 0,
+			"multiplier": 0.05
+		},
+		{
+			"id": "crewQuarters",
+			"type": "building",
+			"name": "Crew Quarters",
+			"modelName": "CrewQuarters",
+			"description": "long habitat module with bunk windows",
+			"baseCost": 440000000000,
+			"baseIncome": 330000000
+		},
+		{
+			"id": "colonyFlag",
+			"type": "decor",
+			"name": "Colony Flag",
+			"modelName": "ColonyFlag",
+			"description": "flag on a pole with a small plaque",
+			"baseCost": 175000000000,
+			"baseIncome": 0,
+			"requires": "crewQuarters",
+			"multiplier": 0.01
+		},
+		{
+			"id": "researchLab",
+			"type": "building",
+			"name": "Research Lab",
+			"modelName": "ResearchLab",
+			"description": "domed lab module with antenna and tanks",
+			"baseCost": 920000000000,
+			"baseIncome": 500000000,
+			"requires": "crewQuarters"
+		},
+		{
+			"id": "roverBay",
+			"type": "building",
+			"name": "Rover Bay",
+			"modelName": "RoverBay",
+			"description": "open garage bay with six-wheel rover",
+			"baseCost": 2000000000000,
+			"baseIncome": 780000000
+		},
+		{
+			"id": "commsArray",
+			"type": "building",
+			"name": "Comms Array",
+			"modelName": "CommsArray",
+			"description": "cluster of communication dishes on a mast",
+			"baseCost": 7700000000000,
+			"baseIncome": 1200000000
+		},
+		{
+			"id": "lifeSupport",
+			"type": "unlock",
+			"name": "Bring Life Support Online",
+			"modelName": "OxygenTanks",
+			"description": "bank of white oxygen tanks with pipes",
+			"baseCost": 15000000000000,
+			"baseIncome": 0,
+			"multiplier": 0.08
+		},
+		{
+			"id": "mineralExtractor",
+			"type": "building",
+			"name": "Mineral Extractor",
+			"modelName": "MineralExtractor",
+			"description": "drilling rig with conveyor and ore pile",
+			"baseCost": 24000000000000,
+			"baseIncome": 2400000000
+		},
+		{
+			"id": "rockGarden",
+			"type": "decor",
+			"name": "Rock Garden",
+			"modelName": "RocksLarge",
+			"description": "arranged regolith boulders with ground lights",
+			"baseCost": 10000000000000,
+			"baseIncome": 0,
+			"requires": "mineralExtractor",
+			"multiplier": 0.01
+		},
+		{
+			"id": "observationDome",
+			"type": "building",
+			"name": "Observation Dome",
+			"modelName": "ObservationDome",
+			"description": "large glass viewing dome with interior deck",
+			"baseCost": 42000000000000,
+			"baseIncome": 3400000000,
+			"requires": "mineralExtractor"
+		},
+		{
+			"id": "fusionReactor",
+			"type": "building",
+			"name": "Fusion Reactor",
+			"modelName": "FusionReactor",
+			"description": "glowing reactor core with cooling towers",
+			"baseCost": 66000000000000,
+			"baseIncome": 4800000000
+		},
+		{
+			"id": "orbitalUplink",
+			"type": "unlock",
+			"name": "Establish the Orbital Uplink",
+			"modelName": "SatelliteDish",
+			"description": "large satellite dish aimed at the sky",
+			"baseCost": 110000000000000,
+			"baseIncome": 0,
+			"multiplier": 0.1
+		},
+		{
+			"id": "dockingBay",
+			"type": "building",
+			"name": "Docking Bay",
+			"modelName": "DockingBay",
+			"description": "shuttle docking bay with clamp arms",
+			"baseCost": 170000000000000,
+			"baseIncome": 8700000000
+		},
+		{
+			"id": "terraformStation",
+			"type": "building",
+			"name": "Terraform Station",
+			"modelName": "TerraformStation",
+			"description": "atmosphere processor with wide exhaust ring",
+			"baseCost": 240000000000000,
+			"baseIncome": 11500000000
+		},
+		{
+			"id": "holoBeacon",
+			"type": "decor",
+			"name": "Holo Beacon",
+			"modelName": "HoloBeacon",
+			"description": "small pylon projecting a hologram ring",
+			"baseCost": 77000000000000,
+			"baseIncome": 0,
+			"requires": "terraformStation",
+			"multiplier": 0.02
+		},
+		{
+			"id": "medicalBay",
+			"type": "building",
+			"name": "Medical Bay",
+			"modelName": "MedicalBay",
+			"description": "med module with cross marking and airlock",
+			"baseCost": 330000000000000,
+			"baseIncome": 15500000000,
+			"requires": "terraformStation"
+		},
+		{
+			"id": "spaceportTerminal",
+			"type": "building",
+			"name": "Spaceport Terminal",
+			"modelName": "SpaceportTerminal",
+			"description": "terminal building with control tower",
+			"baseCost": 370000000000000,
+			"baseIncome": 20000000000
+		},
+		{
+			"id": "planetaryDefense",
+			"type": "unlock",
+			"name": "Raise Planetary Defense",
+			"modelName": "TurretBase",
+			"description": "dome turret on a reinforced base",
+			"baseCost": 420000000000000,
+			"baseIncome": 0,
+			"multiplier": 0.12
+		},
+		{
+			"id": "launchTower",
+			"type": "monument",
+			"name": "Launch Tower",
+			"modelName": "LaunchTower",
+			"description": "rocket on a launch tower with support arm",
+			"baseCost": 460000000000000,
+			"baseIncome": 0
+		}
+	]
+}

@@ -1,0 +1,235 @@
+{
+	"eraIndex": 1,
+	"name": "Village",
+	"slots": [
+		{
+			"id": "campfire",
+			"type": "building",
+			"name": "Campfire",
+			"modelName": "Campfire",
+			"description": "small campfire with stacked logs and stones",
+			"baseCost": 0,
+			"baseIncome": 3
+		},
+		{
+			"id": "tentSmall",
+			"type": "building",
+			"name": "Small Tent",
+			"modelName": "TentSmall",
+			"description": "small canvas camping tent with wooden poles",
+			"baseCost": 150,
+			"baseIncome": 12
+		},
+		{
+			"id": "woodcutterHut",
+			"type": "building",
+			"name": "Woodcutter's Hut",
+			"modelName": "WoodcutterHut",
+			"description": "log hut with axe, stump and stacked firewood",
+			"baseCost": 500,
+			"baseIncome": 30
+		},
+		{
+			"id": "farmPlot",
+			"type": "building",
+			"name": "Farm Plot",
+			"modelName": "FarmPlot",
+			"description": "tilled soil plot with rows of wheat",
+			"baseCost": 1200,
+			"baseIncome": 60
+		},
+		{
+			"id": "houseSmallA",
+			"type": "building",
+			"name": "Small House",
+			"modelName": "HouseSmallA",
+			"description": "small timber-frame house with red roof",
+			"baseCost": 2800,
+			"baseIncome": 110
+		},
+		{
+			"id": "dirtRoad",
+			"type": "unlock",
+			"name": "Pave the Road",
+			"modelName": "RoadCobblestone",
+			"description": "cobblestone road segment with dirt edges",
+			"baseCost": 5500,
+			"baseIncome": 0,
+			"multiplier": 0.05
+		},
+		{
+			"id": "well",
+			"type": "building",
+			"name": "Village Well",
+			"modelName": "Well",
+			"description": "stone well with wooden roof and bucket",
+			"baseCost": 9500,
+			"baseIncome": 330
+		},
+		{
+			"id": "flowerBed",
+			"type": "decor",
+			"name": "Flower Bed",
+			"modelName": "FlowerBed",
+			"description": "wooden planter box with red and yellow flowers",
+			"baseCost": 4000,
+			"baseIncome": 0,
+			"requires": "well",
+			"multiplier": 0.01
+		},
+		{
+			"id": "houseSmallB",
+			"type": "building",
+			"name": "Cottage",
+			"modelName": "HouseSmallB",
+			"description": "small cottage with blue roof and stone chimney",
+			"baseCost": 17000,
+			"baseIncome": 500,
+			"requires": "well"
+		},
+		{
+			"id": "bakery",
+			"type": "building",
+			"name": "Bakery",
+			"modelName": "Bakery",
+			"description": "bakery with stone oven and hanging bread sign",
+			"baseCost": 30000,
+			"baseIncome": 780
+		},
+		{
+			"id": "windmill",
+			"type": "building",
+			"name": "Windmill",
+			"modelName": "Windmill",
+			"description": "wooden windmill with four cloth sails",
+			"baseCost": 100000,
+			"baseIncome": 1200
+		},
+		{
+			"id": "villageSquare",
+			"type": "unlock",
+			"name": "Found the Village Square",
+			"modelName": "Fountain",
+			"description": "round stone fountain for the plaza",
+			"baseCost": 170000,
+			"baseIncome": 0,
+			"multiplier": 0.08
+		},
+		{
+			"id": "marketStall",
+			"type": "building",
+			"name": "Market Stall",
+			"modelName": "MarketStall",
+			"description": "wooden market stall with striped awning",
+			"baseCost": 250000,
+			"baseIncome": 2400
+		},
+		{
+			"id": "treeOak",
+			"type": "decor",
+			"name": "Oak Tree",
+			"modelName": "TreeOak",
+			"description": "large leafy oak tree",
+			"baseCost": 100000,
+			"baseIncome": 0,
+			"requires": "marketStall",
+			"multiplier": 0.01
+		},
+		{
+			"id": "blacksmith",
+			"type": "building",
+			"name": "Blacksmith",
+			"modelName": "Blacksmith",
+			"description": "smithy with anvil, forge and brick chimney",
+			"baseCost": 380000,
+			"baseIncome": 3400,
+			"requires": "marketStall"
+		},
+		{
+			"id": "tavern",
+			"type": "building",
+			"name": "Tavern",
+			"modelName": "Tavern",
+			"description": "two-story tavern with hanging mug sign",
+			"baseCost": 560000,
+			"baseIncome": 4800
+		},
+		{
+			"id": "tradeRoute",
+			"type": "unlock",
+			"name": "Open the Trade Route",
+			"modelName": "CartWagon",
+			"description": "wooden trade cart loaded with sacks and barrels",
+			"baseCost": 840000,
+			"baseIncome": 0,
+			"multiplier": 0.1
+		},
+		{
+			"id": "chapel",
+			"type": "building",
+			"name": "Chapel",
+			"modelName": "Chapel",
+			"description": "small stone chapel with bell tower",
+			"baseCost": 1200000,
+			"baseIncome": 8700
+		},
+		{
+			"id": "houseLargeA",
+			"type": "building",
+			"name": "Manor House",
+			"modelName": "HouseLargeA",
+			"description": "large two-story manor with balcony",
+			"baseCost": 1600000,
+			"baseIncome": 11500
+		},
+		{
+			"id": "bannerPole",
+			"type": "decor",
+			"name": "Banner Pole",
+			"modelName": "BannerPole",
+			"description": "wooden pole with hanging heraldic banner",
+			"baseCost": 500000,
+			"baseIncome": 0,
+			"requires": "houseLargeA",
+			"multiplier": 0.02
+		},
+		{
+			"id": "stables",
+			"type": "building",
+			"name": "Stables",
+			"modelName": "Stables",
+			"description": "open horse stable with hay bales",
+			"baseCost": 2000000,
+			"baseIncome": 15500,
+			"requires": "houseLargeA"
+		},
+		{
+			"id": "watchtower",
+			"type": "building",
+			"name": "Watchtower",
+			"modelName": "Watchtower",
+			"description": "tall stone watchtower with wooden lookout",
+			"baseCost": 2200000,
+			"baseIncome": 20000
+		},
+		{
+			"id": "townWall",
+			"type": "unlock",
+			"name": "Raise the Town Wall",
+			"modelName": "WallGate",
+			"description": "stone wall segment with arched gate",
+			"baseCost": 2400000,
+			"baseIncome": 0,
+			"multiplier": 0.12
+		},
+		{
+			"id": "castleKeep",
+			"type": "monument",
+			"name": "Castle Keep",
+			"modelName": "CastleKeep",
+			"description": "grand stone castle keep with towers and flags",
+			"baseCost": 2600000,
+			"baseIncome": 0
+		}
+	]
+}

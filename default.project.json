@@ -1,0 +1,52 @@
+{
+	"name": "EraCityTycoon",
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Shared": {
+				"$path": "src/shared"
+			},
+			"Packages": {
+				"$path": "Packages"
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Server": {
+				"$path": "src/server"
+			},
+			"ServerPackages": {
+				"$path": "ServerPackages"
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"$ignoreUnknownInstances": true,
+			"Assets": {
+				"$className": "Folder",
+				"Village": {
+					"$className": "Folder"
+				},
+				"Boomtown": {
+					"$className": "Folder"
+				},
+				"Metropolis": {
+					"$className": "Folder"
+				},
+				"OrbitalColony": {
+					"$className": "Folder"
+				}
+			}
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"Client": {
+					"$path": "src/client"
+				}
+			}
+		}
+	}
+}

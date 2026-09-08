@@ -1,0 +1,13 @@
+[package]
+name = "eracity/era-city-tycoon"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+Signal = "sleitnick/signal@^2"
+
+# Server realm: wally emits these into ServerPackages/, mapped to
+# ServerScriptService/ServerPackages in default.project.json (M2 contract).
+[server-dependencies]
+ProfileStore = "lm-loleris/profilestore@1.0.3"
