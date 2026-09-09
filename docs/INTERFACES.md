@@ -1187,6 +1187,17 @@ snapshot, the delta, and `MonetizationService`'s receipt pricing all call it, so
 advertise one amount and the grant deliver another. `state.incomeAtSave` keeps its original and
 only job — the rate persisted for the offline grant.
 
+**8. A pack row states which limit produced its number (playtest fix, 2026-09-09).** The
+contract said pack copy reads "up to N minutes". Once the cap binds that label is false by
+orders of magnitude — at Era 2 with 55M/s the 30-minute pack advertised "Up to 30m" while
+granting 0.4% of that, because the cap ($1.28B) is far below 30 minutes of income ($99B). And
+the cap binds for nearly the whole of every era: about 4:28 into Era 2's 1h44m, per BALANCE.md's
+cap-onset table. So for ~96% of an era the minutes on the label were decorative.
+
+`ShopPanel` now names whichever of the two limits is smaller — `30m of income — $4.5M` while
+minutes bind, `10% of this era — $1.2B` once the cap does. The grant itself is unchanged; only
+the description of it is. Per-pack `capFraction` values and the anti-skip guarantee stand.
+
 ## Definition of done (M4)
 
 `stylua --check src`, `selene src`, `luau-lsp analyze` (committed definitions +

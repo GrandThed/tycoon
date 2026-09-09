@@ -55,6 +55,16 @@ type Row = {
 }
 
 local SECONDS_PER_MINUTE = 60
+local MINUTES_PER_HOUR = 60
+
+-- "30m" / "2h", not Format.Duration's "30m 0s" / "2h 0m": pack lengths are whole and the
+-- trailing zero unit reads like precision the label does not have.
+local function packDurationLabel(minutes: number): string
+	if minutes < MINUTES_PER_HOUR or minutes % MINUTES_PER_HOUR ~= 0 then
+		return `{minutes}m`
+	end
+	return `{minutes // MINUTES_PER_HOUR}h`
+end
 
 local ShopPanel = {}
 
@@ -297,9 +307,8 @@ function ShopPanel.new(parent: Instance, deps: Deps): ShopPanelHandle
 			if minutes == nil then
 				paintOwned(row.button, state.passes[row.key] == true)
 			else
-				local copy = "Up to " .. Format.Duration(minutes * SECONDS_PER_MINUTE)
 				if eraConfig == nil then
-					row.grantLabel.Text = copy
+					row.grantLabel.Text = packDurationLabel(minutes) .. " of income"
 				else
 					local grant = Economy.PackGrant(
 						minutes,
@@ -307,7 +316,17 @@ function ShopPanel.new(parent: Instance, deps: Deps): ShopPanelHandle
 						eraSlotCostTotal,
 						row.capFraction
 					)
-					row.grantLabel.Text = copy .. " — $" .. Format.Cash(grant)
+					-- Say which of the two limits actually produced this number. The cap binds
+					-- for most of an era (about four minutes into Era 2), and a "30 minutes"
+					-- label on a capped grant overstates the time bought by orders of
+					-- magnitude — the player sees a number that is nothing like 30 minutes of
+					-- their income. Whichever limit is smaller is the one describing the sale.
+					local uncapped = minutes * SECONDS_PER_MINUTE * persistedIncomePerSecond
+					local cap = row.capFraction * eraSlotCostTotal
+					local limit = if cap < uncapped
+						then string.format("%d%% of this era", math.round(row.capFraction * 100))
+						else packDurationLabel(minutes) .. " of income"
+					row.grantLabel.Text = limit .. " — $" .. Format.Cash(grant)
 				end
 			end
 		end
