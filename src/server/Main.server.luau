@@ -6,6 +6,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+
 local servicesFolder = script.Parent:WaitForChild("Services")
 
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -35,6 +37,16 @@ end
 for _, service in orderedServices do
 	service.Start()
 end
+
+-- RequestSetSetting (M3). The contract places this handler in DataService.Start, but marking
+-- the delta needs EconomyService, which already requires DataService — a require cycle. Main
+-- requires both, so the wiring lives here; the state write itself stays in DataService.
+-- Payload types are already validated by RemoteService; casts narrow the varargs.
+RemoteService.SetHandler("RequestSetSetting", function(player: Player, key: any, value: any)
+	if DataService.SetSetting(player, key :: Types.SettingKey, value :: boolean) then
+		EconomyService.MarkDirty(player, { settings = true })
+	end
+end)
 
 local function onPlayerAdded(player: Player): ()
 	task.spawn(function()

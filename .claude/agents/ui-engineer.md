@@ -1,6 +1,6 @@
 ---
 name: ui-engineer
-description: Implements Roblox client-side Luau: mobile-first UI built in code, sound and visual feedback, plot visuals. Use for anything under src/client.
+description: "Implements Roblox client-side Luau: mobile-first UI built in code, sound and visual feedback, plot visuals. Use for anything under src/client."
 tools: Read, Edit, Write, Bash, Grep, Glob
 color: green
 ---

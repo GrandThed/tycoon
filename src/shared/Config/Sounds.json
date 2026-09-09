@@ -1,0 +1,21 @@
+{
+	"version": 1,
+	"groups": { "SFX": 0.6, "Music": 0.35, "UI": 0.5 },
+	"sounds": {
+		"uiClick": { "id": 0, "group": "UI", "volume": 0.7 },
+		"purchase": { "id": 0, "group": "SFX", "volume": 1.0 },
+		"reveal": { "id": 0, "group": "SFX", "volume": 0.8 },
+		"levelUp": { "id": 0, "group": "SFX", "volume": 0.7, "pitchPerMilestone": 0.08 },
+		"levelUpMilestone": { "id": 0, "group": "SFX", "volume": 1.0 },
+		"insufficientFunds": { "id": 0, "group": "UI", "volume": 0.6 },
+		"eraAdvance": { "id": 0, "group": "Music", "volume": 1.0 },
+		"rebirth": { "id": 0, "group": "Music", "volume": 1.0 },
+		"welcomeBack": { "id": 0, "group": "Music", "volume": 0.8 }
+	},
+	"ambient": {
+		"Village": { "id": 0, "group": "Music", "volume": 0.25 },
+		"Boomtown": { "id": 0, "group": "Music", "volume": 0.25 },
+		"Metropolis": { "id": 0, "group": "Music", "volume": 0.25 },
+		"OrbitalColony": { "id": 0, "group": "Music", "volume": 0.25 }
+	}
+}

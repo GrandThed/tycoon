@@ -2,8 +2,10 @@
 -- Owns the HUD. The client is a display and input device: the local model below is
 -- replaced by server snapshots and patched by deltas, and every button press becomes a
 -- remote intent. Cash and income are never computed here; Build-panel previews and the
--- Advance-Era legacy preview use the shared pure Economy module and are overwritten by
--- the next server push (docs/INTERFACES.md, M1/M2 client contracts).
+-- Legacy previews use the shared pure Economy module and are overwritten by the next
+-- server push (docs/INTERFACES.md, M1–M3 client contracts). M3 adds the bottom bar with
+-- Legacy/Settings panels, the era-advance screen, the ceremony overlay, the welcome-back
+-- card, sound hooks, and the landscape docking layout.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,15 +14,21 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
-local Format = require(sharedFolder:WaitForChild("Format"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
+local PanelDock = require(uiFolder:WaitForChild("PanelDock"))
 local TopBar = require(uiFolder:WaitForChild("TopBar"))
+local BottomBar = require(uiFolder:WaitForChild("BottomBar"))
 local BuildPanel = require(uiFolder:WaitForChild("BuildPanel"))
-local ConfirmDialog = require(uiFolder:WaitForChild("ConfirmDialog"))
+local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
+local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
+local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
+local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
+local WelcomeBackCard = require(uiFolder:WaitForChild("WelcomeBackCard"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
+local SoundController = require(script.Parent:WaitForChild("SoundController"))
 
 type Model = {
 	plotIndex: number,
@@ -31,23 +39,27 @@ type Model = {
 
 type PrestigeKind = "advance" | "rebirth"
 
-local function getEraCount(): number
-	return Catalog.GetEraCount()
-end
+type PanelKey = "build" | "legacy" | "settings"
 
--- e.g. 11520 -> "3h 12m". Durations are not cash, so Format.Cash does not apply; the
--- welcomeBack contract guarantees elapsed >= 60 s but the seconds branch stays anyway.
-local function humanizeDuration(seconds: number): string
-	local total = math.max(0, math.floor(seconds))
-	local hours = math.floor(total / 3600)
-	local minutes = math.floor((total % 3600) / 60)
-	if hours > 0 then
-		return string.format("%dh %dm", hours, minutes)
+-- Every dockable panel exposes this slice; UIController keeps one open at a time.
+type DockablePanel = {
+	DesignHeight: number,
+	SetOpen: (open: boolean) -> (),
+	SetLayout: (dock: PanelDock.Dock) -> (),
+}
+
+local FIRST_ERA = 1
+
+-- All UI copy uses displayName (M3 contract); a config that predates it degrades to name.
+local function eraDisplayName(eraConfig: Types.EraConfig?, fallback: string): string
+	if eraConfig == nil then
+		return fallback
 	end
-	if minutes > 0 then
-		return string.format("%dm", minutes)
+	local displayName = eraConfig.displayName
+	if typeof(displayName) == "string" and displayName ~= "" then
+		return displayName
 	end
-	return string.format("%ds", total)
+	return eraConfig.name
 end
 
 local function findMonument(eraConfig: Types.EraConfig): Types.SlotConfig?
@@ -70,7 +82,7 @@ local function prestigeKindFor(state: Types.PlayerState): PrestigeKind?
 	if monument == nil or state.slots[monument.id] == nil then
 		return nil
 	end
-	local eraCount = getEraCount()
+	local eraCount = Catalog.GetEraCount()
 	if state.era < eraCount then
 		return "advance"
 	elseif state.era == eraCount then
@@ -81,13 +93,30 @@ end
 
 local function prestigeLabelFor(kind: PrestigeKind?, state: Types.PlayerState): string?
 	if kind == "advance" then
-		local nextEra = Catalog.GetEraConfig(state.era + 1)
 		-- Missing next-era config degrades to a generic label, never an error.
-		return if nextEra ~= nil then "Advance Era → " .. nextEra.name else "Advance Era"
+		local nextEra = Catalog.GetEraConfig(state.era + 1)
+		return if nextEra ~= nil
+			then "Advance Era → " .. eraDisplayName(nextEra, nextEra.name)
+			else "Advance Era"
 	elseif kind == "rebirth" then
-		return "Rebirth → Era 1"
+		return "Rebirth → Era " .. tostring(FIRST_ERA)
 	end
 	return nil
+end
+
+local function totalLevels(state: Types.PlayerState): number
+	local total = 0
+	for _, slotState in state.slots do
+		total += slotState.level
+	end
+	return total
+end
+
+-- Settings arrive from the network; only a table with both booleans is trusted.
+local function isSettings(source: any): boolean
+	return typeof(source) == "table"
+		and typeof(source.music) == "boolean"
+		and typeof(source.sfx) == "boolean"
 end
 
 local UIController = {}
@@ -100,32 +129,91 @@ local function boot(): ()
 	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
 	local actionResult = remotesFolder:WaitForChild("ActionResult") :: RemoteEvent
+	local fxEvent = remotesFolder:WaitForChild("FxEvent") :: RemoteEvent
 	local requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent
 	local requestBuy = remotesFolder:WaitForChild("RequestBuy") :: RemoteEvent
 	local requestLevelUp = remotesFolder:WaitForChild("RequestLevelUp") :: RemoteEvent
 	local requestAdvanceEra = remotesFolder:WaitForChild("RequestAdvanceEra") :: RemoteEvent
 	local requestRebirth = remotesFolder:WaitForChild("RequestRebirth") :: RemoteEvent
+	local requestSetSetting = remotesFolder:WaitForChild("RequestSetSetting") :: RemoteEvent
 
 	local gameConfig = Catalog.GetGameConfig()
 
 	local screenGui = Create("ScreenGui", {
 		Name = "EraCityHUD",
 		ResetOnSpawn = false,
+		-- Sibling, explicitly: under the legacy Global behavior a scrim's high ZIndex
+		-- (Theme.ZINDEX_*) also covers its own card, whose children default to 1 — the
+		-- dialogs rendered behind their own scrim and swallowed every tap. Sibling makes
+		-- the ZINDEX_* constants order the overlay roots only, which is what they mean.
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		Parent = playerGui,
 	}) :: ScreenGui
 
-	local topBar = TopBar.new(screenGui)
-	-- ZIndex tiers in Theme keep the dialog above the HUD and the toast above the
-	-- dialog regardless of this creation order.
-	local dialog = ConfirmDialog.new(screenGui)
-	local toast = Toast.new(screenGui)
-
 	local model: Model? = nil
 	-- The contract puts welcomeBack only on the first post-grant snapshot, but duplicate
-	-- snapshots must be harmless, so the toast additionally fires at most once a session.
+	-- snapshots must be harmless, so the card additionally fires at most once a session.
 	local welcomeBackShown = false
+	local openPanelKey: PanelKey? = nil
 
-	local function openPrestigeDialog(): ()
+	-- Forward declarations: layout and panel wiring reference each other.
+	local applyLayout: () -> ()
+
+	local topBar = TopBar.new(screenGui)
+	local toast = Toast.new(screenGui)
+	local welcomeCard = WelcomeBackCard.new(screenGui, {
+		onVisibilityChanged = function()
+			applyLayout() -- the toast stacks below the card while it is visible
+		end,
+	})
+	local eraScreen = EraAdvanceScreen.new(screenGui)
+	local ceremony = Ceremony.new(screenGui, {
+		onClosed = function()
+			-- Contract: the new era's ambient starts after the overlay, not under the jingle.
+			local current = model
+			if current ~= nil then
+				SoundController.SetAmbientEra(current.eraName)
+			end
+		end,
+	})
+
+	-- String-keyed so the three panels can be registered after their deps exist below.
+	local panels: { [string]: DockablePanel } = {}
+	local togglePanel: (key: PanelKey) -> ()
+	local bottomBar = BottomBar.new(screenGui, {
+		onTap = function(key: BottomBar.BarKey)
+			-- Shop stays hidden until M4 wires monetization ids; nothing to open.
+			if key == "build" or key == "legacy" or key == "settings" then
+				togglePanel(key)
+			end
+		end,
+	})
+	bottomBar.SetShopVisible(false)
+
+	togglePanel = function(panelKey: PanelKey): ()
+		local previous = openPanelKey
+		if previous ~= nil then
+			panels[previous].SetOpen(false)
+		end
+		if previous == panelKey then
+			openPanelKey = nil
+		else
+			openPanelKey = panelKey
+			panels[panelKey].SetOpen(true)
+		end
+		bottomBar.SetActive(openPanelKey)
+	end
+
+	local function closePanels(): ()
+		local previous = openPanelKey
+		if previous ~= nil then
+			panels[previous].SetOpen(false)
+			openPanelKey = nil
+			bottomBar.SetActive(nil)
+		end
+	end
+
+	local function openPrestigeScreen(): ()
 		local current = model
 		if current == nil then
 			return
@@ -138,61 +226,26 @@ local function boot(): ()
 		-- Both prestige paths grant LegacyGain (contract amended mid-M2: rebirth is the
 		-- final era's "advance"). The server computes with the pre-increment rebirthCount,
 		-- which is exactly state.rebirthCount here.
-		local totalLevels = 0
-		for _, slotState in state.slots do
-			totalLevels += slotState.level
-		end
-		local gain = Economy.LegacyGain(state.era, totalLevels, state.rebirthCount, gameConfig)
-		if kind == "advance" then
-			local nextEra = Catalog.GetEraConfig(state.era + 1)
-			local nextName = if nextEra ~= nil then nextEra.name else "the next era"
-			-- Resets/persists copy mirrors spec §3 exactly: cash/slots/levels/plot reset;
-			-- Legacy, era progress, rebirth count, and stats persist.
-			dialog.Show({
-				title = "Advance to " .. nextName .. "?",
-				lines = {
-					{
-						text = "Earn +" .. Format.Cash(gain) .. " Legacy",
-						color = Theme.COLOR_HIGHLIGHT,
-						bold = true,
-					},
-					{ text = "Resets: cash, buildings, levels, and your plot" },
-					{ text = "Keeps: Legacy, era progress, rebirth count, and stats" },
-				},
-				confirmText = "Advance Era",
-				onConfirm = function()
+		local gain =
+			Economy.LegacyGain(state.era, totalLevels(state), state.rebirthCount, gameConfig)
+		local nextEraIndex = if kind == "advance" then state.era + 1 else FIRST_ERA
+		local nextEraConfig = Catalog.GetEraConfig(nextEraIndex)
+		eraScreen.Show({
+			kind = kind :: PrestigeKind,
+			nextEraIndex = nextEraIndex,
+			nextEraName = eraDisplayName(nextEraConfig, "the next era"),
+			nextEraConfig = nextEraConfig,
+			legacyGain = gain,
+			legacy = state.legacy,
+			rebirthCount = state.rebirthCount,
+			onConfirm = function()
+				if kind == "advance" then
 					requestAdvanceEra:FireServer()
-				end,
-			})
-		else
-			dialog.Show({
-				title = "Rebirth?",
-				lines = {
-					{
-						text = "Earn +" .. Format.Cash(gain) .. " Legacy",
-						color = Theme.COLOR_HIGHLIGHT,
-						bold = true,
-					},
-					{
-						text = "Your " .. Format.Cash(state.legacy) .. " Legacy is KEPT",
-						color = Theme.COLOR_TEXT,
-					},
-					{
-						text = "Rebirths: " .. tostring(state.rebirthCount) .. " → " .. tostring(
-							state.rebirthCount + 1
-						) .. " — future eras grant more Legacy",
-						color = Theme.COLOR_TEXT,
-					},
-					{ text = "Start over in Era 1 with your permanent bonuses" },
-					{ text = "Resets: cash, buildings, levels, and your plot" },
-					{ text = "Keeps: Legacy, rebirth count, and stats" },
-				},
-				confirmText = "Rebirth",
-				onConfirm = function()
+				else
 					requestRebirth:FireServer()
-				end,
-			})
-		end
+				end
+			end,
+		})
 	end
 
 	local buildPanel = BuildPanel.new(screenGui, {
@@ -203,20 +256,54 @@ local function boot(): ()
 		onLevelUp = function(slotId: string, count: number)
 			requestLevelUp:FireServer(slotId, count)
 		end,
-		onPrestige = openPrestigeDialog,
+		onPrestige = openPrestigeScreen,
+		onClose = closePanels,
 	})
+	local legacyPanel = LegacyPanel.new(screenGui, {
+		gameConfig = gameConfig,
+		onPrestige = openPrestigeScreen,
+		onClose = closePanels,
+	})
+	local settingsPanel = SettingsPanel.new(screenGui, {
+		onToggle = function(key: Types.SettingKey, value: boolean)
+			-- Apply locally at once; the next snapshot/delta is authoritative.
+			local current = model
+			if current ~= nil then
+				if key == "music" then
+					current.state.settings.music = value
+				else
+					current.state.settings.sfx = value
+				end
+				SoundController.ApplySettings(current.state.settings)
+			end
+			requestSetSetting:FireServer(key, value)
+		end,
+		onClose = closePanels,
+	})
+	panels.build = buildPanel
+	panels.legacy = legacyPanel
+	panels.settings = settingsPanel
+
+	local function applySettings(settings: { music: boolean, sfx: boolean }): ()
+		SoundController.ApplySettings(settings)
+		settingsPanel.SetSettings(settings)
+	end
 
 	local function refreshAll(): ()
 		local current = model
 		if current == nil then
 			return
 		end
-		topBar.SetCash(current.state.cash)
+		local state = current.state
+		topBar.SetCash(state.cash)
 		topBar.SetIncome(current.incomePerSecond)
-		topBar.SetLegacy(current.state.legacy)
-		-- Deltas can deliver the monument purchase, so the banner recomputes every push.
-		buildPanel.SetPrestige(prestigeLabelFor(prestigeKindFor(current.state), current.state))
-		buildPanel.Refresh(current.state)
+		topBar.SetLegacy(state.legacy)
+		-- Deltas can deliver the monument purchase, so the affordance recomputes every push.
+		local prestigeLabel = prestigeLabelFor(prestigeKindFor(state), state)
+		buildPanel.SetPrestige(prestigeLabel)
+		legacyPanel.SetPrestige(prestigeLabel)
+		buildPanel.Refresh(state)
+		legacyPanel.Refresh(state)
 	end
 
 	local function applySnapshot(payload: { [string]: any }): ()
@@ -235,18 +322,25 @@ local function boot(): ()
 			incomePerSecond = snapshot.incomePerSecond,
 		}
 		if eraChanged then
-			-- Any open confirm described the era we just left; its numbers are stale.
-			dialog.Hide()
+			-- Any open prestige screen described the era we just left; its numbers are stale.
+			eraScreen.Hide()
 		end
-		topBar.SetEra(snapshot.state.era, snapshot.eraName)
+		local eraConfig = Catalog.GetEraConfig(snapshot.state.era)
+		topBar.SetEra(snapshot.state.era, eraDisplayName(eraConfig, snapshot.eraName))
 		-- Missing era config degrades to the panel's empty state, never an error.
 		-- BuildPanel.SetEra skips rebuilds only when eraIndex matches, so an era-changing
 		-- snapshot always rebuilds the rows (M2 contract check).
-		buildPanel.SetEra(Catalog.GetEraConfig(snapshot.state.era))
+		buildPanel.SetEra(eraConfig)
 		refreshAll()
 
-		-- Read from the raw payload: the welcomeBack field is an M2 Snapshot amendment
-		-- and may precede the Types.luau update in the concurrent server wave.
+		if isSettings(snapshot.state.settings) then
+			applySettings(snapshot.state.settings)
+		end
+		-- The ceremony switches the ambient itself once its overlay closes.
+		if not ceremony.IsOpen() then
+			SoundController.SetAmbientEra(snapshot.eraName)
+		end
+
 		local welcomeBack = payload.welcomeBack
 		if
 			not welcomeBackShown
@@ -255,15 +349,7 @@ local function boot(): ()
 			and typeof(welcomeBack.elapsedSeconds) == "number"
 		then
 			welcomeBackShown = true
-			toast.Show(
-				"You earned $"
-					.. Format.Cash(welcomeBack.grantedCash)
-					.. " while away — "
-					.. humanizeDuration(welcomeBack.elapsedSeconds)
-					.. " offline",
-				Theme.TOAST_SECONDS,
-				false
-			)
+			welcomeCard.Show(welcomeBack.grantedCash, welcomeBack.elapsedSeconds)
 		end
 	end
 
@@ -285,6 +371,11 @@ local function boot(): ()
 			for slotId, slotState in slots do
 				current.state.slots[slotId] = slotState
 			end
+		end
+		local settings = delta.settings
+		if settings ~= nil and isSettings(settings) then
+			current.state.settings = { music = settings.music, sfx = settings.sfx }
+			applySettings(current.state.settings)
 		end
 		refreshAll()
 	end
@@ -320,8 +411,39 @@ local function boot(): ()
 				true
 			)
 		elseif typeof(payload.slotId) == "string" and payload.slotId ~= "" then
+			-- M3 contract: every slot failure flashes the row; only a failed payment sounds.
 			buildPanel.FlashSlot(payload.slotId)
+			if payload.reason == "insufficientFunds" then
+				SoundController.Play("insufficientFunds")
+			end
 		end
+	end
+
+	-- eraAdvance / rebirth only; PlotVisualsController owns reveal / levelUp.
+	local function onFxEvent(payload: any): ()
+		if typeof(payload) ~= "table" or typeof(payload.toEra) ~= "number" then
+			return
+		end
+		local kind = payload.kind
+		if kind ~= "eraAdvance" and kind ~= "rebirth" then
+			return
+		end
+		local legacyGained = if typeof(payload.legacyGained) == "number"
+			then payload.legacyGained
+			else 0
+		local rebirthCount = if typeof(payload.rebirthCount) == "number"
+			then payload.rebirthCount
+			else 0
+		local toEra: number = payload.toEra
+		local nextEraConfig = Catalog.GetEraConfig(toEra)
+		eraScreen.Hide()
+		ceremony.Show({
+			kind = kind,
+			eraIndex = toEra,
+			displayName = eraDisplayName(nextEraConfig, "Era " .. tostring(toEra)),
+			legacyGained = legacyGained,
+			rebirthCount = rebirthCount,
+		})
 	end
 
 	local function onCashAttribute(): ()
@@ -339,32 +461,42 @@ local function boot(): ()
 		end
 	end
 
-	local function applyScale(): ()
+	applyLayout = function(): ()
 		local size = screenGui.AbsoluteSize
 		if size.X <= 0 or size.Y <= 0 then
 			return -- AbsoluteSize is zero before first layout; the changed signal re-enters
 		end
 		-- MIN_SCALE is derived in Theme so tap targets never drop below 44 physical px;
-		-- the panel adapts its height to the viewport inside SetLayout (landscape fix).
+		-- panels adapt their height/docking to the viewport through PanelDock.
 		local scale = math.clamp(
 			math.min(size.X / Theme.DESIGN_WIDTH, size.Y / Theme.DESIGN_HEIGHT),
 			Theme.MIN_SCALE,
 			Theme.MAX_SCALE
 		)
-		topBar.SetScale(scale)
-		buildPanel.SetLayout(scale, size)
-		dialog.SetScale(scale)
-		toast.SetScale(scale)
+		local landscape = PanelDock.IsLandscape(size)
+		topBar.SetLayout(scale, landscape)
+		bottomBar.SetScale(scale)
+		for _, panel in panels do
+			panel.SetLayout(PanelDock.Compute(scale, size, panel.DesignHeight))
+		end
+		eraScreen.SetLayout(scale, size)
+		ceremony.SetScale(scale)
+		welcomeCard.SetLayout(scale, landscape)
+		local stackedAbove = if welcomeCard.IsVisible()
+			then welcomeCard.DesignHeight() + Theme.TOAST_GAP
+			else 0
+		toast.SetLayout(scale, landscape, stackedAbove)
 	end
 
 	-- The HUD lives for the whole session (ResetOnSpawn = false); these connections die
-	-- with the client. Components expose Destroy() for when M3 rebuilds screens.
+	-- with the client. Components expose Destroy() for any future screen rebuild.
 	stateChanged.OnClientEvent:Connect(onStateChanged)
 	actionResult.OnClientEvent:Connect(onActionResult)
+	fxEvent.OnClientEvent:Connect(onFxEvent)
 	player:GetAttributeChangedSignal("Cash"):Connect(onCashAttribute)
-	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyScale)
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
 
-	applyScale()
+	applyLayout()
 	onCashAttribute()
 	-- One explicit request on boot: the server's proactive join snapshot may have fired
 	-- before our connection existed; duplicate snapshots are harmless by design.

@@ -177,6 +177,27 @@ function DataService.GetState(player: Player): Types.PlayerState?
 	return profile.Data
 end
 
+-- M3 settings write behind RequestSetSetting (key/value already validated by RemoteService).
+-- Returns false while state isn't loaded so the caller skips the delta mark. The remote
+-- handler itself is wired in Main: marking dirty needs EconomyService, which already requires
+-- this module, so registering it here would be a require cycle.
+function DataService.SetSetting(player: Player, key: Types.SettingKey, value: boolean): boolean
+	local state = DataService.GetState(player)
+	if state == nil then
+		return false
+	end
+	if key == "music" then
+		state.settings.music = value
+	elseif key == "sfx" then
+		state.settings.sfx = value
+	else
+		-- Only the remote validator whitelists keys today; a future direct caller must not be
+		-- able to write an unknown key into the profile.
+		return false
+	end
+	return true
+end
+
 -- Final save + session release. lastSeen/incomeAtSave are already fresh via the tick rule.
 function DataService.Release(player: Player): ()
 	local profile = profiles[player]

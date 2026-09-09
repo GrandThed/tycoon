@@ -11,15 +11,18 @@ local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("C
 
 -- Every reserved remote exists from Init so the client can WaitForChild all of them;
 -- RequestPrompt stays reserved (validator/handler land at M4) and has no dispatcher.
+-- FxEvent (M3) is server→client only: presentation events, owner only, never on bulk restore.
 local REMOTE_NAMES = {
 	"RequestSnapshot",
 	"RequestBuy",
 	"RequestLevelUp",
 	"RequestAdvanceEra",
 	"RequestRebirth",
+	"RequestSetSetting",
 	"RequestPrompt",
 	"StateChanged",
 	"ActionResult",
+	"FxEvent",
 }
 
 type PackedArgs = { n: number, [number]: any }
@@ -54,6 +57,12 @@ local validators: { [string]: Validator } = {
 	end,
 	RequestRebirth = function(args: PackedArgs): boolean
 		return args.n == 0
+	end,
+	RequestSetSetting = function(args: PackedArgs): boolean
+		-- Only the two Types.SettingKey values exist; anything else is a silent drop.
+		return args.n == 2
+			and (args[1] == "music" or args[1] == "sfx")
+			and typeof(args[2]) == "boolean"
 	end,
 }
 

@@ -4,18 +4,24 @@ Updated by the lead at the start of each milestone. Agents conform to this docum
 If your task needs a change to a file or contract you don't own, **report it in your final
 message** — never edit across an ownership boundary.
 
-Current milestone: **M2 — Persistence & eras** (ProfileStore, offline progress, eras 2–4,
-Advance Era / Rebirth / Legacy, Python economy sim). M1 contracts below remain standing; the
-**M2 contracts** section at the end defines this milestone's additions and the few amendments
-called out inline.
+Current milestone: **M3 — Presentation** (mobile UI pass, sounds, reveal/level-up feedback,
+era-advance ceremony, welcome-back card, asset manifest generator, VIP skin support). M1 and M2
+contracts below remain standing; the **M3 contracts** section at the end defines this
+milestone's additions and the amendments called out there.
 
 ## Environment notes (all agents)
 
-- Toolchain is Rokit-managed; repo-root `rokit.toml` pins versions, so `~/.rokit/bin` shims
-  resolve inside the repo. PowerShell has them on PATH; from Bash prefix
-  `export PATH="$HOME/.rokit/bin:$PATH"`.
-- Python is `python` (3.12.5); there is no `python3` alias.
-- Not a git repository; do not `git init`.
+- Repo root is `C:\Users\benja\Desktop\tycoon`; it IS a git repository since 2026-09-08 (one
+  commit). Do not commit; the lead commits.
+- Toolchain is Rokit-managed at `~/.rokit/bin` (restored 2026-09-08; repo-root `rokit.toml`
+  pins versions). Neither PowerShell nor Bash has it on PATH by default:
+  - PowerShell: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+  - Bash: `export PATH="$HOME/.rokit/bin:$PATH"`
+- **Python is `py`** (3.14). `python` and `python3` resolve to Windows Store stubs that print
+  "Python was not found" — never invoke them. Every doc/tool command uses `py tools/...`.
+- Typecheck: `luau-lsp analyze --definitions=tools/types/globalTypes.d.luau --ignore "Packages/**"
+  --ignore "ServerPackages/**" src` — the definitions file is committed; **never re-download it**.
+- Line endings are LF everywhere (`.gitattributes`); stylua checks fail on CRLF.
 - You may create empty directories anywhere; create files only inside your ownership.
 
 ## M2 ownership
@@ -425,3 +431,262 @@ Lint/analyze/build green; `wally install` green with ServerPackages; `python too
 --check` passes with all four eras in band; leave/rejoin restores state (mock or real API);
 offline grant correct, capped, and toasted; a full accelerated playthrough (Studio levers)
 reaches Era 4, rebirths, and keeps Legacy; reviewer verdict SHIP.
+
+---
+
+# M3 contracts — Presentation
+
+Goal: the game looks and sounds like a real game on a phone, with or without imported Kenney
+assets. Nothing in this milestone changes balance, persistence keys, or the M1/M2 remotes'
+payloads; everything below is additive unless marked **AMENDED**.
+
+## M3 ownership
+
+| Owner | Files |
+|-------|-------|
+| luau-engineer | `src/server/**`, `src/shared/{Types,Economy,Format,Catalog}.luau`, `default.project.json` (unfrozen only to add the `<Era>_VIP` asset folders) |
+| ui-engineer | `src/client/**` (new UI modules allowed under `src/client/UI/`) |
+| economy-designer | `src/shared/Config/**` (`Sounds.json` new; era JSONs gain `displayName` + per-slot `kit`; **no balance changes** — `baseCost`/`baseIncome`/`multiplier` are frozen this milestone), `tools/gen_asset_manifest.py` (new), first generation of `docs/ASSET_MANIFEST.md` |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, `docs/ASSET_MANIFEST.md` (regenerate), status ticks in `docs/PLAN.md` |
+
+`src/shared/Layouts/**` are frozen this milestone (no owner edits them).
+
+Presentation constants: `src/client/UI/Theme.luau` remains the sanctioned home for client-only
+sizing, colors, and **presentation timings** (tween durations, particle counts, card auto-dismiss
+seconds, reduce-motion factors) — this extends the M1 exemption and is the only place such
+numbers may live. Audio ids/volumes live in `Config/Sounds.json`. Gameplay numbers stay in
+`Game.json`/era configs; nothing new is added to `Game.json` this milestone.
+
+## Era config schema v1.1 (economy-designer authors; everyone consumes)
+
+Two additive fields, both **required** in every era file:
+
+```json
+{
+  "eraIndex": 4,
+  "name": "OrbitalColony",
+  "displayName": "Orbital Colony",
+  "slots": [
+    { "id": "landingPad", "...": "...", "kit": "Space Kit" }
+  ]
+}
+```
+
+- `displayName`: human copy for the era (spaces allowed). `name` stays the frozen module/folder
+  key (`Layouts/<name>`, `ServerStorage/Assets/<name>`). **All UI copy uses `displayName`**;
+  `Snapshot.eraName` is unchanged (still `name`) — the client resolves display copy through
+  `Catalog.GetEraConfig(era).displayName`.
+- `kit`: the Kenney kit the model should be imported from (free text, e.g. `"Fantasy Town Kit"`,
+  `"Nature Kit"`, `"City Kit (Commercial)"`). Consumed only by the manifest generator; Luau
+  never reads it. Every slot's `modelName` must be PascalCase `[A-Z][A-Za-z0-9]*`, unique
+  within its era, and `description` non-empty — the generator's `--check` enforces all three.
+
+`Types.EraConfig` gains `displayName: string`; `Types.SlotConfig` gains `kit: string?` (optional
+in the type so old configs still typecheck; required by the generator).
+
+## Sounds.json schema v1 — `Config/Sounds.json` (economy-designer authors; client consumes)
+
+```json
+{
+  "version": 1,
+  "groups": { "SFX": 0.6, "Music": 0.35, "UI": 0.5 },
+  "sounds": {
+    "uiClick":           { "id": 0, "group": "UI",    "volume": 1.0 },
+    "purchase":          { "id": 0, "group": "SFX",   "volume": 1.0 },
+    "reveal":            { "id": 0, "group": "SFX",   "volume": 0.8 },
+    "levelUp":           { "id": 0, "group": "SFX",   "volume": 0.8, "pitchPerMilestone": 0.08 },
+    "levelUpMilestone":  { "id": 0, "group": "SFX",   "volume": 1.0 },
+    "insufficientFunds": { "id": 0, "group": "UI",    "volume": 0.8 },
+    "eraAdvance":        { "id": 0, "group": "Music", "volume": 1.0 },
+    "rebirth":           { "id": 0, "group": "Music", "volume": 1.0 },
+    "welcomeBack":       { "id": 0, "group": "Music", "volume": 0.8 }
+  },
+  "ambient": {
+    "Village":       { "id": 0, "group": "Music", "volume": 0.25 },
+    "Boomtown":      { "id": 0, "group": "Music", "volume": 0.25 },
+    "Metropolis":    { "id": 0, "group": "Music", "volume": 0.25 },
+    "OrbitalColony": { "id": 0, "group": "Music", "volume": 0.25 }
+  }
+}
+```
+
+- `groups`: the three `SoundGroup`s the client creates under `SoundService` with these default
+  volumes. `UI` and `SFX` follow the `sfx` setting; `Music` follows `music`.
+- `sounds` keys are **frozen event names** (exactly the nine above); `id` is a numeric Roblox
+  asset id, `0` = silent (skip, never warn). `volume` is a 0–1 multiplier inside the group;
+  `pitchPerMilestone` (levelUp only) adds that much `PlaybackSpeed` per milestone already
+  reached by the building's level, so higher tiers tick higher (spec §9).
+- `ambient` keyed by era `name`; loops at low volume while the player's era is that era;
+  toggled by the `music` setting. All ids ship as `0` (uploads are a MANUAL_STEPS item).
+- Types (luau-engineer): `SoundGroupName = "SFX" | "Music" | "UI"`,
+  `SoundDef = { id: number, group: SoundGroupName, volume: number, pitchPerMilestone: number? }`,
+  `SoundsConfig = { version: number, groups: { [string]: number }, sounds: { [string]: SoundDef },
+  ambient: { [string]: SoundDef } }`. `Catalog.GetSoundsConfig(): Types.SoundsConfig` (cached,
+  same pattern as `GetGameConfig`).
+
+## Remotes — M3 additions (RemoteService owns creation + validation)
+
+Server → client, fire-and-forget, owner only, **never** on bulk restore (join/claim/era rebuild):
+
+- `FxEvent(payload: Types.FxEvent)` — one RemoteEvent, discriminated by `kind`:
+
+```lua
+export type FxReveal = { kind: "reveal", slotId: string, slotType: SlotType, modelName: string }
+export type FxLevelUp = {
+	kind: "levelUp", slotId: string, fromLevel: number, toLevel: number,
+	milestone: boolean, -- true iff a milestoneLevels entry lies in (fromLevel, toLevel]
+}
+export type FxEraAdvance = { kind: "eraAdvance", fromEra: number, toEra: number, legacyGained: number }
+export type FxRebirth = {
+	kind: "rebirth", fromEra: number, toEra: number, legacyGained: number, rebirthCount: number,
+}
+export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth
+```
+
+Firing points (PlotService), all AFTER the state mutation succeeds:
+- `tryBuy` success (pad touch or `RequestBuy`): `reveal`, fired after `spawnBuilding` +
+  `refreshPads` + `MarkDirty` so the instance replicates ahead of the event.
+- `tryLevelUp` success: `levelUp` with the granted range.
+- `tryAdvanceEra` / `tryRebirth` success: `eraAdvance` / `rebirth` fired **before** the fresh
+  Snapshot (the ceremony overlay opens first; the snapshot rebuilds the panel behind it).
+
+Client → server:
+- `RequestSetSetting(key: string, value: boolean)` — `key` must be `"music"` or `"sfx"`, `value`
+  a boolean; anything else is dropped silently. Same token-bucket rate limit as every remote.
+  The state write is `DataService.SetSetting(player, key, value): boolean` (false when state
+  isn't loaded); the remote handler is wired in **`Main.server.luau`** (AMENDED post-wave:
+  DataService cannot require EconomyService without a cycle), which calls `SetSetting` then
+  `EconomyService.MarkDirty(player, { settings = true })`.
+
+Amendments to existing payloads (**AMENDED**, additive):
+- `Types.Delta` gains `settings: { music: boolean, sfx: boolean }?`; `EconomyService.DirtyFields`
+  gains `settings: boolean?` and `flushDeltas` includes the whole settings table when dirty.
+- `ActionResult` unchanged; the client now branches on `reason` (see client contracts).
+
+## Server runtime contracts (M3)
+
+- **VIP skin resolution** (`PlotService.spawnBuilding`): template lookup order is
+  `ServerStorage/Assets/<EraName>_VIP/<modelName>` when `state.passes.VIP == true`, then
+  `ServerStorage/Assets/<EraName>/<modelName>`, then the placeholder part. Only `Model`
+  instances count as templates. `passes.VIP` is never set until M4; the branch must simply
+  exist and be exercised by the fallback path. `default.project.json` adds
+  `ServerStorage/Assets/<Era>_VIP` folders for all four eras (same `$className: Folder`).
+- **Plot sign** (`PlotService`): each plot gets `Workspace/Plots/Plot_<i>/Sign` — an anchored
+  part at the plot's front-edge center (geometry derived from the layout's `plotSize`/`padSize`;
+  formula in code, numbers from the layout) with a BillboardGui: line 1 `<DisplayName>'s
+  <era displayName>`, line 2 `Rebirth ×<n>` only when `rebirthCount > 0` (spec §3 cosmetic
+  rank). Text set on claim and refreshed on era advance/rebirth; gold text when `passes.VIP`
+  (M4 flips it), neutral otherwise. Cleared (empty text) on release. This is the rebirth
+  cosmetic rank visual; name tags are M4 with the VIP tag.
+- **Format** (`src/shared/Format.luau`, additive):
+  - `Format.Cash(n)` unchanged.
+  - `Format.Rate(n: number): string` — for per-second values: `n < 10` ⇒ up to 2 decimals
+    (`0.35`, `2.5`, `7`), `10 ≤ n < 1000` ⇒ up to 1 decimal (`12.5`, `340`), else
+    `Format.Cash(n)`. Trailing zeros stripped; floors, never rounds up. UI appends `/s` itself.
+  - `Format.Duration(seconds: number): string` — `3h 12m`, `12m 5s`, `45s`; negative/zero ⇒
+    `0s`. (Replaces the client's local `humanizeDuration`.)
+- Bulk restore (`rebuildPlotForEra`, `ClaimPlot`) stays silent: no `FxEvent`s.
+- `Catalog.GetSoundsConfig()` added (see above). `Catalog` remains usable from both realms.
+
+## Client contracts (M3) — ui-engineer
+
+World naming the client relies on (frozen since M1, restated): the local player's plot index
+is the `PlotIndex` player attribute; buildings live at
+`Workspace/Plots/Plot_<i>/Buildings/Building_<slotId>` (a `Model` cloned from Assets, pivoted
+to the anchor, or a placeholder `Part`). The client may modify its **local** copies freely
+(scale, transparency, attachments) — nothing replicates back.
+
+Controller wiring (Main.client order unchanged: UIController, SoundController,
+PlotVisualsController; `Init` all, then `Start` all):
+- `SoundController.Init()` builds the three SoundGroups and pre-creates one `Sound` per
+  non-zero id **synchronously, without yielding**. Public API:
+  `SoundController.Play(key: string, opts: { milestones: number? }?)` (unknown key or id 0 ⇒
+  no-op), `SoundController.ApplySettings(settings: { music: boolean, sfx: boolean })`,
+  `SoundController.SetAmbientEra(eraName: string?)` (nil stops). Other controllers `require`
+  it directly (`script.Parent.SoundController`); calling `Play` before `Init` is a harmless no-op.
+- `PlotVisualsController` connects to `FxEvent` and handles `reveal` and `levelUp`; it ignores
+  other kinds. `UIController` also connects to `FxEvent` and handles `eraAdvance` and `rebirth`
+  only. (Two listeners on one RemoteEvent, disjoint kinds — no cross-controller bus needed.)
+- Reveal: locate `Building_<slotId>` under the local plot (`WaitForChild` with a short timeout;
+  give up silently if absent). `Model` ⇒ `ScaleTo` from a small start scale to 1 with a
+  Back-out tween; `Part` ⇒ tween `Size` from small to the current size keeping the bottom face
+  fixed. Play `purchase` then `reveal`. Reduce-motion ⇒ shorter linear tween, no particles.
+- Level-up: floating text at the building (`+N` levels, or `MILESTONE` styling when
+  `milestone`), brief highlight, `levelUp` sound with `opts.milestones` = number of
+  milestoneLevels ≤ `toLevel` (for pitch), `levelUpMilestone` sound additionally when
+  `milestone`. Particles only when not reduce-motion.
+- Reduce-motion: `Theme.reducedMotion` stays the single source; it is
+  `UserInputService.TouchEnabled` OR a low-end signal (your judgment, documented in the report).
+
+HUD (all copy through `Format`; era copy through `displayName`):
+- **Top bar**: cash (`Format.Cash`), income (`Format.Rate(ips) .. "/s"`), era badge
+  (`ERA n` + displayName), Legacy count. Sub-1/s incomes must never render `0/s`.
+- **Bottom bar** (spec §10): four ≥ 44 px targets — `Build`, `Legacy`, `Shop`, `Settings`.
+  `Shop` is built but **hidden** this milestone (`SetShopVisible(false)`; M4 shows it when any
+  Monetization id is non-zero — spec §6 says items with id 0 are hidden, and an empty shop is
+  the same thing). Every button press plays `uiClick`.
+- **Build panel**: rows as in M1/M2 plus, on levelable rows, three buttons `×1 / ×10 / Max`
+  sending `RequestLevelUp(slotId, 1 | 10 | gameConfig.maxLevel)`. Cost labels: ×1 =
+  `LevelUpCost`, ×10 = `LevelUpCostTotal(level, min(level+10, maxLevel))`, Max = total cost of
+  the largest affordable `n` (greedy over `LevelUpCost`, display prediction only — the server
+  computes the real grant). Income-delta preview per button via shared `Economy`. "Next
+  affordable" highlight = the cheapest affordable action (buy or ×1 level) in purchase order.
+  Row buttons with cost > cash are dimmed but still tappable (server answers with
+  `insufficientFunds`).
+- **Legacy panel**: legacy count, current multiplier (`Economy.LegacyMult`), rebirth count,
+  and the Advance Era / Rebirth entry when eligible (same eligibility rules as M2; the Build
+  panel banner stays too). Legacy shop is Phase 2 — one dim line "Legacy perks: coming later"
+  is acceptable, nothing more.
+- **Settings panel**: `Music` and `SFX` toggles bound to `state.settings`. Toggling applies
+  locally at once (`SoundController.ApplySettings`) and fires `RequestSetSetting(key, value)`;
+  the next snapshot/delta is authoritative and re-applies. No other settings this milestone.
+- **Era-advance screen** (replaces the M2 minimal dialog for `advance`; `rebirth` uses the same
+  screen with rebirth copy): next era displayName + `ERA n+1`, a preview list (first three
+  building names and the monument name of the next era config), resets-vs-persists columns,
+  `+X Legacy` (client preview via `Economy.LegacyGain`), explicit `Confirm` + `Cancel`. Scrim
+  blocks input only while this screen is open.
+- **Ceremony** on `FxEvent.eraAdvance`/`rebirth`: full-screen overlay, `ERA n — <displayName>`
+  (rebirth: `REBIRTH ×n` then `ERA 1 — <displayName>`), `+X Legacy`, `eraAdvance`/`rebirth`
+  sound, auto-dismiss after a Theme-defined duration or on tap; reduce-motion shortens it.
+  `SoundController.SetAmbientEra(newEraName)` after the overlay.
+- **Welcome-back card** (replaces the M2 toast): non-blocking card under the top bar, title
+  `Welcome back!`, body `You earned $<Format.Cash> while away (<Format.Duration>)`, dismiss
+  `X`, auto-dismiss after a Theme duration, `welcomeBack` sound. Reserve (hidden) a secondary
+  button slot via `SetDoubleOffer(nil | { label, onTap })` for M4's "Double it".
+- **Feedback on `ActionResult`**: `insufficientFunds` ⇒ row flash + `insufficientFunds` sound;
+  `locked`/`invalid` ⇒ row flash only; era actions ⇒ toast as in M2.
+- **Layout**: one uniform `UIScale` model as today, plus `UIAspectRatioConstraint` on the
+  fixed-aspect cards (era-advance screen, ceremony title block, welcome-back card). **Real
+  landscape layout**: when viewport width > height, the Build/Legacy/Settings panels dock to a
+  side column (full available height, fixed design width) instead of the portrait bottom
+  sheet, and the bottom bar stays bottom-center. Verify mentally at 375×667, 667×375, and
+  1920×1080 and say so in the report. All tap targets ≥ 44 px at `MIN_SCALE`.
+- `Toast` stays for transient errors; `ConfirmDialog` stays for anything not covered above.
+
+## tools/gen_asset_manifest.py (economy-designer)
+
+- `py tools/gen_asset_manifest.py` reads `src/shared/Config/Eras/*.json` and writes
+  `docs/ASSET_MANIFEST.md`: a header explaining the naming rule
+  (`ServerStorage/Assets/<name>/<modelName>` must equal the config `modelName`; VIP variants in
+  `Assets/<name>_VIP/`), then one section per era (`## Era n — <displayName>`, sorted by
+  eraIndex, listing the era's kits) with a table in purchase order: `#`, `modelName`, slot
+  `name`, `type`, `kit`, `description`, and a checkbox column for the human to tick as imported.
+  A closing "Totals" line gives model count per era. Output is deterministic (stable ordering,
+  no timestamps) so `--check` can diff it.
+- `--check`: exits non-zero and prints one line per problem when any era lacks `displayName`,
+  any slot lacks `kit`/`description`/`modelName`, a `modelName` is not PascalCase or is
+  duplicated within an era, or the committed `docs/ASSET_MANIFEST.md` differs from the
+  regenerated text. QA runs `--check`.
+- The script is stdlib-only, mirrors the sim's config-loading path (repo-root relative), and
+  never duplicates a game constant.
+
+## Definition of done (M3)
+
+`stylua --check src`, `selene src`, `luau-lsp analyze` (committed definitions), `rojo build`
+all green; `py tools/sim_economy.py --check` still passes untouched (no balance edits);
+`py tools/gen_asset_manifest.py --check` passes with the manifest committed. With every sound
+id 0 and no assets imported, Studio shows: reveal tween + placeholder on buy, floating level-up
+text (milestone variant at 10), ×1/×10/Max, bottom bar with Build/Legacy/Settings (Shop hidden),
+settings toggles that survive rejoin, the welcome-back card, the era-advance screen and the
+ceremony overlay, the plot sign, and a usable layout in portrait, landscape, and 1920×1080.
+Reviewer verdict SHIP.

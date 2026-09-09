@@ -20,11 +20,13 @@ type SlotConfig = {
 	baseIncome: number,
 	requires: string?,
 	multiplier: number?,
+	kit: string?,
 }
 
 type EraConfig = {
 	eraIndex: number,
 	name: string,
+	displayName: string,
 	slots: { SlotConfig },
 }
 

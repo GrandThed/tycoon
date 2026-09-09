@@ -1,5 +1,5 @@
 --!strict
--- Shared type definitions, frozen in docs/INTERFACES.md (M1 + the M2 amendments). Slot ids
+-- Shared type definitions, frozen in docs/INTERFACES.md (M1 + the M2/M3 amendments). Slot ids
 -- stored in PlayerState.slots are persistence keys since M2 and may never be renamed.
 
 export type SlotType = "building" | "unlock" | "decor" | "monument"
@@ -14,11 +14,16 @@ export type SlotConfig = {
 	baseIncome: number,
 	requires: string?,
 	multiplier: number?,
+	-- M3 (schema v1.1): Kenney kit for the asset manifest only; Luau never reads it. Optional
+	-- in the type so pre-v1.1 configs still typecheck; the generator's --check requires it.
+	kit: string?,
 }
 
 export type EraConfig = {
 	eraIndex: number,
 	name: string,
+	-- M3: human copy (spaces allowed); `name` stays the module/folder key.
+	displayName: string,
 	slots: { SlotConfig },
 }
 
@@ -59,6 +64,8 @@ export type Delta = {
 	cash: number?,
 	incomePerSecond: number?,
 	slots: { [string]: SlotState }?,
+	-- M3: the whole settings table whenever a RequestSetSetting write lands.
+	settings: { music: boolean, sfx: boolean }?,
 }
 
 export type ActionResult = {
@@ -67,6 +74,49 @@ export type ActionResult = {
 	slotId: string,
 	ok: boolean,
 	reason: ("insufficientFunds" | "locked" | "invalid")?,
+}
+
+-- M3 presentation events (server → client, owner only, never on bulk restore), discriminated
+-- by `kind`. milestone is true iff a milestoneLevels entry lies in (fromLevel, toLevel].
+export type FxReveal = { kind: "reveal", slotId: string, slotType: SlotType, modelName: string }
+export type FxLevelUp = {
+	kind: "levelUp",
+	slotId: string,
+	fromLevel: number,
+	toLevel: number,
+	milestone: boolean,
+}
+export type FxEraAdvance = {
+	kind: "eraAdvance",
+	fromEra: number,
+	toEra: number,
+	legacyGained: number,
+}
+export type FxRebirth = {
+	kind: "rebirth",
+	fromEra: number,
+	toEra: number,
+	legacyGained: number,
+	rebirthCount: number,
+}
+export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth
+
+-- RequestSetSetting keys; anything else is dropped by the remote validator.
+export type SettingKey = "music" | "sfx"
+
+-- Sounds.json v1 mirror; field names follow the JSON keys exactly.
+export type SoundGroupName = "SFX" | "Music" | "UI"
+export type SoundDef = {
+	id: number,
+	group: SoundGroupName,
+	volume: number,
+	pitchPerMilestone: number?,
+}
+export type SoundsConfig = {
+	version: number,
+	groups: { [string]: number },
+	sounds: { [string]: SoundDef },
+	ambient: { [string]: SoundDef },
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.

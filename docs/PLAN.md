@@ -10,27 +10,34 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [~] M0 — Scaffold (QA-green; Rojo connect verified. Studio playtest deferred by Ben — folded into the M1 gate)
 - [~] M1 — Playable loop (built, review SHIP after fixes, QA green — awaiting combined M0+M1 playtest)
 - [~] M2 — Persistence & eras (built, review SHIP after exploit fix, QA+sim green — awaiting combined M0–M2 playtest)
-- [ ] M3 — Presentation (approved by Ben 2026-09-03 to start in a fresh session; no playtest gate has run yet — the combined M0–M2 checklist in PLAYTEST.md is still pending and can happen before or alongside M3)
+- [~] M3 — Presentation (built, review SHIP, QA green — awaiting Studio playtest. The combined
+  M0–M2 playtest is still pending too; can run in the same session as M3's)
 - [ ] M4 — Monetization & analytics
 - [ ] M5 — Hardening
 
 ---
 
-## 1. Environment (verified 2026-09-02)
+## 1. Environment (verified 2026-09-08)
+
+Repo now lives at `C:\Users\benja\Desktop\tycoon` and **is** a git repository.
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| rojo | ✅ `~/.rokit/bin/rojo.exe` | Rokit-managed; on the **PowerShell** PATH only |
-| wally | ✅ `~/.rokit/bin/wally.exe` | ProfileStore via Wally is the plan of record |
-| stylua | ✅ `~/.rokit/bin/stylua.exe` | |
-| selene | ✅ `~/.rokit/bin/selene.exe` | |
-| luau-lsp | ✅ `~/.rokit/bin/luau-lsp.exe` | available for typecheck if useful |
-| python | ✅ 3.12.5 as `python` | **no `python3` alias on this machine** — tools/docs must invoke `python` |
+| rojo | ✅ `~/.rokit/bin/rojo.exe` 7.7.0 | Rokit-managed; **not** on PATH by default in either shell |
+| wally | ✅ `~/.rokit/bin/wally.exe` 0.3.2 | ProfileStore via Wally is the plan of record |
+| stylua | ✅ `~/.rokit/bin/stylua.exe` 2.5.2 | requires LF line endings (`.gitattributes`) |
+| selene | ✅ `~/.rokit/bin/selene.exe` 0.31.0 | |
+| luau-lsp | ✅ `~/.rokit/bin/luau-lsp.exe` 1.69.0 | needs `--sourcemap sourcemap.json`; regenerate with `rojo sourcemap default.project.json -o sourcemap.json` whenever modules are added |
+| python | ✅ `py` (3.14) | **`python` and `python3` do NOT exist on this machine** — every doc/tool command invokes `py tools/...` |
 | Roblox type defs | ✅ `tools/types/globalTypes.d.luau` | committed at end of M2 session; use for `luau-lsp analyze --definitions=...` — do NOT re-download (the obvious URL 404s) |
 
-Agent note: the Git-Bash environment does not have `~/.rokit/bin` on PATH. Subagents running
-toolchain commands must either use PowerShell or prefix Bash commands with
-`export PATH="$HOME/.rokit/bin:$PATH"`.
+Toolchain reinstalled 2026-09-08 (rokit was missing on this machine/profile) at `~/.rokit/bin`,
+pinned by the repo-root `rokit.toml`. Not on PATH by default in either shell:
+- PowerShell: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+- Bash: `export PATH="$HOME/.rokit/bin:$PATH"`
+
+Agent note: subagents running toolchain commands must set one of the two PATH lines above first
+— neither shell has `~/.rokit/bin` on PATH out of the box.
 
 ## 2. Standing assumptions & defaults
 
@@ -182,6 +189,36 @@ ids/module names stay frozen, only display strings change).
 
 **Done when:** game is presentable with *or without* imported assets; manifest lists every model
 per era. **Playtest gate:** Ben plays on mobile emulation, then optionally starts Kenney imports.
+
+**Shipped (2026-09-08):** `FxEvent` remote (reveal/levelUp/eraAdvance/rebirth, owner-only,
+never on bulk restore); `RequestSetSetting` (music/sfx persisted in the profile); VIP skin
+lookup at `ServerStorage/Assets/<Era>_VIP/<modelName>` with fallback; plot sign
+(`Plot_<i>/Sign`, owner name + era displayName, `Rebirth ×n` line); `Format.Rate`/
+`Format.Duration`; `Catalog.GetSoundsConfig`. Client: bottom bar Build/Legacy/Settings (Shop
+built but hidden until M4); Build panel ×1/×10/Max; Legacy panel; Settings panel; era-advance
+screen; ceremony overlay; welcome-back card; `SoundController` (SoundGroups, `Config/Sounds.json`,
+id 0 = silent); `PlotVisualsController` (reveal tween, floating level-up text, milestone
+styling, particles off under reduce-motion); landscape docking (panels dock right, top bar
+top-left); reduce-motion = `TouchEnabled` OR `SavedQualityLevel` 1–3. Config/tools: era configs
+v1.1 (`displayName`, per-slot `kit`), `Sounds.json`, `tools/gen_asset_manifest.py` (+ `--check`),
+`docs/ASSET_MANIFEST.md`. Repo hygiene: `.gitattributes` (LF), `.gitignore`, sourcemap
+regenerated. Reviewer verdict SHIP; QA green.
+
+**Carried forward (owners assigned):**
+- ui-engineer, M4: landscape viewports narrower than ~690 px (e.g. 640×360) — the right-docked
+  panel overlaps the top-left top bar by ~9 px. Clamp panel width or accept the overlap on very
+  narrow landscape devices — decide at M4.
+- ui-engineer, M4: toggling a setting before the first `StateChanged` snapshot arrives doesn't
+  call `SoundController.ApplySettings` immediately (the next snapshot/delta heals it, so it's
+  cosmetic — a toggle tapped in the first second of a session may not audibly apply until data
+  loads).
+- ui-engineer, M4: hoist inline insets into `Theme` — `Panel.luau` header `+2`/`-16`, and
+  `BuildPanel.luau` `ScrollBarThickness 4` and the empty-label height `40`.
+- ui-engineer, M4: show the Shop button via `BottomBar.SetShopVisible(true)` when any
+  Monetization id is non-zero; wire `WelcomeBackCard.SetDoubleOffer`; flip `passes.VIP` to
+  drive the gold plot sign and VIP skins.
+- ui-engineer, M4: VIP name tag (the plot sign is the rebirth cosmetic rank visual; the VIP
+  name tag itself is still open).
 
 ## M4 — Monetization & analytics
 

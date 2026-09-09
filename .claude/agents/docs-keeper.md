@@ -1,6 +1,6 @@
 ---
 name: docs-keeper
-description: Keeps the human-facing docs current at the end of each milestone: PLAN, PLAYTEST, MANUAL_STEPS, and the generated asset manifest. Use after code is reviewed and verified.
+description: "Keeps the human-facing docs current at the end of each milestone: PLAN, PLAYTEST, MANUAL_STEPS, and the generated asset manifest. Use after code is reviewed and verified."
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 color: purple

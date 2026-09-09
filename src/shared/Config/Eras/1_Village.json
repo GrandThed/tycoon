@@ -1,6 +1,7 @@
 {
 	"eraIndex": 1,
 	"name": "Village",
+	"displayName": "Village",
 	"slots": [
 		{
 			"id": "campfire",
@@ -8,6 +9,7 @@
 			"name": "Campfire",
 			"modelName": "Campfire",
 			"description": "small campfire with stacked logs and stones",
+			"kit": "Nature Kit",
 			"baseCost": 0,
 			"baseIncome": 3
 		},
@@ -17,6 +19,7 @@
 			"name": "Small Tent",
 			"modelName": "TentSmall",
 			"description": "small canvas camping tent with wooden poles",
+			"kit": "Nature Kit",
 			"baseCost": 150,
 			"baseIncome": 12
 		},
@@ -26,6 +29,7 @@
 			"name": "Woodcutter's Hut",
 			"modelName": "WoodcutterHut",
 			"description": "log hut with axe, stump and stacked firewood",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 500,
 			"baseIncome": 30
 		},
@@ -35,6 +39,7 @@
 			"name": "Farm Plot",
 			"modelName": "FarmPlot",
 			"description": "tilled soil plot with rows of wheat",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 1200,
 			"baseIncome": 60
 		},
@@ -44,6 +49,7 @@
 			"name": "Small House",
 			"modelName": "HouseSmallA",
 			"description": "small timber-frame house with red roof",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 2800,
 			"baseIncome": 110
 		},
@@ -53,6 +59,7 @@
 			"name": "Pave the Road",
 			"modelName": "RoadCobblestone",
 			"description": "cobblestone road segment with dirt edges",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 5500,
 			"baseIncome": 0,
 			"multiplier": 0.05
@@ -63,6 +70,7 @@
 			"name": "Village Well",
 			"modelName": "Well",
 			"description": "stone well with wooden roof and bucket",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 9500,
 			"baseIncome": 330
 		},
@@ -72,6 +80,7 @@
 			"name": "Flower Bed",
 			"modelName": "FlowerBed",
 			"description": "wooden planter box with red and yellow flowers",
+			"kit": "Nature Kit",
 			"baseCost": 4000,
 			"baseIncome": 0,
 			"requires": "well",
@@ -83,6 +92,7 @@
 			"name": "Cottage",
 			"modelName": "HouseSmallB",
 			"description": "small cottage with blue roof and stone chimney",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 17000,
 			"baseIncome": 500,
 			"requires": "well"
@@ -93,6 +103,7 @@
 			"name": "Bakery",
 			"modelName": "Bakery",
 			"description": "bakery with stone oven and hanging bread sign",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 30000,
 			"baseIncome": 780
 		},
@@ -102,6 +113,7 @@
 			"name": "Windmill",
 			"modelName": "Windmill",
 			"description": "wooden windmill with four cloth sails",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 100000,
 			"baseIncome": 1200
 		},
@@ -111,6 +123,7 @@
 			"name": "Found the Village Square",
 			"modelName": "Fountain",
 			"description": "round stone fountain for the plaza",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 170000,
 			"baseIncome": 0,
 			"multiplier": 0.08
@@ -121,6 +134,7 @@
 			"name": "Market Stall",
 			"modelName": "MarketStall",
 			"description": "wooden market stall with striped awning",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 250000,
 			"baseIncome": 2400
 		},
@@ -130,6 +144,7 @@
 			"name": "Oak Tree",
 			"modelName": "TreeOak",
 			"description": "large leafy oak tree",
+			"kit": "Nature Kit",
 			"baseCost": 100000,
 			"baseIncome": 0,
 			"requires": "marketStall",
@@ -141,6 +156,7 @@
 			"name": "Blacksmith",
 			"modelName": "Blacksmith",
 			"description": "smithy with anvil, forge and brick chimney",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 380000,
 			"baseIncome": 3400,
 			"requires": "marketStall"
@@ -151,6 +167,7 @@
 			"name": "Tavern",
 			"modelName": "Tavern",
 			"description": "two-story tavern with hanging mug sign",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 560000,
 			"baseIncome": 4800
 		},
@@ -160,6 +177,7 @@
 			"name": "Open the Trade Route",
 			"modelName": "CartWagon",
 			"description": "wooden trade cart loaded with sacks and barrels",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 840000,
 			"baseIncome": 0,
 			"multiplier": 0.1
@@ -170,6 +188,7 @@
 			"name": "Chapel",
 			"modelName": "Chapel",
 			"description": "small stone chapel with bell tower",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 1200000,
 			"baseIncome": 8700
 		},
@@ -179,6 +198,7 @@
 			"name": "Manor House",
 			"modelName": "HouseLargeA",
 			"description": "large two-story manor with balcony",
+			"kit": "Fantasy Town Kit",
 			"baseCost": 1600000,
 			"baseIncome": 11500
 		},
@@ -188,6 +208,7 @@
 			"name": "Banner Pole",
 			"modelName": "BannerPole",
 			"description": "wooden pole with hanging heraldic banner",
+			"kit": "Castle Kit",
 			"baseCost": 500000,
 			"baseIncome": 0,
 			"requires": "houseLargeA",
@@ -199,6 +220,7 @@
 			"name": "Stables",
 			"modelName": "Stables",
 			"description": "open horse stable with hay bales",
+			"kit": "Retro Medieval Kit",
 			"baseCost": 2000000,
 			"baseIncome": 15500,
 			"requires": "houseLargeA"
@@ -209,6 +231,7 @@
 			"name": "Watchtower",
 			"modelName": "Watchtower",
 			"description": "tall stone watchtower with wooden lookout",
+			"kit": "Castle Kit",
 			"baseCost": 2200000,
 			"baseIncome": 20000
 		},
@@ -218,6 +241,7 @@
 			"name": "Raise the Town Wall",
 			"modelName": "WallGate",
 			"description": "stone wall segment with arched gate",
+			"kit": "Castle Kit",
 			"baseCost": 2400000,
 			"baseIncome": 0,
 			"multiplier": 0.12
@@ -228,6 +252,7 @@
 			"name": "Castle Keep",
 			"modelName": "CastleKeep",
 			"description": "grand stone castle keep with towers and flags",
+			"kit": "Castle Kit",
 			"baseCost": 2600000,
 			"baseIncome": 0
 		}

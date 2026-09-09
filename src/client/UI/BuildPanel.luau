@@ -1,12 +1,11 @@
 --!strict
--- Build panel plus its bottom-bar toggle button. Rows come from the era config and
--- their live state from server pushes. Costs and income deltas shown here are previews
--- computed with the shared pure Economy module; the server stays authoritative and the
--- next snapshot/delta overwrites anything predicted (docs/INTERFACES.md, M1 client
--- contract).
+-- Build panel content: one row per slot of the current era, live state from server
+-- pushes. Costs and income deltas shown here are previews computed with the shared pure
+-- Economy module; the server stays authoritative and the next snapshot/delta overwrites
+-- anything predicted (docs/INTERFACES.md, M1–M3 client contracts). M3 adds the
+-- ×1 / ×10 / Max strip on levelable rows and the "cheapest affordable action" highlight.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -14,10 +13,14 @@ local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
+local Panel = require(script.Parent:WaitForChild("Panel"))
+local PanelDock = require(script.Parent:WaitForChild("PanelDock"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
+local SoundController =
+	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
--- Legacy/neighbors multipliers activate at M2, pass/premium at M4; M1 previews pass
--- all 1s per INTERFACES.md so client math matches the server's.
+-- Legacy/neighbors multipliers activate at M2, pass/premium at M4; previews pass all 1s
+-- per INTERFACES.md — deltas are relative, so the shared factors cancel out.
 local UNIT_MULTIPLIERS: Types.Multipliers = { legacy = 1, pass = 1, premium = 1, neighbors = 1 }
 
 export type Deps = {
@@ -25,19 +28,32 @@ export type Deps = {
 	onBuy: (slotId: string) -> (),
 	onLevelUp: (slotId: string, count: number) -> (),
 	onPrestige: () -> (),
+	onClose: () -> (),
 }
 
 export type BuildPanelHandle = {
+	DesignHeight: number,
 	SetEra: (eraConfig: Types.EraConfig?) -> (),
 	Refresh: (state: Types.PlayerState) -> (),
 	FlashSlot: (slotId: string) -> (),
 	SetPrestige: (label: string?) -> (),
 	SetOpen: (open: boolean) -> (),
-	SetLayout: (scale: number, viewportSize: Vector2) -> (),
+	IsOpen: () -> boolean,
+	SetLayout: (dock: PanelDock.Dock) -> (),
 	Destroy: () -> (),
 }
 
 type RowMode = "locked" | "buy" | "level" | "max" | "owned"
+
+type LevelOption = "one" | "ten" | "max"
+
+type LevelButton = {
+	option: LevelOption,
+	button: TextButton,
+	title: TextLabel,
+	cost: TextLabel,
+	delta: TextLabel,
+}
 
 type Row = {
 	slot: Types.SlotConfig,
@@ -49,11 +65,22 @@ type Row = {
 	button: TextButton,
 	buttonTitle: TextLabel,
 	buttonCost: TextLabel,
+	levelStrip: Frame,
+	levelButtons: { LevelButton },
 	stroke: UIStroke,
 	mode: RowMode,
-	cost: number,
+	cost: number, -- buy price, or the ×1 level-up price: the "next affordable" candidate
 	flashUntil: number,
 }
+
+-- Requested counts per strip button. "Max" asks for maxLevel; the server grants what is
+-- affordable (docs/INTERFACES.md RequestLevelUp).
+local LEVEL_OPTIONS: { { option: LevelOption, label: string } } = {
+	{ option = "one", label = "×1" },
+	{ option = "ten", label = "×10" },
+	{ option = "max", label = "Max" },
+}
+local TEN_LEVELS = 10
 
 local BuildPanel = {}
 
@@ -63,76 +90,20 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	local rowsById: { [string]: Row } = {}
 	local namesById: { [string]: string } = {}
 	local lastState: Types.PlayerState? = nil
-	local isOpen = false
-	local currentScale = 1
-	local openTween: Tween? = nil
 	local lastActionTime = 0
 	local connections: { RBXScriptConnection } = {}
+	local gameConfig = deps.gameConfig
 
-	local buildButton = Create("TextButton", {
-		Name = "BuildButton",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -Theme.PADDING),
-		Size = UDim2.fromOffset(Theme.BUILD_BUTTON_WIDTH, Theme.BUILD_BUTTON_HEIGHT),
-		BackgroundColor3 = Theme.COLOR_ACCENT,
-		BorderSizePixel = 0,
-		Font = Theme.FONT_BOLD,
-		TextSize = Theme.TEXT_HEADER,
-		TextColor3 = Theme.COLOR_TEXT_DARK,
-		Text = "Build",
-		Parent = parent,
-	}) :: TextButton
-	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = buildButton })
-	local buttonScale = Create("UIScale", { Parent = buildButton }) :: UIScale
-
-	local panel = Create("Frame", {
-		Name = "BuildPanel",
-		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -Theme.PANEL_BOTTOM_MARGIN),
-		Size = UDim2.fromOffset(Theme.PANEL_WIDTH, Theme.PANEL_HEIGHT),
-		BackgroundColor3 = Theme.COLOR_BG,
-		BackgroundTransparency = Theme.BG_TRANSPARENCY,
-		BorderSizePixel = 0,
-		Visible = false,
-		Parent = parent,
-	}) :: Frame
-	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = panel })
-	-- No aspect-ratio lock here: SetLayout derives the panel height from the real
-	-- viewport (M1 review decision — landscape phones get a shorter, scrollable panel
-	-- rather than a scaled-down portrait canvas). M3's landscape layout may revisit.
-	local panelScale = Create("UIScale", { Parent = panel }) :: UIScale
-
-	local titleLabel = Create("TextLabel", {
-		Name = "Title",
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(Theme.PADDING + 2, 0),
-		Size = UDim2.new(1, -Theme.PADDING - Theme.CLOSE_BUTTON_SIZE - 16, 0, Theme.HEADER_HEIGHT),
-		Font = Theme.FONT_BOLD,
-		TextSize = Theme.TEXT_HEADER,
-		TextColor3 = Theme.COLOR_TEXT,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "Build",
-		Parent = panel,
-	}) :: TextLabel
-
-	local closeButton = Create("TextButton", {
-		Name = "Close",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.fromOffset(Theme.CLOSE_BUTTON_SIZE, Theme.CLOSE_BUTTON_SIZE),
-		BackgroundTransparency = 1,
-		Font = Theme.FONT_BOLD,
-		TextSize = Theme.TEXT_HEADER,
-		TextColor3 = Theme.COLOR_TEXT_DIM,
-		Text = "X",
-		Parent = panel,
-	}) :: TextButton
+	local panel = Panel.new(parent, {
+		name = "BuildPanel",
+		title = "Build",
+		designHeight = Theme.PANEL_HEIGHT,
+		onClose = deps.onClose,
+	})
 
 	local scroll = Create("ScrollingFrame", {
 		Name = "SlotList",
-		Position = UDim2.fromOffset(Theme.PADDING, Theme.HEADER_HEIGHT),
-		Size = UDim2.new(1, -Theme.PADDING * 2, 1, -Theme.HEADER_HEIGHT - Theme.PADDING),
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.new(),
@@ -140,7 +111,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollBarThickness = 4,
 		ScrollBarImageColor3 = Theme.COLOR_TEXT_DIM,
-		Parent = panel,
+		Parent = panel.Content,
 	}) :: ScrollingFrame
 	Create("UIListLayout", {
 		Padding = UDim.new(0, Theme.ROW_SPACING),
@@ -170,6 +141,28 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		{ CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = prestigeButton }
 	)
 
+	-- Twin of the pinned banner, parked after the last slot row (LayoutOrder far above any
+	-- row index). A player who completes the era while scrolled to the bottom of a 24-row
+	-- list would otherwise have to scroll back up to find the affordance.
+	local prestigeButtonBottom = Create("TextButton", {
+		Name = "PrestigeBannerBottom",
+		LayoutOrder = 10000,
+		Size = UDim2.new(1, -Theme.ROW_SPACING, 0, Theme.PRESTIGE_ROW_HEIGHT),
+		BackgroundColor3 = Theme.COLOR_HIGHLIGHT,
+		BorderSizePixel = 0,
+		Font = Theme.FONT_BOLD,
+		TextSize = Theme.TEXT_HEADER,
+		TextColor3 = Theme.COLOR_TEXT_DARK,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = "",
+		Visible = false,
+		Parent = scroll,
+	}) :: TextButton
+	Create(
+		"UICorner",
+		{ CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = prestigeButtonBottom }
+	)
+
 	local emptyLabel = Create("TextLabel", {
 		Name = "EmptyState",
 		BackgroundTransparency = 1,
@@ -182,13 +175,8 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		TextWrapped = true,
 		Text = "Loading...",
 		Visible = true,
-		Parent = panel,
+		Parent = panel.Root,
 	}) :: TextLabel
-
-	local function panelPosition(): UDim2
-		-- UIScale multiplies size, not position offsets, so margins scale by hand.
-		return UDim2.new(0.5, 0, 1, -Theme.PANEL_BOTTOM_MARGIN * currentScale)
-	end
 
 	local function projectedIncome(
 		state: Types.PlayerState,
@@ -198,7 +186,11 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	): number
 		local projected = table.clone(state.slots)
 		projected[slotId] = { level = level }
-		return Economy.IncomePerSecond(projected, eraConfig, deps.gameConfig, UNIT_MULTIPLIERS)
+		return Economy.IncomePerSecond(projected, eraConfig, gameConfig, UNIT_MULTIPLIERS)
+	end
+
+	local function deltaText(delta: number): string
+		return if delta > 0 then "+" .. Format.Rate(delta) .. "/s" else ""
 	end
 
 	local function computeMode(row: Row, state: Types.PlayerState): ()
@@ -206,12 +198,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		local owned = state.slots[slot.id]
 		if owned ~= nil then
 			if slot.type == "building" then
-				if owned.level >= deps.gameConfig.maxLevel then
+				if owned.level >= gameConfig.maxLevel then
 					row.mode = "max"
 					row.cost = 0
 				else
 					row.mode = "level"
-					row.cost = Economy.LevelUpCost(slot.baseCost, owned.level + 1, deps.gameConfig)
+					row.cost = Economy.LevelUpCost(slot.baseCost, owned.level + 1, gameConfig)
 				end
 			else
 				row.mode = "owned"
@@ -229,6 +221,73 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		end
 	end
 
+	-- Target level for each strip button. Max is a greedy display prediction over
+	-- LevelUpCost: the largest n whose total the player can pay right now. When nothing is
+	-- affordable it shows the ×1 price so the button still reads as a price tag.
+	local function levelTarget(
+		option: LevelOption,
+		baseCost: number,
+		level: number,
+		cash: number
+	): (number, number)
+		local maxLevel = gameConfig.maxLevel
+		if option == "one" then
+			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig)
+		elseif option == "ten" then
+			local target = math.min(level + TEN_LEVELS, maxLevel)
+			return target, Economy.LevelUpCostTotal(baseCost, level, target, gameConfig)
+		end
+		local target = level
+		local total = 0
+		while target < maxLevel do
+			local nextCost = Economy.LevelUpCost(baseCost, target + 1, gameConfig)
+			if total + nextCost > cash then
+				break
+			end
+			total += nextCost
+			target += 1
+		end
+		if target == level then
+			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig)
+		end
+		return target, total
+	end
+
+	local function paintLevelStrip(
+		row: Row,
+		state: Types.PlayerState,
+		eraConfig: Types.EraConfig,
+		level: number,
+		currentIncome: number
+	): ()
+		for index, levelButton in row.levelButtons do
+			local target, cost =
+				levelTarget(levelButton.option, row.slot.baseCost, level, state.cash)
+			local affordable = state.cash >= cost
+			local label = LEVEL_OPTIONS[index].label
+			if levelButton.option == "max" and affordable then
+				label = label .. " ×" .. tostring(target - level)
+			end
+			levelButton.title.Text = label
+			levelButton.cost.Text = "$" .. Format.Cash(cost)
+			levelButton.delta.Text =
+				deltaText(projectedIncome(state, eraConfig, row.slot.id, target) - currentIncome)
+			-- Dimmed but tappable when unaffordable: the server answers insufficientFunds.
+			levelButton.button.BackgroundTransparency = if affordable
+				then 0
+				else Theme.DIM_TRANSPARENCY
+			levelButton.button.BackgroundColor3 = if affordable
+				then Theme.COLOR_ACCENT_ALT
+				else Theme.COLOR_BG_LIGHT
+			local textColor = if affordable then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT_DIM
+			levelButton.title.TextColor3 = textColor
+			levelButton.cost.TextColor3 = textColor
+			levelButton.delta.TextColor3 = if affordable
+				then Theme.COLOR_TEXT_DARK
+				else Theme.COLOR_ACCENT
+		end
+	end
+
 	local function applyVisuals(
 		row: Row,
 		state: Types.PlayerState,
@@ -239,21 +298,30 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		local slot = row.slot
 		local mode = row.mode
 		local locked = mode == "locked"
+		local isLevel = mode == "level"
 
 		row.frame.BackgroundColor3 = if locked then Theme.COLOR_ROW_LOCKED else Theme.COLOR_ROW
+		row.frame.Size = UDim2.new(
+			1,
+			-Theme.ROW_SPACING,
+			0,
+			if isLevel then Theme.LEVEL_ROW_HEIGHT else Theme.ROW_HEIGHT
+		)
 		row.nameLabel.TextColor3 = if locked then Theme.COLOR_TEXT_DIM else Theme.COLOR_TEXT
 		row.stroke.Color = Theme.COLOR_HIGHLIGHT
 		row.stroke.Enabled = highlighted
+		row.levelStrip.Visible = isLevel
 
 		local statusText = ""
 		local statusColor = Theme.COLOR_TEXT_DIM
 		local previewText = ""
-		local buttonVisible = true
+		local buttonVisible = not isLevel
 		local buttonTitleText = ""
 		local buttonCostText = ""
 		local buttonActive = false
 		local buttonColor = Theme.COLOR_BG_LIGHT
 		local buttonTextColor = Theme.COLOR_TEXT_DIM
+		local buttonTransparency = 0
 
 		if mode == "locked" then
 			local requiresId = row.requiresId
@@ -266,40 +334,28 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			local affordable = state.cash >= row.cost
 			statusText = "$" .. Format.Cash(row.cost)
 			statusColor = if affordable then Theme.COLOR_TEXT else Theme.COLOR_TEXT_DIM
-			local delta = projectedIncome(state, eraConfig, slot.id, 1) - currentIncome
-			if delta > 0 then
-				previewText = "+" .. Format.Cash(delta) .. "/s"
-			end
+			previewText = deltaText(projectedIncome(state, eraConfig, slot.id, 1) - currentIncome)
 			buttonTitleText = "Buy"
 			buttonActive = true
 			if affordable then
 				buttonColor = Theme.COLOR_ACCENT
 				buttonTextColor = Theme.COLOR_TEXT_DARK
+			else
+				buttonTransparency = Theme.DIM_TRANSPARENCY
 			end
 		elseif mode == "level" then
 			local owned = state.slots[slot.id]
 			local level = if owned ~= nil then owned.level else 1
-			local affordable = state.cash >= row.cost
 			statusText = "Lv " .. tostring(level)
 			statusColor = Theme.COLOR_TEXT
-			local delta = projectedIncome(state, eraConfig, slot.id, level + 1) - currentIncome
-			if delta > 0 then
-				previewText = "+" .. Format.Cash(delta) .. "/s"
-			end
-			buttonTitleText = "Level Up ×1"
-			buttonCostText = "$" .. Format.Cash(row.cost)
-			buttonActive = true
-			if affordable then
-				buttonColor = Theme.COLOR_ACCENT_ALT
-				buttonTextColor = Theme.COLOR_TEXT_DARK
-			end
+			paintLevelStrip(row, state, eraConfig, level, currentIncome)
 		elseif mode == "max" then
 			local owned = state.slots[slot.id]
-			local level = if owned ~= nil then owned.level else deps.gameConfig.maxLevel
+			local level = if owned ~= nil then owned.level else gameConfig.maxLevel
 			statusText = "Lv " .. tostring(level)
 			statusColor = Theme.COLOR_TEXT
 			buttonTitleText = "MAX"
-		else -- owned unlock/decor/monument: nothing further to do with this slot in M1
+		else -- owned unlock/decor/monument: nothing further to do with this slot
 			statusText = "Owned"
 			statusColor = Theme.COLOR_ACCENT
 			buttonVisible = false
@@ -314,6 +370,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		row.button.Active = buttonActive
 		row.button.AutoButtonColor = buttonActive
 		row.button.BackgroundColor3 = buttonColor
+		row.button.BackgroundTransparency = buttonTransparency
 		row.buttonTitle.TextColor3 = buttonTextColor
 		row.buttonCost.TextColor3 = buttonTextColor
 		-- Two-line button only when a cost is shown; a lone title centers vertically.
@@ -341,26 +398,79 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		if eraConfig == nil then
 			return
 		end
-		if not isOpen then
+		if not panel.IsOpen() then
 			-- Visuals rebuild on open; skipping keeps the 1 Hz cash ticks cheap while hidden.
 			return
 		end
 		for _, row in rows do
 			computeMode(row, state)
 		end
-		-- "Next affordable" = first slot in purchase order you can buy right now.
+		-- "Next affordable" = the cheapest affordable buy or ×1 level-up; ties go to
+		-- purchase order (strict < keeps the first row).
 		local highlightId: string? = nil
+		local highlightCost = math.huge
 		for _, row in rows do
-			if row.mode == "buy" and state.cash >= row.cost then
+			local candidate = row.mode == "buy" or row.mode == "level"
+			if candidate and state.cash >= row.cost and row.cost < highlightCost then
 				highlightId = row.slot.id
-				break
+				highlightCost = row.cost
 			end
 		end
 		local currentIncome =
-			Economy.IncomePerSecond(state.slots, eraConfig, deps.gameConfig, UNIT_MULTIPLIERS)
+			Economy.IncomePerSecond(state.slots, eraConfig, gameConfig, UNIT_MULTIPLIERS)
 		for _, row in rows do
 			applyVisuals(row, state, eraConfig, currentIncome, row.slot.id == highlightId)
 		end
+	end
+
+	-- Small client-side debounce so double-taps don't burn the server rate limit.
+	local function tryAction(action: () -> ()): ()
+		local now = os.clock()
+		if now - lastActionTime < Theme.ACTION_DEBOUNCE_SECONDS then
+			return
+		end
+		lastActionTime = now
+		SoundController.Play("uiClick")
+		action()
+	end
+
+	local function makeLevelButton(strip: Frame, index: number, option: LevelOption): LevelButton
+		local button = Create("TextButton", {
+			Name = option,
+			LayoutOrder = index,
+			Size = UDim2.new(
+				1 / #LEVEL_OPTIONS,
+				-Theme.LEVEL_BUTTON_GAP * (#LEVEL_OPTIONS - 1) / #LEVEL_OPTIONS,
+				1,
+				0
+			),
+			BackgroundColor3 = Theme.COLOR_BG_LIGHT,
+			BorderSizePixel = 0,
+			Text = "",
+			Parent = strip,
+		}) :: TextButton
+		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = button })
+		local function line(name: string, y: number, bold: boolean): TextLabel
+			return Create("TextLabel", {
+				Name = name,
+				BackgroundTransparency = 1,
+				Position = UDim2.fromOffset(Theme.BUTTON_TEXT_PAD, y),
+				Size = UDim2.new(1, -Theme.BUTTON_TEXT_PAD * 2, 0, Theme.ROW_LINE_HEIGHT),
+				Font = if bold then Theme.FONT_BOLD else Theme.FONT,
+				TextSize = Theme.TEXT_SMALL,
+				TextColor3 = Theme.COLOR_TEXT_DIM,
+				TextTruncate = Enum.TextTruncate.AtEnd,
+				Text = "",
+				Parent = button,
+			}) :: TextLabel
+		end
+		return {
+			option = option,
+			button = button,
+			title = line("Title", Theme.LEVEL_BUTTON_TITLE_Y, true),
+			cost = line("Cost", Theme.LEVEL_BUTTON_COST_Y, false),
+			delta = line("Delta", Theme.LEVEL_BUTTON_DELTA_Y, false),
+		}
 	end
 
 	local function makeRow(slot: Types.SlotConfig, index: number, requiresId: string?): ()
@@ -423,8 +533,13 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 
 		local button = Create("TextButton", {
 			Name = "Action",
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -Theme.ROW_SPACING, 0.5, 0),
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(
+				1,
+				-Theme.ROW_SPACING,
+				0,
+				(Theme.ROW_HEIGHT - Theme.ROW_BUTTON_HEIGHT) / 2
+			),
 			Size = UDim2.fromOffset(Theme.ROW_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
 			BackgroundColor3 = Theme.COLOR_BG_LIGHT,
 			BorderSizePixel = 0,
@@ -457,6 +572,30 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			Parent = button,
 		}) :: TextLabel
 
+		local levelStrip = Create("Frame", {
+			Name = "LevelStrip",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(Theme.ROW_TEXT_LEFT, Theme.LEVEL_BUTTONS_Y),
+			Size = UDim2.new(
+				1,
+				-Theme.ROW_TEXT_LEFT - Theme.ROW_SPACING,
+				0,
+				Theme.LEVEL_BUTTON_HEIGHT
+			),
+			Visible = false,
+			Parent = frame,
+		}) :: Frame
+		Create("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, Theme.LEVEL_BUTTON_GAP),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Parent = levelStrip,
+		})
+		local levelButtons: { LevelButton } = {}
+		for optionIndex, entry in LEVEL_OPTIONS do
+			table.insert(levelButtons, makeLevelButton(levelStrip, optionIndex, entry.option))
+		end
+
 		local row: Row = {
 			slot = slot,
 			requiresId = requiresId,
@@ -467,6 +606,8 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			button = button,
 			buttonTitle = buttonTitle,
 			buttonCost = buttonCost,
+			levelStrip = levelStrip,
+			levelButtons = levelButtons,
 			stroke = stroke,
 			mode = "locked",
 			cost = 0,
@@ -475,21 +616,28 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		table.insert(rows, row)
 		rowsById[slot.id] = row
 
-		-- Connection dies with the button when the row is destroyed (era rebuild/Destroy).
+		-- Connections die with their buttons when the row is destroyed (era rebuild/Destroy).
 		button.Activated:Connect(function()
-			-- Small client-side debounce so double-taps don't burn the server rate limit.
-			local now = os.clock()
-			if now - lastActionTime < Theme.ACTION_DEBOUNCE_SECONDS then
-				return
-			end
 			if row.mode == "buy" then
-				lastActionTime = now
-				deps.onBuy(slot.id)
-			elseif row.mode == "level" then
-				lastActionTime = now
-				deps.onLevelUp(slot.id, 1)
+				tryAction(function()
+					deps.onBuy(slot.id)
+				end)
 			end
 		end)
+		for _, levelButton in levelButtons do
+			levelButton.button.Activated:Connect(function()
+				if row.mode ~= "level" then
+					return
+				end
+				local count = if levelButton.option == "one"
+					then 1
+					elseif levelButton.option == "ten" then TEN_LEVELS
+					else gameConfig.maxLevel
+				tryAction(function()
+					deps.onLevelUp(slot.id, count)
+				end)
+			end)
+		end
 	end
 
 	local function setEra(eraConfig: Types.EraConfig?): ()
@@ -508,12 +656,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		table.clear(namesById)
 		if eraConfig == nil then
 			-- Missing era config degrades to an empty panel, never an error (M1 contract).
-			titleLabel.Text = "Build"
+			panel.SetTitle("Build")
 			emptyLabel.Text = "Era data unavailable"
 			emptyLabel.Visible = true
 			return
 		end
-		titleLabel.Text = "Build — " .. eraConfig.name
+		panel.SetTitle("Build — " .. eraConfig.displayName)
 		emptyLabel.Visible = false
 		for _, slot in eraConfig.slots do
 			namesById[slot.id] = slot.name
@@ -531,9 +679,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	local function setPrestige(label: string?): ()
 		if label == nil then
 			prestigeButton.Visible = false
+			prestigeButtonBottom.Visible = false
 		else
 			prestigeButton.Text = label
 			prestigeButton.Visible = true
+			prestigeButtonBottom.Text = label
+			prestigeButtonBottom.Visible = true
 		end
 	end
 
@@ -556,103 +707,40 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	end
 
 	local function setOpen(open: boolean): ()
-		if open == isOpen then
+		if open == panel.IsOpen() then
 			return
 		end
-		isOpen = open
-		buildButton.Text = if open then "Close" else "Build"
-		local tween = openTween
-		if tween ~= nil then
-			tween:Cancel()
-			openTween = nil
-		end
-		if open then
-			local state = lastState
-			if state ~= nil then
-				refresh(state)
-			end
-			panel.Visible = true
-			if Theme.reducedMotion then
-				panel.Position = panelPosition()
-			else
-				panel.Position = panelPosition() + UDim2.fromOffset(0, Theme.PANEL_SLIDE_OFFSET)
-				local newTween = TweenService:Create(
-					panel,
-					TweenInfo.new(
-						Theme.OPEN_TWEEN_SECONDS,
-						Enum.EasingStyle.Quad,
-						Enum.EasingDirection.Out
-					),
-					{ Position = panelPosition() }
-				)
-				openTween = newTween
-				newTween:Play()
-			end
-		else
-			panel.Visible = false
-			panel.Position = panelPosition()
+		panel.SetOpen(open)
+		local state = lastState
+		if open and state ~= nil then
+			refresh(state)
 		end
 	end
 
-	local function setLayout(scale: number, viewportSize: Vector2): ()
-		currentScale = scale
-		panelScale.Scale = scale
-		buttonScale.Scale = scale
-		buildButton.Position = UDim2.new(0.5, 0, 1, -Theme.PADDING * scale)
-		-- Landscape fix (M1 review): when the viewport is short, derive the panel height
-		-- from what actually fits between the top bar and the Build button instead of
-		-- scaling the portrait canvas down (which shrank tap targets and overflowed).
-		-- The budget is physical px; divide by scale because UIScale multiplies size.
-		local topZone = (Theme.SCREEN_MARGIN * 2 + Theme.TOP_BAR_HEIGHT) * scale
-		local bottomZone = Theme.PANEL_BOTTOM_MARGIN * scale
-		local budget = (viewportSize.Y - topZone - bottomZone) / scale
-		local panelHeight = math.clamp(budget, Theme.PANEL_MIN_HEIGHT, Theme.PANEL_HEIGHT)
-		panel.Size = UDim2.fromOffset(Theme.PANEL_WIDTH, panelHeight)
-		panel.Position = panelPosition()
+	local function onPrestigeTapped(): ()
+		-- No debounce: this only opens the local era-advance screen, no remote fires.
+		SoundController.Play("uiClick")
+		deps.onPrestige()
 	end
-
-	local function destroy(): ()
-		for _, connection in connections do
-			connection:Disconnect()
-		end
-		table.clear(connections)
-		local tween = openTween
-		if tween ~= nil then
-			tween:Cancel()
-			openTween = nil
-		end
-		panel:Destroy() -- row button connections die with their instances here
-		buildButton:Destroy()
-	end
-
-	table.insert(
-		connections,
-		buildButton.Activated:Connect(function()
-			setOpen(not isOpen)
-		end)
-	)
-	table.insert(
-		connections,
-		closeButton.Activated:Connect(function()
-			setOpen(false)
-		end)
-	)
-	table.insert(
-		connections,
-		prestigeButton.Activated:Connect(function()
-			-- No debounce: this only opens the local confirm dialog, no remote fires here.
-			deps.onPrestige()
-		end)
-	)
+	table.insert(connections, prestigeButton.Activated:Connect(onPrestigeTapped))
+	table.insert(connections, prestigeButtonBottom.Activated:Connect(onPrestigeTapped))
 
 	local handle: BuildPanelHandle = {
+		DesignHeight = panel.DesignHeight,
 		SetEra = setEra,
 		Refresh = refresh,
 		FlashSlot = flashSlot,
 		SetPrestige = setPrestige,
 		SetOpen = setOpen,
-		SetLayout = setLayout,
-		Destroy = destroy,
+		IsOpen = panel.IsOpen,
+		SetLayout = panel.SetLayout,
+		Destroy = function()
+			for _, connection in connections do
+				connection:Disconnect()
+			end
+			table.clear(connections)
+			panel.Destroy() -- row button connections die with their instances here
+		end,
 	}
 	return handle
 end

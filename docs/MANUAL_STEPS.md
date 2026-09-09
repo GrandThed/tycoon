@@ -121,4 +121,114 @@ persistence or offline earnings without doing this.
 
 ---
 
-<!-- M3 section appended here once M3 ships. Do not delete completed sections above. -->
+## M3 — Presentation
+
+### 1. Rebuild first
+
+- [ ] 1. If you pulled new changes since M2, rebuild: `rojo build -o build/test.rbxl` (or
+      re-run `rojo serve` and reconnect the Rojo plugin). Full commands in the M0 section above.
+      No new dependencies this milestone (`wally install` not required unless `wally.toml`
+      changed).
+
+### 2. Kenney mesh import (optional this milestone — the game works with placeholders)
+
+The game is fully playable and presentable with **zero** imported models — every slot falls
+back to a tinted placeholder box automatically. Import meshes whenever you have time; nothing
+breaks if you stop partway. Full list of what to import: `docs/ASSET_MANIFEST.md` (regenerate
+it any time with `py tools/gen_asset_manifest.py` after editing an era config).
+
+- [ ] 2. **Import scale — pick ONE and record it here before importing anything:**
+      `1 Kenney unit = _____ studs` (fill in once you've imported a standard house and confirm
+      it looks about **8 studs wide** in Studio; reuse the exact same scale for every kit and
+      every era so all four eras sit at a consistent size).
+- [ ] 3. For each model in `docs/ASSET_MANIFEST.md`:
+      1. Studio → **Avatar** tab (or Insert) → **3D Importer**.
+      2. Load the kit's **FBX or OBJ** file (from the suggested Kenney pack in the manifest's
+         `Kit` column).
+      3. Confirm the kit's **colormap texture** is applied (the importer usually auto-detects
+         it if the texture file sits next to the mesh — verify the model isn't grey/untextured
+         before importing).
+      4. Apply the import scale from step 2.
+      5. Import as a single **`Model`**.
+      6. Set the model's **`PrimaryPart`** to a part at the **base-center** (so it sits flush on
+         the plot with no floating/sinking).
+      7. Select every part inside the model and set **`Anchored = true`**.
+      8. Set **`CanCollide = true`** only for large structures (buildings, walls, the monument);
+         small props/decor can stay `CanCollide = false`.
+      9. Rename the `Model` to **exactly** the manifest's `modelName` column (PascalCase, no
+         spaces — e.g. `HouseSmallA`, not `House Small A` or `housesmalla`).
+      10. Place it at `ServerStorage/Assets/<EraName>/<modelName>` — `<EraName>` is the era's
+          folder name from the manifest header (`Village`, `Boomtown`, `Metropolis`,
+          `OrbitalColony`), NOT the display name.
+      11. Tick the checkbox in that row of `docs/ASSET_MANIFEST.md` once done (regenerating the
+          manifest later will reset checkboxes — re-tick after any regeneration, or import in a
+          batch right before your next docs-keeper pass).
+- [ ] 4. **VIP variants (optional, can skip entirely for now):** same process, placed at
+      `ServerStorage/Assets/<EraName>_VIP/<modelName>` with the same name. A missing VIP variant
+      silently falls back to the normal model — never an error. VIP skins aren't driven by
+      anything yet (`passes.VIP` flips at M4); import these later if at all.
+- [ ] 5. Ground/roads/props (optional, spec §8): Nature Kit trees/rocks for Era 1–3 edges, City
+      Kit Roads for Era 2–3, Space Kit floor tiles for Era 4. These aren't config-driven slots —
+      place them by hand around the plot ring however looks good; no naming convention applies.
+
+### 3. Audio upload (optional this milestone — the game ships fully silent and correct)
+
+Every sound ID in `src/shared/Config/Sounds.json` is `0` right now, which means **silent, not
+broken** — buying, leveling, era-advancing, etc. all work with no audio and no errors. Upload
+whenever convenient.
+
+- [ ] 6. Download the suggested free Kenney sound packs (kenney.nl/assets, CC0, no account
+      needed): **UI Audio** / **Interface Sounds**, **Casino Audio**, **Impact Sounds**,
+      **Music Jingles**.
+- [ ] 7. Creator Hub → your experience → **Audio** (or Studio → Toolbox → Inventory → Audio →
+      **Upload**). Upload each clip you want to use. Wait for moderation approval (usually
+      automatic, sometimes a short delay) — note the numeric **asset id** for each.
+- [ ] 8. Paste each id into `src/shared/Config/Sounds.json` (`"id": 0` → `"id": 1234567890`).
+      Nine event keys under `sounds`, suggested pack per spec §9:
+
+      | Key | Suggested Kenney pack |
+      |-----|------------------------|
+      | `uiClick` | UI Audio / Interface Sounds |
+      | `purchase` | Casino Audio (coin) |
+      | `reveal` | Impact Sounds (soft thud) + a pop |
+      | `levelUp` | Interface Sounds (short rising tick) |
+      | `levelUpMilestone` | Interface Sounds (bigger sting) or Music Jingles (short) |
+      | `insufficientFunds` | Interface Sounds (error) |
+      | `eraAdvance` | Music Jingles (fanfare) |
+      | `rebirth` | Music Jingles (bigger fanfare) |
+      | `welcomeBack` | Music Jingles (short) |
+
+      Plus four `ambient` keys (one loop per era, low volume, optional — leave at `0` if you'd
+      rather skip ambient loops entirely):
+
+      | Key | Notes |
+      |-----|-------|
+      | `Village` | medieval/pastoral loop |
+      | `Boomtown` | jazzy/retro-urban loop |
+      | `Metropolis` | modern-city loop |
+      | `OrbitalColony` | sci-fi/space loop |
+- [ ] 9. Leave any id at `0` to keep that specific event silent — no need to fill every row
+      before testing again.
+
+### 4. Credits line
+
+- [ ] 10. Kenney assets are CC0 — legally no attribution is required. Still add one line to the
+      game's Creator Hub description crediting Kenney (e.g. "3D models and sound from
+      kenney.nl"). README already carries this credit; this step is just the in-game
+      description.
+
+### 5. Nothing else needed for M3
+
+- [ ] 11. No game passes or developer products yet — those start at M4 (next section, once M4
+      ships). Nothing to create or paste IDs for on Creator Hub this milestone beyond audio
+      (step 3) and the optional mesh imports (step 2).
+- [ ] 12. That's it — go run `docs/PLAYTEST.md` M3 section.
+
+---
+
+## M4 — Monetization & analytics (placeholder — filled in once M4 ships)
+
+Future: create game passes and developer products on Creator Hub, paste their numeric IDs into
+`src/shared/Config/Monetization.json`, and enable Premium payouts. Nothing to do here yet.
+
+<!-- M4 section replaced with real content once M4 ships. Do not delete completed sections above. -->

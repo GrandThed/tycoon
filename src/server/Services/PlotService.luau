@@ -1,9 +1,11 @@
 --!strict
 -- Owns world geometry and purchases: hub + plot ring at Init, plot claim/release, buy pads,
--- building spawns (with placeholder fallback), level-up prompts, and the M2 era actions
--- (Advance Era / Rebirth with plot teardown + rebuild). Only derived geometry lives in code;
--- every number comes from Game.json or the era layout module. Claim/Release are called by
--- Main's join/leave orchestration — this service connects no player lifecycle events itself.
+-- building spawns (VIP skin → base model → placeholder), level-up prompts, the M2 era actions
+-- (Advance Era / Rebirth with plot teardown + rebuild), the M3 plot sign, and the M3 FxEvent
+-- firing points (owner only, after each successful mutation, never on bulk restore). Only
+-- derived geometry lives in code; every number comes from Game.json or the era layout module.
+-- Claim/Release are called by Main's join/leave orchestration — this service connects no
+-- player lifecycle events itself.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,6 +24,8 @@ local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 -- Era indices are 1-based by schema; rebirth returns here (docs/INTERFACES.md M2 contracts).
 local FIRST_ERA_INDEX = 1
+-- ServerStorage/Assets/<EraName>_VIP holds VIP skin variants (spec §8).
+local VIP_ASSET_SUFFIX = "_VIP"
 
 type PlotRecord = {
 	index: number,
@@ -29,6 +33,7 @@ type PlotRecord = {
 	base: Part,
 	buildingsFolder: Folder,
 	padsFolder: Folder,
+	signBillboard: BillboardGui,
 	owner: Player?,
 	connections: { RBXScriptConnection },
 	padTouchLast: { [string]: number },
@@ -79,6 +84,21 @@ local function sendFailure(
 	RemoteService.FireClient(player, "ActionResult", result)
 end
 
+-- The only presentation colors in this service: neutral white for every world label, gold for
+-- the plot sign of a VIP owner (M4 flips passes.VIP; the branch exists now per the M3 contract).
+local LABEL_TEXT_COLOR = Color3.new(1, 1, 1)
+local VIP_SIGN_TEXT_COLOR = Color3.fromRGB(255, 200, 60)
+
+local function fireFx(player: Player, payload: Types.FxEvent): ()
+	RemoteService.FireClient(player, "FxEvent", payload)
+end
+
+-- displayName is required by era schema v1.1; a pre-v1.1 config degrades to the module key.
+local function eraDisplayName(eraConfig: Types.EraConfig): string
+	local displayName: string? = eraConfig.displayName
+	return if displayName ~= nil and displayName ~= "" then displayName else eraConfig.name
+end
+
 -- Billboard dimensions are in studs (BillboardGui scale units), derived from layout sizes so
 -- label proportions remain a layout decision; the per-line fractions are pure UI arithmetic.
 local function createLabelBillboard(
@@ -98,12 +118,52 @@ local function createLabelBillboard(
 		label.Size = UDim2.fromScale(1, 1 / #lines)
 		label.Position = UDim2.fromScale(0, (index - 1) / #lines)
 		label.TextScaled = true
-		label.TextColor3 = Color3.new(1, 1, 1)
+		label.TextColor3 = LABEL_TEXT_COLOR
 		label.TextStrokeTransparency = 0
 		label.Text = text
 		label.Parent = billboard
 	end
 	return billboard
+end
+
+-- Lines beyond `lines` go blank rather than being destroyed: the sign keeps its two-line
+-- geometry so the second line simply appears at the first rebirth.
+local function setSignLines(record: PlotRecord, lines: { string }, color: Color3): ()
+	for _, child in record.signBillboard:GetChildren() do
+		if not child:IsA("TextLabel") then
+			continue
+		end
+		local index = tonumber(string.match(child.Name, "^Line(%d+)$"))
+		local text: string? = if index ~= nil then lines[index] else nil
+		child.Text = text or ""
+		child.TextColor3 = color
+	end
+end
+
+-- Spec §3 cosmetic rank: "<DisplayName>'s <era displayName>" plus "Rebirth ×n" once reborn.
+local function refreshSign(record: PlotRecord, player: Player, state: Types.PlayerState): ()
+	local eraConfig = Catalog.GetEraConfig(state.era)
+	local eraName = if eraConfig ~= nil then eraDisplayName(eraConfig) else ""
+	local lines = { `{player.DisplayName}'s {eraName}` }
+	if state.rebirthCount > 0 then
+		table.insert(lines, `Rebirth ×{state.rebirthCount}`)
+	end
+	local color = if state.passes.VIP == true then VIP_SIGN_TEXT_COLOR else LABEL_TEXT_COLOR
+	setSignLines(record, lines, color)
+end
+
+local function clearSign(record: PlotRecord): ()
+	setSignLines(record, {}, LABEL_TEXT_COLOR)
+end
+
+-- True iff a milestone lies in (fromLevel, toLevel] — the granted range just crossed one.
+local function crossesMilestone(fromLevel: number, toLevel: number): boolean
+	for _, milestone in Catalog.GetGameConfig().milestoneLevels do
+		if milestone > fromLevel and milestone <= toLevel then
+			return true
+		end
+	end
+	return false
 end
 
 local function tryLevelUp(player: Player, slotId: string, count: number): ()
@@ -161,6 +221,7 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		state.cash -= totalCost
 	end
 
+	local fromLevel = slotState.level
 	slotState.level += granted
 	if slotState.level >= gameConfig.maxLevel then
 		-- Optional annotation: map indexing is non-optional under the old solver.
@@ -170,6 +231,13 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		end
 	end
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
+	fireFx(player, {
+		kind = "levelUp",
+		slotId = slotId,
+		fromLevel = fromLevel,
+		toLevel = slotState.level,
+		milestone = crossesMilestone(fromLevel, slotState.level),
+	})
 end
 
 local function onPromptTriggered(record: PlotRecord, slotId: string, player: Player): ()
@@ -185,11 +253,32 @@ local function onPromptTriggered(record: PlotRecord, slotId: string, player: Pla
 	tryLevelUp(player, slotId, 1)
 end
 
+-- Template lookup order (M3 contract): <EraName>_VIP when the owner holds VIP, then <EraName>,
+-- then nil (placeholder). Only Model instances count; a stray Folder/Part is not a template.
+local function findTemplate(eraName: string, modelName: string, vipSkins: boolean): Model?
+	local assetsFolder = ServerStorage:FindFirstChild("Assets")
+	if assetsFolder == nil then
+		return nil
+	end
+	local folderNames: { string } = if vipSkins
+		then { eraName .. VIP_ASSET_SUFFIX, eraName }
+		else { eraName }
+	for _, folderName in folderNames do
+		local eraAssets = assetsFolder:FindFirstChild(folderName)
+		local template = if eraAssets ~= nil then eraAssets:FindFirstChild(modelName) else nil
+		if template ~= nil and template:IsA("Model") then
+			return template
+		end
+	end
+	return nil
+end
+
 local function spawnBuilding(
 	record: PlotRecord,
 	slot: Types.SlotConfig,
 	eraName: string,
-	layout: Types.EraLayout
+	layout: Types.EraLayout,
+	vipSkins: boolean
 ): ()
 	local anchor = record.base:FindFirstChild("Slot_" .. slot.id)
 	local anchorCFrame: CFrame
@@ -203,10 +292,8 @@ local function spawnBuilding(
 	end
 
 	local spawned: Instance
-	local assetsFolder = ServerStorage:FindFirstChild("Assets")
-	local eraAssets = if assetsFolder ~= nil then assetsFolder:FindFirstChild(eraName) else nil
-	local template = if eraAssets ~= nil then eraAssets:FindFirstChild(slot.modelName) else nil
-	if template ~= nil and template:IsA("Model") then
+	local template = findTemplate(eraName, slot.modelName, vipSkins)
+	if template ~= nil then
 		local model = template:Clone()
 		model.Name = "Building_" .. slot.id
 		model:PivotTo(anchorCFrame)
@@ -391,10 +478,17 @@ function tryBuy(player: Player, slotId: string): ()
 
 	local layout = Catalog.GetLayout(eraConfig.name)
 	if layout ~= nil then
-		spawnBuilding(record, slot, eraConfig.name, layout)
+		spawnBuilding(record, slot, eraConfig.name, layout, state.passes.VIP == true)
 		refreshPads(record, state, eraConfig, layout)
 	end
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
+	-- After spawn + MarkDirty so the Building_<slotId> instance replicates ahead of the event.
+	fireFx(player, {
+		kind = "reveal",
+		slotId = slotId,
+		slotType = slot.type,
+		modelName = slot.modelName,
+	})
 end
 
 -- Recolor + re-anchor a plot base for an era. Attachments are era-specific, so old ones are
@@ -456,10 +550,11 @@ local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): 
 	end
 	configureBaseForEra(record, eraConfig, layout)
 	local maxLevel = Catalog.GetGameConfig().maxLevel
+	local vipSkins = state.passes.VIP == true
 	for _, slot in eraConfig.slots do
 		local owned = state.slots[slot.id]
 		if owned ~= nil then
-			spawnBuilding(record, slot, eraConfig.name, layout)
+			spawnBuilding(record, slot, eraConfig.name, layout, vipSkins)
 			if owned.level >= maxLevel then
 				local prompt: ProximityPrompt? = record.prompts[slot.id]
 				if prompt ~= nil then
@@ -499,20 +594,31 @@ local function tryAdvanceEra(player: Player): ()
 	end
 	-- Effects are atomic (no yields), so a second in-flight RequestAdvanceEra revalidates
 	-- against the emptied slots table and fails "locked" — legacy can never double-grant.
-	state.legacy += Economy.LegacyGain(
+	local fromEra = state.era
+	local legacyGained = Economy.LegacyGain(
 		state.era,
 		totalLevelsThisEra,
 		state.rebirthCount,
 		Catalog.GetGameConfig()
 	)
+	state.legacy += legacyGained
 	state.era += 1
 	state.cash = 0
 	state.slots = {}
 	state.stats.erasCompleted += 1
 	rebuildPlotForEra(record, state)
+	refreshSign(record, player, state)
 	-- Restamp the persisted rate NOW (0 for the empty era): a disconnect before the next tick
 	-- must not save the completed era's rate for ApplyOfflineGrant to pay into the new era.
 	EconomyService.RefreshPersistedRate(player)
+	-- Ceremony event BEFORE the snapshot so the overlay opens first and the panel rebuilds
+	-- behind it (M3 contract).
+	fireFx(player, {
+		kind = "eraAdvance",
+		fromEra = fromEra,
+		toEra = state.era,
+		legacyGained = legacyGained,
+	})
 	-- Fresh full snapshot: the era differs from the client's model, which rebuilds its panel.
 	EconomyService.SendSnapshot(player)
 end
@@ -546,20 +652,31 @@ local function tryRebirth(player: Player): ()
 	-- rebirthCount at its pre-increment value — otherwise the longest era pays zero prestige.
 	-- Existing legacy is kept. Same atomicity argument as tryAdvanceEra: no yields, and a
 	-- second in-flight rebirth revalidates against the emptied slots table.
-	state.legacy += Economy.LegacyGain(
+	local fromEra = state.era
+	local legacyGained = Economy.LegacyGain(
 		state.era,
 		totalLevelsThisEra,
 		state.rebirthCount,
 		Catalog.GetGameConfig()
 	)
+	state.legacy += legacyGained
 	state.rebirthCount += 1
 	state.era = FIRST_ERA_INDEX
 	state.cash = 0
 	state.slots = {}
 	state.stats.erasCompleted += 1
 	rebuildPlotForEra(record, state)
+	refreshSign(record, player, state)
 	-- Same as tryAdvanceEra: never let the Era-4 rate persist next to Era 1's empty slots.
 	EconomyService.RefreshPersistedRate(player)
+	-- Ceremony event before the snapshot, as in tryAdvanceEra.
+	fireFx(player, {
+		kind = "rebirth",
+		fromEra = fromEra,
+		toEra = state.era,
+		legacyGained = legacyGained,
+		rebirthCount = state.rebirthCount,
+	})
 	EconomyService.SendSnapshot(player)
 end
 
@@ -639,6 +756,28 @@ local function buildWorld(): ()
 		local padsFolder = Instance.new("Folder")
 		padsFolder.Name = "Pads"
 		padsFolder.Parent = plotFolder
+
+		-- Plot sign (M3): a post as thin as a pad is tall, straddling the front-edge center
+		-- (local -Z, the hub-facing edge) and rising one placeholder height. Layouts keep every
+		-- pad inside the base with padOffset clearance, so the edge line never overlaps one, and
+		-- CanCollide stays off so the hub walkway is unobstructed. Text is blank until claimed.
+		local signHeight = layout.placeholderSize.Y
+		local sign = Instance.new("Part")
+		sign.Name = "Sign"
+		sign.Anchored = true
+		sign.CanCollide = false
+		sign.Size = Vector3.new(layout.padSize.Y, signHeight, layout.padSize.Y)
+		sign.CFrame = base.CFrame * CFrame.new(0, plotSize.Y / 2 + signHeight / 2, -plotSize.Z / 2)
+		-- Wide enough for "<DisplayName>'s Orbital Colony" at readable height from the hub.
+		local signLabelHeight = layout.placeholderSize.Y / 2
+		local signBillboard = createLabelBillboard(
+			{ "", "" },
+			plotSize.X / 4,
+			signLabelHeight,
+			signHeight / 2 + signLabelHeight / 2
+		)
+		signBillboard.Parent = sign
+		sign.Parent = plotFolder
 		plotFolder.Parent = plotsFolder
 
 		table.insert(plots, {
@@ -647,6 +786,7 @@ local function buildWorld(): ()
 			base = base,
 			buildingsFolder = buildingsFolder,
 			padsFolder = padsFolder,
+			signBillboard = signBillboard,
 			owner = nil :: Player?,
 			connections = {},
 			padTouchLast = {},
@@ -685,6 +825,7 @@ function PlotService.ClaimPlot(player: Player): ()
 	player:SetAttribute("PlotIndex", record.index)
 	-- Rebuilds owned buildings from persisted state.slots (bulk restore, no reveal effects).
 	rebuildPlotForEra(record, state)
+	refreshSign(record, player, state)
 end
 
 -- Main calls this first on PlayerRemoving (before EconomyService.Cleanup/DataService.Release).
@@ -696,6 +837,7 @@ function PlotService.Release(player: Player): ()
 	plotsByPlayer[player] = nil
 	record.owner = nil
 	clearPlotContents(record)
+	clearSign(record)
 end
 
 function PlotService.Init(): ()

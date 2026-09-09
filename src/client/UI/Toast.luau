@@ -1,17 +1,18 @@
 --!strict
--- Small non-blocking toast under the top bar. M2 uses it for the welcome-back message
--- and for generic prestige-failure feedback; M3 replaces the welcome-back use with the
--- real card (spec §10). Never intercepts input: the frame stays inactive and holds no
--- buttons, so gameplay taps pass straight through it.
+-- Small non-blocking toast under the top bar for transient errors (prestige failures).
+-- Never intercepts input: the frame stays inactive and holds no buttons, so gameplay taps
+-- pass straight through it. M3 moved the welcome-back message to its own card; the toast
+-- stacks below that card when both are showing (UIController passes the extra offset).
 
 local TweenService = game:GetService("TweenService")
 
 local Create = require(script.Parent:WaitForChild("Create"))
+local Motion = require(script.Parent:WaitForChild("Motion"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 
 export type ToastHandle = {
 	Show: (message: string, seconds: number, isError: boolean) -> (),
-	SetScale: (scale: number) -> (),
+	SetLayout: (scale: number, landscape: boolean, extraTopDesignPx: number) -> (),
 	Destroy: () -> (),
 }
 
@@ -20,25 +21,18 @@ local Toast = {}
 function Toast.new(parent: Instance): ToastHandle
 	-- Token guards the auto-dismiss: a newer Show invalidates any pending fade/hide.
 	local activeToken = 0
-	local currentScale = 1
 	local fadeTweens: { Tween } = {}
-
-	local function rootPosition(): UDim2
-		-- Sits just below the scaled top bar; UIScale multiplies size, not position
-		-- offsets, so the offset scales by hand like every other HUD margin.
-		return UDim2.new(
-			0.5,
-			0,
-			0,
-			(Theme.SCREEN_MARGIN + Theme.TOP_BAR_HEIGHT + Theme.TOAST_GAP) * currentScale
-		)
-	end
 
 	local root = Create("Frame", {
 		Name = "Toast",
 		Active = false, -- explicit: a toast must never block input (M2 contract)
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = rootPosition(),
+		Position = UDim2.new(
+			0.5,
+			0,
+			0,
+			Theme.SCREEN_MARGIN + Theme.TOP_BAR_HEIGHT + Theme.TOAST_GAP
+		),
 		Size = UDim2.fromOffset(Theme.TOAST_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.COLOR_BG,
@@ -95,11 +89,7 @@ function Toast.new(parent: Instance): ToastHandle
 				root.Visible = false
 				return
 			end
-			local info = TweenInfo.new(
-				Theme.TOAST_FADE_SECONDS,
-				Enum.EasingStyle.Quad,
-				Enum.EasingDirection.Out
-			)
+			local info = Motion.Info(Theme.TOAST_FADE_SECONDS)
 			local backgroundTween = TweenService:Create(root, info, { BackgroundTransparency = 1 })
 			local textTween = TweenService:Create(label, info, { TextTransparency = 1 })
 			table.insert(fadeTweens, backgroundTween)
@@ -116,10 +106,23 @@ function Toast.new(parent: Instance): ToastHandle
 
 	local handle: ToastHandle = {
 		Show = show,
-		SetScale = function(scale: number)
-			currentScale = scale
+		SetLayout = function(scale: number, landscape: boolean, extraTopDesignPx: number)
 			uiScale.Scale = scale
-			root.Position = rootPosition()
+			-- Sits just below the scaled top bar (plus whatever card is stacked above);
+			-- UIScale multiplies size, not position offsets, so offsets scale by hand.
+			local top = (
+				Theme.SCREEN_MARGIN
+				+ Theme.TOP_BAR_HEIGHT
+				+ Theme.TOAST_GAP
+				+ extraTopDesignPx
+			) * scale
+			if landscape then
+				root.AnchorPoint = Vector2.new(0, 0)
+				root.Position = UDim2.fromOffset(Theme.SCREEN_MARGIN * scale, top)
+			else
+				root.AnchorPoint = Vector2.new(0.5, 0)
+				root.Position = UDim2.new(0.5, 0, 0, top)
+			end
 		end,
 		Destroy = function()
 			activeToken += 1 -- invalidates any pending task.delay dismissal

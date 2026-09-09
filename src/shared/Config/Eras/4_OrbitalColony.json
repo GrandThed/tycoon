@@ -1,6 +1,7 @@
 {
 	"eraIndex": 4,
 	"name": "OrbitalColony",
+	"displayName": "Orbital Colony",
 	"slots": [
 		{
 			"id": "landingPad",
@@ -8,6 +9,7 @@
 			"name": "Landing Pad",
 			"modelName": "LandingPad",
 			"description": "round landing pad with light strip markings",
+			"kit": "Space Kit",
 			"baseCost": 0,
 			"baseIncome": 3000000
 		},
@@ -17,6 +19,7 @@
 			"name": "Solar Array",
 			"modelName": "SolarArray",
 			"description": "row of angled solar panels on a rack",
+			"kit": "Space Kit",
 			"baseCost": 3300000000,
 			"baseIncome": 12000000
 		},
@@ -26,6 +29,7 @@
 			"name": "Habitat Pod",
 			"modelName": "HabitatPod",
 			"description": "small white living pod with round porthole",
+			"kit": "Space Kit",
 			"baseCost": 13000000000,
 			"baseIncome": 30000000
 		},
@@ -35,6 +39,7 @@
 			"name": "Hydroponics Dome",
 			"modelName": "HydroponicsDome",
 			"description": "glass dome full of green crop racks",
+			"kit": "Space Kit",
 			"baseCost": 35000000000,
 			"baseIncome": 60000000
 		},
@@ -44,6 +49,7 @@
 			"name": "Oxygen Generator",
 			"modelName": "OxygenGenerator",
 			"description": "machine block with tanks and vent stacks",
+			"kit": "Space Kit",
 			"baseCost": 100000000000,
 			"baseIncome": 110000000
 		},
@@ -53,6 +59,7 @@
 			"name": "Connect the Walkways",
 			"modelName": "WalkwayTube",
 			"description": "pressurized walkway tube between pads",
+			"kit": "Space Kit",
 			"baseCost": 220000000000,
 			"baseIncome": 0,
 			"multiplier": 0.05
@@ -63,6 +70,7 @@
 			"name": "Crew Quarters",
 			"modelName": "CrewQuarters",
 			"description": "long habitat module with bunk windows",
+			"kit": "Space Kit",
 			"baseCost": 440000000000,
 			"baseIncome": 330000000
 		},
@@ -72,6 +80,7 @@
 			"name": "Colony Flag",
 			"modelName": "ColonyFlag",
 			"description": "flag on a pole with a small plaque",
+			"kit": "Space Kit",
 			"baseCost": 175000000000,
 			"baseIncome": 0,
 			"requires": "crewQuarters",
@@ -83,6 +92,7 @@
 			"name": "Research Lab",
 			"modelName": "ResearchLab",
 			"description": "domed lab module with antenna and tanks",
+			"kit": "Space Kit",
 			"baseCost": 920000000000,
 			"baseIncome": 500000000,
 			"requires": "crewQuarters"
@@ -93,6 +103,7 @@
 			"name": "Rover Bay",
 			"modelName": "RoverBay",
 			"description": "open garage bay with six-wheel rover",
+			"kit": "Space Kit",
 			"baseCost": 2000000000000,
 			"baseIncome": 780000000
 		},
@@ -102,6 +113,7 @@
 			"name": "Comms Array",
 			"modelName": "CommsArray",
 			"description": "cluster of communication dishes on a mast",
+			"kit": "Space Kit",
 			"baseCost": 7700000000000,
 			"baseIncome": 1200000000
 		},
@@ -111,6 +123,7 @@
 			"name": "Bring Life Support Online",
 			"modelName": "OxygenTanks",
 			"description": "bank of white oxygen tanks with pipes",
+			"kit": "Space Kit",
 			"baseCost": 15000000000000,
 			"baseIncome": 0,
 			"multiplier": 0.08
@@ -121,6 +134,7 @@
 			"name": "Mineral Extractor",
 			"modelName": "MineralExtractor",
 			"description": "drilling rig with conveyor and ore pile",
+			"kit": "Space Kit",
 			"baseCost": 24000000000000,
 			"baseIncome": 2400000000
 		},
@@ -130,6 +144,7 @@
 			"name": "Rock Garden",
 			"modelName": "RocksLarge",
 			"description": "arranged regolith boulders with ground lights",
+			"kit": "Space Kit",
 			"baseCost": 10000000000000,
 			"baseIncome": 0,
 			"requires": "mineralExtractor",
@@ -141,6 +156,7 @@
 			"name": "Observation Dome",
 			"modelName": "ObservationDome",
 			"description": "large glass viewing dome with interior deck",
+			"kit": "Space Kit",
 			"baseCost": 42000000000000,
 			"baseIncome": 3400000000,
 			"requires": "mineralExtractor"
@@ -151,6 +167,7 @@
 			"name": "Fusion Reactor",
 			"modelName": "FusionReactor",
 			"description": "glowing reactor core with cooling towers",
+			"kit": "Space Kit",
 			"baseCost": 66000000000000,
 			"baseIncome": 4800000000
 		},
@@ -160,6 +177,7 @@
 			"name": "Establish the Orbital Uplink",
 			"modelName": "SatelliteDish",
 			"description": "large satellite dish aimed at the sky",
+			"kit": "Space Kit",
 			"baseCost": 110000000000000,
 			"baseIncome": 0,
 			"multiplier": 0.1
@@ -170,6 +188,7 @@
 			"name": "Docking Bay",
 			"modelName": "DockingBay",
 			"description": "shuttle docking bay with clamp arms",
+			"kit": "Space Kit",
 			"baseCost": 170000000000000,
 			"baseIncome": 8700000000
 		},
@@ -179,6 +198,7 @@
 			"name": "Terraform Station",
 			"modelName": "TerraformStation",
 			"description": "atmosphere processor with wide exhaust ring",
+			"kit": "Space Kit",
 			"baseCost": 240000000000000,
 			"baseIncome": 11500000000
 		},
@@ -188,6 +208,7 @@
 			"name": "Holo Beacon",
 			"modelName": "HoloBeacon",
 			"description": "small pylon projecting a hologram ring",
+			"kit": "Space Kit",
 			"baseCost": 77000000000000,
 			"baseIncome": 0,
 			"requires": "terraformStation",
@@ -199,6 +220,7 @@
 			"name": "Medical Bay",
 			"modelName": "MedicalBay",
 			"description": "med module with cross marking and airlock",
+			"kit": "Space Kit",
 			"baseCost": 330000000000000,
 			"baseIncome": 15500000000,
 			"requires": "terraformStation"
@@ -209,6 +231,7 @@
 			"name": "Spaceport Terminal",
 			"modelName": "SpaceportTerminal",
 			"description": "terminal building with control tower",
+			"kit": "Space Kit",
 			"baseCost": 370000000000000,
 			"baseIncome": 20000000000
 		},
@@ -218,6 +241,7 @@
 			"name": "Raise Planetary Defense",
 			"modelName": "TurretBase",
 			"description": "dome turret on a reinforced base",
+			"kit": "Space Kit",
 			"baseCost": 420000000000000,
 			"baseIncome": 0,
 			"multiplier": 0.12
@@ -228,6 +252,7 @@
 			"name": "Launch Tower",
 			"modelName": "LaunchTower",
 			"description": "rocket on a launch tower with support arm",
+			"kit": "Space Kit",
 			"baseCost": 460000000000000,
 			"baseIncome": 0
 		}

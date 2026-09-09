@@ -21,3 +21,5 @@ pass, and never re-run the suite from scratch. Also: point qa-runner (and luau-l
 general) at the repo's committed definitions file `tools/types/globalTypes.d.luau` — left to
 itself the agent downloads a 404 page and poisons the luau-lsp step (happened at M1; the valid
 837 KB file was committed to the repo at the end of the M2 session).
+
+Update 2026-09-08 (M3): giving qa-runner the exact command list with environment overrides (PATH line, `py`, `--sourcemap sourcemap.json`) and the sentence "you MUST end with the report even if every command passes" produced a complete report on the first try. Keep doing that.

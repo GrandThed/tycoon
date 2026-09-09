@@ -36,6 +36,18 @@
 				},
 				"OrbitalColony": {
 					"$className": "Folder"
+				},
+				"Village_VIP": {
+					"$className": "Folder"
+				},
+				"Boomtown_VIP": {
+					"$className": "Folder"
+				},
+				"Metropolis_VIP": {
+					"$className": "Folder"
+				},
+				"OrbitalColony_VIP": {
+					"$className": "Folder"
 				}
 			}
 		},

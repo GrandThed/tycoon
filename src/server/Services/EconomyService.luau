@@ -14,8 +14,18 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
-export type DirtyFields = { cash: boolean?, income: boolean?, slotIds: { string }? }
-type DirtyRecord = { cash: boolean, income: boolean, slotIds: { [string]: boolean } }
+export type DirtyFields = {
+	cash: boolean?,
+	income: boolean?,
+	slotIds: { string }?,
+	settings: boolean?,
+}
+type DirtyRecord = {
+	cash: boolean,
+	income: boolean,
+	slotIds: { [string]: boolean },
+	settings: boolean,
+}
 
 local dirtyRecords: { [Player]: DirtyRecord } = {}
 local pendingWelcomeBack: { [Player]: Types.WelcomeBack } = {}
@@ -26,7 +36,7 @@ local flushAccumulator = 0
 local function getDirtyRecord(player: Player): DirtyRecord
 	local record = dirtyRecords[player]
 	if record == nil then
-		record = { cash = false, income = false, slotIds = {} }
+		record = { cash = false, income = false, slotIds = {}, settings = false }
 		dirtyRecords[player] = record
 	end
 	return record
@@ -106,7 +116,7 @@ end
 
 local function flushDeltas(): ()
 	for player, record in dirtyRecords do
-		if not (record.cash or record.income or next(record.slotIds) ~= nil) then
+		if not (record.cash or record.income or record.settings or next(record.slotIds) ~= nil) then
 			continue
 		end
 		local state = DataService.GetState(player)
@@ -131,8 +141,13 @@ local function flushDeltas(): ()
 			end
 			delta.slots = slots
 		end
+		if record.settings then
+			-- Whole table by contract (M3): a copy, so the client's merge never aliases state.
+			delta.settings = { music = state.settings.music, sfx = state.settings.sfx }
+		end
 		record.cash = false
 		record.income = false
+		record.settings = false
 		table.clear(record.slotIds)
 		RemoteService.FireClient(player, "StateChanged", delta)
 	end
@@ -194,6 +209,14 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 			offlineConfig.capSeconds,
 			offlineConfig.efficiency
 		)
+		if isStudio then
+			-- Playtest diagnostic (Studio only): the grant is invisible next to the ×debug
+			-- income, so print the inputs the checklist asks the human to sanity-check.
+			print(
+				`[EconomyService] offline grant for {player.Name}: away {elapsed}s, `
+					.. `saved rate {state.incomeAtSave}/s, granted {granted}`
+			)
+		end
 		if granted > 0 then
 			state.cash += granted
 			state.stats.totalCashAllTime += granted
@@ -241,6 +264,9 @@ function EconomyService.MarkDirty(player: Player, fields: DirtyFields): ()
 		for _, slotId in fields.slotIds do
 			record.slotIds[slotId] = true
 		end
+	end
+	if fields.settings then
+		record.settings = true
 	end
 end
 

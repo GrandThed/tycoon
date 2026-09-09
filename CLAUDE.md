@@ -40,3 +40,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 
 @.claude/memory/MEMORY.md
 @.claude/memory/qa-runner-silent-finish.md
+@.claude/memory/environment-2026-09-08.md

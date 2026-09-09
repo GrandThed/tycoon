@@ -1,0 +1,5 @@
+# Keep LF in the working tree: stylua --check and the Rojo toolchain expect Unix line endings.
+* text=auto eol=lf
+*.png binary
+*.rbxl binary
+*.rbxm binary

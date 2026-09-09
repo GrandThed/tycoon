@@ -1,7 +1,8 @@
 --!strict
 -- Top HUD bar: cash, income/s, Legacy count (M2), era badge. Display-only by contract —
 -- UIController pushes every value from server state; nothing here computes cash, income,
--- or legacy (docs/INTERFACES.md, M1/M2 client contracts).
+-- or legacy (docs/INTERFACES.md, M1/M2/M3 client contracts). Landscape (M3) parks the bar
+-- top-left so the docked side panel never overlaps it on a 667x375 phone.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -14,8 +15,8 @@ export type TopBarHandle = {
 	SetCash: (cash: number) -> (),
 	SetIncome: (incomePerSecond: number) -> (),
 	SetLegacy: (legacy: number) -> (),
-	SetEra: (eraIndex: number, eraName: string) -> (),
-	SetScale: (scale: number) -> (),
+	SetEra: (eraIndex: number, displayName: string) -> (),
+	SetLayout: (scale: number, landscape: boolean) -> (),
 	Destroy: () -> (),
 }
 
@@ -123,20 +124,28 @@ function TopBar.new(parent: Instance): TopBarHandle
 			cashLabel.Text = "$" .. Format.Cash(cash)
 		end,
 		SetIncome = function(incomePerSecond: number)
-			incomeLabel.Text = Format.Cash(incomePerSecond) .. "/s"
+			-- Format.Rate keeps sub-1/s starters from rendering "0/s" (M3 contract).
+			incomeLabel.Text = Format.Rate(incomePerSecond) .. "/s"
 		end,
 		SetLegacy = function(legacy: number)
 			legacyLabel.Text = "LEGACY " .. Format.Cash(legacy)
 		end,
-		SetEra = function(eraIndex: number, eraName: string)
+		SetEra = function(eraIndex: number, displayName: string)
 			-- tostring, not Format.Cash: an era index is an ordinal, never "1.2K".
 			eraIndexLabel.Text = "ERA " .. tostring(eraIndex)
-			eraNameLabel.Text = eraName
+			eraNameLabel.Text = displayName
 		end,
-		SetScale = function(scale: number)
+		SetLayout = function(scale: number, landscape: boolean)
 			uiScale.Scale = scale
 			-- UIScale multiplies size, not position offsets, so the margin scales by hand.
-			root.Position = UDim2.new(0.5, 0, 0, Theme.SCREEN_MARGIN * scale)
+			local margin = Theme.SCREEN_MARGIN * scale
+			if landscape then
+				root.AnchorPoint = Vector2.new(0, 0)
+				root.Position = UDim2.fromOffset(margin, margin)
+			else
+				root.AnchorPoint = Vector2.new(0.5, 0)
+				root.Position = UDim2.new(0.5, 0, 0, margin)
+			end
 		end,
 		Destroy = function()
 			root:Destroy()

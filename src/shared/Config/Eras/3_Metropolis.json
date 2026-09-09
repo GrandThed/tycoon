@@ -1,6 +1,7 @@
 {
 	"eraIndex": 3,
 	"name": "Metropolis",
+	"displayName": "Metropolis",
 	"slots": [
 		{
 			"id": "foodTruck",
@@ -8,6 +9,7 @@
 			"name": "Food Truck",
 			"modelName": "FoodTruck",
 			"description": "food truck with serving hatch and rooftop menu",
+			"kit": "Car Kit",
 			"baseCost": 0,
 			"baseIncome": 30000
 		},
@@ -17,6 +19,7 @@
 			"name": "Coffee Shop",
 			"modelName": "CoffeeShop",
 			"description": "glass-front coffee shop with sidewalk tables",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 9000000,
 			"baseIncome": 120000
 		},
@@ -26,6 +29,7 @@
 			"name": "Corner Shop",
 			"modelName": "CornerShop",
 			"description": "small corner convenience store with green awning",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 36000000,
 			"baseIncome": 300000
 		},
@@ -35,6 +39,7 @@
 			"name": "Apartment Block",
 			"modelName": "ApartmentBlockA",
 			"description": "mid-rise apartment block with balconies",
+			"kit": "Modular Buildings",
 			"baseCost": 95000000,
 			"baseIncome": 600000
 		},
@@ -44,6 +49,7 @@
 			"name": "Low-Rise Office",
 			"modelName": "OfficeLowRise",
 			"description": "four-story office building with blue glass",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 270000000,
 			"baseIncome": 1100000
 		},
@@ -53,6 +59,7 @@
 			"name": "Lay the City Grid",
 			"modelName": "RoadIntersection",
 			"description": "four-way road intersection with crosswalks",
+			"kit": "City Kit (Roads)",
 			"baseCost": 600000000,
 			"baseIncome": 0,
 			"multiplier": 0.05
@@ -63,6 +70,7 @@
 			"name": "Supermarket",
 			"modelName": "Supermarket",
 			"description": "wide supermarket with cart corral and big sign",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 1200000000,
 			"baseIncome": 3300000
 		},
@@ -72,6 +80,7 @@
 			"name": "Bus Stop",
 			"modelName": "BusStop",
 			"description": "glass bus shelter with bench",
+			"kit": "City Kit (Roads)",
 			"baseCost": 480000000,
 			"baseIncome": 0,
 			"requires": "supermarket",
@@ -83,6 +92,7 @@
 			"name": "High-Rise Apartments",
 			"modelName": "ApartmentBlockB",
 			"description": "tall apartment tower with rooftop water tank",
+			"kit": "Modular Buildings",
 			"baseCost": 2500000000,
 			"baseIncome": 5000000,
 			"requires": "supermarket"
@@ -93,6 +103,7 @@
 			"name": "Parking Garage",
 			"modelName": "ParkingGarage",
 			"description": "multi-level parking garage with ramp",
+			"kit": "City Kit (Industrial)",
 			"baseCost": 5400000000,
 			"baseIncome": 7800000
 		},
@@ -102,6 +113,7 @@
 			"name": "Shopping Mall",
 			"modelName": "ShoppingMall",
 			"description": "shopping mall with glass atrium entrance",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 21000000000,
 			"baseIncome": 12000000
 		},
@@ -111,6 +123,7 @@
 			"name": "Dig the Subway Line",
 			"modelName": "SubwayEntrance",
 			"description": "subway stair entrance with railing and sign",
+			"kit": "City Kit (Roads)",
 			"baseCost": 40000000000,
 			"baseIncome": 0,
 			"multiplier": 0.08
@@ -121,6 +134,7 @@
 			"name": "Hospital",
 			"modelName": "Hospital",
 			"description": "white hospital block with red cross and helipad",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 66000000000,
 			"baseIncome": 24000000
 		},
@@ -130,6 +144,7 @@
 			"name": "City Park",
 			"modelName": "ParkTrees",
 			"description": "small green park square with trees and path",
+			"kit": "Nature Kit",
 			"baseCost": 27000000000,
 			"baseIncome": 0,
 			"requires": "hospital",
@@ -141,6 +156,7 @@
 			"name": "Office Tower",
 			"modelName": "OfficeTowerA",
 			"description": "steel and glass office tower",
+			"kit": "Modular Buildings",
 			"baseCost": 115000000000,
 			"baseIncome": 34000000,
 			"requires": "hospital"
@@ -151,6 +167,7 @@
 			"name": "Hotel Tower",
 			"modelName": "HotelTower",
 			"description": "tall hotel with porte-cochere and rooftop sign",
+			"kit": "Modular Buildings",
 			"baseCost": 180000000000,
 			"baseIncome": 48000000
 		},
@@ -160,6 +177,7 @@
 			"name": "Build the Highway Ramp",
 			"modelName": "HighwayRamp",
 			"description": "elevated highway on-ramp on concrete pylons",
+			"kit": "City Kit (Roads)",
 			"baseCost": 300000000000,
 			"baseIncome": 0,
 			"multiplier": 0.1
@@ -170,6 +188,7 @@
 			"name": "Stadium",
 			"modelName": "Stadium",
 			"description": "open-bowl stadium with floodlight masts",
+			"kit": "City Kit (Suburban)",
 			"baseCost": 470000000000,
 			"baseIncome": 87000000
 		},
@@ -179,6 +198,7 @@
 			"name": "Convention Center",
 			"modelName": "ConventionCenter",
 			"description": "long glass convention hall with curved roof",
+			"kit": "City Kit (Industrial)",
 			"baseCost": 660000000000,
 			"baseIncome": 115000000
 		},
@@ -188,6 +208,7 @@
 			"name": "Rooftop Garden",
 			"modelName": "RooftopGarden",
 			"description": "green rooftop terrace with hedges and benches",
+			"kit": "Nature Kit",
 			"baseCost": 210000000000,
 			"baseIncome": 0,
 			"requires": "conventionCenter",
@@ -199,6 +220,7 @@
 			"name": "Bank Tower",
 			"modelName": "BankTower",
 			"description": "dark glass bank headquarters tower",
+			"kit": "Modular Buildings",
 			"baseCost": 900000000000,
 			"baseIncome": 155000000,
 			"requires": "conventionCenter"
@@ -209,6 +231,7 @@
 			"name": "Broadcast Tower",
 			"modelName": "BroadcastTower",
 			"description": "TV station with tall red-and-white antenna",
+			"kit": "City Kit (Industrial)",
 			"baseCost": 1000000000000,
 			"baseIncome": 200000000
 		},
@@ -218,6 +241,7 @@
 			"name": "Open the Finance District",
 			"modelName": "OfficeTowerB",
 			"description": "pair of twin glass office towers",
+			"kit": "Modular Buildings",
 			"baseCost": 1150000000000,
 			"baseIncome": 0,
 			"multiplier": 0.12
@@ -228,6 +252,7 @@
 			"name": "Skyscraper",
 			"modelName": "SkyscraperA",
 			"description": "landmark skyscraper with spire and lit crown",
+			"kit": "City Kit (Commercial)",
 			"baseCost": 1250000000000,
 			"baseIncome": 0
 		}
