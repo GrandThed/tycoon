@@ -171,44 +171,48 @@ it any time with `py tools/gen_asset_manifest.py` after editing an era config).
       Kit Roads for Era 2–3, Space Kit floor tiles for Era 4. These aren't config-driven slots —
       place them by hand around the plot ring however looks good; no naming convention applies.
 
-### 3. Audio upload (optional this milestone — the game ships fully silent and correct)
+### 3. Audio upload — **DONE (2026-09-09), scripted**
 
-Every sound ID in `src/shared/Config/Sounds.json` is `0` right now, which means **silent, not
-broken** — buying, leveling, era-advancing, etc. all work with no audio and no errors. Upload
-whenever convenient.
+The nine event sounds are uploaded and their ids are committed in
+`src/shared/Config/Sounds.json`. This is no longer a manual Studio task: it is done by
+`py tools/upload_audio.py`, which uploads through Roblox Open Cloud and writes the ids back.
 
-- [ ] 6. Download the suggested free Kenney sound packs (kenney.nl/assets, CC0, no account
-      needed): **UI Audio** / **Interface Sounds**, **Casino Audio**, **Impact Sounds**,
-      **Music Jingles**.
-- [ ] 7. Creator Hub → your experience → **Audio** (or Studio → Toolbox → Inventory → Audio →
-      **Upload**). Upload each clip you want to use. Wait for moderation approval (usually
-      automatic, sometimes a short delay) — note the numeric **asset id** for each.
-- [ ] 8. Paste each id into `src/shared/Config/Sounds.json` (`"id": 0` → `"id": 1234567890`).
-      Nine event keys under `sounds`, suggested pack per spec §9:
+- [x] 6. Kenney packs downloaded to `assets/` (CC0, kenney.nl/assets): Interface Sounds,
+      Casino Audio, Impact Sounds, Music Jingles. The folder is gitignored — the zips are
+      re-downloadable, so they stay out of the repo.
+- [x] 7. Uploaded via Open Cloud. Credentials live in `.env` (gitignored; `.env.example` is the
+      template): an API key scoped to **Assets → write** for the creator that owns the place,
+      plus `ROBLOX_CREATOR_TYPE`/`ROBLOX_CREATOR_ID`. The **experience id is not used** for
+      audio — asset creation is scoped to the creator, not a place.
+- [x] 8. The nine ids are in `Sounds.json`. Which file went where is recorded in
+      `tools/audio_map.json`.
 
-      | Key | Suggested Kenney pack |
-      |-----|------------------------|
-      | `uiClick` | UI Audio / Interface Sounds |
-      | `purchase` | Casino Audio (coin) |
-      | `reveal` | Impact Sounds (soft thud) + a pop |
-      | `levelUp` | Interface Sounds (short rising tick) |
-      | `levelUpMilestone` | Interface Sounds (bigger sting) or Music Jingles (short) |
-      | `insufficientFunds` | Interface Sounds (error) |
-      | `eraAdvance` | Music Jingles (fanfare) |
-      | `rebirth` | Music Jingles (bigger fanfare) |
-      | `welcomeBack` | Music Jingles (short) |
+**Upload quota — read before uploading anything else.** Open Cloud allows **10 audio uploads
+per calendar month** on an account that is not ID-verified, **100** on one that is. This
+account is ID-verified (Settings → Account Info shows age group and birth date verified), so
+9 of 100 slots were spent. The tool never re-uploads a key whose id is already non-zero, so
+re-running it is safe and cheap.
 
-      Plus four `ambient` keys (one loop per era, low volume, optional — leave at `0` if you'd
-      rather skip ambient loops entirely):
+**To change a sound you do not like:**
 
-      | Key | Notes |
-      |-----|-------|
-      | `Village` | medieval/pastoral loop |
-      | `Boomtown` | jazzy/retro-urban loop |
-      | `Metropolis` | modern-city loop |
-      | `OrbitalColony` | sci-fi/space loop |
-- [ ] 9. Leave any id at `0` to keep that specific event silent — no need to fill every row
-      before testing again.
+1. `py tools/upload_audio.py --audition` extracts each pick plus three alternates to
+   `assets/audition/<soundKey>/` so you can listen. Spends no quota.
+2. Edit that key's `pick` in `tools/audio_map.json`.
+3. Set that key's `"id"` back to `0` in `src/shared/Config/Sounds.json`.
+4. `py tools/upload_audio.py` — it uploads only keys sitting at `0` and leaves the rest alone.
+
+`--dry-run` shows exactly what would upload without calling anything.
+
+- [ ] 9. **Ambient loops are still `0`** (`Village`, `Boomtown`, `Metropolis`, `OrbitalColony`)
+      and are optional — the game is correct and silent with them unset. The four packs above
+      are all short one-shots with no loopable music beds, so ambient needs a different CC0
+      pack plus 4 more upload slots. Add the files to `assets/`, add an `ambient` section to
+      `tools/audio_map.json`, and the same tool handles them.
+
+**If a sound is silent in Studio:** uploaded audio starts private and is moderated, so give it
+a few minutes. If it never plays, check the asset on create.roblox.com — if it was rejected,
+set that id back to `0` rather than leaving the config pointing at a dead asset. An id of `0`
+is silent by design and never an error.
 
 ### 4. Credits line
 
