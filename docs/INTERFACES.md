@@ -4,7 +4,7 @@ Updated by the lead at the start of each milestone. Agents conform to this docum
 If your task needs a change to a file or contract you don't own, **report it in your final
 message** — never edit across an ownership boundary.
 
-Current milestone: **M5 — Hardening** (data-load safe mode, leave/shutdown edge cases,
+Current milestone: **M6 — Legacy shop** (see the "M6 contracts" section at the end; M5 below is shipped and playtested). M5 was: (data-load safe mode, leave/shutdown edge cases,
 session-lock contention UX, rate-limit audit, confirmed receipt saves, persisted `DoubleOffline`
 reservation, `--rebirth`/`--laps` in the sim, second balance pass, full-codebase audit). M1–M4
 contracts below remain standing — read the M4 "Post-review amendments" as the current contract,
@@ -1477,3 +1477,167 @@ so `DataService.attemptLoad` returns nil immediately (with a warn) when `RunServ
 and the Workspace boolean attribute `ForceLoadFailure` is true. Read on every attempt, so it can
 be toggled live from the Properties pane to exercise failed → Retry → recovered without a rejoin.
 Ignored outside Studio; not a config key because it is a live toggle, not a constant.
+
+---
+
+# M6 contracts — Legacy shop (Phase 2)
+
+Source design: `docs/LEGACY_SHOP.md` (Ben approved Model C "invest + softcap", softcap 1000,
+Level Floor tier 2 = 8, Long Memory sells cap hours only, the seven perks and five cosmetics as
+tabled there). This section turns that document into frozen contracts; where the two disagree,
+this section wins.
+
+## M6 ownership
+
+| Owner | Files |
+|-------|-------|
+| luau-engineer | `src/server/**`, `src/shared/{Types,Economy,Catalog}.luau` |
+| ui-engineer | `src/client/**`, `sourcemap.json` (regenerate if a module is added) |
+| economy-designer | `src/shared/Config/LegacyShop.json` (new), `tools/sim_economy.py`, `docs/BALANCE.md`, `docs/LEGACY_SHOP.md` (mark as adopted) |
+| lead | `docs/INTERFACES.md`, `docs/PLAN.md`, `src/shared/Config/Game.json` (v1.6 — applied: `legacy.softcap = 1000`) |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, status ticks in `docs/PLAN.md` |
+
+Frozen: `Config/Eras/**`, `Layouts/**`, `Config/{Sounds,Monetization}.json`, `Format.luau`,
+`default.project.json`, `wally.toml`. Every other constant in this milestone lives in
+`LegacyShop.json` or `Game.json`; client-only sizing/copy timing in `Theme`.
+
+## Game.json v1.6 (lead, applied)
+
+`legacy.softcap: 1000`. `Types.LegacyConfig` gains `softcap: number?` (optional so an older
+Game.json still typechecks and behaves linearly).
+
+## LegacyShop.json v1 (economy-designer authors; everyone consumes via Catalog)
+
+```json
+{
+  "version": 1,
+  "perks": [
+    {
+      "id": "founders", "name": "Founder's Blessing", "cosmetic": false,
+      "description": "Your legacy inspires everyone: +5% income per tier.",
+      "effect": "incomeMult",
+      "tiers": [ { "cost": 80, "value": 1.05 }, ... ]
+    },
+    ...
+  ]
+}
+```
+
+- `effect` is a closed enum: `"incomeMult" | "levelCostDiscount" | "startingSlots" | "levelFloor"
+  | "extraMilestone" | "neighbours" | "offlineCapSeconds" | "cosmetic"`. Every tier of a perk
+  shares it. `value` is the **total** effect once that tier is owned (never per-tier). The
+  `neighbours` tier additionally carries `maxBonus`. Cosmetic perks have `cosmetic: true`,
+  `effect: "cosmetic"`, exactly one tier, `value: 0`, and may carry cosmetic-specific fields:
+  `signTitle.titles: { string }` (indexed by `min(rebirthCount + 1, #titles)`),
+  `nameTagColour.color: "#RRGGBB"`, `goldenRoads.color: "#RRGGBB"`. `monumentGlow` and
+  `advanceFireworks` carry nothing extra.
+- Perk ids (frozen, persistence keys): `founders`, `builders`, `inheritance`, `levelFloor`,
+  `milestone75`, `neighbours`, `longMemory`, `signTitle`, `nameTagColour`, `monumentGlow`,
+  `advanceFireworks`, `goldenRoads`. Array order is display order. Tier costs and values are the
+  LEGACY_SHOP.md §2/§3 numbers (Level Floor 5 / 8).
+- Tiers are bought in order: the server accepts only `ownedTier + 1`. A perk present in a profile
+  but absent from the config is ignored, never an error. `Catalog.GetLegacyShopConfig()` returns
+  the module, or `{ version = 1, perks = {} }` when the file is missing (the shop then hides).
+
+## Types.luau — M6 additions
+
+```lua
+export type PerkEffect = "incomeMult" | "levelCostDiscount" | "startingSlots" | "levelFloor"
+	| "extraMilestone" | "neighbours" | "offlineCapSeconds" | "cosmetic"
+export type PerkTier = { cost: number, value: number, maxBonus: number? }
+export type PerkDef = {
+	id: string, name: string, description: string, cosmetic: boolean, effect: PerkEffect,
+	tiers: { PerkTier }, titles: { string }?, color: string?,
+}
+export type LegacyShopConfig = { version: number, perks: { PerkDef } }
+export type LegacyShopState = { spent: number, perks: { [string]: number } } -- perkId -> tier owned
+
+-- PlayerState (schema v3, additive): legacyShop: LegacyShopState
+-- Multipliers gains perk: number (Founder's Blessing; 1 when none)
+-- LegacyConfig gains softcap: number?
+-- Delta gains legacyShop: LegacyShopState?  (present whenever the legacyShop dirty flag flushes)
+-- EconomyService.DirtyFields gains legacyShop: boolean?
+-- ActionResult.action gains "buyPerk"; slotId carries the perkId; reasons reuse
+--   insufficientFunds (Legacy balance) | locked (not the next tier / no such perk) | invalid
+```
+
+## Profile schema v3 (luau-engineer)
+
+Template gains `legacyShop = { spent = 0, perks = {} }`; `SCHEMA_VERSION = 3`; `Migrations[2]`
+fills the field when nil. Additive and idempotent, same rules as v2.
+
+## Economy.luau — exact signatures (luau-engineer implements; the sim mirrors 1:1)
+
+All pure. Existing functions keep their current parameters and gain trailing optionals so every
+current caller and the sim's lap-1 output stay byte-identical when the new arguments are absent.
+
+```lua
+Economy.LegacyMult(legacy: number, game: GameConfig): number
+	-- softcap: s = game.legacy.softcap; eff = if s and legacy > s then s + s*math.log(legacy/s) else legacy
+Economy.IncomePerSecond(slots, era, game, mults)   -- mults.perk multiplied in beside mults.legacy
+Economy.LevelUpCost(baseCost, level, game, discount: number?)        -- cost * (1 - (discount or 0))
+Economy.LevelUpCostTotal(baseCost, fromLevel, count, game, discount: number?)
+Economy.SlotIncome(baseIncome, level, game, milestoneLevels: { number }?)  -- overrides game.milestoneLevels
+Economy.NeighborsMult(playerCount, game, perPlayer: number?, maxBonus: number?)
+
+-- New helpers (all take the shop config so both realms and the sim read one source):
+Economy.PerkTier(shopState: LegacyShopState?, perkId: string): number        -- 0 when unowned/nil
+Economy.PerkValue(shop: LegacyShopConfig, shopState, perkId): number?        -- tier's value, nil when unowned
+Economy.PerkIncomeMult(shop, shopState): number                              -- founders value or 1
+Economy.LevelCostDiscount(shop, shopState): number                           -- builders value or 0
+Economy.LevelFloor(shop, shopState): number                                  -- levelFloor value or 1
+Economy.MilestoneLevels(shop, shopState, game): { number }                   -- game list + 75 when owned, sorted
+Economy.NeighborsParams(shop, shopState, game): (number, number)             -- perPlayer, maxBonus
+Economy.OfflineCapSeconds(passes, shopState, shop, game): number             -- pass cap + longMemory value
+Economy.InheritanceCash(eraConfig, shop, shopState): number                  -- sum baseCost of first N slots (array order); 0 when unowned
+Economy.LegacySpendable(state: PlayerState): number                          -- legacy - legacyShop.spent
+Economy.NextPerkTier(shop, shopState, perkId): (PerkTier?, number)           -- next tier def + its index, nil when maxed/unknown
+```
+
+`OfflineGrant`, `LegacyGain`, `PackGrant`, `PassMult`, `PremiumMult` are unchanged. The discount
+is applied in `LevelUpCost` ONLY — never at a call site — so the Build panel preview and the
+server charge cannot disagree. Level Floor levels count toward `LegacyGain` (LEGACY_SHOP.md §8).
+
+## Server behaviour (luau-engineer)
+
+- **`RequestBuyPerk(perkId: string)`** — new remote, validator `args.n == 1 and typeof(args[1]) == "string"`, shared `callsPerSecond` bucket. Handler chain: state loaded → perk exists in config → next tier exists (else `locked`) → `LegacySpendable >= cost` (else `insufficientFunds`) → `legacyShop.perks[id] = tier`, `legacyShop.spent += cost` → `RefreshPersistedRate` → `MarkDirty { income = true, legacyShop = true }` → `PlotService.RefreshCosmetics(player)` (cosmetics and `goldenRoads`/`monumentGlow` take effect at once) → `FxEvent { kind = "perkBought", perkId, tier }` → analytics Sink (`legacy`, `Shop`, `perk:<id>:<tier>`). Failure ⇒ `ActionResult { action = "buyPerk", slotId = perkId, ok = false, reason }`. No Robux anywhere near this path.
+- **Founder's**: `mults.perk = Economy.PerkIncomeMult(...)` in the live, reported and persisted rates.
+- **Master Builders**: `tryLevelUp` passes `Economy.LevelCostDiscount(...)` into `LevelUpCostTotal`.
+- **Inheritance**: on successful `tryAdvanceEra` and `tryRebirth`, after the reset, `state.cash += Economy.InheritanceCash(newEra, ...)`; counts toward `totalCashAllTime`; analytics Source (`Gameplay`, `inheritance`). Cash only — slots are still bought in order.
+- **Level Floor**: `tryBuy` creates `building`-type slots at `level = Economy.LevelFloor(...)`; unlock/decor/monument stay at 1. The reveal `FxEvent` is unchanged (no levelUp event for the floor).
+- **Extra Milestone**: every `SlotIncome` call and the `FxLevelUp.milestone` flag use `Economy.MilestoneLevels(...)` for that player.
+- **Good Neighbours**: `NeighborsMult` receives `Economy.NeighborsParams(...)` of the plot owner.
+- **Long Memory**: `ApplyOfflineGrant` uses `Economy.OfflineCapSeconds(...)`; efficiency logic unchanged; the Studio diagnostic print includes the cap used.
+- **Cosmetics** (all server-side world cosmetics in `PlotService`, applied on spawn, `ClaimPlot`, `RefreshCosmetics`, silently): `signTitle` adds a third sign line with the title indexed by rebirth count; `nameTagColour` recolours the player's name — implement as a `BillboardGui` beside the VIP tag pattern (`MonetizationService` owns the VIP tag; put this one in `PlotService` and name it `TitleTag`; when both exist they stack vertically); `monumentGlow` = a `PointLight` plus `Material = Neon`-style highlight on the monument building/placeholder; `goldenRoads` = colour override on `unlock`-type buildings/placeholders (never on VIP skin models — placeholder or base-colour parts only); `advanceFireworks` = a server-side `ParticleEmitter` burst at the monument on advance/rebirth, ~2 s, `Enabled` toggled with `task.delay`, visible to everyone. Missing perk ⇒ nothing spawned; never an error.
+- **Studio lever**: in Studio only, a numeric Workspace attribute `GrantLegacy` > 0 is consumed by the 1 Hz tick: every loaded player's `legacy += value`, `RefreshPersistedRate`, `MarkDirty { income = true }` plus a fresh snapshot (legacy is a snapshot field), then the attribute is reset to 0 with a `warn`. Same pattern as `ForceLoadFailure`.
+- `FxEvent` union gains `FxPerkBought = { kind: "perkBought", perkId: string, tier: number }`.
+
+## Client contracts (M6) — ui-engineer
+
+- **Legacy panel becomes the shop.** Header: `Legacy <total>` and `Spendable <legacy − spent>`, a multiplier breakdown row `Legacy ×a · Perks ×b · Passes ×c` (values from `Economy.LegacyMult`, `PerkIncomeMult`, `PassMult × PremiumMult`), and a one-line softcap note ("Legacy grows slower past 1,000" — from `Game.json`, formatted). Then one row per perk in config order: name, description, `Tier n/N`, the next tier's effect and cost, **Buy** (disabled with the cost in red when unaffordable; "Maxed" when complete). Cosmetics section below with the same row shape. Long Memory copy must say "+2 h on your offline cap", never a total. Tap targets ≥ 44 px, portrait and landscape.
+- **Build panel** uses `Economy.LevelUpCost/Total` with `Economy.LevelCostDiscount(...)` and `Economy.MilestoneLevels(...)` for "next milestone" labels — it may never read `Game.milestoneLevels` directly for the owner's plot. Level Floor: a row's post-purchase preview reflects the floor level.
+- `StateChanged` delta merges `legacyShop`; `FxEvent.perkBought` ⇒ toast + the existing `purchase` sound (no new sound keys). `ActionResult.buyPerk` failures ⇒ the row flashes and the `insufficientFunds` sound when that is the reason.
+- After the era-advance/rebirth ceremony closes, if `LegacySpendable` can afford any next tier, open the Legacy panel once (not a modal; a panel, dismissable) — spec §6 rule 3 concerns Robux, this is earned currency.
+- Client-side cosmetics: none (all world cosmetics are server-side); `PlotVisualsController` may skip the fireworks' local particle load under reduce-motion by setting the emitter's `Enabled = false` on its local copy.
+- Welcome-back card: unchanged (the sum is visible via elapsed time).
+
+## tools/sim_economy.py (economy-designer)
+
+Replace the hardcoded `PERK_DEFS` with `Config/LegacyShop.json`; `legacy_mult` gains the softcap
+from `Game.json` (mirroring the exact Lua expression); every mirrored helper above exists with the
+same name in snake_case. Default output and `--check` stay byte-identical (softcap never binds in
+lap 1). `--shop softcap` becomes the default shop model when `--perks auto` is given; drop the
+`spend`/`invest` models from the CLI (they were decision tooling; keep the numbers in BALANCE.md).
+`docs/BALANCE.md` gains an M6 section: Model C lap 1–6 table from the real config, the purchase
+timeline, the paid-stack re-verification, and any deviation from LEGACY_SHOP.md.
+
+## Definition of done (M6)
+
+Standard suite green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated sourcemap if
+modules were added, `rojo build`, `sim_economy.py --check`, `gen_asset_manifest.py --check`).
+Reviewer SHIP. In Studio with the `GrantLegacy` lever: every perk tier is buyable in order and
+only in order, the balance and breakdown row update at once, a second buy of the same tier is
+refused, Founder's/Master Builders/Level Floor/Extra Milestone visibly change income, level costs,
+new-building levels and milestone labels, Inheritance grants cash on advance, cosmetics appear on
+the plot and for a second player, and with the config file absent the Legacy panel shows no shop
+and nothing errors.

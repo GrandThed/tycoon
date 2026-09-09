@@ -20,6 +20,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [x] M5 — Hardening (review SHIP after two Warnings fixed, QA green; **playtest passed 2026-09-09**
   — Ben reported everything correct, including the final sweep that re-covers the M2/M3 long-haul
   steps. MVP definition of done (spec §12) met.)
+- [ ] M6 — Legacy shop (Phase 2; contracts frozen 2026-09-09)
 
 ---
 
@@ -369,6 +370,27 @@ unchanged from M2/M4), `gen_asset_manifest.py --check`.
   for lap-3+ runaway income instead of shrinking `legacy.incomePerPoint` — `docs/BALANCE.md`'s
   "M5 — rebirth laps" section has the quantified alternative (`incomePerPoint` 0.01 → 0.002 +
   era cost retuning) fully worked out if the lead ever wants that path instead.
+
+## M6 — Legacy shop (Phase 2)
+
+**Goal:** spec §3's Phase 2 — Legacy becomes a currency with choices. Model C from
+`docs/LEGACY_SHOP.md` (Ben approved 2026-09-09): Legacy is never consumed (a spendable balance =
+earned − spent), the passive multiplier soft-caps at 1000 so laps 3+ plateau near 1.5 h instead of
+collapsing, seven gameplay perks (Founder's Blessing, Master Builders, Inheritance, Level Floor
+5/8, Extra Milestone 75, Good Neighbours, Long Memory +2 h/tier stacking above OfflinePro) and
+five cosmetic sinks. Contracts: INTERFACES.md "M6 contracts".
+
+| Owner | Tasks |
+|-------|-------|
+| economy-designer | `Config/LegacyShop.json` v1; sim reads the config and mirrors the softcap + every new pure helper; BALANCE.md M6 section |
+| luau-engineer | Types + schema v3 migration; `Economy.luau` softcap and perk helpers; `RequestBuyPerk`; all perk effects server-side; cosmetics in PlotService; `GrantLegacy` Studio lever; analytics |
+| ui-engineer | Legacy panel becomes the shop (balance, breakdown row, perk/cosmetic rows); Build panel uses discount + per-player milestones; auto-open after ceremony; perk feedback |
+| roblox-reviewer | diff review with a full pass over the Legacy/purchase path |
+| qa-runner | full suite |
+| docs-keeper | PLAYTEST M6 (with the `GrantLegacy` lever), MANUAL_STEPS, README |
+
+**Done when:** the M6 definition of done in INTERFACES.md holds. **Playtest gate:** Ben buys
+through the shop with the lever and sees every effect.
 
 ---
 

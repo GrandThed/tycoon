@@ -12,7 +12,8 @@
 		"incomePerPoint": 0.01,
 		"gainBase": 10,
 		"gainLevelsDivisor": 100,
-		"gainRebirthBonus": 0.5
+		"gainRebirthBonus": 0.5,
+		"softcap": 1000
 	},
 	"offline": {
 		"capSeconds": 28800,
