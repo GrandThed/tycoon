@@ -7,13 +7,16 @@ this document only sketches them so the shape of the work is visible up front.
 
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested.
 
-- [~] M0 — Scaffold (QA-green; Rojo connect verified. Studio playtest deferred by Ben — folded into the M1 gate)
-- [~] M1 — Playable loop (built, review SHIP after fixes, QA green — awaiting combined M0+M1 playtest)
-- [~] M2 — Persistence & eras (built, review SHIP after exploit fix, QA+sim green — awaiting combined M0–M2 playtest)
-- [~] M3 — Presentation (built, review SHIP, QA green — awaiting Studio playtest. The combined
-  M0–M2 playtest is still pending too; can run in the same session as M3's)
-- [~] M4 — Monetization & analytics (built, reviewer verdict SHIP after a Critical join-race fix
-  and four Major/Minor findings, QA green — awaiting Studio playtest)
+- [x] M0 — Scaffold (QA-green; Rojo connect verified; playtest 19/19)
+- [x] M1 — Playable loop (review SHIP after fixes, QA green; playtest 32/32)
+- [~] M2 — Persistence & eras (review SHIP after exploit fix, QA+sim green; **playtest 30/45 —
+  15 steps still unchecked**, mostly the long-haul persistence/prestige runs)
+- [~] M3 — Presentation (review SHIP, QA green; **playtest 21/40 plus 7/12 of the carry-over
+  re-verifications — 24 steps still unchecked**)
+- [x] M4 — Monetization & analytics (reviewer SHIP after a Critical join-race fix and four
+  Major findings; QA green; **playtest 17/17**, with real pass/product ids live in
+  `Monetization.json` and the nine event sounds uploaded. Three further bugs were found *by*
+  that playtest and fixed after the review — see "Shipped" below)
 - [ ] M5 — Hardening
 
 ---
