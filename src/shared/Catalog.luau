@@ -20,6 +20,9 @@ local MONETIZATION_SCHEMA_VERSION = 1
 -- Mirrors the shipped Monetization.json value. Never 0: the fallback config is used for real
 -- receipt bookkeeping, and a 0 limit would trim the idempotency log empty on the first insert.
 local MONETIZATION_DEFAULT_RECEIPT_HISTORY_LIMIT = 200
+-- Stamped on the fallback config when LegacyShop.json is absent (mirrors its v1). No perks ⇒
+-- every Economy perk helper returns its neutral value and the client hides the shop.
+local LEGACY_SHOP_SCHEMA_VERSION = 1
 
 local cachedGameConfig: Types.GameConfig? = nil
 local cachedSoundsConfig: Types.SoundsConfig? = nil
@@ -27,6 +30,7 @@ local cachedEraConfigs: { [number]: Types.EraConfig } = {}
 local cachedLayouts: { [string]: Types.EraLayout } = {}
 local cachedEraCount: number? = nil
 local cachedMonetizationConfig: Types.MonetizationConfig? = nil
+local cachedLegacyShopConfig: Types.LegacyShopConfig? = nil
 
 local Catalog = {}
 
@@ -97,6 +101,32 @@ function Catalog.GetProductDef(key: string): Types.ProductDef?
 	for _, productDef in Catalog.GetMonetizationConfig().products do
 		if productDef.key == key then
 			return productDef
+		end
+	end
+	return nil
+end
+
+-- LegacyShop.json (M6) is optional in the same sense as Monetization.json: with the file absent
+-- the shop hides and every perk helper is neutral, so the game runs before the designer's file
+-- lands. Fresh fallback table per call for the same reasons as the other two fallbacks.
+function Catalog.GetLegacyShopConfig(): Types.LegacyShopConfig
+	local cached = cachedLegacyShopConfig
+	if cached ~= nil then
+		return cached
+	end
+	local shopModule = configFolder:FindFirstChild("LegacyShop")
+	if shopModule == nil or not shopModule:IsA("ModuleScript") then
+		return { version = LEGACY_SHOP_SCHEMA_VERSION, perks = {} }
+	end
+	cached = require(shopModule) :: Types.LegacyShopConfig
+	cachedLegacyShopConfig = cached
+	return cached :: Types.LegacyShopConfig
+end
+
+function Catalog.GetPerkDef(perkId: string): Types.PerkDef?
+	for _, perkDef in Catalog.GetLegacyShopConfig().perks do
+		if perkDef.id == perkId then
+			return perkDef
 		end
 	end
 	return nil

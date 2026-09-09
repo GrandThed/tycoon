@@ -144,6 +144,15 @@ local Theme = {
 	SHOP_DESC_Y = 58,
 	SHOP_ROW_PAD_BOTTOM = 10,
 
+	-- M6: Legacy shop rows (Perks then Cosmetics). Same silhouette as a Shop row: name,
+	-- one "Tier n/N · next effect" line beside the Buy button, wrapped description under
+	-- it. The header's breakdown row and softcap note use TEXT_SMALL because
+	-- "Legacy ×19.10 · Perks ×1.16 · Passes ×2.42" overflows a 340 px sheet at TEXT_MEDIUM.
+	PERK_TIER_Y = 30,
+	PERK_DESC_Y = 58,
+	PERK_ROW_PAD_BOTTOM = 10,
+	PERK_NOTE_LINE_HEIGHT = 18,
+
 	-- M3: era-advance screen. A fixed-aspect card that still fits a 320 px tall viewport
 	-- at MIN_SCALE (340x300 -> 312x275 physical) so nothing clips in landscape.
 	ERA_SCREEN_WIDTH = 340,

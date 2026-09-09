@@ -142,3 +142,24 @@ shapes and ProfileStore facts verified from `ServerPackages/_Index/.../ProfileSt
 - Client: `LoadScreen` scrim is a non-Active Frame (never sinks input); bottom bar hidden until
   first snapshot; TopBar boots with dashes. `Theme.ZINDEX_LOAD = 22` sits between dialogs and
   ceremony.
+
+**M6 baseline (2026-09-09, SHIP with Warnings — Legacy shop).** Load-bearing shapes to watch in M7+:
+- `LegacyShopService.tryBuyPerk` is the ONLY Legacy sink; `state.legacy` never decreases anywhere
+  (`spent` is the ledger, `Economy.LegacySpendable = legacy - spent`). Softcap lives in
+  `Economy.LegacyMult` (`s + s*ln(L/s)`, continuous at s); SPEC §4 line 57 still prints the linear
+  formula — docs deviation, not code.
+- Every perk helper takes the shop config explicitly; `Economy.PerkValue` clamps a profile tier
+  beyond a shrunk config to the last tier, while `NextPerkTier` returns "maxed" — consistent.
+- Master Builders discount is applied ONLY inside `Economy.LevelUpCost`; Extra Milestone reaches
+  income only via `IncomePerSecond`'s trailing `milestoneLevels` (server `computeIncomeWithMults`,
+  client BuildPanel `previewGame` clone, PlotVisualsController `legacyShopState`). Any new caller
+  of `SlotIncome`/`MilestoneMult` must thread the owner's list or milestones silently diverge.
+- `PlotService.RefreshCosmetics` = full plot rebuild (VIP path reused) — silent, no FX; called
+  after EVERY perk buy. `PlotService.Start` now owns a `CharacterAdded` map for `TitleTag`
+  (disconnected on PlayerRemoving). Fireworks part lives in `record.folder` (NOT cleared by
+  `clearPlotContents`) and self-destroys after 4 s.
+- Studio-only levers on Workspace: `ForceLoadFailure` (DataService) and `GrantLegacy`
+  (EconomyService, consumed in the 1 Hz tick, gated on the module-level `isStudio`). Neither
+  rejects NaN/inf.
+- Client: ceremony `onClosed` auto-opens the Legacy panel via `openPanel` (togglePanel wrapper)
+  when `hasAffordableTier`; that is the only automatic panel open in the game — keep it the only one.

@@ -1,4 +1,4 @@
-# BALANCE — final (M5)
+# BALANCE — final (M6)
 
 Produced by `py tools/sim_economy.py` (mirrors `src/shared/Economy.luau` function-for-function
 and reads the real configs — regenerate any table below by rerunning the commands in the last
@@ -18,6 +18,9 @@ every second; `--strategy rusher` buys slots only; `--laps K` rebirths between l
   can pick instead are both documented with numbers.
 - **Paid stack 2.42×, packs capped at ≤ half an era, pricing ladder 1 : 2.2 : 4.2** — all
   unchanged from M4 and restated below.
+- **M6 Legacy shop (Model C, softcap 1000): lap 1 with the shop 15:19:31, still in every band;
+  laps 2–6 4:15 / 2:29 / 1:50 / 1:36 / 1:27.** Lap 1 without perks is byte-identical to M2;
+  laps 2+ without perks move (softcap only) — see "M6 — Legacy shop" at the end.
 
 ---
 
@@ -421,4 +424,141 @@ py tools/sim_economy.py --laps 3                             # laps 1-3, rebirth
 py tools/sim_economy.py --laps 2 --passes doublecash,vip --premium   # fully-paid two laps
 py tools/sim_economy.py --rebirth 1 --era 1 --legacy 887     # Era 1 as a first-rebirth player
 py tools/gen_asset_manifest.py --check                       # era configs still valid
+```
+
+---
+
+# M6 — Legacy shop (Model C "invest + softcap", numbers from the real config)
+
+Everything below is `py tools/sim_economy.py --perks auto --laps 6` and friends reading
+`src/shared/Config/LegacyShop.json` and `Game.json` (`legacy.softcap = 1000`). The prototype
+tables in `docs/LEGACY_SHOP.md` were re-derived from the shipped config and reproduce to the
+second: the config carries exactly the §2/§3 numbers, and the sim's hardcoded `PERK_DEFS` is gone.
+
+## Sim changes (mirrors `docs/INTERFACES.md` "Economy.luau — exact signatures")
+
+- `legacy_mult` softcaps: `eff = s + s·ln(legacy / s)` when `legacy > s`, `s = legacy.softcap`
+  (absent key ⇒ linear). `slot_income` / `income_per_second` take a trailing `milestone_levels`;
+  `level_up_cost` / `level_up_cost_total` a trailing `discount` — applied inside `level_up_cost`
+  only, never at a call site; `neighbors_mult` trailing `per_player, max_bonus`; `mults["perk"]` is
+  multiplied in beside `legacy`.
+- New mirrors, same names in snake_case: `perk_tier, perk_value, perk_income_mult,
+  level_cost_discount, level_floor, milestone_levels, neighbors_params, offline_cap_seconds,
+  inheritance_cash, legacy_spendable, next_perk_tier`. `load_legacy_shop_config` returns
+  `{version 1, perks []}` when the file is missing (Catalog's behaviour) and validates the v1 schema
+  (closed `effect` enum, cosmetic ⇔ one tier at value 0, `maxBonus` on `neighbours`, description
+  ≤ 90 chars) so a broken config fails `--check` loudly.
+- CLI: `--shop` and the spend/invest models are gone (their numbers stay in LEGACY_SHOP.md §4).
+  `--perks auto` runs the purchase policy at every era entry; `--perks id=tier,...` owns perks from
+  the start at no cost (ids are the frozen camelCase ids); `--softcap N` overrides `Game.json` for
+  exploration (`0` = linear). `--check` refuses both.
+- **Byte-identity, diffed before/after:** default, `--packs`, `--strategy rusher`, `--strategy
+  rusher --laps 2`, `--passes doublecash,vip --premium`, `--era 2 --legacy 50`, `--rebirth 1 --era
+  1` and `--check` are identical. **`--laps 2+` without perks is NOT** — the softcap now lives in
+  `Economy.LegacyMult` itself and lap 2 Era 2 enters at 1004 Legacy, so from lap 2 Era 3 on the
+  passive multiplier is lower than the M5 tables (lap 2 4:51:29 → 5:13:06, lap 3 2:29:07 → 3:33:29,
+  lap 6 45:28 → 2:18:18). That is the design working, not drift; the M5 lap tables above are the
+  pre-softcap baseline and are kept for the comparison.
+
+## Lap 1–6 per era, greedy, free, auto policy (`--perks auto --laps 6`)
+
+"←" = bought on entering that era (cost in brackets). Multiplier = `LegacyMult` of the Legacy
+carried in; Founder's Blessing is on top of it.
+
+| Lap | Era 1 Village | Era 2 Boomtown | Era 3 Metropolis | Era 4 Orbital Colony | Lap total | Legacy after |
+|---|---|---|---|---|---|---|
+| 1 | 41:50 (×1.00) | 1:44:06 (×1.78) ← Inheritance 1 (40) | 4:15:55 (×3.61) ← Founder's 1 (80), Long Memory 1 (80) | 8:37:40 (×6.29) ← Master Builders 1 (200), Inheritance 2 (90) | **15:19:31** | 891 |
+| 2 | 3:21 (×9.91) ← Founder's 2 (160), Level Floor 1 (200) | 14:11 (×11.10) ← Long Memory 2 (160) | 1:00:37 (×13.52) ← Inheritance 3 (180) | 2:57:12 (×16.28) ← Master Builders 2 (400) | **4:15:21** | 2247 |
+| 3 | 1:33 (×19.10) ← Founder's 3 (300), Extra Milestone (350) | 7:04 (×19.79) | 33:20 (×21.24) ← Level Floor 2 (500) | 1:47:17 (×23.04) ← Founder's 4 (400) | **2:29:14** | 4071 |
+| 4 | 1:04 (×25.04) ← Master Builders 3 (650), Good Neighbours (250) | 4:52 (×25.53) | 23:05 (×26.59) ← Founder's 5 (550) | 1:20:33 (×27.96) ← Long Memory 3 (320), Sign Title (250) | **1:49:34** | 6387 |
+| 5 | 0:52 (×29.54) ← Name-Tag Colour (300), Monument Glow (400), Advance Fireworks (500) | 3:58 (×29.92) | 19:58 (×30.75) ← Golden Roads (600) | 1:10:43 (×31.85) | **1:35:31** | 9167 |
+| 6 | 0:48 (×33.16) | 3:33 (×33.47) | 17:59 (×34.15) | 1:04:13 (×35.07) | **1:26:33** | 12410 |
+
+Lap 1 bands with the shop: Era 1 41:50 (30–45 min), Era 2 1:44:06 (1:30–2:30), Era 3 4:15:55
+(4–6 h), Era 4 8:37:40 (8–12 h) — all in band, 16 and 38 minutes of margin on the two tight floors.
+Longest early-game wait is unchanged at 14 s (Era 1 and Era 4); longest wait anywhere 113 s
+(Era 4 `launchTower`, was 121 s). Lap ratios 0.28 → 0.58 → 0.73 → 0.87 → 0.91; the plateau is
+about 1:15 with the whole shop bought. `SHOP:` line: 23 purchases, 6960 spent, 5450 spendable
+after lap 6, passive ×36.19.
+
+Same six laps with the softcap but **no perks** (`--laps 6`): 16:20:04 / 5:13:06 / 3:33:29 /
+2:54:29 / 2:32:38 / 2:18:18 — the perks are worth roughly a third of each late lap, which is the
+felt progression the shop exists to provide.
+
+## Purchase timeline (auto policy, as the sim bought them)
+
+| # | Purchase | Cost | Cum. | Bought at | # | Purchase | Cost | Cum. | Bought at |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Inheritance 1 | 40 | 40 | lap 1 → Era 2 | 13 | Level Floor 2 | 500 | 2740 | lap 3 → Era 3 |
+| 2 | Founder's 1 | 80 | 120 | lap 1 → Era 3 | 14 | Founder's 4 | 400 | 3140 | lap 3 → Era 4 |
+| 3 | Long Memory 1 | 80 | 200 | lap 1 → Era 3 | 15 | Master Builders 3 | 650 | 3790 | lap 4 → Era 1 |
+| 4 | Master Builders 1 | 200 | 400 | lap 1 → Era 4 | 16 | Good Neighbours | 250 | 4040 | lap 4 → Era 1 |
+| 5 | Inheritance 2 | 90 | 490 | lap 1 → Era 4 | 17 | Founder's 5 | 550 | 4590 | lap 4 → Era 3 |
+| 6 | Founder's 2 | 160 | 650 | lap 2 → Era 1 | 18 | Long Memory 3 | 320 | 4910 | lap 4 → Era 4 |
+| 7 | Level Floor 1 | 200 | 850 | lap 2 → Era 1 | 19 | Sign Title | 250 | 5160 | lap 4 → Era 4 |
+| 8 | Long Memory 2 | 160 | 1010 | lap 2 → Era 2 | 20 | Name-Tag Colour | 300 | 5460 | lap 5 → Era 1 |
+| 9 | Inheritance 3 | 180 | 1190 | lap 2 → Era 3 | 21 | Monument Glow | 400 | 5860 | lap 5 → Era 1 |
+| 10 | Master Builders 2 | 400 | 1590 | lap 2 → Era 4 | 22 | Advance Fireworks | 500 | 6360 | lap 5 → Era 1 |
+| 11 | Founder's 3 | 300 | 1890 | lap 3 → Era 1 | 23 | Golden Roads | 600 | 6960 | lap 5 → Era 3 |
+| 12 | Extra Milestone | 350 | 2240 | lap 3 → Era 1 | | | | | |
+
+The policy (`PERK_POLICY` in the sim, tool-only) is ordered by measured pacing value per Legacy,
+QoL after, cosmetics last in config order. Lap 1 buys five tiers (490 of 891); laps 2–3 reach 14 of
+18 perk tiers; lap 4 finishes the perks; cosmetics are lap 4–5 prestige sinks.
+
+## Paid stack re-verification with perks (`--perks auto --laps 2 --passes doublecash,vip --premium`)
+
+| | Free | DoubleCash + VIP + Premium | Ratio |
+|---|---|---|---|
+| Lap 1 | 15:19:31 | 6:20:08 (17:20 / 43:04 / 1:45:47 / 3:33:57) | 2.419× |
+| Lap 2 | 4:15:21 | 1:45:40 (1:26 / 5:54 / 25:05 / 1:13:15) | 2.417× |
+
+No perk touches `PassMult` / `PremiumMult`, and the perk purchase timeline is identical for the
+paid player (Legacy earned does not depend on the multiplier), so the paid stack stays exactly
+2.42× with the shop in play. Convenience, never a gate (spec §6 rule 5).
+
+## Softcap knob (`--softcap N`, `--perks auto --laps 6`)
+
+| `legacy.softcap` | Lap 1 | Lap 2 | Lap 3 | Lap 4 | Lap 5 | Lap 6 | Passive after lap 6 |
+|---|---|---|---|---|---|---|---|
+| 700 | 15:19:31 | 4:48:25 | 3:00:54 | 2:16:36 | 2:01:01 | 1:50:50 | ×28.13 |
+| **1000 (shipped)** | **15:19:31** | **4:15:21** | **2:29:14** | **1:49:34** | **1:35:31** | **1:26:33** | **×36.19** |
+| 1500 | 15:19:31 | 3:58:22 | 2:03:47 | 1:26:57 | 1:14:02 | 1:06:04 | ×47.70 |
+
+Lap 1 never sees the cap (max Legacy at any lap-1 era entry is 529; lap-1 total 891). 700 gives
+~2 h late laps, 1000 ~1.5 h, 1500 ~1.1 h — a one-key change in `Game.json` if Studio play says the
+plateau is wrong.
+
+## Rusher with the shop
+
+`--perks levelFloor=2 --strategy rusher`: Era 1 8:17 (greedy 41:50, no-perk rusher 15:10) —
+the reason Level Floor tier 2 is 8, not 10 (LEGACY_SHOP.md §8). `--perks auto --laps 2 --strategy
+rusher`: the rusher earns too little Legacy to buy anything before lap 2 (122 after lap 1) and
+finishes lap 2 in 10:03:09 against greedy's 4:15:21 — rushing stays worse from Era 3 on.
+
+## Config decisions and deviations from LEGACY_SHOP.md
+
+- **Founder's `value`s are exact powers of 1.05** (1.157625, 1.21550625, 1.2762815625) rather than
+  the 4-decimal roundings in §6, so the HUD breakdown (`Perks ×1.28`) and the sim agree to the bit.
+- **Long Memory `value`s are total seconds** (7200 / 14400 / 21600) per the contract ("value = total
+  effect"); the description says "+2 h on your offline cap per tier" and never a total.
+- **Level Floor 5 / 8** as approved; **Good Neighbours `value` 0.04 with `maxBonus` 0.36** on the tier.
+- Cosmetic colours: `nameTagColour` `#2FB8D9` (teal, clearly not VIP gold), `goldenRoads` `#E3B341`
+  (warm gold). `signTitle.titles`: Founder, Magnate, Tycoon, Sovereign, Eternal.
+- Nothing else deviates: costs, tiers, ids and display order are the §2/§3 tables verbatim.
+- Not changed: `Game.json` values other than the lead's `legacy.softcap = 1000`; every `Eras/*.json`
+  and `Layouts/**` is frozen and untouched, which is why lap 1 without perks is byte-identical.
+
+## Commands used
+
+```
+py tools/sim_economy.py --check                                        # lap 1 bands, exits 0
+py tools/sim_economy.py --perks auto --laps 6                          # Model C tables above
+py tools/sim_economy.py --laps 6                                       # softcap, no perks
+py tools/sim_economy.py --perks auto --laps 6 --softcap 700            # knob table
+py tools/sim_economy.py --perks auto --laps 6 --softcap 1500
+py tools/sim_economy.py --perks auto --laps 2 --passes doublecash,vip --premium   # 2.42x
+py tools/sim_economy.py --perks levelFloor=2 --strategy rusher         # Level Floor cliff check
+py tools/sim_economy.py --perks auto --laps 2 --strategy rusher
+py tools/gen_asset_manifest.py --check                                 # era configs still valid
 ```

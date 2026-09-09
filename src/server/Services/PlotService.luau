@@ -94,6 +94,152 @@ local function fireFx(player: Player, payload: Types.FxEvent): ()
 	RemoteService.FireClient(player, "FxEvent", payload)
 end
 
+-- M6 Legacy shop cosmetics (server-side world cosmetics, applied silently on spawn/claim/
+-- refresh; a missing or unowned perk spawns nothing). Perk ids are the frozen config keys.
+local PERK_SIGN_TITLE = "signTitle"
+local PERK_NAME_TAG_COLOUR = "nameTagColour"
+local PERK_MONUMENT_GLOW = "monumentGlow"
+local PERK_ADVANCE_FIREWORKS = "advanceFireworks"
+local PERK_GOLDEN_ROADS = "goldenRoads"
+-- Sizing of the world-space cosmetics lives here for the same reason MonetizationService keeps
+-- the VIP tag's: they are server instances, not client Theme values. The title tag sits one VIP
+-- tag height above the VIP tag's offset so the two stack when both exist.
+local TITLE_TAG_NAME = "TitleTag"
+local TITLE_TAG_WIDTH_STUDS = 4
+local TITLE_TAG_HEIGHT_STUDS = 0.8
+local TITLE_TAG_OFFSET_STUDS = 3.3
+local MONUMENT_LIGHT_NAME = "MonumentGlow"
+local MONUMENT_LIGHT_BRIGHTNESS = 2
+local MONUMENT_LIGHT_RANGE = 24
+local FIREWORKS_NAME = "AdvanceFireworks"
+local FIREWORKS_SECONDS = 2
+local FIREWORKS_RATE = 60
+local FIREWORKS_SPEED = 25
+local FIREWORKS_LIFETIME = 2
+local FIREWORKS_SIZE = 1.5
+local FIREWORKS_SPREAD_DEGREES = 40
+-- Character tracking for the title tag (the head can replicate a frame after CharacterAdded).
+local HEAD_WAIT_SECONDS = 5
+
+local characterConnections: { [Player]: RBXScriptConnection } = {}
+
+-- Owned AND present in the config: a perk id left in a profile after a config edit is ignored.
+local function ownsCosmetic(state: Types.PlayerState, perkId: string): boolean
+	return Economy.PerkValue(Catalog.GetLegacyShopConfig(), state.legacyShop, perkId) ~= nil
+end
+
+-- "#RRGGBB" from LegacyShop.json; nil (cosmetic skipped) on anything malformed, never an error.
+local function perkColor(perkId: string): Color3?
+	local perkDef = Catalog.GetPerkDef(perkId)
+	local hex = if perkDef ~= nil then perkDef.color else nil
+	if hex == nil then
+		return nil
+	end
+	local ok, color = pcall(Color3.fromHex, hex)
+	return if ok then color else nil
+end
+
+-- Creates or removes the coloured name tag to match the owner's perk; idempotent both ways.
+local function applyTitleTag(player: Player): ()
+	local character = player.Character
+	if character == nil then
+		return
+	end
+	local head = character:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local state = DataService.GetState(player)
+	local color = if state ~= nil and ownsCosmetic(state, PERK_NAME_TAG_COLOUR)
+		then perkColor(PERK_NAME_TAG_COLOUR)
+		else nil
+	local existing = head:FindFirstChild(TITLE_TAG_NAME)
+	-- The tag replaces the Humanoid's overhead name (otherwise the owner reads their name twice);
+	-- removing the tag restores the default so nothing changes for anyone without the perk.
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if color == nil then
+		if existing ~= nil then
+			existing:Destroy()
+			if humanoid ~= nil then
+				humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+			end
+		end
+		return
+	end
+	if existing ~= nil then
+		return
+	end
+	if humanoid ~= nil then
+		humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = TITLE_TAG_NAME
+	billboard.Size = UDim2.fromScale(TITLE_TAG_WIDTH_STUDS, TITLE_TAG_HEIGHT_STUDS)
+	billboard.StudsOffset = Vector3.new(0, TITLE_TAG_OFFSET_STUDS, 0)
+	local label = Instance.new("TextLabel")
+	label.Name = "Line1"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0
+	label.TextColor3 = color
+	label.Text = player.DisplayName
+	label.Parent = billboard
+	billboard.Parent = head
+end
+
+local function onCharacterAdded(player: Player, character: Model): ()
+	task.spawn(function()
+		if character:WaitForChild("Head", HEAD_WAIT_SECONDS) == nil then
+			return
+		end
+		applyTitleTag(player)
+	end)
+end
+
+-- The part a model-based cosmetic attaches to: the part itself, else the model's primary part,
+-- else its first BasePart; nil for an empty model (cosmetic skipped).
+local function cosmeticTargetPart(spawned: Instance): BasePart?
+	if spawned:IsA("BasePart") then
+		return spawned
+	end
+	if spawned:IsA("Model") then
+		local primary = spawned.PrimaryPart
+		if primary ~= nil then
+			return primary
+		end
+		return spawned:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
+end
+
+local function applyMonumentGlow(spawned: Instance): ()
+	local target = cosmeticTargetPart(spawned)
+	if target == nil then
+		return
+	end
+	target.Material = Enum.Material.Neon
+	local light = Instance.new("PointLight")
+	light.Name = MONUMENT_LIGHT_NAME
+	light.Brightness = MONUMENT_LIGHT_BRIGHTNESS
+	light.Range = MONUMENT_LIGHT_RANGE
+	light.Color = target.Color
+	light.Parent = target
+end
+
+-- The signTitle perk's title for this owner: titles[min(rebirthCount + 1, #titles)].
+local function signTitleFor(state: Types.PlayerState): string?
+	if not ownsCosmetic(state, PERK_SIGN_TITLE) then
+		return nil
+	end
+	local perkDef = Catalog.GetPerkDef(PERK_SIGN_TITLE)
+	local titles = if perkDef ~= nil then perkDef.titles else nil
+	if titles == nil or #titles == 0 then
+		return nil
+	end
+	return titles[math.min(state.rebirthCount + 1, #titles)]
+end
+
 -- displayName is required by era schema v1.1; a pre-v1.1 config degrades to the module key.
 local function eraDisplayName(eraConfig: Types.EraConfig): string
 	local displayName: string? = eraConfig.displayName
@@ -141,13 +287,20 @@ local function setSignLines(record: PlotRecord, lines: { string }, color: Color3
 	end
 end
 
--- Spec §3 cosmetic rank: "<DisplayName>'s <era displayName>" plus "Rebirth ×n" once reborn.
+-- Spec §3 cosmetic rank: "<DisplayName>'s <era displayName>" plus "Rebirth ×n" once reborn,
+-- plus the signTitle perk's title on the third line (M6) when owned.
 local function refreshSign(record: PlotRecord, player: Player, state: Types.PlayerState): ()
 	local eraConfig = Catalog.GetEraConfig(state.era)
 	local eraName = if eraConfig ~= nil then eraDisplayName(eraConfig) else ""
 	local lines = { `{player.DisplayName}'s {eraName}` }
 	if state.rebirthCount > 0 then
 		table.insert(lines, `Rebirth ×{state.rebirthCount}`)
+	end
+	local title = signTitleFor(state)
+	if title ~= nil then
+		-- Always the third line, so the title does not jump when the rebirth line appears.
+		lines[2] = lines[2] or ""
+		lines[3] = title
 	end
 	local color = if state.passes.VIP == true then VIP_SIGN_TEXT_COLOR else LABEL_TEXT_COLOR
 	setSignLines(record, lines, color)
@@ -157,9 +310,19 @@ local function clearSign(record: PlotRecord): ()
 	setSignLines(record, {}, LABEL_TEXT_COLOR)
 end
 
--- True iff a milestone lies in (fromLevel, toLevel] — the granted range just crossed one.
-local function crossesMilestone(fromLevel: number, toLevel: number): boolean
-	for _, milestone in Catalog.GetGameConfig().milestoneLevels do
+-- True iff a milestone lies in (fromLevel, toLevel] — the granted range just crossed one. The
+-- owner's list (Extra Milestone perk), never Game.json's directly.
+local function crossesMilestone(
+	state: Types.PlayerState,
+	fromLevel: number,
+	toLevel: number
+): boolean
+	local milestoneLevels = Economy.MilestoneLevels(
+		Catalog.GetLegacyShopConfig(),
+		state.legacyShop,
+		Catalog.GetGameConfig()
+	)
+	for _, milestone in milestoneLevels do
 		if milestone > fromLevel and milestone <= toLevel then
 			return true
 		end
@@ -208,10 +371,13 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		granted = wanted
 	else
 		-- Accumulating per-step costs equals LevelUpCostTotal for the granted range and finds
-		-- the affordable count in the same pass.
+		-- the affordable count in the same pass. Master Builders (M6) is applied inside
+		-- LevelUpCost only, so the Build panel's preview and this charge cannot disagree.
+		local discount = Economy.LevelCostDiscount(Catalog.GetLegacyShopConfig(), state.legacyShop)
 		local totalCost = 0
 		for step = 1, wanted do
-			local stepCost = Economy.LevelUpCost(slot.baseCost, slotState.level + step, gameConfig)
+			local stepCost =
+				Economy.LevelUpCost(slot.baseCost, slotState.level + step, gameConfig, discount)
 			if totalCost + stepCost > state.cash then
 				break
 			end
@@ -242,7 +408,7 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		slotId = slotId,
 		fromLevel = fromLevel,
 		toLevel = slotState.level,
-		milestone = crossesMilestone(fromLevel, slotState.level),
+		milestone = crossesMilestone(state, fromLevel, slotState.level),
 	})
 end
 
@@ -279,13 +445,16 @@ local function findTemplate(eraName: string, modelName: string, vipSkins: boolea
 	return nil
 end
 
+-- state drives the owner-dependent looks: VIP skins (M4) and the monumentGlow/goldenRoads
+-- perks (M6). Golden roads recolour placeholders only — a template may be a VIP skin model.
 local function spawnBuilding(
 	record: PlotRecord,
 	slot: Types.SlotConfig,
 	eraName: string,
 	layout: Types.EraLayout,
-	vipSkins: boolean
+	state: Types.PlayerState
 ): ()
+	local vipSkins = state.passes.VIP == true
 	local anchor = record.base:FindFirstChild("Slot_" .. slot.id)
 	local anchorCFrame: CFrame
 	if anchor ~= nil and anchor:IsA("Attachment") then
@@ -312,6 +481,12 @@ local function spawnBuilding(
 		part.Anchored = true
 		part.Size = layout.placeholderSize
 		part.CFrame = anchorCFrame * CFrame.new(0, layout.placeholderSize.Y / 2, 0)
+		if slot.type == "unlock" and ownsCosmetic(state, PERK_GOLDEN_ROADS) then
+			local roadColor = perkColor(PERK_GOLDEN_ROADS)
+			if roadColor ~= nil then
+				part.Color = roadColor
+			end
+		end
 		local billboard = createLabelBillboard(
 			{ slot.modelName },
 			layout.padSize.X,
@@ -321,6 +496,10 @@ local function spawnBuilding(
 		billboard.Parent = part
 		part.Parent = record.buildingsFolder
 		spawned = part
+	end
+
+	if slot.type == "monument" and ownsCosmetic(state, PERK_MONUMENT_GLOW) then
+		applyMonumentGlow(spawned)
 	end
 
 	if slot.type == "building" then
@@ -487,11 +666,22 @@ function tryBuy(player: Player, slotId: string): ()
 		state.cash -= slot.baseCost
 		charged = slot.baseCost
 	end
-	state.slots[slotId] = { level = 1 }
+	-- Level Floor (M6): building slots start at the perk's level (unlock/decor/monument stay at
+	-- 1). Floor levels count toward LegacyGain by design (docs/LEGACY_SHOP.md §8); the reveal
+	-- event is unchanged — no levelUp event for the floor.
+	local startLevel = 1
+	if slot.type == "building" then
+		startLevel = math.clamp(
+			Economy.LevelFloor(Catalog.GetLegacyShopConfig(), state.legacyShop),
+			1,
+			gameConfig.maxLevel
+		)
+	end
+	state.slots[slotId] = { level = startLevel }
 
 	local layout = Catalog.GetLayout(eraConfig.name)
 	if layout ~= nil then
-		spawnBuilding(record, slot, eraConfig.name, layout, state.passes.VIP == true)
+		spawnBuilding(record, slot, eraConfig.name, layout, state)
 		refreshPads(record, state, eraConfig, layout)
 	end
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
@@ -564,11 +754,10 @@ local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): 
 	end
 	configureBaseForEra(record, eraConfig, layout)
 	local maxLevel = Catalog.GetGameConfig().maxLevel
-	local vipSkins = state.passes.VIP == true
 	for _, slot in eraConfig.slots do
 		local owned = state.slots[slot.id]
 		if owned ~= nil then
-			spawnBuilding(record, slot, eraConfig.name, layout, vipSkins)
+			spawnBuilding(record, slot, eraConfig.name, layout, state)
 			if owned.level >= maxLevel then
 				local prompt: ProximityPrompt? = record.prompts[slot.id]
 				if prompt ~= nil then
@@ -578,6 +767,66 @@ local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): 
 		end
 	end
 	refreshPads(record, state, eraConfig, layout)
+end
+
+-- Inheritance (M6): cash worth the first N slots of the era just entered, granted after the
+-- reset so it lands in the new era. Cash only — slots are still bought in order.
+local function grantInheritance(player: Player, state: Types.PlayerState): ()
+	local newEra = Catalog.GetEraConfig(state.era)
+	if newEra == nil then
+		return
+	end
+	local cash = Economy.InheritanceCash(newEra, Catalog.GetLegacyShopConfig(), state.legacyShop)
+	if cash <= 0 then
+		return
+	end
+	state.cash += cash
+	state.stats.totalCashAllTime += cash
+	AnalyticsService.LogCashSource(player, cash, state.cash, "Gameplay", "inheritance")
+end
+
+-- advanceFireworks (M6): a short server-side burst at the new era's monument anchor (the old
+-- monument was just torn down), visible to everyone. Enabled is toggled with task.delay and the
+-- emitter part removed once the last particle has expired.
+local function spawnFireworks(record: PlotRecord, state: Types.PlayerState): ()
+	if not ownsCosmetic(state, PERK_ADVANCE_FIREWORKS) then
+		return
+	end
+	local origin = record.base.CFrame * CFrame.new(0, record.base.Size.Y / 2, 0)
+	local eraConfig = Catalog.GetEraConfig(state.era)
+	if eraConfig ~= nil then
+		for _, slot in eraConfig.slots do
+			local anchor = record.base:FindFirstChild("Slot_" .. slot.id)
+			if slot.type == "monument" and anchor ~= nil and anchor:IsA("Attachment") then
+				origin = anchor.WorldCFrame
+				break
+			end
+		end
+	end
+	local part = Instance.new("Part")
+	part.Name = FIREWORKS_NAME
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.Transparency = 1
+	part.Size = Vector3.one
+	part.CFrame = origin
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Rate = FIREWORKS_RATE
+	emitter.Speed = NumberRange.new(FIREWORKS_SPEED)
+	emitter.Lifetime = NumberRange.new(FIREWORKS_LIFETIME)
+	emitter.Size = NumberSequence.new(FIREWORKS_SIZE)
+	emitter.SpreadAngle = Vector2.new(FIREWORKS_SPREAD_DEGREES, FIREWORKS_SPREAD_DEGREES)
+	emitter.LightEmission = 1
+	emitter.Enabled = true
+	emitter.Parent = part
+	part.Parent = record.folder
+	task.delay(FIREWORKS_SECONDS, function()
+		emitter.Enabled = false
+	end)
+	task.delay(FIREWORKS_SECONDS + FIREWORKS_LIFETIME, function()
+		part:Destroy()
+	end)
 end
 
 local function tryAdvanceEra(player: Player): ()
@@ -620,8 +869,10 @@ local function tryAdvanceEra(player: Player): ()
 	state.cash = 0
 	state.slots = {}
 	state.stats.erasCompleted += 1
+	grantInheritance(player, state)
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	spawnFireworks(record, state)
 	AnalyticsService.LogLegacySource(player, legacyGained, state.legacy, `era:{fromEra}`)
 	AnalyticsService.LogEraProgression(player, fromEra, false)
 	-- Restamp the persisted rate NOW (0 for the empty era): a disconnect before the next tick
@@ -681,8 +932,10 @@ local function tryRebirth(player: Player): ()
 	state.cash = 0
 	state.slots = {}
 	state.stats.erasCompleted += 1
+	grantInheritance(player, state)
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	spawnFireworks(record, state)
 	AnalyticsService.LogLegacySource(player, legacyGained, state.legacy, `era:{fromEra}`)
 	AnalyticsService.LogEraProgression(player, fromEra, true)
 	-- Same as tryAdvanceEra: never let the Era-4 rate persist next to Era 1's empty slots.
@@ -788,8 +1041,9 @@ local function buildWorld(): ()
 		sign.CFrame = base.CFrame * CFrame.new(0, plotSize.Y / 2 + signHeight / 2, -plotSize.Z / 2)
 		-- Wide enough for "<DisplayName>'s Orbital Colony" at readable height from the hub.
 		local signLabelHeight = layout.placeholderSize.Y / 2
+		-- Three line slots: owner, rebirth rank, and the M6 signTitle perk's title.
 		local signBillboard = createLabelBillboard(
-			{ "", "" },
+			{ "", "", "" },
 			plotSize.X / 4,
 			signLabelHeight,
 			signHeight / 2 + signLabelHeight / 2
@@ -844,12 +1098,13 @@ function PlotService.ClaimPlot(player: Player): ()
 	-- Rebuilds owned buildings from persisted state.slots (bulk restore, no reveal effects).
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	applyTitleTag(player)
 end
 
--- MonetizationService calls this when a pass is granted mid-session (VIP is the only pass with
--- cosmetics, but calling it for any pass is harmless). Re-runs the bulk-restore path, which
--- re-resolves every owned building through the VIP-aware template lookup and re-tints the plot
--- sign — silently, per bulk-restore rules: no FxEvents, no tweens, no sounds.
+-- MonetizationService calls this when a pass is granted mid-session and LegacyShopService after
+-- every perk purchase. Re-runs the bulk-restore path, which re-resolves every owned building
+-- through the VIP-aware template lookup and the M6 perk cosmetics, and re-tints the plot sign
+-- and name tag — silently, per bulk-restore rules: no FxEvents, no tweens, no sounds.
 function PlotService.RefreshCosmetics(player: Player): ()
 	local record = plotsByPlayer[player]
 	local state = DataService.GetState(player)
@@ -858,6 +1113,7 @@ function PlotService.RefreshCosmetics(player: Player): ()
 	end
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	applyTitleTag(player)
 end
 
 -- Main calls this first on PlayerRemoving (before EconomyService.Cleanup/DataService.Release).
@@ -889,6 +1145,31 @@ function PlotService.Init(): ()
 	end)
 end
 
-function PlotService.Start(): () end
+function PlotService.Start(): ()
+	-- Title-tag listeners only (mirrors MonetizationService's VIP tag); per-player lifecycle
+	-- stays in Main's orchestration, so these are deliberately order-independent.
+	local function trackPlayer(player: Player): ()
+		characterConnections[player] = player.CharacterAdded:Connect(function(character: Model)
+			onCharacterAdded(player, character)
+		end)
+		local character = player.Character
+		if character ~= nil then
+			onCharacterAdded(player, character)
+		end
+	end
+
+	Players.PlayerAdded:Connect(trackPlayer)
+	for _, player in Players:GetPlayers() do
+		trackPlayer(player)
+	end
+	Players.PlayerRemoving:Connect(function(player: Player)
+		-- Optional annotation: map indexing is non-optional under the old solver.
+		local connection: RBXScriptConnection? = characterConnections[player]
+		if connection ~= nil then
+			connection:Disconnect()
+			characterConnections[player] = nil
+		end
+	end)
+end
 
 return PlotService

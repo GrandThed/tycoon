@@ -111,7 +111,7 @@ function AnalyticsService.LogCashSource(
 	logEconomy(player, flowSource, CASH_CURRENCY, amount, endingBalance, transactionType, itemSku)
 end
 
--- Legacy is only ever earned, and only from an era advance or a rebirth.
+-- Legacy is only ever earned from an era advance or a rebirth.
 function AnalyticsService.LogLegacySource(
 	player: Player,
 	amount: number,
@@ -119,6 +119,18 @@ function AnalyticsService.LogLegacySource(
 	itemSku: string
 ): ()
 	logEconomy(player, flowSource, LEGACY_CURRENCY, amount, endingBalance, "Gameplay", itemSku)
+end
+
+-- Legacy invested in the shop (M6). endingBalance is the SPENDABLE remainder, not the total:
+-- the total never falls, so the dashboards would otherwise show a sink that leaves the balance
+-- untouched.
+function AnalyticsService.LogLegacySink(
+	player: Player,
+	amount: number,
+	endingBalance: number,
+	itemSku: string
+): ()
+	logEconomy(player, flowSink, LEGACY_CURRENCY, amount, endingBalance, "Shop", itemSku)
 end
 
 -- One event per era advance and per rebirth; eraIndex is the era just COMPLETED.

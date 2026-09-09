@@ -20,13 +20,20 @@ export type DirtyFields = {
 	income: boolean?,
 	slotIds: { string }?,
 	settings: boolean?,
+	legacyShop: boolean?,
 }
 type DirtyRecord = {
 	cash: boolean,
 	income: boolean,
 	slotIds: { [string]: boolean },
 	settings: boolean,
+	legacyShop: boolean,
 }
+
+-- Studio-only playtest lever (same pattern as DataService's ForceLoadFailure): Legacy only moves
+-- on an era advance, so a numeric Workspace attribute set in the Properties pane stands in for
+-- one. Consumed by the 1 Hz tick and reset to 0. Ignored outside Studio.
+local GRANT_LEGACY_ATTRIBUTE = "GrantLegacy"
 
 -- Session-scoped record of the offline grant this player received on join, so the welcome-back
 -- card's "Double it" product can be honoured for the whole session (the card can be tapped a
@@ -58,7 +65,8 @@ local flushAccumulator = 0
 local function getDirtyRecord(player: Player): DirtyRecord
 	local record = dirtyRecords[player]
 	if record == nil then
-		record = { cash = false, income = false, slotIds = {}, settings = false }
+		record =
+			{ cash = false, income = false, slotIds = {}, settings = false, legacyShop = false }
 		dirtyRecords[player] = record
 	end
 	return record
@@ -85,27 +93,39 @@ local function computePremiumMult(
 	)
 end
 
+-- Extra Milestone (M6) changes which levels double a slot, so the owner's list rides along with
+-- every income computation rather than the global Game.json list.
 local function computeIncomeWithMults(state: Types.PlayerState, mults: Types.Multipliers): number
 	local eraConfig = Catalog.GetEraConfig(state.era)
 	if eraConfig == nil then
 		return 0
 	end
-	return Economy.IncomePerSecond(state.slots, eraConfig, Catalog.GetGameConfig(), mults)
+	local gameConfig = Catalog.GetGameConfig()
+	return Economy.IncomePerSecond(
+		state.slots,
+		eraConfig,
+		gameConfig,
+		mults,
+		Economy.MilestoneLevels(Catalog.GetLegacyShopConfig(), state.legacyShop, gameConfig)
+	)
 end
 
 -- The live rate ticks/HUD run on: every multiplier active (legacy + neighbors since M2,
--- pass + premium since M4).
+-- pass + premium since M4, Founder's perk + Good Neighbours params since M6).
 local function computeLiveIncomePerSecond(
 	player: Player,
 	state: Types.PlayerState,
 	monetizationConfig: Types.MonetizationConfig
 ): number
 	local gameConfig = Catalog.GetGameConfig()
+	local shopConfig = Catalog.GetLegacyShopConfig()
+	local perPlayer, maxBonus = Economy.NeighborsParams(shopConfig, state.legacyShop, gameConfig)
 	return computeIncomeWithMults(state, {
 		legacy = Economy.LegacyMult(state.legacy, gameConfig),
+		perk = Economy.PerkIncomeMult(shopConfig, state.legacyShop),
 		pass = computePassMult(state, monetizationConfig),
 		premium = computePremiumMult(player, monetizationConfig),
-		neighbors = Economy.NeighborsMult(#Players:GetPlayers(), gameConfig),
+		neighbors = Economy.NeighborsMult(#Players:GetPlayers(), gameConfig, perPlayer, maxBonus),
 	})
 end
 
@@ -114,7 +134,8 @@ end
 -- live rate twice by design: no Studio debug multiplier (offline grants are never
 -- debug-inflated, M2 contract) and neighbors pinned to 1 (lead ruling: a live-social bonus,
 -- not an away bonus — also closes idling in a full server right before logout). Passes and
--- Premium DO apply here (M4): they are account properties, so offline earnings carry them.
+-- Premium DO apply here (M4): they are account properties, so offline earnings carry them —
+-- and so does Founder's Blessing (M6), a permanent perk.
 local function computePersistedIncomePerSecond(
 	player: Player,
 	state: Types.PlayerState,
@@ -123,6 +144,7 @@ local function computePersistedIncomePerSecond(
 	local gameConfig = Catalog.GetGameConfig()
 	return computeIncomeWithMults(state, {
 		legacy = Economy.LegacyMult(state.legacy, gameConfig),
+		perk = Economy.PerkIncomeMult(Catalog.GetLegacyShopConfig(), state.legacyShop),
 		pass = computePassMult(state, monetizationConfig),
 		premium = computePremiumMult(player, monetizationConfig),
 		neighbors = 1,
@@ -184,7 +206,15 @@ end
 
 local function flushDeltas(): ()
 	for player, record in dirtyRecords do
-		if not (record.cash or record.income or record.settings or next(record.slotIds) ~= nil) then
+		if
+			not (
+				record.cash
+				or record.income
+				or record.settings
+				or record.legacyShop
+				or next(record.slotIds) ~= nil
+			)
+		then
 			continue
 		end
 		local state = DataService.GetState(player)
@@ -219,9 +249,15 @@ local function flushDeltas(): ()
 			-- Whole table by contract (M3): a copy, so the client's merge never aliases state.
 			delta.settings = { music = state.settings.music, sfx = state.settings.sfx }
 		end
+		if record.legacyShop then
+			-- Whole table by contract (M6), copied so the client's merge never aliases state.
+			delta.legacyShop =
+				{ spent = state.legacyShop.spent, perks = table.clone(state.legacyShop.perks) }
+		end
 		record.cash = false
 		record.income = false
 		record.settings = false
+		record.legacyShop = false
 		table.clear(record.slotIds)
 		RemoteService.FireClient(player, "StateChanged", delta)
 	end
@@ -273,12 +309,19 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 	if state == nil then
 		return
 	end
-	local offlineConfig = Catalog.GetGameConfig().offline
+	local gameConfig = Catalog.GetGameConfig()
+	local offlineConfig = gameConfig.offline
 	local now = os.time()
-	-- Offline Pro widens the window and removes the efficiency haircut (M4). Main refreshes
-	-- passes before calling this, so state.passes is already authoritative for the session.
+	-- Offline Pro widens the window and removes the efficiency haircut (M4); Long Memory (M6)
+	-- adds hours to whichever cap applies and never touches efficiency. Main refreshes passes
+	-- before calling this, so state.passes is already authoritative for the session.
 	local pro = state.passes.OfflinePro == true
-	local cap = if pro then offlineConfig.capSecondsOfflinePro else offlineConfig.capSeconds
+	local cap = Economy.OfflineCapSeconds(
+		state.passes,
+		state.legacyShop,
+		Catalog.GetLegacyShopConfig(),
+		gameConfig
+	)
 	local efficiency = if pro then offlineConfig.efficiencyOfflinePro else offlineConfig.efficiency
 	-- lastSeen == 0 marks a first-ever join: nothing was earned, no card.
 	if state.lastSeen > 0 then
@@ -444,6 +487,38 @@ function EconomyService.MarkDirty(player: Player, fields: DirtyFields): ()
 	if fields.settings then
 		record.settings = true
 	end
+	if fields.legacyShop then
+		record.legacyShop = true
+	end
+end
+
+-- Studio lever: GrantLegacy > 0 on Workspace pays that much Legacy to every loaded player once,
+-- then resets itself. Legacy is a snapshot-only field, so a fresh snapshot follows the rate
+-- refresh (a delta could not carry it).
+local function consumeGrantLegacyLever(): ()
+	local value = workspace:GetAttribute(GRANT_LEGACY_ATTRIBUTE)
+	-- NaN/inf are refused too: Studio with API access writes a real profile, and a corrupted
+	-- legacy field would survive the session.
+	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+		return
+	end
+	workspace:SetAttribute(GRANT_LEGACY_ATTRIBUTE, 0)
+	local granted = 0
+	for _, player in Players:GetPlayers() do
+		local state = DataService.GetState(player)
+		if state == nil then
+			continue
+		end
+		state.legacy += value
+		EconomyService.RefreshPersistedRate(player)
+		EconomyService.MarkDirty(player, { income = true })
+		EconomyService.SendSnapshot(player)
+		granted += 1
+	end
+	warn(
+		`[EconomyService] {GRANT_LEGACY_ATTRIBUTE} lever: granted {value} Legacy to {granted}`
+			.. ` loaded player(s); attribute reset to 0`
+	)
 end
 
 -- Main calls this on PlayerRemoving (after PlotService.Release, before DataService.Release).
@@ -484,6 +559,9 @@ function EconomyService.Start(): ()
 		end
 		if ticks > 0 then
 			grantIncome(ticks * tickInterval)
+			if isStudio then
+				consumeGrantLegacyLever()
+			end
 		end
 
 		flushAccumulator += deltaTime

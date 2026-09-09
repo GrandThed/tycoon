@@ -429,3 +429,63 @@ Open Cloud upload quota noted in the M3 section above — 9 of 100 monthly slots
 - [ ] 3. That's it — go run `docs/PLAYTEST.md` M5 section, including the Final sweep.
 
 <!-- M5 section complete. Do not delete completed sections above. -->
+
+---
+
+## M6 — Legacy shop (Phase 2)
+
+Nothing new to create on the Creator Hub this milestone — the Legacy shop is entirely Legacy-
+currency, no Robux anywhere near it. This section is a rebuild, the new `GrantLegacy` Studio
+lever (with an important persistence warning), and the same two reminders carried forward again.
+
+### 1. Rebuild first
+
+- [ ] 1. If you pulled new changes since M5, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+      (PowerShell) then `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). No new
+      dependencies (`wally install` not required — `wally.toml` is frozen for M6).
+      `luau-lsp analyze` needs a fresh sourcemap since a new module landed
+      (`Services/LegacyShopService.luau`): `rojo sourcemap default.project.json -o sourcemap.json`.
+
+### 2. The `GrantLegacy` lever, and a warning about it
+
+`docs/PLAYTEST.md` M6 section 2 has the exact playtest steps. Summary: `DataService`/the income
+tick reads a **numeric** Workspace attribute named `GrantLegacy`. While it holds a value > 0, in
+Studio only, every loaded player's Legacy increases by that amount once (server's 1 Hz tick),
+their persisted rate refreshes, and the attribute resets itself to `0` with a warn line in
+Output. Same pattern as M5's `ForceLoadFailure`. It is ignored entirely in a published game.
+
+- **This is real, not sandboxed.** With "Enable Studio Access to API Services" ON (the same
+  toggle from M2/M3/M5), Legacy granted through this attribute is written to your actual saved
+  profile permanently, the same as if you'd earned it by playing. There is no separate "test
+  Legacy" pool. Don't grant huge numbers on a save you want to stay representative of real
+  progress — a fresh/throwaway profile is the cleanest way to exercise every perk tier.
+
+### 3. Robux pricing ladder — still your call, still 1 : 2.2 : 4.2
+
+Carried forward unchanged from M4/M5 (`docs/BALANCE.md` "Cash packs and the era cap" and this
+milestone's M6 paid-stack re-verification both confirm nothing about the ladder moved — the
+Legacy shop never touches `PassMult`/`PremiumMult`). Whenever you actually set or revisit Robux
+prices for `Cash30m` / `Cash2h` / `Cash8h` on the Creator Hub, keep roughly the **1 : 2.2 : 4.2**
+ratio (`Cash2h` at most 2.5× `Cash30m`, `Cash8h` at most 5×).
+
+### 4. Still outstanding: ambient era loops
+
+Unchanged from M5. The four ambient loop ids in `src/shared/Config/Sounds.json` (`Village`,
+`Boomtown`, `Metropolis`, `OrbitalColony`) are still `0` — silent by design, not a bug. Optional;
+needs a CC0 loop pack (the four uploaded Kenney packs are all one-shots). Same tooling handles it
+once you have files (`tools/upload_audio.py` + `tools/audio_map.json`'s `ambient` section).
+
+### 5. Accepted risks (recorded here per the lead's ruling — not bugs, don't report them)
+
+- [ ] 19. **New (M6): Legacy granted via the `GrantLegacy` lever in Studio with API access on is
+      real and permanent for that account.** See section 2 above. Not a bug — it's the intended
+      behaviour of a Studio-only testing lever that writes through the same save path as real
+      play; just don't do it on a profile you want to keep representative.
+
+### 6. Nothing else needed for M6
+
+- [ ] 20. No new Kenney meshes, audio, passes, or developer products this milestone. Mesh import
+      (`docs/MANUAL_STEPS.md` M3 §2) remains fully optional at any pace.
+- [ ] 21. That's it — go run `docs/PLAYTEST.md` M6 section.
+
+<!-- M6 section complete. Do not delete completed sections above. -->

@@ -993,3 +993,191 @@ re-timing it with a stopwatch.
       Ticking this box marks `M5` `[x]` in `docs/PLAN.md`. If you're treating the Final sweep as
       also closing out the stale M2 (15 boxes) and M3 (24 boxes) sign-offs, say so explicitly —
       otherwise those remain separately tracked as pending in `docs/PLAN.md`.
+
+---
+
+## M6 — Legacy shop (Phase 2)
+
+**Goal:** the Legacy panel becomes a real shop. Legacy is never spent away — buying a perk only
+lowers your **Spendable** balance, the total Legacy (and its passive multiplier) never drops.
+Twelve perks: seven change gameplay, five are pure cosmetics. Everything below uses a new
+Studio-only lever, `GrantLegacy`, so you don't have to grind hours of real play to reach the
+shop's later tiers. `docs/BALANCE.md` "M6 — Legacy shop" has the exact numbers cited here if you
+want to cross-check.
+
+The combined M0–M5 checklist above is still pending full sign-off on some long-haul boxes (see
+the status lines at the top of `docs/PLAN.md`) — that's unchanged by M6 and not part of this gate.
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). `luau-lsp analyze` needs a
+      fresh sourcemap — a new module (`LegacyShopService.luau`) landed this milestone:
+      `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security). You need real persistence for the rejoin/v3-migration checks in section 9.
+
+### 2. The `GrantLegacy` lever
+
+- [ ] 3. **Before** pressing Play: select **Workspace** in Explorer, Properties → Attributes →
+      **+**, add `GrantLegacy`, type **number**, value **3000**.
+- [ ] 4. Press Play. Within a second or two (the lever is consumed on the server's 1 Hz tick),
+      confirm your Legacy total jumps by 3000 and Output shows a warn line naming the attribute
+      and the amount granted.
+- [ ] 5. Check Workspace's Attributes again: confirm `GrantLegacy` has reset itself to `0` on its
+      own — it is consumed once, not held.
+- [ ] 6. **Read this before you close Studio today:** if real API access is on (step 2 above),
+      Legacy granted this way is written to your actual saved profile, permanently — it is not a
+      sandboxed test value. That's fine for testing the shop, but don't grant huge numbers on an
+      account/profile you care about keeping "clean."
+
+### 3. Legacy panel becomes the shop
+
+- [ ] 7. Open the **Legacy** panel (bottom bar). Confirm the header shows **Legacy** (your total,
+      unaffected by anything you buy) and **Spendable** (Legacy minus what you've spent — right
+      now these should be equal, since you haven't bought anything).
+- [ ] 8. Confirm a breakdown row reads `Legacy ×a · Perks ×b · Passes ×c` with real numbers (not
+      placeholders), and a one-line note explaining Legacy grows slower past 1,000 (the softcap).
+- [ ] 9. Confirm perk rows appear in this exact order: Founder's Blessing, Master Builders,
+      Inheritance, Level Floor, Extra Milestone, Good Neighbours, Long Memory, then a cosmetics
+      section: Sign Title, Name-Tag Colour, Monument Glow, Advance Fireworks, Golden Roads.
+- [ ] 10. Confirm each row shows `Tier n/N`, the next tier's effect description, its cost, and a
+      **Buy** button (≥ 44 px tap target).
+
+### 4. Buy Founder's Blessing tier 1 — the full purchase loop
+
+- [ ] 11. Note your current income/s. Tap **Buy** on Founder's Blessing tier 1 (cost 80).
+      Confirm: a toast/confirmation appears, the purchase sound plays (if sound IDs are set),
+      income/s rises by roughly **5%**, **Spendable drops by 80**, **Legacy total is unchanged**,
+      and the breakdown row now reads `Perks ×1.05`.
+- [ ] 12. Tap **Buy** on the same row again (still showing tier 1, or now offering tier 2 if you
+      have enough — if you don't have 160 spendable yet, this naturally tests the refusal case;
+      otherwise grant more Legacy with the lever first to force testing it at tier 1 again by
+      trying to double-buy). To specifically test **double-buy refusal**: if the tier already
+      advanced past 1, skip to step 13; otherwise this step confirms nothing else to check.
+- [ ] 13. Confirm you can never see or tap a tier out of order — only the next tier is ever
+      offered on a row; there is no way to jump from tier 1 to tier 3.
+
+### 5. Gameplay perks — verify each one's effect
+
+Grant more Legacy with the lever (section 2) as needed to afford these.
+
+- [ ] 14. **Master Builders** — buy a tier. Open the **Build** panel on an owned, levelable
+      building. Confirm the level-up cost shown is **10% lower** per tier owned, and the
+      ProximityPrompt's charge (walk up and trigger it) matches the discounted panel price exactly.
+- [ ] 15. **Level Floor** — buy tier 1. Buy a brand-new building slot you didn't own before.
+      Confirm it spawns **already at level 5** (not level 1). Buy tier 2; the next new building
+      should open at **level 8**.
+- [ ] 16. **Extra Milestone** — buy it (350). Level a building up past **75**. Confirm its income
+      **doubles again** right at 75 (on top of the existing 10/25/50/100 milestones), and its
+      Build-panel row label shows something like "×2 at Lv 75".
+- [ ] 17. **Inheritance** — buy at least tier 1. Using the debug era-advance/rebirth levers,
+      advance an era or rebirth. Confirm your starting cash on the new era is **not zero** —
+      it should equal the combined `baseCost` of the first N slots (N = 3/5/8 depending on tier
+      owned) in that new era's Build-panel order.
+- [ ] 18. **Long Memory** — buy a tier. Stop Play, wait 65+ seconds with nonzero income, Press
+      Play again. Confirm the Studio welcome-back diagnostic print in Output shows the offline
+      cap **increased by the tier's amount** (e.g. +7200 s = +2h for tier 1) on top of whatever
+      pass cap you have.
+- [ ] 19. **Good Neighbours** — buy it (250). **Test → Start** with **2 Players** (Local Server
+      mode). Confirm the neighbours-bonus display shows **4% per player** (not the default 3%)
+      once both players are loaded in, capped at 36%.
+
+### 6. Cosmetics — verify each one appears, and persists
+
+- [ ] 20. Buy all five cosmetics (Sign Title, Name-Tag Colour, Monument Glow, Advance Fireworks,
+      Golden Roads) as Legacy allows (grant more with the lever if needed — whole cosmetics set
+      is 2050 Legacy).
+- [ ] 21. **Sign Title**: walk to your plot sign. Confirm a third line appears with a title (e.g.
+      "Founder") — the title should change if your rebirth count is higher (index picks from
+      Founder/Magnate/Tycoon/Sovereign/Eternal by rebirth count).
+- [ ] 22. **Name-Tag Colour**: look at your own character. Confirm a teal name tag floats over
+      your head. Confirm you see **only one** name tag (no duplicate default overhead name
+      showing underneath/behind it) — if you also own VIP, confirm the two tags stack vertically
+      rather than overlapping.
+- [ ] 23. **Monument Glow**: walk to your monument slot. Confirm it visibly glows (emissive/Neon
+      look plus a light source), day or night.
+- [ ] 24. **Advance Fireworks**: trigger an era-advance or rebirth (debug levers). Confirm a
+      particle burst plays at your monument for roughly 2 seconds.
+- [ ] 25. **Golden Roads**: confirm your `unlock`-type slots (roads, rails, etc. — not buildings)
+      show a gold tint. Confirm your VIP building skins (if VIP owned) are **not** recolored gold
+      — Golden Roads should never touch the VIP skin set.
+- [ ] 26. **Two-player visibility**: with 2 Players (Local Server), confirm Player 2 can see all
+      five of Player 1's cosmetics on Player 1's plot (sign title, name tag, monument glow,
+      golden roads) from Player 2's own client.
+- [ ] 27. **Fireworks visible to others**: as Player 1, trigger an advance/rebirth. Confirm
+      Player 2's client also sees the fireworks burst at Player 1's monument.
+- [ ] 28. **Persistence**: Stop Play, Press Play again (real API access on). Confirm every
+      cosmetic is still visible immediately on rejoin — no re-purchase needed.
+
+### 7. Auto-open after the ceremony
+
+- [ ] 29. With enough Spendable to afford at least one more tier, trigger an era-advance or
+      rebirth ceremony. Confirm that once the ceremony overlay closes, the **Legacy panel opens
+      automatically once** (not a blocking modal — you can dismiss it like any other panel).
+- [ ] 30. Repeat with **zero** Spendable (spend it all first, or don't grant extra Legacy).
+      Confirm the panel does **not** auto-open this time (nothing affordable).
+
+### 8. Reduce-motion / mobile emulator
+
+- [ ] 31. Device Emulator, **375×667** portrait. Turn on reduce-motion (TouchEnabled emulation
+      already implies it, or lower Studio's quality level 1–3). Trigger an advance/rebirth with
+      Advance Fireworks owned. Confirm the fireworks particle burst is **suppressed locally**
+      (you personally don't see it) — but a second, non-reduced-motion player still would
+      (covered by step 27).
+- [ ] 32. Still at 375×667: open the Legacy panel. Confirm every perk/cosmetic row is
+      comfortably tappable (≥ 48 px) and every description wraps cleanly instead of being cut
+      off or overlapping the Buy button.
+- [ ] 33. Rotate to **667×375** landscape. Confirm the Legacy panel rows are still all reachable,
+      tap targets still comfortable, nothing clipped.
+- [ ] 34. Stop Play.
+
+### 9. Persistence and schema v3
+
+- [ ] 35. With at least one perk owned, Stop Play, Press Play again. Confirm all owned perks and
+      tiers persist exactly as bought — no reset.
+- [ ] 36. Check Output on that rejoin. Confirm **no** migration warning/error prints (the v2→v3
+      migration is silent and additive, same pattern as v1→v2 in M5).
+- [ ] 37. If you have DataStore viewing access, confirm the saved profile's `version` field now
+      reads `3` and `legacyShop.perks` contains the ids you bought.
+
+### 10. Missing config — graceful degrade
+
+- [ ] 38. Stop Play. Temporarily rename `src/shared/Config/LegacyShop.json` (e.g. to
+      `LegacyShop.json.bak`) and rebuild/resync. Press Play. Confirm the Legacy panel shows
+      **no shop** (just Legacy total, or an empty/hidden shop section) and Output has **zero**
+      errors. Stop Play, rename the file back, rebuild/resync before continuing.
+
+### What a bug looks like here
+
+- Legacy **total** ever decreasing when you buy something — only Spendable should drop.
+- A perk tier being buyable twice, or a later tier being offered/buyable before an earlier one.
+- Buying a perk not updating the breakdown row, income/s, or Build-panel prices immediately.
+- Master Builders' Build-panel preview and the ProximityPrompt's actual charge disagreeing.
+- A new building NOT spawning at the Level Floor level after that perk is owned.
+- Extra Milestone not doubling income at level 75, or doubling at the wrong level.
+- Inheritance not granting cash on era-advance/rebirth, or granting the wrong amount.
+- Long Memory's offline cap increase missing from the diagnostic print.
+- Good Neighbours still showing 3%/player after being bought.
+- Any cosmetic not appearing on the plot, not visible to a second player, or not surviving a
+  rejoin.
+- Two overlapping name tags (default + `TitleTag`) instead of one combined/stacked display.
+- Golden Roads recoloring a VIP-skinned building.
+- Fireworks not visible to a second player, or NOT suppressed locally under reduce-motion.
+- The Legacy panel failing to auto-open after a ceremony when something is affordable, or
+  auto-opening when nothing is affordable.
+- Any migration warning/error in Output, or `legacyShop` not persisting across a rejoin.
+- Any error (not just silence) with `LegacyShop.json` removed/renamed.
+- `GrantLegacy` not resetting to `0` after being consumed, or not warning in Output.
+- Legacy panel rows cramped, overlapping, or un-tappable at 375×667 or 667×375.
+
+### Sign-off
+
+- [ ] 39. All boxes above checked: the `GrantLegacy` lever, the full shop UI (header/breakdown/
+      softcap note/row order), the Founder's Blessing buy-and-refuse loop, all seven gameplay
+      perks' effects individually verified, all five cosmetics verified on-plot and to a second
+      player and across a rejoin, the ceremony auto-open (both affordable and not), reduce-motion
+      fireworks suppression, 375×667 portrait, 667×375 landscape, schema v3 persistence with no
+      migration warning, and the missing-config graceful degrade.
+- [ ] 40. Tell Claude Code "M6 playtest passed" (or report the exact failure and step number).
+      Ticking this box marks `M6` `[x]` in `docs/PLAN.md`.

@@ -1641,3 +1641,19 @@ refused, Founder's/Master Builders/Level Floor/Extra Milestone visibly change in
 new-building levels and milestone labels, Inheritance grants cash on advance, cosmetics appear on
 the plot and for a second player, and with the config file absent the Legacy panel shows no shop
 and nothing errors.
+
+## Post-wave amendments (M6)
+
+**1. Signatures as shipped (override the printed ones above).** `Economy.IncomePerSecond(slots,
+era, game, mults, milestoneLevels: { number }?)` — the trailing list is the only route for Extra
+Milestone to reach income, since `SlotIncome` is called inside its loop. `Economy.LevelUpCostTotal`
+keeps its existing third parameter `toLevel` (the contract wrote `count`; "existing functions keep
+their current parameters" wins). The sim mirrors both.
+
+**2. Buy handler lives in a new `Services/LegacyShopService.luau`**, boot order `DataService →
+RemoteService → EconomyService → PlotService → LegacyShopService → MonetizationService →
+AnalyticsService`.
+
+**3. Multi-lap sim output without perks changes from lap 2 Era 3 on** (the softcap now lives in
+`LegacyMult` itself and lap 2 enters Era 2 above 1000 Legacy). Lap 1, `--check`, packs, rusher and
+paid outputs are byte-identical to M5; BALANCE.md's M6 section is the new multi-lap baseline.

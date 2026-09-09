@@ -5,6 +5,12 @@
 -- copies — never pads, never other plots — and nothing here replicates back. Every
 -- instance it creates is destroyed when its effect ends. eraAdvance/rebirth belong to
 -- UIController (two listeners on one RemoteEvent, disjoint kinds).
+--
+-- M6: the level-up pitch counts milestones from the player's own list (Extra Milestone),
+-- so this controller keeps a copy of the pushed legacyShop state from StateChanged; and
+-- under reduce-motion the server's advanceFireworks ParticleEmitter (replicated under the
+-- owner's monument) is disabled on the local copy only. World cosmetics are otherwise
+-- entirely server-side.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +20,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Economy = require(sharedFolder:WaitForChild("Economy"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -29,6 +36,14 @@ local BUILDINGS_FOLDER = "Buildings"
 local BUILDING_PREFIX = "Building_"
 
 local player = Players.LocalPlayer
+
+-- Mirrors state.legacyShop from snapshots/deltas; nil until the first snapshot, which
+-- Economy.MilestoneLevels treats as "no perks" (the game list).
+local legacyShopState: Types.LegacyShopState? = nil
+
+-- The reduce-motion emitter watch on the local plot; replaced (never doubled) if the
+-- PlotIndex attribute changes again.
+local plotWatch: RBXScriptConnection? = nil
 
 local function localBuildingsFolder(): Instance?
 	local plotIndex = player:GetAttribute(PLOT_ATTRIBUTE)
@@ -68,7 +83,12 @@ end
 
 local function countMilestones(toLevel: number): number
 	local count = 0
-	for _, milestoneLevel in Catalog.GetGameConfig().milestoneLevels do
+	local milestoneLevels = Economy.MilestoneLevels(
+		Catalog.GetLegacyShopConfig(),
+		legacyShopState,
+		Catalog.GetGameConfig()
+	)
+	for _, milestoneLevel in milestoneLevels do
 		if milestoneLevel <= toLevel then
 			count += 1
 		end
@@ -287,6 +307,68 @@ local function onFxEvent(payload: any): ()
 	end
 end
 
+local function isLegacyShopState(source: any): boolean
+	return typeof(source) == "table"
+		and typeof(source.spent) == "number"
+		and typeof(source.perks) == "table"
+end
+
+local function onStateChanged(payload: any): ()
+	if typeof(payload) ~= "table" then
+		return
+	end
+	local source: any = nil
+	if payload.kind == "snapshot" and typeof(payload.state) == "table" then
+		source = payload.state.legacyShop
+	elseif payload.kind == "delta" then
+		source = payload.legacyShop
+	end
+	if isLegacyShopState(source) then
+		legacyShopState = source :: Types.LegacyShopState
+	end
+end
+
+-- Reduce-motion: the server bursts advanceFireworks with Enabled toggled by task.delay,
+-- and that toggle replicates, so a one-time `Enabled = false` would be overwritten by the
+-- server's own flip; re-assert on every change instead. Our own FxBurst emitters never
+-- exist under reduce-motion (burst() returns early), so any emitter here is the server's.
+local function silenceEmitter(instance: Instance): ()
+	if not instance:IsA("ParticleEmitter") then
+		return
+	end
+	local emitter = instance :: ParticleEmitter
+	emitter.Enabled = false
+	-- Dies with the emitter (the server destroys it after the burst).
+	emitter:GetPropertyChangedSignal("Enabled"):Connect(function()
+		if emitter.Enabled then
+			emitter.Enabled = false
+		end
+	end)
+end
+
+local function watchLocalPlot(): ()
+	local plotIndex = player:GetAttribute(PLOT_ATTRIBUTE)
+	if typeof(plotIndex) ~= "number" then
+		return
+	end
+	local plots = Workspace:FindFirstChild(PLOTS_FOLDER)
+	if plots == nil then
+		return
+	end
+	local plot = plots:FindFirstChild(PLOT_PREFIX .. tostring(plotIndex))
+	if plot == nil then
+		return
+	end
+	for _, descendant in plot:GetDescendants() do
+		silenceEmitter(descendant)
+	end
+	local previous = plotWatch
+	if previous ~= nil then
+		previous:Disconnect()
+	end
+	plotWatch = plot.DescendantAdded:Connect(silenceEmitter)
+end
+
 local PlotVisualsController = {}
 
 function PlotVisualsController.Init(): ()
@@ -298,9 +380,16 @@ function PlotVisualsController.Start(): ()
 		-- RemoteService creates this folder at server Init; wait rather than assume order.
 		local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 		local fxEvent = remotesFolder:WaitForChild("FxEvent") :: RemoteEvent
-		-- Lives for the whole session; the connection dies with the client.
+		local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
+		-- Live for the whole session; the connections die with the client.
 		fxEvent.OnClientEvent:Connect(onFxEvent)
+		stateChanged.OnClientEvent:Connect(onStateChanged)
 	end)
+	if Theme.reducedMotion then
+		-- The plot is assigned on claim (PlotIndex attribute), possibly before we run.
+		player:GetAttributeChangedSignal(PLOT_ATTRIBUTE):Connect(watchLocalPlot)
+		watchLocalPlot()
+	end
 end
 
 return PlotVisualsController

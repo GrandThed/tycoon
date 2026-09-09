@@ -42,7 +42,7 @@ type PlayerStore = {
 
 type LoadPhase = "loading" | "failed"
 
-local SCHEMA_VERSION = 2
+local SCHEMA_VERSION = 3
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 -- Infrastructure retry policy, not game balance (ProfileStore retries the underlying DataStore
@@ -63,7 +63,7 @@ local SAVE_CONFIRM_TIMEOUT_SECONDS = 10
 -- on Workspace, toggled live in the Properties pane, stands in for one. Ignored outside Studio.
 local FORCE_LOAD_FAILURE_ATTRIBUTE = "ForceLoadFailure"
 
--- Template = schema v2, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v3, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -79,15 +79,22 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 	stats = { totalCashAllTime = 0, erasCompleted = 0, playtimeSeconds = 0 },
 	settings = { music = true, sfx = true },
 	pendingDoubleOfflineAmount = 0,
+	legacyShop = { spent = 0, perks = {} },
 }
 
 -- Migrations[n](state) upgrades schema n → n+1; the runner bumps state.version afterwards.
--- Additive and idempotent. Reconcile would also fill v2's field, but the version stamp must
--- advance so a v1 profile is provably upgraded once rather than reconciled forever.
+-- Additive and idempotent. Reconcile would also fill the new fields, but the version stamp must
+-- advance so an old profile is provably upgraded once rather than reconciled forever.
 local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 	[1] = function(state: Types.PlayerState): ()
 		if state.pendingDoubleOfflineAmount == nil then
 			state.pendingDoubleOfflineAmount = 0
+		end
+	end,
+	-- M6: the Legacy shop state (docs/INTERFACES.md "Profile schema v3").
+	[2] = function(state: Types.PlayerState): ()
+		if state.legacyShop == nil then
+			state.legacyShop = { spent = 0, perks = {} }
 		end
 	end,
 }

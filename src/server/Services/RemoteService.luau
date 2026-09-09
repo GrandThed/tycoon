@@ -20,6 +20,7 @@ local REMOTE_NAMES = {
 	"RequestSetSetting",
 	"RequestPrompt",
 	"RequestRetryLoad",
+	"RequestBuyPerk",
 	"StateChanged",
 	"ActionResult",
 	"FxEvent",
@@ -72,6 +73,11 @@ local validators: { [string]: Validator } = {
 	RequestRetryLoad = function(args: PackedArgs): boolean
 		-- Shape only; the real throttle is DataService's retry cooldown (M5 safe mode).
 		return args.n == 0
+	end,
+	RequestBuyPerk = function(args: PackedArgs): boolean
+		-- The perk id is resolved (and unknown ids refused) by LegacyShopService, which owns
+		-- the purchase chain; shared callsPerSecond bucket (M6 — earned currency, no dialog).
+		return args.n == 1 and typeof(args[1]) == "string"
 	end,
 }
 

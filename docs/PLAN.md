@@ -20,7 +20,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [x] M5 — Hardening (review SHIP after two Warnings fixed, QA green; **playtest passed 2026-09-09**
   — Ben reported everything correct, including the final sweep that re-covers the M2/M3 long-haul
   steps. MVP definition of done (spec §12) met.)
-- [ ] M6 — Legacy shop (Phase 2; contracts frozen 2026-09-09)
+- [~] M6 — Legacy shop (Phase 2; review SHIP after two Warnings fixed, QA green; playtest pending)
 
 ---
 
@@ -391,6 +391,57 @@ five cosmetic sinks. Contracts: INTERFACES.md "M6 contracts".
 
 **Done when:** the M6 definition of done in INTERFACES.md holds. **Playtest gate:** Ben buys
 through the shop with the lever and sees every effect.
+
+**Shipped (2026-09-09):** `Config/LegacyShop.json` v1, twelve perks in display order — seven
+gameplay (Founder's Blessing 5 tiers +5%/tier income, Master Builders 3 tiers −10%/tier level
+cost applied only inside `Economy.LevelUpCost`, Inheritance 3 tiers cash for the first 3/5/8
+slots on advance/rebirth, Level Floor 2 tiers new buildings at level 5/8, Extra Milestone level
+75, Good Neighbours 3%→4%/player cap 36%, Long Memory 3 tiers +2 h/tier stacked on top of the
+pass's offline cap) and five cosmetics (Sign Title, Name-Tag Colour, Monument Glow, Advance
+Fireworks, Golden Roads). `Game.json` v1.6 `legacy.softcap = 1000`: `Economy.LegacyMult` grows
+linearly to 1000 Legacy then logarithmically (`s + s·ln(L/s)`), so laps 3+ plateau near 1:15
+instead of collapsing — Model C from `docs/LEGACY_SHOP.md`, adopted. Legacy is never consumed;
+`legacyShop.spent` tracks what's been bought and `Spendable = legacy − spent`. New
+`Economy.luau` pure helpers (`PerkTier`, `PerkValue`, `PerkIncomeMult`, `LevelCostDiscount`,
+`LevelFloor`, `MilestoneLevels`, `NeighborsParams`, `OfflineCapSeconds`, `InheritanceCash`,
+`LegacySpendable`, `NextPerkTier`), all mirrored in `sim_economy.py`. Server: new
+`RequestBuyPerk(perkId)` remote and `Services/LegacyShopService.luau` (boot order `DataService →
+RemoteService → EconomyService → PlotService → LegacyShopService → MonetizationService →
+AnalyticsService`); profile schema **v3** (`legacyShop = { spent, perks }`, silent v2→v3
+migration); cosmetics applied server-side in `PlotService` (third sign line, `TitleTag`
+BillboardGui stacking above the VIP tag, monument `PointLight` + Neon highlight, a ~2 s server
+particle burst on advance/rebirth visible to everyone, gold tint restricted to `unlock`-type
+placeholders/base-colour parts, never VIP skins); Studio-only `GrantLegacy` Workspace attribute
+(numeric, consumed by the 1 Hz tick, same pattern as `ForceLoadFailure`). Client: Legacy panel is
+now the shop (header Legacy/Spendable, `Legacy ×a · Perks ×b · Passes ×c` breakdown, softcap
+note, perk/cosmetic rows with Tier n/N, next effect, cost, Buy, "Maxed"); Build panel reads
+`LevelCostDiscount`/`MilestoneLevels` per player instead of the global config; unowned building
+previews note "(opens at Lv 5)" once Level Floor is owned; the Legacy panel auto-opens once after
+an advance/rebirth ceremony when any tier is affordable; `perkBought` toast + the existing
+purchase sound; refusal flashes the row red. Balance (`docs/BALANCE.md` M6 section): lap 1
+unchanged and in every band (41:50 / 1:44:06 / 4:15:55 / 8:37:40 with the shop in play); laps 1–6
+totals 15:19:31 / 4:15:21 / 2:29:14 / 1:49:34 / 1:35:31 / 1:26:33; paid stack unchanged at 2.42×;
+whole shop costs 6960 Legacy across 23 purchases. With `LegacyShop.json` removed or renamed: no
+shop, no errors. Reviewer verdict SHIP after two Warnings fixed; QA green (`stylua`, `selene`,
+`luau-lsp analyze` with a regenerated sourcemap for the new service, `rojo build`,
+`sim_economy.py --check`, `gen_asset_manifest.py --check`). **Playtest not yet run** —
+`docs/PLAYTEST.md` M6 section (40 steps) is ready; the status line above stays `[~]` until Ben
+signs off.
+
+**Carried forward (owners assigned):**
+- **economy-designer / Ben:** cash-pack Robux pricing must still follow the **1 : 2.2 : 4.2**
+  ladder (`docs/BALANCE.md` "Cash packs and the era cap") whenever real Robux prices are set or
+  revised on the Creator Hub — unchanged since M4, the M6 shop doesn't touch this at all.
+- **Ben / whoever finds a CC0 loop pack:** the four ambient era loops in `Sounds.json` remain
+  `0` — unchanged since M5, optional; tooling is ready (`tools/upload_audio.py` +
+  `tools/audio_map.json`'s `ambient` section).
+- **economy-designer / lead:** the safe-mode-players-count-toward-neighbours-bonus nit (M5
+  carried forward, `MANUAL_STEPS.md` M4 §8 item 18) remains deferred, not fixed.
+- **Ben / whoever imports meshes:** Kenney mesh import (`MANUAL_STEPS.md` M3 §2) remains fully
+  optional at any pace — unchanged.
+- **economy-designer / lead, next milestone:** the long-run lap sink is still open past the whole
+  shop being bought out (~lap 6, `docs/BALANCE.md`/`docs/LEGACY_SHOP.md` §8) — a fifth era or a
+  second cosmetic wave is the proposed answer, not scoped yet.
 
 ---
 

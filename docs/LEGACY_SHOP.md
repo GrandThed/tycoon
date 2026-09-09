@@ -1,4 +1,5 @@
 # Legacy shop — Phase 2 design and pricing (proposal, nothing frozen)
+> Adopted as M6 on 2026-09-09; `docs/INTERFACES.md` "M6 contracts" is now the contract and wins where the two disagree. The prototype flags below (`--shop`) are gone; see `docs/BALANCE.md` M6 for the shipped commands.
 
 Design document for spec §3's "Phase 2 Legacy shop". Ben decides; the lead then writes the M6
 contracts. Every number below comes from `py tools/sim_economy.py --shop <model> --laps N`

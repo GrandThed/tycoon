@@ -15,6 +15,7 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local EconomyService = require(servicesFolder:WaitForChild("EconomyService"))
 local PlotService = require(servicesFolder:WaitForChild("PlotService"))
+local LegacyShopService = require(servicesFolder:WaitForChild("LegacyShopService"))
 local MonetizationService = require(servicesFolder:WaitForChild("MonetizationService"))
 local AnalyticsService = require(servicesFolder:WaitForChild("AnalyticsService"))
 
@@ -31,6 +32,8 @@ local orderedServices: { Service } = {
 	RemoteService,
 	EconomyService,
 	PlotService,
+	-- M6: sells Legacy shop tiers; needs PlotService (cosmetics refresh) and nothing needs it.
+	LegacyShopService,
 	MonetizationService,
 	-- AnalyticsService goes last: it depends on nothing, and nothing depends on its Start.
 	AnalyticsService,

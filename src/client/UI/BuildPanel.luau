@@ -19,12 +19,14 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
--- Legacy/neighbors multipliers activate at M2, pass/premium at M4; previews pass all 1s
--- per INTERFACES.md — deltas are relative, so the shared factors cancel out.
-local UNIT_MULTIPLIERS: Types.Multipliers = { legacy = 1, pass = 1, premium = 1, neighbors = 1 }
+-- Legacy/neighbors multipliers activate at M2, pass/premium at M4, perk at M6; previews
+-- pass all 1s per INTERFACES.md — deltas are relative, so the shared factors cancel out.
+local UNIT_MULTIPLIERS: Types.Multipliers =
+	{ legacy = 1, perk = 1, pass = 1, premium = 1, neighbors = 1 }
 
 export type Deps = {
 	gameConfig: Types.GameConfig,
+	shopConfig: Types.LegacyShopConfig,
 	onBuy: (slotId: string) -> (),
 	onLevelUp: (slotId: string, count: number) -> (),
 	onPrestige: () -> (),
@@ -93,6 +95,17 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	local lastActionTime = 0
 	local connections: { RBXScriptConnection } = {}
 	local gameConfig = deps.gameConfig
+	local shopConfig = deps.shopConfig
+	-- M6 per-player economy inputs, recomputed from the pushed legacyShop state on every
+	-- refresh. The discount is applied inside Economy.LevelUpCost only (never here), so
+	-- this preview and the server's charge cannot disagree. previewGame is gameConfig
+	-- with milestoneLevels swapped for the player's own list (Extra Milestone), so every
+	-- income delta below goes through the same SlotIncome the server uses; the rows never
+	-- read Game.milestoneLevels directly.
+	local levelDiscount = 0
+	local levelFloor = 1
+	local milestoneLevels: { number } = gameConfig.milestoneLevels
+	local previewGame: Types.GameConfig = gameConfig
 
 	local panel = Panel.new(parent, {
 		name = "BuildPanel",
@@ -186,7 +199,17 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	): number
 		local projected = table.clone(state.slots)
 		projected[slotId] = { level = level }
-		return Economy.IncomePerSecond(projected, eraConfig, gameConfig, UNIT_MULTIPLIERS)
+		return Economy.IncomePerSecond(projected, eraConfig, previewGame, UNIT_MULTIPLIERS)
+	end
+
+	-- The first milestone above `level`, for the level row's status line.
+	local function nextMilestone(level: number): number?
+		for _, milestoneLevel in milestoneLevels do
+			if milestoneLevel > level then
+				return milestoneLevel
+			end
+		end
+		return nil
 	end
 
 	local function deltaText(delta: number): string
@@ -203,7 +226,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 					row.cost = 0
 				else
 					row.mode = "level"
-					row.cost = Economy.LevelUpCost(slot.baseCost, owned.level + 1, gameConfig)
+					row.cost = Economy.LevelUpCost(
+						slot.baseCost,
+						owned.level + 1,
+						gameConfig,
+						levelDiscount
+					)
 				end
 			else
 				row.mode = "owned"
@@ -232,15 +260,16 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 	): (number, number)
 		local maxLevel = gameConfig.maxLevel
 		if option == "one" then
-			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig)
+			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig, levelDiscount)
 		elseif option == "ten" then
 			local target = math.min(level + TEN_LEVELS, maxLevel)
-			return target, Economy.LevelUpCostTotal(baseCost, level, target, gameConfig)
+			return target,
+				Economy.LevelUpCostTotal(baseCost, level, target, gameConfig, levelDiscount)
 		end
 		local target = level
 		local total = 0
 		while target < maxLevel do
-			local nextCost = Economy.LevelUpCost(baseCost, target + 1, gameConfig)
+			local nextCost = Economy.LevelUpCost(baseCost, target + 1, gameConfig, levelDiscount)
 			if total + nextCost > cash then
 				break
 			end
@@ -248,7 +277,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			target += 1
 		end
 		if target == level then
-			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig)
+			return level + 1, Economy.LevelUpCost(baseCost, level + 1, gameConfig, levelDiscount)
 		end
 		return target, total
 	end
@@ -334,7 +363,14 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			local affordable = state.cash >= row.cost
 			statusText = "$" .. Format.Cash(row.cost)
 			statusColor = if affordable then Theme.COLOR_TEXT else Theme.COLOR_TEXT_DIM
-			previewText = deltaText(projectedIncome(state, eraConfig, slot.id, 1) - currentIncome)
+			-- Level Floor: a new building opens at the floor level, and the preview says so.
+			-- Unlock/decor/monument slots have no level to speak of (SlotIncome ignores them).
+			local startLevel = if slot.type == "building" then levelFloor else 1
+			previewText =
+				deltaText(projectedIncome(state, eraConfig, slot.id, startLevel) - currentIncome)
+			if startLevel > 1 then
+				previewText ..= " (opens at Lv " .. tostring(startLevel) .. ")"
+			end
 			buttonTitleText = "Buy"
 			buttonActive = true
 			if affordable then
@@ -347,6 +383,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			local owned = state.slots[slot.id]
 			local level = if owned ~= nil then owned.level else 1
 			statusText = "Lv " .. tostring(level)
+			local milestone = nextMilestone(level)
+			if milestone ~= nil then
+				statusText ..= " · ×" .. Format.Rate(gameConfig.milestoneMultiplier) .. " at Lv " .. tostring(
+					milestone
+				)
+			end
 			statusColor = Theme.COLOR_TEXT
 			paintLevelStrip(row, state, eraConfig, level, currentIncome)
 		elseif mode == "max" then
@@ -402,6 +444,12 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			-- Visuals rebuild on open; skipping keeps the 1 Hz cash ticks cheap while hidden.
 			return
 		end
+		local shopState = state.legacyShop
+		levelDiscount = Economy.LevelCostDiscount(shopConfig, shopState)
+		levelFloor = Economy.LevelFloor(shopConfig, shopState)
+		milestoneLevels = Economy.MilestoneLevels(shopConfig, shopState, gameConfig)
+		previewGame = table.clone(gameConfig)
+		previewGame.milestoneLevels = milestoneLevels
 		for _, row in rows do
 			computeMode(row, state)
 		end
@@ -417,7 +465,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			end
 		end
 		local currentIncome =
-			Economy.IncomePerSecond(state.slots, eraConfig, gameConfig, UNIT_MULTIPLIERS)
+			Economy.IncomePerSecond(state.slots, eraConfig, previewGame, UNIT_MULTIPLIERS)
 		for _, row in rows do
 			applyVisuals(row, state, eraConfig, currentIncome, row.slot.id == highlightId)
 		end

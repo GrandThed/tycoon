@@ -29,6 +29,12 @@ Usage:
   py tools/sim_economy.py --packs                 # cash-pack grants per era
   py tools/sim_economy.py --laps 2                # two laps, rebirth between
   py tools/sim_economy.py --rebirth 1 --era 1     # one era as a reborn player
+  py tools/sim_economy.py --perks auto --laps 6   # Legacy shop: buy perks by
+                                                  # policy at every era entry
+  py tools/sim_economy.py --perks levelFloor=2 --strategy rusher
+                                                  # perks owned from the start
+  py tools/sim_economy.py --perks auto --softcap 700 --laps 6
+                                                  # explore the softcap knob
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GAME_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Game.json"
 ERAS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Eras"
 MONETIZATION_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Monetization.json"
+LEGACY_SHOP_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "LegacyShop.json"
 
 # Spec section 4 pacing bands (seconds) for the DEFAULT greedy run with legacy
 # carry. Tool-only constants: INTERFACES.md sanctions the bands living here.
@@ -72,29 +79,35 @@ def milestone_mult(level, milestone_levels, milestone_multiplier):
     return milestone_multiplier**reached
 
 
-def slot_income(base_income, level, game):
-    """Economy.SlotIncome"""
+def slot_income(base_income, level, game, milestone_levels=None):
+    """Economy.SlotIncome -- milestone_levels (Extra Milestone) overrides game.milestoneLevels"""
+    if milestone_levels is None:
+        milestone_levels = game["milestoneLevels"]
     return (
         base_income
         * (1 + game["levelIncomeBonus"] * (level - 1))
-        * milestone_mult(level, game["milestoneLevels"], game["milestoneMultiplier"])
+        * milestone_mult(level, milestone_levels, game["milestoneMultiplier"])
     )
 
 
-def level_up_cost(base_cost, target_level, game):
-    """Economy.LevelUpCost (minBase floor keeps zero-cost starters from free levels)"""
+def level_up_cost(base_cost, target_level, game, discount=None):
+    """Economy.LevelUpCost (minBase floor keeps zero-cost starters from free levels).
+    The Master Builders discount is applied HERE and nowhere else, so the Build
+    panel preview and the server charge can never disagree."""
     level_cost = game["levelCost"]
     return (
         max(base_cost, level_cost["minBase"])
         * level_cost["factor"]
         * level_cost["growth"] ** (target_level - 1)
+        * (1 - (discount or 0))
     )
 
 
-def level_up_cost_total(base_cost, from_level, to_level, game):
+def level_up_cost_total(base_cost, from_level, to_level, game, discount=None):
     """Economy.LevelUpCostTotal"""
     return sum(
-        level_up_cost(base_cost, target, game) for target in range(from_level + 1, to_level + 1)
+        level_up_cost(base_cost, target, game, discount)
+        for target in range(from_level + 1, to_level + 1)
     )
 
 
@@ -113,30 +126,43 @@ def era_mult(slots, era):
 
 
 def legacy_mult(legacy, game):
-    """Economy.LegacyMult"""
-    return 1 + game["legacy"]["incomePerPoint"] * legacy
+    """Economy.LegacyMult -- linear up to legacy.softcap, then each doubling of
+    Legacy adds softcap*ln(2) effective points (continuous and smooth at the
+    cap). `softcap` is optional so an older Game.json behaves linearly."""
+    softcap = game["legacy"].get("softcap")
+    if softcap is not None and legacy > softcap:
+        effective = softcap + softcap * math.log(legacy / softcap)
+    else:
+        effective = legacy
+    return 1 + game["legacy"]["incomePerPoint"] * effective
 
 
-def neighbors_mult(player_count, game):
-    """Economy.NeighborsMult"""
+def neighbors_mult(player_count, game, per_player=None, max_bonus=None):
+    """Economy.NeighborsMult -- per_player/max_bonus (Good Neighbours) default to game.neighbors"""
     neighbors = game["neighbors"]
-    return 1 + min(neighbors["perPlayer"] * (player_count - 1), neighbors["maxBonus"])
+    if per_player is None:
+        per_player = neighbors["perPlayer"]
+    if max_bonus is None:
+        max_bonus = neighbors["maxBonus"]
+    return 1 + min(per_player * (player_count - 1), max_bonus)
 
 
-def income_per_second(slots, era, game, mults):
-    """Economy.IncomePerSecond"""
+def income_per_second(slots, era, game, mults, milestone_levels=None):
+    """Economy.IncomePerSecond -- mults.perk (Founder's Blessing, 1 when none) sits
+    beside mults.legacy. milestone_levels is threaded to SlotIncome for the
+    owner's Extra Milestone list (see the contract note in docs/BALANCE.md M6)."""
     base = 0.0
     for slot in era["slots"]:
         if slot["id"] in slots and slot["type"] == "building":
-            base += slot_income(slot["baseIncome"], slots[slot["id"]], game)
+            base += slot_income(slot["baseIncome"], slots[slot["id"]], game, milestone_levels)
     return (
         base
         * era_mult(slots, era)
         * mults["legacy"]
+        * mults["perk"]
         * mults["pass"]
         * mults["premium"]
         * mults["neighbors"]
-        * mults.get("perk", 1)  # prototype only (Founder's Blessing); absent = 1
     )
 
 
@@ -192,115 +218,155 @@ def premium_mult(is_premium, monetization):
 
 
 # --------------------------------------------------------------------------
-# Legacy shop PROTOTYPE (docs/LEGACY_SHOP.md, Phase 2 design). Nothing below
-# exists in Economy.luau or in any config yet: the perk table is hardcoded on
-# purpose until the M6 contracts freeze LegacyShop.json, and it is inert unless
-# --shop / --perks is given so the default output stays byte-identical.
+# Legacy shop (M6) -- Economy.luau helpers, mirrored 1:1. Every number comes
+# from Config/LegacyShop.json; shop_state is the profile's
+# legacyShop = { spent, perks = { perkId -> tier } }.
 # --------------------------------------------------------------------------
 
-# id -> tier costs (Legacy) and the effect per tier. "values" is indexed by
-# tier (index 0 = not owned).
-PERK_DEFS = {
-    "founders": {"name": "Founder's Blessing", "costs": [80, 160, 300, 400, 550]},
-    "builders": {"name": "Master Builders", "costs": [200, 400, 650]},
-    "inheritance": {"name": "Inheritance", "costs": [40, 90, 180], "values": [0, 3, 5, 8]},
-    "levelfloor": {"name": "Level Floor", "costs": [200, 500], "values": [1, 5, 8]},
-    "milestone75": {"name": "Extra Milestone", "costs": [350], "values": [None, 75]},
-    "neighbours": {"name": "Good Neighbours", "costs": [250], "values": [0.03, 0.04]},
-    "longmemory": {"name": "Long Memory", "costs": [80, 160, 320], "values": [0, 2, 4, 6]},
-}
-FOUNDERS_PER_TIER = 0.05  # +5% income per tier, multiplicative
-BUILDERS_PER_TIER = 0.10  # -10% level-up cost per tier
+PERK_EFFECTS = (
+    "incomeMult",
+    "levelCostDiscount",
+    "startingSlots",
+    "levelFloor",
+    "extraMilestone",
+    "neighbours",
+    "offlineCapSeconds",
+    "cosmetic",
+)
 
-# Pure sinks: no field in the sim reads them; the policy buys them last.
-COSMETIC_DEFS = [
-    ("signTitle", "Plot-sign title", 250),
-    ("nameTagColour", "Name-tag colour", 300),
-    ("monumentGlow", "Monument glow", 400),
-    ("advanceFireworks", "Advance fireworks", 500),
-    ("goldenRoads", "Golden road tint", 600),
-]
 
-# --perks auto: buy in this order whenever the balance allows, re-scanning from
-# the top after every purchase. Ordered by measured pacing value per Legacy
-# (docs/LEGACY_SHOP.md "Perk value"), QoL perks after, cosmetics last.
+def empty_shop_state():
+    """The v3 profile template's legacyShop field."""
+    return {"spent": 0, "perks": {}}
+
+
+def perk_def(shop, perk_id):
+    for perk in shop["perks"]:
+        if perk["id"] == perk_id:
+            return perk
+    return None
+
+
+def perk_tier(shop_state, perk_id):
+    """Economy.PerkTier -- 0 when unowned or the state is nil"""
+    if shop_state is None:
+        return 0
+    return shop_state["perks"].get(perk_id, 0)
+
+
+def perk_value(shop, shop_state, perk_id):
+    """Economy.PerkValue -- the owned tier's TOTAL value, None when unowned or
+    the perk is not in the config (a profile perk absent from the config is
+    ignored, never an error)."""
+    tier = perk_tier(shop_state, perk_id)
+    perk = perk_def(shop, perk_id)
+    if perk is None or tier <= 0:
+        return None
+    return perk["tiers"][min(tier, len(perk["tiers"])) - 1]["value"]
+
+
+def perk_income_mult(shop, shop_state):
+    """Economy.PerkIncomeMult -- founders value or 1"""
+    value = perk_value(shop, shop_state, "founders")
+    return 1 if value is None else value
+
+
+def level_cost_discount(shop, shop_state):
+    """Economy.LevelCostDiscount -- builders value or 0"""
+    value = perk_value(shop, shop_state, "builders")
+    return 0 if value is None else value
+
+
+def level_floor(shop, shop_state):
+    """Economy.LevelFloor -- levelFloor value or 1"""
+    value = perk_value(shop, shop_state, "levelFloor")
+    return 1 if value is None else value
+
+
+def milestone_levels(shop, shop_state, game):
+    """Economy.MilestoneLevels -- game list plus the Extra Milestone level, sorted"""
+    extra = perk_value(shop, shop_state, "milestone75")
+    if extra is None:
+        return game["milestoneLevels"]
+    return sorted(game["milestoneLevels"] + [extra])
+
+
+def neighbors_params(shop, shop_state, game):
+    """Economy.NeighborsParams -> (perPlayer, maxBonus)"""
+    tier = perk_tier(shop_state, "neighbours")
+    perk = perk_def(shop, "neighbours")
+    if perk is None or tier <= 0:
+        return game["neighbors"]["perPlayer"], game["neighbors"]["maxBonus"]
+    owned = perk["tiers"][min(tier, len(perk["tiers"])) - 1]
+    return owned["value"], owned["maxBonus"]
+
+
+def offline_cap_seconds(passes, shop_state, shop, game):
+    """Economy.OfflineCapSeconds -- the pass cap plus Long Memory, additively"""
+    offline = game["offline"]
+    cap = offline["capSecondsOfflinePro"] if passes.get("OfflinePro") else offline["capSeconds"]
+    extra = perk_value(shop, shop_state, "longMemory")
+    return cap + (0 if extra is None else extra)
+
+
+def inheritance_cash(era, shop, shop_state):
+    """Economy.InheritanceCash -- baseCost of the first N slots in ARRAY order
+    (cash only; the requires chain is untouched). 0 when unowned."""
+    count = perk_value(shop, shop_state, "inheritance")
+    if count is None:
+        return 0
+    return sum(slot["baseCost"] for slot in era["slots"][:count])
+
+
+def legacy_spendable(state):
+    """Economy.LegacySpendable -- legacy never decreases; spent is tracked beside it"""
+    return state["legacy"] - state["legacyShop"]["spent"]
+
+
+def next_perk_tier(shop, shop_state, perk_id):
+    """Economy.NextPerkTier -> (tier def, 1-based index) or (None, 0) when maxed/unknown"""
+    perk = perk_def(shop, perk_id)
+    if perk is None:
+        return None, 0
+    index = perk_tier(shop_state, perk_id) + 1
+    if index > len(perk["tiers"]):
+        return None, 0
+    return perk["tiers"][index - 1], index
+
+
+# --perks auto: buy in this order whenever the spendable balance allows,
+# re-scanning from the top after every purchase. Ordered by measured pacing
+# value per Legacy (docs/LEGACY_SHOP.md section 2), QoL perks after; every
+# cosmetic in the config follows in config order. Tool-only policy, not a
+# game constant: the real player chooses.
 PERK_POLICY = [
     ("inheritance", 1),
     ("founders", 1),
     ("builders", 1),
     ("founders", 2),
-    ("levelfloor", 1),
-    ("longmemory", 1),
+    ("levelFloor", 1),
+    ("longMemory", 1),
     ("builders", 2),
     ("founders", 3),
     ("inheritance", 2),
     ("milestone75", 1),
-    ("levelfloor", 2),
+    ("levelFloor", 2),
     ("builders", 3),
     ("founders", 4),
-    ("longmemory", 2),
+    ("longMemory", 2),
     ("inheritance", 3),
     ("founders", 5),
     ("neighbours", 1),
-    ("longmemory", 3),
-] + [(cosmetic_id, 1) for cosmetic_id, _, _ in COSMETIC_DEFS]
-
-SHOP_MODELS = ("spend", "invest", "softcap")
-DEFAULT_SOFTCAP = 1000
+    ("longMemory", 3),
+]
 
 
-def perk_cost(perk_id, tier):
-    for cosmetic_id, _, cost in COSMETIC_DEFS:
-        if cosmetic_id == perk_id:
-            return cost
-    return PERK_DEFS[perk_id]["costs"][tier - 1]
+def shop_policy(shop):
+    return PERK_POLICY + [(perk["id"], 1) for perk in shop["perks"] if perk["cosmetic"]]
 
 
-def perk_max_tier(perk_id):
-    if perk_id in PERK_DEFS:
-        return len(PERK_DEFS[perk_id]["costs"])
-    return 1
-
-
-def perk_income_mult(perks):
-    """Would become Economy.PerkIncomeMult(perks, shopConfig)."""
-    return (1 + FOUNDERS_PER_TIER) ** perks.get("founders", 0)
-
-
-def perk_level_cost_factor(perks):
-    """Would become a discount argument on Economy.LevelUpCost."""
-    return 1 - BUILDERS_PER_TIER * perks.get("builders", 0)
-
-
-def perk_game(game, perks):
-    """Extra Milestone: a per-player milestone list, where the sim today reads
-    the global one. Returns the config untouched when the perk is not owned."""
-    extra = PERK_DEFS["milestone75"]["values"][perks.get("milestone75", 0)]
-    if extra is None:
-        return game
-    patched = dict(game)
-    patched["milestoneLevels"] = sorted(game["milestoneLevels"] + [extra])
-    return patched
-
-
-def inheritance_cash(era, perks):
-    """Cash, not slots: the requires chain is untouched."""
-    count = PERK_DEFS["inheritance"]["values"][perks.get("inheritance", 0)]
-    return float(sum(slot["baseCost"] for slot in era["slots"][:count]))
-
-
-def legacy_mult_model(legacy, game, model, softcap):
-    """Model C: linear up to `softcap`, then each doubling of Legacy adds
-    softcap*ln(2) effective points. Continuous and smooth at the cap, so
-    every lap-1 number (max 887) is untouched."""
-    if model == "softcap" and legacy > softcap:
-        effective = softcap + softcap * math.log(legacy / softcap)
-        return 1 + game["legacy"]["incomePerPoint"] * effective
-    return legacy_mult(legacy, game)
-
-
-def parse_perks(raw):
-    """--perks auto | founders=2,builders=1,..."""
+def parse_perks(raw, shop):
+    """--perks auto | founders=2,builders=1,... (owned from the start, at no cost)"""
     if raw == "auto":
         return "auto"
     perks = {}
@@ -310,7 +376,8 @@ def parse_perks(raw):
             continue
         perk_id, _, tier = token.partition("=")
         tier = int(tier) if tier else 1
-        if perk_id not in PERK_DEFS or not 0 <= tier <= perk_max_tier(perk_id):
+        perk = perk_def(shop, perk_id)
+        if perk is None or not 0 <= tier <= len(perk["tiers"]):
             print(f"error: unknown perk or tier '{token}'", file=sys.stderr)
             sys.exit(2)
         perks[perk_id] = tier
@@ -318,48 +385,44 @@ def parse_perks(raw):
 
 
 class Shop:
-    """Purchase state for one run. `legacy` (the passive source) and
-    `spendable` diverge only under the invest/softcap models."""
+    """One run's legacyShop state plus the auto-buy policy. The passive
+    multiplier reads the FULL legacy total (Model C); buying only lowers the
+    spendable balance."""
 
-    def __init__(self, model, perks, softcap):
-        self.model = model
-        self.softcap = softcap
+    def __init__(self, config, perks):
+        self.config = config
         self.auto = perks == "auto"
-        self.perks = {} if self.auto else dict(perks)
-        self.spendable = 0
-        self.log = []  # (lap, era_index, perk_id, tier, cost, balance_after)
+        self.state = empty_shop_state()
+        if not self.auto:
+            self.state["perks"] = {perk_id: tier for perk_id, tier in perks.items() if tier > 0}
+        self.log = []  # (lap, era_index, perk_id, tier, cost, spendable_after)
 
-    def earn(self, amount):
-        self.spendable += amount
-
-    def balance(self, legacy):
-        return legacy if self.model == "spend" else self.spendable
+    def spendable(self, legacy):
+        return legacy_spendable({"legacy": legacy, "legacyShop": self.state})
 
     def buy_affordable(self, legacy, lap, era_index):
-        """Returns the (possibly reduced) legacy after the policy has run."""
+        """Mirrors RequestBuyPerk's checks: next tier exists, spendable >= cost."""
         if not self.auto:
-            return legacy
+            return
         bought = True
         while bought:
             bought = False
-            for perk_id, tier in PERK_POLICY:
-                if self.perks.get(perk_id, 0) != tier - 1:
+            for perk_id, tier in shop_policy(self.config):
+                next_tier, index = next_perk_tier(self.config, self.state, perk_id)
+                if next_tier is None or index != tier:
                     continue
-                cost = perk_cost(perk_id, tier)
-                if self.balance(legacy) < cost:
+                if self.spendable(legacy) < next_tier["cost"]:
                     continue
-                if self.model == "spend":
-                    legacy -= cost
-                else:
-                    self.spendable -= cost
-                self.perks[perk_id] = tier
-                self.log.append((lap, era_index, perk_id, tier, cost, self.balance(legacy)))
+                self.state["perks"][perk_id] = index
+                self.state["spent"] += next_tier["cost"]
+                self.log.append(
+                    (lap, era_index, perk_id, index, next_tier["cost"], self.spendable(legacy))
+                )
                 bought = True
                 break
-        return legacy
 
     def owned_label(self):
-        bits = [f"{perk_id} {tier}" for perk_id, tier in self.perks.items() if tier > 0]
+        bits = [f"{perk_id} {tier}" for perk_id, tier in self.state["perks"].items() if tier > 0]
         return ", ".join(bits) if bits else "nothing"
 
 
@@ -376,6 +439,43 @@ def load_game_config():
 def load_monetization_config():
     with open(MONETIZATION_CONFIG_PATH, encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_legacy_shop_config():
+    """Catalog.GetLegacyShopConfig: the module, or an empty shop when the file
+    is missing (the in-game shop then hides). Validates the v1 schema so a
+    broken config fails --check instead of silently doing nothing."""
+    if not LEGACY_SHOP_CONFIG_PATH.exists():
+        return {"version": 1, "perks": []}
+    with open(LEGACY_SHOP_CONFIG_PATH, encoding="utf-8") as handle:
+        shop = json.load(handle)
+    validate_legacy_shop_config(shop)
+    return shop
+
+
+def validate_legacy_shop_config(shop):
+    seen = set()
+    for perk in shop["perks"]:
+        perk_id = perk["id"]
+        if perk_id in seen:
+            raise ValueError(f"LegacyShop.json: duplicate perk id {perk_id}")
+        seen.add(perk_id)
+        if perk["effect"] not in PERK_EFFECTS:
+            raise ValueError(f"LegacyShop.json: {perk_id} has unknown effect {perk['effect']}")
+        if perk["cosmetic"] != (perk["effect"] == "cosmetic"):
+            raise ValueError(f"LegacyShop.json: {perk_id} cosmetic flag and effect disagree")
+        tiers = perk["tiers"]
+        if not tiers:
+            raise ValueError(f"LegacyShop.json: {perk_id} has no tiers")
+        if perk["cosmetic"] and (len(tiers) != 1 or tiers[0]["value"] != 0):
+            raise ValueError(f"LegacyShop.json: cosmetic {perk_id} must have one tier, value 0")
+        for tier in tiers:
+            if tier["cost"] <= 0:
+                raise ValueError(f"LegacyShop.json: {perk_id} has a non-positive cost")
+            if perk["effect"] == "neighbours" and "maxBonus" not in tier:
+                raise ValueError(f"LegacyShop.json: {perk_id} tier is missing maxBonus")
+        if len(perk["description"]) > 90:
+            raise ValueError(f"LegacyShop.json: {perk_id} description exceeds 90 characters")
 
 
 def load_eras():
@@ -429,16 +529,20 @@ def simulate_era(
     paid=None,
     record_ips=False,
     rebirth_count=0,
-    perks=None,
-    legacy_mult_value=None,
+    shop=None,
+    shop_state=None,
 ):
     """paid = {"pass": x, "premium": y}; None keeps the free-player defaults.
     rebirth_count feeds LegacyGain exactly as the server passes state.rebirthCount.
-    perks / legacy_mult_value are the Legacy-shop prototype (None = today's game)."""
-    perks = perks or {}
-    game = perk_game(game, perks)
-    level_cost_factor = perk_level_cost_factor(perks)
-    level_floor = PERK_DEFS["levelfloor"]["values"][perks.get("levelfloor", 0)]
+    shop / shop_state are the LegacyShop config and the player's legacyShop
+    state; None means an empty shop (every helper returns its default)."""
+    if shop is None:
+        shop = {"version": 1, "perks": []}
+    if shop_state is None:
+        shop_state = empty_shop_state()
+    discount = level_cost_discount(shop, shop_state)
+    floor = level_floor(shop, shop_state)
+    milestones = milestone_levels(shop, shop_state, game)
     by_id = {slot["id"]: slot for slot in era["slots"]}
     requires = resolve_requires(era)
     children = {}
@@ -449,20 +553,19 @@ def simulate_era(
     result = EraResult(era)
     result.legacy_in = legacy
     mults = {
-        "legacy": legacy_mult(legacy, game) if legacy_mult_value is None else legacy_mult_value,
+        "legacy": legacy_mult(legacy, game),
+        "perk": perk_income_mult(shop, shop_state),
         "pass": paid["pass"] if paid else 1,
         "premium": paid["premium"] if paid else 1,
         "neighbors": 1,
     }
-    if perks:
-        mults["perk"] = perk_income_mult(perks)
     if record_ips:
         result.ips_series = []
 
     owned = {}  # slotId -> level (every slot type gets level 1 on buy)
     frontier = [slot["id"] for slot in era["slots"] if requires[slot["id"]] is None]
     total_slots = len(era["slots"])
-    cash = inheritance_cash(era, perks)
+    cash = inheritance_cash(era, shop, shop_state)
     ips = 0.0
     t = 0
     last_purchase_t = 0
@@ -487,7 +590,7 @@ def simulate_era(
                 for slot_id, level in owned.items():
                     slot = by_id[slot_id]
                     if slot["type"] == "building" and level < game["maxLevel"]:
-                        cost = level_up_cost(slot["baseCost"], level + 1, game) * level_cost_factor
+                        cost = level_up_cost(slot["baseCost"], level + 1, game, discount)
                         if best_cost is None or cost < best_cost:
                             best_cost, best_kind, best_id = cost, "level", slot_id
             if best_cost is None or cash < best_cost - 1e-9:
@@ -495,7 +598,7 @@ def simulate_era(
             cash -= best_cost
             record_wait()
             if best_kind == "slot":
-                owned[best_id] = level_floor if by_id[best_id]["type"] == "building" else 1
+                owned[best_id] = floor if by_id[best_id]["type"] == "building" else 1
                 result.slot_buys += 1
                 frontier.remove(best_id)
                 frontier.extend(children.get(best_id, []))
@@ -511,7 +614,7 @@ def simulate_era(
             else:
                 owned[best_id] += 1
                 result.level_buys += 1
-            ips = income_per_second(owned, era, game, mults)
+            ips = income_per_second(owned, era, game, mults, milestones)
 
         if record_ips:
             result.ips_series.append(ips)
@@ -589,12 +692,12 @@ def paid_label(paid):
     )
 
 
-def shop_label(shop):
+def shop_label(shop, game):
     if shop is None:
         return ""
-    softcap = f" softcap {shop.softcap}" if shop.model == "softcap" else ""
+    softcap = game["legacy"].get("softcap")
     perks = "auto policy" if shop.auto else shop.owned_label()
-    return f"legacy shop {shop.model}{softcap} ({perks}), "
+    return f"legacy shop softcap {softcap} ({perks}), "
 
 
 def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=None):
@@ -602,11 +705,11 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
     mirroring the RequestRebirth handler. The band check judges lap 1 only: the
     spec bands describe a first playthrough. Lap headers are printed only when
     the run is not the plain single lap so the default output never moves.
-    shop (prototype) runs the purchase policy at every era entry, i.e. the only
-    moments Legacy changes."""
+    shop runs the purchase policy at every era entry, i.e. the only moments
+    Legacy changes."""
     print(
         f"Era City Tycoon economy sim -- strategy={strategy}, "
-        f"{paid_label(paid)}{shop_label(shop)}"
+        f"{paid_label(paid)}{shop_label(shop, game)}"
         "full playthrough, legacy carried across advances"
     )
     print()
@@ -615,20 +718,17 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
     rebirth_count = rebirth
     grand_seconds = 0
     all_in_band = True
-    model = shop.model if shop else None
-    softcap = shop.softcap if shop else 0
     for lap in range(1, laps + 1):
         if multi:
             print(
                 f"=== Lap {lap} (rebirthCount {rebirth_count}, legacy in {legacy}, "
-                f"income mult x{legacy_mult_model(legacy, game, model, softcap):.2f}) ==="
+                f"income mult x{legacy_mult(legacy, game):.2f}) ==="
             )
             print()
         total_seconds = 0
         for era in eras:
             if shop is not None:
-                legacy = shop.buy_affordable(legacy, lap, era["eraIndex"])
-            mult_value = legacy_mult_model(legacy, game, model, softcap)
+                shop.buy_affordable(legacy, lap, era["eraIndex"])
             result = simulate_era(
                 era,
                 game,
@@ -637,10 +737,10 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
                 paid,
                 False,
                 rebirth_count,
-                shop.perks if shop else None,
-                mult_value if shop else None,
+                shop.config if shop else None,
+                shop.state if shop else None,
             )
-            result.legacy_in_mult = mult_value
+            result.legacy_in_mult = legacy_mult(legacy, game)
             in_band = print_era_result(result, check and lap == 1)
             if shop is not None:
                 bought = [
@@ -650,14 +750,12 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
                 ]
                 print(
                     f"  legacy shop       : owns {shop.owned_label()} | "
-                    f"balance {shop.balance(legacy)}"
+                    f"spendable {shop.spendable(legacy)}"
                     + (f" | bought at entry: {', '.join(bought)}" if bought else "")
                 )
             all_in_band = all_in_band and in_band
             print()
             legacy += result.legacy_gained
-            if shop is not None:
-                shop.earn(result.legacy_gained)
             total_seconds += result.seconds
         grand_seconds += total_seconds
         if multi:
@@ -672,11 +770,10 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
             f"   rebirthCount: {rebirth_count}"
         )
     if shop is not None and shop.auto:
-        spent = sum(cost for _, _, _, _, cost, _ in shop.log)
         print(
-            f"SHOP: {len(shop.log)} purchases, {spent} Legacy spent, "
-            f"balance {shop.balance(legacy)}, passive mult "
-            f"x{legacy_mult_model(legacy, game, model, softcap):.2f}"
+            f"SHOP: {len(shop.log)} purchases, {shop.state['spent']} Legacy spent, "
+            f"spendable {shop.spendable(legacy)}, passive mult "
+            f"x{legacy_mult(legacy, game):.2f}"
         )
     return all_in_band
 
@@ -822,40 +919,37 @@ def main():
         help="run the default greedy playthrough and exit 1 if any era misses its band",
     )
     parser.add_argument(
-        "--shop",
-        choices=SHOP_MODELS,
-        help="PROTOTYPE legacy shop model (docs/LEGACY_SHOP.md); implies --perks auto",
-    )
-    parser.add_argument(
         "--perks",
-        help="PROTOTYPE: 'auto' (buy by policy at era entry) or a fixed set owned from "
-        "the start at no cost, e.g. founders=2,builders=1",
+        help="Legacy shop: 'auto' (buy by policy at every era entry) or a fixed set "
+        "owned from the start at no cost, e.g. founders=2,builders=1",
     )
     parser.add_argument(
         "--softcap",
         type=int,
-        default=DEFAULT_SOFTCAP,
-        help=f"PROTOTYPE: legacy softcap for --shop softcap (default {DEFAULT_SOFTCAP})",
+        help="override Game.json legacy.softcap for exploration (0 = no softcap)",
     )
     args = parser.parse_args()
     if args.rebirth < 0 or args.laps < 1:
         print("error: --rebirth must be >= 0 and --laps >= 1", file=sys.stderr)
         sys.exit(2)
 
-    shop = None
-    if args.shop is not None or args.perks is not None:
-        if args.era is not None or args.packs:
-            print("error: --shop/--perks apply to full playthroughs only", file=sys.stderr)
-            sys.exit(2)
-        perks = parse_perks(args.perks) if args.perks is not None else "auto"
-        if perks == "auto" and args.shop is None:
-            print("error: --perks auto needs --shop <model>", file=sys.stderr)
-            sys.exit(2)
-        shop = Shop(args.shop or "invest", perks, args.softcap)
-
     game = load_game_config()
     eras = load_eras()
     monetization = load_monetization_config()
+    legacy_shop = load_legacy_shop_config()
+
+    if args.softcap is not None:
+        game["legacy"]["softcap"] = args.softcap if args.softcap > 0 else None
+
+    shop = None
+    if args.perks is not None:
+        if args.era is not None or args.packs:
+            print("error: --perks applies to full playthroughs only", file=sys.stderr)
+            sys.exit(2)
+        if not legacy_shop["perks"]:
+            print("error: --perks needs src/shared/Config/LegacyShop.json", file=sys.stderr)
+            sys.exit(2)
+        shop = Shop(legacy_shop, parse_perks(args.perks, legacy_shop))
 
     paid = None
     passes = parse_passes(args.passes)
@@ -883,6 +977,7 @@ def main():
             or paid is not None
             or args.rebirth != 0
             or shop is not None
+            or args.softcap is not None
         ):
             print("error: --check runs the default greedy playthrough only", file=sys.stderr)
             sys.exit(2)

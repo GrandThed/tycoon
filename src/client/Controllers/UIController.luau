@@ -10,7 +10,10 @@
 -- by Monetization.json ids, so with every id 0 the HUD is exactly the M3 HUD. M5 adds the
 -- data-load safe-mode card: until the first snapshot the HUD is blank (dashes, no bottom
 -- bar) behind a LoadScreen driven by LoadStatus payloads, and a failed load offers Retry
--- (RequestRetryLoad) or Leave instead of a kick.
+-- (RequestRetryLoad) or Leave instead of a kick. M6 turns the Legacy panel into the
+-- Legacy shop: RequestBuyPerk intents, the legacyShop delta merge, perkBought / buyPerk
+-- feedback, and one automatic (dismissable, non-modal) open of the panel after a
+-- ceremony when a tier has become affordable — earned currency, not Robux.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -156,6 +159,39 @@ local function isSettings(source: any): boolean
 		and typeof(source.sfx) == "boolean"
 end
 
+-- The delta's shop state arrives from the network; only the full shape is trusted.
+local function isLegacyShopState(source: any): boolean
+	return typeof(source) == "table"
+		and typeof(source.spent) == "number"
+		and typeof(source.perks) == "table"
+end
+
+-- Linear scan over a dozen entries; the array is display order.
+local function findPerk(shopConfig: Types.LegacyShopConfig, perkId: string): Types.PerkDef?
+	for _, perk in shopConfig.perks do
+		if perk.id == perkId then
+			return perk
+		end
+	end
+	return nil
+end
+
+-- True when the spendable balance covers at least one perk's next tier — the trigger
+-- for the single automatic Legacy-panel open after a ceremony.
+local function hasAffordableTier(
+	shopConfig: Types.LegacyShopConfig,
+	state: Types.PlayerState
+): boolean
+	local spendable = Economy.LegacySpendable(state)
+	for _, perk in shopConfig.perks do
+		local nextTier = Economy.NextPerkTier(shopConfig, state.legacyShop, perk.id)
+		if nextTier ~= nil and spendable >= nextTier.cost then
+			return true
+		end
+	end
+	return false
+end
+
 local UIController = {}
 
 local function boot(): ()
@@ -175,10 +211,14 @@ local function boot(): ()
 	local requestSetSetting = remotesFolder:WaitForChild("RequestSetSetting") :: RemoteEvent
 	local requestPrompt = remotesFolder:WaitForChild("RequestPrompt") :: RemoteEvent
 	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
+	local requestBuyPerk = remotesFolder:WaitForChild("RequestBuyPerk") :: RemoteEvent
 
 	local gameConfig = Catalog.GetGameConfig()
 	-- Static for the life of the server, so the Shop button's visibility is decided once.
 	local monetization = Catalog.GetMonetizationConfig()
+	-- Static too; an absent LegacyShop.json yields an empty perk list and the panel hides
+	-- the shop (M6 contract).
+	local shopConfig = Catalog.GetLegacyShopConfig()
 
 	local screenGui = Create("ScreenGui", {
 		Name = "EraCityHUD",
@@ -222,19 +262,26 @@ local function boot(): ()
 		end,
 	})
 	local eraScreen = EraAdvanceScreen.new(screenGui)
+
+	-- String-keyed so the three panels can be registered after their deps exist below.
+	local panels: { [string]: DockablePanel } = {}
+	local togglePanel: (key: PanelKey) -> ()
+	local openPanel: (key: PanelKey) -> ()
+
 	local ceremony = Ceremony.new(screenGui, {
 		onClosed = function()
 			-- Contract: the new era's ambient starts after the overlay, not under the jingle.
 			local current = model
 			if current ~= nil then
 				SoundController.SetAmbientEra(current.eraName)
+				-- M6: Legacy only moves on advance, so this is the one moment the shop is
+				-- "new". A plain panel the player can close, never a modal (LEGACY_SHOP.md §8).
+				if hasAffordableTier(shopConfig, current.state) then
+					openPanel("legacy")
+				end
 			end
 		end,
 	})
-
-	-- String-keyed so the three panels can be registered after their deps exist below.
-	local panels: { [string]: DockablePanel } = {}
-	local togglePanel: (key: PanelKey) -> ()
 	local bottomBar = BottomBar.new(screenGui, {
 		onTap = function(key: BottomBar.BarKey)
 			togglePanel(key)
@@ -254,6 +301,12 @@ local function boot(): ()
 			panels[panelKey].SetOpen(true)
 		end
 		bottomBar.SetActive(openPanelKey)
+	end
+
+	openPanel = function(panelKey: PanelKey): ()
+		if openPanelKey ~= panelKey then
+			togglePanel(panelKey)
+		end
 	end
 
 	local function closePanels(): ()
@@ -302,6 +355,7 @@ local function boot(): ()
 
 	local buildPanel = BuildPanel.new(screenGui, {
 		gameConfig = gameConfig,
+		shopConfig = shopConfig,
 		onBuy = function(slotId: string)
 			requestBuy:FireServer(slotId)
 		end,
@@ -314,7 +368,12 @@ local function boot(): ()
 	local legacyPanel = LegacyPanel.new(screenGui, {
 		gameConfig = gameConfig,
 		monetization = monetization,
+		shopConfig = shopConfig,
 		onPrestige = openPrestigeScreen,
+		-- Intent only: the server checks tier order and the Legacy balance.
+		onBuyPerk = function(perkId: string)
+			requestBuyPerk:FireServer(perkId)
+		end,
 		onClose = closePanels,
 	})
 	local shopPanel = ShopPanel.new(screenGui, {
@@ -481,6 +540,11 @@ local function boot(): ()
 			current.state.settings = { music = settings.music, sfx = settings.sfx }
 			applySettings(current.state.settings)
 		end
+		-- M6: the whole shop state whenever a perk purchase lands (a copy, never aliased).
+		local legacyShop = delta.legacyShop
+		if isLegacyShopState(legacyShop) then
+			current.state.legacyShop = legacyShop :: Types.LegacyShopState
+		end
 		refreshAll()
 	end
 
@@ -532,6 +596,19 @@ local function boot(): ()
 				Theme.TOAST_ERROR_SECONDS,
 				true
 			)
+		elseif action == "buyPerk" then
+			-- M6: slotId carries the perkId. The row can only be tapped with the panel
+			-- open, so the flash is on-screen; the sound is for the balance failure only.
+			local perkId = payload.slotId
+			if typeof(perkId) == "string" then
+				legacyPanel.FlashPerk(perkId)
+			end
+			if payload.reason == "insufficientFunds" then
+				SoundController.Play("insufficientFunds")
+			end
+			if not legacyPanel.IsOpen() then
+				toast.Show("Can't buy that perk right now", Theme.TOAST_ERROR_SECONDS, true)
+			end
 		elseif typeof(payload.slotId) == "string" and payload.slotId ~= "" then
 			-- M3 contract: every slot failure flashes the row; only a failed payment sounds.
 			buildPanel.FlashSlot(payload.slotId)
@@ -586,14 +663,35 @@ local function boot(): ()
 		SoundController.Play("purchase")
 	end
 
-	-- eraAdvance / rebirth / purchase / passGranted; PlotVisualsController owns reveal
-	-- and levelUp.
+	-- M6 perk purchase acknowledgement: the new legacyShop state arrives as a delta; this
+	-- is the toast plus the existing purchase sound (Sounds.json is frozen).
+	local function onPerkBoughtFx(payload: { [string]: any }): ()
+		local perkId = payload.perkId
+		if typeof(perkId) ~= "string" then
+			return
+		end
+		local perk = findPerk(shopConfig, perkId)
+		local name = if perk ~= nil then perk.name else perkId
+		local tier = if typeof(payload.tier) == "number" then payload.tier else 0
+		local message = if perk ~= nil and perk.cosmetic
+			then name .. " unlocked"
+			else name .. " — Tier " .. tostring(tier)
+		toast.Show(message, Theme.TOAST_SECONDS, false)
+		SoundController.Play("purchase")
+	end
+
+	-- eraAdvance / rebirth / purchase / passGranted / perkBought; PlotVisualsController
+	-- owns reveal and levelUp.
 	local function onFxEvent(payload: any): ()
 		if typeof(payload) ~= "table" then
 			return
 		end
 		if payload.kind == "purchase" or payload.kind == "passGranted" then
 			onPurchaseFx(payload)
+			return
+		end
+		if payload.kind == "perkBought" then
+			onPerkBoughtFx(payload)
 			return
 		end
 		if typeof(payload.toEra) ~= "number" then

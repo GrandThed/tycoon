@@ -1,0 +1,139 @@
+{
+	"version": 1,
+	"perks": [
+		{
+			"id": "founders",
+			"name": "Founder's Blessing",
+			"cosmetic": false,
+			"description": "Your legacy inspires everyone: +5% income per tier, in every era.",
+			"effect": "incomeMult",
+			"tiers": [
+				{ "cost": 80, "value": 1.05 },
+				{ "cost": 160, "value": 1.1025 },
+				{ "cost": 300, "value": 1.157625 },
+				{ "cost": 400, "value": 1.21550625 },
+				{ "cost": 550, "value": 1.2762815625 }
+			]
+		},
+		{
+			"id": "builders",
+			"name": "Master Builders",
+			"cosmetic": false,
+			"description": "Veteran crews work cheaper: level-ups cost 10% less per tier.",
+			"effect": "levelCostDiscount",
+			"tiers": [
+				{ "cost": 200, "value": 0.1 },
+				{ "cost": 400, "value": 0.2 },
+				{ "cost": 650, "value": 0.3 }
+			]
+		},
+		{
+			"id": "inheritance",
+			"name": "Inheritance",
+			"cosmetic": false,
+			"description": "Start every era with the cash for its first 3, 5 or 8 buildings.",
+			"effect": "startingSlots",
+			"tiers": [
+				{ "cost": 40, "value": 3 },
+				{ "cost": 90, "value": 5 },
+				{ "cost": 180, "value": 8 }
+			]
+		},
+		{
+			"id": "levelFloor",
+			"name": "Level Floor",
+			"cosmetic": false,
+			"description": "New buildings open already levelled up: level 5, then level 8.",
+			"effect": "levelFloor",
+			"tiers": [
+				{ "cost": 200, "value": 5 },
+				{ "cost": 500, "value": 8 }
+			]
+		},
+		{
+			"id": "milestone75",
+			"name": "Extra Milestone",
+			"cosmetic": false,
+			"description": "Level 75 becomes a milestone: one more x2 on every building that reaches it.",
+			"effect": "extraMilestone",
+			"tiers": [
+				{ "cost": 350, "value": 75 }
+			]
+		},
+		{
+			"id": "neighbours",
+			"name": "Good Neighbours",
+			"cosmetic": false,
+			"description": "Each neighbour on the server adds 4% income instead of 3%, up to 36%.",
+			"effect": "neighbours",
+			"tiers": [
+				{ "cost": 250, "value": 0.04, "maxBonus": 0.36 }
+			]
+		},
+		{
+			"id": "longMemory",
+			"name": "Long Memory",
+			"cosmetic": false,
+			"description": "Your city keeps earning longer: +2 h on your offline cap per tier.",
+			"effect": "offlineCapSeconds",
+			"tiers": [
+				{ "cost": 80, "value": 7200 },
+				{ "cost": 160, "value": 14400 },
+				{ "cost": 320, "value": 21600 }
+			]
+		},
+		{
+			"id": "signTitle",
+			"name": "Sign Title",
+			"cosmetic": true,
+			"description": "A title on your plot sign that grows grander with every rebirth.",
+			"effect": "cosmetic",
+			"tiers": [
+				{ "cost": 250, "value": 0 }
+			],
+			"titles": ["Founder", "Magnate", "Tycoon", "Sovereign", "Eternal"]
+		},
+		{
+			"id": "nameTagColour",
+			"name": "Name-Tag Colour",
+			"cosmetic": true,
+			"description": "A teal name tag over your head that every player can see.",
+			"effect": "cosmetic",
+			"tiers": [
+				{ "cost": 300, "value": 0 }
+			],
+			"color": "#2FB8D9"
+		},
+		{
+			"id": "monumentGlow",
+			"name": "Monument Glow",
+			"cosmetic": true,
+			"description": "Your monument glows in every era, day and night.",
+			"effect": "cosmetic",
+			"tiers": [
+				{ "cost": 400, "value": 0 }
+			]
+		},
+		{
+			"id": "advanceFireworks",
+			"name": "Advance Fireworks",
+			"cosmetic": true,
+			"description": "Fireworks over your monument whenever you advance or rebirth.",
+			"effect": "cosmetic",
+			"tiers": [
+				{ "cost": 500, "value": 0 }
+			]
+		},
+		{
+			"id": "goldenRoads",
+			"name": "Golden Roads",
+			"cosmetic": true,
+			"description": "Roads, rails and other unlocks on your plot shine in warm gold.",
+			"effect": "cosmetic",
+			"tiers": [
+				{ "cost": 600, "value": 0 }
+			],
+			"color": "#E3B341"
+		}
+	]
+}

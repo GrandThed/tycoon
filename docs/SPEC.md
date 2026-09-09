@@ -54,8 +54,8 @@ Four eras at launch, data-driven so more can be added by adding a config file.
 ```
 legacyGain = floor(10 * eraIndex * (1 + totalLevelsThisEra / 100)) * (1 + rebirthCount * 0.5)
 ```
-**Legacy effect:** permanent income multiplier `1 + 0.01 * legacy` (multiplicative with everything else).
-**Phase 2 (after MVP):** a Legacy shop for permanent perks (starting cash, cheaper levels, +% income) — design the data model so this can be added without migration pain.
+**Legacy effect:** permanent income multiplier `1 + 0.01 * effectiveLegacy` (multiplicative with everything else), where `effectiveLegacy = legacy` up to `legacy.softcap` (Game.json, 1000) and `softcap + softcap * ln(legacy / softcap)` above it — continuous at the cap, so laps 3+ plateau instead of collapsing (amended at M6, see `docs/LEGACY_SHOP.md`).
+**Phase 2 — Legacy shop (shipped at M6):** permanent perks and cosmetics bought with Legacy. Legacy is never consumed: `spendable = legacy − legacyShop.spent`, and the passive multiplier keeps reading the full total. Perks and prices live in `src/shared/Config/LegacyShop.json`; Legacy is never sold for Robux and no perk touches the paid multiplier stack.
 
 **Rebirth (after Era 4):** era → 1, rebirthCount += 1, Legacy kept, grants a cosmetic rank shown on the plot sign and name tag.
 

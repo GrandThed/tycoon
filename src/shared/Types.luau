@@ -47,9 +47,47 @@ export type PlayerState = {
 	-- receipt delivered in a later session (player left with the dialog up) still grants it.
 	-- 0 means "no reservation".
 	pendingDoubleOfflineAmount: number,
+	-- M6 (schema v3): Legacy shop purchases. `spent` is Legacy invested (never deducted from
+	-- `legacy` itself — the multiplier keeps counting it); perks maps perkId -> tier owned.
+	legacyShop: LegacyShopState,
 }
 
-export type Multipliers = { legacy: number, pass: number, premium: number, neighbors: number }
+-- M6 Legacy shop (docs/INTERFACES.md "M6 contracts"). LegacyShop.json v1 mirror; perk ids are
+-- persistence keys (state.legacyShop.perks) and may never be renamed.
+export type PerkEffect =
+	"incomeMult"
+	| "levelCostDiscount"
+	| "startingSlots"
+	| "levelFloor"
+	| "extraMilestone"
+	| "neighbours"
+	| "offlineCapSeconds"
+	| "cosmetic"
+-- `value` is the TOTAL effect once the tier is owned, never a per-tier increment.
+export type PerkTier = { cost: number, value: number, maxBonus: number? }
+export type PerkDef = {
+	id: string,
+	name: string,
+	description: string,
+	cosmetic: boolean,
+	effect: PerkEffect,
+	tiers: { PerkTier },
+	-- Cosmetic extras: signTitle carries titles (indexed by min(rebirthCount + 1, #titles));
+	-- nameTagColour and goldenRoads carry a "#RRGGBB" colour.
+	titles: { string }?,
+	color: string?,
+}
+export type LegacyShopConfig = { version: number, perks: { PerkDef } }
+export type LegacyShopState = { spent: number, perks: { [string]: number } }
+
+-- perk: Founder's Blessing (1 when none). Legacy/pass/premium/neighbors as before.
+export type Multipliers = {
+	legacy: number,
+	perk: number,
+	pass: number,
+	premium: number,
+	neighbors: number,
+}
 
 export type WelcomeBack = { grantedCash: number, elapsedSeconds: number }
 
@@ -76,6 +114,8 @@ export type Delta = {
 	slots: { [string]: SlotState }?,
 	-- M3: the whole settings table whenever a RequestSetSetting write lands.
 	settings: { music: boolean, sfx: boolean }?,
+	-- M6: the whole shop state whenever the legacyShop dirty flag flushes (a copy, never aliased).
+	legacyShop: LegacyShopState?,
 }
 
 -- M5: sent on StateChanged while a player has no loaded state (safe mode), so the client can
@@ -91,8 +131,9 @@ export type LoadStatus = {
 -- The StateChanged payload union is Snapshot | Delta | LoadStatus, discriminated by `kind`.
 
 export type ActionResult = {
-	-- M2 adds the era actions; for them slotId is "" (no slot involved).
-	action: "buy" | "levelUp" | "advanceEra" | "rebirth",
+	-- M2 adds the era actions; for them slotId is "" (no slot involved). M6 adds buyPerk, for
+	-- which slotId carries the perkId (locked = not the next tier / no such perk).
+	action: "buy" | "levelUp" | "advanceEra" | "rebirth" | "buyPerk",
 	slotId: string,
 	ok: boolean,
 	reason: ("insufficientFunds" | "locked" | "invalid")?,
@@ -125,7 +166,16 @@ export type FxRebirth = {
 -- the client can never derive it); passGranted fires the moment a pass applies mid-session.
 export type FxPurchase = { kind: "purchase", productKey: string, grantedCash: number }
 export type FxPassGranted = { kind: "passGranted", passKey: string }
-export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth | FxPurchase | FxPassGranted
+-- M6: a Legacy shop tier just bought (earned currency, no Robux anywhere near it).
+export type FxPerkBought = { kind: "perkBought", perkId: string, tier: number }
+export type FxEvent =
+	FxReveal
+	| FxLevelUp
+	| FxEraAdvance
+	| FxRebirth
+	| FxPurchase
+	| FxPassGranted
+	| FxPerkBought
 
 -- Monetization.json v1 mirror; field names follow the JSON keys exactly. PassKey/ProductKey
 -- are persistence keys (state.passes) and analytics SKUs — never rename them. The def tables
@@ -187,6 +237,9 @@ export type LegacyConfig = {
 	gainBase: number,
 	gainLevelsDivisor: number,
 	gainRebirthBonus: number,
+	-- v1.6: Legacy past this point counts logarithmically toward the multiplier. Optional so an
+	-- older Game.json still typechecks and behaves linearly.
+	softcap: number?,
 }
 
 export type OfflineConfig = {
