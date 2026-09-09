@@ -4,10 +4,11 @@ Updated by the lead at the start of each milestone. Agents conform to this docum
 If your task needs a change to a file or contract you don't own, **report it in your final
 message** — never edit across an ownership boundary.
 
-Current milestone: **M4 — Monetization & analytics** (game passes, developer products,
-idempotent ProcessReceipt, Premium bonus, analytics events, Shop UI). M1-M3 contracts below
-remain standing; the **M4 contracts** section at the end defines this milestone's additions and
-the amendments called out there.
+Current milestone: **M5 — Hardening** (data-load safe mode, leave/shutdown edge cases,
+session-lock contention UX, rate-limit audit, confirmed receipt saves, persisted `DoubleOffline`
+reservation, `--rebirth`/`--laps` in the sim, second balance pass, full-codebase audit). M1–M4
+contracts below remain standing — read the M4 "Post-review amendments" as the current contract,
+not history — and the **M5 contracts** section at the end defines this milestone's additions.
 
 ## Environment notes (all agents)
 
@@ -1209,3 +1210,253 @@ lists exactly the created items, a test purchase grants the capped amount once a
 (replayed receipts are no-ops), a pass applies within the session (income, VIP sign, VIP skins,
 VIP name tag), Offline Pro widens the offline cap and efficiency, and Premium shows and
 multiplies. Reviewer verdict SHIP.
+
+---
+
+# M5 contracts — Hardening
+
+Goal (spec §12 M5, PLAN M5 + the M4 "Carried forward" block): the MVP definition of done holds
+end-to-end under failure. Nothing here changes gameplay numbers except the designer's balance
+pass; every server change is about what happens when DataStores, sessions, or players misbehave.
+
+## M5 ownership
+
+| Owner | Files |
+|-------|-------|
+| luau-engineer | `src/server/**`, `src/shared/{Types,Economy,Catalog}.luau` |
+| ui-engineer | `src/client/**` (new `src/client/UI/LoadScreen.luau` allowed) |
+| economy-designer | `tools/sim_economy.py`, `docs/BALANCE.md`, `src/shared/Config/Eras/**` (unfrozen for the balance pass only) |
+| lead | `docs/INTERFACES.md`, `src/shared/Config/Game.json` (v1.5 — already applied: `remotes.snapshotCallsPerSecond = 2`; any further key an agent needs is **reported**, not edited) |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, status ticks in `docs/PLAN.md`, regenerated `docs/ASSET_MANIFEST.md` |
+
+Frozen this milestone: `src/shared/Layouts/**`, `Config/{Sounds,Monetization}.json`,
+`src/shared/Format.luau`, `default.project.json`, `wally.toml`. `Economy.luau` may not change
+shape (the sim mirrors it); the balance pass is config-only. If the designer needs a `Game.json`
+balance key changed (`levelIncomeBonus`, `levelCost.*`, `legacy.*`), report the exact key and
+value and the lead applies it.
+
+Infrastructure retry policy (attempt counts, backoffs, confirmation timeouts, retry cooldowns)
+stays **in code** beside the call it governs, per the ruling already recorded in
+`DataService.luau` — `Config/*.json` is for gameplay constants. The one new config key is a
+rate limit, which has always lived in `Game.json`.
+
+## Game.json v1.5 (lead, applied)
+
+`remotes.snapshotCallsPerSecond: 2` — `RequestSnapshot` gets its own bucket: each call answers
+with a full state snapshot (the most expensive reply the server makes), so it must not share the
+10/s gameplay budget. `Types.RemotesConfig` gains `snapshotCallsPerSecond: number`;
+`RemoteService.bucketCallsPerSecond` returns it for `RequestSnapshot`.
+
+## Types.luau — M5 additions (luau-engineer authors; the client consumes by name)
+
+```lua
+-- Sent on StateChanged while a player has no loaded state. The client boots blank otherwise.
+export type LoadStatus = {
+	kind: "loadStatus",
+	phase: "loading" | "failed",
+	attempt: number,          -- 1-based count of load attempts this session (retries included)
+	retryAvailableIn: number, -- seconds until RequestRetryLoad is honored; 0 = now. Always 0 while loading.
+}
+-- StateChanged payload union is now Snapshot | Delta | LoadStatus.
+
+export type PlayerState = { ... , pendingDoubleOfflineAmount: number, ... } -- schema v2, see below
+export type RemotesConfig = { ..., snapshotCallsPerSecond: number, ... }
+```
+
+## Profile schema v2 (luau-engineer)
+
+`PROFILE_TEMPLATE` gains `pendingDoubleOfflineAmount = 0` and `SCHEMA_VERSION` becomes `2`.
+`Migrations[1]` sets `state.pendingDoubleOfflineAmount = 0` when the field is `nil`. This is the
+first real migration and deliberately exercises the M2 mechanism; ProfileStore's `Reconcile`
+would also fill the field, but the version stamp must advance so a v1 profile is provably
+upgraded once, not reconciled forever. Migrations remain additive and idempotent.
+
+`0` means "no reservation". Nothing else in the schema changes.
+
+## Data-load safe mode (replaces the M2 "kick on load failure" rule)
+
+**Ruling.** A player whose profile cannot be loaded is no longer kicked. They stay in the server
+with **no state, no plot, and no writes**, see a clear explanation, and can retry or leave.
+Session-lock contention (the common cause — a previous server still holds the session; ProfileStore
+waits and steals after 40 s) therefore resolves itself while the player watches a loading card
+instead of a kick screen. The kick from `OnSessionEnd` (another server took the session while this
+one held it) is unchanged: that player is playing elsewhere.
+
+"No writes" is structural, not a flag: without a profile there is nothing to save. The existing
+nil-tolerance of every `GetState` call site is what makes safe mode free — the audit below
+verifies it path by path.
+
+**DataService.** Owns the per-player load status and publishes it; Main only orchestrates.
+
+```lua
+DataService.LoadAsync(player): Types.PlayerState?      -- unchanged signature
+DataService.RetryLoadAsync(player): Types.PlayerState? -- honors the cooldown; nil without an attempt when refused
+DataService.IsLoading(player): boolean
+DataService.GetLoadStatus(player): Types.LoadStatus?   -- nil once state is loaded (or the player never joined)
+DataService.SaveAsync(player, confirm: ((saved: Types.PlayerState) -> boolean)?): boolean -- see receipts
+```
+
+- Every attempt (first load or retry) publishes `{ phase = "loading", attempt = n,
+  retryAvailableIn = 0 }` on `StateChanged` before it yields. A nil result with the player still
+  present publishes `{ phase = "failed", attempt = n, retryAvailableIn = LOAD_RETRY_COOLDOWN_SECONDS }`.
+  Publishing goes through `RemoteService.FireClient(player, "StateChanged", status)` (no cycle:
+  RemoteService requires only Catalog). Success publishes nothing — the join snapshot follows.
+- `RetryLoadAsync` returns nil **without** publishing or attempting when: state is already
+  loaded, a load is in flight, or fewer than `LOAD_RETRY_COOLDOWN_SECONDS` (`10`, code constant
+  beside `LOAD_RETRY_ATTEMPTS`) have passed since the last failure. Otherwise it is `LoadAsync`
+  with the attempt counter continued.
+- `RequestSnapshot` with no loaded state replies with `GetLoadStatus(player)` when non-nil (the
+  client's boot request may land before, during, or after the first attempt — every ordering
+  must end with the client seeing either a status or a snapshot). Nothing is sent when it is nil.
+- **The duplicate-load busy-wait is gone** (M2 carry-over). Concurrent `LoadAsync` callers for
+  the same player park on a per-player completion signal (a waiter list resumed with
+  `task.spawn`, or the Wally `Signal` package — engineer's choice) and receive the same result the
+  in-flight load produced. No `while … task.wait()` polling anywhere in DataService after this
+  milestone.
+
+**RemoteService.** New client → server remote `RequestRetryLoad()` (no args; validator
+`args.n == 0`; standard `callsPerSecond` bucket for shape — the real throttle is DataService's
+cooldown). Added to `REMOTE_NAMES`; the client `WaitForChild`s it like the others.
+
+**Main.** The join sequence becomes a named function `runJoinSequence(player, loader)` used by
+both `PlayerAdded` (with `LoadAsync`) and the `RequestRetryLoad` handler (with
+`RetryLoadAsync`): load → left-during-yield guard → `RefreshPassesAsync` → guard →
+`ApplyOfflineGrant` → `ClaimPlot` → `SendSnapshot`. On a nil load Main does **nothing** (no kick;
+DataService already published the status). The `RequestRetryLoad` handler drops silently when
+`GetState` is non-nil or `IsLoading` is true — `RetryLoadAsync` re-checks anyway.
+
+## Leave-mid-purchase and shutdown (luau-engineer: audit, fix, and report)
+
+Required behaviour per path — the engineer verifies each against the code, fixes what fails,
+and lists the verdict per row in the final report (the reviewer re-checks the same table):
+
+| Path | Required behaviour |
+|------|--------------------|
+| `RequestBuy` / pad `Touched` / `RequestLevelUp` / ProximityPrompt / `RequestAdvanceEra` / `RequestRebirth` | No yield between validation and mutation; a call landing after `PlayerRemoving` teardown sees `GetState == nil` and drops. |
+| `ProcessReceipt` while the player leaves | Grant + receipt id are appended before `SaveAsync`; if the session ends during the confirmation wait, `SaveAsync` returns false → rollback → `NotProcessedYet`. Whether or not ProfileStore's final save captured the grant, the persisted `cash` and `processedReceipts` are always consistent with each other, so the next-session retry is exactly-once. Engineer confirms this reasoning holds for the confirmed-save implementation below, and that a `ProcessReceipt` arriving with no player/state returns `NotProcessedYet` without touching anything. |
+| `PromptGamePassPurchaseFinished` / `PromptProductPurchaseFinished` after leave | No-op when state is nil or the player is gone; no error, no orphaned reservation (the pending amount is persisted — see below). |
+| `RequestPrompt("DoubleOffline")` then leave with the dialog open | Reservation persists (`pendingDoubleOfflineAmount`); a later-session receipt grants it. |
+| Server shutdown | `Main` registers `game:BindToClose` running the `PlayerRemoving` teardown (`PlotService.Release` → `EconomyService.Cleanup` → `DataService.Release`) for every player that still has a profile, idempotently with the `PlayerRemoving` connection (both may run; `Release` on a released profile is a no-op). ProfileStore's own `BindToClose` (registered at require time) blocks shutdown until its final saves land — Main's callback must not busy-wait for that. Skipped when `RunService:IsStudio()` **only** if ProfileStore is in mock mode; otherwise it runs in Studio too. |
+| Income tick during teardown/shutdown | `Cleanup` clears `joinComplete`, so no grant lands on a released profile. Engineer confirms `grantIncome` cannot observe a profile between `DataService.Release` and `Cleanup` in either call order. |
+
+## Confirmed receipt saves (resolves the M4 accepted risk)
+
+**Ruling: a stronger guarantee is worth the latency.** ProfileStore exposes
+`Profile.OnAfterSave(last_saved_data)`, fired after each write actually lands, so the receipt path
+can wait for durability instead of trusting the non-yielding `Save()`. The cost is one DataStore
+round-trip (typically well under 2 s) before `PurchaseGranted`, on a path where Roblox already
+tolerates a yielding handler. The M4 caveat in `MANUAL_STEPS.md` M4 §8 item 14 is retired by
+docs-keeper once this ships.
+
+`DataService.SaveAsync(player, confirm?)`:
+- Without `confirm`: unchanged (accepted-into-session semantics; no remaining caller relies on it
+  as durability, and the engineer removes any that does).
+- With `confirm`: connect `profile.OnAfterSave` **before** calling `profile:Save()`; park the
+  calling thread (no polling) until an `OnAfterSave` fires whose `last_saved_data` satisfies
+  `confirm`, or `SAVE_CONFIRM_TIMEOUT_SECONDS` (`10`, code constant) elapses, or the session ends.
+  Return `true` only on a satisfying fire; disconnect in every exit. An earlier-started autosave
+  landing after the call does not satisfy `confirm` unless it actually contains the mutation —
+  that is why the predicate exists.
+- Retry policy: `LOAD_RETRY_ATTEMPTS` re-issues `Save()` on a thrown call as today; a timeout is
+  **not** retried (the write may still be queued) — return false and let Roblox retry the receipt.
+
+`MonetizationService.ProcessReceipt` step 4 becomes: `DataService.SaveAsync(player, function(saved)
+return table.find(saved.processedReceipts, id) ~= nil end)`. Rollback on `false` is unchanged
+(amendment 2) and remains correct in every interleaving: memory and the persisted profile agree
+on whether the id is present, and the id is only ever written together with the cash.
+
+Engineer must confirm from `ProfileStore.luau` that mock-mode saves (Studio without API access)
+also fire `OnAfterSave`; if they do not, `SaveAsync` treats a mock profile's `Save()` as confirmed
+so Studio test purchases still complete, and says so in the report.
+
+## Persisted `DoubleOffline` reservation (resolves the M4 open edge)
+
+`EconomyService`:
+- `ReserveDoubleOfflineGrant` also writes `state.pendingDoubleOfflineAmount = amount`.
+- `ReleaseDoubleOfflineGrant` clears it to `0`.
+- `ConsumeDoubleOfflineGrant` settles, in order: the session record if reserved; else the persisted
+  `pendingDoubleOfflineAmount` when `> 0` (a receipt from an earlier session's dialog); else `0`
+  with the existing `warn`. Every settle path writes `pendingDoubleOfflineAmount = 0`. Rollback
+  (amendment 2) restores whichever source it consumed.
+- `ApplyOfflineGrant` never touches the pending field: a new session's offer only replaces the
+  persisted amount when it is itself reserved.
+
+The remaining theoretical double (an old receipt and a new reservation both settling in one
+session) grants the reserved amount once and `0` for the other with a warn; docs-keeper records
+that as the residual, replacing `MANUAL_STEPS.md` M4 §8 item 15.
+
+## Rate-limit audit (luau-engineer implements the table; reviewer confirms it)
+
+| Intent path | Budget |
+|-------------|--------|
+| `RequestSnapshot` | `remotes.snapshotCallsPerSecond` (2/s) — new bucket |
+| `RequestBuy`, `RequestLevelUp`, `RequestAdvanceEra`, `RequestRebirth`, `RequestSetSetting`, `RequestRetryLoad` | `remotes.callsPerSecond` (10/s) |
+| `RequestPrompt` | `remotes.promptCallsPerSecond` (1/s) |
+| Pad `Touched` | `padTouchDebounce` **and** the `RequestBuy` bucket via `TryConsumeToken` |
+| ProximityPrompt level-up | the `RequestLevelUp` bucket via `TryConsumeToken` |
+| `ProcessReceipt`, `PromptGamePassPurchaseFinished`, `PromptProductPurchaseFinished` | Roblox-originated, no bucket; must be nil-tolerant for absent state/player |
+
+Plus: `RemoteService.Init` warns and clamps any configured rate below `1` (a fractional refill
+rate starts every bucket empty, silently disabling the remote); `RequestSetSetting` handled in
+Main keeps the shared bucket; the `Touched`/ProximityPrompt rows are verified, not assumed —
+report the line numbers.
+
+## Client contracts (M5) — ui-engineer
+
+**`LoadScreen`** (new `src/client/UI/LoadScreen.luau`, wired in `UIController`): a centered card
+over a light dim, shown from boot until the first `Snapshot` arrives, driven by `LoadStatus`.
+It never blocks movement or the camera (the player may walk the hub and look at other plots —
+spec §5). All sizing/timing constants in `Theme`.
+- Before any payload: "Loading your city…" (so a slow first status still isn't a blank HUD).
+- `phase == "loading"`: same copy; after `Theme.LOAD_SLOW_SECONDS` (8) on screen, a second
+  line: "Still working — another server may be finishing your last save."
+- `phase == "failed"`: title "We couldn't load your save", body "Nothing you do now will be
+  saved. Try again in a moment, or rejoin.", buttons **Retry** (fires `RequestRetryLoad`;
+  disabled with a live countdown until `retryAvailableIn` has elapsed since the payload
+  arrived, then enabled; on tap, shows "Retrying…" until the next status/snapshot) and **Leave**
+  (`Players.LocalPlayer:Kick("Rejoin to load your save.")` — allowed on the local player).
+  Tap targets ≥ 44 px; verified at 375×667 portrait and 667×375 landscape.
+- Hidden permanently on the first `Snapshot` (`Hide()`; later `LoadStatus` payloads are ignored
+  once a model exists — none should arrive).
+- While no model exists: bottom bar and Shop button hidden, top bar shows nothing misleading (no
+  "$0 / 0/s" on a failed load — blank or dashes). Existing "delta before snapshot" handling stays.
+- `onStateChanged` dispatches `kind == "loadStatus"` to the screen; unknown kinds stay ignored.
+- Reuse `Panel`/`ConfirmDialog` primitives where they fit; no new sound keys (`Sounds.json` is
+  frozen) — Retry uses the existing UI click.
+
+**Feedback audit.** Every player-initiated action has a visible success or failure response.
+Produce the table (action → success feedback → failure feedback → file:line) in the final report
+and fix any gap found. Known-acceptable: `RequestPrompt` drops that the client can never trigger
+(id 0, already owned, no offer) need no feedback because the client hides those controls; a
+declined OS purchase dialog is its own feedback.
+
+**Reduce-motion verification.** List every tween/particle/animation call site and the
+`Motion`/reduce-motion check that gates it; fix any unguarded one. Report the list.
+
+## tools/sim_economy.py — M5 additions (economy-designer)
+
+- `--rebirth N` (default 0): the starting `rebirthCount` for the run, applied to `LegacyGain`
+  exactly as `Economy.luau` does (the M2 carry-over: the sim hardcoded 0).
+- `--laps K` (default 1): simulate K consecutive laps of eras 1..4, rebirthing between laps with
+  `legacy` and `rebirthCount` carried, printing the per-era table for every lap. Lap 1 output with
+  defaults must be byte-identical to today's, so `--check` keeps its meaning.
+- `--check` semantics unchanged (lap 1 in band). If the balance pass moves any era config, the
+  new numbers become the `--check` baseline and BALANCE.md says what moved and why.
+
+**Second balance pass (config-only):** targets are spec §4's bands for lap 1; for lap 2 the
+designer decides and documents a target (recommendation: lap 2 should be noticeably faster but
+not degenerate — no era under half its lap-1 band floor), and checks the fully-paid stack still
+reads as convenience (BALANCE.md "Paid vs. free pacing"). Any `Game.json` key change is reported,
+not applied. Final `docs/BALANCE.md` carries every table the spec §4 simulation requirement asks
+for, the lap-2 table, and the unchanged 1 : 2.2 : 4.2 pricing-ladder note for Ben.
+
+## Definition of done (M5)
+
+`stylua --check src`, `selene src`, `luau-lsp analyze` (committed definitions +
+`--sourcemap sourcemap.json`, regenerated because `LoadScreen.luau` is new), `rojo build -o
+build/test.rbxl` all green; `py tools/sim_economy.py --check` passes; `py tools/gen_asset_manifest.py
+--check` passes. Full-codebase reviewer audit (not a diff review) returns SHIP. In Studio: a
+forced load failure shows the card, Retry recovers without a rejoin, the player is never kicked
+for a load failure; a test purchase completes with a visible confirmation delay and grants once;
+shutdown (Stop in Studio with API access on) persists the last tick's state; the M0–M4 playtests
+still pass, re-swept by docs-keeper's final PLAYTEST section against spec §12's definition of done.
