@@ -16,13 +16,13 @@ export PATH="$HOME/.rokit/bin:$PATH"
 
 ### 1. One-time toolchain setup
 
-- [ ] 1. If you haven't already, install Rokit, then from the repo root run:
+- [x] 1. If you haven't already, install Rokit, then from the repo root run:
       ```
       rokit install
       ```
       This restores the pinned versions from `rokit.toml`: rojo 7.7.0, wally 0.3.2,
       stylua 2.5.2, selene 0.31.0, luau-lsp 1.69.0.
-- [ ] 2. Install the **Rojo plugin** in Roblox Studio, matching **Rojo 7.7**:
+- [x] 2. Install the **Rojo plugin** in Roblox Studio, matching **Rojo 7.7**:
       - Studio → Toolbox → search "Rojo" → install the plugin by CodeKu / Rojo team, OR
       - In Studio: Plugins tab → Manage Plugins → get the Rojo plugin from the Creator Store.
       - Confirm the plugin's version shows 7.7.x when you open it (Plugins tab → Rojo icon).
@@ -30,7 +30,7 @@ export PATH="$HOME/.rokit/bin:$PATH"
 
 ### 2. First build
 
-- [ ] 3. From the repo root, if `Packages/` is missing (first checkout, or after pulling changes
+- [x] 3. From the repo root, if `Packages/` is missing (first checkout, or after pulling changes
       to `wally.toml`), run:
       ```
       wally install
@@ -46,9 +46,9 @@ export PATH="$HOME/.rokit/bin:$PATH"
 
 ### 3. Opening the project in Studio (pick one)
 
-- [ ] 5a. **Quick check:** double-click `build/test.rbxl` (or File → Open in Studio) to open the
+- [x] 5a. **Quick check:** double-click `build/test.rbxl` (or File → Open in Studio) to open the
       built place directly. Rebuild first (step 4) if you've synced new changes.
-- [ ] 5b. **Live sync (optional, for poking around while iterating):**
+- [x] 5b. **Live sync (optional, for poking around while iterating):**
       1. From the repo root, run `rojo serve`.
       2. In Studio, open a place (any new baseplate is fine), open the Rojo plugin, click
          **Connect** (default `localhost:34872`).
@@ -56,7 +56,7 @@ export PATH="$HOME/.rokit/bin:$PATH"
 
 ### 4. Nothing else to do in Studio for M0
 
-- [ ] 6. No meshes, audio, game passes, or developer products yet — those start at M3/M4. The
+- [x] 6. No meshes, audio, game passes, or developer products yet — those start at M3/M4. The
       `ServerStorage/Assets/{Village,Boomtown,Metropolis,OrbitalColony}` folders already exist
       from the Rojo sync; leave them empty for now.
 
@@ -68,10 +68,10 @@ export PATH="$HOME/.rokit/bin:$PATH"
 to upload, no game passes or developer products to create, no IDs to paste anywhere. Mesh
 import starts at M3; passes/products start at M4.
 
-- [ ] 1. If you pulled new changes since M0, rebuild: `rojo build -o build/test.rbxl` (or re-run
+- [x] 1. If you pulled new changes since M0, rebuild: `rojo build -o build/test.rbxl` (or re-run
       `rojo serve` and reconnect the Rojo plugin if you're using live sync). Exact commands are
       in the M0 section above (§2-3).
-- [ ] 2. That's it — go run `docs/PLAYTEST.md` M1 section.
+- [x] 2. That's it — go run `docs/PLAYTEST.md` M1 section.
 
 ---
 
@@ -84,14 +84,14 @@ this enabled, ProfileStore silently falls back to an in-memory mock: the game st
 correctly for a single Play session but **wipes on every Stop** — you will not see true
 persistence or offline earnings without doing this.
 
-- [ ] 1. In Studio, open the place (`build/test.rbxl` or via `rojo serve`).
-- [ ] 2. Home tab → **Game Settings**.
-- [ ] 3. **Security** tab (left sidebar of the Game Settings window).
-- [ ] 4. Toggle **"Enable Studio Access to API Services"** to ON.
-- [ ] 5. Click **Save**.
-- [ ] 6. This setting is per-place and persists across Studio sessions once saved — you only
+- [x] 1. In Studio, open the place (`build/test.rbxl` or via `rojo serve`).
+- [x] 2. Home tab → **Game Settings**.
+- [x] 3. **Security** tab (left sidebar of the Game Settings window).
+- [x] 4. Toggle **"Enable Studio Access to API Services"** to ON.
+- [x] 5. Click **Save**.
+- [x] 6. This setting is per-place and persists across Studio sessions once saved — you only
       need to do this once per place file, not before every Play.
-- [ ] 7. How to tell mock vs real at any time: Press Play, open **Output**, look for one line
+- [x] 7. How to tell mock vs real at any time: Press Play, open **Output**, look for one line
       printed once by ProfileStore:
       - `[ProfileStore]: Roblox API services available - data will be saved` = real, persists.
       - `[ProfileStore]: Roblox API services unavailable - data will not be saved` = mock,
@@ -101,22 +101,22 @@ persistence or offline earnings without doing this.
 
 ### 2. Install the new server dependency
 
-- [ ] 8. From the repo root, run:
+- [x] 8. From the repo root, run:
       ```
       wally install
       ```
       This now also populates **`ServerPackages/`** with ProfileStore (in addition to
       `Packages/` for Signal, as before). Re-run this any time `wally.toml`/`wally.lock`
       change — safe to re-run even if nothing changed.
-- [ ] 9. Rebuild: `rojo build -o build/test.rbxl` (or reconnect `rojo serve` if using live
+- [x] 9. Rebuild: `rojo build -o build/test.rbxl` (or reconnect `rojo serve` if using live
       sync). Confirm it succeeds with no errors — this is also QA's build gate.
 
 ### 3. Nothing needed on Creator Hub for M2
 
-- [ ] 10. No game passes, developer products, meshes, or audio yet — those start at M3
+- [x] 10. No game passes, developer products, meshes, or audio yet — those start at M3
       (meshes/audio) and M4 (passes/products). Nothing to create or paste IDs for this
       milestone.
-- [ ] 11. That's it — go run `docs/PLAYTEST.md` M2 section (run it together with the M0 and M1
+- [x] 11. That's it — go run `docs/PLAYTEST.md` M2 section (run it together with the M0 and M1
       sections per the combined playtest gate).
 
 ---
@@ -125,7 +125,7 @@ persistence or offline earnings without doing this.
 
 ### 1. Rebuild first
 
-- [ ] 1. If you pulled new changes since M2, rebuild: `rojo build -o build/test.rbxl` (or
+- [x] 1. If you pulled new changes since M2, rebuild: `rojo build -o build/test.rbxl` (or
       re-run `rojo serve` and reconnect the Rojo plugin). Full commands in the M0 section above.
       No new dependencies this milestone (`wally install` not required unless `wally.toml`
       changed).

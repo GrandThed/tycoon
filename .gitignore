@@ -1,1 +1,9 @@
 tools/__pycache__/
+
+# Secrets — never commit. Holds the Roblox Open Cloud API key for tools/upload_audio.py.
+.env
+.env.*
+!.env.example
+
+# Kenney source media (CC0). Re-downloadable; keeps binaries out of the repo.
+assets/

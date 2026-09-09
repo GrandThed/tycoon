@@ -1,0 +1,66 @@
+{
+	"_comment": [
+		"Maps each Sounds.json event key to one file inside the Kenney zips in assets/.",
+		"Picks were made by FILENAME ONLY - nobody has listened to these yet. Audition them",
+		"with `py tools/upload_audio.py --audition` and swap any `pick` you dislike for one of",
+		"its `alternates` before uploading. Open Cloud audio uploads are capped per month",
+		"(10 unverified / 100 ID-verified), so a bad pick costs a slot that cannot be reclaimed.",
+		"`ambient` entries in Sounds.json stay 0: these four packs contain no loopable music beds."
+	],
+	"sounds": {
+		"uiClick": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/click_001.ogg",
+			"alternates": ["Audio/click_002.ogg", "Audio/click_004.ogg", "Audio/switch_002.ogg"],
+			"wants": "short, dry, quiet tick - fires on every button press, so it must never grate"
+		},
+		"purchase": {
+			"zip": "kenney_casino-audio.zip",
+			"pick": "Audio/chip-lay-1.ogg",
+			"alternates": ["Audio/chips-collide-1.ogg", "Audio/chips-handle-1.ogg", "Audio/chip-lay-3.ogg"],
+			"wants": "single crisp chip/coin placement - the reward beat of the core loop"
+		},
+		"reveal": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactSoft_medium_000.ogg",
+			"alternates": ["Audio/impactWood_light_000.ogg", "Audio/impactSoft_heavy_000.ogg", "Audio/impactWood_heavy_000.ogg"],
+			"wants": "soft thud as a building lands (spec 9); pairs under the purchase sound"
+		},
+		"levelUp": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/confirmation_001.ogg",
+			"alternates": ["Audio/select_001.ogg", "Audio/bong_001.ogg", "Audio/confirmation_003.ogg"],
+			"wants": "short rising tick; pitch-shifted up per milestone, so it must survive +0.08 steps"
+		},
+		"levelUpMilestone": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Steel jingles/jingles_STEEL00.ogg",
+			"alternates": ["Audio/Pizzicato jingles/jingles_PIZZI00.ogg", "Audio/Hit jingles/jingles_HIT00.ogg", "Audio/Steel jingles/jingles_STEEL03.ogg"],
+			"wants": "brief bright flourish at levels 10/25/50/100 - stacks on top of levelUp"
+		},
+		"insufficientFunds": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/error_001.ogg",
+			"alternates": ["Audio/error_004.ogg", "Audio/error_006.ogg", "Audio/error_008.ogg"],
+			"wants": "soft negative blip, not harsh - players hit this constantly while saving up"
+		},
+		"eraAdvance": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Steel jingles/jingles_STEEL07.ogg",
+			"alternates": ["Audio/Sax jingles/jingles_SAX07.ogg", "Audio/Steel jingles/jingles_STEEL10.ogg", "Audio/Hit jingles/jingles_HIT07.ogg"],
+			"wants": "triumphant fanfare under the era ceremony overlay - the game's biggest moment"
+		},
+		"rebirth": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Sax jingles/jingles_SAX10.ogg",
+			"alternates": ["Audio/Steel jingles/jingles_STEEL13.ogg", "Audio/8-Bit jingles/jingles_NES10.ogg", "Audio/Hit jingles/jingles_HIT13.ogg"],
+			"wants": "grander than eraAdvance - rarer and more final; must read as a bigger deal"
+		},
+		"welcomeBack": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Pizzicato jingles/jingles_PIZZI02.ogg",
+			"alternates": ["Audio/8-Bit jingles/jingles_NES02.ogg", "Audio/Steel jingles/jingles_STEEL02.ogg", "Audio/Sax jingles/jingles_SAX02.ogg"],
+			"wants": "short friendly greeting on the welcome-back card - non-blocking, low volume"
+		}
+	}
+}
