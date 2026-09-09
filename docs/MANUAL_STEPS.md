@@ -226,9 +226,118 @@ whenever convenient.
 
 ---
 
-## M4 — Monetization & analytics (placeholder — filled in once M4 ships)
+## M4 — Monetization & analytics
 
-Future: create game passes and developer products on Creator Hub, paste their numeric IDs into
-`src/shared/Config/Monetization.json`, and enable Premium payouts. Nothing to do here yet.
+The game ships with every game-pass/product `id` at `0`. **`id: 0` means "hidden, never
+prompted, never granted"** — no Shop button, no "Double it" button, no prompts anywhere, no
+errors. You can create the three passes and four products **one at a time, in any order**, paste
+each id in, and the game stays correct at every step (test the ones you've created, the rest
+stay invisible). You do **not** have to create all seven before testing any of this milestone.
 
-<!-- M4 section replaced with real content once M4 ships. Do not delete completed sections above. -->
+### 1. Rebuild first
+
+- [ ] 1. If you pulled new changes since M3, rebuild: `rojo build -o build/test.rbxl` (or
+      re-run `rojo serve` and reconnect the Rojo plugin). No new dependencies this milestone
+      (`wally install` not required unless `wally.toml` changed).
+
+### 2. Read the pricing guidance before creating anything
+
+`docs/BALANCE.md` ("Cash packs and the era cap") derives this from the actual sim numbers —
+worth reading before you pick Robux prices:
+
+- The three cash packs (`Cash30m`, `Cash2h`, `Cash8h`) are *nominally* 30/120/480 minutes of
+  income, a 1 : 4 : 16 ratio. But each pack is also capped at a fraction of the current era's
+  total slot cost (10% / 25% / 50%) so a purchase can never skip an era. For all but the first
+  2–14% of every era, that cap is what actually pays out — and the capped ratio is **1 : 2.5 : 5**,
+  not 1 : 4 : 16.
+- If you price the packs at the nominal 1 : 4 : 16 ratio (e.g. the big pack 16× the small one),
+  the big packs are **worse value than the small one** for 86–98% of every era — the opposite of
+  normal "bigger bundle, better value" pricing, and it stays that way for almost the whole game.
+- **Recommendation: price roughly 1 : 2.2 : 4.2** (`Cash2h` at most 2.5× `Cash30m`'s price,
+  `Cash8h` at most 5×). That keeps "bigger bundle is slightly better value" true in every era
+  phase. This is a ratio, not an absolute price — pick whatever base Robux amount feels right for
+  `Cash30m` and scale the other two from it.
+- `DoubleCash`, `OfflinePro`, and `VIP` are permanent passes with no cap math — price those
+  however feels right for a one-time permanent perk (typical Roblox tycoon pass pricing).
+
+### 3. Create the game passes (Creator Hub)
+
+For each of the three passes below: Creator Hub → your experience → **Monetization** → **Passes**
+→ **Create a Pass**. Upload any icon (placeholder is fine, swap later), set a name/price, save,
+then copy the numeric **Pass ID** from the pass's page URL or the passes list.
+
+- [ ] 2. Create **`DoubleCash`** ("Double Cash" — 2× income forever). Paste the id into
+      `src/shared/Config/Monetization.json` → `passes` → the entry with `"key": "DoubleCash"` →
+      `"id"`. Leave `"key"` exactly as it is — only edit `"id"`.
+- [ ] 3. Create **`OfflinePro`** ("Offline Pro" — offline cap 8h→24h, efficiency 50%→100%). Paste
+      the id into the `"key": "OfflinePro"` entry's `"id"`.
+- [ ] 4. Create **`VIP`** ("VIP" — +10% income, VIP name tag, gold plot sign, VIP building
+      skins). Paste the id into the `"key": "VIP"` entry's `"id"`.
+
+### 4. Create the developer products (Creator Hub)
+
+For each of the four products below: Creator Hub → your experience → **Monetization** →
+**Developer Products** → **Create a Product**. Same flow — name, price, icon, save, copy the
+numeric **Product ID**.
+
+- [ ] 5. Create **`Cash30m`** ("30 Minutes of Cash"). Paste the id into `products` → the
+      `"key": "Cash30m"` entry's `"id"`.
+- [ ] 6. Create **`Cash2h`** ("2 Hours of Cash", priced ~2.2× `Cash30m` per the guidance above).
+      Paste into `"key": "Cash2h"`'s `"id"`.
+- [ ] 7. Create **`Cash8h`** ("8 Hours of Cash", priced ~4.2× `Cash30m`). Paste into
+      `"key": "Cash8h"`'s `"id"`.
+- [ ] 8. Create **`DoubleOffline`** ("Double it" — doubles the most recent offline grant; only
+      ever offered on the welcome-back card, never in the Shop). Paste into
+      `"key": "DoubleOffline"`'s `"id"`. Price this low — it's a small impulse buy tied to one
+      welcome-back moment, not a bundle.
+- [ ] 9. Double-check every pasted value is a **numeric id**, not `0`, and that you did not touch
+      any `"key"`, `"minutes"`, or `"capFraction"` field — those are frozen contract values, not
+      yours to edit.
+
+### 5. Enable Premium payouts (optional but recommended)
+
+- [ ] 10. Creator Hub → your experience → **Monetization** → **Premium Payouts** → confirm it's
+      enabled (usually on by default for new experiences). This is what funds the 1.1× Premium
+      multiplier the game already shows/applies — no config change needed on your side.
+
+### 6. Rebuild and test in Studio
+
+- [ ] 11. After pasting ids, rebuild: `rojo build -o build/test.rbxl` (or resync via
+      `rojo serve`). Ids are read from config, not remotes — no server-side redeploy step beyond
+      a normal rebuild/sync.
+- [ ] 12. Run `docs/PLAYTEST.md` M4 Phase A first (all ids still `0`, i.e. before this section —
+      already true if you're doing this for the first time) to confirm the baseline is silent,
+      then Phase B once you've pasted at least one real id.
+
+### 7. Testing purchases — read this before you tap "Buy" in Studio
+
+- [ ] 13. **Developer product purchases inside Studio Play-testing are real-ish**: Studio uses
+      your live Roblox account and can prompt a real Robux confirmation for a real product (game
+      passes in Studio are typically mocked/free for the owner, but don't assume — the safest
+      assumption is that any purchase you complete in Play mode may actually charge Robux).
+      Use an account you're comfortable spending test Robux from, and don't leave a test session
+      unattended near a purchase prompt. If you want to avoid any charge, create the products but
+      don't tap through the purchase confirmation — just confirm the prompt appears and cancel it.
+
+### 8. Accepted risks (recorded here per the lead's ruling — not bugs, don't report them)
+
+- [ ] 14. **`DataService.SaveAsync` durability caveat.** `SaveAsync` wraps ProfileStore's
+      `Profile:Save()`, which is non-yielding — a `true` return means "accepted into an active
+      session", **not** "durably written to the DataStore yet". `ProcessReceipt` returns
+      `PurchaseGranted` on that `true`, which permanently retires the receipt with Roblox (Roblox
+      will never re-deliver it). If the server crashes in the few seconds between that `true` and
+      the underlying write actually landing, the player keeps the Robux charge and the grant is
+      lost, with no automatic retry. This is the strongest guarantee ProfileStore exposes; it's
+      accepted for M4 and is an M5 hardening item (see `docs/PLAN.md` M5 carry-forward list). You
+      won't be able to reproduce this in a normal playtest — it needs a server crash mid-save.
+- [ ] 15. **Open `DoubleOffline` reservation.** If a player leaves with a "Double it" offer
+      reserved (dialog open) but not completed, that reservation is simply dropped — a receipt
+      that somehow arrives in a later session grants `0` (with a `warn` logged server-side, not
+      an error). Rare in practice (Roblox retries receipts quickly and this window is small).
+- [ ] 16. **Analytics events are silent in Studio by design.** `slot bought`, `level-up`,
+      `offline grant`, `product grant`, and `legacy on advance/rebirth` events only actually
+      appear on the Creator Hub analytics dashboards for a **published** place with analytics
+      enabled. You will not see anything on a dashboard from Studio Play-testing — that's
+      expected, not a bug to report.
+
+<!-- M4 section complete. Do not delete completed sections above. -->

@@ -55,6 +55,10 @@ export type Snapshot = {
 	eraName: string,
 	state: PlayerState,
 	incomePerSecond: number,
+	-- M4 (wave 2): the persisted rate — no Studio debug multiplier, neighbors pinned to 1 — is
+	-- what the server prices cash packs with, so the shop previews grants against THIS and
+	-- never reconstructs it client-side. Always present on a snapshot.
+	persistedIncomePerSecond: number,
 	-- M2: present only on the first snapshot after an offline grant (elapsed >= 60 s).
 	welcomeBack: WelcomeBack?,
 }
@@ -63,6 +67,8 @@ export type Delta = {
 	kind: "delta",
 	cash: number?,
 	incomePerSecond: number?,
+	-- M4 (wave 2): emitted alongside incomePerSecond whenever the income flag flushes.
+	persistedIncomePerSecond: number?,
 	slots: { [string]: SlotState }?,
 	-- M3: the whole settings table whenever a RequestSetSetting write lands.
 	settings: { music: boolean, sfx: boolean }?,
@@ -99,7 +105,45 @@ export type FxRebirth = {
 	legacyGained: number,
 	rebirthCount: number,
 }
-export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth
+-- M4 monetization events. purchase carries the server-computed grant (packs are capped, so
+-- the client can never derive it); passGranted fires the moment a pass applies mid-session.
+export type FxPurchase = { kind: "purchase", productKey: string, grantedCash: number }
+export type FxPassGranted = { kind: "passGranted", passKey: string }
+export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth | FxPurchase | FxPassGranted
+
+-- Monetization.json v1 mirror; field names follow the JSON keys exactly. PassKey/ProductKey
+-- are persistence keys (state.passes) and analytics SKUs — never rename them. The def tables
+-- keep `key: string` because they are decoded from JSON, which Luau cannot narrow to a union.
+export type PassKey = "DoubleCash" | "OfflinePro" | "VIP"
+export type ProductKey = "Cash30m" | "Cash2h" | "Cash8h" | "DoubleOffline"
+
+export type PassDef = { key: string, id: number, name: string, description: string }
+
+export type ProductDef = {
+	key: string,
+	id: number,
+	name: string,
+	description: string,
+	-- Cash packs only: minutes of current income the pack is priced in. DoubleOffline has none.
+	minutes: number?,
+	-- Cash packs only: this pack's own anti-skip ceiling, as a fraction of the era's total slot
+	-- cost. Absent ⇒ the config-wide packCapFractionOfEraSlotCost. Per-pack because one global
+	-- cap made every pack converge on the same grant past the first fifth of an era, so the
+	-- expensive packs delivered exactly what the cheapest one buys (docs/INTERFACES.md M4).
+	capFraction: number?,
+	shopVisible: boolean,
+}
+
+export type MonetizationMultipliers = { doubleCash: number, vip: number, premium: number }
+
+export type MonetizationConfig = {
+	version: number,
+	multipliers: MonetizationMultipliers,
+	packCapFractionOfEraSlotCost: number,
+	receiptHistoryLimit: number,
+	passes: { PassDef },
+	products: { ProductDef },
+}
 
 -- RequestSetSetting keys; anything else is dropped by the remote validator.
 export type SettingKey = "music" | "sfx"
@@ -141,6 +185,8 @@ export type NeighborsConfig = { perPlayer: number, maxBonus: number }
 
 export type RemotesConfig = {
 	callsPerSecond: number,
+	-- v1.4: RequestPrompt opens a modal OS dialog, so it gets its own much tighter budget.
+	promptCallsPerSecond: number,
 	stateDeltaHz: number,
 	padTouchDebounce: number,
 }

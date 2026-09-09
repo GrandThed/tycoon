@@ -109,7 +109,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
-		ScrollBarThickness = 4,
+		ScrollBarThickness = Theme.SCROLLBAR_THICKNESS,
 		ScrollBarImageColor3 = Theme.COLOR_TEXT_DIM,
 		Parent = panel.Content,
 	}) :: ScrollingFrame
@@ -168,7 +168,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		BackgroundTransparency = 1,
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(1, -Theme.PADDING * 2, 0, 40),
+		Size = UDim2.new(1, -Theme.PADDING * 2, 0, Theme.EMPTY_LABEL_HEIGHT),
 		Font = Theme.FONT,
 		TextSize = Theme.TEXT_MEDIUM,
 		TextColor3 = Theme.COLOR_TEXT_DIM,

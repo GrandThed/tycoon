@@ -5,7 +5,9 @@
 -- Legacy previews use the shared pure Economy module and are overwritten by the next
 -- server push (docs/INTERFACES.md, M1–M3 client contracts). M3 adds the bottom bar with
 -- Legacy/Settings panels, the era-advance screen, the ceremony overlay, the welcome-back
--- card, sound hooks, and the landscape docking layout.
+-- card, sound hooks, and the landscape docking layout. M4 adds the Shop panel, the
+-- welcome-back "Double it" offer, purchase feedback, and the bonuses readout - all driven
+-- by Monetization.json ids, so with every id 0 the HUD is exactly the M3 HUD.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -14,6 +16,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
+local Format = require(sharedFolder:WaitForChild("Format"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -23,6 +26,7 @@ local TopBar = require(uiFolder:WaitForChild("TopBar"))
 local BottomBar = require(uiFolder:WaitForChild("BottomBar"))
 local BuildPanel = require(uiFolder:WaitForChild("BuildPanel"))
 local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
+local ShopPanel = require(uiFolder:WaitForChild("ShopPanel"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
 local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
 local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
@@ -35,11 +39,15 @@ type Model = {
 	eraName: string,
 	state: Types.PlayerState,
 	incomePerSecond: number,
+	-- The rate the server prices cash packs off (no Studio debug multiplier, neighbors
+	-- pinned to 1). Tracked like incomePerSecond and never derived here: only the Shop's
+	-- pack preview reads it, and only the server may compute it (wave-2 ruling 4).
+	persistedIncomePerSecond: number,
 }
 
 type PrestigeKind = "advance" | "rebirth"
 
-type PanelKey = "build" | "legacy" | "settings"
+type PanelKey = "build" | "legacy" | "shop" | "settings"
 
 -- Every dockable panel exposes this slice; UIController keeps one open at a time.
 type DockablePanel = {
@@ -49,6 +57,31 @@ type DockablePanel = {
 }
 
 local FIRST_ERA = 1
+
+-- Spec section 6: an item whose id is still 0 does not exist for the player. The Shop
+-- button appears only once the human has created at least one item the Shop can list --
+-- shopVisible = false products (DoubleOffline) are welcome-back-only, so on their own
+-- they must not open an empty panel (wave-2 ruling 6).
+local function hasShopListableId(monetization: Types.MonetizationConfig): boolean
+	for _, pass in monetization.passes do
+		if pass.id ~= 0 then
+			return true
+		end
+	end
+	for _, product in monetization.products do
+		if product.id ~= 0 and product.shopVisible then
+			return true
+		end
+	end
+	return false
+end
+
+-- Server-published rate; absent means luau-engineer's snapshot change is not in this
+-- build, and a 0 preview understates rather than overstating a real-money item.
+local function readPersistedRate(payload: { [string]: any }): number
+	local rate = payload.persistedIncomePerSecond
+	return if typeof(rate) == "number" then rate else 0
+end
 
 -- All UI copy uses displayName (M3 contract); a config that predates it degrades to name.
 local function eraDisplayName(eraConfig: Types.EraConfig?, fallback: string): string
@@ -136,8 +169,11 @@ local function boot(): ()
 	local requestAdvanceEra = remotesFolder:WaitForChild("RequestAdvanceEra") :: RemoteEvent
 	local requestRebirth = remotesFolder:WaitForChild("RequestRebirth") :: RemoteEvent
 	local requestSetSetting = remotesFolder:WaitForChild("RequestSetSetting") :: RemoteEvent
+	local requestPrompt = remotesFolder:WaitForChild("RequestPrompt") :: RemoteEvent
 
 	local gameConfig = Catalog.GetGameConfig()
+	-- Static for the life of the server, so the Shop button's visibility is decided once.
+	local monetization = Catalog.GetMonetizationConfig()
 
 	local screenGui = Create("ScreenGui", {
 		Name = "EraCityHUD",
@@ -155,6 +191,9 @@ local function boot(): ()
 	-- snapshots must be harmless, so the card additionally fires at most once a session.
 	local welcomeBackShown = false
 	local openPanelKey: PanelKey? = nil
+	-- Mirrors state.settings, but exists before the first snapshot so a toggle pressed
+	-- during loading still reaches SoundController (M3 carry-over b).
+	local localSettings = { music = true, sfx = true }
 
 	-- Forward declarations: layout and panel wiring reference each other.
 	local applyLayout: () -> ()
@@ -182,13 +221,10 @@ local function boot(): ()
 	local togglePanel: (key: PanelKey) -> ()
 	local bottomBar = BottomBar.new(screenGui, {
 		onTap = function(key: BottomBar.BarKey)
-			-- Shop stays hidden until M4 wires monetization ids; nothing to open.
-			if key == "build" or key == "legacy" or key == "settings" then
-				togglePanel(key)
-			end
+			togglePanel(key)
 		end,
 	})
-	bottomBar.SetShopVisible(false)
+	bottomBar.SetShopVisible(hasShopListableId(monetization))
 
 	togglePanel = function(panelKey: PanelKey): ()
 		local previous = openPanelKey
@@ -261,20 +297,33 @@ local function boot(): ()
 	})
 	local legacyPanel = LegacyPanel.new(screenGui, {
 		gameConfig = gameConfig,
+		monetization = monetization,
 		onPrestige = openPrestigeScreen,
+		onClose = closePanels,
+	})
+	local shopPanel = ShopPanel.new(screenGui, {
+		monetization = monetization,
+		-- Intent only: the server decides whether a prompt may be shown at all (spec
+		-- section 6 rule 2 - never a prompt the player did not open themselves).
+		onPrompt = function(key: string)
+			requestPrompt:FireServer(key)
+		end,
 		onClose = closePanels,
 	})
 	local settingsPanel = SettingsPanel.new(screenGui, {
 		onToggle = function(key: Types.SettingKey, value: boolean)
-			-- Apply locally at once; the next snapshot/delta is authoritative.
+			-- Apply locally at once, loaded or not (M3 carry-over b): the toggle must be
+			-- audible immediately even before the first snapshot arrives. The next
+			-- snapshot/delta stays authoritative and re-applies.
+			if key == "music" then
+				localSettings.music = value
+			else
+				localSettings.sfx = value
+			end
+			SoundController.ApplySettings(localSettings)
 			local current = model
 			if current ~= nil then
-				if key == "music" then
-					current.state.settings.music = value
-				else
-					current.state.settings.sfx = value
-				end
-				SoundController.ApplySettings(current.state.settings)
+				current.state.settings = { music = localSettings.music, sfx = localSettings.sfx }
 			end
 			requestSetSetting:FireServer(key, value)
 		end,
@@ -282,11 +331,23 @@ local function boot(): ()
 	})
 	panels.build = buildPanel
 	panels.legacy = legacyPanel
+	panels.shop = shopPanel
 	panels.settings = settingsPanel
 
-	local function applySettings(settings: { music: boolean, sfx: boolean }): ()
-		SoundController.ApplySettings(settings)
-		settingsPanel.SetSettings(settings)
+	local function applySettings(pushed: { music: boolean, sfx: boolean }): ()
+		localSettings = { music = pushed.music, sfx = pushed.sfx }
+		SoundController.ApplySettings(localSettings)
+		settingsPanel.SetSettings(localSettings)
+	end
+
+	-- Bonuses readout: VIP from server state, Premium from the local player's membership,
+	-- neighbors from the live player count (spec section 4). All three are previews of
+	-- what the server already folded into incomePerSecond.
+	local function refreshBonuses(): ()
+		local current = model
+		local vip = current ~= nil and current.state.passes.VIP == true
+		local premium = player.MembershipType == Enum.MembershipType.Premium
+		legacyPanel.SetBonuses(vip, premium, #Players:GetPlayers())
 	end
 
 	local function refreshAll(): ()
@@ -304,6 +365,10 @@ local function boot(): ()
 		legacyPanel.SetPrestige(prestigeLabel)
 		buildPanel.Refresh(state)
 		legacyPanel.Refresh(state)
+		-- Pack previews follow the persisted rate, which is what the server charges
+		-- against, and re-render on every push because that rate moves with the build.
+		shopPanel.Refresh(state, current.persistedIncomePerSecond, Catalog.GetEraConfig(state.era))
+		refreshBonuses()
 	end
 
 	local function applySnapshot(payload: { [string]: any }): ()
@@ -320,6 +385,7 @@ local function boot(): ()
 			eraName = snapshot.eraName,
 			state = snapshot.state,
 			incomePerSecond = snapshot.incomePerSecond,
+			persistedIncomePerSecond = readPersistedRate(payload),
 		}
 		if eraChanged then
 			-- Any open prestige screen described the era we just left; its numbers are stale.
@@ -349,6 +415,20 @@ local function boot(): ()
 			and typeof(welcomeBack.elapsedSeconds) == "number"
 		then
 			welcomeBackShown = true
+			-- Spec section 6 rule 3: the one contextual offer of the session, and only
+			-- when the human has actually created the product. Nothing auto-opens.
+			local doubleOffline = Catalog.GetProductDef("DoubleOffline")
+			if doubleOffline ~= nil and doubleOffline.id ~= 0 then
+				welcomeCard.SetDoubleOffer({
+					label = doubleOffline.name,
+					onTap = function()
+						requestPrompt:FireServer(doubleOffline.key)
+						welcomeCard.SetDoubleOffer(nil) -- one offer; the card may stay
+					end,
+				})
+			else
+				welcomeCard.SetDoubleOffer(nil)
+			end
 			welcomeCard.Show(welcomeBack.grantedCash, welcomeBack.elapsedSeconds)
 		end
 	end
@@ -365,6 +445,8 @@ local function boot(): ()
 		end
 		if typeof(delta.incomePerSecond) == "number" then
 			current.incomePerSecond = delta.incomePerSecond
+			-- Contract: the persisted rate ships with every income flush.
+			current.persistedIncomePerSecond = readPersistedRate(payload)
 		end
 		local slots = delta.slots
 		if typeof(slots) == "table" then
@@ -419,9 +501,51 @@ local function boot(): ()
 		end
 	end
 
-	-- eraAdvance / rebirth only; PlotVisualsController owns reveal / levelUp.
+	-- M4 purchase feedback. The cash itself arrives as a normal delta; this is only the
+	-- acknowledgement, and it reuses the existing purchase sound (Sounds.json is frozen).
+	local function onPurchaseFx(payload: { [string]: any }): ()
+		if payload.kind == "purchase" then
+			local granted = if typeof(payload.grantedCash) == "number"
+				then payload.grantedCash
+				else 0
+			-- A zero grant is reachable (a DoubleOffline receipt replayed with no record
+			-- left); "+$0" reads worse than saying nothing (wave-2 ruling 6).
+			if granted > 0 then
+				toast.Show("+$" .. Format.Cash(granted), Theme.TOAST_SECONDS, false)
+			end
+		else
+			local passKey = payload.passKey
+			if typeof(passKey) ~= "string" then
+				return
+			end
+			local def = Catalog.GetPassDef(passKey)
+			toast.Show(
+				(if def ~= nil then def.name else passKey) .. " active",
+				Theme.TOAST_SECONDS,
+				false
+			)
+			-- The grant delta carries income, not passes, so mirror the pass locally for
+			-- the badge and the Shop's Owned state; the next snapshot overwrites it.
+			local current = model
+			if current ~= nil then
+				current.state.passes[passKey] = true
+				refreshAll()
+			end
+		end
+		SoundController.Play("purchase")
+	end
+
+	-- eraAdvance / rebirth / purchase / passGranted; PlotVisualsController owns reveal
+	-- and levelUp.
 	local function onFxEvent(payload: any): ()
-		if typeof(payload) ~= "table" or typeof(payload.toEra) ~= "number" then
+		if typeof(payload) ~= "table" then
+			return
+		end
+		if payload.kind == "purchase" or payload.kind == "passGranted" then
+			onPurchaseFx(payload)
+			return
+		end
+		if typeof(payload.toEra) ~= "number" then
 			return
 		end
 		local kind = payload.kind
@@ -494,10 +618,14 @@ local function boot(): ()
 	actionResult.OnClientEvent:Connect(onActionResult)
 	fxEvent.OnClientEvent:Connect(onFxEvent)
 	player:GetAttributeChangedSignal("Cash"):Connect(onCashAttribute)
+	-- The neighbors bonus tracks the live player count, not a server push.
+	Players.PlayerAdded:Connect(refreshBonuses)
+	Players.PlayerRemoving:Connect(refreshBonuses)
 	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
 
 	applyLayout()
 	onCashAttribute()
+	refreshBonuses()
 	-- One explicit request on boot: the server's proactive join snapshot may have fired
 	-- before our connection existed; duplicate snapshots are harmless by design.
 	requestSnapshot:FireServer()

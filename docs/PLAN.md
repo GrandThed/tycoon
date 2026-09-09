@@ -12,7 +12,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [~] M2 — Persistence & eras (built, review SHIP after exploit fix, QA+sim green — awaiting combined M0–M2 playtest)
 - [~] M3 — Presentation (built, review SHIP, QA green — awaiting Studio playtest. The combined
   M0–M2 playtest is still pending too; can run in the same session as M3's)
-- [ ] M4 — Monetization & analytics
+- [~] M4 — Monetization & analytics (built, reviewer verdict SHIP after a Critical join-race fix
+  and four Major/Minor findings, QA green — awaiting Studio playtest)
 - [ ] M5 — Hardening
 
 ---
@@ -237,6 +238,53 @@ idempotency rule, time-priced grant computation, analytics event taxonomy.
 **Done when:** with all IDs 0 the game shows no monetization anywhere and errors nowhere; with
 IDs set, purchases grant correctly and receipts are idempotent. **Playtest gate:** Ben creates
 real passes/products and test-buys in Studio.
+
+**Shipped (2026-09-09):** `Config/Monetization.json` v1 (3 passes, 4 products, all ids `0`,
+per-pack `capFraction` 0.10/0.25/0.50 — see "Per-pack caps" amendment below); `Economy.luau`
+additions (`EraSlotCostTotal`, `PackGrant`, `PassMult`, `PremiumMult`), pure and mirrored by
+`sim_economy.py`'s new `--passes`/`--premium`/`--packs` flags. Server: `MonetizationService`
+(cached `UserOwnsGamePassAsync` refresh on join, `PromptGamePassPurchaseFinished` applies a pass
+mid-session, idempotent `ProcessReceipt` with a rollback on failed save, VIP name tag);
+`AnalyticsService` (sink/source/progression events, all `pcall`-wrapped no-ops on failure);
+`EconomyService` passes/Premium live in the live/reported/persisted rate trio, Offline Pro
+cap/efficiency switch, `Reserve/Release/ConsumeDoubleOfflineGrant`; `PlotService.RefreshCosmetics`
+(silent VIP re-skin); `DataService.SaveAsync`; `RequestPrompt` remote with its own rate-limit
+bucket (`remotes.promptCallsPerSecond`, Game.json v1.4). Client: `ShopPanel` (Passes then Packs,
+id-0 items hidden, previews the persisted rate so the shown grant matches what's actually
+credited), Shop button gated on any non-zero id, welcome-back "Double it", VIP/Premium/neighbors
+indicator, `purchase`/`passGranted` toasts. `docs/BALANCE.md`'s M4 half: paid-stack verification
+(2.42×, the exact number spec §6's own multiplier table implies — satisfies rule 5's "≤ ~2.4×"),
+the per-pack-cap decision and `--packs` tables, the analytics taxonomy, and the 1 : 2.2 : 4.2
+pricing ladder recommendation.
+
+Reviewer found one Critical (a join-sequence yield that could silently zero a player's offline
+grant once a real pass id existed) and four Major/Minor findings (receipt-save rollback,
+`DoubleOffline` reserve-at-prompt-time instead of drop-at-receipt-time, the shop preview using
+the reported rate instead of the persisted rate — up to +27% overstated in a full server — and
+`RequestPrompt`'s own rate bucket). All five are fixed; see INTERFACES.md's "Post-review
+amendments (M4 wave 2)" for the exact rulings. QA green (`stylua`, `selene`, `luau-lsp analyze`,
+`rojo build`, `sim_economy.py --check` unchanged from M2, `gen_asset_manifest.py --check`).
+
+**Carried forward (owners assigned):**
+- **Done this milestone** (were assigned to ui-engineer at M4, from the M3 list): Shop button
+  visibility wired to any non-zero id; "Double it" wired to the welcome-back card; `passes.VIP`
+  driving the gold plot sign and VIP building skins; the VIP name tag on the character's head;
+  the landscape-panel/top-bar overlap clamp at narrow widths; the pre-snapshot settings-toggle
+  fix; the `Theme` inset hoist (`Panel.luau`, `BuildPanel.luau`).
+- **New, M5 — luau-engineer:** `DataService.SaveAsync`'s durability caveat is an accepted risk,
+  not a fix, for M4 (see `docs/MANUAL_STEPS.md` M4 §8 and INTERFACES.md amendment 6) — `Save()`
+  is non-yielding, so a `true` return means "accepted into an active session", not "durably
+  written"; a server crash in that window loses Robux with no retry. M5 should evaluate whether
+  a stronger guarantee (e.g. waiting on a confirmed write, or a reconciliation job) is worth the
+  added latency on a real-money path.
+- **New, M5 — luau-engineer:** the open `DoubleOffline` reservation edge (a player leaving with
+  an offer reserved but not completed causes a later-session receipt, if one somehow arrives, to
+  grant `0` with a `warn` instead of a value) — low-frequency, documented, not fixed this
+  milestone.
+- **New, M5 — economy-designer / Ben:** cash-pack Robux pricing must follow the **1 : 2.2 : 4.2**
+  ladder derived in `docs/BALANCE.md` (`Cash2h` at most 2.5× `Cash30m`, `Cash8h` at most 5×) —
+  applies whenever real Robux prices are actually set on the Creator Hub, tracked here so it
+  isn't lost before M5's final balance pass.
 
 ## M5 — Hardening
 

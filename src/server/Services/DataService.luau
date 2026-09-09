@@ -20,6 +20,7 @@ type Profile = {
 	OnSessionEnd: SessionSignal,
 	AddUserId: (self: Profile, userId: number) -> (),
 	Reconcile: (self: Profile) -> (),
+	Save: (self: Profile) -> (),
 	EndSession: (self: Profile) -> (),
 	IsActive: (self: Profile) -> boolean,
 }
@@ -196,6 +197,37 @@ function DataService.SetSetting(player: Player, key: Types.SettingKey, value: bo
 		return false
 	end
 	return true
+end
+
+-- Explicit profile save, used by the receipt handler so a grant and its PurchaseId reach the
+-- DataStore before PurchaseGranted is returned. ProfileStore's Save queues the write on its own
+-- thread and retries the underlying DataStore itself, so `true` means "accepted into an active
+-- session", NOT "durably written to the DataStore" — that is the strongest guarantee this API
+-- can offer; do not read more into the boolean than that. `false` (no profile, inactive session, or
+-- a thrown call) makes the caller return NotProcessedYet so Roblox retries the receipt.
+function DataService.SaveAsync(player: Player): boolean
+	local profile = profiles[player]
+	if profile == nil then
+		warn(`[DataService] SaveAsync with no loaded profile for {player.Name}`)
+		return false
+	end
+	for attempt = 1, LOAD_RETRY_ATTEMPTS do
+		if not profile:IsActive() then
+			warn(`[DataService] SaveAsync on an inactive session for {player.Name}`)
+			return false
+		end
+		local ok, err = pcall(function()
+			profile:Save()
+		end)
+		if ok then
+			return true
+		end
+		warn(`[DataService] Save failed for {player.Name} (attempt {attempt}): {err}`)
+		if attempt < LOAD_RETRY_ATTEMPTS then
+			task.wait(LOAD_RETRY_BASE_SECONDS * 2 ^ (attempt - 1))
+		end
+	end
+	return false
 end
 
 -- Final save + session release. lastSeen/incomeAtSave are already fresh via the tick rule.

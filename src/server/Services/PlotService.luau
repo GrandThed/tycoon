@@ -18,6 +18,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
@@ -199,6 +200,9 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 
 	local wanted = math.min(count, headroom)
 	local granted = 0
+	-- Cash actually charged, for the single analytics sink event this action logs (a grant of
+	-- n levels is one event, never n) — stays 0 on the Studio free-buy path.
+	local charged = 0
 	if isStudio and gameConfig.debug.studioFreeBuy then
 		-- Free-buy skips affordability entirely: grant the full clamped count, charge nothing.
 		granted = wanted
@@ -219,6 +223,7 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 			return
 		end
 		state.cash -= totalCost
+		charged = totalCost
 	end
 
 	local fromLevel = slotState.level
@@ -231,6 +236,7 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		end
 	end
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
+	AnalyticsService.LogCashSink(player, charged, state.cash, `level:{eraConfig.name}:{slotId}`)
 	fireFx(player, {
 		kind = "levelUp",
 		slotId = slotId,
@@ -467,12 +473,14 @@ function tryBuy(player: Player, slotId: string): ()
 	-- Free-buy skips affordability only (never the requires chain) and charges nothing, so
 	-- testing from zero cash cannot drive the balance negative.
 	local freeBuy = isStudio and gameConfig.debug.studioFreeBuy
+	local charged = 0
 	if not freeBuy then
 		if state.cash < slot.baseCost then
 			sendFailure(player, "buy", slotId, "insufficientFunds")
 			return
 		end
 		state.cash -= slot.baseCost
+		charged = slot.baseCost
 	end
 	state.slots[slotId] = { level = 1 }
 
@@ -482,6 +490,7 @@ function tryBuy(player: Player, slotId: string): ()
 		refreshPads(record, state, eraConfig, layout)
 	end
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
+	AnalyticsService.LogCashSink(player, charged, state.cash, `slot:{eraConfig.name}:{slotId}`)
 	-- After spawn + MarkDirty so the Building_<slotId> instance replicates ahead of the event.
 	fireFx(player, {
 		kind = "reveal",
@@ -608,6 +617,8 @@ local function tryAdvanceEra(player: Player): ()
 	state.stats.erasCompleted += 1
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	AnalyticsService.LogLegacySource(player, legacyGained, state.legacy, `era:{fromEra}`)
+	AnalyticsService.LogEraProgression(player, fromEra, false)
 	-- Restamp the persisted rate NOW (0 for the empty era): a disconnect before the next tick
 	-- must not save the completed era's rate for ApplyOfflineGrant to pay into the new era.
 	EconomyService.RefreshPersistedRate(player)
@@ -667,6 +678,8 @@ local function tryRebirth(player: Player): ()
 	state.stats.erasCompleted += 1
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
+	AnalyticsService.LogLegacySource(player, legacyGained, state.legacy, `era:{fromEra}`)
+	AnalyticsService.LogEraProgression(player, fromEra, true)
 	-- Same as tryAdvanceEra: never let the Era-4 rate persist next to Era 1's empty slots.
 	EconomyService.RefreshPersistedRate(player)
 	-- Ceremony event before the snapshot, as in tryAdvanceEra.
@@ -824,6 +837,20 @@ function PlotService.ClaimPlot(player: Player): ()
 	plotsByPlayer[player] = record
 	player:SetAttribute("PlotIndex", record.index)
 	-- Rebuilds owned buildings from persisted state.slots (bulk restore, no reveal effects).
+	rebuildPlotForEra(record, state)
+	refreshSign(record, player, state)
+end
+
+-- MonetizationService calls this when a pass is granted mid-session (VIP is the only pass with
+-- cosmetics, but calling it for any pass is harmless). Re-runs the bulk-restore path, which
+-- re-resolves every owned building through the VIP-aware template lookup and re-tints the plot
+-- sign — silently, per bulk-restore rules: no FxEvents, no tweens, no sounds.
+function PlotService.RefreshCosmetics(player: Player): ()
+	local record = plotsByPlayer[player]
+	local state = DataService.GetState(player)
+	if record == nil or state == nil then
+		return
+	end
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
 end

@@ -29,12 +29,22 @@ function PanelDock.Compute(scale: number, viewportSize: Vector2, designHeight: n
 	if PanelDock.IsLandscape(viewportSize) then
 		local height =
 			math.max((viewportSize.Y - margin - bottomZone) / scale, Theme.PANEL_MIN_HEIGHT)
+		-- M4 carry-over (a): the top bar is docked top-left in landscape and the panel
+		-- top-right at the same Y, so on a narrow viewport (640x360) the design widths
+		-- no longer both fit and the panel covered the era badge. Clamp to the width
+		-- left beside the top bar. Below ~583 px of viewport width the floor wins and a
+		-- small overlap returns — narrower than any landscape device Roblox ships on.
+		local beside = viewportSize.X / scale
+			- Theme.SCREEN_MARGIN * 2
+			- Theme.TOP_BAR_WIDTH
+			- Theme.PANEL_TOP_BAR_GAP
+		local width = math.clamp(beside, Theme.PANEL_MIN_WIDTH, Theme.PANEL_WIDTH)
 		return {
 			scale = scale,
 			landscape = true,
 			anchor = Vector2.new(1, 0),
 			position = UDim2.new(1, -margin, 0, margin),
-			size = UDim2.fromOffset(Theme.PANEL_WIDTH, height),
+			size = UDim2.fromOffset(width, height),
 			slideOffset = UDim2.fromOffset(Theme.PANEL_SLIDE_OFFSET, 0),
 		}
 	end

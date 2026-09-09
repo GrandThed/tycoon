@@ -15,6 +15,7 @@ local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local EconomyService = require(servicesFolder:WaitForChild("EconomyService"))
 local PlotService = require(servicesFolder:WaitForChild("PlotService"))
 local MonetizationService = require(servicesFolder:WaitForChild("MonetizationService"))
+local AnalyticsService = require(servicesFolder:WaitForChild("AnalyticsService"))
 
 type Service = {
 	Init: () -> (),
@@ -28,6 +29,8 @@ local orderedServices: { Service } = {
 	EconomyService,
 	PlotService,
 	MonetizationService,
+	-- AnalyticsService goes last: it depends on nothing, and nothing depends on its Start.
+	AnalyticsService,
 }
 
 for _, service in orderedServices do
@@ -60,6 +63,15 @@ local function onPlayerAdded(player: Player): ()
 			return
 		end
 		if player.Parent == nil then
+			DataService.Release(player)
+			return
+		end
+		-- Passes first (yields): the offline grant must already see Offline Pro's wider cap
+		-- and full efficiency, and the join snapshot must report the paid income multipliers.
+		MonetizationService.RefreshPassesAsync(player)
+		-- Same "left during the yield" guard as above, phrased against Players so the solver
+		-- doesn't treat the already-narrowed player.Parent as non-nil.
+		if not player:IsDescendantOf(Players) then
 			DataService.Release(player)
 			return
 		end

@@ -9,8 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Catalog"))
 
--- Every reserved remote exists from Init so the client can WaitForChild all of them;
--- RequestPrompt stays reserved (validator/handler land at M4) and has no dispatcher.
+-- Every reserved remote exists from Init so the client can WaitForChild all of them.
 -- FxEvent (M3) is server→client only: presentation events, owner only, never on bulk restore.
 local REMOTE_NAMES = {
 	"RequestSnapshot",
@@ -58,6 +57,11 @@ local validators: { [string]: Validator } = {
 	RequestRebirth = function(args: PackedArgs): boolean
 		return args.n == 0
 	end,
+	RequestPrompt = function(args: PackedArgs): boolean
+		-- The key itself is resolved (and unknown keys dropped) by MonetizationService, which
+		-- owns the pass/product tables; the validator only guarantees the shape.
+		return args.n == 1 and typeof(args[1]) == "string"
+	end,
 	RequestSetSetting = function(args: PackedArgs): boolean
 		-- Only the two Types.SettingKey values exist; anything else is a silent drop.
 		return args.n == 2
@@ -66,8 +70,18 @@ local validators: { [string]: Validator } = {
 	end,
 }
 
+-- RequestPrompt opens a modal OS purchase dialog rather than performing a game action, so it
+-- gets its own much tighter budget (Game.json v1.4); every other remote shares callsPerSecond.
+local function bucketCallsPerSecond(remoteName: string): number
+	local remotesConfig = Catalog.GetGameConfig().remotes
+	if remoteName == "RequestPrompt" then
+		return remotesConfig.promptCallsPerSecond
+	end
+	return remotesConfig.callsPerSecond
+end
+
 local function tryConsumeToken(player: Player, remoteName: string): boolean
-	local callsPerSecond = Catalog.GetGameConfig().remotes.callsPerSecond
+	local callsPerSecond = bucketCallsPerSecond(remoteName)
 	local playerBuckets = buckets[player]
 	if playerBuckets == nil then
 		playerBuckets = {}

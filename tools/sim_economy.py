@@ -22,8 +22,11 @@ Usage:
                                                   # eras 1..N, legacy carried
   python tools/sim_economy.py --era 2 --legacy 50 # one era in isolation
   python tools/sim_economy.py --strategy rusher   # slots-only player
-  python tools/sim_economy.py --check             # default greedy run; exit 1
+  py tools/sim_economy.py --check                  # default greedy run; exit 1
                                                   # if any era misses its band
+  py tools/sim_economy.py --passes doublecash,vip --premium
+                                                  # fully-paid pacing
+  py tools/sim_economy.py --packs                 # cash-pack grants per era
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GAME_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Game.json"
 ERAS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Eras"
+MONETIZATION_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Monetization.json"
 
 # Spec section 4 pacing bands (seconds) for the DEFAULT greedy run with legacy
 # carry. Tool-only constants: INTERFACES.md sanctions the bands living here.
@@ -149,6 +153,41 @@ def offline_grant(elapsed_seconds, ips, cap_seconds, efficiency):
     return max(0, min(elapsed_seconds, cap_seconds)) * ips * efficiency
 
 
+def era_slot_cost_total(era):
+    """Economy.EraSlotCostTotal"""
+    return sum(slot["baseCost"] for slot in era["slots"])
+
+
+def pack_grant(minutes, ips, slot_cost_total, cap_fraction):
+    """Economy.PackGrant"""
+    return max(0.0, min(minutes * 60 * ips, cap_fraction * slot_cost_total))
+
+
+def pack_cap_fraction(product, monetization):
+    """Caller-side rule (INTERFACES.md M4 "Per-pack caps"):
+    def.capFraction or cfg.packCapFractionOfEraSlotCost."""
+    fraction = product.get("capFraction")
+    if fraction is None:
+        fraction = monetization["packCapFractionOfEraSlotCost"]
+    return fraction
+
+
+def pass_mult(passes, monetization):
+    """Economy.PassMult"""
+    multipliers = monetization["multipliers"]
+    value = 1.0
+    if passes.get("DoubleCash"):
+        value *= multipliers["doubleCash"]
+    if passes.get("VIP"):
+        value *= multipliers["vip"]
+    return value
+
+
+def premium_mult(is_premium, monetization):
+    """Economy.PremiumMult"""
+    return monetization["multipliers"]["premium"] if is_premium else 1
+
+
 # --------------------------------------------------------------------------
 # Config loading
 # --------------------------------------------------------------------------
@@ -156,6 +195,11 @@ def offline_grant(elapsed_seconds, ips, cap_seconds, efficiency):
 
 def load_game_config():
     with open(GAME_CONFIG_PATH, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def load_monetization_config():
+    with open(MONETIZATION_CONFIG_PATH, encoding="utf-8") as handle:
         return json.load(handle)
 
 
@@ -202,7 +246,8 @@ def resolve_requires(era):
     return requires
 
 
-def simulate_era(era, game, legacy, strategy):
+def simulate_era(era, game, legacy, strategy, paid=None, record_ips=False):
+    """paid = {"pass": x, "premium": y}; None keeps the free-player defaults."""
     by_id = {slot["id"]: slot for slot in era["slots"]}
     requires = resolve_requires(era)
     children = {}
@@ -214,10 +259,12 @@ def simulate_era(era, game, legacy, strategy):
     result.legacy_in = legacy
     mults = {
         "legacy": legacy_mult(legacy, game),
-        "pass": 1,
-        "premium": 1,
+        "pass": paid["pass"] if paid else 1,
+        "premium": paid["premium"] if paid else 1,
         "neighbors": 1,
     }
+    if record_ips:
+        result.ips_series = []
 
     owned = {}  # slotId -> level (every slot type gets level 1 on buy)
     frontier = [slot["id"] for slot in era["slots"] if requires[slot["id"]] is None]
@@ -273,6 +320,8 @@ def simulate_era(era, game, legacy, strategy):
                 result.level_buys += 1
             ips = income_per_second(owned, era, game, mults)
 
+        if record_ips:
+            result.ips_series.append(ips)
         t += 1
         if t > TICK_LIMIT:
             raise RuntimeError(
@@ -329,9 +378,28 @@ def print_era_result(result, check_band):
     return True
 
 
-def run_full(game, eras, strategy, check):
+def paid_label(paid):
+    """Header fragment; empty for the free player so default output never moves."""
+    if paid is None:
+        return ""
+    bits = []
+    if paid["passes"].get("DoubleCash"):
+        bits.append("DoubleCash")
+    if paid["passes"].get("VIP"):
+        bits.append("VIP")
+    if paid["premium"] > 1:
+        bits.append("Premium")
+    joined = "+".join(bits) if bits else "none"
+    return (
+        f"paid {joined} (pass x{paid['pass']:.2f}, "
+        f"premium x{paid['premium']:.2f}), "
+    )
+
+
+def run_full(game, eras, strategy, check, paid=None):
     print(
         f"Era City Tycoon economy sim -- strategy={strategy}, "
+        f"{paid_label(paid)}"
         "full playthrough, legacy carried across advances"
     )
     print()
@@ -339,7 +407,7 @@ def run_full(game, eras, strategy, check):
     total_seconds = 0
     all_in_band = True
     for era in eras:
-        result = simulate_era(era, game, legacy, strategy)
+        result = simulate_era(era, game, legacy, strategy, paid)
         result.legacy_in_mult = legacy_mult(legacy, game)
         in_band = print_era_result(result, check)
         all_in_band = all_in_band and in_band
@@ -350,20 +418,99 @@ def run_full(game, eras, strategy, check):
     return all_in_band
 
 
-def run_single(game, eras, era_index, legacy, strategy):
+def run_single(game, eras, era_index, legacy, strategy, paid=None):
     era = next((e for e in eras if e["eraIndex"] == era_index), None)
     if era is None:
         print(f"error: no era config with eraIndex {era_index}", file=sys.stderr)
         return False
     print(
         f"Era City Tycoon economy sim -- strategy={strategy}, "
+        f"{paid_label(paid)}"
         f"era {era_index} in isolation, legacy={legacy}"
     )
     print()
-    result = simulate_era(era, game, legacy, strategy)
+    result = simulate_era(era, game, legacy, strategy, paid)
     result.legacy_in_mult = legacy_mult(legacy, game)
     print_era_result(result, False)
     return True
+
+
+def fmt_cash(value):
+    """Compact magnitude for the packs table (report-only; UI uses Format.luau)."""
+    for suffix, scale in (("T", 1e12), ("B", 1e9), ("M", 1e6), ("K", 1e3)):
+        if abs(value) >= scale:
+            return f"{value / scale:.2f}{suffix}"
+    return f"{value:.2f}"
+
+
+def run_packs(game, eras, monetization):
+    """Evidence for spec section 6 rule 6: what a pack actually delivers.
+
+    Mid-era income is the free greedy player's income at the halfway point (in
+    time) of the default run, legacy carried -- i.e. the moment a player is
+    most likely to consider a pack.
+    """
+    default_fraction = monetization["packCapFractionOfEraSlotCost"]
+    packs = [p for p in monetization["products"] if p.get("minutes") is not None]
+    print(
+        "Era City Tycoon pack report -- grants at mid-era income of the default "
+        "greedy run"
+    )
+    print(
+        "cap = the pack's own capFraction (default "
+        f"packCapFractionOfEraSlotCost {default_fraction:g}) x era total slot cost"
+    )
+    print()
+    legacy = 0
+    for era in eras:
+        result = simulate_era(era, game, legacy, "greedy", None, True)
+        result.legacy_in_mult = legacy_mult(legacy, game)
+        total_cost = era_slot_cost_total(era)
+        mid_index = min(result.seconds // 2, len(result.ips_series) - 1)
+        mid_ips = result.ips_series[mid_index]
+        print(f"Era {era['eraIndex']}: {era['name']}")
+        print(
+            f"  era length {fmt_time(result.seconds)}, total slot cost "
+            f"{fmt_cash(total_cost)}"
+        )
+        print(
+            f"  mid-era ({fmt_time(mid_index)}) income {fmt_cash(mid_ips)}/s"
+        )
+        print(
+            f"  {'pack':<10}{'capFrac':>9}{'uncapped':>12}{'cap':>12}"
+            f"{'granted':>12}{'% era cost':>12}{'capped?':>9}{'real mins':>11}"
+        )
+        for pack in packs:
+            minutes = pack["minutes"]
+            fraction = pack_cap_fraction(pack, monetization)
+            cap = fraction * total_cost
+            uncapped = minutes * 60 * mid_ips
+            granted = pack_grant(minutes, mid_ips, total_cost, fraction)
+            real_minutes = granted / mid_ips / 60 if mid_ips > 0 else 0
+            print(
+                f"  {pack['key']:<10}{fraction:>9.2f}"
+                f"{fmt_cash(uncapped):>12}{fmt_cash(cap):>12}"
+                f"{fmt_cash(granted):>12}{100 * granted / total_cost:>11.1f}%"
+                f"{('yes' if granted < uncapped - 1e-6 else 'no'):>9}"
+                f"{real_minutes:>11.1f}"
+            )
+        print()
+        legacy += result.legacy_gained
+
+
+def parse_passes(raw):
+    """--passes doublecash,vip -> the Economy.PassMult `passes` map."""
+    known = {"doublecash": "DoubleCash", "vip": "VIP", "offlinepro": "OfflinePro"}
+    passes = {}
+    for token in raw.split(","):
+        token = token.strip().lower()
+        if not token:
+            continue
+        if token not in known:
+            print(f"error: unknown pass '{token}'", file=sys.stderr)
+            sys.exit(2)
+        passes[known[token]] = True
+    return passes
 
 
 def main():
@@ -379,6 +526,21 @@ def main():
         help="greedy = cheapest affordable thing; rusher = slots only",
     )
     parser.add_argument(
+        "--passes",
+        default="",
+        help="comma-separated passes to own, e.g. doublecash,vip (default none)",
+    )
+    parser.add_argument(
+        "--premium",
+        action="store_true",
+        help="simulate a Roblox Premium member",
+    )
+    parser.add_argument(
+        "--packs",
+        action="store_true",
+        help="report cash-pack grants per era (uncapped value, cap, delivered)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="run the default greedy playthrough and exit 1 if any era misses its band",
@@ -387,9 +549,29 @@ def main():
 
     game = load_game_config()
     eras = load_eras()
+    monetization = load_monetization_config()
+
+    paid = None
+    passes = parse_passes(args.passes)
+    if passes or args.premium:
+        paid = {
+            "passes": passes,
+            "pass": pass_mult(passes, monetization),
+            "premium": premium_mult(args.premium, monetization),
+        }
+
+    if args.packs:
+        if paid is not None:
+            print(
+                "error: --packs reports the free player's mid-era income only",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        run_packs(game, eras, monetization)
+        sys.exit(0)
 
     if args.check:
-        if args.era is not None or args.strategy != "greedy":
+        if args.era is not None or args.strategy != "greedy" or paid is not None:
             print("error: --check runs the default greedy playthrough only", file=sys.stderr)
             sys.exit(2)
         ok = run_full(game, eras, "greedy", True)
@@ -398,10 +580,10 @@ def main():
         sys.exit(0 if ok else 1)
 
     if args.era is not None:
-        ok = run_single(game, eras, args.era, args.legacy, args.strategy)
+        ok = run_single(game, eras, args.era, args.legacy, args.strategy, paid)
         sys.exit(0 if ok else 2)
 
-    run_full(game, eras, args.strategy, False)
+    run_full(game, eras, args.strategy, False, paid)
     sys.exit(0)
 
 

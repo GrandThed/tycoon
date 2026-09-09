@@ -4,6 +4,12 @@
 -- (UIController decides eligibility exactly as it does for the Build-panel banner). The
 -- Legacy shop is Phase 2, so one dim placeholder line is all it gets. Display only:
 -- every number is server state or a shared-Economy preview of it.
+--
+-- M4 adds the bonuses readout (contract: top bar or Legacy panel, my judgment): the
+-- neighbors bonus (spec §4, always shown so players see why friends help) plus VIP and
+-- Premium lines that only exist while the player actually has them. The 375x667 top bar
+-- is already four values wide, so this lives here; the content scrolls because a
+-- 360 px-tall landscape viewport cannot show every line at once.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -21,6 +27,7 @@ local SoundController =
 
 export type Deps = {
 	gameConfig: Types.GameConfig,
+	monetization: Types.MonetizationConfig,
 	onPrestige: () -> (),
 	onClose: () -> (),
 }
@@ -28,6 +35,7 @@ export type Deps = {
 export type LegacyPanelHandle = {
 	DesignHeight: number,
 	Refresh: (state: Types.PlayerState) -> (),
+	SetBonuses: (vip: boolean, premium: boolean, playerCount: number) -> (),
 	SetPrestige: (label: string?) -> (),
 	SetOpen: (open: boolean) -> (),
 	IsOpen: () -> boolean,
@@ -43,13 +51,27 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 	local panel = Panel.new(parent, {
 		name = "LegacyPanel",
 		title = "Legacy",
-		designHeight = Theme.PANEL_HEIGHT_COMPACT,
+		-- Full height since M4 added the bonuses block: at 375x667 every line fits
+		-- without scrolling, and short landscape viewports scroll instead of clipping.
+		designHeight = Theme.PANEL_HEIGHT,
 		onClose = deps.onClose,
 	})
+	local scroll = Create("ScrollingFrame", {
+		Name = "Lines",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = Theme.SCROLLBAR_THICKNESS,
+		ScrollBarImageColor3 = Theme.COLOR_TEXT_DIM,
+		Parent = panel.Content,
+	}) :: ScrollingFrame
 	Create("UIListLayout", {
 		Padding = UDim.new(0, Theme.INFO_LINE_GAP),
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = panel.Content,
+		Parent = scroll,
 	})
 
 	local function line(name: string, order: number, color: Color3, bold: boolean): TextLabel
@@ -57,14 +79,14 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 			Name = name,
 			LayoutOrder = order,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, Theme.INFO_LINE_HEIGHT),
+			Size = UDim2.new(1, -Theme.ROW_SPACING, 0, Theme.INFO_LINE_HEIGHT),
 			Font = if bold then Theme.FONT_BOLD else Theme.FONT,
 			TextSize = if bold then Theme.TEXT_HEADER else Theme.TEXT_MEDIUM,
 			TextColor3 = color,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Text = "",
-			Parent = panel.Content,
+			Parent = scroll,
 		}) :: TextLabel
 	end
 
@@ -76,7 +98,7 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 	local prestigeButton = Create("TextButton", {
 		Name = "PrestigeEntry",
 		LayoutOrder = 5,
-		Size = UDim2.new(1, 0, 0, Theme.PRESTIGE_ROW_HEIGHT),
+		Size = UDim2.new(1, -Theme.ROW_SPACING, 0, Theme.PRESTIGE_ROW_HEIGHT),
 		BackgroundColor3 = Theme.COLOR_HIGHLIGHT,
 		BorderSizePixel = 0,
 		Font = Theme.FONT_BOLD,
@@ -85,14 +107,22 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Text = "",
 		Visible = false,
-		Parent = panel.Content,
+		Parent = scroll,
 	}) :: TextButton
 	Create(
 		"UICorner",
 		{ CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = prestigeButton }
 	)
 
-	local perksLabel = line("Perks", 6, Theme.COLOR_TEXT_DIM, false)
+	local bonusesHeader = line("Bonuses", 6, Theme.COLOR_TEXT_DIM, true)
+	bonusesHeader.Text = "BONUSES"
+	local neighborsLabel = line("Neighbors", 7, Theme.COLOR_ACCENT_ALT, false)
+	local vipLabel = line("Vip", 8, Theme.COLOR_HIGHLIGHT, false)
+	vipLabel.Visible = false
+	local premiumLabel = line("Premium", 9, Theme.COLOR_HIGHLIGHT, false)
+	premiumLabel.Visible = false
+
+	local perksLabel = line("Perks", 10, Theme.COLOR_TEXT_DIM, false)
 	perksLabel.Text = "Legacy perks: coming later"
 
 	local function refresh(state: Types.PlayerState): ()
@@ -109,6 +139,22 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 		nextGainLabel.Text = "Next advance: +" .. Format.Cash(gain) .. " Legacy"
 	end
 
+	-- Multipliers are previews of what the server already applied to incomePerSecond; the
+	-- numbers come from the same shared config the server reads, never from the client.
+	local function setBonuses(vip: boolean, premium: boolean, playerCount: number): ()
+		local neighbors = Economy.NeighborsMult(playerCount, deps.gameConfig)
+		neighborsLabel.Text = "Neighbors: ×"
+			.. Format.Rate(neighbors)
+			.. " ("
+			.. tostring(playerCount)
+			.. (if playerCount == 1 then " player)" else " players)")
+		local multipliers = deps.monetization.multipliers
+		vipLabel.Visible = vip
+		vipLabel.Text = "VIP: ×" .. Format.Rate(multipliers.vip) .. " income"
+		premiumLabel.Visible = premium
+		premiumLabel.Text = "Premium: ×" .. Format.Rate(multipliers.premium) .. " income"
+	end
+
 	table.insert(
 		connections,
 		prestigeButton.Activated:Connect(function()
@@ -120,6 +166,7 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 	local handle: LegacyPanelHandle = {
 		DesignHeight = panel.DesignHeight,
 		Refresh = refresh,
+		SetBonuses = setBonuses,
 		SetPrestige = function(label: string?)
 			prestigeButton.Visible = label ~= nil
 			prestigeButton.Text = label or ""

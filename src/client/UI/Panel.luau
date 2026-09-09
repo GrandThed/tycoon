@@ -56,8 +56,13 @@ function Panel.new(parent: Instance, deps: PanelDeps): PanelHandle
 	local titleLabel = Create("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(Theme.PADDING + 2, 0),
-		Size = UDim2.new(1, -Theme.PADDING - Theme.CLOSE_BUTTON_SIZE - 16, 0, Theme.HEADER_HEIGHT),
+		Position = UDim2.fromOffset(Theme.PADDING + Theme.PANEL_TITLE_INSET, 0),
+		Size = UDim2.new(
+			1,
+			-Theme.PADDING - Theme.CLOSE_BUTTON_SIZE - Theme.PANEL_TITLE_TRIM,
+			0,
+			Theme.HEADER_HEIGHT
+		),
 		Font = Theme.FONT_BOLD,
 		TextSize = Theme.TEXT_HEADER,
 		TextColor3 = Theme.COLOR_TEXT,

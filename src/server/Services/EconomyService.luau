@@ -11,6 +11,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
@@ -27,8 +28,22 @@ type DirtyRecord = {
 	settings: boolean,
 }
 
+-- Session-scoped record of the offline grant this player received on join, so the welcome-back
+-- card's "Double it" product can be honoured for the whole session (the card can be tapped a
+-- while after the snapshot). Single use: ConsumeDoubleOfflineGrant flips `used`.
+-- reserved: a purchase dialog for DoubleOffline is open right now. Reserving at prompt time
+-- (not at receipt time) is what stops a modified client opening two dialogs and paying twice
+-- for one grant; a declined or failed prompt releases the reservation.
+type OfflineRecord = { amount: number, reserved: boolean, used: boolean }
+
 local dirtyRecords: { [Player]: DirtyRecord } = {}
 local pendingWelcomeBack: { [Player]: Types.WelcomeBack } = {}
+local offlineRecords: { [Player]: OfflineRecord } = {}
+-- The income tick must not touch a player whose join sequence is still running: passes are
+-- refreshed with a yielding Marketplace call before ApplyOfflineGrant, and a tick landing in
+-- that window would restamp lastSeen and silently zero the offline grant. It also stops income
+-- accruing into a plot the player has not been given yet.
+local joinComplete: { [Player]: boolean } = {}
 local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
 local flushAccumulator = 0
@@ -42,7 +57,27 @@ local function getDirtyRecord(player: Player): DirtyRecord
 	return record
 end
 
--- Legacy + neighbors are live since M2; pass/premium stay 1 until M4.
+-- Passes and Premium are account properties, not session state, so they multiply the live,
+-- the reported AND the persisted rate (M4 contract): offline earnings carry them too.
+-- The monetization config is passed in rather than fetched here: grantIncome resolves it once
+-- per tick instead of four times per player.
+local function computePassMult(
+	state: Types.PlayerState,
+	monetizationConfig: Types.MonetizationConfig
+): number
+	return Economy.PassMult(state.passes, monetizationConfig)
+end
+
+local function computePremiumMult(
+	player: Player,
+	monetizationConfig: Types.MonetizationConfig
+): number
+	return Economy.PremiumMult(
+		player.MembershipType == Enum.MembershipType.Premium,
+		monetizationConfig
+	)
+end
+
 local function computeIncomeWithMults(state: Types.PlayerState, mults: Types.Multipliers): number
 	local eraConfig = Catalog.GetEraConfig(state.era)
 	if eraConfig == nil then
@@ -51,13 +86,18 @@ local function computeIncomeWithMults(state: Types.PlayerState, mults: Types.Mul
 	return Economy.IncomePerSecond(state.slots, eraConfig, Catalog.GetGameConfig(), mults)
 end
 
--- The live rate ticks/HUD run on: legacy + neighbors active since M2, pass/premium 1 until M4.
-local function computeLiveIncomePerSecond(state: Types.PlayerState): number
+-- The live rate ticks/HUD run on: every multiplier active (legacy + neighbors since M2,
+-- pass + premium since M4).
+local function computeLiveIncomePerSecond(
+	player: Player,
+	state: Types.PlayerState,
+	monetizationConfig: Types.MonetizationConfig
+): number
 	local gameConfig = Catalog.GetGameConfig()
 	return computeIncomeWithMults(state, {
 		legacy = Economy.LegacyMult(state.legacy, gameConfig),
-		pass = 1,
-		premium = 1,
+		pass = computePassMult(state, monetizationConfig),
+		premium = computePremiumMult(player, monetizationConfig),
 		neighbors = Economy.NeighborsMult(#Players:GetPlayers(), gameConfig),
 	})
 end
@@ -66,20 +106,26 @@ end
 -- RefreshPersistedRate, and the ApplyOfflineGrant restamp all call this). Differs from the
 -- live rate twice by design: no Studio debug multiplier (offline grants are never
 -- debug-inflated, M2 contract) and neighbors pinned to 1 (lead ruling: a live-social bonus,
--- not an away bonus — also closes idling in a full server right before logout).
-local function computePersistedIncomePerSecond(state: Types.PlayerState): number
+-- not an away bonus — also closes idling in a full server right before logout). Passes and
+-- Premium DO apply here (M4): they are account properties, so offline earnings carry them.
+local function computePersistedIncomePerSecond(
+	player: Player,
+	state: Types.PlayerState,
+	monetizationConfig: Types.MonetizationConfig
+): number
 	local gameConfig = Catalog.GetGameConfig()
 	return computeIncomeWithMults(state, {
 		legacy = Economy.LegacyMult(state.legacy, gameConfig),
-		pass = 1,
-		premium = 1,
+		pass = computePassMult(state, monetizationConfig),
+		premium = computePremiumMult(player, monetizationConfig),
 		neighbors = 1,
 	})
 end
 
 -- Reported and live-granted income share the Studio debug multiplier so the HUD matches gains.
-local function computeReportedIncomePerSecond(state: Types.PlayerState): number
-	local incomePerSecond = computeLiveIncomePerSecond(state)
+local function computeReportedIncomePerSecond(player: Player, state: Types.PlayerState): number
+	local incomePerSecond =
+		computeLiveIncomePerSecond(player, state, Catalog.GetMonetizationConfig())
 	if isStudio then
 		incomePerSecond *= Catalog.GetGameConfig().debug.studioIncomeMultiplier
 	end
@@ -88,10 +134,12 @@ end
 
 local function grantIncome(seconds: number): ()
 	local debugMultiplier = Catalog.GetGameConfig().debug.studioIncomeMultiplier
+	local monetizationConfig = Catalog.GetMonetizationConfig()
 	local now = os.time()
 	for _, player in Players:GetPlayers() do
 		local state = DataService.GetState(player)
-		if state == nil then
+		-- Skip anyone mid-join: restamping lastSeen here would destroy their offline grant.
+		if state == nil or not joinComplete[player] then
 			continue
 		end
 		state.stats.playtimeSeconds += seconds
@@ -99,8 +147,8 @@ local function grantIncome(seconds: number): ()
 		-- ProfileStore fires next (auto-save, final save, shutdown) is always correct. The
 		-- persisted rate deliberately differs from the granted one (see the compute helpers).
 		state.lastSeen = now
-		state.incomeAtSave = computePersistedIncomePerSecond(state)
-		local grantPerSecond = computeLiveIncomePerSecond(state)
+		state.incomeAtSave = computePersistedIncomePerSecond(player, state, monetizationConfig)
+		local grantPerSecond = computeLiveIncomePerSecond(player, state, monetizationConfig)
 		if isStudio then
 			grantPerSecond *= debugMultiplier
 		end
@@ -129,7 +177,10 @@ local function flushDeltas(): ()
 			delta.cash = state.cash
 		end
 		if record.income then
-			delta.incomePerSecond = computeReportedIncomePerSecond(state)
+			delta.incomePerSecond = computeReportedIncomePerSecond(player, state)
+			-- The rate the shop must price against: incomeAtSave IS the persisted rate and is
+			-- exactly the number a receipt would use, so a preview cannot overstate a grant.
+			delta.persistedIncomePerSecond = state.incomeAtSave
 		end
 		if next(record.slotIds) ~= nil then
 			local slots: { [string]: Types.SlotState } = {}
@@ -184,7 +235,8 @@ function EconomyService.SendSnapshot(player: Player): ()
 		plotIndex = if typeof(plotIndexValue) == "number" then plotIndexValue else 0,
 		eraName = if eraConfig ~= nil then eraConfig.name else "",
 		state = state,
-		incomePerSecond = computeReportedIncomePerSecond(state),
+		incomePerSecond = computeReportedIncomePerSecond(player, state),
+		persistedIncomePerSecond = state.incomeAtSave,
 		welcomeBack = welcomeBack,
 	}
 	player:SetAttribute("Cash", state.cash)
@@ -200,26 +252,31 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 	end
 	local offlineConfig = Catalog.GetGameConfig().offline
 	local now = os.time()
+	-- Offline Pro widens the window and removes the efficiency haircut (M4). Main refreshes
+	-- passes before calling this, so state.passes is already authoritative for the session.
+	local pro = state.passes.OfflinePro == true
+	local cap = if pro then offlineConfig.capSecondsOfflinePro else offlineConfig.capSeconds
+	local efficiency = if pro then offlineConfig.efficiencyOfflinePro else offlineConfig.efficiency
 	-- lastSeen == 0 marks a first-ever join: nothing was earned, no card.
 	if state.lastSeen > 0 then
-		local elapsed = math.clamp(now - state.lastSeen, 0, offlineConfig.capSeconds)
-		local granted = Economy.OfflineGrant(
-			elapsed,
-			state.incomeAtSave,
-			offlineConfig.capSeconds,
-			offlineConfig.efficiency
-		)
+		local elapsed = math.clamp(now - state.lastSeen, 0, cap)
+		local granted = Economy.OfflineGrant(elapsed, state.incomeAtSave, cap, efficiency)
 		if isStudio then
 			-- Playtest diagnostic (Studio only): the grant is invisible next to the ×debug
 			-- income, so print the inputs the checklist asks the human to sanity-check.
 			print(
 				`[EconomyService] offline grant for {player.Name}: away {elapsed}s, `
-					.. `saved rate {state.incomeAtSave}/s, granted {granted}`
+					.. `saved rate {state.incomeAtSave}/s, cap {cap}s, efficiency {efficiency}, `
+					.. `granted {granted}`
 			)
 		end
 		if granted > 0 then
 			state.cash += granted
 			state.stats.totalCashAllTime += granted
+			-- Recorded for the whole session so the welcome-back card's "Double it" product
+			-- can still be honoured minutes later; a single use, cleared in Cleanup.
+			offlineRecords[player] = { amount = granted, reserved = false, used = false }
+			AnalyticsService.LogCashSource(player, granted, state.cash, "TimedReward", "offline")
 			-- The card only appears when the player was away at least the configured minimum
 			-- (Game.json v1.3 offline.welcomeBackMinSeconds) AND the grant was positive.
 			if elapsed >= offlineConfig.welcomeBackMinSeconds then
@@ -230,7 +287,46 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 	-- Stamp immediately (not just on the next tick): a leave before the first tick must not
 	-- leave the old lastSeen in place, or rejoining would re-earn the same offline window.
 	state.lastSeen = now
-	state.incomeAtSave = computePersistedIncomePerSecond(state)
+	state.incomeAtSave =
+		computePersistedIncomePerSecond(player, state, Catalog.GetMonetizationConfig())
+	-- Join sequence over: the income tick may now touch this player (see joinComplete).
+	joinComplete[player] = true
+end
+
+-- Claims the offer for one purchase dialog. nil when there is nothing to sell or a dialog is
+-- already open, so two RequestPrompts can never produce two chargeable prompts for one grant.
+function EconomyService.ReserveDoubleOfflineGrant(player: Player): number?
+	local record = offlineRecords[player]
+	if record == nil or record.used or record.reserved then
+		return nil
+	end
+	record.reserved = true
+	return record.amount
+end
+
+-- Returns a reservation to the pool: the player declined the dialog, the prompt call failed, or
+-- a receipt grant was rolled back after a failed save.
+function EconomyService.ReleaseDoubleOfflineGrant(player: Player): ()
+	local record = offlineRecords[player]
+	if record == nil then
+		return
+	end
+	record.reserved = false
+	record.used = false
+end
+
+-- Marks the offer used and returns the amount to grant (0 when there is nothing pending, which
+-- the receipt handler treats as a successful zero grant rather than an endless Roblox retry).
+function EconomyService.ConsumeDoubleOfflineGrant(player: Player): number
+	local record = offlineRecords[player]
+	if record == nil or record.used then
+		return 0
+	end
+	-- Settles the reservation. A receipt with no reservation (a server restart between prompt
+	-- and delivery) still settles: the charge happened, so the grant must happen.
+	record.used = true
+	record.reserved = false
+	return record.amount
 end
 
 -- PlotService calls this after an era mutation (advance/rebirth), before the fresh snapshot:
@@ -242,7 +338,8 @@ function EconomyService.RefreshPersistedRate(player: Player): ()
 	if state == nil then
 		return
 	end
-	state.incomeAtSave = computePersistedIncomePerSecond(state)
+	state.incomeAtSave =
+		computePersistedIncomePerSecond(player, state, Catalog.GetMonetizationConfig())
 	state.lastSeen = os.time()
 end
 
@@ -274,6 +371,8 @@ end
 function EconomyService.Cleanup(player: Player): ()
 	dirtyRecords[player] = nil
 	pendingWelcomeBack[player] = nil
+	offlineRecords[player] = nil
+	joinComplete[player] = nil
 end
 
 function EconomyService.Init(): ()

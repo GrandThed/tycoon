@@ -1,0 +1,62 @@
+{
+	"version": 1,
+	"multipliers": { "doubleCash": 2.0, "vip": 1.1, "premium": 1.1 },
+	"packCapFractionOfEraSlotCost": 0.25,
+	"receiptHistoryLimit": 200,
+	"passes": [
+		{
+			"key": "DoubleCash",
+			"id": 0,
+			"name": "Double Cash",
+			"description": "Doubles your income for good, in every era."
+		},
+		{
+			"key": "OfflinePro",
+			"id": 0,
+			"name": "Offline Pro",
+			"description": "While you are away, earn for up to 24 hours instead of 8, at full rate instead of half."
+		},
+		{
+			"key": "VIP",
+			"id": 0,
+			"name": "VIP",
+			"description": "+10% income, a VIP name tag, a gold plot sign, and an alternate building skin set in every era."
+		}
+	],
+	"products": [
+		{
+			"key": "Cash30m",
+			"id": 0,
+			"name": "30 Minutes of Cash",
+			"description": "Cash worth up to 30 minutes of your current income. Capped at a tenth of the current era, so it speeds you up rather than finishing the era.",
+			"minutes": 30,
+			"capFraction": 0.10,
+			"shopVisible": true
+		},
+		{
+			"key": "Cash2h",
+			"id": 0,
+			"name": "2 Hours of Cash",
+			"description": "Cash worth up to 2 hours of your current income. Capped at a quarter of the current era, so it speeds you up rather than finishing the era.",
+			"minutes": 120,
+			"capFraction": 0.25,
+			"shopVisible": true
+		},
+		{
+			"key": "Cash8h",
+			"id": 0,
+			"name": "8 Hours of Cash",
+			"description": "Cash worth up to 8 hours of your current income. Capped at half of the current era, so it speeds you up rather than finishing the era.",
+			"minutes": 480,
+			"capFraction": 0.50,
+			"shopVisible": true
+		},
+		{
+			"key": "DoubleOffline",
+			"id": 0,
+			"name": "Double it",
+			"description": "Doubles the cash you just earned while away. Offered once, on the welcome-back card.",
+			"shopVisible": false
+		}
+	]
+}

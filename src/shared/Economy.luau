@@ -47,6 +47,12 @@ type GameConfig = {
 
 type Multipliers = { legacy: number, pass: number, premium: number, neighbors: number }
 
+-- Structural copy of Types.MonetizationConfig's multiplier block (purity forbids requiring
+-- Types); only the fields these functions read are declared.
+type MonetizationConfig = {
+	multipliers: { doubleCash: number, vip: number, premium: number },
+}
+
 local Economy = {}
 
 function Economy.MilestoneMult(
@@ -152,6 +158,52 @@ function Economy.LegacyGain(
 			* (1 + totalLevelsThisEra / legacyConfig.gainLevelsDivisor)
 			* (1 + rebirthCount * legacyConfig.gainRebirthBonus)
 	)
+end
+
+-- M4 monetization math. Kept here (not in MonetizationService) so tools/sim_economy.py can
+-- mirror it and the client can preview the same grant the server will compute.
+
+-- Every slot in the era, owned or not: the anti-skip cap is a flat era-relative ceiling, so a
+-- player near the end of an era still gets a meaningful pack (lead ruling, docs/INTERFACES.md).
+function Economy.EraSlotCostTotal(eraConfig: EraConfig): number
+	local total = 0
+	for _, slot in eraConfig.slots do
+		total += slot.baseCost
+	end
+	return total
+end
+
+-- Packs are priced in minutes of the player's CURRENT income (spec §6 rule 6), then capped so
+-- one purchase can never buy more than capFraction of an era.
+function Economy.PackGrant(
+	minutes: number,
+	incomePerSecond: number,
+	eraSlotCostTotal: number,
+	capFraction: number
+): number
+	local uncapped = minutes * 60 * incomePerSecond
+	local cap = capFraction * eraSlotCostTotal
+	return math.max(math.min(uncapped, cap), 0)
+end
+
+-- An unowned pass, or one whose id is still 0 (never granted), contributes exactly 1.
+function Economy.PassMult(
+	passes: { [string]: boolean },
+	monetizationConfig: MonetizationConfig
+): number
+	local multipliers = monetizationConfig.multipliers
+	local mult = 1
+	if passes.DoubleCash == true then
+		mult *= multipliers.doubleCash
+	end
+	if passes.VIP == true then
+		mult *= multipliers.vip
+	end
+	return mult
+end
+
+function Economy.PremiumMult(isPremium: boolean, monetizationConfig: MonetizationConfig): number
+	return if isPremium then monetizationConfig.multipliers.premium else 1
 end
 
 -- Frozen now, used at M2 for offline progress.

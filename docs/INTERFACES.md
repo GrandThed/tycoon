@@ -4,10 +4,10 @@ Updated by the lead at the start of each milestone. Agents conform to this docum
 If your task needs a change to a file or contract you don't own, **report it in your final
 message** — never edit across an ownership boundary.
 
-Current milestone: **M3 — Presentation** (mobile UI pass, sounds, reveal/level-up feedback,
-era-advance ceremony, welcome-back card, asset manifest generator, VIP skin support). M1 and M2
-contracts below remain standing; the **M3 contracts** section at the end defines this
-milestone's additions and the amendments called out there.
+Current milestone: **M4 — Monetization & analytics** (game passes, developer products,
+idempotent ProcessReceipt, Premium bonus, analytics events, Shop UI). M1-M3 contracts below
+remain standing; the **M4 contracts** section at the end defines this milestone's additions and
+the amendments called out there.
 
 ## Environment notes (all agents)
 
@@ -690,3 +690,497 @@ text (milestone variant at 10), ×1/×10/Max, bottom bar with Build/Legacy/Setti
 settings toggles that survive rejoin, the welcome-back card, the era-advance screen and the
 ceremony overlay, the plot sign, and a usable layout in portrait, landscape, and 1920×1080.
 Reviewer verdict SHIP.
+
+---
+
+# M4 contracts — Monetization & analytics
+
+Goal: passes, dev products, Premium, and analytics — all optional, all restrained (spec §6).
+**With every id in `Monetization.json` left at `0` the game must show no monetization anywhere
+and error nowhere.** Nothing here changes balance, persistence keys, or the M1–M3 payload
+shapes; everything is additive unless marked **AMENDED**.
+
+## M4 ownership
+
+| Owner | Files |
+|-------|-------|
+| luau-engineer | `src/server/**` (incl. new `Services/AnalyticsService.luau`), `src/shared/{Types,Economy,Catalog}.luau` |
+| ui-engineer | `src/client/**` (new `src/client/UI/ShopPanel.luau` allowed) |
+| economy-designer | `src/shared/Config/Monetization.json` (new), `tools/sim_economy.py`, `docs/BALANCE.md` |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, status ticks in `docs/PLAN.md` |
+
+`src/shared/Layouts/**`, `src/shared/Config/{Game,Sounds}.json`, `src/shared/Config/Eras/**`
+and `src/shared/Format.luau` are **frozen** this milestone — no balance, era, layout or audio
+edits, and `Format.Cash`/`Rate`/`Duration` already cover every M4 label.
+`default.project.json` is frozen.
+
+Constant homes are unchanged: gameplay/monetization numbers in `Config/*.json`, client-only
+sizing/timing in `src/client/UI/Theme.luau`, tool-only bands in the sim source.
+
+## Monetization.json schema v1 (economy-designer authors; everyone consumes)
+
+`src/shared/Config/Monetization.json`. Arrays, not maps, so shop display order is data.
+
+```json
+{
+	"version": 1,
+	"multipliers": { "doubleCash": 2.0, "vip": 1.1, "premium": 1.1 },
+	"packCapFractionOfEraSlotCost": 0.25,
+	"receiptHistoryLimit": 200,
+	"passes": [
+		{
+			"key": "DoubleCash",
+			"id": 0,
+			"name": "Double Cash",
+			"description": "Doubles all income, forever."
+		},
+		{ "key": "OfflinePro", "id": 0, "name": "Offline Pro", "description": "..." },
+		{ "key": "VIP", "id": 0, "name": "VIP", "description": "..." }
+	],
+	"products": [
+		{
+			"key": "Cash30m",
+			"id": 0,
+			"name": "30 Minutes of Cash",
+			"description": "Instantly earn 30 minutes of your current income.",
+			"minutes": 30,
+			"capFraction": 0.10,
+			"shopVisible": true
+		},
+		{ "key": "Cash2h", "id": 0, "name": "…", "description": "…", "minutes": 120, "capFraction": 0.25, "shopVisible": true },
+		{ "key": "Cash8h", "id": 0, "name": "…", "description": "…", "minutes": 480, "capFraction": 0.50, "shopVisible": true },
+		{
+			"key": "DoubleOffline",
+			"id": 0,
+			"name": "Double it",
+			"description": "Doubles the cash you just earned while away.",
+			"shopVisible": false
+		}
+	]
+}
+```
+
+Frozen semantics:
+
+- **Pass keys** are exactly `DoubleCash`, `OfflinePro`, `VIP`; **product keys** exactly
+  `Cash30m`, `Cash2h`, `Cash8h`, `DoubleOffline`. They are persistence keys (`state.passes`)
+  and analytics SKUs — never rename. Keys are unique across both tables, so a single
+  `RequestPrompt(key)` namespace resolves passes first, then products.
+- `id`: the Roblox game-pass / developer-product id. **`0` means "not created yet": the item is
+  hidden in every UI, `RequestPrompt` for it is dropped, and no Marketplace call is ever made.**
+- `minutes`: cash packs only; `DoubleOffline` has no `minutes` (its grant comes from the
+  session's recorded offline grant). `shopVisible: false` keeps `DoubleOffline` out of the Shop
+  list — it is only ever offered on the welcome-back card (spec §6 rule 3: one contextual offer).
+- `capFraction` (**AMENDED mid-wave**, see "Per-pack caps" below): cash packs only; the pack's
+  own anti-skip ceiling as a fraction of the era's total slot cost. Absent ⇒ fall back to
+  `packCapFractionOfEraSlotCost`.
+- `multipliers`: the whole paid stack. `doubleCash × vip × premium = 2.42` — economy-designer
+  verifies and records the ≤ ~2.4× check (spec §6 rule 5) in `docs/BALANCE.md`.
+- `packCapFractionOfEraSlotCost`: the anti-skip cap, see "Pack grant" below.
+- `receiptHistoryLimit`: max `PurchaseId`s kept in `state.processedReceipts` (FIFO trim).
+
+Types (luau-engineer):
+
+```lua
+export type PassKey = "DoubleCash" | "OfflinePro" | "VIP"
+export type ProductKey = "Cash30m" | "Cash2h" | "Cash8h" | "DoubleOffline"
+export type PassDef = { key: string, id: number, name: string, description: string }
+export type ProductDef = {
+	key: string,
+	id: number,
+	name: string,
+	description: string,
+	minutes: number?,
+	capFraction: number?,
+	shopVisible: boolean,
+}
+export type MonetizationMultipliers = { doubleCash: number, vip: number, premium: number }
+export type MonetizationConfig = {
+	version: number,
+	multipliers: MonetizationMultipliers,
+	packCapFractionOfEraSlotCost: number,
+	receiptHistoryLimit: number,
+	passes: { PassDef },
+	products: { ProductDef },
+}
+```
+
+`Catalog.GetMonetizationConfig(): Types.MonetizationConfig` (cached, same pattern as
+`GetGameConfig`), plus `Catalog.GetPassDef(key: string): Types.PassDef?` and
+`Catalog.GetProductDef(key: string): Types.ProductDef?`. Usable from both realms — the client
+reads ids itself, so **no remote publishes the monetization config**.
+
+## Economy.luau additions (pure; the sim mirrors them)
+
+```lua
+Economy.EraSlotCostTotal(eraConfig): number
+	-- sum of baseCost over every slot in the era (owned or not)
+Economy.PackGrant(minutes, incomePerSecond, eraSlotCostTotal, capFraction): number
+	-- math.min(minutes * 60 * incomePerSecond, capFraction * eraSlotCostTotal); never < 0
+Economy.PassMult(passes: { [string]: boolean }, monetizationConfig): number
+	-- (DoubleCash and doubleCash or 1) * (VIP and vip or 1)
+Economy.PremiumMult(isPremium: boolean, monetizationConfig): number
+	-- isPremium and premium or 1
+```
+
+**Pack grant (spec §6 rule 6 + the BALANCE.md M2 flag).** Packs stay priced in minutes of the
+player's *current* income, computed server-side at purchase time, and are additionally capped
+at `packCapFractionOfEraSlotCost` × the current era's total slot cost. Lead ruling: the cap is
+against the era's **total** slot cost, not its *remaining* cost — remaining-cost degrades to a
+near-zero grant for a player who is nearly done with an era, i.e. Robux for nothing. A flat
+era-relative ceiling makes "a pack can never skip an era" literally true (one purchase buys at
+most 25% of an era) while always granting something meaningful. This replaces the BALANCE.md
+alternative of hiding the big packs before Era 3 — packs stay visible at every era and the cap
+does the work.
+
+Because a capped pack grants less than its name implies, **every UI that offers a pack must
+show the real predicted grant** (`Format.Cash(Economy.PackGrant(...))`) next to the label, and
+the label copy must read as "up to N minutes". The client's preview uses the same pure function
+against the snapshot's `incomePerSecond`; the server's computation at receipt time is
+authoritative and may differ (income changed meanwhile) — expected, not an error.
+
+The `incomePerSecond` the server passes to `PackGrant` is the **persisted-rate** flavour (no
+Studio debug multiplier, neighbors pinned to 1) so a Studio playtest cannot inflate a purchase.
+
+**Per-pack caps (AMENDED mid-wave — lead ruling on the economy-designer's `--packs` finding).**
+A single global cap makes all three packs converge: past roughly the first 10–20% of every era
+every pack delivers the *identical* capped amount, so a player paying the `Cash8h` price
+receives exactly what `Cash30m` buys. That is a fair-value defect, not a balance nit, and spec
+§6 ("Robux buys convenience", "fair monetization") does not permit it. The cap therefore
+becomes per-product:
+
+- `capFraction` on each cash pack: `Cash30m` 0.10, `Cash2h` 0.25, `Cash8h` 0.50.
+- `Monetization.packCapFractionOfEraSlotCost` stays as the **default** for any pack that omits
+  `capFraction` (and is the value the sim and docs cite as the family default).
+- Every caller of `Economy.PackGrant` — the server at receipt time and the client's shop
+  preview — passes `def.capFraction or cfg.packCapFractionOfEraSlotCost`. `Economy.PackGrant`
+  itself is unchanged: it already takes `capFraction` as an argument.
+
+Rule 6 still holds literally: the largest single purchase possible is half an era's slot cost,
+so no one pack skips an era. The packs are now genuinely differentiated (1 : 2.5 : 5) while
+each stays honestly described by its "up to N minutes" copy.
+
+## Multipliers go live (EconomyService) — **AMENDED**
+
+`Types.Multipliers` keeps its shape. `pass` and `premium` stop being hardcoded `1`:
+
+- `mults.pass = Economy.PassMult(state.passes, monetizationConfig)`
+- `mults.premium = Economy.PremiumMult(player.MembershipType == Enum.MembershipType.Premium,
+  monetizationConfig)`
+
+Both apply to the live rate, the reported rate, **and** the persisted rate
+(`computePersistedIncomePerSecond`) — passes and Premium are account properties, not session
+state, so offline earnings carry them. Neighbors stays pinned to 1 in the persisted rate as
+before. A pass with id `0`, or a pass the player doesn't own, contributes exactly `1`.
+
+`computePersistedIncomePerSecond` therefore needs the `Player`, not just the state: change its
+signature (and `RefreshPersistedRate`'s internals) accordingly — every caller already has the
+player in hand.
+
+## Offline Pro (EconomyService.ApplyOfflineGrant) — **AMENDED**
+
+Select cap and efficiency by pass, from the Game.json keys that already exist:
+
+```lua
+local pro = state.passes.OfflinePro == true
+local cap = if pro then offline.capSecondsOfflinePro else offline.capSeconds
+local efficiency = if pro then offline.efficiencyOfflinePro else offline.efficiency
+```
+
+The Studio diagnostic print stays (it is what makes the grant checkable in a playtest); extend
+it with the cap/efficiency actually used. The grant is still never multiplied by the Studio
+debug income multiplier.
+
+**Offline grant record (for `DoubleOffline`).** `ApplyOfflineGrant` records
+`{ amount = granted, used = false }` per player for the whole session (not just until the first
+snapshot — the welcome-back card can be tapped a moment later). New API:
+
+```lua
+EconomyService.ReserveDoubleOfflineGrant(player): number? -- claims the offer for one dialog
+EconomyService.ReleaseDoubleOfflineGrant(player): ()      -- returns an unsold reservation
+EconomyService.ConsumeDoubleOfflineGrant(player): number  -- settles it, returns the amount (0 if none)
+```
+
+(**AMENDED**, see post-review amendment 3: the original `GetDoubleOfflineOffer` read allowed two
+chargeable dialogs for one grant and has been removed — reserving *is* the check, and a
+read-only accessor with no caller is dead code under the project rules.)
+
+Single use per session; `Cleanup` clears it. `RequestPrompt("DoubleOffline")` is dropped when
+`ReserveDoubleOfflineGrant` returns nil, so a receipt for it can only exist when a grant is
+pending. If a receipt nonetheless arrives with nothing recorded (only reachable via a Roblox
+retry after the player rejoined), grant `0`, `warn` with the player and PurchaseId, and still
+return `PurchaseGranted` — the alternative is an infinite retry loop.
+
+## MonetizationService (luau-engineer) — the whole service is new
+
+Every `MarketplaceService` call is wrapped in `pcall` with retry + logging (spec §11); a
+failure never errors a player's session.
+
+**Pass ownership.** On join, called from `Main`'s orchestration after `LoadAsync` and **before**
+`ApplyOfflineGrant` (so the offline grant already reflects Offline Pro):
+`MonetizationService.RefreshPassesAsync(player)` — for each pass with a non-zero id, one
+`UserOwnsGamePassAsync` behind pcall+retry; write the result into `state.passes[key]`. Cached
+for the session: never re-queried per tick. **On API failure keep the persisted value** (never
+downgrade `true → false` on an error); on success write the API's answer verbatim, including
+`false` (refunds/revokes must take effect).
+
+`PromptGamePassPurchaseFinished` applies a pass immediately: set `state.passes[key] = true`,
+then `EconomyService.RefreshPersistedRate(player)`, `EconomyService.MarkDirty(player,
+{ income = true })`, `PlotService.RefreshCosmetics(player)` (VIP only, but calling it always is
+harmless), then the `passGranted` `FxEvent`. Roblox may also deliver the same pass state via
+the next session's join refresh — both paths must be idempotent.
+
+**ProcessReceipt** (`MarketplaceService.ProcessReceipt`, assigned exactly once, in `Init`):
+
+1. Resolve `receiptInfo.ProductId` to a product key via `Monetization.json`. Unknown id ⇒
+   `warn` + `Enum.ProductPurchaseDecision.NotProcessedYet` (a product created on the Creator
+   Hub before its id is pasted into the config must not be silently eaten).
+2. `local state = DataService.GetState(player)` — `nil` (player absent, or data not loaded yet)
+   ⇒ `NotProcessedYet`.
+3. `local id = tostring(receiptInfo.PurchaseId)`; if `id` is already in
+   `state.processedReceipts` ⇒ `PurchaseGranted` immediately (idempotency; no second grant).
+4. Grant (below), then append `id` to `state.processedReceipts` and FIFO-trim to
+   `receiptHistoryLimit`, then `DataService.SaveAsync(player)`. **Return `PurchaseGranted` only
+   if the save succeeded**; otherwise `NotProcessedYet` so Roblox retries. The grant and the
+   receipt id land in the same profile write, so a retry after a failed save finds the id
+   absent and re-grants against a profile that never persisted the first grant — consistent
+   either way.
+5. Any error inside the handler ⇒ caught, logged, `NotProcessedYet`.
+
+Grants:
+- `Cash30m` / `Cash2h` / `Cash8h`: `granted = Economy.PackGrant(def.minutes, persistedIps,
+  Economy.EraSlotCostTotal(eraConfig), def.capFraction or cfg.packCapFractionOfEraSlotCost)`; then
+  `state.cash += granted`, `state.stats.totalCashAllTime += granted`, `MarkDirty { cash = true }`.
+- `DoubleOffline`: `granted = EconomyService.ConsumeDoubleOfflineGrant(player)`; same cash
+  bookkeeping.
+- Every grant fires the `purchase` `FxEvent` and one analytics source event (below).
+
+**VIP name tag** (the M3 carry-over): a `BillboardGui` named `VipTag` on the character's
+`Head`, text `VIP` in the plot sign's gold, created on `CharacterAdded` when `state.passes.VIP`
+is true and on the `passGranted` path for an already-spawned character; removed if VIP is ever
+false. Sizing constants live in code beside it (a server-side world cosmetic, not client
+`Theme`) — mirror the existing plot-sign constants block.
+
+`MonetizationService` keeps `Init()`/`Start()` and stays in the slot it already occupies in the
+frozen boot order. `AnalyticsService` is a **new** service and goes **last** in the ordered list
+in `Main.server.luau` (it depends on nothing, and nothing depends on its `Start`).
+
+## RequestPrompt (RemoteService validator + MonetizationService handler)
+
+`RequestPrompt(key: string)` — shape unchanged from M1's reservation.
+
+- Validator: `args.n == 1 and typeof(args[1]) == "string"`. Standard token bucket.
+- Handler: resolve `key` in passes, then products. Drop silently when the key is unknown, when
+  the resolved `id == 0`, when the player has no loaded state, when it is a pass the player
+  already owns, or when it is `DoubleOffline` with no pending offer.
+- Otherwise `MarketplaceService:PromptGamePassPurchase(player, id)` /
+  `:PromptProductPurchase(player, id)` inside a pcall.
+- **The server never prompts on its own initiative** (spec §6 rule 2): a prompt exists only as
+  a direct response to this remote.
+
+## FxEvent — M4 additions (additive to the M3 union)
+
+```lua
+export type FxPurchase = { kind: "purchase", productKey: string, grantedCash: number }
+export type FxPassGranted = { kind: "passGranted", passKey: string }
+export type FxEvent = FxReveal | FxLevelUp | FxEraAdvance | FxRebirth | FxPurchase | FxPassGranted
+```
+
+Owner only, fired after the state mutation. `UIController` handles both new kinds (toast +
+`purchase` sound); `PlotVisualsController` keeps ignoring everything but `reveal`/`levelUp`.
+No new sound keys — `Sounds.json` is frozen; reuse the existing `purchase` key.
+
+## DataService addition
+
+```lua
+DataService.SaveAsync(player): boolean   -- explicit profile save (pcall + retry + warn); false on failure
+```
+
+`state.processedReceipts` is already in schema v1 — no migration and no schema bump this
+milestone. Trimming the list is the receipt handler's job, not DataService's.
+
+## PlotService addition
+
+```lua
+PlotService.RefreshCosmetics(player): ()
+```
+
+Re-runs the plot-sign refresh and re-spawns the owned buildings through the existing VIP-aware
+template lookup, **silently** (bulk-restore rules: no `FxEvent`s, no tweens, no sounds). No-op
+when the player holds no plot. Called on the pass-grant path only.
+
+## Analytics taxonomy (frozen here; luau-engineer implements, economy-designer documents)
+
+New `src/server/Services/AnalyticsService.luau`, a thin wrapper over Roblox's
+`AnalyticsService`. Rules:
+
+- **Every call inside `pcall`.** If the service or an enum is unavailable the wrapper degrades
+  to a no-op — analytics must never break a purchase or a build. Verify exact signatures
+  against `tools/types/globalTypes.d.luau`; do not guess and find out at runtime.
+- Balances passed to Roblox are integers (`math.floor(state.cash)`); currency names are exactly
+  `"cash"` and `"legacy"`.
+- **Income ticks are never logged** (1 Hz per player would swamp the quota). A `RequestLevelUp`
+  granting `n` levels logs **one** event, not `n`.
+
+| Event | Flow | Currency | Transaction type | itemSku |
+|-------|------|----------|------------------|---------|
+| slot bought | Sink | cash | `Shop` | `slot:<eraName>:<slotId>` |
+| level-up (per action) | Sink | cash | `Shop` | `level:<eraName>:<slotId>` |
+| offline grant | Source | cash | `TimedReward` | `offline` |
+| product grant | Source | cash | `IAP` | `product:<productKey>` |
+| legacy on advance/rebirth | Source | legacy | `Gameplay` | `era:<eraIndex>` |
+
+Progression: one `LogProgressionEvent` per era advance and per rebirth (category
+`"EraProgression"`, the completed era index as the level). If that API is not available in this
+engine version, log nothing and say so in the report — do not invent a substitute.
+
+`AnalyticsService` public API (called by PlotService / EconomyService / MonetizationService):
+
+```lua
+AnalyticsService.LogCashSink(player, amount, endingBalance, itemSku): ()
+AnalyticsService.LogCashSource(player, amount, endingBalance, transactionType, itemSku): ()
+AnalyticsService.LogLegacySource(player, amount, endingBalance, itemSku): ()
+AnalyticsService.LogEraProgression(player, eraIndex, isRebirth): ()
+```
+
+## Client contracts (M4) — ui-engineer
+
+**Everything monetization-facing is driven by `Catalog.GetMonetizationConfig()` ids.** With all
+ids `0` the client must look exactly like it does at the end of M3.
+
+- **Shop button**: `bottomBar.SetShopVisible(anyNonZeroId)`, where `anyNonZeroId` is true iff
+  any pass or product in the config has `id ~= 0`. Evaluated once at boot (the config is static).
+- **`ShopPanel`** (new; docks like the other panels in both orientations): sections `Passes`
+  then `Packs`, in config array order, skipping any item with `id == 0` and any product with
+  `shopVisible == false`. Each row: name, description, and for packs the predicted grant
+  (`Economy.PackGrant` against the current snapshot `incomePerSecond`, re-rendered as income
+  changes) with "up to N minutes" copy. Owned passes render as an `Owned` state and are not
+  tappable. Tapping fires `RequestPrompt(key)` and nothing else — no client-side optimism, no
+  local grant, no blocking spinner. If every item filters out, the panel shows the same dim
+  "nothing here yet" line pattern the Legacy panel uses (and the Shop button is hidden anyway).
+- **Welcome-back "Double it"**: when the snapshot carries `welcomeBack` **and** the
+  `DoubleOffline` product id is non-zero, call `SetDoubleOffer({ label = "Double it",
+  onTap = ... RequestPrompt("DoubleOffline") })`; otherwise pass `nil`. Tapping fires the prompt
+  and closes the offer (the card itself may stay); the resulting cash arrives as a normal delta.
+  Never auto-open anything.
+- **`passGranted` / `purchase` FxEvents**: a brief toast (`+$X` for `purchase`, `<Pass> active`
+  for `passGranted`) and the `purchase` sound. Authoritative state arrives in the snapshot/delta.
+- **Indicators**: a compact multiplier readout — VIP badge when `state.passes.VIP`, `Premium`
+  when `Players.LocalPlayer.MembershipType == Enum.MembershipType.Premium`, and the neighbors
+  bonus (`Economy.NeighborsMult(#Players:GetPlayers(), gameConfig)`, spec §4: shown so players
+  understand why friends help). Top bar or Legacy panel — your judgment; keep the top bar
+  uncluttered at 375×667 and say what you chose in the report.
+
+**M3 carry-overs assigned to ui-engineer this milestone** (from PLAN.md's M3 list):
+
+1. Landscape viewports narrower than ~690 px (e.g. 640×360): the right-docked panel overlaps
+   the top-left top bar by ~9 px. Clamp the panel width (preferred) or document the accepted
+   overlap.
+2. Toggling a setting before the first snapshot arrives doesn't call
+   `SoundController.ApplySettings` immediately — apply locally on toggle whether or not state
+   has loaded.
+3. Hoist inline insets into `Theme`: `Panel.luau` header `+2` / `-16`, and `BuildPanel.luau`
+   `ScrollBarThickness 4` and the empty-label height `40`.
+
+## tools/sim_economy.py (economy-designer)
+
+- Mirror `Economy.EraSlotCostTotal`, `PackGrant`, `PassMult`, `PremiumMult` function-for-function
+  and read the new `Monetization.json` from the repo root (never duplicate a constant).
+- The **default run and `--check` behaviour must not change** — no passes, no Premium, so every
+  number in the existing BALANCE.md table stays byte-identical. QA re-runs `--check` to prove it.
+- Add `--passes doublecash,vip` / `--premium` flags that switch the multipliers on, so the paid
+  stack's effect on pacing is measurable, plus a small `--packs` report: per era and per pack,
+  the uncapped minute-value, the cap, and the delivered grant at a mid-era income — the evidence
+  for the §6 rule-6 claim in BALANCE.md.
+
+## docs/BALANCE.md additions (economy-designer)
+
+- The paid multiplier stack table and the ≤ ~2.4× verification (spec §6 rule 5).
+- The pack-cap section: replace the M2 "Cash packs (M4 heads-up)" recommendation with what was
+  actually decided (era-total cap, packs visible at every era), including the `--packs` table.
+- The analytics taxonomy table above, restated for the human who will read the dashboards.
+- How much faster a fully-paid player finishes each era (from the `--passes`/`--premium` run),
+  so the "convenience, never progress gates" claim is backed by a number.
+
+## Post-review amendments (M4 wave 2 — lead rulings on the reviewer's findings)
+
+These are frozen additions made after the first implementation wave. They override anything
+above that conflicts.
+
+**1. The join critical section may not yield (Critical).** `MonetizationService.RefreshPassesAsync`
+introduced a yield between `LoadAsync` returning and `ApplyOfflineGrant`, and the 1 Hz
+`grantIncome` loop restamps `state.lastSeen`/`incomeAtSave` for every loaded profile — so a tick
+landing inside that window zeroes `elapsed` and silently destroys the player's entire offline
+grant, welcome-back card and `DoubleOffline` offer. Invisible in the all-ids-0 default, ~10–30%
+per join once a real pass id exists.
+
+Fix (chosen): **gate the income tick on join completion.** `EconomyService` gets a per-player
+`joinComplete` flag, set at the end of `ApplyOfflineGrant` and cleared in `Cleanup`;
+`grantIncome` skips (`continue`) any player not yet marked. This also stops income accruing
+into a plot the player has not been given yet, which was always latent. The passes-before-
+offline-grant ordering in the join orchestration is unchanged and still required.
+
+**2. A failed receipt save must not leave a grantable mutation in memory (Major, money).**
+`grantProduct` mutates `state.cash` before `SaveAsync`. When `SaveAsync` fails while the session
+is still active, ProfileStore's autosave can still persist the cash, but the `PurchaseId` never
+lands — so Roblox's retry grants a second time. On a `false` from `SaveAsync`, **roll the
+in-memory mutation back** (`cash`, `stats.totalCashAllTime`, and un-consume the `DoubleOffline`
+record) before returning `NotProcessedYet`. Correct the "consistent either way" comment: it is
+only true once the rollback exists.
+
+**3. `DoubleOffline` is consumed at prompt time, not receipt time (Major, money).** The current
+drop condition lets a modified client open two dialogs; completing both charges Robux twice and
+grants once. `EconomyService` gains `ReserveDoubleOfflineGrant(player): number?` — marks the
+record reserved and returns the amount, or nil when there is no unreserved offer.
+`RequestPrompt("DoubleOffline")` reserves before prompting and **releases the reservation** if
+the prompt is declined (`PromptProductPurchaseFinished` with `isPurchased == false`) or the
+prompt call itself fails. `ConsumeDoubleOfflineGrant` then settles a reserved record.
+
+**4. The shop preview must use the persisted rate (Major, fair value).** `ShopPanel` previews
+against the snapshot's `incomePerSecond`, which is the *reported* rate (Studio debug multiplier
+applied, neighbors up to ×1.27), while the server prices packs off `state.incomeAtSave`. In a
+full server the shop advertises up to **+27% more cash than the player receives**, every time —
+a permanent one-directional overstatement on a real-money item, which is the same class of
+defect as the converging caps. The contract's sanctioned divergence covers incidental drift
+("income changed meanwhile"), not a systematic bias.
+
+Fix: the server publishes the persisted rate explicitly. `Types.Snapshot` and `Types.Delta` gain
+`persistedIncomePerSecond: number` (Snapshot: always present; Delta: present whenever the
+`income` dirty flag flushes, alongside `incomePerSecond`). `ShopPanel` previews against it and
+never reconstructs it client-side. This keeps the three-rate discipline (live / reported /
+persisted) explicit on both realms.
+
+**5. `RequestPrompt` gets its own rate-limit bucket (Minor, exploit).** A prompt is a modal OS
+dialog, not a gameplay action; the shared 10/s budget lets a modified client make the game
+unusable and hammer `MarketplaceService`. `Game.json` is **unfrozen for exactly one key**:
+`remotes.promptCallsPerSecond` (schema v1.4, value `1`), added by the lead. `Types.RemotesConfig`
+gains `promptCallsPerSecond: number`, and `RemoteService` uses it for `RequestPrompt`'s bucket
+instead of `callsPerSecond`. Every other remote is unchanged.
+
+**6. Smaller rulings.**
+- `Catalog`'s missing-file monetization fallback must use the schema default
+  `receiptHistoryLimit = 200`, never `0` — a `0` would trim the idempotency log to empty.
+- `BottomBar.SetShopVisible` excludes products with `shopVisible == false` from the
+  "any non-zero id" test, so a lone `DoubleOffline` id cannot show a Shop button that opens an
+  empty panel. (Reviewer was right that the literal contract said otherwise; this is better.)
+- The client suppresses the purchase toast when `grantedCash <= 0`.
+- Shop row descriptions size to their content (`AutomaticSize`) rather than a fixed 4-line box:
+  the shipped copy is 137–139 chars against a ~140-char budget, and the copy is owned by an
+  agent with no visibility of the client's layout constants.
+- `DataService.SaveAsync`'s guarantee — ProfileStore's `Save()` is non-yielding, so `true` means
+  "accepted into an active session", not "durably written" — is accepted as the strongest
+  guarantee available, but it is a **documented** residual risk: docs-keeper records it in
+  `MANUAL_STEPS.md` and it becomes an M5 hardening item. Nothing else may read the boolean as
+  durability.
+
+## Definition of done (M4)
+
+`stylua --check src`, `selene src`, `luau-lsp analyze` (committed definitions +
+`--sourcemap sourcemap.json`), `rojo build -o build/test.rbxl` all green;
+`py tools/sim_economy.py --check` passes with the M2 numbers unchanged;
+`py tools/gen_asset_manifest.py --check` passes. With every id `0`: no Shop button, no Double
+it, no prompts, no warnings, and the M3 playtest still passes unchanged. With ids set: the Shop
+lists exactly the created items, a test purchase grants the capped amount once and only once
+(replayed receipts are no-ops), a pass applies within the session (income, VIP sign, VIP skins,
+VIP name tag), Offline Pro widens the offline cap and efficiency, and Premium shows and
+multiplies. Reviewer verdict SHIP.

@@ -64,17 +64,28 @@ local Theme = {
 	BOTTOM_BAR_GAP = 6,
 
 	PANEL_WIDTH = 340,
+	-- M4 carry-over (a): in landscape the panel docks right while the top bar sits
+	-- top-left, so on narrow viewports (640x360) the two overlapped by ~9 px. PanelDock
+	-- clamps the docked width to what is left beside the top bar, down to this floor.
+	PANEL_MIN_WIDTH = 260,
+	PANEL_TOP_BAR_GAP = 8, -- clear space between the top bar and a landscape-docked panel
 	PANEL_HEIGHT = 430,
 	PANEL_HEIGHT_COMPACT = 300, -- Legacy/Settings hold a handful of lines; no empty sheet
 	PANEL_MIN_HEIGHT = 140, -- header + one row + paddings; floor for absurdly short viewports
 	PANEL_BOTTOM_MARGIN = 76, -- clears the bottom bar below the panel
 	PANEL_SLIDE_OFFSET = 16,
 	HEADER_HEIGHT = 48,
+	-- M4 carry-over (c): the panel header's title insets, hoisted out of Panel.luau.
+	PANEL_TITLE_INSET = 2, -- extra left inset so the title clears the sheet's corner radius
+	PANEL_TITLE_TRIM = 16, -- gap kept between the title column and the close button
 	CLOSE_BUTTON_SIZE = CLOSE_BUTTON_SIZE,
 	ROW_HEIGHT = 64,
 	ROW_BUTTON_WIDTH = 96,
 	ROW_BUTTON_HEIGHT = ROW_BUTTON_HEIGHT,
 	ROW_SPACING = 8,
+	-- M4 carry-over (c): hoisted out of BuildPanel.luau.
+	SCROLLBAR_THICKNESS = 4,
+	EMPTY_LABEL_HEIGHT = 40,
 	ROW_TEXT_LEFT = 10, -- left inset of the row's text column
 	ROW_TEXT_GAP = 16, -- gap between the text column and the action button
 	ROW_NAME_Y = 8,
@@ -122,6 +133,16 @@ local Theme = {
 	SETTINGS_ROW_HEIGHT = 56,
 	TOGGLE_WIDTH = 72,
 	TOGGLE_HEIGHT = TOGGLE_HEIGHT,
+
+	-- M4: Shop panel rows (Passes then Packs). One row height for both sections; only
+	-- pack rows fill the third line with the predicted grant.
+	SHOP_SECTION_HEIGHT = 22,
+	SHOP_GRANT_Y = 30,
+	-- The description spans the full row width UNDER the Buy button and sizes to its own
+	-- content (wave-2 ruling): pack copy is owned by an agent with no view of these
+	-- numbers, so the row grows with the text instead of clipping it at a fixed height.
+	SHOP_DESC_Y = 58,
+	SHOP_ROW_PAD_BOTTOM = 10,
 
 	-- M3: era-advance screen. A fixed-aspect card that still fits a 320 px tall viewport
 	-- at MIN_SCALE (340x300 -> 312x275 physical) so nothing clips in landscape.

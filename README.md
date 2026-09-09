@@ -3,8 +3,10 @@
 A mobile-first Roblox plot tycoon: claim a plot, grow a medieval village into a boomtown, a
 metropolis, and finally an orbital colony. Completing an era resets your plot but grants
 permanent **Legacy** — era progression is the prestige loop. Progress persists across sessions
-(ProfileStore), including offline earnings on rejoin. Built with Luau and Rojo. Full design in
-[`docs/SPEC.md`](docs/SPEC.md).
+(ProfileStore), including offline earnings on rejoin. Optional, restrained monetization (game
+passes, time-priced cash packs, Premium) stays fully hidden until game-pass/product ids are
+created and pasted into config — see `docs/MANUAL_STEPS.md` M4. Built with Luau and Rojo. Full
+design in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Quickstart
 

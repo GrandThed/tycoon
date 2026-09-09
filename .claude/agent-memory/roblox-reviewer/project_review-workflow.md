@@ -1,6 +1,6 @@
 ---
 name: review-workflow
-description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M3, and recurring bug patterns to recheck
+description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M4, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
 metadata:
   type: project
 ---
@@ -80,3 +80,43 @@ Load-bearing shapes to watch in M4+:
   `Catalog.GetSoundsConfig` returns an uncached empty fallback when Sounds.json is absent.
 - Panel.luau carries M1's inline `+ 2` / `- 16` header insets and BuildPanel's `40` /
   `ScrollBarThickness = 4` — pre-existing, flagged as Suggestion at M3, not new debt.
+
+**Recurring pattern (found at M4, 2026-09-09) — the highest-value check in this repo:**
+- **Any new yield inserted into `Main.server.luau`'s join coroutine silently destroys the
+  offline grant.** `EconomyService.grantIncome` runs at 1 Hz over *every* player with a loaded
+  profile and unconditionally does `state.lastSeen = os.time()`. The M2 invariant "no yields
+  between `LoadAsync` returning and `SendSnapshot`" is what protects `ApplyOfflineGrant`'s
+  `elapsed = now - state.lastSeen`. M4 inserted `MonetizationService.RefreshPassesAsync`
+  (a yielding `UserOwnsGamePassAsync` loop) between them → a tick landing in that window zeroes
+  `elapsed`, losing the whole grant, the welcome-back card and the `DoubleOffline` offer.
+  **How to apply:** every milestone, diff `Main.server.luau`'s `onPlayerAdded` and ask of each
+  new call "does this yield?". If yes it is a Critical unless the join path is gated out of the
+  income tick or `lastSeen`/`incomeAtSave` are snapshotted before the yield. Bonus trap: the
+  bug is invisible in the shipping all-ids-0 default (no ids ⇒ no Marketplace call ⇒ no yield),
+  so a green playtest is not evidence.
+- **Preview-vs-authoritative rate mismatch on paid items.** Client shop previews use the
+  snapshot's *reported* rate (Studio debug ×, neighbors ×1.27); the server prices packs off the
+  *persisted* rate (no debug, neighbors 1). The 3-rate discipline means any client preview of a
+  server-computed number must state which rate it used. Recheck whenever a UI previews cash.
+
+**M4 baseline (2026-09-09, SHIP after one fix round — Monetization & analytics).** Load-bearing
+shapes to watch in M5+:
+- `EconomyService.joinComplete[player]` gates `grantIncome`; set ONLY at the end of
+  `ApplyOfflineGrant`, cleared ONLY in `Cleanup`. Anything new in the join path must sit before
+  that assignment, and nothing else may set the flag.
+- **Four rates now, not three:** live / reported / persisted / *published* persisted.
+  `Types.Snapshot.persistedIncomePerSecond` (always) and `Types.Delta.persistedIncomePerSecond`
+  (whenever the `income` dirty flag flushes) carry `state.incomeAtSave` to the client so the shop
+  preview prices exactly as a receipt does. Any new client preview of a server-computed cash
+  number must say which rate it used.
+- `DoubleOffline` is a reserve → (release | consume) state machine in `EconomyService`
+  (`{amount, reserved, used}`). `ReleaseDoubleOfflineGrant` resets BOTH flags, which is what makes
+  the receipt-rollback path re-grantable — do not "simplify" it to clearing `reserved` only.
+- Receipt handler order: grant in memory → append id → `SaveAsync` → on false, pop id + roll back
+  + `NotProcessedYet`; analytics and the `purchase` FxEvent fire only after a successful save.
+- `Game.json` `remotes.promptCallsPerSecond` (v1.4) is `RequestPrompt`'s own bucket in
+  `RemoteService.bucketCallsPerSecond`; every other remote still shares `callsPerSecond`.
+- Known residual risks deliberately deferred to M5 (do not re-file as new): `SaveAsync` true means
+  "accepted into an active session", not durable; a reservation open across a disconnect hits the
+  "granting 0" warn path; `RefreshPassesAsync` serializes up to 3 retrying Marketplace calls in
+  front of the join snapshot.

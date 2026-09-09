@@ -257,10 +257,13 @@ Requires real API access (section 1, step 4 showed the "available" line).
 - [x] 13. Press Play again. Confirm a small toast appears near the top of the screen reading
       something like "You earned $X while away — <time> offline" and auto-dismisses after a
       few seconds without blocking any taps underneath it.
-- [x] 14. Confirm the granted amount is plausible: roughly (income/s at the moment you stopped)
-      × (seconds away) × 0.5 (50% offline efficiency) — it will not be exact since income/s
-      may have changed right before you stopped, but it should be the right order of magnitude,
-      not the full 100% rate and not zero.
+- [x] 14. Confirm the granted amount is plausible. **The offline grant deliberately ignores the
+      Studio debug income multiplier, while the HUD income/s does not** — so divide the HUD
+      figure out first: roughly (HUD income/s at the moment you stopped ÷
+      `debug.studioIncomeMultiplier`) × (seconds away) × 0.5 (50% offline efficiency; this
+      becomes 1.0 instead of 0.5 once you own the Offline Pro pass, from M4 onward). It will not
+      be exact since income/s may have changed right before you stopped, but it should be the
+      right order of magnitude, not the full 100% rate and not zero.
 - [x] 15. Immediately press Play a second time (rejoin again right away, well under 60 s this
       time). Confirm **no toast appears** — too little time passed.
 - [x] 16. If this is a brand-new profile's very first-ever join (never played before), confirm
@@ -581,4 +584,138 @@ Requires real Studio API access (section 5 above).
       Ticking this box marks `M3` `[x]` in `docs/PLAN.md`. If the combined M0–M2 checklist above
       hasn't been signed off yet, mention that separately — it's still tracked as pending.
 
-<!-- M4 section appended here once M4 ships. Do not delete completed sections above. -->
+## M4 — Monetization & analytics
+
+**Goal:** passes, dev products, Premium, and analytics — all optional, restrained, and invisible
+until you create them. Two phases: **Phase A** proves the all-ids-0 default is silent; **Phase
+B** proves real purchases work once you've created things per `docs/MANUAL_STEPS.md` M4.
+
+The combined M0–M3 checklist above is still pending sign-off — run it in the same session if you
+haven't yet. This section assumes a clean boot and doesn't repeat those checks.
+
+### Phase A — all ids still `0` (do this before creating anything on Creator Hub)
+
+- [ ] 1. Press Play. Confirm the bottom bar shows exactly **Build, Legacy, Settings** — **no
+      Shop button**.
+- [ ] 2. Get a welcome-back card (Stop, wait 65+ s with nonzero income, Play again — same as M3
+      section 8). Confirm it shows the offline amount and an **X**, and there is **no "Double
+      it" button**.
+- [ ] 3. Confirm Output has **zero warnings or errors** related to monetization, passes,
+      products, or analytics across the whole session.
+- [ ] 4. Re-run the M3 checklist's sections 1–9 (reveal, level-up, ×1/×10/Max, bottom bar,
+      settings, era advance, plot sign, welcome-back, silence) and confirm every one still passes
+      exactly as before — M4 must not have changed any M3 behavior when nothing is configured.
+- [ ] 5. Stop Play.
+
+### Phase B — with real ids pasted in
+
+Do `docs/MANUAL_STEPS.md` M4 sections 2–5 first (create at least one pass and one product, paste
+the ids into `src/shared/Config/Monetization.json`, rebuild). You do not need all seven created
+to start — test what you have.
+
+- [ ] 6. Press Play. Confirm the bottom bar now shows a **Shop** button.
+- [ ] 7. Open **Shop**. Confirm it lists **exactly** the items you created (and only those —
+      anything still at id `0` is absent), in two sections **Passes** then **Packs**, in the same
+      order as `Monetization.json`. `DoubleOffline` should **never** appear in the Shop list even
+      if its id is set (it's welcome-back-only).
+- [ ] 8. For each pack row (`Cash30m` / `Cash2h` / `Cash8h` you created), note the previewed
+      "up to N minutes" grant amount shown next to the label.
+- [ ] 9. Confirm the three pack previews are **visibly different amounts**, roughly in a
+      **1 : 2.5 : 5** ratio (not identical, and not the nominal 1 : 4 : 16) — this is the
+      per-pack cap working. If two pack rows show the same number, that's a bug.
+- [ ] 10. Buy one pack (see MANUAL_STEPS.md M4 section 7 about real charges before you tap
+      through). Confirm the cash that actually lands in your balance **matches the previewed
+      amount** from step 8 (small drift is fine if your income changed between preview and
+      purchase; a large systematic overstatement — historically up to +27% too high in a full
+      server — is the bug this milestone fixed. Testing solo, preview and actual should match
+      almost exactly).
+- [ ] 11. Immediately try to buy the same pack again (or, if Studio lets a receipt replay,
+      trigger it twice). Confirm cash is **not** double-granted — one purchase, one grant.
+- [ ] 12. Buy a pass (e.g. `DoubleCash` or `VIP`). Confirm it applies **within the same
+      session, without rejoining**:
+      - `DoubleCash`: income/s roughly doubles immediately.
+      - `VIP`: a gold plot sign, a `VIP` name tag floating above your character's head, and (if
+        VIP variants were imported) VIP building skins — all without leaving and rejoining.
+- [ ] 13. Buy `OfflinePro`. Stop Play, wait 65+ s, Press Play again. Confirm the Studio
+      diagnostic print in Output now reads something like
+      `away Ns, saved rate R/s, cap Cs, efficiency E, granted G` with **cap = 86400** (24h) and
+      **efficiency = 1** — not the default 8h/0.5. Confirm the welcome-back card's amount is
+      correspondingly larger than a non-Pro grant would be.
+- [ ] 14. If you have Roblox Premium on your test account, confirm a **Premium** indicator shows
+      in the UI and income/s reflects the extra 1.1× multiplying with anything else you own
+      (e.g. `DoubleCash` × `VIP` × `Premium` ≈ 2.42× if you have all three).
+- [ ] 15. Confirm a compact **VIP / Premium / neighbors-bonus** indicator is visible somewhere in
+      the top bar or Legacy panel and doesn't crowd the top bar at 375×667 (checked again in the
+      mobile pass below).
+- [ ] 16. Buy `DoubleOffline` if you have it: get a welcome-back card, tap "Double it" (only
+      visible now that the id is set), confirm the resulting cash delta roughly doubles what the
+      card originally showed, and confirm the card's "Double it" button does not reappear for
+      that same grant.
+
+### Join-race check (the milestone's Critical bug — do this one carefully)
+
+- [ ] 17. With a real pass id set (e.g. `VIP` or `OfflinePro`) and the pass owned: stop Play, wait
+      65+ s with nonzero income, then Press Play again **several times in a row** (5+ rejoins) to
+      exercise the join sequence under repeated load. Confirm **every single join** still shows a
+      correct welcome-back card with a nonzero, plausible amount (per M2 step 14's formula) —
+      never a missing card, a silently-zeroed grant, or a warning in Output about the offline
+      grant. (This used to be able to silently zero the grant on the join right after a real pass
+      id was configured; it's now gated so the income tick can't race the join.)
+
+### M3 carry-over fixes — re-verify these are actually fixed now
+
+- [ ] 18. Device Emulator, landscape **640×360**. Open a panel (Build/Legacy/Settings/Shop).
+      Confirm the right-docked panel does **not** overlap the top-left top bar anymore (this was
+      a known ~9 px overlap at M3, fixed this milestone).
+- [ ] 19. Rejoin so the very first `StateChanged` snapshot hasn't arrived yet, and within that
+      first second or two, tap the **Music** or **SFX** toggle in Settings. Confirm it applies
+      **audibly at once** (if you have sound IDs set) rather than waiting for the first
+      snapshot/delta to "heal" it.
+
+### Mobile emulation pass (required every milestone)
+
+- [ ] 20. Device Emulator, **375×667** portrait. Open the Shop panel (with at least one real id
+      set). Confirm every row (pass or pack) is comfortably tappable (~44×44 px), text isn't
+      truncated oddly, and nothing overlaps the top or bottom bar. Confirm the VIP/Premium/
+      neighbors indicator doesn't crowd the top bar at this width.
+- [ ] 21. Rotate to landscape (either 667×375 or the 640×360 case from step 18). Confirm the Shop
+      panel docks the same way the other panels do and remains usable.
+- [ ] 22. Stop Play.
+
+### Two-player test — Local Server mode
+
+- [ ] 23. **Test → Start** with **2 Players**.
+- [ ] 24. As Player 1 (with a real pass id owned), confirm Player 1's VIP sign/skins/name tag (if
+      applicable) and income multiplier are visible/correct to Player 1.
+- [ ] 25. As Player 2, look at Player 1's plot. Confirm Player 2 sees Player 1's gold sign and
+      VIP building skins (world state replicates to everyone) but Player 2's own Shop/pass state
+      is unaffected by Player 1's purchases — passes and products are per-player.
+- [ ] 26. As Player 2, confirm Player 2's own Shop panel only reflects Player 2's own ownership
+      (no owned/greyed state leaking from Player 1).
+- [ ] 27. Stop the test session.
+
+### What a bug looks like here
+
+- A Shop button, a "Double it" button, or any prompt appearing while every id is still `0`.
+- Any Output warning/error mentioning monetization, passes, products, or analytics in Phase A.
+- Two pack rows showing the identical predicted grant (the per-pack-cap bug this milestone
+  fixed) or a purchase crediting a noticeably different amount than its own preview showed.
+- Buying the same product twice granting cash twice, or a replayed receipt granting again.
+- A pass not applying until a rejoin (should be immediate, same session).
+- Offline Pro not widening the cap/efficiency in the diagnostic print.
+- A missing or zeroed welcome-back card on any of the repeated rejoins in the join-race check —
+  this was the milestone's Critical bug; a single failure here is worth reporting precisely
+  (which rejoin number, and the exact Output around it).
+- The landscape panel/top-bar overlap still present at 640×360.
+- A Settings toggle tapped before the first snapshot not applying audibly right away.
+- Player 2 seeing Player 1's Shop/pass ownership state, or vice versa.
+
+### Sign-off
+
+- [ ] 28. All boxes above checked: Phase A silence, Phase B Shop contents/pricing/purchase
+      correctness/idempotency/pass application/Offline Pro/Premium/Double-it, the join-race
+      check across 5+ rejoins, both M3 carry-over fixes, 375×667 portrait, a landscape pass, and
+      the 2-player test.
+- [ ] 29. Tell Claude Code "M4 playtest passed" (or report the exact failure and step number).
+      Ticking this box marks `M4` `[x]` in `docs/PLAN.md`. If the combined M0–M3 checklist above
+      hasn't been signed off yet, mention that separately — it's still tracked as pending.

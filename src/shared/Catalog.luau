@@ -13,12 +13,20 @@ local configFolder = sharedFolder:WaitForChild("Config")
 
 -- Schema version stamped on the fallback config when Sounds.json is absent (mirrors its v1).
 local SOUNDS_SCHEMA_VERSION = 1
+-- Stamped on the fallback config when Monetization.json is absent (mirrors its v1). The
+-- fallback carries no passes/products and neutral multipliers, so an absent file behaves
+-- exactly like the shipping all-ids-zero state: no shop, no prompts, no multipliers.
+local MONETIZATION_SCHEMA_VERSION = 1
+-- Mirrors the shipped Monetization.json value. Never 0: the fallback config is used for real
+-- receipt bookkeeping, and a 0 limit would trim the idempotency log empty on the first insert.
+local MONETIZATION_DEFAULT_RECEIPT_HISTORY_LIMIT = 200
 
 local cachedGameConfig: Types.GameConfig? = nil
 local cachedSoundsConfig: Types.SoundsConfig? = nil
 local cachedEraConfigs: { [number]: Types.EraConfig } = {}
 local cachedLayouts: { [string]: Types.EraLayout } = {}
 local cachedEraCount: number? = nil
+local cachedMonetizationConfig: Types.MonetizationConfig? = nil
 
 local Catalog = {}
 
@@ -47,6 +55,51 @@ function Catalog.GetSoundsConfig(): Types.SoundsConfig
 	cached = require(soundsModule) :: Types.SoundsConfig
 	cachedSoundsConfig = cached
 	return cached :: Types.SoundsConfig
+end
+
+-- Monetization.json is optional in exactly the same sense as Sounds.json: the game must be
+-- fully playable before the human creates a single pass or product. A missing module degrades
+-- to a neutral config instead of blocking boot; the fallback is a fresh table per call so a
+-- later-replicating module is picked up and callers can never mutate a shared placeholder.
+function Catalog.GetMonetizationConfig(): Types.MonetizationConfig
+	local cached = cachedMonetizationConfig
+	if cached ~= nil then
+		return cached
+	end
+	local monetizationModule = configFolder:FindFirstChild("Monetization")
+	if monetizationModule == nil or not monetizationModule:IsA("ModuleScript") then
+		return {
+			version = MONETIZATION_SCHEMA_VERSION,
+			multipliers = { doubleCash = 1, vip = 1, premium = 1 },
+			packCapFractionOfEraSlotCost = 0,
+			receiptHistoryLimit = MONETIZATION_DEFAULT_RECEIPT_HISTORY_LIMIT,
+			passes = {},
+			products = {},
+		}
+	end
+	cached = require(monetizationModule) :: Types.MonetizationConfig
+	cachedMonetizationConfig = cached
+	return cached :: Types.MonetizationConfig
+end
+
+-- Linear scans over at most a handful of entries; the arrays are display order, so a map would
+-- have to be kept alongside them anyway.
+function Catalog.GetPassDef(key: string): Types.PassDef?
+	for _, passDef in Catalog.GetMonetizationConfig().passes do
+		if passDef.key == key then
+			return passDef
+		end
+	end
+	return nil
+end
+
+function Catalog.GetProductDef(key: string): Types.ProductDef?
+	for _, productDef in Catalog.GetMonetizationConfig().products do
+		if productDef.key == key then
+			return productDef
+		end
+	end
+	return nil
 end
 
 -- Era config modules are named "<eraIndex>_<Name>" (e.g. "1_Village"); resolve by prefix.
