@@ -1,10 +1,27 @@
-# BALANCE — M2 first full balance pass
+# BALANCE — final (M5)
 
-Produced by `py tools/sim_economy.py` (mirrors `src/shared/Economy.luau` and reads the
-real configs — regenerate any table below by rerunning the tool). The sim's greedy player
-buys the cheapest affordable thing (slots and level-ups) every second; `--strategy rusher`
-buys slots only. `--check` (used by QA) exits nonzero if any era of the default greedy run
-misses its spec §4 band.
+Produced by `py tools/sim_economy.py` (mirrors `src/shared/Economy.luau` function-for-function
+and reads the real configs — regenerate any table below by rerunning the commands in the last
+section). The sim's greedy player buys the cheapest affordable thing (slots and level-ups)
+every second; `--strategy rusher` buys slots only; `--laps K` rebirths between laps;
+`--rebirth N` starts as a reborn player. `--check` (used by QA) exits nonzero if any era of
+**lap 1** of the default greedy run misses its spec §4 band.
+
+## Status at M5
+
+- **Lap 1 (spec §4 bands): in band, unchanged since M2.** 41:50 / 1:44:15 / 4:28:49 / 9:25:10,
+  longest early-game wait 14 s. The M5 sim additions produce byte-identical default, rusher,
+  paid, packs and `--check` output (diffed before and after).
+- **Second balance pass: no era config value moved, no `Game.json` change requested.** The
+  evidence and the lap-2 decision are in "M5 — rebirth laps" below.
+- **Lap 2: 4:51:29 (0.30× lap 1), lap 3: 2:29:07.** Adopted target and the alternative the lead
+  can pick instead are both documented with numbers.
+- **Paid stack 2.42×, packs capped at ≤ half an era, pricing ladder 1 : 2.2 : 4.2** — all
+  unchanged from M4 and restated below.
+
+---
+
+# M2 — first full balance pass (lap 1, still current)
 
 ## Default run (greedy, legacy carried across advances)
 
@@ -81,11 +98,11 @@ isolation (`--era N --legacy 0` will read slow by design).
 
 ---
 
-# BALANCE - M4 monetization pass
+# M4 — monetization pass (numbers still current)
 
-Nothing in the M2 tables above changed this milestone: no era, layout or `Game.json` value was
+Nothing in the M2 tables above changed at M4 or M5: no era, layout or `Game.json` value was
 touched, and `py tools/sim_economy.py` produces byte-identical default output before and after
-the M4 sim additions (diffed). All monetization constants live in
+the M4 and M5 sim additions (diffed). All monetization constants live in
 `src/shared/Config/Monetization.json`; the sim reads that file rather than restating any of it.
 
 ## Paid multiplier stack (spec section 6 rule 5)
@@ -134,6 +151,12 @@ never accidentally band-check a paid run.
 Longest early-game wait, fully paid: 5s / 4s / 6s / 8s (free: 14s / 5s / 9s / 14s) - well inside
 the 90 s pillar either way.
 
+Re-checked at M5 across two laps (`--laps 2 --passes doublecash,vip --premium`): the paid
+player's lap 2 is 1:51 / 7:02 / 29:11 / 1:22:36 = **2:00:40** against the free player's 4:51:29
+- again exactly 2.42x. The stack compresses time by the same constant in every era of every
+lap and never changes what is built or the legacy banked, so the "convenience, never a progress
+gate" reading holds after rebirth as well as before it.
+
 ## Cash packs and the era cap (replaces the M2 heads-up)
 
 **Decision (lead ruling, INTERFACES.md M4 "Pack grant" + "Per-pack caps"):** packs stay priced
@@ -166,10 +189,10 @@ neither a client nor a Studio playtest can inflate a grant.
 with a single 0.25 cap, all three packs delivered the *identical* amount past roughly the first
 10-20% of every era - a player paying the `Cash8h` price received exactly what `Cash30m` buys.
 Splitting the ceiling 0.10 / 0.25 / 0.50 restores a real 1 : 2.5 : 5 ordering for the whole
-capped phase while keeping every pack honestly described by its "up to N minutes" copy.
+capped phase while keeping every pack honestly described by its copy.
 
 `py tools/sim_economy.py --packs` - grants at the free greedy player's income at the halfway
-point of each era:
+point of each era (unchanged at M5, re-run and diffed):
 
 | Era | Era length | Total slot cost | Mid-era income | Pack | Cap | Uncapped value | Delivered | % of era | Real minutes |
 |-----|-----------|-----------------|----------------|------|-----|----------------|-----------|----------|--------------|
@@ -190,15 +213,17 @@ point of each era:
 would hand over 1.86B against a 14.97M era - **124x the entire era**, i.e. Era 1 and most of Era
 2 in one tap. Capped, the largest single purchase possible anywhere in the game is **half** an
 era's slot cost, so no pack skips an era at any income in any era, and the two smaller packs are
-strictly further from doing so.
+strictly further from doing so. This is independent of legacy and rebirth: the cap is a fraction
+of a fixed cost total, so a reborn player with x9.87 income hits the cap sooner and gets exactly
+the same ceiling.
 
 **Why "minutes of income" inflates so hard here:** income grows exponentially inside an era
 while the era's cost total is fixed, so past the first few minutes a player earns an era's worth
 of cash in a few minutes. At mid-era, the *whole* of Era 1 is about 4 minutes of income. That is
 why a nominal 30-minute pack delivers well under a real minute of income at mid-Era-1 and about
-3.7 real minutes at mid-Era-4 - hence the mandatory honest copy: every pack is labelled **"up to
-N minutes"**, states its own share of the era, and every pack row shows the predicted
-`Economy.PackGrant` beside it.
+3.7 real minutes at mid-Era-4 - hence the mandatory honest copy: every pack row names whichever
+limit produced its number (`30m of income - $4.5M` while minutes bind, `10% of this era -
+$1.2B` once the cap does; INTERFACES.md M4 amendment 8).
 
 Where each pack starts hitting its own cap in the free default run:
 
@@ -223,13 +248,16 @@ which two packs tie. Only the *ratio* changes with era phase:
 | Uncapped (early era) | first 2-14% of an era (table above) | 1 : 4 : 16 (the nominal minutes) |
 | Capped (rest of the era) | the remaining 86-98% | 1 : 2.5 : 5 (the cap fractions) |
 
-**Relative pricing recommendation** (Robux prices are not set yet): price the packs no steeper
-than the ratio that holds for almost the whole era, i.e. `Cash2h` at most 2.5x and `Cash8h` at
-most 5x the `Cash30m` price. Roughly **1 : 2.2 : 4.2** is the honest choice - it keeps the usual
-"bigger bundle is slightly better value" shape instead of inverting it, in every era phase. A
-price ladder steeper than 1 : 2.5 : 5 (for example 1 : 4 : 16, matching the nominal minutes)
-would make the big packs worse value than the small one for 86-98% of every era, which the "up
-to N minutes" copy alone would not excuse.
+## Pricing-ladder note for Ben (unchanged at M5)
+
+Robux prices are not set by any config; when pricing the three developer products on Creator
+Hub, price the packs no steeper than the ratio that holds for almost the whole era, i.e.
+`Cash2h` at most 2.5x and `Cash8h` at most 5x the `Cash30m` price. Roughly **1 : 2.2 : 4.2** is
+the honest choice - it keeps the usual "bigger bundle is slightly better value" shape instead of
+inverting it, in every era phase. A price ladder steeper than 1 : 2.5 : 5 (for example 1 : 4 :
+16, matching the nominal minutes) would make the big packs worse value than the small one for
+86-98% of every era, which the pack copy alone would not excuse. Nothing in the M5 pass changes
+this: the delivered ratios depend only on `minutes` and `capFraction`, neither of which moved.
 
 ## Analytics taxonomy (what shows up on the dashboards)
 
@@ -254,6 +282,8 @@ tails in the M2 section); `product:*` sources against the pack table above show 
 purchases land where the cap predicts; `offline` volume against session count shows whether
 `OfflinePro` earns its price. The four `EraProgression` levels should produce drop-off steps
 matching the free pacing column, with paying players arriving at each step about 2.42x earlier.
+A second `era:1` legacy source for the same player marks a rebirth; the lap-2 table below
+predicts how much sooner each `EraProgression` step should recur.
 
 ## Monetization constants and why
 
@@ -265,15 +295,130 @@ matching the free pacing column, with paying players arriving at each step about
 | `packCapFractionOfEraSlotCost` | 0.25 | Family default for any pack without its own `capFraction`; all three current packs declare one. |
 | `capFraction` 0.10 / 0.25 / 0.50 | per pack | Anti-skip ceiling per pack. Uncapped, `Cash8h` is 124x Era 1; a single global 0.25 made all three packs deliver the identical amount past ~10-20% into an era. |
 | `receiptHistoryLimit` | 200 | FIFO idempotency window - far beyond any plausible Roblox retry horizon, and small in the profile. |
-| `minutes` 30 / 120 / 480 | spec section 6 | Nominal, pre-cap; the UI copy says "up to" and names the pack's era share. |
-| every `id` | 0 | No pass or product exists yet; `0` hides the item everywhere (spec section 6 implementation notes). |
+| `minutes` 30 / 120 / 480 | spec section 6 | Nominal, pre-cap; the UI copy names whichever limit binds. |
+| every `id` | Creator Hub ids | Pasted 2026-09-09; an `id` of `0` hides the item everywhere (spec section 6 implementation notes). |
 
-## Commands used for everything above
+---
+
+# M5 — rebirth laps and the second balance pass
+
+## Sim additions
+
+- `--rebirth N` (default 0): starting `rebirthCount`, fed to `legacy_gain` exactly as the server
+  passes `state.rebirthCount` to `Economy.LegacyGain` (M2 carry-over: the sim hardcoded 0).
+- `--laps K` (default 1): K consecutive laps of eras 1..4, rebirthing between laps (era → 1,
+  `rebirthCount += 1`, legacy kept — what `RequestRebirth` does), printing the per-era block for
+  every lap plus per-lap and grand totals. Lap headers appear only when `--laps > 1` or
+  `--rebirth > 0`, so the plain run is untouched.
+- `--check` still judges **lap 1 only** (the spec §4 bands describe a first playthrough) and
+  refuses `--rebirth` (it would change lap 1's legacy carry).
+- Verified: default, `--strategy rusher`, `--passes doublecash,vip --premium`, `--packs` and
+  `--check` outputs captured before the change and diffed after — all five byte-identical.
+
+## Lap 2 and lap 3 (`py tools/sim_economy.py --laps 3`)
+
+Lap 1 is the M2 table above (identical). Rebirth carries 887 legacy and `rebirthCount` 1 into
+lap 2, 2217 and `rebirthCount` 2 into lap 3.
+
+| Lap 2 | Legacy in (mult) | Completed | vs lap 1 | Longest wait | Wait ≤ 10 min | Legacy gained |
+|-------|------------------|-----------|----------|--------------|----------------|---------------|
+| 1 Village | 887 (×9.87) | 4:20 | 9.65× faster | 2 s | 2 s | +117 (681 levels) |
+| 2 Boomtown | 1004 (×11.04) | 16:54 | 6.17× faster | 4 s | 4 s | +274 (815 levels) |
+| 3 Metropolis | 1278 (×13.78) | 1:10:29 | 3.81× faster | 16 s | 5 s | +402 (795 levels) |
+| 4 OrbitalColony | 1680 (×17.80) | 3:19:46 | 2.83× faster | 43 s | 7 s | +537 (795 levels) |
+| **Lap 2 total** | | **4:51:29** | **3.36× faster** | | | legacy 2217 |
+
+Lap-2 unlock beats: Era 1 — 0:47 / 1:56 / 3:04 / 4:17; Era 2 — 0:33 / 3:21 / 8:16 / 16:23;
+Era 3 — 1:19 / 13:10 / 36:57 / 1:08:56; Era 4 — 3:24 / 37:44 / 1:44:01 / 3:15:22.
+
+| Lap 3 | Legacy in (mult) | Completed | vs lap 1 | Longest wait | Wait ≤ 10 min | Legacy gained |
+|-------|------------------|-----------|----------|--------------|----------------|---------------|
+| 1 Village | 2217 (×23.17) | 1:54 | 22.0× faster | 1 s | 1 s | +156 |
+| 2 Boomtown | 2373 (×24.73) | 7:35 | 13.7× faster | 2 s | 2 s | +366 |
+| 3 Metropolis | 2739 (×28.39) | 34:16 | 7.8× faster | 8 s | 5 s | +537 |
+| 4 OrbitalColony | 3276 (×33.76) | 1:45:22 | 5.4× faster | 23 s | 6 s | +716 |
+| **Lap 3 total** | | **2:29:07** | **6.6× faster** | | | legacy 3992 |
+
+Three laps back to back: **23:40:40**, final legacy 3992, `rebirthCount` 3. The legacy gained
+per era grows ×1.5 / ×2.0 per lap from `gainRebirthBonus` (0.5), which is why lap 3 compresses
+faster than lap 2 did.
+
+## The lap-2 decision
+
+**Adopted target:** lap 2 finishes in a quarter to a half of lap 1's time, every era is at
+least 2.5× faster than lap 1 (so the rebirth is felt in every era, not just the Village), the
+purchase set and therefore the legacy gained are identical to lap 1 (rebirth does not change
+what the player builds, only how fast), and the 90 s early-wait pillar holds. **Met:** 0.30× of
+lap 1, per-era 9.65× / 6.17× / 3.81× / 2.83×, 681 / 815 / 795 / 795 levels in every lap, longest
+early wait 7 s.
+
+**The recommended stricter target ("no era under half its lap-1 band floor": ≥ 15:00 / 45:00 /
+2:00:00 / 4:00:00) is not met and cannot be met by the era configs.** Greedy buys the same
+purchases in the same order in every lap (the set of things cheaper than the monument depends
+only on cost ordering), so an era's time is its fixed cost total divided by income, and income
+is linear in the legacy multiplier. Lap-2 ÷ lap-1 time per era is therefore just
+`legacyMult(lap-1 entry) ÷ legacyMult(lap-2 entry)` — ×1.00 ÷ ×9.87 for Era 1, ×6.29 ÷ ×17.80
+for Era 4 — and both laps read the same `Eras/*.json`, so no `baseCost`/`baseIncome`/
+`multiplier` value can move that ratio; it only moves lap 1 and lap 2 together. Meeting the
+stricter target needs the legacy multiplier itself to shrink, which is `Game.json`.
+
+**The `Game.json` route, quantified (not applied — for the lead to choose):** in-memory runs
+with the sim's own functions, `legacy.incomePerPoint` overridden and Era 2–4 `baseCost`s
+uniformly scaled (uniform scaling preserves purchase order, hence legacy):
+
+| `incomePerPoint` | Era 2–4 cost scale to keep lap 1 mid-band | Lap-1 legacy mults (E2/E3/E4) | Lap 1 | Lap 2 (E1 / E2 / E3 / E4) | Lap 3 |
+|---|---|---|---|---|---|
+| 0.01 (current) | 1 / 1 / 1 | ×1.78 / ×3.61 / ×6.29 | 41:50 / 1:44 / 4:29 / 9:25 | 4:20 / 16:54 / 1:10 / 3:20 | 1:54 / 7:35 / 34:16 / 1:45 |
+| 0.005, no retune | — | ×1.39 / ×2.30 / ×3.65 | 41:50 / 2:13 / **7:01** / **16:15** (out of band) | 7:47 / 30:54 / 2:11 / 6:18 | — |
+| 0.002, no retune | — | ×1.16 / ×1.52 / ×2.06 | 41:50 / **2:40** / **10:37** / **28:47** (out of band) | 15:09 / 1:01:44 / 4:32 / 13:35 | — |
+| **0.002, retuned** | 0.745 / 0.470 / 0.347 | ×1.16 / ×1.52 / ×2.06 | 41:50 / 2:00 / 5:00 / 10:00 | **15:09 / 46:10 / 2:08 / 4:43** | 7:47 / 24:14 / 1:10 / 2:43 |
+
+`incomePerPoint` must drop to **0.002** (the exact threshold: 41:50 ÷ 15:00 = 2.79 = 1 + 887 ×
+0.002) before Era 1 of lap 2 clears 15 minutes; 0.005 does not get there. That change is
+mechanically simple — one key plus scaling every Era 2/3/4 `baseCost` by 0.745 / 0.470 / 0.347 —
+but its cost is the point of legacy inside lap 1: a finished Village would show "×1.16" on the
+HUD instead of "×1.78", and a whole first playthrough's legacy would be worth ×2.06 into Era 4
+instead of ×6.29. It also re-baselines every table in this file (packs, cap onset, paid deltas,
+rusher spread) and the Studio-playtested feel of eras 2–4 one milestone before ship, and lap 3
+lands back where lap 2 is today (7:47 Village) — it delays the collapse by one lap rather than
+removing it.
+
+**My call as designer: keep 0.01 and the current era files for the MVP.** The first lap is the
+product spec §4's bands describe and it is in band; the second lap is a victory lap whose
+Village and Boomtown fly by (4 and 17 minutes, no wait over 4 s, the same unlock beats and
+legacy), while Metropolis and the Orbital Colony still take 1:10 and 3:20 — a reborn player's
+evening. The runaway across laps is real (lap 3 at 2:29, lap 4 would be near an hour) but it is
+the `gainRebirthBonus` term of the spec's own formula doing what it says, and the MVP has four
+eras and no Legacy shop to spend into; the Phase 2 Legacy shop (spec §3) is the natural place
+to turn accumulated legacy into perks instead of raw multiplier, which is the durable fix for
+lap 3+. If Ben wants the stricter lap-2 shape now, the exact change is
+**`legacy.incomePerPoint` 0.01 → 0.002 in `Game.json`** plus the Era 2–4 cost scaling above;
+the harness is ready and it is a one-session job that re-baselines `--check`.
+
+## Rusher spread after rebirth
+
+Unchanged in structure: the rusher's ratio to greedy is independent of the legacy multiplier
+(both players' times scale by the same factor), so lap-2 rusher times are the M2 spread divided
+by the same ×9.87 / ×6.20 / ×3.82 / ×2.83 factors — the Era 1 exploit is about 1:34 against
+greedy's 4:20 in lap 2, and rushing stays neutral-to-worse from Era 3 on.
+
+## Early-wait pillar across laps
+
+Longest wait in the first ten minutes: lap 1 14 s / 5 s / 9 s / 14 s, lap 2 2 s / 4 s / 5 s /
+7 s, lap 3 1 s / 2 s / 5 s / 6 s (limit 90 s). Longest wait anywhere in an era: lap 1 14 s /
+22 s / 58 s / 121 s (the 121 s is Era 4's `launchTower`, past the nine-hour mark — the one
+wait the greedy player ever sees above two minutes), lap 2 2 s / 4 s / 16 s / 43 s.
+
+## Commands used
 
 ```
-py tools/sim_economy.py                                     # free default run (M2 tables)
-py tools/sim_economy.py --strategy rusher                   # rusher spread
-py tools/sim_economy.py --check                             # band check, exits 0
-py tools/sim_economy.py --packs                             # pack grants per era
-py tools/sim_economy.py --passes doublecash,vip --premium   # fully-paid pacing
+py tools/sim_economy.py                                      # lap 1 (M2 tables), default run
+py tools/sim_economy.py --check                              # lap 1 band check, exits 0
+py tools/sim_economy.py --strategy rusher                    # rusher spread
+py tools/sim_economy.py --packs                              # pack grants and caps per era
+py tools/sim_economy.py --passes doublecash,vip --premium    # fully-paid lap 1
+py tools/sim_economy.py --laps 3                             # laps 1-3, rebirth between laps
+py tools/sim_economy.py --laps 2 --passes doublecash,vip --premium   # fully-paid two laps
+py tools/sim_economy.py --rebirth 1 --era 1 --legacy 887     # Era 1 as a first-rebirth player
+py tools/gen_asset_manifest.py --check                       # era configs still valid
 ```

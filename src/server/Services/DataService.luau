@@ -1,23 +1,32 @@
 --!strict
--- ProfileStore-backed PlayerState persistence (spec §7, docs/INTERFACES.md "M2 contracts").
--- Internals (session locking, retries, BindToClose flushing) live in ProfileStore; this module
--- exposes LoadAsync/GetState/Release and owns the schema template + migration mechanism.
--- GetState returns nil until LoadAsync completes — all call sites are nil-tolerant by contract.
+-- ProfileStore-backed PlayerState persistence (spec §7, docs/INTERFACES.md "M2 contracts" +
+-- "M5 contracts — Hardening"). Internals (session locking, retries, BindToClose flushing) live
+-- in ProfileStore; this module exposes LoadAsync/RetryLoadAsync/GetState/SaveAsync/Release,
+-- owns the schema template + migration mechanism, and owns each player's load status while
+-- they sit in safe mode (no profile, no plot, no writes) after a failed load.
+-- GetState returns nil until a load completes — all call sites are nil-tolerant by contract.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 -- ProfileStore is plain (non-strict) Luau; narrow interfaces below cover the surface we use.
 local ProfileStoreModule =
 	require(ServerScriptService:WaitForChild("ServerPackages"):WaitForChild("ProfileStore")) :: any
 
-type SessionSignal = { Connect: (self: SessionSignal, listener: () -> ()) -> any }
+type Connection = { Disconnect: (self: Connection) -> () }
+type SessionSignal = { Connect: (self: SessionSignal, listener: () -> ()) -> Connection }
+type AfterSaveSignal = {
+	Connect: (self: AfterSaveSignal, listener: (saved: Types.PlayerState) -> ()) -> Connection,
+}
 
 type Profile = {
 	Data: Types.PlayerState,
 	OnSessionEnd: SessionSignal,
+	OnAfterSave: AfterSaveSignal,
 	AddUserId: (self: Profile, userId: number) -> (),
 	Reconcile: (self: Profile) -> (),
 	Save: (self: Profile) -> (),
@@ -31,16 +40,30 @@ type PlayerStore = {
 	StartSessionAsync: (self: PlayerStore, key: string, params: StartSessionParams?) -> Profile?,
 }
 
-local SCHEMA_VERSION = 1
+type LoadPhase = "loading" | "failed"
+
+local SCHEMA_VERSION = 2
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 -- Infrastructure retry policy, not game balance (ProfileStore retries the underlying DataStore
--- calls itself; this only re-attempts a thrown StartSessionAsync). Kept in code deliberately —
--- Config/*.json is for gameplay constants.
+-- calls itself; this only re-attempts a thrown StartSessionAsync/Save). Kept in code
+-- deliberately — Config/*.json is for gameplay constants.
 local LOAD_RETRY_ATTEMPTS = 3
 local LOAD_RETRY_BASE_SECONDS = 1
+-- Safe mode: how long after a failed load a RequestRetryLoad is honored. Long enough that a
+-- modified client cannot turn Retry into a DataStore budget drain; short enough that the
+-- common cause (a previous server still finishing its final save) has usually cleared.
+local LOAD_RETRY_COOLDOWN_SECONDS = 10
+-- Confirmed saves (receipts): how long to wait for OnAfterSave before handing the purchase back
+-- to Roblox. A DataStore round-trip is normally well under 2 s; a timeout is NOT retried because
+-- the write may still be queued and a second Save() would not make it land sooner.
+local SAVE_CONFIRM_TIMEOUT_SECONDS = 10
+-- Studio-only playtest lever: a real load failure cannot be forced from Studio (ProfileStore
+-- retries throttled DataStore calls internally and never surfaces them), so a boolean attribute
+-- on Workspace, toggled live in the Properties pane, stands in for one. Ignored outside Studio.
+local FORCE_LOAD_FAILURE_ATTRIBUTE = "ForceLoadFailure"
 
--- Template = schema v1, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v2, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -55,18 +78,31 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 	incomeAtSave = 0,
 	stats = { totalCashAllTime = 0, erasCompleted = 0, playtimeSeconds = 0 },
 	settings = { music = true, sfx = true },
+	pendingDoubleOfflineAmount = 0,
 }
 
 -- Migrations[n](state) upgrades schema n → n+1; the runner bumps state.version afterwards.
--- Empty at v1 (current) — the mechanism exists so future schema bumps are additive here.
-local Migrations: { [number]: (state: Types.PlayerState) -> () } = {}
+-- Additive and idempotent. Reconcile would also fill v2's field, but the version stamp must
+-- advance so a v1 profile is provably upgraded once rather than reconciled forever.
+local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
+	[1] = function(state: Types.PlayerState): ()
+		if state.pendingDoubleOfflineAmount == nil then
+			state.pendingDoubleOfflineAmount = 0
+		end
+	end,
+}
 
 local playerStore: PlayerStore? = nil
 local profiles: { [Player]: Profile } = {}
-local loadingPlayers: { [Player]: boolean } = {}
+-- Present exactly while a load is in flight; concurrent LoadAsync callers park here and are
+-- resumed with the in-flight result (replaces the M2 busy-wait).
+local loadWaiters: { [Player]: { thread } } = {}
+local loadAttempts: { [Player]: number } = {}
+local loadPhases: { [Player]: LoadPhase } = {}
+local lastLoadFailure: { [Player]: number } = {}
 
--- Unit-style guard exercised on every load: a v1 profile takes zero iterations (no-op), and a
--- schema bump without its migration function is a loud warn instead of silent corruption.
+-- Unit-style guard exercised on every load: a current-version profile takes zero iterations,
+-- and a schema bump without its migration function is a loud warn instead of silent corruption.
 local function runMigrations(state: Types.PlayerState, player: Player): ()
 	while state.version < SCHEMA_VERSION do
 		local migrate = Migrations[state.version]
@@ -119,36 +155,32 @@ local function startSessionWithRetry(player: Player, key: string): Profile?
 	return nil
 end
 
-local DataService = {}
+local function publishLoadStatus(player: Player, phase: LoadPhase, retryAvailableIn: number): ()
+	local status: Types.LoadStatus = {
+		kind = "loadStatus",
+		phase = phase,
+		attempt = loadAttempts[player] or 1,
+		retryAvailableIn = retryAvailableIn,
+	}
+	RemoteService.FireClient(player, "StateChanged", status)
+end
 
--- Yields. Returns nil when the load failed, the session stayed locked, or the player left
--- mid-load (the profile is released internally in that case). Main decides kick vs stop.
-function DataService.LoadAsync(player: Player): Types.PlayerState?
-	local existing = profiles[player]
-	if existing ~= nil then
-		return existing.Data
+-- One attempt: session start, left-during-yield guard, reconcile + migrate, session-end hook.
+local function attemptLoad(player: Player): Types.PlayerState?
+	if RunService:IsStudio() and workspace:GetAttribute(FORCE_LOAD_FAILURE_ATTRIBUTE) == true then
+		warn(
+			`[DataService] {FORCE_LOAD_FAILURE_ATTRIBUTE} attribute set — simulating a load failure`
+				.. ` for {player.Name}`
+		)
+		return nil
 	end
-	if loadingPlayers[player] then
-		-- A second orchestration thread for the same player (PlayerAdded + existing-players
-		-- sweep overlap): starting a second ProfileStore session on the same key errors, so
-		-- wait for the in-flight load instead.
-		while loadingPlayers[player] do
-			task.wait()
-		end
-		local settled = profiles[player]
-		return if settled ~= nil then settled.Data else nil
-	end
-	loadingPlayers[player] = true
-
 	local profile = startSessionWithRetry(player, PROFILE_KEY_PREFIX .. player.UserId)
 	if profile == nil then
-		loadingPlayers[player] = nil
 		return nil
 	end
 	if player.Parent == nil then
 		-- Player left during the yield: release the session before anyone can reference it.
 		profile:EndSession()
-		loadingPlayers[player] = nil
 		return nil
 	end
 
@@ -159,15 +191,120 @@ function DataService.LoadAsync(player: Player): Types.PlayerState?
 	profiles[player] = profile
 	profile.OnSessionEnd:Connect(function()
 		-- Fires for our own Release too; profiles[player] is cleared there first, so this
-		-- branch only handles an external end (another server stole the session lock).
-		if profiles[player] == profile then
-			profiles[player] = nil
-			player:Kick("Your data was loaded on another server — please rejoin.")
+		-- branch only handles an external end. ProfileStore's own BindToClose also ends every
+		-- session (possibly before Main's flush runs): that is a shutdown, not a steal, so
+		-- leave the entry in place for Main's teardown and do not kick with a false message.
+		if profiles[player] ~= profile or (ProfileStoreModule :: any).IsClosing == true then
+			return
 		end
+		profiles[player] = nil
+		player:Kick("Your data was loaded on another server — please rejoin.")
 	end)
-
-	loadingPlayers[player] = nil
 	return profile.Data
+end
+
+-- Runs one load attempt, publishes its status, and resumes every parked duplicate caller with
+-- the same result. Callers guarantee no load is in flight for this player.
+local function runLoad(player: Player): Types.PlayerState?
+	loadWaiters[player] = {}
+	loadAttempts[player] = (loadAttempts[player] or 0) + 1
+	loadPhases[player] = "loading"
+	-- Before the yield: the client's boot RequestSnapshot may land at any point of the attempt
+	-- and must always be answerable with a status.
+	publishLoadStatus(player, "loading", 0)
+
+	local state = attemptLoad(player)
+
+	-- A nil result with the player gone needs no status: nobody is there to read it.
+	loadPhases[player] = nil
+	if state == nil and player.Parent ~= nil then
+		-- Safe mode: the player stays with no state and no writes, sees the card, may retry.
+		loadPhases[player] = "failed"
+		lastLoadFailure[player] = os.clock()
+		publishLoadStatus(player, "failed", LOAD_RETRY_COOLDOWN_SECONDS)
+	end
+
+	local waiters = loadWaiters[player]
+	loadWaiters[player] = nil
+	if waiters ~= nil then
+		for _, waiter in waiters do
+			task.spawn(waiter, state)
+		end
+	end
+	return state
+end
+
+local DataService = {}
+
+-- Yields. Returns nil when the load failed, the session stayed locked, or the player left
+-- mid-load (the profile is released internally in that case). On a nil with the player still
+-- present the "failed" status has already been published; Main does nothing further.
+function DataService.LoadAsync(player: Player): Types.PlayerState?
+	local existing = profiles[player]
+	if existing ~= nil then
+		return existing.Data
+	end
+	local waiters = loadWaiters[player]
+	if waiters ~= nil then
+		-- A second orchestration thread for the same player (PlayerAdded + existing-players
+		-- sweep overlap): starting a second ProfileStore session on the same key errors, so
+		-- park until the in-flight load resumes us with its result.
+		table.insert(waiters, coroutine.running())
+		local settled: any = coroutine.yield()
+		return settled :: Types.PlayerState?
+	end
+	return runLoad(player)
+end
+
+-- Yields. Safe-mode retry behind RequestRetryLoad: refused (nil, no attempt, nothing published)
+-- while state is loaded, a load is in flight, or the cooldown since the last failure has not
+-- elapsed. Otherwise a fresh attempt with the attempt counter continued.
+function DataService.RetryLoadAsync(player: Player): Types.PlayerState?
+	if profiles[player] ~= nil or loadWaiters[player] ~= nil then
+		return nil
+	end
+	local failedAt = lastLoadFailure[player]
+	if failedAt ~= nil and os.clock() - failedAt < LOAD_RETRY_COOLDOWN_SECONDS then
+		return nil
+	end
+	return runLoad(player)
+end
+
+function DataService.IsLoading(player: Player): boolean
+	return loadWaiters[player] ~= nil
+end
+
+-- nil once state is loaded or when the player never started a load. retryAvailableIn is the
+-- live remainder of the cooldown, so a late RequestSnapshot gets an accurate countdown.
+function DataService.GetLoadStatus(player: Player): Types.LoadStatus?
+	if profiles[player] ~= nil then
+		return nil
+	end
+	-- Optional annotation: map indexing is non-optional under the old solver.
+	local phase: LoadPhase? = loadPhases[player]
+	if phase == nil then
+		return nil
+	end
+	local retryAvailableIn = 0
+	if phase == "failed" then
+		local failedAt = lastLoadFailure[player] or 0
+		retryAvailableIn =
+			math.max(0, math.ceil(LOAD_RETRY_COOLDOWN_SECONDS - (os.clock() - failedAt)))
+	end
+	local status: Types.LoadStatus = {
+		kind = "loadStatus",
+		phase = phase,
+		attempt = loadAttempts[player] or 1,
+		retryAvailableIn = retryAvailableIn,
+	}
+	return status
+end
+
+-- Whether ProfileStore is writing to its in-memory mock (Studio without API access, or no
+-- internet). Main uses it to skip the shutdown flush in Studio only when nothing would persist.
+-- Reads the field live: ProfileStore probes access asynchronously after require.
+function DataService.IsMockMode(): boolean
+	return (ProfileStoreModule :: any).DataStoreState ~= "Access"
 end
 
 function DataService.GetState(player: Player): Types.PlayerState?
@@ -199,13 +336,93 @@ function DataService.SetSetting(player: Player, key: Types.SettingKey, value: bo
 	return true
 end
 
--- Explicit profile save, used by the receipt handler so a grant and its PurchaseId reach the
--- DataStore before PurchaseGranted is returned. ProfileStore's Save queues the write on its own
+-- Issues one Save() and parks the calling thread until a write lands that satisfies `confirm`,
+-- the session ends, or the confirmation timeout elapses. Never polls: the three exits each
+-- resume the parked thread exactly once. Returns (confirmed, threw): a thrown Save() is the
+-- only outcome the caller may retry.
+local function saveAndConfirm(
+	player: Player,
+	profile: Profile,
+	confirm: (saved: Types.PlayerState) -> boolean
+): (boolean, boolean)
+	local thread = coroutine.running()
+	local parked = false
+	local outcome: boolean? = nil
+	local timedOut = false
+
+	local function settle(result: boolean): ()
+		if outcome ~= nil then
+			return
+		end
+		outcome = result
+		if parked then
+			task.spawn(thread, result)
+		end
+	end
+
+	-- Connected BEFORE Save() so the write we are about to queue can never be missed. An earlier
+	-- autosave landing during the wait only counts if it actually carries the mutation — that
+	-- is what the predicate checks.
+	local afterSave = profile.OnAfterSave:Connect(function(saved: Types.PlayerState)
+		if confirm(saved) then
+			settle(true)
+		end
+	end)
+	local sessionEnd = profile.OnSessionEnd:Connect(function()
+		settle(false)
+	end)
+	local timeout = task.delay(SAVE_CONFIRM_TIMEOUT_SECONDS, function()
+		timedOut = true
+		settle(false)
+	end)
+
+	local ok, err = pcall(function()
+		profile:Save()
+	end)
+	if not ok then
+		afterSave:Disconnect()
+		sessionEnd:Disconnect()
+		task.cancel(timeout)
+		warn(`[DataService] Save threw for {player.Name}: {err}`)
+		return false, true
+	end
+
+	-- ProfileStore's write runs on its own thread and yields before any signal fires, but a
+	-- settle before the park would otherwise be lost, so check once more before yielding.
+	local result: boolean
+	if outcome ~= nil then
+		result = outcome :: boolean
+	else
+		parked = true
+		local resumed: any = coroutine.yield()
+		result = resumed == true
+	end
+
+	afterSave:Disconnect()
+	sessionEnd:Disconnect()
+	if not timedOut then
+		task.cancel(timeout)
+	end
+	if not result then
+		warn(
+			`[DataService] confirmed save for {player.Name} did not land`
+				.. ` ({if timedOut then "timeout" else "session ended"})`
+		)
+	end
+	return result, false
+end
+
+-- Explicit profile save. Without `confirm`: ProfileStore's Save queues the write on its own
 -- thread and retries the underlying DataStore itself, so `true` means "accepted into an active
--- session", NOT "durably written to the DataStore" — that is the strongest guarantee this API
--- can offer; do not read more into the boolean than that. `false` (no profile, inactive session, or
--- a thrown call) makes the caller return NotProcessedYet so Roblox retries the receipt.
-function DataService.SaveAsync(player: Player): boolean
+-- session", NOT "durably written" — nothing may read the boolean as durability. With `confirm`
+-- (the receipt path): `true` means an OnAfterSave fired whose persisted data satisfied the
+-- predicate, i.e. the mutation is durably written. `false` (no profile, inactive session, a
+-- thrown call after retries, a confirmation timeout, or the session ending mid-wait) makes the
+-- receipt caller roll back and return NotProcessedYet so Roblox retries the receipt.
+function DataService.SaveAsync(
+	player: Player,
+	confirm: ((saved: Types.PlayerState) -> boolean)?
+): boolean
 	local profile = profiles[player]
 	if profile == nil then
 		warn(`[DataService] SaveAsync with no loaded profile for {player.Name}`)
@@ -216,13 +433,22 @@ function DataService.SaveAsync(player: Player): boolean
 			warn(`[DataService] SaveAsync on an inactive session for {player.Name}`)
 			return false
 		end
-		local ok, err = pcall(function()
-			profile:Save()
-		end)
-		if ok then
-			return true
+		if confirm ~= nil then
+			local confirmed, threw = saveAndConfirm(player, profile, confirm)
+			if not threw then
+				-- A timeout is not retried: the write may still be queued, and a second
+				-- Save() cannot make it land sooner. Roblox's receipt retry covers it.
+				return confirmed
+			end
+		else
+			local ok, err = pcall(function()
+				profile:Save()
+			end)
+			if ok then
+				return true
+			end
+			warn(`[DataService] Save failed for {player.Name} (attempt {attempt}): {err}`)
 		end
-		warn(`[DataService] Save failed for {player.Name} (attempt {attempt}): {err}`)
 		if attempt < LOAD_RETRY_ATTEMPTS then
 			task.wait(LOAD_RETRY_BASE_SECONDS * 2 ^ (attempt - 1))
 		end
@@ -231,7 +457,12 @@ function DataService.SaveAsync(player: Player): boolean
 end
 
 -- Final save + session release. lastSeen/incomeAtSave are already fresh via the tick rule.
+-- Idempotent: a released (or never-loaded) player is a no-op, so PlayerRemoving and the
+-- shutdown flush may both run it. Also forgets safe-mode bookkeeping for the leaving player.
 function DataService.Release(player: Player): ()
+	loadAttempts[player] = nil
+	loadPhases[player] = nil
+	lastLoadFailure[player] = nil
 	local profile = profiles[player]
 	if profile == nil then
 		return

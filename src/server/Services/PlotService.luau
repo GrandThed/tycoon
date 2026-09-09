@@ -384,6 +384,11 @@ local function onPadTouched(record: PlotRecord, slot: Types.SlotConfig, hit: Bas
 		return
 	end
 	record.padTouchLast[slot.id] = now
+	-- Pads bypass remotes, so spend from the RequestBuy bucket as well: one rate-limit budget
+	-- across both buy paths (M5 audit), with the same silent-drop-on-overflow semantics.
+	if not RemoteService.TryConsumeToken(player, "RequestBuy") then
+		return
+	end
 	tryBuy(player, slot.id)
 end
 

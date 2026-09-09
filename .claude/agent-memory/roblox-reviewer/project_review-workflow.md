@@ -1,6 +1,6 @@
 ---
 name: review-workflow
-description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M4, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
+description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M5 + ProfileStore facts, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
 metadata:
   type: project
 ---
@@ -120,3 +120,25 @@ shapes to watch in M5+:
   "accepted into an active session", not durable; a reservation open across a disconnect hits the
   "granting 0" warn path; `RefreshPassesAsync` serializes up to 3 retrying Marketplace calls in
   front of the join snapshot.
+
+**M5 baseline (2026-09-09, SHIP with 2 Warnings — Hardening, full-codebase audit).** Load-bearing
+shapes and ProfileStore facts verified from `ServerPackages/_Index/.../ProfileStore.luau` (v1.0.3):
+- `SaveProfileAsync(is_ending=true)` fires `OnSessionEnd` synchronously (stravant-style Signal,
+  `task.spawn` per listener) BEFORE its `UpdateAsync`, so `DataService.saveAndConfirm`'s
+  session-end settle → receipt rollback runs before the final write reads `profile.Data`. Both
+  orderings are consistent anyway (cash and receipt id always travel together).
+- Mock-mode saves go through the same `UpdateAsync` wrapper and DO fire `OnAfterSave`.
+- ProfileStore registers its own `BindToClose` at require time that ends EVERY active session
+  itself → `OnSessionEnd` fires for all players at shutdown. Any handler that treats
+  `OnSessionEnd` as "stolen session" must gate on `ProfileStore.IsClosing` (flagged M5 Warning).
+- `DataService.LoadAsync` dedupes via a per-player waiter list (`coroutine.yield` +
+  `task.spawn(waiter, state)`); `RetryLoadAsync` is refused (nil, silent) while loaded / in
+  flight / inside `LOAD_RETRY_COOLDOWN_SECONDS`. Safe mode = no profile ⇒ no writes structurally.
+- `EconomyService` DoubleOffline now has THREE sources (`"session" | "persisted" | "none"`);
+  `RestoreDoubleOfflineGrant(player, source, amount)` is the rollback, `Release` is for
+  declines only. Recheck: `Reserve` overwrites a non-zero persisted pending (M5 Warning).
+- Rate buckets: calls 10/s (all gameplay + RetryLoad + SetSetting), prompt 1/s, snapshot 2/s;
+  pad `Touched` = debounce + RequestBuy bucket; ProximityPrompt = RequestLevelUp bucket.
+- Client: `LoadScreen` scrim is a non-Active Frame (never sinks input); bottom bar hidden until
+  first snapshot; TopBar boots with dashes. `Theme.ZINDEX_LOAD = 22` sits between dialogs and
+  ceremony.

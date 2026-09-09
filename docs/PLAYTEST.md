@@ -719,3 +719,277 @@ to start — test what you have.
 - [x] 29. Tell Claude Code "M4 playtest passed" (or report the exact failure and step number).
       Ticking this box marks `M4` `[x]` in `docs/PLAN.md`. If the combined M0–M3 checklist above
       hasn't been signed off yet, mention that separately — it's still tracked as pending.
+
+---
+
+## M5 — Hardening
+
+**Goal:** the game survives failure — a save that can't load, a session that's contested by
+another server, a shutdown mid-earn, a Robux purchase that needs a confirmed write — without
+ever kicking a player for something that isn't their fault, and without ever losing a real
+purchase. Nothing about the economy or the UI you already tested changed on the happy path;
+this section is entirely about the unhappy paths plus one final end-to-end sweep.
+
+The combined M0–M4 checklist above is still pending full sign-off (M2 has 15 unchecked steps,
+M3 has 24 — see the status lines at the top of `docs/PLAN.md`). Those are stale long-haul
+persistence/prestige/two-player runs, not known failures — the "Final sweep" subsection at the
+end of this M5 section re-covers that same ground in one pass instead of asking you to redo
+every individual box. If you'd rather close the old boxes literally one-by-one first, that's
+fine too; either path satisfies the spec §12 definition of done.
+
+### 1. Rebuild first
+
+- [ ] 1. From the repo root (PowerShell): `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` then
+      `rojo build -o build/test.rbxl`. Confirm it succeeds with no errors. (Or reconnect
+      `rojo serve` if you're using live sync.)
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security — same toggle as M2/M3). Almost every check below needs real persistence.
+
+### 2. Force a load failure and confirm safe mode (not a kick)
+
+Use the **`ForceLoadFailure` Studio lever**, not a DataStore trick: ProfileStore retries its own
+throttled calls internally and never lets a throttle reach our code, so there's no reliable way
+to make a real load fail from outside it. The lead added a Studio-only debug attribute instead —
+it is read by `DataService`, ignored entirely in a published game, and lets every load attempt
+fail on command without touching real DataStore traffic.
+
+- [ ] 3. **Before** pressing Play: in the **Explorer** window, select **Workspace**. In the
+      **Properties** window, scroll to **Attributes**, click **+**, add a new attribute named
+      exactly `ForceLoadFailure`, type **boolean**, value **true**.
+- [ ] 4. Press **Play**. Confirm the **loading card** appears immediately: a centered card
+      titled "Loading your city…", over a light dim that does **not** block movement — walk
+      your character around the hub while the card is up and confirm you can move and look
+      around normally.
+- [ ] 5. Confirm the **top bar shows dashes** (not "$0" / "0/s") while no snapshot has arrived,
+      and the **bottom bar (Build/Legacy/Shop/Settings) is completely hidden** — not greyed out,
+      not present-but-disabled, just absent.
+- [ ] 6. The lever check runs **before** any DataStore call, so the load fails **immediately**
+      (well under a second) — no multi-attempt backoff to wait out. Confirm the card changes to
+      the **failed** state right away: title "We couldn't load your save", body "Nothing you do
+      now will be saved. Try again in a moment, or rejoin.", and two buttons **Retry** and
+      **Leave**, both ≥ 44 px tap targets.
+      - The lever fails fast, so you will **not** see the "Still working…" line here — that
+        line only appears once a load is still genuinely yielding after 8 seconds, which
+        section 3's session-lock test below exercises instead. Not seeing it in this section is
+        correct, not a bug.
+- [ ] 7. Check **Output**. Confirm you see a warn line reading
+      `[DataService] ForceLoadFailure attribute set — simulating a load failure for <your name>`
+      for this attempt, and confirm there is **no `Kick` line** anywhere for this player — the
+      M2-era behaviour ("kick on load failure") is gone. Any red error is a bug; only that warn
+      and DataService's normal retry logging are expected.
+- [ ] 8. Confirm **Retry** is disabled with a visible countdown (e.g. "Retry (10s)") that counts
+      down live, then becomes tappable once it hits zero.
+- [ ] 9. With the attribute still `true`, tap **Retry** once it's enabled. Confirm the card
+      fails again immediately (same as step 6 — no backoff to wait out), the attempt count
+      visibly increments, and Output shows another `ForceLoadFailure` warn line for the new
+      attempt.
+- [ ] 10. Now, while still in Play, go back to **Workspace**'s Attributes and set
+      `ForceLoadFailure` to **false** (or delete the attribute). Tap **Retry** again. Confirm
+      the load now succeeds: the card disappears, your normal HUD/snapshot arrives, and you get
+      your plot — all **without stopping or rejoining**.
+- [ ] 11. To see **Leave** instead: Stop Play, set `ForceLoadFailure` back to `true` on
+      Workspace, Press Play, wait for the failed card, then tap **Leave**. Confirm you are
+      kicked with the message "Rejoin to load your save." (this is the one legitimate kick path
+      left — something the player chose, not something the server decided for them).
+- [ ] 12. **Remove the `ForceLoadFailure` attribute from Workspace** (or set it `false`) before
+      continuing to any other section below — leaving it `true` will fail every subsequent load,
+      including the sections that expect a normal one.
+
+### 3. Session-lock contention — two overlapping sessions
+
+This is the everyday cause of a slow load (a previous server, or a second Studio window, still
+holding your session) — it should resolve on its own, not fail.
+
+- [ ] 13. Press Play (Play Solo is fine) and stay in that session — don't stop it.
+- [ ] 14. With that session still running, open a **second** Studio window on the same place
+      file (File → Open the same `.rbxl`, or a second `rojo serve`-connected Studio instance)
+      and press **Play** there too, on the same Roblox account.
+- [ ] 15. In the second session, confirm the **loading card** appears (same as section 2) and
+      stays in the "loading" phase — not "failed" — while the first session still holds the
+      lock. Confirm the "Still working…" line appears after ~8 s.
+- [ ] 16. Within roughly 40 seconds, confirm the second session's card resolves on its own to
+      your normal HUD (the server-side session lock steals after 40 s) — no tap required, no
+      failed card, no kick.
+- [ ] 17. Stop both sessions.
+
+### 4. Shutdown flush (Stop, not Leave)
+
+- [ ] 18. Press Play with API access on. Own at least one income-producing building so cash is
+      visibly ticking up. Note the exact cash figure at a specific second.
+- [ ] 19. Press **Stop** (Shift+F5) — not a graceful leave, just Stop, ideally right after you
+      see a tick land.
+- [ ] 20. Press Play again. Confirm the cash you rejoin with is at least the value you noted in
+      step 18 (the last tick before Stop was flushed to the DataStore, not lost).
+- [ ] 21. Now turn API access **OFF** (Game Settings → Security), press Play, and press **Stop**
+      immediately. Confirm Stop is not noticeably slower than normal — the shutdown flush only
+      waits on real ProfileStore saves; in mock mode (API access off) it must not hang. Turn API
+      access back **ON** before continuing to the rest of this checklist.
+
+### 5. Confirmed receipt saves — visible delay, no double grant
+
+Requires at least one real developer product id pasted in (`docs/MANUAL_STEPS.md` M4 §4).
+
+- [ ] 22. Open the Shop, buy a pack. Confirm there is now a small but noticeable delay
+      (roughly 1–2 seconds) between completing the purchase and the confirmation toast/cash
+      landing — this is new this milestone (the server now waits for a confirmed DataStore
+      write before telling Roblox the purchase is granted). A total freeze longer than a few
+      seconds, or no toast ever arriving, is a bug.
+- [ ] 23. If Studio lets you replay the same receipt (or just try buying the identical product
+      again right away), confirm cash is **not** granted a second time for the same purchase.
+
+### 6. DoubleOffline persists across a session boundary
+
+Requires the `DoubleOffline` product id set.
+
+- [ ] 24. Stop Play, wait 65+ seconds with nonzero income, Press Play to get a welcome-back
+      card. Tap **"Double it"** to open its confirm/purchase flow, but **do not complete the
+      purchase** — instead, immediately Stop Play with that dialog still open.
+- [ ] 25. Press Play again (new session). If the purchase from step 24 arrives as a receipt in
+      this new session (Roblox may deliver it shortly after, even though you "left" mid-flow),
+      confirm it grants correctly — the reservation survived the session boundary. This is hard
+      to force on demand in Studio (it depends on receipt timing you don't fully control) — if
+      no receipt ever arrives, that's not a failure of this check, just note in your report
+      whether you observed a grant or observed nothing (inconclusive is fine here).
+- [ ] 26. What IS checkable directly: after step 24's Stop, if you have DataStore browsing
+      access (Creator Hub → your experience → a DataStore viewer, or a Command Bar `GetAsync`
+      against the `PlayerData` store for your UserId), confirm the saved profile's
+      `pendingDoubleOfflineAmount` field is a **nonzero** number, not `0` — that's the
+      persisted reservation this milestone added, and it's the part you can verify without
+      waiting on Roblox's receipt delivery timing.
+
+### 7. v1 → v2 migration (silent, no warning)
+
+- [ ] 27. Using an existing save from an earlier milestone's testing (any profile that existed
+      before this session), press Play and check Output. Confirm there is **no** warning or
+      error mentioning migration, schema version, or `pendingDoubleOfflineAmount`. The migration
+      is silent and additive — you should see nothing about it in Output at all, just a normal
+      clean load.
+- [ ] 28. If you have DataStore viewing access (same as step 26), confirm the profile's
+      `version` field now reads `2`.
+
+### 8. Pad spam and rate limits
+
+- [ ] 29. Stand on an unowned pad. Rapidly touch it on and off many times in a couple of seconds
+      (walk back and forth across the edge, or nudge repeatedly). Confirm it buys **at most
+      once** — no double-charge, no duplicate placeholder, no error in Output from spamming it.
+
+### 9. Pad-touch / prompt failure toast (Build panel closed)
+
+- [ ] 30. **Close** the Build panel (tap it again to collapse it, or tap another bottom-bar
+      button). Walk onto a pad you can't afford, or trigger a ProximityPrompt level-up you can't
+      afford, with the Build panel closed. Confirm you still get a clear **toast/feedback**
+      (not just silence) telling you the purchase failed — this is new this milestone; before,
+      failure feedback only showed inside the open Build panel.
+
+### 10. Mobile emulation — LoadScreen portrait and landscape (required every milestone)
+
+- [ ] 31. Device Emulator, **375×667** portrait. Repeat section 2's forced-failure steps (or at
+      minimum, catch the loading card on a normal join). Confirm the card, its title/body text,
+      and the Retry/Leave buttons are fully on-screen, not clipped, and comfortably tappable.
+- [ ] 32. Rotate to **667×375** landscape. Confirm the same card is still fully visible and
+      usable — it should stay centered regardless of the panel-docking rules the other panels
+      follow (the LoadScreen is not one of the docked panels).
+- [ ] 33. Stop Play.
+
+### 11. Two-player test — Local Server mode (safe-mode isolation)
+
+- [ ] 34. Before starting: set the `ForceLoadFailure` attribute on **Workspace** to `true` (same
+      as section 2, step 3). Then **Test → Start** with **2 Players** (Local Server mode). Both
+      Player1 and Player2 should land on the failed card, since the attribute is on for every
+      load attempt server-side.
+- [ ] 35. In the **server** window's Explorer (Local Server mode gives you a separate Server
+      view plus one Client view per player), set `ForceLoadFailure` back to **false** on
+      Workspace.
+- [ ] 36. As **Player2 only**, tap **Retry**. Confirm Player2's load succeeds and they get a
+      normal HUD and plot. **Do not** tap Retry for Player1 — leave Player1 sitting on the
+      failed card.
+- [ ] 37. Confirm **Player1 stays in safe mode**: still showing the failed card, **no plot**
+      assigned to them (walk Player2's camera around the hub and confirm no plot on the ring
+      belongs to Player1), and no HUD.
+- [ ] 38. Confirm **Player2** is completely unaffected by Player1's stuck load — normal HUD,
+      normal plot, no delay, able to buy/level/etc. normally.
+- [ ] 39. Remove the `ForceLoadFailure` attribute (same as section 2, step 12) and Stop the test
+      session.
+
+### What a bug looks like here
+
+- Any red error in Output at any point above (warnings from DataService's own retry logging are
+  expected during a forced failure; errors are not).
+- A `Kick` in Output for a load failure (should never happen — only the explicit "Leave" button
+  and the pre-existing "loaded on another server" kick are allowed to disconnect a player).
+- The loading/failed card blocking movement or the camera.
+- The top bar showing "$0 / 0/s" (rather than dashes/blank) before the first snapshot.
+- The bottom bar visible or tappable before the first snapshot.
+- The "Still working…" line never appearing after 8+ seconds of loading, or appearing instantly.
+- Retry usable before its countdown reaches zero, or Retry requiring a full rejoin to work.
+- Leave not kicking with the "Rejoin to load your save." message.
+- Session-lock contention (section 3) resolving in a "failed" card instead of quietly steal-
+  ing after ~40 s.
+- Cash from the last tick before Stop missing on rejoin (section 4), or Stop hanging with API
+  access off.
+- No visible delay before a purchase confirms (section 5) — suggests the confirmed-save wait
+  isn't actually happening — or, worse, a double grant on a replay.
+- `pendingDoubleOfflineAmount` staying `0` after reserving an offer and leaving (section 6, if
+  you have DataStore viewing access to check).
+- A migration warning/error in Output (section 7), or `version` not reading `2` on an old save.
+- A pad or prompt granting more than once from rapid spam (section 8).
+- No failure toast when the Build panel is closed (section 9) — this was the specific gap fixed
+  this milestone.
+- The LoadScreen clipped, untappable, or missing entirely at 375×667 or 667×375 (sections 10).
+- A safe-mode player still getting a plot, or their trouble delaying/affecting the other player
+  (section 11).
+
+**Not reproducible in Studio — trust the code path, don't try to force these:**
+- A server crash mid-write between a confirmed DataStore save call and the actual write landing
+  (the specific scenario `SaveAsync`'s confirmed-write change closes off) — Studio can't crash a
+  live server mid-call on demand. The reviewer's full-codebase audit is the check for this, not
+  a playtest step.
+- The residual DoubleOffline double-settle edge (an old receipt and a new reservation both
+  settling in the same session) — needs precise receipt-delivery timing you don't control in
+  Studio. Section 6 above is the closest checkable proxy.
+
+### Final sweep — spec §12 definition of done
+
+Run this once, start to finish, in a single sitting if you can. It is the actual bar for
+shipping: *"a new player can join on a phone, complete Era 1 in roughly 30–45 minutes without
+spending, leave, come back to offline earnings, reach Era 4, rebirth, and never see a purchase
+prompt they didn't open themselves."* Use the Studio debug levers (×100 income, per
+`docs/BALANCE.md`) to compress the real-time targets — the spec's minutes/hours are the ×1
+targets already verified by `sim_economy.py`; this sweep is about the *experience*, not
+re-timing it with a stopwatch.
+
+- [ ] 40. **Device Emulator, 375×667 portrait** (phone-first, per spec pillar "mobile-first").
+      Press Play. Confirm a new/fresh profile loads straight to the hub with no unrequested
+      prompt, dialog, or purchase screen of any kind on join — this closes the loop on M0 step
+      15, M1 steps 21–24, and M3 step 30's mobile checks without re-running them individually.
+- [ ] 41. **Complete Era 1** (all 24 Village slots including the monument) using pads and the
+      Build panel, spending no Robux. This re-covers M1 sections 2–8 (steps 4–20) and M2 section
+      4 (steps 17–21) in one continuous play session rather than as isolated boxes.
+- [ ] 42. **Leave** (Stop Play) mid-session, with income/s clearly nonzero.
+- [ ] 43. Wait 65+ seconds real time, then **rejoin**. Confirm the welcome-back card appears
+      with a plausible offline amount — this re-covers M2 section 3 (steps 11–16) and M3 section
+      8 (steps 25–28).
+- [ ] 44. **Advance through Era 2, 3, and reach Era 4**, using the debug income multiplier to
+      compress the real time. Confirm each advance shows the full-screen era-advance screen,
+      ceremony overlay, and plot sign update — this re-covers M2 section 5 (steps 22–26) and M3
+      section 6–7 (steps 17–24).
+- [ ] 45. **Rebirth** once you complete Era 4 (all 24 OrbitalColony slots + monument). Confirm
+      the Rebirth confirm dialog and the resulting Era 1 restart with Legacy kept and rebirth
+      count incremented — closes M2 section 5 steps 23–26 fully.
+- [ ] 46. Across the **entire** sweep above (steps 40–45), confirm you **never once saw a
+      purchase prompt, Shop nudge, or "Double it" button you didn't tap into yourself** — no
+      prompts on join, no blocking modals, at most the one contextual "Double it" offer on a
+      welcome-back card you already triggered on purpose. This is the monetization restraint
+      rule (spec §6 rules 1–3) held for a whole session, not just a single Phase A/B check.
+- [ ] 47. Confirm nothing in this whole sweep produced a red Output error.
+
+### Sign-off
+
+- [ ] 48. All M5 boxes above checked (sections 1–11: rebuild, forced load failure and safe mode,
+      session-lock contention, shutdown flush, confirmed receipt delay, DoubleOffline
+      persistence, migration, pad spam, closed-panel failure toast, mobile portrait/landscape,
+      two-player isolation) plus the Final sweep (steps 40–47).
+- [ ] 49. Tell Claude Code "M5 playtest passed" (or report the exact failure and step number).
+      Ticking this box marks `M5` `[x]` in `docs/PLAN.md`. If you're treating the Final sweep as
+      also closing out the stale M2 (15 boxes) and M3 (24 boxes) sign-offs, say so explicitly —
+      otherwise those remain separately tracked as pending in `docs/PLAN.md`.

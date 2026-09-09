@@ -29,7 +29,7 @@ export type EraConfig = {
 
 export type SlotState = { level: number }
 
--- Full profile schema v1 (spec §7), persisted via ProfileStore since M2.
+-- Full profile schema (spec §7 v1 + the M5 v2 field), persisted via ProfileStore since M2.
 export type PlayerState = {
 	version: number,
 	cash: number,
@@ -43,6 +43,10 @@ export type PlayerState = {
 	incomeAtSave: number,
 	stats: { totalCashAllTime: number, erasCompleted: number, playtimeSeconds: number },
 	settings: { music: boolean, sfx: boolean },
+	-- M5 (schema v2): the DoubleOffline amount a still-open purchase dialog is for, so a
+	-- receipt delivered in a later session (player left with the dialog up) still grants it.
+	-- 0 means "no reservation".
+	pendingDoubleOfflineAmount: number,
 }
 
 export type Multipliers = { legacy: number, pass: number, premium: number, neighbors: number }
@@ -73,6 +77,18 @@ export type Delta = {
 	-- M3: the whole settings table whenever a RequestSetSetting write lands.
 	settings: { music: boolean, sfx: boolean }?,
 }
+
+-- M5: sent on StateChanged while a player has no loaded state (safe mode), so the client can
+-- show a loading/failed card instead of booting blank. Never sent once a snapshot exists.
+export type LoadStatus = {
+	kind: "loadStatus",
+	phase: "loading" | "failed",
+	-- 1-based count of load attempts this session, retries included.
+	attempt: number,
+	-- Seconds until RequestRetryLoad is honored; 0 = now. Always 0 while loading.
+	retryAvailableIn: number,
+}
+-- The StateChanged payload union is Snapshot | Delta | LoadStatus, discriminated by `kind`.
 
 export type ActionResult = {
 	-- M2 adds the era actions; for them slotId is "" (no slot involved).
@@ -187,6 +203,9 @@ export type RemotesConfig = {
 	callsPerSecond: number,
 	-- v1.4: RequestPrompt opens a modal OS dialog, so it gets its own much tighter budget.
 	promptCallsPerSecond: number,
+	-- v1.5: RequestSnapshot answers with a full state snapshot, the most expensive reply the
+	-- server makes, so it does not share the gameplay budget.
+	snapshotCallsPerSecond: number,
 	stateDeltaHz: number,
 	padTouchDebounce: number,
 }

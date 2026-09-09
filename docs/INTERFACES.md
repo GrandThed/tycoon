@@ -1460,3 +1460,20 @@ forced load failure shows the card, Retry recovers without a rejoin, the player 
 for a load failure; a test purchase completes with a visible confirmation delay and grants once;
 shutdown (Stop in Studio with API access on) persists the last tick's state; the M0–M4 playtests
 still pass, re-swept by docs-keeper's final PLAYTEST section against spec §12's definition of done.
+
+## Post-review amendments (M5)
+
+**1. Reviewer Warnings, fixed.** `DataService`'s `OnSessionEnd` handler skips the "loaded on
+another server" kick while `ProfileStore.IsClosing` is true (ProfileStore's own `BindToClose` ends
+sessions before Main's flush runs), and Main's flush runs the teardown for every player
+unconditionally. `ReserveDoubleOfflineGrant` stashes the prior persisted amount on the record and
+`ReleaseDoubleOfflineGrant` restores it instead of writing `0`, so a declined second dialog cannot
+zero an earlier session's paid reservation; `Release` no longer resets `used`; a reservation is
+queued to the DataStore immediately via the unconfirmed `SaveAsync`.
+
+**2. Studio lever for the load-failure playtest (lead).** A real load failure cannot be forced
+from Studio — ProfileStore retries throttled DataStore calls internally and never surfaces them —
+so `DataService.attemptLoad` returns nil immediately (with a warn) when `RunService:IsStudio()`
+and the Workspace boolean attribute `ForceLoadFailure` is true. Read on every attempt, so it can
+be toggled live from the Properties pane to exercise failed → Retry → recovered without a rejoin.
+Ignored outside Studio; not a config key because it is a live toggle, not a constant.

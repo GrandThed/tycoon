@@ -15,6 +15,9 @@ export type BottomBarDeps = { onTap: (key: BarKey) -> () }
 
 export type BottomBarHandle = {
 	SetActive: (key: BarKey?) -> (),
+	-- M5: the whole bar stays hidden until a model exists (nothing to build, spend, or
+	-- configure while a save is loading or failed to load).
+	SetVisible: (visible: boolean) -> (),
 	SetShopVisible: (visible: boolean) -> (),
 	SetScale: (scale: number) -> (),
 	Destroy: () -> (),
@@ -42,6 +45,7 @@ function BottomBar.new(parent: Instance, deps: BottomBarDeps): BottomBarHandle
 		Position = UDim2.new(0.5, 0, 1, -Theme.PADDING),
 		Size = UDim2.fromOffset(width, Theme.BOTTOM_BAR_BUTTON_HEIGHT),
 		BackgroundTransparency = 1,
+		Visible = false,
 		Parent = parent,
 	}) :: Frame
 	local uiScale = Create("UIScale", { Parent = root }) :: UIScale
@@ -96,6 +100,9 @@ function BottomBar.new(parent: Instance, deps: BottomBarDeps): BottomBarHandle
 		SetActive = function(key: BarKey?)
 			activeKey = key
 			paint()
+		end,
+		SetVisible = function(visible: boolean)
+			root.Visible = visible
 		end,
 		SetShopVisible = function(visible: boolean)
 			if shopButton ~= nil then

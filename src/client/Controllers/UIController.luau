@@ -7,7 +7,10 @@
 -- Legacy/Settings panels, the era-advance screen, the ceremony overlay, the welcome-back
 -- card, sound hooks, and the landscape docking layout. M4 adds the Shop panel, the
 -- welcome-back "Double it" offer, purchase feedback, and the bonuses readout - all driven
--- by Monetization.json ids, so with every id 0 the HUD is exactly the M3 HUD.
+-- by Monetization.json ids, so with every id 0 the HUD is exactly the M3 HUD. M5 adds the
+-- data-load safe-mode card: until the first snapshot the HUD is blank (dashes, no bottom
+-- bar) behind a LoadScreen driven by LoadStatus payloads, and a failed load offers Retry
+-- (RequestRetryLoad) or Leave instead of a kick.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,6 +35,7 @@ local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
 local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
 local WelcomeBackCard = require(uiFolder:WaitForChild("WelcomeBackCard"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
+local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 
 type Model = {
@@ -170,6 +174,7 @@ local function boot(): ()
 	local requestRebirth = remotesFolder:WaitForChild("RequestRebirth") :: RemoteEvent
 	local requestSetSetting = remotesFolder:WaitForChild("RequestSetSetting") :: RemoteEvent
 	local requestPrompt = remotesFolder:WaitForChild("RequestPrompt") :: RemoteEvent
+	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
 
 	local gameConfig = Catalog.GetGameConfig()
 	-- Static for the life of the server, so the Shop button's visibility is decided once.
@@ -200,6 +205,17 @@ local function boot(): ()
 
 	local topBar = TopBar.new(screenGui)
 	local toast = Toast.new(screenGui)
+	-- Up from boot so a slow first status still isn't a blank HUD; Hide() on the first
+	-- snapshot is permanent. Retry is an intent; the server decides whether to honor it.
+	local loadScreen = LoadScreen.new(screenGui, {
+		onRetry = function()
+			requestRetryLoad:FireServer()
+		end,
+		onLeave = function()
+			-- Kick is allowed on the local player; the message shows on the disconnect screen.
+			player:Kick("Rejoin to load your save.")
+		end,
+	})
 	local welcomeCard = WelcomeBackCard.new(screenGui, {
 		onVisibilityChanged = function()
 			applyLayout() -- the toast stacks below the card while it is visible
@@ -391,6 +407,12 @@ local function boot(): ()
 			-- Any open prestige screen described the era we just left; its numbers are stale.
 			eraScreen.Hide()
 		end
+		if previous == nil then
+			-- First model of the session: the safe-mode card is done for good and the bar
+			-- finally has something to act on.
+			loadScreen.Hide()
+			bottomBar.SetVisible(true)
+		end
 		local eraConfig = Catalog.GetEraConfig(snapshot.state.era)
 		topBar.SetEra(snapshot.state.era, eraDisplayName(eraConfig, snapshot.eraName))
 		-- Missing era config degrades to the panel's empty state, never an error.
@@ -462,6 +484,22 @@ local function boot(): ()
 		refreshAll()
 	end
 
+	-- Sent only while the player has no loaded state (Types.LoadStatus, M5). Once a model
+	-- exists the screen is hidden for good and any straggler is ignored by LoadScreen.
+	local function applyLoadStatus(payload: { [string]: any }): ()
+		local phase = payload.phase
+		if phase ~= "loading" and phase ~= "failed" then
+			return
+		end
+		local attempt = payload.attempt
+		local retryAvailableIn = payload.retryAvailableIn
+		loadScreen.Apply({
+			phase = phase,
+			attempt = if typeof(attempt) == "number" then attempt else 1,
+			retryAvailableIn = if typeof(retryAvailableIn) == "number" then retryAvailableIn else 0,
+		})
+	end
+
 	local function onStateChanged(payload: any): ()
 		if typeof(payload) ~= "table" then
 			return
@@ -470,6 +508,8 @@ local function boot(): ()
 			applySnapshot(payload)
 		elseif payload.kind == "delta" then
 			applyDelta(payload)
+		elseif payload.kind == "loadStatus" then
+			applyLoadStatus(payload)
 		end
 	end
 
@@ -497,6 +537,17 @@ local function boot(): ()
 			buildPanel.FlashSlot(payload.slotId)
 			if payload.reason == "insufficientFunds" then
 				SoundController.Play("insufficientFunds")
+			end
+			-- M5 feedback audit: a buy pad or ProximityPrompt fails with the Build panel
+			-- closed, so the row flash is off-screen and the sound may be id 0 - a toast is
+			-- the only visible answer the player gets.
+			if not buildPanel.IsOpen() then
+				local reason = payload.reason
+				local message = if reason == "insufficientFunds"
+					then "Not enough cash"
+					elseif reason == "locked" then "Locked — buy the previous slot first"
+					else "Can't do that right now"
+				toast.Show(message, Theme.TOAST_ERROR_SECONDS, true)
 			end
 		end
 	end
@@ -605,6 +656,7 @@ local function boot(): ()
 		end
 		eraScreen.SetLayout(scale, size)
 		ceremony.SetScale(scale)
+		loadScreen.SetScale(scale)
 		welcomeCard.SetLayout(scale, landscape)
 		local stackedAbove = if welcomeCard.IsVisible()
 			then welcomeCard.DesignHeight() + Theme.TOAST_GAP

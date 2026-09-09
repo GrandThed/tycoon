@@ -19,6 +19,7 @@ local REMOTE_NAMES = {
 	"RequestRebirth",
 	"RequestSetSetting",
 	"RequestPrompt",
+	"RequestRetryLoad",
 	"StateChanged",
 	"ActionResult",
 	"FxEvent",
@@ -68,16 +69,44 @@ local validators: { [string]: Validator } = {
 			and (args[1] == "music" or args[1] == "sfx")
 			and typeof(args[2]) == "boolean"
 	end,
+	RequestRetryLoad = function(args: PackedArgs): boolean
+		-- Shape only; the real throttle is DataService's retry cooldown (M5 safe mode).
+		return args.n == 0
+	end,
 }
 
--- RequestPrompt opens a modal OS purchase dialog rather than performing a game action, so it
--- gets its own much tighter budget (Game.json v1.4); every other remote shares callsPerSecond.
-local function bucketCallsPerSecond(remoteName: string): number
-	local remotesConfig = Catalog.GetGameConfig().remotes
-	if remoteName == "RequestPrompt" then
-		return remotesConfig.promptCallsPerSecond
+-- Resolved once in Init from Game.json, clamped to >= 1: a fractional refill rate would start
+-- every bucket empty and silently disable the remote, which is worse than a loud warn.
+local MIN_CALLS_PER_SECOND = 1
+local bucketRates = {
+	calls = MIN_CALLS_PER_SECOND,
+	prompt = MIN_CALLS_PER_SECOND,
+	snapshot = MIN_CALLS_PER_SECOND,
+}
+
+local function clampRate(keyName: string, configured: number): number
+	if configured >= MIN_CALLS_PER_SECOND then
+		return configured
 	end
-	return remotesConfig.callsPerSecond
+	warn(
+		`[RemoteService] remotes.{keyName} = {configured} is below {MIN_CALLS_PER_SECOND};`
+			.. ` clamped (a lower rate would disable the remote)`
+	)
+	return MIN_CALLS_PER_SECOND
+end
+
+-- RequestPrompt opens a modal OS purchase dialog rather than performing a game action, so it
+-- gets its own much tighter budget (Game.json v1.4); RequestSnapshot answers with a full
+-- state snapshot, the most expensive reply the server makes, so it gets its own too (v1.5).
+-- Every other remote shares callsPerSecond.
+local function bucketCallsPerSecond(remoteName: string): number
+	if remoteName == "RequestPrompt" then
+		return bucketRates.prompt
+	end
+	if remoteName == "RequestSnapshot" then
+		return bucketRates.snapshot
+	end
+	return bucketRates.calls
 end
 
 local function tryConsumeToken(player: Player, remoteName: string): boolean
@@ -150,6 +179,11 @@ function RemoteService.FireClient(player: Player, remoteName: string, payload: a
 end
 
 function RemoteService.Init(): ()
+	local remotesConfig = Catalog.GetGameConfig().remotes
+	bucketRates.calls = clampRate("callsPerSecond", remotesConfig.callsPerSecond)
+	bucketRates.prompt = clampRate("promptCallsPerSecond", remotesConfig.promptCallsPerSecond)
+	bucketRates.snapshot = clampRate("snapshotCallsPerSecond", remotesConfig.snapshotCallsPerSecond)
+
 	local folder = Instance.new("Folder")
 	folder.Name = "Remotes"
 	folder.Parent = ReplicatedStorage

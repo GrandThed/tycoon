@@ -198,9 +198,18 @@ local Theme = {
 	PARTICLE_SPREAD = 180,
 	REDUCED_MOTION_FACTOR = 0.5,
 
+	-- M5: data-load safe-mode card (LoadScreen). The dim is lighter than a modal scrim
+	-- because the world stays playable behind it (spec section 5).
+	LOAD_CARD_WIDTH = 320,
+	LOAD_SCRIM_TRANSPARENCY = 0.7,
+	LOAD_SLOW_SECONDS = 8, -- "still working" line after this long in the loading phase
+	LOAD_TICK_SECONDS = 0.25, -- countdown / slow-line refresh cadence
+	LOAD_RETRY_ACK_SECONDS = 5, -- "Retrying…" re-arms to Retry if no status answers by then
+
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,
 	ZINDEX_DIALOG = 20,
+	ZINDEX_LOAD = 22, -- above dialogs (none can open without a model), below toasts
 	ZINDEX_CEREMONY = 25,
 	ZINDEX_TOAST = 30,
 

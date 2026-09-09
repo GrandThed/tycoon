@@ -2,7 +2,9 @@
 -- Top HUD bar: cash, income/s, Legacy count (M2), era badge. Display-only by contract —
 -- UIController pushes every value from server state; nothing here computes cash, income,
 -- or legacy (docs/INTERFACES.md, M1/M2/M3 client contracts). Landscape (M3) parks the bar
--- top-left so the docked side panel never overlaps it on a 667x375 phone.
+-- top-left so the docked side panel never overlaps it on a 667x375 phone. Until the first
+-- snapshot every value reads as a dash (M5): a player whose save failed to load must never
+-- see "$0 / 0/s" and take it for their real balance.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,6 +12,8 @@ local Format = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Fo
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
+
+local BLANK = "—"
 
 export type TopBarHandle = {
 	SetCash: (cash: number) -> (),
@@ -46,7 +50,7 @@ function TopBar.new(parent: Instance): TopBarHandle
 		TextColor3 = Theme.COLOR_TEXT,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "$0",
+		Text = BLANK,
 		Parent = root,
 	}) :: TextLabel
 
@@ -60,7 +64,7 @@ function TopBar.new(parent: Instance): TopBarHandle
 		TextColor3 = Theme.COLOR_TEXT_DIM,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "0/s",
+		Text = BLANK,
 		Parent = root,
 	}) :: TextLabel
 
@@ -77,7 +81,7 @@ function TopBar.new(parent: Instance): TopBarHandle
 		TextColor3 = Theme.COLOR_HIGHLIGHT,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "LEGACY 0",
+		Text = "LEGACY " .. BLANK,
 		Parent = root,
 	}) :: TextLabel
 
@@ -115,7 +119,7 @@ function TopBar.new(parent: Instance): TopBarHandle
 		TextColor3 = Theme.COLOR_TEXT,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "Loading...",
+		Text = BLANK,
 		Parent = badge,
 	}) :: TextLabel
 

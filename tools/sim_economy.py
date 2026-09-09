@@ -27,6 +27,8 @@ Usage:
   py tools/sim_economy.py --passes doublecash,vip --premium
                                                   # fully-paid pacing
   py tools/sim_economy.py --packs                 # cash-pack grants per era
+  py tools/sim_economy.py --laps 2                # two laps, rebirth between
+  py tools/sim_economy.py --rebirth 1 --era 1     # one era as a reborn player
 """
 
 from __future__ import annotations
@@ -246,8 +248,9 @@ def resolve_requires(era):
     return requires
 
 
-def simulate_era(era, game, legacy, strategy, paid=None, record_ips=False):
-    """paid = {"pass": x, "premium": y}; None keeps the free-player defaults."""
+def simulate_era(era, game, legacy, strategy, paid=None, record_ips=False, rebirth_count=0):
+    """paid = {"pass": x, "premium": y}; None keeps the free-player defaults.
+    rebirth_count feeds LegacyGain exactly as the server passes state.rebirthCount."""
     by_id = {slot["id"]: slot for slot in era["slots"]}
     requires = resolve_requires(era)
     children = {}
@@ -312,7 +315,7 @@ def simulate_era(era, game, legacy, strategy, paid=None, record_ips=False):
                     result.seconds = t
                     result.total_levels = sum(owned.values())
                     result.legacy_gained = legacy_gain(
-                        era["eraIndex"], result.total_levels, 0, game
+                        era["eraIndex"], result.total_levels, rebirth_count, game
                     )
                     return result
             else:
@@ -396,29 +399,54 @@ def paid_label(paid):
     )
 
 
-def run_full(game, eras, strategy, check, paid=None):
+def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1):
+    """laps > 1 rebirths between laps (era -> 1, rebirthCount += 1, legacy kept),
+    mirroring the RequestRebirth handler. The band check judges lap 1 only: the
+    spec bands describe a first playthrough. Lap headers are printed only when
+    the run is not the plain single lap so the default output never moves."""
     print(
         f"Era City Tycoon economy sim -- strategy={strategy}, "
         f"{paid_label(paid)}"
         "full playthrough, legacy carried across advances"
     )
     print()
+    multi = laps > 1 or rebirth > 0
     legacy = 0
-    total_seconds = 0
+    rebirth_count = rebirth
+    grand_seconds = 0
     all_in_band = True
-    for era in eras:
-        result = simulate_era(era, game, legacy, strategy, paid)
-        result.legacy_in_mult = legacy_mult(legacy, game)
-        in_band = print_era_result(result, check)
-        all_in_band = all_in_band and in_band
-        print()
-        legacy += result.legacy_gained
-        total_seconds += result.seconds
-    print(f"TOTAL playthrough : {fmt_time(total_seconds)}   final legacy: {legacy}")
+    for lap in range(1, laps + 1):
+        if multi:
+            print(
+                f"=== Lap {lap} (rebirthCount {rebirth_count}, legacy in {legacy}, "
+                f"income mult x{legacy_mult(legacy, game):.2f}) ==="
+            )
+            print()
+        total_seconds = 0
+        for era in eras:
+            result = simulate_era(era, game, legacy, strategy, paid, False, rebirth_count)
+            result.legacy_in_mult = legacy_mult(legacy, game)
+            in_band = print_era_result(result, check and lap == 1)
+            all_in_band = all_in_band and in_band
+            print()
+            legacy += result.legacy_gained
+            total_seconds += result.seconds
+        grand_seconds += total_seconds
+        if multi:
+            print(f"Lap {lap} total   : {fmt_time(total_seconds)}   legacy after lap: {legacy}")
+            print()
+        else:
+            print(f"TOTAL playthrough : {fmt_time(total_seconds)}   final legacy: {legacy}")
+        rebirth_count += 1
+    if multi:
+        print(
+            f"TOTAL {laps} lap(s)  : {fmt_time(grand_seconds)}   final legacy: {legacy}"
+            f"   rebirthCount: {rebirth_count}"
+        )
     return all_in_band
 
 
-def run_single(game, eras, era_index, legacy, strategy, paid=None):
+def run_single(game, eras, era_index, legacy, strategy, paid=None, rebirth=0):
     era = next((e for e in eras if e["eraIndex"] == era_index), None)
     if era is None:
         print(f"error: no era config with eraIndex {era_index}", file=sys.stderr)
@@ -427,9 +455,10 @@ def run_single(game, eras, era_index, legacy, strategy, paid=None):
         f"Era City Tycoon economy sim -- strategy={strategy}, "
         f"{paid_label(paid)}"
         f"era {era_index} in isolation, legacy={legacy}"
+        f"{f', rebirthCount={rebirth}' if rebirth else ''}"
     )
     print()
-    result = simulate_era(era, game, legacy, strategy, paid)
+    result = simulate_era(era, game, legacy, strategy, paid, False, rebirth)
     result.legacy_in_mult = legacy_mult(legacy, game)
     print_era_result(result, False)
     return True
@@ -541,11 +570,26 @@ def main():
         help="report cash-pack grants per era (uncapped value, cap, delivered)",
     )
     parser.add_argument(
+        "--rebirth",
+        type=int,
+        default=0,
+        help="starting rebirthCount (feeds LegacyGain like the server; default 0)",
+    )
+    parser.add_argument(
+        "--laps",
+        type=int,
+        default=1,
+        help="consecutive laps of eras 1..N, rebirthing between laps (default 1)",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="run the default greedy playthrough and exit 1 if any era misses its band",
     )
     args = parser.parse_args()
+    if args.rebirth < 0 or args.laps < 1:
+        print("error: --rebirth must be >= 0 and --laps >= 1", file=sys.stderr)
+        sys.exit(2)
 
     game = load_game_config()
     eras = load_eras()
@@ -571,19 +615,24 @@ def main():
         sys.exit(0)
 
     if args.check:
-        if args.era is not None or args.strategy != "greedy" or paid is not None:
+        if (
+            args.era is not None
+            or args.strategy != "greedy"
+            or paid is not None
+            or args.rebirth != 0
+        ):
             print("error: --check runs the default greedy playthrough only", file=sys.stderr)
             sys.exit(2)
-        ok = run_full(game, eras, "greedy", True)
+        ok = run_full(game, eras, "greedy", True, None, 0, args.laps)
         print()
         print("CHECK: " + ("PASS -- all eras in band" if ok else "FAIL -- era out of band"))
         sys.exit(0 if ok else 1)
 
     if args.era is not None:
-        ok = run_single(game, eras, args.era, args.legacy, args.strategy, paid)
+        ok = run_single(game, eras, args.era, args.legacy, args.strategy, paid, args.rebirth)
         sys.exit(0 if ok else 2)
 
-    run_full(game, eras, args.strategy, False, paid)
+    run_full(game, eras, args.strategy, False, paid, args.rebirth, args.laps)
     sys.exit(0)
 
 

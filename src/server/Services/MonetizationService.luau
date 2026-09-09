@@ -148,22 +148,28 @@ local function findPassDefById(gamePassId: number): Types.PassDef?
 	return nil
 end
 
--- Computes and applies a product's cash grant to the in-memory profile. Returns the granted
--- amount, or nil when the grant could not be computed (the caller answers NotProcessedYet so
--- Roblox retries later). The player-visible effects (analytics, FxEvent) are deliberately NOT
--- fired here: they belong after the save succeeds, because a failed save rolls this back.
+-- What grantProduct applied, so rollbackGrant can undo exactly that. doubleOfflineSource is
+-- "none" for cash packs.
+type GrantResult = { granted: number, doubleOfflineSource: EconomyService.DoubleOfflineSource }
+
+-- Computes and applies a product's cash grant to the in-memory profile. Returns the grant, or
+-- nil when it could not be computed (the caller answers NotProcessedYet so Roblox retries
+-- later). The player-visible effects (analytics, FxEvent) are deliberately NOT fired here: they
+-- belong after the save succeeds, because a failed save rolls this back.
 local function grantProduct(
 	player: Player,
 	state: Types.PlayerState,
 	productDef: Types.ProductDef,
 	purchaseId: string
-): number?
+): GrantResult?
 	local granted: number
+	local doubleOfflineSource: EconomyService.DoubleOfflineSource = "none"
 	if productDef.key == DOUBLE_OFFLINE_PRODUCT_KEY then
-		granted = EconomyService.ConsumeDoubleOfflineGrant(player)
+		granted, doubleOfflineSource = EconomyService.ConsumeDoubleOfflineGrant(player)
 		if granted <= 0 then
-			-- Only reachable when Roblox retries a receipt after the player rejoined: the
-			-- session's offline record is gone. Granting 0 beats an infinite retry loop.
+			-- Neither this session's reserved offer nor a persisted one from an earlier dialog
+			-- exists (e.g. an old receipt and a new reservation both settling in one session —
+			-- the documented residual). Granting 0 beats an infinite retry loop.
 			warn(
 				`[MonetizationService] DoubleOffline receipt {purchaseId} for {player.Name}`
 					.. ` had no pending offline grant; granting 0`
@@ -200,18 +206,14 @@ local function grantProduct(
 		state.stats.totalCashAllTime += granted
 		EconomyService.MarkDirty(player, { cash = true })
 	end
-	return granted
+	return { granted = granted, doubleOfflineSource = doubleOfflineSource }
 end
 
 -- Undoes grantProduct when the receipt could not be persisted. Without this the cash can still
 -- reach the DataStore via ProfileStore's autosave while the PurchaseId does not, and Roblox's
 -- retry would grant a second time.
-local function rollbackGrant(
-	player: Player,
-	state: Types.PlayerState,
-	productDef: Types.ProductDef,
-	granted: number
-): ()
+local function rollbackGrant(player: Player, state: Types.PlayerState, grant: GrantResult): ()
+	local granted = grant.granted
 	if granted > 0 then
 		-- Floored at 0: the same retry yield lets the player spend the granted cash before the
 		-- reversal lands, and an exact subtraction would then render a negative balance in the
@@ -222,10 +224,8 @@ local function rollbackGrant(
 		state.stats.totalCashAllTime -= granted
 		EconomyService.MarkDirty(player, { cash = true })
 	end
-	if productDef.key == DOUBLE_OFFLINE_PRODUCT_KEY then
-		-- Put the offer back so the retried receipt (or a re-prompt) can grant it once.
-		EconomyService.ReleaseDoubleOfflineGrant(player)
-	end
+	-- Put the offer back where it came from so the redelivered receipt grants it exactly once.
+	EconomyService.RestoreDoubleOfflineGrant(player, grant.doubleOfflineSource, granted)
 end
 
 -- The decision order is frozen in docs/INTERFACES.md; every early return is a deliberate
@@ -255,10 +255,11 @@ local function handleReceipt(receiptInfo: { [string]: any }): Enum.ProductPurcha
 		end
 	end
 
-	local granted = grantProduct(player, state, productDef, purchaseId)
-	if granted == nil then
+	local grant = grantProduct(player, state, productDef, purchaseId)
+	if grant == nil then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
+	local granted = grant.granted
 
 	table.insert(state.processedReceipts, purchaseId)
 	local limit = Catalog.GetMonetizationConfig().receiptHistoryLimit
@@ -268,19 +269,25 @@ local function handleReceipt(receiptInfo: { [string]: any }): Enum.ProductPurcha
 		table.remove(state.processedReceipts, 1)
 	end
 
-	-- The grant and the receipt id ride the same profile write. If that write is refused, the
-	-- in-memory grant must be undone before we ask Roblox to retry: an active session can still
-	-- autosave the cash on its own, and the retry would then grant it a second time.
-	if not DataService.SaveAsync(player) then
-		-- Remove by value, not by position: SaveAsync's retry backoff yields, so a second
-		-- receipt for this player can append its own id meanwhile, and a bare table.remove
-		-- would pop THAT id and leave ours behind — Roblox would then find ours already
-		-- recorded and retire the purchase without ever granting it.
+	-- The grant and the receipt id ride the same profile write, and PurchaseGranted is only
+	-- returned once a write carrying THIS id has actually landed (M5 confirmed save): an earlier
+	-- autosave finishing during the wait does not count. If the write is refused, times out, or
+	-- the session ends mid-wait, the in-memory grant must be undone before we ask Roblox to
+	-- retry: memory and the persisted profile then agree on whether the id is present, and the
+	-- id is only ever written together with the cash, so the retry is exactly-once.
+	local saved = DataService.SaveAsync(player, function(persisted: Types.PlayerState): boolean
+		return table.find(persisted.processedReceipts, purchaseId) ~= nil
+	end)
+	if not saved then
+		-- Remove by value, not by position: the confirmation wait yields, so a second receipt
+		-- for this player can append its own id meanwhile, and a bare table.remove would pop
+		-- THAT id and leave ours behind — Roblox would then find ours already recorded and
+		-- retire the purchase without ever granting it.
 		local index = table.find(state.processedReceipts, purchaseId)
 		if index ~= nil then
 			table.remove(state.processedReceipts, index)
 		end
-		rollbackGrant(player, state, productDef, granted)
+		rollbackGrant(player, state, grant)
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	AnalyticsService.LogCashSource(player, granted, state.cash, "IAP", `product:{productDef.key}`)

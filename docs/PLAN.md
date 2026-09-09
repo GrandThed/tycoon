@@ -17,7 +17,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   Major findings; QA green; **playtest 17/17**, with real pass/product ids live in
   `Monetization.json` and the nine event sounds uploaded. Three further bugs were found *by*
   that playtest and fixed after the review — see "Shipped" below)
-- [ ] M5 — Hardening
+- [~] M5 — Hardening (review SHIP after two Warnings fixed, QA green; playtest pending)
 
 ---
 
@@ -304,6 +304,70 @@ amendments (M4 wave 2)" for the exact rulings. QA green (`stylua`, `selene`, `lu
 
 **Done when:** the spec's MVP definition of done holds end-to-end.
 
+**Shipped (2026-09-09):** Server: data-load **safe mode** replaces the M2 kick-on-load-failure
+rule — a player whose profile can't load stays in the server with no state/plot/writes, sees a
+`loadStatus` payload (loading/failed, attempt, retryAvailableIn) on `StateChanged`, and can
+retry via a new `RequestRetryLoad` remote (10 s server-side cooldown) or leave; session-lock
+contention (ProfileStore waits, steals after 40 s) now shows the same loading card instead of a
+kick. `DataService`'s per-frame duplicate-load busy-wait replaced by a waiter list (M2
+carry-over, done). `DataService.SaveAsync(player, confirm)` now waits on ProfileStore's
+`OnAfterSave` (10 s timeout) so `ProcessReceipt` reports `PurchaseGranted` only once the grant +
+purchase id are durably written — retires M4 accepted risk #14 (`docs/MANUAL_STEPS.md` M4 §8);
+expect a visible ~1–2 s delay on a test purchase. Profile schema **v2**: new
+`pendingDoubleOfflineAmount` field with the first real migration (v1→v2); the DoubleOffline
+reservation now persists so a player who leaves with the "Double it" dialog open and gets the
+receipt in a later session is granted — retires M4 accepted risk #15; residual: if an old
+receipt and a new reservation both settle in one session, one grants and the other grants `0`
+with a `warn` (new accepted risk, `MANUAL_STEPS.md` M4 §8 item 17). `game:BindToClose` shutdown
+flush now runs the leave teardown for every player still holding a profile (skipped in Studio
+only when ProfileStore is in mock mode); the "loaded on another server" kick is suppressed
+during shutdown. Rate-limit audit: `RequestSnapshot` gets its own 2/s bucket (`Game.json` v1.5
+`remotes.snapshotCallsPerSecond`), pad touches now also spend from the `RequestBuy` bucket (a
+real hole, fixed), and `RemoteService` clamps any configured rate below 1. Leave-mid-purchase
+and shutdown paths audited row by row against the INTERFACES M5 tables.
+
+Client: new `LoadScreen` card (loading copy, "Still working — another server may be finishing
+your last save." after 8 s, failed state with Retry countdown + Leave, never blocks movement,
+44 px tap targets); top bar shows dashes instead of "$0 / 0/s" before the first snapshot; bottom
+bar (and Shop) hidden until the first snapshot; pad-touch and ProximityPrompt failures now show
+a toast even with the Build panel closed (feedback-audit gap, fixed); every tween/particle
+verified gated by reduce-motion.
+
+Economy: `sim_economy.py --rebirth N` and `--laps K` (M2 carry-over, done); second balance pass
+moved **nothing** — lap 1 unchanged and in band (41:50 / 1:44:15 / 4:28:49 / 9:25:10), lap 2 =
+0.30× lap 1 (4:20 / 16:54 / 1:10:29 / 3:19:46), paid stack unchanged at 2.42×. Lead accepted the
+designer's recommendation to keep `legacy.incomePerPoint = 0.01` and let a Phase 2 Legacy shop
+handle lap-3+ runaway rather than shrink lap-1 Legacy's payoff. Cash-pack Robux pricing must
+still follow the 1 : 2.2 : 4.2 ladder (`docs/BALANCE.md`) whenever real prices are set — carried
+forward again below.
+
+Still open by design: the four ambient era loops in `Sounds.json` are id `0` (need a CC0 loop
+pack — the four uploaded packs are all one-shots); Kenney meshes never imported (placeholders by
+design, per spec §5). Reviewer suggestion deferred: safe-mode players still count toward the
+neighbours bonus (+3% each) for other players in the server — recorded as a known nit, not fixed
+this milestone (`MANUAL_STEPS.md` M4 §8 item 18).
+
+Reviewer verdict: full-codebase audit (not a diff review) found two Warnings, both fixed before
+sign-off (see `docs/INTERFACES.md` M5 section for the exact rulings and the rate-limit/leave-
+mid-purchase/shutdown audit tables). QA green: `stylua`, `selene`, `luau-lsp analyze` (fresh
+sourcemap for the new `LoadScreen.luau`), `rojo build`, `sim_economy.py --check` (lap 1
+unchanged from M2/M4), `gen_asset_manifest.py --check`.
+
+**Carried forward (owners assigned):**
+- **economy-designer / Ben:** cash-pack Robux pricing must follow the **1 : 2.2 : 4.2** ladder
+  (`docs/BALANCE.md` "Cash packs and the era cap") whenever real Robux prices are set or revised
+  on the Creator Hub — unchanged since M4, still not applied to anything (ids exist, prices are
+  Ben's call).
+- **Ben / whoever finds a CC0 loop pack:** the four ambient era loops in `Sounds.json` remain
+  `0`. Optional; the tooling (`tools/upload_audio.py` + `tools/audio_map.json`'s `ambient`
+  section) is ready whenever files are picked.
+- **economy-designer / lead, Phase 2:** the neighbours-bonus nit (safe-mode players count toward
+  `neighborsMult`) is deferred, not fixed — low priority, revisit if it ever matters in practice.
+- **economy-designer / lead, Phase 2:** the Legacy shop (spec §3 "Phase 2") is the intended lever
+  for lap-3+ runaway income instead of shrinking `legacy.incomePerPoint` — `docs/BALANCE.md`'s
+  "M5 — rebirth laps" section has the quantified alternative (`incomePerPoint` 0.01 → 0.002 +
+  era cost retuning) fully worked out if the lead ever wants that path instead.
+
 ---
 
 ## 6. Risks & watch items (non-blocking)
@@ -314,8 +378,10 @@ amendments (M4 wave 2)" for the exact rulings. QA green (`stylua`, `selene`, `lu
   Rokit shims resolve from any shell.
 - **Pacing targets vs playtest reality:** sim models a greedy player, not a human. Expect a
   tuning round after Ben's M2 playtest; constants live only in config, so tuning is data-only.
-- **OneDrive path:** the repo lives under OneDrive; if file-lock/sync issues bite the toolchain,
-  consider pausing sync for the folder (Ben's call — flagged only if it actually bites).
+- **OneDrive path — stale, corrected 2026-09-09:** this line originally warned the repo lived
+  under OneDrive. It does not — the repo has lived at `C:\Users\benja\Desktop\tycoon` (plain
+  Desktop, not OneDrive-synced) since the environment drift noted in §1 (2026-09-08). No
+  file-lock/sync risk has bitten the toolchain; nothing to watch here.
 - **Era art direction:** manifest quality (kit suggestions per model) drives Ben's import effort;
   reviewed at M3 gate before any importing starts.
 

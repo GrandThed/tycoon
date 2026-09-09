@@ -334,23 +334,98 @@ numeric **Product ID**.
 
 ### 8. Accepted risks (recorded here per the lead's ruling — not bugs, don't report them)
 
-- [ ] 14. **`DataService.SaveAsync` durability caveat.** `SaveAsync` wraps ProfileStore's
-      `Profile:Save()`, which is non-yielding — a `true` return means "accepted into an active
-      session", **not** "durably written to the DataStore yet". `ProcessReceipt` returns
-      `PurchaseGranted` on that `true`, which permanently retires the receipt with Roblox (Roblox
-      will never re-deliver it). If the server crashes in the few seconds between that `true` and
-      the underlying write actually landing, the player keeps the Robux charge and the grant is
-      lost, with no automatic retry. This is the strongest guarantee ProfileStore exposes; it's
-      accepted for M4 and is an M5 hardening item (see `docs/PLAN.md` M5 carry-forward list). You
-      won't be able to reproduce this in a normal playtest — it needs a server crash mid-save.
-- [ ] 15. **Open `DoubleOffline` reservation.** If a player leaves with a "Double it" offer
-      reserved (dialog open) but not completed, that reservation is simply dropped — a receipt
-      that somehow arrives in a later session grants `0` (with a `warn` logged server-side, not
-      an error). Rare in practice (Roblox retries receipts quickly and this window is small).
+- [x] 14. **`DataService.SaveAsync` durability caveat — RETIRED by M5.** ~~`SaveAsync` wraps
+      ProfileStore's `Profile:Save()`, which is non-yielding — a `true` return means "accepted
+      into an active session", not "durably written to the DataStore yet".~~ Replaced this
+      milestone: `SaveAsync(player, confirm)` now waits on ProfileStore's `OnAfterSave` (up to a
+      10 s timeout) before returning `true`, and `ProcessReceipt` only reports
+      `PurchaseGranted` once the grant + purchase id are confirmed durably written. The cost is a
+      visible ~1–2 s delay on a test purchase (`docs/PLAYTEST.md` M5 section 5) — that delay is
+      expected, not a bug.
+- [x] 15. **Open `DoubleOffline` reservation — RETIRED by M5, narrowed to a smaller residual.**
+      ~~If a player leaves with a "Double it" offer reserved but not completed, the reservation
+      was simply dropped.~~ Replaced this milestone: the reservation is now persisted to the
+      profile (`pendingDoubleOfflineAmount`, schema v2) and survives a session boundary — a
+      receipt that arrives in a later session grants correctly. See item 17 below for the new,
+      smaller residual risk this leaves.
 - [ ] 16. **Analytics events are silent in Studio by design.** `slot bought`, `level-up`,
       `offline grant`, `product grant`, and `legacy on advance/rebirth` events only actually
       appear on the Creator Hub analytics dashboards for a **published** place with analytics
       enabled. You will not see anything on a dashboard from Studio Play-testing — that's
       expected, not a bug to report.
+- [ ] 17. **New (M5): residual `DoubleOffline` double-settle edge.** In the rare case where an
+      old receipt (from a session before the one where the reservation was made) and a new
+      reservation both try to settle in the same session, only one grants — the other grants `0`
+      with a `warn` logged server-side, not an error. Lower-frequency than the M4 risk it
+      replaces (item 15) since the common "leave with the dialog open" case is now handled
+      correctly. Not reproducible on demand in Studio; don't chase it in a normal playtest.
+- [ ] 18. **New (M5): neighbours bonus doesn't exclude safe-mode players.** A player stuck in
+      safe mode (load failure, no plot, no state) still counts toward `neighborsMult` for other
+      players in the server (+3% each, capped at +27%) even though they aren't really playing.
+      Reviewer-flagged nit, deferred by the lead as low-impact (safe mode is rare and the bonus
+      is small and uncapped-in-practice-only-at-9-players); not a bug to report, and not planned
+      for a fix this milestone.
 
 <!-- M4 section complete. Do not delete completed sections above. -->
+
+---
+
+## M5 — Hardening
+
+Nothing new to create on the Creator Hub this milestone — all passes/products already exist
+from M4. This section is a rebuild, a note on how to exercise the new failure-handling UX in
+Studio, and two reminders carried forward from earlier milestones.
+
+### 1. Rebuild first
+
+- [ ] 1. If you pulled new changes since M4, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+      (PowerShell) then `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). No new
+      dependencies this milestone (`wally install` not required — `wally.toml` is frozen for
+      M5). `luau-lsp analyze` needs a fresh sourcemap since `LoadScreen.luau` is new:
+      `rojo sourcemap default.project.json -o sourcemap.json`.
+
+### 2. Forcing a load failure for the playtest
+
+`docs/PLAYTEST.md` M5 section 2 has the exact steps. Summary: this is a **Studio-only debug
+attribute**, not a DataStore trick — ProfileStore retries its own throttled calls internally and
+never lets a throttle reach our code, so there is no reliable way to fail a load from outside
+it. `DataService` instead reads a boolean **`ForceLoadFailure`** attribute on **Workspace**:
+while it is `true`, every load attempt for every player fails **immediately** (before any
+DataStore call is even made — no multi-second backoff to wait out), landing on the "failed"
+card. It is ignored entirely in a published game. Set it to `false` (or delete it) and tap
+**Retry** to recover without a rejoin — the load then succeeds normally. **Always remove the
+attribute before continuing to any other playtest section**, or every subsequent load will fail
+too. Output logs a `[DataService] ForceLoadFailure attribute set — simulating a load failure
+for <name>` warn line each time it triggers, which is expected, not an error.
+
+Session-lock contention (a second overlapping Studio session on the same account) is a separate,
+gentler check that does **not** use this attribute — that one should resolve itself within ~40 s
+without ever reaching "failed", and is the case that actually exercises the "Still working…"
+line (the forced-failure lever above fails too fast to show it).
+
+### 3. Robux pricing ladder — still your call, still 1 : 2.2 : 4.2
+
+Carried forward from M4, unchanged by the M5 balance pass (`docs/BALANCE.md` "M5 — rebirth laps
+and the second balance pass" confirms nothing moved). Whenever you actually set or revisit Robux
+prices for `Cash30m` / `Cash2h` / `Cash8h` on the Creator Hub, keep roughly the **1 : 2.2 : 4.2**
+ratio (`Cash2h` at most 2.5× `Cash30m`, `Cash8h` at most 5×) — see `docs/BALANCE.md` "Cash packs
+and the era cap" for why a steeper ladder (e.g. the nominal 1 : 4 : 16) makes the big packs worse
+value than the small one for most of every era.
+
+### 4. Still outstanding: ambient era loops
+
+The four ambient loop ids in `src/shared/Config/Sounds.json` (`Village`, `Boomtown`,
+`Metropolis`, `OrbitalColony`) are still `0` — silent by design, not a bug. The four uploaded
+Kenney packs (Interface Sounds, Casino Audio, Impact Sounds, Music Jingles) are all short
+one-shots with no loopable bed, so this needs a different CC0 pack. Optional; the game is
+correct and silent without it. Same tool handles it once you have files: add them to `assets/`,
+add an `ambient` section to `tools/audio_map.json`, run `py tools/upload_audio.py` (mind the
+Open Cloud upload quota noted in the M3 section above — 9 of 100 monthly slots already spent).
+
+### 5. Nothing else needed for M5
+
+- [ ] 2. No new Kenney meshes, audio, passes, or products required this milestone. Mesh import
+      (`docs/MANUAL_STEPS.md` M3 §2) remains fully optional at any pace.
+- [ ] 3. That's it — go run `docs/PLAYTEST.md` M5 section, including the Final sweep.
+
+<!-- M5 section complete. Do not delete completed sections above. -->

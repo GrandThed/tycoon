@@ -34,7 +34,14 @@ type DirtyRecord = {
 -- reserved: a purchase dialog for DoubleOffline is open right now. Reserving at prompt time
 -- (not at receipt time) is what stops a modified client opening two dialogs and paying twice
 -- for one grant; a declined or failed prompt releases the reservation.
-type OfflineRecord = { amount: number, reserved: boolean, used: boolean }
+-- previousPending: the persisted amount an EARLIER session's still-open dialog left behind,
+-- stashed while this session's dialog is up so a decline puts it back rather than zeroing it.
+type OfflineRecord = { amount: number, reserved: boolean, used: boolean, previousPending: number }
+
+-- Which store a DoubleOffline receipt settled from, so a rolled-back grant can put the amount
+-- back where it came from: this session's reserved record, the persisted amount an earlier
+-- session's dialog left behind (M5 schema v2), or nothing.
+export type DoubleOfflineSource = "session" | "persisted" | "none"
 
 local dirtyRecords: { [Player]: DirtyRecord } = {}
 local pendingWelcomeBack: { [Player]: Types.WelcomeBack } = {}
@@ -291,7 +298,8 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 			state.stats.totalCashAllTime += granted
 			-- Recorded for the whole session so the welcome-back card's "Double it" product
 			-- can still be honoured minutes later; a single use, cleared in Cleanup.
-			offlineRecords[player] = { amount = granted, reserved = false, used = false }
+			offlineRecords[player] =
+				{ amount = granted, reserved = false, used = false, previousPending = 0 }
 			AnalyticsService.LogCashSource(player, granted, state.cash, "TimedReward", "offline")
 			-- The card only appears when the player was away at least the configured minimum
 			-- (Game.json v1.3 offline.welcomeBackMinSeconds) AND the grant was positive.
@@ -311,38 +319,87 @@ end
 
 -- Claims the offer for one purchase dialog. nil when there is nothing to sell or a dialog is
 -- already open, so two RequestPrompts can never produce two chargeable prompts for one grant.
+-- The reservation is also persisted (pendingDoubleOfflineAmount): a player who leaves with the
+-- dialog open and completes it later is still charged, and the receipt must find the amount.
 function EconomyService.ReserveDoubleOfflineGrant(player: Player): number?
 	local record = offlineRecords[player]
-	if record == nil or record.used or record.reserved then
+	local state = DataService.GetState(player)
+	if record == nil or state == nil or record.used or record.reserved then
 		return nil
 	end
 	record.reserved = true
+	record.previousPending = state.pendingDoubleOfflineAmount
+	state.pendingDoubleOfflineAmount = record.amount
+	-- Queue the write now rather than waiting for the next autosave: the reservation only
+	-- matters if the player leaves with the dialog open, which can be seconds away.
+	DataService.SaveAsync(player)
 	return record.amount
 end
 
--- Returns a reservation to the pool: the player declined the dialog, the prompt call failed, or
--- a receipt grant was rolled back after a failed save.
+-- Returns a reservation to the pool: the player declined the dialog or the prompt call failed.
+-- Nothing was charged, so the persisted field goes back to whatever an earlier session's
+-- dialog left there (its receipt may still arrive). `used` is untouched: rollback
+-- re-grantability is RestoreDoubleOfflineGrant's job.
 function EconomyService.ReleaseDoubleOfflineGrant(player: Player): ()
+	local state = DataService.GetState(player)
 	local record = offlineRecords[player]
+	if state ~= nil then
+		state.pendingDoubleOfflineAmount = if record ~= nil then record.previousPending else 0
+	end
 	if record == nil then
 		return
 	end
 	record.reserved = false
-	record.used = false
 end
 
--- Marks the offer used and returns the amount to grant (0 when there is nothing pending, which
--- the receipt handler treats as a successful zero grant rather than an endless Roblox retry).
-function EconomyService.ConsumeDoubleOfflineGrant(player: Player): number
+-- Settles one DoubleOffline receipt: this session's reserved record first; else the persisted
+-- amount an earlier session's dialog left behind; else 0 (the receipt handler grants 0 rather
+-- than retrying forever). Every path zeroes the persisted field, so a receipt can never be paid
+-- twice. Also returns which source paid, for rollback.
+function EconomyService.ConsumeDoubleOfflineGrant(player: Player): (number, DoubleOfflineSource)
+	local state = DataService.GetState(player)
 	local record = offlineRecords[player]
-	if record == nil or record.used then
-		return 0
+	if record ~= nil and record.reserved and not record.used then
+		record.used = true
+		record.reserved = false
+		if state ~= nil then
+			state.pendingDoubleOfflineAmount = 0
+		end
+		return record.amount, "session"
 	end
-	-- Settles the reservation. A receipt with no reservation (a server restart between prompt
-	-- and delivery) still settles: the charge happened, so the grant must happen.
-	record.used = true
-	record.reserved = false
-	return record.amount
+	if state ~= nil and state.pendingDoubleOfflineAmount > 0 then
+		local amount = state.pendingDoubleOfflineAmount
+		state.pendingDoubleOfflineAmount = 0
+		return amount, "persisted"
+	end
+	if state ~= nil then
+		state.pendingDoubleOfflineAmount = 0
+	end
+	return 0, "none"
+end
+
+-- Undoes ConsumeDoubleOfflineGrant after a failed receipt save: the Robux charge stands and
+-- Roblox will redeliver the receipt, so the amount goes back to exactly the source it came from
+-- (the session record stays reserved — its dialog completed — and the persisted field is
+-- restored so a rejoin-then-redeliver still finds it).
+function EconomyService.RestoreDoubleOfflineGrant(
+	player: Player,
+	source: DoubleOfflineSource,
+	amount: number
+): ()
+	local state = DataService.GetState(player)
+	if source == "session" then
+		local record = offlineRecords[player]
+		if record ~= nil then
+			record.used = false
+			record.reserved = true
+		end
+	elseif source == "none" then
+		return
+	end
+	if state ~= nil then
+		state.pendingDoubleOfflineAmount = amount
+	end
 end
 
 -- PlotService calls this after an era mutation (advance/rebirth), before the fresh snapshot:
@@ -399,6 +456,15 @@ end
 
 function EconomyService.Init(): ()
 	RemoteService.SetHandler("RequestSnapshot", function(player: Player)
+		if DataService.GetState(player) == nil then
+			-- Safe mode (M5): the client's boot request may land before, during, or after the
+			-- first load attempt; whichever it is, it must end with a status or a snapshot.
+			local status = DataService.GetLoadStatus(player)
+			if status ~= nil then
+				RemoteService.FireClient(player, "StateChanged", status)
+			end
+			return
+		end
 		EconomyService.SendSnapshot(player)
 	end)
 end
