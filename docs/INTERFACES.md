@@ -1173,6 +1173,20 @@ instead of `callsPerSecond`. Every other remote is unchanged.
   `MANUAL_STEPS.md` and it becomes an M5 hardening item. Nothing else may read the boolean as
   durability.
 
+**7. The published persisted rate must be computed live, not read from `state.incomeAtSave`
+(playtest fix, 2026-09-09).** Amendment 4 said the server publishes `state.incomeAtSave`. That
+was wrong: `incomeAtSave` is a *persistence* field, restamped only by the 1 Hz income tick,
+while the delta's `incomePerSecond` beside it is computed fresh at flush time. The consequences
+in Studio were that every shop pack previewed the rate from before the player's last purchase,
+and read **$0 for an entire era after an advance** — the advance restamps `incomeAtSave`
+against the new era's empty slots, and nothing marks income dirty when the tick recomputes it,
+so the client kept the zero until a second purchase happened to flush a delta.
+
+`EconomyService.GetPersistedIncomePerSecond(player): number` is now the single source: the
+snapshot, the delta, and `MonetizationService`'s receipt pricing all call it, so the row cannot
+advertise one amount and the grant deliver another. `state.incomeAtSave` keeps its original and
+only job — the rate persisted for the offline grant.
+
 ## Definition of done (M4)
 
 `stylua --check src`, `selene src`, `luau-lsp analyze` (committed definitions +

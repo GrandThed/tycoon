@@ -181,11 +181,13 @@ local function grantProduct(
 			return nil
 		end
 		local monetizationConfig = Catalog.GetMonetizationConfig()
-		-- incomeAtSave is the persisted-rate flavour (no Studio debug multiplier, neighbors
-		-- pinned to 1), refreshed every income tick — a Studio playtest cannot inflate a pack.
+		-- The persisted-rate flavour (no Studio debug multiplier, neighbors pinned to 1), so a
+		-- Studio playtest cannot inflate a pack. Computed live rather than read from
+		-- state.incomeAtSave: the shop preview publishes this same number, so the row cannot
+		-- advertise one amount and the receipt grant another.
 		granted = Economy.PackGrant(
 			minutes,
-			state.incomeAtSave,
+			EconomyService.GetPersistedIncomePerSecond(player),
 			Economy.EraSlotCostTotal(eraConfig),
 			-- Per-pack ceiling, falling back to the config-wide default (M4 amendment): a
 			-- single shared cap made every pack grant the same amount past early-era.

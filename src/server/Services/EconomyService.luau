@@ -162,6 +162,19 @@ local function grantIncome(seconds: number): ()
 	end
 end
 
+-- The live persisted rate: what a cash pack is priced against and what the shop previews.
+-- Deliberately NOT state.incomeAtSave — that is a persistence field the 1 Hz tick restamps,
+-- so publishing it handed the client a rate one purchase out of date, and 0 for a whole era
+-- after an advance (the advance restamps it against the new era's empty slots). Exposed as
+-- EconomyService.GetPersistedIncomePerSecond so the receipt path prices with this same number.
+local function livePersistedRate(player: Player): number
+	local state = DataService.GetState(player)
+	if state == nil then
+		return 0
+	end
+	return computePersistedIncomePerSecond(player, state, Catalog.GetMonetizationConfig())
+end
+
 local function flushDeltas(): ()
 	for player, record in dirtyRecords do
 		if not (record.cash or record.income or record.settings or next(record.slotIds) ~= nil) then
@@ -178,9 +191,12 @@ local function flushDeltas(): ()
 		end
 		if record.income then
 			delta.incomePerSecond = computeReportedIncomePerSecond(player, state)
-			-- The rate the shop must price against: incomeAtSave IS the persisted rate and is
-			-- exactly the number a receipt would use, so a preview cannot overstate a grant.
-			delta.persistedIncomePerSecond = state.incomeAtSave
+			-- The rate the shop prices against. Computed live, NOT read from state.incomeAtSave:
+			-- that field is only restamped by the 1 Hz tick, so publishing it sent the client a
+			-- rate one purchase out of date — and 0 for a whole era after an advance, because
+			-- the advance restamps it against the new era's empty slots. The receipt path calls
+			-- this same function, so preview and grant agree exactly.
+			delta.persistedIncomePerSecond = livePersistedRate(player)
 		end
 		if next(record.slotIds) ~= nil then
 			local slots: { [string]: Types.SlotState } = {}
@@ -236,7 +252,7 @@ function EconomyService.SendSnapshot(player: Player): ()
 		eraName = if eraConfig ~= nil then eraConfig.name else "",
 		state = state,
 		incomePerSecond = computeReportedIncomePerSecond(player, state),
-		persistedIncomePerSecond = state.incomeAtSave,
+		persistedIncomePerSecond = livePersistedRate(player),
 		welcomeBack = welcomeBack,
 	}
 	player:SetAttribute("Cash", state.cash)
@@ -333,6 +349,12 @@ end
 -- without it, prestige-then-disconnect-before-the-next-tick would persist the COMPLETED era's
 -- rate alongside the new era's empty slots, and ApplyOfflineGrant on rejoin would pay up to
 -- capSeconds of it into an era that should never see that income.
+-- Public form of livePersistedRate: MonetizationService prices cash packs with this, so the
+-- receipt grants exactly what the shop row previewed. Never read state.incomeAtSave for that.
+function EconomyService.GetPersistedIncomePerSecond(player: Player): number
+	return livePersistedRate(player)
+end
+
 function EconomyService.RefreshPersistedRate(player: Player): ()
 	local state = DataService.GetState(player)
 	if state == nil then
