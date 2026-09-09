@@ -503,40 +503,40 @@ should take well under the real ~40 min target.
 
 Requires real Studio API access (section 5 above).
 
-- [ ] 25. With income/s clearly nonzero, Stop Play. Wait at least **65 seconds** real time.
+- [x] 25. With income/s clearly nonzero, Stop Play. Wait at least **65 seconds** real time.
       Press Play again. Confirm a **card** (not a bare toast) appears under the top bar: title
       "Welcome back!", body text with the dollar amount and a duration like "12m 5s" or "3h
       12m" (never a raw number of seconds), and an **X** button.
-- [ ] 26. Tap the **X**. Confirm the card dismisses immediately.
-- [ ] 27. Trigger another welcome-back card (Stop, wait 65+ s, Play). This time don't tap
+- [x] 26. Tap the **X**. Confirm the card dismisses immediately.
+- [x] 27. Trigger another welcome-back card (Stop, wait 65+ s, Play). This time don't tap
       anything — confirm it auto-dismisses on its own after a few seconds.
-- [ ] 28. Confirm there is no "Double it" button visible on the card — that's an M4 feature,
+- [x] 28. Confirm there is no "Double it" button visible on the card — that's an M4 feature,
       hidden until a dev product ID is set.
 
 ### 9. Silence check
 
-- [ ] 29. Across everything above (buy, level up, milestone, era advance, rebirth, welcome
+- [x] 29. Across everything above (buy, level up, milestone, era advance, rebirth, welcome
       back, button taps), confirm you never hear any audio (expected — all sound IDs are 0) AND
       Output never prints a warning/error about a missing or invalid sound. A warning here is a
       bug (id-0 must be treated as "silent, skip" — never an error).
 
 ### 10. Mobile emulation pass — portrait AND landscape (required every milestone)
 
-- [ ] 30. Open the **Device Emulator**. Set **375×667** (portrait). Press Play. Open Build,
+- [x] 30. Open the **Device Emulator**. Set **375×667** (portrait). Press Play. Open Build,
       Legacy, and Settings panels one at a time. Confirm every button (including the new ×1/×10/
       Max buttons) is comfortably tappable (~44×44 px) and nothing overlaps the top bar or
       bottom bar.
-- [ ] 31. Rotate the emulator to **667×375** (landscape). Confirm the panels now dock to a
+- [x] 31. Rotate the emulator to **667×375** (landscape). Confirm the panels now dock to a
       column on the **right** side of the screen (not the portrait bottom sheet), the top bar
       moves to the **top-left**, and the bottom bar stays centered at the bottom. Confirm all
       tap targets are still ≥ 44 px and nothing is cut off.
       - Known nit (not a bug to report, already tracked): on very narrow landscape sizes below
         about 640×360, the right-docked panel may overlap the top-left top bar by a few pixels.
         If you see this on 667×375 specifically (wider than that), it IS worth reporting.
-- [ ] 32. Switch to a **desktop 1920×1080** view (Device Emulator off, or a custom 1920×1080
+- [x] 32. Switch to a **desktop 1920×1080** view (Device Emulator off, or a custom 1920×1080
       preset). Confirm the layout still looks reasonable — panels not stretched edge-to-edge,
       text not tiny, nothing overlapping.
-- [ ] 33. Stop Play.
+- [x] 33. Stop Play.
 
 ### 11. Two-player test — Local Server mode (owner-only FX)
 
@@ -595,17 +595,17 @@ haven't yet. This section assumes a clean boot and doesn't repeat those checks.
 
 ### Phase A — all ids still `0` (do this before creating anything on Creator Hub)
 
-- [ ] 1. Press Play. Confirm the bottom bar shows exactly **Build, Legacy, Settings** — **no
+- [x] 1. Press Play. Confirm the bottom bar shows exactly **Build, Legacy, Settings** — **no
       Shop button**.
-- [ ] 2. Get a welcome-back card (Stop, wait 65+ s with nonzero income, Play again — same as M3
+- [x] 2. Get a welcome-back card (Stop, wait 65+ s with nonzero income, Play again — same as M3
       section 8). Confirm it shows the offline amount and an **X**, and there is **no "Double
       it" button**.
-- [ ] 3. Confirm Output has **zero warnings or errors** related to monetization, passes,
+- [x] 3. Confirm Output has **zero warnings or errors** related to monetization, passes,
       products, or analytics across the whole session.
-- [ ] 4. Re-run the M3 checklist's sections 1–9 (reveal, level-up, ×1/×10/Max, bottom bar,
+- [x] 4. Re-run the M3 checklist's sections 1–9 (reveal, level-up, ×1/×10/Max, bottom bar,
       settings, era advance, plot sign, welcome-back, silence) and confirm every one still passes
       exactly as before — M4 must not have changed any M3 behavior when nothing is configured.
-- [ ] 5. Stop Play.
+- [x] 5. Stop Play.
 
 ### Phase B — with real ids pasted in
 
@@ -613,48 +613,48 @@ Do `docs/MANUAL_STEPS.md` M4 sections 2–5 first (create at least one pass and 
 the ids into `src/shared/Config/Monetization.json`, rebuild). You do not need all seven created
 to start — test what you have.
 
-- [ ] 6. Press Play. Confirm the bottom bar now shows a **Shop** button.
-- [ ] 7. Open **Shop**. Confirm it lists **exactly** the items you created (and only those —
+- [x] 6. Press Play. Confirm the bottom bar now shows a **Shop** button.
+- [x] 7. Open **Shop**. Confirm it lists **exactly** the items you created (and only those —
       anything still at id `0` is absent), in two sections **Passes** then **Packs**, in the same
       order as `Monetization.json`. `DoubleOffline` should **never** appear in the Shop list even
       if its id is set (it's welcome-back-only).
-- [ ] 8. For each pack row (`Cash30m` / `Cash2h` / `Cash8h` you created), note the previewed
+- [x] 8. For each pack row (`Cash30m` / `Cash2h` / `Cash8h` you created), note the previewed
       "up to N minutes" grant amount shown next to the label.
-- [ ] 9. Confirm the three pack previews are **visibly different amounts**, roughly in a
+- [x] 9. Confirm the three pack previews are **visibly different amounts**, roughly in a
       **1 : 2.5 : 5** ratio (not identical, and not the nominal 1 : 4 : 16) — this is the
       per-pack cap working. If two pack rows show the same number, that's a bug.
-- [ ] 10. Buy one pack (see MANUAL_STEPS.md M4 section 7 about real charges before you tap
+- [x] 10. Buy one pack (see MANUAL_STEPS.md M4 section 7 about real charges before you tap
       through). Confirm the cash that actually lands in your balance **matches the previewed
       amount** from step 8 (small drift is fine if your income changed between preview and
       purchase; a large systematic overstatement — historically up to +27% too high in a full
       server — is the bug this milestone fixed. Testing solo, preview and actual should match
       almost exactly).
-- [ ] 11. Immediately try to buy the same pack again (or, if Studio lets a receipt replay,
+- [x] 11. Immediately try to buy the same pack again (or, if Studio lets a receipt replay,
       trigger it twice). Confirm cash is **not** double-granted — one purchase, one grant.
-- [ ] 12. Buy a pass (e.g. `DoubleCash` or `VIP`). Confirm it applies **within the same
+- [x] 12. Buy a pass (e.g. `DoubleCash` or `VIP`). Confirm it applies **within the same
       session, without rejoining**:
       - `DoubleCash`: income/s roughly doubles immediately.
       - `VIP`: a gold plot sign, a `VIP` name tag floating above your character's head, and (if
         VIP variants were imported) VIP building skins — all without leaving and rejoining.
-- [ ] 13. Buy `OfflinePro`. Stop Play, wait 65+ s, Press Play again. Confirm the Studio
+- [x] 13. Buy `OfflinePro`. Stop Play, wait 65+ s, Press Play again. Confirm the Studio
       diagnostic print in Output now reads something like
       `away Ns, saved rate R/s, cap Cs, efficiency E, granted G` with **cap = 86400** (24h) and
       **efficiency = 1** — not the default 8h/0.5. Confirm the welcome-back card's amount is
       correspondingly larger than a non-Pro grant would be.
-- [ ] 14. If you have Roblox Premium on your test account, confirm a **Premium** indicator shows
+- [x] 14. If you have Roblox Premium on your test account, confirm a **Premium** indicator shows
       in the UI and income/s reflects the extra 1.1× multiplying with anything else you own
       (e.g. `DoubleCash` × `VIP` × `Premium` ≈ 2.42× if you have all three).
-- [ ] 15. Confirm a compact **VIP / Premium / neighbors-bonus** indicator is visible somewhere in
+- [x] 15. Confirm a compact **VIP / Premium / neighbors-bonus** indicator is visible somewhere in
       the top bar or Legacy panel and doesn't crowd the top bar at 375×667 (checked again in the
       mobile pass below).
-- [ ] 16. Buy `DoubleOffline` if you have it: get a welcome-back card, tap "Double it" (only
+- [x] 16. Buy `DoubleOffline` if you have it: get a welcome-back card, tap "Double it" (only
       visible now that the id is set), confirm the resulting cash delta roughly doubles what the
       card originally showed, and confirm the card's "Double it" button does not reappear for
       that same grant.
 
 ### Join-race check (the milestone's Critical bug — do this one carefully)
 
-- [ ] 17. With a real pass id set (e.g. `VIP` or `OfflinePro`) and the pass owned: stop Play, wait
+- [x] 17. With a real pass id set (e.g. `VIP` or `OfflinePro`) and the pass owned: stop Play, wait
       65+ s with nonzero income, then Press Play again **several times in a row** (5+ rejoins) to
       exercise the join sequence under repeated load. Confirm **every single join** still shows a
       correct welcome-back card with a nonzero, plausible amount (per M2 step 14's formula) —
@@ -664,23 +664,23 @@ to start — test what you have.
 
 ### M3 carry-over fixes — re-verify these are actually fixed now
 
-- [ ] 18. Device Emulator, landscape **640×360**. Open a panel (Build/Legacy/Settings/Shop).
+- [x] 18. Device Emulator, landscape **640×360**. Open a panel (Build/Legacy/Settings/Shop).
       Confirm the right-docked panel does **not** overlap the top-left top bar anymore (this was
       a known ~9 px overlap at M3, fixed this milestone).
-- [ ] 19. Rejoin so the very first `StateChanged` snapshot hasn't arrived yet, and within that
+- [x] 19. Rejoin so the very first `StateChanged` snapshot hasn't arrived yet, and within that
       first second or two, tap the **Music** or **SFX** toggle in Settings. Confirm it applies
       **audibly at once** (if you have sound IDs set) rather than waiting for the first
       snapshot/delta to "heal" it.
 
 ### Mobile emulation pass (required every milestone)
 
-- [ ] 20. Device Emulator, **375×667** portrait. Open the Shop panel (with at least one real id
+- [x] 20. Device Emulator, **375×667** portrait. Open the Shop panel (with at least one real id
       set). Confirm every row (pass or pack) is comfortably tappable (~44×44 px), text isn't
       truncated oddly, and nothing overlaps the top or bottom bar. Confirm the VIP/Premium/
       neighbors indicator doesn't crowd the top bar at this width.
-- [ ] 21. Rotate to landscape (either 667×375 or the 640×360 case from step 18). Confirm the Shop
+- [x] 21. Rotate to landscape (either 667×375 or the 640×360 case from step 18). Confirm the Shop
       panel docks the same way the other panels do and remains usable.
-- [ ] 22. Stop Play.
+- [x] 22. Stop Play.
 
 ### Two-player test — Local Server mode
 
@@ -712,10 +712,10 @@ to start — test what you have.
 
 ### Sign-off
 
-- [ ] 28. All boxes above checked: Phase A silence, Phase B Shop contents/pricing/purchase
+- [x] 28. All boxes above checked: Phase A silence, Phase B Shop contents/pricing/purchase
       correctness/idempotency/pass application/Offline Pro/Premium/Double-it, the join-race
       check across 5+ rejoins, both M3 carry-over fixes, 375×667 portrait, a landscape pass, and
       the 2-player test.
-- [ ] 29. Tell Claude Code "M4 playtest passed" (or report the exact failure and step number).
+- [x] 29. Tell Claude Code "M4 playtest passed" (or report the exact failure and step number).
       Ticking this box marks `M4` `[x]` in `docs/PLAN.md`. If the combined M0–M3 checklist above
       hasn't been signed off yet, mention that separately — it's still tracked as pending.

@@ -324,7 +324,7 @@ numeric **Product ID**.
 
 ### 7. Testing purchases — read this before you tap "Buy" in Studio
 
-- [ ] 13. **Developer product purchases inside Studio Play-testing are real-ish**: Studio uses
+- [x] 13. **Developer product purchases inside Studio Play-testing are real-ish**: Studio uses
       your live Roblox account and can prompt a real Robux confirmation for a real product (game
       passes in Studio are typically mocked/free for the owner, but don't assume — the safest
       assumption is that any purchase you complete in Play mode may actually charge Robux).
