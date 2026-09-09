@@ -240,7 +240,7 @@ stay invisible). You do **not** have to create all seven before testing any of t
 
 ### 1. Rebuild first
 
-- [ ] 1. If you pulled new changes since M3, rebuild: `rojo build -o build/test.rbxl` (or
+- [x] 1. If you pulled new changes since M3, rebuild: `rojo build -o build/test.rbxl` (or
       re-run `rojo serve` and reconnect the Rojo plugin). No new dependencies this milestone
       (`wally install` not required unless `wally.toml` changed).
 
@@ -270,12 +270,12 @@ For each of the three passes below: Creator Hub → your experience → **Moneti
 → **Create a Pass**. Upload any icon (placeholder is fine, swap later), set a name/price, save,
 then copy the numeric **Pass ID** from the pass's page URL or the passes list.
 
-- [ ] 2. Create **`DoubleCash`** ("Double Cash" — 2× income forever). Paste the id into
+- [x] 2. Create **`DoubleCash`** ("Double Cash" — 2× income forever). Paste the id into
       `src/shared/Config/Monetization.json` → `passes` → the entry with `"key": "DoubleCash"` →
       `"id"`. Leave `"key"` exactly as it is — only edit `"id"`.
-- [ ] 3. Create **`OfflinePro`** ("Offline Pro" — offline cap 8h→24h, efficiency 50%→100%). Paste
+- [x] 3. Create **`OfflinePro`** ("Offline Pro" — offline cap 8h→24h, efficiency 50%→100%). Paste
       the id into the `"key": "OfflinePro"` entry's `"id"`.
-- [ ] 4. Create **`VIP`** ("VIP" — +10% income, VIP name tag, gold plot sign, VIP building
+- [x] 4. Create **`VIP`** ("VIP" — +10% income, VIP name tag, gold plot sign, VIP building
       skins). Paste the id into the `"key": "VIP"` entry's `"id"`.
 
 ### 4. Create the developer products (Creator Hub)
@@ -284,25 +284,34 @@ For each of the four products below: Creator Hub → your experience → **Monet
 **Developer Products** → **Create a Product**. Same flow — name, price, icon, save, copy the
 numeric **Product ID**.
 
-- [ ] 5. Create **`Cash30m`** ("30 Minutes of Cash"). Paste the id into `products` → the
+- [x] 5. Create **`Cash30m`** ("30 Minutes of Cash"). Paste the id into `products` → the
       `"key": "Cash30m"` entry's `"id"`.
-- [ ] 6. Create **`Cash2h`** ("2 Hours of Cash", priced ~2.2× `Cash30m` per the guidance above).
+- [x] 6. Create **`Cash2h`** ("2 Hours of Cash", priced ~2.2× `Cash30m` per the guidance above).
       Paste into `"key": "Cash2h"`'s `"id"`.
-- [ ] 7. Create **`Cash8h`** ("8 Hours of Cash", priced ~4.2× `Cash30m`). Paste into
+- [x] 7. Create **`Cash8h`** ("8 Hours of Cash", priced ~4.2× `Cash30m`). Paste into
       `"key": "Cash8h"`'s `"id"`.
-- [ ] 8. Create **`DoubleOffline`** ("Double it" — doubles the most recent offline grant; only
+- [x] 8. Create **`DoubleOffline`** ("Double it" — doubles the most recent offline grant; only
       ever offered on the welcome-back card, never in the Shop). Paste into
       `"key": "DoubleOffline"`'s `"id"`. Price this low — it's a small impulse buy tied to one
       welcome-back moment, not a bundle.
-- [ ] 9. Double-check every pasted value is a **numeric id**, not `0`, and that you did not touch
+- [x] 9. Double-check every pasted value is a **numeric id**, not `0`, and that you did not touch
       any `"key"`, `"minutes"`, or `"capFraction"` field — those are frozen contract values, not
       yours to edit.
 
 ### 5. Enable Premium payouts (optional but recommended)
 
-- [ ] 10. Creator Hub → your experience → **Monetization** → **Premium Payouts** → confirm it's
-      enabled (usually on by default for new experiences). This is what funds the 1.1× Premium
-      multiplier the game already shows/applies — no config change needed on your side.
+- [x] 10. **Nothing to do for the Premium multiplier.** (Corrected 2026-09-09 — an earlier
+      version of this step told you to enable "Premium Payouts". That was wrong twice.)
+      - There is no such setting any more. "Premium Payouts" became Engagement-Based Payouts,
+        which Roblox deprecated on 2025-07-24 and replaced with **Creator Rewards**
+        (`Recompensas del creador` in the Monetization sidebar). It is automatic; that page
+        only reports earnings.
+      - It was never related to our multiplier anyway. Creator Rewards is Roblox paying **you**
+        for Premium engagement. Our 1.1× is the game paying **the player**, decided in-game by
+        `player.MembershipType == Enum.MembershipType.Premium` (`EconomyService.luau`), and it
+        works regardless of any payout program.
+      - The only Monetization sidebar entries M4 needs are **`Pases`** (game passes) and
+        **`Productos del desarrollador`** (developer products), both covered above.
 
 ### 6. Rebuild and test in Studio
 
