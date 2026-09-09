@@ -17,7 +17,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   Major findings; QA green; **playtest 17/17**, with real pass/product ids live in
   `Monetization.json` and the nine event sounds uploaded. Three further bugs were found *by*
   that playtest and fixed after the review — see "Shipped" below)
-- [~] M5 — Hardening (review SHIP after two Warnings fixed, QA green; playtest pending)
+- [x] M5 — Hardening (review SHIP after two Warnings fixed, QA green; **playtest passed 2026-09-09**
+  — Ben reported everything correct, including the final sweep that re-covers the M2/M3 long-haul
+  steps. MVP definition of done (spec §12) met.)
 
 ---
 
