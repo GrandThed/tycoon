@@ -6,19 +6,19 @@
 	"passes": [
 		{
 			"key": "DoubleCash",
-			"id": 0,
+			"id": 1978964257,
 			"name": "Double Cash",
 			"description": "Doubles your income for good, in every era."
 		},
 		{
 			"key": "OfflinePro",
-			"id": 0,
+			"id": 1976786432,
 			"name": "Offline Pro",
 			"description": "While you are away, earn for up to 24 hours instead of 8, at full rate instead of half."
 		},
 		{
 			"key": "VIP",
-			"id": 0,
+			"id": 1977152471,
 			"name": "VIP",
 			"description": "+10% income, a VIP name tag, a gold plot sign, and an alternate building skin set in every era."
 		}
@@ -26,7 +26,7 @@
 	"products": [
 		{
 			"key": "Cash30m",
-			"id": 0,
+			"id": 3712150579,
 			"name": "30 Minutes of Cash",
 			"description": "Cash worth up to 30 minutes of your current income. Capped at a tenth of the current era, so it speeds you up rather than finishing the era.",
 			"minutes": 30,
@@ -35,7 +35,7 @@
 		},
 		{
 			"key": "Cash2h",
-			"id": 0,
+			"id": 3712150648,
 			"name": "2 Hours of Cash",
 			"description": "Cash worth up to 2 hours of your current income. Capped at a quarter of the current era, so it speeds you up rather than finishing the era.",
 			"minutes": 120,
@@ -44,7 +44,7 @@
 		},
 		{
 			"key": "Cash8h",
-			"id": 0,
+			"id": 3712150674,
 			"name": "8 Hours of Cash",
 			"description": "Cash worth up to 8 hours of your current income. Capped at half of the current era, so it speeds you up rather than finishing the era.",
 			"minutes": 480,
@@ -53,7 +53,7 @@
 		},
 		{
 			"key": "DoubleOffline",
-			"id": 0,
+			"id": 3712150784,
 			"name": "Double it",
 			"description": "Doubles the cash you just earned while away. Offered once, on the welcome-back card.",
 			"shopVisible": false
