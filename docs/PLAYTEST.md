@@ -1171,6 +1171,13 @@ Grant more Legacy with the lever (section 2) as needed to afford these.
 - `GrantLegacy` not resetting to `0` after being consumed, or not warning in Output.
 - Legacy panel rows cramped, overlapping, or un-tappable at 375×667 or 667×375.
 
+### Balance visibility (playtest fix, 2026-09-09)
+
+- [ ] a. Top bar reads `LEGACY <spendable> / <total>`; buy a perk and the first number drops while the second holds.
+- [ ] b. Open Legacy and scroll to the bottom of the list: the Legacy total, Spendable, breakdown row and softcap note stay pinned above the list.
+- [ ] c. Force a refusal at the boundary (e.g. two quick taps on a tier you can afford only once): a toast reads "Not enough spendable Legacy (have X, need Y)".
+- [ ] d. Rename `LegacyShop.json` away: the top bar shows the single total and the panel header collapses to two lines.
+
 ### Sign-off
 
 - [ ] 39. All boxes above checked: the `GrantLegacy` lever, the full shop UI (header/breakdown/
