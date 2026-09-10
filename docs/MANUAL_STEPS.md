@@ -440,7 +440,7 @@ lever (with an important persistence warning), and the same two reminders carrie
 
 ### 1. Rebuild first
 
-- [ ] 1. If you pulled new changes since M5, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+- [x] 1. If you pulled new changes since M5, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
       (PowerShell) then `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). No new
       dependencies (`wally install` not required — `wally.toml` is frozen for M6).
       `luau-lsp analyze` needs a fresh sourcemap since a new module landed
@@ -477,15 +477,15 @@ once you have files (`tools/upload_audio.py` + `tools/audio_map.json`'s `ambient
 
 ### 5. Accepted risks (recorded here per the lead's ruling — not bugs, don't report them)
 
-- [ ] 19. **New (M6): Legacy granted via the `GrantLegacy` lever in Studio with API access on is
+- [x] 19. **New (M6): Legacy granted via the `GrantLegacy` lever in Studio with API access on is
       real and permanent for that account.** See section 2 above. Not a bug — it's the intended
       behaviour of a Studio-only testing lever that writes through the same save path as real
       play; just don't do it on a profile you want to keep representative.
 
 ### 6. Nothing else needed for M6
 
-- [ ] 20. No new Kenney meshes, audio, passes, or developer products this milestone. Mesh import
+- [x] 20. No new Kenney meshes, audio, passes, or developer products this milestone. Mesh import
       (`docs/MANUAL_STEPS.md` M3 §2) remains fully optional at any pace.
-- [ ] 21. That's it — go run `docs/PLAYTEST.md` M6 section.
+- [x] 21. That's it — go run `docs/PLAYTEST.md` M6 section.
 
 <!-- M6 section complete. Do not delete completed sections above. -->

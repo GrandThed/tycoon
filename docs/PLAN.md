@@ -20,7 +20,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [x] M5 — Hardening (review SHIP after two Warnings fixed, QA green; **playtest passed 2026-09-09**
   — Ben reported everything correct, including the final sweep that re-covers the M2/M3 long-haul
   steps. MVP definition of done (spec §12) met.)
-- [~] M6 — Legacy shop (Phase 2; review SHIP after two Warnings fixed, QA green; playtest pending)
+- [x] M6 — Legacy shop (review SHIP after two Warnings fixed, QA green; **playtest passed
+  2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
 
 ---
 
