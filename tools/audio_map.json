@@ -7,6 +7,12 @@
 		"(10 unverified / 100 ID-verified), so a bad pick costs a slot that cannot be reclaimed.",
 		"`ambient` entries in Sounds.json stay 0: these four packs contain no loopable music beds."
 	],
+	"ambient": {
+		"Village": { "file": "ambient/Loop_The_Bards_Tale.wav", "source": "OpenGameArt, RandomMind, 'Medieval: The Bard's Tale' loop version" },
+		"Boomtown": { "file": "ambient/west1.ogg", "source": "OpenGameArt, Tozan, 'Old West Style'" },
+		"Metropolis": { "file": "ambient/busy_cyberworld.ogg", "source": "OpenGameArt, TinyWorlds, 'Scifi City - Ambient Loop'" },
+		"OrbitalColony": { "file": "ambient/outer_space.mp3", "source": "OpenGameArt, wipics, 'Outer Space Loop'" }
+	},
 	"sounds": {
 		"uiClick": {
 			"zip": "kenney_interface-sounds.zip",

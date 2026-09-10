@@ -203,8 +203,11 @@ re-running it is safe and cheap.
 
 `--dry-run` shows exactly what would upload without calling anything.
 
-- [ ] 9. **Ambient loops are still `0`** (`Village`, `Boomtown`, `Metropolis`, `OrbitalColony`)
-      and are optional — the game is correct and silent with them unset. The four packs above
+- [x] 9. **Ambient loops — DONE (2026-09-09).** Four CC0 loops from OpenGameArt (RandomMind
+      "Medieval: The Bard's Tale" loop, Tozan "Old West Style", TinyWorlds "Scifi City - Ambient
+      Loop", wipics "Outer Space Loop") uploaded via `py tools/upload_audio.py`, which now also
+      handles loose files listed under `ambient` in `tools/audio_map.json`. 13 of 100 monthly
+      slots used. The original note, kept for context: ambient loops were `0` and optional — the game is correct and silent with them unset. The four packs above
       are all short one-shots with no loopable music beds, so ambient needs a different CC0
       pack plus 4 more upload slots. Add the files to `assets/`, add an `ambient` section to
       `tools/audio_map.json`, and the same tool handles them.

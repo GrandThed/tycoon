@@ -126,6 +126,14 @@ def read_from_zip(zip_name: str, inner_path: str) -> bytes:
             raise UploadError(f"{inner_path!r} not found inside {zip_name}") from None
 
 
+def read_loose_file(relative: str) -> bytes:
+    """Ambient loops are single downloaded files under assets/, not Kenney zips."""
+    path = ASSETS_DIR / relative
+    if not path.exists():
+        raise UploadError(f"missing file {path}")
+    return path.read_bytes()
+
+
 def build_multipart(payload: dict, filename: str, file_bytes: bytes) -> tuple[bytes, str]:
     """Hand-rolled multipart/form-data: the API wants a `request` JSON part and `fileContent`."""
     boundary = f"----EraCityTycoon{uuid.uuid4().hex}"
@@ -185,14 +193,21 @@ def poll_operation(operation_path: str, api_key: str) -> int:
 
 def upload_one(key: str, entry: dict, creds: tuple[str, str, str]) -> int:
     api_key, creator_type, creator_id = creds
-    inner = entry["pick"]
-    filename = Path(inner).name
-    file_bytes = read_from_zip(entry["zip"], inner)
+    if "file" in entry:
+        filename = Path(entry["file"]).name
+        file_bytes = read_loose_file(entry["file"])
+        source = entry.get("source", "unknown source")
+        description = f"Era City Tycoon ambient loop '{key}'. Source: {source}, CC0."
+    else:
+        inner = entry["pick"]
+        filename = Path(inner).name
+        file_bytes = read_from_zip(entry["zip"], inner)
+        description = f"Era City Tycoon UI sound '{key}'. Source: Kenney ({entry['zip']}), CC0."
     creator = {"userId": creator_id} if creator_type == "user" else {"groupId": creator_id}
     payload = {
         "assetType": "Audio",
         "displayName": f"EraCityTycoon_{key}",
-        "description": f"Era City Tycoon UI sound '{key}'. Source: Kenney ({entry['zip']}), CC0.",
+        "description": description,
         "creationContext": {"creator": creator},
     }
     body, content_type = build_multipart(payload, filename, file_bytes)
@@ -244,12 +259,21 @@ def main() -> int:
         do_audition(audio_map)
         return 0
 
-    unknown = [k for k in args.only if k not in audio_map["sounds"]]
+    # One flat key space: event sounds and era ambient loops never share a name, and each
+    # key remembers which Sounds.json block it belongs to so the id lands in the right place.
+    entries: dict[str, dict] = {}
+    blocks: dict[str, str] = {}
+    for block in ("sounds", "ambient"):
+        for key, entry in audio_map.get(block, {}).items():
+            entries[key] = entry
+            blocks[key] = block
+
+    unknown = [k for k in args.only if k not in entries]
     if unknown:
         raise SystemExit(f"--only names unmapped key(s): {', '.join(unknown)}")
 
-    wanted = args.only or list(audio_map["sounds"])
-    pending = [k for k in wanted if sounds["sounds"].get(k, {}).get("id", 0) == 0]
+    wanted = args.only or list(entries)
+    pending = [k for k in wanted if sounds[blocks[k]].get(k, {}).get("id", 0) == 0]
     already = [k for k in wanted if k not in pending]
 
     if already:
@@ -266,15 +290,16 @@ def main() -> int:
 
     if args.dry_run:
         for key in pending:
-            entry = audio_map["sounds"][key]
-            print(f"  would upload {key:<18} <- {entry['zip']} :: {entry['pick']}")
+            entry = entries[key]
+            source = entry["file"] if "file" in entry else f"{entry['zip']} :: {entry['pick']}"
+            print(f"  would upload {key:<18} <- {source}")
         print("\nDry run: nothing uploaded, no quota spent.")
         return 0
 
     creds = require_credentials(load_env())
     failures: list[str] = []
     for index, key in enumerate(pending, start=1):
-        entry = audio_map["sounds"][key]
+        entry = entries[key]
         print(f"[{index}/{len(pending)}] {key}")
         try:
             asset_id = upload_one(key, entry, creds)

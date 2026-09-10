@@ -13,9 +13,9 @@
 		"welcomeBack": { "id": 95087984597608, "group": "Music", "volume": 0.8 }
 	},
 	"ambient": {
-		"Village": { "id": 0, "group": "Music", "volume": 0.25 },
-		"Boomtown": { "id": 0, "group": "Music", "volume": 0.25 },
-		"Metropolis": { "id": 0, "group": "Music", "volume": 0.25 },
-		"OrbitalColony": { "id": 0, "group": "Music", "volume": 0.25 }
+		"Village": { "id": 96294045773577, "group": "Music", "volume": 0.25 },
+		"Boomtown": { "id": 90341197133812, "group": "Music", "volume": 0.25 },
+		"Metropolis": { "id": 114546218833908, "group": "Music", "volume": 0.25 },
+		"OrbitalColony": { "id": 99934107080605, "group": "Music", "volume": 0.25 }
 	}
 }
