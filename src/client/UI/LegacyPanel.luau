@@ -117,9 +117,30 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 		designHeight = Theme.PANEL_HEIGHT,
 		onClose = deps.onClose,
 	})
+	-- Pinned header (M6 playtest): the balance and the breakdown never scroll away, so a
+	-- red Buy always has its reason on screen. Height is the sum of the visible lines.
+	local softcap = gameConfig.legacy.softcap
+	local headerHeight = Theme.INFO_LINE_HEIGHT
+		+ Theme.INFO_LINE_GAP
+		+ Theme.PERK_NOTE_LINE_HEIGHT
+		+ (if hasShop then Theme.INFO_LINE_GAP + Theme.INFO_LINE_HEIGHT else 0)
+		+ (if softcap ~= nil then Theme.INFO_LINE_GAP + Theme.PERK_NOTE_LINE_HEIGHT else 0)
+	local header = Create("Frame", {
+		Name = "Header",
+		Size = UDim2.new(1, 0, 0, headerHeight),
+		BackgroundTransparency = 1,
+		Parent = panel.Content,
+	}) :: Frame
+	Create("UIListLayout", {
+		Padding = UDim.new(0, Theme.INFO_LINE_GAP),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = header,
+	})
+	local scrollTop = headerHeight + Theme.LEGACY_HEADER_GAP
 	local scroll = Create("ScrollingFrame", {
 		Name = "Lines",
-		Size = UDim2.fromScale(1, 1),
+		Position = UDim2.fromOffset(0, scrollTop),
+		Size = UDim2.new(1, 0, 1, -scrollTop),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.new(),
@@ -141,7 +162,13 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 		return order
 	end
 
-	local function line(name: string, color: Color3, bold: boolean, small: boolean?): TextLabel
+	local function lineIn(
+		container: Instance,
+		name: string,
+		color: Color3,
+		bold: boolean,
+		small: boolean?
+	): TextLabel
 		return Create("TextLabel", {
 			Name = name,
 			LayoutOrder = nextOrder(),
@@ -161,8 +188,12 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			Text = "",
-			Parent = scroll,
+			Parent = container,
 		}) :: TextLabel
+	end
+
+	local function line(name: string, color: Color3, bold: boolean, small: boolean?): TextLabel
+		return lineIn(scroll, name, color, bold, small)
 	end
 
 	local function sectionHeader(title: string): TextLabel
@@ -171,14 +202,13 @@ function LegacyPanel.new(parent: Instance, deps: Deps): LegacyPanelHandle
 		return header
 	end
 
-	-- Header block.
-	local legacyLabel = line("LegacyCount", Theme.COLOR_HIGHLIGHT, true)
-	local spendableLabel = line("Spendable", Theme.COLOR_TEXT, false)
+	-- Pinned header block.
+	local legacyLabel = lineIn(header, "LegacyCount", Theme.COLOR_HIGHLIGHT, true)
+	local spendableLabel = lineIn(header, "Spendable", Theme.COLOR_TEXT, false)
 	spendableLabel.Visible = hasShop
-	local breakdownLabel = line("Breakdown", Theme.COLOR_TEXT, false, true)
+	local breakdownLabel = lineIn(header, "Breakdown", Theme.COLOR_TEXT, false, true)
 	-- Softcap note (HUD honesty, LEGACY_SHOP.md §8): only when Game.json declares one.
-	local softcap = gameConfig.legacy.softcap
-	local softcapLabel = line("Softcap", Theme.COLOR_TEXT_DIM, false, true)
+	local softcapLabel = lineIn(header, "Softcap", Theme.COLOR_TEXT_DIM, false, true)
 	softcapLabel.Visible = softcap ~= nil
 	if softcap ~= nil then
 		softcapLabel.Text = "Legacy grows slower past " .. Format.Cash(softcap)

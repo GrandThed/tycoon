@@ -219,6 +219,7 @@ local function boot(): ()
 	-- Static too; an absent LegacyShop.json yields an empty perk list and the panel hides
 	-- the shop (M6 contract).
 	local shopConfig = Catalog.GetLegacyShopConfig()
+	local hasShop = #shopConfig.perks > 0
 
 	local screenGui = Create("ScreenGui", {
 		Name = "EraCityHUD",
@@ -433,7 +434,9 @@ local function boot(): ()
 		local state = current.state
 		topBar.SetCash(state.cash)
 		topBar.SetIncome(current.incomePerSecond)
-		topBar.SetLegacy(state.legacy)
+		-- Spendable rides beside the lifetime total (M6 playtest): the total never drops,
+		-- so on its own it hid why every Buy had gone red. Nil hides it when no shop exists.
+		topBar.SetLegacy(state.legacy, if hasShop then Economy.LegacySpendable(state) else nil)
 		-- Deltas can deliver the monument purchase, so the affordance recomputes every push.
 		local prestigeLabel = prestigeLabelFor(prestigeKindFor(state), state)
 		buildPanel.SetPrestige(prestigeLabel)
@@ -603,10 +606,27 @@ local function boot(): ()
 			if typeof(perkId) == "string" then
 				legacyPanel.FlashPerk(perkId)
 			end
+			local current = model
 			if payload.reason == "insufficientFunds" then
 				SoundController.Play("insufficientFunds")
-			end
-			if not legacyPanel.IsOpen() then
+				-- Explicit reason (M6 playtest): the flash alone did not say WHY. Both
+				-- numbers are server state / the shared config, never computed here.
+				if current ~= nil and typeof(perkId) == "string" then
+					local have = Economy.LegacySpendable(current.state)
+					local nextTier =
+						Economy.NextPerkTier(shopConfig, current.state.legacyShop, perkId)
+					local need = if nextTier ~= nil then Format.Cash(nextTier.cost) else "more"
+					toast.Show(
+						"Not enough spendable Legacy (have "
+							.. Format.Cash(have)
+							.. ", need "
+							.. need
+							.. ")",
+						Theme.TOAST_ERROR_SECONDS,
+						true
+					)
+				end
+			elseif not legacyPanel.IsOpen() then
 				toast.Show("Can't buy that perk right now", Theme.TOAST_ERROR_SECONDS, true)
 			end
 		elseif typeof(payload.slotId) == "string" and payload.slotId ~= "" then

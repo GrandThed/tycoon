@@ -55,8 +55,12 @@ local Theme = {
 	TOP_BAR_HEIGHT = 56,
 	ERA_BADGE_WIDTH = 118,
 	-- M2: the income/legacy line splits the top-bar text column between these two widths.
-	TOP_INCOME_WIDTH = 100,
-	TOP_LEGACY_WIDTH = 96,
+	-- M6 playtest: the legacy field reads "LEGACY <spendable> / <total>", so it takes the
+	-- larger share of the 204 px text column and scales its text down (never below
+	-- TOP_LEGACY_MIN_TEXT) before it would truncate.
+	TOP_INCOME_WIDTH = 84,
+	TOP_LEGACY_WIDTH = 120,
+	TOP_LEGACY_MIN_TEXT = 9,
 
 	-- M3 bottom bar: Build / Legacy / Shop (hidden until M4) / Settings, centered.
 	BOTTOM_BAR_BUTTON_WIDTH = 78,
@@ -152,6 +156,9 @@ local Theme = {
 	PERK_DESC_Y = 58,
 	PERK_ROW_PAD_BOTTOM = 10,
 	PERK_NOTE_LINE_HEIGHT = 18,
+	-- Gap between the pinned Legacy header block (total, spendable, breakdown, softcap)
+	-- and the scrolling list beneath it (M6 playtest: the balance must never scroll away).
+	LEGACY_HEADER_GAP = 8,
 
 	-- M3: era-advance screen. A fixed-aspect card that still fits a 320 px tall viewport
 	-- at MIN_SCALE (340x300 -> 312x275 physical) so nothing clips in landscape.

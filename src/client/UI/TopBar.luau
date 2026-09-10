@@ -18,7 +18,8 @@ local BLANK = "—"
 export type TopBarHandle = {
 	SetCash: (cash: number) -> (),
 	SetIncome: (incomePerSecond: number) -> (),
-	SetLegacy: (legacy: number) -> (),
+	-- spendable is nil when there is no Legacy shop (empty perk config): total only.
+	SetLegacy: (legacy: number, spendable: number?) -> (),
 	SetEra: (eraIndex: number, displayName: string) -> (),
 	SetLayout: (scale: number, landscape: boolean) -> (),
 	Destroy: () -> (),
@@ -80,10 +81,17 @@ function TopBar.new(parent: Instance): TopBarHandle
 		TextSize = Theme.TEXT_SMALL,
 		TextColor3 = Theme.COLOR_HIGHLIGHT,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		TextTruncate = Enum.TextTruncate.AtEnd,
+		-- M6: "LEGACY 29 / 279" can outgrow the column at two K-suffixed values; shrink
+		-- the text (bounded) instead of cutting the total off the end.
+		TextScaled = true,
 		Text = "LEGACY " .. BLANK,
 		Parent = root,
 	}) :: TextLabel
+	Create("UITextSizeConstraint", {
+		MinTextSize = Theme.TOP_LEGACY_MIN_TEXT,
+		MaxTextSize = Theme.TEXT_SMALL,
+		Parent = legacyLabel,
+	})
 
 	local badge = Create("Frame", {
 		Name = "EraBadge",
@@ -131,8 +139,12 @@ function TopBar.new(parent: Instance): TopBarHandle
 			-- Format.Rate keeps sub-1/s starters from rendering "0/s" (M3 contract).
 			incomeLabel.Text = Format.Rate(incomePerSecond) .. "/s"
 		end,
-		SetLegacy = function(legacy: number)
-			legacyLabel.Text = "LEGACY " .. Format.Cash(legacy)
+		SetLegacy = function(legacy: number, spendable: number?)
+			-- Spendable first: it is the number the player acts on; the lifetime total
+			-- (which never decreases) follows so the multiplier still has its explanation.
+			legacyLabel.Text = if spendable ~= nil
+				then "LEGACY " .. Format.Cash(spendable) .. " / " .. Format.Cash(legacy)
+				else "LEGACY " .. Format.Cash(legacy)
 		end,
 		SetEra = function(eraIndex: number, displayName: string)
 			-- tostring, not Format.Cash: an era index is an ordinal, never "1.2K".

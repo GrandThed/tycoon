@@ -378,7 +378,7 @@ Studio, and two reminders carried forward from earlier milestones.
 
 ### 1. Rebuild first
 
-- [ ] 1. If you pulled new changes since M4, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
+- [x] 1. If you pulled new changes since M4, rebuild: `$env:PATH = "$HOME\.rokit\bin;$env:PATH"`
       (PowerShell) then `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). No new
       dependencies this milestone (`wally install` not required — `wally.toml` is frozen for
       M5). `luau-lsp analyze` needs a fresh sourcemap since `LoadScreen.luau` is new:
@@ -424,9 +424,9 @@ Open Cloud upload quota noted in the M3 section above — 9 of 100 monthly slots
 
 ### 5. Nothing else needed for M5
 
-- [ ] 2. No new Kenney meshes, audio, passes, or products required this milestone. Mesh import
+- [x] 2. No new Kenney meshes, audio, passes, or products required this milestone. Mesh import
       (`docs/MANUAL_STEPS.md` M3 §2) remains fully optional at any pace.
-- [ ] 3. That's it — go run `docs/PLAYTEST.md` M5 section, including the Final sweep.
+- [x] 3. That's it — go run `docs/PLAYTEST.md` M5 section, including the Final sweep.
 
 <!-- M5 section complete. Do not delete completed sections above. -->
 
