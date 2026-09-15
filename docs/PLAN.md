@@ -9,10 +9,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 
 - [x] M0 — Scaffold (QA-green; Rojo connect verified; playtest 19/19)
 - [x] M1 — Playable loop (review SHIP after fixes, QA green; playtest 32/32)
-- [~] M2 — Persistence & eras (review SHIP after exploit fix, QA+sim green; **playtest 30/45 —
-  15 steps still unchecked**, mostly the long-haul persistence/prestige runs)
-- [~] M3 — Presentation (review SHIP, QA green; **playtest 21/40 plus 7/12 of the carry-over
-  re-verifications — 24 steps still unchecked**)
+- [x] M2 — Persistence & eras (review SHIP after exploit fix, QA+sim green; playtest 30/45 boxes
+  ticked individually; the 15 long-haul persistence/prestige steps were closed by the M5 Final
+  sweep, `docs/PLAYTEST.md` steps 40–47, rather than box by box)
+- [x] M3 — Presentation (review SHIP, QA green; playtest 21/40 plus 7/12 carry-over boxes ticked
+  individually; the remaining steps were closed by the M5 Final sweep, same as M2)
 - [x] M4 — Monetization & analytics (reviewer SHIP after a Critical join-race fix and four
   Major findings; QA green; **playtest 17/17**, with real pass/product ids live in
   `Monetization.json` and the nine event sounds uploaded. Three further bugs were found *by*
@@ -22,6 +23,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   steps. MVP definition of done (spec §12) met.)
 - [x] M6 — Legacy shop (review SHIP after two Warnings fixed, QA green; **playtest passed
   2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
+- [ ] M7 — Assets (research only, not started: Kenney buildings assembled from kit pieces that grow
+  with the player's levels; scripted Open Cloud pipeline. Handoff: `docs/ASSET_RESEARCH.md`)
 
 ---
 
@@ -345,8 +348,8 @@ handle lap-3+ runaway rather than shrink lap-1 Legacy's payoff. Cash-pack Robux 
 still follow the 1 : 2.2 : 4.2 ladder (`docs/BALANCE.md`) whenever real prices are set — carried
 forward again below.
 
-Still open by design: the four ambient era loops in `Sounds.json` are id `0` (need a CC0 loop
-pack — the four uploaded packs are all one-shots); Kenney meshes never imported (placeholders by
+Still open by design at M5 sign-off: the four ambient era loops in `Sounds.json` were id `0`
+(resolved 2026-09-09 after M6 — see the M6 carried-forward list); Kenney meshes never imported (placeholders by
 design, per spec §5). Reviewer suggestion deferred: safe-mode players still count toward the
 neighbours bonus (+3% each) for other players in the server — recorded as a known nit, not fixed
 this milestone (`MANUAL_STEPS.md` M4 §8 item 18).
@@ -362,9 +365,8 @@ unchanged from M2/M4), `gen_asset_manifest.py --check`.
   (`docs/BALANCE.md` "Cash packs and the era cap") whenever real Robux prices are set or revised
   on the Creator Hub — unchanged since M4, still not applied to anything (ids exist, prices are
   Ben's call).
-- **Ben / whoever finds a CC0 loop pack:** the four ambient era loops in `Sounds.json` remain
-  `0`. Optional; the tooling (`tools/upload_audio.py` + `tools/audio_map.json`'s `ambient`
-  section) is ready whenever files are picked.
+- ~~**Ben / whoever finds a CC0 loop pack:** the four ambient era loops in `Sounds.json` remain
+  `0`.~~ Resolved 2026-09-09 (see M6 below).
 - **economy-designer / lead, Phase 2:** the neighbours-bonus nit (safe-mode players count toward
   `neighborsMult`) is deferred, not fixed — low priority, revisit if it ever matters in practice.
 - **economy-designer / lead, Phase 2:** the Legacy shop (spec §3 "Phase 2") is the intended lever
@@ -425,17 +427,17 @@ totals 15:19:31 / 4:15:21 / 2:29:14 / 1:49:34 / 1:35:31 / 1:26:33; paid stack un
 whole shop costs 6960 Legacy across 23 purchases. With `LegacyShop.json` removed or renamed: no
 shop, no errors. Reviewer verdict SHIP after two Warnings fixed; QA green (`stylua`, `selene`,
 `luau-lsp analyze` with a regenerated sourcemap for the new service, `rojo build`,
-`sim_economy.py --check`, `gen_asset_manifest.py --check`). **Playtest not yet run** —
-`docs/PLAYTEST.md` M6 section (40 steps) is ready; the status line above stays `[~]` until Ben
-signs off.
+`sim_economy.py --check`, `gen_asset_manifest.py --check`). **Playtest passed 2026-09-09**
+(`docs/PLAYTEST.md` M6 section). One UX fix came out of it: the Legacy panel's balance header is
+pinned above the scrolling list, and the top bar reads `LEGACY <spendable> / <total>`.
 
 **Carried forward (owners assigned):**
 - **economy-designer / Ben:** cash-pack Robux pricing must still follow the **1 : 2.2 : 4.2**
   ladder (`docs/BALANCE.md` "Cash packs and the era cap") whenever real Robux prices are set or
   revised on the Creator Hub — unchanged since M4, the M6 shop doesn't touch this at all.
-- **Ben / whoever finds a CC0 loop pack:** the four ambient era loops in `Sounds.json` remain
-  `0` — unchanged since M5, optional; tooling is ready (`tools/upload_audio.py` +
-  `tools/audio_map.json`'s `ambient` section).
+- **Ben:** the four ambient era loops were uploaded 2026-09-09 (CC0, OpenGameArt; real ids in
+  `Sounds.json`, 13 of 100 monthly Open Cloud upload slots used) but have not been heard in
+  Studio yet — `docs/PLAYTEST.md` "Post-M6 — Ambient era loops".
 - **economy-designer / lead:** the safe-mode-players-count-toward-neighbours-bonus nit (M5
   carried forward, `MANUAL_STEPS.md` M4 §8 item 18) remains deferred, not fixed.
 - **Ben / whoever imports meshes:** Kenney mesh import (`MANUAL_STEPS.md` M3 §2) remains fully

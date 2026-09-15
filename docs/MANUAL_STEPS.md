@@ -190,7 +190,7 @@ The nine event sounds are uploaded and their ids are committed in
 **Upload quota — read before uploading anything else.** Open Cloud allows **10 audio uploads
 per calendar month** on an account that is not ID-verified, **100** on one that is. This
 account is ID-verified (Settings → Account Info shows age group and birth date verified), so
-9 of 100 slots were spent. The tool never re-uploads a key whose id is already non-zero, so
+13 of 100 slots are spent for September 2026 (the nine event sounds plus the four ambient loops). The tool never re-uploads a key whose id is already non-zero, so
 re-running it is safe and cheap.
 
 **To change a sound you do not like:**
@@ -206,11 +206,9 @@ re-running it is safe and cheap.
 - [x] 9. **Ambient loops — DONE (2026-09-09).** Four CC0 loops from OpenGameArt (RandomMind
       "Medieval: The Bard's Tale" loop, Tozan "Old West Style", TinyWorlds "Scifi City - Ambient
       Loop", wipics "Outer Space Loop") uploaded via `py tools/upload_audio.py`, which now also
-      handles loose files listed under `ambient` in `tools/audio_map.json`. 13 of 100 monthly
-      slots used. The original note, kept for context: ambient loops were `0` and optional — the game is correct and silent with them unset. The four packs above
-      are all short one-shots with no loopable music beds, so ambient needs a different CC0
-      pack plus 4 more upload slots. Add the files to `assets/`, add an `ambient` section to
-      `tools/audio_map.json`, and the same tool handles them.
+      handles loose files listed under `ambient` in `tools/audio_map.json`. The Kenney packs
+      above are all one-shots, which is why the loops came from a different source. Not yet
+      heard in Studio — `docs/PLAYTEST.md` "Post-M6 — Ambient era loops" is the check.
 
 **If a sound is silent in Studio:** uploaded audio starts private and is moderated, so give it
 a few minutes. If it never plays, check the asset on create.roblox.com — if it was rejected,
@@ -226,10 +224,10 @@ is silent by design and never an error.
 
 ### 5. Nothing else needed for M3
 
-- [ ] 11. No game passes or developer products yet — those start at M4 (next section, once M4
+- [x] 11. No game passes or developer products yet — those start at M4 (next section, once M4
       ships). Nothing to create or paste IDs for on Creator Hub this milestone beyond audio
       (step 3) and the optional mesh imports (step 2).
-- [ ] 12. That's it — go run `docs/PLAYTEST.md` M3 section.
+- [x] 12. That's it — go run `docs/PLAYTEST.md` M3 section.
 
 ---
 
@@ -318,10 +316,10 @@ numeric **Product ID**.
 
 ### 6. Rebuild and test in Studio
 
-- [ ] 11. After pasting ids, rebuild: `rojo build -o build/test.rbxl` (or resync via
+- [x] 11. After pasting ids, rebuild: `rojo build -o build/test.rbxl` (or resync via
       `rojo serve`). Ids are read from config, not remotes — no server-side redeploy step beyond
       a normal rebuild/sync.
-- [ ] 12. Run `docs/PLAYTEST.md` M4 Phase A first (all ids still `0`, i.e. before this section —
+- [x] 12. Run `docs/PLAYTEST.md` M4 Phase A first (all ids still `0`, i.e. before this section —
       already true if you're doing this for the first time) to confirm the baseline is silent,
       then Phase B once you've pasted at least one real id.
 
@@ -351,18 +349,18 @@ numeric **Product ID**.
       profile (`pendingDoubleOfflineAmount`, schema v2) and survives a session boundary — a
       receipt that arrives in a later session grants correctly. See item 17 below for the new,
       smaller residual risk this leaves.
-- [ ] 16. **Analytics events are silent in Studio by design.** `slot bought`, `level-up`,
+- [x] 16. **Analytics events are silent in Studio by design.** `slot bought`, `level-up`,
       `offline grant`, `product grant`, and `legacy on advance/rebirth` events only actually
       appear on the Creator Hub analytics dashboards for a **published** place with analytics
       enabled. You will not see anything on a dashboard from Studio Play-testing — that's
       expected, not a bug to report.
-- [ ] 17. **New (M5): residual `DoubleOffline` double-settle edge.** In the rare case where an
+- [x] 17. **New (M5): residual `DoubleOffline` double-settle edge.** In the rare case where an
       old receipt (from a session before the one where the reservation was made) and a new
       reservation both try to settle in the same session, only one grants — the other grants `0`
       with a `warn` logged server-side, not an error. Lower-frequency than the M4 risk it
       replaces (item 15) since the common "leave with the dialog open" case is now handled
       correctly. Not reproducible on demand in Studio; don't chase it in a normal playtest.
-- [ ] 18. **New (M5): neighbours bonus doesn't exclude safe-mode players.** A player stuck in
+- [x] 18. **New (M5): neighbours bonus doesn't exclude safe-mode players.** A player stuck in
       safe mode (load failure, no plot, no state) still counts toward `neighborsMult` for other
       players in the server (+3% each, capped at +27%) even though they aren't really playing.
       Reviewer-flagged nit, deferred by the lead as low-impact (safe mode is rare and the bonus
@@ -415,15 +413,10 @@ ratio (`Cash2h` at most 2.5× `Cash30m`, `Cash8h` at most 5×) — see `docs/BAL
 and the era cap" for why a steeper ladder (e.g. the nominal 1 : 4 : 16) makes the big packs worse
 value than the small one for most of every era.
 
-### 4. Still outstanding: ambient era loops
+### 4. Ambient era loops — resolved after M6
 
-The four ambient loop ids in `src/shared/Config/Sounds.json` (`Village`, `Boomtown`,
-`Metropolis`, `OrbitalColony`) are still `0` — silent by design, not a bug. The four uploaded
-Kenney packs (Interface Sounds, Casino Audio, Impact Sounds, Music Jingles) are all short
-one-shots with no loopable bed, so this needs a different CC0 pack. Optional; the game is
-correct and silent without it. Same tool handles it once you have files: add them to `assets/`,
-add an `ambient` section to `tools/audio_map.json`, run `py tools/upload_audio.py` (mind the
-Open Cloud upload quota noted in the M3 section above — 9 of 100 monthly slots already spent).
+At M5 sign-off the four ambient loop ids in `src/shared/Config/Sounds.json` were still `0`.
+They were uploaded on 2026-09-09, after M6 — see M3 §3 item 9.
 
 ### 5. Nothing else needed for M5
 
@@ -471,12 +464,15 @@ Legacy shop never touches `PassMult`/`PremiumMult`). Whenever you actually set o
 prices for `Cash30m` / `Cash2h` / `Cash8h` on the Creator Hub, keep roughly the **1 : 2.2 : 4.2**
 ratio (`Cash2h` at most 2.5× `Cash30m`, `Cash8h` at most 5×).
 
-### 4. Still outstanding: ambient era loops
+### 4. Ambient era loops — uploaded, listen once
 
-Unchanged from M5. The four ambient loop ids in `src/shared/Config/Sounds.json` (`Village`,
-`Boomtown`, `Metropolis`, `OrbitalColony`) are still `0` — silent by design, not a bug. Optional;
-needs a CC0 loop pack (the four uploaded Kenney packs are all one-shots). Same tooling handles it
-once you have files (`tools/upload_audio.py` + `tools/audio_map.json`'s `ambient` section).
+The four ambient loops (`Village`, `Boomtown`, `Metropolis`, `OrbitalColony`) were uploaded on
+2026-09-09, after this milestone's playtest, and their ids are in
+`src/shared/Config/Sounds.json` (M3 §3 item 9 has the sources).
+
+- [ ] 22. Rebuild, then run `docs/PLAYTEST.md` "Post-M6 — Ambient era loops". If a loop never
+      plays, check the asset's moderation status on create.roblox.com; a rejected asset's id
+      goes back to `0` (silent, never an error).
 
 ### 5. Accepted risks (recorded here per the lead's ruling — not bugs, don't report them)
 
