@@ -13,6 +13,12 @@ direction he wants instead.
 | Pipeline | **Scripted**: tools prepare Kenney files, upload them through Open Cloud, write asset ids to config; the server loads them at runtime. No hand-importing in Studio. |
 | One static model per slot (the first proposal) | **Rejected.** See §2. |
 
+- **2026-09-15, after the Studio check:** Ben confirmed the tower renders textured and the hangar
+  is plain grey. Decision: building templates are **generated offline** (`.rbxmx` MeshParts
+  referencing the uploaded mesh/texture ids, normalised and pre-scaled, built in by Rojo); no
+  runtime `InsertService` and no hand-importing. Material-colour kits get a baked palette
+  texture at upload time. The test-fit happens in Blender 5.2 (installed) before anything is uploaded.
+
 ## 2. Ben's direction — buildings that grow
 
 > "Use the building blocks of the pack to build something more modular that upgrades from basic
