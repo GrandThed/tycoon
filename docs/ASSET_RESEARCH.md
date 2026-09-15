@@ -90,12 +90,31 @@ Learned:
 - Space-kit origins are off-centre (hangar origin = bottom-centre − (2, 0, 1.5)); castle-kit origins
   are exactly bottom-centre. glTF colour factors are linear and space-kit materials have
   `metallic = 1`, so colours may render dark or shiny.
-- **Still unverified — needs Ben in Studio:** the command-bar check was prepared but not run.
-  It answers: studs per glTF unit, whether a model arrives as one MeshPart or one per node/material,
-  whether the texture survives, whether scripts can write `MeshPart.TextureID` at runtime (decides
-  VIP skins), `SurfaceAppearance` presence, `Model:ScaleTo`, and whether a **server** script can
-  `InsertService:LoadAsset` the ids. Snippets: `assets/research/2026-09-15/glb-trial/studio_check.luau`
-  (Edit mode) and `studio_check_server.luau` (Play, Server view). Delete `TRIAL_*` afterwards.
+- **Verified in Studio on 2026-09-15** (command bar, Edit mode; `[TRIAL]` output saved next to the
+  snippet as `studio_check_output.txt`):
+  - **Scale: 1 glTF unit = 1 stud.** The tower arrives 1 × 2.01 × 1 studs, the hangar 2 × 1 × 3.
+    Kit pieces must be scaled roughly 4–5× to fill a 9–10 stud footprint. `Model:ScaleTo` works
+    and scales extents correctly, but baking the scale into the GLB before upload is preferable
+    (correct collision, no per-spawn work).
+  - **Structure: one MeshPart per glTF primitive**, i.e. per material, wrapped three Models deep
+    (`Model` → `Trial_<name>` → `<node>` → MeshPart). The textured castle tower is 1 MeshPart; the
+    material-coloured hangar is 9 (3 body + 3 per gate × 2). Material-colour kits therefore explode
+    the part count.
+  - **Textures survive; material colours do not.** The embedded colormap became its own Image
+    asset (`rbxassetid://135388297648400`) set as `MeshPart.TextureID`. Every hangar part is default
+    grey `(163,162,165)`, `Plastic`, no `SurfaceAppearance` — glTF `baseColorFactor` is dropped.
+    Fix for material-colour kits (space-kit): bake a small palette PNG and remap UVs at upload
+    time so they become one textured primitive like the castle kit.
+  - **`MeshPart.TextureID` is writable at runtime** (set to `rbxassetid://0` and restored, no
+    error), so VIP skins can be a texture swap. `SurfaceAppearance.ColorMap` is also writable.
+  - **Pivot:** the outer container's pivot is the bbox centre (half the model would sit
+    underground after `PivotTo`); the inner `Trial_*` model's pivot is bottom-centre for the
+    castle kit and bottom-centre + (2, 0, 1.5) for the space kit, matching the glTF origins.
+    Templates must have their pivot normalised to bottom-centre.
+  - Parts arrive `Anchored=false`, `CanCollide=true`, `Material=Plastic`. Anchoring is mandatory.
+  - Not yet run: `studio_check_server.luau` (Play, Server view) — confirms a server Script can
+    `InsertService:LoadAsset` the ids. Moot if templates are generated offline as `.rbxmx`
+    MeshParts referencing the uploaded `MeshId`/`TextureID` and built in by Rojo.
 
 ## 4. Kenney kits — what is actually in them
 

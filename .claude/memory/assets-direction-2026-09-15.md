@@ -9,9 +9,11 @@ Assets work (pre-M7) is research only so far; the full handoff is `docs/ASSET_RE
   invalid glTF (a `tmpParent` node) and fails upload with a completed-operation error, not an HTTP error.
   That defect is fixable (strip the node, renumber; ASSET_RESEARCH §3) and trial B was approved
   after the fix, so the kit is still usable for Orbital Colony.
-- The Studio verification of the two trial uploads (asset ids 116756725746364, 102687532898806)
-  has not been run yet; it decides runtime scaling and whether VIP skins can be a runtime
-  `TextureID` swap.
+- Studio check of the two trial uploads ran 2026-09-15 (ASSET_RESEARCH §3): **1 glTF unit = 1
+  stud** (pieces need ~4–5× scale), one MeshPart per material, embedded textures survive as a
+  separate Image asset, glTF material colours are **lost** (space-kit needs a baked palette
+  texture), `MeshPart.TextureID` is writable at runtime so VIP skins can be a texture swap,
+  container pivot is bbox-centre and parts arrive unanchored.
 
 **Why:** the next session starts fresh and would otherwise repeat the rejected proposal or
 re-derive the kit and upload findings.
