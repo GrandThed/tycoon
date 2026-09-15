@@ -61,6 +61,7 @@ type Row = {
 	slot: Types.SlotConfig,
 	requiresId: string?,
 	frame: Frame,
+	textWidth: number, -- negative offset that keeps a text line clear of the action button
 	nameLabel: TextLabel,
 	statusLabel: TextLabel,
 	previewLabel: TextLabel,
@@ -212,6 +213,19 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		return nil
 	end
 
+	-- M7: the level at which the building's next visual stage appears. Stages follow the
+	-- BASE milestone list only (docs/INTERFACES.md M7 "Stage rule"): the Extra Milestone
+	-- perk doubles income at its level but never grows the model, so this deliberately
+	-- reads gameConfig rather than the per-player list above. nil at the last stage.
+	local function nextGrowthLevel(level: number): number?
+		for _, milestoneLevel in gameConfig.milestoneLevels do
+			if milestoneLevel > level then
+				return milestoneLevel
+			end
+		end
+		return nil
+	end
+
 	local function deltaText(delta: number): string
 		return if delta > 0 then "+" .. Format.Rate(delta) .. "/s" else ""
 	end
@@ -340,6 +354,14 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 		row.stroke.Color = Theme.COLOR_HIGHLIGHT
 		row.stroke.Enabled = highlighted
 		row.levelStrip.Visible = isLevel
+		-- The level row hides the action button, so its status line ("Lv 12 · ×2 at Lv 25 ·
+		-- Grows at Lv 25") may run the full row width instead of stopping at the button.
+		row.statusLabel.Size = UDim2.new(
+			1,
+			if isLevel then -Theme.ROW_TEXT_LEFT - Theme.ROW_SPACING else row.textWidth,
+			0,
+			Theme.ROW_LINE_HEIGHT
+		)
 
 		local statusText = ""
 		local statusColor = Theme.COLOR_TEXT_DIM
@@ -388,6 +410,10 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 				statusText ..= " · ×" .. Format.Rate(gameConfig.milestoneMultiplier) .. " at Lv " .. tostring(
 					milestone
 				)
+			end
+			local growthLevel = nextGrowthLevel(level)
+			if growthLevel ~= nil then
+				statusText ..= " · " .. string.format(Theme.GROW_HINT_FORMAT, growthLevel)
 			end
 			statusColor = Theme.COLOR_TEXT
 			paintLevelStrip(row, state, eraConfig, level, currentIncome)
@@ -648,6 +674,7 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			slot = slot,
 			requiresId = requiresId,
 			frame = frame,
+			textWidth = textWidth,
 			nameLabel = nameLabel,
 			statusLabel = statusLabel,
 			previewLabel = previewLabel,

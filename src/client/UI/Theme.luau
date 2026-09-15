@@ -214,6 +214,17 @@ local Theme = {
 	PARTICLE_SPREAD = 180,
 	REDUCED_MOTION_FACTOR = 0.5,
 
+	-- M7: stage growth pop on a milestone (PlotVisualsController) — shrink, overshoot,
+	-- settle — and the Build panel's "grows at" hint. levelUp(milestone) and stageUp
+	-- describe one crossing and arrive back to back, so the shared fanfare (sound, flash,
+	-- burst) is played once per slot inside the dedupe window.
+	STAGE_POP_SECONDS = 0.5,
+	STAGE_POP_START_SCALE = 0.85,
+	STAGE_POP_PEAK_SCALE = 1.08,
+	STAGE_POP_PEAK_FRACTION = 0.6, -- share of STAGE_POP_SECONDS spent growing to the peak
+	MILESTONE_FX_DEDUPE_SECONDS = 0.25,
+	GROW_HINT_FORMAT = "Grows at Lv %d",
+
 	-- M5: data-load safe-mode card (LoadScreen). The dim is lighter than a modal scrim
 	-- because the world stays playable behind it (spec section 5).
 	LOAD_CARD_WIDTH = 320,

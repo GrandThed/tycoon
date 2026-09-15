@@ -1,6 +1,7 @@
 --!strict
 -- Owns world geometry and purchases: hub + plot ring at Init, plot claim/release, buy pads,
--- building spawns (VIP skin → base model → placeholder), level-up prompts, the M2 era actions
+-- building spawns (template at the level's stage → placeholder, M7), stage swaps on base
+-- milestones, the VIP texture swap, level-up prompts, the M2 era actions
 -- (Advance Era / Rebirth with plot teardown + rebuild), the M3 plot sign, and the M3 FxEvent
 -- firing points (owner only, after each successful mutation, never on bulk restore). Only
 -- derived geometry lives in code; every number comes from Game.json or the era layout module.
@@ -27,6 +28,11 @@ local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 local FIRST_ERA_INDEX = 1
 -- ServerStorage/Assets/<EraName>_VIP holds VIP skin variants (spec §8).
 local VIP_ASSET_SUFFIX = "_VIP"
+-- M7 template shape (docs/INTERFACES.md "Template shape"): Stage<n> Models under the template,
+-- one MeshPart per kit named after the kit, and an invisible `Base` PrimaryPart at the anchor.
+local STAGE_CHILD_PATTERN = "^Stage(%d+)$"
+local STAGE_CHILD_PREFIX = "Stage"
+local ASSET_ID_PREFIX = "rbxassetid://"
 
 type PlotRecord = {
 	index: number,
@@ -111,6 +117,10 @@ local TITLE_TAG_OFFSET_STUDS = 3.3
 local MONUMENT_LIGHT_NAME = "MonumentGlow"
 local MONUMENT_LIGHT_BRIGHTNESS = 2
 local MONUMENT_LIGHT_RANGE = 24
+-- M7: mesh monuments glow through a Highlight (a MeshPart's texture would swallow Neon).
+local MONUMENT_HIGHLIGHT_NAME = "MonumentGlow"
+local MONUMENT_HIGHLIGHT_FILL_TRANSPARENCY = 0.6
+local MONUMENT_HIGHLIGHT_OUTLINE_TRANSPARENCY = 0.2
 local FIREWORKS_NAME = "AdvanceFireworks"
 local FIREWORKS_SECONDS = 2
 local FIREWORKS_RATE = 60
@@ -213,18 +223,147 @@ local function cosmeticTargetPart(spawned: Instance): BasePart?
 	return nil
 end
 
+-- Monument Glow: a PointLight on the anchor part plus, for a template Model, a Highlight over
+-- the whole model (it survives stage swaps, so the swap path never re-applies it); a placeholder
+-- Part keeps the pre-M7 Neon look. The perk carries no colour in LegacyShop.json today, so the
+-- glow takes the part's own colour until one is configured.
 local function applyMonumentGlow(spawned: Instance): ()
 	local target = cosmeticTargetPart(spawned)
 	if target == nil then
 		return
 	end
-	target.Material = Enum.Material.Neon
+	local color = perkColor(PERK_MONUMENT_GLOW) or target.Color
+	if spawned:IsA("Model") then
+		local highlight = Instance.new("Highlight")
+		highlight.Name = MONUMENT_HIGHLIGHT_NAME
+		highlight.FillColor = color
+		highlight.FillTransparency = MONUMENT_HIGHLIGHT_FILL_TRANSPARENCY
+		highlight.OutlineColor = color
+		highlight.OutlineTransparency = MONUMENT_HIGHLIGHT_OUTLINE_TRANSPARENCY
+		highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+		highlight.Parent = spawned
+	else
+		target.Material = Enum.Material.Neon
+	end
 	local light = Instance.new("PointLight")
 	light.Name = MONUMENT_LIGHT_NAME
 	light.Brightness = MONUMENT_LIGHT_BRIGHTNESS
 	light.Range = MONUMENT_LIGHT_RANGE
-	light.Color = target.Color
+	light.Color = color
 	light.Parent = target
+end
+
+-- M7 stage rule (docs/INTERFACES.md "Server behaviour"): the stage is the count of BASE
+-- milestones at or below the level, so L1-9 → 0, 10-24 → 1, 25-49 → 2, 50-99 → 3, 100 → 4.
+-- Pure so the rule is testable; callers pass Game.json's list, never the owner's perk list.
+local function stageForLevel(level: number, milestoneLevels: { number }): number
+	local stage = 0
+	for _, milestone in milestoneLevels do
+		if milestone <= level then
+			stage += 1
+		end
+	end
+	return stage
+end
+
+-- Only buildings grow; unlock/decor/monument templates are single-stage by contract.
+local function stageForSlot(slot: Types.SlotConfig, level: number): number
+	if slot.type ~= "building" then
+		return 0
+	end
+	return stageForLevel(level, Catalog.GetGameConfig().milestoneLevels)
+end
+
+type StageMap = { [number]: Model }
+
+-- Stage<n> Models directly under a template or live building; empty for a legacy single-model
+-- template (kept whole) and for a placeholder Part.
+local function stageChildren(container: Instance): StageMap
+	local stages: StageMap = {}
+	for _, child in container:GetChildren() do
+		if not child:IsA("Model") then
+			continue
+		end
+		local index = tonumber(string.match(child.Name, STAGE_CHILD_PATTERN))
+		if index ~= nil then
+			stages[index] = child
+		end
+	end
+	return stages
+end
+
+-- The highest present stage <= wanted (a template may be missing later stages while the
+-- pipeline is mid-upload); nil when none qualifies, which callers treat as "no template".
+local function pickStage(stages: StageMap, wanted: number): number?
+	local best: number? = nil
+	for index in stages do
+		if index <= wanted and (best == nil or index > best) then
+			best = index
+		end
+	end
+	return best
+end
+
+-- VIP (M7): one recoloured colormap per kit in Assets.json, applied by swapping TextureID on
+-- the visible stage's MeshParts (named after their kit). Missing config or an id of 0 (not
+-- uploaded yet) leaves the normal texture; nothing here can error.
+local function applyVipTextures(stageModel: Model): ()
+	local assets = Catalog.GetAssetsConfig()
+	if assets == nil or type(assets.textures) ~= "table" then
+		return
+	end
+	for _, descendant in stageModel:GetDescendants() do
+		if not descendant:IsA("MeshPart") then
+			continue
+		end
+		-- Optional annotation: map indexing is non-optional under the old solver.
+		local texture: Types.AssetTexture? = assets.textures[descendant.Name]
+		local vipImageId = if texture ~= nil then texture.vipImageId else nil
+		if type(vipImageId) == "number" and vipImageId > 0 then
+			descendant.TextureID = ASSET_ID_PREFIX .. tostring(vipImageId)
+		end
+	end
+end
+
+-- Everything owner-dependent about a visible stage, in one place so the spawn and swap paths
+-- cannot drift: the VIP texture, then the Golden Roads tint on unlock slots (Color multiplies
+-- the texture, so the road reads as gilded rather than flat).
+local function dressStage(stageModel: Model, slot: Types.SlotConfig, state: Types.PlayerState): ()
+	if state.passes.VIP == true then
+		applyVipTextures(stageModel)
+	end
+	if slot.type == "unlock" and ownsCosmetic(state, PERK_GOLDEN_ROADS) then
+		local roadColor = perkColor(PERK_GOLDEN_ROADS)
+		if roadColor ~= nil then
+			for _, descendant in stageModel:GetDescendants() do
+				if descendant:IsA("MeshPart") then
+					descendant.Color = roadColor
+				end
+			end
+		end
+	end
+end
+
+-- Clones `stage` out of the template into the live building at the same offset from the
+-- building's pivot as it has from the template's (both pivots are the Base part, but the
+-- relation holds for any pivot), then dresses it. Hidden stages are never kept alive.
+local function attachStage(
+	template: Model,
+	building: Model,
+	stage: number,
+	slot: Types.SlotConfig,
+	state: Types.PlayerState
+): Model?
+	local templateStage = stageChildren(template)[stage]
+	if templateStage == nil then
+		return nil
+	end
+	local clone = templateStage:Clone()
+	clone.Name = STAGE_CHILD_PREFIX .. tostring(stage)
+	clone:PivotTo(building:GetPivot() * template:GetPivot():ToObjectSpace(templateStage:GetPivot()))
+	dressStage(clone, slot, state)
+	clone.Parent = building
+	return clone
 end
 
 -- The signTitle perk's title for this owner: titles[min(rebirthCount + 1, #titles)].
@@ -330,6 +469,16 @@ local function crossesMilestone(
 	return false
 end
 
+-- Forward-declared: defined with the spawn helpers below (it needs findTemplate), used here.
+local swapStage: (
+	record: PlotRecord,
+	slot: Types.SlotConfig,
+	eraName: string,
+	state: Types.PlayerState,
+	fromLevel: number,
+	toLevel: number
+) -> number?
+
 local function tryLevelUp(player: Player, slotId: string, count: number): ()
 	-- Frozen validation order: plot → slot exists in era → ownership/level rules → requires
 	-- (ownership already implies the chain for level-ups) → affordability.
@@ -401,6 +550,9 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 			prompt.Enabled = false
 		end
 	end
+	-- Swap before MarkDirty/FX so the new Stage<n> replicates ahead of the events (as the
+	-- reveal does for the whole building).
+	local newStage = swapStage(record, slot, eraConfig.name, state, fromLevel, slotState.level)
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
 	AnalyticsService.LogCashSink(player, charged, state.cash, `level:{eraConfig.name}:{slotId}`)
 	fireFx(player, {
@@ -410,6 +562,9 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 		toLevel = slotState.level,
 		milestone = crossesMilestone(state, fromLevel, slotState.level),
 	})
+	if newStage ~= nil then
+		fireFx(player, { kind = "stageUp", slotId = slotId, stage = newStage })
+	end
 end
 
 local function onPromptTriggered(record: PlotRecord, slotId: string, player: Player): ()
@@ -445,8 +600,10 @@ local function findTemplate(eraName: string, modelName: string, vipSkins: boolea
 	return nil
 end
 
--- state drives the owner-dependent looks: VIP skins (M4) and the monumentGlow/goldenRoads
--- perks (M6). Golden roads recolour placeholders only — a template may be a VIP skin model.
+-- state drives the owner-dependent looks: the VIP texture (M7), and the monumentGlow/
+-- goldenRoads perks (M6). Template path (M7): clone at the stage for the slot's level, keeping
+-- only that Stage<n>; a template with Stage children but none <= the wanted stage degrades to
+-- the placeholder, and a template with no Stage children at all is a legacy single model.
 local function spawnBuilding(
 	record: PlotRecord,
 	slot: Types.SlotConfig,
@@ -468,9 +625,30 @@ local function spawnBuilding(
 
 	local spawned: Instance
 	local template = findTemplate(eraName, slot.modelName, vipSkins)
+	local chosenStage: number? = nil
+	if template ~= nil then
+		local stages = stageChildren(template)
+		if next(stages) ~= nil then
+			local owned = state.slots[slot.id]
+			local level = if owned ~= nil then owned.level else 1
+			chosenStage = pickStage(stages, stageForSlot(slot, level))
+			if chosenStage == nil then
+				template = nil
+			end
+		end
+	end
 	if template ~= nil then
 		local model = template:Clone()
 		model.Name = "Building_" .. slot.id
+		if chosenStage ~= nil then
+			for index, stageModel in stageChildren(model) do
+				if index ~= chosenStage then
+					stageModel:Destroy()
+				else
+					dressStage(stageModel, slot, state)
+				end
+			end
+		end
 		model:PivotTo(anchorCFrame)
 		model.Parent = record.buildingsFolder
 		spawned = model
@@ -514,9 +692,52 @@ local function spawnBuilding(
 				onPromptTriggered(record, slot.id, triggeringPlayer)
 			end)
 		)
-		prompt.Parent = spawned
+		-- A ProximityPrompt is inert unless its parent is a BasePart (or Attachment): the
+		-- template's Base, a legacy model's first part, or the placeholder Part itself.
+		prompt.Parent = cosmeticTargetPart(spawned) or spawned
 		record.prompts[slot.id] = prompt
 	end
+end
+
+-- M7 stage swap after a level-up: when the base-milestone stage changed, replace the live
+-- building's Stage<n> with the template's. Returns the stage now shown, or nil when nothing
+-- changed (placeholder, same stage, or the template lacks anything new to show) so the caller
+-- fires stageUp only for a real visual change. The Highlight/PointLight cosmetics sit on the
+-- model and Base, so they survive; the stage-level dressing is re-applied by attachStage.
+function swapStage(
+	record: PlotRecord,
+	slot: Types.SlotConfig,
+	eraName: string,
+	state: Types.PlayerState,
+	fromLevel: number,
+	toLevel: number
+): number?
+	if stageForSlot(slot, fromLevel) == stageForSlot(slot, toLevel) then
+		return nil
+	end
+	local building = record.buildingsFolder:FindFirstChild("Building_" .. slot.id)
+	if building == nil or not building:IsA("Model") then
+		return nil
+	end
+	local template = findTemplate(eraName, slot.modelName, state.passes.VIP == true)
+	if template == nil then
+		return nil
+	end
+	local chosen = pickStage(stageChildren(template), stageForSlot(slot, toLevel))
+	if chosen == nil then
+		return nil
+	end
+	local liveStages = stageChildren(building)
+	if liveStages[chosen] ~= nil then
+		return nil
+	end
+	if attachStage(template, building, chosen, slot, state) == nil then
+		return nil
+	end
+	for _, stageModel in liveStages do
+		stageModel:Destroy()
+	end
+	return chosen
 end
 
 local function padWorldCFrame(
@@ -1069,6 +1290,12 @@ end
 
 local PlotService = {}
 
+-- M7 stage rule, exported for tests and the reviewer; see the local above. Pass Game.json's
+-- milestoneLevels: the Legacy milestone75 perk changes income, never the visual stage.
+function PlotService.stageForLevel(level: number, milestoneLevels: { number }): number
+	return stageForLevel(level, milestoneLevels)
+end
+
 -- Main calls this after DataService.LoadAsync + the offline grant; state is guaranteed loaded.
 -- Idempotent: a duplicate orchestration thread for the same player is a no-op.
 function PlotService.ClaimPlot(player: Player): ()
@@ -1103,7 +1330,7 @@ end
 
 -- MonetizationService calls this when a pass is granted mid-session and LegacyShopService after
 -- every perk purchase. Re-runs the bulk-restore path, which re-resolves every owned building
--- through the VIP-aware template lookup and the M6 perk cosmetics, and re-tints the plot sign
+-- through spawnBuilding (stage selection, VIP texture, M6 perk cosmetics), and re-tints the plot sign
 -- and name tag — silently, per bulk-restore rules: no FxEvents, no tweens, no sounds.
 function PlotService.RefreshCosmetics(player: Player): ()
 	local record = plotsByPlayer[player]

@@ -11,6 +11,11 @@
 -- under reduce-motion the server's advanceFireworks ParticleEmitter (replicated under the
 -- owner's monument) is disabled on the local copy only. World cosmetics are otherwise
 -- entirely server-side.
+--
+-- M7: stageUp plays a growth pop on the model whose Stage<n> the server just swapped. It
+-- arrives right after the milestone levelUp for the same crossing, so the shared fanfare
+-- (milestone sound, flash, burst) is deduped per slot; the pop never fights the reveal
+-- tween because both register in scaleTweens by slotId.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -44,6 +49,15 @@ local legacyShopState: Types.LegacyShopState? = nil
 -- The reduce-motion emitter watch on the local plot; replaced (never doubled) if the
 -- PlotIndex attribute changes again.
 local plotWatch: RBXScriptConnection? = nil
+
+-- One scale animation per building at a time. A reveal owns the slot until it completes
+-- (a stageUp then skips its pop); a new pop cancels a pop still settling.
+type ScaleTween = { kind: "reveal" | "pop", cancel: () -> () }
+local scaleTweens: { [string]: ScaleTween } = {}
+
+-- os.clock of the last milestone fanfare per slot, so levelUp(milestone) and stageUp for
+-- the same crossing play the sound/flash/burst once between them.
+local lastMilestoneFx: { [string]: number } = {}
 
 local function localBuildingsFolder(): Instance?
 	local plotIndex = player:GetAttribute(PLOT_ATTRIBUTE)
@@ -116,13 +130,23 @@ local function burst(part: BasePart, count: number): ()
 	end)
 end
 
--- Model reveal: drive Model:ScaleTo from a NumberValue so TweenService supplies the
--- Back-out curve. pcall around ScaleTo: an imported model with unscalable content must
--- never break the purchase flow (spec §12.4).
-local function revealModel(model: Model): Tween
+-- Model scale animations drive Model:ScaleTo from a NumberValue so TweenService supplies
+-- the easing. pcall around ScaleTo: an imported model with unscalable content must never
+-- break the purchase flow (spec §12.4). The driver lives under this script (never in the
+-- replicated model) and is destroyed with the animation.
+type ScaleDriver = {
+	value: NumberValue,
+	finish: () -> (),
+}
+
+local function newScaleDriver(model: Model, slotId: string, startScale: number): ScaleDriver
+	local previous = scaleTweens[slotId]
+	if previous ~= nil then
+		previous.cancel()
+	end
 	local driver = Create("NumberValue", {
-		Name = "RevealScale",
-		Value = Theme.REVEAL_START_SCALE,
+		Name = "Scale_" .. slotId,
+		Value = startScale,
 		Parent = script,
 	}) :: NumberValue
 	local function applyScale(scale: number): ()
@@ -130,22 +154,61 @@ local function revealModel(model: Model): Tween
 			pcall(model.ScaleTo, model, scale)
 		end
 	end
-	applyScale(Theme.REVEAL_START_SCALE)
+	applyScale(startScale)
 	local connection = driver:GetPropertyChangedSignal("Value"):Connect(function()
 		applyScale(driver.Value)
 	end)
+	local finished = false
+	local function finish(): ()
+		if finished then
+			return
+		end
+		finished = true
+		connection:Disconnect()
+		driver:Destroy()
+		local registered = scaleTweens[slotId]
+		if registered ~= nil and registered.cancel == finish then
+			scaleTweens[slotId] = nil
+		end
+		applyScale(1) -- always land on the replicated size, even when cut short
+	end
+	return { value = driver, finish = finish }
+end
+
+local function revealModel(model: Model, slotId: string): Tween
+	local driver = newScaleDriver(model, slotId, Theme.REVEAL_START_SCALE)
 	local tween = TweenService:Create(
-		driver,
+		driver.value,
 		Motion.Info(Theme.REVEAL_SECONDS, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
 		{ Value = 1 }
 	)
-	tween.Completed:Once(function()
-		connection:Disconnect()
-		driver:Destroy()
-		applyScale(1)
-	end)
+	scaleTweens[slotId] = { kind = "reveal", cancel = driver.finish }
+	tween.Completed:Once(driver.finish)
 	tween:Play()
 	return tween
+end
+
+-- Growth pop on a stage swap: shrink, overshoot past full size with the reveal's Back-out,
+-- then settle to 1. Two chained tweens on the one driver; cancelling either lands on 1.
+local function popModel(model: Model, slotId: string): ()
+	local driver = newScaleDriver(model, slotId, Theme.STAGE_POP_START_SCALE)
+	local growSeconds = Theme.STAGE_POP_SECONDS * Theme.STAGE_POP_PEAK_FRACTION
+	local settleSeconds = Theme.STAGE_POP_SECONDS - growSeconds
+	local grow = TweenService:Create(
+		driver.value,
+		Motion.Info(growSeconds, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{ Value = Theme.STAGE_POP_PEAK_SCALE }
+	)
+	local settle = TweenService:Create(driver.value, Motion.Info(settleSeconds), { Value = 1 })
+	scaleTweens[slotId] = { kind = "pop", cancel = driver.finish }
+	grow.Completed:Once(function(playbackState: Enum.PlaybackState)
+		if playbackState ~= Enum.PlaybackState.Completed or driver.value.Parent == nil then
+			return -- cancelled: finish() already snapped the model back to 1
+		end
+		settle.Completed:Once(driver.finish)
+		settle:Play()
+	end)
+	grow:Play()
 end
 
 -- Placeholder reveal: grow Size from a sliver to the replicated size with the bottom face
@@ -244,7 +307,7 @@ local function onReveal(payload: Types.FxReveal): ()
 		SoundController.Play("purchase")
 		local tween: Tween? = nil
 		if building:IsA("Model") then
-			tween = revealModel(building)
+			tween = revealModel(building, payload.slotId)
 		elseif building:IsA("BasePart") then
 			tween = revealPart(building)
 		end
@@ -262,11 +325,49 @@ local function onReveal(payload: Types.FxReveal): ()
 	end)
 end
 
+-- The milestone fanfare shared by levelUp(milestone) and stageUp: whichever of the two
+-- arrives first for a crossing plays it, the other finds the dedupe window and skips.
+local function milestoneFanfare(slotId: string, building: Instance?, part: BasePart?): ()
+	local now = os.clock()
+	local last = lastMilestoneFx[slotId]
+	if last ~= nil and now - last < Theme.MILESTONE_FX_DEDUPE_SECONDS then
+		return
+	end
+	lastMilestoneFx[slotId] = now
+	SoundController.Play("levelUpMilestone")
+	if building ~= nil then
+		flashHighlight(building, true)
+	end
+	if part ~= nil then
+		burst(part, Theme.LEVELUP_PARTICLES)
+	end
+end
+
 local function onLevelUp(payload: Types.FxLevelUp): ()
 	SoundController.Play("levelUp", { milestones = countMilestones(payload.toLevel) })
+	local buildings = localBuildingsFolder()
+	local building = if buildings ~= nil
+		then buildings:FindFirstChild(BUILDING_PREFIX .. payload.slotId)
+		else nil
+	local part = if building ~= nil then anchorPart(building) else nil
 	if payload.milestone then
-		SoundController.Play("levelUpMilestone")
+		milestoneFanfare(payload.slotId, building, part)
+	elseif building ~= nil then
+		flashHighlight(building, false)
 	end
+	if building == nil or part == nil then
+		return
+	end
+	local gained = payload.toLevel - payload.fromLevel
+	local text = if payload.milestone
+		then "MILESTONE! +" .. tostring(gained)
+		else "+" .. tostring(gained)
+	floatText(building, part, text, payload.milestone)
+end
+
+-- The server swapped Stage<n> before firing, so the pop scales the new mesh. Placeholder
+-- Parts (no template) only get the shared flash; a model mid-reveal keeps its reveal.
+local function onStageUp(payload: Types.FxStageUp): ()
 	local buildings = localBuildingsFolder()
 	if buildings == nil then
 		return
@@ -275,18 +376,10 @@ local function onLevelUp(payload: Types.FxLevelUp): ()
 	if building == nil then
 		return
 	end
-	local part = anchorPart(building)
-	if part == nil then
-		return
-	end
-	local gained = payload.toLevel - payload.fromLevel
-	local text = if payload.milestone
-		then "MILESTONE! +" .. tostring(gained)
-		else "+" .. tostring(gained)
-	floatText(building, part, text, payload.milestone)
-	flashHighlight(building, payload.milestone)
-	if payload.milestone then
-		burst(part, Theme.LEVELUP_PARTICLES)
+	milestoneFanfare(payload.slotId, building, anchorPart(building))
+	local active = scaleTweens[payload.slotId]
+	if building:IsA("Model") and (active == nil or active.kind ~= "reveal") then
+		popModel(building, payload.slotId)
 	end
 end
 
@@ -304,6 +397,8 @@ local function onFxEvent(payload: any): ()
 		local levelUp = payload :: Types.FxLevelUp
 		levelUp.milestone = levelUp.milestone == true
 		onLevelUp(levelUp)
+	elseif payload.kind == "stageUp" and typeof(payload.stage) == "number" then
+		onStageUp(payload :: Types.FxStageUp)
 	end
 end
 
