@@ -6,4 +6,8 @@ tools/__pycache__/
 !.env.example
 
 # Kenney source media (CC0). Re-downloadable; keeps binaries out of the repo.
-assets/
+/assets/
+# Generated pipeline output (merged stage GLBs, palettes, VIP swatches); rebuilt by tools/assets.
+/assets/build/
+__pycache__/
+**/__pycache__/

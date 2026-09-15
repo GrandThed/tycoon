@@ -11,7 +11,6 @@ units before scaling.  Blender is Z up, so every position is converted with
 """
 
 import argparse
-import json
 import math
 import os
 import subprocess
@@ -20,13 +19,13 @@ import sys
 import bpy
 from mathutils import Vector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from blueprint import STAGE_COUNT, BlueprintError, load_blueprint  # noqa: E402
+
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 KITS_ROOT = os.path.join(REPO_ROOT, "assets", "kenney3d")
 MODEL_DIRS = ("GLB format", "GLTF format")
-FOOTPRINT_STUDS = 9.0
 PLAYER_HEIGHT_STUDS = 5.0
-STAGE_LABELS = ["stage 0 (buy)", "stage 1 (L10)", "stage 2 (L25)", "stage 3 (L50)", "stage 4 (L100)"]
-STAGE_COUNT = len(STAGE_LABELS)
 RENDER_SIZE = (1280, 960)
 # Three-quarter view from the front-right; the front of a building faces -Z in glTF space.
 CAMERA_DIR_GLTF = Vector((1.0, 0.72, -1.35))
@@ -254,11 +253,15 @@ class PieceCache:
 
 
 def render_blueprint(bp_path, out_dir, only_stage):
-    with open(bp_path, "r", encoding="utf-8") as fh:
-        bp = json.load(fh)
-    bid = bp.get("id", os.path.splitext(os.path.basename(bp_path))[0])
-    scale = float(bp.get("scale", 4.0))
-    pieces = bp.get("pieces", [])
+    try:
+        bp = load_blueprint(bp_path)
+    except BlueprintError as exc:
+        warn(f"blueprint {bp_path} rejected: {exc}")
+        return
+    for message in bp.warnings:
+        warn(message)
+    bid = bp.id
+    scale = bp.scale
     os.makedirs(out_dir, exist_ok=True)
 
     clear_scene()
@@ -273,39 +276,37 @@ def render_blueprint(bp_path, out_dir, only_stage):
 
     cache = PieceCache(library)
     placed = []  # (stage, root_empty, name)
-    for i, piece in enumerate(pieces):
-        kit = piece.get("kit", "")
-        model = piece.get("model", "")
-        stage = int(piece.get("stage", 0))
-        if not (0 <= stage < STAGE_COUNT):
-            warn(f"piece {i} ({model}) has stage {stage}, clamped to 0..{STAGE_COUNT - 1}")
-            stage = max(0, min(STAGE_COUNT - 1, stage))
-        roots = cache.get(kit, model)
+    for piece in bp.pieces:
+        roots = cache.get(piece.kit, piece.model)
         if roots is None:
             continue
-        holder = bpy.data.objects.new(f"p{i:02d}_{model}", None)
-        holder.location = gltf_to_blender(piece.get("pos", [0, 0, 0]))
-        holder.rotation_euler = (0.0, 0.0, math.radians(float(piece.get("rotY", 0.0))))
+        holder = bpy.data.objects.new(f"p{piece.index:02d}_{piece.model}", None)
+        holder.location = gltf_to_blender(piece.pos)
+        holder.rotation_euler = (0.0, 0.0, math.radians(piece.rot_y))
         building.objects.link(holder)
         cache.instantiate(roots, holder, building)
-        placed.append((stage, holder, f"{i}:{model}"))
+        placed.append((piece.stage, holder, piece.label))
 
     bpy.context.view_layer.update()
 
-    fp = FOOTPRINT_STUDS / scale
+    # Footprint in kit units: fx along X, fz along glTF Z (Blender -Y); the frame is drawn to fit it.
+    fx = bp.footprint[0] / scale
+    fz = bp.footprint[1] / scale
     ground_mat = flat_material("Ground", (0.62, 0.62, 0.60))
     frame_mat = flat_material("Frame", (0.85, 0.25, 0.2))
     player_mat = flat_material("Player", (0.2, 0.45, 0.85))
+    fp = max(fx, fz)
     make_box("Ground", (fp * 60, fp * 60, 0.02), (0, 0, -0.011), ground_mat, props)
     t = 0.16 / scale  # frame thickness: 0.16 studs
-    h = fp / 2
-    make_box("FrameN", (fp + t, t, t), (0, h, t / 2), frame_mat, props)
-    make_box("FrameS", (fp + t, t, t), (0, -h, t / 2), frame_mat, props)
-    make_box("FrameE", (t, fp + t, t), (h, 0, t / 2), frame_mat, props)
-    make_box("FrameW", (t, fp + t, t), (-h, 0, t / 2), frame_mat, props)
+    hx = fx / 2
+    hz = fz / 2
+    make_box("FrameN", (fx + t, t, t), (0, hz, t / 2), frame_mat, props)
+    make_box("FrameS", (fx + t, t, t), (0, -hz, t / 2), frame_mat, props)
+    make_box("FrameE", (t, fz + t, t), (hx, 0, t / 2), frame_mat, props)
+    make_box("FrameW", (t, fz + t, t), (-hx, 0, t / 2), frame_mat, props)
     ph = PLAYER_HEIGHT_STUDS / scale
     pw = ph * 0.4
-    player_pos = gltf_to_blender((h + pw * 1.2, ph / 2, -h + pw))
+    player_pos = gltf_to_blender((hx + pw * 1.2, ph / 2, -hz + pw))
     make_box("Player", (pw, pw, ph), player_pos, player_mat, props)
 
     setup_lights(scene)
@@ -314,7 +315,7 @@ def render_blueprint(bp_path, out_dir, only_stage):
     # Frame the camera on the full assembly plus the footprint so every stage shares one view.
     full = world_bounds([p[1] for p in placed] + [o for o in props.objects if o.name != "Ground"])
     if full is None:
-        full = (Vector((-h, -h, 0)), Vector((h, h, ph)))
+        full = (Vector((-hx, -hz, 0)), Vector((hx, hz, ph)))
     setup_camera(scene, *full)
 
     stages = [only_stage] if only_stage is not None else list(range(STAGE_COUNT))
@@ -348,9 +349,9 @@ def render_blueprint(bp_path, out_dir, only_stage):
                 continue
             lo, hi = b
             eps = 0.01
-            if lo.x < -h - eps or hi.x > h + eps or lo.z < -h - eps or hi.z > h + eps:
+            if lo.x < -hx - eps or hi.x > hx + eps or lo.z < -hz - eps or hi.z > hz + eps:
                 warn(
-                    f"stage {stage}: piece {name} exceeds the {FOOTPRINT_STUDS:g}x{FOOTPRINT_STUDS:g} footprint: "
+                    f"stage {stage}: piece {name} exceeds the {bp.footprint[0]:g}x{bp.footprint[1]:g} footprint: "
                     f"x[{lo.x * scale:.2f}, {hi.x * scale:.2f}] z[{lo.z * scale:.2f}, {hi.z * scale:.2f}] studs"
                 )
         out_path = os.path.join(out_dir, f"{bid}_stage{stage}.png")

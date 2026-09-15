@@ -25,30 +25,7 @@
 			"$ignoreUnknownInstances": true,
 			"Assets": {
 				"$className": "Folder",
-				"Village": {
-					"$className": "Folder"
-				},
-				"Boomtown": {
-					"$className": "Folder"
-				},
-				"Metropolis": {
-					"$className": "Folder"
-				},
-				"OrbitalColony": {
-					"$className": "Folder"
-				},
-				"Village_VIP": {
-					"$className": "Folder"
-				},
-				"Boomtown_VIP": {
-					"$className": "Folder"
-				},
-				"Metropolis_VIP": {
-					"$className": "Folder"
-				},
-				"OrbitalColony_VIP": {
-					"$className": "Folder"
-				}
+				"$path": { "optional": "templates" }
 			}
 		},
 		"StarterPlayer": {

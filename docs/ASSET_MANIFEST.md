@@ -28,44 +28,44 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 
 | Era | Blueprints | Uploaded | Harvested | Templates |
 |-----|------------|----------|-----------|-----------|
-| 1 — Village | 1/24 | 0/24 | 0/24 | 0/24 |
+| 1 — Village | 16/24 | 1/24 | 0/24 | 0/24 |
 | 2 — Boomtown | 0/24 | 0/24 | 0/24 | 0/24 |
 | 3 — Metropolis | 0/24 | 0/24 | 0/24 | 0/24 |
 | 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 1/96 | 0/96 | 0/96 | 0/96 |
+| **Total** | 16/96 | 1/96 | 0/96 | 0/96 |
 
 ## Era 1 — Village
 
 Blueprints: `tools/testfit/blueprints/Village/` -- templates: `templates/Village/` -- in game: `ServerStorage/Assets/Village/`
 
-Summary: 1/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 16/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Campfire` | Campfire | building | — | — | — | n/a | — | — | — |
-| 2 | `TentSmall` | Small Tent | building | — | — | — | n/a | — | — | — |
-| 3 | `WoodcutterHut` | Woodcutter's Hut | building | — | — | — | n/a | — | — | — |
-| 4 | `FarmPlot` | Farm Plot | building | — | — | — | n/a | — | — | — |
-| 5 | `HouseSmallA` | Small House | building | — | — | — | n/a | — | — | — |
-| 6 | `RoadCobblestone` | Pave the Road | unlock | — | — | — | n/a | — | — | — |
-| 7 | `Well` | Village Well | building | — | — | — | n/a | — | — | — |
-| 8 | `FlowerBed` | Flower Bed | decor | — | — | — | n/a | — | — | — |
-| 9 | `HouseSmallB` | Cottage | building | — | — | — | n/a | — | — | — |
-| 10 | `Bakery` | Bakery | building | — | — | — | n/a | — | — | — |
-| 11 | `Windmill` | Windmill | building | — | — | — | n/a | — | — | — |
-| 12 | `Fountain` | Found the Village Square | unlock | — | — | — | n/a | — | — | — |
-| 13 | `MarketStall` | Market Stall | building | — | — | — | n/a | — | — | — |
-| 14 | `TreeOak` | Oak Tree | decor | — | — | — | n/a | — | — | — |
-| 15 | `Blacksmith` | Blacksmith | building | — | — | — | n/a | — | — | — |
-| 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | n/a | — | — | — |
-| 17 | `CartWagon` | Open the Trade Route | unlock | — | — | — | n/a | — | — | — |
-| 18 | `Chapel` | Chapel | building | — | — | — | n/a | — | — | — |
-| 19 | `HouseLargeA` | Manor House | building | — | — | — | n/a | — | — | — |
-| 20 | `BannerPole` | Banner Pole | decor | — | — | — | n/a | — | — | — |
-| 21 | `Stables` | Stables | building | — | — | — | n/a | — | — | — |
-| 22 | `Watchtower` | Watchtower | building | — | — | — | n/a | — | — | — |
-| 23 | `WallGate` | Raise the Town Wall | unlock | — | — | — | n/a | — | — | — |
-| 24 | `CastleKeep` | Castle Keep | monument | — | — | — | n/a | — | — | — |
+| 1 | `Campfire` | Campfire | building | yes | fantasy-town-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 2 | `TentSmall` | Small Tent | building | yes | castle-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 3 | `WoodcutterHut` | Woodcutter's Hut | building | yes | fantasy-town-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 4 | `FarmPlot` | Farm Plot | building | yes | fantasy-town-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 5 | `HouseSmallA` | Small House | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 6 | `RoadCobblestone` | Pave the Road | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 7 | `Well` | Village Well | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 8 | `FlowerBed` | Flower Bed | decor | yes | fantasy-town-kit, nature-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 9 | `HouseSmallB` | Cottage | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 10 | `Bakery` | Bakery | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 11 | `Windmill` | Windmill | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 12 | `Fountain` | Found the Village Square | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 13 | `MarketStall` | Market Stall | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 14 | `TreeOak` | Oak Tree | decor | yes | fantasy-town-kit, nature-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 15 | `Blacksmith` | Blacksmith | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 0/5 | — |
+| 17 | `CartWagon` | Open the Trade Route | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 18 | `Chapel` | Chapel | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 19 | `HouseLargeA` | Manor House | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 20 | `BannerPole` | Banner Pole | decor | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 21 | `Stables` | Stables | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 22 | `Watchtower` | Watchtower | building | yes | castle-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 23 | `WallGate` | Raise the Town Wall | unlock | yes | castle-kit | 1 | 0/1 | 0/1 | 0/1 | — |
+| 24 | `CastleKeep` | Castle Keep | monument | yes | castle-kit | 1 | 0/1 | 0/1 | 0/1 | — |
 
 ## Era 2 — Boomtown
 
@@ -75,30 +75,30 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Newsstand` | Newsstand | building | — | — | — | n/a | — | — | — |
-| 2 | `HotDogStand` | Hot Dog Stand | building | — | — | — | n/a | — | — | — |
-| 3 | `Diner` | Diner | building | — | — | — | n/a | — | — | — |
-| 4 | `GasStation` | Gas Station | building | — | — | — | n/a | — | — | — |
-| 5 | `Motel` | Motel | building | — | — | — | n/a | — | — | — |
-| 6 | `RoadStraight` | Pave Main Street | unlock | — | — | — | n/a | — | — | — |
-| 7 | `BarberShop` | Barber Shop | building | — | — | — | n/a | — | — | — |
-| 8 | `FireHydrant` | Fire Hydrant | decor | — | — | — | n/a | — | — | — |
-| 9 | `GroceryStore` | Grocery Store | building | — | — | — | n/a | — | — | — |
-| 10 | `Laundromat` | Laundromat | building | — | — | — | n/a | — | — | — |
-| 11 | `CarDealership` | Car Dealership | building | — | — | — | n/a | — | — | — |
-| 12 | `TrafficLight` | Install Traffic Lights | unlock | — | — | — | n/a | — | — | — |
-| 13 | `Cinema` | Cinema | building | — | — | — | n/a | — | — | — |
-| 14 | `Streetlamp` | Streetlamp Row | decor | — | — | — | n/a | — | — | — |
-| 15 | `AutoRepairShop` | Auto Repair Shop | building | — | — | — | n/a | — | — | — |
-| 16 | `BowlingAlley` | Bowling Alley | building | — | — | — | n/a | — | — | — |
-| 17 | `BusYellow` | Open the Bus Line | unlock | — | — | — | n/a | — | — | — |
-| 18 | `Bank` | Bank | building | — | — | — | n/a | — | — | — |
-| 19 | `DepartmentStore` | Department Store | building | — | — | — | n/a | — | — | — |
-| 20 | `Billboard` | Billboard | decor | — | — | — | n/a | — | — | — |
-| 21 | `RadioStation` | Radio Station | building | — | — | — | n/a | — | — | — |
-| 22 | `FireStation` | Fire Station | building | — | — | — | n/a | — | — | — |
-| 23 | `NeonSign` | Light the Neon District | unlock | — | — | — | n/a | — | — | — |
-| 24 | `ClockTower` | Clock Tower | monument | — | — | — | n/a | — | — | — |
+| 1 | `Newsstand` | Newsstand | building | — | — | — | 0/5 | — | — | — |
+| 2 | `HotDogStand` | Hot Dog Stand | building | — | — | — | 0/5 | — | — | — |
+| 3 | `Diner` | Diner | building | — | — | — | 0/5 | — | — | — |
+| 4 | `GasStation` | Gas Station | building | — | — | — | 0/5 | — | — | — |
+| 5 | `Motel` | Motel | building | — | — | — | 0/5 | — | — | — |
+| 6 | `RoadStraight` | Pave Main Street | unlock | — | — | — | 0/1 | — | — | — |
+| 7 | `BarberShop` | Barber Shop | building | — | — | — | 0/5 | — | — | — |
+| 8 | `FireHydrant` | Fire Hydrant | decor | — | — | — | 0/1 | — | — | — |
+| 9 | `GroceryStore` | Grocery Store | building | — | — | — | 0/5 | — | — | — |
+| 10 | `Laundromat` | Laundromat | building | — | — | — | 0/5 | — | — | — |
+| 11 | `CarDealership` | Car Dealership | building | — | — | — | 0/5 | — | — | — |
+| 12 | `TrafficLight` | Install Traffic Lights | unlock | — | — | — | 0/1 | — | — | — |
+| 13 | `Cinema` | Cinema | building | — | — | — | 0/5 | — | — | — |
+| 14 | `Streetlamp` | Streetlamp Row | decor | — | — | — | 0/1 | — | — | — |
+| 15 | `AutoRepairShop` | Auto Repair Shop | building | — | — | — | 0/5 | — | — | — |
+| 16 | `BowlingAlley` | Bowling Alley | building | — | — | — | 0/5 | — | — | — |
+| 17 | `BusYellow` | Open the Bus Line | unlock | — | — | — | 0/1 | — | — | — |
+| 18 | `Bank` | Bank | building | — | — | — | 0/5 | — | — | — |
+| 19 | `DepartmentStore` | Department Store | building | — | — | — | 0/5 | — | — | — |
+| 20 | `Billboard` | Billboard | decor | — | — | — | 0/1 | — | — | — |
+| 21 | `RadioStation` | Radio Station | building | — | — | — | 0/5 | — | — | — |
+| 22 | `FireStation` | Fire Station | building | — | — | — | 0/5 | — | — | — |
+| 23 | `NeonSign` | Light the Neon District | unlock | — | — | — | 0/1 | — | — | — |
+| 24 | `ClockTower` | Clock Tower | monument | — | — | — | 0/1 | — | — | — |
 
 ## Era 3 — Metropolis
 
@@ -108,30 +108,30 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `FoodTruck` | Food Truck | building | — | — | — | n/a | — | — | — |
-| 2 | `CoffeeShop` | Coffee Shop | building | — | — | — | n/a | — | — | — |
-| 3 | `CornerShop` | Corner Shop | building | — | — | — | n/a | — | — | — |
-| 4 | `ApartmentBlockA` | Apartment Block | building | — | — | — | n/a | — | — | — |
-| 5 | `OfficeLowRise` | Low-Rise Office | building | — | — | — | n/a | — | — | — |
-| 6 | `RoadIntersection` | Lay the City Grid | unlock | — | — | — | n/a | — | — | — |
-| 7 | `Supermarket` | Supermarket | building | — | — | — | n/a | — | — | — |
-| 8 | `BusStop` | Bus Stop | decor | — | — | — | n/a | — | — | — |
-| 9 | `ApartmentBlockB` | High-Rise Apartments | building | — | — | — | n/a | — | — | — |
-| 10 | `ParkingGarage` | Parking Garage | building | — | — | — | n/a | — | — | — |
-| 11 | `ShoppingMall` | Shopping Mall | building | — | — | — | n/a | — | — | — |
-| 12 | `SubwayEntrance` | Dig the Subway Line | unlock | — | — | — | n/a | — | — | — |
-| 13 | `Hospital` | Hospital | building | — | — | — | n/a | — | — | — |
-| 14 | `ParkTrees` | City Park | decor | — | — | — | n/a | — | — | — |
-| 15 | `OfficeTowerA` | Office Tower | building | — | — | — | n/a | — | — | — |
-| 16 | `HotelTower` | Hotel Tower | building | — | — | — | n/a | — | — | — |
-| 17 | `HighwayRamp` | Build the Highway Ramp | unlock | — | — | — | n/a | — | — | — |
-| 18 | `Stadium` | Stadium | building | — | — | — | n/a | — | — | — |
-| 19 | `ConventionCenter` | Convention Center | building | — | — | — | n/a | — | — | — |
-| 20 | `RooftopGarden` | Rooftop Garden | decor | — | — | — | n/a | — | — | — |
-| 21 | `BankTower` | Bank Tower | building | — | — | — | n/a | — | — | — |
-| 22 | `BroadcastTower` | Broadcast Tower | building | — | — | — | n/a | — | — | — |
-| 23 | `OfficeTowerB` | Open the Finance District | unlock | — | — | — | n/a | — | — | — |
-| 24 | `SkyscraperA` | Skyscraper | monument | — | — | — | n/a | — | — | — |
+| 1 | `FoodTruck` | Food Truck | building | — | — | — | 0/5 | — | — | — |
+| 2 | `CoffeeShop` | Coffee Shop | building | — | — | — | 0/5 | — | — | — |
+| 3 | `CornerShop` | Corner Shop | building | — | — | — | 0/5 | — | — | — |
+| 4 | `ApartmentBlockA` | Apartment Block | building | — | — | — | 0/5 | — | — | — |
+| 5 | `OfficeLowRise` | Low-Rise Office | building | — | — | — | 0/5 | — | — | — |
+| 6 | `RoadIntersection` | Lay the City Grid | unlock | — | — | — | 0/1 | — | — | — |
+| 7 | `Supermarket` | Supermarket | building | — | — | — | 0/5 | — | — | — |
+| 8 | `BusStop` | Bus Stop | decor | — | — | — | 0/1 | — | — | — |
+| 9 | `ApartmentBlockB` | High-Rise Apartments | building | — | — | — | 0/5 | — | — | — |
+| 10 | `ParkingGarage` | Parking Garage | building | — | — | — | 0/5 | — | — | — |
+| 11 | `ShoppingMall` | Shopping Mall | building | — | — | — | 0/5 | — | — | — |
+| 12 | `SubwayEntrance` | Dig the Subway Line | unlock | — | — | — | 0/1 | — | — | — |
+| 13 | `Hospital` | Hospital | building | — | — | — | 0/5 | — | — | — |
+| 14 | `ParkTrees` | City Park | decor | — | — | — | 0/1 | — | — | — |
+| 15 | `OfficeTowerA` | Office Tower | building | — | — | — | 0/5 | — | — | — |
+| 16 | `HotelTower` | Hotel Tower | building | — | — | — | 0/5 | — | — | — |
+| 17 | `HighwayRamp` | Build the Highway Ramp | unlock | — | — | — | 0/1 | — | — | — |
+| 18 | `Stadium` | Stadium | building | — | — | — | 0/5 | — | — | — |
+| 19 | `ConventionCenter` | Convention Center | building | — | — | — | 0/5 | — | — | — |
+| 20 | `RooftopGarden` | Rooftop Garden | decor | — | — | — | 0/1 | — | — | — |
+| 21 | `BankTower` | Bank Tower | building | — | — | — | 0/5 | — | — | — |
+| 22 | `BroadcastTower` | Broadcast Tower | building | — | — | — | 0/5 | — | — | — |
+| 23 | `OfficeTowerB` | Open the Finance District | unlock | — | — | — | 0/1 | — | — | — |
+| 24 | `SkyscraperA` | Skyscraper | monument | — | — | — | 0/1 | — | — | — |
 
 ## Era 4 — Orbital Colony
 
@@ -141,31 +141,31 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `LandingPad` | Landing Pad | building | — | — | — | n/a | — | — | — |
-| 2 | `SolarArray` | Solar Array | building | — | — | — | n/a | — | — | — |
-| 3 | `HabitatPod` | Habitat Pod | building | — | — | — | n/a | — | — | — |
-| 4 | `HydroponicsDome` | Hydroponics Dome | building | — | — | — | n/a | — | — | — |
-| 5 | `OxygenGenerator` | Oxygen Generator | building | — | — | — | n/a | — | — | — |
-| 6 | `WalkwayTube` | Connect the Walkways | unlock | — | — | — | n/a | — | — | — |
-| 7 | `CrewQuarters` | Crew Quarters | building | — | — | — | n/a | — | — | — |
-| 8 | `ColonyFlag` | Colony Flag | decor | — | — | — | n/a | — | — | — |
-| 9 | `ResearchLab` | Research Lab | building | — | — | — | n/a | — | — | — |
-| 10 | `RoverBay` | Rover Bay | building | — | — | — | n/a | — | — | — |
-| 11 | `CommsArray` | Comms Array | building | — | — | — | n/a | — | — | — |
-| 12 | `OxygenTanks` | Bring Life Support Online | unlock | — | — | — | n/a | — | — | — |
-| 13 | `MineralExtractor` | Mineral Extractor | building | — | — | — | n/a | — | — | — |
-| 14 | `RocksLarge` | Rock Garden | decor | — | — | — | n/a | — | — | — |
-| 15 | `ObservationDome` | Observation Dome | building | — | — | — | n/a | — | — | — |
-| 16 | `FusionReactor` | Fusion Reactor | building | — | — | — | n/a | — | — | — |
-| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | — | — | — | n/a | — | — | — |
-| 18 | `DockingBay` | Docking Bay | building | — | — | — | n/a | — | — | — |
-| 19 | `TerraformStation` | Terraform Station | building | — | — | — | n/a | — | — | — |
-| 20 | `HoloBeacon` | Holo Beacon | decor | — | — | — | n/a | — | — | — |
-| 21 | `MedicalBay` | Medical Bay | building | — | — | — | n/a | — | — | — |
-| 22 | `SpaceportTerminal` | Spaceport Terminal | building | — | — | — | n/a | — | — | — |
-| 23 | `TurretBase` | Raise Planetary Defense | unlock | — | — | — | n/a | — | — | — |
-| 24 | `LaunchTower` | Launch Tower | monument | — | — | — | n/a | — | — | — |
+| 1 | `LandingPad` | Landing Pad | building | — | — | — | 0/5 | — | — | — |
+| 2 | `SolarArray` | Solar Array | building | — | — | — | 0/5 | — | — | — |
+| 3 | `HabitatPod` | Habitat Pod | building | — | — | — | 0/5 | — | — | — |
+| 4 | `HydroponicsDome` | Hydroponics Dome | building | — | — | — | 0/5 | — | — | — |
+| 5 | `OxygenGenerator` | Oxygen Generator | building | — | — | — | 0/5 | — | — | — |
+| 6 | `WalkwayTube` | Connect the Walkways | unlock | — | — | — | 0/1 | — | — | — |
+| 7 | `CrewQuarters` | Crew Quarters | building | — | — | — | 0/5 | — | — | — |
+| 8 | `ColonyFlag` | Colony Flag | decor | — | — | — | 0/1 | — | — | — |
+| 9 | `ResearchLab` | Research Lab | building | — | — | — | 0/5 | — | — | — |
+| 10 | `RoverBay` | Rover Bay | building | — | — | — | 0/5 | — | — | — |
+| 11 | `CommsArray` | Comms Array | building | — | — | — | 0/5 | — | — | — |
+| 12 | `OxygenTanks` | Bring Life Support Online | unlock | — | — | — | 0/1 | — | — | — |
+| 13 | `MineralExtractor` | Mineral Extractor | building | — | — | — | 0/5 | — | — | — |
+| 14 | `RocksLarge` | Rock Garden | decor | — | — | — | 0/1 | — | — | — |
+| 15 | `ObservationDome` | Observation Dome | building | — | — | — | 0/5 | — | — | — |
+| 16 | `FusionReactor` | Fusion Reactor | building | — | — | — | 0/5 | — | — | — |
+| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | — | — | — | 0/1 | — | — | — |
+| 18 | `DockingBay` | Docking Bay | building | — | — | — | 0/5 | — | — | — |
+| 19 | `TerraformStation` | Terraform Station | building | — | — | — | 0/5 | — | — | — |
+| 20 | `HoloBeacon` | Holo Beacon | decor | — | — | — | 0/1 | — | — | — |
+| 21 | `MedicalBay` | Medical Bay | building | — | — | — | 0/5 | — | — | — |
+| 22 | `SpaceportTerminal` | Spaceport Terminal | building | — | — | — | 0/5 | — | — | — |
+| 23 | `TurretBase` | Raise Planetary Defense | unlock | — | — | — | 0/1 | — | — | — |
+| 24 | `LaunchTower` | Launch Tower | monument | — | — | — | 0/1 | — | — | — |
 
 ## Totals
 
-96 models: 1/96 blueprints, 0/96 uploaded, 0/96 harvested, 0/96 templated
+96 models: 16/96 blueprints, 1/96 uploaded, 0/96 harvested, 0/96 templated

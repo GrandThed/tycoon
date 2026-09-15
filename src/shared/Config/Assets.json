@@ -1,0 +1,501 @@
+{
+  "version": 1,
+  "textures": {
+    "fantasy-town-kit": {
+      "vipSwatchAssetId": 113791458028891,
+      "vipImageId": 0
+    }
+  },
+  "eras": {
+    "Village": {
+      "Campfire": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "TentSmall": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "WoodcutterHut": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "FarmPlot": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "HouseSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "RoadCobblestone": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Well": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "FlowerBed": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "HouseSmallB": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Bakery": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Windmill": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Fountain": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "MarketStall": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "TreeOak": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Blacksmith": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Tavern": {
+        "stages": [
+          {
+            "modelAssetId": 124879481344789,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.24, 4.0],
+                "offset": [0.0, 2.12, -1.8]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 77366854302224,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.18, 6.74, 8.717],
+                "offset": [0.09, 3.37, -0.158]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 134637036017584,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 10.744, 8.985],
+                "offset": [0.0, 5.372, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72389293234700,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 18.74, 8.985],
+                "offset": [0.0, 9.37, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76766683155076,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 20.24, 8.985],
+                "offset": [0.0, 10.12, -0.024]
+              }
+            ]
+          }
+        ]
+      },
+      "CartWagon": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Chapel": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "HouseLargeA": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "BannerPole": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Stables": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "Watchtower": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          },
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "WallGate": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      },
+      "CastleKeep": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": []
+          }
+        ]
+      }
+    }
+  }
+}

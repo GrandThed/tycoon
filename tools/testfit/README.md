@@ -6,7 +6,7 @@ so a building can be judged at every stage before anything is uploaded to Roblox
 ## Run
 
 ```
-blender -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/Village/tavern.json --out assets/testfit/out
+blender -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/Village/Tavern.json --out assets/testfit/out
 blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --out <dir> --stage 2   # one stage only
 blender -b -P tools/testfit/testfit.py -- --dump-bounds fantasy-town-kit                  # measure a kit
 ```
@@ -16,18 +16,22 @@ blender -b -P tools/testfit/testfit.py -- --dump-bounds fantasy-town-kit        
 (1280 x 960, EEVEE, fixed front-right three-quarter camera) and `<id>_strip.png` (all five
 stages side by side, composed by `strip.py` under the system `py` because Blender's Python has
 no Pillow). Stdout lists piece count and bounding box in studs per stage and warns when a piece
-leaves the 9 x 9 stud footprint. A missing GLB is a warning, never a crash.
+leaves the footprint. A missing GLB is a warning, never a crash.
 
-The render shows a light-grey ground, a red 9 x 9 stud footprint frame and a blue 5-stud
-reference "player" box beside it.
+The render shows a light-grey ground, a red footprint frame (9 x 9 studs unless the blueprint
+says otherwise) and a blue 5-stud reference "player" box beside it.
 
 ## Blueprint format
 
-One JSON file per building under `blueprints/<Era>/`:
+One JSON file per building under `blueprints/<Era>/<ModelName>.json`. The file name **equals**
+the era config's `modelName` (PascalCase) and the blueprint's `id`; `blueprint.py` is the shared
+loader/validator used by this renderer and by `tools/assets/merge_stages.py`, so a blueprint that
+renders here merges there.
 
 ```json
 {
-  "id": "tavern", "era": "Village", "scale": 4.0,
+  "id": "Tavern", "era": "Village", "scale": 4.0,
+  "footprint": [9, 9],
   "pieces": [
     { "kit": "fantasy-town-kit", "model": "wall-door", "pos": [0.5, 0, -0.45], "rotY": 90, "stage": 0 }
   ]
@@ -35,7 +39,9 @@ One JSON file per building under `blueprints/<Era>/`:
 ```
 
 - `scale`: kit units to studs, applied uniformly to the whole assembly (1 glTF unit = 1 stud
-  in Roblox, so kit pieces need roughly 4x to fill a slot).
+  in Roblox, so kit pieces need roughly 4x to fill a slot). Fixed at 4.0 for every M7 blueprint.
+- `footprint`: optional `[x, z]` in studs, default `[9, 9]`; the frame and the out-of-footprint
+  warning use it. The monument may go up to `[14, 14]`.
 - `pos`: kit units before scaling, X / Y / Z with Y up (glTF and Roblox convention). The
   building's front faces -Z.
 - `rotY`: degrees about Y. `+90` turns a piece's +X side to face -Z.
