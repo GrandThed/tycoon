@@ -1,0 +1,30 @@
+{
+  "id": "Campfire",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "nature-kit", "model": "campfire_stones", "pos": [0, 0, -0.2], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0, 0, -0.2], "rotY": 45, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0, 0, -0.2], "rotY": 135, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0, 0, -0.85], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "rock_smallA", "pos": [-0.5, 0, 0.2], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "rock_smallB", "pos": [0.5, 0, 0.2], "rotY": 30, "stage": 1},
+    {"kit": "nature-kit", "model": "rock_smallC", "pos": [0.3, 0, -0.55], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "rock_smallA", "pos": [-0.3, 0, -0.55], "rotY": 60, "stage": 1},
+    {"kit": "nature-kit", "model": "log_large", "pos": [-0.75, 0, -0.2], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "log", "pos": [0.75, 0, -0.2], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "pot_small", "pos": [0.05, 0, 0.35], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "stall", "pos": [0, 0, 0.78], "rotY": 90, "stage": 2},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.75, 0, 0.85], "rotY": 90, "stage": 2},
+    {"kit": "nature-kit", "model": "pot_large", "pos": [0.85, 0, 0.85], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [-0.62, 0, 0.35], "rotY": 90, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0.62, 0, 0.35], "rotY": 90, "stage": 3},
+    {"kit": "nature-kit", "model": "stump_round", "pos": [-0.95, 0, -0.75], "rotY": 0, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [-0.35, 0, -0.65], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.35, 0, -0.65], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [-0.35, 0, 0.25], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.35, 0, 0.25], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "roof-point", "pos": [0, 1.0, -0.2], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [-0.34, 1.0, -0.2], "rotY": 0, "stage": 4}
+  ]
+}

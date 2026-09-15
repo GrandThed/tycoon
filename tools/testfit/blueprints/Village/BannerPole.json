@@ -1,0 +1,13 @@
+{
+  "id": "BannerPole",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0, 1.0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "banner-red", "pos": [0, 1.0, 0.3], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "banner-red", "pos": [0, 1.0, -0.3], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "banner-green", "pos": [-0.3, 1.0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "banner-green", "pos": [0.3, 1.0, 0], "rotY": 180, "stage": 0}
+  ]
+}

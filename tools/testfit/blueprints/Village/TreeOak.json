@@ -1,0 +1,11 @@
+{
+  "id": "TreeOak",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "tree-high-round", "pos": [0, 0, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "rock_smallA", "pos": [-0.6, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "rock_smallB", "pos": [0.55, 0, -0.35], "rotY": 45, "stage": 0},
+    {"kit": "nature-kit", "model": "rock_smallC", "pos": [0.35, 0, -0.75], "rotY": 0, "stage": 0}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "WoodcutterHut",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "nature-kit", "model": "log_stackLarge", "pos": [0.5, 0, -0.55], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "stump_squareDetailed", "pos": [-0.35, 0, -0.35], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [-0.72, 0, -0.35], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.1, 0, -1.02], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.9, 0, -1.02], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.1, 0, -0.14], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.9, 0, -0.14], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof", "pos": [0.5, 1.0, -0.55], "rotY": 270, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [-0.5, 0, 0.55], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-small", "pos": [-0.5, 0, 0.55], "rotY": 180, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [-0.5, 0, 0.55], "rotY": 270, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [-0.5, 0, 0.55], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [-0.5, 1.0, 0.55], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [-0.2, 0, -0.08], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "poles-horizontal", "pos": [-0.5, 0, -0.5], "rotY": 180, "stage": 3},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.45, 0, -0.92], "rotY": 90, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-shutters", "pos": [0.5, 0, 0.55], "rotY": 90, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.5, 0, 0.55], "rotY": 270, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-small", "pos": [0.5, 0, 0.55], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "roof-point", "pos": [0.5, 1.0, 0.55], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [0.5, 1.0, 0.55], "rotY": 0, "stage": 4}
+  ]
+}

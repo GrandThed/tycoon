@@ -1,0 +1,33 @@
+{
+  "id": "FarmPlot",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "nature-kit", "model": "crops_dirtRow", "pos": [-0.45, 0, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_wheatStageA", "pos": [-0.75, 0, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_wheatStageA", "pos": [-0.25, 0, -0.7], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtRow", "pos": [-0.45, 0, -0.05], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_wheatStageB", "pos": [-0.75, 0, -0.05], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_wheatStageB", "pos": [-0.25, 0, -0.05], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "fence_gate", "pos": [-0.5, 0, -0.6], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.5, 0, -0.6], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.6, 0, -0.5], "rotY": 90, "stage": 2},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.6, 0, 0.5], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [-0.45, 0, 0.55], "rotY": 0, "stage": 3},
+    {"kit": "nature-kit", "model": "log", "pos": [-0.45, 0.65, 0.55], "rotY": 90, "stage": 3},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.45, 1.0, 0.55], "rotY": 0, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [0.5, 0, -0.53], "rotY": 90, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [0.5, 0, -0.53], "rotY": 0, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [0.5, 0, -0.53], "rotY": 270, "stage": 3},
+    {"kit": "fantasy-town-kit", "model": "roof-gable-top", "pos": [0.5, 0.5, -0.53], "rotY": 0, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.5, 0, 0.6], "rotY": 180, "stage": 4},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.6, 0, -0.5], "rotY": 270, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0.5, 0, 0.5], "rotY": 90, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-small", "pos": [0.5, 0, 0.5], "rotY": 0, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.5, 0, 0.5], "rotY": 270, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.5, 0, 0.5], "rotY": 180, "stage": 4},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0.5, 1.0, 0.5], "rotY": 90, "stage": 4},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.8, 0, 0.42], "rotY": 0, "stage": 4},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.28, 0, 0.75], "rotY": 40, "stage": 4}
+  ]
+}

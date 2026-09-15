@@ -1,0 +1,25 @@
+{
+  "id": "TentSmall",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "nature-kit", "model": "tent_smallOpen", "pos": [-0.55, 0, -0.45], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "tent_smallClosed", "pos": [0.55, 0, -0.45], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "tent_smallOpen", "pos": [-0.55, 0, 0.55], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "campfire_stones", "pos": [0, 0, -0.05], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "campfire_logs", "pos": [0, 0, -0.05], "rotY": 30, "stage": 2},
+    {"kit": "nature-kit", "model": "pot_small", "pos": [0.5, 0, 0.05], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [0, 0, -0.75], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "fence_gate", "pos": [-0.5, 0, -0.6], "rotY": 0, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.5, 0, -0.6], "rotY": 0, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.5, 0, 0.6], "rotY": 180, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.5, 0, 0.6], "rotY": 180, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.6, 0, -0.5], "rotY": 90, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [-0.6, 0, 0.5], "rotY": 90, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.6, 0, -0.5], "rotY": 270, "stage": 3},
+    {"kit": "nature-kit", "model": "fence_simple", "pos": [0.6, 0, 0.5], "rotY": 270, "stage": 3},
+    {"kit": "nature-kit", "model": "stump_round", "pos": [0.4, 0, 0.45], "rotY": 0, "stage": 3},
+    {"kit": "nature-kit", "model": "tent_detailedOpen", "pos": [0.5, 0, 0.6], "rotY": 0, "stage": 4},
+    {"kit": "castle-kit", "model": "flag", "pos": [-0.92, 0, -0.05], "rotY": 0, "stage": 4}
+  ]
+}
