@@ -1657,3 +1657,234 @@ AnalyticsService`.
 **3. Multi-lap sim output without perks changes from lap 2 Era 3 on** (the softcap now lives in
 `LegacyMult` itself and lap 2 enters Era 2 above 1000 Legacy). Lap 1, `--check`, packs, rusher and
 paid outputs are byte-identical to M5; BALANCE.md's M6 section is the new multi-lap baseline.
+
+---
+
+# M7 contracts — growing buildings: pipeline + Village (2026-09-15)
+
+Read `docs/PLAN.md` "M7" and `docs/SPEC.md` §8 (amended) first; `docs/ASSET_RESEARCH.md` §1–§4 for
+the measured facts behind every number here. Scope: the pipeline plus Village's 24 slots.
+
+## M7 ownership
+
+| Owner | Files |
+|-------|-------|
+| pipeline-engineer (general-purpose) | `tools/assets/**` (new), `tools/testfit/{testfit.py,strip.py,README.md,blueprint.py}`, `templates/**` (generated `.rbxmx`, committed), `src/shared/Config/Assets.json` (generated), `default.project.json` (only the `ServerStorage.Assets` mapping), `.gitignore` (add `assets/build/`) |
+| asset-builder A/B/C (general-purpose ×3) | `tools/testfit/blueprints/Village/<ModelName>.json` for their slot set only (table below); read-only on everything else |
+| luau-engineer | `src/server/**`, `src/shared/{Types,Catalog}.luau` |
+| ui-engineer | `src/client/**`, `sourcemap.json` |
+| economy-designer | `tools/gen_asset_manifest.py`, `docs/ASSET_MANIFEST.md` |
+| lead | `docs/INTERFACES.md`, `docs/PLAN.md`, the tavern proof, routing |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, PLAN ticks |
+
+Frozen: `Config/Eras/**`, `Layouts/**`, `Config/{Game,Sounds,Monetization,LegacyShop}.json`,
+`Economy.luau`, `Format.luau`, `tools/sim_economy.py`, `wally.toml`. No balance change in M7.
+
+## Blueprints (asset-builders author; pipeline-engineer's tools consume)
+
+Path `tools/testfit/blueprints/<EraName>/<ModelName>.json`; the file name **equals** the era
+config's `modelName` (PascalCase). The approved prototype is `Village/Tavern.json`.
+
+```json
+{
+  "id": "Tavern",                 // == modelName == file stem
+  "era": "Village",
+  "scale": 4.0,                   // studs per kit unit; fixed at 4.0 for every M7 blueprint
+  "footprint": [9, 9],            // optional, studs; default [9, 9]. Monument may use up to [14, 14]
+  "pieces": [
+    { "kit": "fantasy-town-kit", "model": "wall-door", "pos": [0, 0, 0], "rotY": 0, "stage": 0 }
+  ]
+}
+```
+
+- `pos` in kit units before scaling, Y up; the origin is the slot anchor at ground level; the
+  front faces **−Z**. `rotY` degrees about Y. `stage` 0–4 is the first stage the piece appears in;
+  stages are additive (a piece never disappears). Buried pieces are fine when no outward face
+  lands on a cell boundary (see `tools/testfit/README.md`).
+- `building` slots use all five stages: 0 buy, 1 L10, 2 L25, 3 L50, 4 L100, humble → imposing,
+  growing **up**. `unlock`, `decor`, `monument` slots put every piece at stage 0.
+- Pieces may come from more than one kit, but keep the era's palette: Village = `fantasy-town-kit`,
+  `castle-kit`, `nature-kit` only. One kit per building where possible (each kit adds one MeshPart
+  per stage, see below).
+- Every blueprint must render clean with `testfit.py` (no footprint warning, no floating or
+  clipping piece) and the builder looks at the strip before reporting. Piece budget ≤ 60 at stage 4.
+
+Village slot sets (id → ModelName, type):
+
+| Builder | Slots |
+|---|---|
+| A — houses and shops | HouseSmallA, HouseSmallB, HouseLargeA, Bakery, Blacksmith, MarketStall, Stables, Chapel (all `building`) |
+| B — structures and unlocks | Windmill, Well, Watchtower (`building`); Fountain, RoadCobblestone, CartWagon, WallGate (`unlock`); CastleKeep (`monument`, footprint up to 14×14, must be the plot's most imposing silhouette) |
+| C — early slots and nature | Campfire, TentSmall, WoodcutterHut, FarmPlot (`building`, modest growth: more tents, stacked logs, more crops, a fence); FlowerBed, TreeOak, BannerPole (`decor`) |
+
+Slot order in `Config/Eras/1_Village.json` is the price ramp; earlier slots must read humbler than
+later ones at the same stage.
+
+## tools/assets — the pipeline (pipeline-engineer)
+
+All Python runs with `py`; Blender is `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P <script> -- <args>`.
+Every tool is idempotent and deterministic (stable ordering, no timestamps in outputs), prints a
+one-line summary per item, and never raises on a missing input — it warns and skips.
+
+1. **`tools/testfit/blueprint.py`** — shared loader/validator (schema above), used by `testfit.py`
+   and `merge_stages.py`. Rename the prototype to `Tavern.json` (done by lead).
+2. **`tools/assets/merge_stages.py`** (Blender) — `--era Village [--model Tavern]`. For each
+   blueprint and stage: place pieces (linked data, as testfit does), **join into one mesh per kit**,
+   apply scale ×4 with the origin kept at the blueprint origin (bottom-centre of the footprint,
+   front −Z), and export `assets/build/stages/<Era>/<ModelName>_S<n>.glb` with one node and one
+   material per kit, texture **embedded** (the kit's `colormap.png`). Kits whose GLBs use material
+   colours instead of a texture (nature-kit and space-kit do; verify per kit at import: a primitive
+   with no `baseColorTexture`) get a deterministic **palette texture** per kit
+   (`assets/build/palettes/<kit>.png`, one swatch per distinct base colour across the whole kit,
+   generated by `tools/assets/palette.py`) and UVs remapped onto their swatch, so every piece of a
+   kit shares one image and one UV convention. Also writes `assets/build/stages/<Era>/<ModelName>.json`
+   with per-stage, per-kit bounds in studs (for the manifest and for sanity checks). Non-building
+   slots produce only `_S0`.
+3. **`tools/assets/upload_models.py`** — `--era Village [--model Tavern] [--dry-run]`. Open Cloud
+   Model upload of every stage GLB, reusing `tools/upload_audio.py`'s env/credential/polling code
+   (import or copy; `.env` key `ROBLOX_API_KEY` etc. exactly as that tool reads them). Writes
+   `modelAssetId` into `Assets.json` (schema below) and skips any stage whose id is already
+   non-zero. Also uploads, once per kit, a **VIP swatch**: one small kit piece with the VIP
+   recoloured colormap embedded (`tools/assets/vip_palette.py` from the research folder's
+   `vip_palette.py` — a warm gold gradient map), as `assets/build/vip/<kit>_swatch.glb`, recorded
+   under `textures.<kit>.vipSwatchAssetId`.
+4. **`tools/assets/harvest.luau` + `tools/assets/harvest.py`** — the one Studio step. The Luau file
+   is pasted into the Studio command bar (Edit mode); it reads the id list embedded at its top
+   (regenerated by `harvest.py --emit` from `Assets.json` so it never has to be edited by hand),
+   `InsertService:LoadAsset`s each model and swatch, and prints one `[HARVEST] {json}` line per
+   asset: for every MeshPart — `kit` (the node name), `meshId`, `imageId` (from `TextureID`),
+   `size` (studs) and `offset` (part position relative to the inner model's pivot, which is the
+   glTF origin). Then it destroys what it loaded. `py tools/assets/harvest.py` reads the Windows
+   clipboard (`powershell Get-Clipboard`) or `--file`, parses only `[HARVEST]` lines, and merges
+   them into `Assets.json`. Missing lines leave entries untouched and are listed.
+5. **`tools/assets/gen_templates.py`** — `Assets.json` → `templates/<Era>/<ModelName>.rbxmx`
+   (Rojo XML model format). Template shape is frozen below. `--check` regenerates to memory and
+   diffs, like the manifest tool.
+6. **`default.project.json`** — `ServerStorage.Assets` becomes `{"$path": "templates"}` so
+   `templates/Village/Tavern.rbxmx` builds to `ServerStorage.Assets.Village.Tavern`.
+   `$ignoreUnknownInstances` stays on `ServerStorage` itself only. The `<Era>_VIP` folders are
+   removed (VIP is a texture swap now; `findTemplate`'s VIP branch simply finds nothing). Each era
+   directory needs at least one file, so `templates/<Era>/.gitkeep`-style placeholders are not
+   valid for Rojo — create the four era directories only when they have a template; the server
+   already tolerates a missing era folder.
+
+## Assets.json — schema v1 (`src/shared/Config/Assets.json`, generated; Rojo → ModuleScript)
+
+```json
+{
+  "version": 1,
+  "textures": {
+    "fantasy-town-kit": { "vipSwatchAssetId": 0, "vipImageId": 0 }
+  },
+  "eras": {
+    "Village": {
+      "Tavern": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              { "kit": "fantasy-town-kit", "meshId": 0, "imageId": 0,
+                "size": [8.5, 4.2, 4.0], "offset": [0.0, 2.1, 0.0] }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+`stages` has 5 entries for `building` slots and 1 otherwise. `0` means "not yet" everywhere and
+never errors. Sizes and offsets are studs. The file is optional at runtime: `Catalog.GetAssetsConfig()`
+returns `nil` when the ModuleScript is absent and every consumer treats that as "no assets".
+
+## Template shape (frozen; gen_templates.py writes it, PlotService consumes it)
+
+```
+Model "<ModelName>"                      PrimaryPart = Base
+  Part "Base"                            Size (1, 0.2, 1), CFrame identity (origin = anchor, ground level),
+                                         Transparency 1, Anchored, CanCollide false, CanQuery false, CanTouch false
+  Model "Stage0" … "Stage4"              one per stage present in Assets.json
+    MeshPart "<kit>"                     MeshId rbxassetid://<meshId>, TextureID rbxassetid://<imageId>,
+                                         Size = size, CFrame = CFrame.new(offset), Anchored,
+                                         CanCollide true, CollisionFidelity Box, CanTouch false,
+                                         Material Plastic, Color (255,255,255)
+```
+
+- `PivotTo(anchorCFrame)` on the Model therefore puts the footprint's bottom-centre on the anchor,
+  exactly as the placeholder does today.
+- `MeshId` is not scriptable at runtime, which is the whole reason templates are files.
+- Part budget: a spawned building is `Base` + the MeshParts of one stage (1–2). A full Village plot
+  stays ≤ 60 parts from buildings.
+
+## Server behaviour (luau-engineer)
+
+- **`Types.luau`**: `AssetsConfig`, `AssetStage`, `AssetPart` mirroring the schema; `FxEvent`
+  gains `{ kind: "stageUp", slotId: string, stage: number }`.
+- **`Catalog.GetAssetsConfig(): Types.AssetsConfig?`** — nil-safe like the LegacyShop lookup.
+- **Stage rule** (pure helper `PlotService.stageForLevel(level, milestoneLevels)`; base milestones
+  from `Game.json.milestoneLevels` only — the Legacy `milestone75` perk affects income, never the
+  visual): stage = count of base milestones `<= level`, so L1–9 → 0, 10–24 → 1, 25–49 → 2,
+  50–99 → 3, 100 → 4. Non-`building` slots are always stage 0. If `Stage<n>` is missing in the
+  template, use the highest present stage `<= n`; if none, the placeholder path.
+- **`spawnBuilding`**: clone the template, delete every `Stage*` except the chosen one, pivot,
+  parent. The `LevelUpPrompt` must be parented to `Base` (a ProximityPrompt needs a BasePart
+  parent; today it is parented to the Model and would be inert on a real template).
+- **Milestone crossing** (`tryLevelUp` → `crossesMilestone`): when the stage changes, clone the new
+  `Stage<n>` from the template into the live model, destroy the old one, re-apply VIP/cosmetics,
+  and fire `FxEvent stageUp` to the owner (in addition to the existing level-up FX).
+  `RefreshCosmetics` and rebuilds go through the same path.
+- **VIP**: when `state.passes.VIP` is true, for each MeshPart in the visible stage set
+  `TextureID = "rbxassetid://" .. textures[kit].vipImageId` if that id is non-zero; otherwise leave
+  the normal texture. Losing/gaining VIP mid-session goes through `RefreshCosmetics`.
+- **Cosmetics redesign**: Golden Roads tints `unlock` slots' MeshParts with `Color` = the perk
+  colour (texture is multiplied, so it reads as gilded); placeholders keep today's behaviour.
+  Monument Glow keeps the `PointLight` and replaces Neon with a `Highlight` (FillColor perk colour,
+  FillTransparency 0.6, OutlineTransparency 0.2) on the model; never touches `Material`.
+- Everything degrades: missing `Assets.json`, missing template, missing stage, id `0` — placeholder
+  or plain texture, never an error. Rate limits and validation order unchanged.
+
+## Client contracts (ui-engineer)
+
+- `FxEvent stageUp`: play a growth pop on the building model (`Model:ScaleTo` 0.85 → 1.08 → 1.0
+  over ~0.5 s with the existing reveal easing), reuse the milestone particles/flash, and the
+  existing `levelUpMilestone` sound (no new sound). No new remotes.
+- Build panel: for `building` slots owned below stage 4, the row's hint line reads
+  "Grows at Lv <next base milestone>" (client computes from `Game.json.milestoneLevels`); at
+  stage 4 nothing extra. Copy lives in `Theme`.
+- Nothing else changes; placeholders keep their billboard labels.
+
+## tools/gen_asset_manifest.py (economy-designer)
+
+Becomes a coverage report per era: for every `modelName` — slot type, blueprint present
+(`tools/testfit/blueprints/<Era>/<ModelName>.json`), stages defined, stage GLBs built
+(`assets/build/...`, may be absent on a fresh clone → "n/a"), uploaded (`Assets.json`
+`modelAssetId` non-zero per stage), harvested (`meshId` non-zero), template present
+(`templates/<Era>/<ModelName>.rbxmx`). Keeps `--check` and the deterministic-output rule; still
+validates the era configs as today. The Kenney-kit suggestion column is dropped (blueprints are
+the suggestion now).
+
+## Waves
+
+- **Wave 0 (parallel, disjoint):** pipeline-engineer builds tools 1–6 and runs the **tavern
+  proof** through merge → upload → `harvest.py --emit`; asset-builders A/B/C author blueprints;
+  luau-engineer implements the server side against the frozen template shape; ui-engineer the
+  client; economy-designer the manifest.
+- **Ben:** pastes the harvest script, copies Output back, then after `gen_templates.py` +
+  `rojo build` confirms in Studio that the Tavern template shows its mesh and texture and grows
+  in Play. **No further uploads until this passes.** If a file-defined MeshPart does not load, the
+  fallback is building templates at server boot with `InsertService:LoadAsset(modelAssetId)`
+  into the same shape (verified loadable in Edit mode on 2026-09-15).
+- **Wave 1:** upload + harvest the remaining Village blueprints (one harvest paste), templates,
+  manifest, review, QA, docs.
+
+## Definition of done (M7)
+
+Standard suite green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated sourcemap,
+`rojo build`, `sim_economy.py --check`, `gen_asset_manifest.py --check`, `gen_templates.py --check`).
+Reviewer SHIP. All 24 Village slots have blueprints that render clean, uploaded and harvested
+stages, and committed templates. In Studio: buying any Village slot reveals its stage-0 mesh at
+the anchor, facing the pad; levelling a `Tavern` with the cash lever to 10 / 25 / 50 / 100 swaps
+the stage each time with the pop; a VIP plot shows the gold texture; with `Assets.json` and
+`templates/` removed, every slot is a placeholder and nothing errors; a full-stage Village plot has
+≤ 60 building parts.
