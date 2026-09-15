@@ -1,0 +1,20 @@
+{
+  "id": "Watchtower",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "castle-kit", "model": "tower-square-mid-open", "pos": [-0.55, 0, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "tower-square-mid-open", "pos": [-0.55, 1.01, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "tower-hexagon-top-wood", "pos": [-0.55, 2.02, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "flag", "pos": [-0.55, 2.15, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "tower-square-base", "pos": [0.55, 0, -0.55], "rotY": 90, "stage": 1},
+    {"kit": "castle-kit", "model": "tower-square-top", "pos": [0.55, 1.01, -0.55], "rotY": 0, "stage": 1},
+    {"kit": "castle-kit", "model": "tower-square-mid-windows", "pos": [0.55, 1.31, -0.55], "rotY": 0, "stage": 2},
+    {"kit": "castle-kit", "model": "tower-square-top", "pos": [0.55, 2.32, -0.55], "rotY": 0, "stage": 2},
+    {"kit": "castle-kit", "model": "tower-square-mid", "pos": [0.55, 2.62, -0.55], "rotY": 0, "stage": 3},
+    {"kit": "castle-kit", "model": "tower-square-top-roof-high", "pos": [0.55, 3.63, -0.55], "rotY": 0, "stage": 3},
+    {"kit": "castle-kit", "model": "flag-banner-long", "pos": [0.55, 1.31, -1.055], "rotY": 90, "stage": 4},
+    {"kit": "castle-kit", "model": "flag-pennant", "pos": [0.95, 3.93, -0.95], "rotY": 180, "stage": 4},
+    {"kit": "castle-kit", "model": "flag-pennant", "pos": [0.15, 3.93, -0.15], "rotY": 0, "stage": 4}
+  ]
+}

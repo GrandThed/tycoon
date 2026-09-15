@@ -1,0 +1,13 @@
+{
+  "id": "WallGate",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "castle-kit", "model": "wall-doorway", "pos": [0, 0, -0.25], "rotY": 90, "stage": 0},
+    {"kit": "castle-kit", "model": "gate", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "castle-kit", "model": "wall-narrow-corner", "pos": [-0.75, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "wall-narrow-corner", "pos": [0.75, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "castle-kit", "model": "flag", "pos": [-0.35, 1.31, 0], "rotY": 180, "stage": 0},
+    {"kit": "castle-kit", "model": "flag", "pos": [0.35, 1.31, 0], "rotY": 180, "stage": 0}
+  ]
+}

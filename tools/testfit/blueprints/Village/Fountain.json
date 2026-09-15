@@ -1,0 +1,12 @@
+{
+  "id": "Fountain",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "fountain-round-detail", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [-1.0, 0, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [-1.0, 0, 1.0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [1.0, 0, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [1.0, 0, 1.0], "rotY": 0, "stage": 0}
+  ]
+}

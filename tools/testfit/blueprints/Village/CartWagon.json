@@ -1,0 +1,11 @@
+{
+  "id": "CartWagon",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "cart-high", "pos": [0.5, 0, 0.05], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "cart", "pos": [-0.55, 0, 0.05], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [0.95, 0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [0.95, 0.226, -0.9], "rotY": 45, "stage": 0}
+  ]
+}
