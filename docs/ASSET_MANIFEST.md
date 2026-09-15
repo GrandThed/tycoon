@@ -28,17 +28,17 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 
 | Era | Blueprints | Uploaded | Harvested | Templates |
 |-----|------------|----------|-----------|-----------|
-| 1 — Village | 16/24 | 1/24 | 0/24 | 0/24 |
+| 1 — Village | 24/24 | 1/24 | 0/24 | 0/24 |
 | 2 — Boomtown | 0/24 | 0/24 | 0/24 | 0/24 |
 | 3 — Metropolis | 0/24 | 0/24 | 0/24 | 0/24 |
 | 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 16/96 | 1/96 | 0/96 | 0/96 |
+| **Total** | 24/96 | 1/96 | 0/96 | 0/96 |
 
 ## Era 1 — Village
 
 Blueprints: `tools/testfit/blueprints/Village/` -- templates: `templates/Village/` -- in game: `ServerStorage/Assets/Village/`
 
-Summary: 16/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -46,23 +46,23 @@ Summary: 16/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
 | 2 | `TentSmall` | Small Tent | building | yes | castle-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 3 | `WoodcutterHut` | Woodcutter's Hut | building | yes | fantasy-town-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 4 | `FarmPlot` | Farm Plot | building | yes | fantasy-town-kit, nature-kit | 5 | 0/5 | 0/5 | 0/5 | — |
-| 5 | `HouseSmallA` | Small House | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 5 | `HouseSmallA` | Small House | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 6 | `RoadCobblestone` | Pave the Road | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
 | 7 | `Well` | Village Well | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 8 | `FlowerBed` | Flower Bed | decor | yes | fantasy-town-kit, nature-kit | 1 | 0/1 | 0/1 | 0/1 | — |
-| 9 | `HouseSmallB` | Cottage | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
-| 10 | `Bakery` | Bakery | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 9 | `HouseSmallB` | Cottage | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 10 | `Bakery` | Bakery | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 11 | `Windmill` | Windmill | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 12 | `Fountain` | Found the Village Square | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
-| 13 | `MarketStall` | Market Stall | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 13 | `MarketStall` | Market Stall | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 14 | `TreeOak` | Oak Tree | decor | yes | fantasy-town-kit, nature-kit | 1 | 0/1 | 0/1 | 0/1 | — |
-| 15 | `Blacksmith` | Blacksmith | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 15 | `Blacksmith` | Blacksmith | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 0/5 | — |
 | 17 | `CartWagon` | Open the Trade Route | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
-| 18 | `Chapel` | Chapel | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
-| 19 | `HouseLargeA` | Manor House | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 18 | `Chapel` | Chapel | building | yes | castle-kit, fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
+| 19 | `HouseLargeA` | Manor House | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 20 | `BannerPole` | Banner Pole | decor | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
-| 21 | `Stables` | Stables | building | — | — | — | 0/5 | 0/5 | 0/5 | — |
+| 21 | `Stables` | Stables | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 22 | `Watchtower` | Watchtower | building | yes | castle-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 23 | `WallGate` | Raise the Town Wall | unlock | yes | castle-kit | 1 | 0/1 | 0/1 | 0/1 | — |
 | 24 | `CastleKeep` | Castle Keep | monument | yes | castle-kit | 1 | 0/1 | 0/1 | 0/1 | — |
@@ -168,4 +168,4 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 ## Totals
 
-96 models: 16/96 blueprints, 1/96 uploaded, 0/96 harvested, 0/96 templated
+96 models: 24/96 blueprints, 1/96 uploaded, 0/96 harvested, 0/96 templated
