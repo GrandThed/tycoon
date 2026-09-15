@@ -200,8 +200,7 @@ docs/
   PLAN.md  PLAYTEST.md  MANUAL_STEPS.md  ASSET_MANIFEST.md  BALANCE.md
 ```
 - Rojo syncs `*.json` under `Config/` as ModuleScripts that return the decoded table, so Luau and Python read the same files. Never duplicate constants.
-- In `default.project.json`, set `"$ignoreUnknownInstances": true` on `ServerStorage` (and anywhere the human places hand-imported assets) so syncs never delete imported meshes.
-- Hand-imported assets live in `ServerStorage/Assets/<EraName>/<modelName>` and are **not** managed by Rojo.
+- Building templates are generated `.rbxmx` files committed to the repo and mapped by Rojo into `ServerStorage/Assets/<EraName>/<modelName>` (amended 2026-09-15, see §8). Nothing is hand-placed in `ServerStorage`.
 
 **Server authority**
 - Remotes: `RequestBuy(slotId)`, `RequestLevelUp(slotId, count)`, `RequestAdvanceEra()`, `RequestRebirth()`, `RequestPrompt(productKey)`. Server validates types, ownership, affordability, and `requires` chain; never trusts amounts from the client.
@@ -227,19 +226,39 @@ docs/
 
 ---
 
-## 8. Asset pipeline (Kenney)
+## 8. Asset pipeline (Kenney) — amended 2026-09-15
 
-The human imports meshes; you generate the list of what to import.
+Nothing is imported by hand. Buildings are **assembled from Kenney kit pieces and grow**: a
+`building` slot has five visual stages — stage 0 on purchase, then one per base milestone level
+(10 / 25 / 50 / 100) — from humble to imposing, growing upward inside its footprint. `unlock`,
+`decor` and `monument` slots are single-stage. Research and decisions: `docs/ASSET_RESEARCH.md`.
 
-- Run `tools/gen_asset_manifest.py` to produce `docs/ASSET_MANIFEST.md`: every `modelName` referenced by every era config, grouped by era, with the suggested Kenney kit and a one-line description (e.g., "small house with red roof").
-- Naming convention: `modelName` in config **must equal** the Model name in `ServerStorage/Assets/<EraName>/`. Use PascalCase without spaces (`HouseSmallA`, `Blacksmith`, `Windmill`, `Diner`, `GasStation`, `SkyscraperA`, `DomeHabitat`).
-- Import rules for the human (write these into `docs/MANUAL_STEPS.md`):
-  - Use Studio's 3D Importer with the kit's FBX/OBJ; make sure the kit's `colormap` texture is applied.
-  - Choose one import scale so a standard house is ~8 studs wide; use the same scale for every kit and record it in the doc.
-  - Each asset is a `Model` with a `PrimaryPart` at the base-center, all parts `Anchored`, `CanCollide` on for large structures only.
-  - Kenney assets are CC0; no attribution required, but add a credits line in the game description anyway.
-- Ground/roads/props: Nature Kit trees and rocks for Era 1–3 edges, City Kit Roads for Era 2–3, Space Kit floor tiles for Era 4. The plot base itself is a plain part tinted per era.
-- VIP skins: a second folder `ServerStorage/Assets/<EraName>_VIP/` with recolored or alternate variants; fall back to the normal model if a VIP variant is missing.
+- **Blueprints** (`tools/testfit/blueprints/<EraName>/<modelName>.json`) list kit pieces with
+  position, rotation and the stage that adds them; stages are additive. Authored and checked with
+  the Blender test-fit renderer (`tools/testfit/`); Ben approves each era's strips before upload.
+- **Scale:** 1 glTF unit is 1 stud on import, so every assembly is scaled ×4 at merge time. Toy
+  proportions (a storey is 4 studs) are intentional; the footprint budget is 9×9 studs.
+- **Merge and upload:** each stage is merged into one mesh in Blender (texture baked in; kits that
+  use material colours get a generated palette texture, because Roblox drops glTF colour
+  factors) and uploaded through Open Cloud as one Model asset. Roblox splits the texture into its
+  own Image asset, shared by every piece of that kit. Ids and mesh sizes land in
+  `src/shared/Config/Assets.json`; the upload tool is idempotent.
+- **Templates:** a generator turns `Assets.json` into `.rbxmx` files that Rojo maps into
+  `ServerStorage/Assets/<EraName>/<modelName>`: a Model with an invisible base `PrimaryPart` at
+  bottom-centre and `Stage0`…`Stage4` MeshParts, all `Anchored`, `CanCollide` only on the base.
+  (`MeshId` is not scriptable, so templates must be files.) `modelName` in config **must equal**
+  the template name; PascalCase, no spaces.
+- **Runtime:** the server shows the stage for the slot's level, swaps stages on milestone with
+  client feedback, and falls back to the placeholder Part when a template is missing. The game
+  stays fully playable with `Assets.json` absent.
+- **VIP skins** are a recoloured colormap per kit, uploaded once and applied by setting
+  `TextureID` on the visible stage; fall back to the normal texture if missing.
+- `tools/gen_asset_manifest.py` still produces `docs/ASSET_MANIFEST.md`, now as a coverage report:
+  every `modelName` per era with blueprint / uploaded / templated status.
+- Ground/roads/props: Nature Kit trees and rocks for Era 1–3 edges, City Kit Roads for Era 2–3,
+  Space Kit floor tiles for Era 4; the plot base itself is a plain part tinted per era. Same
+  pipeline, later milestone.
+- Kenney assets are CC0; no attribution required, but add a credits line in the game description anyway.
 
 ---
 

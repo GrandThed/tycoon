@@ -15,6 +15,10 @@ Assets work (pre-M7) is research only so far; the full handoff is `docs/ASSET_RE
   texture), `MeshPart.TextureID` is writable at runtime so VIP skins can be a texture swap,
   container pivot is bbox-centre and parts arrive unanchored.
 
+- Decided 2026-09-15 after the tavern prototype: **scale 4 (toy proportions)** and **merged stages**
+  (one mesh per building stage). M7 = pipeline + Village only; M8 other eras; M9 ground/props/icons.
+  Spec §8 and PLAN M7 were rewritten to match; M7 awaits Ben's go, then INTERFACES contracts.
+
 **Why:** the next session starts fresh and would otherwise repeat the rejected proposal or
 re-derive the kit and upload findings.
 

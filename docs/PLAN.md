@@ -448,6 +448,71 @@ pinned above the scrolling list, and the top bar reads `LEGACY <spendable> / <to
 
 ---
 
+## M7 — Growing buildings: pipeline + Village (proposed 2026-09-15, awaiting Ben's go)
+
+**Goal:** replace placeholder Parts with Kenney-kit buildings that **grow through five stages**
+(stage 0 on purchase, then one stage at each base milestone 10 / 25 / 50 / 100), produced by a
+fully scripted pipeline with no hand-importing. Decisions behind it: `docs/ASSET_RESEARCH.md` §1
+(4 studs per kit unit, toy proportions; each stage merged into one mesh; Village tavern prototype
+approved). Supersedes spec §8 (amended the same day).
+
+**Scope — this milestone is the pipeline plus one era.** Village's 24 slots ship; Boomtown,
+Metropolis and Orbital Colony are content waves in M8 (same pipeline, blueprints only); ground,
+roads, props, icons and the experience thumbnail are M9. Nothing here touches balance.
+
+**The pipeline (each step is a tool, each output is committed or generated deterministically):**
+1. **Blueprints** — `tools/testfit/blueprints/<Era>/<ModelName>.json`, one per slot, file name
+   equal to the era config's `modelName`. `building` slots have pieces at stages 0–4; `unlock`,
+   `decor` and `monument` slots are single-stage in M7 (stage 0 only). Authored against the
+   Blender test-fit renders (`tools/testfit/testfit.py`); Ben approves each era's contact sheet
+   of strips before anything is uploaded.
+2. **Stage merge** — Blender headless: per blueprint, per stage, join the placed pieces into one
+   mesh, bake the kit colormap in (material-colour kits get a generated palette texture), scale
+   ×4, origin at bottom-centre, front facing −Z, export `<ModelName>_S<n>.glb`.
+3. **Upload** — Open Cloud (same key and polling as `tools/upload_audio.py`); one Model asset
+   per stage, one Image asset per kit colormap (Roblox splits the texture out on import, so a
+   whole kit shares one texture id, and a **VIP skin is one recoloured colormap per kit**, not
+   per building). Ids and mesh sizes are written to `src/shared/Config/Assets.json` (schema in
+   INTERFACES); re-runs skip anything already uploaded.
+4. **Templates** — `Assets.json` → `.rbxmx` files under a Rojo-mapped folder →
+   `ServerStorage/Assets/<Era>/<ModelName>`: a Model whose PrimaryPart is an invisible base Part
+   at bottom-centre (so today's `PivotTo` spawn keeps working) with children `Stage0`…`Stage4`
+   MeshParts (anchored, `CanCollide` only on the base). `MeshId` cannot be set by scripts, which
+   is why templates are files, not runtime code. `$ignoreUnknownInstances` comes off
+   `ServerStorage.Assets`; nothing is hand-placed there any more.
+5. **Runtime** — `PlotService.spawnBuilding` shows the stage for the slot's current level (base
+   milestones only; the Legacy `milestone75` perk changes income, not the visual), swaps to the
+   next stage when `crossesMilestone` fires, and applies VIP by setting `TextureID` on the visible
+   stage. Placeholder fallback is unchanged when a template or `Assets.json` entry is missing.
+   Cosmetics that assumed placeholder Parts (Golden Roads tint, Monument Glow Neon) are
+   redesigned for meshes.
+
+**First proof before fan-out (lead + one agent):** the approved tavern goes through steps 2–5
+alone — merge, upload, rbxmx, `rojo build`, and Ben confirms in Studio that a file-defined
+MeshPart loads its mesh and texture and that the five stages swap in Play. This is the one
+unverified link (rbxmx MeshParts via Rojo) and it gates everything else.
+
+| Owner | Tasks |
+|-------|-------|
+| lead | INTERFACES "M7 contracts": blueprint conventions, `Assets.json` schema, template shape, stage rules, ownership; the tavern proof |
+| pipeline engineer (general-purpose) | `tools/assets/`: stage merge (Blender), palette bake for material-colour kits, upload with resume, `Assets.json` writer, rbxmx generator; `default.project.json` mapping |
+| asset builders (general-purpose ×3, disjoint slot sets) | 23 remaining Village blueprints, each verified by strip render; a per-era contact sheet for Ben |
+| luau-engineer | Stage selection and swap in `PlotService`; VIP texture swap; cosmetic redesign; `Types`/`Catalog` additions; part-count guard |
+| ui-engineer | Stage-growth animation on milestone (pop + particles reuse), Build panel "grows at Lv 25" hint, VIP preview if cheap |
+| economy-designer | `gen_asset_manifest.py` reads blueprints + `Assets.json` and reports coverage per era; `ASSET_MANIFEST.md` regenerated |
+| roblox-reviewer / qa-runner / docs-keeper | usual gate; PLAYTEST M7 with a cash lever to level a building through all stages; MANUAL_STEPS lists the one `.env` upload run |
+
+**Done when:** the M7 definition of done in INTERFACES.md holds — all 24 Village slots spawn as
+merged-stage meshes from Rojo-built templates, buildings grow at each base milestone with
+feedback, VIP is a texture swap, placeholders still work with `Assets.json` absent, a full-stage
+Village plot stays under ~40 building parts, QA green. **Playtest gate:** Ben levels a tavern
+0→100 and watches it grow, then checks a VIP plot.
+
+**Not in M7:** the other three eras (M8), ground/roads/props/icons (M9), monument growth tied to
+era completion (open idea, M8 at the earliest), runtime piece composition (rejected).
+
+---
+
 ## 6. Risks & watch items (non-blocking)
 
 - **ProfileStore on Wally:** resolved — see assumption #1. The M2 INTERFACES update must

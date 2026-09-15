@@ -12,6 +12,9 @@ direction he wants instead.
 | Scope | All four: slot buildings, VIP skins, ground/roads/props, pass & product icons (+ experience icon/thumbnail) |
 | Pipeline | **Scripted**: tools prepare Kenney files, upload them through Open Cloud, write asset ids to config; the server loads them at runtime. No hand-importing in Studio. |
 | One static model per slot (the first proposal) | **Rejected.** See §2. |
+| Scale | **4 studs per kit unit, toy proportions accepted** (a storey is 4 studs, doors shorter than the player). Fits the 9×9 footprint; the tycoon camera hides it. |
+| Assembly | **Merged stages.** Each building stage is merged in Blender into one GLB and uploaded as one mesh, so a building is one MeshPart per stage (~480 uploads over four eras). Runtime piece composition rejected for mobile part count. |
+| Prototype | Village tavern, 5 stages, 8→54 pieces, approved by Ben 2026-09-15 (`tools/testfit/`). |
 
 - **2026-09-15, after the Studio check:** Ben confirmed the tower renders textured and the hangar
   is plain grey. Decision: building templates are **generated offline** (`.rbxmx` MeshParts
