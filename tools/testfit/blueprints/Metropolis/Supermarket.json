@@ -1,0 +1,20 @@
+{
+  "id": "Supermarket",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-commercial", "model": "building-e", "pos": [0.0, 0.0, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-fence", "pos": [0.45, 0.0, -0.78], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-fence", "pos": [0.95, 0.0, -0.78], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-fence", "pos": [0.7, 0.0, -0.98], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-awning-wide", "pos": [0.3, 0.0, -0.3], "rotY": 180, "stage": 1},
+    {"kit": "city-kit-roads", "model": "light-square", "pos": [1.05, 0.0, -0.5], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-commercial", "model": "detail-awning-wide", "pos": [-0.5, 0.0, -0.3], "rotY": 180, "stage": 2},
+    {"kit": "city-kit-roads", "model": "sign-highway-detailed", "pos": [-0.6, 0.0, -0.85], "rotY": 270, "stage": 2},
+    {"kit": "city-kit-commercial", "model": "building-k", "pos": [0.0, 0.0, 0.65], "rotY": 180, "stage": 3},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.5, 1.2, 0.3], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [0.5, 1.2, 0.3], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.5, 1.4, 0.27], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [0.5, 1.4, 0.27], "rotY": 270, "stage": 4}
+  ]
+}
