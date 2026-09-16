@@ -1,0 +1,22 @@
+{
+  "id": "Newsstand",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "shipping-container-a", "pos": [-0.35, 0, -0.7], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0.3, 0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "fence", "pos": [-0.35, 0, -0.95], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [-0.93, 0, -1.0], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.75, 0, -0.85], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-industrial", "model": "shipping-container-c", "pos": [0.4115, 0, 0.18], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "shipping-container-b", "pos": [-0.4115, 0, 0.18], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "shipping-container-b", "pos": [0.4115, 0, 0.553], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "shipping-container-c", "pos": [-0.4115, 0, 0.553], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "shipping-container-c", "pos": [0.4115, 0, 0.926], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "shipping-container-b", "pos": [-0.4115, 0, 0.926], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-suburban", "model": "building-type-j", "pos": [0, 0.348, 0.553], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-industrial", "model": "shipping-container-b", "pos": [-0.35, 0.348, -0.7], "rotY": 90, "stage": 4},
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [0.55, 1.0, 0.553], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.55, 1.475, 0.553], "rotY": 0, "stage": 4}
+  ]
+}

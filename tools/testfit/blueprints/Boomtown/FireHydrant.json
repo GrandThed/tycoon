@@ -1,0 +1,14 @@
+{
+  "id": "FireHydrant",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0, 0.0, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0, 0.13, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0, 0.26, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-cone", "pos": [0, 0.39, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-object-stop", "pos": [0.075, 0.2, 0], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-object-stop", "pos": [-0.075, 0.2, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-object-stop", "pos": [0, 0.2, -0.12], "rotY": 270, "stage": 0}
+  ]
+}

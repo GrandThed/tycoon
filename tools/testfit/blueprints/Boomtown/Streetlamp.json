@@ -1,0 +1,11 @@
+{
+  "id": "Streetlamp",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [0.6, 0, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.6, 0.475, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [-0.6, 0, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [-0.6, 0.475, 0.2], "rotY": 0, "stage": 0}
+  ]
+}

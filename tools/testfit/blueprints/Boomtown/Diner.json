@@ -1,0 +1,17 @@
+{
+  "id": "Diner",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-j", "pos": [0.27, 0, -0.15], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-warning", "pos": [0.97, 0, -1.0], "rotY": 270, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.88, 0, -0.9], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "building-type-g", "pos": [0.0, 0, 0.53], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "chimney-basic", "pos": [-0.93, 0, -0.55], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.93, 1.0, -0.55], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.95, 0, 0.95], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-industrial", "model": "chimney-basic", "pos": [-0.93, 1.0, -0.55], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-industrial", "model": "shipping-container-a", "pos": [-0.93, 2.0, -0.55], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.93, 2.348, -0.55], "rotY": 0, "stage": 4}
+  ]
+}
