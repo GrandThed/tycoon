@@ -1,0 +1,13 @@
+{
+  "id": "HouseA",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-m", "pos": [0, 0, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0.12, 0, -0.85], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.9, 0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.9, 0, -0.75], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "fence-1x4", "pos": [0, 0, 0.86], "rotY": 0, "stage": 0}
+  ]
+}

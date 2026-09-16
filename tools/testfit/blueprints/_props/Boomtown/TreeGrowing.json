@@ -1,0 +1,17 @@
+{
+  "id": "TreeGrowing",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0, 0], "rotY": 30, "stage": 1},
+
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0.24, 0], "rotY": 60, "stage": 2},
+
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0.48, 0], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.27, 0, 0.12], "rotY": 40, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.22, 0, -0.2], "rotY": 110, "stage": 3}
+  ]
+}

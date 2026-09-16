@@ -1,0 +1,9 @@
+{
+  "id": "LampPost",
+  "era": "Boomtown",
+  "scale": 9.0,
+  "footprint": [2, 4],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

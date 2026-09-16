@@ -1,0 +1,14 @@
+{
+  "id": "HouseC",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-l", "pos": [-0.4, 0, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.55, 0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.55, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "fence-1x3", "pos": [0, 0, 0.84], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0.75, 0, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-stones-long", "pos": [-0.62, 0, -0.85], "rotY": 0, "stage": 0}
+  ]
+}

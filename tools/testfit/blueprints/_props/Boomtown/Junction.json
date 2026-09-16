@@ -1,0 +1,9 @@
+{
+  "id": "Junction",
+  "era": "Boomtown",
+  "scale": 10.0,
+  "footprint": [10, 10],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-intersection", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

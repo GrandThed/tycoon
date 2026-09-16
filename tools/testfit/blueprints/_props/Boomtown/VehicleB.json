@@ -1,0 +1,9 @@
+{
+  "id": "VehicleB",
+  "era": "Boomtown",
+  "scale": 2.5,
+  "footprint": [4, 7.5],
+  "pieces": [
+    {"kit": "car-kit", "model": "truck", "pos": [0, 0, -0.025], "rotY": 180, "stage": 0}
+  ]
+}
