@@ -1367,3 +1367,154 @@ cross-check.
       check.
 - [ ] 28. Tell Claude Code "M7 playtest passed" (or report the exact failure and step number).
       Ticking this box marks `M7` `[x]` playtested in `docs/PLAN.md`.
+
+---
+
+## M8 — Growing buildings (Boomtown)
+
+**Goal:** all 24 Boomtown slots have real meshes, same pipeline as M7's Village pass — built from
+`city-kit-suburban`, `city-kit-industrial`, and `city-kit-roads` for street props. Direction this
+era is "lower, wider": ordinary buildings top out around 13 studs at level 100 and grow mostly by
+width and clutter, not height. Only three landmarks are tall. This section assumes M7 already
+passed — it doesn't repeat the `GrantCash` lever setup, growth-pop/sound mechanics, VIP-as-
+texture-swap mechanics, or the missing-config degrade check in depth; it re-checks them briefly on
+Boomtown's models and spends the rest of the time on placement/silhouette/approximation quality.
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). Regenerate the sourcemap
+      before any `luau-lsp analyze` run: `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security).
+
+### 2. Reach Boomtown
+
+- [ ] 3. Press Play. On a fresh or near-complete Village save, use the `GrantCash` Workspace
+      attribute (M7 section 2 — add it, type number, big value) to afford and buy all 24 Village
+      slots including the monument.
+- [ ] 4. Tap the gold **"Advance Era → Boomtown"** banner at the top of the Build panel, then
+      **Confirm** (M2/M3 behaviour — full-screen ceremony, ~40 min of design-target progress
+      compressed by `GrantCash`). Confirm you land in Boomtown: era badge "ERA 2" / "Boomtown",
+      plot base recolored, Build panel rebuilt to 24 fresh Boomtown rows, all locked except the
+      free first slot (**Newsstand**, cost 0).
+- [ ] 5. If you'd rather skip Village entirely on a throwaway profile, rebirthing back around
+      also lands you in Boomtown after one lap — either path is fine, just note which you used.
+
+### 3. Buy every slot — meshes, no placeholders
+
+- [ ] 6. Re-add `GrantCash` with a large value as needed. In the Build panel, buy all 24 slots in
+      the order listed (Newsstand → Hot Dog Stand → Diner → Gas Station → Motel → Pave Main
+      Street → Barber Shop → Fire Hydrant → Grocery Store → Laundromat → Car Dealership →
+      Traffic Lights → Cinema → Streetlamp Row → Auto Repair Shop → Bowling Alley → Bus Line →
+      Bank → Department Store → Billboard → Radio Station → Fire Station → Neon District → Clock
+      Tower).
+- [ ] 7. As each one appears, confirm it's a **textured stage-0 mesh** — no grey/untextured box,
+      no floating placeholder label, no red error in Output. Same check as M7 section 3.
+
+### 4. Walk the plot — placement sanity
+
+- [ ] 8. Walk the entire plot ring at a few angles. Confirm: every model faces its buy pad, no
+      piece floats above the ground, nothing sinks into the ground, and no building clips badly
+      into a neighbouring slot's footprint.
+- [ ] 9. Confirm the **Clock Tower** (monument, last slot) sits at the mouth of main street and
+      faces arriving players — it should read as the landmark you walk toward, not something
+      tucked in a corner or facing away.
+
+### 5. Grow one building through all five stages
+
+- [ ] 10. Use `GrantCash` and the Build panel's ×1/×10/Max buttons to level the **Radio Station**
+      from 0 to level 10, then 25, then 50, then 100. Confirm one growth pop + one milestone
+      sound at each crossing (not two, not zero — same check as M7 section 4), the model visibly
+      grows wider/more built-up at each stage, and it never flashes back to a smaller stage.
+- [ ] 11. Confirm the Build panel's growth hint line updates/merges the same way it did for
+      Village (M7 section 4, step 12).
+
+### 6. Silhouette check — "lower, wider" holds up
+
+- [ ] 12. With the Radio Station at level 100 (from section 5) and the Fire Station and Clock
+      Tower also bought, stand back from the plot and compare heights by eye. Confirm the order,
+      tallest to shortest: **Clock Tower** (25.8 studs, tallest) > **Radio Station** (21.3 studs,
+      lattice mast) > **Fire Station** (18.7 studs, water tower). Everything else should read
+      noticeably lower and squatter than these three — no ordinary slot should look taller than
+      the Fire Station.
+- [ ] 13. Confirm the Fire Station's water tower and the Radio Station's lattice mast are the
+      features making them tall, not a tall building body — the "lower, wider" direction should
+      still be visible in the base structure under each mast/tower.
+
+### 7. Known approximations — eyeball, not blockers
+
+None of the pieces below have a matching Kenney model; each is assembled from adjacent kit props.
+Confirm each looks like a reasonable stand-in, not broken/misplaced:
+
+- [ ] 14. **Bus Line** (`BusYellow`): the model is a **bus stop**, not an actual bus — confirm it
+      reads as a bus stop (shelter/sign), not as a broken vehicle.
+- [ ] 15. **Fire Hydrant**: stacked grey barriers with red disc caps standing in for a hydrant —
+      confirm it reads as a curbside object roughly hydrant-sized, not a random barrier pile.
+- [ ] 16. **Barber Shop** pole: a striped construction light stands in for the barber pole —
+      confirm it's mounted near the shop entrance like a sign, not floating loose.
+- [ ] 17. **Clock Tower** clock faces: rings of red stop-sign discs stand in for the clock faces —
+      confirm all four faces (or however many are visible) show the same disc-ring treatment
+      consistently, not just one face.
+- [ ] 18. **Neon District** (`NeonSign`): a red disc arrow with beacon "bulbs" — confirm the front
+      reads as a lit sign shape; the **back is expected to read as an unlit dark tube** — that's
+      the known look, not a bug.
+- [ ] 19. **Newsstand** paper rack: an A-board plus a fence board — confirm it sits beside the
+      stand like a rack/display, not blocking the buy pad or a walkway.
+
+### 8. Known minor flaws — confirm present, not blockers
+
+These are recorded, accepted issues — check they look the way described, don't file them again:
+
+- [ ] 20. **Bank** and **Laundromat**: both put a house-style piece on a flat industrial block, so
+      they may look similar from a distance. Confirm this is the case (a similarity, not a
+      complete duplicate) and move on.
+- [ ] 21. **Gas Station**: the raised round fuel tank is a large mass roughly the same scale as
+      the Fire Station's water tower. Confirm it doesn't actually exceed the Fire Station in
+      height (section 6) — it's allowed to look chunky, not to break the silhouette order.
+- [ ] 22. **Bank**: ground-floor garage doors are visible on its back side. Confirm the front
+      (facing the pad) looks correct with columns and brass doors — the garage doors on the back
+      are the known flaw, not a sign the wrong model loaded.
+
+### 9. VIP skins
+
+- [ ] 23. If you don't already own the `VIP` pass on this profile, buy it now (Shop panel, same
+      flow as M4 section 3 / M7 section 5).
+- [ ] 24. With VIP owned, walk the plot and confirm Boomtown buildings show a recoloured
+      gold-tinted skin using the **three new city-kit swatches** uploaded for this era — check at
+      least one `city-kit-suburban` piece, one `city-kit-industrial` piece, and one
+      `city-kit-roads` prop. It should look like a colour swap, not a different model.
+- [ ] 25. If you just bought VIP mid-session, confirm the gold skin applies to every already-owned
+      Boomtown building without a rejoin.
+
+### 10. Mobile emulation pass (required every milestone)
+
+- [ ] 26. Device Emulator, **375×667** portrait. Walk the plot and open the Build panel. Confirm
+      nothing about the growth hint text or button layout regressed from M7's mobile pass, and
+      the plot itself renders/scales sensibly at this resolution (no obviously oversized or
+      clipped-off-screen geometry from the wider Boomtown models).
+- [ ] 27. Stop Play.
+
+### What a bug looks like here
+
+- Any slot showing a grey/untextured mesh, a red error in Output, or a mesh at the wrong scale.
+- A building not facing its pad, floating, sunk, or badly clipping a neighbouring slot.
+- The Clock Tower not at the mouth of main street, or not facing arriving players.
+- Two pops or zero pops at a milestone crossing, or a milestone sound firing more than once.
+- Silhouette order broken — any ordinary slot taller than the Fire Station, or the Radio Station
+  taller than the Clock Tower.
+- Any of the approximations (section 7) looking broken/misplaced rather than a reasonable
+  stand-in — e.g. the bus stop reading as a mangled vehicle, the hydrant barrier stack floating,
+  the neon sign's front unlit instead of just its back.
+- The Bank's garage doors visible from the front, or the Gas Station's fuel tank taller than the
+  Fire Station's water tower (that would be a real regression, not the known flaw).
+- VIP showing a different-shaped model instead of a texture/colour change, or not applying live.
+
+### Sign-off
+
+- [ ] 28. All boxes above checked: reaching Boomtown, all 24 slots buying in as real meshes, a
+      full plot placement walk including the Clock Tower's orientation, a full 0→100 growth run
+      on the Radio Station, the silhouette order, every known approximation and known minor flaw,
+      VIP skins, and 375×667 mobile emulation.
+- [ ] 29. Tell Claude Code "M8 Boomtown assets playtest passed" (or report the exact failure and
+      step number).
