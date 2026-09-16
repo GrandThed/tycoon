@@ -71,16 +71,16 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Village/` -- templates: `templates/_props/Village/` -- in game: `ReplicatedStorage/Assets/Props/Village/`
 
-Summary: 6/6 blueprints, 6/6 uploaded, 0/6 harvested, 0/6 templated
+Summary: 6/6 blueprints, 6/6 uploaded, 6/6 harvested, 6/6 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 2 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 3 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 4 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 5 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 6 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 0/4 | — |
+| 1 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
 
 ## Era 2 — Boomtown
 
@@ -119,22 +119,22 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Boomtown/` -- templates: `templates/_props/Boomtown/` -- in game: `ReplicatedStorage/Assets/Props/Boomtown/`
 
-Summary: 12/12 blueprints, 12/12 uploaded, 0/12 harvested, 0/12 templated
+Summary: 12/12 blueprints, 12/12 uploaded, 12/12 harvested, 12/12 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Bend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 2 | `HouseA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 3 | `HouseB` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 4 | `HouseC` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 5 | `HouseD` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 6 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 7 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 8 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 9 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 0/4 | — |
-| 10 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 11 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 12 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 1 | `Bend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `HouseA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `HouseB` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `HouseC` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `HouseD` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 10 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 3 — Metropolis
 

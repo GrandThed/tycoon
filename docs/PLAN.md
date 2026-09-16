@@ -26,8 +26,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [x] M7 — Growing buildings: pipeline + Village (review SHIP after two Warnings fixed, QA green;
   all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
 - [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
-  contracts, layouts, pipeline, blueprints, client and prop uploads shipped 2026-09-16; the
-  harvest paste, templates and Ben's Studio playtest are still open — see "M9" below; wave 2
+  contracts, layouts, pipeline, blueprints, client and prop uploads, harvest and 18 prop
+  templates shipped 2026-09-16; Ben's Studio playtest is still open — see "M9" below; wave 2
   (Metropolis/OrbitalColony + `cityDetail`) not started)
 
 ---
@@ -644,9 +644,8 @@ junction, bend, lamp, 3 vehicles), all uploaded to Open Cloud (24 stages). Revie
 QA green (stylua/selene/luau-lsp/`rojo build`/`sim_economy.py --check`).
 
 **Carried forward (owners assigned):**
-- **Ben, before playtest:** the one Studio harvest paste (`docs/MANUAL_STEPS.md` M9) covers both
-  eras' uploaded prop stages; run it, then `gen_templates.py --props` and commit the templates —
-  `docs/PLAYTEST.md` "M9" cannot be run until they exist.
+- [x] **Ben, before playtest:** harvest paste done 2026-09-16 (24 stages, 0 failed); 18 prop
+  templates generated and committed.
 - **Ben, after templates land:** run `docs/PLAYTEST.md` "M9 — City dressing" in Studio; this ticks
   M9 `[x]` above once passed.
 - **lead / economy-designer, wave 2:** Metropolis and Orbital Colony street plans + prop

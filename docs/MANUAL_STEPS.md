@@ -641,9 +641,9 @@ Run in this order from the repo root; every step is idempotent, same as M7.
       4 filler houses + pocket park + junction + bend + lamp + 3 vehicles). `Assets.json` v2's
       `props` table holds a non-zero `modelAssetId` per stage already; `meshId`/`imageId` are still
       `0` (search the file to confirm) until step 6 below runs.
-- [ ] 10. **Pending Ben:** step 6 (the harvest paste) and step 7 (`gen_templates.py --props`) for
-      Village + Boomtown — nothing under `templates/_props/` exists yet, so `docs/PLAYTEST.md`
-      "M9" cannot be run until these two steps are done and the repo rebuilt/resynced.
+- [x] 10. Harvest paste and `gen_templates.py --props` done 2026-09-16 for Village + Boomtown
+      (24 stages harvested, 0 failed; 18 templates in `templates/_props/`). `docs/PLAYTEST.md`
+      "M9" is ready to run after a Rojo sync.
 
 ### 4. Nothing new to create on the Creator Hub
 
@@ -656,4 +656,3 @@ Run in this order from the repo root; every step is idempotent, same as M7.
       (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no manual/Studio steps
       beyond the same pipeline run.
 
-<!-- M9 section: harvest + templates pending Ben. Do not delete completed sections above. -->
