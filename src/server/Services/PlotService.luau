@@ -284,7 +284,8 @@ local function stageChildren(container: Instance): StageMap
 		if not child:IsA("Model") then
 			continue
 		end
-		local index = tonumber(string.match(child.Name, STAGE_CHILD_PATTERN))
+		local digits = string.match(child.Name, STAGE_CHILD_PATTERN)
+		local index = if digits ~= nil then tonumber(digits) else nil
 		if index ~= nil then
 			stages[index] = child
 		end
@@ -354,7 +355,7 @@ local function attachStage(
 	slot: Types.SlotConfig,
 	state: Types.PlayerState
 ): Model?
-	local templateStage = stageChildren(template)[stage]
+	local templateStage: Model? = stageChildren(template)[stage]
 	if templateStage == nil then
 		return nil
 	end
@@ -728,7 +729,8 @@ function swapStage(
 		return nil
 	end
 	local liveStages = stageChildren(building)
-	if liveStages[chosen] ~= nil then
+	local alreadyShown: Model? = liveStages[chosen]
+	if alreadyShown ~= nil then
 		return nil
 	end
 	if attachStage(template, building, chosen, slot, state) == nil then
