@@ -179,9 +179,18 @@ watch in M8+ (other eras reuse every one of these):
 - `swapStage` returns nil (no stageUp) on: placeholder, same stage, missing template, missing
   Stage<n> with no lower fallback, or live already showing the fallback stage. `RefreshCosmetics`
   = full rebuild, silent. `LevelUpPrompt` parent is `Base` (ground level) — prompt UI sits at the feet.
-- Client scale animations (`newScaleDriver`) use `Model:ScaleTo`, which rescales EVERY descendant
-  including a Stage<n> that replicated mid-tween → persistent size drift on rapid double milestone
-  crossings (flagged Warning at M7; fix = snapshot-based per-part scaling). Recheck if unfixed.
+- Client scale animations (`newScaleDriver`) were fixed post-M7 to snapshot per-part Size/offset
+  relative to `model:GetPivot()` (no ScaleTo); restore at scale 1 is exact whatever the pivot.
+- **Pivot fix (2026-09-16):** template PrimaryPart ref arrived nil in a live Studio session (the
+  .rbxmx DOES serialize `<Ref name="PrimaryPart">`; likely a rojo-serve ref gap), so bbox-centre
+  pivots sank buildings. Now `templateBase(model)` finds `Base` by name; spawnBuilding sets
+  PrimaryPart before the stage loop/PivotTo; attachStage uses Base.CFrame on both sides. Never
+  trust a template PrimaryPart ref again; the client still uses GetPivot/PrimaryPart (Nit).
+
+**Recurring pattern (found 2026-09-16, VIP skins toggle):** any cheap remote whose handler calls
+`PlotService.RefreshCosmetics` (full plot rebuild, replicated to every client) turns the shared
+10/s bucket into a server-wide lag vector. Require a server-side gate (e.g. VIP owned) plus a
+trailing coalesce (Config constant), not a token bucket that drops the last optimistic write.
 - Studio levers on Workspace: `ForceLoadFailure`, `GrantLegacy`, `GrantCash` (all gated on the
   module-level `isStudio`, consumed in the 1 Hz tick; GrantCash rejects NaN/inf/<=0).
 - Tools: `upload_models.py` idempotent (skips non-zero ids, saves Assets.json after every upload,
@@ -189,3 +198,15 @@ watch in M8+ (other eras reuse every one of these):
   `templates/` that Assets.json does not produce — never hand-place files there.
 - Pre-existing, not M7: selene shadowing warning in `LegacyPanel.luau:200`; SPEC §8 says
   "CanCollide only on the base" while INTERFACES/templates set MeshPart CanCollide true.
+
+**Asset preload gate (2026-09-16, SHIP with Warnings, client-only).** Load-bearing shapes:
+- `AssetPreloader` (utility, not booted by Main.client): `PreloadEra` fire-and-forget over
+  content strings; `AwaitInstance` = coroutine.yield + `task.defer` resume (defer is required:
+  PreloadAsync may not yield) + `task.delay` timeout cancelled on completion. Sound.
+- PlotVisualsController hides via `LocalTransparencyModifier` (nothing else in src writes it) on
+  ALL plots; `watches`/`gated` are weak-keyed on Instances; waiters released by task.spawn when
+  `pending` hits 0 (before parts un-hide, so reveal/pop set start scale first) and on unwatch.
+- Recheck: the gate hides unconditionally, so every `RefreshCosmetics` rebuild can blank the plot
+  for the PreloadAsync round-trip even with warm cache — any future gate should skip parts whose
+  `ContentProvider:GetAssetFetchStatus` is already Success. Buildings folder persists across
+  rebuilds (`ClearAllChildren`), so one ChildAdded per plot is the correct lifetime.

@@ -183,7 +183,7 @@ Props:
 car-kit: every vehicle is 2.2–3.45 units long (≥ 9 studs at ×4) and pastel; none fits a 9×9 slot and
 all clash with retro-urban. `debris-tire` is centre-origin and reads as an oversized black blob.
 
-## city-kit-commercial and city-kit-roads notes (Boomtown redo, three builders, 2026-09-16)
+## city-kit-commercial and city-kit-roads notes (authored as a Boomtown redo 2026-09-16; the kit now belongs to Metropolis)
 
 Both kits use one `colormap.png`. Palette: off-white walls, slate trim, dark ground floors, pale-blue
 windows; accents only green (awnings, planters, parasols, `building-m` roof, `sign-highway` faces,

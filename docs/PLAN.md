@@ -542,7 +542,10 @@ tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated so
 **Carried forward (owners assigned):**
 - **pipeline-engineer / lead, M8:** the same pipeline (blueprints → merge → upload → harvest →
   templates) repeats for Boomtown, Metropolis, and Orbital Colony — no new tooling expected,
-  content only.
+  content only. **Kit decision 2026-09-16:** Boomtown = city-kit-suburban + city-kit-industrial,
+  Metropolis = city-kit-commercial (drafts in `tools/testfit/blueprints/_drafts/`); see
+  `docs/ASSET_RESEARCH.md` §4. Boomtown authoring restarts in a fresh session from
+  `docs/prompts/boomtown-suburban-industrial.md`.
 - **lead, M9:** ground/roads/props/icons and the experience thumbnail were explicitly out of
   scope this milestone (see "Not in M7" below) — still open.
 - **lead / economy-designer, open idea:** monument growth tied to era completion, raised at M7

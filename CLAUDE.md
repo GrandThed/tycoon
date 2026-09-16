@@ -43,3 +43,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/environment-2026-09-08.md
 @.claude/memory/playtest-repro-methods.md
 @.claude/memory/assets-direction-2026-09-15.md
+@.claude/memory/era-kits-2026-09-16.md

@@ -159,6 +159,19 @@ Style findings per era (from the mapping pass):
   with them.
 - **Orbital Colony:** space-kit only; station-kit clashes.
 
+**Era kit decision, 2026-09-16 (M8, Ben).** Two Boomtown attempts were authored and judged on
+contact sheets:
+1. `retro-urban-kit` (brick): rejected on look. It also has 22 tiling textures per kit, which the
+   one-texture-per-kit merge cannot handle. Blueprints are in git history (commits 2b5af60..3293d78).
+2. `city-kit-commercial` + `city-kit-roads`: liked, but it is Metropolis's kit, so the two eras
+   would overlap. The 24 blueprints moved to
+   `tools/testfit/blueprints/_drafts/Metropolis-city-kit-commercial/` as the Metropolis starting point.
+
+Result: **Boomtown = `city-kit-suburban` + `city-kit-industrial`** (+ `city-kit-roads` props);
+**Metropolis = `city-kit-commercial`** incl. skyscrapers (+ roads). Each kit belongs to one era.
+All three building kits have one `colormap.png`, so the M7 pipeline needs no change. The four City
+Kits share one palette, so the eras must differ by building type and height, not colour.
+
 The spec/manifest kit column was never checked against the kits: "Retro Medieval Kit" does not
 exist (closest is `retro-fantasy-kit`), and many manifest names (BowlingAlley, ClockTower face,
 bus, billboard, hydrant, subway entrance, stadium, rocket) have no Kenney model at all.

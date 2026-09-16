@@ -42,8 +42,12 @@ Four eras at launch, data-driven so more can be added by adding a config file.
 | # | Era name | Kenney kits (primary) | Monument (final slot) |
 |---|----------|-----------------------|-----------------------|
 | 1 | Village | Fantasy Town Kit and/or Retro Medieval Kit, Nature Kit, Castle Kit | Castle keep |
-| 2 | Boomtown | Retro Urban Kit, Car Kit / Toy Car Kit | Town hall / clock tower |
-| 3 | Metropolis | City Kit (Commercial, Suburban, Industrial, Roads), Modular Buildings, Car Kit | Skyscraper |
+| 2 | Boomtown | City Kit Suburban + City Kit Industrial (+ City Kit Roads props) | Town hall / clock tower |
+| 3 | Metropolis | City Kit Commercial incl. skyscrapers (+ City Kit Roads props) | Skyscraper |
+
+Era kits were re-decided on 2026-09-16 (M8): retro-urban was rejected for Boomtown, and
+city-kit-commercial went to Metropolis so the two eras do not share buildings. See
+`docs/ASSET_RESEARCH.md` §4.
 | 4 | Orbital Colony | Space Kit | Launch tower / rocket |
 
 **Advance Era requirements:** all slots in the current era owned (levels do not matter).

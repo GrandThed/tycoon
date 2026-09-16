@@ -20,11 +20,14 @@ Argument: `<EraName>` = `Boomtown` | `Metropolis` | `OrbitalColony` (Village shi
    for the slot list (id, type, modelName, order = price ramp) and `src/shared/Layouts/<EraName>.luau`
    for where the monument sits.
 2. Era palette (from the research; do not mix families that clash):
-   - **Boomtown:** pick ONE building family — `modular-buildings` (pastel stucco, stackable
-     1.0 × 0.62 floors, fronts face +Z) or `retro-urban-kit` (brick, closed 1×1×1 blocks, fronts
-     face −Z) — plus `car-kit` and `city-kit-roads` for props/roads.
-   - **Metropolis:** the four City Kits only (`city-kit-commercial/industrial/suburban/roads`),
-     one muted purple-grey palette; `modular-buildings` clashes.
+   - **Boomtown:** `city-kit-suburban` + `city-kit-industrial` for buildings, `city-kit-roads`
+     for street props (decided 2026-09-16; retro-urban was rejected). Never `city-kit-commercial`.
+   - **Metropolis:** `city-kit-commercial` (skyscrapers included) + `city-kit-roads`. Start from
+     the approved-in-style drafts in `tools/testfit/blueprints/_drafts/Metropolis-city-kit-commercial/`
+     (authored for Boomtown slot names; re-map to Metropolis slots). Never suburban/industrial.
+   - All four City Kits share one palette, so Boomtown vs Metropolis must differ by building
+     type and scale (homes/workshops/factories vs shops/towers), and each kit belongs to one era.
+   - Car-kit vehicles are ≥ 9 studs long at ×4 and never fit a 9×9 slot.
    - **OrbitalColony:** `space-kit` only. Every space-kit GLB is invalid glTF (a `tmpParent`
      root node) — before authoring, run `--dump-bounds space-kit` and confirm `testfit.py` and
      `tools/assets/merge_stages.py` import them; if not, port the `sanitize()` fix from
