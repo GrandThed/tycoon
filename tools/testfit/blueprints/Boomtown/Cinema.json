@@ -3,18 +3,18 @@
   "era": "Boomtown",
   "scale": 4.0,
   "pieces": [
-    {"kit": "city-kit-industrial", "model": "building-g", "pos": [0.0, 0.0, -0.22], "rotY": 0, "stage": 0},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.5, 0.0, -0.92], "rotY": 270, "stage": 1},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.5, 0.0, -0.92], "rotY": 270, "stage": 1},
-    {"kit": "city-kit-industrial", "model": "building-g", "pos": [0.01, 0.0, 0.22], "rotY": 180, "stage": 2},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.5, 0.2, -0.935], "rotY": 270, "stage": 2},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.5, 0.2, -0.935], "rotY": 270, "stage": 2},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 1.2, 0.0], "rotY": 270, "stage": 3},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 1.4, -0.015], "rotY": 270, "stage": 3},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 1.6, 0.0], "rotY": 270, "stage": 3},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 1.8, -0.015], "rotY": 270, "stage": 4},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 2.0, 0.0], "rotY": 270, "stage": 4},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 2.2, -0.015], "rotY": 270, "stage": 4},
-    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.0, 2.4, 0.0], "rotY": 270, "stage": 4}
+    {"kit": "city-kit-industrial", "model": "building-g", "pos": [0.0, 0.0, -0.02], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.88, 0.0, -0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.2, 0.0, -0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.42, 0.0, -0.9], "rotY": 270, "stage": 1},
+    {"kit": "city-kit-industrial", "model": "building-g", "pos": [0.01, 0.0, 0.42], "rotY": 180, "stage": 2},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.42, 0.2, -0.915], "rotY": 270, "stage": 2},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.635, 1.0, 0.2], "rotY": 180, "stage": 3},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.605, 1.2, 0.2], "rotY": 180, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.54, 0.0, -0.62], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.635, 1.4, 0.2], "rotY": 180, "stage": 4},
+    {"kit": "city-kit-roads", "model": "sign-highway-wide", "pos": [-0.605, 1.6, 0.2], "rotY": 180, "stage": 4},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.98, 0.0, -0.72], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.1, 0.0, -0.72], "rotY": 0, "stage": 4}
   ]
 }
