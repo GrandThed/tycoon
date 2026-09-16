@@ -127,3 +127,58 @@ nature-kit (material colours; the merge tool bakes a palette texture):
   flowers ~0.8. `fence_simple`/`fence_gate` span x −0.5..0.5 with the rail at z −0.50..−0.43.
 - Foliage is bright teal-green and wood orange-tan, lighter than fantasy-town; reads as props next
   to it. `rock_*` are pale grey; `stone_*` render cyan — avoid them.
+
+## retro-urban-kit notes from the Boomtown authoring (three builders, 2026-09-16)
+
+Textures: **no single colormap.** GLBs reference 22 separate 64 px textures in
+`Models/GLB format/Textures/` (wall, windows, doors, concrete, metal, roof, signs, …), and the UVs
+tile far outside 0..1 (u −46..32), so they cannot be atlased. A Boomtown building uses 3–11 of
+them per stage. `wall-a-detail`, `wall-a-detail-painted`, `wall-b-detail-painted` also carry a
+2-triangle colour-only `_defaultMat`.
+
+Blocks:
+- `wall-a*` / `wall-b*` are closed 1×1×1 cubes, bottom-centre origin, concrete slab top, white
+  plinth and trim band. The detail (door/window/garage) is on **−Z**; the other faces are plain, so
+  plain cubes stack with no z-fight and a buried flat roof is invisible. The plinth reads as a
+  storey line. Detail to +X: `rotY` 270; to −X: 90; to +Z: 180.
+- `wall-a` = red brick with white pilasters; `-painted` = slate-blue upper band (shop/sign band).
+  `wall-b` = **green corrugated metal**, not brick; it lacks `-painted`, `-detail`, `-flat-painted`.
+- `-low` half-height cube; `-open` four corner posts + slab (canopies, shopfronts); `-corner` L-cube;
+  `-diagonal` triangular prism; `-column` 0.25 pier; `-detail` 0.6 × 1 × 0.2 pilaster.
+- Garage doors are recessed: keep anything buried in a later garage cell ≥ 0.35 behind the face.
+- Shopfront: `wall-a-open` + `wall-type-a` sill + `window-wide-type-*` at y +0.3, both at cell
+  centre −0.46 in Z.
+
+Roofs: `wall-*-roof` are 0.5-tall gables, exactly 1×1, closed brick ends; `-detailed` overhangs to
+1.137 and clashes with a neighbour (use plain ones side by side); `-roof-slant` is a shed.
+`roof-metal-type-a/b` are the same gable with **open ends** — seen end-on it is a clean 45° "^"
+chevron (NeonSign's arrowhead). `roof-metal-poles` four 0.7 posts; `scaffolding-poles` four 1.0
+posts; `scaffolding-structure` a stackable 1×1×1 lattice (RadioStation mast); `scaffolding-floor`
+a 0.07 grate.
+
+Flats and decals:
+- `wall-a-flat`, `wall-a-flat-painted`, `wall-b-flat` are **zero-thickness single-sided quads**;
+  use a back-to-back pair (second copy `rotY` 180, 0.01 behind) for any sign seen from both sides.
+  `*-flat-window` / `*-flat-garage` are 0.1 thick (z 0..0.1). `wall-c-flat*` are black iron grilles.
+- `door-type-a` (red, panic bar), `door-type-b` (brown), `window-*` are 0.05 decals; 0.52 from the
+  cell centre puts them on a face. Window types: `wide-a` light blue barred, `wide-b` light two-pane,
+  `wide-c` dark cross grid, `wide-d` dark green.
+
+Props:
+- `detail-awning-small/wide` dark corrugated, 0.3 deep, slope down to −Z, attach on +Z edge; centre
+  0.6 in front of the cell centre. No striped or coloured awning exists.
+- `balcony-type-a` black railing, front rail on −Z: 0.61 in front of cell centre on a facade, 0.36 as
+  a roof parapet.
+- `detail-light-single` 0.96 tall (3.84 studs), arm −Z (rotY 180 near the front edge);
+  `-double` is a T; `detail-light-traffic` 1.04 tall, arm −Z, no visible lamps.
+- `detail-beam` 0.25 × 0.25 × 1 along Z; sunk to 0.02 above asphalt it is the only road marking.
+- `road-asphalt-center`/`-pavement` are 0-height; `-straight` is 1 × 2 with raised pavement at both
+  Z ends; no tile has a painted line.
+- `truck-*` 0.83 × 1.0 × 1.64, cab −Z, fit a 9×9 slot (`truck-green` carries a smiley logo).
+  `detail-dumpster-closed` (green) makes a food cart; `detail-cables-type-a` a pennant string;
+  `detail-barrier-type-a/b` (yellow/black) are the only sign-like boards.
+- Only bright colours: red doors, yellow/black barriers, green `wall-b`, orange trees. No tyres,
+  crates, produce, letters, emissive pieces.
+
+car-kit: every vehicle is 2.2–3.45 units long (≥ 9 studs at ×4) and pastel; none fits a 9×9 slot and
+all clash with retro-urban. `debris-tire` is centre-origin and reads as an oversized black blob.
