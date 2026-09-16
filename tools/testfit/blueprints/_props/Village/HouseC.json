@@ -1,0 +1,15 @@
+{
+  "id": "HouseC",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0, 0, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [0, 0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.5], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0, 1, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0, 1, 0.5], "rotY": 90, "stage": 0}
+  ]
+}

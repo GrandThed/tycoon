@@ -1,0 +1,17 @@
+{
+  "id": "HouseB",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [-0.5, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-shutters", "pos": [0.5, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.5, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [-0.5, 0, 0], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [-0.5, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-shutters", "pos": [0.5, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-flat", "pos": [-0.5, 1, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-flat", "pos": [0.5, 1, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [0.5, 1, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "overhang", "pos": [-0.5, 0, -0.23], "rotY": 90, "stage": 0}
+  ]
+}

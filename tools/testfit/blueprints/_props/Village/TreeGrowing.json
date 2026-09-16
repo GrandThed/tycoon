@@ -1,0 +1,13 @@
+{
+  "id": "TreeGrowing",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "nature-kit", "model": "tree_pineSmallA", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "tree_pineTallC", "pos": [0, 0, 0], "rotY": 45, "stage": 1},
+    {"kit": "nature-kit", "model": "tree_pineTallD", "pos": [0, 0.2, 0], "rotY": 20, "stage": 2},
+    {"kit": "nature-kit", "model": "tree_pineRoundA", "pos": [0, 0, 0], "rotY": 30, "stage": 3},
+    {"kit": "nature-kit", "model": "tree_pineTallC", "pos": [0, 0.45, 0], "rotY": 10, "stage": 3},
+    {"kit": "nature-kit", "model": "tree_pineTallD", "pos": [0, 0.75, 0], "rotY": 65, "stage": 3}
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "id": "PlazaA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [-1, 0, -1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [-1, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [-1, 0, 1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [0, 0, -1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [0, 0, 1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [1, 0, -1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [1, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [1, 0, 1], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "road-curb", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [1.2, 0.025, -1.2], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [-1.25, 0.025, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0, 0.025, 1.25], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [1.2, 0.025, 1.2], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [1.2, 0.251, 1.2], "rotY": 30, "stage": 0},
+    {"kit": "nature-kit", "model": "pot_large", "pos": [-1.15, 0.075, -1.15], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bushDetailed", "pos": [-1.15, 0.225, -1.15], "rotY": 0, "stage": 0}
+  ]
+}

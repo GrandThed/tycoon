@@ -1,0 +1,13 @@
+{
+  "id": "HouseA",
+  "era": "Village",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-door", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-point", "pos": [0, 1, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [-0.1, 1, 0.05], "rotY": 0, "stage": 0}
+  ]
+}
