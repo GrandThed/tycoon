@@ -1,6 +1,6 @@
 ---
 name: review-workflow
-description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M5 + ProfileStore facts, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
+description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M7 + ProfileStore facts, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
 metadata:
   type: project
 ---
@@ -163,3 +163,29 @@ shapes and ProfileStore facts verified from `ServerPackages/_Index/.../ProfileSt
   rejects NaN/inf.
 - Client: ceremony `onClosed` auto-opens the Legacy panel via `openPanel` (togglePanel wrapper)
   when `hasAffordableTier`; that is the only automatic panel open in the game — keep it the only one.
+
+**M7 baseline (2026-09-16, SHIP with Warnings — growing Kenney buildings).** Load-bearing shapes to
+watch in M8+ (other eras reuse every one of these):
+- `ServerStorage.Assets` is `{"$path": {"optional": "templates"}}`; templates are generated
+  `.rbxmx` (gen_templates.py, `--check` in the suite). Template = Model{Base PrimaryPart at identity,
+  Stage0..4 Models with one MeshPart per kit named after the kit}. Rojo-built MeshContent/
+  TextureContent/InitialSize verified in Studio by Ben (post-proof amendment).
+- Stage rule is `PlotService.stageForLevel(level, Game.milestoneLevels)` — BASE list only; the
+  owner's list (Extra Milestone perk) is a superset, so `levelUp.milestone == true` whenever a
+  `stageUp` fires. Client dedupes the shared fanfare with a 0.25 s per-slot window
+  (`lastMilestoneFx`); fragile but sound given the superset property — re-verify if either list changes.
+- `attachStage` pivot math `building:GetPivot() * template:GetPivot():ToObjectSpace(stagePivot)` is
+  invariant to how a PrimaryPart-less Stage model resolves its pivot (Clone preserves it). Safe.
+- `swapStage` returns nil (no stageUp) on: placeholder, same stage, missing template, missing
+  Stage<n> with no lower fallback, or live already showing the fallback stage. `RefreshCosmetics`
+  = full rebuild, silent. `LevelUpPrompt` parent is `Base` (ground level) — prompt UI sits at the feet.
+- Client scale animations (`newScaleDriver`) use `Model:ScaleTo`, which rescales EVERY descendant
+  including a Stage<n> that replicated mid-tween → persistent size drift on rapid double milestone
+  crossings (flagged Warning at M7; fix = snapshot-based per-part scaling). Recheck if unfixed.
+- Studio levers on Workspace: `ForceLoadFailure`, `GrantLegacy`, `GrantCash` (all gated on the
+  module-level `isStudio`, consumed in the 1 Hz tick; GrantCash rejects NaN/inf/<=0).
+- Tools: `upload_models.py` idempotent (skips non-zero ids, saves Assets.json after every upload,
+  error text = response body, never the key); `gen_templates.py` DELETES any stray `.rbxmx` under
+  `templates/` that Assets.json does not produce — never hand-place files there.
+- Pre-existing, not M7: selene shadowing warning in `LegacyPanel.luau:200`; SPEC §8 says
+  "CanCollide only on the base" while INTERFACES/templates set MeshPart CanCollide true.
