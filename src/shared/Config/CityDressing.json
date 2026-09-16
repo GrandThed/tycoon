@@ -1,0 +1,205 @@
+{
+  "version": 1,
+  "tier": {
+    "ownedWeight": 10,
+    "thresholds": [
+      10,
+      80,
+      250,
+      600,
+      1200
+    ]
+  },
+  "lod": {
+    "nearRadius": 250,
+    "hysteresis": 40,
+    "vehiclePlots": 3,
+    "refreshSeconds": 0.5
+  },
+  "road": {
+    "thickness": 0.2,
+    "laneOffsetFraction": 0.25,
+    "spineTierStep": 1
+  },
+  "trees": {
+    "stages": 4,
+    "edgeMargin": 3
+  },
+  "lamps": {
+    "firstTier": 3,
+    "everyNthJunction": 2,
+    "maxPerPlot": 10
+  },
+  "vehicles": {
+    "firstTier": 2,
+    "turnSeconds": 0.5
+  },
+  "eras": {
+    "Village": {
+      "road": {
+        "width": 5,
+        "material": "Ground",
+        "color": [
+          126,
+          99,
+          66
+        ],
+        "junctionProp": null,
+        "bendProp": null
+      },
+      "trees": {
+        "maxCount": 40,
+        "clearance": 7,
+        "prop": "TreeGrowing"
+      },
+      "houses": {
+        "props": [
+          "HouseA",
+          "HouseB",
+          "HouseC"
+        ]
+      },
+      "plazas": {
+        "props": [
+          "PlazaA"
+        ]
+      },
+      "lamps": {
+        "prop": null
+      },
+      "vehicles": {
+        "props": [
+          "Cart"
+        ],
+        "perPlot": 2,
+        "speed": 5
+      }
+    },
+    "Boomtown": {
+      "road": {
+        "width": 8,
+        "material": "Asphalt",
+        "color": [
+          72,
+          74,
+          82
+        ],
+        "junctionProp": "Junction",
+        "bendProp": "Bend"
+      },
+      "trees": {
+        "maxCount": 32,
+        "clearance": 7,
+        "prop": "TreeGrowing"
+      },
+      "houses": {
+        "props": [
+          "HouseA",
+          "HouseB",
+          "HouseC",
+          "HouseD"
+        ]
+      },
+      "plazas": {
+        "props": [
+          "PlazaA"
+        ]
+      },
+      "lamps": {
+        "prop": "LampPost"
+      },
+      "vehicles": {
+        "props": [
+          "VehicleA",
+          "VehicleB",
+          "VehicleC"
+        ],
+        "perPlot": 4,
+        "speed": 10
+      }
+    },
+    "Metropolis": {
+      "road": {
+        "width": 8,
+        "material": "Asphalt",
+        "color": [
+          60,
+          62,
+          70
+        ],
+        "junctionProp": "Junction",
+        "bendProp": "Bend"
+      },
+      "trees": {
+        "maxCount": 24,
+        "clearance": 7,
+        "prop": "TreeGrowing"
+      },
+      "houses": {
+        "props": [
+          "HouseA",
+          "HouseB",
+          "HouseC"
+        ]
+      },
+      "plazas": {
+        "props": [
+          "PlazaA",
+          "PlazaB"
+        ]
+      },
+      "lamps": {
+        "prop": "LampPost"
+      },
+      "vehicles": {
+        "props": [
+          "VehicleA",
+          "VehicleB",
+          "VehicleC",
+          "VehicleD"
+        ],
+        "perPlot": 6,
+        "speed": 12
+      }
+    },
+    "OrbitalColony": {
+      "road": {
+        "width": 6,
+        "material": "Metal",
+        "color": [
+          214,
+          216,
+          222
+        ],
+        "junctionProp": null,
+        "bendProp": null
+      },
+      "trees": {
+        "maxCount": 0,
+        "clearance": 7,
+        "prop": null
+      },
+      "houses": {
+        "props": [
+          "HouseA",
+          "HouseB"
+        ]
+      },
+      "plazas": {
+        "props": [
+          "PlazaA"
+        ]
+      },
+      "lamps": {
+        "prop": "LampPost"
+      },
+      "vehicles": {
+        "props": [
+          "Rover"
+        ],
+        "perPlot": 2,
+        "speed": 6
+      }
+    }
+  }
+}

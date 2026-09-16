@@ -546,8 +546,8 @@ tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated so
   Metropolis = city-kit-commercial (drafts in `tools/testfit/blueprints/_drafts/`); see
   `docs/ASSET_RESEARCH.md` §4. Boomtown authoring restarts in a fresh session from
   `docs/prompts/boomtown-suburban-industrial.md`.
-- **lead, M9:** ground/roads/props/icons and the experience thumbnail were explicitly out of
-  scope this milestone (see "Not in M7" below) — still open.
+- **lead, M9:** city dressing (roads, trees, filler, squares, vehicles) is now the M9 section
+  below (contracts frozen 2026-09-16). Icons and the experience thumbnail move to M10.
 - **lead / economy-designer, open idea:** monument growth tied to era completion, raised at M7
   scoping, not designed or scheduled.
 - **economy-designer / Ben:** cash-pack Robux pricing still must follow the 1 : 2.2 : 4.2 ladder
@@ -558,6 +558,77 @@ tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated so
 
 **Not in M7:** the other three eras (M8), ground/roads/props/icons (M9), monument growth tied to
 era completion (open idea, M8 at the earliest), runtime piece composition (rejected).
+
+---
+
+## M9 — City dressing: roads, trees, filler, squares, vehicles
+
+**Goal:** make each plot read as a growing town rather than 24 buildings on a lawn. Roads connect
+the buildings, trees sprout and grow with the city, filler houses and a square fill the gaps, and
+a few vehicles move along the roads — without a measurable frame cost. Decided with Ben
+2026-09-16 (contracts: `docs/INTERFACES.md` "M9 contracts"; spec §8 amended the same day).
+
+**Three rulings that shape everything:**
+1. **Client-side cosmetics.** The server publishes two attributes per plot (`EraName`,
+   `GrowthTier` 0–5) and nothing else. Every client builds identical dressing from
+   `(era, tier, owned slots, plot seed)`. No new remotes, no persistence, no balance change.
+2. **No collisions.** Every dressing part is `Anchored`, `CanCollide false`, `CanQuery false`,
+   `CanTouch false`. Players walk through trees and over roads; prompts and clicks pass through.
+3. **car-kit belongs to Boomtown and Metropolis.** Village gets carts (nature-kit), Orbital a
+   rover only if space-kit has one.
+
+**Growth tier.** `score = owned × 10 + Σ levels`; tier = number of thresholds
+`[10, 80, 250, 600, 1200]` reached (pure `CityGrowth.luau`, mirrored in the sim; constants in
+`Config/CityDressing.json`). Tuning target: tier 1 on the first purchase, tier 3 at ~40 % and
+tier 5 at ~80 % of the era's target duration.
+
+**Layers (in build order):**
+- **Roads** — hand-drawn "spine" polylines per era in the layout (2–5, revealed one per tier);
+  auto-routed L-shaped spurs from each owned building's pad to the spine (appear with the
+  building). Surfaces are plain Parts with an era material (dirt / asphalt / metal); kit pieces
+  only at junctions, bends and lamps (Boomtown/Metropolis, city-kit-roads). ≤ 60 parts per plot.
+- **Trees** — one 4-stage `TreeGrowing` prop per era (nature-kit for Village, suburban tree/planter
+  for the city eras; none in Orbital). Seeded scatter inside layout `treeZones`, rejecting points
+  near slots, roads, lots and edges; each tree has a birth tier and grows a stage per tier after
+  it. ≤ 40 per plot, near plots only.
+- **Filler houses and squares** — 3–4 single-stage house props per era on layout `lots` (8–12,
+  each with an appearance tier), 1–2 `Plaza` props at layout anchors. Never a slot's silhouette.
+- **Vehicles** — anchored car-kit models (`scale 2.5`, ≈ 6 studs) moved along the road graph in
+  one Heartbeat loop with a single `BulkMoveTo`; only on the 3 plots nearest the camera,
+  2–6 per plot by era and tier. Random turns at junctions, U-turn at dead ends.
+
+**Performance envelope:** ≤ ~1300 static anchored parts and ≤ ~20 moving parts for 10 plots at
+tier 5; identical meshes per era so Roblox batches them. Near/far LOD (250 studs, 40 hysteresis)
+drops trees, lamps and vehicles on far plots. Dressing only adds as a plot grows; full rebuild
+only on era change. Wave 2 adds a persisted "City detail" setting (same pattern as VIP skins)
+that halves trees, drops lamps and keeps vehicles to the local plot.
+
+**Props pipeline:** blueprints in `tools/testfit/blueprints/_props/<Era>/`, the existing tools gain
+`--props`, ids land in `Assets.json.props` (schema v2), templates in `templates/_props/<Era>/`
+mapped to `ReplicatedStorage/Assets/Props` (the client must clone them; MeshIds are not
+scriptable). Prop templates carry the no-collision flags. One harvest paste per era, as in M7.
+
+**Waves:**
+1. Parallel, disjoint: luau-engineer (types, `CityGrowth`, attributes), economy-designer
+   (Village + Boomtown street plans, sim tier timeline), pipeline-engineer (`--props` mode),
+   two Opus prop-builders (Village, Boomtown), ui-engineer (controller, road graph, scatter,
+   traffic — roads work before any prop exists).
+2. Lead approves street-plan PNGs and prop strips; merge → upload; Ben pastes the harvest;
+   templates committed.
+3. roblox-reviewer (server untouched by client state; collision flags; budgets; Heartbeat cost),
+   qa-runner, docs-keeper.
+4. Wave 2: Metropolis + OrbitalColony dressing once their buildings ship (M8), and the
+   `cityDetail` setting.
+
+**Done when** (full list in INTERFACES): a Village plot goes from bare ground to roads, growing
+trees, cottages, a plaza and two moving carts by tier 5; a Boomtown plot has asphalt, kit
+junctions, lamps and four cars; nothing blocks the player or a prompt; deleting the config or any
+template leaves the game playable; era advance rebuilds; the map stays within the part budget and
+the traffic step under 0.2 ms; format, lint, build, `gen_templates.py --check` and the sim are
+clean.
+
+**Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
+base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.
 
 ---
 

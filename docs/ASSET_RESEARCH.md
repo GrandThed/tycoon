@@ -175,6 +175,14 @@ One exception (lead, 2026-09-16): Metropolis may use `city-kit-suburban` `tree-l
 `planter` and `path-*` as small props, because no Metropolis kit has trees (ParkTrees,
 RooftopGarden). Suburban buildings and fences stay Boomtown's.
 
+**Props and vehicles, 2026-09-16 (M9, Ben).** `car-kit` is assigned to **Boomtown and Metropolis**
+(vehicles are city-dressing props at `scale 2.5`, never slot buildings). `nature-kit` supplies
+Village trees and the cart; Boomtown/Metropolis trees come from `city-kit-suburban`
+(`tree-small`, `tree-large`, `planter`); `city-kit-roads` supplies junction/bend tiles and lamps
+for both city eras; Orbital Colony has no trees and a `Rover` only if `space-kit` has a vehicle.
+Prop blueprints live in `tools/testfit/blueprints/_props/<Era>/`; contract in `docs/INTERFACES.md`
+"M9 contracts".
+
 The spec/manifest kit column was never checked against the kits: "Retro Medieval Kit" does not
 exist (closest is `retro-fantasy-kit`), and many manifest names (BowlingAlley, ClockTower face,
 bus, billboard, hydrant, subway entrance, stadium, rocket) have no Kenney model at all.

@@ -259,9 +259,16 @@ Nothing is imported by hand. Buildings are **assembled from Kenney kit pieces an
   `TextureID` on the visible stage; fall back to the normal texture if missing.
 - `tools/gen_asset_manifest.py` still produces `docs/ASSET_MANIFEST.md`, now as a coverage report:
   every `modelName` per era with blueprint / uploaded / templated status.
-- Ground/roads/props: Nature Kit trees and rocks for Era 1–3 edges, City Kit Roads for Era 2–3,
-  Space Kit floor tiles for Era 4; the plot base itself is a plain part tinted per era. Same
-  pipeline, later milestone.
+- **City dressing (M9, decided 2026-09-16):** roads, growing trees, filler houses, squares, lamps
+  and moving vehicles are **client-side cosmetics** derived from two replicated plot attributes
+  (`EraName`, `GrowthTier` 0–5; tier = f(owned slots, total levels) via the pure
+  `CityGrowth.luau`, constants in `Config/CityDressing.json`). Streets are hand-drawn polylines
+  in each era's layout; spurs to buildings are auto-routed and appear with the building; trees,
+  houses and plazas appear by tier; vehicles are anchored props moved along the road graph on
+  the nearest plots only. **No dressing part collides, queries or touches.** Props (`_props`
+  blueprints) go through the same pipeline into `ReplicatedStorage/Assets/Props/<Era>/`. Kits:
+  Village nature-kit + fantasy-town, Boomtown suburban + roads + **car-kit**, Metropolis
+  commercial + roads + **car-kit**, Orbital space-kit. The plot base stays a plain tinted part.
 - Kenney assets are CC0; no attribution required, but add a credits line in the game description anyway.
 
 ---

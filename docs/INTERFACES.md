@@ -1988,3 +1988,271 @@ no server, remote or config change.
 **Done when:** on a fresh join and on buy/level-up, Village buildings appear already textured (or
 after at most the timeout); nothing stays invisible when an asset fails; other players' plots
 behave the same; stylua, selene, luau-lsp analyze and `rojo build` are clean.
+
+---
+
+# M9 contracts — city dressing: roads, trees, filler, squares, vehicles (2026-09-16)
+
+Read `docs/PLAN.md` "M9" and `docs/SPEC.md` §8 (amended) first, then `docs/ASSET_RESEARCH.md` §4
+for the kit facts. Decided by Ben 2026-09-16: **everything in this milestone is client-side
+cosmetics**, derived deterministically from replicated facts; **no dressing part collides**;
+**car-kit belongs to Boomtown and Metropolis**. Balance, remotes and the economy are untouched.
+
+## Principles
+
+- The server publishes two attributes per plot and nothing else. Every client builds the same
+  dressing from `(eraName, growthTier, owned slots, plotIndex)`; nothing about it is persisted,
+  replicated or validated. Two clients may see different vehicle positions; that is fine.
+- **No collisions, no queries, no touch** on any dressing instance (roads, junctions, trees,
+  houses, plazas, lamps, vehicles): `CanCollide false`, `CanQuery false`, `CanTouch false`,
+  `Anchored true`. Players walk through trees and over roads; prompts and clicks pass through.
+- Dressing only ever **adds** as a plot grows; it is cleared and rebuilt only on era change.
+- Everything degrades: a missing prop template skips that feature silently; roads are plain Parts
+  and never depend on an asset; a missing `CityDressing.json` disables the controller.
+- Budget at tier 5, per plot: roads + junctions ≤ 60 parts, houses + plazas + lamps ≤ 25,
+  trees ≤ 40 (near plots only), vehicles ≤ 6 (nearest plots only). Whole map ≤ ~1300 static
+  anchored parts and ≤ ~20 moving parts.
+
+## M9 ownership
+
+| Owner | Files |
+|-------|-------|
+| lead | `docs/INTERFACES.md`, `docs/PLAN.md`, `docs/SPEC.md` §8, `docs/ASSET_RESEARCH.md` §4, `src/shared/Config/CityDressing.json` v1 (applied), routing |
+| luau-engineer | `src/shared/Types.luau` (M9 additions), `src/shared/CityGrowth.luau` (new, pure), `src/shared/Catalog.luau` (`GetCityDressingConfig`), `src/server/Services/PlotService.luau` (attributes only) |
+| economy-designer | `src/shared/Layouts/*.luau` (streets/lots/plazas/treeZones), `CityDressing.json` tuning after v1, `tools/sim_economy.py` (tier timeline), `docs/BALANCE.md` (tier section) |
+| pipeline-engineer (general-purpose) | `tools/assets/**` (props mode), `tools/testfit/{blueprint,testfit}.py` (prop blueprints), `default.project.json` (`ReplicatedStorage.Assets` mapping only), `templates/_props/**` (generated) |
+| prop-builder Village / Boomtown (general-purpose, `model: "opus"`) | `tools/testfit/blueprints/_props/<Era>/*.json` for their era only |
+| ui-engineer | `src/client/City/**` (new), `src/client/Controllers/CityDressingController.luau` (new), `src/client/Controllers/AssetPreloader.luau` (props preload), `src/client/Main.client.luau` (registration), `src/client/UI/Theme.luau` (constants) |
+| docs-keeper (after QA) | `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md`, `README.md`, PLAN ticks, `docs/ASSET_MANIFEST.md` regeneration |
+
+Frozen: `Config/Eras/**`, `Config/{Game,Sounds,Monetization,LegacyShop,Assets}.json` (Assets.json
+changes only through the pipeline), `Economy.luau`, every remote, `DataService`, `RemoteService`.
+Wave 2 unfreezes `Types.SettingKey`, `DataService`, `RemoteService`, `SettingsPanel` for the
+`cityDetail` setting (below).
+
+## CityDressing.json — schema v1 (`src/shared/Config/CityDressing.json`, lead-applied; Rojo → ModuleScript)
+
+The file is committed with these values; the shape is:
+
+```json
+{
+  "version": 1,
+  "tier": { "ownedWeight": 10, "thresholds": [10, 80, 250, 600, 1200] },
+  "lod": { "nearRadius": 250, "hysteresis": 40, "vehiclePlots": 3, "refreshSeconds": 0.5 },
+  "road": { "thickness": 0.2, "laneOffsetFraction": 0.25, "spineTierStep": 1 },
+  "trees": { "stages": 4, "edgeMargin": 3 },
+  "lamps": { "firstTier": 3, "everyNthJunction": 2, "maxPerPlot": 10 },
+  "vehicles": { "firstTier": 2, "turnSeconds": 0.5 },
+  "eras": {
+    "Village": {
+      "road": { "width": 5, "material": "Ground", "color": [126, 99, 66], "junctionProp": null, "bendProp": null },
+      "trees": { "maxCount": 40, "clearance": 7, "prop": "TreeGrowing" },
+      "houses": { "props": ["HouseA", "HouseB", "HouseC"] },
+      "plazas": { "props": ["PlazaA"] },
+      "lamps": { "prop": null },
+      "vehicles": { "props": ["Cart"], "perPlot": 2, "speed": 5 }
+    }
+  }
+}
+```
+
+Boomtown, Metropolis and OrbitalColony follow the same per-era shape (see the committed file):
+asphalt 8-stud roads with `Junction`/`Bend`/`LampPost` kit props and car-kit `VehicleA..D` for
+the two city eras; Orbital has 6-stud metal roads, no trees, a `Rover` only if space-kit has one.
+
+- `material` is an `Enum.Material` name; `color` is RGB 0–255. Every `*Prop`/`props` entry is a
+  prop name under `Assets.json.props.<Era>`; `null` or a missing template means "feature off".
+- `tier.thresholds` has exactly 5 entries (tiers 1–5); economy-designer tunes them (below).
+- Ben's "city detail" setting (wave 2) halves `trees.maxCount`, disables lamps and restricts
+  vehicles to the local plot; no extra config key is needed for that.
+
+## Growth tier — `src/shared/CityGrowth.luau` (luau-engineer; pure, no Roblox globals)
+
+```lua
+CityGrowth.Score(ownedCount: number, totalLevels: number, ownedWeight: number): number
+  -- ownedCount * ownedWeight + totalLevels
+CityGrowth.TierFor(score: number, thresholds: { number }): number
+  -- count of thresholds <= score, so 0..5. Monotonic in both inputs.
+```
+
+`tools/sim_economy.py` mirrors both 1:1 (economy-designer) and prints the tier timeline per era
+(first minute each tier is reached for the greedy player). Tuning target: tier 1 on the first
+purchase, tier 3 by ~40 % and tier 5 by ~80 % of the era's target duration in `docs/BALANCE.md`.
+
+## Server behaviour (luau-engineer) — attributes only
+
+- On the **plot folder** (`Workspace/Plots/<n>`, the parent of `Buildings`; not the Base, so the
+  client has one place to watch): `EraName: string` (the era config `name`) and
+  `GrowthTier: number` (0–5). Set both whenever the plot is configured for an era (claim, load,
+  advance, rebirth) and `GrowthTier` after every buy, level-up and rebuild path that changes
+  `totalLevelsThisEra` or the owned count; write only when the value changes. On plot release
+  set `GrowthTier` 0 and `EraName` to the lobby era (`Village`).
+- Score uses the same owned/levels numbers the sign and `totalLevelsThisEra` use.
+- `Catalog.GetCityDressingConfig(): Types.CityDressingConfig?` — nil-safe like the others.
+- **`Types.luau` additions:**
+
+```lua
+export type StreetLayout = { points: { Vector3 } }            -- polyline, studs rel. plot centre, Y 0
+export type LotLayout = { position: Vector3, rotationY: number, tier: number }
+export type PlazaLayout = { position: Vector3, rotationY: number, tier: number, prop: string }
+export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
+-- EraLayout gains (all optional so untouched layouts stay valid):
+--   streets: { StreetLayout }?, lots: { LotLayout }?, plazas: { PlazaLayout }?, treeZones: { TreeZoneLayout }?
+-- SlotLayout gains spur: { Vector3 }?   (hand-authored spur override, pad edge → spine)
+export type CityDressingConfig = { ... }                      -- mirrors the JSON above
+```
+
+Nothing else on the server changes: no remote, no rate-limit entry, no profile field in wave 1.
+
+## Layouts (economy-designer) — the street plan per era
+
+Every `src/shared/Layouts/<Era>.luau` gains:
+
+- **`streets`** — 2 to 5 polylines (the "spine") in unlock order; polyline `i` (1-based) becomes
+  visible at tier `i * road.spineTierStep`. Segments axis-aligned where possible; points at Y 0;
+  ≥ `road.width / 2 + 1` studs clear of every slot footprint (9×9, monument 14×14), pad and
+  the `Sign`. The first polyline must pass the monument approach and the plot's front edge
+  (−Z, the hub side) so an early plot reads as "a road into town".
+- **`lots`** — 8 to 12 filler-house positions along the streets, facing the road (front −Z
+  convention, `rotationY` like slots), each with the tier it appears at (2–5), ≥ 6 studs from any
+  slot footprint.
+- **`plazas`** — 1 or 2, each naming a prop from `eras.<Era>.plazas.props`, tier 3–5.
+- **`treeZones`** — 3 to 6 circles covering the empty ground between clusters; `count` per zone,
+  Σ count ≤ `eras.<Era>.trees.maxCount`.
+- Optional **`slots.<id>.spur`** where the auto-route (below) would cut through something.
+
+Village first (wave 1); Boomtown next; Metropolis and OrbitalColony in wave 2. economy-designer
+checks the plan against the slot positions with a quick top-down plot (matplotlib to
+`assets/testfit/out/<Era>/streetplan.png`) so Ben can approve it without Studio.
+
+## Road routing (ui-engineer implements in `src/client/City/RoadGraph.luau`)
+
+- **Spine:** each visible polyline segment becomes one Part: length = segment length + width
+  (so corners overlap), `Size (width, road.thickness, length)`, top face at Y `road.thickness`,
+  `Material`/`Color` from config, `TopSurface Smooth`, no collision (principles above).
+- **Spur per owned slot** (a `Building_<slotId>` child exists in the plot's `Buildings`): start at
+  the pad's outer edge (`padPosition or position + facing * padOffset`, plus `facing * padSize.Z/2`),
+  leg 1 along the slot's facing until the projection onto the nearest spine segment is reached on
+  that axis, leg 2 perpendicular to join; if a `spur` override exists, use its points verbatim.
+  A spur to a not-yet-visible spine still draws. Spurs use the same width and material.
+- **Junctions and bends** (Boomtown/Metropolis): where a spur meets the spine and at spine bends,
+  clone `junctionProp`/`bendProp` from the props templates, rotated to the incoming directions;
+  skip when the template is missing. Never more than one piece per junction point.
+- **Graph:** nodes at every polyline point, junction and spur end; edges along the road centrelines
+  with `laneOffsetFraction * width` as the right-hand lane offset. The vehicle loop reads this
+  graph; it is rebuilt when a spur or spine appears and vehicles re-seat on the nearest edge.
+
+## Trees, houses, plazas, lamps (ui-engineer, `src/client/City/Scatter.luau` + controller)
+
+- **Seed:** `Random.new(plotIndex * 7919 + hash(eraName))`; identical on every client.
+- **Trees:** for each zone, draw `count` candidate points uniformly in the circle, reject any point
+  within `trees.clearance` of a slot anchor, lot, plaza, `Sign` or pad, within `width/2 + 2` of a
+  road centreline, or within `trees.edgeMargin` of the plot edge; keep up to `count`. Tree `i`
+  (0-based, across all zones) has birth tier `1 + floor(i * 5 / total)`; its visible stage is
+  `clamp(growthTier - birthTier, 0, trees.stages - 1)`. The tree prop is a 4-stage template
+  (below); the `Stage<n>` is chosen the same way `spawnBuilding` does. Trees exist only on
+  **near** plots.
+- **Houses:** each lot with `tier <= growthTier` gets one clone of a prop chosen from
+  `houses.props` by the seed, pivoted like a building (bottom-centre on the lot position, front −Z
+  rotated by `rotationY`). Always present (near and far).
+- **Plazas:** clone the named prop at `tier <= growthTier`. Always present.
+- **Lamps:** from `lamps.firstTier`, at every `everyNthJunction`-th spur junction of owned slots
+  (seeded order), capped at `maxPerPlot`, offset to the right-hand road edge. Near plots only.
+- **Hide-until-loaded:** every cloned prop goes through the existing `AssetPreloader.AwaitInstance`
+  gate exactly like buildings; `AssetPreloader.PreloadEra` also walks `Assets.json.props.<Era>`.
+
+## Vehicles (ui-engineer, `src/client/City/Traffic.luau`)
+
+- Only on the **`lod.vehiclePlots`** plots nearest the camera (the local plot always counts); count
+  per plot = `ceil(perPlot * growthTier / 5)` from `vehicles.firstTier`; models from
+  `vehicles.props` by the seed; a plot leaving the nearest set despawns its vehicles.
+- Anchored single-Model clones, no physics, no Humanoid, no collision. One `RunService.Heartbeat`
+  connection for the whole map: advance each vehicle `speed * dt` along its edge (Y = road top),
+  at a node choose a random outgoing edge that is not the one it came from (dead end → U-turn,
+  blending the facing over `vehicles.turnSeconds`), then apply every CFrame with a single
+  `workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)`.
+- Vehicles start spaced evenly along the graph so they never spawn on top of each other; no
+  collision avoidance between vehicles (toy scale, opposite lanes).
+- Vehicle blueprints use **`scale: 2.5`** (≈ 6 studs long, fits the 8-stud road) and face −Z.
+
+## LOD and lifecycle (ui-engineer, `CityDressingController`)
+
+- Watches `Workspace/Plots/*`: `EraName`/`GrowthTier` attribute changes and `Buildings` child
+  add/remove. `GrowthTier` up → add the newly qualifying pieces only. `EraName` change (or
+  `GrowthTier` dropping) → clear the plot's dressing and rebuild.
+- All dressing lives in a client-owned folder `Workspace/CityDressing/Plot<n>` (never inside the
+  server's plot folder, so server watchers and the reveal gate are unaffected).
+- **Near/far:** every `lod.refreshSeconds` compute camera distance to each plot centre; a plot is
+  near when `< lod.nearRadius`, far when `> nearRadius + hysteresis`, unchanged in between. Far
+  plots keep roads, junctions, houses and plazas; trees, lamps and vehicles are removed.
+- Startup: on the first Snapshot the controller preloads the local era's props, then dresses every
+  plot already present; plots added later are dressed on `ChildAdded`.
+- `Theme` gains the copy/constants the controller needs (folder name); numbers that are tunables
+  go in `CityDressing.json`, never in code.
+
+## Props — blueprints, pipeline, templates (pipeline-engineer + prop-builders)
+
+- **Blueprint path:** `tools/testfit/blueprints/_props/<Era>/<PropName>.json`, same schema as
+  buildings (`id` == file stem; `era`; `scale` default 4.0; `footprint` optional; `pieces` with
+  `stage`). Prop stages: `TreeGrowing` uses stages 0–3 (4 stages, each visibly taller/fuller);
+  every other prop is single-stage (stage 0 only). Vehicles: `scale: 2.5`, front −Z, origin
+  bottom-centre, wheels included in the merge (they do not spin). Junction/Bend: pick `scale` so
+  the kit tile's road surface matches `road.width` (measure with `testfit.py --dump-bounds
+  city-kit-roads`); footprint may be `[width, width]`.
+- **Kit rules:** Village props = `nature-kit` (trees, cart), `fantasy-town-kit` (houses, plaza);
+  Boomtown = `city-kit-suburban` (houses, trees, planters), `city-kit-roads` (junction, bend,
+  lamps), `car-kit` (vehicles); Metropolis = `city-kit-commercial` (low filler shops, plaza),
+  suburban trees/planters (existing exception), `city-kit-roads`, `car-kit`; OrbitalColony =
+  `space-kit` only (no trees; `Rover` only if the kit has a vehicle, otherwise omit the file).
+  Filler houses must not reuse a slot's silhouette (a filler `HouseA` is not the Village
+  `HouseSmallA`).
+- **Pipeline:** `merge_stages.py`, `upload_models.py`, `harvest.py --emit`/`harvest.py` and
+  `gen_templates.py` gain `--props`, which switches the blueprint root to `_props/<Era>`, the
+  Assets.json target to `props.<Era>.<PropName>` and the template output to
+  `templates/_props/<Era>/<PropName>.rbxmx`. Stage count comes from the blueprint, not the era
+  config (props are not slots). Same scale, same texture baking, same idempotent upload.
+- **Assets.json v2:** adds `"props": { "<Era>": { "<PropName>": { "stages": [ … ] } } }` with the
+  exact `AssetStage` shape; `version` 1 → 2; every reader tolerates a missing `props` key.
+- **Prop template shape:** identical to the building template **except** every MeshPart has
+  `CanCollide false`, `CanQuery false`, `CanTouch false` (Ben's rule). Rojo maps
+  `ReplicatedStorage.Assets.Props` → `{ "$path": { "optional": "templates/_props" } }` so the client
+  can clone them (`ServerStorage` is not replicated). `gen_templates.py --check` covers both roots.
+- `docs/ASSET_MANIFEST.md` gains a props table per era (same columns).
+
+## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
+
+Same pattern as the VIP-skins amendment: `settings.cityDetail: boolean`, default `true`;
+`Types.SettingKey` gains `"cityDetail"`; profile schema v5 with an additive migration;
+`RequestSetSetting` accepts the key (same validator and rate limit); the settings delta carries
+it; SettingsPanel gains a row "City detail" visible to everyone; the controller treats `false` as
+"halve `trees.maxCount`, no lamps, vehicles on the local plot only" and re-evaluates live.
+
+## Waves
+
+1. **Wave 1 (parallel, disjoint):** luau-engineer (types, CityGrowth, attributes, Catalog);
+   economy-designer (Village + Boomtown layouts, sim tier timeline, threshold check);
+   pipeline-engineer (props mode end to end, dry-run on a fixture); prop-builders Village and
+   Boomtown (blueprints + strips); ui-engineer (controller, road graph, scatter, traffic,
+   preload) built against roads-only until props exist.
+2. **Lead:** approve the street plans and prop strips; run merge → upload; Ben pastes the harvest
+   once per era; `gen_templates.py --props`; commit.
+3. **Review + QA:** roblox-reviewer on the diff (focus: nothing client-built can affect server
+   state; no collision flags; part budgets; Heartbeat cost), qa-runner, docs-keeper.
+4. **Wave 2:** Metropolis + OrbitalColony layouts and props when their building sets have shipped
+   (M8), and the `cityDetail` setting.
+
+## Definition of done (M9)
+
+- A fresh Village plot shows bare ground; the first purchase draws a spur and the first spine
+  segment; by tier 5 the plot has roads, ≤ 40 growing trees, filler cottages, a plaza and two
+  carts moving along the roads; a Boomtown plot has asphalt roads with kit junctions, lamps and
+  four car-kit vehicles. Other players' plots dress identically from their attributes.
+- Walking through any tree, house, vehicle or over any road never blocks the player or a
+  ProximityPrompt; `CanCollide`/`CanQuery`/`CanTouch` are false on every dressing part
+  (reviewer greps it).
+- With all 10 plots at tier 5 the map holds ≤ ~1300 static dressing parts; the Heartbeat traffic
+  step stays under 0.2 ms with 20 vehicles (MicroProfiler in Studio, PLAYTEST step).
+- Deleting `CityDressing.json`, `templates/_props`, or any single prop template leaves the game
+  playable with that feature absent and no error in Output.
+- Era advance and rebirth clear and rebuild the dressing; rejoin reproduces the same layout.
+- stylua, selene, luau-lsp analyze, `rojo build`, `gen_templates.py --check` and the sim are clean.
