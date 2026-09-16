@@ -3,10 +3,11 @@
   "era": "Boomtown",
   "scale": 4.0,
   "pieces": [
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [-0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "detail-beam", "pos": [0.0, -0.23, 0.0], "rotY": 90, "stage": 0}
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [-0.5, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, -0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0.5, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, -0.625], "rotY": 0, "stage": 0}
   ]
 }

@@ -3,22 +3,14 @@
   "era": "Boomtown",
   "scale": 4.0,
   "pieces": [
-    {"kit": "retro-urban-kit", "model": "wall-a-garage", "pos": [0.5, 0.0, -0.375], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "wall-a-garage", "pos": [-0.5, 0.0, -0.375], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "wall-a", "pos": [0.5, 0.0, 0.625], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "wall-a", "pos": [-0.5, 0.0, 0.625], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [-0.5, 1.0, 0.625], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 2.0, 0.625], "rotY": 0, "stage": 1},
-    {"kit": "retro-urban-kit", "model": "door-type-a", "pos": [1.025, 0.0, -0.375], "rotY": 90, "stage": 1},
-    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 1.0, -0.375], "rotY": 0, "stage": 2},
-    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 1.0, -0.375], "rotY": 0, "stage": 2},
-    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 1.0, 0.625], "rotY": 270, "stage": 2},
-    {"kit": "retro-urban-kit", "model": "balcony-type-a", "pos": [-0.5, 2.0, -0.02], "rotY": 0, "stage": 2},
-    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 3.0, 0.625], "rotY": 0, "stage": 3},
-    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [-0.5, 4.0, 0.625], "rotY": 0, "stage": 3},
-    {"kit": "retro-urban-kit", "model": "wall-a-open", "pos": [-0.5, 5.0, 0.625], "rotY": 0, "stage": 4},
-    {"kit": "retro-urban-kit", "model": "wall-a-roof-detailed", "pos": [-0.5, 6.0, 0.625], "rotY": 0, "stage": 4},
-    {"kit": "retro-urban-kit", "model": "wall-a-roof", "pos": [0.5, 2.0, -0.375], "rotY": 0, "stage": 4},
-    {"kit": "retro-urban-kit", "model": "wall-a-roof", "pos": [0.5, 2.0, 0.625], "rotY": 0, "stage": 4}
+    {"kit": "city-kit-commercial", "model": "building-k", "pos": [0, 0, -0.655], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "building-a", "pos": [-0.5, 0, 0.505], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-commercial", "model": "building-d", "pos": [0.62, 0, 0.55], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [0.8, 1.2, -0.955], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.8, 1.2, -0.955], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-commercial", "model": "building-m", "pos": [-0.5, 0, 0.505], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.45, 1.2, -0.655], "rotY": 90, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.05, 2.4, 0.055], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.95, 2.4, 0.055], "rotY": 0, "stage": 4}
   ]
 }

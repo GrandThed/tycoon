@@ -3,14 +3,22 @@
   "era": "Boomtown",
   "scale": 4.0,
   "pieces": [
-    {"kit": "retro-urban-kit", "model": "road-asphalt-pavement", "pos": [0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-pavement", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "road-asphalt-center", "pos": [-0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "scaffolding-poles", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "roof-metal-type-a", "pos": [-0.5, 1.0, -0.5], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "detail-bench", "pos": [-0.5, 0.0, -0.4], "rotY": 0, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "detail-light-single", "pos": [0.45, 0.0, -0.85], "rotY": 90, "stage": 0},
-    {"kit": "retro-urban-kit", "model": "truck-green", "pos": [0.0, 0.0, 0.55], "rotY": 90, "stage": 0}
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [-0.5, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0.5, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.005, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.505, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.005, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.505, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.005, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.505, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.005, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.505, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [-0.35, 1.005, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-overhang", "pos": [-0.35, 0.005, 0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.35, 0.005, 0.87], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.45, 0.005, 0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.95, 0.005, 0.2], "rotY": 180, "stage": 0}
   ]
 }
