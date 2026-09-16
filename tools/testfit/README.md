@@ -229,3 +229,50 @@ city-kit-roads:
   studs; `dumpster` green 0.28×0.21×0.37 along Z; `light-curved` 2.7 studs (arm −Z), `light-square`
   2.4 (arm −Z: rotY 90 → −X, 270 → +X); `traffic-light*` ~2 studs; `road-sign-empty-hanging` reads as
   a bare lamp post.
+
+## city-kit-suburban and city-kit-industrial notes (Boomtown authoring, five builders, 2026-09-16)
+
+Both kits use one `colormap.png`, the same palette as the other City Kits (green suburban roofs,
+slate industrial walls, orange doors/bands). Storey grid is 0.4 units (1.6 studs) in both kits.
+
+Height at ×4 is the constraint: houses are 3–5 studs, industrial buildings ≤ 7.7, `water-tower` 8.6.
+Stacking flat industrial blocks gets taller but reads as a Metropolis office tower; Ben chose
+"lower, wider" (ordinary slots ≤ 13 studs, growing by width and clutter; only landmarks tall).
+
+city-kit-suburban:
+- `building-type-*` doors: `a g h i j m` on −Z; `r` has a door on every side. `h`, `j` have solar
+  roofs; `j` has its own chimney at +X. `h` and `j` are both 0.916 deep (neither swallows the other).
+- **Houses cannot be stacked or swallowed**: every roof overhang pokes out as a diagonal lip. A house
+  sits cleanly on a flat industrial deck (`type-c` on `building-c` at (+0.1, 0.5, 0) buries its vents;
+  `type-e` on `building-a`'s parapet at +1.28, rot 0 or 90). `p`/`q` stack flush at 0.85.
+
+city-kit-industrial:
+- Many GLBs are off-centre on their origin (`c d e f h i j l n o q`, `detail-tank-large`): place from
+  `--dump-bounds` min/max.
+- Parapet / deck: `a` 1.28 / 1.20; `o` 0.88 / 0.80; `q` 0.58 / 0.50 (box 0.88); `p` 0.715 / ~0.66;
+  `g` block 1.28; `t` box 0.88; `l` 0.88; `d` 1.28 / 1.20 (rear porch canopy z −0.80..−0.65 to y 0.40);
+  `b` main 1.20 (x −0.15..1.04), annex 0.50 with rim 0.58; `e` front 0.50, rear block 0.90;
+  `f` low 0.50, high block 0.90; `h` ridge 0.72 along Z, lean-to 0.40.
+- Clean stacks: `a` on `a`, `o` on `o`, `s` on `s` at +0.5; `q` on `q` needs a (+0.04, +0.04)
+  offset; `l` on `q` at q + (0.23, 0.39, −0.10) buries l's annex. Two `g` at rot 0 / 180 offset
+  (+0.01, 0, +0.44) merge into one 1.68 × 0.84 × 1.28 block. `l` stacked on itself leaves a floating gap.
+- `building-a` at rot 180 has a blank front; its back shows garage doors. `building-j` (quonset)
+  has a garage door on −Z and a side door. `building-m`'s three orange-tipped stacks read as pins.
+- Props: `chimney-basic` white with orange band, open top, stacks leave a band per joint (a
+  `construction-light` hides inside the next segment); `chimney-small` on the `l` chimney at
+  l + (−0.295, 1.925, +0.935). `shipping-container-a/b/c` orange/green/blue, stack 0.348, pack 0.373.
+  `water-tower` feet (±0.35, ±0.33), tank y 1.27–2.14. `detail-tank` reads as a hot-dog cart.
+
+city-kit-roads (additions):
+- `sign-highway*` board is 0.23 tall (y 0.48–0.71), posts at local z ±0.45 run 0.48 below to foot pads;
+  `sign-highway` is two boards with a centre gap, `-wide` one board, `-detailed` two boards with orange
+  underlines. Put a board's holder ~0.03 behind the posts. Stacked `-wide` every 0.2 reads as separate
+  bars; a solid face needs rows ~0.21 apart with alternating 0.012 offsets, and a back-to-back layer.
+- `road-bridge` is a 1×1 road deck on 4 columns, deck top 0.51, 0.43 clearance (fits a container),
+  stacks every 0.52. `electricity-pole` is an H-frame; two crossed (rotY 0/90) per 0.525 make a lattice
+  mast. `road-sign-empty` stacks every 0.475 with a knob per joint. `road-sign-street` blades read as
+  pennants. `road-sign-object-warning` is an orange diamond (0.134, centre origin). A chain of
+  `road-sign-object-stop` discs at 0.125 pitch reads as a continuous red neon tube (one-sided).
+  `road-side` is a road tile with a wider kerb strip on local −Z. `tile-high` is 1×1×0.25 lavender;
+  overlapping coplanar tiles show no z-fight. `construction-barrier`/`-fence` render grey.
+- testfit's footprint warning tolerance is 0.01 kit units.
