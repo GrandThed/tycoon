@@ -1,0 +1,30 @@
+{
+  "id": "GroceryStore",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "wall-a-open", "pos": [-0.5, 0.0, -0.375], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-type-a", "pos": [-0.5, 0.0, -0.835], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "window-wide-type-c", "pos": [-0.5, 0.3, -0.835], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "window-wide-type-a", "pos": [0.026, 0.3, -0.375], "rotY": 270, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-wide", "pos": [-0.5, 0.7, -0.975], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-small", "pos": [0.12, 0.7, -0.275], "rotY": 270, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [-0.5, 0.0, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a-door", "pos": [0.5, 0.0, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [0.28, 0.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [0.28, 0.15, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [0.84, 0.15, -0.62], "rotY": 90, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [0.84, 0.0, -0.62], "rotY": 90, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a", "pos": [-0.5, 1, 0.625], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 1, 0.625], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 1, -0.375], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "detail-light-double", "pos": [0.84, 0.0, -0.1], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 2, 0.625], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [0.5, 2, 0.625], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "balcony-type-a", "pos": [-0.5, 2, -0.735], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-flat-painted", "pos": [-0.5, 3, 0.2], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-flat-painted", "pos": [-0.5, 3, 0.21], "rotY": 180, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-flat-painted", "pos": [0.5, 3, 0.2], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-flat-painted", "pos": [0.5, 3, 0.21], "rotY": 180, "stage": 4}
+  ]
+}

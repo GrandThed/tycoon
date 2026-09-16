@@ -1,0 +1,29 @@
+{
+  "id": "BarberShop",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "wall-a-open", "pos": [-0.5, 0.0, -0.375], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-type-a", "pos": [-0.5, 0.0, -0.835], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "window-wide-type-a", "pos": [-0.5, 0.3, -0.835], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a-door", "pos": [0.5, 0.0, -0.375], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-small", "pos": [-0.5, 0.7, -0.975], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-small", "pos": [0.4, 0.64, -0.975], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a-column-painted", "pos": [0.95, 0.0, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "wall-a-column-painted", "pos": [0.95, 1, -1.0], "rotY": 90, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a", "pos": [-0.5, 0.0, 0.625], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a-door", "pos": [0.5, 0.0, 0.625], "rotY": 270, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "window-small-type-a", "pos": [1.026, 0.25, -0.375], "rotY": 270, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 1, -0.375], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 1, -0.375], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "balcony-type-a", "pos": [-0.5, 1, -0.985], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [-0.5, 1, 0.625], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 1, 0.625], "rotY": 270, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "balcony-type-a", "pos": [-0.5, 2, -0.735], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "balcony-type-a", "pos": [0.5, 2, -0.735], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.5, 2, 0.625], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-door", "pos": [0.5, 2, 0.625], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-roof", "pos": [-0.5, 3, 0.625], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "wall-a-roof", "pos": [0.5, 3, 0.625], "rotY": 0, "stage": 4}
+  ]
+}
