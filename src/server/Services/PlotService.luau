@@ -32,6 +32,9 @@ local VIP_ASSET_SUFFIX = "_VIP"
 -- one MeshPart per kit named after the kit, and an invisible `Base` PrimaryPart at the anchor.
 local STAGE_CHILD_PATTERN = "^Stage(%d+)$"
 local STAGE_CHILD_PREFIX = "Stage"
+-- Attachment under a template's Base at half the visible stage's height: the LevelUpPrompt and
+-- the client's particle/float-text origin hang here, so neither sits at the building's feet.
+local PROMPT_ANCHOR_NAME = "PromptAnchor"
 local ASSET_ID_PREFIX = "rbxassetid://"
 
 type PlotRecord = {
@@ -345,9 +348,33 @@ local function dressStage(stageModel: Model, slot: Types.SlotConfig, state: Type
 	end
 end
 
+-- Creates or moves Base.PromptAnchor to mid-height of the visible stage so the prompt's
+-- billboard and activation radius track the building as it grows. Nil when the building has
+-- no BasePart to hang it from (an empty legacy model), in which case the prompt falls back.
+local function positionPromptAnchor(building: Model, stageModel: Model): Attachment?
+	local base = cosmeticTargetPart(building)
+	if base == nil then
+		return nil
+	end
+	local existing = base:FindFirstChild(PROMPT_ANCHOR_NAME)
+	local anchor: Attachment
+	if existing ~= nil and existing:IsA("Attachment") then
+		anchor = existing
+	else
+		anchor = Instance.new("Attachment")
+		anchor.Name = PROMPT_ANCHOR_NAME
+		anchor.Parent = base
+	end
+	-- Extents are the stage's bounding box in studs; Base sits at the footprint's bottom-centre.
+	local height = stageModel:GetExtentsSize().Y
+	anchor.Position = Vector3.new(0, height / 2, 0)
+	return anchor
+end
+
 -- Clones `stage` out of the template into the live building at the same offset from the
 -- building's pivot as it has from the template's (both pivots are the Base part, but the
--- relation holds for any pivot), then dresses it. Hidden stages are never kept alive.
+-- relation holds for any pivot), then dresses it and re-aims the prompt anchor. Hidden stages
+-- are never kept alive.
 local function attachStage(
 	template: Model,
 	building: Model,
@@ -364,6 +391,7 @@ local function attachStage(
 	clone:PivotTo(building:GetPivot() * template:GetPivot():ToObjectSpace(templateStage:GetPivot()))
 	dressStage(clone, slot, state)
 	clone.Parent = building
+	positionPromptAnchor(building, clone)
 	return clone
 end
 
@@ -625,6 +653,7 @@ local function spawnBuilding(
 	end
 
 	local spawned: Instance
+	local promptParent: Instance? = nil
 	local template = findTemplate(eraName, slot.modelName, vipSkins)
 	local chosenStage: number? = nil
 	if template ~= nil then
@@ -647,6 +676,7 @@ local function spawnBuilding(
 					stageModel:Destroy()
 				else
 					dressStage(stageModel, slot, state)
+					promptParent = positionPromptAnchor(model, stageModel)
 				end
 			end
 		end
@@ -693,9 +723,10 @@ local function spawnBuilding(
 				onPromptTriggered(record, slot.id, triggeringPlayer)
 			end)
 		)
-		-- A ProximityPrompt is inert unless its parent is a BasePart (or Attachment): the
-		-- template's Base, a legacy model's first part, or the placeholder Part itself.
-		prompt.Parent = cosmeticTargetPart(spawned) or spawned
+		-- A ProximityPrompt is inert unless its parent is a BasePart or Attachment: the
+		-- template's Base.PromptAnchor (mid-height, so the billboard and reach are not measured
+		-- from the floor), else a legacy model's first part, else the placeholder Part itself.
+		prompt.Parent = promptParent or cosmeticTargetPart(spawned) or spawned
 		record.prompts[slot.id] = prompt
 	end
 end
