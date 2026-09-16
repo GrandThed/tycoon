@@ -39,6 +39,7 @@ local PLOTS_FOLDER = "Plots"
 local PLOT_PREFIX = "Plot_"
 local BUILDINGS_FOLDER = "Buildings"
 local BUILDING_PREFIX = "Building_"
+local PROMPT_ANCHOR = "PromptAnchor" -- Attachment under a template's Base (M7 contracts)
 
 local player = Players.LocalPlayer
 
@@ -86,13 +87,31 @@ local function anchorPart(building: Instance): BasePart?
 	return nil
 end
 
--- Studs from the anchor part's position up to the building's top edge.
-local function topOffset(building: Instance, part: BasePart): number
+-- Where particles emit from and the float text starts (instance + world position). A
+-- template's Base is a flat invisible part at ground level, so the server keeps a
+-- PromptAnchor Attachment on it at half the visible stage's height (M7); placeholders
+-- and templates without one fall back to the anchor part itself.
+local function fxOrigin(building: Instance): (Instance?, Vector3?)
+	local part = anchorPart(building)
+	if part == nil then
+		return nil, nil
+	end
+	local attachment = part:FindFirstChild(PROMPT_ANCHOR)
+	if attachment ~= nil and attachment:IsA("Attachment") then
+		return attachment, attachment.WorldPosition
+	end
+	return part, part.Position
+end
+
+-- Studs from the origin's height up to the building's top edge.
+local function topOffset(building: Instance, originY: number): number
 	if building:IsA("Model") then
 		local boundsCFrame, boundsSize = building:GetBoundingBox()
-		return boundsCFrame.Position.Y + boundsSize.Y / 2 - part.Position.Y
+		return boundsCFrame.Position.Y + boundsSize.Y / 2 - originY
+	elseif building:IsA("BasePart") then
+		return building.Position.Y + building.Size.Y / 2 - originY
 	end
-	return part.Size.Y / 2
+	return 0
 end
 
 local function countMilestones(toLevel: number): number
@@ -110,7 +129,7 @@ local function countMilestones(toLevel: number): number
 	return count
 end
 
-local function burst(part: BasePart, count: number): ()
+local function burst(origin: Instance, count: number): ()
 	if Theme.reducedMotion then
 		return
 	end
@@ -122,7 +141,7 @@ local function burst(part: BasePart, count: number): ()
 		SpreadAngle = Vector2.new(Theme.PARTICLE_SPREAD, Theme.PARTICLE_SPREAD),
 		Size = NumberSequence.new(Theme.PARTICLE_SIZE, 0),
 		Color = ColorSequence.new(Theme.COLOR_HIGHLIGHT),
-		Parent = part,
+		Parent = origin, -- a BasePart or an Attachment; both host emitters
 	}) :: ParticleEmitter
 	emitter:Emit(count)
 	task.delay(Theme.PARTICLE_LIFETIME_MAX, function()
@@ -130,19 +149,36 @@ local function burst(part: BasePart, count: number): ()
 	end)
 end
 
--- Model scale animations drive Model:ScaleTo from a NumberValue so TweenService supplies
--- the easing. pcall around ScaleTo: an imported model with unscalable content must never
--- break the purchase flow (spec §12.4). The driver lives under this script (never in the
--- replicated model) and is destroyed with the animation.
+-- Model scale animations drive a NumberValue so TweenService supplies the easing, and
+-- scale a snapshot of the BaseParts present when the driver was created (Size and CFrame
+-- relative to the pivot, i.e. the ground-level Base). Model:ScaleTo is deliberately not
+-- used: it rescales every current descendant against the model's tracked scale, so a
+-- Stage<n> that replicates mid-animation would be mis-sized by the final restore. Parts
+-- that arrive later are simply left alone, and finish() restores the snapshot exactly.
+-- The driver lives under this script (never in the replicated model) and is destroyed
+-- with the animation.
 type ScaleDriver = {
 	value: NumberValue,
 	finish: () -> (),
 }
 
+type PartSnapshot = { part: BasePart, size: Vector3, offset: CFrame }
+
 local function newScaleDriver(model: Model, slotId: string, startScale: number): ScaleDriver
 	local previous = scaleTweens[slotId]
 	if previous ~= nil then
 		previous.cancel()
+	end
+	local pivot = model:GetPivot()
+	local snapshot: { PartSnapshot } = {}
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			table.insert(snapshot, {
+				part = descendant,
+				size = descendant.Size,
+				offset = pivot:ToObjectSpace(descendant.CFrame),
+			})
+		end
 	end
 	local driver = Create("NumberValue", {
 		Name = "Scale_" .. slotId,
@@ -150,8 +186,12 @@ local function newScaleDriver(model: Model, slotId: string, startScale: number):
 		Parent = script,
 	}) :: NumberValue
 	local function applyScale(scale: number): ()
-		if model.Parent ~= nil then
-			pcall(model.ScaleTo, model, scale)
+		for _, entry in snapshot do
+			local part = entry.part
+			if part.Parent ~= nil then
+				part.Size = entry.size * scale
+				part.CFrame = pivot * (entry.offset.Rotation + entry.offset.Position * scale)
+			end
 		end
 	end
 	applyScale(startScale)
@@ -229,15 +269,22 @@ local function revealPart(part: BasePart): Tween
 	return tween
 end
 
-local function floatText(building: Instance, part: BasePart, text: string, milestone: boolean): ()
+local function floatText(
+	building: Instance,
+	origin: Instance,
+	originPosition: Vector3,
+	text: string,
+	milestone: boolean
+): ()
 	local playerGui = player:FindFirstChildOfClass("PlayerGui")
 	if playerGui == nil then
 		return
 	end
-	local startOffset = Vector3.new(0, topOffset(building, part) + Theme.LEVELUP_OFFSET_Y, 0)
+	local startOffset =
+		Vector3.new(0, topOffset(building, originPosition.Y) + Theme.LEVELUP_OFFSET_Y, 0)
 	local gui = Create("BillboardGui", {
 		Name = "FxLevelUp",
-		Adornee = part,
+		Adornee = origin, -- BasePart or Attachment
 		AlwaysOnTop = true,
 		Size = UDim2.fromOffset(Theme.LEVELUP_BILLBOARD_WIDTH, Theme.LEVELUP_BILLBOARD_HEIGHT),
 		StudsOffsetWorldSpace = startOffset,
@@ -318,16 +365,16 @@ local function onReveal(payload: Types.FxReveal): ()
 		else
 			SoundController.Play("reveal")
 		end
-		local part = anchorPart(building)
-		if part ~= nil then
-			burst(part, Theme.REVEAL_PARTICLES)
+		local origin = fxOrigin(building)
+		if origin ~= nil then
+			burst(origin, Theme.REVEAL_PARTICLES)
 		end
 	end)
 end
 
 -- The milestone fanfare shared by levelUp(milestone) and stageUp: whichever of the two
 -- arrives first for a crossing plays it, the other finds the dedupe window and skips.
-local function milestoneFanfare(slotId: string, building: Instance?, part: BasePart?): ()
+local function milestoneFanfare(slotId: string, building: Instance?, origin: Instance?): ()
 	local now = os.clock()
 	local last = lastMilestoneFx[slotId]
 	if last ~= nil and now - last < Theme.MILESTONE_FX_DEDUPE_SECONDS then
@@ -338,8 +385,8 @@ local function milestoneFanfare(slotId: string, building: Instance?, part: BaseP
 	if building ~= nil then
 		flashHighlight(building, true)
 	end
-	if part ~= nil then
-		burst(part, Theme.LEVELUP_PARTICLES)
+	if origin ~= nil then
+		burst(origin, Theme.LEVELUP_PARTICLES)
 	end
 end
 
@@ -349,20 +396,24 @@ local function onLevelUp(payload: Types.FxLevelUp): ()
 	local building = if buildings ~= nil
 		then buildings:FindFirstChild(BUILDING_PREFIX .. payload.slotId)
 		else nil
-	local part = if building ~= nil then anchorPart(building) else nil
+	local origin: Instance? = nil
+	local originPosition: Vector3? = nil
+	if building ~= nil then
+		origin, originPosition = fxOrigin(building)
+	end
 	if payload.milestone then
-		milestoneFanfare(payload.slotId, building, part)
+		milestoneFanfare(payload.slotId, building, origin)
 	elseif building ~= nil then
 		flashHighlight(building, false)
 	end
-	if building == nil or part == nil then
+	if building == nil or origin == nil or originPosition == nil then
 		return
 	end
 	local gained = payload.toLevel - payload.fromLevel
 	local text = if payload.milestone
 		then "MILESTONE! +" .. tostring(gained)
 		else "+" .. tostring(gained)
-	floatText(building, part, text, payload.milestone)
+	floatText(building, origin, originPosition, text, payload.milestone)
 end
 
 -- The server swapped Stage<n> before firing, so the pop scales the new mesh. Placeholder
@@ -376,7 +427,7 @@ local function onStageUp(payload: Types.FxStageUp): ()
 	if building == nil then
 		return
 	end
-	milestoneFanfare(payload.slotId, building, anchorPart(building))
+	milestoneFanfare(payload.slotId, building, (fxOrigin(building)))
 	local active = scaleTweens[payload.slotId]
 	if building:IsA("Model") and (active == nil or active.kind ~= "reveal") then
 		popModel(building, payload.slotId)

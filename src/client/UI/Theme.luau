@@ -223,7 +223,11 @@ local Theme = {
 	STAGE_POP_PEAK_SCALE = 1.08,
 	STAGE_POP_PEAK_FRACTION = 0.6, -- share of STAGE_POP_SECONDS spent growing to the peak
 	MILESTONE_FX_DEDUPE_SECONDS = 0.25,
+	-- Level-row status fragments: (multiplier, level) / (level) / (multiplier, level) when
+	-- the next income milestone and the next growth stage are the same level.
+	MILESTONE_HINT_FORMAT = "×%s at Lv %d",
 	GROW_HINT_FORMAT = "Grows at Lv %d",
+	MILESTONE_GROW_HINT_FORMAT = "×%s & grows at Lv %d",
 
 	-- M5: data-load safe-mode card (LoadScreen). The dim is lighter than a modal scrim
 	-- because the world stays playable behind it (spec section 5).

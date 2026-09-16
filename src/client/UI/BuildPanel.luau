@@ -406,14 +406,26 @@ function BuildPanel.new(parent: Instance, deps: Deps): BuildPanelHandle
 			local level = if owned ~= nil then owned.level else 1
 			statusText = "Lv " .. tostring(level)
 			local milestone = nextMilestone(level)
-			if milestone ~= nil then
-				statusText ..= " · ×" .. Format.Rate(gameConfig.milestoneMultiplier) .. " at Lv " .. tostring(
+			local growthLevel = nextGrowthLevel(level)
+			local multiplier = Format.Rate(gameConfig.milestoneMultiplier)
+			if milestone ~= nil and milestone == growthLevel then
+				-- Base milestones both double income and grow the model: one fragment.
+				statusText ..= " · " .. string.format(
+					Theme.MILESTONE_GROW_HINT_FORMAT,
+					multiplier,
 					milestone
 				)
-			end
-			local growthLevel = nextGrowthLevel(level)
-			if growthLevel ~= nil then
-				statusText ..= " · " .. string.format(Theme.GROW_HINT_FORMAT, growthLevel)
+			else
+				if milestone ~= nil then
+					statusText ..= " · " .. string.format(
+						Theme.MILESTONE_HINT_FORMAT,
+						multiplier,
+						milestone
+					)
+				end
+				if growthLevel ~= nil then
+					statusText ..= " · " .. string.format(Theme.GROW_HINT_FORMAT, growthLevel)
+				end
 			end
 			statusColor = Theme.COLOR_TEXT
 			paintLevelStrip(row, state, eraConfig, level, currentIncome)
