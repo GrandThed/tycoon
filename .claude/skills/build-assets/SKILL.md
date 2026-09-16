@@ -24,7 +24,8 @@ Argument: `<EraName>` = `Boomtown` | `Metropolis` | `OrbitalColony` (Village shi
      for street props (decided 2026-09-16; retro-urban was rejected). Never `city-kit-commercial`.
    - **Metropolis:** `city-kit-commercial` (skyscrapers included) + `city-kit-roads`. Start from
      the approved-in-style drafts in `tools/testfit/blueprints/_drafts/Metropolis-city-kit-commercial/`
-     (authored for Boomtown slot names; re-map to Metropolis slots). Never suburban/industrial.
+     (authored for Boomtown slot names; re-map to Metropolis slots). Never suburban/industrial
+     buildings; suburban `tree-*`, `planter`, `path-*` are allowed as props (no other tree source).
    - All four City Kits share one palette, so Boomtown vs Metropolis must differ by building
      type and scale (homes/workshops/factories vs shops/towers), and each kit belongs to one era.
    - Car-kit vehicles are ≥ 9 studs long at ×4 and never fit a 9×9 slot.

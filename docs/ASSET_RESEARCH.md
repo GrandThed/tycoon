@@ -171,6 +171,9 @@ Result: **Boomtown = `city-kit-suburban` + `city-kit-industrial`** (+ `city-kit-
 **Metropolis = `city-kit-commercial`** incl. skyscrapers (+ roads). Each kit belongs to one era.
 All three building kits have one `colormap.png`, so the M7 pipeline needs no change. The four City
 Kits share one palette, so the eras must differ by building type and height, not colour.
+One exception (lead, 2026-09-16): Metropolis may use `city-kit-suburban` `tree-large`, `tree-small`,
+`planter` and `path-*` as small props, because no Metropolis kit has trees (ParkTrees,
+RooftopGarden). Suburban buildings and fences stay Boomtown's.
 
 The spec/manifest kit column was never checked against the kits: "Retro Medieval Kit" does not
 exist (closest is `retro-fantasy-kit`), and many manifest names (BowlingAlley, ClockTower face,
