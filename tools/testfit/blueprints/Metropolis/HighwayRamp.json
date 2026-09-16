@@ -1,0 +1,15 @@
+{
+  "id": "HighwayRamp",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [-0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-slant-flat-curve", "pos": [0.0, 0.0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.87, 0.005, -0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.87, 0.005, -0.8], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0.95, 0.02, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.0, 0.52, 0.93], "rotY": 0, "stage": 0}
+  ]
+}

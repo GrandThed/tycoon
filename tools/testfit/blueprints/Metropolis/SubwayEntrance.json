@@ -1,0 +1,21 @@
+{
+  "id": "SubwayEntrance",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0.0, 0.0, -0.3], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-slant-barrier", "pos": [0.0, 0.0, -0.3], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway-detailed", "pos": [0.0, 0.0, -0.85], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.8, 0.0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [-0.8, 0.0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.75, 0.005, 0.75], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.75, 0.005, 0.75], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.75, 0.005, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.75, 0.005, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.9, 0.005, 0.95], "rotY": 0, "stage": 0}
+  ]
+}

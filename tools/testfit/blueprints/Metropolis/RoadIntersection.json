@@ -1,0 +1,24 @@
+{
+  "id": "RoadIntersection",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-crossroad-path", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.75, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.0, 0.0, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [-0.75, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.0, 0.0, -0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.625, -0.015, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.625, -0.015, -0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.625, -0.015, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.625, -0.015, -0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.625, -0.015, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.0, -0.015, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.625, -0.015, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.0, -0.015, -0.625], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [0.62, 0.02, 0.62], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [-0.62, 0.02, -0.62], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [-0.62, 0.02, 0.62], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [0.62, 0.02, -0.62], "rotY": 90, "stage": 0}
+  ]
+}

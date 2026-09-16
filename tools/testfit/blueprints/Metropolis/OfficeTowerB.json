@@ -1,0 +1,23 @@
+{
+  "id": "OfficeTowerB",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [0.45, 0.005, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [0.45, 0.705, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-l", "pos": [0.45, 1.405, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [-0.45, 0.005, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [-0.45, 0.705, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-l", "pos": [-0.45, 1.405, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [0.0, 1.6, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.75, 0.005, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.75, 0.005, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.0, 0.005, -0.8], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.3, 0.005, -1.0], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [-0.3, 0.005, -1.0], "rotY": 180, "stage": 0}
+  ]
+}

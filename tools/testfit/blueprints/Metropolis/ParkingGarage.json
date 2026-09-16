@@ -1,0 +1,27 @@
+{
+  "id": "ParkingGarage",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 0.0, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [-0.5, 0.0, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-slant-flat-high", "pos": [-0.5, 0.0, -0.5], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [-0.3, 0.0, -1.05], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [-0.7, 0.0, -1.05], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 0.0, -0.5], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-slant-flat-high", "pos": [0.5, 0.52, -0.5], "rotY": 270, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 0.52, 0.5], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [-0.5, 0.52, 0.5], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [-0.5, 0.52, -0.5], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-roads", "model": "road-slant-flat-high", "pos": [-0.5, 1.04, -0.5], "rotY": 270, "stage": 2},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 1.04, 0.5], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [-0.5, 1.04, 0.5], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0.5, 1.04, -0.5], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "light-square", "pos": [0.95, 1.56, -0.95], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "light-square", "pos": [0.95, 1.56, 0.95], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.1, 1.56, 0.75], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-roads", "model": "light-square", "pos": [-0.95, 1.56, 0.95], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-cone", "pos": [0.3, 1.565, -0.9], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-cone", "pos": [0.7, 1.565, -0.9], "rotY": 0, "stage": 4}
+  ]
+}
