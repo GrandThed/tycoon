@@ -1210,3 +1210,160 @@ the Studio debug income multiplier (`docs/BALANCE.md`) to move between eras quic
 - [ ] 7. Across the whole run, Output shows no warning or error about a sound. If one era stays
       silent, check that asset's moderation status on create.roblox.com before reporting it.
 - [ ] 8. Tell Claude Code "ambient loops OK", or name the era and step that failed.
+
+---
+
+## M7 — Growing buildings (Village)
+
+**Goal:** placeholder Parts are gone for Village — every slot is a Kenney-kit mesh that grows
+through five stages (stage 0 on buy, then a swap at base milestones 10/25/50/100). A new
+Studio-only lever, `GrantCash`, lets you level buildings fast without grinding real income.
+`docs/BALANCE.md` and `docs/PLAN.md` M7 have the numbers/decisions behind this if you want to
+cross-check.
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). Regenerate the sourcemap before
+      any `luau-lsp analyze` run: `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security) — you need real persistence for the rejoin check in section 6, and a real VIP
+      pass purchase in section 4.
+
+### 2. The `GrantCash` lever
+
+- [ ] 3. **Before** pressing Play: select **Workspace** in Explorer, Properties → Attributes →
+      **+**, add `GrantCash`, type **number**, value big enough to afford several building
+      levels (e.g. `100000` — check the Tavern's level-up cost in the Build panel first if
+      unsure).
+- [ ] 4. Press Play. Within a second or two (the lever is consumed on the server's 1 Hz tick,
+      same pattern as `GrantLegacy`), confirm your cash jumps by that amount and Output shows a
+      warn line naming the attribute and the amount granted.
+- [ ] 5. Check Workspace's Attributes again: confirm `GrantCash` has reset itself to `0` on its
+      own. Re-add it with a new value any time you need more cash.
+- [ ] 6. **Note, not a bug:** `GrantCash` does **not** increase your all-time-cash stat
+      (`stats.totalCashAllTime`) — only real income and offline grants do. If you're
+      cross-checking a stats display, a `GrantCash`-heavy session under-reporting all-time cash
+      vs. wallet cash is expected.
+
+### 3. First buy — mesh, not a placeholder
+
+- [ ] 7. Open the Build panel, buy any Village slot (a fresh save has none owned yet). Confirm the
+      building that appears at the anchor is a **textured, correctly proportioned mesh** — no
+      grey/untextured box, no floating `BillboardGui` label. It should face the buy pad, roughly
+      toy-proportioned (not huge, not miniature).
+- [ ] 8. Confirm the reveal tween (pop-in from small) still plays as it did before M7, and the
+      `purchase`/`reveal` sounds still fire.
+
+### 4. Growing a Tavern through all five stages
+
+- [ ] 9. Buy the **Tavern** if you haven't already. Use the `GrantCash` lever (section 2) and the
+      Build panel's ×1/×10/Max level buttons to bring it to level **10**. Confirm: one growth
+      pop plays on the building (a quick scale bounce) and one milestone sound plays — not two,
+      not zero.
+- [ ] 10. Repeat to level **25**, then **50**, then **100**. Confirm a stage swap (visibly more
+      built-up model) with exactly one pop + one milestone sound at each crossing, and that the
+      model never flashes back to a smaller stage.
+- [ ] 11. **Double-crossing edge case:** get the Tavern to level 9. Tap **+10** twice quickly (so
+      it jumps roughly L9 -> L19 -> L29, crossing both the 10 and the 25 milestones in quick
+      succession). Confirm the building ends up at the correct **Stage2** model (not oversized,
+      not undersized, not stuck at Stage1) and there's no visible glitch/flicker between stages.
+- [ ] 12. Open the Build panel row for a `building` slot below stage 4: confirm the hint line
+      reads something like "x2 & grows at Lv 25" (merged copy — one line, not two separate
+      hints). At stage 4 (level 100) confirm the "grows at" part is gone.
+
+### 5. VIP — texture swap, not a new model
+
+- [ ] 13. If you don't already own the `VIP` pass on this profile, buy it now (same flow as
+      `docs/PLAYTEST.md` M4 section 3, step 12 — Shop panel, `VIP`; read M4's note there about
+      real-ish Studio purchases before you tap through).
+- [ ] 14. With VIP owned, walk your plot and confirm buildings show a **gold-tinted colormap**
+      instead of their normal texture — check all three kits used in Village
+      (`fantasy-town-kit`, `castle-kit`, `nature-kit`), e.g. a house, the Watchtower, and a
+      FlowerBed/TreeOak. It should look like a recoloured skin, not a different model.
+- [ ] 15. If you were mid-session without VIP and just bought it, confirm the gold skin applies
+      to every already-owned building **without a rejoin** (the existing `RefreshCosmetics`
+      path, now driving a `TextureID` swap instead of a template swap).
+
+### 6. Missing config — graceful degrade
+
+- [ ] 16. Stop Play. Temporarily rename `src/shared/Config/Assets.json` (e.g. to
+      `Assets.json.bak`) **and** temporarily rename the `templates/` folder (e.g.
+      `templates_bak/`). Rebuild/resync. Press Play. Confirm **every** Village slot falls back to
+      the old tinted-box placeholder with its `modelName` label, and Output has **zero** errors.
+- [ ] 17. Stop Play, rename both back, rebuild/resync before continuing.
+
+### 7. Part budget and prompt reachability
+
+- [ ] 18. Using `GrantCash`, buy and fully level (to stage 4 where applicable) every slot on your
+      plot — all 24. Once done, open the Explorer and confirm
+      `Workspace/Plots/Plot_<i>/Buildings` holds **≤ 60 parts** total.
+- [ ] 19. Walk up to the **CastleKeep** monument (the tallest, most imposing stage-4 model in
+      Village) and confirm its ProximityPrompt (level-up, if it's a levelable type — otherwise
+      skip) is easy to reach and trigger, not buried inside the mesh or floating far from it.
+      Repeat for any other stage-4 building that looks unusually tall.
+
+### 8. Walk the whole plot — placement sanity
+
+- [ ] 20. With all 24 slots owned (from section 7), walk the entire plot ring and look at every
+      building from a few angles. Confirm: every model faces its buy pad (not sideways or
+      backwards), nothing floats above the ground, nothing sinks into the ground, and no building
+      clips badly into a neighbour. **Known, accepted by design:** the Windmill's sails overhang
+      its 9x9 footprint by about 0.5 studs — not a bug, don't report it.
+
+### 9. Reduce-motion / mobile emulator
+
+- [ ] 21. Device Emulator, **375x667** portrait. Turn on reduce-motion (TouchEnabled emulation
+      already implies it, or lower Studio's quality level 1–3). Trigger a milestone crossing
+      (`GrantCash` + level buttons). Confirm the growth pop is **shortened**, **no particles**
+      play, and the milestone flash/highlight is still visible (feedback isn't silently lost,
+      just toned down).
+- [ ] 22. Still at 375x667: open the Build panel and confirm the merged growth hint reads cleanly
+      without wrapping oddly or overlapping the Buy/Level buttons.
+- [ ] 23. Stop Play.
+
+### 10. Two-player — stage growth replicates
+
+- [ ] 24. **Test -> Start** with **2 Players** (Local Server mode). As Player 1, use `GrantCash`
+      and level a building through a milestone crossing. Confirm **Player 2's client** sees the
+      stage swap and the growth pop on Player 1's plot too (world state replicates to everyone,
+      same as reveal/level-up FX before M7).
+- [ ] 25. As Player 1, confirm your VIP gold skins (if VIP owned) are visible from **Player 2's**
+      client on Player 1's plot.
+- [ ] 26. Stop Play.
+
+### What a bug looks like here
+
+- Any slot showing a grey/untextured mesh, or a mesh at the wrong scale (tiny or huge relative to
+  its pad).
+- A building not facing its pad after spawn.
+- Two pops, or zero pops, at a single milestone crossing; a milestone sound playing more than
+  once per crossing.
+- The double-crossing edge case (step 11) landing on the wrong stage, or a visible flicker between
+  stages.
+- The growth hint showing two separate lines instead of one merged line, or not updating after a
+  stage swap.
+- VIP showing anything other than a texture/colour change (e.g. a different-shaped model), or not
+  applying to every kit.
+- VIP not applying live via `RefreshCosmetics` without a rejoin.
+- Any error in Output with `Assets.json`/`templates/` renamed away — placeholders must appear
+  silently.
+- More than 60 parts under a fully-built plot's `Buildings` folder.
+- A ProximityPrompt unreachable or buried inside a tall stage-4 mesh.
+- Any building floating, sunk, or badly clipping a neighbour (the Windmill's sail overhang is not
+  this — see section 8).
+- Reduce-motion not shortening the pop or not suppressing particles, or suppressing the milestone
+  flash entirely (it should stay visible, just less animated).
+- Stage growth or VIP skins not visible from a second player's client.
+- `GrantCash` not resetting to `0` after being consumed, or not warning in Output.
+
+### Sign-off
+
+- [ ] 27. All boxes above checked: the `GrantCash` lever, a first buy showing a real mesh, a full
+      0->100 Tavern growth run including the double-crossing edge case, the merged growth hint,
+      VIP as a texture swap on all three kits (including live re-skin), the missing-config
+      graceful degrade, the <= 60-part budget with a full plot, prompt reachability on the tallest
+      building, a full-plot placement walk, 375x667 reduce-motion, and the two-player replication
+      check.
+- [ ] 28. Tell Claude Code "M7 playtest passed" (or report the exact failure and step number).
+      Ticking this box marks `M7` `[x]` playtested in `docs/PLAN.md`.

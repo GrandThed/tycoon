@@ -488,3 +488,94 @@ The four ambient loops (`Village`, `Boomtown`, `Metropolis`, `OrbitalColony`) we
 - [x] 21. That's it — go run `docs/PLAYTEST.md` M6 section.
 
 <!-- M6 section complete. Do not delete completed sections above. -->
+
+---
+
+## M7 — Growing buildings: pipeline + Village
+
+Meshes are no longer hand-imported. Every Village model is produced by a scripted pipeline —
+blueprint -> merge -> upload -> the one Studio step -> template -> `rojo build`. The old M3 "Kenney
+mesh import" instructions (M3 section 2 above) are retired for eras this pipeline has reached;
+left in place as history, not to be followed again for Village. `templates/` and
+`src/shared/Config/Assets.json` are **generated-only** — never hand-edit them, they're overwritten
+by the tools below.
+
+### 1. One-time setup — `.env`
+
+- [x] 1. The pipeline reuses the same Open Cloud credentials as `tools/upload_audio.py`
+      (`docs/MANUAL_STEPS.md` M3 section 3): `.env` at the repo root (gitignored;
+      `.env.example` is the template) needs `ROBLOX_API_KEY` (an Assets → write key scoped to the
+      creator that owns the place), `ROBLOX_CREATOR_TYPE`, `ROBLOX_CREATOR_ID`. Already set up as
+      of M3 — nothing new to create here unless the key was revoked/expired.
+
+### 2. Running the pipeline for an era (already done for Village; repeats per-era at M8)
+
+Run in this order from the repo root. Every step is idempotent — re-running skips anything
+already built/uploaded, so it's safe to re-run after fixing a blueprint.
+
+- [x] 2. **Blueprints** (already authored for all 24 Village slots): author/edit
+      `tools/testfit/blueprints/<Era>/<ModelName>.json`, preview with
+      `py tools/testfit/testfit.py --era <Era>` (or `--model <ModelName>` for one), and check the
+      strip render — no floating/clipping pieces, footprint respected.
+- [x] 3. **Stage merge** (Blender, headless):
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --era <Era>`
+      (add `--model <ModelName>` to rebuild just one). Writes GLBs to `assets/build/` — gitignored,
+      not committed.
+- [x] 4. **Upload** — dry run first, then for real:
+      `py tools/assets/upload_models.py --era <Era> --dry-run`
+      `py tools/assets/upload_models.py --era <Era>`
+      Writes asset ids into `src/shared/Config/Assets.json`. Safe to re-run — already-uploaded
+      stages (non-zero id) are skipped.
+- [x] 5. **The one Studio step** — harvesting mesh/texture ids that only Studio can read:
+      1. `py tools/assets/harvest.py --emit` — regenerates `tools/assets/harvest.luau` from
+         whatever in `Assets.json` still needs harvesting (uploaded but not yet harvested).
+      2. In Studio (Edit mode, not Play), open the **Command Bar** and paste the entire contents
+         of `tools/assets/harvest.luau`, then run it.
+      3. Select all of the Output panel's `[HARVEST] {...}` lines and copy them (Ctrl+A, Ctrl+C in
+         Output, or drag-select just those lines).
+      4. `py tools/assets/harvest.py` — reads the Windows clipboard automatically
+         (`powershell Get-Clipboard`) and merges the harvested `meshId`/`imageId`/`size`/`offset`
+         values into `Assets.json`. (`--file <path>` if you saved the Output text to a file
+         instead of using the clipboard.) Any asset the paste didn't cover is listed and left
+         untouched — re-run steps 1–4 to pick up the rest.
+- [x] 6. **Templates**: `py tools/assets/gen_templates.py` — writes
+      `templates/<Era>/<ModelName>.rbxmx` from `Assets.json`. `py tools/assets/gen_templates.py
+      --check` diffs without writing (same pattern as the asset manifest's `--check`) — QA runs
+      this.
+- [x] 7. **Build**: `rojo build -o build/test.rbxl` (or resync `rojo serve`). Confirm in Studio
+      that `ServerStorage.Assets.<Era>.<ModelName>` exists with `Stage0`…`Stage4` (or just
+      `Stage0` for non-`building` slots) and that the mesh previews textured in Edit mode.
+
+### 3. Open Cloud upload quota — read before uploading a new era
+
+- [x] 8. The **100 uploads/month cap is audio only** (M3 section 3). Models have no documented
+      monthly cap, and the evidence agrees: 91 model uploads (Tavern proof + the Village run) went
+      through on 2026-09-15/16 on top of the 13 audio uploads already spent this month, with no
+      quota error. Expect M8's three eras at roughly 85 uploads each. One upload failed with
+      Roblox's transient "Unknown Error"; the tool never re-uploads an id that is already
+      non-zero, so simply re-run it (`--model <Name>` to target one slot).
+
+### 4. Nothing new to create on the Creator Hub
+
+- [x] 9. No new game passes or developer products this milestone — M7 doesn't touch
+      monetization. VIP building skins ride the existing `VIP` pass (already created and pasted,
+      M4 section 3) as a texture swap; nothing to recreate.
+
+### 5. If a template doesn't show a mesh
+
+- [x] 10. Confirm `Assets.json` has non-zero `modelAssetId`/`meshId`/`imageId` for that stage
+      (open the file, search the model name) — `0` means it hasn't been uploaded/harvested yet,
+      re-run the relevant pipeline step above.
+- [x] 11. Uploaded meshes are moderated like audio — give it a few minutes if it's freshly
+      uploaded. Check the asset on create.roblox.com if it never appears.
+- [x] 12. `$ignoreUnknownInstances` stays OFF for `ServerStorage.Assets` now — nothing is
+      hand-placed there any more. If you ever need to test something by hand-placing a Model
+      under `ServerStorage/Assets`, expect Rojo to delete it on the next sync; that's the
+      generated-only contract working as intended, not a bug.
+
+### 6. Nothing else needed for M7
+
+- [x] 13. That's it — go run `docs/PLAYTEST.md` M7 section, including the `GrantCash` lever setup
+      and the two-player check.
+
+<!-- M7 section complete. Do not delete completed sections above. -->

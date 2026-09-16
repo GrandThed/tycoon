@@ -23,8 +23,8 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   steps. MVP definition of done (spec §12) met.)
 - [x] M6 — Legacy shop (review SHIP after two Warnings fixed, QA green; **playtest passed
   2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
-- [ ] M7 — Assets (research only, not started: Kenney buildings assembled from kit pieces that grow
-  with the player's levels; scripted Open Cloud pipeline. Handoff: `docs/ASSET_RESEARCH.md`)
+- [x] M7 — Growing buildings: pipeline + Village (review SHIP after two Warnings fixed, QA green;
+  all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
 
 ---
 
@@ -448,7 +448,7 @@ pinned above the scrolling list, and the top bar reads `LEGACY <spendable> / <to
 
 ---
 
-## M7 — Growing buildings: pipeline + Village (proposed 2026-09-15, awaiting Ben's go)
+## M7 — Growing buildings: pipeline + Village
 
 **Goal:** replace placeholder Parts with Kenney-kit buildings that **grow through five stages**
 (stage 0 on purchase, then one stage at each base milestone 10 / 25 / 50 / 100), produced by a
@@ -487,10 +487,13 @@ roads, props, icons and the experience thumbnail are M9. Nothing here touches ba
    Cosmetics that assumed placeholder Parts (Golden Roads tint, Monument Glow Neon) are
    redesigned for meshes.
 
-**First proof before fan-out (lead + one agent):** the approved tavern goes through steps 2–5
-alone — merge, upload, rbxmx, `rojo build`, and Ben confirms in Studio that a file-defined
-MeshPart loads its mesh and texture and that the five stages swap in Play. This is the one
-unverified link (rbxmx MeshParts via Rojo) and it gates everything else.
+**First proof before fan-out (lead + one agent) — passed 2026-09-16:** the approved tavern went
+through steps 2–5 alone — merge, upload, rbxmx, `rojo build` — and Ben confirmed in Studio that
+all five Tavern stages load their mesh and texture, correctly sized, sitting on the ground, from
+a Rojo-built `.rbxmx` (`ServerStorage.Assets.Village.Tavern`). The `InsertService:LoadAsset`
+fallback was not needed. Bonus finding: Roblox deduplicates the texture across stage uploads (all
+five returned the same `imageId`), so a kit's texture id is stable. This was the one unverified
+link (rbxmx MeshParts via Rojo) and it gated everything else — resolved, fan-out proceeded.
 
 | Owner | Tasks |
 |-------|-------|
@@ -507,6 +510,48 @@ merged-stage meshes from Rojo-built templates, buildings grow at each base miles
 feedback, VIP is a texture swap, placeholders still work with `Assets.json` absent, a full-stage
 Village plot stays under ~40 building parts, QA green. **Playtest gate:** Ben levels a tavern
 0→100 and watches it grow, then checks a VIP plot.
+
+**Shipped (2026-09-16):** all 24 Village slots (blueprints in `tools/testfit/blueprints/Village/`,
+authored by three disjoint builders and verified with `tools/testfit/testfit.py` strip renders)
+went through the full pipeline — `merge_stages.py` (Blender, one mesh per kit per stage, palette
+bake for material-colour kits), `upload_models.py` (79 stage models + 2 VIP swatches uploaded to
+Open Cloud, idempotent/resumable), the one Studio step (`harvest.py --emit` → paste
+`harvest.luau` into the command bar → copy Output → `harvest.py`), `gen_templates.py`
+(`templates/Village/<ModelName>.rbxmx`, generated-only). `src/shared/Config/Assets.json` v1 holds
+every id/size. Server: `PlotService.stageForLevel` (base milestones 10/25/50/100 only — the
+Legacy `milestone75` perk changes income, not the visual), stage swap on milestone crossing,
+`FxEvent stageUp`, VIP as a per-kit `TextureID` swap, Golden Roads/Monument Glow redesigned for
+meshes (`Highlight` instead of `Neon`), `LevelUpPrompt` moved onto a `PromptAnchor` attachment at
+half the visible stage's height (review fix — it was parented to the Model, inert on a real
+template). Client: growth pop on `stageUp` implemented as a snapshot-based scale animation (not
+`Model:ScaleTo`, review fix), the Build-panel hint merged to "×2 & grows at Lv 25" (review fix),
+FX origin moved to `PromptAnchor` (review fix). New Studio-only `GrantCash` lever (same pattern as
+`GrantLegacy`, consumed once by the 1 Hz tick; does not bump `stats.totalCashAllTime`) for the
+stage-growth playtest. `tools/gen_asset_manifest.py` is now a per-slot pipeline coverage report
+(blueprint / stage GLBs / uploaded / harvested / templated); `docs/ASSET_MANIFEST.md` regenerated.
+Spec §8 amended the same day to match (merged-stage meshes, not runtime piece composition).
+
+Reviewer found two Warnings on the first pass — both fixed before sign-off: the `LevelUpPrompt`
+parented to a template's inert Model instead of its `Base` BasePart, and the client using
+`Model:ScaleTo` for the growth pop where the codebase's established pattern is snapshot-driven
+tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated sourcemap,
+`rojo build`, `sim_economy.py --check` unchanged, `gen_asset_manifest.py --check`,
+`gen_templates.py --check`). **Playtest pending** — `docs/PLAYTEST.md` "M7 — Growing buildings
+(Village)".
+
+**Carried forward (owners assigned):**
+- **pipeline-engineer / lead, M8:** the same pipeline (blueprints → merge → upload → harvest →
+  templates) repeats for Boomtown, Metropolis, and Orbital Colony — no new tooling expected,
+  content only.
+- **lead, M9:** ground/roads/props/icons and the experience thumbnail were explicitly out of
+  scope this milestone (see "Not in M7" below) — still open.
+- **lead / economy-designer, open idea:** monument growth tied to era completion, raised at M7
+  scoping, not designed or scheduled.
+- **economy-designer / Ben:** cash-pack Robux pricing still must follow the 1 : 2.2 : 4.2 ladder
+  (`docs/BALANCE.md`) whenever real prices are set — unchanged since M4/M5/M6, M7 doesn't touch
+  monetization at all.
+- **economy-designer / lead:** the ambient-loop items and the long-run lap-6+ sink (both carried
+  from M6) remain open, untouched by M7.
 
 **Not in M7:** the other three eras (M8), ground/roads/props/icons (M9), monument growth tied to
 era completion (open idea, M8 at the earliest), runtime piece composition (rejected).
