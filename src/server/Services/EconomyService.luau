@@ -34,6 +34,9 @@ type DirtyRecord = {
 -- on an era advance, so a numeric Workspace attribute set in the Properties pane stands in for
 -- one. Consumed by the 1 Hz tick and reset to 0. Ignored outside Studio.
 local GRANT_LEGACY_ATTRIBUTE = "GrantLegacy"
+-- Same lever for cash (M7): levelling a building to 100 at real pace takes hours, and the
+-- stage-growth check needs every base milestone in one sitting.
+local GRANT_CASH_ATTRIBUTE = "GrantCash"
 
 -- Session-scoped record of the offline grant this player received on join, so the welcome-back
 -- card's "Double it" product can be honoured for the whole session (the card can be tapped a
@@ -521,6 +524,31 @@ local function consumeGrantLegacyLever(): ()
 	)
 end
 
+-- Studio lever: GrantCash > 0 on Workspace pays that much cash to every loaded player once,
+-- then resets itself. Cash rides the normal dirty/delta path, so no snapshot is needed.
+local function consumeGrantCashLever(): ()
+	local value = workspace:GetAttribute(GRANT_CASH_ATTRIBUTE)
+	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+		return
+	end
+	workspace:SetAttribute(GRANT_CASH_ATTRIBUTE, 0)
+	local granted = 0
+	for _, player in Players:GetPlayers() do
+		local state = DataService.GetState(player)
+		if state == nil then
+			continue
+		end
+		state.cash += value
+		player:SetAttribute("Cash", state.cash)
+		EconomyService.MarkDirty(player, { cash = true })
+		granted += 1
+	end
+	warn(
+		`[EconomyService] {GRANT_CASH_ATTRIBUTE} lever: granted {value} cash to {granted}`
+			.. ` loaded player(s); attribute reset to 0`
+	)
+end
+
 -- Main calls this on PlayerRemoving (after PlotService.Release, before DataService.Release).
 function EconomyService.Cleanup(player: Player): ()
 	dirtyRecords[player] = nil
@@ -561,6 +589,7 @@ function EconomyService.Start(): ()
 			grantIncome(ticks * tickInterval)
 			if isStudio then
 				consumeGrantLegacyLever()
+				consumeGrantCashLever()
 			end
 		end
 
