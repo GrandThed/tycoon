@@ -3,7 +3,7 @@
   "textures": {
     "fantasy-town-kit": {
       "vipSwatchAssetId": 113791458028891,
-      "vipImageId": 0
+      "vipImageId": 91158106530449
     }
   },
   "eras": {
@@ -311,10 +311,10 @@
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 118446410614942,
+                "imageId": 76536101627711,
                 "size": [8.0, 4.24, 4.0],
-                "offset": [0.0, 2.12, -1.8]
+                "offset": [0.0, 2.12, 1.8]
               }
             ]
           },
@@ -323,10 +323,10 @@
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.18, 6.74, 8.717],
-                "offset": [0.09, 3.37, -0.158]
+                "meshId": 76384924598375,
+                "imageId": 76536101627711,
+                "size": [8.18, 6.74, 8.7166],
+                "offset": [-0.09, 3.37, 0.1583]
               }
             ]
           },
@@ -335,10 +335,10 @@
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.537, 10.744, 8.985],
-                "offset": [0.0, 5.372, -0.024]
+                "meshId": 114623521312792,
+                "imageId": 76536101627711,
+                "size": [8.5367, 10.7436, 8.985],
+                "offset": [0.0, 5.3718, 0.0242]
               }
             ]
           },
@@ -347,10 +347,10 @@
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.537, 18.74, 8.985],
-                "offset": [0.0, 9.37, -0.024]
+                "meshId": 125705801864468,
+                "imageId": 76536101627711,
+                "size": [8.5367, 18.74, 8.985],
+                "offset": [0.0, 9.37, 0.0242]
               }
             ]
           },
@@ -359,10 +359,10 @@
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.537, 20.24, 8.985],
-                "offset": [0.0, 10.12, -0.024]
+                "meshId": 77600894717025,
+                "imageId": 76536101627711,
+                "size": [8.5367, 20.24, 8.985],
+                "offset": [0.0, 10.12, 0.0242]
               }
             ]
           }

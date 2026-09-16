@@ -28,17 +28,17 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 
 | Era | Blueprints | Uploaded | Harvested | Templates |
 |-----|------------|----------|-----------|-----------|
-| 1 — Village | 24/24 | 1/24 | 0/24 | 0/24 |
+| 1 — Village | 24/24 | 1/24 | 1/24 | 1/24 |
 | 2 — Boomtown | 0/24 | 0/24 | 0/24 | 0/24 |
 | 3 — Metropolis | 0/24 | 0/24 | 0/24 | 0/24 |
 | 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 24/96 | 1/96 | 0/96 | 0/96 |
+| **Total** | 24/96 | 1/96 | 1/96 | 1/96 |
 
 ## Era 1 — Village
 
 Blueprints: `tools/testfit/blueprints/Village/` -- templates: `templates/Village/` -- in game: `ServerStorage/Assets/Village/`
 
-Summary: 24/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 1/24 uploaded, 1/24 harvested, 1/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -57,7 +57,7 @@ Summary: 24/24 blueprints, 1/24 uploaded, 0/24 harvested, 0/24 templated
 | 13 | `MarketStall` | Market Stall | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 14 | `TreeOak` | Oak Tree | decor | yes | fantasy-town-kit, nature-kit | 1 | 0/1 | 0/1 | 0/1 | — |
 | 15 | `Blacksmith` | Blacksmith | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
-| 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 0/5 | — |
+| 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 17 | `CartWagon` | Open the Trade Route | unlock | yes | fantasy-town-kit | 1 | 0/1 | 0/1 | 0/1 | — |
 | 18 | `Chapel` | Chapel | building | yes | castle-kit, fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
 | 19 | `HouseLargeA` | Manor House | building | yes | fantasy-town-kit | 5 | 0/5 | 0/5 | 0/5 | — |
@@ -168,4 +168,4 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 ## Totals
 
-96 models: 24/96 blueprints, 1/96 uploaded, 0/96 harvested, 0/96 templated
+96 models: 24/96 blueprints, 1/96 uploaded, 1/96 harvested, 1/96 templated
