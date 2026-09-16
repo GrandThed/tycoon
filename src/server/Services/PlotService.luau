@@ -1245,9 +1245,14 @@ local function buildWorld(): ()
 	local plotSize = layout.plotSize
 	local plotCount = gameConfig.plotCount
 
-	-- The ring circumference must fit every plot plus its margin; never overlap the hub.
+	-- Plots are radial rectangles, so neighbours converge toward the hub and their inner
+	-- corners collide first. Size the ring so each inner corner stays plotMargin / 2 clear of
+	-- the radial line splitting two plots; coplanar overlapping bases z-fight at the seam.
+	local halfSector = math.pi / plotCount
 	local ringRadius = math.max(
-		plotCount * (plotSize.X + gameConfig.plotMargin) / (2 * math.pi),
+		plotSize.Z / 2
+			+ (plotSize.X / 2 * math.cos(halfSector) + gameConfig.plotMargin / 2)
+				/ math.sin(halfSector),
 		gameConfig.hubRadius + gameConfig.plotMargin + plotSize.Z / 2
 	)
 
