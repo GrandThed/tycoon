@@ -29,10 +29,10 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 | Era | Blueprints | Uploaded | Harvested | Templates |
 |-----|------------|----------|-----------|-----------|
 | 1 — Village | 24/24 | 24/24 | 24/24 | 24/24 |
-| 2 — Boomtown | 24/24 | 4/24 | 0/24 | 0/24 |
+| 2 — Boomtown | 24/24 | 24/24 | 24/24 | 24/24 |
 | 3 — Metropolis | 24/24 | 0/24 | 0/24 | 0/24 |
 | 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 72/96 | 28/96 | 24/96 | 24/96 |
+| **Total** | 72/96 | 48/96 | 48/96 | 48/96 |
 
 ## Era 1 — Village
 
@@ -71,34 +71,34 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/Boomtown/` -- templates: `templates/Boomtown/` -- in game: `ServerStorage/Assets/Boomtown/`
 
-Summary: 24/24 blueprints, 4/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Newsstand` | Newsstand | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 2 | `HotDogStand` | Hot Dog Stand | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 3 | `Diner` | Diner | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 4 | `GasStation` | Gas Station | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 5 | `Motel` | Motel | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 6 | `RoadStraight` | Pave Main Street | unlock | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 7 | `BarberShop` | Barber Shop | building | yes | city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 0/5 | — |
-| 8 | `FireHydrant` | Fire Hydrant | decor | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 9 | `GroceryStore` | Grocery Store | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 10 | `Laundromat` | Laundromat | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 11 | `CarDealership` | Car Dealership | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 12 | `TrafficLight` | Install Traffic Lights | unlock | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 13 | `Cinema` | Cinema | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 14 | `Streetlamp` | Streetlamp Row | decor | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 15 | `AutoRepairShop` | Auto Repair Shop | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 0/5 | — |
-| 16 | `BowlingAlley` | Bowling Alley | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 17 | `BusYellow` | Open the Bus Line | unlock | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 18 | `Bank` | Bank | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 0/5 | — |
-| 19 | `DepartmentStore` | Department Store | building | yes | city-kit-industrial | 5 | 5/5 | 0/5 | 0/5 | — |
-| 20 | `Billboard` | Billboard | decor | yes | city-kit-industrial, city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 21 | `RadioStation` | Radio Station | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 22 | `FireStation` | Fire Station | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 23 | `NeonSign` | Light the Neon District | unlock | yes | city-kit-industrial, city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 24 | `ClockTower` | Clock Tower | monument | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
+| 1 | `Newsstand` | Newsstand | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 2 | `HotDogStand` | Hot Dog Stand | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 3 | `Diner` | Diner | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 4 | `GasStation` | Gas Station | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 5 | `Motel` | Motel | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 6 | `RoadStraight` | Pave Main Street | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `BarberShop` | Barber Shop | building | yes | city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 8 | `FireHydrant` | Fire Hydrant | decor | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `GroceryStore` | Grocery Store | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 10 | `Laundromat` | Laundromat | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 11 | `CarDealership` | Car Dealership | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 12 | `TrafficLight` | Install Traffic Lights | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `Cinema` | Cinema | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 14 | `Streetlamp` | Streetlamp Row | decor | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `AutoRepairShop` | Auto Repair Shop | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 16 | `BowlingAlley` | Bowling Alley | building | yes | city-kit-industrial, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 17 | `BusYellow` | Open the Bus Line | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `Bank` | Bank | building | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 19 | `DepartmentStore` | Department Store | building | yes | city-kit-industrial | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 20 | `Billboard` | Billboard | decor | yes | city-kit-industrial, city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `RadioStation` | Radio Station | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 22 | `FireStation` | Fire Station | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 23 | `NeonSign` | Light the Neon District | unlock | yes | city-kit-industrial, city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 24 | `ClockTower` | Clock Tower | monument | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 3 — Metropolis
 
@@ -168,4 +168,4 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 ## Totals
 
-96 models: 72/96 blueprints, 28/96 uploaded, 24/96 harvested, 24/96 templated
+96 models: 72/96 blueprints, 48/96 uploaded, 48/96 harvested, 48/96 templated
