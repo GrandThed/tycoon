@@ -1888,3 +1888,13 @@ the anchor, facing the pad; levelling a `Tavern` with the cash lever to 10 / 25 
 the stage each time with the pop; a VIP plot shows the gold texture; with `Assets.json` and
 `templates/` removed, every slot is a placeholder and nothing errors; a full-stage Village plot has
 ≤ 60 building parts.
+
+## Post-proof amendment (M7, 2026-09-16)
+
+**Rojo-built `.rbxmx` MeshParts work.** Ben previewed all five Tavern stages from
+`ServerStorage.Assets.Village.Tavern` in Edit mode: textured, correct size, sitting on the ground.
+The `InsertService` fallback is not needed. Roblox also **deduplicated the texture**: all five stage
+uploads returned the same `imageId`, so a kit's texture id is stable across uploads. The
+`ServerStorage.Assets` mapping is `{"$path": {"optional": "templates"}}` (Rojo 7.7), which makes
+`.gitkeep` placeholders unnecessary. A Studio-only `GrantCash` Workspace attribute (number,
+consumed once by the 1 Hz tick like `GrantLegacy`) was added by the lead for the growth playtest.
