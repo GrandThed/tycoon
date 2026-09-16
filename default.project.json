@@ -1,5 +1,6 @@
 {
 	"name": "EraCityTycoon",
+	"globIgnorePaths": ["templates/_props"],
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
@@ -9,6 +10,13 @@
 			},
 			"Packages": {
 				"$path": "Packages"
+			},
+			"Assets": {
+				"$className": "Folder",
+				"Props": {
+					"$className": "Folder",
+					"$path": { "optional": "templates/_props" }
+				}
 			}
 		},
 		"ServerScriptService": {

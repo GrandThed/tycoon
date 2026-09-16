@@ -50,6 +50,7 @@ GAME_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Game.json"
 ERAS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Eras"
 MONETIZATION_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Monetization.json"
 LEGACY_SHOP_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "LegacyShop.json"
+CITY_DRESSING_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json"
 
 # Spec section 4 pacing bands (seconds) for the DEFAULT greedy run with legacy
 # carry. Tool-only constants: INTERFACES.md sanctions the bands living here.
@@ -175,6 +176,16 @@ def legacy_gain(era_index, total_levels_this_era, rebirth_count, game):
         * (1 + total_levels_this_era / cfg["gainLevelsDivisor"])
         * (1 + rebirth_count * cfg["gainRebirthBonus"])
     )
+
+
+def city_growth_score(owned_count, total_levels, owned_weight):
+    """CityGrowth.Score"""
+    return owned_count * owned_weight + total_levels
+
+
+def city_growth_tier_for(score, thresholds):
+    """CityGrowth.TierFor -- counts thresholds reached, so out-of-order configs stay monotonic"""
+    return sum(1 for threshold in thresholds if threshold <= score)
 
 
 def offline_grant(elapsed_seconds, ips, cap_seconds, efficiency):
@@ -478,6 +489,15 @@ def validate_legacy_shop_config(shop):
             raise ValueError(f"LegacyShop.json: {perk_id} description exceeds 90 characters")
 
 
+def load_city_dressing_config():
+    """None when the file is absent: the game disables dressing then, so the sim
+    simply skips the tier timeline."""
+    if not CITY_DRESSING_CONFIG_PATH.exists():
+        return None
+    with open(CITY_DRESSING_CONFIG_PATH, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def load_eras():
     eras = []
     for path in sorted(ERAS_DIR.glob("*.json")):
@@ -504,6 +524,7 @@ class EraResult:
         self.longest_wait = 0
         self.longest_wait_early = 0
         self.unlock_beats = []  # (slotId, t)
+        self.tier_times = None  # t at which city growth tier i+1 was first reached
 
 
 def resolve_requires(era):
@@ -531,11 +552,15 @@ def simulate_era(
     rebirth_count=0,
     shop=None,
     shop_state=None,
+    city=None,
 ):
     """paid = {"pass": x, "premium": y}; None keeps the free-player defaults.
     rebirth_count feeds LegacyGain exactly as the server passes state.rebirthCount.
     shop / shop_state are the LegacyShop config and the player's legacyShop
-    state; None means an empty shop (every helper returns its default)."""
+    state; None means an empty shop (every helper returns its default).
+    city is the CityDressing config; when given, result.tier_times records the
+    first second each growth tier is reached (the server republishes the tier
+    after every buy and level-up, so checking per purchase is exact)."""
     if shop is None:
         shop = {"version": 1, "perks": []}
     if shop_state is None:
@@ -569,6 +594,9 @@ def simulate_era(
     ips = 0.0
     t = 0
     last_purchase_t = 0
+    if city is not None:
+        thresholds = city["tier"]["thresholds"]
+        result.tier_times = [None] * len(thresholds)
 
     def record_wait():
         nonlocal last_purchase_t
@@ -577,6 +605,14 @@ def simulate_era(
         if t <= EARLY_WINDOW_SECONDS:
             result.longest_wait_early = max(result.longest_wait_early, wait)
         last_purchase_t = t
+
+    def record_tier():
+        if city is None:
+            return
+        score = city_growth_score(len(owned), sum(owned.values()), city["tier"]["ownedWeight"])
+        for index in range(city_growth_tier_for(score, thresholds)):
+            if result.tier_times[index] is None:
+                result.tier_times[index] = t
 
     while True:
         # Buy the cheapest affordable purchase, repeatedly, before the next tick.
@@ -604,6 +640,7 @@ def simulate_era(
                 frontier.extend(children.get(best_id, []))
                 if by_id[best_id]["type"] == "unlock":
                     result.unlock_beats.append((best_id, t))
+                record_tier()
                 if len(owned) == total_slots:
                     result.seconds = t
                     result.total_levels = sum(owned.values())
@@ -614,6 +651,7 @@ def simulate_era(
             else:
                 owned[best_id] += 1
                 result.level_buys += 1
+                record_tier()
             ips = income_per_second(owned, era, game, mults, milestones)
 
         if record_ips:
@@ -669,9 +707,27 @@ def print_era_result(result, check_band):
         f"  legacy gained     : +{result.legacy_gained}"
         f"  (total levels this era: {result.total_levels})"
     )
+    if result.tier_times is not None:
+        print(f"  city growth tiers : {tier_timeline_label(result, band)}")
     if check_band and band is not None:
         return band[0] <= result.seconds <= band[1]
     return True
+
+
+def tier_timeline_label(result, band):
+    """Each tier's first minute, as % of this run's completion and of the band
+    midpoint (the era's target duration); INTERFACES M9 targets tier 1 on the
+    first purchase, tier 3 by ~40 % and tier 5 by ~80 %."""
+    target = (band[0] + band[1]) / 2 if band is not None else None
+    bits = []
+    for index, reached in enumerate(result.tier_times):
+        if reached is None:
+            bits.append(f"T{index + 1} never")
+            continue
+        run_pct = 100 * reached / result.seconds if result.seconds > 0 else 0
+        target_note = f"/{100 * reached / target:.0f}%tgt" if target else ""
+        bits.append(f"T{index + 1} {fmt_time(reached)} ({run_pct:.0f}%run{target_note})")
+    return " | ".join(bits)
 
 
 def paid_label(paid):
@@ -700,7 +756,9 @@ def shop_label(shop, game):
     return f"legacy shop softcap {softcap} ({perks}), "
 
 
-def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=None):
+def run_full(
+    game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=None, city=None
+):
     """laps > 1 rebirths between laps (era -> 1, rebirthCount += 1, legacy kept),
     mirroring the RequestRebirth handler. The band check judges lap 1 only: the
     spec bands describe a first playthrough. Lap headers are printed only when
@@ -739,6 +797,7 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
                 rebirth_count,
                 shop.config if shop else None,
                 shop.state if shop else None,
+                city,
             )
             result.legacy_in_mult = legacy_mult(legacy, game)
             in_band = print_era_result(result, check and lap == 1)
@@ -778,7 +837,7 @@ def run_full(game, eras, strategy, check, paid=None, rebirth=0, laps=1, shop=Non
     return all_in_band
 
 
-def run_single(game, eras, era_index, legacy, strategy, paid=None, rebirth=0):
+def run_single(game, eras, era_index, legacy, strategy, paid=None, rebirth=0, city=None):
     era = next((e for e in eras if e["eraIndex"] == era_index), None)
     if era is None:
         print(f"error: no era config with eraIndex {era_index}", file=sys.stderr)
@@ -790,7 +849,7 @@ def run_single(game, eras, era_index, legacy, strategy, paid=None, rebirth=0):
         f"{f', rebirthCount={rebirth}' if rebirth else ''}"
     )
     print()
-    result = simulate_era(era, game, legacy, strategy, paid, False, rebirth)
+    result = simulate_era(era, game, legacy, strategy, paid, False, rebirth, city=city)
     result.legacy_in_mult = legacy_mult(legacy, game)
     print_era_result(result, False)
     return True
@@ -937,6 +996,7 @@ def main():
     eras = load_eras()
     monetization = load_monetization_config()
     legacy_shop = load_legacy_shop_config()
+    city = load_city_dressing_config()
 
     if args.softcap is not None:
         game["legacy"]["softcap"] = args.softcap if args.softcap > 0 else None
@@ -981,16 +1041,18 @@ def main():
         ):
             print("error: --check runs the default greedy playthrough only", file=sys.stderr)
             sys.exit(2)
-        ok = run_full(game, eras, "greedy", True, None, 0, args.laps)
+        ok = run_full(game, eras, "greedy", True, None, 0, args.laps, None, city)
         print()
         print("CHECK: " + ("PASS -- all eras in band" if ok else "FAIL -- era out of band"))
         sys.exit(0 if ok else 1)
 
     if args.era is not None:
-        ok = run_single(game, eras, args.era, args.legacy, args.strategy, paid, args.rebirth)
+        ok = run_single(
+            game, eras, args.era, args.legacy, args.strategy, paid, args.rebirth, city
+        )
         sys.exit(0 if ok else 2)
 
-    run_full(game, eras, args.strategy, False, paid, args.rebirth, args.laps, shop)
+    run_full(game, eras, args.strategy, False, paid, args.rebirth, args.laps, shop, city)
     sys.exit(0)
 
 

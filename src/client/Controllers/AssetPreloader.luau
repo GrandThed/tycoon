@@ -4,7 +4,9 @@
 -- renders grey and colours in a moment later. PreloadEra warms the era's content ahead of
 -- time from Assets.json; AwaitInstance lets PlotVisualsController hold a freshly replicated
 -- stage hidden until its actual MeshParts (which carry the server's VIP texture choice, not
--- necessarily the Assets.json image) are loaded. A utility module, not a controller: it has
+-- necessarily the Assets.json image) are loaded. M9: PreloadEra also warms the era's city
+-- dressing props (Assets.json v2 `props`), which the City modules gate the same way. A
+-- utility module, not a controller: it has
 -- no Init/Start and Main.client does not boot it.
 
 local ContentProvider = game:GetService("ContentProvider")
@@ -15,6 +17,9 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local ASSET_PREFIX = "rbxassetid://"
+-- Sort-key prefixes keeping buildings and props (independent name spaces) apart in one pass.
+local BUILDING_KEY_PREFIX = "b:"
+local PROP_KEY_PREFIX = "p:"
 
 -- Content strings already handed to ContentProvider this session. ContentProvider dedups on
 -- its own, but skipping here keeps repeat PreloadEra calls (every era/VIP change) free.
@@ -53,33 +58,62 @@ end
 
 local AssetPreloader = {}
 
+type ModelMap = { [string]: Types.AssetModel }
+
+-- Appends one map's models under a key prefix, so a prop and a building sharing a name (the
+-- two maps are independent namespaces) never collapse into one entry.
+local function collectModels(
+	into: { [string]: Types.AssetModel },
+	models: ModelMap?,
+	keyPrefix: string
+): ()
+	if type(models) ~= "table" then
+		return
+	end
+	for modelName, assetModel in models :: ModelMap do
+		if type(assetModel) == "table" and type(assetModel.stages) == "table" then
+			into[keyPrefix .. modelName] = assetModel
+		end
+	end
+end
+
 function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	local config = Catalog.GetAssetsConfig()
 	if config == nil then
 		return
 	end
-	local era = config.eras[eraName]
-	if era == nil then
-		return
-	end
+	-- Buildings and (Assets.json v2) city-dressing props share one pass; a v1 file has no
+	-- `props` key and simply contributes nothing.
+	local propsByEra = config.props
+	local eraProps: ModelMap? = if propsByEra ~= nil then propsByEra[eraName] else nil
+	local models: { [string]: Types.AssetModel } = {}
+	collectModels(models, config.eras[eraName], BUILDING_KEY_PREFIX)
+	collectModels(models, eraProps, PROP_KEY_PREFIX)
 
 	-- Sorted so the request order (and so what the player sees first) is deterministic.
-	local modelNames: { string } = {}
+	local modelKeys: { string } = {}
 	local stageCount = 0
-	for modelName, assetModel in era do
-		table.insert(modelNames, modelName)
+	for modelKey, assetModel in models do
+		table.insert(modelKeys, modelKey)
 		stageCount = math.max(stageCount, #assetModel.stages)
 	end
-	table.sort(modelNames)
+	if #modelKeys == 0 then
+		return
+	end
+	table.sort(modelKeys)
 
 	-- Textures first: one kit image colours many meshes, so it is the cheapest win.
 	local content: { string } = {}
 	local kits: { [string]: boolean } = {}
-	for _, modelName in modelNames do
-		for _, stage: Types.AssetStage in era[modelName].stages do
+	for _, modelKey in modelKeys do
+		-- Only buildings wear VIP skins; a prop-only kit's VIP image would never be shown.
+		local isBuilding = string.sub(modelKey, 1, #BUILDING_KEY_PREFIX) == BUILDING_KEY_PREFIX
+		for _, stage: Types.AssetStage in models[modelKey].stages do
 			for _, part in stage.parts do
 				queue(content, part.imageId)
-				kits[part.kit] = true
+				if isBuilding then
+					kits[part.kit] = true
+				end
 			end
 		end
 	end
@@ -93,8 +127,8 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	end
 	-- Meshes by stage: every stage 0 (what a fresh plot shows) before any later growth stage.
 	for stageIndex = 1, stageCount do
-		for _, modelName in modelNames do
-			local stage = era[modelName].stages[stageIndex]
+		for _, modelKey in modelKeys do
+			local stage = models[modelKey].stages[stageIndex]
 			if stage ~= nil then
 				for _, part in stage.parts do
 					queue(content, part.meshId)

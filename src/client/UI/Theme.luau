@@ -234,6 +234,16 @@ local Theme = {
 	-- this, so a failed or slow download shows grey rather than nothing.
 	ASSET_LOAD_TIMEOUT_SECONDS = 3,
 
+	-- M9 city dressing (CityDressingController + src/client/City). Client-owned names only;
+	-- every tunable lives in Config/CityDressing.json. The folder is created by the client and
+	-- is never inside the server's Workspace/Plots, so server watchers never see dressing.
+	CITY_DRESSING_FOLDER = "CityDressing",
+	CITY_PLOT_FOLDER_PREFIX = "Plot",
+	-- Startup waits for the first Snapshot so the local era's props preload before dressing,
+	-- but never longer than this: a snapshot consumed before our listener connected (or a
+	-- failed data load) must not leave every plot undressed.
+	CITY_SNAPSHOT_WAIT_SECONDS = 5,
+
 	-- M5: data-load safe-mode card (LoadScreen). The dim is lighter than a modal scrim
 	-- because the world stays playable behind it (spec section 5).
 	LOAD_CARD_WIDTH = 320,

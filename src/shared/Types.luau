@@ -252,6 +252,8 @@ export type AssetsConfig = {
 	version: number,
 	textures: { [string]: AssetTexture },
 	eras: { [string]: { [string]: AssetModel } },
+	-- v2 (M9): city-dressing props by era, then prop name; absent in v1 files.
+	props: { [string]: { [string]: AssetModel } }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.
@@ -315,7 +317,17 @@ export type SlotLayout = {
 	position: Vector3,
 	rotationY: number,
 	padPosition: Vector3?,
+	-- M9: hand-authored spur (pad edge → spine) used verbatim where auto-routing would cut
+	-- through something; studs relative to the plot centre.
+	spur: { Vector3 }?,
 }
+
+-- M9 street plan (docs/INTERFACES.md "Layouts"). Positions are studs relative to the plot
+-- centre at Y 0; rotationY follows the slot convention (front −Z).
+export type StreetLayout = { points: { Vector3 } }
+export type LotLayout = { position: Vector3, rotationY: number, tier: number }
+export type PlazaLayout = { position: Vector3, rotationY: number, tier: number, prop: string }
+export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
 
 export type EraLayout = {
 	plotSize: Vector3,
@@ -324,6 +336,73 @@ export type EraLayout = {
 	padOffset: number,
 	placeholderSize: Vector3,
 	slots: { [string]: SlotLayout },
+	-- M9 dressing: optional so a layout without a street plan stays valid (no dressing drawn).
+	streets: { StreetLayout }?,
+	lots: { LotLayout }?,
+	plazas: { PlazaLayout }?,
+	treeZones: { TreeZoneLayout }?,
+}
+
+-- CityDressing.json v1 mirror (M9); field names follow the JSON keys exactly. JSON null props
+-- arrive as absent keys, hence the optional prop fields: absent means "feature off".
+export type CityTierConfig = { ownedWeight: number, thresholds: { number } }
+export type CityLodConfig = {
+	nearRadius: number,
+	hysteresis: number,
+	vehiclePlots: number,
+	refreshSeconds: number,
+}
+export type CityRoadConfig =
+	{ thickness: number, laneOffsetFraction: number, spineTierStep: number }
+-- roadClearance is added to road.width / 2 when rejecting tree spots near a centreline;
+-- footprintMargin grows every slot/pad/lot/plaza footprint a tree spot must stay outside.
+export type CityTreesConfig = {
+	stages: number,
+	edgeMargin: number,
+	roadClearance: number,
+	footprintMargin: number,
+}
+-- Per-plot part ceilings from the M9 contract (vehiclesMap is whole-map).
+export type CityBudgetConfig = {
+	roadPieces: number,
+	fillerPieces: number,
+	trees: number,
+	vehiclesPerPlot: number,
+	vehiclesMap: number,
+}
+export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
+export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
+-- `material` is an Enum.Material name; `color` is RGB 0-255.
+export type CityEraRoadConfig = {
+	width: number,
+	material: string,
+	color: { number },
+	junctionProp: string?,
+	bendProp: string?,
+}
+export type CityEraTreesConfig = { maxCount: number, clearance: number, prop: string? }
+export type CityEraPropsConfig = { props: { string } }
+export type CityEraLampsConfig = { prop: string? }
+export type CityEraVehiclesConfig = { props: { string }, perPlot: number, speed: number }
+export type CityEraDressingConfig = {
+	road: CityEraRoadConfig,
+	trees: CityEraTreesConfig,
+	houses: CityEraPropsConfig,
+	plazas: CityEraPropsConfig,
+	lamps: CityEraLampsConfig,
+	vehicles: CityEraVehiclesConfig,
+}
+export type CityDressingConfig = {
+	version: number,
+	tier: CityTierConfig,
+	lod: CityLodConfig,
+	road: CityRoadConfig,
+	budget: CityBudgetConfig,
+	trees: CityTreesConfig,
+	lamps: CityLampsConfig,
+	vehicles: CityVehiclesConfig,
+	-- Keyed by era `name`; a missing era means no dressing for it.
+	eras: { [string]: CityEraDressingConfig },
 }
 
 return {}

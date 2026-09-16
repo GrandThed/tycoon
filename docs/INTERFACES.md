@@ -2063,6 +2063,25 @@ the two city eras; Orbital has 6-stud metal roads, no trees, a `Rover` only if s
 - `material` is an `Enum.Material` name; `color` is RGB 0–255. Every `*Prop`/`props` entry is a
   prop name under `Assets.json.props.<Era>`; `null` or a missing template means "feature off".
 - `tier.thresholds` has exactly 5 entries (tiers 1–5); economy-designer tunes them (below).
+- Lead amendment (wave 1): `"budget": { "roadPieces": 60, "fillerPieces": 25, "trees": 40,
+  "vehiclesPerPlot": 6, "vehiclesMap": 20 }` holds the part ceilings from Principles, and
+  `trees.roadClearance: 2` is the extra clearance beyond `width / 2`, so neither lives in code.
+  `trees.footprintMargin: 1`: tree spots are also rejected inside every slot, pad, lot and plaza
+  footprint (from `Assets.json` part bounds) grown by this margin.
+- Budgets count **placed pieces** (one Part or one cloned prop model), not MeshParts; a two-kit
+  prop is one piece. `lod.refreshSeconds` must be ≥ 0.1 (the LOD pass is not a per-frame step).
+- Ben 2026-09-16 (wave 1 tuning): `tier.ownedWeight` 10 → **50**, `tier.thresholds` →
+  **[50, 400, 950, 1350, 1600]** (v1 never reached tier 5; the sim timeline is in `docs/BALANCE.md`).
+
+**Street-plan amendments (Ben, 2026-09-16, wave 1).** Boomtown's main street at x = 0 is exactly one
+road wide between the storefront pads and holds the median road-piece slots, so the strict rules
+left 9 slots unreachable:
+- **P1:** a spine may cover the slots whose model is itself a road piece (Boomtown
+  `paveMainStreet`, `streetlampRow`, `trafficLights`) and their pads; every other clearance rule
+  stays strict.
+- **P2:** a `spur` override with exactly **one** point means "no spur for this slot": no Part, no
+  junction, no lamp, no graph edge. Used where the building already sits on or against a road.
+`tools/streetplan.py` checks these rules by default.
 - Ben's "city detail" setting (wave 2) halves `trees.maxCount`, disables lamps and restricts
   vehicles to the local plot; no extra config key is needed for that.
 
@@ -2081,7 +2100,7 @@ purchase, tier 3 by ~40 % and tier 5 by ~80 % of the era's target duration in `d
 
 ## Server behaviour (luau-engineer) — attributes only
 
-- On the **plot folder** (`Workspace/Plots/<n>`, the parent of `Buildings`; not the Base, so the
+- On the **plot folder** (`Workspace/Plots/Plot_<n>`, the parent of `Buildings`; not the Base, so the
   client has one place to watch): `EraName: string` (the era config `name`) and
   `GrowthTier: number` (0–5). Set both whenever the plot is configured for an era (claim, load,
   advance, rebirth) and `GrowthTier` after every buy, level-up and rebuild path that changes

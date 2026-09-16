@@ -1,13 +1,13 @@
 {
   "version": 1,
   "tier": {
-    "ownedWeight": 10,
+    "ownedWeight": 50,
     "thresholds": [
-      10,
-      80,
-      250,
-      600,
-      1200
+      50,
+      400,
+      950,
+      1350,
+      1600
     ]
   },
   "lod": {
@@ -21,9 +21,18 @@
     "laneOffsetFraction": 0.25,
     "spineTierStep": 1
   },
+  "budget": {
+    "roadPieces": 60,
+    "fillerPieces": 25,
+    "trees": 40,
+    "vehiclesPerPlot": 6,
+    "vehiclesMap": 20
+  },
   "trees": {
     "stages": 4,
-    "edgeMargin": 3
+    "edgeMargin": 3,
+    "roadClearance": 2,
+    "footprintMargin": 1
   },
   "lamps": {
     "firstTier": 3,

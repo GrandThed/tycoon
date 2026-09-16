@@ -32,6 +32,7 @@ local cachedEraCount: number? = nil
 local cachedMonetizationConfig: Types.MonetizationConfig? = nil
 local cachedLegacyShopConfig: Types.LegacyShopConfig? = nil
 local cachedAssetsConfig: Types.AssetsConfig? = nil
+local cachedCityDressingConfig: Types.CityDressingConfig? = nil
 
 local Catalog = {}
 
@@ -148,6 +149,23 @@ function Catalog.GetAssetsConfig(): Types.AssetsConfig?
 	end
 	cached = require(assetsModule) :: Types.AssetsConfig
 	cachedAssetsConfig = cached
+	return cached
+end
+
+-- CityDressing.json (M9) is optional in the same sense as Assets.json: nil disables the client
+-- dressing controller and pins every plot's GrowthTier to 0. Re-checked per call until the
+-- module shows up, cached from then on.
+function Catalog.GetCityDressingConfig(): Types.CityDressingConfig?
+	local cached = cachedCityDressingConfig
+	if cached ~= nil then
+		return cached
+	end
+	local dressingModule = configFolder:FindFirstChild("CityDressing")
+	if dressingModule == nil or not dressingModule:IsA("ModuleScript") then
+		return nil
+	end
+	cached = require(dressingModule) :: Types.CityDressingConfig
+	cachedCityDressingConfig = cached
 	return cached
 end
 

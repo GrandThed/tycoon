@@ -562,3 +562,69 @@ py tools/sim_economy.py --perks levelFloor=2 --strategy rusher         # Level F
 py tools/sim_economy.py --perks auto --laps 2 --strategy rusher
 py tools/gen_asset_manifest.py --check                                 # era configs still valid
 ```
+
+---
+
+# M9 — City growth tiers
+
+`py tools/sim_economy.py` now mirrors `CityGrowth.Score` (`owned × ownedWeight + Σ levels`) and
+`CityGrowth.TierFor` (count of thresholds ≤ score) 1:1, reading `tier` from
+`src/shared/Config/CityDressing.json`. Every era line gains `city growth tiers`: the first second
+the greedy player reaches each tier 1–5. The line shows it as a % of that run's completion (`run`)
+and of the band midpoint in spec §4 (`tgt`). The score is re-evaluated after every slot buy and
+level-up, which is exactly when the server republishes `GrowthTier`. Nothing else in the output
+moved, and `--check` still passes.
+
+Tuning target (INTERFACES M9): tier 1 on the first purchase, tier 3 by ~40 % and tier 5 by ~80 %
+of the era.
+
+## Applied (Ben, 2026-09-16): `ownedWeight 50`, thresholds `[50, 400, 950, 1350, 1600]`
+
+Lap 1 greedy, % of the run:
+
+| Era | length | T1 | T2 | T3 | T4 | T5 |
+|-----|--------|----|----|----|----|----|
+| Village | 41:50 | 0:00 | 7:16 (17 %) | 18:18 (44 %) | 29:30 (71 %) | 36:33 (87 %) |
+| Boomtown | 1:44:15 | 0:00 | 2:03 (2 %) | 15:18 (15 %) | 39:52 (38 %) | 1:13:48 (71 %) |
+| Metropolis | 4:28:49 | 0:00 | 2:44 (1 %) | 35:53 (13 %) | 1:48:30 (40 %) | 3:23:13 (76 %) |
+| OrbitalColony | 9:25:10 | 0:00 | 4:54 (1 %) | 1:14:58 (13 %) | 3:47:47 (40 %) | 7:06:20 (75 %) |
+
+## Why v1 was replaced
+
+v1 was `ownedWeight 10`, thresholds `[10, 80, 250, 600, 1200]`:
+
+| Era | T1 | T2 | T3 | T4 | T5 |
+|-----|----|----|----|----|----|
+| Village | 0:00 | 3:51 (9 %) | 8:27 (20 %) | 23:43 (57 %) | never |
+| Boomtown | 0:00 | 0:19 (0 %) | 3:04 (3 %) | 24:35 (24 %) | never |
+| Metropolis | 0:00 | 0:02 (0 %) | 3:35 (1 %) | 1:03:13 (24 %) | never |
+| OrbitalColony | 0:00 | 0:01 (0 %) | 6:41 (1 %) | 2:11:48 (23 %) | never |
+
+- **Tier 5 was unreachable.** An era ends at a score of 921 (Village) to 1055 (Boomtown), below
+  1200, so the last spine, the last lots and every tree's final stage never showed. Tiers 2–3 also
+  landed in the first minutes of Eras 2–4.
+- **The first purchase still lands tier 1.** It scores `ownedWeight + 1`, so `T1 = ownedWeight` is
+  reached on the first purchase in every era.
+- **Tier 5 is now reachable everywhere, at 71–87 %.**
+- **A heavier owned weight is the lever.** Slot purchases are spread across an era by their costs,
+  while level-ups bunch up in the early minutes of Eras 2–4. A grid search over weights 10–1000
+  (fitting each threshold to the target across all four eras) improves up to about 50 and flattens
+  after that. At weight 10 the best global fit still puts Village tier 5 at 96 %.
+- **The residual miss is structural.** With one global list, Village (no Legacy) and Eras 2–4
+  (Legacy carried) climb the score curve at different rates. Tier 3 lands at 44 % in Village but
+  13–15 % later. The early tiers only add roads, lots and saplings, so arriving early in later eras
+  reads as "a returning mayor builds fast" and is acceptable.
+- **Per-era thresholds: considered and deferred.** `eras.<Era>.tier.thresholds` at weight 10 would
+  hit the target almost exactly (Village `[10, 235, 460, 610, 740]`, Boomtown
+  `[10, 560, 740, 810, 935]`, Metropolis/Orbital `[10, 560, 730, 790, 915]`). It needs a schema and
+  `CityGrowth` caller change, so Ben kept one global list.
+- Laps 2+ compress all of this proportionally. Tiers are cosmetic, so nothing gates on them.
+
+## Commands used
+
+```
+py tools/sim_economy.py                  # tier timeline on every era line
+py tools/sim_economy.py --check          # bands still pass, exits 0
+py tools/sim_economy.py --laps 2         # tier timeline per lap
+py tools/streetplan.py                   # street plans vs clearance rules (P1/P2), PNGs per era
+```

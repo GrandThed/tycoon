@@ -19,6 +19,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CityGrowth = require(sharedFolder:WaitForChild("CityGrowth"))
 local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
@@ -37,6 +38,10 @@ local TEMPLATE_BASE_NAME = "Base"
 -- the client's particle/float-text origin hang here, so neither sits at the building's feet.
 local PROMPT_ANCHOR_NAME = "PromptAnchor"
 local ASSET_ID_PREFIX = "rbxassetid://"
+-- M9 plot-folder attributes (docs/INTERFACES.md "Server behaviour — attributes only"): the whole
+-- server side of city dressing; clients derive everything else from them.
+local ERA_NAME_ATTRIBUTE = "EraName"
+local GROWTH_TIER_ATTRIBUTE = "GrowthTier"
 
 type PlotRecord = {
 	index: number,
@@ -82,6 +87,55 @@ local function getEraMaps(eraConfig: Types.EraConfig): EraMaps
 	local maps: EraMaps = { slotsById = slotsById, effectiveRequires = effectiveRequires }
 	eraMapsCache[eraConfig.eraIndex] = maps
 	return maps
+end
+
+-- Buys and level-ups recompute the tier far more often than it changes, so compare first rather
+-- than sending a property write per purchase to every client.
+local function setAttributeIfChanged(instance: Instance, name: string, value: string | number): ()
+	if instance:GetAttribute(name) ~= value then
+		instance:SetAttribute(name, value)
+	end
+end
+
+-- Owned count and level sum over the era's own slots, exactly as tryAdvanceEra/tryRebirth total
+-- totalLevelsThisEra, so a stale slot id left in a profile never inflates the tier.
+local function growthTierFor(state: Types.PlayerState, eraConfig: Types.EraConfig): number
+	local dressing = Catalog.GetCityDressingConfig()
+	if dressing == nil then
+		return 0
+	end
+	local ownedCount = 0
+	local totalLevels = 0
+	for _, slot in eraConfig.slots do
+		local owned = state.slots[slot.id]
+		if owned ~= nil then
+			ownedCount += 1
+			totalLevels += owned.level
+		end
+	end
+	local score = CityGrowth.Score(ownedCount, totalLevels, dressing.tier.ownedWeight)
+	return CityGrowth.TierFor(score, dressing.tier.thresholds)
+end
+
+-- Both attributes for a claimed plot; a missing era config (already warned about by the caller)
+-- leaves them as they were rather than publishing a name no layout matches.
+local function publishCityAttributes(record: PlotRecord, state: Types.PlayerState): ()
+	local eraConfig = Catalog.GetEraConfig(state.era)
+	if eraConfig == nil then
+		return
+	end
+	setAttributeIfChanged(record.folder, ERA_NAME_ATTRIBUTE, eraConfig.name)
+	setAttributeIfChanged(record.folder, GROWTH_TIER_ATTRIBUTE, growthTierFor(state, eraConfig))
+end
+
+-- Unclaimed plots read as a bare first-era plot. The name comes from era 1's config (the lobby
+-- era, Village) rather than a literal; buildWorld builds no plots without that config.
+local function publishLobbyAttributes(record: PlotRecord): ()
+	local firstEra = Catalog.GetEraConfig(FIRST_ERA_INDEX)
+	if firstEra ~= nil then
+		setAttributeIfChanged(record.folder, ERA_NAME_ATTRIBUTE, firstEra.name)
+	end
+	setAttributeIfChanged(record.folder, GROWTH_TIER_ATTRIBUTE, 0)
 end
 
 local function sendFailure(
@@ -601,6 +655,7 @@ local function tryLevelUp(player: Player, slotId: string, count: number): ()
 	-- Swap before MarkDirty/FX so the new Stage<n> replicates ahead of the events (as the
 	-- reveal does for the whole building).
 	local newStage = swapStage(record, slot, eraConfig.name, state, fromLevel, slotState.level)
+	publishCityAttributes(record, state)
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
 	AnalyticsService.LogCashSink(player, charged, state.cash, `level:{eraConfig.name}:{slotId}`)
 	fireFx(player, {
@@ -961,6 +1016,8 @@ function tryBuy(player: Player, slotId: string): ()
 		spawnBuilding(record, slot, eraConfig.name, layout, state)
 		refreshPads(record, state, eraConfig, layout)
 	end
+	-- After the spawn so the client sees Building_<slotId> (its spur) no later than the new tier.
+	publishCityAttributes(record, state)
 	EconomyService.MarkDirty(player, { cash = true, income = true, slotIds = { slotId } })
 	AnalyticsService.LogCashSink(player, charged, state.cash, `slot:{eraConfig.name}:{slotId}`)
 	-- After spawn + MarkDirty so the Building_<slotId> instance replicates ahead of the event.
@@ -1017,7 +1074,7 @@ end
 -- bulk restore of owned buildings WITHOUT tweens/sounds (M2 contract: 24 reveal effects on a
 -- rejoin would be noise, and M3 owns reveal presentation anyway). Serves both the claim path
 -- (state.slots populated from persistence) and era changes (state.slots freshly emptied).
-local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): ()
+local function rebuildPlotContents(record: PlotRecord, state: Types.PlayerState): ()
 	clearPlotContents(record)
 	local eraConfig = Catalog.GetEraConfig(state.era)
 	if eraConfig == nil then
@@ -1044,6 +1101,14 @@ local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): 
 		end
 	end
 	refreshPads(record, state, eraConfig, layout)
+end
+
+-- Every era (re)configuration — claim, cosmetic refresh, advance, rebirth — ends here, so the
+-- M9 attributes cannot be skipped by a new caller. Published after the buildings exist so a
+-- client rebuilding on an EraName change already sees them; also on a bare (layout-less) plot.
+local function rebuildPlotForEra(record: PlotRecord, state: Types.PlayerState): ()
+	rebuildPlotContents(record, state)
+	publishCityAttributes(record, state)
 end
 
 -- Inheritance (M6): cash worth the first N slots of the era just entered, granted after the
@@ -1332,20 +1397,23 @@ local function buildWorld(): ()
 		)
 		signBillboard.Parent = sign
 		sign.Parent = plotFolder
-		plotFolder.Parent = plotsFolder
 
-		table.insert(plots, {
+		local record: PlotRecord = {
 			index = index,
 			folder = plotFolder,
 			base = base,
 			buildingsFolder = buildingsFolder,
 			padsFolder = padsFolder,
 			signBillboard = signBillboard,
-			owner = nil :: Player?,
+			owner = nil,
 			connections = {},
 			padTouchLast = {},
 			prompts = {},
-		})
+		}
+		-- Before parenting, so clients never observe a plot without its attributes.
+		publishLobbyAttributes(record)
+		plotFolder.Parent = plotsFolder
+		table.insert(plots, record)
 	end
 end
 
@@ -1414,6 +1482,7 @@ function PlotService.Release(player: Player): ()
 	record.owner = nil
 	clearPlotContents(record)
 	clearSign(record)
+	publishLobbyAttributes(record)
 end
 
 function PlotService.Init(): ()
