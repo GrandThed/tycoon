@@ -245,7 +245,7 @@ Nothing is imported by hand. Buildings are **assembled from Kenney kit pieces an
   `src/shared/Config/Assets.json`; the upload tool is idempotent.
 - **Templates:** a generator turns `Assets.json` into `.rbxmx` files that Rojo maps into
   `ServerStorage/Assets/<EraName>/<modelName>`: a Model with an invisible base `PrimaryPart` at
-  bottom-centre and `Stage0`…`Stage4` MeshParts, all `Anchored`, `CanCollide` only on the base.
+  bottom-centre and `Stage0`…`Stage4` MeshParts, all `Anchored`; MeshParts collide (box fidelity), the base does not.
   (`MeshId` is not scriptable, so templates must be files.) `modelName` in config **must equal**
   the template name; PascalCase, no spaces.
 - **Runtime:** the server shows the stage for the slot's level, swaps stages on milestone with
