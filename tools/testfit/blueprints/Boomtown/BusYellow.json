@@ -1,0 +1,24 @@
+{
+  "id": "BusYellow",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0.5, 0.0, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0.5, 0.0, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.9, 0.005, 0.3], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.9, 0.125, 0.3], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.9, 0.245, 0.3], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.1, 0.005, 0.72], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [-0.1, 0.505, 0.72], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.1, 0.005, -0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [-0.1, 0.505, -0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, 0.958, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [-0.65, 0.005, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [-0.65, 0.005, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.1, 0.005, -0.85], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [-0.1, 0.505, -0.85], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.1, 0.98, -0.85], "rotY": 0, "stage": 0}
+  ]
+}

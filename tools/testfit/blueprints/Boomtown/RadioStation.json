@@ -1,0 +1,33 @@
+{
+  "id": "RadioStation",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-n", "pos": [0.56, 0.0, -0.185], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 0.0, 0.82], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 0.0, 0.82], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 0.525, 0.82], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 0.525, 0.82], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 1.05, 0.82], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 1.05, 0.82], "rotY": 90, "stage": 1},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.85, 0.0, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-industrial", "model": "building-f", "pos": [0.225, 0.0, 0.235], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 1.575, 0.82], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 1.575, 0.82], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 2.1, 0.82], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 2.1, 0.82], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 2.625, 0.82], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 2.625, 0.82], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 3.15, 0.82], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 3.15, 0.82], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-industrial", "model": "solar-panel-flat", "pos": [0.45, 0.5, 0.1], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 3.675, 0.82], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 3.675, 0.82], "rotY": 90, "stage": 4},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 4.2, 0.82], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "electricity-pole", "pos": [0.84, 4.2, 0.82], "rotY": 90, "stage": 4},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.84, 3.6, 0.82], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.84, 4.1, 0.82], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.84, 4.6, 0.82], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [0.84, 5.1, 0.82], "rotY": 0, "stage": 4}
+  ]
+}

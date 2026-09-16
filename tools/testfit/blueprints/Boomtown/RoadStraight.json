@@ -1,0 +1,9 @@
+{
+  "id": "RoadStraight",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-side", "pos": [0.155, 0.0, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-side", "pos": [0.155, 0.0, 0.5], "rotY": 90, "stage": 0}
+  ]
+}

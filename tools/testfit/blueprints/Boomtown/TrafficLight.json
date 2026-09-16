@@ -1,0 +1,20 @@
+{
+  "id": "TrafficLight",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-crossroad", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.75, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [-0.75, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.0, 0.0, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [0.0, 0.0, -0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.6, 0.0, -0.6], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [0.6, 0.5, -0.6], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.6, 0.0, -0.6], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [-0.6, 0.5, -0.6], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.6, 0.0, 0.6], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [-0.6, 0.5, 0.6], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.6, 0.0, 0.6], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [0.6, 0.5, 0.6], "rotY": 0, "stage": 0}
+  ]
+}
