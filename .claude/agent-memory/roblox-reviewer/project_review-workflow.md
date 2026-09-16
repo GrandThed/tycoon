@@ -210,3 +210,16 @@ trailing coalesce (Config constant), not a token bucket that drops the last opti
   for the PreloadAsync round-trip even with warm cache — any future gate should skip parts whose
   `ContentProvider:GetAssetFetchStatus` is already Success. Buildings folder persists across
   rebuilds (`ClearAllChildren`), so one ChildAdded per plot is the correct lifetime.
+
+**M9 baseline (2026-09-16, city dressing, SHIP with Majors — client-only cosmetics).** Load-bearing:
+- Server side is ONLY `PlotService.publishCityAttributes` (buy, levelUp, `rebuildPlotForEra` wrapper =
+  claim/RefreshCosmetics/advance/rebirth) + `publishLobbyAttributes` (buildWorld before parenting, Release).
+  Any new slot/level mutator must call it. `setAttributeIfChanged` avoids per-buy writes.
+- Client: `CityDressingController` deferred per-plot `sync`; `PropFactory.Seal` is the single collision
+  choke point (roadPart + Spawn); `Traffic` one Heartbeat, BulkMoveTo in pcall, disconnects at 0 vehicles.
+  Budgets allocated up front from layout (RoadGraph.allocate, Scatter.Plan), so growth order never matters.
+- `globIgnorePaths: ["templates/_props"]` verified empirically (scratch copy + fake prop): props appear
+  only under ReplicatedStorage.Assets.Props; ignore filters children of dir walks, not a `$path` root.
+- **Recurring pattern (M9):** client code that reconciles against replicated server children must not
+  treat a *transient* missing child as a teardown signal — server full rebuilds (RefreshCosmetics) replicate
+  in chunks across frames. Recheck any "child gone → clear everything" logic.

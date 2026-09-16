@@ -67,6 +67,21 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 23 | `WallGate` | Raise the Town Wall | unlock | yes | castle-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 24 | `CastleKeep` | Castle Keep | monument | yes | castle-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
+### Props — Village
+
+Blueprints: `tools/testfit/blueprints/_props/Village/` -- templates: `templates/_props/Village/` -- in game: `ReplicatedStorage/Assets/Props/Village/`
+
+Summary: 6/6 blueprints, 6/6 uploaded, 0/6 harvested, 0/6 templated
+
+| # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
+|---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
+| 1 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 2 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 3 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 4 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 5 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 6 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 0/4 | — |
+
 ## Era 2 — Boomtown
 
 Blueprints: `tools/testfit/blueprints/Boomtown/` -- templates: `templates/Boomtown/` -- in game: `ServerStorage/Assets/Boomtown/`
@@ -99,6 +114,27 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 22 | `FireStation` | Fire Station | building | yes | city-kit-industrial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 23 | `NeonSign` | Light the Neon District | unlock | yes | city-kit-industrial, city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 24 | `ClockTower` | Clock Tower | monument | yes | city-kit-industrial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+
+### Props — Boomtown
+
+Blueprints: `tools/testfit/blueprints/_props/Boomtown/` -- templates: `templates/_props/Boomtown/` -- in game: `ReplicatedStorage/Assets/Props/Boomtown/`
+
+Summary: 12/12 blueprints, 12/12 uploaded, 0/12 harvested, 0/12 templated
+
+| # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
+|---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
+| 1 | `Bend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
+| 2 | `HouseA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 3 | `HouseB` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 4 | `HouseC` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 5 | `HouseD` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 6 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
+| 7 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
+| 8 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 9 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 0/4 | — |
+| 10 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 11 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 12 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
 
 ## Era 3 — Metropolis
 

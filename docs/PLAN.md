@@ -25,6 +25,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
 - [x] M7 — Growing buildings: pipeline + Village (review SHIP after two Warnings fixed, QA green;
   all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
+- [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
+  contracts, layouts, pipeline, blueprints, client and prop uploads shipped 2026-09-16; the
+  harvest paste, templates and Ben's Studio playtest are still open — see "M9" below; wave 2
+  (Metropolis/OrbitalColony + `cityDetail`) not started)
 
 ---
 
@@ -626,6 +630,28 @@ junctions, lamps and four cars; nothing blocks the player or a prompt; deleting 
 template leaves the game playable; era advance rebuilds; the map stays within the part budget and
 the traffic step under 0.2 ms; format, lint, build, `gen_templates.py --check` and the sim are
 clean.
+
+**Shipped (wave 1, 2026-09-16):** contracts (`docs/INTERFACES.md` "M9 contracts", incl. the
+`tier.ownedWeight`/`thresholds` retune and the P1/P2 street-plan amendments); `CityGrowth.luau`
+(pure score/tier) and its `sim_economy.py` mirror with a per-era tier timeline in
+`docs/BALANCE.md`; `PlotService` publishing `EraName`/`GrowthTier` attributes on every plot
+folder; Village and Boomtown street/lot/plaza/tree-zone layouts (`tools/streetplan.py`-checked);
+the client stack (`RoadGraph`, `Scatter`, `Traffic`, `CityDressingController`) built and gated on
+a missing `CityDressing.json`; the `--props` pipeline mode (`merge_stages.py`, `upload_models.py`,
+`harvest.py`, `gen_templates.py`) and `Assets.json` v2; Village prop blueprints (growing pine, 3
+filler cottages, plaza, cart) and Boomtown prop blueprints (tree, 4 filler houses, pocket park,
+junction, bend, lamp, 3 vehicles), all uploaded to Open Cloud (24 stages). Reviewer verdict SHIP,
+QA green (stylua/selene/luau-lsp/`rojo build`/`sim_economy.py --check`).
+
+**Carried forward (owners assigned):**
+- **Ben, before playtest:** the one Studio harvest paste (`docs/MANUAL_STEPS.md` M9) covers both
+  eras' uploaded prop stages; run it, then `gen_templates.py --props` and commit the templates —
+  `docs/PLAYTEST.md` "M9" cannot be run until they exist.
+- **Ben, after templates land:** run `docs/PLAYTEST.md` "M9 — City dressing" in Studio; this ticks
+  M9 `[x]` above once passed.
+- **lead / economy-designer, wave 2:** Metropolis and Orbital Colony street plans + prop
+  blueprints (after M8's Metropolis/Orbital buildings ship) and the persisted `cityDetail` setting
+  — contracts already frozen in INTERFACES, not started.
 
 **Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
 base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.

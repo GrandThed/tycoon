@@ -1518,3 +1518,218 @@ These are recorded, accepted issues — check they look the way described, don't
       VIP skins, and 375×667 mobile emulation.
 - [ ] 29. Tell Claude Code "M8 Boomtown assets playtest passed" (or report the exact failure and
       step number).
+
+---
+
+## M9 — City dressing (roads, trees, filler, squares, vehicles)
+
+**Goal:** plots read as a growing town, not 24 buildings on a lawn — roads connect what you own,
+trees grow with the city, filler houses and a square fill the gaps, and a few vehicles move along
+the roads. Everything here is **client-side cosmetics**: the server only publishes `EraName` and
+`GrowthTier` (0–5) attributes; nothing about it is persisted or validated, so two players can see
+different vehicle positions on the same plot and that's fine. `docs/BALANCE.md` "M9 — City growth
+tiers" has the tier-timeline numbers if you want to cross-check pacing.
+
+**Before you start:** run the M9 pipeline steps in `docs/MANUAL_STEPS.md` "M9 — City dressing" —
+the harvest paste and `gen_templates.py --props` must be done, or every prop (trees, houses,
+plaza, vehicles) will be silently absent (roads still draw; see section 8 below for why that's
+the expected degrade, not a bug, if you skip this).
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). Regenerate the sourcemap before
+      any `luau-lsp analyze` run: `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security).
+
+### 2. Growth tiers on a fresh Village plot
+
+- [ ] 3. Press Play on a fresh save. Before buying anything, select your plot in Explorer
+      (`Workspace/Plots/Plot_<n>`, `<n>` matches your `PlotIndex` — check your player's
+      Attributes if unsure) and open its **Attributes**. Confirm `GrowthTier` reads `0` and
+      `EraName` reads `Village`. Walk the plot: bare ground, no roads, no trees, no houses.
+- [ ] 4. Buy the first (free) slot. Within a second or two confirm `GrowthTier` ticks up to `1` on
+      the plot's Attributes, a short dirt-coloured road spur appears from the new building out to
+      a road segment, and the first spine segment (the road "into town" toward the monument) is
+      visible.
+- [ ] 5. Add the `GrantCash` Workspace attribute (same lever as M7/M8 — Workspace → Attributes →
+      **+** → `GrantCash`, type number, a large value) and use the Build panel's ×1/×10/Max
+      buttons to buy and level slots. Re-check `GrowthTier` after a few buys/levels — it should
+      keep climbing (never jump backward) as you re-add `GrantCash` and spend it. Push it all the
+      way to `5`. (Pacing note: per `docs/BALANCE.md`, a *real* greedy playthrough reaches tier 5
+      around minute 36 of Village — `GrantCash` is what makes this a two-minute check instead.)
+
+### 3. Tier 5 Village — the full look
+
+- [ ] 6. With `GrowthTier` at `5` and your plot **near** the camera (stand on it), confirm: a
+      network of dirt-coloured road spurs and the full spine connect your owned buildings, up to
+      **40 trees** are scattered around the plot (some short/young, some tall/full — trees grow in
+      stages as the tier rises, so don't expect all 40 at full height if you just jumped to tier 5
+      quickly), a few **filler cottages** sit along the roads that are not buy-pad buildings, one
+      **plaza** (small square/gathering-spot prop), and **two carts** are visibly moving along the
+      roads.
+- [ ] 7. Watch a cart for 10–15 seconds: confirm it moves continuously along the road network and
+      turns (not just at the same spot), and that it never clips through a building.
+
+### 4. Boomtown — asphalt, kit pieces, cars
+
+- [ ] 8. Get a plot to Boomtown (Advance Era from a completed Village plot, or rebirth — same as
+      M8 section 2) and repeat the `GrantCash` push to `GrowthTier` 5.
+- [ ] 9. Confirm the roads are **grey asphalt**, not dirt, and that kit **junction**/**bend**
+      pieces sit at road corners and T-junctions — walk along a junction and confirm the piece
+      lines up with the road edges (no visible gap, no floating piece, no z-fighting/flickering
+      where two surfaces overlap) and that a junction piece never appears at a straight, non-T
+      point on the road.
+- [ ] 10. Confirm **lamp posts** appear once `GrowthTier` reaches 3 (not before), and up to **four
+      cars** (not carts) move along the roads.
+- [ ] 11. Walk down **main street** (the road running through the middle of the plot, x = 0):
+      confirm the spine passes directly over the **Pave Main Street** and **Streetlamp Row**
+      slots — those two are road-piece buildings that sit *on* the road itself, so the road should
+      run through/over them, not curve around them.
+- [ ] 12. Confirm **Bank**, **Radio Station**, **Pave Main Street**, and **Streetlamp Row** have
+      **no driveway spur** connecting them sideways to the street (they sit directly against/on
+      the road already) — every other owned building should have its own short spur.
+
+### 5. No collisions — walk through everything
+
+- [ ] 13. On either plot at tier 5: walk **through** a tree, **through** a filler house, and
+      **through** a moving vehicle. Confirm your character passes through all three with no
+      bump/stop.
+- [ ] 14. Walk **over** a road tile and a junction/lamp piece — confirm no bump, no rising up onto
+      the geometry, just flat ground-level walking.
+- [ ] 15. Stand so a tree or filler house is between you and one of your buy pads/owned buildings,
+      then tap the ProximityPrompt through it — confirm the prompt still triggers (it isn't
+      blocked by the dressing in front of it).
+- [ ] 16. In Explorer, expand `Workspace/CityDressing/Plot<n>` (note: no underscore, unlike
+      `Plots/Plot_<n>`) and spot-check a road Part, a tree model's parts, a filler house's parts,
+      and (Boomtown) a vehicle's parts: Properties should show **`CanCollide` false, `CanQuery`
+      false, `CanTouch` false, `Anchored` true** on all of them.
+
+### 6. Other players see the same dressing
+
+- [ ] 17. **Test → Start** with **2 Players** (Local Server mode). Get both players' plots to
+      `GrowthTier` 5 (Village or Boomtown, your choice, can be different eras). As Player 2, look
+      at Player 1's plot: confirm the roads, trees (same growth stages), filler houses, and plaza
+      look **identical** to what Player 1 sees on their own client. Vehicle positions may differ
+      between the two clients — that's expected, not a bug.
+- [ ] 18. Stop Play.
+
+### 7. LOD — far plots simplify
+
+- [ ] 19. Single-player Play, plot at tier 5 with trees/lamps/vehicles visible. Fly the camera
+      (or walk) more than **~290 studs** away from the plot (past `lod.nearRadius` 250 +
+      `hysteresis` 40). Confirm trees, lamps, and vehicles **disappear** from that plot, while
+      roads, junctions, houses, and the plaza **stay**.
+- [ ] 20. Move back within range. Confirm trees, lamps, and vehicles **reappear** within a second
+      or two (no need to wait long — the LOD check runs every `lod.refreshSeconds`, 0.5s).
+
+### 8. MicroProfiler — vehicle movement cost
+
+- [ ] 21. Get 3 plots near the camera to `GrowthTier` 5 (so vehicles are active on all three —
+      `lod.vehiclePlots` is 3). Press **Ctrl+F6** to open the MicroProfiler.
+- [ ] 22. In the profiler, find the **client thread's Heartbeat** bar for the current frame and
+      expand it looking for the row driving vehicle movement (labelled by the script/module
+      moving vehicles, e.g. `Traffic`) — it should show up as one connection with all ~20 vehicles
+      moved in a single `BulkMoveTo` call, not one row per vehicle.
+- [ ] 23. Confirm that row's time is **under 0.2 ms** per frame. (How to read it: click the row —
+      the profiler shows the selected frame's time in milliseconds at the bottom/side; hover
+      nearby frames to confirm it's consistently under 0.2 ms, not just a lucky frame.)
+
+### 9. Part budget
+
+- [ ] 24. With as many plots as you can reasonably get to `GrowthTier` 5 (10 plots at tier 5 is
+      the target; fewer is fine, just note how many), open the **Command Bar** (View → Command
+      Bar) and run:
+      ```
+      print(#workspace.CityDressing:GetDescendants())
+      ```
+- [ ] 25. Confirm the printed count is **≤ ~1300** at 10 plots tier 5, or proportionally fewer for
+      however many plots you actually got to tier 5 (e.g. roughly ≤ 130 per plot).
+
+### 10. Refresh stability
+
+- [ ] 26. With VIP owned (or buy it now, same flow as M7 section 5) and a plot dressed at tier 5,
+      toggle something that refreshes cosmetics — buy the VIP pass mid-session, or buy a Legacy
+      perk if you have Legacy to spend. Confirm the roads/trees/houses/plaza **do not flicker,
+      disappear-and-reappear, or reset**, and any moving vehicle **keeps moving smoothly** through
+      the refresh (no visible teleport/reset of its position).
+
+### 11. Lifecycle — advance, rebirth, rejoin
+
+- [ ] 27. From a fully-dressed tier-5 Village plot, Advance Era to Boomtown (own every Village
+      slot first, use `GrantCash`). Confirm the Village dressing (roads, trees, cottages, plaza,
+      carts) is **fully cleared** and Boomtown dressing rebuilds fresh at tier 0 (bare, then
+      growing again as you buy Boomtown slots).
+- [ ] 28. Repeat once through a Rebirth (own every slot of the final era, `RequestRebirth`):
+      confirm dressing clears and rebuilds for the fresh Village lap.
+- [ ] 29. Get a plot to tier 3+ with some dressing visible, then **rejoin** (leave Play, Play
+      again on the same save, or Stop → Play). Confirm the same plot **reproduces the same
+      layout** (same roads, same tree positions/stages, same filler houses) — not a different
+      random arrangement.
+- [ ] 30. On a fresh join, confirm your own plot dresses (roads/trees/etc. for its current tier)
+      within **about 1 second** of spawning in — not stuck bare for several seconds.
+
+### 12. Failure paths — missing config/props degrade silently
+
+Do each of these **in Edit mode, before pressing Play** (the controller reads config once at
+`Start()` and does not retry if it was missing at boot):
+
+- [ ] 31. In Explorer, find `ReplicatedStorage/Shared/Config/CityDressing` and temporarily rename
+      it (e.g. `CityDressing_bak`). Press Play. Confirm: **no dressing at all** appears on any
+      plot (no roads, no trees, nothing under `Workspace/CityDressing`), buildings/pads/economy
+      work exactly as before, and **Output has zero errors**. Stop Play, rename it back.
+- [ ] 32. Find `ReplicatedStorage/Assets/Props` and temporarily rename it (e.g. `Props_bak`).
+      Press Play, get a plot to tier 5. Confirm: **roads still draw normally** (they're plain
+      Parts, not props), but **no trees, houses, plaza, lamps, or vehicles** appear anywhere, and
+      **Output has zero errors**. Stop Play, rename it back.
+- [ ] 33. Find `ReplicatedStorage/Assets/Props/Village/Cart` and temporarily rename it (e.g.
+      `Cart_bak`). Press Play, get a Village plot to `GrowthTier` 2+ (carts start at
+      `vehicles.firstTier` 2). Confirm: **no carts** appear on that plot, but roads, trees, houses,
+      and the plaza are all still present and correct, and **Output has zero errors**. Stop Play,
+      rename it back and rebuild (`rojo build`) before continuing.
+
+### 13. Mobile emulation pass (required every milestone)
+
+- [ ] 34. Device Emulator, **375×667** portrait. Walk a tier-5 plot (either era). Confirm the
+      dressing renders at a sensible scale (trees/houses/roads not oversized or clipped off
+      screen) and doesn't visibly tank the frame rate. Open the Build panel — confirm nothing
+      about its layout regressed.
+- [ ] 35. Stop Play.
+
+### What a bug looks like here
+
+- `GrowthTier` not appearing as a plot Attribute, staying at `0` after buys, or jumping backward.
+- No road/spur appears after the first purchase, or the spine/spur never connects to a building
+  you own.
+- Boomtown junction/bend pieces floating, gapped, z-fighting, rotated wrong, or appearing at a
+  straight (non-T) point on the road.
+- The main-street spine curving around Pave Main Street/Streetlamp Row instead of running over
+  them, or Bank/Radio Station/Pave Main Street/Streetlamp Row growing a driveway spur they
+  shouldn't have.
+- The player, camera, or a ProximityPrompt blocked by a tree, house, vehicle, or road tile.
+- Any dressing part with `CanCollide`/`CanQuery`/`CanTouch` true, or not `Anchored`.
+- Another player's client showing different roads/trees/houses than the owner sees (vehicle
+  position differences are fine).
+- Trees/lamps/vehicles not disappearing on far plots, or not returning when the camera comes back.
+- The Traffic Heartbeat step at or above 0.2 ms with ~20 vehicles active.
+- More than ~1300 total descendants under `Workspace/CityDressing` at 10 plots tier 5 (or
+  proportionally more for fewer plots).
+- Dressing flickering, clearing, or a vehicle teleporting/resetting on a VIP or Legacy-perk
+  refresh.
+- Dressing surviving an era advance/rebirth instead of clearing and rebuilding, or a rejoin
+  producing a different layout on the same plot.
+- A plot staying bare for more than a couple seconds after joining.
+- **Any Output error** with `CityDressing`, `Assets/Props`, or a single prop template renamed
+  away — every one of those must degrade silently.
+
+### Sign-off
+
+- [ ] 36. All boxes above checked: growth-tier attribute tracking, a full Village tier-5 look
+      (roads/trees/cottages/plaza/carts), a full Boomtown tier-5 look (asphalt/junctions/lamps/
+      cars, main-street spine, P1/P2 no-spur slots), no collisions anywhere (including the
+      Explorer flag check), identical dressing for a second player, near/far LOD, the traffic
+      MicroProfiler check under 0.2 ms, the part-budget count, refresh stability, era-advance/
+      rebirth/rejoin lifecycle, all three failure-path degrades, and 375×667 mobile emulation.
+- [ ] 37. Tell Claude Code "M9 city dressing playtest passed" (or report the exact failure and step
+      number).

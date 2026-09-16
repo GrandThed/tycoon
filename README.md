@@ -62,6 +62,8 @@ src/
   client/                 -- StarterPlayerScripts/Client: UI and controllers
 tools/                    -- sim_economy.py (M2), gen_asset_manifest.py (from M3 onward),
                              testfit/ + assets/ (from M7 onward) -- the growing-building pipeline
+                             (both gain --props for city-dressing props, M9), streetplan.py (M9
+                             street-plan check)
 templates/                -- generated .rbxmx building templates (from M7 onward; committed, never
                              hand-edited -- regenerate with tools/assets/gen_templates.py)
 docs/                     -- design, plan, and playtest docs (see below)

@@ -515,7 +515,8 @@ already built/uploaded, so it's safe to re-run after fixing a blueprint.
 
 - [x] 2. **Blueprints** (already authored for all 24 Village slots): author/edit
       `tools/testfit/blueprints/<Era>/<ModelName>.json`, preview with
-      `py tools/testfit/testfit.py --era <Era>` (or `--model <ModelName>` for one), and check the
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/testfit/testfit.py -- --blueprint <json>`
+      (one blueprint per run), and check the
       strip render — no floating/clipping pieces, footprint respected.
 - [x] 3. **Stage merge** (Blender, headless):
       `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --era <Era>`
@@ -579,3 +580,80 @@ already built/uploaded, so it's safe to re-run after fixing a blueprint.
       and the two-player check.
 
 <!-- M7 section complete. Do not delete completed sections above. -->
+
+---
+
+## M9 — City dressing: roads, trees, filler, squares, vehicles
+
+Same pipeline as M7/M8 (`tools/assets/`), extended with a **`--props`** mode: instead of a slot's
+building stages, it merges/uploads/templates a **city-dressing prop** (tree, filler house, plaza,
+junction, bend, lamp, vehicle). Props are per-era too, but templates land under
+`templates/_props/<Era>/` → `ReplicatedStorage/Assets/Props/<Era>/<PropName>` (not
+`ServerStorage`, so the client can clone them itself). `Assets.json` gains a `props` table
+alongside the existing per-slot table — still generated-only, never hand-edit it.
+
+### 1. Nothing new to set up
+
+- [x] 1. Same Open Cloud credentials as M3/M7 (`.env` at the repo root) — nothing new to create.
+
+### 2. Running the props pipeline for an era
+
+Run in this order from the repo root; every step is idempotent, same as M7.
+
+- [x] 2. **Blueprints** (already authored, Village + Boomtown): author/edit
+      `tools/testfit/blueprints/_props/<Era>/<PropName>.json`, preview with
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/_props/<Era>/<PropName>.json`
+      (output PNG lands under `assets/testfit/out/<Era>/props/`) and check the strip render.
+- [x] 3. **Street-plan check** (before uploading anything, whenever a layout's `streets`/`lots`/
+      `plazas`/`treeZones` change): `py tools/streetplan.py` (Village + Boomtown; pass an era name,
+      e.g. `py tools/streetplan.py Metropolis`, once it exists) — writes
+      `assets/testfit/out/<Era>/streetplan.png` and exits non-zero on a clearance-rule violation
+      (P1/P2 amendments included). Look at the PNG before approving a layout.
+- [x] 4. **Stage merge** (Blender, headless):
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era <Era>`
+- [x] 5. **Upload** — dry run first, then for real:
+      `py tools/assets/upload_models.py --props --era <Era> --dry-run`
+      `py tools/assets/upload_models.py --props --era <Era>`
+      (re-run on Roblox's transient "Unknown Error" — the tool never re-uploads a non-zero id, so
+      it's safe to repeat.)
+- [ ] 6. **The one Studio step** — one harvest paste covers **both** eras already uploaded:
+      1. `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
+         (copies the generated snippet straight to the clipboard).
+      2. In Studio (**Edit mode, not Play**), open the **Command Bar**, paste, run it, and wait for
+         the `[HARVEST-DONE]` line in Output.
+      3. In the Output panel: right-click → **Select All** → **Ctrl+C** (copies every
+         `[HARVEST] {...}` line since the last clear).
+      4. `py tools/assets/harvest.py --props` — reads the clipboard and merges `meshId`/`imageId`/
+         `size`/`offset` into `Assets.json`. Anything the paste didn't cover is listed and left
+         untouched — re-run steps 1–4 to pick up the rest.
+- [ ] 7. **Templates**: `py tools/assets/gen_templates.py --props` — writes
+      `templates/_props/<Era>/<PropName>.rbxmx`. `py tools/assets/gen_templates.py --check` covers
+      both the building and prop template roots — QA runs this.
+- [ ] 8. **Build**: `rojo build -o build/test.rbxl` (or resync `rojo serve`), then
+      `py tools/gen_asset_manifest.py && py tools/gen_asset_manifest.py --check`. Confirm in Studio
+      that `ReplicatedStorage.Assets.Props.<Era>.<PropName>` exists with a `Stage0` (trees also
+      have `Stage1`–`Stage3`) and previews textured in Edit mode.
+
+### 3. Status
+
+- [x] 9. **Village + Boomtown props merged and uploaded 2026-09-16** (24 stages total across both
+      eras: Village's growing pine [4 stages] + 3 filler cottages + plaza + cart; Boomtown's tree +
+      4 filler houses + pocket park + junction + bend + lamp + 3 vehicles). `Assets.json` v2's
+      `props` table holds a non-zero `modelAssetId` per stage already; `meshId`/`imageId` are still
+      `0` (search the file to confirm) until step 6 below runs.
+- [ ] 10. **Pending Ben:** step 6 (the harvest paste) and step 7 (`gen_templates.py --props`) for
+      Village + Boomtown — nothing under `templates/_props/` exists yet, so `docs/PLAYTEST.md`
+      "M9" cannot be run until these two steps are done and the repo rebuilt/resynced.
+
+### 4. Nothing new to create on the Creator Hub
+
+- [x] 11. No new game passes or developer products this milestone — M9 doesn't touch
+      monetization.
+
+### 5. Wave 2 (Metropolis, Orbital Colony, `cityDetail` setting) — not started
+
+- [ ] 12. Repeats sections 2–3 above for Metropolis and Orbital Colony once their buildings ship
+      (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no manual/Studio steps
+      beyond the same pipeline run.
+
+<!-- M9 section: harvest + templates pending Ben. Do not delete completed sections above. -->
