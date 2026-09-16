@@ -1,9 +1,17 @@
 {
   "version": 1,
   "textures": {
+    "castle-kit": {
+      "vipSwatchAssetId": 103844883997226,
+      "vipImageId": 0
+    },
     "fantasy-town-kit": {
       "vipSwatchAssetId": 113791458028891,
       "vipImageId": 91158106530449
+    },
+    "nature-kit": {
+      "vipSwatchAssetId": 70411050112785,
+      "vipImageId": 0
     }
   },
   "eras": {
@@ -11,296 +19,852 @@
       "Campfire": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 75368922231093,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.84, 0.693, 4.386],
+                "offset": [0.0, 0.146, -1.706]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 81897577658104,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.51, 1.667, 5.42],
+                "offset": [-0.256, 0.633, -1.189]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 87570708670022,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 1.462, 2.6],
+                "offset": [0.0, 0.731, 3.12]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.947, 1.667, 8.275],
+                "offset": [0.054, 0.633, 0.239]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 133775598767466,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.72, 1.462, 3.54],
+                "offset": [0.0, 0.731, 2.65]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.97, 1.667, 8.275],
+                "offset": [0.042, 0.633, 0.239]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 136476736405622,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.72, 6.5, 7.42],
+                "offset": [0.0, 3.25, 0.71]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.97, 1.667, 8.275],
+                "offset": [0.042, 0.633, 0.239]
+              }
+            ]
           }
         ]
       },
       "TentSmall": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 80814991955948,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.19, 2.245, 2.666],
+                "offset": [-2.2, 0.922, -1.86]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 100226614541180,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.59, 2.245, 2.666],
+                "offset": [0.0, 0.922, -1.86]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79284239344205,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.59, 2.245, 7.893],
+                "offset": [0.0, 0.922, -0.474]
+              }
+            ]
           },
           {
             "modelAssetId": 0,
-            "parts": []
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.8, 2.245, 8.82],
+                "offset": [0.0, 0.922, -0.01]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
-          },
-          {
-            "modelAssetId": 0,
-            "parts": []
-          },
-          {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 130726605310729,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.426, 3.462, 1.729],
+                "offset": [-3.68, 1.731, -0.852]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.8, 2.245, 8.82],
+                "offset": [0.0, 0.922, -0.01]
+              }
+            ]
           }
         ]
       },
       "WoodcutterHut": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 73279438001901,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.737, 1.386, 3.457],
+                "offset": [0.052, 0.493, -1.708]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 80986810601586,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.504, 4.268],
+                "offset": [2.0, 3.252, -2.334]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.737, 1.386, 3.457],
+                "offset": [0.052, 0.493, -1.708]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 90848858118226,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 6.504, 8.868],
+                "offset": [-0.1, 3.252, -0.034]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.737, 1.386, 3.457],
+                "offset": [0.052, 0.493, -1.708]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 81376702971710,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 6.504, 8.868],
+                "offset": [-0.1, 3.252, -0.034]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.737, 1.386, 4.5],
+                "offset": [0.052, 0.493, -2.23]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 92050406821157,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 6.504, 8.868],
+                "offset": [0.0, 3.252, -0.034]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.737, 1.386, 4.5],
+                "offset": [0.052, 0.493, -2.23]
+              }
+            ]
           }
         ]
       },
       "FarmPlot": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 131008274294272,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.279, 1.34, 2.48],
+                "offset": [-1.94, 0.47, -2.676]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 114342862997505,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.279, 2.14, 5.08],
+                "offset": [-1.94, 0.87, -1.376]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 140644078233186,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 2.14, 8.4],
+                "offset": [-0.2, 0.87, -0.2]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 124041875987877,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.12, 4.0, 6.64],
+                "offset": [0.94, 2.0, -0.8]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 5.335, 8.4],
+                "offset": [-0.2, 2.468, -0.2]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 115080351676809,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.32, 6.283, 8.32],
+                "offset": [1.04, 3.141, 0.04]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.8, 5.335, 8.8],
+                "offset": [0.0, 2.468, 0.0]
+              }
+            ]
           }
         ]
       },
       "HouseSmallA": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 74467204700421,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 5.504, 4.0],
+                "offset": [-1.9, 2.752, -1.8]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 119090051618319,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.5, 4.0],
+                "offset": [0.0, 3.25, -1.8]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 73567414045769,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.433, 6.5, 8.717],
+                "offset": [-0.216, 3.25, -0.158]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 114173859080599,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.433, 10.5, 8.717],
+                "offset": [-0.216, 5.25, -0.158]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 79341947503718,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.433, 10.5, 8.717],
+                "offset": [-0.216, 5.25, -0.158]
+              }
+            ]
           }
         ]
       },
       "RoadCobblestone": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 126011392038563,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 6.224, 8.897],
+                "offset": [0.0, 3.112, 0.0]
+              }
+            ]
           }
         ]
       },
       "Well": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 100201641226064,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.96, 2.0, 4.96],
+                "offset": [-0.0, 1.0, 0.0]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 91265312464472,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.04, 6.283, 4.96],
+                "offset": [0.0, 3.141, 0.0]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 113294850980658,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.363, 8.0],
+                "offset": [0.0, 3.101, 0.0]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 77243124303386,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 10.584, 8.537],
+                "offset": [0.0, 5.212, 0.0]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 98243942738817,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 10.584, 8.537],
+                "offset": [0.0, 5.212, 0.0]
+              }
+            ]
           }
         ]
       },
       "FlowerBed": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 136934179725698,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 8.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.896, 1.442, 4.993],
+                "offset": [0.03, 0.521, -0.018]
+              }
+            ]
           }
         ]
       },
       "HouseSmallB": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 71465730390213,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 6.283, 4.283],
+                "offset": [0.0, 3.141, -1.8]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 77015776632274,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.633, 10.5, 4.858],
+                "offset": [-0.116, 5.25, -2.088]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 83903589500026,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.633, 10.5, 8.858],
+                "offset": [-0.116, 5.25, -0.088]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 136693368305485,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.633, 10.5, 8.858],
+                "offset": [-0.116, 5.25, -0.088]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 74365535265218,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.633, 10.5, 8.858],
+                "offset": [-0.116, 5.25, -0.088]
+              }
+            ]
           }
         ]
       },
       "Bakery": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 126771885578172,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.34, 5.504, 5.92],
+                "offset": [-0.17, 2.752, 1.24]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 87073603562089,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.5, 10.5, 8.717],
+                "offset": [-0.25, 5.25, -0.158]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 86228364809593,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 12.447, 8.985],
+                "offset": [-0.15, 6.224, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 75334904912015,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 12.447, 8.985],
+                "offset": [-0.15, 6.224, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 108694528762869,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 12.447, 8.985],
+                "offset": [-0.15, 6.224, -0.024]
+              }
+            ]
           }
         ]
       },
       "Windmill": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 74238916553192,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 17.826, 8.96],
+                "offset": [-0.02, 8.913, 0.02]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 72870226256435,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 17.826, 8.96],
+                "offset": [-0.02, 8.913, 0.02]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 111919327912152,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 17.826, 8.96],
+                "offset": [-0.02, 8.913, 0.02]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 139898150165716,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 18.0, 8.96],
+                "offset": [-0.02, 9.0, 0.02]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 119450008440490,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 20.08, 8.96],
+                "offset": [-0.02, 10.04, 0.02]
+              }
+            ]
           }
         ]
       },
       "Fountain": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 83931522304838,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 6.224, 8.897],
+                "offset": [0.0, 3.112, 0.0]
+              }
+            ]
           }
         ]
       },
       "MarketStall": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 76348299556510,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 1.462, 2.6],
+                "offset": [-2.0, 0.731, -1.8]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 118826774865584,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.12, 4.948, 4.32],
+                "offset": [-0.06, 2.474, -1.96]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 136691978589845,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.12, 4.948, 8.68],
+                "offset": [-0.06, 2.474, -0.14]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 138232294775323,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 10.504, 8.985],
+                "offset": [0.0, 5.252, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 131647930080718,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.537, 10.504, 8.985],
+                "offset": [0.0, 5.252, -0.024]
+              }
+            ]
           }
         ]
       },
       "TreeOak": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 97300327259889,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.074, 11.003, 4.074],
+                "offset": [0.0, 5.501, 0.4]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.093, 0.765, 2.956],
+                "offset": [-0.075, 0.182, -2.243]
+              }
+            ]
           }
         ]
       },
       "Blacksmith": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 79275441608304,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.34, 6.504, 8.228],
+                "offset": [0.17, 3.252, 0.086]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 118084885184035,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.5, 14.5, 8.717],
+                "offset": [0.25, 7.25, -0.158]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 116379013623922,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 14.5, 8.985],
+                "offset": [0.15, 7.25, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 118473346597277,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.9, 14.5, 8.985],
+                "offset": [0.05, 7.25, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 93388118245751,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.9, 14.5, 8.985],
+                "offset": [0.05, 7.25, -0.024]
+              }
+            ]
           }
         ]
       },
@@ -371,128 +935,327 @@
       "CartWagon": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 75445697862445,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.451, 3.442, 7.445],
+                "offset": [0.239, 1.721, -0.542]
+              }
+            ]
           }
         ]
       },
       "Chapel": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 132454900769016,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.633, 10.0, 8.917],
+                "offset": [1.884, 5.0, -0.058]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 118996570435321,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.3, 10.0, 8.917],
+                "offset": [0.05, 5.0, -0.058]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 88592328510460,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 14.0, 8.917],
+                "offset": [0.0, 7.0, -0.058]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 72232059483241,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 16.504, 8.917],
+                "offset": [0.0, 8.252, -0.058]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 72351488360692,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.4, 4.0],
+                "offset": [2.0, 18.7, 2.2]
+              },
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 16.504, 8.917],
+                "offset": [0.0, 8.252, -0.058]
+              }
+            ]
           }
         ]
       },
       "HouseLargeA": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 129740518070004,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.701, 6.504, 8.985],
+                "offset": [-0.082, 3.252, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 114154759739171,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 6.504, 8.985],
+                "offset": [0.0, 3.252, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 83835879301776,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 10.504, 8.985],
+                "offset": [0.0, 5.252, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 85040887075461,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 17.5, 8.985],
+                "offset": [0.0, 8.75, -0.024]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 94112556455462,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.866, 20.0, 8.985],
+                "offset": [0.0, 10.0, -0.024]
+              }
+            ]
           }
         ]
       },
       "BannerPole": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 71329850918772,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.0, 8.0, 2.0],
+                "offset": [0.0, 4.0, -0.0]
+              }
+            ]
           }
         ]
       },
       "Stables": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 73708433959234,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.504, 8.04],
+                "offset": [0.0, 3.252, 0.22]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 100372630782423,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.504, 8.757],
+                "offset": [0.0, 3.252, -0.138]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 76588723007551,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 10.283, 8.858],
+                "offset": [0.0, 5.141, -0.088]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 123450884201321,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 10.283, 8.858],
+                "offset": [0.0, 5.141, -0.088]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 77824034710223,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 10.283, 8.858],
+                "offset": [0.0, 5.141, -0.088]
+              }
+            ]
           }
         ]
       },
       "Watchtower": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 74613765503341,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.72, 12.062, 3.72],
+                "offset": [-2.2, 6.031, 2.2]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 120572334464668,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 12.062, 8.26],
+                "offset": [0.07, 6.031, -0.07]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 84305969847911,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 12.062, 8.26],
+                "offset": [0.07, 6.031, -0.07]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 120138773505115,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 19.92, 8.26],
+                "offset": [0.07, 9.96, -0.07]
+              }
+            ]
           },
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 103266947327399,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 19.92, 8.44],
+                "offset": [0.07, 9.96, -0.16]
+              }
+            ]
           }
         ]
       },
       "WallGate": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 87002670032476,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 8.702, 2.516],
+                "offset": [0.0, 4.351, 0.258]
+              }
+            ]
           }
         ]
       },
       "CastleKeep": {
         "stages": [
           {
-            "modelAssetId": 0,
-            "parts": []
+            "modelAssetId": 84401250646403,
+            "parts": [
+              {
+                "kit": "castle-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [14.0, 23.08, 14.0],
+                "offset": [0.0, 11.54, 0.0]
+              }
+            ]
           }
         ]
       }
