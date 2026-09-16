@@ -1,0 +1,15 @@
+{
+  "id": "Laundromat",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-c", "pos": [-0.095, 0.0, -0.145], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.445, 0.0, -0.945], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.455, 0.0, -0.945], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "building-type-c", "pos": [0.005, 0.5, -0.145], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "chimney-basic", "pos": [-0.495, 0.5, 0.505], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-industrial", "model": "chimney-basic", "pos": [0.555, 0.5, 0.505], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-industrial", "model": "chimney-basic", "pos": [-0.495, 1.5, 0.505], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-industrial", "model": "chimney-small", "pos": [0.555, 1.5, 0.505], "rotY": 0, "stage": 4}
+  ]
+}

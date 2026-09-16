@@ -1,0 +1,19 @@
+{
+  "id": "BarberShop",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-k", "pos": [-0.6, 0.0, -0.58], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.1, 0.0, -0.95], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-0.1, 0.5, -0.95], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-short", "pos": [-0.4, 0.0, -1.02], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.35, 0.0, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-1.05, 0.0, -1.02], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "construction-light", "pos": [-1.05, 0.5, -1.02], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "building-type-o", "pos": [0.48, 0.0, 0.58], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0.48, 0.0, -0.15], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-suburban", "model": "fence-low", "pos": [0.48, 0.0, -0.6], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [1.0, 0.0, -1.0], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "building-type-k", "pos": [-0.6, 0.0, 0.58], "rotY": 180, "stage": 4}
+  ]
+}

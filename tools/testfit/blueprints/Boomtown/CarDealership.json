@@ -1,0 +1,21 @@
+{
+  "id": "CarDealership",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-o", "pos": [1.12, 0.0, -0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-industrial", "model": "building-i", "pos": [-0.17, 0.0, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.68, 0.0, -0.38], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-cone", "pos": [-0.2, 0.02, -0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "construction-cone", "pos": [-0.2, 0.02, -0.95], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-square", "pos": [-0.5, 0.0, -0.62], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-roads", "model": "road-square", "pos": [0.5, 0.0, -0.62], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-industrial", "model": "building-o", "pos": [1.12, 0.88, -0.12], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [-0.95, 0.0, -1.07], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.05, 0.0, -1.07], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [1.05, 0.0, -1.07], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.12, 0.0, 0.0], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.12, 0.0, 0.9], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-industrial", "model": "building-o", "pos": [1.12, 1.76, -0.12], "rotY": 0, "stage": 4}
+  ]
+}
