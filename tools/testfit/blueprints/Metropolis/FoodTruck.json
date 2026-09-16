@@ -1,0 +1,28 @@
+{
+  "id": "FoodTruck",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.47, 0.0, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.1, 0.0, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [0.27, 0.0, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.47, 0.209, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.1, 0.209, 0.75], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-awning-wide", "pos": [-0.285, 0.0, 0.7], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-overhang", "pos": [-0.285, 0.418, 0.9], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-a", "pos": [-0.1, 0.0, 0.05], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-a", "pos": [-0.7, 0.0, 0.05], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-commercial", "model": "detail-awning", "pos": [-0.9, 0.0, 0.65], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-commercial", "model": "detail-awning", "pos": [-0.9, 0.0, 0.85], "rotY": 180, "stage": 2},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [-0.9, 0.0, 0.75], "rotY": 90, "stage": 2},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-b", "pos": [0.5, 0.0, 0.05], "rotY": 0, "stage": 2},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.55, 0.0, -0.6], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-commercial", "model": "detail-overhang-wide", "pos": [0.55, 0.02, -0.5], "rotY": 180, "stage": 3},
+    {"kit": "city-kit-commercial", "model": "detail-overhang-wide", "pos": [0.55, 0.02, -0.7], "rotY": 0, "stage": 3},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0.3, 0.02, -0.6], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-roads", "model": "construction-barrier", "pos": [0.8, 0.02, -0.6], "rotY": 90, "stage": 3},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-b", "pos": [-0.45, 0.0, -0.55], "rotY": 0, "stage": 4},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [-1.05, 0.0, -0.1], "rotY": 270, "stage": 4},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.45, 0.0, -0.95], "rotY": 0, "stage": 4}
+  ]
+}

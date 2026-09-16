@@ -1,0 +1,27 @@
+{
+  "id": "BusStop",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-square", "pos": [0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [-0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-low", "pos": [0.5, -0.015, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.005, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.505, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.005, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [-0.8, 0.505, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.005, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.505, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.005, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar", "pos": [0.1, 0.505, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-straight-half", "pos": [-0.35, 1.005, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.35, 0.005, 0.87], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [-0.35, 0.205, 0.9], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-overhang", "pos": [-0.35, 0.005, 0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-street", "pos": [0.45, 0.005, 0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.95, 0.005, 0.2], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-roads", "model": "dumpster", "pos": [-0.99, 0.005, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.85, 0.005, 0.8], "rotY": 0, "stage": 0}
+  ]
+}

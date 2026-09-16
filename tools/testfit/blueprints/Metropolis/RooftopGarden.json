@@ -1,0 +1,17 @@
+{
+  "id": "RooftopGarden",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "city-kit-commercial", "model": "building-i", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.25, 1.6, -0.42], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.25, 1.6, -0.42], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.42, 1.6, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.42, 1.6, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.4, 1.6, 0.42], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0.0, 1.6, 0.45], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0.4, 1.6, 0.42], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-a", "pos": [-0.12, 1.6, -0.05], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-b", "pos": [0.18, 1.6, 0.1], "rotY": 0, "stage": 0}
+  ]
+}
