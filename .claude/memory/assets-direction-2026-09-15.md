@@ -28,6 +28,10 @@ commands in `docs/MANUAL_STEPS.md` M7.
   `GrantCash` Workspace attribute is the Studio cash lever. Blueprint authoring works well as three
   parallel general-purpose builders with disjoint slot sets; give each a distinct scratch filename.
 
+- Opus vs Fable blueprint test (2026-09-16, Bakery + Chapel): Opus matched or beat the shipped
+  strips and self-corrected via the render loop. **Use `model: "opus"` for blueprint builders**;
+  the whole per-era routine is the `/build-assets <Era>` skill (`.claude/skills/build-assets/`).
+
 **Why:** the next session starts fresh and would otherwise repeat the rejected proposal or
 re-derive the kit and upload findings.
 
