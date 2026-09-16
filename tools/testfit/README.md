@@ -182,3 +182,50 @@ Props:
 
 car-kit: every vehicle is 2.2–3.45 units long (≥ 9 studs at ×4) and pastel; none fits a 9×9 slot and
 all clash with retro-urban. `debris-tire` is centre-origin and reads as an oversized black blob.
+
+## city-kit-commercial and city-kit-roads notes (Boomtown redo, three builders, 2026-09-16)
+
+Both kits use one `colormap.png`. Palette: off-white walls, slate trim, dark ground floors, pale-blue
+windows; accents only green (awnings, planters, parasols, `building-m` roof, `sign-highway` faces,
+dumpster) and yellow (`g`/`i`/`k` shopfronts, traffic-light housings); orange/white construction
+pieces; red only on `road-sign-object-stop`. No brick, no emissive, no bus, no bench, no hydrant.
+Skyscrapers and `low-detail-building-*` are reserved for Metropolis (ClockTower's shaft excepted).
+
+city-kit-commercial:
+- Every `building-*` is a finished building, bottom-centre origin, **front −Z** at rotY 0. Sizes at
+  ×4 are small: a 2-storey building is 3.6 studs, shorter than the player. `-n` (2.32 wide) does not
+  fit 9×9.
+- Characters: `a` 3 storeys curved corner; `b` like `a` plus rear fire escape; `c` 2 storeys; `d` roof
+  terrace with tree; `e` wide, one-storey −X half and two-storey +X half; `f` 4 storeys green awning;
+  `g` 4 storeys yellow awning; `h` 3 storeys dark; `i` 4 storeys yellow shopfront; `j` 4-storey
+  apartments with balconies; `k` wide 3 storeys, twin yellow shopfronts, water tower (0.94 deep —
+  nothing nests inside it); `l` 5 storeys; `m` 7-storey tower with green pyramid roof and spike
+  (distinctive: use it in one slot per era only).
+- Roof decks sit below the bbox top (which is a parapet or rooftop box): `c` 0.80, `d` 0.80 front /
+  1.20 back, `e` 0.40 / 0.80, `h` and `k` 1.20, `f`/`g`/`i` 1.60, `l` 2.00, `m` 2.40 (hip 2.79, spike
+  3.15), `skyscraper-d` 5.20, `skyscraper-b` 4.40. Props placed at bbox top float.
+- **Growth by swallowing:** outer walls sit flush with their bbox, so a later building at the same
+  centre hides an earlier one with ≥ 0.01 margin. Clean: `a`,`b`,`c`,`d`,`h` in `i`; `c`,`f`,`g`,`h`
+  in `l`; `a`,`d`,`g` in `m`; `e`,`f` in `j`; `c`+`d` together in `j`; `d` in `g`. Fails: `i` in `l`
+  (yellow awning shows). The camera sees only −Z and +X; check the back with a rotated copy
+  (positions (−x, y, −z), rotY + 180) in a scratch blueprint.
+- `detail-awning*` (green) and `detail-overhang*` (white trough) are free-standing canopies on legs,
+  0.4 tall, wall side at local z +0.10 / +0.05, legs toward +Z: for a −Z wall at z = f use rotY 180,
+  holder z = f + 0.10 (awning) / f + 0.05 (overhang). A back-to-back pair makes a two-legged stall
+  canopy. `detail-parasol-a/b` are identical umbrella tables, 1.8 studs.
+
+city-kit-roads:
+- Road tiles are 1×1 (4 studs); asphalt top y 0.010, curb strips (|z| > 0.4) 0.020. `road-crossing`
+  has zebra stripes; `road-square` reads as a parking bay. `tile-low` is a 0.02 lavender slab — as a
+  sidewalk under a road edge place it at y −0.015 (−0.005 covers the asphalt, −0.025 vanishes under
+  testfit's ground at −0.001). `tile-high` is a 1-stud lavender plinth.
+- `sign-highway*` gantries: green face on local −X only (grey/slate back) — rotY 270 faces −Z, 180
+  faces +X. 0.7 tall, posts at z ±0.45; stacking at +0.60 makes a pylon, every 0.2 with a 0.03 step
+  makes a solid panel. `road-sign-object-stop` red face also on −X.
+- `bridge-pillar` 2-stud column; `bridge-pillar-wide` 0.5 tall, 0.088 body, stacks every 0.5 (packed
+  0.088 apart the bodies form solid bands); `construction-fence` 0.375 rail fits between pillars 0.5
+  apart; `electricity-pole` (orange wood) stacks every 0.525; `construction-light` 0.234 (0.94 studs,
+  orange/white striped — a barber pole / beacon) sits on a pillar cap; `construction-cone` 0.38
+  studs; `dumpster` green 0.28×0.21×0.37 along Z; `light-curved` 2.7 studs (arm −Z), `light-square`
+  2.4 (arm −Z: rotY 90 → −X, 270 → +X); `traffic-light*` ~2 studs; `road-sign-empty-hanging` reads as
+  a bare lamp post.
