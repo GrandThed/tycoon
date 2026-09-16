@@ -7,7 +7,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local servicesFolder = script.Parent:WaitForChild("Services")
 
@@ -47,14 +49,42 @@ for _, service in orderedServices do
 	service.Start()
 end
 
+-- Players with a VIP skin rebuild already scheduled; flips inside the window share it.
+local pendingSkinRefresh: { [Player]: boolean } = {}
+
 -- RequestSetSetting (M3). The contract places this handler in DataService.Start, but marking
 -- the delta needs EconomyService, which already requires DataService — a require cycle. Main
 -- requires both, so the wiring lives here; the state write itself stays in DataService.
 -- Payload types are already validated by RemoteService; casts narrow the varargs.
 RemoteService.SetHandler("RequestSetSetting", function(player: Player, key: any, value: any)
-	if DataService.SetSetting(player, key :: Types.SettingKey, value :: boolean) then
-		EconomyService.MarkDirty(player, { settings = true })
+	-- Read before the write: re-sending the current vipSkins value must not rebuild the plot.
+	local state = DataService.GetState(player)
+	local previousVipSkins = if state ~= nil then state.settings.vipSkins else nil
+	if not DataService.SetSetting(player, key :: Types.SettingKey, value :: boolean) then
+		return
 	end
+	EconomyService.MarkDirty(player, { settings = true })
+	-- Without VIP nothing on the plot changes, and alternating values would otherwise let any
+	-- client force a full plot rebuild on every rate-limited call.
+	if
+		key ~= "vipSkins"
+		or value == previousVipSkins
+		or state == nil
+		or state.passes.VIP ~= true
+	then
+		return
+	end
+	if pendingSkinRefresh[player] then
+		return
+	end
+	pendingSkinRefresh[player] = true
+	task.delay(Catalog.GetGameConfig().remotes.skinRefreshDelaySeconds, function()
+		if pendingSkinRefresh[player] == nil then
+			return -- left during the window
+		end
+		pendingSkinRefresh[player] = nil
+		PlotService.RefreshCosmetics(player)
+	end)
 end)
 
 -- Shared by the first join (LoadAsync) and a safe-mode retry (RetryLoadAsync). Yields.
@@ -103,6 +133,7 @@ end)
 -- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
 -- idempotent, so PlayerRemoving and the shutdown flush may both run it for one player.
 local function onPlayerRemoving(player: Player): ()
+	pendingSkinRefresh[player] = nil
 	PlotService.Release(player)
 	EconomyService.Cleanup(player)
 	DataService.Release(player)

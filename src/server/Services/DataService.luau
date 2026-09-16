@@ -42,7 +42,7 @@ type PlayerStore = {
 
 type LoadPhase = "loading" | "failed"
 
-local SCHEMA_VERSION = 3
+local SCHEMA_VERSION = 4
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 -- Infrastructure retry policy, not game balance (ProfileStore retries the underlying DataStore
@@ -63,7 +63,7 @@ local SAVE_CONFIRM_TIMEOUT_SECONDS = 10
 -- on Workspace, toggled live in the Properties pane, stands in for one. Ignored outside Studio.
 local FORCE_LOAD_FAILURE_ATTRIBUTE = "ForceLoadFailure"
 
--- Template = schema v3, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v4, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -77,7 +77,7 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 	lastSeen = 0,
 	incomeAtSave = 0,
 	stats = { totalCashAllTime = 0, erasCompleted = 0, playtimeSeconds = 0 },
-	settings = { music = true, sfx = true },
+	settings = { music = true, sfx = true, vipSkins = true },
 	pendingDoubleOfflineAmount = 0,
 	legacyShop = { spent = 0, perks = {} },
 }
@@ -95,6 +95,13 @@ local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 	[2] = function(state: Types.PlayerState): ()
 		if state.legacyShop == nil then
 			state.legacyShop = { spent = 0, perks = {} }
+		end
+	end,
+	-- VIP skins toggle (docs/INTERFACES.md "Amendment — VIP skins toggle"): default on, so an
+	-- existing VIP owner keeps the look they already had.
+	[3] = function(state: Types.PlayerState): ()
+		if state.settings.vipSkins == nil then
+			state.settings.vipSkins = true
 		end
 	end,
 }
@@ -335,6 +342,8 @@ function DataService.SetSetting(player: Player, key: Types.SettingKey, value: bo
 		state.settings.music = value
 	elseif key == "sfx" then
 		state.settings.sfx = value
+	elseif key == "vipSkins" then
+		state.settings.vipSkins = value
 	else
 		-- Only the remote validator whitelists keys today; a future direct caller must not be
 		-- able to write an unknown key into the profile.

@@ -2,7 +2,8 @@
 -- Settings panel (M3 contract): Music and SFX toggles bound to state.settings. A tap flips
 -- the toggle at once (UIController applies it to SoundController and fires
 -- RequestSetSetting); the next snapshot/delta is authoritative and SetSettings re-paints
--- from it. No other settings this milestone.
+-- from it. The VIP skins row (2026-09-16 amendment) exists only for VIP owners: hidden, not
+-- disabled, so non-VIP players never see a setting they cannot use.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -16,7 +17,7 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
-export type Settings = { music: boolean, sfx: boolean }
+export type Settings = { music: boolean, sfx: boolean, vipSkins: boolean }
 
 export type Deps = {
 	onToggle: (key: Types.SettingKey, value: boolean) -> (),
@@ -26,18 +27,23 @@ export type Deps = {
 export type SettingsPanelHandle = {
 	DesignHeight: number,
 	SetSettings: (settings: Settings) -> (),
+	SetVipVisible: (visible: boolean) -> (),
 	SetOpen: (open: boolean) -> (),
 	IsOpen: () -> boolean,
 	SetLayout: (dock: PanelDock.Dock) -> (),
 	Destroy: () -> (),
 }
 
-type ToggleRow = { key: Types.SettingKey, button: TextButton, value: boolean }
+type ToggleRow = { key: Types.SettingKey, row: Frame, button: TextButton, value: boolean }
 
 local ROWS: { { key: Types.SettingKey, label: string } } = {
 	{ key = "music", label = "Music" },
 	{ key = "sfx", label = "Sound effects" },
+	{ key = "vipSkins", label = "VIP building skins" },
 }
+
+-- Rows shown only while the player owns the VIP pass.
+local VIP_ONLY: { [string]: boolean } = { vipSkins = true }
 
 local SettingsPanel = {}
 
@@ -70,6 +76,8 @@ function SettingsPanel.new(parent: Instance, deps: Deps): SettingsPanelHandle
 			Name = entry.key,
 			LayoutOrder = index,
 			Size = UDim2.new(1, 0, 0, Theme.SETTINGS_ROW_HEIGHT),
+			-- UIListLayout skips invisible children, so a hidden row leaves no gap.
+			Visible = not VIP_ONLY[entry.key],
 			BackgroundColor3 = Theme.COLOR_ROW,
 			BorderSizePixel = 0,
 			Parent = panel.Content,
@@ -107,7 +115,7 @@ function SettingsPanel.new(parent: Instance, deps: Deps): SettingsPanelHandle
 			Parent = row,
 		}) :: TextButton
 		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = button })
-		local toggle: ToggleRow = { key = entry.key, button = button, value = true }
+		local toggle: ToggleRow = { key = entry.key, row = row, button = button, value = true }
 		toggles[entry.key] = toggle
 		paint(toggle)
 		table.insert(
@@ -130,6 +138,13 @@ function SettingsPanel.new(parent: Instance, deps: Deps): SettingsPanelHandle
 				if typeof(value) == "boolean" then
 					toggle.value = value
 					paint(toggle)
+				end
+			end
+		end,
+		SetVipVisible = function(visible: boolean)
+			for key, toggle in toggles do
+				if VIP_ONLY[key] then
+					toggle.row.Visible = visible
 				end
 			end
 		end,

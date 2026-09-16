@@ -40,6 +40,7 @@ local WelcomeBackCard = require(uiFolder:WaitForChild("WelcomeBackCard"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
+local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
 
 type Model = {
 	plotIndex: number,
@@ -152,11 +153,22 @@ local function totalLevels(state: Types.PlayerState): number
 	return total
 end
 
--- Settings arrive from the network; only a table with both booleans is trusted.
-local function isSettings(source: any): boolean
-	return typeof(source) == "table"
-		and typeof(source.music) == "boolean"
-		and typeof(source.sfx) == "boolean"
+-- Settings arrive from the network; only a table with music and sfx booleans is trusted.
+-- A missing vipSkins reads as true (the profile default) so a server build that predates
+-- the key still delivers music/sfx instead of the whole table being rejected.
+local function readSettings(source: any): SettingsPanel.Settings?
+	if
+		typeof(source) ~= "table"
+		or typeof(source.music) ~= "boolean"
+		or typeof(source.sfx) ~= "boolean"
+	then
+		return nil
+	end
+	return {
+		music = source.music,
+		sfx = source.sfx,
+		vipSkins = source.vipSkins ~= false,
+	}
 end
 
 -- The delta's shop state arrives from the network; only the full shape is trusted.
@@ -239,7 +251,7 @@ local function boot(): ()
 	local openPanelKey: PanelKey? = nil
 	-- Mirrors state.settings, but exists before the first snapshot so a toggle pressed
 	-- during loading still reaches SoundController (M3 carry-over b).
-	local localSettings = { music = true, sfx = true }
+	local localSettings: SettingsPanel.Settings = { music = true, sfx = true, vipSkins = true }
 
 	-- Forward declarations: layout and panel wiring reference each other.
 	local applyLayout: () -> ()
@@ -393,13 +405,15 @@ local function boot(): ()
 			-- snapshot/delta stays authoritative and re-applies.
 			if key == "music" then
 				localSettings.music = value
-			else
+			elseif key == "sfx" then
 				localSettings.sfx = value
+			else
+				localSettings.vipSkins = value
 			end
 			SoundController.ApplySettings(localSettings)
 			local current = model
 			if current ~= nil then
-				current.state.settings = { music = localSettings.music, sfx = localSettings.sfx }
+				current.state.settings = table.clone(localSettings)
 			end
 			requestSetSetting:FireServer(key, value)
 		end,
@@ -410,8 +424,8 @@ local function boot(): ()
 	panels.shop = shopPanel
 	panels.settings = settingsPanel
 
-	local function applySettings(pushed: { music: boolean, sfx: boolean }): ()
-		localSettings = { music = pushed.music, sfx = pushed.sfx }
+	local function applySettings(pushed: SettingsPanel.Settings): ()
+		localSettings = table.clone(pushed)
 		SoundController.ApplySettings(localSettings)
 		settingsPanel.SetSettings(localSettings)
 	end
@@ -424,6 +438,33 @@ local function boot(): ()
 		local vip = current ~= nil and current.state.passes.VIP == true
 		local premium = player.MembershipType == Enum.MembershipType.Premium
 		legacyPanel.SetBonuses(vip, premium, #Players:GetPlayers())
+		-- Every path that changes passes (snapshot, delta, the mid-session grant mirror)
+		-- ends here, so the VIP-only settings row can never go stale.
+		settingsPanel.SetVipVisible(vip)
+	end
+
+	-- The era/VIP/next-era combination last handed to AssetPreloader, so deltas (which all
+	-- land in refreshAll) only re-request when one of the three actually changed.
+	local preloadKey: string? = nil
+	local function refreshPreload(current: Model): ()
+		local state = current.state
+		local vip = state.passes.VIP == true
+		-- Warm the era the player is about to enter once the monument makes it reachable.
+		local kind = prestigeKindFor(state)
+		local nextEraConfig = if kind == "advance"
+			then Catalog.GetEraConfig(state.era + 1)
+			elseif kind == "rebirth" then Catalog.GetEraConfig(FIRST_ERA)
+			else nil
+		local nextEraName = if nextEraConfig ~= nil then nextEraConfig.name else nil
+		local key = current.eraName .. "|" .. tostring(vip) .. "|" .. (nextEraName or "")
+		if key == preloadKey then
+			return
+		end
+		preloadKey = key
+		AssetPreloader.PreloadEra(current.eraName, vip)
+		if nextEraName ~= nil and nextEraName ~= current.eraName then
+			AssetPreloader.PreloadEra(nextEraName, vip)
+		end
 	end
 
 	local function refreshAll(): ()
@@ -447,6 +488,7 @@ local function boot(): ()
 		-- against, and re-render on every push because that rate moves with the build.
 		shopPanel.Refresh(state, current.persistedIncomePerSecond, Catalog.GetEraConfig(state.era))
 		refreshBonuses()
+		refreshPreload(current)
 	end
 
 	local function applySnapshot(payload: { [string]: any }): ()
@@ -483,8 +525,10 @@ local function boot(): ()
 		buildPanel.SetEra(eraConfig)
 		refreshAll()
 
-		if isSettings(snapshot.state.settings) then
-			applySettings(snapshot.state.settings)
+		local settings = readSettings(snapshot.state.settings)
+		if settings ~= nil then
+			snapshot.state.settings = settings
+			applySettings(settings)
 		end
 		-- The ceremony switches the ambient itself once its overlay closes.
 		if not ceremony.IsOpen() then
@@ -538,10 +582,10 @@ local function boot(): ()
 				current.state.slots[slotId] = slotState
 			end
 		end
-		local settings = delta.settings
-		if settings ~= nil and isSettings(settings) then
-			current.state.settings = { music = settings.music, sfx = settings.sfx }
-			applySettings(current.state.settings)
+		local settings = readSettings(delta.settings)
+		if settings ~= nil then
+			current.state.settings = settings
+			applySettings(settings)
 		end
 		-- M6: the whole shop state whenever a perk purchase lands (a copy, never aliased).
 		local legacyShop = delta.legacyShop

@@ -23,6 +23,6 @@
 		"welcomeBackMinSeconds": 60
 	},
 	"neighbors": { "perPlayer": 0.03, "maxBonus": 0.27 },
-	"remotes": { "callsPerSecond": 10, "promptCallsPerSecond": 1, "snapshotCallsPerSecond": 2, "stateDeltaHz": 4, "padTouchDebounce": 0.5 },
+	"remotes": { "callsPerSecond": 10, "promptCallsPerSecond": 1, "snapshotCallsPerSecond": 2, "stateDeltaHz": 4, "padTouchDebounce": 0.5, "skinRefreshDelaySeconds": 0.75 },
 	"debug": { "studioIncomeMultiplier": 100, "studioFreeBuy": false }
 }

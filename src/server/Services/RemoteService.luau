@@ -65,9 +65,9 @@ local validators: { [string]: Validator } = {
 		return args.n == 1 and typeof(args[1]) == "string"
 	end,
 	RequestSetSetting = function(args: PackedArgs): boolean
-		-- Only the two Types.SettingKey values exist; anything else is a silent drop.
+		-- Only the Types.SettingKey values exist; anything else is a silent drop.
 		return args.n == 2
-			and (args[1] == "music" or args[1] == "sfx")
+			and (args[1] == "music" or args[1] == "sfx" or args[1] == "vipSkins")
 			and typeof(args[2]) == "boolean"
 	end,
 	RequestRetryLoad = function(args: PackedArgs): boolean

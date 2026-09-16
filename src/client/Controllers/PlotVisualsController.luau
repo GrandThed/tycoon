@@ -1,9 +1,9 @@
 --!strict
 -- Client-side plot presentation (docs/INTERFACES.md, M3 client contracts): the reveal
 -- tween on a purchase and the floating level-up text, both driven by the server's FxEvent.
--- Touches only the local player's own Workspace/Plots/Plot_<i>/Buildings/Building_<slotId>
--- copies — never pads, never other plots — and nothing here replicates back. Every
--- instance it creates is destroyed when its effect ends. eraAdvance/rebirth belong to
+-- Effects touch only the local player's own Workspace/Plots/Plot_<i>/Buildings/Building_<slotId>
+-- copies — never pads — and nothing here replicates back. Every instance it creates is
+-- destroyed when its effect ends. eraAdvance/rebirth belong to
 -- UIController (two listeners on one RemoteEvent, disjoint kinds).
 --
 -- M6: the level-up pitch counts milestones from the player's own list (Extra Milestone),
@@ -16,11 +16,18 @@
 -- arrives right after the milestone levelUp for the same crossing, so the shared fanfare
 -- (milestone sound, flash, burst) is deduped per slot; the pop never fights the reveal
 -- tween because both register in scaleTweens by slotId.
+--
+-- Asset preload amendment: on every plot (other players' buildings flash too) a template
+-- building or a new Stage<n> is held at LocalTransparencyModifier 1 until AssetPreloader
+-- reports its MeshParts loaded or Theme.ASSET_LOAD_TIMEOUT_SECONDS passes. The modifier is
+-- local and separate from the Size/CFrame the scale driver writes, so the two never conflict.
+-- The reveal and the pop wait on the same gate, so they never animate an invisible or grey model.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local ContentProvider = game:GetService("ContentProvider")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -32,6 +39,7 @@ local Create = require(uiFolder:WaitForChild("Create"))
 local Motion = require(uiFolder:WaitForChild("Motion"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
+local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
 
 -- World naming frozen since M1 (docs/INTERFACES.md).
 local PLOT_ATTRIBUTE = "PlotIndex"
@@ -59,6 +67,22 @@ local scaleTweens: { [string]: ScaleTween } = {}
 -- os.clock of the last milestone fanfare per slot, so levelUp(milestone) and stageUp for
 -- the same crossing play the sound/flash/burst once between them.
 local lastMilestoneFx: { [string]: number } = {}
+
+-- Load gate bookkeeping per live building Model. `pending` counts gates still loading;
+-- `waiters` are FX threads resumed once it drops to zero. `hiddenParts` stay hidden until
+-- then, so an earlier gate never shows its parts full size while a reveal is still waiting
+-- on a later one. `gated` marks roots and parts already considered, so a Stage<n> and its
+-- MeshParts arriving as separate DescendantAdded events are handled once; it lives and dies
+-- with the watch.
+type BuildingWatch = {
+	pending: number,
+	waiters: { thread },
+	hiddenParts: { BasePart },
+	gated: { [Instance]: boolean },
+	connections: { RBXScriptConnection },
+}
+-- Entries are removed by unwatchBuilding (AncestryChanged / Destroying).
+local watches: { [Model]: BuildingWatch } = {}
 
 local function localBuildingsFolder(): Instance?
 	local plotIndex = player:GetAttribute(PLOT_ATTRIBUTE)
@@ -112,6 +136,207 @@ local function topOffset(building: Instance, originY: number): number
 		return building.Position.Y + building.Size.Y / 2 - originY
 	end
 	return 0
+end
+
+local function releaseWaiters(watch: BuildingWatch): ()
+	local waiters = watch.waiters
+	watch.waiters = {}
+	for _, waiter in waiters do
+		task.spawn(waiter)
+	end
+end
+
+local function showHiddenParts(watch: BuildingWatch): ()
+	local parts = watch.hiddenParts
+	watch.hiddenParts = {}
+	for _, part in parts do
+		part.LocalTransparencyModifier = 0
+	end
+end
+
+local function isFetched(content: string): boolean
+	if content == "" then
+		return true -- nothing to download
+	end
+	local ok, status = pcall(function()
+		return ContentProvider:GetAssetFetchStatus(content)
+	end)
+	return ok and status == Enum.AssetFetchStatus.Success
+end
+
+-- Rebuilds (RefreshCosmetics), stage swaps and streamed-back parts usually reuse content this
+-- client already has; hiding those would blink them for a frame or two on every client.
+local function allFetched(meshParts: { MeshPart }): boolean
+	for _, meshPart in meshParts do
+		if not isFetched(meshPart.MeshId) or not isFetched(meshPart.TextureID) then
+			return false
+		end
+	end
+	return true
+end
+
+-- Hides every not-yet-gated BasePart under `root` until its MeshParts load. A root with no
+-- new MeshParts (a Model whose meshes have not streamed in yet, a legacy Part-only model) is
+-- left alone and unmarked; its MeshParts gate themselves when they arrive.
+local function gate(watch: BuildingWatch, root: Instance): ()
+	local gated = watch.gated
+	if gated[root] then
+		return
+	end
+	local parts: { BasePart } = {}
+	local meshParts: { MeshPart } = {}
+	local function consider(instance: Instance): ()
+		if instance:IsA("BasePart") and not gated[instance] then
+			table.insert(parts, instance)
+			if instance:IsA("MeshPart") then
+				table.insert(meshParts, instance)
+			end
+		end
+	end
+	consider(root)
+	for _, descendant in root:GetDescendants() do
+		consider(descendant)
+	end
+	if #meshParts == 0 then
+		return
+	end
+	gated[root] = true
+	for _, part in parts do
+		gated[part] = true
+	end
+	if allFetched(meshParts) then
+		return
+	end
+	for _, part in parts do
+		part.LocalTransparencyModifier = 1
+		table.insert(watch.hiddenParts, part)
+	end
+	watch.pending += 1
+	task.spawn(function()
+		AssetPreloader.AwaitInstance(root, Theme.ASSET_LOAD_TIMEOUT_SECONDS)
+		-- After unwatchBuilding this record is detached: the count may land at zero again,
+		-- but its waiter and hidden lists were already emptied there.
+		watch.pending -= 1
+		if watch.pending == 0 then
+			-- Waiters run synchronously up to their first yield, so a reveal applies its
+			-- start scale before the parts show and no full-size frame slips through.
+			releaseWaiters(watch)
+			showHiddenParts(watch)
+		end
+	end)
+end
+
+local function gateCandidate(instance: Instance): boolean
+	return instance:IsA("Model") or instance:IsA("MeshPart")
+end
+
+local function unwatchBuilding(model: Model): ()
+	local watch = watches[model]
+	if watch == nil then
+		return
+	end
+	watches[model] = nil
+	for _, connection in watch.connections do
+		connection:Disconnect()
+	end
+	-- A waiter must never hang on a building the server removed (rebuild, rebirth), and
+	-- nothing it hid may stay hidden.
+	releaseWaiters(watch)
+	showHiddenParts(watch)
+	watch.gated = {}
+end
+
+-- Idempotent: the Buildings watcher and an FX handler that got there first both land here.
+local function watchBuilding(model: Model): BuildingWatch
+	local existing = watches[model]
+	if existing ~= nil then
+		return existing
+	end
+	local watch: BuildingWatch = {
+		pending = 0,
+		waiters = {},
+		hiddenParts = {},
+		gated = {},
+		connections = {},
+	}
+	watches[model] = watch
+	gate(watch, model)
+	-- Covers stage swaps (a new Stage<n> Model) and MeshParts that stream in late, whether
+	-- their stage is still hidden or already shown.
+	table.insert(
+		watch.connections,
+		model.DescendantAdded:Connect(function(descendant: Instance)
+			if gateCandidate(descendant) then
+				gate(watch, descendant)
+			end
+		end)
+	)
+	table.insert(
+		watch.connections,
+		model.AncestryChanged:Connect(function()
+			if not model:IsDescendantOf(Workspace) then
+				unwatchBuilding(model)
+			end
+		end)
+	)
+	table.insert(
+		watch.connections,
+		model.Destroying:Connect(function()
+			unwatchBuilding(model)
+		end)
+	)
+	return watch
+end
+
+-- Yields until the building's gates are all open (at most about the load timeout). Sweeps
+-- first because a stage the server swapped just before firing FxEvent may still have its
+-- DescendantAdded event queued behind this handler.
+local function awaitVisible(building: Instance): ()
+	if not building:IsA("Model") or not building:IsDescendantOf(Workspace) then
+		return
+	end
+	local watch = watchBuilding(building)
+	for _, descendant in building:GetDescendants() do
+		if gateCandidate(descendant) then
+			gate(watch, descendant)
+		end
+	end
+	if watch.pending == 0 then
+		return
+	end
+	table.insert(watch.waiters, coroutine.running())
+	coroutine.yield()
+end
+
+local function watchBuildingsFolder(folder: Instance): ()
+	local function onChild(child: Instance): ()
+		if child:IsA("Model") then
+			watchBuilding(child)
+		end
+	end
+	for _, child in folder:GetChildren() do
+		onChild(child)
+	end
+	-- Plot folders live for the whole server; Destroy would disconnect this anyway.
+	folder.ChildAdded:Connect(onChild)
+end
+
+local function watchPlot(plot: Instance): ()
+	if string.sub(plot.Name, 1, #PLOT_PREFIX) ~= PLOT_PREFIX then
+		return
+	end
+	local buildings = plot:FindFirstChild(BUILDINGS_FOLDER)
+	if buildings ~= nil then
+		watchBuildingsFolder(buildings)
+		return
+	end
+	local connection: RBXScriptConnection? = nil
+	connection = plot.ChildAdded:Connect(function(child: Instance)
+		if child.Name == BUILDINGS_FOLDER and connection ~= nil then
+			connection:Disconnect()
+			watchBuildingsFolder(child)
+		end
+	end)
 end
 
 local function countMilestones(toLevel: number): number
@@ -352,6 +577,10 @@ local function onReveal(payload: Types.FxReveal): ()
 			return -- not replicated in time; the building still stands, just without fanfare
 		end
 		SoundController.Play("purchase")
+		awaitVisible(building)
+		if building.Parent == nil then
+			return -- rebuilt or removed while its assets loaded
+		end
 		local tween: Tween? = nil
 		if building:IsA("Model") then
 			tween = revealModel(building, payload.slotId)
@@ -374,19 +603,31 @@ end
 
 -- The milestone fanfare shared by levelUp(milestone) and stageUp: whichever of the two
 -- arrives first for a crossing plays it, the other finds the dedupe window and skips.
-local function milestoneFanfare(slotId: string, building: Instance?, origin: Instance?): ()
+-- Claiming is separate from playing so stageUp can claim on arrival (keeping the dedupe
+-- window honest) and play once its stage has loaded, however long that takes.
+local function claimMilestoneFanfare(slotId: string): boolean
 	local now = os.clock()
 	local last = lastMilestoneFx[slotId]
 	if last ~= nil and now - last < Theme.MILESTONE_FX_DEDUPE_SECONDS then
-		return
+		return false
 	end
 	lastMilestoneFx[slotId] = now
+	return true
+end
+
+local function playMilestoneFanfare(building: Instance?, origin: Instance?): ()
 	SoundController.Play("levelUpMilestone")
 	if building ~= nil then
 		flashHighlight(building, true)
 	end
 	if origin ~= nil then
 		burst(origin, Theme.LEVELUP_PARTICLES)
+	end
+end
+
+local function milestoneFanfare(slotId: string, building: Instance?, origin: Instance?): ()
+	if claimMilestoneFanfare(slotId) then
+		playMilestoneFanfare(building, origin)
 	end
 end
 
@@ -427,11 +668,28 @@ local function onStageUp(payload: Types.FxStageUp): ()
 	if building == nil then
 		return
 	end
-	milestoneFanfare(payload.slotId, building, (fxOrigin(building)))
-	local active = scaleTweens[payload.slotId]
-	if building:IsA("Model") and (active == nil or active.kind ~= "reveal") then
-		popModel(building, payload.slotId)
+	if not building:IsA("Model") then
+		milestoneFanfare(payload.slotId, building, (fxOrigin(building)))
+		return
 	end
+	local model = building :: Model
+	local claimed = claimMilestoneFanfare(payload.slotId)
+	-- The server destroys the old stage in the same frame it parents the new one, so there
+	-- is nothing left to keep on screen: the new stage stays hidden until loaded, then the
+	-- flash/burst and the pop land on it together.
+	task.spawn(function()
+		awaitVisible(model)
+		if model.Parent == nil then
+			return
+		end
+		if claimed then
+			playMilestoneFanfare(model, (fxOrigin(model)))
+		end
+		local active = scaleTweens[payload.slotId]
+		if active == nil or active.kind ~= "reveal" then
+			popModel(model, payload.slotId)
+		end
+	end)
 end
 
 local function onFxEvent(payload: any): ()
@@ -530,6 +788,14 @@ function PlotVisualsController.Start(): ()
 		-- Live for the whole session; the connections die with the client.
 		fxEvent.OnClientEvent:Connect(onFxEvent)
 		stateChanged.OnClientEvent:Connect(onStateChanged)
+	end)
+	task.spawn(function()
+		-- PlotService builds every plot at server boot, so the set is fixed for the session.
+		local plots = Workspace:WaitForChild(PLOTS_FOLDER)
+		for _, plot in plots:GetChildren() do
+			watchPlot(plot)
+		end
+		plots.ChildAdded:Connect(watchPlot)
 	end)
 	if Theme.reducedMotion then
 		-- The plot is assigned on claim (PlotIndex attribute), possibly before we run.

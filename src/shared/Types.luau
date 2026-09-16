@@ -42,7 +42,7 @@ export type PlayerState = {
 	lastSeen: number,
 	incomeAtSave: number,
 	stats: { totalCashAllTime: number, erasCompleted: number, playtimeSeconds: number },
-	settings: { music: boolean, sfx: boolean },
+	settings: { music: boolean, sfx: boolean, vipSkins: boolean },
 	-- M5 (schema v2): the DoubleOffline amount a still-open purchase dialog is for, so a
 	-- receipt delivered in a later session (player left with the dialog up) still grants it.
 	-- 0 means "no reservation".
@@ -113,7 +113,7 @@ export type Delta = {
 	persistedIncomePerSecond: number?,
 	slots: { [string]: SlotState }?,
 	-- M3: the whole settings table whenever a RequestSetSetting write lands.
-	settings: { music: boolean, sfx: boolean }?,
+	settings: { music: boolean, sfx: boolean, vipSkins: boolean }?,
 	-- M6: the whole shop state whenever the legacyShop dirty flag flushes (a copy, never aliased).
 	legacyShop: LegacyShopState?,
 }
@@ -216,7 +216,7 @@ export type MonetizationConfig = {
 }
 
 -- RequestSetSetting keys; anything else is dropped by the remote validator.
-export type SettingKey = "music" | "sfx"
+export type SettingKey = "music" | "sfx" | "vipSkins"
 
 -- Sounds.json v1 mirror; field names follow the JSON keys exactly.
 export type SoundGroupName = "SFX" | "Music" | "UI"
@@ -286,6 +286,9 @@ export type RemotesConfig = {
 	snapshotCallsPerSecond: number,
 	stateDeltaHz: number,
 	padTouchDebounce: number,
+	-- VIP skins toggle: a vipSkins flip rebuilds the whole plot, so flips inside this window
+	-- collapse into one rebuild instead of one per call.
+	skinRefreshDelaySeconds: number,
 }
 
 export type DebugConfig = { studioIncomeMultiplier: number, studioFreeBuy: boolean }

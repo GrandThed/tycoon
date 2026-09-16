@@ -250,7 +250,11 @@ local function flushDeltas(): ()
 		end
 		if record.settings then
 			-- Whole table by contract (M3): a copy, so the client's merge never aliases state.
-			delta.settings = { music = state.settings.music, sfx = state.settings.sfx }
+			delta.settings = {
+				music = state.settings.music,
+				sfx = state.settings.sfx,
+				vipSkins = state.settings.vipSkins,
+			}
 		end
 		if record.legacyShop then
 			-- Whole table by contract (M6), copied so the client's merge never aliases state.

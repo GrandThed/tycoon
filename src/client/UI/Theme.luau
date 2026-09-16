@@ -229,6 +229,11 @@ local Theme = {
 	GROW_HINT_FORMAT = "Grows at Lv %d",
 	MILESTONE_GROW_HINT_FORMAT = "×%s & grows at Lv %d",
 
+	-- Asset preload gate (PlotVisualsController): a freshly replicated template building or
+	-- stage stays locally hidden until its meshes and textures load, but never longer than
+	-- this, so a failed or slow download shows grey rather than nothing.
+	ASSET_LOAD_TIMEOUT_SECONDS = 3,
+
 	-- M5: data-load safe-mode card (LoadScreen). The dim is lighter than a modal scrim
 	-- because the world stays playable behind it (spec section 5).
 	LOAD_CARD_WIDTH = 320,

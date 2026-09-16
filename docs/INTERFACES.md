@@ -1898,3 +1898,93 @@ uploads returned the same `imageId`, so a kit's texture id is stable across uplo
 `ServerStorage.Assets` mapping is `{"$path": {"optional": "templates"}}` (Rojo 7.7), which makes
 `.gitkeep` placeholders unnecessary. A Studio-only `GrantCash` Workspace attribute (number,
 consumed once by the 1 Hz tick like `GrantLegacy`) was added by the lead for the growth playtest.
+
+---
+
+# Amendment — VIP skins toggle (2026-09-16)
+
+Ben asked for a way to switch the VIP building skin off. It is a persisted player setting, not a
+Studio lever. The VIP pass keeps every other benefit (income bonus, gold sign text) regardless.
+
+## Contract
+
+- **Setting:** `settings.vipSkins: boolean`, default `true`. `Types.PlayerState.settings` and the
+  `settings` delta become `{ music: boolean, sfx: boolean, vipSkins: boolean }`;
+  `Types.SettingKey = "music" | "sfx" | "vipSkins"`.
+- **Profile schema v4:** `SCHEMA_VERSION` 3 → 4; `Migrations[3]` sets `state.settings.vipSkins =
+  true` when nil (additive, idempotent). Template default includes `vipSkins = true`.
+- **Remote:** `RequestSetSetting(key, value)` — validator accepts `"vipSkins"`; same boolean check
+  and rate limit. `DataService.SetSetting` writes it. In `Main.server.luau`, after a successful
+  write of `vipSkins`, call `PlotService.RefreshCosmetics(player)` (silent bulk rebuild — no FX)
+  in addition to the existing `MarkDirty(player, { settings = true })`. A write whose value equals
+  the current one does not rebuild. **Review fix:** the rebuild runs only for a VIP owner, and
+  flips are coalesced — the first change schedules one `RefreshCosmetics` after
+  `Game.json remotes.skinRefreshDelaySeconds` (0.75); later flips inside that window share it;
+  the pending flag is cleared on PlayerRemoving.
+- **Server skin rule:** one helper in PlotService, `usesVipSkins(state) = state.passes.VIP == true
+  and state.settings.vipSkins ~= false`, replaces `state.passes.VIP == true` in the three
+  skin decisions: `dressStage` (VIP texture swap), `spawnBuilding` (`findTemplate` vipSkins arg),
+  `swapStage` (`findTemplate` vipSkins arg). The sign colour keeps reading `passes.VIP`.
+- **EconomyService:** the settings delta carries `vipSkins` alongside music/sfx.
+- **Client:** SettingsPanel gains a third row `{ key = "vipSkins", label = "VIP building skins" }`,
+  visible only while `state.passes.VIP == true` (hidden, not disabled, otherwise; re-evaluated when
+  passes change, including the local mirror after a mid-session VIP grant). UIController carries
+  `vipSkins` in `localSettings`, snapshot/delta parsing, and the optimistic write; the toggle fires
+  `RequestSetSetting("vipSkins", value)` like the others. SoundController ignores the key.
+
+## Ownership (one wave, disjoint)
+
+| Agent | Files |
+|---|---|
+| luau-engineer | `src/shared/Types.luau`, `src/server/Main.server.luau`, `src/server/Services/{DataService,RemoteService,EconomyService,PlotService}.luau` |
+| ui-engineer | `src/client/UI/SettingsPanel.luau`, `src/client/Controllers/{UIController,SoundController}.luau` |
+
+**Done when:** a VIP owner toggles "VIP building skins" off and every building on their plot
+rebuilds with the normal textures (and back on with VIP textures); the setting survives rejoin; a
+non-VIP player never sees the row; an old v3 profile loads as v4 with `vipSkins = true`; stylua,
+selene, luau-lsp analyze and `rojo build` are clean.
+
+---
+
+# Amendment — asset preload, no grey flash (2026-09-16)
+
+Ben saw template buildings appear grey/untextured and colour in a moment later: MeshParts are
+parented before their MeshContent/TextureContent have downloaded on the client. Client-only fix;
+no server, remote or config change.
+
+## Contract
+
+- **New module `src/client/Controllers/AssetPreloader.luau`:**
+  - `AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()` — non-yielding; spawns
+    one `ContentProvider:PreloadAsync` pass over `rbxassetid://` content strings read from
+    `Catalog.GetAssetsConfig()`: first every distinct `imageId` of the era's parts (plus each
+    kit's `vipImageId > 0` when `includeVip`), then every `meshId`, stage 0 first then ascending
+    stages. Ids already requested are skipped (module-level set), so repeat calls are cheap. A
+    missing config/era is a silent no-op. PreloadAsync runs inside `pcall`; failures are ignored
+    (the building is shown anyway).
+  - `AssetPreloader.AwaitInstance(instance: Instance, timeoutSeconds: number): ()` — yields until
+    `PreloadAsync` over the instance's MeshParts finishes or the timeout elapses, whichever first.
+    Never errors.
+- **Hide until loaded:** the client watches every plot's `Buildings` folder (all plots, not only
+  the local one — other players' plots flash too). When a template building Model or a new
+  `Stage<n>` child appears, its BaseParts get `LocalTransparencyModifier = 1`, then
+  `AwaitInstance(..., Theme.ASSET_LOAD_TIMEOUT_SECONDS)` (new Theme constant, 3), then the
+  modifier returns to 0. Placeholder Parts (no MeshParts) are not hidden. Parts that stream in
+  later under an already-hidden stage are handled the same way.
+- **FX ordering (local owner):** the existing reveal tween on buy and the stage pop on `stageUp`
+  start only after the building/stage is visible, so the animation never plays on an invisible or
+  grey model. If the Fx event arrives before the Model replicates, keep today's behaviour for
+  finding it, then wait on the same load gate.
+- **Kick-off:** `UIController` (or `Main.client`) calls `PreloadEra(state.era's era name,
+  state.passes.VIP == true)` on the first Snapshot and again whenever the era or VIP pass changes
+  (and for the next era once the player can advance, if cheap to detect).
+
+## Ownership
+
+| Agent | Files |
+|---|---|
+| ui-engineer | new `src/client/Controllers/AssetPreloader.luau`, `src/client/Controllers/PlotVisualsController.luau`, `src/client/Controllers/UIController.luau`, `src/client/Main.client.luau`, `src/client/UI/Theme.luau` |
+
+**Done when:** on a fresh join and on buy/level-up, Village buildings appear already textured (or
+after at most the timeout); nothing stays invisible when an asset fails; other players' plots
+behave the same; stylua, selene, luau-lsp analyze and `rojo build` are clean.

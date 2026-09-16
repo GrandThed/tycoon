@@ -32,6 +32,7 @@ local VIP_ASSET_SUFFIX = "_VIP"
 -- one MeshPart per kit named after the kit, and an invisible `Base` PrimaryPart at the anchor.
 local STAGE_CHILD_PATTERN = "^Stage(%d+)$"
 local STAGE_CHILD_PREFIX = "Stage"
+local TEMPLATE_BASE_NAME = "Base"
 -- Attachment under a template's Base at half the visible stage's height: the LevelUpPrompt and
 -- the client's particle/float-text origin hang here, so neither sits at the building's feet.
 local PROMPT_ANCHOR_NAME = "PromptAnchor"
@@ -329,11 +330,18 @@ local function applyVipTextures(stageModel: Model): ()
 	end
 end
 
+-- The VIP pass grants the skin, but the owner may switch it off (settings.vipSkins); nil counts as
+-- on so a profile read before its migration still shows what the pass paid for. Only the skin
+-- honours the toggle — the gold sign text and income bonus stay tied to the pass alone.
+local function usesVipSkins(state: Types.PlayerState): boolean
+	return state.passes.VIP == true and state.settings.vipSkins ~= false
+end
+
 -- Everything owner-dependent about a visible stage, in one place so the spawn and swap paths
 -- cannot drift: the VIP texture, then the Golden Roads tint on unlock slots (Color multiplies
 -- the texture, so the road reads as gilded rather than flat).
 local function dressStage(stageModel: Model, slot: Types.SlotConfig, state: Types.PlayerState): ()
-	if state.passes.VIP == true then
+	if usesVipSkins(state) then
 		applyVipTextures(stageModel)
 	end
 	if slot.type == "unlock" and ownsCosmetic(state, PERK_GOLDEN_ROADS) then
@@ -371,10 +379,17 @@ local function positionPromptAnchor(building: Model, stageModel: Model): Attachm
 	return anchor
 end
 
+-- The template's ground-level Base, found by name. The PrimaryPart ref is not trusted: it can
+-- arrive nil in a live session, and a Model without one pivots about its bounding-box centre,
+-- which sank every building by half its height in the M7 playtest.
+local function templateBase(model: Model): BasePart?
+	local base = model:FindFirstChild(TEMPLATE_BASE_NAME)
+	return if base ~= nil and base:IsA("BasePart") then base else nil
+end
+
 -- Clones `stage` out of the template into the live building at the same offset from the
--- building's pivot as it has from the template's (both pivots are the Base part, but the
--- relation holds for any pivot), then dresses it and re-aims the prompt anchor. Hidden stages
--- are never kept alive.
+-- building's Base as it has from the template's (pivot fallback for a template without one),
+-- then dresses it and re-aims the prompt anchor. Hidden stages are never kept alive.
 local function attachStage(
 	template: Model,
 	building: Model,
@@ -388,7 +403,11 @@ local function attachStage(
 	end
 	local clone = templateStage:Clone()
 	clone.Name = STAGE_CHILD_PREFIX .. tostring(stage)
-	clone:PivotTo(building:GetPivot() * template:GetPivot():ToObjectSpace(templateStage:GetPivot()))
+	local sourceBase = templateBase(template)
+	local targetBase = templateBase(building)
+	local sourceFrame = if sourceBase ~= nil then sourceBase.CFrame else template:GetPivot()
+	local targetFrame = if targetBase ~= nil then targetBase.CFrame else building:GetPivot()
+	clone:PivotTo(targetFrame * sourceFrame:ToObjectSpace(templateStage:GetPivot()))
 	dressStage(clone, slot, state)
 	clone.Parent = building
 	positionPromptAnchor(building, clone)
@@ -640,7 +659,7 @@ local function spawnBuilding(
 	layout: Types.EraLayout,
 	state: Types.PlayerState
 ): ()
-	local vipSkins = state.passes.VIP == true
+	local vipSkins = usesVipSkins(state)
 	local anchor = record.base:FindFirstChild("Slot_" .. slot.id)
 	local anchorCFrame: CFrame
 	if anchor ~= nil and anchor:IsA("Attachment") then
@@ -670,6 +689,10 @@ local function spawnBuilding(
 	if template ~= nil then
 		local model = template:Clone()
 		model.Name = "Building_" .. slot.id
+		local base = templateBase(model)
+		if base ~= nil then
+			model.PrimaryPart = base
+		end
 		if chosenStage ~= nil then
 			for index, stageModel in stageChildren(model) do
 				if index ~= chosenStage then
@@ -751,7 +774,7 @@ function swapStage(
 	if building == nil or not building:IsA("Model") then
 		return nil
 	end
-	local template = findTemplate(eraName, slot.modelName, state.passes.VIP == true)
+	local template = findTemplate(eraName, slot.modelName, usesVipSkins(state))
 	if template == nil then
 		return nil
 	end
