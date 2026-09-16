@@ -9,7 +9,7 @@
 			"name": "Newsstand",
 			"modelName": "Newsstand",
 			"description": "corner newsstand with striped awning and paper racks",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 0,
 			"baseIncome": 300
 		},
@@ -19,7 +19,7 @@
 			"name": "Hot Dog Stand",
 			"modelName": "HotDogStand",
 			"description": "small hot dog cart with umbrella and menu board",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 15000,
 			"baseIncome": 1200
 		},
@@ -29,7 +29,7 @@
 			"name": "Diner",
 			"modelName": "Diner",
 			"description": "chrome retro diner with neon sign and big windows",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 60000,
 			"baseIncome": 3000
 		},
@@ -39,7 +39,7 @@
 			"name": "Gas Station",
 			"modelName": "GasStation",
 			"description": "retro gas station with canopy and twin pumps",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 160000,
 			"baseIncome": 6000
 		},
@@ -49,7 +49,7 @@
 			"name": "Motel",
 			"modelName": "Motel",
 			"description": "single-story roadside motel with tall vacancy sign",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 450000,
 			"baseIncome": 11000
 		},
@@ -59,7 +59,7 @@
 			"name": "Pave Main Street",
 			"modelName": "RoadStraight",
 			"description": "asphalt road segment with painted center line",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Roads",
 			"baseCost": 1000000,
 			"baseIncome": 0,
 			"multiplier": 0.05
@@ -70,7 +70,7 @@
 			"name": "Barber Shop",
 			"modelName": "BarberShop",
 			"description": "small barber shop with spiral pole and awning",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Roads",
 			"baseCost": 2000000,
 			"baseIncome": 33000
 		},
@@ -80,7 +80,7 @@
 			"name": "Fire Hydrant",
 			"modelName": "FireHydrant",
 			"description": "red curbside fire hydrant",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Roads",
 			"baseCost": 800000,
 			"baseIncome": 0,
 			"requires": "barberShop",
@@ -92,7 +92,7 @@
 			"name": "Grocery Store",
 			"modelName": "GroceryStore",
 			"description": "corner grocery store with produce crates out front",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial",
 			"baseCost": 4200000,
 			"baseIncome": 50000,
 			"requires": "barberShop"
@@ -103,7 +103,7 @@
 			"name": "Laundromat",
 			"modelName": "Laundromat",
 			"description": "storefront laundromat with washer row visible inside",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial",
 			"baseCost": 9000000,
 			"baseIncome": 78000
 		},
@@ -113,7 +113,7 @@
 			"name": "Car Dealership",
 			"modelName": "CarDealership",
 			"description": "showroom with big glass front and pennant flags",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 35000000,
 			"baseIncome": 120000
 		},
@@ -123,7 +123,7 @@
 			"name": "Install Traffic Lights",
 			"modelName": "TrafficLight",
 			"description": "hanging traffic light on a curved pole",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Roads",
 			"baseCost": 68000000,
 			"baseIncome": 0,
 			"multiplier": 0.08
@@ -134,7 +134,7 @@
 			"name": "Cinema",
 			"modelName": "Cinema",
 			"description": "movie theater with marquee and ticket booth",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 110000000,
 			"baseIncome": 240000
 		},
@@ -144,7 +144,7 @@
 			"name": "Streetlamp Row",
 			"modelName": "Streetlamp",
 			"description": "pair of curved metal streetlamps",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Roads",
 			"baseCost": 45000000,
 			"baseIncome": 0,
 			"requires": "cinema",
@@ -156,7 +156,7 @@
 			"name": "Auto Repair Shop",
 			"modelName": "AutoRepairShop",
 			"description": "garage with rolling door, lift and tire stack",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 190000000,
 			"baseIncome": 340000,
 			"requires": "cinema"
@@ -167,7 +167,7 @@
 			"name": "Bowling Alley",
 			"modelName": "BowlingAlley",
 			"description": "bowling alley with giant pin sign on the roof",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial",
 			"baseCost": 300000000,
 			"baseIncome": 480000
 		},
@@ -177,7 +177,7 @@
 			"name": "Open the Bus Line",
 			"modelName": "BusYellow",
 			"description": "yellow city bus parked at a small bus stop",
-			"kit": "Toy Car Kit",
+			"kit": "City Kit Roads",
 			"baseCost": 500000000,
 			"baseIncome": 0,
 			"multiplier": 0.1
@@ -188,7 +188,7 @@
 			"name": "Bank",
 			"modelName": "Bank",
 			"description": "stone bank facade with columns and brass doors",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 900000000,
 			"baseIncome": 870000
 		},
@@ -198,7 +198,7 @@
 			"name": "Department Store",
 			"modelName": "DepartmentStore",
 			"description": "two-story department store with display windows",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial",
 			"baseCost": 1300000000,
 			"baseIncome": 1150000
 		},
@@ -208,7 +208,7 @@
 			"name": "Billboard",
 			"modelName": "Billboard",
 			"description": "large rooftop billboard on steel legs",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 400000000,
 			"baseIncome": 0,
 			"requires": "departmentStore",
@@ -220,7 +220,7 @@
 			"name": "Radio Station",
 			"modelName": "RadioStation",
 			"description": "brick radio station with lattice antenna tower",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 1800000000,
 			"baseIncome": 1550000,
 			"requires": "departmentStore"
@@ -231,7 +231,7 @@
 			"name": "Fire Station",
 			"modelName": "FireStation",
 			"description": "fire station with red doors and a garage bay",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 2100000000,
 			"baseIncome": 2000000
 		},
@@ -241,7 +241,7 @@
 			"name": "Light the Neon District",
 			"modelName": "NeonSign",
 			"description": "big glowing neon arrow sign",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Industrial + City Kit Roads",
 			"baseCost": 2400000000,
 			"baseIncome": 0,
 			"multiplier": 0.12
@@ -252,7 +252,7 @@
 			"name": "Clock Tower",
 			"modelName": "ClockTower",
 			"description": "brick town hall clock tower with four-faced clock",
-			"kit": "Retro Urban Kit",
+			"kit": "City Kit Suburban + City Kit Industrial + City Kit Roads",
 			"baseCost": 2600000000,
 			"baseIncome": 0
 		}

@@ -4,4 +4,4 @@
 - [Environment drift 2026-09-08](environment-2026-09-08.md) — Desktop path, rokit reinstalled, `py` not `python`, LF via .gitattributes, agent YAML colon bug
 - [Playtest repro methods](playtest-repro-methods.md) — verify failure-path repros against library behaviour; ForceLoadFailure lever
 - [Assets direction 2026-09-15](assets-direction-2026-09-15.md) — growing buildings pipeline (M7 shipped for Village); harvest-paste routine, levers, kit facts; read docs/ASSET_RESEARCH.md first
-- [Era kits 2026-09-16](era-kits-2026-09-16.md) — Boomtown = city-kit-suburban+industrial, Metropolis = city-kit-commercial (drafts in _drafts/); redo prompt in docs/prompts
+- [Era kits 2026-09-16](era-kits-2026-09-16.md) — Boomtown = city-kit-suburban+industrial ("lower, wider", only landmarks tall), Metropolis = city-kit-commercial (drafts in _drafts/)
