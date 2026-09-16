@@ -4,7 +4,9 @@ Used by tools/testfit/testfit.py (renders) and tools/assets/merge_stages.py (mer
 which run inside Blender's Python, so this module is stdlib only.
 
 Path convention: tools/testfit/blueprints/<Era>/<ModelName>.json, where the file stem equals the
-era config's modelName and the blueprint's "id".
+era config's modelName and the blueprint's "id". City-dressing props (INTERFACES.md "M9 contracts")
+use the same schema under tools/testfit/blueprints/_props/<Era>/<PropName>.json; they are not slots,
+so their stage count is the blueprint's own (max stage + 1).
 """
 
 from __future__ import annotations
@@ -15,6 +17,8 @@ from dataclasses import dataclass, field
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 BLUEPRINTS_ROOT = os.path.join(REPO_ROOT, "tools", "testfit", "blueprints")
+PROPS_DIRNAME = "_props"
+PROPS_ROOT = os.path.join(BLUEPRINTS_ROOT, PROPS_DIRNAME)
 STAGE_COUNT = 5
 DEFAULT_SCALE = 4.0
 DEFAULT_FOOTPRINT = (9.0, 9.0)
@@ -53,6 +57,10 @@ class Blueprint:
         return max((p.stage for p in self.pieces), default=0)
 
     @property
+    def stage_count(self) -> int:
+        return self.max_stage + 1
+
+    @property
     def kits(self) -> list[str]:
         return sorted({p.kit for p in self.pieces})
 
@@ -65,8 +73,14 @@ def blueprint_path(era: str, model: str) -> str:
     return os.path.join(BLUEPRINTS_ROOT, era, f"{model}.json")
 
 
-def list_blueprints(era: str) -> list[str]:
-    folder = os.path.join(BLUEPRINTS_ROOT, era)
+def is_prop_blueprint(path: str) -> bool:
+    """True for <anything>/_props/<Era>/<PropName>.json."""
+    era_dir = os.path.dirname(os.path.abspath(path))
+    return os.path.basename(os.path.dirname(era_dir)) == PROPS_DIRNAME
+
+
+def list_blueprints(era: str, root: str | None = None) -> list[str]:
+    folder = os.path.join(root or BLUEPRINTS_ROOT, era)
     if not os.path.isdir(folder):
         return []
     return [os.path.join(folder, f) for f in sorted(os.listdir(folder)) if f.lower().endswith(".json")]

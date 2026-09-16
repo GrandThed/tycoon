@@ -3,11 +3,17 @@
 asset ids into src/shared/Config/Assets.json.
 
     py tools/assets/upload_models.py --era Village [--model Tavern] [--dry-run]
+    py tools/assets/upload_models.py --props --era Village [--model TreeGrowing] [--dry-run]
 
 Idempotent: a stage whose modelAssetId is already non-zero, or a kit whose vipSwatchAssetId is
 non-zero, is skipped. Assets.json is rewritten after EVERY successful upload so a crash or Ctrl-C
 never loses an id. --dry-run does everything (creates/pre-lists Assets.json, builds the swatch
 GLBs, validates every file) except the network calls.
+
+--props uploads city-dressing props merged by `merge_stages.py --props` into
+Assets.json props.<Era>.<PropName> (stage count from the blueprint; the file becomes v2). Props
+reuse their kits' building textures, so no VIP swatch is built for them. --assets-json,
+--build-root and --blueprint-root point a dry run at scratch copies and fixtures.
 
 Credentials, multipart encoding and the operation polling are tools/upload_audio.py's, imported
 so the two uploaders can never drift on how .env is read.
@@ -26,7 +32,7 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, os.path.join(HERE, "..", "testfit"))
 import assets_config as cfg  # noqa: E402
 import glbtools  # noqa: E402
-from blueprint import BlueprintError, list_blueprints, load_blueprint  # noqa: E402
+from blueprint import BLUEPRINTS_ROOT, PROPS_ROOT, BlueprintError, list_blueprints, load_blueprint  # noqa: E402
 from upload_audio import CREATE_URL, OPERATION_URL, UploadError, api_request, build_multipart, load_env, require_credentials  # noqa: E402
 
 VIP_DIR = os.path.join(cfg.REPO_ROOT, "assets", "build", "vip")
@@ -97,7 +103,14 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--era", required=True)
     parser.add_argument("--model", action="append", default=[], help="only this modelName (repeatable)")
     parser.add_argument("--dry-run", action="store_true", help="prepare and validate everything; call no API")
+    parser.add_argument("--props", action="store_true", help="upload city-dressing props (blueprints/_props/<Era>/)")
+    parser.add_argument("--assets-json", help="read and write this Assets.json instead of src/shared/Config/Assets.json")
+    parser.add_argument("--build-root", help="merge output root to read instead of assets/build")
+    parser.add_argument("--blueprint-root", help="blueprints tree to read instead of tools/testfit/blueprints[/_props]")
     args = parser.parse_args(argv)
+    cfg.use_assets_path(args.assets_json)
+    if args.props:
+        return upload_props(args)
 
     era_cfg = cfg.load_era_config(args.era)
     if era_cfg is None:
@@ -107,12 +120,7 @@ def main(argv: list[str]) -> int:
     assets = cfg.load_assets()
     era_entries = cfg.ensure_era(assets, era_cfg)
 
-    paths = list_blueprints(args.era)
-    if args.model:
-        wanted = set(args.model)
-        paths = [p for p in paths if os.path.splitext(os.path.basename(p))[0] in wanted]
-        for missing in sorted(wanted - {os.path.splitext(os.path.basename(p))[0] for p in paths}):
-            warn(f"no blueprint tools/testfit/blueprints/{args.era}/{missing}.json")
+    paths = select_blueprints(args, BLUEPRINTS_ROOT)
 
     jobs: list[Job] = []
     kits: set[str] = set()
@@ -127,7 +135,7 @@ def main(argv: list[str]) -> int:
             warn(f"{model}: no slot with that modelName in the {args.era} config; skipped")
             continue
         kits.update(bp.kits)
-        sidecar = cfg.load_sidecar(args.era, model)
+        sidecar = cfg.load_sidecar(args.era, model, build_root=args.build_root)
         if sidecar is None:
             warn(f"{model}: no merge output (run merge_stages.py first); skipped")
             continue
@@ -135,7 +143,7 @@ def main(argv: list[str]) -> int:
         for index, stage in enumerate(stages):
             side_stage = next((s for s in sidecar.get("stages", []) if s.get("stage") == index), None)
             cfg.prefill_parts(stage, side_stage)
-            glb = os.path.join(cfg.STAGES_DIR, args.era, f"{model}_S{index}.glb")
+            glb = os.path.join(cfg.stages_dir(args.era, build_root=args.build_root), f"{model}_S{index}.glb")
             label = f"{args.era}/{model} S{index}"
             if int(stage.get("modelAssetId", 0)) != 0:
                 log(f"{label}: already uploaded as {stage['modelAssetId']}, skipped")
@@ -189,7 +197,69 @@ def main(argv: list[str]) -> int:
 
     cfg.save_assets(assets)
     log(f"Assets.json pre-listed: {len(era_entries)} {args.era} slots, {len(assets['textures'])} kit texture(s)")
+    return run_jobs(jobs, assets, args.dry_run)
 
+
+def select_blueprints(args, default_root: str) -> list[str]:
+    root = os.path.abspath(args.blueprint_root) if args.blueprint_root else default_root
+    paths = list_blueprints(args.era, root)
+    if args.model:
+        wanted = set(args.model)
+        paths = [p for p in paths if os.path.splitext(os.path.basename(p))[0] in wanted]
+        for missing in sorted(wanted - {os.path.splitext(os.path.basename(p))[0] for p in paths}):
+            rel = os.path.relpath(os.path.join(root, args.era, f"{missing}.json"), cfg.REPO_ROOT).replace(os.sep, "/")
+            warn(f"no blueprint {rel}")
+    return paths
+
+
+def upload_props(args) -> int:
+    assets = cfg.load_assets()
+    jobs: list[Job] = []
+    listed = 0
+    for path in select_blueprints(args, PROPS_ROOT):
+        try:
+            bp = load_blueprint(path)
+        except BlueprintError as exc:
+            warn(f"{path}: {exc}")
+            continue
+        prop = bp.id
+        entry = cfg.ensure_prop(assets, args.era, prop, bp.stage_count)
+        listed += 1
+        sidecar = cfg.load_sidecar(args.era, prop, props=True, build_root=args.build_root)
+        if sidecar is None:
+            warn(f"props/{args.era}/{prop}: no merge output (run merge_stages.py --props first); skipped")
+            continue
+        for index, stage in enumerate(entry["stages"]):
+            side_stage = next((s for s in sidecar.get("stages", []) if s.get("stage") == index), None)
+            cfg.prefill_parts(stage, side_stage)
+            glb = os.path.join(cfg.stages_dir(args.era, props=True, build_root=args.build_root), f"{prop}_S{index}.glb")
+            label = f"props/{args.era}/{prop} S{index}"
+            if int(stage.get("modelAssetId", 0)) != 0:
+                log(f"{label}: already uploaded as {stage['modelAssetId']}, skipped")
+                continue
+            if not os.path.isfile(glb):
+                warn(f"{label}: missing {os.path.relpath(glb, cfg.REPO_ROOT)}; skipped")
+                continue
+
+            def commit(asset_id: int, stage=stage) -> None:
+                stage["modelAssetId"] = asset_id
+
+            jobs.append(
+                Job(
+                    label,
+                    glb,
+                    f"EraCityTycoon_Prop_{args.era}_{prop}_S{index}",
+                    f"Era City Tycoon city prop '{prop}' ({args.era}) stage {index}. Kenney kit pieces, CC0.",
+                    commit,
+                )
+            )
+    if listed:
+        cfg.save_assets(assets)
+    log(f"Assets.json pre-listed: {listed} {args.era} prop(s)")
+    return run_jobs(jobs, assets, args.dry_run, props=True)
+
+
+def run_jobs(jobs: list[Job], assets: dict, dry_run: bool, props: bool = False) -> int:
     valid: list[Job] = []
     for job in jobs:
         with open(job.path, "rb") as fh:
@@ -204,7 +274,7 @@ def main(argv: list[str]) -> int:
     if not valid:
         log("nothing to upload")
         return 0
-    if args.dry_run:
+    if dry_run:
         for job in valid:
             log(f"would upload {job.label:<32} <- {os.path.relpath(job.path, cfg.REPO_ROOT)} as {job.display_name}")
         log(f"dry run: {len(valid)} upload(s) prepared, nothing sent")
@@ -229,7 +299,7 @@ def main(argv: list[str]) -> int:
     if failures:
         warn("failed (still 0, safe to re-run): " + ", ".join(failures))
         return 1
-    log("next: py tools/assets/harvest.py --emit, then paste tools/assets/harvest.luau into Studio")
+    log(f"next: py tools/assets/harvest.py --emit{' --props' if props else ''}, then paste tools/assets/harvest.luau into Studio")
     return 0
 
 

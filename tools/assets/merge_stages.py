@@ -3,6 +3,7 @@
 Runs inside Blender (headless):
 
     blender -b -P tools/assets/merge_stages.py -- --era Village [--model Tavern] [--out assets/build]
+    blender -b -P tools/assets/merge_stages.py -- --props --era Village [--model TreeGrowing]
 
 For every blueprint in tools/testfit/blueprints/<Era>/ (or just --model) and every stage the slot
 has (5 for `building`, 1 otherwise; stages are additive), the pieces present at that stage are
@@ -11,6 +12,10 @@ the blueprint's scale about the blueprint origin (bottom-centre of the footprint
 exported to assets/build/stages/<Era>/<ModelName>_S<n>.glb with one node, one material and one
 embedded PNG per kit. A bounds sidecar assets/build/stages/<Era>/<ModelName>.json records
 per-stage, per-kit extents in studs.
+
+--props reads tools/testfit/blueprints/_props/<Era>/ instead and writes to
+assets/build/stages/_props/<Era>/; a prop is not a slot, so its stage count is the blueprint's
+max stage + 1. --blueprint-root points either mode at another blueprints tree (fixtures).
 
 Kits whose materials are plain colour factors (no baseColorTexture) get the deterministic palette
 texture from palette.py with their UVs moved onto the right swatch, because Roblox drops colour
@@ -38,13 +43,24 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "testfit"))
 import glbtools  # noqa: E402
 import palette  # noqa: E402
-from blueprint import STAGE_COUNT, Blueprint, BlueprintError, Piece, list_blueprints, load_blueprint  # noqa: E402
+from blueprint import (  # noqa: E402
+    BLUEPRINTS_ROOT,
+    PROPS_DIRNAME,
+    PROPS_ROOT,
+    STAGE_COUNT,
+    Blueprint,
+    BlueprintError,
+    Piece,
+    list_blueprints,
+    load_blueprint,
+)
 
 KITS_ROOT = os.path.join(REPO_ROOT, "assets", "kenney3d")
 MODEL_DIRS = ("GLB format", "GLTF format")
 ERAS_DIR = os.path.join(REPO_ROOT, "src", "shared", "Config", "Eras")
 DEFAULT_OUT = os.path.join(REPO_ROOT, "assets", "build")
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
+PROP_TYPE = "prop"
 # The rendered footprint frame tolerates this much overhang before it is worth a warning.
 FOOTPRINT_EPS_STUDS = 0.05
 
@@ -85,6 +101,8 @@ def load_slot_types(era: str) -> dict[str, str]:
 
 
 def stage_count_for(bp: Blueprint, slot_type: str | None) -> int:
+    if slot_type == PROP_TYPE:
+        return bp.stage_count
     if slot_type == "building":
         return STAGE_COUNT
     if slot_type in SINGLE_STAGE_TYPES:
@@ -399,7 +417,8 @@ def merge_blueprint(bp: Blueprint, slot_type: str | None, out_root: str) -> dict
             per_kit.setdefault(piece.kit, []).append((piece, template))
     paints = {kit: p for kit, p in ((kit, build_kit_paint(kit, items)) for kit, items in sorted(per_kit.items())) if p is not None}
 
-    era_dir = os.path.join(out_root, "stages", bp.era)
+    stages_root = os.path.join(out_root, "stages", PROPS_DIRNAME) if slot_type == PROP_TYPE else os.path.join(out_root, "stages")
+    era_dir = os.path.join(stages_root, bp.era)
     report = {
         "id": bp.id,
         "era": bp.era,
@@ -485,15 +504,18 @@ def main() -> int:
     parser.add_argument("--era", required=True, help="era name, e.g. Village")
     parser.add_argument("--model", action="append", default=[], help="only this modelName (repeatable)")
     parser.add_argument("--out", default=DEFAULT_OUT, help="build root (default assets/build)")
+    parser.add_argument("--props", action="store_true", help="merge city-dressing props from blueprints/_props/<Era>/")
+    parser.add_argument("--blueprint-root", help="blueprints tree to read instead of tools/testfit/blueprints[/_props]")
     args = parser.parse_args(argv)
 
-    slot_types = load_slot_types(args.era)
-    paths = list_blueprints(args.era)
+    root = os.path.abspath(args.blueprint_root) if args.blueprint_root else (PROPS_ROOT if args.props else BLUEPRINTS_ROOT)
+    slot_types = {} if args.props else load_slot_types(args.era)
+    paths = list_blueprints(args.era, root)
     if args.model:
         wanted = set(args.model)
         paths = [p for p in paths if os.path.splitext(os.path.basename(p))[0] in wanted]
         for m in sorted(wanted - {os.path.splitext(os.path.basename(p))[0] for p in paths}):
-            warn(f"no blueprint tools/testfit/blueprints/{args.era}/{m}.json")
+            warn(f"no blueprint {os.path.relpath(os.path.join(root, args.era, m + '.json'), REPO_ROOT).replace(os.sep, '/')}")
     if not paths:
         warn(f"no blueprints to merge for era {args.era}")
         return 0
@@ -508,7 +530,8 @@ def main() -> int:
             continue
         for message in bp.warnings:
             warn(f"{bp.id}: {message}")
-        report = merge_blueprint(bp, slot_types.get(bp.id), os.path.abspath(args.out))
+        slot_type = PROP_TYPE if args.props else slot_types.get(bp.id)
+        report = merge_blueprint(bp, slot_type, os.path.abspath(args.out))
         if any(s.get("problems") or s.get("glb") is None for s in report["stages"]):
             failures += 1
     log(f"done: {len(paths)} blueprint(s), {failures} with problems")

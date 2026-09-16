@@ -5,6 +5,9 @@ Run inside Blender (headless):
     blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --out <dir> [--stage N]
     blender -b -P tools/testfit/testfit.py -- --dump-bounds <kit-slug>
 
+A city-dressing prop blueprint (blueprints/_props/<Era>/, or any blueprint with --props) renders
+only the stages it defines, and without --out lands in assets/testfit/out/<Era>/props/.
+
 Blueprint coordinates use the glTF/Roblox convention (Y up, front faces -Z) in kit
 units before scaling.  Blender is Z up, so every position is converted with
 (x, y, z) -> (x, -z, y) and every reported bound is converted back.
@@ -20,10 +23,11 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from blueprint import STAGE_COUNT, BlueprintError, load_blueprint  # noqa: E402
+from blueprint import STAGE_COUNT, BlueprintError, is_prop_blueprint, load_blueprint  # noqa: E402
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 KITS_ROOT = os.path.join(REPO_ROOT, "assets", "kenney3d")
+OUT_ROOT = os.path.join(REPO_ROOT, "assets", "testfit", "out")
 MODEL_DIRS = ("GLB format", "GLTF format")
 PLAYER_HEIGHT_STUDS = 5.0
 RENDER_SIZE = (1280, 960)
@@ -252,7 +256,7 @@ class PieceCache:
         return [copy_tree(r, parent) for r in roots]
 
 
-def render_blueprint(bp_path, out_dir, only_stage):
+def render_blueprint(bp_path, out_dir, only_stage, prop=False):
     try:
         bp = load_blueprint(bp_path)
     except BlueprintError as exc:
@@ -318,7 +322,9 @@ def render_blueprint(bp_path, out_dir, only_stage):
         full = (Vector((-hx, -hz, 0)), Vector((hx, hz, ph)))
     setup_camera(scene, *full)
 
-    stages = [only_stage] if only_stage is not None else list(range(STAGE_COUNT))
+    # Props are not slots: they have exactly the stages their pieces use (TreeGrowing 4, most 1).
+    stage_total = bp.stage_count if prop else STAGE_COUNT
+    stages = [only_stage] if only_stage is not None else list(range(stage_total))
     outputs = {}
     for stage in stages:
         visible = []
@@ -362,7 +368,7 @@ def render_blueprint(bp_path, out_dir, only_stage):
 
     if only_stage is None:
         strip_path = os.path.join(out_dir, f"{bid}_strip.png")
-        compose_strip([outputs[s] for s in range(STAGE_COUNT)], strip_path)
+        compose_strip([outputs[s] for s in range(stage_total)], strip_path)
 
 
 def compose_strip(stage_paths, strip_path):
@@ -429,15 +435,24 @@ def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(prog="testfit.py")
     parser.add_argument("--blueprint", help="blueprint JSON to render")
-    parser.add_argument("--out", default=os.path.join(REPO_ROOT, "assets", "testfit", "out"))
+    parser.add_argument("--out", help="output folder (default assets/testfit/out, or assets/testfit/out/<Era>/props for a prop)")
     parser.add_argument("--stage", type=int, help="render only this stage (0-4)")
+    parser.add_argument("--props", action="store_true", help="treat the blueprint as a city-dressing prop wherever it lives")
     parser.add_argument("--dump-bounds", metavar="KIT", help="print size and origin of every GLB in a kit")
     args = parser.parse_args(argv)
 
     if args.dump_bounds:
         dump_bounds(args.dump_bounds)
     elif args.blueprint:
-        render_blueprint(os.path.abspath(args.blueprint), os.path.abspath(args.out), args.stage)
+        bp_path = os.path.abspath(args.blueprint)
+        prop = args.props or is_prop_blueprint(bp_path)
+        if args.out:
+            out_dir = args.out
+        elif prop:
+            out_dir = os.path.join(OUT_ROOT, os.path.basename(os.path.dirname(bp_path)), "props")
+        else:
+            out_dir = OUT_ROOT
+        render_blueprint(bp_path, os.path.abspath(out_dir), args.stage, prop)
     else:
         parser.print_help()
 

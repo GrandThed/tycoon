@@ -1,0 +1,8 @@
+Sample Studio Output for `py tools/assets/harvest.py --props --file tools/assets/fixtures/harvest_props_sample.txt`,
+run against a scratch Assets.json prepared from the PipelineFixture props in fixtures/_props/. Every id is FAKE (91000xxx asset ids, 9200xxx mesh/image ids).
+The last line is a building record: with --props it is reported and skipped, so a mixed paste never lands in the wrong block.
+  16:40:01.101  [HARVEST] {"kind":"prop","era":"PipelineFixture","model":"FixtureLamp","stage":0,"assetId":"9100000000001","parts":[{"name":"city-kit-roads","parent":"city-kit-roads_Node","meshId":"9200000000001","imageId":"9200000000100","size":[0.125,1.5,0.594],"offset":[0,0.75,-0.234],"rotated":false}],"partCount":1}  -  Edit
+  16:40:02.204  [HARVEST] {"kind":"prop","era":"PipelineFixture","model":"FixtureTree","stage":0,"assetId":"9100000000002","parts":[{"name":"nature-kit","parent":"nature-kit_Node","meshId":"9200000000002","imageId":"9200000000200","size":[1.419,4.44,1.638],"offset":[0,2.02,0],"rotated":false}],"partCount":1}  -  Edit
+  16:40:03.310  [HARVEST] {"kind":"prop","era":"PipelineFixture","model":"FixtureTree","stage":1,"assetId":"9100000000003","parts":[{"name":"nature-kit","parent":"nature-kit_Node","meshId":"9200000000003","imageId":"9200000000200","size":[3.02,6.832,2.615],"offset":[0,3.216,0],"rotated":false}],"partCount":1}  -  Edit
+  16:40:03.411  [HARVEST-DONE] 3 loaded, 0 failed - now copy the Output and run: py tools/assets/harvest.py --props  -  Edit
+  16:40:04.000  [HARVEST] {"kind":"model","era":"Village","model":"Tavern","stage":0,"assetId":"124879481344789","parts":[],"partCount":0}  -  Edit

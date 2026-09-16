@@ -12,6 +12,10 @@ Inputs (all optional except the era configs; a missing input reads as "not yet")
   src/shared/Config/Assets.json                     uploaded ids / harvested mesh ids
   templates/<Era>/<ModelName>.rbxmx                 Rojo-mapped template
 
+City-dressing props (M9) get their own table per era, listed only when the era has any: the same
+facts from tools/testfit/blueprints/_props/<Era>/, assets/build/stages/_props/<Era>/,
+Assets.json `props` (optional key) and templates/_props/<Era>/.
+
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
 --check masks that column on both sides before comparing.
@@ -38,6 +42,8 @@ ASSETS_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"
 BLUEPRINTS_DIR = REPO_ROOT / "tools" / "testfit" / "blueprints"
 STAGES_DIR = REPO_ROOT / "assets" / "build" / "stages"
 TEMPLATES_DIR = REPO_ROOT / "templates"
+PROPS_DIRNAME = "_props"
+PROP_TYPE = "prop"
 MANIFEST_PATH = REPO_ROOT / "docs" / "ASSET_MANIFEST.md"
 
 # Era config schema v1.1 (INTERFACES.md): modelName must be PascalCase.
@@ -126,11 +132,11 @@ def validate(eras: list[dict]) -> list[str]:
     return problems
 
 
-def load_blueprint(era_name: str, model: str) -> Blueprint | None:
+def load_blueprint(era_name: str, model: str, root: Path = BLUEPRINTS_DIR) -> Blueprint | None:
     """Read a blueprint if present. Hard schema errors (unparseable, id or era
     mismatch, bad pieces) land in .problems and fail --check, because the
     merge/upload tools key on exactly those fields."""
-    path = BLUEPRINTS_DIR / era_name / f"{model}.json"
+    path = root / era_name / f"{model}.json"
     if not path.exists():
         return None
     label = path.relative_to(REPO_ROOT).as_posix()
@@ -205,10 +211,54 @@ def stage_id_counts(entry: object) -> tuple[int | None, int, int]:
     return len(stages), uploaded, harvested
 
 
-def count_glbs(era_name: str, model: str) -> int | None:
+def count_glbs(era_name: str, model: str, props: bool = False) -> int | None:
     if not STAGES_DIR.is_dir():
         return None
-    return len(list((STAGES_DIR / era_name).glob(f"{model}_S[0-9].glb")))
+    folder = STAGES_DIR / PROPS_DIRNAME / era_name if props else STAGES_DIR / era_name
+    return len(list(folder.glob(f"{model}_S[0-9].glb")))
+
+
+def collect_props(era_name: str, assets: dict | None) -> tuple[list[tuple[str, Coverage]], list[str]]:
+    """(prop name, Coverage) sorted by name for every prop with a blueprint or an Assets.json entry.
+    A prop's expected stage count is its own blueprint's (props are not slots)."""
+    era_assets: object = None
+    if assets is not None:
+        props_block = assets.get("props")
+        if isinstance(props_block, dict):
+            era_assets = props_block.get(era_name)
+    names: set[str] = set()
+    blueprint_dir = BLUEPRINTS_DIR / PROPS_DIRNAME / era_name
+    if blueprint_dir.is_dir():
+        names.update(path.stem for path in blueprint_dir.glob("*.json"))
+    if isinstance(era_assets, dict):
+        names.update(str(name) for name in era_assets)
+    rows: list[tuple[str, Coverage]] = []
+    notes: list[str] = []
+    for name in sorted(names):
+        blueprint = load_blueprint(era_name, name, BLUEPRINTS_DIR / PROPS_DIRNAME)
+        if blueprint is not None:
+            notes.extend(blueprint.problems)
+        entry = era_assets.get(name) if isinstance(era_assets, dict) else None
+        stage_count, uploaded, harvested = stage_id_counts(entry)
+        if blueprint is not None and not blueprint.problems:
+            expected = blueprint.stage_count
+        else:
+            expected = stage_count or DEFAULT_STAGE_COUNT
+        rows.append(
+            (
+                name,
+                Coverage(
+                    blueprint=blueprint,
+                    expected_stages=expected,
+                    glb_count=count_glbs(era_name, name, props=True),
+                    assets_stage_count=stage_count,
+                    uploaded_stages=uploaded,
+                    harvested_stages=harvested,
+                    template=(TEMPLATES_DIR / PROPS_DIRNAME / era_name / f"{name}.rbxmx").exists(),
+                ),
+            )
+        )
+    return rows, notes
 
 
 def collect(era: dict, assets: dict | None) -> tuple[list[Coverage], list[str]]:
@@ -301,7 +351,9 @@ def summary_line(s: dict[str, int]) -> str:
 
 def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
     per_era = [collect(era, assets) for era in eras]
+    per_era_props = [collect_props(era.get("name", "?"), assets) for era in eras]
     notes = [note for _, era_notes in per_era for note in era_notes]
+    notes += [note for _, era_notes in per_era_props for note in era_notes]
     lines: list[str] = [
         "# Asset manifest",
         "",
@@ -366,7 +418,7 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
         ),
         "",
     ]
-    for era, (rows, _) in zip(eras, per_era):
+    for era, (rows, _), (prop_rows, _) in zip(eras, per_era, per_era_props):
         display = era.get("displayName") or era.get("name", "?")
         name = era.get("name", "?")
         slots = era.get("slots", [])
@@ -384,6 +436,21 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
         for index, (slot, cov) in enumerate(zip(slots, rows), start=1):
             lines.append(render_row(index, slot, cov))
         lines.append("")
+        if prop_rows:
+            lines += [
+                f"### Props — {display}",
+                "",
+                f"Blueprints: `tools/testfit/blueprints/{PROPS_DIRNAME}/{name}/` -- templates: "
+                f"`templates/{PROPS_DIRNAME}/{name}/` -- in game: `ReplicatedStorage/Assets/Props/{name}/`",
+                "",
+                f"Summary: {summary_line(summarize([cov for _, cov in prop_rows]))}",
+                "",
+                TABLE_HEADER,
+                TABLE_RULE,
+            ]
+            for index, (prop_name, cov) in enumerate(prop_rows, start=1):
+                lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
+            lines.append("")
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
 

@@ -1,0 +1,9 @@
+{
+  "id": "FixtureTree",
+  "era": "PipelineFixture",
+  "scale": 4.0,
+  "pieces": [
+    { "kit": "nature-kit", "model": "tree_small", "pos": [0, 0, 0], "rotY": 0, "stage": 0 },
+    { "kit": "nature-kit", "model": "tree_default", "pos": [0, 0, 0], "rotY": 0, "stage": 1 }
+  ]
+}

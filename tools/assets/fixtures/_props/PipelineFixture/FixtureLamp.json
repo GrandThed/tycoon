@@ -1,0 +1,9 @@
+{
+  "id": "FixtureLamp",
+  "era": "PipelineFixture",
+  "scale": 2.5,
+  "footprint": [8, 8],
+  "pieces": [
+    { "kit": "city-kit-roads", "model": "light-square", "pos": [0, 0, 0], "rotY": 0, "stage": 0 }
+  ]
+}

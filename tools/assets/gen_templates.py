@@ -2,7 +2,8 @@
 """Generate the building templates Rojo builds into ServerStorage.Assets from Assets.json.
 
     py tools/assets/gen_templates.py           # (re)write templates/<Era>/<ModelName>.rbxmx
-    py tools/assets/gen_templates.py --check   # regenerate in memory, diff against disk, exit 1 if stale
+    py tools/assets/gen_templates.py --props   # (re)write templates/_props/<Era>/<PropName>.rbxmx
+    py tools/assets/gen_templates.py --check   # regenerate both trees in memory, diff against disk, exit 1 if stale
 
 Template shape (frozen in INTERFACES.md "M7 contracts"):
 
@@ -19,6 +20,11 @@ instances (rbx-dom canonical: MeshContent/TextureContent with <uri>, `size`, Col
 round trip through Rojo is byte-stable. MeshId is not scriptable at runtime, which is why these
 are files. Output is deterministic; stray .rbxmx files under templates/ that this run would not
 produce are removed (or reported by --check).
+
+City-dressing props (Assets.json `props`, INTERFACES.md "M9 contracts") use the same shape with
+CanCollide, CanQuery and CanTouch false on every MeshPart, because nothing in the city dressing may
+block a player or a prompt. They live under templates/_props/, which Rojo maps to
+ReplicatedStorage.Assets.Props so clients can clone them; the building run never looks inside it.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ sys.path.insert(0, HERE)
 import assets_config as cfg  # noqa: E402
 
 TEMPLATES_DIR = os.path.join(cfg.REPO_ROOT, "templates")
+PROPS_DIRNAME = "_props"
 BASE_SIZE = (1.0, 0.2, 1.0)
 COLLISION_FIDELITY_BOX = 2
 MATERIAL_PLASTIC = 256
@@ -81,13 +88,17 @@ class Referents:
         return ref
 
 
-def mesh_part_xml(part: dict, refs: Referents, indent: str) -> list[str]:
+def mesh_part_xml(part: dict, refs: Referents, indent: str, prop: bool) -> list[str]:
     p = indent + "    "
     lines = [f'{indent}<Item class="MeshPart" referent="{refs.next()}">', f"{indent}  <Properties>"]
     lines.append(f'{p}<string name="Name">{escape(str(part["kit"]))}</string>')
     lines.append(f'{p}<bool name="Anchored">true</bool>')
     lines += cframe(part.get("offset", [0, 0, 0]), p)
-    lines.append(f'{p}<bool name="CanCollide">true</bool>')
+    if prop:
+        lines.append(f'{p}<bool name="CanCollide">false</bool>')
+        lines.append(f'{p}<bool name="CanQuery">false</bool>')
+    else:
+        lines.append(f'{p}<bool name="CanCollide">true</bool>')
     lines.append(f'{p}<bool name="CanTouch">false</bool>')
     lines.append(f'{p}<token name="CollisionFidelity">{COLLISION_FIDELITY_BOX}</token>')
     lines.append(f'{p}<Color3uint8 name="Color3uint8">{COLOR_WHITE}</Color3uint8>')
@@ -107,7 +118,7 @@ def mesh_part_xml(part: dict, refs: Referents, indent: str) -> list[str]:
     return lines
 
 
-def template_xml(model: str, stages: list[tuple[int, list[dict]]]) -> str:
+def template_xml(model: str, stages: list[tuple[int, list[dict]]], prop: bool = False) -> str:
     refs = Referents()
     root_ref = refs.next()
     base_ref = refs.next()
@@ -141,42 +152,53 @@ def template_xml(model: str, stages: list[tuple[int, list[dict]]]) -> str:
             "      </Properties>",
         ]
         for part in parts:
-            lines += mesh_part_xml(part, refs, "      ")
+            lines += mesh_part_xml(part, refs, "      ", prop)
         lines.append("    </Item>")
     lines += ["  </Item>", "</roblox>"]
     return "\n".join(lines) + "\n"
 
 
-def generate(assets: dict) -> tuple[dict[str, str], list[str]]:
-    """relative path -> xml, plus notes about what was skipped and why."""
+def generate(assets: dict, group: str = "eras") -> tuple[dict[str, str], list[str]]:
+    """relative path -> xml, plus notes about what was skipped and why; group "props" for props."""
+    prop = group == "props"
+    prefix = f"{group}/" if prop else ""
     out: dict[str, str] = {}
     notes: list[str] = []
-    for era, models in assets.get("eras", {}).items():
+    for era, models in assets.get(group, {}).items():
         for model, entry in models.items():
             stages: list[tuple[int, list[dict]]] = []
             for index, stage in enumerate(entry.get("stages") or []):
                 if int(stage.get("modelAssetId", 0)) == 0:
                     continue
                 if not cfg.stage_harvested(stage):
-                    notes.append(f"{era}/{model} S{index}: uploaded but not harvested; stage left out")
+                    notes.append(f"{prefix}{era}/{model} S{index}: uploaded but not harvested; stage left out")
                     continue
                 stages.append((index, stage["parts"]))
             if not stages:
                 continue
             if stages[0][0] != 0:
-                notes.append(f"{era}/{model}: stage 0 is not harvested; no template")
+                notes.append(f"{prefix}{era}/{model}: stage 0 is not harvested; no template")
                 continue
-            out[f"{era}/{model}.rbxmx"] = template_xml(model, stages)
+            out[f"{era}/{model}.rbxmx"] = template_xml(model, stages, prop)
     return out, notes
 
 
-def existing_templates() -> dict[str, str]:
+class Tree:
+    """One template root: buildings in templates/, props in templates/_props/."""
+
+    def __init__(self, props: bool):
+        self.group = "props" if props else "eras"
+        self.root = os.path.join(TEMPLATES_DIR, PROPS_DIRNAME) if props else TEMPLATES_DIR
+        self.label = f"templates/{PROPS_DIRNAME}" if props else "templates"
+
+
+def existing_templates(tree: Tree) -> dict[str, str]:
     found: dict[str, str] = {}
-    if not os.path.isdir(TEMPLATES_DIR):
+    if not os.path.isdir(tree.root):
         return found
-    for era in sorted(os.listdir(TEMPLATES_DIR)):
-        folder = os.path.join(TEMPLATES_DIR, era)
-        if not os.path.isdir(folder):
+    for era in sorted(os.listdir(tree.root)):
+        folder = os.path.join(tree.root, era)
+        if not os.path.isdir(folder) or (tree.group == "eras" and era == PROPS_DIRNAME):
             continue
         for name in sorted(os.listdir(folder)):
             if name.endswith(".rbxmx"):
@@ -188,35 +210,52 @@ def existing_templates() -> dict[str, str]:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true", help="fail if templates/ differs from what Assets.json produces")
+    parser.add_argument("--props", action="store_true", help="write city-dressing prop templates to templates/_props/")
+    parser.add_argument("--assets-json", help="read this Assets.json instead of src/shared/Config/Assets.json")
     args = parser.parse_args(argv)
+    cfg.use_assets_path(args.assets_json)
 
     assets = cfg.load_assets() if os.path.isfile(cfg.ASSETS_PATH) else cfg.new_assets()
-    wanted, notes = generate(assets)
-    for note in notes:
-        log(note)
-    on_disk = existing_templates()
-
     if args.check:
-        problems = []
+        return check(assets)
+    return write(assets, Tree(args.props))
+
+
+def check(assets: dict) -> int:
+    problems = []
+    total = 0
+    for tree in (Tree(False), Tree(True)):
+        wanted, notes = generate(assets, tree.group)
+        for note in notes:
+            log(note)
+        on_disk = existing_templates(tree)
+        total += len(wanted)
         for rel, xml in wanted.items():
             if rel not in on_disk:
-                problems.append(f"templates/{rel} is missing")
+                problems.append(f"{tree.label}/{rel} is missing")
             elif on_disk[rel] != xml:
-                problems.append(f"templates/{rel} is stale")
+                problems.append(f"{tree.label}/{rel} is stale")
         for rel in on_disk:
             if rel not in wanted:
-                problems.append(f"templates/{rel} has no harvested entry in Assets.json (stray)")
-        for line in problems:
-            print(line)
-        if problems:
-            print(f"CHECK: FAIL -- {len(problems)} problem(s); rerun py tools/assets/gen_templates.py")
-            return 1
-        print(f"CHECK: PASS -- {len(wanted)} template(s) up to date")
-        return 0
+                problems.append(f"{tree.label}/{rel} has no harvested entry in Assets.json (stray)")
+    for line in problems:
+        print(line)
+    if problems:
+        props_hint = " (--props for templates/_props)" if any(line.startswith(Tree(True).label + "/") for line in problems) else ""
+        print(f"CHECK: FAIL -- {len(problems)} problem(s); rerun py tools/assets/gen_templates.py{props_hint}")
+        return 1
+    print(f"CHECK: PASS -- {total} template(s) up to date")
+    return 0
 
+
+def write(assets: dict, tree: Tree) -> int:
+    wanted, notes = generate(assets, tree.group)
+    for note in notes:
+        log(note)
+    on_disk = existing_templates(tree)
     written = unchanged = 0
     for rel, xml in wanted.items():
-        path = os.path.join(TEMPLATES_DIR, rel)
+        path = os.path.join(tree.root, rel)
         if on_disk.get(rel) == xml:
             unchanged += 1
             continue
@@ -224,19 +263,21 @@ def main(argv: list[str]) -> int:
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(xml)
         written += 1
-        log(f"wrote templates/{rel}")
+        log(f"wrote {tree.label}/{rel}")
     removed = 0
     for rel in on_disk:
         if rel not in wanted:
-            os.remove(os.path.join(TEMPLATES_DIR, rel))
+            os.remove(os.path.join(tree.root, rel))
             removed += 1
-            log(f"removed stray templates/{rel}")
-    if os.path.isdir(TEMPLATES_DIR):
-        for era in os.listdir(TEMPLATES_DIR):
-            folder = os.path.join(TEMPLATES_DIR, era)
+            log(f"removed stray {tree.label}/{rel}")
+    if os.path.isdir(tree.root):
+        for era in os.listdir(tree.root):
+            folder = os.path.join(tree.root, era)
             if os.path.isdir(folder) and not os.listdir(folder):
                 os.rmdir(folder)  # Rojo maps the folder tree; an empty era folder is just clutter
-    log(f"{len(wanted)} template(s): {written} written, {unchanged} unchanged, {removed} removed")
+        if tree.group == "props" and not os.listdir(tree.root):
+            os.rmdir(tree.root)
+    log(f"{len(wanted)} {'prop ' if tree.group == 'props' else ''}template(s): {written} written, {unchanged} unchanged, {removed} removed")
     return 0
 
 
