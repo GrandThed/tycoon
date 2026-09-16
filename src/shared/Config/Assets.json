@@ -5,6 +5,22 @@
       "vipSwatchAssetId": 103844883997226,
       "vipImageId": 95729759545951
     },
+    "city-kit-commercial": {
+      "vipSwatchAssetId": 0,
+      "vipImageId": 0
+    },
+    "city-kit-industrial": {
+      "vipSwatchAssetId": 0,
+      "vipImageId": 0
+    },
+    "city-kit-roads": {
+      "vipSwatchAssetId": 0,
+      "vipImageId": 0
+    },
+    "city-kit-suburban": {
+      "vipSwatchAssetId": 0,
+      "vipImageId": 0
+    },
     "fantasy-town-kit": {
       "vipSwatchAssetId": 113791458028891,
       "vipImageId": 91158106530449
@@ -1254,6 +1270,3770 @@
                 "imageId": 135388297648400,
                 "size": [14.0, 23.0798, 14.0],
                 "offset": [0.0, 11.5399, 0.0]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "Metropolis": {
+      "FoodTruck": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.2, 3.272, 1.592],
+                "offset": [-1.14, 1.636, 2.604]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.44, 1.674, 1.1],
+                "offset": [-0.4, 0.837, 2.97]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.953, 3.272, 4.0],
+                "offset": [-1.516, 1.636, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.44, 1.674, 1.1],
+                "offset": [-0.4, 0.837, 2.97]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.093, 3.272, 4.192],
+                "offset": [-0.854, 1.636, 1.496]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.87, 1.674, 1.1],
+                "offset": [-1.115, 0.837, 2.97]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.6, 3.272, 6.592],
+                "offset": [-0.1, 1.636, 0.296]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.25, 1.674, 7.92],
+                "offset": [0.075, 0.837, -0.44]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.6, 3.272, 6.592],
+                "offset": [-0.1, 1.636, 0.296]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.5, 2.7, 7.92],
+                "offset": [-0.05, 1.35, -0.44]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [-1.8, 0.354, -3.802]
+              }
+            ]
+          }
+        ]
+      },
+      "CoffeeShop": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 3.572, 7.18],
+                "offset": [2.0, 1.786, -0.41]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 3.572, 7.18],
+                "offset": [2.0, 1.786, -0.41]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [2.0, 0.354, -3.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.447, 5.172, 7.2],
+                "offset": [0.044, 2.586, -0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.2, 1.35, -3.87]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [2.0, 0.354, -3.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.707, 6.772, 7.244],
+                "offset": [-0.086, 3.386, -0.378]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.2, 1.35, -3.87]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [2.0, 0.354, -3.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.707, 6.772, 7.244],
+                "offset": [-0.086, 3.386, -0.378]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.2, 1.35, -3.87]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.221, 2.268, 1.888],
+                "offset": [-0.31, 1.134, -3.458]
+              }
+            ]
+          }
+        ]
+      },
+      "CornerShop": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 5.172, 4.032],
+                "offset": [-2.2, 2.586, 1.2]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.785, 1.9, 0.785],
+                "offset": [-4.093, 0.95, -3.908]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 5.172, 4.032],
+                "offset": [-2.2, 2.586, 1.2]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.225, 1.9, 8.7],
+                "offset": [-0.872, 0.95, 0.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [-1.0, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.567, 5.172, 6.407],
+                "offset": [-0.684, 2.586, 0.012]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.785, 2.4, 8.7],
+                "offset": [-0.093, 1.2, 0.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [-1.0, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.647, 6.772, 6.452],
+                "offset": [-0.144, 3.386, 0.034]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.785, 2.4, 8.7],
+                "offset": [-0.093, 1.2, 0.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [-1.0, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.647, 6.772, 6.452],
+                "offset": [-0.144, 3.386, 0.034]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.785, 7.63, 8.7],
+                "offset": [-0.093, 3.815, 0.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [-1.0, 0.354, -1.802]
+              }
+            ]
+          }
+        ]
+      },
+      "ApartmentBlockA": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 5.172, 3.76],
+                "offset": [-2.2, 2.586, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [0.0, 1.35, -3.35]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 5.172, 3.76],
+                "offset": [-2.2, 2.586, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [0.0, 1.35, -3.35]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.621, 2.268, 1.884],
+                "offset": [-0.19, 1.134, -2.744]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.02, 5.172, 3.76],
+                "offset": [-0.13, 2.586, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [0.0, 1.35, -3.35]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.842, 2.268, 1.884],
+                "offset": [-0.8, 1.134, -2.744]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 6.772, 5.36],
+                "offset": [0.0, 3.386, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [0.0, 1.35, -3.35]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.221, 2.268, 2.284],
+                "offset": [-0.61, 1.134, -2.544]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 8.28, 5.36],
+                "offset": [0.0, 4.14, 1.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 2.7, 0.9],
+                "offset": [2.0, 1.35, -3.35]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.221, 7.188, 6.284],
+                "offset": [-0.61, 3.594, -0.544]
+              }
+            ]
+          }
+        ]
+      },
+      "OfficeLowRise": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 5.172, 3.76],
+                "offset": [0.0, 2.586, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.4, 0.95],
+                "offset": [3.2, 1.2, -3.375]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 5.172, 4.56],
+                "offset": [0.0, 2.586, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.4, 0.95],
+                "offset": [3.2, 1.2, -3.375]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.6, 0.708, 1.2],
+                "offset": [0.0, 0.354, -2.482]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 5.172, 4.56],
+                "offset": [0.0, 2.586, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.7, 2.829, 1.329],
+                "offset": [-0.55, 1.415, -3.565]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.021, 2.268, 4.368],
+                "offset": [0.71, 1.134, -0.898]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.44, 11.52, 5.44],
+                "offset": [-0.0, 5.76, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.7, 2.829, 1.329],
+                "offset": [-0.55, 1.415, -3.565]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.021, 2.268, 4.368],
+                "offset": [0.71, 1.134, -0.898]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.44, 11.52, 5.44],
+                "offset": [-0.0, 5.76, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.7, 2.829, 3.879],
+                "offset": [-0.55, 1.415, -2.29]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.442, 3.068, 4.368],
+                "offset": [0.0, 1.534, -0.898]
+              }
+            ]
+          }
+        ]
+      },
+      "RoadIntersection": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 2.176, 9.0],
+                "offset": [0.0, 1.028, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Supermarket": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.56, 3.572, 4.032],
+                "offset": [0.0, 1.786, 0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.3, 0.715, 1.7],
+                "offset": [2.8, 0.357, -3.22]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.56, 3.572, 4.607],
+                "offset": [0.0, 1.786, 0.112]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.65, 2.4, 2.17],
+                "offset": [2.975, 1.2, -2.985]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.88, 3.572, 4.607],
+                "offset": [-0.16, 1.786, 0.112]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 3.288, 2.17],
+                "offset": [-0.05, 1.644, -2.985]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 6.676],
+                "offset": [-0.0, 2.94, 1.146]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 3.288, 2.17],
+                "offset": [-0.05, 1.644, -2.985]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 6.676],
+                "offset": [-0.0, 2.94, 1.146]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 8.429, 5.37],
+                "offset": [-0.05, 4.215, -1.385]
+              }
+            ]
+          }
+        ]
+      },
+      "BusStop": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.0, 1.6, 0.8],
+                "offset": [-1.4, 0.82, 2.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 4.16, 8.0],
+                "offset": [-0.24, 2.02, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.842, 2.268, 0.972],
+                "offset": [3.4, 1.154, 3.2]
+              }
+            ]
+          }
+        ]
+      },
+      "ApartmentBlockB": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 5.172, 3.6],
+                "offset": [-1.68, 2.586, 0.4]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.842, 2.268, 0.972],
+                "offset": [2.2, 1.134, -3.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 5.172, 3.6],
+                "offset": [-1.68, 2.586, 0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.0, 1.35, -3.95]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.101, 2.268, 1.488],
+                "offset": [0.07, 1.134, -3.258]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [-1.68, 3.386, 0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.0, 1.35, -3.95]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.701, 2.268, 1.488],
+                "offset": [0.87, 1.134, -3.258]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.96, 12.6, 4.968],
+                "offset": [-1.68, 6.3, 0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.0, 1.35, -3.95]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.701, 2.268, 1.488],
+                "offset": [0.87, 1.134, -3.258]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.367, 12.6, 4.968],
+                "offset": [0.024, 6.3, 0.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.2, 2.7, 0.9],
+                "offset": [-4.0, 1.35, -3.95]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.701, 2.268, 1.488],
+                "offset": [0.87, 1.134, -3.258]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkingGarage": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 2.08, 8.471],
+                "offset": [-0.0, 1.04, -0.235]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.16, 8.471],
+                "offset": [-0.0, 2.08, -0.235]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.24, 8.471],
+                "offset": [-0.0, 3.12, -0.235]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 8.64, 8.471],
+                "offset": [-0.0, 4.32, -0.235]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 9.069, 8.471],
+                "offset": [-0.0, 4.535, -0.235]
+              }
+            ]
+          }
+        ]
+      },
+      "ShoppingMall": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 3.768],
+                "offset": [0.0, 2.94, -1.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.564],
+                "offset": [0.0, 2.94, -1.598]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 2.4, 0.2],
+                "offset": [0.0, 1.2, -4.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 6.772, 8.36],
+                "offset": [0.0, 3.386, 0.3]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 2.4, 0.2],
+                "offset": [0.0, 1.2, -4.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.8, 0.708, 1.2],
+                "offset": [0.0, 0.354, -3.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 10.08, 8.36],
+                "offset": [0.0, 5.04, 0.3]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 7.63, 1.8],
+                "offset": [0.0, 3.815, -3.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.8, 0.708, 1.2],
+                "offset": [0.0, 0.354, -3.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.426, 10.08, 8.36],
+                "offset": [0.0, 5.04, 0.3]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 12.288, 5.4],
+                "offset": [0.0, 6.144, -1.4]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.8, 3.068, 1.204],
+                "offset": [0.0, 1.534, -3.804]
+              }
+            ]
+          }
+        ]
+      },
+      "SubwayEntrance": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.348, 8.885],
+                "offset": [0.0, 1.614, 0.042]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.6, 2.268, 3.284],
+                "offset": [0.0, 1.154, 1.956]
+              }
+            ]
+          }
+        ]
+      },
+      "Hospital": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 6.772, 4.12],
+                "offset": [0.0, 3.386, 1.2]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.383, 1.383, 0.31],
+                "offset": [0.0, 4.8, -1.005]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.772, 4.94],
+                "offset": [0.0, 3.386, 0.79]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.591, 5.491, 3.05],
+                "offset": [1.604, 2.746, -2.375]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.772, 4.94],
+                "offset": [0.0, 3.386, 0.79]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.1, 5.491, 4.0],
+                "offset": [-0.15, 2.746, -2.48]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [3.2, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.96, 6.772, 6.004],
+                "offset": [0.0, 3.386, 1.322]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.1, 5.491, 4.0],
+                "offset": [-0.15, 2.746, -2.48]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.741, 2.268, 2.884],
+                "offset": [2.63, 1.134, -2.644]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.96, 11.572, 6.004],
+                "offset": [0.0, 5.786, 1.322]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.1, 12.575, 8.48],
+                "offset": [-0.15, 6.288, -0.24]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.741, 2.268, 2.884],
+                "offset": [2.63, 1.134, -2.644]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkTrees": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 2.78, 8.0],
+                "offset": [0.0, 1.33, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.64, 3.068, 8.64],
+                "offset": [-0.002, 1.554, -0.002]
+              }
+            ]
+          }
+        ]
+      },
+      "OfficeTowerA": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 5.172, 3.6],
+                "offset": [0.0, 2.586, 0.6]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 5.172, 3.6],
+                "offset": [0.0, 2.586, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 2.48, 4.0],
+                "offset": [0.0, 1.24, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [0.0, 3.386, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 2.48, 4.0],
+                "offset": [0.0, 1.24, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [0.0, 3.386, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 11.335, 6.6],
+                "offset": [0.0, 5.667, -1.1]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.12, 16.32, 5.552],
+                "offset": [-0.0, 8.16, 0.6]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 11.335, 6.6],
+                "offset": [0.0, 5.667, -1.1]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.6, 0.708, 1.2],
+                "offset": [0.0, 0.434, -3.002]
+              }
+            ]
+          }
+        ]
+      },
+      "HotelTower": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 6.772, 4.12],
+                "offset": [0.0, 3.386, 1.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.36, 6.772, 4.12],
+                "offset": [0.0, 3.386, 1.2]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 0.08, 4.0],
+                "offset": [0.0, 0.04, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.772, 6.22],
+                "offset": [0.0, 3.386, 0.15]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 0.08, 4.0],
+                "offset": [0.0, 0.04, -2.4]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 0.708, 1.6],
+                "offset": [-0.002, 0.434, -0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.772, 6.22],
+                "offset": [0.0, 3.386, 0.15]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 9.229, 5.7],
+                "offset": [0.0, 4.615, -1.55]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 0.708, 1.6],
+                "offset": [-0.002, 0.434, -0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.18, 16.32, 6.644],
+                "offset": [0.0, 8.16, 0.362]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 18.83, 5.7],
+                "offset": [0.0, 9.415, -1.55]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 0.708, 1.6],
+                "offset": [-0.002, 0.434, -0.2]
+              }
+            ]
+          }
+        ]
+      },
+      "HighwayRamp": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.23, 4.84, 8.0],
+                "offset": [0.115, 2.36, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Stadium": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.92, 1.308, 8.92],
+                "offset": [0.0, 0.434, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 2.308, 9.0],
+                "offset": [0.0, 0.934, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 6.14, 9.0],
+                "offset": [0.0, 2.85, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 1.6, 4.0],
+                "offset": [4.1, 2.88, 0.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 8.14, 9.0],
+                "offset": [0.0, 3.85, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 1.6, 4.0],
+                "offset": [0.0, 2.88, 0.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.0, 14.54, 9.0],
+                "offset": [0.0, 7.05, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ConventionCenter": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.6, 1.6],
+                "offset": [0.0, 0.8, -2.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.48, 3.52],
+                "offset": [0.0, 2.24, -1.24]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 0.08, 8.0],
+                "offset": [0.0, 0.04, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.48, 5.48],
+                "offset": [0.0, 2.74, -0.26]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.08, 8.0],
+                "offset": [0.0, 0.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.88, 7.44],
+                "offset": [0.0, 2.94, 0.72]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.08, 8.0],
+                "offset": [0.0, 0.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.88, 7.44],
+                "offset": [0.0, 2.94, 0.72]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 2.909, 8.429],
+                "offset": [0.0, 1.455, -0.215]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.6, 0.708, 1.2],
+                "offset": [1.4, 0.434, -3.802]
+              }
+            ]
+          }
+        ]
+      },
+      "RooftopGarden": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.96, 8.2, 5.208],
+                "offset": [0.0, 4.1, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.56, 3.068, 4.568],
+                "offset": [-0.002, 7.934, 0.002]
+              }
+            ]
+          }
+        ]
+      },
+      "BankTower": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [0.0, 4.386, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 8.0],
+                "offset": [0.0, 0.5, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [0.0, 4.386, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.7, 8.0],
+                "offset": [0.0, 1.85, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.88, 6.772, 3.688],
+                "offset": [0.0, 4.386, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.44, 17.92, 5.44],
+                "offset": [-0.0, 9.96, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.44, 17.92, 5.44],
+                "offset": [-0.0, 9.96, 1.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 21.535, 8.0],
+                "offset": [0.0, 10.767, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "BroadcastTower": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.48, 9.08, 5.608],
+                "offset": [-1.72, 4.54, 1.68]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.4, 2.0, 2.4],
+                "offset": [-1.72, 9.0, 1.68]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.94, 9.08, 8.484],
+                "offset": [0.01, 4.54, 0.242]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.4, 4.0, 2.4],
+                "offset": [-1.72, 10.0, 1.68]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.94, 9.08, 8.484],
+                "offset": [0.01, 4.54, 0.242]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 16.936, 6.51],
+                "offset": [-1.72, 8.468, -0.375]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.94, 9.08, 8.484],
+                "offset": [0.01, 4.54, 0.242]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 22.808, 6.51],
+                "offset": [-1.72, 11.404, -0.375]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.94, 9.08, 8.484],
+                "offset": [0.01, 4.54, 0.242]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 28.58, 6.51],
+                "offset": [-1.72, 14.29, -0.375]
+              }
+            ]
+          }
+        ]
+      },
+      "OfficeTowerB": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.6, 13.0, 2.0],
+                "offset": [0.0, 6.52, 0.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 2.78, 8.1],
+                "offset": [0.0, 1.33, -0.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.842, 2.268, 1.488],
+                "offset": [0.0, 1.154, -3.058]
+              }
+            ]
+          }
+        ]
+      },
+      "SkyscraperA": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [13.48, 25.88, 12.54],
+                "offset": [0.0, 12.94, 0.706]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.4, 35.636, 10.5],
+                "offset": [-0.0, 17.818, -1.05]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "Boomtown": {
+      "Newsstand": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.29, 1.392, 1.49],
+                "offset": [-1.4, 0.696, -2.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.542, 0.52, 0.9],
+                "offset": [1.2, 0.26, -3.6]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.29, 1.392, 1.49],
+                "offset": [-1.4, 0.696, -2.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.876, 1.9, 0.95],
+                "offset": [-1.467, 0.95, -3.625]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.15, 1.08, 1.2],
+                "offset": [0.725, 0.54, -3.402]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.582, 1.392, 7.994],
+                "offset": [0.0, 0.696, 0.452]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.876, 1.9, 0.95],
+                "offset": [-1.467, 0.95, -3.625]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.15, 1.08, 1.2],
+                "offset": [0.725, 0.54, -3.402]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.582, 1.392, 7.994],
+                "offset": [0.0, 0.696, 0.452]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.876, 1.9, 0.95],
+                "offset": [-1.467, 0.95, -3.625]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.54, 5.542, 8.046],
+                "offset": [0.53, 2.771, 0.021]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.582, 2.784, 7.994],
+                "offset": [0.0, 1.392, 0.452]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.705, 7.8, 6.997],
+                "offset": [-1.053, 3.9, -0.602]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.54, 5.542, 8.046],
+                "offset": [0.53, 2.771, 0.021]
+              }
+            ]
+          }
+        ]
+      },
+      "HotDogStand": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.392, 1.661, 2.061],
+                "offset": [-1.4, 0.831, -3.12]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.392, 1.661, 2.061],
+                "offset": [-1.4, 0.831, -3.12]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.1, 0.838, 1.48],
+                "offset": [2.23, 0.419, -3.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.402, 0.354, -0.8]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.392, 1.661, 2.061],
+                "offset": [-1.4, 0.831, -3.12]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.1, 0.838, 1.48],
+                "offset": [2.23, 0.419, -3.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.575, 2.95, 4.112],
+                "offset": [-0.715, 1.475, 0.32]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.096, 4.4, 5.751],
+                "offset": [-0.548, 2.2, -1.275]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.1, 0.838, 1.48],
+                "offset": [2.23, 0.419, -3.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.019, 3.068, 5.422],
+                "offset": [-0.012, 1.534, 0.975]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.096, 9.261, 8.581],
+                "offset": [-0.548, 4.631, 0.14]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.6, 7.44],
+                "offset": [0.78, 3.8, -0.22]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.019, 3.068, 5.422],
+                "offset": [-0.012, 1.534, 0.975]
+              }
+            ]
+          }
+        ]
+      },
+      "Diner": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 3.445, 4.106],
+                "offset": [-0.016, 1.722, -2.34]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 3.445, 4.106],
+                "offset": [-0.016, 1.722, -2.34]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.589, 1.994, 0.309],
+                "offset": [3.88, 0.997, -4.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.522, 0.354, -3.6]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 3.445, 4.106],
+                "offset": [-0.016, 1.722, -2.34]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.589, 1.994, 0.309],
+                "offset": [3.88, 0.997, -4.05]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.022, 3.073, 8.876],
+                "offset": [-0.611, 1.536, 0.038]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.704, 4.0, 4.106],
+                "offset": [-0.768, 2.0, -2.34]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.044, 4.935, 2.155],
+                "offset": [0.152, 2.467, -3.127]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.343, 3.073, 8.876],
+                "offset": [0.049, 1.536, 0.038]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.049, 9.392, 4.106],
+                "offset": [-0.941, 4.696, -2.34]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.044, 10.327, 2.155],
+                "offset": [0.152, 5.163, -3.127]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.343, 3.073, 8.876],
+                "offset": [0.049, 1.536, 0.038]
+              }
+            ]
+          }
+        ]
+      },
+      "GasStation": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 4.0, 0.8],
+                "offset": [-2.0, 2.0, -2.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.0, 4.0],
+                "offset": [-2.0, 2.5, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 4.0, 0.8],
+                "offset": [-2.0, 2.0, -2.4]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.35, 5.0, 4.03],
+                "offset": [-2.175, 2.5, -2.415]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.802, 0.354, -0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 4.0, 7.264],
+                "offset": [0.0, 2.0, 0.832]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.35, 5.0, 4.03],
+                "offset": [-2.175, 2.5, -2.415]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.802, 0.354, -0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 4.0, 7.264],
+                "offset": [0.0, 2.0, 0.832]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.35, 5.0, 4.03],
+                "offset": [-0.175, 2.5, -2.415]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.802, 0.354, -0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 10.246, 7.277],
+                "offset": [0.0, 5.123, 0.838]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.35, 11.175, 5.78],
+                "offset": [-0.175, 5.587, -1.54]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.2, 0.708, 1.6],
+                "offset": [-3.802, 0.354, -0.2]
+              }
+            ]
+          }
+        ]
+      },
+      "Motel": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 3.347, 3.665],
+                "offset": [0.0, 1.674, 2.64]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.229, 0.53],
+                "offset": [-2.48, 2.615, -4.045]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 3.347, 3.665],
+                "offset": [0.0, 1.674, 2.64]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.229, 0.53],
+                "offset": [-2.48, 2.615, -4.045]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.48, 3.334, 4.334],
+                "offset": [1.24, 1.667, -1.489]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 3.347, 3.665],
+                "offset": [0.0, 1.674, 2.64]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.63, 0.53],
+                "offset": [-2.48, 3.815, -4.045]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.701, 3.334, 4.342],
+                "offset": [0.13, 1.667, -1.485]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 5.347, 3.665],
+                "offset": [0.0, 2.674, 2.64]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.63, 0.53],
+                "offset": [-2.48, 3.815, -4.045]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.701, 3.334, 4.342],
+                "offset": [0.13, 1.667, -1.485]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 5.347, 3.665],
+                "offset": [0.0, 2.674, 2.64]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 12.889, 0.53],
+                "offset": [-2.48, 6.444, -4.045]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.701, 3.334, 4.342],
+                "offset": [0.13, 1.667, -1.485]
+              }
+            ]
+          }
+        ]
+      },
+      "RoadStraight": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.24, 0.08, 8.0],
+                "offset": [0.0, 0.04, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "BarberShop": {
+        "stages": [
+          {
+            "modelAssetId": 86041252902370,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.4, 2.935, 0.4],
+                "offset": [-0.4, 1.467, -3.8]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.684, 4.598, 4.2],
+                "offset": [-2.4, 2.299, -2.38]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92172711597262,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 2.935, 0.68],
+                "offset": [-2.3, 1.467, -3.94]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.442, 4.598, 4.2],
+                "offset": [-1.021, 2.299, -2.38]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 140584354151518,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 2.935, 0.68],
+                "offset": [-2.3, 1.467, -3.94]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.702, 4.598, 8.856],
+                "offset": [0.109, 2.299, -0.052]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 139042322628107,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 2.935, 0.68],
+                "offset": [-2.3, 1.467, -3.94]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.712, 4.598, 8.862],
+                "offset": [0.114, 2.299, -0.055]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 78929231179598,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.2, 2.935, 0.68],
+                "offset": [-2.3, 1.467, -3.94]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.712, 4.598, 8.862],
+                "offset": [0.114, 2.299, -0.055]
+              }
+            ]
+          }
+        ]
+      },
+      "FireHydrant": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.92, 1.935, 1.09],
+                "offset": [0.0, 0.967, -0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "GroceryStore": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.292, 4.55, 4.375],
+                "offset": [-0.766, 2.275, -2.215]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.49, 1.392, 3.29],
+                "offset": [3.7, 0.696, -2.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.292, 4.55, 4.375],
+                "offset": [-0.766, 2.275, -2.215]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.49, 2.792, 3.29],
+                "offset": [3.7, 1.396, -2.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.892, 4.55, 8.782],
+                "offset": [0.034, 2.275, -0.011]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.49, 2.792, 3.29],
+                "offset": [3.7, 1.396, -2.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 7.072, 8.782],
+                "offset": [0.0, 3.536, -0.011]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.49, 4.192, 3.29],
+                "offset": [3.7, 2.096, -2.2]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 7.072, 8.782],
+                "offset": [0.0, 3.536, -0.011]
+              }
+            ]
+          }
+        ]
+      },
+      "Laundromat": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.504, 5.0, 8.432],
+                "offset": [0.005, 2.5, -0.008]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.504, 5.0, 8.432],
+                "offset": [0.005, 2.5, -0.008]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 0.708, 1.2],
+                "offset": [0.02, 0.354, -3.782]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.504, 6.0, 8.432],
+                "offset": [0.005, 3.0, -0.008]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 6.134, 5.859],
+                "offset": [0.02, 3.067, -1.453]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.504, 6.0, 8.432],
+                "offset": [0.005, 3.0, -0.008]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 6.134, 5.859],
+                "offset": [0.02, 3.067, -1.453]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.504, 10.0, 8.432],
+                "offset": [0.005, 5.0, -0.008]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 6.134, 5.859],
+                "offset": [0.02, 3.067, -1.453]
+              }
+            ]
+          }
+        ]
+      },
+      "CarDealership": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.953, 3.672, 8.944],
+                "offset": [0.004, 1.836, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 0.08, 4.0],
+                "offset": [2.0, 0.04, -2.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.953, 3.672, 8.944],
+                "offset": [0.004, 1.836, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.365, 1.9, 4.0],
+                "offset": [1.817, 0.95, -2.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.953, 3.672, 8.944],
+                "offset": [0.004, 1.836, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.445, 1.9, 8.96],
+                "offset": [-0.223, 0.95, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.953, 7.192, 8.944],
+                "offset": [0.004, 3.596, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.445, 1.9, 8.96],
+                "offset": [-0.223, 0.95, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.953, 8.112, 8.944],
+                "offset": [0.004, 4.056, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.445, 8.62, 8.96],
+                "offset": [-0.223, 4.31, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TrafficLight": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.036, 8.0],
+                "offset": [0.0, 2.018, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Cinema": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.713, 5.12, 5.134],
+                "offset": [-0.0, 2.56, -0.08]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.32, 0.708, 1.2],
+                "offset": [-2.16, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.713, 5.12, 5.134],
+                "offset": [-0.0, 2.56, -0.08]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.829, 0.53],
+                "offset": [-1.68, 1.415, -3.765]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.32, 0.708, 1.2],
+                "offset": [-2.16, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.753, 5.12, 6.894],
+                "offset": [0.02, 2.56, 0.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.629, 0.59],
+                "offset": [-1.68, 1.815, -3.795]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.32, 0.708, 1.2],
+                "offset": [-2.16, 0.354, -1.802]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.753, 5.12, 6.894],
+                "offset": [0.02, 2.56, 0.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.63, 6.89],
+                "offset": [-1.68, 3.815, -0.645]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.32, 0.708, 2.078],
+                "offset": [-2.16, 0.354, -2.241]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.753, 5.12, 6.894],
+                "offset": [0.02, 2.56, 0.8]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 9.229, 6.89],
+                "offset": [-1.68, 4.615, -0.645]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.162, 2.268, 2.164],
+                "offset": [-1.76, 1.134, -2.284]
+              }
+            ]
+          }
+        ]
+      },
+      "Streetlamp": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 4.6, 0.9],
+                "offset": [0.0, 2.3, 0.45]
+              }
+            ]
+          }
+        ]
+      },
+      "AutoRepairShop": {
+        "stages": [
+          {
+            "modelAssetId": 79162380871317,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.287, 2.934, 5.24],
+                "offset": [1.892, 1.467, -1.764]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.5, 0.375, 0.46],
+                "offset": [-2.7, 0.227, -4.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 127803403091365,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.817, 3.432, 5.24],
+                "offset": [0.627, 1.716, -1.764]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.08, 4.0],
+                "offset": [-2.536, 1.04, -2.536]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 77011195926546,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 5.88, 8.836],
+                "offset": [0.186, 2.94, 0.034]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.015, 4.0],
+                "offset": [-2.536, 1.507, -2.536]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 82305431573607,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.7, 5.88, 8.836],
+                "offset": [0.186, 2.94, 0.034]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.216, 6.8, 4.816],
+                "offset": [-0.428, 3.4, -2.128]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 127441111053673,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.717, 5.88, 8.836],
+                "offset": [0.177, 2.94, 0.034]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.216, 10.7, 4.816],
+                "offset": [-0.428, 5.35, -2.128]
+              }
+            ]
+          }
+        ]
+      },
+      "BowlingAlley": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.8, 6.076, 5.265],
+                "offset": [0.0, 3.038, 1.8]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.8, 6.076, 5.265],
+                "offset": [0.0, 3.038, 1.8]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.88, 0.04, 3.2],
+                "offset": [2.72, 0.02, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.886, 6.076, 8.947],
+                "offset": [-0.543, 3.038, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.88, 0.04, 3.2],
+                "offset": [2.72, 0.02, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.686, 6.076, 8.947],
+                "offset": [-0.143, 3.038, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.88, 0.04, 3.2],
+                "offset": [2.72, 0.02, -2.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.686, 6.076, 8.947],
+                "offset": [-0.143, 3.038, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.88, 0.04, 3.2],
+                "offset": [2.72, 0.02, -2.4]
+              }
+            ]
+          }
+        ]
+      },
+      "BusYellow": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.915, 8.0],
+                "offset": [0.0, 2.398, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Bank": {
+        "stages": [
+          {
+            "modelAssetId": 137637880911283,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.968],
+                "offset": [-0.003, 3.94, 1.92]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 9.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 0.708, 1.2],
+                "offset": [0.0, 1.354, -3.882]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 133867709873876,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.968],
+                "offset": [-0.003, 3.94, 1.92]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 9.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 4.55, 4.138],
+                "offset": [0.0, 3.275, -2.413]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 130742504008049,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.968],
+                "offset": [-0.003, 3.94, 1.92]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 9.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 4.55, 4.138],
+                "offset": [0.0, 3.275, -2.413]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89247427708044,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.968],
+                "offset": [-0.003, 3.94, 1.92]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 9.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 9.67, 8.962],
+                "offset": [0.0, 5.835, -0.001]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 139176349561448,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.334, 5.88, 4.968],
+                "offset": [-0.003, 3.94, 1.92]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.0, 9.0],
+                "offset": [0.0, 0.5, 0.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 9.67, 8.962],
+                "offset": [0.0, 5.835, -0.001]
+              }
+            ]
+          }
+        ]
+      },
+      "DepartmentStore": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.56, 4.912, 7.08],
+                "offset": [0.007, 2.456, -0.016]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.593, 9.26, 7.732],
+                "offset": [0.024, 4.63, 0.31]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.593, 9.26, 7.732],
+                "offset": [0.024, 4.63, 0.31]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.593, 9.26, 7.732],
+                "offset": [0.024, 4.63, 0.31]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.593, 12.26, 7.732],
+                "offset": [0.024, 6.13, 0.31]
+              }
+            ]
+          }
+        ]
+      },
+      "Billboard": {
+        "stages": [
+          {
+            "modelAssetId": 129853683191938,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.52, 4.0, 0.8],
+                "offset": [0.0, 2.0, 0.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.12, 7.869, 1.003],
+                "offset": [0.0, 6.135, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RadioStation": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.68, 7.618, 3.906],
+                "offset": [-0.0, 3.809, -2.547]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.316, 2.1, 2.316],
+                "offset": [3.329, 1.05, 3.311]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.68, 7.618, 3.906],
+                "offset": [-0.0, 3.809, -2.547]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.407, 6.3, 8.809],
+                "offset": [0.283, 3.15, 0.065]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.333, 7.7, 9.016],
+                "offset": [-0.826, 3.85, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.407, 10.5, 8.809],
+                "offset": [0.283, 5.25, 0.065]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.72, 7.7, 9.016],
+                "offset": [-0.633, 3.85, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.407, 14.7, 8.809],
+                "offset": [0.283, 7.35, 0.065]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.72, 7.7, 9.016],
+                "offset": [-0.633, 3.85, 0.008]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.407, 21.335, 8.809],
+                "offset": [0.283, 10.667, 0.065]
+              }
+            ]
+          }
+        ]
+      },
+      "FireStation": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 6.6, 5.16],
+                "offset": [0.0, 3.3, 1.936]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 6.6, 8.801],
+                "offset": [0.0, 3.3, 0.115]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.015, 4.0],
+                "offset": [0.0, 0.507, -2.5]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 6.6, 8.801],
+                "offset": [0.0, 3.3, 0.115]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.08, 7.64],
+                "offset": [0.0, 3.04, -0.68]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.734, 6.6, 8.801],
+                "offset": [0.0, 3.3, 0.115]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 10.16, 7.64],
+                "offset": [0.0, 5.08, -0.68]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.872, 18.727, 8.801],
+                "offset": [0.069, 9.363, 0.115]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 10.16, 7.64],
+                "offset": [0.0, 5.08, -0.68]
+              }
+            ]
+          }
+        ]
+      },
+      "NeonSign": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 12.0, 0.8],
+                "offset": [2.0, 7.0, 0.0]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.171, 13.735, 4.0],
+                "offset": [-0.086, 6.868, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ClockTower": {
+        "stages": [
+          {
+            "modelAssetId": 0,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.534, 20.058, 6.28],
+                "offset": [-0.0, 10.029, -0.26]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.16, 4.411, 5.72],
+                "offset": [0.0, 19.074, -0.26]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [13.974, 25.845, 13.996],
+                "offset": [-0.027, 12.922, 0.002]
               }
             ]
           }
