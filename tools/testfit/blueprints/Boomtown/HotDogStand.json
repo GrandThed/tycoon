@@ -1,0 +1,20 @@
+{
+  "id": "HotDogStand",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "roof-metal-poles", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "roof-metal-type-a", "pos": [-0.5, 0.7, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-dumpster-closed", "pos": [-0.5, 0.0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-barrier-type-a", "pos": [0.2, 0.0, -0.95], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-bench", "pos": [0.6, 0.0, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "detail-bench", "pos": [0.6, 0.0, -0.3], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "roof-metal-poles", "pos": [-0.5, 0.0, 0.55], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "roof-metal-type-b", "pos": [-0.5, 0.7, 0.55], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "detail-dumpster-closed", "pos": [-0.5, 0.0, 0.55], "rotY": 180, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [0.5, 0.0, 0.55], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-roof", "pos": [0.5, 1.0, 0.55], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "detail-awning-wide", "pos": [0.5, 0.62, -0.1], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "detail-barrier-type-b", "pos": [1.03, 0.0, -0.6], "rotY": 270, "stage": 4}
+  ]
+}

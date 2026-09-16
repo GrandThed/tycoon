@@ -1,0 +1,12 @@
+{
+  "id": "Streetlamp",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "road-asphalt-pavement", "pos": [0.5, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "road-asphalt-pavement", "pos": [-0.5, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-light-single", "pos": [0.75, 0.0, -0.15], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-light-single", "pos": [-0.75, 0.0, -0.15], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-bench", "pos": [0.0, 0.0, 0.1], "rotY": 0, "stage": 0}
+  ]
+}

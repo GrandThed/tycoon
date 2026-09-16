@@ -1,0 +1,14 @@
+{
+  "id": "FireHydrant",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "road-asphalt-pavement", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "door-type-a", "pos": [0.0, 0.0, -0.175], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "door-type-a", "pos": [0.0, 0.0, 0.175], "rotY": 180, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "door-type-a", "pos": [0.175, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "door-type-a", "pos": [-0.175, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "road-dirt-tile", "pos": [0.0, 0.628, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "road-dirt-tile", "pos": [0.0, 0.678, 0.0], "rotY": 45, "stage": 0}
+  ]
+}

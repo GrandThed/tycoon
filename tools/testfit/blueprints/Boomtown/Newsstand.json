@@ -1,0 +1,24 @@
+{
+  "id": "Newsstand",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "retro-urban-kit", "model": "wall-a-open", "pos": [0.45, 0.0, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-wide", "pos": [0.45, 0.62, -0.75], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-block", "pos": [0.45, 0.0, -0.2], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-bricks-type-b", "pos": [0.45, 0.5, -0.2], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [0.45, 0.0, -0.86], "rotY": 90, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-bricks-type-a", "pos": [0.45, 0.15, -0.86], "rotY": 0, "stage": 0},
+    {"kit": "retro-urban-kit", "model": "detail-awning-small", "pos": [0.98, 0.62, -0.1], "rotY": 270, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [-0.25, 0.0, -0.86], "rotY": 90, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "pallet-small", "pos": [-0.25, 0.15, -0.86], "rotY": 90, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "detail-bricks-type-b", "pos": [-0.25, 0.3, -0.86], "rotY": 0, "stage": 1},
+    {"kit": "retro-urban-kit", "model": "wall-a-window", "pos": [-0.55, 0.0, -0.1], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "detail-awning-wide", "pos": [-0.55, 0.62, -0.75], "rotY": 0, "stage": 2},
+    {"kit": "retro-urban-kit", "model": "detail-barrier-type-b", "pos": [0.45, 1.0, -0.4], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "detail-bench", "pos": [-0.82, 0.0, -0.78], "rotY": 0, "stage": 3},
+    {"kit": "retro-urban-kit", "model": "wall-a-painted", "pos": [-0.55, 1.0, -0.1], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "window-wide-type-a", "pos": [-0.55, 1.12, -0.62], "rotY": 0, "stage": 4},
+    {"kit": "retro-urban-kit", "model": "window-small-type-a", "pos": [-0.03, 1.12, -0.1], "rotY": 270, "stage": 4}
+  ]
+}
