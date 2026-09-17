@@ -14,6 +14,13 @@ vehicles) was scoped. Contracts: `docs/INTERFACES.md` "M9 contracts"; plan: `doc
 - Props need templates the **client** can clone, so they map to `ReplicatedStorage/Assets/Props`
   (`templates/_props/`), unlike buildings in ServerStorage.
 
+**Wave 1b, Ben's first Studio look (same day):** the tier-revealed, straight 5-stud Village roads
+"don't line up with anything, way too wide and straight". Ben chose: **roads grow with buildings**
+(visible spine = shortest paths from the plot entrance to each owned building's join, all eras);
+**spurs start under the building** (slot anchor); Village is a **3-stud meandering Pebble trail**
+(seeded arc-length noise, tapered at nodes, straight on far plots). Boomtown keeps its straight
+asphalt grid. Contract: INTERFACES "Wave 1b — natural paths".
+
 **Why:** a fresh session would otherwise propose server-spawned dressing, collidable props, or
 mix car-kit into Village, and would re-open the M9 scope.
 

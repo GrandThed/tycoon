@@ -2030,7 +2030,10 @@ changes only through the pipeline), `Economy.luau`, every remote, `DataService`,
 Wave 2 unfreezes `Types.SettingKey`, `DataService`, `RemoteService`, `SettingsPanel` for the
 `cityDetail` setting (below).
 
-## CityDressing.json — schema v1 (`src/shared/Config/CityDressing.json`, lead-applied; Rojo → ModuleScript)
+## CityDressing.json — schema v2 (`src/shared/Config/CityDressing.json`, lead-applied; Rojo → ModuleScript)
+
+**v2 (wave 1b):** `road.spineTierStep` removed; `budget.roadPiecesNear`, `eras.*.road.meander` and
+`eras.*.road.laneOffsetFraction` added. The shape below is v1; the amendments follow it.
 
 The file is committed with these values; the shape is:
 
@@ -2081,6 +2084,9 @@ left 9 slots unreachable:
   stays strict.
 - **P2:** a `spur` override with exactly **one** point means "no spur for this slot": no Part, no
   junction, no lamp, no graph edge. Used where the building already sits on or against a road.
+- **P3 (Ben, wave 1b):** a spine may also pass under a **monument** standing on a street centreline
+  and under a decor slot whose footprint overlaps that monument (Boomtown `clockTower`,
+  `fireHydrant`); both take one-point spurs. The tower becomes the main street's centrepiece.
 `tools/streetplan.py` checks these rules by default.
 - Ben's "city detail" setting (wave 2) halves `trees.maxCount`, disables lamps and restricts
   vehicles to the local plot; no extra config key is needed for that.
@@ -2237,6 +2243,53 @@ checks the plan against the slot positions with a quick top-down plot (matplotli
   `ReplicatedStorage.Assets.Props` → `{ "$path": { "optional": "templates/_props" } }` so the client
   can clone them (`ServerStorage` is not replicated). `gen_templates.py --check` covers both roots.
 - `docs/ASSET_MANIFEST.md` gains a props table per era (same columns).
+
+## Wave 1b — natural paths (Ben's playtest, 2026-09-16)
+
+Ben's first Studio look: "the paths idea is great, but they don't line up with anything, they are
+way too wide and straight". Decided the same day. **This section supersedes the conflicting parts
+of "Road routing", "Layouts" and "CityDressing.json" above.**
+
+- **Roads grow with buildings (all eras).** Spines are no longer revealed by tier, and
+  `road.spineTierStep` is removed. All spine polylines together form one road network. The plot
+  **entrance** is point 1 of polyline 1. The visible spine is the union of the **shortest paths
+  along that network from the entrance to the join point of every drawn spur** (owned slots,
+  excluding P2 one-point spurs). Only those stretches exist: no road ever leads nowhere. When a
+  building is bought, the missing stretch is added; nothing already drawn moves. Every join point
+  must be reachable from the entrance (`streetplan.py` checks this).
+- **Spurs start under their building (all eras).** A spur's first point is the slot anchor
+  (`position`), not the pad's outer edge, so the path visibly runs out from under the building
+  front, across the pad, to the spine. Leg 1 still runs along the facing. A multi-point `spur`
+  override is prefixed with the anchor automatically when its first point is not already the
+  anchor. Crossing its own footprint and pad is allowed; crossing any other footprint, pad, lot
+  or plaza is not.
+- **Meander (per era, `eras.<Era>.road.meander`, optional; Village only in wave 1):**
+  `{ "amplitude": 0.7, "wavelength": 18, "segmentLength": 5, "widthJitter": 0.5 }`.
+  - Every drawn centreline (spine stretch or spur) is cut into pieces of about `segmentLength`.
+  - Each cut point moves sideways by `amplitude * taper * noise(arcLength)`. `noise` is a sum of
+    two sines, with phases from the plot seed and the polyline index (spurs use the sorted slot
+    id), so it is a pure function of arc length and never depends on draw order or which
+    stretches are visible. Each piece's width is `width + widthJitter * noise2(arcLength)`.
+  - `taper` goes 0 → 1 over one `width` from every graph node: polyline points, every
+    potential join point of every slot (owned or not), and spur ends. Connections therefore
+    always line up.
+  - Pieces overlap by half a width so joints stay closed. A spine bend of ≥ 30° also gets one
+    `Cylinder` disc (diameter = width, same material) so corners are round.
+  - Eras without `meander` keep straight Parts and kit tiles as before.
+- **Near/far roads.** Near plots draw meandered roads. Far plots draw the straight version (one
+  Part per centreline segment) of the same visible network. A near/far flip rebuilds only the
+  road Parts, and the lane graph is unaffected. Budgets: `budget.roadPieces` (60) applies to far
+  and straight roads, `budget.roadPiecesNear` (160) to meandered near roads.
+- **Lanes.** Vehicles follow the drawn centreline (meandered on near plots).
+  `eras.<Era>.road.laneOffsetFraction` optionally overrides the global value. Village sets `0`,
+  so carts drive single-file down the middle of the 3-stud trail; carts passing through each
+  other is accepted.
+- **Trees** keep `width/2 + amplitude + trees.roadClearance` from every potential road
+  centreline.
+- **Village road config:** `width` 5 → **3**, `material` `Ground` → **`Pebble`**, `color` stays a
+  warm dirt brown. The Village street plan may use diagonal segments; no kit tiles need axis
+  alignment there. Boomtown keeps its straight 8-stud asphalt grid and kit tiles, but gets the
+  growth rule and the under-building spur start.
 
 ## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
 

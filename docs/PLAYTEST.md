@@ -1550,9 +1550,10 @@ the expected degrade, not a bug, if you skip this).
       Attributes if unsure) and open its **Attributes**. Confirm `GrowthTier` reads `0` and
       `EraName` reads `Village`. Walk the plot: bare ground, no roads, no trees, no houses.
 - [ ] 4. Buy the first (free) slot. Within a second or two confirm `GrowthTier` ticks up to `1` on
-      the plot's Attributes, a short dirt-coloured road spur appears from the new building out to
-      a road segment, and the first spine segment (the road "into town" toward the monument) is
-      visible.
+      the plot's Attributes, and a narrow (about 3-stud) **pebble trail** runs out from *under* the
+      new building, across its pad, and back along the shortest route to the plot entrance at the
+      front-west gap. No other road is drawn yet: roads only exist where an owned building needs
+      them (wave 1b).
 - [ ] 5. Add the `GrantCash` Workspace attribute (same lever as M7/M8 — Workspace → Attributes →
       **+** → `GrantCash`, type number, a large value) and use the Build panel's ×1/×10/Max
       buttons to buy and level slots. Re-check `GrowthTier` after a few buys/levels — it should
@@ -1560,10 +1561,22 @@ the expected degrade, not a bug, if you skip this).
       way to `5`. (Pacing note: per `docs/BALANCE.md`, a *real* greedy playthrough reaches tier 5
       around minute 36 of Village — `GrantCash` is what makes this a two-minute check instead.)
 
+- [ ] 5b. **Wave 1b trail look** (Ben's playtest feedback). Stand on the plot and confirm:
+      - The trail **wobbles gently** and varies a little in width; it is not ruler-straight.
+      - It has a visible **pebble texture** in a warm dirt brown (Graphics quality high enough to
+        show materials; at the lowest quality every material looks flat).
+      - Where two trails meet, or a path joins a lane, the joint lines up with **no gap** and
+        corners are **rounded**; no round disc sticks out past the end of a trail.
+      - Buying a second building **adds** a branch; nothing already drawn shifts or flickers.
+      - Fly the camera more than ~290 studs away: the trail turns into straight strips. Fly back:
+        the wobble returns and no stretch is missing.
+      - Carts (from tier 2) stay on the pebble trail at all times, single-file down the middle.
+
 ### 3. Tier 5 Village — the full look
 
 - [ ] 6. With `GrowthTier` at `5` and your plot **near** the camera (stand on it), confirm: a
-      network of dirt-coloured road spurs and the full spine connect your owned buildings, up to
+      network of pebble trails connects every owned building (each path starts under its
+      building), with no road running anywhere no building needs it, up to
       **40 trees** are scattered around the plot (some short/young, some tall/full — trees grow in
       stages as the tier rises, so don't expect all 40 at full height if you just jumped to tier 5
       quickly), a few **filler cottages** sit along the roads that are not buy-pad buildings, one
@@ -1586,8 +1599,10 @@ the expected degrade, not a bug, if you skip this).
 - [ ] 11. Walk down **main street** (the road running through the middle of the plot, x = 0):
       confirm the spine passes directly over the **Pave Main Street** and **Streetlamp Row**
       slots — those two are road-piece buildings that sit *on* the road itself, so the road should
-      run through/over them, not curve around them.
-- [ ] 12. Confirm **Bank**, **Radio Station**, **Pave Main Street**, and **Streetlamp Row** have
+      run through/over them, not curve around them. It also runs under the **Clock Tower** and
+      **Fire Hydrant** (amendment P3), so the tower stands in the middle of main street.
+- [ ] 12. Confirm **Bank**, **Radio Station**, **Pave Main Street**, **Streetlamp Row**, **Clock
+      Tower** and **Fire Hydrant** have
       **no driveway spur** connecting them sideways to the street (they sit directly against/on
       the road already) — every other owned building should have its own short spur.
 

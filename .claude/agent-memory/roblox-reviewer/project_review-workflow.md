@@ -223,3 +223,25 @@ trailing coalesce (Config constant), not a token bucket that drops the last opti
 - **Recurring pattern (M9):** client code that reconciles against replicated server children must not
   treat a *transient* missing child as a teardown signal — server full rebuilds (RefreshCosmetics) replicate
   in chunks across frames. Recheck any "child gone → clear everything" logic.
+
+**M9 wave 1b (2026-09-17, "natural paths", SHIP with 2 Majors — client-only).** Roads now grow with
+buildings: `RoadGraph` builds one network from all spine polylines, splits every segment at every
+*potential* join point (owned or not), runs an O(N^2) Dijkstra from the entrance (polyline 1 point 1;
+ties keep the lower node index, relaxation keeps the first parent — deterministic), and `allocate`
+fixes both budgets (`roadPieces` straight, `roadPiecesNear` meandered) from the whole layout before
+any ownership is known. That is what makes "A then B" == "B then A" and "nothing already drawn moves";
+never let a budget or a route depend on the owned set. `Noise.luau` (Hash/Phases/Wave) is the shared
+pure hash — Scatter.Hash now delegates to it.
+- **Recurring pattern (wave 1b):** a render budget that can legitimately produce *zero* parts must not
+  double as the "is this drawn?" flag. `RoadGraph.SetNear` redraws only groups with `#parts > 0`, so a
+  group whose meandered draw was cut by the near budget is never redrawn straight (and disappears
+  permanently after near->far->near). Keep an explicit revealed set instead of counting Instances.
+- **Recurring pattern (wave 1b):** a Python mirror must mirror the *allocation* function, not the
+  rendered result. `streetplan.py road_pieces` merges contiguous stretches into runs before
+  `round(L/segmentLength)` while the client meanders per stretch and budgets every stretch/bend node in
+  the network (Village: tool 146, client 153, of 160). Whenever a budget moves into code, re-derive the
+  tool's counter from the Luau allocator line by line.
+- Read-only verification for this area: `py tools/streetplan.py` (0 violations = the plan's clearance,
+  reachability and budget rules) and a scratch script that imports `tools/streetplan.py` as a module
+  (`importlib.util.spec_from_file_location`) to re-count pieces the way the client does — that is how
+  both Majors were quantified without Studio.
