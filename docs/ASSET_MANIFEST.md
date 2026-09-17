@@ -202,6 +202,15 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 | 23 | `TurretBase` | Raise Planetary Defense | unlock | — | — | — | 0/1 | — | — | — |
 | 24 | `LaunchTower` | Launch Tower | monument | — | — | — | 0/1 | — | — | — |
 
+## Path textures
+
+Ribbon path textures: `tools/paths/texture.py` -> `tools/assets/upload_path_texture.py` (Decal)
+-> Studio harvest (`imageId`). An era without a harvested `imageId` draws its paths with Parts.
+
+| Era | assetId | imageId | Status |
+|-----|---------|---------|--------|
+| Village | 129735535354317 | 115163704776256 | harvested |
+
 ## Totals
 
 96 models: 72/96 blueprints, 48/96 uploaded, 48/96 harvested, 48/96 templated

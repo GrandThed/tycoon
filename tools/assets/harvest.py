@@ -19,6 +19,11 @@ untouched and are listed.
 kind "prop", and the merge step with --props takes only those lines (without it, only building
 and swatch lines), so each paste lands exactly where its emit came from. --assets-json and
 --luau redirect the files for dry runs.
+
+Ribbon path textures (Assets.json pathTextures.<Era>, uploaded as Decals by
+upload_path_texture.py) ride along in both modes with no flag of their own: an entry with an
+assetId but no imageId is emitted as kind "pathTexture", and either merge writes its imageId,
+because a path texture belongs to neither buildings nor props and should not wait on either paste.
 """
 
 from __future__ import annotations
@@ -96,7 +101,12 @@ for _, asset in ASSETS do
 		parts = {},
 	}
 	for _, d in container:GetDescendants() do
-		if d:IsA("MeshPart") then
+		if asset.kind == "pathTexture" then
+			-- A Decal upload loads as a Model holding one Decal; its Texture is the Image asset.
+			if d:IsA("Decal") then
+				record.imageId = idFrom(d.Texture)
+			end
+		elseif d:IsA("MeshPart") then
 			local offset = d.Position - pivot.Position
 			table.insert(record.parts, {
 				name = d.Name,
@@ -155,6 +165,8 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
         if asset_id == 0 or (not include_all and int(tex.get("vipImageId", 0)) != 0):
             continue
         lines.append(f"\t{{ kind = \"swatch\", kit = {lua_string(kit)}, id = {asset_id} }},")
+    for era, entry in pending_path_textures(assets, include_all):
+        lines.append(f"\t{{ kind = \"pathTexture\", era = {lua_string(era)}, id = {int(entry['assetId'])} }},")
     flag = " --props" if props else ""
     text = LUAU_TEMPLATE % {
         "entries": "\n".join(lines) if lines else "\t-- nothing to harvest",
@@ -167,6 +179,15 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
     if not lines:
         log("nothing is waiting for harvest (upload first, or pass --all to re-harvest everything)")
     return 0
+
+
+def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple[str, dict]]:
+    out = []
+    for era in sorted(assets.get(cfg.PATH_TEXTURES_KEY, {})):
+        entry = assets[cfg.PATH_TEXTURES_KEY][era]
+        if int(entry.get("assetId", 0)) != 0 and (include_all or int(entry.get("imageId", 0)) == 0):
+            out.append((era, entry))
+    return out
 
 
 # ---------------------------------------------------------------- merge
@@ -283,6 +304,26 @@ def merge_swatch(assets: dict, rec: dict, force: bool) -> bool:
     return True
 
 
+def merge_path_texture(assets: dict, rec: dict, force: bool) -> bool:
+    era = rec.get("era")
+    entry = assets.get(cfg.PATH_TEXTURES_KEY, {}).get(era)
+    if entry is None:
+        warn(f"no pathTextures entry for era {era!r}; line skipped")
+        return False
+    expected = int(entry.get("assetId", 0))
+    got = int(str(rec.get("assetId", "0")) or 0)
+    if expected != got and not force:
+        warn(f"path texture {era}: printed asset {got} but Assets.json has {expected}; skipped")
+        return False
+    image_id = int(str(rec.get("imageId", "0")) or 0)
+    if image_id == 0:
+        warn(f"path texture {era}: no Decal Texture on the loaded asset (still in moderation?); skipped")
+        return False
+    entry["imageId"] = image_id
+    log(f"path texture {era}: image {image_id}")
+    return True
+
+
 def list_missing(assets: dict, props: bool) -> list[str]:
     missing = []
     group, prefix = ("props", "props/") if props else ("eras", "")
@@ -293,6 +334,7 @@ def list_missing(assets: dict, props: bool) -> list[str]:
         tex = assets["textures"][kit]
         if int(tex.get("vipSwatchAssetId", 0)) != 0 and int(tex.get("vipImageId", 0)) == 0:
             missing.append(f"VIP swatch {kit}")
+    missing += [f"path texture {era}" for era, _ in pending_path_textures(assets)]
     return missing
 
 
@@ -301,10 +343,12 @@ def merge(assets: dict, text: str, force: bool, props: bool) -> int:
     if not records:
         warn("no [HARVEST] lines found (copy the whole Output window after running harvest.luau)")
         return 1
-    models = swatches = 0
+    models = swatches = path_textures = 0
     for rec in records:
         kind = rec.get("kind")
-        if props:
+        if kind == "pathTexture":
+            path_textures += merge_path_texture(assets, rec, force)
+        elif props:
             if kind == "prop":
                 models += merge_model(assets, rec, force, "props")
             else:
@@ -322,6 +366,8 @@ def merge(assets: dict, text: str, force: bool, props: bool) -> int:
         log(f"merged {models} prop stage(s) into {os.path.relpath(cfg.ASSETS_PATH, cfg.REPO_ROOT)}")
     else:
         log(f"merged {models} model stage(s) and {swatches} swatch(es) into {os.path.relpath(cfg.ASSETS_PATH, cfg.REPO_ROOT)}")
+    if path_textures:
+        log(f"merged {path_textures} path texture(s)")
     missing = list_missing(assets, props)
     if missing:
         log("still missing harvest data: " + ", ".join(missing))

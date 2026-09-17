@@ -1,5 +1,6 @@
 """Read, shape and write src/shared/Config/Assets.json (schema v1, INTERFACES.md "M7 contracts";
-v2 adds the city-dressing `props` block, "M9 contracts").
+v2 adds the city-dressing `props` block, "M9 contracts"; the optional `pathTextures` block is
+"Wave 1c — ribbon paths").
 
 Shared by upload_models.py (writes modelAssetId / vipSwatchAssetId), harvest.py (writes meshId,
 imageId, size, offset, vipImageId) and gen_templates.py (reads everything). Every writer goes
@@ -27,6 +28,8 @@ SCHEMA_VERSION = 1
 # A file only becomes v2 once it carries props, so building-only runs keep writing v1 byte for byte.
 PROPS_SCHEMA_VERSION = 2
 PROPS_KEY = "props"
+# Additive and optional (a missing key means no ribbon texture), so it bumps no schema version.
+PATH_TEXTURES_KEY = "pathTextures"
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -133,6 +136,13 @@ def ensure_texture(assets: dict, kit: str) -> dict:
     return tex
 
 
+def ensure_path_texture(assets: dict, era: str) -> dict:
+    entry = assets.setdefault(PATH_TEXTURES_KEY, {}).setdefault(era, {})
+    entry.setdefault("assetId", 0)
+    entry.setdefault("imageId", 0)
+    return entry
+
+
 def stage_harvested(stage: dict) -> bool:
     parts = stage.get("parts") or []
     return bool(parts) and all(int(p.get("meshId", 0)) != 0 for p in parts)
@@ -176,6 +186,9 @@ def render_assets(assets: dict) -> str:
     if PROPS_KEY in assets:
         props = assets[PROPS_KEY]
         ordered[PROPS_KEY] = {era: {name: props[era][name] for name in sorted(props[era])} for era in sorted(props)}
+    if PATH_TEXTURES_KEY in assets:
+        paths = assets[PATH_TEXTURES_KEY]
+        ordered[PATH_TEXTURES_KEY] = {era: {"assetId": paths[era].get("assetId", 0), "imageId": paths[era].get("imageId", 0)} for era in sorted(paths)}
     text = json.dumps(ordered, indent=2, ensure_ascii=False)
     text = _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
     return text + "\n"

@@ -16,6 +16,8 @@ City-dressing props (M9) get their own table per era, listed only when the era h
 facts from tools/testfit/blueprints/_props/<Era>/, assets/build/stages/_props/<Era>/,
 Assets.json `props` (optional key) and templates/_props/<Era>/.
 
+Ribbon path textures (wave 1c) get one small table from Assets.json `pathTextures` (optional key).
+
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
 --check masks that column on both sides before comparing.
@@ -451,8 +453,34 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
             for index, (prop_name, cov) in enumerate(prop_rows, start=1):
                 lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
             lines.append("")
+    lines += render_path_textures(assets)
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
+
+
+def render_path_textures(assets: dict | None) -> list[str]:
+    block = assets.get("pathTextures") if assets is not None else None
+    lines = [
+        "## Path textures",
+        "",
+        "Ribbon path textures: `tools/paths/texture.py` -> `tools/assets/upload_path_texture.py` (Decal)",
+        "-> Studio harvest (`imageId`). An era without a harvested `imageId` draws its paths with Parts.",
+        "",
+    ]
+    if not isinstance(block, dict) or not block:
+        return lines + ["No path textures listed in `Assets.json`.", ""]
+    lines += ["| Era | assetId | imageId | Status |", "|-----|---------|---------|--------|"]
+    for era in sorted(block):
+        entry = block[era] if isinstance(block[era], dict) else {}
+        asset_id, image_id = entry.get("assetId") or 0, entry.get("imageId") or 0
+        if image_id:
+            status = "harvested"
+        elif asset_id:
+            status = "uploaded, awaiting harvest"
+        else:
+            status = "not uploaded"
+        lines.append(f"| {md_cell(era)} | {asset_id or NONE} | {image_id or NONE} | {status} |")
+    return lines + [""]
 
 
 def mask_volatile(text: str) -> str:
