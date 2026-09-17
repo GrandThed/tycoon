@@ -650,6 +650,25 @@ Run in this order from the repo root; every step is idempotent, same as M7.
 - [x] 11. No new game passes or developer products this milestone — M9 doesn't touch
       monetization.
 
+### 6. Wave 1c — ribbon paths (EditableMesh)
+
+- [x] 13. Path texture generated, uploaded and harvested 2026-09-17 (Village: asset
+      129735535354317, image 115163704776256). To regenerate or add an era:
+      ```bash
+      "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/paths/texture.py --era Village
+      py tools/assets/upload_path_texture.py --era Village --dry-run
+      py tools/assets/upload_path_texture.py --era Village
+      py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip
+      ```
+      Paste in the Studio command bar (Edit mode), wait for `[HARVEST-DONE]`, copy Output, then
+      `py tools/assets/harvest.py` and `py tools/gen_asset_manifest.py`. A brand-new Decal can sit in
+      moderation for a few minutes; re-run the paste if the merge says so.
+- [ ] 14. **Creator Dashboard — required for ribbons in the published game.** Studio does not
+      enforce this, so ribbons work in Studio either way. The experience owner (for a group game,
+      the group owner) must be **13+ and ID verified**. Then: create.roblox.com → Creator
+      Dashboard → the experience (or your account/group settings) → turn on **Enable Mesh / Image
+      APIs**. Without it, the published game silently draws Beam paths instead.
+
 ### 5. Wave 2 (Metropolis, Orbital Colony, `cityDetail` setting) — not started
 
 - [ ] 12. Repeats sections 2–3 above for Metropolis and Orbital Colony once their buildings ship

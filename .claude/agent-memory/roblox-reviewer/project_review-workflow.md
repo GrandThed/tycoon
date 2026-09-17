@@ -245,3 +245,21 @@ pure hash — Scatter.Hash now delegates to it.
   reachability and budget rules) and a scratch script that imports `tools/streetplan.py` as a module
   (`importlib.util.spec_from_file_location`) to re-count pieces the way the client does — that is how
   both Majors were quantified without Studio.
+
+**M9 wave 1c (2026-09-17, ribbon paths, SHIP with Majors — client-only).** `PathRibbon` (pure port of
+`tools/pathmock/pathgeom.py`) + `PathRenderer` (ribbon EditableMesh per layer 0/1/2 → Beam → RoadGraph Parts via
+`onParts`). Network smoothed once per layout in `RoadGraph.ribbonCache`; drawn pieces are arc ranges of fixed
+curves, so ownership never moves geometry. Failure handling verified sound: every create in pcall, late
+`CreateMeshPartAsync` result destroyed when `handle.destroyed`/mode changed/layer replaced, growth Heartbeat is
+module-level and disconnects at 0 jobs, beam tweens cancelled in `destroyBeams`.
+- Read-only quantification: `py tools/pathmock/pathgeom.py <scratch>/x.json` prints full-network stats
+  (Village: 9750 tris / 6612 verts / 28 meshes, lane1 2184 tris, 1 folded triangle) — use it to check
+  `budget.ribbonTriangles` headroom instead of guessing.
+- **Recurring pattern (wave 1c):** a renderer that takes the *whole visible set* per call must not be called
+  once per item inside a per-slot loop. `RoadGraph.AddSpur` → `PathRenderer.Update` runs N times on a plot's
+  first sync, and each run that extends a lane run removes and re-adds that whole piece's vertices (O(N²)
+  EditableMesh churn on join) and cancels the previous call's growth job. Recheck any "full-set" API for a
+  single flush per sync.
+- Studio-only unknowns to keep listing until Ben confirms: MeshPart.TextureContent alpha really blends (vs
+  showing part Color) on an EditableMesh-backed MeshPart; live add/remove faces after CreateMeshPartAsync
+  render; CCW-from-+Y is front face; flat Beam orientation (attachment Y = face normal) and CurveSize1 sign.

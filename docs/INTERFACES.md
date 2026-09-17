@@ -2354,8 +2354,9 @@ It ports `tools/pathmock/pathgeom.py`:
 - **Height:** layer `i` sits at `road.thickness + i × ribbon.layerLift` above the plot top.
 - Output per path: arrays of positions (plot-local), UVs and triangle indices, plus the
   smoothed centreline polyline with cumulative arc length.
-- Everything is a pure function of `(layout, plot seed, visible set)`, so a path is identical
-  on every client. Adding a path never changes another path's geometry, because joins snap to
+- Everything is a pure function of `(layout, visible set)` (meander phases come from the
+  polyline index or slot id, not the plot seed, so every plot of an era shares one shape, as in
+  the approved mock), so a path is identical on every client. Adding a path never changes another path's geometry, because joins snap to
   the host's full smoothed curve, which is computed from the whole network.
 - Magic numbers that are part of the look (0.62/0.38/2.13/1.71/0.9, 2.399963, 0.618, 0.265,
   0.45, 0.95/0.48) are named constants in PathRibbon with a why-comment pointing here. Tunables

@@ -1561,16 +1561,28 @@ the expected degrade, not a bug, if you skip this).
       way to `5`. (Pacing note: per `docs/BALANCE.md`, a *real* greedy playthrough reaches tier 5
       around minute 36 of Village — `GrantCash` is what makes this a two-minute check instead.)
 
-- [ ] 5b. **Wave 1b trail look** (Ben's playtest feedback). Stand on the plot and confirm:
-      - The trail **wobbles gently** and varies a little in width; it is not ruler-straight.
-      - It has a visible **pebble texture** in a warm dirt brown (Graphics quality high enough to
-        show materials; at the lowest quality every material looks flat).
-      - Where two trails meet, or a path joins a lane, the joint lines up with **no gap** and
-        corners are **rounded**; no round disc sticks out past the end of a trail.
-      - Buying a second building **adds** a branch; nothing already drawn shifts or flickers.
-      - Fly the camera more than ~290 studs away: the trail turns into straight strips. Fly back:
-        the wobble returns and no stretch is missing.
-      - Carts (from tier 2) stay on the pebble trail at all times, single-file down the middle.
+- [ ] 5b. **Wave 1c ribbon paths** (Ben's second playtest). Rebuild first. On your Village plot:
+      - In Explorer, `Workspace/CityDressing/Plot<n>` has the attribute `PathRenderer = ribbon`
+        and contains `PathRibbon0`/`PathRibbon1`/`PathRibbon2` MeshParts.
+      - Trails are **smooth curves** with rounded corners, a dirt-and-pebble texture, and **soft
+        edges that fade into the grass**. **Most important check:** if the edge shows as a solid
+        brown band instead of fading, the texture alpha isn't blending — screenshot it and report.
+      - **No flicker or z-fighting** anywhere, including where a building's path meets a lane,
+        seen from a low camera angle. The lane stays full width at the plot entrance.
+      - Use `GrantCash` and buy a building: its path **grows** out from the lane to the building in
+        about 1 s. Buy two quickly: both grow, neither jumps to full length.
+      - Carts (from tier 2) follow the curves; no tree sits on a trail.
+      - Look closely along the main lane for a tiny pinhole (one folded triangle in the mock).
+- [ ] 5c. **Renderer fallbacks** (edit `src/shared/Config/CityDressing.json`, rebuild, Play; restore
+      `"renderer": "auto"` afterwards):
+      - `"renderer": "beam"` → attribute reads `beam`, a `PathBeams` anchor exists, the trails
+        **lie flat** and curve the right way (report if beams stand upright or kink), no Output
+        errors.
+      - `"renderer": "parts"` → attribute reads `parts`, the Wave 1b pebble parts draw, no errors.
+      - Boomtown plots always read `parts` (asphalt grid unchanged).
+- [ ] 5d. **Published-game check** (after the Creator Dashboard step in `MANUAL_STEPS.md` M9 §6):
+      publish, join the live game, and confirm your plot reads `PathRenderer = ribbon`. If it reads
+      `beam`, the Mesh/Image API gate is still closed for this experience.
 
 ### 3. Tier 5 Village — the full look
 
