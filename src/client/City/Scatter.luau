@@ -16,11 +16,10 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local RoadGraph = require(script.Parent:WaitForChild("RoadGraph"))
+local Noise = require(script.Parent:WaitForChild("Noise"))
 
 -- Seed formula frozen by the contract.
 local SEED_PLOT_MULTIPLIER = 7919
-local HASH_MULTIPLIER = 31
-local HASH_MODULUS = 16777216 -- 2^24 keeps every intermediate exact in a double
 local FULL_TURN = 2 * math.pi
 
 export type TreeSpot = {
@@ -57,13 +56,9 @@ type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
 
 local Scatter = {}
 
--- Small pure string hash (31-multiplier over bytes, mod 2^24): identical on every client.
+-- The seed hash lives in Noise so the road meander keys its phases with the same function.
 function Scatter.Hash(text: string): number
-	local hash = 0
-	for index = 1, #text do
-		hash = (hash * HASH_MULTIPLIER + string.byte(text, index)) % HASH_MODULUS
-	end
-	return hash
+	return Noise.Hash(text)
 end
 
 function Scatter.Seed(plotIndex: number, eraName: string): number
@@ -261,7 +256,11 @@ local function treeSpots(input: PlanInput, rng: Random): { TreeSpot }
 	local obstacles = obstaclesFor(input, clearance)
 	local footprints = footprintsFor(input)
 	local footprintMargin = input.config.trees.footprintMargin
-	local roadClearance = input.roadWidth / 2 + input.config.trees.roadClearance
+	-- A meandered trail can wander `amplitude` off its centreline, so trees keep that much more.
+	local meander = era.road.meander
+	local roadClearance = input.roadWidth / 2
+		+ (if meander ~= nil then meander.amplitude else 0)
+		+ input.config.trees.roadClearance
 	local margin = input.config.trees.edgeMargin
 	local halfX = input.plotSize.X / 2 - margin
 	local halfZ = input.plotSize.Z / 2 - margin

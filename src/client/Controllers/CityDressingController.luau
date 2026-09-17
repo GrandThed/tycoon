@@ -11,7 +11,7 @@
 -- single pass. Dressing only adds while a plot grows; an era change, a tier drop, or a drawn
 -- spur whose building is gone clears the plot and rebuilds it. Near/far LOD (trees, lamps,
 -- vehicles) and the vehicle-plot selection refresh every lod.refreshSeconds on a task.delay
--- chain. A missing CityDressing config means the controller does nothing at all.
+-- chain. A missing (or pre-budget) CityDressing config means the controller does nothing at all.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -79,6 +79,16 @@ local player = Players.LocalPlayer
 local entries: { [Instance]: PlotEntry } = {}
 local rootFolder: Folder? = nil
 local started = false
+
+-- Silent degradation (M9 principles): a config file too old to carry the part ceilings can't be
+-- allocated against, so it counts as no config at all rather than erroring mid-build.
+local function dressingConfig(): Types.CityDressingConfig?
+	local config = Catalog.GetCityDressingConfig()
+	if config == nil or type(config.budget) ~= "table" then
+		return nil
+	end
+	return config
+end
 
 local function baseOf(plot: Instance): BasePart?
 	local base = plot:FindFirstChild(BASE_NAME)
@@ -171,9 +181,10 @@ local function newBuild(
 		plotFrame = plotFrame,
 		layout = layout,
 		eraName = eraName,
+		seed = Scatter.Seed(entry.index, eraName),
 		config = config,
 		era = era,
-	})
+	}, entry.near)
 	local plan = Scatter.Plan({
 		plotIndex = entry.index,
 		eraName = eraName,
@@ -290,9 +301,8 @@ local function syncLamps(
 			continue
 		end
 		local junction = RoadGraph.GetJunction(build.roads, slotId)
-		-- A lamp needs the spine it lights: a spur can be drawn before its spine is visible.
-		local polyline = if junction ~= nil then junction.polyline else nil
-		if junction == nil or polyline == nil or polyline > build.roads.visible then
+		-- A lamp needs the spine it lights: a spur to an unreachable join point has none.
+		if junction == nil or not RoadGraph.JoinVisible(build.roads, slotId) then
 			continue
 		end
 		local model = PropFactory.Spawn(
@@ -366,7 +376,7 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 end
 
 local function sync(entry: PlotEntry): ()
-	local config = Catalog.GetCityDressingConfig()
+	local config = dressingConfig()
 	if config == nil or entries[entry.plot] ~= entry then
 		return
 	end
@@ -417,7 +427,9 @@ local function sync(entry: PlotEntry): ()
 	local current = build :: Build
 	local folder = entry.folder
 
-	local roadsChanged = RoadGraph.SetTier(current.roads, tier)
+	-- Roads grow with buildings, not tiers; near/far only swaps meandered and straight Parts.
+	RoadGraph.SetNear(current.roads, entry.near)
+	local roadsChanged = false
 	for _, slotId in (ownedSlotIds(plot, current.layout)) do
 		if RoadGraph.AddSpur(current.roads, slotId) then
 			roadsChanged = true
@@ -630,7 +642,7 @@ local function refreshLod(config: Types.CityDressingConfig): ()
 end
 
 local function lodLoop(): ()
-	local config = Catalog.GetCityDressingConfig()
+	local config = dressingConfig()
 	if config == nil then
 		return
 	end
@@ -639,7 +651,7 @@ local function lodLoop(): ()
 end
 
 local function start(): ()
-	if started or Catalog.GetCityDressingConfig() == nil then
+	if started or dressingConfig() == nil then
 		return
 	end
 	started = true
@@ -667,7 +679,7 @@ function CityDressingController.Init(): ()
 end
 
 function CityDressingController.Start(): ()
-	if Catalog.GetCityDressingConfig() == nil then
+	if dressingConfig() == nil then
 		return
 	end
 	task.spawn(function()

@@ -352,8 +352,7 @@ export type CityLodConfig = {
 	vehiclePlots: number,
 	refreshSeconds: number,
 }
-export type CityRoadConfig =
-	{ thickness: number, laneOffsetFraction: number, spineTierStep: number }
+export type CityRoadConfig = { thickness: number, laneOffsetFraction: number }
 -- roadClearance is added to road.width / 2 when rejecting tree spots near a centreline;
 -- footprintMargin grows every slot/pad/lot/plaza footprint a tree spot must stay outside.
 export type CityTreesConfig = {
@@ -364,7 +363,9 @@ export type CityTreesConfig = {
 }
 -- Per-plot part ceilings from the M9 contract (vehiclesMap is whole-map).
 export type CityBudgetConfig = {
-	roadPieces: number,
+	roadPieces: number, -- far plots and straight-road eras
+	-- Wave 1b; optional so a pre-v2 file still typechecks (readers fall back to roadPieces).
+	roadPiecesNear: number?, -- meandered roads on near plots
 	fillerPieces: number,
 	trees: number,
 	vehiclesPerPlot: number,
@@ -373,12 +374,22 @@ export type CityBudgetConfig = {
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
 -- `material` is an Enum.Material name; `color` is RGB 0-255.
+-- Wave 1b: a smooth sideways wobble along every drawn centreline, tapered to 0 at graph nodes.
+export type CityMeanderConfig = {
+	amplitude: number,
+	wavelength: number,
+	segmentLength: number,
+	widthJitter: number,
+}
 export type CityEraRoadConfig = {
 	width: number,
 	material: string,
 	color: { number },
 	junctionProp: string?,
 	bendProp: string?,
+	-- Overrides road.laneOffsetFraction; Village sets 0 so carts run down the trail's middle.
+	laneOffsetFraction: number?,
+	meander: CityMeanderConfig?,
 }
 export type CityEraTreesConfig = { maxCount: number, clearance: number, prop: string? }
 export type CityEraPropsConfig = { props: { string } }

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "tier": {
     "ownedWeight": 50,
     "thresholds": [
@@ -18,11 +18,11 @@
   },
   "road": {
     "thickness": 0.2,
-    "laneOffsetFraction": 0.25,
-    "spineTierStep": 1
+    "laneOffsetFraction": 0.25
   },
   "budget": {
     "roadPieces": 60,
+    "roadPiecesNear": 160,
     "fillerPieces": 25,
     "trees": 40,
     "vehiclesPerPlot": 6,
@@ -46,15 +46,22 @@
   "eras": {
     "Village": {
       "road": {
-        "width": 5,
-        "material": "Ground",
+        "width": 3,
+        "material": "Pebble",
         "color": [
           126,
           99,
           66
         ],
         "junctionProp": null,
-        "bendProp": null
+        "bendProp": null,
+        "laneOffsetFraction": 0,
+        "meander": {
+          "amplitude": 0.7,
+          "wavelength": 18,
+          "segmentLength": 5,
+          "widthJitter": 0.5
+        }
       },
       "trees": {
         "maxCount": 40,

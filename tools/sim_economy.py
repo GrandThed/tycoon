@@ -525,6 +525,7 @@ class EraResult:
         self.longest_wait_early = 0
         self.unlock_beats = []  # (slotId, t)
         self.tier_times = None  # t at which city growth tier i+1 was first reached
+        self.slot_order = []  # (slotId, t) in purchase order; streetplan.py colours roads by it
 
 
 def resolve_requires(era):
@@ -636,6 +637,7 @@ def simulate_era(
             if best_kind == "slot":
                 owned[best_id] = floor if by_id[best_id]["type"] == "building" else 1
                 result.slot_buys += 1
+                result.slot_order.append((best_id, t))
                 frontier.remove(best_id)
                 frontier.extend(children.get(best_id, []))
                 if by_id[best_id]["type"] == "unlock":
