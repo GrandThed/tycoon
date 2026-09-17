@@ -12,6 +12,10 @@
 -- spur whose building is gone clears the plot and rebuilds it. Near/far LOD (trees, lamps,
 -- vehicles) and the vehicle-plot selection refresh every lod.refreshSeconds on a task.delay
 -- chain. A missing (or pre-budget) CityDressing config means the controller does nothing at all.
+--
+-- Wave 1c: ribbon-era roads are drawn by PathRenderer (through RoadGraph) on near and far plots
+-- alike. A path revealed by a purchase on a near plot grows in; anything revealed while a build
+-- is still settling (join, rejoin, era rebuild) appears at once.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -52,6 +56,7 @@ type Build = {
 	plazas: { [number]: Model },
 	trees: { [number]: TreeInstance },
 	lamps: { [string]: Model },
+	createdAt: number, -- os.clock when the build started
 }
 
 type PlotEntry = {
@@ -71,6 +76,8 @@ type PlotEntry = {
 	suspectSince: number?,
 	-- Set by the LOD tick once that interval has passed: the next sync may rebuild.
 	confirmSuspect: boolean,
+	-- The roads were redrawn by a fallback renderer, so the vehicles' lane graph is out of date.
+	lanesStale: boolean,
 	scheduled: boolean,
 	build: Build?,
 }
@@ -162,6 +169,9 @@ local function clearBuild(entry: PlotEntry): ()
 	entry.folder:ClearAllChildren()
 end
 
+-- Forward-declared: a build's fallback callback schedules its own plot.
+local schedule: (entry: PlotEntry) -> ()
+
 local function newBuild(
 	entry: PlotEntry,
 	config: Types.CityDressingConfig,
@@ -184,6 +194,10 @@ local function newBuild(
 		seed = Scatter.Seed(entry.index, eraName),
 		config = config,
 		era = era,
+		onRoadsRedrawn = function()
+			entry.lanesStale = true
+			schedule(entry)
+		end,
 	}, entry.near)
 	local plan = Scatter.Plan({
 		plotIndex = entry.index,
@@ -207,6 +221,7 @@ local function newBuild(
 		plazas = {},
 		trees = {},
 		lamps = {},
+		createdAt = os.clock(),
 	}
 end
 
@@ -429,12 +444,18 @@ local function sync(entry: PlotEntry): ()
 
 	-- Roads grow with buildings, not tiers; near/far only swaps meandered and straight Parts.
 	RoadGraph.SetNear(current.roads, entry.near)
-	local roadsChanged = false
+	local roadsChanged = entry.lanesStale
+	entry.lanesStale = false
+	-- Buildings replicate over several frames after a join or rebuild; only a building that
+	-- appears once the build has settled for one LOD interval is a purchase worth animating.
+	local animate = entry.near and os.clock() - current.createdAt >= config.lod.refreshSeconds
 	for _, slotId in (ownedSlotIds(plot, current.layout)) do
-		if RoadGraph.AddSpur(current.roads, slotId) then
+		if RoadGraph.AddSpur(current.roads, slotId, animate) then
 			roadsChanged = true
 		end
 	end
+	-- One renderer update for every spur revealed above.
+	RoadGraph.Flush(current.roads)
 	RoadGraph.RefreshPieces(current.roads)
 	syncFiller(current, tier, folder)
 
@@ -462,7 +483,7 @@ local function sync(entry: PlotEntry): ()
 	end
 end
 
-local function schedule(entry: PlotEntry): ()
+schedule = function(entry: PlotEntry): ()
 	if entry.scheduled or not started then
 		return
 	end
@@ -518,6 +539,7 @@ local function addPlot(plot: Instance): ()
 		vehiclesBlocked = false,
 		suspectSince = nil,
 		confirmSuspect = false,
+		lanesStale = false,
 		scheduled = false,
 		build = nil,
 	}

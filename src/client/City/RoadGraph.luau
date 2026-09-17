@@ -9,6 +9,11 @@
 -- the (meandered) centreline of the roads the near rendering draws — vehicles only run on near
 -- plots — and never changes on a near/far flip.
 --
+-- Wave 1c: eras with `road.ribbon` hand drawing to PathRenderer (smooth textured ribbons, or
+-- flat Beams), which falls back to the Parts here silently. Those plots have no near/far road
+-- rebuild; their lanes follow PathRibbon's meandered centreline and trees keep clear of its
+-- smoothed centreline of every potential path.
+--
 -- Everything is computed in plot-local studs (origin at the plot's top-centre, front -Z, Y 0) and
 -- placed through the plot frame, so every client derives identical geometry from the layout.
 -- The network, the shortest-path tree and every budget decision are fixed once per plot/era
@@ -22,6 +27,8 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Noise = require(script.Parent:WaitForChild("Noise"))
+local PathRibbon = require(script.Parent:WaitForChild("PathRibbon"))
+local PathRenderer = require(script.Parent:WaitForChild("PathRenderer"))
 
 local SPINE_PART_NAME = "Road"
 local SPUR_PART_NAME = "Spur"
@@ -38,6 +45,9 @@ local QUARTER_TURN = math.pi / 2
 -- junction opens to -X, +X and +Z (straight kerb along -Z); the bend opens to -X and +Z.
 local JUNCTION_EXITS = { Vector3.new(-1, 0, 0), Vector3.new(1, 0, 0), Vector3.new(0, 0, 1) }
 local BEND_EXITS = { Vector3.new(-1, 0, 0), Vector3.new(0, 0, 1) }
+-- Connector chains take phase key 97 + their 0-based stretch index (tools/pathmock/pathgeom.py),
+-- which is 96 + the 1-based stretch id here.
+local CONNECTOR_KEY_BASE = 96
 
 export type Junction = {
 	position: Vector3, -- plot-local join point on the spine centreline when `polyline` is set
@@ -68,6 +78,21 @@ export type Context = {
 	seed: number, -- Scatter.Seed(plotIndex, eraName); keys the meander phases
 	config: Types.CityDressingConfig,
 	era: Types.CityEraDressingConfig,
+	-- Called when the roads were redrawn by a different renderer after a silent fallback, so the
+	-- lane graph changed without a new spur.
+	onRoadsRedrawn: (() -> ())?,
+}
+
+-- Ribbon geometry for a layout, shared by every plot of the era (it depends on nothing else).
+type RibbonData = {
+	era: Types.CityEraDressingConfig,
+	thickness: number,
+	network: PathRibbon.Network,
+	stretchChains: { [number]: number }, -- stretch id -> chain index
+	stretchArcs: { [number]: { number } }, -- stretch id -> final arcs at a and b
+	fullTriangles: number,
+	extent: number,
+	treeLines: { { Vector3 } },
 }
 
 -- The atomic piece of spine: the part of one polyline segment between two network nodes.
@@ -142,7 +167,16 @@ export type State = {
 	bendParts: { Instance },
 	pieces: { [string]: Model },
 	lanes: Lanes?,
+	ribbon: RibbonData?, -- eras with road.ribbon
+	paths: PathRenderer.Handle?, -- nil: Parts from the start
+	-- Spurs revealed since the last Flush while PathRenderer draws, and whether any of them
+	-- should grow in.
+	pathsDirty: boolean,
+	pathsAnimate: boolean,
 }
+
+local ribbonCache: { [Types.EraLayout]: RibbonData } = {}
+local pathSpans: (state: State) -> { PathRibbon.Span }
 
 local materialsByName: { [string]: Enum.Material }? = nil
 
@@ -1083,6 +1117,194 @@ local function allocate(state: State): ()
 	end
 end
 
+-- The final-curve arc of a network node on a chain. A polyline's own end points map to the
+-- chain's ends exactly: a joiner's end was snapped onto its host, so projecting the unsnapped
+-- point could land a little way along the curve.
+local function chainArc(
+	network: PathRibbon.Network,
+	chainIndex: number,
+	point: Vector3,
+	polyline: { Vector3 }?
+): number
+	local lo, hi = PathRibbon.FullSpan(network, chainIndex)
+	if polyline ~= nil then
+		local key = keyFor(point)
+		if key == keyFor(polyline[1]) then
+			return lo
+		elseif key == keyFor(polyline[#polyline]) then
+			return hi
+		end
+	end
+	return PathRibbon.ArcAt(network, chainIndex, point.X, point.Z)
+end
+
+local function toPoints(points: { Vector3 }): { PathRibbon.Point }
+	local out: { PathRibbon.Point } = {}
+	for _, point in points do
+		table.insert(out, { point.X, point.Z })
+	end
+	return out
+end
+
+-- Every visible stretch and drawn spur as a span of its ribbon chain.
+pathSpans = function(state: State): { PathRibbon.Span }
+	local spans: { PathRibbon.Span } = {}
+	local ribbon = state.ribbon
+	if ribbon == nil then
+		return spans
+	end
+	for id, stretch in state.stretches do
+		local chain = ribbon.stretchChains[id]
+		if not state.visible[id] or chain == nil then
+			continue
+		end
+		local arcs = ribbon.stretchArcs[id]
+		table.insert(spans, {
+			chain = chain,
+			a = arcs[1],
+			b = arcs[2],
+			distA = state.distance[stretch.fromNode] or math.huge,
+			distB = state.distance[stretch.toNode] or math.huge,
+		})
+	end
+	for _, slotId in state.spurSlotIds do
+		local chain = ribbon.network.spurChains[slotId]
+		if state.spurs[slotId] == nil or chain == nil then
+			continue
+		end
+		local lo, hi = PathRibbon.FullSpan(ribbon.network, chain)
+		-- A spur grows from its join toward the building.
+		table.insert(spans, { chain = chain, a = lo, b = hi, distA = math.huge, distB = 0 })
+	end
+	return spans
+end
+
+-- Smooths the whole potential network once per layout. The triangle count covers what can ever
+-- be drawn (the allowed groups and spurs), so the renderer choice never depends on ownership.
+local function ribbonDataFor(state: State, ribbonConfig: Types.CityRibbonConfig): RibbonData
+	local context = state.context
+	local cached = ribbonCache[context.layout]
+	if cached ~= nil and cached.era == context.era and cached.thickness == state.thickness then
+		return cached
+	end
+	local segmentGroups = 0
+	for _, points in state.polylines do
+		segmentGroups += #points - 1
+	end
+	local polylines: { { PathRibbon.Point } } = {}
+	for _, points in state.polylines do
+		table.insert(polylines, toPoints(points))
+	end
+	local connectors: { PathRibbon.ConnectorInput } = {}
+	for id, stretch in state.stretches do
+		if stretch.group > segmentGroups then
+			table.insert(connectors, {
+				key = CONNECTOR_KEY_BASE + id,
+				from = { stretch.a.X, stretch.a.Z },
+				to = { stretch.b.X, stretch.b.Z },
+			})
+		end
+	end
+	local spurs: { PathRibbon.SpurInput } = {}
+	for _, slotId in state.spurSlotIds do
+		table.insert(spurs, { id = slotId, points = toPoints(state.routes[slotId].points) })
+	end
+	local meander = context.era.road.meander
+	local network = PathRibbon.Build({
+		width = state.width,
+		thickness = state.thickness,
+		meander = if meander ~= nil
+			then {
+				amplitude = meander.amplitude,
+				wavelength = meander.wavelength,
+				widthJitter = meander.widthJitter,
+			}
+			else nil,
+		ribbon = ribbonConfig,
+		polylines = polylines,
+		connectors = connectors,
+		spurs = spurs,
+	})
+
+	local data: RibbonData = {
+		era = context.era,
+		thickness = state.thickness,
+		network = network,
+		stretchChains = {},
+		stretchArcs = {},
+		fullTriangles = 0,
+		extent = PathRibbon.Extent(network),
+		treeLines = {},
+	}
+	local allSpans: { PathRibbon.Span } = {}
+	for id, stretch in state.stretches do
+		local connector = stretch.group > segmentGroups
+		local chain = if connector
+			then network.connectorChains[CONNECTOR_KEY_BASE + id]
+			else network.polylineChains[stretch.polyline]
+		if chain == nil then
+			continue
+		end
+		local arcs: { number }
+		if connector then
+			local lo, hi = PathRibbon.FullSpan(network, chain)
+			arcs = { lo, hi }
+		else
+			local polyline = state.polylines[stretch.polyline]
+			arcs = {
+				chainArc(network, chain, stretch.a, polyline),
+				chainArc(network, chain, stretch.b, polyline),
+			}
+		end
+		data.stretchChains[id] = chain
+		data.stretchArcs[id] = arcs
+		if state.groupAllowed[stretch.group] and stretchNearDistance(state, id) ~= nil then
+			table.insert(
+				allSpans,
+				{ chain = chain, a = arcs[1], b = arcs[2], distA = 0, distB = 0 }
+			)
+		end
+	end
+	for _, slotId in state.spurSlotIds do
+		local chain = network.spurChains[slotId]
+		if chain ~= nil and state.spurAllowed[slotId] then
+			local lo, hi = PathRibbon.FullSpan(network, chain)
+			table.insert(allSpans, { chain = chain, a = lo, b = hi, distA = 0, distB = 0 })
+		end
+	end
+	for _, piece in PathRibbon.Pieces(network, allSpans) do
+		data.fullTriangles += PathRibbon.TriangleCount(#PathRibbon.Rows(network, piece))
+	end
+	-- Sampled about a road width apart: on the tightest fillet (radius cornerRadiusWidths *
+	-- width) the chord strays well under the clearance margin, and it is a fraction of the
+	-- segments the mesh needs.
+	for _, line in PathRibbon.SmoothedCentrelines(network, state.width) do
+		local points: { Vector3 } = {}
+		for _, point in line do
+			table.insert(points, Vector3.new(point[1], 0, point[2]))
+		end
+		table.insert(data.treeLines, points)
+	end
+	ribbonCache[context.layout] = data
+	return data
+end
+
+-- After a silent renderer fallback: every revealed road again, as Parts.
+local function redrawParts(state: State): ()
+	state.lanes = nil
+	for groupIndex in state.revealedGroups do
+		drawGroup(state, groupIndex)
+	end
+	for slotId in state.spurs do
+		drawSpur(state, slotId)
+	end
+	drawBends(state)
+	local callback = state.context.onRoadsRedrawn
+	if callback ~= nil then
+		callback()
+	end
+end
+
 function RoadGraph.new(context: Context, near: boolean): State
 	local road = context.era.road
 	local width = math.max(road.width, MIN_LENGTH)
@@ -1131,11 +1353,41 @@ function RoadGraph.new(context: Context, near: boolean): State
 		bendParts = {},
 		pieces = {},
 		lanes = nil,
+		ribbon = nil,
+		paths = nil,
+		pathsDirty = false,
+		pathsAnimate = false,
 	}
 	buildNetwork(state)
 	buildShortestPaths(state)
 	allocate(state)
+	local ribbonConfig = road.ribbon
+	if ribbonConfig ~= nil then
+		local ribbon = ribbonDataFor(state, ribbonConfig)
+		state.ribbon = ribbon
+		-- Also sets the plot folder's PathRenderer attribute (a Studio diagnostic).
+		state.paths = PathRenderer.Create({
+			folder = context.folder,
+			plotFrame = context.plotFrame,
+			eraName = context.eraName,
+			config = context.config,
+			ribbon = ribbonConfig,
+			network = ribbon.network,
+			fullTriangles = ribbon.fullTriangles,
+			extent = ribbon.extent,
+			color = state.color,
+			onParts = function()
+				redrawParts(state)
+			end,
+		})
+	end
 	return state
+end
+
+-- Whether the plot's roads are drawn by PathRenderer (ribbon or beam) rather than Parts.
+function RoadGraph.UsesPaths(state: State): boolean
+	local paths = state.paths
+	return paths ~= nil and paths.mode ~= "parts"
 end
 
 -- Reveals the shortest path from the entrance to `node`, returning the groups that changed. The
@@ -1172,21 +1424,32 @@ end
 
 -- Draws the slot's spur and reveals its path from the entrance if it is routable, inside the
 -- budget and not drawn yet. Returns whether the network changed.
-function RoadGraph.AddSpur(state: State, slotId: string): boolean
+-- `animate` grows the new path (ribbon and beam renderers only). With those renderers nothing is
+-- drawn until Flush, so a sync that reveals many spurs rebuilds the meshes once.
+function RoadGraph.AddSpur(state: State, slotId: string, animate: boolean?): boolean
 	if state.spurs[slotId] ~= nil or not state.spurAllowed[slotId] then
 		return false
 	end
 	local route = state.routes[slotId]
 	state.spurs[slotId] = route
 	local node = route.junction.node
+	local paths = state.paths
+	local drawsParts = paths == nil or paths.mode == "parts"
 	if node ~= nil then
 		for groupIndex in reveal(state, node) do
-			drawGroup(state, groupIndex)
+			if drawsParts then
+				drawGroup(state, groupIndex)
+			end
 		end
 	end
-	drawSpur(state, slotId)
-	drawBends(state)
 	state.lanes = nil
+	if not drawsParts then
+		state.pathsDirty = true
+		state.pathsAnimate = state.pathsAnimate or animate == true
+	else
+		drawSpur(state, slotId)
+		drawBends(state)
+	end
 	refreshPieces(state)
 	return true
 end
@@ -1198,7 +1461,7 @@ function RoadGraph.SetNear(state: State, near: boolean): ()
 		return
 	end
 	state.near = near
-	if state.meander == nil then
+	if state.meander == nil or RoadGraph.UsesPaths(state) then
 		return
 	end
 	-- Every revealed group, not only those currently holding Parts: a group whose stretches fall
@@ -1213,6 +1476,22 @@ function RoadGraph.SetNear(state: State, near: boolean): ()
 end
 
 -- Retries tiles whose templates were missing earlier (props replicate or upload later).
+-- Hands every spur revealed since the last Flush to PathRenderer in one update, growing them all
+-- together when any was a purchase. A fallback to Parts meanwhile already drew them.
+function RoadGraph.Flush(state: State): ()
+	if not state.pathsDirty then
+		return
+	end
+	local animate = state.pathsAnimate
+	state.pathsDirty = false
+	state.pathsAnimate = false
+	local paths = state.paths
+	if paths ~= nil and paths.mode ~= "parts" then
+		-- A fallback inside Update redraws every revealed road with Parts.
+		PathRenderer.Update(paths, pathSpans(state), animate)
+	end
+end
+
 function RoadGraph.RefreshPieces(state: State): ()
 	refreshPieces(state)
 end
@@ -1244,6 +1523,14 @@ function RoadGraph.AllCentrelines(state: State): { { Vector3 } }
 	for _, slotId in state.spurSlotIds do
 		table.insert(lines, state.routes[slotId].points)
 	end
+	-- Ribbon eras also keep clear of the smoothed curves, which cut inside corners; the straight
+	-- lines stay so a Parts fallback never draws under a tree either.
+	local ribbon = state.ribbon
+	if ribbon ~= nil then
+		for _, line in ribbon.treeLines do
+			table.insert(lines, line)
+		end
+	end
 	return lines
 end
 
@@ -1260,7 +1547,9 @@ end
 
 -- Lanes follow the same centreline function as the meandered rendering (whether or not the
 -- plot is near right now), cut into short lanes joined through pass-through nodes, so vehicles
--- stay on the trail. Network nodes are shared; the pass-through nodes are not.
+-- stay on the trail. Network nodes are shared; the pass-through nodes are not. Plots drawn by
+-- PathRenderer take PathRibbon's meandered centreline instead, with the network's own node ids
+-- at stretch ends and joins, since the drawn curves meet only to within float noise.
 local function buildLanes(state: State): Lanes
 	local lanes: Lanes = {
 		count = 0,
@@ -1308,14 +1597,14 @@ local function buildLanes(state: State): Lanes
 		table.insert(lanes.outgoing[fromNode], id)
 		return id
 	end
-	local function chain(points: { Vector3 }): ()
-		local previous = nodeAt(points[1])
+	local function chainBetween(points: { Vector3 }, firstNode: number, lastNode: number): ()
+		local previous = firstNode
 		for index = 2, #points do
 			local a, b = points[index - 1], points[index]
 			if (b - a).Magnitude < MIN_LENGTH then
 				continue
 			end
-			local current = if index == #points then nodeAt(b) else freshNode()
+			local current = if index == #points then lastNode else freshNode()
 			local right = ((b - a).Unit):Cross(UP)
 			local forward = addLane(previous, current, a + right * offset, b + right * offset)
 			local backward = addLane(current, previous, b - right * offset, a - right * offset)
@@ -1323,6 +1612,51 @@ local function buildLanes(state: State): Lanes
 			lanes.reverse[backward] = forward
 			previous = current
 		end
+	end
+	local function chain(points: { Vector3 }): ()
+		chainBetween(points, nodeAt(points[1]), nodeAt(points[#points]))
+	end
+
+	local ribbon = state.ribbon
+	if ribbon ~= nil and RoadGraph.UsesPaths(state) then
+		-- Network node ids first, so stretch ends and spur joins share lane nodes by id.
+		for _ = 1, #state.nodes do
+			freshNode()
+		end
+		local network = ribbon.network
+		local spacing = network.ribbon.sampleSpacing
+		local function sampled(chainIndex: number, a: number, b: number): { Vector3 }
+			local points: { Vector3 } = {}
+			for _, point in PathRibbon.Centreline(network, chainIndex, a, b, spacing) do
+				table.insert(points, Vector3.new(point[1], 0, point[2]))
+			end
+			return points
+		end
+		for id, stretch in state.stretches do
+			local chainIndex = ribbon.stretchChains[id]
+			if state.visible[id] and chainIndex ~= nil then
+				local arcs = ribbon.stretchArcs[id]
+				chainBetween(
+					sampled(chainIndex, arcs[1], arcs[2]),
+					stretch.fromNode,
+					stretch.toNode
+				)
+			end
+		end
+		for _, slotId in state.spurSlotIds do
+			local route = state.spurs[slotId]
+			local chainIndex = network.spurChains[slotId]
+			if route == nil or chainIndex == nil then
+				continue
+			end
+			local lo, hi = PathRibbon.FullSpan(network, chainIndex)
+			chainBetween(
+				sampled(chainIndex, lo, hi),
+				freshNode(),
+				route.junction.node or freshNode()
+			)
+		end
+		return lanes
 	end
 
 	-- Vehicles only ever run on near plots, so in a meander era the lanes follow exactly what the
@@ -1373,6 +1707,10 @@ function RoadGraph.GetLanes(state: State): Lanes
 end
 
 function RoadGraph.Destroy(state: State): ()
+	local paths = state.paths
+	if paths ~= nil then
+		PathRenderer.Destroy(paths)
+	end
 	for _, parts in state.groupParts do
 		destroyAll(parts)
 	end

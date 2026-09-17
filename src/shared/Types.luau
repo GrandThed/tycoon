@@ -254,6 +254,9 @@ export type AssetsConfig = {
 	eras: { [string]: { [string]: AssetModel } },
 	-- v2 (M9): city-dressing props by era, then prop name; absent in v1 files.
 	props: { [string]: { [string]: AssetModel } }?,
+	-- M9 wave 1c: the path-ribbon texture per era (optional, additive). `imageId` is the Image the
+	-- ribbon and beam renderers use; a missing entry or 0 means the parts renderer.
+	pathTextures: { [string]: { assetId: number, imageId: number } }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.
@@ -352,7 +355,13 @@ export type CityLodConfig = {
 	vehiclePlots: number,
 	refreshSeconds: number,
 }
-export type CityRoadConfig = { thickness: number, laneOffsetFraction: number }
+-- Wave 1c: `renderer` is "auto" | "beam" | "parts" and forces a road renderer for Studio tests;
+-- optional so an older file still typechecks (absent = "auto").
+export type CityRoadConfig = {
+	thickness: number,
+	laneOffsetFraction: number,
+	renderer: string?,
+}
 -- roadClearance is added to road.width / 2 when rejecting tree spots near a centreline;
 -- footprintMargin grows every slot/pad/lot/plaza footprint a tree spot must stay outside.
 export type CityTreesConfig = {
@@ -370,6 +379,8 @@ export type CityBudgetConfig = {
 	trees: number,
 	vehiclesPerPlot: number,
 	vehiclesMap: number,
+	-- Wave 1c; optional like roadPiecesNear. Triangle ceiling per plot for the ribbon renderer.
+	ribbonTriangles: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -381,6 +392,17 @@ export type CityMeanderConfig = {
 	segmentLength: number,
 	widthJitter: number,
 }
+-- Wave 1c: smooth textured ribbon paths (docs/INTERFACES.md "Wave 1c — ribbon paths").
+export type CityRibbonConfig = {
+	textureLength: number, -- studs of path per texture repeat
+	meshWidthFactor: number, -- mesh width over nominal width (texture alpha 0.5 at the nominal edge)
+	cornerRadiusWidths: number,
+	sampleSpacing: number,
+	capLength: number,
+	flare: number,
+	layerLift: number,
+	growSeconds: number,
+}
 export type CityEraRoadConfig = {
 	width: number,
 	material: string,
@@ -390,6 +412,7 @@ export type CityEraRoadConfig = {
 	-- Overrides road.laneOffsetFraction; Village sets 0 so carts run down the trail's middle.
 	laneOffsetFraction: number?,
 	meander: CityMeanderConfig?,
+	ribbon: CityRibbonConfig?,
 }
 export type CityEraTreesConfig = { maxCount: number, clearance: number, prop: string? }
 export type CityEraPropsConfig = { props: { string } }
