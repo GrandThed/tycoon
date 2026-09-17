@@ -21,6 +21,15 @@ vehicles) was scoped. Contracts: `docs/INTERFACES.md` "M9 contracts"; plan: `doc
 (seeded arc-length noise, tapered at nodes, straight on far plots). Boomtown keeps its straight
 asphalt grid. Contract: INTERFACES "Wave 1b — natural paths".
 
+**Wave 1c, Ben's second Studio look (2026-09-17):** part-based trails still glitch (coplanar
+overlaps z-fight, Pebble material seams per piece, curves read as angled rectangles). Ben chose an
+**EditableMesh ribbon** (arc-length-sampled centripetal Catmull-Rom, uploaded procedural tiling
+path texture with soft alpha edges) with **Beams as automatic fallback**, a **grow-along-the-path**
+animation, and an **offline Blender mock first** (`tools/pathmock/`). Gate: EditableMesh/Image in
+*published* games need the owner 13+ **ID verified** and "Enable Mesh / Image APIs" on in the
+Creator Dashboard; Studio does not enforce it, so a Studio playtest can't prove it works live.
+Ben says he is/will be verified. Buildings and trees are fine; only paths glitched.
+
 **Why:** a fresh session would otherwise propose server-spawned dressing, collidable props, or
 mix car-kit into Village, and would re-open the M9 scope.
 

@@ -18,7 +18,8 @@
   },
   "road": {
     "thickness": 0.2,
-    "laneOffsetFraction": 0.25
+    "laneOffsetFraction": 0.25,
+    "renderer": "auto"
   },
   "budget": {
     "roadPieces": 60,
@@ -26,7 +27,8 @@
     "fillerPieces": 25,
     "trees": 40,
     "vehiclesPerPlot": 6,
-    "vehiclesMap": 20
+    "vehiclesMap": 20,
+    "ribbonTriangles": 18000
   },
   "trees": {
     "stages": 4,
@@ -61,6 +63,16 @@
           "wavelength": 18,
           "segmentLength": 5,
           "widthJitter": 0.5
+        },
+        "ribbon": {
+          "textureLength": 8,
+          "meshWidthFactor": 1.4,
+          "cornerRadiusWidths": 2,
+          "sampleSpacing": 0.6,
+          "capLength": 2.4,
+          "flare": 0.4,
+          "layerLift": 0.012,
+          "growSeconds": 1.0
         }
       },
       "trees": {

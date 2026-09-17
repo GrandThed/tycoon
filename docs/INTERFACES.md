@@ -2291,6 +2291,132 @@ of "Road routing", "Layouts" and "CityDressing.json" above.**
   alignment there. Boomtown keeps its straight 8-stud asphalt grid and kit tiles, but gets the
   growth rule and the under-building spur start.
 
+## Wave 1c — ribbon paths (Ben's second playtest, 2026-09-17)
+
+Ben's second Studio look: the part-based trail is better, but "many textures are glitching". The
+glitching comes from coplanar Part overlaps (z-fighting) and Pebble material seams on every
+piece, and the curves read as angled rectangles. Ben approved the offline mock
+(`tools/pathmock/`, renders in `assets/testfit/out/Village/paths/`). **This section supersedes
+the drawing parts of "Wave 1b" for eras with `road.ribbon`.** The network rules from Wave 1b stay
+unchanged: grow-with-buildings shortest paths, spurs from the slot anchor, P1–P3, and
+determinism.
+
+### Rendering, per plot, by availability
+1. **`ribbon`** (primary) uses `AssetService:CreateEditableMesh` and then
+   `AssetService:CreateMeshPartAsync(Content.fromObject(mesh))`. Each **layer** gets one
+   EditableMesh and one MeshPart: layer 0 is polyline 1, layer 1 is the other polylines, layer 2
+   is spurs. Separate parts per layer make higher layers sort above lower ones. Every create goes
+   through a nil check and `pcall`: the API returns nil when the memory budget is exhausted, and
+   fails in published games unless the owner is ID verified with "Enable Mesh / Image APIs" on.
+   Any failure drops that plot to the next renderer silently.
+2. **`beam`** (fallback) draws one flat Beam per spline span between Attachments on a single
+   client anchor Part per plot. `CurveSize0/1` comes from the Catmull-Rom tangents converted to
+   Bézier form. It uses the same texture, `TextureMode Wrap`, and
+   `TextureLength = ribbon.textureLength`.
+3. **`parts`**: the Wave 1b Part renderer, used when neither of the above works or the texture
+   id is missing.
+- `road.renderer` in `CityDressing.json` is `"auto"` (default), `"beam"` or `"parts"`. It forces
+  a renderer for Studio testing.
+- The MeshParts, the anchor Part and every Part keep `Anchored true` and `CanCollide`,
+  `CanQuery` and `CanTouch` false. MeshParts also use `CollisionFidelity Box`, `CastShadow false`
+  and `DoubleSided false`.
+
+### Geometry — `src/client/City/PathRibbon.luau` (pure: numbers, tables and arrays only, no Roblox globals or services)
+It ports `tools/pathmock/pathgeom.py`:
+- **Control points:**
+  - Drop collinear points.
+  - Merge legs shorter than one width.
+  - Put a circular fillet of radius `ribbon.cornerRadiusWidths × width` at each corner, with
+    the tangent clamped to 0.95 of the incoming leg and 0.48 of the outgoing leg.
+- **Spline:** centripetal Catmull-Rom (alpha 0.5) with mirrored phantom ends, then an arc-length
+  resample.
+- **Joins:** a joiner's end snaps to the nearest point on the host's **smoothed** curve, and the
+  joiner is re-splined.
+- **Meander:**
+  - `offset = amplitude × taper × wave(s)` with
+    `wave = 0.62 sin(ks + φ) + 0.38 sin(2.13ks + 1.71φ + 0.9)` and `k = 2π / wavelength`.
+  - `φ = (key × 2.399963) mod 2π`, where `key` is the polyline index or, for spurs, the byte sum
+    of the slot id.
+  - `taper = smoothstep(distance to the nearest chain end or join / (2 × width))`.
+  - Arc length is re-measured after the offset.
+- **Cross-section:** 4 columns with v = 0, 0.265k, 1 − 0.265k, 1.
+  - Mesh half-width = `ribbon.meshWidthFactor × (width + widthJitter × wave2) / 2 × flare × cap`.
+  - The soft band stays a constant world width.
+  - `u = arc / ribbon.textureLength + (key × 0.618) mod 1`.
+  - Sample spacing is `ribbon.sampleSpacing`, dropping to 0.25 inside caps.
+  - Winding is counter-clockwise seen from +Y.
+- **Ends:**
+  - A joined end extends 0.45 widths past the host centreline, flares by `ribbon.flare` over the
+    last 3 studs, and gets a rounded cap.
+  - A free dead end, or a growth tip, gets a cap `ribbon.capLength` long with profile
+    `sqrt(1 − (1 − x)²)`.
+  - **The plot entrance end stays full width** (no cap, no taper).
+- **Height:** layer `i` sits at `road.thickness + i × ribbon.layerLift` above the plot top.
+- Output per path: arrays of positions (plot-local), UVs and triangle indices, plus the
+  smoothed centreline polyline with cumulative arc length.
+- Everything is a pure function of `(layout, plot seed, visible set)`, so a path is identical
+  on every client. Adding a path never changes another path's geometry, because joins snap to
+  the host's full smoothed curve, which is computed from the whole network.
+- Magic numbers that are part of the look (0.62/0.38/2.13/1.71/0.9, 2.399963, 0.618, 0.265,
+  0.45, 0.95/0.48) are named constants in PathRibbon with a why-comment pointing here. Tunables
+  live in config.
+
+### Texture
+- `tools/paths/texture.py` (moved from `tools/pathmock/texture.py`) generates
+  `village_path.png` deterministically: 1024×512 RGBA, tiling along u, soft irregular alpha
+  edge.
+- `tools/assets/upload_path_texture.py --era Village` uploads it the same way the VIP swatches
+  are uploaded, and is idempotent.
+- The harvest paste resolves the image id, as it does for swatches.
+- The result lands in `Assets.json` as an optional additive key:
+  `"pathTextures": { "Village": { "assetId": <n>, "imageId": <n> } }`.
+- A missing key or an `imageId` of 0 means no texture, so the plot uses the `parts` renderer.
+
+### Growth animation
+- When a path is revealed **after** the plot's initial dressing (a purchase, not a join, rejoin
+  or era rebuild), its ribbon grows from the host toward the building over
+  `ribbon.growSeconds`. It is rebuilt over `[total − g, total]` with the tip cap.
+- Ribbon renderer: vertex positions are updated in place on the layer's EditableMesh. Edits
+  show immediately; no new MeshPart.
+- Beam renderer: spans are revealed in order along the path, with `Width0/Width1` tweened from 0.
+- Parts renderer: no animation.
+- One extra `RunService.Heartbeat` connection may exist **only while a growth is running**, and
+  is disconnected when none remain. Nothing grows on far plots, which draw instantly.
+
+### Lanes, trees, near/far
+- On ribbon and beam eras vehicles follow the smoothed, meandered centreline from PathRibbon.
+  The Wave 1b lane-offset rule still applies.
+- Trees keep `width/2 + meander.amplitude + trees.roadClearance` from the **smoothed**
+  centreline. Scatter must use PathRibbon's centreline for every *potential* path so the tree
+  plan never depends on ownership.
+- Ribbons are drawn on near and far plots alike; there is no near/far rebuild for ribbon or beam
+  roads. `budget.ribbonTriangles` caps triangles per plot. Past the cap, the plot uses `beam`.
+
+### Config (`CityDressing.json`, lead-applied)
+- `road.renderer: "auto"`.
+- `budget.ribbonTriangles: 18000`.
+- `eras.Village.road.ribbon: { "textureLength": 8, "meshWidthFactor": 1.4,
+  "cornerRadiusWidths": 2, "sampleSpacing": 0.6, "capLength": 2.4, "flare": 0.4,
+  "layerLift": 0.012, "growSeconds": 1.0 }`.
+- Boomtown has no `ribbon` in wave 1c. It keeps straight asphalt Parts and kit tiles.
+
+### Ownership (wave 1c)
+| Owner | Files |
+|-------|-------|
+| lead | `docs/INTERFACES.md`, `CityDressing.json` |
+| ui-engineer | `src/client/City/PathRibbon.luau` (new), `src/client/City/PathRenderer.luau` (new: ribbon/beam/parts selection and growth), `RoadGraph.luau`, `Scatter.luau`, `Traffic.luau` if needed, `CityDressingController.luau`, `src/shared/Types.luau` (the `CityRibbonConfig`, `road.renderer`, `budget.ribbonTriangles` and `AssetsConfig.pathTextures` additions only) |
+| pipeline-engineer | `tools/paths/**` (texture generator moved from pathmock), `tools/assets/upload_path_texture.py` (new), the `harvest.py` path-texture support, `tools/gen_asset_manifest.py` (a path-texture row), `src/shared/Config/Assets.json` (pipeline writes only) |
+
+### Done when
+- In Studio, Village trails render as one smooth textured ribbon per layer: no z-fighting, soft
+  edges, rounded corners, a full-width entrance.
+- Buying a building grows its path in about 1 s.
+- Setting `road.renderer` to `"beam"` or `"parts"` switches renderer with no errors.
+- Deleting `pathTextures` gives the parts renderer silently.
+- Heartbeat stays one traffic connection plus a growth connection only while a growth is running.
+- stylua, selene, luau-lsp, rojo build, `streetplan.py`, the template checks and the manifest
+  check are all clean.
+
 ## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
 
 Same pattern as the VIP-skins amendment: `settings.cityDetail: boolean`, default `true`;
