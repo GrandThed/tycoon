@@ -36,6 +36,13 @@
 				"$path": { "optional": "templates" }
 			}
 		},
+		"Workspace": {
+			"$className": "Workspace",
+			"$ignoreUnknownInstances": true,
+			"PathTest": {
+				"$path": { "optional": "tools/pathtest/out/PathTest.rbxmx" }
+			}
+		},
 		"StarterPlayer": {
 			"$className": "StarterPlayer",
 			"StarterPlayerScripts": {

@@ -1,0 +1,144 @@
+{
+  "models": {
+    "Lane": {
+      "file": "tools/pathtest/out/Lane.glb",
+      "sha256": "8024a89a83543164a30edbec28307b938b7d2cb6fdc144efd210cd1b0fd33e04",
+      "assetId": 103115926179660,
+      "meshId": 131708714155260,
+      "size": [
+        12.4926,
+        0.01,
+        26.4508
+      ],
+      "offset": [
+        -21.441,
+        0.045,
+        -4.2532
+      ]
+    },
+    "Spur": {
+      "file": "tools/pathtest/out/Spur.glb",
+      "sha256": "f3629df205e9cc5182b13a581b613a8ed62f909a75497ce04154d0de9b6449f7",
+      "assetId": 95311075283429,
+      "meshId": 73325974993191,
+      "size": [
+        17.9476,
+        0.01,
+        5.1191
+      ],
+      "offset": [
+        -33.0262,
+        0.069,
+        -9.9812
+      ]
+    },
+    "Fill_Lane": {
+      "file": "tools/pathtest/out/Fill_Lane.glb",
+      "sha256": "93204e30c80b06ee126298b4ad162677d78429d523440b0a36d40f6030b57b61",
+      "assetId": 117105387637477,
+      "meshId": 85111348775332,
+      "size": [
+        12.7931,
+        0.005,
+        26.5483
+      ],
+      "offset": [
+        -21.5909,
+        0.0025,
+        -4.3532
+      ]
+    },
+    "Fill_Spur": {
+      "file": "tools/pathtest/out/Fill_Spur.glb",
+      "sha256": "750ae38aea409cad2374e7d69dd457100183cc6b24ac3fdcadd3d98968e71421",
+      "assetId": 94149876546389,
+      "meshId": 102440819512512,
+      "size": [
+        17.9476,
+        0.005,
+        5.4114
+      ],
+      "offset": [
+        -33.0262,
+        0.0025,
+        -9.9653
+      ]
+    },
+    "Rim_Lane": {
+      "file": "tools/pathtest/out/Rim_Lane.glb",
+      "sha256": "7a66aabbf1ca6cce8b9b903d709faa76cfe78835618db8abca06862c1a168eff",
+      "assetId": 70743064805892,
+      "meshId": 84858621473971,
+      "size": [
+        13.5083,
+        0.005,
+        27.3475
+      ],
+      "offset": [
+        -21.4347,
+        0.0025,
+        -4.303
+      ]
+    },
+    "Rim_Spur": {
+      "file": "tools/pathtest/out/Rim_Spur.glb",
+      "sha256": "472414f3e8c98eda055783b67550cd7d55ac14a404bc597c58bc37cb5aab81d1",
+      "assetId": 74465849333466,
+      "meshId": 90260808906139,
+      "size": [
+        17.9499,
+        0.005,
+        5.7966
+      ],
+      "offset": [
+        -33.0266,
+        0.0025,
+        -9.9612
+      ]
+    }
+  },
+  "images": {
+    "A_color": {
+      "file": "tools/pathtest/out/tex/A_color.png",
+      "sha256": "8de1d089997f43438e04b0172efdfc954524c5e33fca598b0402bf2f487ee1d4",
+      "assetId": 94791021682814,
+      "imageId": 133713751849306
+    },
+    "B_color": {
+      "file": "tools/pathtest/out/tex/B_color.png",
+      "sha256": "0ea28b5536d201a4cab734cb746348d6bc0c3af9536c97e9fc1e0b168ef82ab5",
+      "assetId": 86160058075574,
+      "imageId": 91394957894876
+    },
+    "B_normal": {
+      "file": "tools/pathtest/out/tex/B_normal.png",
+      "sha256": "3a331a7486805628e4d07b83c11fe66f2f3746448323fe1175f86665d5bf6000",
+      "assetId": 128173069406560,
+      "imageId": 105031199426327
+    },
+    "B_rough": {
+      "file": "tools/pathtest/out/tex/B_rough.png",
+      "sha256": "c12fc185e88ea4c8e042b1f0eaf47e943ae702e1754c48d33b0e43473c61a4c1",
+      "assetId": 104203000053312,
+      "imageId": 88633090708877
+    },
+    "C_color": {
+      "file": "tools/pathtest/out/tex/C_color.png",
+      "sha256": "9e288b5855e3c24c093f1e61af042cf5a4e4db462f4f5c682ba6bb7092fee2c1",
+      "assetId": 77506197905759,
+      "imageId": 118079706031593
+    },
+    "P_fill": {
+      "file": "tools/pathtest/out/tex/P_fill.png",
+      "sha256": "df6d3793694830b77b67db74002205064890e8a9b0e38b0a34ca1c505e6fd4f7",
+      "assetId": 124704031265175,
+      "imageId": 131082749682562
+    },
+    "P_rim": {
+      "file": "tools/pathtest/out/tex/P_rim.png",
+      "sha256": "928f798a982b0c03e10b8880f0bf417cc615bfec0aded9021d48937d73d0f06a",
+      "assetId": 93646610035627,
+      "imageId": 82441902524768
+    }
+  }
+}

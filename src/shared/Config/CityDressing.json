@@ -28,7 +28,7 @@
     "trees": 40,
     "vehiclesPerPlot": 6,
     "vehiclesMap": 20,
-    "ribbonTriangles": 18000
+    "pathPieces": 120
   },
   "trees": {
     "stages": 4,
@@ -64,15 +64,8 @@
           "segmentLength": 5,
           "widthJitter": 0.5
         },
-        "ribbon": {
-          "textureLength": 8,
-          "meshWidthFactor": 1.4,
-          "cornerRadiusWidths": 2,
-          "sampleSpacing": 0.6,
-          "capLength": 2.4,
-          "flare": 0.4,
-          "layerLift": 0.012,
-          "growSeconds": 1.0
+        "paths": {
+          "tileStuds": 11
         }
       },
       "trees": {
@@ -112,8 +105,11 @@
           74,
           82
         ],
-        "junctionProp": "Junction",
-        "bendProp": "Bend"
+        "junctionProp": null,
+        "bendProp": null,
+        "paths": {
+          "tileStuds": 11
+        }
       },
       "trees": {
         "maxCount": 32,
@@ -229,5 +225,12 @@
         "speed": 6
       }
     }
+  },
+  "paths": {
+    "rimHeight": 0.02,
+    "fillHeight": 0.07,
+    "rimLeadSeconds": 0.15,
+    "dustSeconds": 0.8,
+    "rimNearOnly": true
   }
 }

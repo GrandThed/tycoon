@@ -30,6 +30,25 @@ animation, and an **offline Blender mock first** (`tools/pathmock/`). Gate: Edit
 Creator Dashboard; Studio does not enforce it, so a Studio playtest can't prove it works live.
 Ben says he is/will be verified. Buildings and trees are fine; only paths glitched.
 
+**Wave 1c rejected (2026-09-17, Ben's third Studio look):** the runtime ribbon looked faint and
+smeared in Studio ("absolute trash"), and **Ben will not do the 13+ ID verification**, so
+EditableMesh/EditableImage are off the table for this project. He also said the gate should
+have been disclosed far more prominently: surface any platform/account/age requirement as a
+plain blocker *before* proposing a design that depends on it, not inside a multiple-choice option.
+
+**Path look SOLVED (2026-09-17, Ben: "C3 is excellent").** The winning recipe, from the
+`tools/pathtest/` A/B/C/C2/C3 Studio bake-off:
+- **Baked meshes uploaded as Models** (no EditableMesh, no account gate), geometry from
+  `tools/pathmock/pathgeom.py` + `tools/pathtest/planar.py`.
+- **World-planar UVs** (u = x/11, v = z/11 in plot coords, identical on every piece) + a **fully
+  opaque, 2D-seamless** texture: overlapping pieces then sample the same texel, so junction
+  overlaps and z-fighting are invisible. This is what fixed Ben's "overlap in the textures".
+- **Irregular edge cut into the mesh outline** (3 sines, amplitude 0.35 studs), not into texture alpha.
+- **Rim ribbon** 0.4 studs wider in a darker/desaturated copy of the same texture, rims at
+  base+0.02 and fills at base+0.07, so a rim never shows across a path mouth.
+- Stylised flat dirt (bold simple pebbles, no fine grain, no directional features), dirt luminance
+  well above the grass (155 vs 118) — the earlier washed-out attempt matched the grass.
+
 **Why:** a fresh session would otherwise propose server-spawned dressing, collidable props, or
 mix car-kit into Village, and would re-open the M9 scope.
 

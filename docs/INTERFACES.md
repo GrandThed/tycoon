@@ -2418,6 +2418,113 @@ It ports `tools/pathmock/pathgeom.py`:
 - stylua, selene, luau-lsp, rojo build, `streetplan.py`, the template checks and the manifest
   check are all clean.
 
+## Wave 1d — baked paths (approved 2026-09-17: the C3 bake-off winner)
+
+Ben ran the `tools/pathtest/` bake-off in Studio (A/B/C/C2/C3) and approved **C3**: "C3 is
+excellent". **This section replaces Wave 1c's renderer entirely.** EditableMesh and EditableImage
+are **banned in this project**: they need the owner to be 13+ and ID verified in published
+experiences, and Ben will not verify. Wave 1b's network rules (grow-with-buildings shortest paths,
+anchor-start spurs, P1–P3, determinism) still hold unchanged.
+
+### The approved recipe (do not re-litigate)
+- **Baked meshes, uploaded as Model assets** through the existing pipeline; the client clones
+  templates. Geometry comes from `tools/pathmock/pathgeom.py` plus `tools/pathtest/planar.py`.
+- **World-planar UVs:** `u = x / tileStuds`, `v = z / tileStuds` in plot-local coordinates,
+  identical on every piece (`tileStuds` 11 for Village). Overlapping pieces then sample the same
+  texel, which is what makes junction overlaps and any z-fighting invisible.
+- **Fully opaque, 2D-seamless texture.** No alpha anywhere. Stylised flat dirt: bold simple
+  pebbles, no fine grain, no directional features (a path crosses a tile in any direction), and
+  dirt luminance well above the grass (155 against 118; a washed-out match is what failed before).
+- **The irregular edge is cut into the mesh outline**, not into texture alpha: three sines
+  (3.7, 2.6, 1.9 stud wavelengths), amplitude 0.35 studs, independent per side, sampled every
+  0.25 studs, tapering to 0 within 1.3 studs of a tip so caps stay round.
+- **Rim ribbon** per path: the same ribbon widened by 0.4 studs with its own 0.2-stud noise, in a
+  darker desaturated copy of the same texture. Rims sit at `paths.rimHeight` (0.02) above the plot
+  top and fills at `paths.fillHeight` (0.07), so a rim never shows across a path mouth.
+- Every path MeshPart: `Anchored true`, `CanCollide`/`CanQuery`/`CanTouch` false, `CastShadow`
+  false, `CollisionFidelity Box`, `Material SmoothPlastic`, `Color` white.
+
+### Pieces (`pieceId`)
+A piece is the smallest unit that can appear on its own, and it matches the Wave 1b network:
+- **`L<polylineIndex>_<stretchIndex>`** for each spine stretch (a segment between two network
+  nodes), and
+- **`SP_<slotId>`** for each spur.
+
+Both a `Fill_<pieceId>` and a `Rim_<pieceId>` mesh are baked per piece. Piece ids are derived from
+the layout only, so they are stable across clients and runs; the bake fails loudly if a piece id
+would change for an unchanged layout.
+
+### Pipeline (pipeline-engineer)
+- `tools/paths/bake.py --era <Era>` writes one GLB per mesh to
+  `assets/build/paths/<Era>/{Fill,Rim}_<pieceId>.glb`, plus `<Era>.json` listing each piece's
+  bbox centre, size, triangle count and the layout hash. Geometry is plot-local, `y = 0`, with the
+  existing 0.005-stud centre crown so no bbox is flat.
+- `tools/paths/texture.py --era <Era>` writes `assets/paths/<Era>_fill.png` and
+  `<Era>_rim.png`, deterministically.
+- `tools/assets/upload_paths.py --era <Era> [--dry-run] [--piece <id>]` uploads meshes and both
+  textures, idempotently, and records them in `Assets.json` (v3, additive):
+  `"paths": { "<Era>": { "tileStuds": 11, "fillImageId": n, "rimImageId": n,
+  "pieces": { "<pieceId>": { "fill": { "assetId": n, "meshId": n, "size": [x,y,z],
+  "offset": [x,y,z] }, "rim": { … } } } } }`.
+- `harvest.py --emit` covers path pieces and path textures in the same paste as everything else.
+- `gen_templates.py --paths` writes `templates/_paths/<Era>/<pieceId>.rbxmx`: a Model holding
+  `Rim` and `Fill` MeshParts already at their relative heights, textured and sealed, positioned by
+  bbox centre with the **180° Y turn** the Open Cloud import applies (`R00 = R22 = -1`; see
+  `tools/pathtest/gen_display.py`). Rojo maps `ReplicatedStorage.Assets.Paths` →
+  `{ "$path": { "optional": "templates/_paths" } }`.
+- `gen_templates.py --check` and the manifest cover paths too.
+
+### Client (ui-engineer)
+- `PathRenderer` keeps two modes only: **`baked`** and **`parts`**.
+  - **Remove the `ribbon` (EditableMesh) and `beam` code paths entirely, and delete
+    `PathRibbon.luau`'s mesh-building half if nothing else uses it.** No dead code.
+  - `baked` clones `ReplicatedStorage.Assets.Paths.<Era>.<pieceId>` per visible piece, pivots it
+    onto the plot frame, and seals it. A missing template, era folder or `Assets.Paths` → `parts`.
+  - `road.renderer` is `"auto"` or `"parts"`.
+- **Appear effect (Ben's choice: dust puff, path pops in).** For a piece revealed after the plot's
+  initial dressing, on a near plot: parent the `Rim` first, then the `Fill` after
+  `paths.rimLeadSeconds` (0.15), and run a dust burst travelling from the piece's join end to its
+  far end over `paths.dustSeconds` (0.8). Dust is one pooled `ParticleEmitter` per plot on a
+  client part, moved along the piece's centreline, using a built-in texture
+  (`rbxasset://textures/particles/smoke_main.dds`) so nothing needs uploading; `Enabled` only
+  while a burst runs. At most one extra `RunService.Heartbeat` connection, alive only while a
+  burst runs. Joins, rejoins, era rebuilds and far plots skip the effect and appear instantly.
+- **Vehicles** follow the same smoothed centreline as before (`PathRibbon`'s centreline half
+  stays). Trees keep using the smoothed centrelines of every potential path.
+- **Budgets:** `budget.pathPieces` (per plot, 120) counts cloned piece Models. Far plots drop the
+  `Rim` parts (`paths.rimNearOnly` true) to halve the part count; the fill is what reads at
+  distance. Past the budget, further pieces are skipped in sorted order, as the parts renderer
+  does today.
+
+### Boomtown
+- Same recipe with its own textures: asphalt fill, a lighter concrete **kerb** rim, `tileStuds` 11.
+- **Lead ruling 2026-09-17: Boomtown drops the kit junction and bend tiles**
+  (`eras.Boomtown.road.junctionProp`/`bendProp` → `null`). A kit tile's own texture cannot match
+  the planar asphalt, so it would reintroduce exactly the overlap seam this wave removes. `Junction`
+  and `Bend` blueprints stay in the repo, unused. `LampPost`, trees, houses, plazas and vehicles are
+  unaffected.
+- Boomtown's straight grid keeps its authored geometry; only the drawing changes.
+
+### Config (`CityDressing.json`, lead-applied)
+- `road.renderer`: `"auto"` | `"parts"`.
+- `budget.pathPieces`: 120 (replaces `budget.ribbonTriangles`).
+- `paths`: `{ "rimHeight": 0.02, "fillHeight": 0.07, "rimLeadSeconds": 0.15,
+  "dustSeconds": 0.8, "rimNearOnly": true }`.
+- `eras.<Era>.road.paths`: `{ "tileStuds": 11 }`; an era without it uses the parts renderer.
+- `eras.<Era>.road.meander` stays: the bake reads it, and the parts fallback still draws it.
+- `eras.Village.road.ribbon` and `eras.*.road.junctionProp`/`bendProp` for Boomtown are removed.
+
+### Done when
+- A Village plot and a Boomtown plot draw every owned building's path as baked meshes with rims,
+  with **no visible seam at any junction** from any camera angle, and no z-fighting.
+- Buying a building pops its path in with the dust burst; nothing flickers elsewhere.
+- Deleting `templates/_paths`, or setting `road.renderer` to `"parts"`, silently falls back.
+- Part counts stay within `budget.pathPieces`, far plots drop rims, and there is one traffic
+  Heartbeat plus a dust Heartbeat only while a burst runs.
+- stylua, selene, luau-lsp, rojo build, `streetplan.py`, the template checks and the manifest check
+  are clean, and `tools/pathtest/**` plus its `Workspace.PathTest` mapping are removed once Ben has
+  seen the real thing.
+
 ## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
 
 Same pattern as the VIP-skins amendment: `settings.cityDetail: boolean`, default `true`;
