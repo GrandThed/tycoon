@@ -230,6 +230,30 @@ city-kit-roads:
   2.4 (arm −Z: rotY 90 → −X, 270 → +X); `traffic-light*` ~2 studs; `road-sign-empty-hanging` reads as
   a bare lamp post.
 
+Measured during the Metropolis Stadium authoring (2026-09-17), when the kit was pushed at a
+subject it has no pieces for:
+
+- **Grid arithmetic.** A 9x9 footprint at scale 4.0 is 2.25 kit units, and every `tile-*` / `road-*`
+  piece is 1x1 unit, so a ring of tiles around an inner court always leaves a 0.25-unit (1-stud)
+  hole. A 12x12 footprint is exactly 3.0 units and tiles evenly -- prefer 12x12 (contract: allowed
+  up to [12, 12] for a non-monument slot where the kit cannot express the subject at 9x9) over
+  fighting the remainder.
+- **Plain mass is only `low-detail-building-n`, `-d`, `-k`** (white boxes with a small dark roof
+  recess). `low-detail-building-a` and the `-wide-a/b` variants carry a large dark glazed panel on
+  their long faces and read unmistakably as office blocks -- they cannot serve as stands, terraces or
+  plain walls. Everything else thin in this kit (`detail-overhang*`, `detail-awning*`, `sign-highway*`,
+  `bridge-pillar*`, `construction-fence`) is an open/legged prop with no mass.
+- **`road-straight-half` (0.5 x 0.02 x 1.0) is the only flat plate that exactly matches a 0.5-deep
+  wall band** -- the cheap way to cap a run of `low-detail-building-*` so it reads as one wall
+  instead of a row of boxes with roof recesses.
+- **Stacked canopies read as scaffolding.** Tiers built from `detail-overhang-wide` alone look like
+  bleacher scaffolding; canopies only work as a single roof course resting on solid blocks.
+- **`light-square-cross` reads as a TV antenna** (straight arms); `light-curved-cross` reads as a
+  lamp cluster and is the better floodlight. Free-standing masts on open ground read as an antenna
+  farm -- mount lights on a roof or parapet.
+- **`road-bend` tiling** gives a pinwheel at rotY 0/90/180/270 and four quarter-annuli around a
+  4-pointed star at 0/270/180/90. Neither makes a clean oval, so an athletics track is not available.
+
 ## city-kit-suburban and city-kit-industrial notes (Boomtown authoring, five builders, 2026-09-16)
 
 Both kits use one `colormap.png`, the same palette as the other City Kits (green suburban roofs,

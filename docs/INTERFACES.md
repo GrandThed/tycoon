@@ -1690,7 +1690,14 @@ config's `modelName` (PascalCase). The approved prototype is `Village/Tavern.jso
   "id": "Tavern",                 // == modelName == file stem
   "era": "Village",
   "scale": 4.0,                   // studs per kit unit; fixed at 4.0 for every M7 blueprint
-  "footprint": [9, 9],            // optional, studs; default [9, 9]. Monument may use up to [14, 14]
+  "footprint": [9, 9],            // optional, studs; default [9, 9]. Monument may use up to [14, 14].
+                                  // A non-monument slot may exceed [9, 9] (max [12, 12]) only where
+                                  // the kit cannot express the building's subject at 9x9 -- so far
+                                  // Metropolis Stadium, which needs a bowl around a readable pitch.
+                                  // Clearance is computed from harvested extents, not from this
+                                  // number, so a wider slot needs no dressing change; but the buy
+                                  // pad sits padOffset studs off the front (-Z), so keep the front
+                                  // face within ~4.5 studs of the origin whatever the footprint.
   "pieces": [
     { "kit": "fantasy-town-kit", "model": "wall-door", "pos": [0, 0, 0], "rotY": 0, "stage": 0 }
   ]
@@ -2135,7 +2142,8 @@ Every `src/shared/Layouts/<Era>.luau` gains:
 
 - **`streets`** — 2 to 5 polylines (the "spine") in unlock order; polyline `i` (1-based) becomes
   visible at tier `i * road.spineTierStep`. Segments axis-aligned where possible; points at Y 0;
-  ≥ `road.width / 2 + 1` studs clear of every slot footprint (9×9, monument 14×14), pad and
+  ≥ `road.width / 2 + 1` studs clear of every slot footprint (9×9; monument 14×14; Metropolis
+  `stadium` 12×12), pad and
   the `Sign`. The first polyline must pass the monument approach and the plot's front edge
   (−Z, the hub side) so an early plot reads as "a road into town".
 - **`lots`** — 8 to 12 filler-house positions along the streets, facing the road (front −Z
