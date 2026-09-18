@@ -1,0 +1,20 @@
+{
+  "id": "HoloBeacon",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2, 0, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "supports_low", "pos": [-2, 0.1, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_small", "pos": [-2, 0.6, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "holo_beacon", "pos": [0, 0.7, 0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [-2.55, 0.1, -2.12], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [-1.45, 0.1, -2.12], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "energy_core", "pos": [-0.75, 0.1, 0.05], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "energy_core", "pos": [0.7, 0.1, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-2.955, 0.1, 1.5], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-0.995, 0.1, 1.5], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "stairs_short", "pos": [2, 0.1, 0.88], "rotY": 180, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.5, 0, -1.03], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0.5, 0, -1.03], "rotY": 0, "stage": 0}
+  ]
+}

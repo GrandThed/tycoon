@@ -1,0 +1,26 @@
+{
+  "id": "RoverBay",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "footprint": [12, 9],
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_long", "pos": [-0.5, 0, 2], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "rover", "pos": [-1.22, 0.1, -1.92], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrel", "pos": [-1.38, 0.1, -2.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrel", "pos": [-0.6, 0.1, -2.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "hangar_smallB", "pos": [-2.5, 0, -1.375], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "rover", "pos": [-0.75, 0.1, -1.92], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "rover", "pos": [-2.5, 0, -1.8], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "corridor_end", "pos": [-1, 0.1, -1], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "machine_barrelLarge", "pos": [-0.95, 0.1, -1.4], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-0.505, 0.1, 1.5], "rotY": 90, "stage": 2},
+    {"kit": "space-kit", "model": "satelliteDish", "pos": [1.5, 1, 1.715], "rotY": 180, "stage": 3},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [2.95, 1.1, 2.25], "rotY": 180, "stage": 3},
+    {"kit": "space-kit", "model": "rover", "pos": [-1, 0.1, -2.32], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "barrels", "pos": [-2.505, 0, -0.9], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "mast_segment", "pos": [-0.5, 1, 0.62], "rotY": 0, "stage": 4},
+    {"kit": "orbital-kit", "model": "mast_tip", "pos": [-0.5, 2, 0.62], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "machine_generator", "pos": [0.9, 0, 1.935], "rotY": 180, "stage": 4},
+    {"kit": "space-kit", "model": "barrels", "pos": [-3.055, 0, -1.95], "rotY": 0, "stage": 4}
+  ]
+}
