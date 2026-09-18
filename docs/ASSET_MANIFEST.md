@@ -30,9 +30,9 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 |-----|------------|----------|-----------|-----------|
 | 1 — Village | 24/24 | 24/24 | 24/24 | 24/24 |
 | 2 — Boomtown | 24/24 | 24/24 | 24/24 | 24/24 |
-| 3 — Metropolis | 24/24 | 0/24 | 0/24 | 0/24 |
+| 3 — Metropolis | 24/24 | 24/24 | 24/24 | 24/24 |
 | 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 72/96 | 48/96 | 48/96 | 48/96 |
+| **Total** | 72/96 | 72/96 | 72/96 | 72/96 |
 
 ## Era 1 — Village
 
@@ -140,34 +140,34 @@ Summary: 12/12 blueprints, 12/12 uploaded, 12/12 harvested, 12/12 templated
 
 Blueprints: `tools/testfit/blueprints/Metropolis/` -- templates: `templates/Metropolis/` -- in game: `ServerStorage/Assets/Metropolis/`
 
-Summary: 24/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `FoodTruck` | Food Truck | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 2 | `CoffeeShop` | Coffee Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 3 | `CornerShop` | Corner Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 4 | `ApartmentBlockA` | Apartment Block | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 5 | `OfficeLowRise` | Low-Rise Office | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 6 | `RoadIntersection` | Lay the City Grid | unlock | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 7 | `Supermarket` | Supermarket | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 8 | `BusStop` | Bus Stop | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
-| 9 | `ApartmentBlockB` | High-Rise Apartments | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 10 | `ParkingGarage` | Parking Garage | building | yes | city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 11 | `ShoppingMall` | Shopping Mall | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 12 | `SubwayEntrance` | Dig the Subway Line | unlock | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
-| 13 | `Hospital` | Hospital | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 14 | `ParkTrees` | City Park | decor | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
-| 15 | `OfficeTowerA` | Office Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 16 | `HotelTower` | Hotel Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 17 | `HighwayRamp` | Build the Highway Ramp | unlock | yes | city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
-| 18 | `Stadium` | Stadium | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 19 | `ConventionCenter` | Convention Center | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 0/5 | 0/5 | — |
-| 20 | `RooftopGarden` | Rooftop Garden | decor | yes | city-kit-commercial, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
-| 21 | `BankTower` | Bank Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 22 | `BroadcastTower` | Broadcast Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 0/5 | 0/5 | — |
-| 23 | `OfficeTowerB` | Open the Finance District | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 0/1 | 0/1 | — |
-| 24 | `SkyscraperA` | Skyscraper | monument | yes | city-kit-commercial, city-kit-roads | 1 | 1/1 | 0/1 | 0/1 | — |
+| 1 | `FoodTruck` | Food Truck | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 2 | `CoffeeShop` | Coffee Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 3 | `CornerShop` | Corner Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 4 | `ApartmentBlockA` | Apartment Block | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 5 | `OfficeLowRise` | Low-Rise Office | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 6 | `RoadIntersection` | Lay the City Grid | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `Supermarket` | Supermarket | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 8 | `BusStop` | Bus Stop | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `ApartmentBlockB` | High-Rise Apartments | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 10 | `ParkingGarage` | Parking Garage | building | yes | city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 11 | `ShoppingMall` | Shopping Mall | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 12 | `SubwayEntrance` | Dig the Subway Line | unlock | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `Hospital` | Hospital | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 14 | `ParkTrees` | City Park | decor | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `OfficeTowerA` | Office Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 16 | `HotelTower` | Hotel Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 17 | `HighwayRamp` | Build the Highway Ramp | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `Stadium` | Stadium | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 19 | `ConventionCenter` | Convention Center | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 20 | `RooftopGarden` | Rooftop Garden | decor | yes | city-kit-commercial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `BankTower` | Bank Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 22 | `BroadcastTower` | Broadcast Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 23 | `OfficeTowerB` | Open the Finance District | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 24 | `SkyscraperA` | Skyscraper | monument | yes | city-kit-commercial, city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 4 — Orbital Colony
 
@@ -215,4 +215,4 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 
 ## Totals
 
-96 models: 72/96 blueprints, 48/96 uploaded, 48/96 harvested, 48/96 templated
+96 models: 72/96 blueprints, 72/96 uploaded, 72/96 harvested, 72/96 templated
