@@ -77,6 +77,19 @@ def write_png(path: str, width: int, height: int, rows: list[list[tuple[int, int
         fh.write(png)
 
 
+# Kits whose authors wrote sRGB values straight into baseColorFactor instead of linear ones.
+# space-kit: raw x 255 matches Kenney's own Isometric previews (orange 255,160,52; dark 70,76,87);
+# decoding as linear turns the orange into pale amber and the dark recesses into mid-grey.
+# nature-kit is probably the same, but Village shipped and was approved with the decoded look.
+SRGB_FACTOR_KITS = frozenset({"space-kit"})
+
+
+def swatch_srgb(kit: str, factor: tuple[float, float, float]) -> tuple[int, int, int]:
+    if kit in SRGB_FACTOR_KITS:
+        return tuple(max(0, min(255, round(c * 255))) for c in factor)
+    return tuple(linear_to_srgb(c) for c in factor)
+
+
 def scan_kit(kit: str) -> dict:
     """Distinct colour-only material colours across the whole kit, plus whether any texture exists."""
     folder = kit_model_dir(kit)
@@ -110,7 +123,7 @@ def build_palette(kit: str) -> dict:
     pixels = [[(0, 0, 0)] * width for _ in range(height)]
     for index, linear in enumerate(colours):
         col, row = index % columns, index // columns
-        srgb = tuple(linear_to_srgb(c) for c in linear)
+        srgb = swatch_srgb(kit, linear)
         for y in range(row * CELL, (row + 1) * CELL):
             for x in range(col * CELL, (col + 1) * CELL):
                 pixels[y][x] = srgb

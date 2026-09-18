@@ -45,16 +45,18 @@ KIT = "orbital-kit"
 DEFAULT_OUT = os.path.join(REPO_ROOT, "assets", "kenney3d", KIT, "Models", "GLB format")
 
 # The first seven are space-kit's own material colour factors, read out of the GLB JSON chunks of
-# assets/kenney3d/space-kit/Models/GLTF format/*.glb and converted back to sRGB bytes.  The kit has
-# exactly eleven materials and these are the ones that carry the look; using the same numbers is
-# what makes these pieces sit beside the real space-kit models instead of looking imported.
-HULL = (237, 240, 245)  # space-kit "metal"      -- the white hull, on 123 models
-PANEL = (214, 219, 228)  # space-kit "metalDark"  -- the slightly darker hull panel
-TRIM = (255, 208, 124)  # space-kit "metalRed"   -- the amber trim band (its name lies)
-SLATE = (143, 148, 158)  # space-kit "dark"       -- recesses, visors, skirts
-ROCK = (245, 190, 167)  # space-kit "rock"       -- salmon terrain
-ROCK_DARK = (218, 164, 140)  # space-kit "rockDark"
-CRYSTAL = (120, 241, 202)  # space-kit "crystal" -- kept for reference; HOLO below is its sibling
+# assets/kenney3d/space-kit/Models/GLTF format/*.glb.  Kenney wrote sRGB values straight into those
+# factors (raw x 255 matches the kit's own Isometric previews; decoding them as linear, as the glTF
+# spec says, gives a washed-out amber and a mid-grey "dark"), so these are raw x 255 and
+# palette.py writes space-kit's swatches the same way.  Using the same numbers is what makes these
+# pieces sit beside the real space-kit models instead of looking imported.
+HULL = (215, 222, 232)  # space-kit "metal"      -- the white hull, on 123 models
+PANEL = (172, 181, 197)  # space-kit "metalDark"  -- the slightly darker hull panel
+TRIM = (255, 160, 52)  # space-kit "metalRed"   -- the orange trim band
+SLATE = (70, 76, 87)  # space-kit "dark"       -- recesses, visors, skirts
+ROCK = (232, 132, 99)  # space-kit "rock"       -- salmon terrain
+ROCK_DARK = (178, 95, 67)  # space-kit "rockDark"
+CRYSTAL = (47, 224, 151)  # space-kit "crystal" -- kept for reference; HOLO below is its sibling
 
 # New accents.  The kit has no glass, no photovoltaic blue, no greenery and no lit window, and every
 # one of those has to read against a near-black plot base, so all of them are bright.

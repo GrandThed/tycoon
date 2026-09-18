@@ -326,3 +326,63 @@ city-kit-roads (additions):
   `road-side` is a road tile with a wider kerb strip on local −Z. `tile-high` is 1×1×0.25 lavender;
   overlapping coplanar tiles show no z-fight. `construction-barrier`/`-fence` render grey.
 - testfit's footprint warning tolerance is 0.01 kit units.
+
+## space-kit and orbital-kit notes (Orbital Colony authoring, three builders, 2026-09-18)
+
+**Origins are offset.** Every space-kit piece carries a baked `tmpParent` transform: its bbox centre
+sits about **(+2.00, +1.50)** in X/Z from the local origin, and not uniformly (`corridor_end` Z +1.75,
+`corridor_wall` X +2.45, `pipe_corner*` (+1.92, +1.42), `terrain_road*` (+2.5, +1.0), `rail*` Z +1.98,
+`pipe_ramp*` Z +2.0, `astronaut*` Z +1.54). `pos` places the origin and `rotY` rotates about it, so
+the offset rotates too: to centre a piece with offset (ox, oz) at (cx, cz), use
+`pos.x = cx - (ox cos t + oz sin t)`, `pos.z = cz - (-ox sin t + oz cos t)`. For (2.0, 1.5): rotY 0 →
+(cx−2.0, cz−1.5); 90 → (cx−1.5, cz+2.0); 180 → (cx+2.0, cz+1.5); 270 → (cx+1.5, cz−2.0). Every
+builder wrote a helper that places by bbox centre from `--dump-bounds`; do the same. Non-90° `rotY`
+inflates the AABB the footprint check uses.
+
+**Colour.** Material-colour kit, all `metallic 1`. Kenney wrote **sRGB values straight into the
+factors**, so `palette.py` lists it in `SRGB_FACTOR_KITS` and writes swatches unconverted (orange
+255,160,52; dark 70,76,87; hull 215,222,232; rock 232,132,99; crystal 47,224,151). Decoded as linear
+it washes out to pale amber and mid-grey. White/orange pieces: `platform_*`, `hangar_*`, `corridor_end`,
+`pipe_*`, `structure_closed` (white panels, orange frame, open top), `supports_*`, `stairs`, barrels.
+Orange open frames: `structure`, `structure_detailed`, `structure_diagonal` (gantry pieces). Salmon:
+`terrain_*`, `rock*`, `meteor*`, `crater`; `rock_crystals*` carry bright green nubs. Dark: the roof
+panel of every `corridor*` tube, the upper slope of `hangar_round*`, a wide roof band on
+`hangar_largeB` (`hangar_largeA` is the same hall, plain white), `machine_wireless`. The Orbital plot
+base is RGB (56, 53, 60): never let a dark surface be the outline or the largest face — cap it
+(orbital-kit `drum_large` seats on a hex hangar's plateau; a `corridor_end` pair is a white-topped
+closed 1×1×1 module). No lamp, solar panel, flag, glass or green exists in space-kit.
+
+**Sizes at ×4.** 9 studs = 2.25 units. `hangar_small*` 2×1×2 (8×8 studs, open bay / door on −Z);
+`hangar_large*` 2×1×3 and `hangar_round*` 3.27×1.5–1.8×2.83 fit no 9×9 slot — three landmarks use
+**scale 3.6, footprint [12, 12]** (INTERFACES Blueprints). `hangar_round*` are hexagons with flat
+facets on ±Z and corners on ±X, closed shells (anything inside is hidden). Crafts: only `craft_racer`
+(4.8 × 8.1 studs, nose −Z) and `craft_speederA/B` (8 × 8.4) fit. `rover` is 1.2 × 1.5 × 1.4 studs.
+`astronautA` 3.2 studs, good free "life".
+
+**Assembly.**
+- Rocket: `rocket_baseA` at y 0 (1.6 tall, 1.8 wide), then the 1.0 grid from y 1.0: `fuelB`/`sidesA`/
+  `sidesB` 1.0 tall (`sidesB` 1.3 wide, stacks on itself), `fuelA` a 0.5 band, `rocket_topB` 1.1.
+- `platform_high` is an open table (deck + four legs); a 3×3 array is a launch pad. A plate resting
+  exactly on a roof z-fights — raise it 0.02; stacked storeys sink 0.01. Two `platform_long` side by
+  side show a double rim seam; use `platform_large`.
+- Corridors butt-join end to end cleanly; two parallel tubes z-fight on the shared wall. A short run
+  capped with `corridor_end` at both ends reads as a blob — leave tube ends open. `corridor_window`
+  at rotY 90 runs along X.
+- `gate_simple` / `gate_complex` are free-standing hexagonal hoops on a base (airlock collar when
+  sunk ~0.25 into a wall). `rail_middle` sits on the +Z edge of its cell at rotY 0. `stairs` rises
+  toward +Z and must abut what it climbs.
+- `supports_high` stacks into a lattice mast with a collar per joint, and a `machine_barrelLarge`
+  fits between its legs. `pipe_supportHigh/Low` share the 0.4 × 0.4 section of `chimney*`, so a flue
+  grows in 1.0 / 0.5 steps and takes the tapered `chimney` as its cap. `pipe_supportHigh` alone reads
+  as a blocky pylon, not a mast. `pipe_ringHigh` reads as a plant vent wheel.
+- Speckle on a platform top is EEVEE shadow dithering, not z-fighting.
+
+**orbital-kit** (`tools/assets/orbital_kit.py`, generated; 21 pieces, all bottom-centre origin, no
+offset): `dome_small/medium/large` nest strictly (a growing dome is the next size at the same spot),
+`dome_small` also nests in `dome_slit`; two stacked `drum_medium` bury a `dome_small`, so a cupola
+climbs a tower by adding two drums and a fresh dome. Drums already carry lit window bands. Dome on a
+drum: y +0.40. `dome_slit` shutter and `telescope` lens face −Z at rotY 0 (the telescope foreshortens
+aimed at the camera; use rotY 90/270). `solar_panel`/`solar_tracker` face −Z, high edge +Z.
+`light_panel` lit face −Z, holder 0.015 clear of the wall. `mast_segment` stacks every 1.0; `mast_tip`
+is 0.6 wide. `flag` pole at local x −0.275, cloth toward +X. `pad_marking` has a dark disc: only on a
+white deck. `planter_tray` is the only green in the era.
