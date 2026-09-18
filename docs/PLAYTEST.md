@@ -1530,10 +1530,17 @@ the roads. Everything here is **client-side cosmetics**: the server only publish
 different vehicle positions on the same plot and that's fine. `docs/BALANCE.md` "M9 — City growth
 tiers" has the tier-timeline numbers if you want to cross-check pacing.
 
-**Before you start:** run the M9 pipeline steps in `docs/MANUAL_STEPS.md` "M9 — City dressing" —
-the harvest paste and `gen_templates.py --props` must be done, or every prop (trees, houses,
-plaza, vehicles) will be silently absent (roads still draw; see section 8 below for why that's
-the expected degrade, not a bug, if you skip this).
+**Before you start:** the M9 pipeline steps in `docs/MANUAL_STEPS.md` "M9 — City dressing" are
+already done (props harvested 2026-09-16; baked paths for Village + Boomtown harvested and
+templated 2026-09-18) — you only need a rebuild. If `templates/_props` is missing, every prop
+(trees, houses, plaza, vehicles) is silently absent; if `templates/_paths` is missing, paths fall
+back to the old Pebble Parts trail. Both are the designed degrade, not a bug (sections 12 and
+steps 5e–5f).
+
+**Paths are baked meshes (wave 1d).** After four Studio rounds Ben approved the "C3" recipe:
+uploaded, world-planar-UV, fully opaque meshes, one Model per piece, cloned by the client.
+EditableMesh/EditableImage are **banned in this project**, so nothing here needs ID verification or
+a Creator Dashboard toggle.
 
 ### 1. Rebuild first
 
@@ -1561,28 +1568,51 @@ the expected degrade, not a bug, if you skip this).
       way to `5`. (Pacing note: per `docs/BALANCE.md`, a *real* greedy playthrough reaches tier 5
       around minute 36 of Village — `GrantCash` is what makes this a two-minute check instead.)
 
-- [ ] 5b. **Wave 1c ribbon paths** (Ben's second playtest). Rebuild first. On your Village plot:
-      - In Explorer, `Workspace/CityDressing/Plot<n>` has the attribute `PathRenderer = ribbon`
-        and contains `PathRibbon0`/`PathRibbon1`/`PathRibbon2` MeshParts.
-      - Trails are **smooth curves** with rounded corners, a dirt-and-pebble texture, and **soft
-        edges that fade into the grass**. **Most important check:** if the edge shows as a solid
-        brown band instead of fading, the texture alpha isn't blending — screenshot it and report.
-      - **No flicker or z-fighting** anywhere, including where a building's path meets a lane,
-        seen from a low camera angle. The lane stays full width at the plot entrance.
-      - Use `GrantCash` and buy a building: its path **grows** out from the lane to the building in
-        about 1 s. Buy two quickly: both grow, neither jumps to full length.
-      - Carts (from tier 2) follow the curves; no tree sits on a trail.
-      - Look closely along the main lane for a tiny pinhole (one folded triangle in the mock).
-- [ ] 5c. **Renderer fallbacks** (edit `src/shared/Config/CityDressing.json`, rebuild, Play; restore
-      `"renderer": "auto"` afterwards):
-      - `"renderer": "beam"` → attribute reads `beam`, a `PathBeams` anchor exists, the trails
-        **lie flat** and curve the right way (report if beams stand upright or kink), no Output
-        errors.
-      - `"renderer": "parts"` → attribute reads `parts`, the Wave 1b pebble parts draw, no errors.
-      - Boomtown plots always read `parts` (asphalt grid unchanged).
-- [ ] 5d. **Published-game check** (after the Creator Dashboard step in `MANUAL_STEPS.md` M9 §6):
-      publish, join the live game, and confirm your plot reads `PathRenderer = ribbon`. If it reads
-      `beam`, the Mesh/Image API gate is still closed for this experience.
+- [ ] 5b. **Baked paths — the look** (wave 1d; Village plot at tier 3+, standing on it). Paths are
+      baked meshes cloned from `ReplicatedStorage/Assets/Paths/Village`, one Model per piece:
+      - Drop the camera to **ground level** at a spot where a building's path meets a lane, and
+        again at a lane corner. Confirm **one continuous dirt surface**: no seam line, no flicker,
+        no darker bar running across the mouth of a path where it joins.
+      - The dirt is **flat stylised pebbles, clearly lighter than the grass**, with a **wobbly,
+        irregular edge** (not a straight-sided band) and a slightly **darker rim** hugging both
+        sides.
+      - Every building path runs out from **under its building** across the pad; the main lane
+        stays **full width at the plot entrance** (no taper, no cap there).
+      - Orbit the camera a full circle around a junction: no z-fighting or shimmer where two
+        pieces overlap.
+      - Carts (from tier 2) drive along the trail; no tree sits on one.
+- [ ] 5c. **Buying a building — rim, then fill, then dust.** Stand on the plot, `GrantCash`, buy an
+      unowned slot and watch its new path:
+      - The **rim outline appears first**, the dirt **fill lands about 0.15 s later**
+        (`paths.rimLeadSeconds`), and a **dust puff travels** from the lane end to the building
+        over about 0.8 s (`paths.dustSeconds`).
+      - **Nothing else on the plot flickers**: existing paths, trees, cottages and the plaza must
+        not blink, rebuild or move, and a moving cart must not jump.
+      - Buy two slots within a second of each other: both appear, one dust burst crosses them, and
+        no cloud is left hanging afterwards.
+      - In Explorer, `Workspace/CityDressing/Plot<n>/PathDust` (a ParticleEmitter on an invisible
+        part) has **`Enabled` false** once the burst ends.
+      - Rejoin the save and confirm the same paths come back **instantly, with no dust** — the
+        effect is for purchases only.
+- [ ] 5d. **Renderer attribute.** In Explorer select `Workspace/CityDressing/Plot<n>` (no
+      underscore) → Attributes: `PathRenderer` reads **`baked`** on Village and Boomtown plots. Its
+      children include one Model per visible piece, named `L<n>_<n>` (lane stretches) and
+      `SP_<slotId>` (building paths), each holding a `Rim` and a `Fill` MeshPart.
+- [ ] 5e. **Forced parts renderer.** Edit `src/shared/Config/CityDressing.json` → `road.renderer`
+      from `"auto"` to `"parts"`, rebuild, Play. Confirm the attribute reads **`parts`**, the old
+      Pebble-Part trail draws instead (visibly rougher, segmented), the game plays normally, and
+      **Output shows zero errors**. Restore `"auto"` and rebuild before continuing.
+- [ ] 5f. **Missing-template fallback (silent).** Two ways; do at least one:
+      - *Explorer, Edit mode before Play:* rename `ReplicatedStorage/Assets/Paths/Village` to
+        `Village_bak` (whole era), **or** rename a single piece inside it, e.g. `L1_1` → `L1_1_bak`.
+      - *On disk:* rename the folder `templates/_paths` to `templates/_paths_bak` and
+        `rojo build -o build/test.rbxl` again (the Rojo mapping is optional, so the build still
+        succeeds).
+      Press Play and buy a slot. Confirm the plot **silently drops to the Pebble Parts trail**
+      (attribute flips to `parts`), everything else is unaffected, and **Output has zero errors**.
+      (A renamed era folder falls back the moment the plot dresses; a single renamed piece falls
+      back the moment that piece would be drawn — on join if it is already visible, otherwise on
+      the purchase that needs it.) Restore the name and rebuild.
 
 ### 3. Tier 5 Village — the full look
 
@@ -1597,15 +1627,16 @@ the expected degrade, not a bug, if you skip this).
 - [ ] 7. Watch a cart for 10–15 seconds: confirm it moves continuously along the road network and
       turns (not just at the same spot), and that it never clips through a building.
 
-### 4. Boomtown — asphalt, kit pieces, cars
+### 4. Boomtown — asphalt, kerbs, cars
 
 - [ ] 8. Get a plot to Boomtown (Advance Era from a completed Village plot, or rebirth — same as
       M8 section 2) and repeat the `GrantCash` push to `GrowthTier` 5.
-- [ ] 9. Confirm the roads are **grey asphalt**, not dirt, and that kit **junction**/**bend**
-      pieces sit at road corners and T-junctions — walk along a junction and confirm the piece
-      lines up with the road edges (no visible gap, no floating piece, no z-fighting/flickering
-      where two surfaces overlap) and that a junction piece never appears at a straight, non-T
-      point on the road.
+- [ ] 9. Confirm the streets are **baked asphalt meshes**, not dirt and not Parts: grey asphalt
+      fill with a **lighter concrete kerb** as the rim, `PathRenderer` reads `baked`. Walk a
+      T-junction and a corner at ground-level camera — the surfaces must read as one road with **no
+      seam, no gap, no z-fighting** where pieces overlap. **There are no kit junction/bend tiles in
+      Boomtown any more** (wave 1d ruling: a kit tile's own texture cannot match the planar
+      asphalt); seeing one is a bug.
 - [ ] 10. Confirm **lamp posts** appear once `GrowthTier` reaches 3 (not before), and up to **four
       cars** (not carts) move along the roads.
 - [ ] 11. Walk down **main street** (the road running through the middle of the plot, x = 0):
@@ -1623,15 +1654,16 @@ the expected degrade, not a bug, if you skip this).
 - [ ] 13. On either plot at tier 5: walk **through** a tree, **through** a filler house, and
       **through** a moving vehicle. Confirm your character passes through all three with no
       bump/stop.
-- [ ] 14. Walk **over** a road tile and a junction/lamp piece — confirm no bump, no rising up onto
-      the geometry, just flat ground-level walking.
+- [ ] 14. Walk **over** a path piece (a `Fill` and a `Rim` MeshPart) and a lamp piece — confirm no
+      bump, no rising up onto the geometry, just flat ground-level walking.
 - [ ] 15. Stand so a tree or filler house is between you and one of your buy pads/owned buildings,
       then tap the ProximityPrompt through it — confirm the prompt still triggers (it isn't
       blocked by the dressing in front of it).
 - [ ] 16. In Explorer, expand `Workspace/CityDressing/Plot<n>` (note: no underscore, unlike
       `Plots/Plot_<n>`) and spot-check a road Part, a tree model's parts, a filler house's parts,
       and (Boomtown) a vehicle's parts: Properties should show **`CanCollide` false, `CanQuery`
-      false, `CanTouch` false, `Anchored` true** on all of them.
+      false, `CanTouch` false, `Anchored` true** on all of them. Do the same for a path piece's
+      `Fill` and `Rim` MeshParts (`CastShadow` false too).
 
 ### 6. Other players see the same dressing
 
@@ -1640,18 +1672,31 @@ the expected degrade, not a bug, if you skip this).
       at Player 1's plot: confirm the roads, trees (same growth stages), filler houses, and plaza
       look **identical** to what Player 1 sees on their own client. Vehicle positions may differ
       between the two clients — that's expected, not a bug.
+- [ ] 17b. **Path parity.** Still in Local Server: have Player 1 buy a slot while Player 2 watches
+      that plot. Both clients must end up with the **same path pieces in the same shape**. Player 2
+      (a remote viewer) may see it appear without the rim/fill/dust effect if the plot is far from
+      their camera — that is expected; a **different** path network is not.
 - [ ] 18. Stop Play.
 
 ### 7. LOD — far plots simplify
 
 - [ ] 19. Single-player Play, plot at tier 5 with trees/lamps/vehicles visible. Fly the camera
       (or walk) more than **~290 studs** away from the plot (past `lod.nearRadius` 250 +
-      `hysteresis` 40). Confirm trees, lamps, and vehicles **disappear** from that plot, while
-      roads, junctions, houses, and the plaza **stay**.
+      `hysteresis` 40). Confirm trees, lamps, and vehicles **disappear** from that plot, while the
+      **path fills**, houses, and the plaza **stay**.
 - [ ] 20. Move back within range. Confirm trees, lamps, and vehicles **reappear** within a second
       or two (no need to wait long — the LOD check runs every `lod.refreshSeconds`, 0.5s).
+- [ ] 20b. **Path rims near/far** (`paths.rimNearOnly` true). Keep your eyes on the paths while you
+      fly out past ~290 studs and back in:
+      - The darker **rim outline vanishes** on the far plot and **comes back** when you return.
+      - The **dirt/asphalt fill never blinks, moves or re-appears** — not once, in either direction.
+      - The lane graph is untouched by the flip, so any vehicle still visible **keeps driving
+        without a jump or reset** (the vehicles themselves still drop at the far threshold, per
+        step 19, and resume when you come back).
+      - Explorer check on the far plot: each piece Model still has its `Fill` and has **no `Rim`**;
+        both are back once it is near.
 
-### 8. MicroProfiler — vehicle movement cost
+### 8. MicroProfiler — vehicle cost, dust cost, path triangles
 
 - [ ] 21. Get 3 plots near the camera to `GrowthTier` 5 (so vehicles are active on all three —
       `lod.vehiclePlots` is 3). Press **Ctrl+F6** to open the MicroProfiler.
@@ -1662,6 +1707,17 @@ the expected degrade, not a bug, if you skip this).
 - [ ] 23. Confirm that row's time is **under 0.2 ms** per frame. (How to read it: click the row —
       the profiler shows the selected frame's time in milliseconds at the bottom/side; hover
       nearby frames to confirm it's consistently under 0.2 ms, not just a lucky frame.)
+- [ ] 23b. **Dust Heartbeat only during a burst.** With the MicroProfiler open, buy a slot on a near
+      plot, then **pause** the profiler (the Pause button in its toolbar) and scrub back through the
+      last couple of seconds. Confirm a **second** Heartbeat row (the dust burst, alongside the
+      traffic row) exists only for the ~0.8 s of the burst and is **gone before and after** it. A
+      dust row still ticking when nothing is appearing is a leaked connection — report it.
+- [ ] 23c. **Path triangle cost.** Open the render stats (**Shift+F2** → Render, or View → Stats →
+      Rendering) and read the **triangle** count. With one fully-owned Village plot in view expect
+      roughly **33k** path triangles, Boomtown roughly **37k**; with all ten plots built and on
+      screen the paths alone are about **350k**. Note the number you see and report it if the frame
+      rate drops noticeably when several built plots are in frame at once — this is the one number
+      that scales badly and it is worth a baseline before wave 2 adds two more eras.
 
 ### 9. Part budget
 
@@ -1671,8 +1727,16 @@ the expected degrade, not a bug, if you skip this).
       ```
       print(#workspace.CityDressing:GetDescendants())
       ```
-- [ ] 25. Confirm the printed count is **≤ ~1300** at 10 plots tier 5, or proportionally fewer for
-      however many plots you actually got to tier 5 (e.g. roughly ≤ 130 per plot).
+- [ ] 25. Confirm the **non-path** dressing still fits the ≤ ~1300 target at 10 plots tier 5
+      (≈ 130 per plot). Baked paths add instances on top of that: one Model plus a `Fill` (plus a
+      `Rim` while near) per visible piece — up to 58 pieces on a fully-owned Village plot, 33 on
+      Boomtown, capped by `budget.pathPieces` (120). Count the path share with:
+      ```
+      print(#workspace.CityDressing:FindFirstChild("Plot1"):GetChildren())
+      ```
+      (swap `Plot1` for your plot's folder name — `Plot<n>`, no underscore.)
+      and report the totals rather than pass/fail — the pre-path budget line has not been re-cut
+      for wave 1d yet (owner: lead, before wave 2).
 
 ### 10. Refresh stability
 
@@ -1707,9 +1771,9 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
       plot (no roads, no trees, nothing under `Workspace/CityDressing`), buildings/pads/economy
       work exactly as before, and **Output has zero errors**. Stop Play, rename it back.
 - [ ] 32. Find `ReplicatedStorage/Assets/Props` and temporarily rename it (e.g. `Props_bak`).
-      Press Play, get a plot to tier 5. Confirm: **roads still draw normally** (they're plain
-      Parts, not props), but **no trees, houses, plaza, lamps, or vehicles** appear anywhere, and
-      **Output has zero errors**. Stop Play, rename it back.
+      Press Play, get a plot to tier 5. Confirm: **paths still draw normally** (baked path
+      templates live in the separate `Assets/Paths` folder), but **no trees, houses, plaza, lamps,
+      or vehicles** appear anywhere, and **Output has zero errors**. Stop Play, rename it back.
 - [ ] 33. Find `ReplicatedStorage/Assets/Props/Village/Cart` and temporarily rename it (e.g.
       `Cart_bak`). Press Play, get a Village plot to `GrowthTier` 2+ (carts start at
       `vehicles.firstTier` 2). Confirm: **no carts** appear on that plot, but roads, trees, houses,
@@ -1719,9 +1783,10 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
 ### 13. Mobile emulation pass (required every milestone)
 
 - [ ] 34. Device Emulator, **375×667** portrait. Walk a tier-5 plot (either era). Confirm the
-      dressing renders at a sensible scale (trees/houses/roads not oversized or clipped off
-      screen) and doesn't visibly tank the frame rate. Open the Build panel — confirm nothing
-      about its layout regressed.
+      dressing renders at a sensible scale (trees/houses/paths not oversized or clipped off
+      screen) and doesn't visibly tank the frame rate. Buy one slot here too and confirm the path
+      appear effect and dust still look right at phone resolution. Open the Build panel — confirm
+      nothing about its layout regressed.
 - [ ] 35. Stop Play.
 
 ### What a bug looks like here
@@ -1729,8 +1794,13 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
 - `GrowthTier` not appearing as a plot Attribute, staying at `0` after buys, or jumping backward.
 - No road/spur appears after the first purchase, or the spine/spur never connects to a building
   you own.
-- Boomtown junction/bend pieces floating, gapped, z-fighting, rotated wrong, or appearing at a
-  straight (non-T) point on the road.
+- A visible **seam, gap, dark bar or z-fight** where two path pieces overlap, or a rim showing
+  across the mouth of a path — the whole point of wave 1d is that overlaps are invisible.
+- A kit junction/bend tile appearing in Boomtown (they were dropped in wave 1d).
+- A new path appearing with fill before rim, with no dust, or with a dust cloud left hanging; any
+  other dressing on the plot flickering or rebuilding when one path appears.
+- `PathRenderer` reading `parts` on a Village or Boomtown plot when `templates/_paths` is intact
+  and `road.renderer` is `"auto"` — or **any Output error** when it is not intact.
 - The main-street spine curving around Pave Main Street/Streetlamp Row instead of running over
   them, or Bank/Radio Station/Pave Main Street/Streetlamp Row growing a driveway spur they
   shouldn't have.
@@ -1739,9 +1809,12 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
 - Another player's client showing different roads/trees/houses than the owner sees (vehicle
   position differences are fine).
 - Trees/lamps/vehicles not disappearing on far plots, or not returning when the camera comes back.
-- The Traffic Heartbeat step at or above 0.2 ms with ~20 vehicles active.
-- More than ~1300 total descendants under `Workspace/CityDressing` at 10 plots tier 5 (or
-  proportionally more for fewer plots).
+- Path **fills** blinking, moving or rebuilding on a near/far flip (only the rims may drop).
+- The Traffic Heartbeat step at or above 0.2 ms with ~20 vehicles active, or a dust Heartbeat row
+  still running when no path is appearing.
+- More than ~1300 total non-path descendants under `Workspace/CityDressing` at 10 plots tier 5 (or
+  proportionally more for fewer plots), or more than `budget.pathPieces` (120) piece Models on one
+  plot.
 - Dressing flickering, clearing, or a vehicle teleporting/resetting on a VIP or Legacy-perk
   refresh.
 - Dressing surviving an era advance/rebirth instead of clearing and rebuilding, or a rejoin
@@ -1753,10 +1826,287 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
 ### Sign-off
 
 - [ ] 36. All boxes above checked: growth-tier attribute tracking, a full Village tier-5 look
-      (roads/trees/cottages/plaza/carts), a full Boomtown tier-5 look (asphalt/junctions/lamps/
-      cars, main-street spine, P1/P2 no-spur slots), no collisions anywhere (including the
-      Explorer flag check), identical dressing for a second player, near/far LOD, the traffic
-      MicroProfiler check under 0.2 ms, the part-budget count, refresh stability, era-advance/
+      (baked dirt paths/trees/cottages/plaza/carts), a full Boomtown tier-5 look (baked asphalt +
+      concrete kerb/lamps/cars, main-street spine, P1/P2 no-spur slots), the baked-path look and
+      appear effect (5b–5c), `PathRenderer = baked` plus both silent fallbacks (5d–5f), no
+      collisions anywhere (including the Explorer flag check), identical dressing for a second
+      player, near/far LOD and the rim drop, the traffic MicroProfiler check under 0.2 ms, the dust
+      Heartbeat and path-triangle readings, the part counts, refresh stability, era-advance/
       rebirth/rejoin lifecycle, all three failure-path degrades, and 375×667 mobile emulation.
 - [ ] 37. Tell Claude Code "M9 city dressing playtest passed" (or report the exact failure and step
+      number).
+
+---
+
+## C0 — Expeditions foundation (second place, Armory, teleport handoff)
+
+**Goal:** the plumbing for combat, not combat itself. The hub gains a **Power** readout, an
+**Armory** (two weapon slots that set your Max HP) and an **Expedition** panel; a second place
+(`build/combat.rbxl`) loads the same profile and shows a lobby HUD you can Ready up in and Return
+from. **There are no enemies until C1** — an empty lobby pad with nothing to fight is the correct
+result here, do not report it as a bug. Numbers to cross-check: `docs/BALANCE.md` "C0".
+
+**Before you start:**
+
+- Build **both** places. PowerShell, from the repo root:
+  ```
+  $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+  rojo build -o build/test.rbxl
+  rojo build combat.project.json -o build/combat.rbxl
+  ```
+- Confirm **Game Settings → Security → Enable Studio Access to API Services** is ON. With it ON
+  the hub and the Expeditions place share one real profile, which is what makes steps 31–40 work.
+  With it OFF each Studio session gets its own mock profile and materials granted in one place
+  will not show in the other — expected, not a bug.
+- Studio levers used below (Workspace → Attributes → **+**, type **number** unless stated; each is
+  consumed once per second and reset to `0`):
+
+  | Attribute | Where | Effect |
+  |---|---|---|
+  | `GrantCash` | hub | cash, as in M7–M9 |
+  | `GrantMaterials` | hub / Expeditions | that many units of the era's material (Village = Timber) |
+  | `GrantValor` | hub / Expeditions | that much Valor |
+  | `DebugMission` | Expeditions (**string**) | mission id to load, default `village` |
+  | `DebugOverdrive` | Expeditions (**boolean**) | Overdrive on/off |
+
+- `src/shared/Config/Places.json` still has `hubPlaceId` and `combatPlaceId` at `0`. Sections 1–8
+  are all run that way; section 9 needs the published pair from `docs/MANUAL_STEPS.md` "C0".
+
+### 1. Hub boots unchanged, with the new readout
+
+- [ ] 1. Open `build/test.rbxl` (or resync `rojo serve`) and press **Play**.
+- [ ] 2. Confirm **zero red errors** in Output, and that the plot, buy pads, income and Build panel
+      behave exactly as in M9 — nothing about the city loop changed this milestone.
+- [ ] 3. Look at the **top bar**: beside cash/income there is now a **`⚔ 34`** power readout
+      (starter Stick + Sling: 8 + 6 damage + 20 % of 100 base HP). Missing, or reading `0`, is a bug.
+- [ ] 4. Look at the **bottom bar**: **six** buttons, each an icon above its word —
+      **Build · Armory (⚔) · Expedition (🗺) · Legacy · Shop · Settings**. The four old buttons
+      deliberately changed look. Confirm nothing is clipped and each is comfortably tappable.
+
+### 2. Armory — buying a weapon raises Power and Max HP
+
+- [ ] 5. Tap **⚔ Armory**. Confirm the header reads **`Max HP 100`**, there is one material chip per
+      band (Timber / Steel / Circuits / Alloy) all reading `0`, and two rows: **Melee** (Stick) and
+      **Ranged** (Sling).
+- [ ] 6. Confirm the Melee row's next-tier line reads **`Tier 1 · 10 Timber`** with a **red**
+      `Buy` (you have no Timber — insufficient), and the Ranged row the same.
+- [ ] 7. Confirm **no Ascend row is visible** at `rebirthCount` 0 (Ascension needs Rebirth 1).
+- [ ] 8. Add the Workspace attribute **`GrantMaterials` = `10`**. Within ~1 s Output warns
+      `[ArmoryService] GrantMaterials lever: granted 10 to 1 loaded player(s)` and the attribute
+      resets to `0`. Confirm the **Timber chip now reads 10**.
+- [ ] 9. Tap **Buy** on the Melee row (Wooden Sword, 10 Timber). Confirm all of:
+      - the row flashes and the weapon name becomes **Wooden Sword**,
+      - the header becomes **`Max HP 120`**,
+      - the top bar's power readout becomes **`⚔ 42`**,
+      - the Timber chip drops to **0**.
+- [ ] 10. Confirm the Melee row's next line is now **`Tier 2 · 60 Timber · unlocks at 15K/s (you:
+      …/s)`** and the button reads **`Locked`** in **amber** — not red. That is the income gate:
+      your city earns far less than 15,000/s this early.
+- [ ] 11. Set **`GrantMaterials` = `60`** so you can afford tier 2, then tap **Buy** again. Confirm
+      it is **refused** (error toast, button stays `Locked`), the Timber chip **keeps its 60**, and
+      the weapon does **not** change. The server refuses the gate, not just the UI.
+- [ ] 12. Use **`GrantCash`** and the Build panel to push your Village income past **15K/s** (a real
+      greedy run crosses it at ~12 minutes — see `docs/BALANCE.md` "C0"). Re-open the Armory: the
+      Melee button goes from **amber `Locked`** to an **enabled `Buy`**, and buying it makes the
+      weapon **Iron Sword**, `Max HP 135`, power `⚔ 51`.
+- [ ] 13. Tap **Buy** on the **Ranged** row too (Short Bow, 10 Timber, no gate). Confirm Max HP and
+      power rise again and the two rows upgrade independently.
+- [ ] 14. Stop Play, press **Play** again. Confirm the weapons, Max HP and power **persisted**, and
+      Output has **no** migration warning or error.
+
+### 3. Expedition panel with the place ids at 0
+
+- [ ] 15. Tap **🗺 Expedition**. Confirm one tile, **Raider Woods**, with the meta line
+      `Era 1 · 10 waves · ~8 min · Timber`.
+- [ ] 16. Confirm the readiness line reads **`Recommended ⚔ 60 — you ⚔ <your power>`** (green at
+      ≥ 60, amber from 42, red below) and ends with **`· Publish the Expeditions place first`** in
+      dim grey.
+- [ ] 17. Confirm the tile's button reads **`Soon`** and is **not tappable**, and that the
+      **Overdrive** toggle is **hidden** (it needs Rebirth 1).
+- [ ] 18. Confirm the **ACTIVE RUNS** list shows **`No friends on an expedition right now.`** (the
+      run registry is a no-op in Studio, so an empty list is correct here).
+- [ ] 19. **Depart refusal in Studio.** Stop Play. In `src/shared/Config/Places.json` set
+      `"combatPlaceId": 1` (any non-zero placeholder), rebuild `build/test.rbxl`, Play, open the
+      Expedition panel: the button now reads **`Depart`** and is tappable. Tap it. Confirm a toast
+      **"Studio can't teleport — open build/combat.rbxl"**, that you **stay** on your plot, that
+      Output warns `[ExpeditionService] Studio can't teleport`, and that nothing about your city
+      (cash, slots, income) changes.
+- [ ] 20. Stop Play and **restore** `"combatPlaceId": 0` (or paste the real id once
+      `docs/MANUAL_STEPS.md` "C0" is done), then rebuild.
+
+### 4. Profile migration — an old save gains the combat table
+
+- [ ] 21. Using a save from an **earlier milestone** (any profile that existed before this session,
+      i.e. schema v4), press Play. Confirm Output has **no** warning or error mentioning migration,
+      schema version, `combat` or `highestEra` — the v4 → v5 step is silent and additive, same as
+      v1 → v2 in M5.
+- [ ] 22. Confirm the old save's city is intact (cash, slots, era, Legacy, perks) and the Armory
+      opens with `Max HP 100` and zeroed materials.
+- [ ] 23. Verify `highestEra` seeded from your era. With Play running, open the **Command Bar**
+      (View → Command Bar), switch its context dropdown to **Server**, and run:
+      ```
+      local s = require(game.ServerScriptService.Server.Services.DataService).GetState(game.Players:GetPlayers()[1]) print(s.version, s.era, s.combat.highestEra, s.combat.expeditionSeconds)
+      ```
+      Confirm it prints version **5** and `highestEra` **equal to your era** (e.g. `5 2 2 0` on a
+      Boomtown save). `highestEra` lower than `era`, or `nil`, is a bug.
+- [ ] 24. If you have DataStore viewing access, confirm the saved profile's `version` reads `5` and
+      it has a `combat` table with `gear`, `materials` and `highestEra`.
+
+### 5. Mobile emulation pass (required every milestone)
+
+- [ ] 25. Device Emulator, **375×667 portrait**. Confirm the six bottom-bar buttons fit in one row
+      without clipping or overlapping, each icon+word is readable, and each is ≥ 48 px tall.
+- [ ] 26. Open the **Armory**: both rows, the Max HP header and the four material chips are fully on
+      screen, the `Tier 2 · 60 Timber · unlocks at 15K/s (you: …/s)` line **wraps** instead of being
+      cut off, and Buy is tappable without zooming.
+- [ ] 27. Open the **Expedition** panel: the tile, the readiness line and the ACTIVE RUNS header all
+      fit; the readiness line wraps rather than truncating.
+- [ ] 28. Confirm the top bar's `⚔` readout does not push cash/income off screen.
+- [ ] 29. Rotate to **667×375 landscape**. Repeat 26–27 — nothing clipped, one panel open at a time,
+      the dock still closes the panel.
+- [ ] 30. Stop Play.
+
+### 6. The Expeditions place in Studio
+
+- [ ] 31. **Stop the hub Play session first** (the profile is session-locked; the Expeditions place
+      cannot load it while the hub holds it). Then File → Open **`build/combat.rbxl`**.
+- [ ] 32. In Explorer select **Workspace** → Attributes → **+** → `DebugMission`, type **string**,
+      value **`village`**. (Leave `DebugOverdrive` off, or add it as an unchecked **boolean**.)
+- [ ] 33. Press **Play**. Confirm: zero red errors, you spawn on a **`LobbyPad`** part in
+      `Workspace` (built by code — the otherwise empty arena is correct at C0), and the HUD shows
+      **`Raider Woods`** with **`Lobby`** under it.
+- [ ] 34. Confirm the bottom-left **HP bar** reads your Armory value, not 100 — `HP 135 / 135` if
+      you bought Iron Sword + Short Bow above. Select your character's **Humanoid** in Explorer and
+      confirm `MaxHealth` matches. A flat 100 here means the profile did not carry over (check API
+      services, "Before you start").
+- [ ] 35. Confirm the **party list** shows one row — your name with a full HP bar — and there is a
+      **Ready** button and a **Return** button.
+- [ ] 36. Tap **Ready**. Confirm your party row gains a **✓** after your name; tap again and the ✓
+      clears. (Nothing else happens at C0 — waves are C1.)
+- [ ] 37. **The away clock.** Wait ~30 s, then Command Bar → context **Server**:
+      ```
+      local s = require(game.ServerScriptService.Server.Services.DataService).GetState(game.Players:GetPlayers()[1]) print(s.combat.expeditionSeconds)
+      ```
+      Confirm it prints roughly the seconds you have been in the lobby, and that running it again
+      10 s later prints a **larger** number. Stuck at `0` is a bug.
+- [ ] 38. **GrantMaterials here.** Workspace → Attributes → **+** → `GrantMaterials` = `25`. Confirm
+      Output warns `[Combat] GrantMaterials lever: granted 25 to 1 loaded player(s)` and the
+      attribute resets to `0`. (This place has no Armory panel — the proof is step 40.)
+- [ ] 39. Tap **Return**. Confirm the **summary card** appears (zeros for cash/kills — C1 fills it),
+      a toast **"Studio can't teleport — reopen build/test.rbxl for the hub"**, that you **stay** in
+      the lobby rather than being kicked or frozen, and that Output warns
+      `[ReturnService] cannot send <you> home (leave): Studio cannot teleport`.
+- [ ] 40. Stop Play (this releases and saves the profile). Re-open **`build/test.rbxl`**, Play, open
+      the **Armory**: confirm the **Timber chip shows the 25 Timber granted in the other place** —
+      one profile, two places. The old value means the profile did not save (API services again).
+- [ ] 41. **Locked mission.** Back in `build/combat.rbxl`, set `DebugMission` to `metropolis` (a
+      mission this profile cannot have unlocked) and Play. Confirm you are **not** admitted: no wave
+      line in the HUD, a "locked" toast, and **no error** in Output. Set it back to `village`.
+- [ ] 42. **Bad mission id.** Set `DebugMission` to `nonsense` and Play. Confirm the same graceful
+      refusal and **zero errors**. Set it back to `village`.
+
+### 7. Two players in the lobby (Local Server — multiplayer changed this milestone)
+
+- [ ] 43. In `build/combat.rbxl`: **Test → Start** with **2 Players** (Local Server). Wait for both
+      clients to spawn on the lobby pad.
+- [ ] 44. On each client confirm the party list shows **both players**, each with their own HP from
+      their own profile (the two can differ) and both bars full.
+- [ ] 45. On client 1 tap **Ready**. Confirm **client 2 also sees the ✓** on client 1's row within a
+      second. Ready up on client 2 too — both rows show ✓ on both clients.
+- [ ] 46. On client 2 tap **Return**. Confirm client 2 gets the summary card and stays, and **client
+      1's party list drops back to one row**.
+- [ ] 47. Confirm **no errors** in either client's Output or the server's, then Stop.
+- [ ] 48. In `build/test.rbxl`: **Test → Start** with **2 Players**. On each client open the
+      **Armory** and confirm each player sees **their own** power, Max HP and materials; set
+      `GrantMaterials` = `10` (it pays **both** loaded players) and confirm a Buy on client 1 does
+      not spend client 2's Timber. Stop.
+
+### 8. Failure paths reachable from Studio
+
+- [ ] 49. **Missing Armory config.** Stop Play. In Explorer (Edit mode) rename
+      `ReplicatedStorage/Shared/Config/Armory` to `Armory_bak`, press Play. Confirm: the **⚔
+      Armory** bottom-bar button is **gone**, the top-bar power readout is **hidden**, the city loop
+      still works, and Output has **zero errors**. Rename it back.
+- [ ] 50. **Missing Combat config.** Same trick with `Config/Combat`: the **🗺 Expedition** button is
+      gone, everything else works, zero errors. Rename it back.
+- [ ] 51. **Missing mission.** Same trick with the `Config/Missions` folder: the Expedition button is
+      hidden (or the panel opens with no tiles), zero errors. Rename it back, then rebuild
+      `build/test.rbxl` before continuing.
+- [ ] 52. **Buy spam.** With the Armory open and no materials, tap **Buy** as fast as you can for
+      ~5 seconds. Confirm refusal toasts but **no** error, no double spend, and no kick.
+
+### 9. Published pair — the real round trip (published only)
+
+Do this only after `docs/MANUAL_STEPS.md` "C0" is complete (both places published, both ids pasted
+into `src/shared/Config/Places.json`, API services on for the live game). **Nothing in section 9
+can be done in Studio** — Studio never teleports.
+
+- [ ] 53. Join the **published hub** from the Roblox app or website. Write down your **cash**,
+      **era**, **Power**, **Max HP** and one owned slot's level.
+- [ ] 54. Open **🗺 Expedition** → **Depart** on Raider Woods. Confirm you are teleported to the
+      Expeditions place within a few seconds (loading screen, then the lobby pad and HUD) and that
+      your **HP matches the Max HP** you wrote down.
+- [ ] 55. Stay in the lobby ~2 minutes, then tap **Return**. Confirm the summary card, then a
+      teleport back to the **hub** and your own plot, and that **cash, era, slot levels, Power and
+      Max HP all match** what you wrote down (plus earnings).
+- [ ] 56. Confirm the **welcome-back / offline card** on that return credits the away time at the
+      **full** rate (`Combat.json offline.expeditionEfficiency` is `1.0`, so ~2 minutes away pays
+      ~2 minutes of full income). A visibly reduced payout, or no card at all, is a bug.
+- [ ] 57. Confirm the round trip did **not** duplicate or wipe anything: no doubled cash, no reset
+      slots, materials unchanged in the Armory.
+- [ ] 58. **Active runs from a second account.** On a second device/account that is **friends** with
+      your main, join the published hub and Depart. Then on your main open **🗺 Expedition** →
+      **ACTIVE RUNS** and confirm the friend's run is listed (host name, mission, wave, party size)
+      within ~10 s (the list polls every 10 s while open). The list must **never** show an access
+      code or any server id.
+- [ ] 59. Tap **Join** on that run. At C0 the expected result is a refusal toast (**"That run is
+      full or already over"**) — join-in-progress is wired in C2. No error, no teleport into a
+      broken state.
+- [ ] 60. Leave from the **Expeditions** place directly (close the app while in the lobby), then
+      rejoin the hub. Confirm your profile loads normally with no "already in a session" error and
+      the away time is credited.
+
+### 10. Not testable this milestone (don't hunt for these)
+
+- `TeleportInitFailed` handling on both sides (a teleport Roblox refuses **after** accepting the
+  call) is **code-review-only** — Studio cannot trigger it and a healthy published pair won't
+  either. It was found and fixed in review; no playtest step covers it.
+- Enemies, waves, damage, rewards, the pacing director, the tempo dot changing colour: **C1**.
+- Party from the hub, join-in-progress, contribution split, Mentor bonus: **C2**.
+- Ascension rows and the Overdrive toggle appear only at **Rebirth 1**; on a rebirthed save,
+  checking that they *appear* is welcome, but the forge is balanced in **C3**.
+
+### What a bug looks like here
+
+- No `⚔` power readout in the top bar, or a value that doesn't change after buying a weapon.
+- Fewer or more than six bottom-bar buttons, clipped icons/words, or a button under 48 px at
+  375×667.
+- Max HP not equal to `100 + melee hp + ranged hp`, or the combat place giving you 100 HP when your
+  weapons say otherwise.
+- A Buy that succeeds above the income gate (must stay `Locked`), or one that charges materials
+  without upgrading the weapon (or upgrades without charging).
+- An Ascend row visible at Rebirth 0, or an Ascend that goes through there.
+- An Expedition tile tappable while `combatPlaceId` is `0`, or a Studio Depart doing anything other
+  than a toast (a kick, a frozen character, a lost profile).
+- Any migration warning/error in Output on an old save, `version` not reading `5`, or
+  `combat.highestEra` below `era`.
+- `expeditionSeconds` stuck at `0` while you sit in the lobby.
+- Materials granted in one place not visible in the other after a Stop/Play with API services on.
+- The Expeditions place erroring, kicking you, or leaving you with no HUD when `DebugMission` is
+  missing, misspelled, or a mission your profile hasn't unlocked.
+- A party list that doesn't show both players, or a Ready ✓ that only one client sees.
+- **Published only:** a round trip that loses cash/levels, an offline card paying a reduced rate for
+  expedition time, an ACTIVE RUNS entry containing anything server-ish (access code, job id), or a
+  "profile already in a session" error after Departing or Returning.
+- **Any red error** in Output in any of the above, including with a config renamed away.
+
+### Sign-off
+
+- [ ] 61. All boxes above checked: hub power readout and six-button bar, the Armory
+      buy/gate/persist loop, the Expedition panel with ids at 0 plus the Studio Depart toast, the
+      v4 → v5 migration and `highestEra`, the 375×667 and 667×375 passes, the Expeditions place in
+      Studio (HP, Ready, away clock, Return toast, cross-place materials, locked/bad mission), the
+      two-player lobby in Local Server, the four Studio-reachable failure paths, and — once
+      published — the round trip, the offline credit and the ACTIVE RUNS list.
+- [ ] 62. Tell Claude Code "C0 expeditions playtest passed" (or report the exact failure and step
       number).

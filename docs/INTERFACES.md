@@ -2521,6 +2521,12 @@ would change for an unchanged layout.
 - Deleting `templates/_paths`, or setting `road.renderer` to `"parts"`, silently falls back.
 - Part counts stay within `budget.pathPieces`, far plots drop rims, and there is one traffic
   Heartbeat plus a dust Heartbeat only while a burst runs.
+- **Part budget, re-cut for baked paths (lead, 2026-09-18).** The Principles line "≤ ~1300 static
+  anchored parts for the whole map" predates them. A fully-owned Village plot is ≈ 174 path
+  instances (58 pieces × Model + Fill + Rim) near, ≈ 116 far once rims drop; Boomtown is ≈ 99/66.
+  New whole-map target: **≤ ~2600 static instances** with 10 plots at tier 5 (about half of it
+  paths), still ≤ ~20 moving parts. If a MicroProfiler check says the path share costs frames, the
+  lever is a coarser bake (`planargeom.STEP`), which changes the look and so needs Ben.
 - stylua, selene, luau-lsp, rojo build, `streetplan.py`, the template checks and the manifest check
   are clean, and `tools/pathtest/**` plus its `Workspace.PathTest` mapping are removed once Ben has
   seen the real thing.
@@ -2562,3 +2568,369 @@ it; SettingsPanel gains a row "City detail" visible to everyone; the controller 
   playable with that feature absent and no error in Output.
 - Era advance and rebirth clear and rebuild the dressing; rejoin reproduces the same layout.
 - stylua, selene, luau-lsp analyze, `rojo build`, `gen_templates.py --check` and the sim are clean.
+
+
+# C0 contracts — Expeditions foundation: second place, Armory, teleport handoff (2026-09-17)
+
+Read `docs/PLAN.md` "C0" and `.claude/memory/combat-2026-09-17.md` first. Decided by Ben
+2026-09-17: combat ("Expeditions", co-op wave defense) lives in a **second place of the same
+experience**; the **Armory is weapons only** (melee + ranged; **weapons determine max HP**), tiers
+cost the era material and **unlock by the city's persisted income per second**; **cash and
+materials are fixed per enemy**; friends can **join a run in progress**; Rebirth unlocks
+**Ascension** and **Overdrive**. Milestones are C0–C3 (M10 stays reserved for icons). C0 ships
+the plumbing and the Armory; no enemy is fought until C1.
+
+## Principles
+
+- **Server owns everything.** The hub validates every Armory purchase against the profile and
+  `EconomyService.GetPersistedIncomePerSecond`; the combat place validates every hit and writes
+  every reward. Teleport data is a hint, never an entitlement.
+- **One profile, two places.** Same ProfileStore name and key. The hub **releases the session
+  before** `TeleportAsync`; the combat place loads it on join; neither place ever passes `Steal`.
+- **No RNG anywhere.** Rewards, unlocks and drops are deterministic functions of config + state.
+- **Pure shared modules.** `src/shared/Armory.luau` and `src/shared/Combat.luau` take config as
+  arguments, use no Roblox globals, and are mirrored 1:1 by `tools/sim_combat.py`.
+- **Everything degrades.** `Places.json` ids of `0` disable the Expedition tiles with a message;
+  missing `Armory.json` / `Combat.json` / mission configs hide the feature; missing weapon
+  models leave the character's hands empty; the combat place boots standalone in Studio.
+- **Every tunable lives in JSON:** `Config/{Armory,Combat,Places}.json`, `Config/Missions/*.json`.
+  Nothing under `src/combat` may require `PlotService`, `EconomyService`, `MonetizationService`,
+  `LegacyShopService` or `ArmoryService`.
+- **Every subagent on this milestone runs on Opus** (Ben's ruling).
+
+## C0 ownership (one wave, disjoint)
+
+| Owner | Files |
+|-------|-------|
+| lead | this section, `docs/PLAN.md` C0, `src/shared/Config/{Armory,Combat,Places}.json` and `Config/Missions/1_Village.json` (schemas, applied), routing |
+| luau-engineer | `combat.project.json` (new), `default.project.json` (`globIgnorePaths` only), `src/server/Services/ProfileSchema.luau` (new), `DataService.luau`, `RemoteService.luau` (`Configure`), `src/server/Services/HubRemotes.luau` (new), `ExpeditionService.luau` (new), `ArmoryService.luau` (new), `EconomyService.luau`, `src/server/Main.server.luau`, `src/combat/server/**` (new), `src/shared/Types.luau`, `src/shared/Catalog.luau`, `src/shared/Armory.luau` (new), `src/shared/Combat.luau` (new) |
+| ui-engineer | `src/client/UI/TopBar.luau`, `src/client/UI/Theme.luau`, `src/client/UI/BottomBar.luau`, `src/client/Controllers/UIController.luau`, `src/client/UI/ArmoryPanel.luau` (new), `src/client/UI/ExpeditionPanel.luau` (new), `src/combat/client/**` (new) |
+| economy-designer | values inside `Armory.json` (costs, unlockRate, damage, hp) and `Missions/1_Village.json` (keys are frozen), `tools/sim_combat.py` (new), `docs/BALANCE.md` "C0" |
+| roblox-reviewer (after wave 1) | read-only review of the diff |
+| qa-runner, docs-keeper (after review) | format/lint/build/sim; `PLAN.md`, `PLAYTEST.md`, `MANUAL_STEPS.md`, manifest |
+
+Frozen: `Config/Eras/**`, `Config/{Game,Sounds,Monetization,LegacyShop,Assets,CityDressing}.json`,
+`Economy.luau`, `PlotService`, `LegacyShopService`, `MonetizationService`, every existing remote's
+payload, `src/client/City/**`. The JSON **keys** of the four combat configs are frozen by this
+section; only the economy-designer changes their values.
+
+## Rojo — two places, one shared tree
+
+`default.project.json` is unchanged except `"globIgnorePaths": ["templates/_props", "templates/_enemies"]`.
+New `combat.project.json`:
+
+```
+name: EraCityTycoonExpeditions
+ReplicatedStorage
+  Shared            ← src/shared            (same folder as the hub)
+  Packages          ← Packages
+  Assets/Props      ← templates/_props      (optional)
+ServerScriptService
+  Server (Folder)
+    Main            ← src/combat/server/Main.server.luau
+    Services        ← src/server/Services   (same folder as the hub; hub-only services are inert)
+    Combat          ← src/combat/server/Services
+  ServerPackages    ← ServerPackages
+ServerStorage       ($ignoreUnknownInstances)
+  Enemies           ← templates/_enemies    (optional)
+Workspace           ($ignoreUnknownInstances: true — the arena is code-built; Ben may add scenery)
+StarterPlayer/StarterPlayerScripts
+  Client            ← src/combat/client
+```
+
+`DataService` keeps `script.Parent:WaitForChild("RemoteService")`, which resolves in both trees.
+Builds: `rojo build -o build/test.rbxl` and `rojo build combat.project.json -o build/combat.rbxl`;
+sourcemaps `sourcemap.json` and `sourcemap.combat.json` (`rojo sourcemap combat.project.json -o sourcemap.combat.json`).
+
+## Profile schema v5 (`DataService`, `ProfileSchema.luau`)
+
+`src/server/Services/ProfileSchema.luau` (new, required by `DataService` in both places) owns
+`SCHEMA_VERSION = 5`, `STORE_NAME = "PlayerData"`, `PROFILE_KEY_PREFIX = "p_"`, `PROFILE_TEMPLATE`
+and the `Migrations` table, moved verbatim from `DataService.luau:45-107`. `DataService` keeps its
+public API unchanged and gains nothing else. `PlayerState` gains:
+
+```luau
+export type CombatProfile = {
+	materials: { [string]: number },       -- material name ("Timber") -> integer, never negative
+	valor: number,                          -- consumed by Ascension
+	gear: { melee: number, ranged: number },        -- tier per slot; 0 = starter weapon
+	ascension: { melee: number, ranged: number },   -- Ascension level per slot; 0 = none
+	missions: { [string]: MissionRecord },  -- keyed by mission id ("village")
+	highestEra: number,                     -- highest era index ever reached; survives Rebirth
+	expeditionSince: number,                -- os.time() stamped by the hub on departure; 0 = not away
+	expeditionSeconds: number,              -- seconds spent in the combat place since departure
+	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
+}
+export type MissionRecord = { bestWave: number, bossClears: number, overdriveBest: number }
+```
+
+`PlayerState.combat: CombatProfile`. Template default:
+`{ materials = {}, valor = 0, gear = { melee = 0, ranged = 0 }, ascension = { melee = 0, ranged = 0 }, missions = {}, highestEra = 1, expeditionSince = 0, expeditionSeconds = 0, stats = { kills = 0, wavesCleared = 0, expeditions = 0, cashFromCombat = 0 } }`.
+`Migrations[4]` adds `combat` when nil and seeds `highestEra = math.max(1, state.era)`; additive
+and idempotent like `[2]`. `PlotService.tryAdvanceEra` is frozen this milestone, so `highestEra`
+is also raised lazily: `ArmoryService`/`ExpeditionService` call `Combat.TouchHighestEra(state)`
+(`highestEra = max(highestEra, era)`) before any check that reads it.
+
+## Config schemas (lead-applied; Rojo → ModuleScripts under `ReplicatedStorage/Shared/Config`)
+
+- **`Places.json`** `{ version: 1, hubPlaceId: number, combatPlaceId: number }`. `0` = not
+  published: the hub disables expedition tiles with "Publish the Expeditions place first"; the
+  combat place's `ReturnService` shows "Hub place id not set" and keeps the player in the lobby.
+- **`Combat.json`** (keys frozen, see file): `offline.expeditionEfficiency`; `player{ respawnSeconds, hitDistancePad, breatherRegenPerSecond, killCooldownRefundSeconds }`;
+  `remotes{ attackCallsPerSecond, abilityCallsPerSecond, runListCallsPerSecond, combatStateHz }`;
+  `director{ windowSeconds, tempoMin, tempoMax, mergeThreshold, mergeTempo, eliteTempo,
+  breatherSeconds, breatherMaxSeconds, maxAlive, runCapSeconds }`; `coop{ maxParty, joinUntilWave,
+  contributionFloor, countPerExtraPlayer, mentorRatio, mentorValor }`; `overdrive{ requiresRebirth,
+  countMult, hpMult, damageMult, spawnRateMult, rewardMult }`; `registry{ mapName, ttlSeconds }`;
+  `animations{ enemyIdle, enemyWalk, enemyAttack, enemyDeath }` (asset ids, 0 = none);
+  `debug{ missionAttribute, overdriveAttribute, grantMaterialsAttribute, grantValorAttribute }`.
+- **`Armory.json`**: `baseHp`; `power.hpWeight`; `bands[{ band, eraName, material }]`;
+  `classes{ <class>: { kind: "melee"|"ranged", … } }` — melee classes carry `range, arcDegrees,
+  chain[3], windows[3], comboReset, finisherKnockback`; ranged carry `fire: "charge"|"semi"|"auto"|"beam"`,
+  `cooldown, range` and optionally `chargeSeconds, minDamageFraction, spreadDegrees, pierce`;
+  `abilities{ <key>: { kind: "aoe"|"burst", cooldown, damageMult, radius?, shots?, knockback?,
+  stunSeconds?, dashStuds?, dotSeconds?, dotTicks?, pierce? } }`;
+  `slots{ melee|ranged: { starter{ name, class, damage, hp, ability, model }, tiers[{ tier, band,
+  cost, unlockRate, name, class, damage, hp, ability, model }] } }` — `tiers` is ordered 1..12,
+  `cost` is in the band's material, `unlockRate` is the persisted income/s required, `model` is a
+  prop name under `ReplicatedStorage/Assets/Props/<band eraName>/` ("" = no model);
+  `ascension{ requiresRebirth, levelsPerRebirth, levels[{ level, materials{name→n}, valor,
+  damageMult, hpMult, abilityMult }] }`.
+- **`Missions/<eraIndex>_<EraName>.json`** (resolved like eras, by numeric prefix): `{ version, id,
+  era, eraName, name, arena, material, waves, bossWaves[], recommendedPower, targetMinutes,
+  targetWaveSeconds, enemies{ <key>: { template, kind: "melee"|"ranged", hp, damage, speed, reach,
+  attackCooldown, cash, materials, elite } }, waveTable{ baseCount, countPerWave, hpGrowth,
+  damageGrowth, rewardGrowth, composition[{ fromWave, weights{key→w} }] }, bosses{ "<wave>": {
+  template, enemy, hpMult, damageMult, cashMult, materialsMult, valor } } }`.
+
+`Types.luau` gains `ArmoryConfig`, `WeaponClassDef`, `AbilityDef`, `WeaponTierDef`, `WeaponStarterDef`,
+`AscensionLevelDef`, `CombatConfig`, `MissionConfig`, `EnemyDef`, `PlacesConfig`, `CombatProfile`,
+`MissionRecord`, `RunState`, `RunSummary`, `ActiveRun` (shapes below). `Catalog.luau` gains
+`GetArmoryConfig(): ArmoryConfig?`, `GetCombatConfig(): CombatConfig?`, `GetPlacesConfig(): PlacesConfig`
+(missing → `{ version = 1, hubPlaceId = 0, combatPlaceId = 0 }`), `GetMissionConfig(eraIndex): MissionConfig?`
+and `GetMissionById(id): MissionConfig?` (scans `Config/Missions`, cached). Armory/Combat use the
+**nil-is-the-signal** pattern (like `GetAssetsConfig`): nil hides the whole feature.
+
+## `src/shared/Armory.luau` (pure)
+
+```luau
+Armory.TierDef(cfg, slot, tier): WeaponTierDef | WeaponStarterDef   -- tier 0 = starter
+Armory.WeaponDamage(cfg, slot, tier, ascLevel): number   -- tierDef.damage × ascension.levels[ascLevel].damageMult (1 when 0)
+Armory.WeaponHp(cfg, slot, tier, ascLevel): number       -- tierDef.hp × hpMult
+Armory.MaxHp(cfg, gear, ascension): number               -- baseHp + WeaponHp(melee) + WeaponHp(ranged)
+Armory.GearPower(cfg, gear, ascension): number           -- round(WeaponDamage(melee) + WeaponDamage(ranged) + MaxHp × power.hpWeight)
+Armory.NextTier(cfg, gear, slot): number?                -- gear[slot] + 1, nil past the last tier
+Armory.TierCost(cfg, slot, tier): (material: string, amount: number)
+Armory.TierUnlockRate(cfg, slot, tier): number
+Armory.CanBuy(cfg, state, slot, incomePerSecond): (ok: boolean, reason: "locked"|"insufficientFunds"|"invalid"|nil)
+   -- invalid: bad slot / no next tier; locked: incomePerSecond < unlockRate; insufficientFunds: materials short
+Armory.AscensionCost(cfg, level): { materials: {[string]: number}, valor: number }?
+Armory.AscensionCap(cfg, rebirthCount): number           -- 0 below requiresRebirth, else min(#levels, (rebirthCount − requiresRebirth + 1) × levelsPerRebirth)
+Armory.CanAscend(cfg, state, slot): (ok, reason)          -- locked: cap reached / rebirth too low; insufficientFunds: materials or valor short
+Armory.ClassDef(cfg, class): WeaponClassDef?  Armory.AbilityDef(cfg, key): AbilityDef?
+```
+
+## `src/shared/Combat.luau` (pure)
+
+```luau
+Combat.TouchHighestEra(state): ()                          -- state.combat.highestEra = max(highestEra, state.era)
+Combat.MissionUnlocked(state, mission, overdrive, combatCfg): boolean   -- mission.era ≤ highestEra; overdrive needs rebirthCount ≥ overdrive.requiresRebirth
+Combat.WaveSpec(mission, wave, partySize, overdrive, combatCfg): { count, hpMult, damageMult, rewardMult, boss: BossDef?, weights }
+   -- count = round((baseCount + countPerWave×(wave−1)) × (1 + countPerExtraPlayer×(partySize−1)) × (overdrive and countMult or 1))
+   -- hpMult = (1+hpGrowth)^(wave−1) × (overdrive and overdrive.hpMult or 1); damage/reward likewise with their growth and mults
+Combat.EnemyStats(mission, key, spec, isBoss: boolean?): { hp, damage, cash, materials }?   -- rounded; boss mults apply ONLY when isBoss (never to ordinary enemies of the same key)
+Combat.BossValor(mission, wave, overdrive, combatCfg): number
+Combat.RecommendedPower(mission, overdrive, combatCfg): number   -- recommendedPower × (overdrive and hpMult or 1)
+Combat.CombatCashMult(state, gameConfig, shopConfig): number      -- Economy.LegacyMult × Economy.PerkIncomeMult; NO pass/premium/neighbors
+Combat.ContributionShares(damageByUser: {[number]: number}, floor): {[number]: number}   -- share_i = floor + (1 − floor·n) × dmg_i/total; equal split when total = 0
+Combat.MentorBonus(combatCfg, hostRate, partyRates: {number}): number   -- mentorValor per member with rate < hostRate × mentorRatio
+Combat.AwayEfficiency(elapsed, expeditionSeconds, efficiency, expeditionEfficiency): number
+   -- time-weighted: (min(expeditionSeconds, elapsed) × expeditionEfficiency + max(elapsed − expeditionSeconds, 0) × efficiency) / elapsed; = efficiency when elapsed ≤ 0
+Combat.Tempo(killsInWindow, windowSeconds, expectedKillsPerSecond, director): number   -- clamp(actual/expected, tempoMin, tempoMax); tempoMin when expected = 0
+```
+(C1 adds hit/ability math here; C0 ships the functions above with unit-style checks in the sim.)
+
+## Snapshot / Delta / ActionResult additions (hub)
+
+- `Snapshot` gains `gearPower: number` (server-computed via `Armory.GearPower`; 0 when Armory
+  config is missing). `state.combat` rides inside `state`.
+- `Delta` gains `combat: CombatProfile?` (a **copy**, never aliased, whenever the `combat` dirty
+  flag flushes) and `gearPower: number?` alongside it. `EconomyService.DirtyFields` gains
+  `combat: boolean?`; `MarkDirty(player, { combat = true })` is the only way combat changes reach
+  the client.
+- `ActionResult.action` gains `"buyGear" | "ascend" | "expedition" | "joinRun"`; `slotId` carries
+  the weapon slot (`"melee"`/`"ranged"`), the mission id, or the host userId as a string.
+  `reason` gains `"unavailable"` (place id 0, Studio, teleport failed after retries, run full/
+  gone). `insufficientFunds` = materials/Valor short; `locked` = income/s below `unlockRate`,
+  Ascension cap, or mission era above `highestEra`.
+
+## Remotes
+
+`RemoteService.Configure(defs)` must be called before `Init` (both places). Shape:
+
+```luau
+export type RemoteDefs = {
+	intents: { [string]: { validate: (args: PackedArgs) -> boolean, bucket: string } },  -- client → server
+	events: { string },                                   -- server → client, no validator, never rate limited
+	rates: { [string]: number },                          -- bucket name → calls per second (clamped ≥ 1 with the existing warn)
+}
+```
+`Init` creates every intent and event RemoteEvent under `ReplicatedStorage/Remotes`, connects
+`OnServerEvent` only for intents, and reads bucket refill from `rates[bucket]`. The old
+hard-coded tables move verbatim into `src/server/Services/HubRemotes.luau`, which exports the
+hub `RemoteDefs` with buckets `calls` (Game.json `callsPerSecond`), `prompt`, `snapshot`, and adds:
+
+| Remote | Args | Bucket | Handler |
+|---|---|---|---|
+| `RequestBuyGear` | `(slot: "melee"\|"ranged")` | calls | `ArmoryService` — `Armory.CanBuy` with `EconomyService.GetPersistedIncomePerSecond(player)`; on ok: subtract materials, `gear[slot] += 1`, `MarkDirty{combat}`, `ActionResult{buyGear, slot, ok}`; every refusal → `ActionResult` with the reason |
+| `RequestAscend` | `(slot)` | calls | `ArmoryService` — `Armory.CanAscend`; subtract materials + valor, `ascension[slot] += 1` |
+| `RequestExpedition` | `(missionId: string, overdrive: boolean)` | prompt | hub `Main` → `ExpeditionService.Depart` (below) |
+| `RequestJoinRun` | `(hostUserId: number)` | prompt | hub `Main` → `ExpeditionService.Join` (C0: validates and replies `unavailable` unless a registry entry exists; full join flow is C2) |
+| `RequestRunList` | `()` | runList (`Combat.json remotes.runListCallsPerSecond`) | `ExpeditionService` → `RunList` event with `{ ActiveRun }` from the registry, filtered to same-server players and friends (`IsFriendsWith` in pcall) |
+
+New hub events: `RunList` (`{ runs: { ActiveRun } }`). `ActiveRun = { hostUserId: number, hostName: string, missionId: string, era: number, wave: number, overdrive: boolean, partySize: number, accessCode: string }` — the access code is **never** sent to clients; the server strips it in `RunList`.
+
+`src/combat/server/Services/CombatRemotes.luau` exports the combat place `RemoteDefs`:
+
+| Remote | Args | Bucket |
+|---|---|---|
+| `RequestSnapshot` | `()` | snapshot |
+| `RequestRetryLoad` | `()` | calls |
+| `RequestReady` | `()` | calls |
+| `RequestLeave` | `()` | calls |
+| `RequestAttack` | `(swingSeq: number, targetIds: { number })` | attack (`Combat.json remotes.attackCallsPerSecond`) — C0 validator only; handler is C1 |
+| `RequestAbility` | `()` | ability — C0 validator only |
+| events | `StateChanged` (Snapshot/LoadStatus as in the hub, no Deltas needed in C0), `ActionResult`, `RunState`, `CombatFx` | |
+
+`RunState = { kind: "run", phase: "lobby"|"wave"|"breather"|"boss"|"summary"|"ended", missionId: string, overdrive: boolean, wave: number, waves: number, alive: number, tempo: number, party: { { userId: number, name: string, hp: number, maxHp: number, ready: boolean } }, breatherEndsIn: number?, summary: RunSummary? }`.
+`RunSummary = { missionId, overdrive, wavesCleared, cash, materials: {[string]: number}, valor, kills, seconds }`.
+C0 sends `RunState` on join (phase `lobby`, party list) and on `RequestReady`/`RequestLeave`
+(phase `summary` with zeros); `CombatFx` exists but is unused until C1.
+
+## Expedition handoff (hub `ExpeditionService`, called from `Main.server.luau`)
+
+`ExpeditionService.Depart(player, missionId, overdrive)`:
+1. `state = DataService.GetState(player)`; nil → drop. `Combat.TouchHighestEra(state)`.
+2. Mission = `Catalog.GetMissionById(missionId)`; nil or `not Combat.MissionUnlocked(...)` → `ActionResult{expedition, missionId, false, "locked"}`.
+3. `Places.combatPlaceId == 0` or `RunService:IsStudio()` → `ActionResult{…, "unavailable"}` (Studio toast: "Studio can't teleport — open build/combat.rbxl").
+4. `ReserveServer(combatPlaceId)` in pcall with 3 attempts (backoff 1 s, 2 s, 4 s; the
+   `MonetizationService.callWithRetry` shape); failure → `unavailable`.
+5. Stamp `state.combat.expeditionSince = os.time()`, `expeditionSeconds = 0`,
+   `stats.expeditions += 1`; `EconomyService.RefreshPersistedRate(player)`; `ActionResult{…, true}`.
+6. Teardown in the frozen order `PlotService.Release`, `EconomyService.Cleanup`, `DataService.Release`
+   (Main exposes this as `Main`'s existing `onPlayerRemoving` body, factored into a local
+   `releasePlayer(player)` that both callers use).
+7. `TeleportAsync(combatPlaceId, {player}, options)` with `ReservedServerAccessCode` and
+   `SetTeleportData({ missionId, overdrive, hostUserId = player.UserId })`, pcall, 3 attempts.
+   Final failure → `task.spawn(runJoinSequence, player, DataService.LoadAsync)` and
+   `ActionResult{expedition, missionId, false, "unavailable"}`.
+
+`ExpeditionService.Join(player, hostUserId)`: C0 reads the registry entry; missing, full
+(`partySize ≥ coop.maxParty`) or `wave > coop.joinUntilWave` → `unavailable`; otherwise the same
+steps 3–7 with the entry's `accessCode` and teleport data `{ missionId, overdrive, hostUserId }`.
+
+Offline: in `EconomyService.ApplyOfflineGrant`, after the existing efficiency line,
+`efficiency = Combat.AwayEfficiency(elapsed, state.combat.expeditionSeconds, efficiency, combatCfg.offline.expeditionEfficiency)`
+(skipped when Combat config is nil); then `expeditionSince = 0`, `expeditionSeconds = 0`.
+
+## Combat place server (`src/combat/server`)
+
+`Main.server.luau` boot order: `DataService.Init/Start`, `RemoteService.Configure(CombatRemotes) + Init/Start`,
+`RunRegistry`, `ArenaService`, `ReturnService`. Join sequence: `DataService.LoadAsync` → if nil,
+safe mode as in the hub → read `player:GetJoinData().TeleportData` (hint) → in Studio, or when
+the hint is missing, use Workspace attributes `DebugMission` (string, default `"village"`) and
+`DebugOverdrive` (boolean) → `Combat.MissionUnlocked` against the **profile**; refused →
+`ReturnService.SendHome(player, "locked")` → otherwise `ArenaService.Admit(player, mission, overdrive)`
+(spawns at the lobby pad, sets `Humanoid.MaxHealth/Health = Armory.MaxHp`, fires `RunState lobby`),
+`EconomyService`-style snapshot: the combat place sends `StateChanged` Snapshot with
+`plotIndex = 0`, `eraName = mission.eraName`, `incomePerSecond = 0`, `persistedIncomePerSecond = state.incomeAtSave`, `gearPower`.
+A 1 Hz Heartbeat accumulator adds to `state.combat.expeditionSeconds` for every admitted player.
+`RequestLeave` / `ReturnService.SendHome`: fire `RunState summary`, `DataService.Release(player)`,
+then `TeleportAsync(hubPlaceId, {player})` with teleport data `{ summary = RunSummary }` (pcall, 3
+attempts; `hubPlaceId == 0` or Studio → stay, toast). PlayerRemoving → `DataService.Release`.
+`RunRegistry`: MemoryStore sorted map `Combat.json registry.mapName`, key `tostring(hostUserId)`,
+value `ActiveRun` (with `accessCode` from `TeleportData`/`game.PrivateServerId` when available),
+`SetAsync` with `ttlSeconds` on admit and every wave, `RemoveAsync` when the last player leaves;
+every call pcall + 3 retries + warn; Studio → no-op. Studio levers (combat place, 1 Hz tick,
+`RunService:IsStudio()` only): `GrantMaterials` (number → that many of the mission's material to
+every loaded player), `GrantValor` (number). Hub gets the same two levers in `ArmoryService`.
+Nothing in `src/combat` writes `lastSeen`, `incomeAtSave`, `cash` (C0) or `slots`.
+
+## Hub client (ui-engineer)
+
+- `TopBar.SetPower(power: number?)` draws `⚔ <Format.Cash-style short number>` beside income;
+  nil hides it (no Armory config). Fed from `UIController.refreshAll` via the model's `gearPower`
+  (Snapshot and Delta both carry it).
+- `BottomBar` gains keys `armory` and `expedition` (icons ⚔ and 🗺), hidden when the respective
+  config is nil. `PanelKey` gains `"armory" | "expedition"`.
+- `ArmoryPanel.new(screenGui, { armoryConfig, onBuy(slot), onAscend(slot), onClose })` with
+  `Refresh(state: PlayerState, persistedIncomePerSecond: number)`, `FlashSlot(slot)`; two rows
+  (Melee, Ranged): current weapon name + tier, damage, "+HP", next tier's line
+  `"Tier 4 · 20 Steel · unlocks at 1K/s (you: 620/s)"`, Buy button (disabled state + reason
+  colour: locked = amber, insufficient = red), materials wallet strip (one chip per band), a Max
+  HP readout above the rows, Ascend row only when `rebirthCount ≥ ascension.requiresRebirth`.
+  All intents fire the remotes; the panel never computes affordability for the server — it uses
+  `Armory.CanBuy` only to colour the button.
+- `ExpeditionPanel.new(screenGui, { missions, placesConfig, combatConfig, onDepart(missionId, overdrive), onJoin(hostUserId), onRefreshRuns(), onClose })`
+  with `Refresh(state, gearPower)`, `SetRuns(runs)`: one tile per mission (locked above
+  `highestEra`), "Recommended ⚔ N — you ⚔ M" coloured green (≥ 1.0), amber (≥ 0.7), red;
+  Overdrive toggle visible when `rebirthCount ≥ overdrive.requiresRebirth`; "Active runs" list
+  with Join buttons (asks `RequestRunList` on open and every 10 s while open). All tiles disabled
+  with the message when `combatPlaceId == 0`.
+- `onActionResult` handles the four new actions (flash + toast + `insufficientFunds` sound).
+- Layout checked at 375×667 portrait and 812×375 landscape, one panel open at a time via the
+  existing dock.
+
+## Combat client (ui-engineer, `src/combat/client`)
+
+`Main.client.luau` registers `CombatUIController` and reuses `SoundController` from the hub tree
+**by copy** (`src/combat/client/Controllers/SoundController.luau` is a verbatim copy; report the
+dedupe as a follow-up). `CombatUIController`: `LoadScreen` copy for safe mode, `CombatHud` (top:
+mission name, wave "Lobby" / "Wave 3 / 10", tempo dot; bottom-left: HP bar from
+`Humanoid.Health/MaxHealth`; party list with HP bars; Ready button in lobby; Return button always),
+`SummaryCard` (fires on `RunState summary`; Return button → `RequestLeave`). No combat input in C0.
+
+## `tools/sim_combat.py` (economy-designer)
+
+Mirrors `Armory.luau` and `Combat.luau` function-for-function (same names in snake_case), loads
+the four configs, and imports `simulate_era`/config loaders from `sim_economy.py` to obtain the
+greedy player's income/s over time per era. `--check` prints one verdict line per assertion and
+exits 1 on any failure:
+1. For every tier: `unlockRate` is non-decreasing with tier and each band's first tier unlocks
+   inside its era (the greedy player's income/s crosses it before the era ends).
+2. At each era's median greedy income/s, the highest unlocked weapons give a Gear Power ≥ that
+   era's `recommendedPower` (only Village exists in C0; skip missing missions with a note).
+3. A modelled run (DPS = melee damage × chain avg / window avg × 0.7 hit rate + ranged damage /
+   cooldown × 0.5 uptime; TTK per enemy = hp / DPS; wave time = count × TTK / party) at
+   recommended power finishes waves 1–10 inside `targetMinutes` ±50 %.
+4. Total run cash at recommended power (fixed per enemy × rewardMult × bosses) ≤ 25 % of the
+   era's remaining slot cost at that point in the greedy run.
+5. `ContributionShares` with a 10:1 damage duo gives the veteran ≥ 75 %.
+6. `AwayEfficiency` equals the base efficiency at 0 expedition seconds and the expedition
+   efficiency when the whole absence was an expedition.
+`docs/BALANCE.md` gains a "C0 — Armory unlocks" table (tier → unlock time in the greedy run).
+
+## Waves
+
+1. luau-engineer ∥ ui-engineer ∥ economy-designer (all Opus). ui-engineer codes against the
+   types in this section; `Types.luau` is luau-engineer's, so any missing field is reported, not
+   added.
+2. roblox-reviewer → qa-runner (`stylua --check src`, `selene src`, both `rojo build`s, both
+   sourcemaps + `luau-lsp analyze` with `tools/types/globalTypes.d.luau`, `py tools/sim_economy.py --check`,
+   `py tools/sim_combat.py --check`, `py tools/assets/gen_templates.py --check`,
+   `py tools/gen_asset_manifest.py --check`) → docs-keeper.
+
+## Definition of done (C0)
+
+- Both builds succeed; hub behaviour with `Places.json` ids at 0 is unchanged except the new
+  Power readout, Armory and Expedition panels (tiles disabled with the message).
+- A fresh profile migrates to v5; a v4 profile gains `combat` with `highestEra = era`.
+- Buying Wooden Sword with 10 Timber (via the `GrantMaterials` lever) raises Gear Power and the
+  Armory's Max HP readout; buying above the income gate returns `locked`; Ascend is hidden at
+  rebirth 0 and refused server-side.
+- `build/combat.rbxl` opened in Studio with `DebugMission = "village"`: loads the same profile
+  (mock in Studio), shows the lobby HUD with the player's HP = `Armory.MaxHp`, Ready and Return
+  work, `expeditionSeconds` ticks, and Return with `hubPlaceId = 0` stays with a toast.
+- On a published pair of places: Depart → arrive → Return round-trip keeps cash and levels, and
+  the welcome-back card pays the away time at `expeditionEfficiency`.
+- `py tools/sim_combat.py --check` passes; `sim_economy.py --check` output is unchanged.

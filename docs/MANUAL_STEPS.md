@@ -10,6 +10,9 @@ From Git Bash instead, prefix each command with:
 export PATH="$HOME/.rokit/bin:$PATH"
 ```
 
+Creator Hub metadata for launch (icon, thumbnails, name, description, genre, maturity, devices) is
+its own checklist: `docs/DISCOVERY_CHECKLIST.md`. Do it at M10 before going public.
+
 ---
 
 ## M0 — Scaffold
@@ -137,11 +140,11 @@ back to a tinted placeholder box automatically. Import meshes whenever you have 
 breaks if you stop partway. Full list of what to import: `docs/ASSET_MANIFEST.md` (regenerate
 it any time with `py tools/gen_asset_manifest.py` after editing an era config).
 
-- [ ] 2. **Import scale — pick ONE and record it here before importing anything:**
+- [x] 2. **Import scale — pick ONE and record it here before importing anything:**
       `1 Kenney unit = _____ studs` (fill in once you've imported a standard house and confirm
       it looks about **8 studs wide** in Studio; reuse the exact same scale for every kit and
       every era so all four eras sit at a consistent size).
-- [ ] 3. For each model in `docs/ASSET_MANIFEST.md`:
+- [x] 3. For each model in `docs/ASSET_MANIFEST.md`:
       1. Studio → **Avatar** tab (or Insert) → **3D Importer**.
       2. Load the kit's **FBX or OBJ** file (from the suggested Kenney pack in the manifest's
          `Kit` column).
@@ -592,6 +595,9 @@ junction, bend, lamp, vehicle). Props are per-era too, but templates land under
 `ServerStorage`, so the client can clone them itself). `Assets.json` gains a `props` table
 alongside the existing per-slot table — still generated-only, never hand-edit it.
 
+**Paths have their own pipeline — see section 6 below** (`tools/paths/` + `upload_paths.py` →
+`templates/_paths/` → `ReplicatedStorage/Assets/Paths`). Sections 1–4 are props only.
+
 ### 1. Nothing new to set up
 
 - [x] 1. Same Open Cloud credentials as M3/M7 (`.env` at the repo root) — nothing new to create.
@@ -650,28 +656,157 @@ Run in this order from the repo root; every step is idempotent, same as M7.
 - [x] 11. No new game passes or developer products this milestone — M9 doesn't touch
       monetization.
 
-### 6. Wave 1c — ribbon paths (EditableMesh)
+### 6. Wave 1d — baked paths (the pipeline, per era)
 
-- [x] 13. Path texture generated, uploaded and harvested 2026-09-17 (Village: asset
-      129735535354317, image 115163704776256). To regenerate or add an era:
+Paths are baked meshes: two textures and two meshes (`Fill`, `Rim`) per piece, uploaded as Model
+assets and cloned by the client. **Nothing here needs EditableMesh/EditableImage, ID verification
+or the Creator Dashboard "Enable Mesh / Image APIs" toggle** — those are banned in this project and
+the old `upload_path_texture.py` step is gone.
+
+- [x] 13. **Village and Boomtown done 2026-09-18** — 91 pieces (58 Village, 33 Boomtown), 186
+      assets uploaded, harvested in **one paste**, templates in `templates/_paths/<Era>/`.
+- [ ] 14. **To re-bake an era, or add one** (`<Era>` = `Village` or `Boomtown`), from the repo root,
+      in this order; every step is idempotent:
       ```bash
-      "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/paths/texture.py --era Village
-      py tools/assets/upload_path_texture.py --era Village --dry-run
-      py tools/assets/upload_path_texture.py --era Village
+      "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/paths/texture.py --era <Era>
+      py tools/paths/bake.py --era <Era> --list    # also a GATE: exits 1 if the client's piece
+                                                  # ids or arcs no longer match the baked meshes
+      py tools/paths/bake.py --era <Era> --dry-run
+      py tools/paths/bake.py --era <Era>
+      py tools/assets/upload_paths.py --era <Era> --dry-run
+      py tools/assets/upload_paths.py --era <Era>
       py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip
       ```
-      Paste in the Studio command bar (Edit mode), wait for `[HARVEST-DONE]`, copy Output, then
-      `py tools/assets/harvest.py` and `py tools/gen_asset_manifest.py`. A brand-new Decal can sit in
-      moderation for a few minutes; re-run the paste if the merge says so.
-- [ ] 14. **Creator Dashboard — required for ribbons in the published game.** Studio does not
-      enforce this, so ribbons work in Studio either way. The experience owner (for a group game,
-      the group owner) must be **13+ and ID verified**. Then: create.roblox.com → Creator
-      Dashboard → the experience (or your account/group settings) → turn on **Enable Mesh / Image
-      APIs**. Without it, the published game silently draws Beam paths instead.
+      1. `texture.py` writes `assets/paths/<Era>_fill.png` and `<Era>_rim.png`.
+      2. `bake.py --list` prints the piece table; `--dry-run` writes nothing; the real run writes
+         one GLB per mesh to `assets/build/paths/<Era>/` plus `<Era>.json`.
+      3. `upload_paths.py` uploads meshes and both textures and records ids in
+         `src/shared/Config/Assets.json` (generated-only, never hand-edit). Re-run on Roblox's
+         transient "Unknown Error"; a non-zero id is never re-uploaded.
+      4. **Open Cloud caps an asset's display name at 50 characters** — the uploader falls back to
+         an `ECT_…` prefix and hard-caps, so long piece ids are safe.
+- [ ] 15. **The one Studio step — the harvest paste.** The command in step 14 already put the
+      snippet on the clipboard (path pieces and path textures ride along with buildings; `--props`
+      is only needed for props):
+      1. Studio, **Edit mode, not Play** → Command Bar → paste → run → wait for `[HARVEST-DONE]`.
+      2. Output panel → right-click → **Select All** → **Ctrl+C**.
+      3. `py tools/assets/harvest.py` — **no argument**: it reads the clipboard directly, so the
+         huge Output never has to be pasted into a file anywhere.
+      4. Anything the paste missed is listed and left alone; re-run 1–3 for the rest.
+- [ ] 16. **Templates, manifest, build:**
+      ```bash
+      py tools/assets/gen_templates.py --paths && py tools/assets/gen_templates.py --check
+      py tools/gen_asset_manifest.py
+      rojo build -o build/test.rbxl
+      ```
+      `--paths` writes `templates/_paths/<Era>/<pieceId>.rbxmx` (`L<n>_<n>` lane stretches,
+      `SP_<slotId>` building paths) → `ReplicatedStorage/Assets/Paths/<Era>/<pieceId>`. In Studio
+      each one is a Model with a `Rim` and a `Fill` MeshPart, textured in Edit mode.
 
 ### 5. Wave 2 (Metropolis, Orbital Colony, `cityDetail` setting) — not started
 
-- [ ] 12. Repeats sections 2–3 above for Metropolis and Orbital Colony once their buildings ship
-      (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no manual/Studio steps
-      beyond the same pipeline run.
+- [ ] 12. Repeats sections 2–3 **and section 6** above for Metropolis and Orbital Colony once their
+      buildings ship (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no
+      manual/Studio steps beyond the same pipeline run and one harvest paste.
 
+
+---
+
+## C0 — Expeditions foundation (second place, Armory, teleport handoff)
+
+Combat lives in a **second place of the same experience** ("Expeditions"), built from
+`combat.project.json` → `build/combat.rbxl`. Everything below is one-time plumbing: create the
+place, paste its id, publish both places. **Studio can never teleport**, so Depart/Return only
+really work after this section — in Studio they stop with a toast, which is the expected result in
+`docs/PLAYTEST.md` "C0" sections 3 and 6. Sections 1–8 of that checklist can be run **before** any
+of this; only section 9 needs a published pair.
+
+### 0. Live sync (Rojo) for the second place
+
+Rojo serves one project per process and both default to port 34872, so run the combat place on
+its own port and point the Studio plugin at it from the Expeditions window:
+
+```
+rojo serve                                   # hub, port 34872
+rojo serve combat.project.json --port 34873  # Expeditions
+```
+
+Both windows can stay connected at once; edits under `src/shared` and `src/server/Services` sync to both.
+
+### 1. Create the second place
+
+- [x] 1. Go to **create.roblox.com** → **Creations** → **Experiences** → *Era City Tycoon*.
+- [x] 2. Open the **Places** tab (left sidebar, under the experience) → **Create Place**.
+- [x] 3. Name it exactly **`Expeditions`**. Leave every other setting default; it inherits the
+      experience's settings, so it is the same experience for data and teleports.
+
+### 2. Collect the two place ids
+
+- [x] 4. **Hub place id** (140344407905104, pasted 2026-09-17) (the start place): Places tab → the row whose name matches the experience
+      → **⋯** → **Copy Place ID**. This is the id the Expeditions place teleports players home to.
+- [x] 5. **Expeditions place id** (74210626673425, pasted 2026-09-17): same **⋯** → **Copy Place ID** on the `Expeditions` row.
+      (Both ids are also in each place's URL: `.../<placeId>/...`.)
+
+### 3. Paste the ids into config
+
+- [x] 6. Open `src/shared/Config/Places.json` and replace the two zeros:
+      ```json
+      {
+      	"version": 1,
+      	"hubPlaceId": <hub place id>,
+      	"combatPlaceId": <Expeditions place id>
+      }
+      ```
+      Numbers only, no quotes, no trailing comma. (Or just send both ids to Claude Code and it
+      pastes them.) While either id is `0` the hub shows the Expedition tiles disabled with
+      "Publish the Expeditions place first" — that is the intended degrade, not a bug.
+- [x] 7. Rebuild **both** places so they carry the ids:
+      ```
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      ```
+
+### 4. Publish both places
+
+- [ ] 8. **Hub:** open `build/test.rbxl` → **File → Publish to Roblox** (it already maps to the
+      start place; if Studio asks, pick *Era City Tycoon* → the start place, **Overwrite**).
+- [ ] 9. **Expeditions:** open `build/combat.rbxl` → **File → Publish to Roblox As…** → choose
+      *Era City Tycoon* → **`Expeditions`** → **Create/Overwrite**. Double-check the place name in
+      the dialog: publishing the combat build over the **start place** replaces your hub.
+- [ ] 10. Re-publish **both** after any future rebuild that touches shared code — they share
+      `src/shared` and `src/server/Services`, so a hub-only publish leaves the two out of sync.
+
+### 5. API services (the run registry needs them)
+
+- [ ] 11. In either place: **Home → Game Settings → Security** → **Enable Studio Access to API
+      Services** ON. This is an **experience-wide** setting and both places share it. It only
+      affects Studio (published servers always have DataStore/MemoryStore access), but the C0
+      playtest depends on it: with it OFF, Studio's hub and Expeditions sessions use separate mock
+      profiles and nothing carries between them.
+- [ ] 12. Nothing to enable for teleports: both places belong to the same experience, so
+      `TeleportAsync` needs no "allow third party teleports" setting.
+- [ ] 13. Nothing to enable for MemoryStore either — the `ActiveRuns` sorted map and the
+      server-only `ActiveRunsCodes` hash map work on any published place. In Studio the registry is
+      a deliberate no-op, which is why the hub's ACTIVE RUNS list is always empty there.
+
+### 6. The published round trip (do it once, right after publishing)
+
+- [ ] 14. Run `docs/PLAYTEST.md` "C0" **section 9** on the live game: Depart → lobby → Return, and
+      confirm cash/era/slot levels/Power survive the round trip and the welcome-back card pays the
+      away time at full rate.
+- [ ] 15. For the ACTIVE RUNS check in that section you need a **second account that is friends
+      with your main** (a phone, a second browser, or a friend). The list is filtered to same-server
+      players and friends, so a stranger's run will never appear — that is by design.
+
+### 7. Nothing new to create on the Creator Hub
+
+- [ ] 16. No game passes and no developer products this milestone — C0 doesn't touch monetization.
+      The Armory is bought with in-game materials only.
+
+### 8. Not possible in Studio (for the record)
+
+- [ ] 17. Studio cannot teleport between places. Both Depart (hub) and Return (Expeditions) detect
+      Studio and stop with a toast, keeping the profile where it is. The `TeleportInitFailed`
+      recovery paths therefore cannot be exercised in Studio at all — they were reviewed in code
+      and have no playtest step.

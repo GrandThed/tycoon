@@ -1,6 +1,6 @@
 ---
 name: review-workflow
-description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, scratchpad build trick, py not python), milestone baselines M0–M7 + ProfileStore facts, and recurring bug patterns to recheck (esp. new yields in Main.onPlayerAdded)
+description: How to run read-only reviews in this repo (git since 2026-09-08, rokit toolchain, two-project rojo/luau-lsp passes since C0, py not python), milestone baselines M0–M9 + C0 + ProfileStore facts, and recurring bug patterns to recheck (new yields in Main.onPlayerAdded, TeleportInitFailed, in-flight guards on yielding remotes)
 metadata:
   type: project
 ---
@@ -263,3 +263,57 @@ module-level and disconnects at 0 jobs, beam tweens cancelled in `destroyBeams`.
 - Studio-only unknowns to keep listing until Ben confirms: MeshPart.TextureContent alpha really blends (vs
   showing part Color) on an EditableMesh-backed MeshPart; live add/remove faces after CreateMeshPartAsync
   render; CCW-from-+Y is front face; flat Beam orientation (attachment Y = face normal) and CurveSize1 sign.
+
+**M9 wave 1d (2026-09-18, baked path meshes, SHIP with 3 Majors — client-only).** EditableMesh/Beam
+renderers deleted cleanly (grep for `ribbon|beam|Editable` in src is clean). `PathRenderer` = `baked`|`parts`;
+templates `ReplicatedStorage/Assets/Paths/<Era>/<pieceId>` (Rojo `globIgnorePaths` now lists `templates/_paths`
+too — verified in a built `.rbxlx`: 91 pieces, all under ReplicatedStorage, none under ServerStorage).
+Templates bake in heights + the importer's 180° Y turn and have **no PrimaryPart** (WorldPivot identity), so
+`clone.WorldPivot = CFrame.identity; clone:PivotTo(plotFrame)` and `showRim`'s `plotFrame * source.CFrame`
+agree — re-verify both if a template ever gains a PrimaryPart.
+- **Read-only verification that found everything here:** import `tools/streetplan.py` + `tools/paths/network.py`
+  as modules from a scratch script and re-derive the client's allocator and arcs. `py tools/paths/bake.py --era
+  <Era> --list` writes nothing and prints the exact piece table (Village 58 = 34 stretch + 24 spur, Boomtown
+  33 = 15 + 18; matches `templates/_paths/` exactly). Luau connector phase key `96 + 1-based id` == python
+  `97 + 0-based sid` — equal only because the two stretch orderings match line for line; re-check together.
+- **Recurring pattern (wave 1d, new):** when geometry moves from the client to an offline bake, every arc /
+  index the client computes must be re-derived from the *tool*, not just self-consistent. `RoadGraph.chainArc`
+  forces a polyline's own end points to the chain's FullSpan ends; `network.py` `arc_at` just projects. Village
+  L3_1 differs by 1.86 studs (L4_1 by 0.08) → dust start and one vehicle-lane endpoint sit off the baked mesh.
+- **Recurring pattern (wave 1d):** a piece id the client can ask for but the bake never emits drops the WHOLE
+  plot to the fallback renderer (`addPiece` false → `fallback`). `pathPieceIds` emits `SP_<slotId>` without
+  checking `network.spurChains[slotId] ~= nil`, while `buildLanes` does check — a derived 1-point spur route
+  (slot anchor already on the spine) would trip it. Village/Boomtown dodge it via explicit 1-point `spur`
+  overrides (P2). Check the guard symmetry whenever a new era gets `road.paths`.
+- Wave-1b's "py mirror the allocator" Major recurred: `budget.pathPieces` (120) has no `streetplan.py` check
+  (it only checks roadPieces/roadPiecesNear). Reserved today: Village 58, Boomtown 33 — headroom, not a breach.
+  Spurs are allocated *after* every stretch, so an overrun drops paths to buildings first.
+
+**C0 baseline (2026-09-17, Expeditions foundation — SHIP with 1 Critical + Majors).** Second place
+(`combat.project.json`, `src/combat/**`) shares `src/shared` AND `src/server/Services` (hub-only
+services inert); `ProfileSchema.luau` is the single schema source (v5, `combat` profile) required by
+DataService in both trees; `RemoteService.Configure(defs)` must precede `Init` (HubRemotes /
+CombatRemotes own the tables; Init without Configure creates nothing and warns). Verification that
+worked: `rojo build` + `rojo sourcemap` for BOTH project files, then `luau-lsp analyze` **once per
+tree** (`src/server src/client src/shared` with the hub map, `src/combat src/shared` with the combat
+map — pointing the hub map at src/combat yields bogus "Unknown require" noise), plus
+`py tools/sim_combat.py --check` (six assertions, prints a verdict line each).
+- **Recurring pattern (C0, highest-value here):** a teleport handoff that releases the profile
+  before `TeleportAsync` must handle **`TeleportService.TeleportInitFailed`**, not just a pcall
+  around the call. TeleportAsync only throws on argument/validation errors; the common runtime
+  failures arrive on that event, so the pcall-only path leaves the player in the source place with
+  no profile, no plot and only a "Departing…" toast. Recheck every place-to-place hop.
+- **Recurring pattern (C0):** any remote whose handler yields for seconds (reserve + teleport,
+  MemoryStore, friend checks) needs a per-player in-flight guard, not just a token bucket — a
+  1/s bucket still admits a second thread while the first is mid-yield (double ReserveServer,
+  double release, and a `rejoin` that re-locks the ProfileStore key mid-teleport).
+- **Recurring pattern (C0):** a fan-out remote must cap its per-call web calls. `RequestRunList`
+  walks up to `REGISTRY_PAGE_SIZE` (50) registry entries and calls `IsFriendsWithAsync` on each;
+  its `Players:GetPlayerByUserId(host)` fast path can never hit (the host is in the other place).
+- Reserved-server fact: `game.PrivateServerId` is NOT a `ReservedServerAccessCode`, and teleport
+  data is client-readable (`TeleportService:GetLocalPlayerTeleportData`), so the access code can
+  travel in neither. Any join-in-progress design has to route it server-side.
+- `src/combat/client` holds verbatim copies of Create/Theme/Toast/Motion/LoadScreen/SoundController
+  (only SoundController was sanctioned by the contract); both project files mount `src/shared`, so
+  `src/shared/UI` is the dedupe. Combat place has no settings surface, so it must call
+  `SoundController.ApplySettings(snapshot.state.settings)` or the player's mute is ignored.

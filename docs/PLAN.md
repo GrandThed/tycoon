@@ -27,8 +27,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
 - [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
   contracts, layouts, pipeline, blueprints, client and prop uploads, harvest and 18 prop
-  templates shipped 2026-09-16; Ben's Studio playtest is still open — see "M9" below; wave 2
-  (Metropolis/OrbitalColony + `cityDetail`) not started)
+  templates shipped 2026-09-16; **wave 1d baked paths shipped and approved in Studio
+  2026-09-18** — 91 pieces for Village + Boomtown; the full M9 checklist re-run is still open —
+  see "M9" below; wave 2 (Metropolis/OrbitalColony + `cityDetail`) not started)
 
 ---
 
@@ -587,10 +588,13 @@ a few vehicles move along the roads — without a measurable frame cost. Decided
 tier 5 at ~80 % of the era's target duration.
 
 **Layers (in build order):**
-- **Roads** — hand-drawn "spine" polylines per era in the layout (2–5, revealed one per tier);
-  auto-routed L-shaped spurs from each owned building's pad to the spine (appear with the
-  building). Surfaces are plain Parts with an era material (dirt / asphalt / metal); kit pieces
-  only at junctions, bends and lamps (Boomtown/Metropolis, city-kit-roads). ≤ 60 parts per plot.
+- **Roads / paths** — hand-drawn "spine" polylines per era in the layout, plus a spur from each
+  owned building. *Amended in wave 1b:* roads **grow with buildings** (the visible network is the
+  shortest paths from the plot entrance to every owned building's join), and a spur starts under
+  its building, not at the pad edge. *Amended in wave 1d:* the surfaces are **baked meshes**
+  (Village dirt, Boomtown asphalt + concrete kerb), one Model per piece, cloned from
+  `ReplicatedStorage/Assets/Paths`; ≤ 120 pieces per plot; kit junction/bend tiles are dropped for
+  Boomtown. Plain Parts remain as the silent fallback.
 - **Trees** — one 4-stage `TreeGrowing` prop per era (nature-kit for Village, suburban tree/planter
   for the city eras; none in Orbital). Seeded scatter inside layout `treeZones`, rejecting points
   near slots, roads, lots and edges; each tree has a birth tier and grows a stage per tier after
@@ -625,8 +629,8 @@ scriptable). Prop templates carry the no-collision flags. One harvest paste per 
    `cityDetail` setting.
 
 **Done when** (full list in INTERFACES): a Village plot goes from bare ground to roads, growing
-trees, cottages, a plaza and two moving carts by tier 5; a Boomtown plot has asphalt, kit
-junctions, lamps and four cars; nothing blocks the player or a prompt; deleting the config or any
+trees, cottages, a plaza and two moving carts by tier 5; a Boomtown plot has asphalt, kerbs,
+lamps and four cars; nothing blocks the player or a prompt; deleting the config or any
 template leaves the game playable; era advance rebuilds; the map stays within the part budget and
 the traffic step under 0.2 ms; format, lint, build, `gen_templates.py --check` and the sim are
 clean.
@@ -643,11 +647,47 @@ filler cottages, plaza, cart) and Boomtown prop blueprints (tree, 4 filler house
 junction, bend, lamp, 3 vehicles), all uploaded to Open Cloud (24 stages). Reviewer verdict SHIP,
 QA green (stylua/selene/luau-lsp/`rojo build`/`sim_economy.py --check`).
 
+**The path look took four Studio rounds with Ben** (1b straight Parts → 1b meandering Pebble trail
+→ 1c EditableMesh ribbon → **1d baked meshes**). The ribbon died on a platform blocker: EditableMesh
+and EditableImage need the experience owner to be 13+ and **ID verified** in published games, and
+Ben will not verify — both APIs are now **banned in this project**, and any account/platform gate
+must be raised as a blocker before a design depends on it. The approved recipe is the `tools/pathtest/`
+bake-off winner **"C3"** (Ben: "C3 is excellent", then "looks really good, lets commit and close it"):
+baked meshes uploaded as Models, **world-planar UVs** (u = x/11, v = z/11 in plot coords, the same on
+every piece) over a **fully opaque, 2D-seamless** stylised dirt/asphalt texture, so overlaps sample the
+same texel and junction seams and z-fighting are invisible; the irregular edge is cut into the mesh
+outline, and a darker **rim** ribbon 0.4 studs wider sits under the fill.
+
+**Shipped (wave 1d — baked paths, 2026-09-18):**
+- **Pipeline:** `tools/paths/{texture,bake,network,planargeom}.py` and
+  `tools/assets/upload_paths.py`; `harvest.py`/`gen_templates.py --paths`/`gen_asset_manifest.py`
+  extended; `Assets.json` v3 `paths` table. The wave-1c `upload_path_texture.py` and the
+  `tools/pathtest/` bake-off harness are deleted.
+- **Assets:** 91 pieces (58 Village, 33 Boomtown), 186 assets uploaded and harvested in one paste
+  on 2026-09-18; templates in `templates/_paths/<Era>/<pieceId>.rbxmx` →
+  `ReplicatedStorage/Assets/Paths`. Piece ids are `L<polylineIndex>_<stretchIndex>` (lane stretches)
+  and `SP_<slotId>` (building paths), derived from the layout so every client agrees.
+- **Client:** `PathRenderer` keeps two modes, `baked` and `parts`; the EditableMesh ribbon and the
+  Beam fallback are gone, and `PathRibbon` is centreline-only. A new path appears **rim first, fill
+  after `paths.rimLeadSeconds`, with a dust burst over `paths.dustSeconds`**; far plots drop rims
+  (`paths.rimNearOnly`) and `budget.pathPieces` is 120 per plot. A missing `templates/_paths`, era
+  folder or single piece template, or `road.renderer: "parts"`, silently falls back to the Pebble
+  Parts trail.
+- **Boomtown dropped the kit junction/bend tiles** (`junctionProp`/`bendProp` → `null`): a kit
+  tile's own texture cannot match the planar asphalt. The blueprints stay in the repo, unused;
+  Metropolis still names them and will need the same ruling in wave 2.
+- **Watch item:** path triangles are ~33k (Village) / ~37k (Boomtown) per fully-owned plot, so
+  ~350k at ten plots — the number to watch before wave 2 doubles the era count.
+
 **Carried forward (owners assigned):**
-- [x] **Ben, before playtest:** harvest paste done 2026-09-16 (24 stages, 0 failed); 18 prop
+- [x] **Ben, before playtest:** prop harvest paste done 2026-09-16 (24 stages, 0 failed); 18 prop
   templates generated and committed.
-- **Ben, after templates land:** run `docs/PLAYTEST.md` "M9 — City dressing" in Studio; this ticks
-  M9 `[x]` above once passed.
+- [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
+  generated and committed; baked paths seen and approved in Studio.
+- **Ben, next:** re-run `docs/PLAYTEST.md` "M9 — City dressing" end to end in Studio (the path
+  steps 5b–5f, 20b and 23b–23c are new); this ticks M9 `[x]` above once passed.
+- **lead, before wave 2:** re-cut the ≤ ~1300-part budget line, which predates baked paths
+  (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail).
 - **lead / economy-designer, wave 2:** Metropolis and Orbital Colony street plans + prop
   blueprints (after M8's Metropolis/Orbital buildings ship) and the persisted `cityDetail` setting
   — contracts already frozen in INTERFACES, not started.
@@ -676,3 +716,75 @@ base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side
 
 **None.** The spec is complete enough to start M0 with the defaults in §2. If any default above
 is wrong, say so at the M0 gate and it's a config/doc change, not a rework.
+
+## C0 — Expeditions foundation: second place, Armory, teleport handoff
+
+**Goal:** the plumbing for combat. A second Roblox place ("Expeditions") built from
+`combat.project.json` shares `src/shared` and the same ProfileStore profile; the hub gains the
+Armory (weapons only, two slots, weapons set max HP, tiers unlock by persisted income/s and cost
+era materials) and an Expedition panel (mission tiles, Overdrive toggle, active-runs list); the
+hub releases the profile and teleports to a reserved server; the combat place loads the profile,
+shows a lobby HUD and returns. No enemies until C1. Decided with Ben 2026-09-17 (contracts:
+`docs/INTERFACES.md` "C0 contracts"; memory: `.claude/memory/combat-2026-09-17.md`).
+
+**Rulings that shape everything:**
+1. Server owns everything; teleport data is a hint, never an entitlement.
+2. One profile, two places: hub releases before `TeleportAsync`, combat place loads; never `Steal`.
+3. Weapons only, no armor; `MaxHp = baseHp + hp(melee) + hp(ranged)`.
+4. Cash and materials are fixed per enemy (C1); no RNG anywhere.
+5. Every subagent on the combat milestones runs on Opus.
+
+**Milestones:** C0 foundation → C1 Village expedition (arena, enemies, combo/ranged/abilities,
+pacing director, feedback) → C2 co-op (party, join-in-progress, contribution split, Mentor
+bonus) → C3 other eras, Ascension forge, Overdrive, full-lap balance. Stop after each for Ben's
+playtest. M10 stays reserved for icons/thumbnail.
+
+**Tasks (wave 1, parallel):** luau-engineer — Rojo second project, `ProfileSchema`, schema v5,
+`RemoteService.Configure`, `HubRemotes`, `ExpeditionService`, `ArmoryService`, `EconomyService`
+additions, `src/combat/server/**`, `Types`, `Catalog`, pure `Armory.luau` + `Combat.luau`.
+ui-engineer — Power readout, `ArmoryPanel`, `ExpeditionPanel`, BottomBar keys, `src/combat/client/**`.
+economy-designer — `tools/sim_combat.py`, Armory/mission values, `docs/BALANCE.md` "C0".
+**Wave 2:** roblox-reviewer → qa-runner → docs-keeper.
+
+**Shipped (2026-09-17):** `combat.project.json` → `build/combat.rbxl`, a second place sharing
+`src/shared` and `src/server/Services` with `src/combat/{server,client}`; `ProfileSchema.luau`
+(schema v5, `combat` profile table, `highestEra`) + the `Migrations[4]` step; `RemoteService.Configure`
+and `HubRemotes`; `ExpeditionService` (Depart/Join/RunList, reserved-server access code kept in a
+server-only MemoryStore hash map `ActiveRunsCodes`); `ArmoryService` (RequestBuyGear/RequestAscend,
+income/s gate on the persisted rate, Studio levers `GrantMaterials`/`GrantValor`); `EconomyService`
+(`gearPower` in Snapshot/Delta, `combat` delta, expedition offline efficiency); pure `Armory.luau`
+and `Combat.luau` mirrored by `tools/sim_combat.py` (`--check`, six assertions, green). Combat
+place: `Main.server.luau` (join → same profile → mission from profile, Studio attributes
+`DebugMission`/`DebugOverdrive`), `ArenaService` (code-built lobby pad, HP = `Armory.MaxHp`,
+`RunState` lobby/summary, Ready), `ReturnService` (summary → release → teleport home; stays with a
+toast when `hubPlaceId` is 0 or in Studio), `RunRegistry` (MemoryStore sorted map `ActiveRuns`,
+Studio no-op). Hub UI: "⚔ power" top-bar readout, six-key bottom bar (icon over word), `ArmoryPanel`,
+`ExpeditionPanel` (tiles disabled with "Publish the Expeditions place first" while
+`Places.json combatPlaceId` is 0); combat client lobby HUD, summary card, load screen. Configs:
+`Config/{Armory,Combat,Places}.json` + `Config/Missions/1_Village.json`; balance in `docs/BALANCE.md`
+"C0" (Village run 7:58 at recommended power 60, 151,981 cash ≈ 1 % of the era's remaining cost,
+full tier unlock ladder).
+
+**Review outcome:** 1 Critical — `TeleportInitFailed` was handled synchronously; 5 Majors —
+missing in-flight guards, re-entrant leave, the access code travelling on a client-visible
+channel, no fan-out cap on `RequestRunList`, and teleport-hint values trusted without re-validating
+against the run actually in progress. **All six fixed in wave 2**; reviewer verdict SHIP, QA green
+(stylua, selene, luau-lsp, both `rojo build`s, `sim_economy.py --check`, `sim_combat.py --check`,
+`gen_templates.py --check`).
+
+**Carried forward (owners assigned):**
+- **Ben, before C1:** publish the Expeditions place and paste both ids into
+  `src/shared/Config/Places.json` (`docs/MANUAL_STEPS.md` "C0"), then run `docs/PLAYTEST.md` "C0".
+- **lead, before C1:** dedupe the five UI modules copied under `src/combat/client/UI` (verbatim
+  copies of the hub's; scheduled as the first C1 task).
+- **lead, open rulings for C2:** boss HP vs party size (waves scale count only today, so a
+  4-player party kills a boss ~4× faster — `docs/BALANCE.md` "One boss per boss wave"); and
+  whether the hub's active-runs list stays same-server + friends or widens.
+
+**Known limits at C0:** no enemies or combat until C1; `TeleportInitFailed` paths are
+code-review-only (not reachable from Studio); a working Depart needs both ids in `Places.json`
+plus MemoryStore access; join-in-progress registry entries exist but the hub Join button only
+works on a published pair *and* after C2 wires party logic.
+
+- [x] C0 built and reviewed (definition of done in INTERFACES "C0 contracts")
+- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C0")

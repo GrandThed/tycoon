@@ -97,6 +97,9 @@ type PathData = {
 	stretchChains: { [number]: number }, -- stretch id -> chain index
 	stretchArcs: { [number]: { number } }, -- stretch id -> final arcs at a and b
 	treeLines: { { Vector3 } },
+	-- Baked piece id -> its drawn centreline. Memoised here, not per plot: it is a function of
+	-- this data alone, so every plot of the era shares one copy.
+	pieceCentrelines: { [string]: { Vector3 } },
 }
 
 -- The atomic piece of spine: the part of one polyline segment between two network nodes.
@@ -178,7 +181,6 @@ export type State = {
 	lanes: Lanes?,
 	pathData: PathData?, -- eras with road.paths
 	paths: PathRenderer.Handle?, -- nil: Parts from the start
-	pieceCentrelines: { [string]: { Vector3 } }, -- memoised per baked piece id
 	-- Spurs revealed since the last Flush while PathRenderer draws, and whether any of them
 	-- should appear with the dust effect.
 	pathsDirty: boolean,
@@ -979,6 +981,40 @@ local function stretchNearDistance(state: State, id: number): number?
 	return math.min(a, b)
 end
 
+-- The spine the paths can ever cover: the union of the shortest paths from the entrance to every
+-- routable spur's join node (Wave 1b's growth rule), ranked from the entrance outward. The bake
+-- emits a piece for exactly this union (tools/paths/network.py `visible_stretches`), so the baked
+-- budget is spent over it and nothing else, and the two sides cannot drift into asking for a piece
+-- that was never baked.
+local function pathStretchOrder(state: State): { Ranked }
+	local order: { Ranked } = {}
+	local seen: { [number]: boolean } = {}
+	for _, slotId in state.spurSlotIds do
+		local node = state.routes[slotId].junction.node
+		if node == nil or state.distance[node] == nil then
+			continue
+		end
+		local current = node
+		while current ~= state.entrance do
+			local id = state.parent[current]
+			if id == nil or seen[id] then
+				break -- the rest of the way back to the entrance is in the union already
+			end
+			seen[id] = true
+			local stretch = state.stretches[id]
+			local distance = stretchNearDistance(state, id)
+			-- A stretch whose group missed the straight budget can never be revealed (`reveal`
+			-- stops there), so it must not hold a baked slot either.
+			if distance ~= nil and state.groupAllowed[stretch.group] then
+				table.insert(order, { index = id, distance = distance })
+			end
+			current = if stretch.fromNode == current then stretch.toNode else stretch.fromNode
+		end
+	end
+	table.sort(order, byDistance)
+	return order
+end
+
 -- Budget plan for the whole layout. Straight budget (budget.roadPieces) decides what exists:
 -- spine groups nearest the entrance first (a group is 1 Part, or 2 when its visible part can be
 -- reached from both ends), then spurs by sorted slot id, then bends, then junction tiles. The
@@ -1097,20 +1133,12 @@ local function allocate(state: State): ()
 		end
 	end
 
-	-- Baked pieces: one cloned Model per visible stretch and per drawn spur, spent nearest the
-	-- entrance first (then spurs in sorted slot order) so an overrun never leaves a gap in the
-	-- middle of a path. Decided from the layout, never from what is owned.
+	-- Baked pieces: one cloned Model per stretch of the path union and per drawn spur, spent
+	-- nearest the entrance first (then spurs in sorted slot order) so an overrun never leaves a
+	-- gap in the middle of a path. Decided from the layout, never from what is owned.
 	if road.paths ~= nil then
 		local pathRemaining = budgetValue(budget.pathPieces, straightBudget)
-		local pathOrder: { Ranked } = {}
-		for id, stretch in state.stretches do
-			local distance = stretchNearDistance(state, id)
-			if distance ~= nil and state.groupAllowed[stretch.group] then
-				table.insert(pathOrder, { index = id, distance = distance })
-			end
-		end
-		table.sort(pathOrder, byDistance)
-		for _, ranked in pathOrder do
+		for _, ranked in pathStretchOrder(state) do
 			if pathRemaining <= 0 then
 				break
 			end
@@ -1168,27 +1196,6 @@ local function allocate(state: State): ()
 	end
 end
 
--- The final-curve arc of a network node on a chain. A polyline's own end points map to the
--- chain's ends exactly: a joiner's end was snapped onto its host, so projecting the unsnapped
--- point could land a little way along the curve.
-local function chainArc(
-	network: PathRibbon.Network,
-	chainIndex: number,
-	point: Vector3,
-	polyline: { Vector3 }?
-): number
-	local lo, hi = PathRibbon.FullSpan(network, chainIndex)
-	if polyline ~= nil then
-		local key = keyFor(point)
-		if key == keyFor(polyline[1]) then
-			return lo
-		elseif key == keyFor(polyline[#polyline]) then
-			return hi
-		end
-	end
-	return PathRibbon.ArcAt(network, chainIndex, point.X, point.Z)
-end
-
 local function toPoints(points: { Vector3 }): { PathRibbon.Point }
 	local out: { PathRibbon.Point } = {}
 	for _, point in points do
@@ -1201,7 +1208,8 @@ end
 -- outward: the order the renderer clones them in and a dust burst runs along them.
 pathPieceIds = function(state: State): { string }
 	local ids: { string } = {}
-	if state.pathData == nil then
+	local data = state.pathData
+	if data == nil then
 		return ids
 	end
 	local ranked: { Ranked } = {}
@@ -1218,7 +1226,14 @@ pathPieceIds = function(state: State): { string }
 		table.insert(ids, state.stretches[item.index].pieceId)
 	end
 	for _, slotId in state.spurSlotIds do
-		if state.spurs[slotId] ~= nil and state.pathSpurAllowed[slotId] then
+		-- Only a spur that kept a chain: PathRibbon.Build drops a route that collapses to one
+		-- point, exactly as the bake does, so no mesh was ever baked for it. Asking for that
+		-- template would fail and drop the whole plot to Parts.
+		if
+			state.spurs[slotId] ~= nil
+			and state.pathSpurAllowed[slotId]
+			and data.network.spurChains[slotId] ~= nil
+		then
 			table.insert(ids, SPUR_PIECE_PREFIX .. slotId)
 		end
 	end
@@ -1227,15 +1242,15 @@ end
 
 -- A baked piece's drawn (meandered) centreline in plot-local studs, join end first: a spur runs
 -- from the spine back under its building, a spine stretch from its end nearer the entrance.
--- Memoised: it is a function of the layout, and only the dust effect asks for it.
+-- Memoised on the PathData, which every plot of the era shares; only the dust effect asks for it.
 local function pieceCentreline(state: State, pieceId: string): { Vector3 }?
-	local cached = state.pieceCentrelines[pieceId]
-	if cached ~= nil then
-		return cached
-	end
 	local data = state.pathData
 	if data == nil then
 		return nil
+	end
+	local cached = data.pieceCentrelines[pieceId]
+	if cached ~= nil then
+		return cached
 	end
 	local network = data.network
 	local chain: number?
@@ -1269,7 +1284,7 @@ local function pieceCentreline(state: State, pieceId: string): { Vector3 }?
 	for _, point in PathRibbon.Centreline(network, chain, from, to, state.width) do
 		table.insert(points, Vector3.new(point[1], 0, point[2]))
 	end
-	state.pieceCentrelines[pieceId] = points
+	data.pieceCentrelines[pieceId] = points
 	return points
 end
 
@@ -1320,6 +1335,7 @@ local function pathDataFor(state: State): PathData
 		stretchChains = {},
 		stretchArcs = {},
 		treeLines = {},
+		pieceCentrelines = {},
 	}
 	for id, stretch in state.stretches do
 		local connector = stretch.group > segmentGroups
@@ -1331,13 +1347,18 @@ local function pathDataFor(state: State): PathData
 		end
 		local arcs: { number }
 		if connector then
+			-- A connector chain is the stretch itself, so its whole span is the piece; the bake
+			-- lands on the same two numbers (verified to 3e-14 over both eras).
 			local lo, hi = PathRibbon.FullSpan(network, chain)
 			arcs = { lo, hi }
 		else
-			local polyline = state.polylines[stretch.polyline]
+			-- Projected, never forced onto the chain's ends. tools/paths/network.py `arc_at`
+			-- projects too, and a polyline end that hosts a join has been snapped and re-splined:
+			-- forcing it put Village L3_1 1.86 studs off the baked piece, which the dust burst and
+			-- the lane a cart turns onto would both have shown.
 			arcs = {
-				chainArc(network, chain, stretch.a, polyline),
-				chainArc(network, chain, stretch.b, polyline),
+				PathRibbon.ArcAt(network, chain, stretch.a.X, stretch.a.Z),
+				PathRibbon.ArcAt(network, chain, stretch.b.X, stretch.b.Z),
 			}
 		end
 		data.stretchChains[id] = chain
@@ -1426,7 +1447,6 @@ function RoadGraph.new(context: Context, near: boolean): State
 		lanes = nil,
 		pathData = nil,
 		paths = nil,
-		pieceCentrelines = {},
 		pathsDirty = false,
 		pathsAnimate = false,
 	}

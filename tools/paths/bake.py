@@ -3,7 +3,7 @@
 
     py tools/paths/bake.py --era Village                 # all pieces
     py tools/paths/bake.py --era Village --piece SP_mill  # one piece (repeatable)
-    py tools/paths/bake.py --era Village --list           # what the pieces are; writes nothing
+    py tools/paths/bake.py --era Village --list           # pieces + the client/bake check; writes nothing
     py tools/paths/bake.py --era Village --dry-run        # what would be written; writes nothing
 
 Writes assets/build/paths/<Era>/{Fill,Rim}_<pieceId>.glb plus assets/build/paths/<Era>.json with
@@ -17,6 +17,10 @@ unchanged; the edge noise, the rim and the caps are the same code as Village's.
 Piece ids are derived from the layout alone. If Assets.json already lists this era's pieces under
 the same layout hash and the id set has changed, the bake refuses: that would silently orphan
 uploaded assets and hand the client ids it cannot resolve.
+
+`--list` additionally runs tools/paths/clientarcs.py, which re-derives every piece the way
+RoadGraph does and fails when the ids, the count or an arc pair disagree with what was baked. A
+piece whose arcs move is a mesh laid down in the wrong place, and nothing in game reports it.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "assets"))
 import assets_config as cfg  # noqa: E402
+import clientarcs as arcs  # noqa: E402
 import network as net  # noqa: E402
 import planargeom as geom  # noqa: E402
 
@@ -189,19 +194,35 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
 
 
 def listing(era: str) -> int:
+    """The piece table, with the arc pair spelled out so a future drift is one diff away, and the
+    client/bake agreement check of INTERFACES "Wave 1d". A disagreement exits 1: a piece whose arcs
+    have moved is a mesh in the wrong place on a live plot, which is invisible in Studio."""
     bake = net.bake_for(era)
     pieces = bake.pieces()
+    client = arcs.requested(bake)
     log(f"{era}: layout hash {bake.layout_hash()}, tile {bake.tile_studs:g} studs, width {bake.era.width:g}")
     for piece in pieces:
         a, b = piece["nodeArcs"]
         win = piece["window"]
+        seen = client.get(piece["id"])
+        arc_text = f"{seen['arcs'][0]:8.3f}-{seen['arcs'][1]:8.3f}" if seen else "   (never requested)"
         log(
             f"  {piece['id']:<16} {piece['kind']:<7} chain {piece['chain']:<12} "
             f"nodes {piece['nodes'][0][0]:7.2f},{piece['nodes'][0][1]:7.2f} -> "
             f"{piece['nodes'][1][0]:7.2f},{piece['nodes'][1][1]:7.2f} "
-            f"arc {a:7.2f}-{b:7.2f} baked {win['lo']:7.2f}-{win['hi']:7.2f}"
+            f"arc {a:8.3f}-{b:8.3f} client {arc_text} baked {win['lo']:8.3f}-{win['hi']:8.3f}"
         )
     log(f"{era}: {len(pieces)} piece(s) = {sum(1 for p in pieces if p['kind'] == 'stretch')} stretch + {sum(1 for p in pieces if p['kind'] == 'spur')} spur")
+    problems = arcs.verify(bake, pieces, arcs.load_record(era))
+    for line in problems:
+        warn(line)
+    if problems:
+        warn(
+            "client/bake disagreement: RoadGraph and tools/paths/network.py have drifted apart. "
+            "Fix the mirror, then re-bake and re-upload the pieces it names."
+        )
+        return 1
+    log(f"{era}: client/bake check OK -- {len(client)} piece(s) requested, ids, count and arcs all agree")
     return 0
 
 

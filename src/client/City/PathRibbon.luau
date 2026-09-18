@@ -31,6 +31,9 @@ export type ChainKind = "lane" | "connector" | "spur"
 
 export type Chain = {
 	kind: ChainKind,
+	-- "lane<n>" / "conn<key>" / the slot id: the name tools/paths/network.py gives the same chain
+	-- and records per piece in assets/build/paths/<Era>.json, so a chain printed in Studio can be
+	-- matched against the bake. Nothing here reads it.
 	id: string,
 	layer: number, -- 0 polyline 1, 1 other polylines and connectors, 2 spurs
 	key: number, -- phase key: polyline index, 96 + connector stretch id, or slot id byte sum
@@ -62,6 +65,8 @@ export type NetworkInput = {
 }
 
 export type Network = {
+	-- The road width the chains were smoothed with, as in network.py's Bake: callers pass their
+	-- own copy of it, so this is the record of what these curves were actually built from.
 	width: number,
 	amplitude: number,
 	wavelength: number,

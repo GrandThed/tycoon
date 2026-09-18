@@ -438,6 +438,7 @@ class Era:
         self.attach_radius = self.width / 2 + MIN_LENGTH  # RoadGraph's attachRadius
         self.meander = road.get("meander")
         self.amplitude = self.meander["amplitude"] if self.meander else 0.0
+        self.paths = road.get("paths")  # Wave 1d: baked pieces; absent means the parts renderer
         plot = self.layout["plotSize"]
         self.half_x, self.half_z = plot[0] / 2, plot[2] / 2
         pad_size = self.layout["padSize"]
@@ -865,6 +866,75 @@ class Network:
         detail.update({"spineNear": spine_near, "spurNear": spur_near, "bends": bends})
         return spine_near + spur_near + bends, far, detail
 
+    def straight_allocate(self):
+        """RoadGraph.allocate's greedy straight pass: which spine groups and which spurs are
+        switched on inside budget.roadPieces. `reserve()` adds up what the layout *wants*; this is
+        what the client actually turns on, and the baked-path pass is gated on both flags.
+
+        Groups go first, nearest the entrance and ties by group index, each costing 1 or 2. Spurs
+        follow in sorted slot order and cost one per leg -- with no `break`, so a short spur still
+        fits after a long one was refused, exactly as the client does.
+        """
+        budget = self.era.city.get("budget", {})
+        remaining = budget_value(budget.get("roadPieces"), 0)
+        order = []
+        for group_index, stretch_ids in enumerate(self.groups):
+            nearest = None
+            for stretch_id in stretch_ids:
+                distance = self.near_distance(stretch_id)
+                if distance is not None and (nearest is None or distance < nearest):
+                    nearest = distance
+            if nearest is not None:
+                order.append((nearest, group_index))
+        order.sort()  # byDistance: distance, then index -- identical on every client
+        groups_allowed = set()
+        for _, group_index in order:
+            toward_start = toward_end = False
+            for stretch_id in self.groups[group_index]:
+                stretch = self.stretches[stretch_id]
+                a, b = self.distance.get(stretch["from"]), self.distance.get(stretch["to"])
+                if a is None or b is None:
+                    continue
+                if a <= b:
+                    toward_start = True
+                else:
+                    toward_end = True
+            cost = 2 if (toward_start and toward_end) else 1
+            if cost > remaining:
+                break
+            groups_allowed.add(group_index)
+            remaining -= cost
+        spurs_allowed = []
+        for slot_id in self.spur_ids:
+            legs = max(len(self.era.spurs[slot_id]["points"]) - 1, 0)
+            if legs <= remaining:
+                spurs_allowed.append(slot_id)
+                remaining -= legs
+        return groups_allowed, spurs_allowed
+
+    def path_reserve(self):
+        """What RoadGraph.allocate's baked-path pass holds back out of `budget.pathPieces`, for an
+        era with `road.paths`: one cloned piece per reachable stretch whose group survived the
+        straight budget, then one per allowed spur. Returns (total, detail).
+
+        Line for line with the client: stretches are ranked nearest-the-entrance first and spend
+        one piece each until `pathRemaining` hits 0, and **spurs are allocated after every
+        stretch**. So an overrun costs buildings their path first -- the spine stays whole, a
+        building simply never gets a trail, and nothing in game or in the bake says so. That is
+        why this has to be a tool check.
+
+        Reserved, not drawn: allocate runs over the whole layout before anything is owned, so a
+        stretch no path ever reveals still holds its piece.
+        """
+        groups_allowed, spurs_allowed = self.straight_allocate()
+        stretches = sum(
+            1
+            for stretch_id, stretch in enumerate(self.stretches)
+            if self.near_distance(stretch_id) is not None and stretch["group"] in groups_allowed
+        )
+        spurs = len(spurs_allowed)
+        return stretches + spurs, {"pathStretches": stretches, "pathSpurs": spurs}
+
     def drawn_bends(self, visible):
         """Bend discs actually drawn: RoadGraph.drawBends places one only when **every** stretch
         at the node is visible (the tool's old "both sides drawn" rule, now node-based so a
@@ -890,6 +960,15 @@ def visible_network(era, network, buy_tiers):
         for stretch_id in stretch_ids:
             visible[stretch_id] = min(visible.get(stretch_id, tier), tier)
     return visible, unreachable
+
+
+def budget_value(value, fallback):
+    """RoadGraph.budgetValue: a budget key a stale CityDressing.json does not carry (or a NaN)
+    degrades to `fallback` on the client, so the tool has to read it the same way or it would
+    check a plan against a number the game never uses."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return fallback
+    return value if value == value else fallback
 
 
 def piece_count(length, segment_length):
@@ -1092,6 +1171,21 @@ def check(era, network, visible, unreachable):
             f"(spine {detail['spineNear']}, spurs {detail['spurNear']}, bend discs {detail['bends']}) "
             "-- the client would drop the far end of the meandered trail"
         )
+    # Wave 1d: the baked-path renderer has its own budget and its own greedy pass, and it drops
+    # spurs before stretches, so an overrun is invisible in game -- a building keeps its road but
+    # loses the trail up to its door.
+    if era.paths is not None:
+        path_total, path_detail = network.path_reserve()
+        detail.update(path_detail)
+        path_budget = budget_value(budget.get("pathPieces"), budget_value(budget.get("roadPieces"), 0))
+        detail["pathPieces"] = path_total
+        detail["pathBudget"] = path_budget
+        if path_total > path_budget:
+            add(
+                f"baked path pieces reserved {path_total} > budget.pathPieces {path_budget} "
+                f"(stretches {path_detail['pathStretches']}, spurs {path_detail['pathSpurs']}) "
+                "-- the client allocates spurs last, so the tail buildings would silently lose their paths"
+            )
     if era.meander is not None:
         notes.append(f"bend discs: {detail['bends']} reserved, {network.drawn_bends(visible)} drawn at full ownership")
         if detail["boundary"]:
@@ -1386,6 +1480,14 @@ def main():
             )
         else:
             print("     near: straight era, same as far")
+        if "pathPieces" in detail:
+            print(
+                f"     baked path pieces {detail['pathPieces']} / {detail['pathBudget']} "
+                f"[stretches {detail['pathStretches']} + spurs {detail['pathSpurs']}] "
+                "(spurs are allocated last, so an overrun costs buildings their path)"
+            )
+        else:
+            print("     baked paths: none (no eras.<Era>.road.paths; the parts renderer draws)")
         for zone, usable, _ in stats:
             print(
                 f"   tree zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "

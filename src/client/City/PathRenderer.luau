@@ -505,6 +505,11 @@ function PathRenderer.SetNear(handle: Handle, near: boolean): ()
 		return
 	end
 	handle.near = near
+	-- A plot that goes far mid-burst stops puffing, whether or not its rims come off: otherwise
+	-- the dust (and the Heartbeat behind it) would run on across a plot nobody is standing on.
+	if not near then
+		dropBursts(handle)
+	end
 	if handle.mode ~= "baked" or not handle.paths.rimNearOnly then
 		return
 	end
@@ -524,9 +529,6 @@ function PathRenderer.SetNear(handle: Handle, near: boolean): ()
 				record.rim = nil
 			end
 		end
-	end
-	if not near then
-		dropBursts(handle)
 	end
 end
 
