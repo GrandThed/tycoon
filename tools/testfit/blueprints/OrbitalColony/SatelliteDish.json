@@ -1,0 +1,20 @@
+{
+  "id": "SatelliteDish",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2.0, 0.0, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_high", "pos": [-2.0, 0.1, -1.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_low", "pos": [-2.0, 1.1, -1.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "satelliteDish_large", "pos": [2.3582, 1.6, 0.7815], "rotY": 200, "stage": 0},
+    {"kit": "space-kit", "model": "machine_wirelessCable", "pos": [1.305, 0.1, 0.85], "rotY": 180, "stage": 0},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [2.62, 0.1, 0.9], "rotY": 180, "stage": 0},
+    {"kit": "space-kit", "model": "stairs", "pos": [-2.0, 0.1, -2.27], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrels", "pos": [-1.255, 0.1, -0.78], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-2.5, 0.1, -2.955], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.5, 0.1, -2.955], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-0.995, 0.1, 2.3], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [0.995, 0.1, -1.7], "rotY": 270, "stage": 0},
+    {"kit": "orbital-kit", "model": "tank_vertical", "pos": [-0.72, 0.1, 0.72], "rotY": 0, "stage": 0}
+  ]
+}

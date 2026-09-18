@@ -1,0 +1,19 @@
+{
+  "id": "OxygenTanks",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2.0, 0.0, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_low", "pos": [-2.5, 0.1, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "tank_vertical", "pos": [-0.7, 0.6, 0.55], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "tank_vertical", "pos": [-0.28, 0.6, 0.62], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "tank_vertical", "pos": [0.35, 0.1, 0.65], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "tank_sphere", "pos": [0.53, 0.1, -0.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "machine_generator", "pos": [-2.155, 0.1, 1.33], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "pipe_ringSupport", "pos": [-2.0, 0.1, -1.8], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "pipe_supportLow", "pos": [-2.2, 0.1, -2.4], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrels", "pos": [-1.285, 0.1, -0.88], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.6, 0.1, -2.955], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [0.995, 0.1, -1.7], "rotY": 270, "stage": 0}
+  ]
+}

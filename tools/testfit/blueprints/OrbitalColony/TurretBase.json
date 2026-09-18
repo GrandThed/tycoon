@@ -1,0 +1,25 @@
+{
+  "id": "TurretBase",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2.0, 0.0, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_high", "pos": [-2.5, 0.1, -2.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_high", "pos": [-2.5, 0.102, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_high", "pos": [-1.5, 0.102, -2.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_high", "pos": [-1.5, 0.1, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "platform_low", "pos": [-2.0, 1.1, -1.35], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "turret_double", "pos": [2.3924, 1.6, 0.8755], "rotY": 200, "stage": 0},
+    {"kit": "space-kit", "model": "turret_single", "pos": [1.7623, 1.1, -0.0948], "rotY": 205, "stage": 0},
+    {"kit": "space-kit", "model": "turret_single", "pos": [1.8629, 1.1, 1.5956], "rotY": 155, "stage": 0},
+    {"kit": "space-kit", "model": "machine_barrelLarge", "pos": [-2.68, 1.1, -0.78], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrels", "pos": [-1.325, 1.1, -0.78], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "stairs", "pos": [-2.0, 0.1, -2.27], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-2.5, 1.1, -2.975], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.5, 1.1, -2.975], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-0.975, 1.1, 2.5], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [0.975, 1.1, -1.5], "rotY": 270, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.3, 0.6, -1.02], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0.3, 0.6, -1.02], "rotY": 0, "stage": 0}
+  ]
+}
