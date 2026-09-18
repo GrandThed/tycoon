@@ -12,6 +12,10 @@
 -- The templates are generated with each MeshPart already at its plot-local position and carrying
 -- the 180 degree Y turn the Open Cloud import applies (tools/pathtest/gen_display.py), so a
 -- clone is only lifted onto the plot frame: it must never be turned again here.
+--
+-- Wave 1e: the whole plot wears one surface variant, which RoadGraph resolves from the owned
+-- slots and pushes through SetSurface. Because the UVs are world-planar, a variant is only a
+-- different image on the same meshes, so it costs two writes per live piece and nothing else.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -19,6 +23,9 @@ local RunService = game:GetService("RunService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 
+local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
+local AssetPreloader =
+	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("AssetPreloader"))
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 
 export type Mode = "baked" | "parts"
@@ -31,6 +38,7 @@ local FILL_PART_NAME = "Fill"
 local RENDERER_PARTS = "parts"
 -- Diagnostic for Studio playtests on Workspace/CityDressing/Plot<n>: the renderer in use now.
 local RENDERER_ATTRIBUTE = "PathRenderer"
+local ASSET_PREFIX = "rbxassetid://"
 
 -- Dust puff (Ben's choice for the appear effect). A built-in texture, so nothing to upload and
 -- no id that could be 0. The numbers are the look, not tunables: the only path the config sets
@@ -59,7 +67,9 @@ export type Options = {
 	eraName: string,
 	config: Types.CityDressingConfig,
 	near: boolean,
-	color: Color3, -- the era's road colour, which tints the dust
+	-- The road colour that tints the dust, read per burst rather than captured: a surface variant
+	-- changes it, and cobble must not puff dirt.
+	colorOf: () -> Color3,
 	width: number, -- the era's road width, which sizes the dust
 	-- The piece's smoothed centreline in plot-local studs, join end first, for the dust travel.
 	centrelineOf: (pieceId: string) -> { Vector3 }?,
@@ -84,6 +94,9 @@ export type Handle = {
 	records: { [string]: Record },
 	dustPart: Part?,
 	dustEmitter: ParticleEmitter?,
+	-- Wave 1e surface variant; nil is "the texture baked into the templates".
+	fillImageId: number?,
+	rimImageId: number?,
 }
 
 -- One burst per plot at a time (the emitter is pooled per plot): a reveal while one runs
@@ -125,6 +138,80 @@ end
 local function partNamed(model: Model, name: string): BasePart?
 	local child = model:FindFirstChild(name)
 	return if child ~= nil and child:IsA("BasePart") then child :: BasePart else nil
+end
+
+-- ------------------------------------------------------------------ surface
+
+-- Ids are up to 15 digits; %d keeps them integral where tostring could print an exponent.
+local function contentFor(imageId: number): string
+	return ASSET_PREFIX .. string.format("%d", imageId)
+end
+
+-- A variant image is not the texture PropFactory's template gate waits on, so a piece cloned just
+-- after an upgrade would render untextured for a moment. One waiter per image for the whole map,
+-- keyed by the content string: there are a handful of those, unlike the clones wearing them.
+local loadedSurfaces: { [string]: boolean } = {}
+local waitingSurfaces: { [string]: { BasePart } } = {}
+
+local function gateSurface(part: BasePart, content: string): ()
+	if loadedSurfaces[content] then
+		return
+	end
+	local waiting = waitingSurfaces[content]
+	local startWaiter = waiting == nil
+	if waiting == nil then
+		waiting = {}
+		waitingSurfaces[content] = waiting
+	end
+	part.LocalTransparencyModifier = 1
+	table.insert(waiting :: { BasePart }, part)
+	if not startWaiter then
+		return
+	end
+	task.spawn(function()
+		-- The part already carries the image, so waiting on it warms exactly that texture. A
+		-- timeout counts as loaded, like a template's: untextured beats invisible.
+		AssetPreloader.AwaitInstance(part, Theme.ASSET_LOAD_TIMEOUT_SECONDS)
+		loadedSurfaces[content] = true
+		local released = waitingSurfaces[content]
+		waitingSurfaces[content] = nil
+		if released ~= nil then
+			for _, hidden in released do
+				-- Parts destroyed meanwhile accept the write harmlessly.
+				hidden.LocalTransparencyModifier = 0
+			end
+		end
+	end)
+end
+
+-- One surface image onto one cloned mesh. A nil id restores the texture the template carries, so
+-- dropping back to "default" needs no record of what the baked image was.
+local function paint(part: BasePart?, source: BasePart?, imageId: number?): ()
+	if part == nil or not part:IsA("MeshPart") then
+		return
+	end
+	local mesh = part :: MeshPart
+	if imageId ~= nil and imageId > 0 then
+		mesh.TextureID = contentFor(imageId)
+	elseif source ~= nil and source:IsA("MeshPart") then
+		mesh.TextureID = (source :: MeshPart).TextureID
+	end
+end
+
+-- Painting a fresh clone also hides it until its image has loaded. A live piece is repainted
+-- without the gate: it is already on screen wearing the old surface, and hiding it would blink.
+local function paintClone(part: BasePart?, source: BasePart?, imageId: number?): ()
+	paint(part, source, imageId)
+	if part ~= nil and imageId ~= nil and imageId > 0 then
+		gateSurface(part, contentFor(imageId))
+	end
+end
+
+-- The plot's current variant on one record, from the template part it was cloned from.
+local function paintRecord(handle: Handle, record: Record, fresh: boolean): ()
+	local apply: (BasePart?, BasePart?, number?) -> () = if fresh then paintClone else paint
+	apply(record.fill, partNamed(record.template, FILL_PART_NAME), handle.fillImageId)
+	apply(record.rim, partNamed(record.template, RIM_PART_NAME), handle.rimImageId)
 end
 
 -- ------------------------------------------------------------------ dust
@@ -171,7 +258,6 @@ local function ensureDust(handle: Handle): ParticleEmitter
 	emitter.Texture = DUST_TEXTURE
 	emitter.Enabled = false
 	emitter.Rate = DUST_RATE
-	emitter.Color = ColorSequence.new(options.color)
 	emitter.Lifetime = NumberRange.new(DUST_LIFETIME_MIN, DUST_LIFETIME_MAX)
 	emitter.Speed = NumberRange.new(DUST_SPEED_MIN, DUST_SPEED_MAX)
 	emitter.SpreadAngle = Vector2.new(DUST_SPREAD, DUST_SPREAD)
@@ -295,6 +381,8 @@ local function startBurst(handle: Handle, pieceIds: { string }): ()
 	if part ~= nil then
 		part.CFrame = CFrame.new(points[1])
 	end
+	-- Per burst, so the puff follows the surface the plot wears right now.
+	emitter.Color = ColorSequence.new(options.colorOf())
 	emitter.Enabled = true
 	table.insert(bursts, {
 		handle = handle,
@@ -356,6 +444,7 @@ local function showRim(handle: Handle, record: Record): ()
 	end
 	local rim = source:Clone()
 	rim.CFrame = handle.options.plotFrame * source.CFrame
+	paintClone(rim, source, handle.rimImageId)
 	PropFactory.Seal(rim)
 	PropFactory.Gate(record.template, rim)
 	rim.Parent = record.model
@@ -380,6 +469,9 @@ local function addPiece(handle: Handle, pieceId: string, animate: boolean): bool
 		rim = partNamed(clone, RIM_PART_NAME),
 		fill = partNamed(clone, FILL_PART_NAME),
 	}
+	-- Before the clone is parented, so a piece arriving on an upgraded plot never shows the
+	-- baked surface for a frame.
+	paintRecord(handle, record, true)
 	local rim = record.rim
 	if rim ~= nil and handle.paths.rimNearOnly and not handle.near then
 		rim:Destroy()
@@ -485,7 +577,34 @@ function PathRenderer.Create(options: Options): Handle?
 		records = {},
 		dustPart = nil,
 		dustEmitter = nil,
+		fillImageId = nil,
+		rimImageId = nil,
 	}
+end
+
+-- The plot's surface variant (docs/INTERFACES.md "Wave 1e — Surfaces"): nil ids mean the texture
+-- baked into the templates. Every live Fill/Rim is rewritten and every later clone follows.
+function PathRenderer.SetSurface(handle: Handle, fillImageId: number?, rimImageId: number?): ()
+	if
+		handle.destroyed
+		or (handle.fillImageId == fillImageId and handle.rimImageId == rimImageId)
+	then
+		return
+	end
+	handle.fillImageId = fillImageId
+	handle.rimImageId = rimImageId
+	for _, record in handle.records do
+		paintRecord(handle, record, false)
+	end
+end
+
+-- Replays the appear dust over pieces that are already drawn, so a surface upgrade reads as work
+-- done on the street rather than a texture popping. Far plots and the Parts renderer stay still.
+function PathRenderer.Burst(handle: Handle, pieceIds: { string }): ()
+	if handle.destroyed or handle.mode ~= "baked" or not handle.near then
+		return
+	end
+	startBurst(handle, pieceIds)
 end
 
 -- Draws exactly `pieceIds` (the whole visible network, not a delta, in reveal order from the

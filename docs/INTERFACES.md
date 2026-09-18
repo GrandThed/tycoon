@@ -1689,7 +1689,11 @@ config's `modelName` (PascalCase). The approved prototype is `Village/Tavern.jso
 {
   "id": "Tavern",                 // == modelName == file stem
   "era": "Village",
-  "scale": 4.0,                   // studs per kit unit; fixed at 4.0 for every M7 blueprint
+  "scale": 4.0,                   // studs per kit unit; fixed at 4.0 for every M7 blueprint.
+                                  // Exception (Ben, 2026-09-18): at most three OrbitalColony
+                                  // landmarks (FusionReactor, TerraformStation, SpaceportTerminal)
+                                  // use 3.6 with footprint [12, 12], because space-kit's hex and
+                                  // long hangars are 13.1 / 12 studs at 4.0 and fit nothing.
   "footprint": [9, 9],            // optional, studs; default [9, 9]. Monument may use up to [14, 14].
                                   // A non-monument slot may exceed [9, 9] (max [12, 12]) only where
                                   // the kit cannot express the building's subject at 9x9 -- so far
@@ -1712,7 +1716,10 @@ config's `modelName` (PascalCase). The approved prototype is `Village/Tavern.jso
   growing **up**. `unlock`, `decor`, `monument` slots put every piece at stage 0.
 - Pieces may come from more than one kit, but keep the era's palette: Village = `fantasy-town-kit`,
   `castle-kit`, `nature-kit` only. One kit per building where possible (each kit adds one MeshPart
-  per stage, see below).
+  per stage, see below). OrbitalColony = `space-kit` plus the generated `orbital-kit`
+  (`tools/assets/orbital_kit.py`: domes, solar panels, flag, hologram, tanks, mast, derrick, lit
+  window strips — subjects space-kit lacks; Ben, 2026-09-18). Generated kits follow the
+  `stadium_kit.py` pattern: the script is committed, the GLBs under `/assets/` regenerate.
 - Every blueprint must render clean with `testfit.py` (no footprint warning, no floating or
   clipping piece) and the builder looks at the strip before reporting. Piece budget ≤ 60 at stage 4.
 
@@ -2538,6 +2545,220 @@ would change for an unchanged layout.
 - stylua, selene, luau-lsp, rojo build, `streetplan.py`, the template checks and the manifest check
   are clean, and `tools/pathtest/**` plus its `Workspace.PathTest` mapping are removed once Ben has
   seen the real thing.
+
+## Wave 1e — street upgrades (Ben, 2026-09-18)
+
+Slots that are *named* as street improvements now change the streets. Still client-only: the
+input is the owned-slot set the controller already derives from `Buildings/Building_<slotId>`.
+No server change, no remote, no attribute, no profile field. Everything is config-driven and
+nil-safe: a missing key, variant, image id or prop means "today's behaviour", never an error.
+
+| Era | Slot | Effect |
+|---|---|---|
+| Village | `dirtRoad` ("Pave the Road") | every trail swaps to the **`cobble`** surface; **`Lantern`** posts line the visible trails |
+| Boomtown | `paveMainStreet` | streets are **`gravel`** until it is owned, then today's asphalt + kerb (`default`) |
+| Boomtown | `streetlampRow` | no lamps before it; then `LampPost`s line the visible streets (the tier-3 junction rule no longer applies to Boomtown) |
+| Boomtown | `trafficLights` | a **`TrafficLight`** prop at street crossings |
+
+### `streetOnly` slots (amended after Ben's first Studio look, 2026-09-18)
+The one server change of the wave. `SlotConfig.streetOnly: boolean?` (era JSON; mirrored in
+`Economy.luau`'s type): the slot's visual **is** the street, so `PlotService.spawnBuilding` spawns
+an empty `Model` named `Building_<slotId>` at the slot anchor instead of `modelName` (no parts,
+no prompt, no cosmetics). The marker keeps every client contract intact (ownership scan, spur,
+reveal sound). Set on Village `dirtRoad` and Boomtown `paveMainStreet`, `streetlampRow` and `trafficLights`
+(Ben, second look: the street props are the whole effect), whose kit models otherwise duplicate,
+or sit on top of, the real street. Their blueprints/templates stay, unused.
+
+### Surfaces (texture swap, no re-bake)
+- A **surface variant** is one fill + one rim image using the approved C3 recipe (opaque,
+  2D-seamless, stylised flat, bold simple shapes, no directional features, luminance well above
+  the ground). UVs are world-planar, so every piece takes any variant unchanged.
+- `"default"` is the texture baked into the templates (Village dirt, Boomtown asphalt + kerb).
+- The whole plot has **one** surface at a time (a per-piece mix would bring the junction seam back).
+- `eras.<Era>.road.paths.surface`: `{ "base": string, "upgrades": [{ "slot": string, "variant": string }] }`.
+  Active variant = the **last** entry of `upgrades` whose slot is owned, else `base`. Absent
+  `surface` = `"default"`.
+- `eras.<Era>.road.paths.variants`: `{ [name]: { "material": string, "color": [r,g,b] } }` is the
+  look the **parts fallback** uses for that variant (`"default"` uses `road.material`/`color`).
+- `Assets.json` → `paths.<Era>.variants.<name>`: `{ fillAssetId, fillImageId, fillSha256,
+  rimAssetId, rimImageId, rimSha256 }`, written by `upload_paths.py`. A variant whose image ids
+  are missing or 0 resolves to `"default"`.
+- Client: `PathRenderer.SetSurface(handle, fillImageId: number?, rimImageId: number?)` (nil =
+  the template's own texture) writes `MeshPart.TextureID` on every live `Fill`/`Rim` and on every
+  later clone (`addPiece`, `showRim`). `RoadGraph.SetSurface(state, owned: { [string]: boolean }, animate: boolean?)`
+  (`animate` as in `AddSpur`) resolves the variant (uniformly for both renderers, so a variant
+  without image ids is `"default"` in `parts` mode too), drives `PathRenderer` in `baked` mode and material/colour in `parts` mode.
+  The controller calls it in `sync` after the spur loop, with `owned` computed once per sync.
+  A surface change after the plot's initial dressing, on a near plot, replays the dust burst
+  over the visible pieces; joins, era rebuilds and far plots switch instantly.
+  `AssetPreloader.PreloadEra` queues every variant image.
+
+### Lamps
+- `eras.<Era>.lamps`: `{ prop, requiresSlot: string?, placement: "junction" | "row"?, spacing: number?, offset: number? }`.
+  - `requiresSlot` set → lamps exist only while that slot is owned, and the slot **replaces**
+    `lamps.firstTier`. Unset → today's tier rule.
+  - `placement` `"junction"` (default) is today's rule. `"row"`: posts every `spacing` studs of
+    arc length along each **spine** centreline (never spurs), alternating sides, `offset` studs
+    outside the road edge (`width / 2 + offset`), facing the road; a post inside a slot footprint,
+    pad, lot or plaza, or within `width / 2` of another centreline, is dropped.
+  - The plan (`Scatter.Plan`) is ownership-independent and seeded as before; each post carries
+    the spine piece id it sits on and spawns only while that piece is visible. Near plots only.
+  - Cap: `budget.lampPosts` (row placement only; junction placement keeps sharing
+    `budget.fillerPieces`). Posts are ordered **numerically** by `(polyline, stretch, step)`,
+    never by id string; when the plan exceeds the cap it is thinned **evenly** over that whole
+    order (keep candidate `i` of `n` iff `floor(i * cap / n)` differs from `i - 1`'s), so every
+    trail keeps its share instead of the first polyline taking the budget.
+- `eras.<Era>.signals`: `{ prop: string?, requiresSlot: string?, offset: number, maxPerPlot: number }?`.
+  One prop at each graph node where **three or more spine stretches** meet, on the corner
+  `offset` studs outside both road edges, spawned while the slot is owned and at least two of the
+  node's stretches are visible. Absent key, nil prop or missing template = none.
+- All of it obeys the M9 no-collision rule through `PropFactory` as lamps do today.
+
+### Assets
+- Textures: `tools/paths/texture.py` gains a per-era `variants` table → `assets/paths/<Era>_<variant>_fill.png`
+  / `_rim.png`; `upload_paths.py` uploads and records them (displayName ≤ 50 chars guard applies).
+- Props (`_props` pipeline → `ReplicatedStorage/Assets/Props`): `Village/Lantern`
+  (fantasy-town-kit lantern on a post, ≈ 4–5 studs tall) and `Boomtown/TrafficLight`
+  (city-kit-roads, may start from `blueprints/Boomtown/TrafficLight.json`).
+
+### Ownership (wave 1e)
+- lead: this section, `CityDressing.json`, `Types.luau` city types.
+- ui-engineer: `src/client/City/{PathRenderer,RoadGraph,Scatter}.luau`,
+  `src/client/Controllers/{CityDressingController,AssetPreloader}.luau`.
+- pipeline-engineer: `tools/paths/texture.py`, `tools/assets/upload_paths.py`, `assets/paths/*`,
+  `Assets.json` `paths.*.variants`, any tool mirror of the new budget key.
+- prop-builder: `tools/testfit/blueprints/_props/Village/Lantern.json`,
+  `tools/testfit/blueprints/_props/Boomtown/TrafficLight.json` and their strips. Uploads run
+  after the pipeline-engineer's, never concurrently (`Assets.json`).
+
+### Done when
+- Fresh Village plot: dirt trails, no lanterns. Buying Pave the Road turns every trail to cobble
+  with a dust burst and lanterns appear along drawn trails; later trails arrive cobbled and lit.
+- Fresh Boomtown plot: gravel streets, no lamps at any tier. Pave Main Street → asphalt;
+  Streetlamp Row → lamp rows on drawn streets; Install Traffic Lights → signals at crossings.
+- Other players' plots show the same state; rejoining shows it instantly with no burst.
+- Missing variant ids / props / `Assets.Paths` degrade silently (default texture, no lamps).
+
+## Wave 2a — Metropolis streets, highway, subway (Ben, 2026-09-18)
+
+Metropolis dressing, and three slots change meaning. Still client-only and config-driven; every
+missing key, prop or layout table means "nothing drawn", never an error. The only server-visible
+change is era JSON (`streetOnly`, one renamed slot).
+
+| Slot | Was | Becomes |
+|---|---|---|
+| `cityGrid` | `RoadIntersection` crossroad tile | a real building: **City Hall** (`modelName: "CityHall"`, name "Found City Hall", still `type: "unlock"`, one stage, same cost/multiplier). The slot **id stays `cityGrid`** so no profile migration is needed. Layout `rotationY` becomes 0 (a facade, not a symmetric tile). |
+| `highwayRamp` | `HighwayRamp` building | `streetOnly`. Owning it draws an **elevated ring highway** on pillars around the plot with one ramp down to the streets and cars on the deck. |
+| `subwayLine` | `SubwayEntrance` building | `streetOnly`. Owning it places small **`MetroEntrance`** props at street corners around the city. |
+
+The old `RoadIntersection` / `HighwayRamp` / `SubwayEntrance` blueprints, templates and
+`Assets.json` entries stay, unused (same ruling as wave 1e).
+
+### Tile streets (`road.tiles`) — Metropolis only
+Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked asphalt, Village trails.
+
+- `eras.<Era>.road.tiles`: `{ "tileStuds": number, "props": { "straight", "end", "bend", "tee", "cross", "crossing": string }, "pavement": { "width": number, "material": string, "color": [r,g,b] }?, "spur": { "width": number, "material": string, "color": [r,g,b] } }`.
+  Presence of `tiles` selects the tile renderer; it is mutually exclusive with `road.paths` and `road.meander`.
+  Metropolis: `tileStuds` **7** (= 28 / 4, four tiles per block pitch; Ben's choice over 9.33),
+  `road.width` becomes 7, and `junctionProp` / `bendProp` are removed.
+- **Grid rule (layout):** every `streets` point of a tiles era lies on the lattice
+  `(7i, 0, 7j)`, every segment is axis-aligned, so a street is a run of whole cells.
+  `tools/streetplan.py` enforces it.
+- **Growth is unchanged:** `RoadGraph` still decides which spine stretches are visible (shortest
+  paths from the entrance to each owned building's join). The tile renderer rasterises the
+  *visible* stretches to cells and picks each cell's prop from its **visible** 4-neighbour
+  connectivity (neighbours joined by a stretch, not merely adjacent), so a street end shows `end`
+  and becomes `straight` / `tee` / `cross` as the network grows. A changed cell swaps its prop
+  without a burst; a new cell drops in with the existing dust burst on near plots.
+- **Canonical prop orientation at `rotationY` 0** (the kit's own; prop blueprints must keep it):
+  `straight` and `crossing` run along **X**; `end` is open to **+X**; `bend` joins **−X ↔ +Z**;
+  `tee` is open −X, +X, +Z (closed **−Z**); `cross` open on all four. The rotation table is code
+  in the renderer (geometry, not a tunable).
+- `crossing` replaces `straight` on the cell adjacent to a `cross`/`tee` cell when the run to the
+  next junction is ≥ 3 cells (zebra at junction mouths), purely cosmetic.
+- **Pavement:** per visible stretch, one plain Part each side, `pavement.width` wide, top at
+  `road.thickness / 2`, same material/colour everywhere so overlaps at junctions are invisible.
+- **Spurs:** drawn by the existing parts renderer as a footpath with `tiles.spur` look from the
+  kerb to the slot anchor (slot `spur` overrides still apply). Spurs never get tiles.
+- Surfaces (`SetSurface`), signals and row lamps work as in wave 1e; `road.paths.*` keys are
+  ignored in a tiles era. Lane graph for Traffic is unchanged (centreline ± `laneOffsetFraction`).
+- Budget: `budget.tileCells` (180) caps cells per plot; far plots render cells without pavement.
+
+### Elevated highway (`highway`)
+- Layout (`EraLayout.highway: HighwayLayout?`):
+  `{ ring: number, ramp: { cell: Vector3, direction: "+X"|"-X"|"+Z"|"-Z" } }` —
+  `ring` is the centreline half-extent (Metropolis **56** = 8 cells: deck spans 52.5…59.5, clears
+  the 46.5 block faces and the 12×12 Stadium at 48, stays inside the 120 plot). `ramp.cell` is the
+  ring cell that carries the deck T-junction; `direction` points from that cell **into the
+  city**; the ramp foot must land on a lattice cell that is the end of a `streets` polyline.
+- Config `eras.<Era>.highway`: `{ "requiresSlot": string, "props": { "deck", "corner", "junction", "ramp", "sign": string? }, "vehicles": { "count": number, "speed": number }, "revealCellsPerSecond": number }`.
+- Props (all `tileStuds` pitch, origin bottom-centre at ground level, pillars included so the
+  client places one prop per cell): `HighwayDeck` (runs along **X**), `HighwayCorner` (joins
+  −X ↔ +Z), `HighwayJunction` (deck T, closed −Z side faces outward), `HighwayRamp` (whole ramp as
+  one prop, high end at the origin cell edge, descending toward **+X**, length = whole cells),
+  `HighwaySign` optional. Soffit must be ≥ 6 studs so characters walk under it; the plot entrance
+  passes beneath the deck.
+- Client: drawn only while `requiresSlot` is owned. On purchase (near plot, after initial
+  dressing) the ring builds outward from the ramp in both directions at `revealCellsPerSecond`;
+  joins, era rebuilds and far plots show it instantly. Far plots: deck props only, no vehicles.
+- Traffic: `highway.vehicles.count` cars loop the ring at deck height on the lane graph's usual
+  offset (they never take the ramp). They count toward `budget.vehiclesPerPlot` / `vehiclesMap`.
+- Budget: `budget.highwayCells` (72).
+
+### Subway entrances (`subway`)
+- Layout (`EraLayout.subwayEntrances: { { position: Vector3, rotationY: number } }?`): 4–6 spots on
+  pavement at street corners, spread over the whole plot, front (−Z convention) facing the
+  street, clear of slot footprints, pads, lots, plazas, road cells and highway pillars.
+- Config `eras.<Era>.subway`: `{ "requiresSlot": string, "prop": string, "maxPerPlot": number }`.
+- Each entrance is tied to its nearest spine stretch (as row lamps are tied to a piece) and
+  spawns while the slot is owned **and** that stretch is visible; the entrance nearest the plot
+  entrance is exempt from the visibility rule so buying the slot always shows at least one.
+- Prop `Metropolis/MetroEntrance`: **custom Blender geometry** (the kit cannot show stairs going
+  down; Ben chose custom) from a committed generator `tools/assets/metro_kit.py`, same pattern as
+  `stadium_kit.py`: colour-only materials sampled from the city-kit `colormap.png`, a raised
+  kiosk with canopy, visible steps and a large "M" sign, footprint ≤ 5 × 6 studs, ≤ 1,200 tris.
+
+### Moving the avenue slots
+`cityGrid`, `subwayLine`, `highwayRamp`, `financeDistrict`, `busStop` and the monument sit on the
+corridor centrelines (x, z ∈ {0, ±28}) where streets must run. The economy-designer may move
+these six slots (positions are not persisted) so that: streets run on the corridors; City Hall
+stays central and faces the entrance; the `highwayRamp` pad stands by the ramp foot and the
+`subwayLine` pad on a pavement beside an entrance; no pad is on a road cell. Building-block slots
+(x, z ∈ {±14, ±42}) do not move.
+
+### Metropolis props (the era has none today)
+`templates/_props/Metropolis/` via the `_props` pipeline: `RoadStraight`, `RoadEnd`, `RoadBend`,
+`RoadTee`, `RoadCross`, `RoadCrossing` (blueprint `scale` 7, one kit piece each); the four
+highway props (+ sign); `MetroEntrance`; `LampPost`, `TrafficLight` (city-kit-roads); `VehicleA–D`
+(car-kit at a scale that makes the body **≤ 2.7 studs wide**, ≈ 1.8, so two fit the 5.6-stud
+asphalt; Boomtown's stay 2.5); `TreeGrowing`, `PlazaA`, `PlazaB`. Metropolis `houses.props` becomes
+`[]` and its layout has no `lots` — the blocks are already full of buildings.
+
+### Types (`Types.luau`, lead)
+`RoadTilesConfig`, `HighwayConfig`, `SubwayConfig`, `HighwayLayout`, `SubwayEntranceLayout`;
+`EraLayout` gains `highway: HighwayLayout?`, `subwayEntrances: { SubwayEntranceLayout }?`.
+
+### Ownership (wave 2a)
+- lead: this section, `CityDressing.json`, `Types.luau`.
+- economy-designer: `src/shared/Layouts/Metropolis.luau`, `src/shared/Config/Eras/3_Metropolis.json`,
+  `tools/streetplan.py` (Metropolis `STREET_FURNITURE`, lattice check, highway/subway checks, PNG).
+- ui-engineer: `src/client/City/*` (new `TileRenderer.luau`, `Highway.luau`; `RoadGraph`,
+  `Scatter`, `Traffic`), `src/client/Controllers/{CityDressingController,AssetPreloader}.luau`.
+- prop-builder A: `_props/Metropolis/Road*.json`, `Highway*.json`. prop-builder B:
+  `tools/assets/metro_kit.py`, `_props/Metropolis/MetroEntrance.json`. prop-builder C: the rest.
+- `Assets.json` writers (merge → upload → harvest → templates, props and `CityHall`) run **one at
+  a time, by the lead**, and only when no other session is uploading.
+
+### Done when
+- Fresh Metropolis plot: bare ground; each purchase grows tile streets with correct ends, bends,
+  tees and crossroads, pavements and a footpath to the building; cars keep to their lanes.
+- Found City Hall spawns the hall at the centre facing the entrance, pad in front.
+- Build the Highway Ramp: no building; the ring builds out from the ramp, cars loop on it, and
+  the player can walk under it everywhere including the plot entrance.
+- Dig the Subway Line: no building; entrances appear at corners along drawn streets, more as the
+  streets grow.
+- Other players' plots match; rejoin is instant; missing props/layout keys draw nothing, silently.
+- `py tools/streetplan.py Metropolis` is green; Village and Boomtown are pixel-for-pixel unchanged.
 
 ## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
 

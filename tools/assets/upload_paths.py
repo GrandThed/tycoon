@@ -1,6 +1,9 @@
 #!/usr/bin/env python
-"""Upload an era's baked path meshes and its two path textures to Roblox via Open Cloud, writing
-the ids into src/shared/Config/Assets.json (v3 `paths`; INTERFACES "Wave 1d - baked paths").
+"""Upload an era's baked path meshes and its path textures to Roblox via Open Cloud, writing the
+ids into src/shared/Config/Assets.json (v3 `paths`; INTERFACES "Wave 1d - baked paths").
+
+Textures are the era's default fill/rim pair plus one pair per surface variant found in
+assets/paths (INTERFACES "Wave 1e - street upgrades"), recorded under `paths.<Era>.variants.<name>`.
 
     "/c/Program Files/.../python.exe" tools/paths/texture.py --era Village   # the two PNGs
     py tools/paths/bake.py --era Village                                     # the GLBs
@@ -26,6 +29,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import struct
 import sys
 import time
@@ -61,8 +65,8 @@ def warn(msg: str) -> None:
     print(f"[paths] WARNING: {msg}", flush=True)
 
 
-def display_name(era: str, layer: str, piece_id: str | None = None) -> str:
-    tail = f"{era}_{layer.capitalize()}" + (f"_{piece_id}" if piece_id else "")
+def display_name(era: str, layer: str, piece_id: str | None = None, variant: str | None = None) -> str:
+    tail = era + (f"_{variant.capitalize()}" if variant else "") + f"_{layer.capitalize()}" + (f"_{piece_id}" if piece_id else "")
     name = f"EraCityTycoon_Path_{tail}"
     if len(name) > MAX_DISPLAY_NAME:
         name = f"ECT_Path_{tail}"
@@ -128,11 +132,31 @@ def load_bake(era: str, bake_root: str) -> dict | None:
         return json.load(fh)
 
 
-def texture_jobs(era: str, entry: dict, paths_dir: str) -> tuple[list[Job], list[str]]:
+def discover_variants(era: str, paths_dir: str, entry: dict) -> list[str]:
+    """Which surface variants (INTERFACES "Wave 1e") this era has, from the files texture.py wrote
+    plus anything already recorded. Reading the directory rather than a second copy of texture.py's
+    table keeps the two tools uncoupled - texture.py needs numpy and cannot be imported here - and
+    a recorded variant whose PNG has since gone missing still shows up, as a problem rather than a
+    silent skip."""
+    found = set(entry.get(cfg.PATH_VARIANTS_KEY) or {})
+    pattern = re.compile(rf"^{re.escape(era)}_([A-Za-z0-9]+)_fill\.png$")
+    for name in sorted(os.listdir(paths_dir)) if os.path.isdir(paths_dir) else []:
+        match = pattern.match(name)
+        if match:
+            found.add(match.group(1))
+    return sorted(found)
+
+
+def layer_jobs(era: str, entry: dict, paths_dir: str, variant: str | None = None) -> tuple[list[Job], list[str]]:
+    """The fill and rim of one surface: the era's default pair, or one variant's pair. A variant
+    records the same six keys in its own block, so the idempotency and the hash check are the
+    default's, unchanged."""
     jobs, problems = [], []
+    stem = era if variant is None else f"{era}_{variant}"
+    what = "baked path" if variant is None else f"baked path {variant} surface"
     for layer in cfg.PATH_LAYERS:
-        png = os.path.join(paths_dir, f"{era}_{layer}.png")
-        label = f"{era} {layer} texture"
+        png = os.path.join(paths_dir, f"{stem}_{layer}.png")
+        label = f"{stem} {layer} texture"
         if not os.path.isfile(png):
             problems.append(f"{label}: missing {os.path.relpath(png, cfg.REPO_ROOT)}; generate it first: {TEXTURE_CMD.format(era=era)}")
             continue
@@ -158,12 +182,21 @@ def texture_jobs(era: str, entry: dict, paths_dir: str) -> tuple[list[Job], list
             Job(
                 label,
                 png,
-                display_name(era, layer),
-                f"Era City Tycoon {era} baked path {layer} texture. Procedurally generated (tools/paths/texture.py).",
+                display_name(era, layer, variant=variant),
+                f"Era City Tycoon {era} {what} {layer} texture. Procedurally generated (tools/paths/texture.py).",
                 "decal",
                 commit,
             )
         )
+    return jobs, problems
+
+
+def texture_jobs(assets: dict, era: str, entry: dict, paths_dir: str) -> tuple[list[Job], list[str]]:
+    jobs, problems = layer_jobs(era, entry, paths_dir)
+    for variant in discover_variants(era, paths_dir, entry):
+        variant_jobs, variant_problems = layer_jobs(era, cfg.ensure_path_variant(assets, era, variant), paths_dir, variant)
+        jobs += variant_jobs
+        problems += variant_problems
     return jobs, problems
 
 
@@ -234,7 +267,7 @@ def main(argv: list[str]) -> int:
     entry = cfg.ensure_path_era(
         assets, args.era, bake["tileStuds"], bake["layoutHash"], (bake.get("totals") or {}).get("triangles", 0)
     )
-    jobs, problems = texture_jobs(args.era, entry, paths_dir)
+    jobs, problems = texture_jobs(assets, args.era, entry, paths_dir)
     mesh, mesh_problems = mesh_jobs(assets, args.era, bake, args.piece)
     jobs += mesh
     problems += mesh_problems

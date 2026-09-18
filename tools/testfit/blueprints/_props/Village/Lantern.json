@@ -1,0 +1,9 @@
+{
+  "id": "Lantern",
+  "era": "Village",
+  "scale": 3.2,
+  "footprint": [2, 2],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "lantern", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

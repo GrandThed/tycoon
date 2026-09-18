@@ -1870,10 +1870,11 @@ else.
 - [ ] 12j. Buy **Streetlamp Row**. Lamp posts appear along the **drawn** streets — expect about
       **8** (spacing 24, offset 0.8), standing clear of the kerb, alternating sides. Before this
       slot there were none, at any tier (step 10).
-- [ ] 12k. Buy **Install Traffic Lights**. Expect **exactly one** traffic light, at the **T where
-      the plot entrance meets main street** (x 0, z −54.5). That is correct, not a bug: it is the
-      only place on today's Boomtown street plan where three streets meet. If you want more
-      signals, say so — it needs more cross streets in the layout, which is a design change.
+- [ ] 12k. Buy **Install Traffic Lights**. Expect a traffic light at every **drawn** crossing: the
+      entrance T (0, −54.5), the four-way on main street (0, −42), and the ring T-junctions at
+      (−51, −22), (−51, −2), (51, −2), (51, 29.5) — six on a fully grown plot (cross streets added
+      2026-09-18). A crossing lights only once two of its streets are drawn, so the east pair
+      arrives around tier 5. The slot itself spawns no model (`streetOnly`).
       Check the head: it stands on the corner outside both kerbs, about **4.6 studs** tall, and the
       lens faces the road rather than the pavement.
 
@@ -2067,8 +2068,8 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
   half cobble, after Pave the Road; lanterns bunched on one trail while the other trails stay dark,
   or more than 16 of them; a lantern/lamp standing in the trail, inside a building, or floating;
   the surface reverting, blinking or re-laying on a near/far flip or a rejoin; a vehicle
-  respawning or jumping when the surface changes. **Exactly one** Boomtown traffic light is
-  expected — that one is not a bug.
+  respawning or jumping when the surface changes. Up to **six** Boomtown traffic lights are
+  expected, one per drawn crossing.
 - The player, camera, or a ProximityPrompt blocked by a tree, house, vehicle, or road tile.
 - Any dressing part with `CanCollide`/`CanQuery`/`CanTouch` true, or not `Anchored`.
 - Another player's client showing different roads/trees/houses than the owner sees (vehicle
@@ -2094,8 +2095,8 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
       (baked dirt paths/trees/cottages/plaza/carts), a full Boomtown tier-5 look (baked gravel →
       asphalt + concrete kerb/lamps/cars, main-street spine, P1/P2 no-spur slots), the baked-path
       look and appear effect (5b–5c), `PathRenderer = baked` plus both silent fallbacks (5d–5f),
-      all four wave 1e street upgrades with their surfaces, lanterns, lamp row and single traffic
-      light (12b–12p), no
+      all four wave 1e street upgrades with their surfaces, lanterns, lamp row and traffic
+      lights (12b–12p), no
       collisions anywhere (including the Explorer flag check), identical dressing for a second
       player, near/far LOD and the rim drop, the traffic MicroProfiler check under 0.2 ms, the dust
       Heartbeat and path-triangle readings, the part counts, refresh stability, era-advance/

@@ -726,6 +726,16 @@ local function spawnBuilding(
 		anchorCFrame = record.base.CFrame * CFrame.new(0, record.base.Size.Y / 2, 0)
 	end
 
+	if slot.streetOnly == true then
+		-- The client repaves the streets when it sees this marker (INTERFACES "Wave 1e"); a kit
+		-- road tile on the pad would only duplicate, or sit on top of, the real street.
+		local marker = Instance.new("Model")
+		marker.Name = "Building_" .. slot.id
+		marker.WorldPivot = anchorCFrame
+		marker.Parent = record.buildingsFolder
+		return
+	end
+
 	local spawned: Instance
 	local promptParent: Instance? = nil
 	local template = findTemplate(eraName, slot.modelName, vipSkins)
@@ -758,7 +768,13 @@ local function spawnBuilding(
 				end
 			end
 		end
-		model:PivotTo(anchorCFrame)
+		-- A spur runs under the building to its anchor; without the lift it draws over any floor,
+		-- ramp or step lower than the path surface.
+		local dressing = Catalog.GetCityDressingConfig()
+		local lift = if dressing ~= nil and dressing.paths ~= nil
+			then dressing.paths.buildingLift or 0
+			else 0
+		model:PivotTo(anchorCFrame * CFrame.new(0, lift, 0))
 		model.Parent = record.buildingsFolder
 		spawned = model
 	else

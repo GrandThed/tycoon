@@ -32,6 +32,9 @@ PROPS_KEY = "props"
 PATHS_SCHEMA_VERSION = 3
 PATHS_KEY = "paths"
 PATH_LAYERS = ("fill", "rim")
+# Surface variants (INTERFACES "Wave 1e"): extra fill/rim image pairs the client swaps onto the
+# same baked meshes, so they live beside the era's default pair and never touch the piece list.
+PATH_VARIANTS_KEY = "variants"
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -163,6 +166,25 @@ def ensure_path_era(assets: dict, era: str, tile_studs: float, layout_hash: str,
     return entry
 
 
+def empty_path_variant() -> dict:
+    entry: dict = {}
+    for layer in PATH_LAYERS:
+        entry[f"{layer}AssetId"] = 0
+        entry[f"{layer}ImageId"] = 0
+        entry[f"{layer}Sha256"] = ""
+    return entry
+
+
+def ensure_path_variant(assets: dict, era: str, variant: str) -> dict:
+    """Pre-list one surface variant of an era without touching ids. The era block must exist:
+    a variant is an alternative texture for pieces that were already baked."""
+    variants = assets[PATHS_KEY][era].setdefault(PATH_VARIANTS_KEY, {})
+    entry = variants.setdefault(variant, {})
+    for key, default in empty_path_variant().items():
+        entry.setdefault(key, default)
+    return entry
+
+
 def ensure_path_piece(assets: dict, era: str, piece_id: str) -> dict:
     entry = assets[PATHS_KEY][era]["pieces"].setdefault(piece_id, {})
     for layer in PATH_LAYERS:
@@ -236,6 +258,12 @@ def render_path_era(entry: dict) -> dict:
     for layer in PATH_LAYERS:
         for suffix in ("AssetId", "ImageId", "Sha256"):
             out[f"{layer}{suffix}"] = entry.get(f"{layer}{suffix}", 0 if suffix != "Sha256" else "")
+    variants = entry.get(PATH_VARIANTS_KEY) or {}
+    if variants:  # omitted while an era has none, so an era that never gains one keeps its bytes
+        out[PATH_VARIANTS_KEY] = {
+            name: {key: variants[name].get(key, default) for key, default in empty_path_variant().items()}
+            for name in sorted(variants)
+        }
     pieces = entry.get("pieces") or {}
     out["pieces"] = {
         piece_id: {

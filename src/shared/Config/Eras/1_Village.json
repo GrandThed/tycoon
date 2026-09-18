@@ -58,6 +58,7 @@
 			"type": "unlock",
 			"name": "Pave the Road",
 			"modelName": "RoadCobblestone",
+			"streetOnly": true,
 			"description": "cobblestone road segment with dirt edges",
 			"kit": "Fantasy Town Kit",
 			"baseCost": 5500,

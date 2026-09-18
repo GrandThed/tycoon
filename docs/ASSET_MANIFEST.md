@@ -31,8 +31,8 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 | 1 — Village | 24/24 | 24/24 | 24/24 | 24/24 |
 | 2 — Boomtown | 24/24 | 24/24 | 24/24 | 24/24 |
 | 3 — Metropolis | 24/24 | 24/24 | 24/24 | 24/24 |
-| 4 — Orbital Colony | 0/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 72/96 | 72/96 | 72/96 | 72/96 |
+| 4 — Orbital Colony | 24/24 | 0/24 | 0/24 | 0/24 |
+| **Total** | 96/96 | 72/96 | 72/96 | 72/96 |
 
 ## Era 1 — Village
 
@@ -71,7 +71,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Village/` -- templates: `templates/_props/Village/` -- in game: `ReplicatedStorage/Assets/Props/Village/`
 
-Summary: 6/6 blueprints, 6/6 uploaded, 6/6 harvested, 6/6 templated
+Summary: 7/7 blueprints, 7/7 uploaded, 7/7 harvested, 7/7 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -79,8 +79,9 @@ Summary: 6/6 blueprints, 6/6 uploaded, 6/6 harvested, 6/6 templated
 | 2 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 3 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 4 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 5 | `Lantern` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
 
 ## Era 2 — Boomtown
 
@@ -119,7 +120,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Boomtown/` -- templates: `templates/_props/Boomtown/` -- in game: `ReplicatedStorage/Assets/Props/Boomtown/`
 
-Summary: 12/12 blueprints, 12/12 uploaded, 12/12 harvested, 12/12 templated
+Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -131,10 +132,11 @@ Summary: 12/12 blueprints, 12/12 uploaded, 12/12 harvested, 12/12 templated
 | 6 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 8 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 10 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 11 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 11 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 3 — Metropolis
 
@@ -161,7 +163,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 15 | `OfficeTowerA` | Office Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 16 | `HotelTower` | Hotel Tower | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 17 | `HighwayRamp` | Build the Highway Ramp | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 18 | `Stadium` | Stadium | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 18 | `Stadium` | Stadium | building | yes | stadium-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 19 | `ConventionCenter` | Convention Center | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 20 | `RooftopGarden` | Rooftop Garden | decor | yes | city-kit-commercial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 21 | `BankTower` | Bank Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
@@ -173,34 +175,34 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/OrbitalColony/` -- templates: `templates/OrbitalColony/` -- in game: `ServerStorage/Assets/OrbitalColony/`
 
-Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `LandingPad` | Landing Pad | building | — | — | — | 0/5 | — | — | — |
-| 2 | `SolarArray` | Solar Array | building | — | — | — | 0/5 | — | — | — |
-| 3 | `HabitatPod` | Habitat Pod | building | — | — | — | 0/5 | — | — | — |
-| 4 | `HydroponicsDome` | Hydroponics Dome | building | — | — | — | 0/5 | — | — | — |
-| 5 | `OxygenGenerator` | Oxygen Generator | building | — | — | — | 0/5 | — | — | — |
-| 6 | `WalkwayTube` | Connect the Walkways | unlock | — | — | — | 0/1 | — | — | — |
-| 7 | `CrewQuarters` | Crew Quarters | building | — | — | — | 0/5 | — | — | — |
-| 8 | `ColonyFlag` | Colony Flag | decor | — | — | — | 0/1 | — | — | — |
-| 9 | `ResearchLab` | Research Lab | building | — | — | — | 0/5 | — | — | — |
-| 10 | `RoverBay` | Rover Bay | building | — | — | — | 0/5 | — | — | — |
-| 11 | `CommsArray` | Comms Array | building | — | — | — | 0/5 | — | — | — |
-| 12 | `OxygenTanks` | Bring Life Support Online | unlock | — | — | — | 0/1 | — | — | — |
-| 13 | `MineralExtractor` | Mineral Extractor | building | — | — | — | 0/5 | — | — | — |
-| 14 | `RocksLarge` | Rock Garden | decor | — | — | — | 0/1 | — | — | — |
-| 15 | `ObservationDome` | Observation Dome | building | — | — | — | 0/5 | — | — | — |
-| 16 | `FusionReactor` | Fusion Reactor | building | — | — | — | 0/5 | — | — | — |
-| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | — | — | — | 0/1 | — | — | — |
-| 18 | `DockingBay` | Docking Bay | building | — | — | — | 0/5 | — | — | — |
-| 19 | `TerraformStation` | Terraform Station | building | — | — | — | 0/5 | — | — | — |
-| 20 | `HoloBeacon` | Holo Beacon | decor | — | — | — | 0/1 | — | — | — |
-| 21 | `MedicalBay` | Medical Bay | building | — | — | — | 0/5 | — | — | — |
-| 22 | `SpaceportTerminal` | Spaceport Terminal | building | — | — | — | 0/5 | — | — | — |
-| 23 | `TurretBase` | Raise Planetary Defense | unlock | — | — | — | 0/1 | — | — | — |
-| 24 | `LaunchTower` | Launch Tower | monument | — | — | — | 0/1 | — | — | — |
+| 1 | `LandingPad` | Landing Pad | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 2 | `SolarArray` | Solar Array | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 3 | `HabitatPod` | Habitat Pod | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 4 | `HydroponicsDome` | Hydroponics Dome | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 5 | `OxygenGenerator` | Oxygen Generator | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 6 | `WalkwayTube` | Connect the Walkways | unlock | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 7 | `CrewQuarters` | Crew Quarters | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 8 | `ColonyFlag` | Colony Flag | decor | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 9 | `ResearchLab` | Research Lab | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 10 | `RoverBay` | Rover Bay | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 11 | `CommsArray` | Comms Array | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 12 | `OxygenTanks` | Bring Life Support Online | unlock | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 13 | `MineralExtractor` | Mineral Extractor | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 14 | `RocksLarge` | Rock Garden | decor | yes | space-kit | 1 | 0/1 | — | — | — |
+| 15 | `ObservationDome` | Observation Dome | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 16 | `FusionReactor` | Fusion Reactor | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 18 | `DockingBay` | Docking Bay | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 19 | `TerraformStation` | Terraform Station | building | yes | orbital-kit, space-kit | 5 | 0/5 | — | — | — |
+| 20 | `HoloBeacon` | Holo Beacon | decor | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 21 | `MedicalBay` | Medical Bay | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 22 | `SpaceportTerminal` | Spaceport Terminal | building | yes | space-kit | 5 | 0/5 | — | — | — |
+| 23 | `TurretBase` | Raise Planetary Defense | unlock | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 24 | `LaunchTower` | Launch Tower | monument | yes | space-kit | 1 | 0/1 | — | — | — |
 
 ## Baked paths
 
@@ -210,9 +212,9 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 
 | Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |
 |-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|
-| Boomtown | 33 | 37308 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 66/66 | 66/66 | 33/33 | in game |
+| Boomtown | 38 | 41956 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 76/76 | 76/76 | 38/38 | in game |
 | Village | 58 | 33380 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 116/116 | 116/116 | 58/58 | in game |
 
 ## Totals
 
-96 models: 72/96 blueprints, 72/96 uploaded, 72/96 harvested, 72/96 templated
+96 models: 96/96 blueprints, 72/96 uploaded, 72/96 harvested, 72/96 templated

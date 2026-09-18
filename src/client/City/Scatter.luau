@@ -5,7 +5,8 @@
 -- Determinism: one Random seeded with plotIndex * 7919 + Hash(eraName), consumed in a fixed
 -- order that depends only on the layout and config (trees: 3 draws per zone candidate whether
 -- or not it is kept; houses: 1 draw per lot; lamps: a Fisher-Yates over the sorted junction
--- slot ids; vehicles: 1 draw per possible vehicle). Rejection tests use every road the plot
+-- slot ids whichever placement the era uses; vehicles: 1 draw per possible vehicle). Wave 1e's
+-- row lamp posts are walked off the streets and draw nothing. Rejection tests use every road the plot
 -- can ever have, never the roads drawn so far, and budgets are allocated in layout order, so
 -- the plan is the same on every client, on rejoin, and at any point in the plot's growth.
 
@@ -21,6 +22,11 @@ local Noise = require(script.Parent:WaitForChild("Noise"))
 -- Seed formula frozen by the contract.
 local SEED_PLOT_MULTIPLIER = 7919
 local FULL_TURN = 2 * math.pi
+local UP = Vector3.yAxis
+-- Wave 1e: lamps down both sides of the streets instead of one at a spur junction.
+local ROW_PLACEMENT = "row"
+-- Samples closer together than this are the same point, and the shortest leg worth walking.
+local MIN_STEP = 0.05
 
 export type TreeSpot = {
 	position: Vector3, -- plot-local, Y 0
@@ -28,11 +34,26 @@ export type TreeSpot = {
 	birthTier: number,
 }
 
+-- Wave 1e row lamps: `key` is the stable identity the controller diffs on, `pieceId` the spine
+-- piece that must be drawn before the post appears, and (polyline, stretch, step) the numeric
+-- order the cap is thinned over -- by id string, "L1_10" would sort before "L1_2" and one trail
+-- would take the whole budget.
+export type LampPost = {
+	key: string,
+	pieceId: string,
+	polyline: number,
+	stretch: number,
+	step: number,
+	position: Vector3, -- plot-local, Y 0
+	yaw: number, -- radians, facing the road
+}
+
 export type Plan = {
 	trees: { TreeSpot },
 	lotProps: { [number]: string }, -- lot index -> house prop (only lots inside the budget)
 	plazaAllowed: { [number]: boolean }, -- plaza index -> inside the budget
 	lampSlots: { [string]: boolean }, -- slots whose spur junction may carry a lamp
+	lampPosts: { LampPost }, -- row placement only, in sorted piece order
 	vehicleProps: { string }, -- vehicle i's prop name
 }
 
@@ -47,6 +68,9 @@ export type PlanInput = {
 	-- RoadGraph.AllCentrelines: every potential road, straight and (baked eras) smoothed.
 	centrelines: { { Vector3 } },
 	junctionSlotIds: { string }, -- RoadGraph.JunctionSlotIds (sorted)
+	-- RoadGraph.StreetLines, called only by row placement: sampling every drawn curve is real
+	-- work and the other eras' lamps stand at junctions.
+	streetLines: () -> RoadGraph.StreetLines,
 }
 
 type Obstacle = { position: Vector3, radius: number }
@@ -56,6 +80,9 @@ type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
 type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
 
 local Scatter = {}
+
+-- The `lamps.placement` value the controller tests for too, so the vocabulary lives in one place.
+Scatter.ROW_PLACEMENT = ROW_PLACEMENT
 
 -- The seed hash lives in Noise so the road meander keys its phases with the same function.
 function Scatter.Hash(text: string): number
@@ -327,6 +354,135 @@ local function treeSpots(input: PlanInput, rng: Random): { TreeSpot }
 	return kept
 end
 
+-- Whether `point` is within `limit` of a polyline.
+local function nearLine(point: Vector3, line: { Vector3 }, limit: number): boolean
+	for index = 2, #line do
+		local closest = RoadGraph.ClosestOnSegment(point, line[index - 1], line[index])
+		if (closest - point).Magnitude < limit then
+			return true
+		end
+	end
+	return false
+end
+
+-- Row lamps (docs/INTERFACES.md "Wave 1e — Lamps"): a post every `spacing` studs of arc along
+-- each spine run, alternating sides, `width / 2 + offset` outside the drawn centreline and facing
+-- it. The walk is a function of the layout alone, so it draws no numbers from the plan's Random
+-- and leaves every later feature's stream exactly as it was before this wave.
+local function lampPosts(input: PlanInput): { LampPost }
+	local lamps = input.era.lamps
+	local spacing = lamps.spacing
+	if
+		lamps.prop == nil
+		or lamps.placement ~= ROW_PLACEMENT
+		or spacing == nil
+		or spacing < MIN_STEP
+	then
+		return {}
+	end
+	local lines = input.streetLines()
+	local footprints = footprintsFor(input)
+	local reach = input.roadWidth / 2 + math.max(lamps.offset or 0, 0)
+	local clearance = input.roadWidth / 2
+	-- A post inside anything the plot builds on, or on another road, is dropped. Its own street is
+	-- what it was measured from, so that one is not tested against.
+	local function blocked(position: Vector3, polyline: number): boolean
+		for _, footprint in footprints do
+			if insideFootprint(footprint, position, 0) then
+				return true
+			end
+		end
+		for _, other in lines.runs do
+			if other.polyline == polyline then
+				continue
+			end
+			for _, piece in other.pieces do
+				if nearLine(position, piece.points, clearance) then
+					return true
+				end
+			end
+		end
+		for _, spur in lines.spurs do
+			if nearLine(position, spur, clearance) then
+				return true
+			end
+		end
+		return false
+	end
+
+	local posts: { LampPost } = {}
+	for _, run in lines.runs do
+		-- The run as one curve, so the spacing carries across the pieces of a street.
+		local points: { Vector3 } = {}
+		local arcs: { number } = {}
+		local pieces: { RoadGraph.SpinePiece } = {}
+		local total = 0
+		for _, piece in run.pieces do
+			for _, point in piece.points do
+				if #points > 0 then
+					local advance = (point - points[#points]).Magnitude
+					if advance < MIN_STEP then
+						continue
+					end
+					total += advance
+				end
+				table.insert(points, point)
+				table.insert(arcs, total)
+				table.insert(pieces, piece)
+			end
+		end
+		local index = 2
+		for step = 1, math.floor(total / spacing) do
+			local target = spacing * step
+			while index < #arcs and arcs[index] < target do
+				index += 1
+			end
+			local a, b = points[index - 1], points[index]
+			local hand = if step % 2 == 1 then 1 else -1
+			local right = ((b - a).Unit):Cross(UP) * hand
+			local position = a:Lerp(b, (target - arcs[index - 1]) / (arcs[index] - arcs[index - 1]))
+				+ right * reach
+			local piece = pieces[index]
+			if not blocked(position, run.polyline) then
+				table.insert(posts, {
+					key = string.format("%s:%d", piece.pieceId, step),
+					pieceId = piece.pieceId,
+					polyline = run.polyline,
+					stretch = piece.stretch,
+					step = step,
+					position = position,
+					-- The post stands on the road's `right` side and looks back across it.
+					yaw = math.atan2(right.X, right.Z),
+				})
+			end
+		end
+	end
+	table.sort(posts, function(a: LampPost, b: LampPost): boolean
+		if a.polyline ~= b.polyline then
+			return a.polyline < b.polyline
+		end
+		if a.stretch ~= b.stretch then
+			return a.stretch < b.stretch
+		end
+		return a.step < b.step
+	end)
+	-- Row posts have their own ceiling; a file too old to carry it falls back to the lamp count.
+	-- An overrun is thinned evenly over the whole order rather than truncated, so the last trail
+	-- keeps its share instead of the first one spending the budget (docs/INTERFACES.md "Wave 1e").
+	local cap = math.max(input.config.budget.lampPosts or input.config.lamps.maxPerPlot, 0)
+	local count = #posts
+	if count <= cap then
+		return posts
+	end
+	local kept: { LampPost } = {}
+	for index, post in posts do
+		if (index * cap) // count ~= ((index - 1) * cap) // count then
+			table.insert(kept, post)
+		end
+	end
+	return kept
+end
+
 function Scatter.Plan(input: PlanInput): Plan
 	local rng = Random.new(Scatter.Seed(input.plotIndex, input.eraName))
 	local era = input.era
@@ -336,6 +492,7 @@ function Scatter.Plan(input: PlanInput): Plan
 		lotProps = {},
 		plazaAllowed = {},
 		lampSlots = {},
+		lampPosts = {},
 		vehicleProps = {},
 	}
 
@@ -368,7 +525,9 @@ function Scatter.Plan(input: PlanInput): Plan
 	local lamps = input.config.lamps
 	local lampCap = math.min(math.max(lamps.maxPerPlot, 0), remaining)
 	local every = math.max(math.floor(lamps.everyNthJunction), 1)
-	if era.lamps.prop ~= nil then
+	-- Row placement lines the streets instead. The shuffle above still runs either way, so the
+	-- choice of placement never shifts the Random stream the vehicles draw from.
+	if era.lamps.prop ~= nil and era.lamps.placement ~= ROW_PLACEMENT then
 		local placed = 0
 		for index, slotId in order do
 			if placed >= lampCap then
@@ -380,6 +539,7 @@ function Scatter.Plan(input: PlanInput): Plan
 			end
 		end
 	end
+	plan.lampPosts = lampPosts(input)
 
 	local vehicleProps = era.vehicles.props
 	local vehicleCap =

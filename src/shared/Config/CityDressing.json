@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "tier": {
     "ownedWeight": 50,
     "thresholds": [
@@ -28,7 +28,10 @@
     "trees": 40,
     "vehiclesPerPlot": 6,
     "vehiclesMap": 20,
-    "pathPieces": 120
+    "pathPieces": 120,
+    "lampPosts": 24,
+    "tileCells": 180,
+    "highwayCells": 72
   },
   "trees": {
     "stages": 4,
@@ -65,7 +68,26 @@
           "widthJitter": 0.5
         },
         "paths": {
-          "tileStuds": 11
+          "tileStuds": 11,
+          "surface": {
+            "base": "default",
+            "upgrades": [
+              {
+                "slot": "dirtRoad",
+                "variant": "cobble"
+              }
+            ]
+          },
+          "variants": {
+            "cobble": {
+              "material": "Cobblestone",
+              "color": [
+                186,
+                176,
+                158
+              ]
+            }
+          }
         }
       },
       "trees": {
@@ -86,7 +108,11 @@
         ]
       },
       "lamps": {
-        "prop": null
+        "prop": "Lantern",
+        "requiresSlot": "dirtRoad",
+        "placement": "row",
+        "spacing": 16,
+        "offset": 1.2
       },
       "vehicles": {
         "props": [
@@ -108,7 +134,26 @@
         "junctionProp": null,
         "bendProp": null,
         "paths": {
-          "tileStuds": 11
+          "tileStuds": 11,
+          "surface": {
+            "base": "gravel",
+            "upgrades": [
+              {
+                "slot": "paveMainStreet",
+                "variant": "default"
+              }
+            ]
+          },
+          "variants": {
+            "gravel": {
+              "material": "Ground",
+              "color": [
+                164,
+                158,
+                145
+              ]
+            }
+          }
         }
       },
       "trees": {
@@ -130,7 +175,11 @@
         ]
       },
       "lamps": {
-        "prop": "LampPost"
+        "prop": "LampPost",
+        "requiresSlot": "streetlampRow",
+        "placement": "row",
+        "spacing": 24,
+        "offset": 0.8
       },
       "vehicles": {
         "props": [
@@ -140,19 +189,52 @@
         ],
         "perPlot": 4,
         "speed": 10
+      },
+      "signals": {
+        "prop": "TrafficLight",
+        "requiresSlot": "trafficLights",
+        "offset": 0.8,
+        "maxPerPlot": 6
       }
     },
     "Metropolis": {
       "road": {
-        "width": 8,
+        "width": 7,
         "material": "Asphalt",
         "color": [
           60,
           62,
           70
         ],
-        "junctionProp": "Junction",
-        "bendProp": "Bend"
+        "tiles": {
+          "tileStuds": 7,
+          "props": {
+            "straight": "RoadStraight",
+            "end": "RoadEnd",
+            "bend": "RoadBend",
+            "tee": "RoadTee",
+            "cross": "RoadCross",
+            "crossing": "RoadCrossing"
+          },
+          "pavement": {
+            "width": 4,
+            "material": "Concrete",
+            "color": [
+              176,
+              180,
+              196
+            ]
+          },
+          "spur": {
+            "width": 3,
+            "material": "Concrete",
+            "color": [
+              176,
+              180,
+              196
+            ]
+          }
+        }
       },
       "trees": {
         "maxCount": 24,
@@ -160,11 +242,27 @@
         "prop": "TreeGrowing"
       },
       "houses": {
-        "props": [
-          "HouseA",
-          "HouseB",
-          "HouseC"
-        ]
+        "props": []
+      },
+      "highway": {
+        "requiresSlot": "highwayRamp",
+        "props": {
+          "deck": "HighwayDeck",
+          "corner": "HighwayCorner",
+          "junction": "HighwayJunction",
+          "ramp": "HighwayRamp",
+          "sign": "HighwaySign"
+        },
+        "vehicles": {
+          "count": 2,
+          "speed": 18
+        },
+        "revealCellsPerSecond": 12
+      },
+      "subway": {
+        "requiresSlot": "subwayLine",
+        "prop": "MetroEntrance",
+        "maxPerPlot": 6
       },
       "plazas": {
         "props": [
@@ -231,6 +329,7 @@
     "fillHeight": 0.07,
     "rimLeadSeconds": 0.15,
     "dustSeconds": 0.8,
-    "rimNearOnly": true
+    "rimNearOnly": true,
+    "buildingLift": 0.1
   }
 }

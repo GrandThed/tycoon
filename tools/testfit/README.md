@@ -49,6 +49,12 @@ renders here merges there.
   with stage N is present at every stage >= N. Nothing is ever removed, so a roof that a later
   storey replaces has to be buried inside that storey (see the notes below).
 
+City-dressing props live under `blueprints/_props/<Era>/<PropName>.json` (same schema, usually one
+stage) and run through the same tools with `--props`. **Careful: `upload_models.py --props
+--dry-run` is not read-only — it pre-lists the prop's entries into `src/shared/Config/Assets.json`
+(only the network calls are skipped).** Check `git status` after a dry run rather than assuming the
+file is untouched.
+
 ## fantasy-town-kit notes (measured with `--dump-bounds`)
 
 - Wall panels (`wall*`, `wall-wood*`) are 1 x 1 x 0.1, bottom-origin, and occupy the +X face of
@@ -66,7 +72,11 @@ renders here merges there.
 - `chimney-base`, `chimney`, `chimney-top` stack on the same cross-section just inside the +X face
   (x 0.25..0.43); a cap alone, sunk into a roof, is enough for a small building.
 - `banner-*` hang at x 0.38..0.43, so offset the holder +0.62 from a wall cell centre (or -0.38 for
-  a wall on x = 0) to hang them 0.02 outside the panel. `lantern` has a 0.22-wide base.
+  a wall on x = 0) to hang them 0.02 outside the panel.
+- `lantern` is **not** wall-hung: it is a free-standing lamp post, 0.216 x 1.556 x 0.224 units,
+  **bottom-centre origin** and radially symmetric, so `rotY` does not matter. At scale 4 it is
+  6.22 studs; the Village `Lantern` prop uses scale 3.2 → **4.98 studs** (measured 2026-09-18,
+  wave 1e).
 - Burying an old roof inside a new storey works only if the buried piece has no outward-facing
   vertical face on the cell boundary (hips and flat slabs are fine; `roof-gable-top` end triangles
   z-fight with the wall in front of them).
@@ -227,8 +237,11 @@ city-kit-roads:
   apart; `electricity-pole` (orange wood) stacks every 0.525; `construction-light` 0.234 (0.94 studs,
   orange/white striped — a barber pole / beacon) sits on a pillar cap; `construction-cone` 0.38
   studs; `dumpster` green 0.28×0.21×0.37 along Z; `light-curved` 2.7 studs (arm −Z), `light-square`
-  2.4 (arm −Z: rotY 90 → −X, 270 → +X); `traffic-light*` ~2 studs; `road-sign-empty-hanging` reads as
-  a bare lamp post.
+  2.4 (arm −Z: rotY 90 → −X, 270 → +X); `road-sign-empty-hanging` reads as a bare lamp post.
+- `traffic-light` and `traffic-light-object-vertical`: the **lens faces local −X** (so `rotY` 270
+  points it at −Z, 90 at +Z, 180 at +X); the plain back is on +X. `traffic-light` is **0.515 tall**
+  (2.06 studs at ×4; the Boomtown `TrafficLight` prop uses scale 9 → 4.63 studs), and a second head
+  at **y 0.30, x +0.03** sits flush against the first (measured 2026-09-18, wave 1e).
 
 Measured during the Metropolis Stadium authoring (2026-09-17), when the kit was pushed at a
 subject it has no pieces for:

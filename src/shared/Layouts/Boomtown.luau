@@ -80,17 +80,19 @@ return {
 		},
 
 		-- west service lane: car businesses with bays facing the street
-		-- spur: driveway to the boulevard; the building itself blocks the ring side
+		-- spur: driveway south onto the cross street, which is what makes the cross street's west
+		-- arm grow (nothing else joins it)
 		carDealership = {
 			position = Vector3.new(-40, 0, -32),
 			rotationY = 270,
 			spur = {
 				Vector3.new(-40, 0, -32),
 				Vector3.new(-31, 0, -32),
-				Vector3.new(-31, 0, -54.5),
+				Vector3.new(-31, 0, -42),
 			},
 		},
-		-- spur: side street between the dealership and the repair shop out to the ring
+		-- spur: out of the bay and onto the head of its own service lane (z = -22); the lane, not
+		-- the ring, is now the nearest street, so the path is half as long as the old dogleg
 		autoRepair = {
 			position = Vector3.new(-40, 0, -12),
 			rotationY = 270,
@@ -98,10 +100,9 @@ return {
 				Vector3.new(-40, 0, -12),
 				Vector3.new(-31, 0, -12),
 				Vector3.new(-31, 0, -22),
-				Vector3.new(-51, 0, -22),
 			},
 		},
-		-- spur: side street between the repair shop and the alley out to the ring
+		-- spur: out of the bay and onto the head of the other west service lane (z = -2)
 		bowlingAlley = {
 			position = Vector3.new(-40, 0, 8),
 			rotationY = 270,
@@ -109,18 +110,18 @@ return {
 				Vector3.new(-40, 0, 8),
 				Vector3.new(-31, 0, 8),
 				Vector3.new(-31, 0, -2),
-				Vector3.new(-51, 0, -2),
 			},
 		},
 
 		-- east service lane: transit and signage
-		-- spur: driveway to the boulevard, mirroring the car dealership
+		-- spur: driveway south onto the cross street, mirroring the car dealership, and the only
+		-- thing that grows the cross street's east arm
 		busLine = {
 			position = Vector3.new(40, 0, -32),
 			rotationY = 90,
-			spur = { Vector3.new(40, 0, -32), Vector3.new(31, 0, -32), Vector3.new(31, 0, -54.5) },
+			spur = { Vector3.new(40, 0, -32), Vector3.new(31, 0, -32), Vector3.new(31, 0, -42) },
 		},
-		-- spur: side street across the empty east lot out to the ring
+		-- spur: driveway onto the head of the east service lane
 		neonDistrict = {
 			position = Vector3.new(40, 0, 8),
 			rotationY = 90,
@@ -128,19 +129,14 @@ return {
 				Vector3.new(40, 0, 8),
 				Vector3.new(31, 0, 8),
 				Vector3.new(31, 0, -2),
-				Vector3.new(51, 0, -2),
 			},
 		},
-		-- spur: side street between the billboard and the fire station out to the ring
+		-- spur: straight out behind the hoarding onto the back lane; the old three-leg dogleg round
+		-- the front was the plot's longest path (38 studs) and joined the ring where nothing else did
 		billboardSign = {
 			position = Vector3.new(40, 0, 20),
 			rotationY = 90,
-			spur = {
-				Vector3.new(40, 0, 20),
-				Vector3.new(31, 0, 20),
-				Vector3.new(31, 0, 29),
-				Vector3.new(51, 0, 29),
-			},
+			spur = { Vector3.new(40, 0, 20), Vector3.new(40, 0, 29.5) },
 		},
 
 		-- monument at the mouth of main street, facing arriving players
@@ -152,64 +148,94 @@ return {
 			spur = { Vector3.new(0, 0, -30) },
 		},
 	},
-	-- Street plan (M9 city dressing, wave 1b). Roads grow with the buildings: only the stretches
-	-- from
-	-- the entrance (the first point below) to each owned building's path are drawn, straight
-	-- asphalt
-	-- with kit tiles. Main street is exactly one road wide between the storefront pads
-	-- (road.width/2
-	-- + 1 either side) and its median slots (paveMainStreet, streetlampRow, trafficLights) are
-	-- road
-	-- pieces meant to stand on it (INTERFACES amendment P1). The monument and the service lots
-	-- fill
-	-- the rest of the town, so the other roads run as a ring behind them.
+	-- Street plan (M9 city dressing, wave 1b, cross streets added in wave 1e). Roads grow with the
+	-- buildings: only the stretches from the entrance (polyline 1's first point) to each owned
+	-- building's path are drawn, straight asphalt. Main street is exactly one road wide between the
+	-- storefront pads (road.width/2 + 1 either side) and its median slots (paveMainStreet,
+	-- streetlampRow, trafficLights) are road pieces meant to stand on it (INTERFACES amendment P1).
+	--
+	-- Two rules shape the grid, and both are why it looks the way it does:
+	--  * A street is only ever drawn where it is on a *shortest path* from the entrance to an
+	--    owned building's join, so what a finished plot shows is a spanning tree. A closed block
+	--    would lose exactly one of its stretches to that tree and leave a permanent gap in a road,
+	--    so no street below closes a loop: each is either the ring or a dead end that stops at the
+	--    driveway which grows it.
+	--  * The storefront rows (x = +/-16) and their pads (x = +/-8) wall main street in from
+	--    z = -25.5 to z = 36 -- nothing can clear both by road.width / 2 + 1 in that band, the
+	--    Install Traffic Lights slot at (0, 24) included -- and the dealership and bus yard close
+	--    z = -41.5 to -22.5 out to the ring. z = -42 is the one line left, which is why the town
+	--    has exactly one four-way and it sits at the clock tower's block.
 	streets = {
-		-- 1: the entrance beside the Sign, the boulevard east and the east ring road up to the fire
-		-- station. Roads grow with the buildings, so the ring stops where the last path joins it.
+		-- 1: main street, from the entrance beside the Sign over Pave Main Street's tile and under
+		-- the clock tower, up to the department store (INTERFACES amendment P3).
+		{ points = { Vector3.new(0, 0, -54.5), Vector3.new(0, 0, 28) } },
+		-- 2: the ring, one road: up the west side past the cinema, back down to the front edge,
+		-- across the front through the entrance and up the east side to the fire station. Written
+		-- as one polyline so the two crossing lanes below still fit in the 5-polyline budget; the
+		-- entrance is the T where main street meets it.
 		{
 			points = {
+				Vector3.new(-51, 0, 35.5),
+				Vector3.new(-51, 0, -54.5),
 				Vector3.new(0, 0, -54.5),
 				Vector3.new(51, 0, -54.5),
 				Vector3.new(51, 0, 35.5),
 			},
 		},
-		-- 2: main street, from the boulevard over Pave Main Street's tile and under the clock
-		-- tower at its mouth, up to the department store (INTERFACES amendment P3).
-		{ points = { Vector3.new(0, 0, -54.5), Vector3.new(0, 0, 28) } },
-		-- 3: the boulevard west and the west ring road up to the cinema, mirroring the east.
+		-- 3: the cross street, the town's one four-way: west and east out of main street at
+		-- z = -42, each arm ending at the dealership / bus yard driveway that grows it. It stops
+		-- 20 studs short of the ring on purpose: reaching it would close a block (see above).
+		{ points = { Vector3.new(-31, 0, -42), Vector3.new(0, 0, -42), Vector3.new(31, 0, -42) } },
+		-- 4: the two west service lanes off the ring, one polyline: in to the repair shop's
+		-- driveway at z = -22, down the ring (a run it shares with polyline 2, so it draws once),
+		-- and in again to the bowling alley's at z = -2. Two T crossings for one polyline.
 		{
 			points = {
-				Vector3.new(0, 0, -54.5),
-				Vector3.new(-51, 0, -54.5),
-				Vector3.new(-51, 0, 35.5),
+				Vector3.new(-31, 0, -2),
+				Vector3.new(-51, 0, -2),
+				Vector3.new(-51, 0, -22),
+				Vector3.new(-31, 0, -22),
+			},
+		},
+		-- 5: the east service lanes, one polyline like 4: in to the neon district's driveway at
+		-- z = -2, up the ring (shared run, drawn once) and in again behind the hoarding at
+		-- z = 29.5, the last strip the fire station's pad leaves clear.
+		{
+			points = {
+				Vector3.new(31, 0, -2),
+				Vector3.new(51, 0, -2),
+				Vector3.new(51, 0, 29.5),
+				Vector3.new(40, 0, 29.5),
 			},
 		},
 	},
-	-- Frontage houses face the boulevard first, where arriving players see them, then the empty
-	-- pockets beside the service lots fill in.
+	-- Frontage houses: the pair the ring's front leg still has room for either side of the cross
+	-- street, two more facing the cross street from the clock tower's block, the east lay-by and
+	-- the two quiet corners by the bowling alley and the cinema.
 	lots = {
-		{ position = Vector3.new(-21, 0, -45.5), rotationY = 0, tier = 2 },
-		{ position = Vector3.new(22.5, 0, -45.5), rotationY = 0, tier = 2 },
-		{ position = Vector3.new(-41, 0, -45.5), rotationY = 0, tier = 3 },
-		{ position = Vector3.new(41, 0, -45.5), rotationY = 0, tier = 3 },
+		{ position = Vector3.new(-41, 0, -45.5), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(41, 0, -45.5), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(-20, 0, -32), rotationY = 0, tier = 3 },
+		{ position = Vector3.new(20, 0, -32), rotationY = 0, tier = 3 },
 		{ position = Vector3.new(42, 0, -21.5), rotationY = 270, tier = 4 },
 		{ position = Vector3.new(-42, 0, 18.5), rotationY = 90, tier = 4 },
 		{ position = Vector3.new(42, 0, -11), rotationY = 270, tier = 5 },
-		{ position = Vector3.new(12.5, 0, -45.5), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(-44, 0, 44), rotationY = 0, tier = 5 },
 	},
 	-- A park on the empty lot behind the motel and grocery.
 	plazas = {
 		{ position = Vector3.new(-29.5, 0, 23), rotationY = 0, tier = 3, prop = "PlazaA" },
 	},
-	-- A full main street leaves only small gaps: beside the clock tower, the empty east lot, the
-	-- west
-	-- park's corner and the two back corners inside the ring.
+	-- Main street, the cross street and the service lanes fill the town centre, so the greenery is
+	-- the east lot, the two pockets beside the west park, and the treeline along the back fence
+	-- behind the civic row. The clock tower's block, which used to hold two groves, is now the
+	-- cross street and the two houses that face it.
 	treeZones = {
-		{ center = Vector3.new(-20, 0, -33), radius = 4, count = 4 },
-		{ center = Vector3.new(17, 0, -31), radius = 5, count = 6 },
-		{ center = Vector3.new(29, 0, -16), radius = 5, count = 6 },
+		{ center = Vector3.new(31, 0, -16), radius = 5, count = 6 },
+		{ center = Vector3.new(-25, 0, 12), radius = 3, count = 3 },
 		{ center = Vector3.new(-44, 0, 27), radius = 3, count = 3 },
-		{ center = Vector3.new(-42, 0, 45), radius = 3, count = 3 },
-		{ center = Vector3.new(42, 0, 45), radius = 3, count = 3 },
+		{ center = Vector3.new(-23, 0, 53), radius = 5, count = 5 },
+		{ center = Vector3.new(14, 0, 53), radius = 5, count = 5 },
+		{ center = Vector3.new(46, 0, 46), radius = 4, count = 4 },
 	},
 }

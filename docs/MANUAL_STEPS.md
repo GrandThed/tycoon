@@ -694,6 +694,9 @@ Run in this order from the repo root; every step is idempotent, same as M7.
 - [x] 10. Harvest paste and `gen_templates.py --props` done 2026-09-16 for Village + Boomtown
       (24 stages harvested, 0 failed; 18 templates in `templates/_props/`). `docs/PLAYTEST.md`
       "M9" is ready to run after a Rojo sync.
+- [x] 10b. (harvested + templated 2026-09-18) **Wave 1e (2026-09-18) added two props** — `Village/Lantern` and `Boomtown/TrafficLight`
+      — merged and uploaded but **not harvested**. Together with the 4 new path-variant textures
+      they need one more paste: **section 7 below**.
 
 ### 4. Nothing new to create on the Creator Hub
 
@@ -747,11 +750,58 @@ the old `upload_path_texture.py` step is gone.
       `SP_<slotId>` building paths) → `ReplicatedStorage/Assets/Paths/<Era>/<pieceId>`. In Studio
       each one is a Model with a `Rim` and a `Fill` MeshPart, textured in Edit mode.
 
+### 7. Wave 1e — street upgrades: one harvest paste (**done 2026-09-18**; kept as the routine for the next props/variants)
+
+Wave 1e (2026-09-18) makes Pave the Road, Pave Main Street, Streetlamp Row and Install Traffic
+Lights change the streets. Everything is built, reviewed and uploaded; **one Studio paste is
+owed**. Until you run it the two new props and both surface variants are silently absent (dirt
+Village, asphalt Boomtown, no lanterns, no signals) — that is the designed degrade, not a bug, and
+`docs/ASSET_MANIFEST.md` is deliberately stale until step 20.
+
+Already done, nothing to do: 4 variant textures uploaded (Village `cobble` fill + rim, Boomtown
+`gravel` fill + rim), `Village/Lantern` and `Boomtown/TrafficLight` merged and uploaded, and
+`tools/assets/harvest.luau` already regenerated with **exactly 6 records** (2 props + 4 path
+textures).
+
+- [ ] 17. **The one Studio step — the harvest paste.** From the repo root:
+      1. `cat tools/assets/harvest.luau | clip` (the file is already generated; only if you need to
+         rebuild it: `py tools/assets/harvest.py --emit --props`, which also picks up the 4 path
+         textures — they ride along in either mode).
+      2. Studio, **Edit mode, not Play** → **Command Bar** → paste → run → wait for the
+         `[HARVEST-DONE]` line in Output.
+      3. Output panel → right-click → **Select All** → **Ctrl+C**.
+- [ ] 18. **Merge it back:** `py tools/assets/harvest.py --props` — reads the clipboard and writes
+      `meshId`/`imageId`/`size`/`offset` into `src/shared/Config/Assets.json` (generated-only,
+      never hand-edit). Expect **6** merged records; anything missed is listed and left untouched —
+      re-run step 17 for the rest.
+- [ ] 19. **Templates:**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --check
+      ```
+      Writes `templates/_props/Village/Lantern.rbxmx` and
+      `templates/_props/Boomtown/TrafficLight.rbxmx`; `--check` must exit 0.
+- [ ] 20. **Manifest** (this is the step that unstales it):
+      ```
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+- [ ] 21. **Build and confirm in Studio:** `rojo build -o build/test.rbxl` (or resync
+      `rojo serve`), then in Explorer check all three:
+      1. `ReplicatedStorage.Assets.Props.Village.Lantern.Stage0` exists and previews textured.
+      2. `ReplicatedStorage.Assets.Props.Boomtown.TrafficLight.Stage0` exists and previews textured.
+      3. In `src/shared/Config/Assets.json`, `paths.Village.variants.cobble.fillImageId` /
+         `.rimImageId` and `paths.Boomtown.variants.gravel.fillImageId` / `.rimImageId` are all
+         **non-zero** (they are `0` before the paste).
+      Then run `docs/PLAYTEST.md` "M9 — City dressing" **section 4b (wave 1e)**.
+
 ### 5. Wave 2 (Metropolis, Orbital Colony, `cityDetail` setting) — not started
 
-- [ ] 12. Repeats sections 2–3 **and section 6** above for Metropolis and Orbital Colony once their
-      buildings ship (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no
-      manual/Studio steps beyond the same pipeline run and one harvest paste.
+- [ ] 12. Repeats sections 2–3 **and sections 6–7** above for Metropolis and Orbital Colony once
+      their buildings ship (M8's remaining eras), plus a `SettingsPanel` row for `cityDetail` — no
+      manual/Studio steps beyond the same pipeline run and one harvest paste. Metropolis and
+      Orbital Colony have no `surface`/`variants`/`signals` config yet, so wave 1e does nothing on
+      those eras.
 
 
 ---

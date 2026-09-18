@@ -23,7 +23,9 @@ and swatch lines), so each paste lands exactly where its emit came from. --asset
 Baked paths (Assets.json paths.<Era>, uploaded by upload_paths.py) ride along in both modes with
 no flag of their own: a piece mesh with an assetId but no meshId is emitted as kind "pathPiece"
 and a texture Decal with no imageId as kind "pathTexture", and either merge writes them back,
-because paths belong to neither buildings nor props and should not wait on either paste.
+because paths belong to neither buildings nor props and should not wait on either paste. A
+"pathTexture" line carrying a `variant` lands in paths.<Era>.variants.<name> instead of the era's
+default pair (INTERFACES "Wave 1e - street upgrades").
 """
 
 from __future__ import annotations
@@ -99,6 +101,7 @@ for _, asset in ASSETS do
 		kit = asset.kit,
 		piece = asset.piece,
 		layer = asset.layer,
+		variant = asset.variant,
 		assetId = tostring(asset.id),
 		parts = {},
 	}
@@ -167,8 +170,11 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
         if asset_id == 0 or (not include_all and int(tex.get("vipImageId", 0)) != 0):
             continue
         lines.append(f"\t{{ kind = \"swatch\", kit = {lua_string(kit)}, id = {asset_id} }},")
-    for era, layer, asset_id in pending_path_textures(assets, include_all):
-        lines.append(f"\t{{ kind = \"pathTexture\", era = {lua_string(era)}, layer = {lua_string(layer)}, id = {asset_id} }},")
+    for era, variant, layer, asset_id in pending_path_textures(assets, include_all):
+        variant_field = f"variant = {lua_string(variant)}, " if variant else ""
+        lines.append(
+            f"\t{{ kind = \"pathTexture\", era = {lua_string(era)}, {variant_field}layer = {lua_string(layer)}, id = {asset_id} }},"
+        )
     for era, piece_id, layer, asset_id in pending_path_pieces(assets, include_all):
         lines.append(
             f"\t{{ kind = \"pathPiece\", era = {lua_string(era)}, piece = {lua_string(piece_id)}, "
@@ -188,14 +194,19 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
     return 0
 
 
-def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple[str, str, int]]:
+def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple[str, str | None, str, int]]:
+    """(era, variant or None, layer, assetId) for every uploaded path Decal whose Image asset is
+    still unknown. Surface variants (INTERFACES "Wave 1e") ride along with the era's default pair,
+    so one paste resolves every texture an era has."""
     out = []
     for era in sorted(assets.get(cfg.PATHS_KEY, {})):
         entry = assets[cfg.PATHS_KEY][era]
-        for layer in cfg.PATH_LAYERS:
-            asset_id = int(entry.get(f"{layer}AssetId", 0))
-            if asset_id != 0 and (include_all or int(entry.get(f"{layer}ImageId", 0)) == 0):
-                out.append((era, layer, asset_id))
+        variants = entry.get(cfg.PATH_VARIANTS_KEY) or {}
+        for variant, block in [(None, entry)] + [(name, variants[name]) for name in sorted(variants)]:
+            for layer in cfg.PATH_LAYERS:
+                asset_id = int(block.get(f"{layer}AssetId", 0))
+                if asset_id != 0 and (include_all or int(block.get(f"{layer}ImageId", 0)) == 0):
+                    out.append((era, variant, layer, asset_id))
     return out
 
 
@@ -327,12 +338,14 @@ def merge_swatch(assets: dict, rec: dict, force: bool) -> bool:
 
 
 def merge_path_texture(assets: dict, rec: dict, force: bool) -> bool:
-    era, layer = rec.get("era"), rec.get("layer")
+    era, layer, variant = rec.get("era"), rec.get("layer"), rec.get("variant")
     entry = assets.get(cfg.PATHS_KEY, {}).get(era)
+    if entry is not None and variant:
+        entry = (entry.get(cfg.PATH_VARIANTS_KEY) or {}).get(variant)
     if entry is None or layer not in cfg.PATH_LAYERS:
-        warn(f"no paths entry for era {era!r} layer {layer!r}; line skipped")
+        warn(f"no paths entry for era {era!r}{f' variant {variant!r}' if variant else ''} layer {layer!r}; line skipped")
         return False
-    label = f"path texture {era} {layer}"
+    label = f"path texture {era} {variant + ' ' if variant else ''}{layer}"
     expected = int(entry.get(f"{layer}AssetId", 0))
     got = int(str(rec.get("assetId", "0")) or 0)
     if expected != got and not force:
@@ -395,7 +408,10 @@ def list_missing(assets: dict, props: bool) -> list[str]:
         tex = assets["textures"][kit]
         if int(tex.get("vipSwatchAssetId", 0)) != 0 and int(tex.get("vipImageId", 0)) == 0:
             missing.append(f"VIP swatch {kit}")
-    missing += [f"path texture {era} {layer}" for era, layer, _ in pending_path_textures(assets)]
+    missing += [
+        f"path texture {era} {variant + ' ' if variant else ''}{layer}"
+        for era, variant, layer, _ in pending_path_textures(assets)
+    ]
     pieces = pending_path_pieces(assets)
     if pieces:
         missing.append(f"{len(pieces)} path piece mesh(es)")

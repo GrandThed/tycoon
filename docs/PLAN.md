@@ -32,8 +32,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
 - [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
   contracts, layouts, pipeline, blueprints, client and prop uploads, harvest and 18 prop
   templates shipped 2026-09-16; **wave 1d baked paths shipped and approved in Studio
-  2026-09-18** — 91 pieces for Village + Boomtown; the full M9 checklist re-run is still open —
-  see "M9" below; wave 2 (Metropolis/OrbitalColony + `cityDetail`) not started)
+  2026-09-18** — 91 pieces for Village + Boomtown; **wave 1e street upgrades shipped
+  2026-09-18** — Pave the Road / Pave Main Street / Streetlamp Row / Traffic Lights now change
+  the streets, review no Criticals, QA green, harvest paste done 2026-09-18, **Studio playtest (PLAYTEST 4b) pending**
+  (`docs/MANUAL_STEPS.md` M9 §7); the full M9 checklist re-run is still open — see "M9" below;
+  wave 2 (Metropolis/OrbitalColony + `cityDetail`) not started)
 
 ---
 
@@ -680,7 +683,9 @@ tier 5 at ~80 % of the era's target duration.
   its building, not at the pad edge. *Amended in wave 1d:* the surfaces are **baked meshes**
   (Village dirt, Boomtown asphalt + concrete kerb), one Model per piece, cloned from
   `ReplicatedStorage/Assets/Paths`; ≤ 120 pieces per plot; kit junction/bend tiles are dropped for
-  Boomtown. Plain Parts remain as the silent fallback.
+  Boomtown. Plain Parts remain as the silent fallback. *Amended in wave 1e:* the slots that are
+  **named** as street improvements now change the streets — surface variants (Village cobble,
+  Boomtown gravel → asphalt), lamp rows and crossing signals, all client-side.
 - **Trees** — one 4-stage `TreeGrowing` prop per era (nature-kit for Village, suburban tree/planter
   for the city eras; none in Orbital). Seeded scatter inside layout `treeZones`, rejecting points
   near slots, roads, lots and edges; each tree has a birth tier and grows a stage per tier after
@@ -765,15 +770,69 @@ outline, and a darker **rim** ribbon 0.4 studs wider sits under the fill.
 - **Watch item:** path triangles are ~33k (Village) / ~37k (Boomtown) per fully-owned plot, so
   ~350k at ten plots — the number to watch before wave 2 doubles the era count.
 
+**Shipped (wave 1e — street upgrades, 2026-09-18):** four slots that were only names now change
+the streets. Still **client-only**: no server, remote, attribute or profile change — the input is
+the owned-slot set the controller already derives from `Buildings/Building_<slotId>`, and every
+tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e — street upgrades".
+
+- **Village `dirtRoad` ("Pave the Road"):** every trail swaps to the **`cobble`** surface — a
+  runtime `MeshPart.TextureID` swap on the baked pieces, **no re-bake** — with one cobble-coloured
+  dust puff along every visible trail on a near plot. **`Lantern`** props (fantasy-town-kit
+  `lantern`, blueprint scale 3.2, 4.98 studs) line the visible spine trails: spacing 16, offset
+  1.2, ≈ 15 on a fully grown plot (11 main lane, 1 campsite lane, 1 farm track, 2 cottage lane),
+  cap `budget.lampPosts` 16.
+- **Boomtown `paveMainStreet`:** streets are **`gravel`** until it is owned, then today's asphalt +
+  concrete kerb (`default`). A fresh Boomtown plot never shows a frame of asphalt.
+- **Boomtown `streetlampRow`:** now gates **all** Boomtown lamps — the tier-3 junction rule no
+  longer applies to that era (Metropolis and Orbital Colony are unchanged). `LampPost` row,
+  spacing 24, offset 0.8, ≈ 8 posts.
+- **Boomtown `trafficLights`:** a **`TrafficLight`** prop (city-kit-roads, blueprint scale 9, 4.63
+  studs) at every node where three or more spine streets meet. Ben asked for real cross streets
+  (2026-09-18): the Boomtown plan now has 5 polylines (main street, the ring, a cross street at
+  z −42, west and east service lanes) and **six** crossings; every lane is a dead end because the
+  drawn network is a spanning tree (a closed block would leave one stretch never drawn). All 38
+  Boomtown path pieces were re-baked, uploaded, harvested and templated. After Ben's Studio looks
+  the four street slots became `streetOnly` (no kit model) and buildings gained
+  `paths.buildingLift` 0.1 so floors clear the spur beneath them.
+- **Degrades silently, as everywhere else in M9:** missing variant image ids (still `0`), a missing
+  prop template or a missing `Assets.Paths` folder means default texture / no lamps / no signals and
+  no error. The Parts fallback repaints from `road.paths.variants.<name>.material/color`.
+- **Pipeline:** `tools/paths/texture.py` grew per-era `variants` (`assets/paths/<Era>_<variant>_fill.png`
+  / `_rim.png`, `--variant`, `--default-only`); `upload_paths.py` uploads and records
+  `Assets.json paths.<Era>.variants.<name>`; `harvest.py` routes a `pathTexture` record carrying a
+  `variant`; `assets_config.py` renders the variants block. **Already uploaded:** the 4 variant
+  textures (Village cobble fill/rim, Boomtown gravel fill/rim — image ids still `0`) and the
+  `Lantern` + `TrafficLight` props.
+- **Review (roblox-reviewer): no Criticals.** One Major fixed — the lamp cap was applied to a
+  string-sorted plan, so Village's main lane ate the whole budget; posts are now ordered numerically
+  by `(polyline, stretch, step)` and thinned evenly to the cap of 16. Minors fixed: the surface
+  burst now supersedes the reveal burst, the variant is gated on its texture actually being
+  uploaded, dust colour follows the variant, an explicit row-mode flag, `PieceVisible` vs the near
+  budget in parts mode, and the Village lantern offset 0.6 → 1.2. QA green (known, not new: the
+  selene `LegacyPanel` warning, `src/combat` luau-lsp diagnostics that need the combat sourcemap,
+  and `gen_asset_manifest.py --check` stale until the harvest paste below).
+
 **Carried forward (owners assigned):**
+- **Ben, before the wave 1e playtest:** one Studio **harvest paste** — `tools/assets/harvest.luau`
+  is already generated with exactly 6 records (2 props + 4 path textures) — then
+  `harvest.py --props`, `gen_templates.py --props`, `gen_asset_manifest.py` and `rojo build`.
+  Ordered steps: `docs/MANUAL_STEPS.md` "M9" §7. Until then Lanterns, Traffic Lights and both
+  surface variants are silently absent and `docs/ASSET_MANIFEST.md` is deliberately stale.
 - [x] **Ben, before playtest:** prop harvest paste done 2026-09-16 (24 stages, 0 failed); 18 prop
   templates generated and committed.
 - [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
   generated and committed; baked paths seen and approved in Studio.
 - **Ben, next:** re-run `docs/PLAYTEST.md` "M9 — City dressing" end to end in Studio (the path
-  steps 5b–5f, 20b and 23b–23c are new); this ticks M9 `[x]` above once passed.
+  steps 5b–5f, 20b and 23b–23c are new, and section 5b covers all of wave 1e); this ticks M9 `[x]`
+  above once passed.
+- **Ben / lead, open question (wave 1e):** today's Boomtown street plan has exactly **one** node
+  where three spine streets meet, so Install Traffic Lights buys **one** signal. More signals means
+  more cross streets in `src/shared/Layouts/Boomtown.luau` — a layout change Ben has to want.
 - **lead, before wave 2:** re-cut the ≤ ~1300-part budget line, which predates baked paths
-  (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail).
+  (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail). Wave 1e adds up to
+  `budget.lampPosts` (16) lamp models plus signals per near plot on top of it.
+- **lead, wave 2:** Metropolis and Orbital Colony have `lamps` but no `surface`, `variants` or
+  `signals` keys, so they keep today's behaviour until their street plans land.
 - **lead / economy-designer, wave 2:** Metropolis and Orbital Colony street plans + prop
   blueprints (after M8's Metropolis/Orbital buildings ship) and the persisted `cityDetail` setting
   — contracts already frozen in INTERFACES, not started.

@@ -289,6 +289,37 @@ agree — re-verify both if a template ever gains a PrimaryPart.
   (it only checks roadPieces/roadPiecesNear). Reserved today: Village 58, Boomtown 33 — headroom, not a breach.
   Spurs are allocated *after* every stretch, so an overrun drops paths to buildings first.
 
+**M9 wave 1e (2026-09-18, street upgrades: surface variants + row lamps + crossing signals, SHIP
+with 2 Majors — client-only).** `RoadGraph.SetSurface(state, owned, animate)` resolves one plot-wide
+variant (last owned `paths.surface.upgrades` entry, else `base`; unuploaded ids ⇒ `"default"` for
+BOTH renderers) → `PathRenderer.SetSurface` writes `MeshPart.TextureID` on every live Fill/Rim and
+`addPiece`/`showRim` paint later clones. `setVariant(NO_SLOTS_OWNED, initial=true)` runs inside
+`RoadGraph.new` so Boomtown never flashes asphalt. Row lamps (`Scatter.lampPosts`) draw **no** rng,
+so the vehicle/tree stream is unchanged; `RoadGraph.StreetLines` (runs of planned spine pieces +
+all spurs) and `SignalSpots` (nodes with ≥3 **spine** stretches; spurs are not stretches) are both
+ownership- and LOD-independent.
+- **Read-only verification that found the Majors:** `py tools/paths/bake.py --era <E> --list` prints
+  every piece's node coords and chain arcs — enough to hand-count row-lamp steps (`floor(runArc /
+  spacing)`) and to count how many nodes have 3+ spine arms. Village polyline 1 is 201 studs / 23
+  stretches (L1_1..L1_23, so **string sorting scrambles ordinals ≥ 10**); Boomtown is 3 polylines
+  × 5 stretches meeting at exactly ONE node (0,-54.5) ⇒ one traffic light per plot.
+- **Recurring pattern (wave 1e, new):** a per-plot cap applied to a **string-sorted** plan silently
+  decides *which* features survive. `"L1_10:4" < "L1_1:1"`, and `"L1_*" < "L2_*"`, so the whole
+  `budget.lampPosts` 12 goes to the longest polyline and every side street is permanently unlit.
+  Any capped plan must sort by numeric (polyline, ordinal, step) or allocate the cap per run.
+- **Recurring pattern (wave 1e):** a purchase that both reveals a piece and changes the surface
+  loses the surface effect — `applyBaked`'s `startBurst(revealed)` removes the handle's existing
+  burst. Only slots with a **one-point (P2) spur** (Boomtown `paveMainStreet`) keep it; Village
+  `dirtRoad` has `SP_dirtRoad`, so it does not.
+- Wave-1b/1d "py mirror the allocator" recurred a third time: `budget.pathPieces` IS now checked by
+  `streetplan.py` (fixed), `budget.lampPosts` is not.
+- `templates/_props/*/{Lantern,TrafficLight}.rbxmx` and all `paths.*.variants.*ImageId` are absent/0
+  until a Studio harvest, so a playtest before that shows none of this wave. `gen_templates.py
+  --check` prints "uploaded but not harvested" and still PASSes — not a failure signal.
+- Verified fact: templates store the texture as `TextureContent` (rbxmx), yet reading/writing the
+  legacy `MeshPart.TextureID` works (`PlotVisualsController:171` already reads it), so the
+  "restore the template's own texture" path is sound.
+
 **C0 baseline (2026-09-17, Expeditions foundation — SHIP with 1 Critical + Majors).** Second place
 (`combat.project.json`, `src/combat/**`) shares `src/shared` AND `src/server/Services` (hub-only
 services inert); `ProfileSchema.luau` is the single schema source (v5, `combat` profile) required by

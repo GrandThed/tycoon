@@ -4,7 +4,11 @@ Needs numpy, which the system `py` lacks, so it runs under Blender's bundled Pyt
   "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/paths/texture.py --era Village
   (optional: --preview-dir <dir> for 2x2 tiled previews over the plot's ground colour)
 
-Writes assets/paths/<Era>_fill.png and <Era>_rim.png. Both are 1024x1024 **opaque** RGB, seamless
+Writes assets/paths/<Era>_fill.png and <Era>_rim.png, plus one pair per **surface variant** named
+in that era's `variants` table (INTERFACES "Wave 1e - street upgrades"): <Era>_<variant>_fill.png
+and <Era>_<variant>_rim.png. A variant is the same recipe in another material, swapped at runtime
+by writing MeshPart.TextureID, so no piece is ever re-baked; --variant restricts a run to one and
+--default-only to the baked-in pair. Every image is 1024x1024 **opaque** RGB, seamless
 on **both** axes, because the meshes carry world-planar UVs (u = x / tileStuds, v = z / tileStuds):
 two pieces that cover the same ground then sample the same texel, which is what makes a junction
 overlap and any z-fighting invisible, and a path may cross a tile in any direction, so the texture
@@ -39,10 +43,35 @@ OUT_DIR = REPO_ROOT / "assets" / "paths"
 P = 1024  # square, seamless on both axes; at tileStuds 11 that is ~93 px per stud
 
 # Per-era look. `ground` is the plot's baseColor (src/shared/Layouts/<Era>.luau) and is only used
-# by --preview-dir, so a preview shows the contrast a player actually sees.
+# by --preview-dir, so a preview shows the contrast a player actually sees. `fill` and `rim` name
+# generators below; "darken" means the rim is the fill run through planar_rim. `variants` are the
+# surface upgrades of INTERFACES "Wave 1e": each gets its own seeds, so adding one can never shift
+# a byte of an already-uploaded image.
 ERAS = {
-    "Village": {"fill_seed": 20260919, "rim": "darken", "ground": (106, 127, 63)},
-    "Boomtown": {"fill_seed": 20260921, "rim_seed": 20260922, "ground": (173, 138, 93)},
+    "Village": {
+        "fill": "dirt",
+        "fill_seed": 20260919,
+        "rim": "darken",
+        "ground": (106, 127, 63),
+        "variants": {
+            # "Pave the Road" (slot dirtRoad): the trail is laid with stone, so it reads brighter
+            # and harder-edged than the dirt it replaces while keeping the warm village palette.
+            "cobble": {"fill": "cobble", "fill_seed": 20260931, "rim": "darken"},
+        },
+    },
+    "Boomtown": {
+        "fill": "asphalt",
+        "fill_seed": 20260921,
+        "rim": "concrete",
+        "rim_seed": 20260922,
+        "ground": (173, 138, 93),
+        "variants": {
+            # Before "Pave Main Street" (slot paveMainStreet) the town has no asphalt: packed
+            # gravel, the Village dirt recipe in a cooler grey-tan, and no kerb to go with it,
+            # so its rim is a darkened copy rather than the concrete kerb of the finished street.
+            "gravel": {"fill": "gravel", "fill_seed": 20260933, "rim": "darken"},
+        },
+    },
 }
 LUMA = np.array([0.2126, 0.7152, 0.0722])
 
@@ -202,6 +231,96 @@ def planar_rim(fill_rgb):
     return to8(np.clip((x * 0.75 + lum * 0.25) * 0.72, 0, 1))
 
 
+# ---------------------------------------------------------------- Village variant: cobble
+
+
+def jittered_cells(rng, cells, jitter):
+    """Toroidal jittered-grid Voronoi: returns (d1, d2, owner) per pixel, where d1/d2 are the
+    distances to the nearest and second-nearest site and `owner` is the flat index of the nearest.
+
+    Evaluated over the 5x5 block of grid cells around each pixel rather than all sites, which is
+    exact for this jitter and keeps the generation to a couple of seconds. Cell indices wrap, and
+    a wrapped site keeps its unwrapped position, so the pattern is seamless on both axes."""
+    cell = P / cells
+    offsets = rng.uniform(-jitter, jitter, (2, cells, cells))
+    site_x = (np.arange(cells, dtype=np.float32)[None, :] + 0.5 + offsets[0]) * cell
+    site_y = (np.arange(cells, dtype=np.float32)[:, None] + 0.5 + offsets[1]) * cell
+    y = np.arange(P, dtype=np.float32)[:, None]
+    x = np.arange(P, dtype=np.float32)[None, :]
+    gy = np.floor(y / cell).astype(np.int32)
+    gx = np.floor(x / cell).astype(np.int32)
+    d1 = np.full((P, P), np.inf, dtype=np.float32)
+    d2 = np.full((P, P), np.inf, dtype=np.float32)
+    owner = np.zeros((P, P), dtype=np.int32)
+    for oy in range(-2, 3):
+        for ox in range(-2, 3):
+            jy, jx = gy + oy, gx + ox
+            iy, ix = jy % cells, jx % cells
+            sx = site_x[iy, ix] + (jx - ix) * cell
+            sy = site_y[iy, ix] + (jy - iy) * cell
+            dist = np.hypot(x - sx, y - sy)
+            d2 = np.minimum(d2, np.maximum(d1, dist))
+            nearer = dist < d1
+            owner = np.where(nearer, iy * cells + ix, owner)
+            d1 = np.where(nearer, dist, d1)
+    return d1, d2, owner
+
+
+def cobble_fill(rng):
+    """Village "cobble" (the Pave the Road upgrade): rounded irregular setts in four flat warm
+    greys, set in a darker mortar. Each sett is its Voronoi cell intersected with a disc around
+    its own site - that intersection is what rounds the corners a plain Voronoi leaves sharp - and
+    carries one flat colour, one soft shade towards its edge and one hard drop shadow, the same
+    bold-flat treatment as the dirt it replaces. At 64 px per cell a sett is about 0.6 studs, so
+    the 3-stud Village trail shows four to five whole setts across."""
+    cells, jitter = 14, 0.30
+    cell = P / cells
+    d1, d2, owner = jittered_cells(rng, cells, jitter)
+    # min(distance to the cell boundary, distance inside the disc): straight joints between
+    # neighbours, arcs where three cells meet.
+    sdf = np.minimum(0.5 * (d2 - d1) - 2.6, 0.66 * cell - d1)
+    mask = smoothstep(0.0, 2.5, sdf)
+
+    stones = np.array([srgb(c) for c in ((218, 206, 186), (198, 186, 167), (226, 217, 199), (184, 171, 152))])
+    mortar = srgb((139, 126, 108))
+    pick = rng.integers(len(stones), size=cells * cells)
+    # One flat tone per sett, nudged by a large-scale field so the paving reads as patches of
+    # wear rather than confetti; sampled once per sett, so the sett itself stays flat.
+    patch = fourier_noise(rng, (cells, cells), 1.8, hi_cut=4).reshape(-1)
+    tone = (1 + 0.05 * rng.uniform(-1, 1, cells * cells) + 0.045 * np.clip(patch, -1.6, 1.6))[:, None]
+    stone_rgb = np.clip(stones[pick] * tone, 0, 1)[owner]
+
+    shade = 1 - 0.08 * (1 - smoothstep(0.0, 0.30 * cell, sdf))
+    albedo = mortar[None, None, :] * (1 - mask[..., None]) + stone_rgb * (mask * shade)[..., None]
+    return to8(np.clip(drop_shadow(albedo, mask, 5, 0.22), 0, 1))
+
+
+# ---------------------------------------------------------------- Boomtown variant: gravel
+
+
+def gravel_fill(rng):
+    """Boomtown "gravel" (the street before Pave Main Street): packed grey-tan gravel, the Village
+    dirt recipe with the warmth taken out and the stones tightened up, so a player reads it as the
+    same kind of surface one era on rather than as dirt again. It has to sit on Boomtown's tan
+    ground (luminance 142), so the contrast is carried by being lighter *and* far less saturated
+    than the ground, the way the asphalt it upgrades into is carried by being much darker."""
+    light = srgb((172, 165, 150))
+    dark = srgb((150, 144, 131))
+    blobs = fourier_noise(rng, (P, P), 2.0, lo_cut=4, hi_cut=14)
+    tone = smoothstep(-0.2, 0.2, blobs + 0.75)
+    colour = dark[None, None, :] * (1 - tone[..., None]) + light[None, None, :] * tone[..., None]
+    fine = fourier_noise(rng, (P, P), 1.6, lo_cut=12, hi_cut=45)
+    colour *= (1 + 0.035 * np.sign(fine) * smoothstep(0.1, 0.8, np.abs(fine)))[..., None]
+    albedo = colour.copy()
+    mask = np.zeros((P, P))
+    stones = [srgb((201, 196, 185)), srgb((122, 118, 110)), srgb((180, 176, 166))]
+    placed = []
+    shadow_px = 5
+    stamp_planar(rng, 40, (24, 40), stones, albedo, mask, placed, shadow_px)  # 0.52-0.86 studs
+    stamp_planar(rng, 95, (12, 19), stones, albedo, mask, placed, shadow_px)  # 0.26-0.41 studs
+    return to8(np.clip(drop_shadow(albedo, mask, shadow_px, 0.24), 0, 1))
+
+
 # ---------------------------------------------------------------- Boomtown: asphalt and kerb
 
 
@@ -257,15 +376,24 @@ def concrete_rim(rng):
 # ---------------------------------------------------------------- output
 
 
-def generate(era: str) -> dict:
-    spec = ERAS[era]
-    if spec.get("rim") == "darken":
-        fill = planar_fill(np.random.default_rng(spec["fill_seed"]))
+FILLS = {"dirt": planar_fill, "asphalt": asphalt_fill, "cobble": cobble_fill, "gravel": gravel_fill}
+RIMS = {"concrete": concrete_rim}
+
+
+def spec_of(era: str, variant: str | None) -> dict:
+    return ERAS[era] if variant is None else ERAS[era]["variants"][variant]
+
+
+def stem(era: str, variant: str | None) -> str:
+    return era if variant is None else f"{era}_{variant}"
+
+
+def generate(era: str, variant: str | None = None) -> dict:
+    spec = spec_of(era, variant)
+    fill = FILLS[spec["fill"]](np.random.default_rng(spec["fill_seed"]))
+    if spec["rim"] == "darken":
         return {"fill": fill, "rim": planar_rim(fill)}
-    return {
-        "fill": asphalt_fill(np.random.default_rng(spec["fill_seed"])),
-        "rim": concrete_rim(np.random.default_rng(spec["rim_seed"])),
-    }
+    return {"fill": fill, "rim": RIMS[spec["rim"]](np.random.default_rng(spec["rim_seed"]))}
 
 
 def preview(rgb, ground, path):
@@ -286,19 +414,30 @@ def main(argv):
     parser.add_argument("--era", required=True, choices=sorted(ERAS))
     parser.add_argument("--out-dir", help="write here instead of assets/paths")
     parser.add_argument("--preview-dir", help="also write 2x2 tiled previews over the plot ground here")
+    parser.add_argument("--variant", action="append", default=[], help="only this surface variant (repeatable)")
+    parser.add_argument("--default-only", action="store_true", help="skip the era's surface variants")
     args = parser.parse_args(argv)
     out_dir = Path(args.out_dir) if args.out_dir else OUT_DIR
     studs = tile_studs(args.era)
-    images = generate(args.era)
-    for layer, rgb in images.items():
-        path = out_dir / f"{args.era}_{layer}.png"
-        write_png(path, rgb)
-        lum = (rgb.astype(float) * LUMA).sum(-1).mean()
-        print(f"wrote {path} {rgb.shape} mean luminance {lum:.0f}")
-        if args.preview_dir:
-            target = Path(args.preview_dir) / f"preview_{args.era}_{layer}.png"
-            preview(rgb, ERAS[args.era]["ground"], target)
-            print(f"wrote {target}")
+    known = ERAS[args.era].get("variants") or {}
+    unknown = [v for v in args.variant if v not in known]
+    if unknown:
+        parser.error(f"{args.era} has no variant(s) {', '.join(unknown)} (known: {', '.join(sorted(known)) or 'none'})")
+    if args.variant:
+        wanted = [v for v in sorted(known) if v in args.variant]
+    else:
+        wanted = [None] + ([] if args.default_only else sorted(known))
+    for variant in wanted:
+        images = generate(args.era, variant)
+        for layer, rgb in images.items():
+            path = out_dir / f"{stem(args.era, variant)}_{layer}.png"
+            write_png(path, rgb)
+            lum = (rgb.astype(float) * LUMA).sum(-1).mean()
+            print(f"wrote {path} {rgb.shape} mean luminance {lum:.0f}")
+            if args.preview_dir:
+                target = Path(args.preview_dir) / f"preview_{stem(args.era, variant)}_{layer}.png"
+                preview(rgb, ERAS[args.era]["ground"], target)
+                print(f"wrote {target}")
     ground_lum = (np.array(ERAS[args.era]["ground"], dtype=float) * LUMA).sum()
     print(f"{args.era}: {studs:g} studs per tile ({P / studs:.0f} px per stud), ground luminance {ground_lum:.0f}")
     return 0

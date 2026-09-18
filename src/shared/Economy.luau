@@ -21,6 +21,7 @@ type SlotConfig = {
 	requires: string?,
 	multiplier: number?,
 	kit: string?,
+	streetOnly: boolean?,
 }
 
 type EraConfig = {

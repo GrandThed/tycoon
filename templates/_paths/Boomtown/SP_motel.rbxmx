@@ -25,7 +25,7 @@
         <CoordinateFrame name="CFrame">
           <X>-6.2</X>
           <Y>0.0225</Y>
-          <Z>15.9422</Z>
+          <Z>15.9361</Z>
           <R00>-1</R00>
           <R01>0</R01>
           <R02>0</R02>
@@ -45,16 +45,16 @@
         <Vector3 name="InitialSize">
           <X>19.6</X>
           <Y>0.005</Y>
-          <Z>14.2503</Z>
+          <Z>14.1626</Z>
         </Vector3>
         <token name="Material">272</token>
         <Content name="MeshContent">
-          <uri>rbxassetid://107310062771405</uri>
+          <uri>rbxassetid://130798914337891</uri>
         </Content>
         <Vector3 name="size">
           <X>19.6</X>
           <Y>0.005</Y>
-          <Z>14.2503</Z>
+          <Z>14.1626</Z>
         </Vector3>
         <Content name="TextureContent">
           <uri>rbxassetid://115125466569784</uri>
@@ -68,7 +68,7 @@
         <CoordinateFrame name="CFrame">
           <X>-6.2</X>
           <Y>0.0725</Y>
-          <Z>16.1905</Z>
+          <Z>15.7926</Z>
           <R00>-1</R00>
           <R01>0</R01>
           <R02>0</R02>
@@ -88,16 +88,16 @@
         <Vector3 name="InitialSize">
           <X>19.6</X>
           <Y>0.005</Y>
-          <Z>13.6338</Z>
+          <Z>13.4027</Z>
         </Vector3>
         <token name="Material">272</token>
         <Content name="MeshContent">
-          <uri>rbxassetid://113861801686167</uri>
+          <uri>rbxassetid://90700249317104</uri>
         </Content>
         <Vector3 name="size">
           <X>19.6</X>
           <Y>0.005</Y>
-          <Z>13.6338</Z>
+          <Z>13.4027</Z>
         </Vector3>
         <Content name="TextureContent">
           <uri>rbxassetid://127993867745508</uri>

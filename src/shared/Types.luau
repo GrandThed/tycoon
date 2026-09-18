@@ -17,6 +17,9 @@ export type SlotConfig = {
 	-- M3 (schema v1.1): Kenney kit for the asset manifest only; Luau never reads it. Optional
 	-- in the type so pre-v1.1 configs still typecheck; the generator's --check requires it.
 	kit: string?,
+	-- M9 wave 1e: the slot's visual IS the street (a surface swap drawn by the client), so the
+	-- server spawns only an empty Building_<id> marker instead of modelName.
+	streetOnly: boolean?,
 }
 
 export type EraConfig = {
@@ -280,11 +283,22 @@ export type AssetPathMesh = {
 	offset: { number },
 }
 export type AssetPathPiece = { fill: AssetPathMesh, rim: AssetPathMesh }
+-- The *AssetId / *Sha256 keys are the uploader's bookkeeping (Decal id, idempotency hash).
+export type AssetPathVariant = {
+	fillAssetId: number,
+	fillImageId: number,
+	fillSha256: string,
+	rimAssetId: number,
+	rimImageId: number,
+	rimSha256: string,
+}
 export type AssetPathsEra = {
 	tileStuds: number,
 	fillImageId: number,
 	rimImageId: number,
 	pieces: { [string]: AssetPathPiece },
+	-- Wave 1e: extra surface textures by variant name; ids of 0 mean "not yet" (default look).
+	variants: { [string]: AssetPathVariant }?,
 }
 export type AssetsConfig = {
 	version: number,
@@ -370,6 +384,11 @@ export type StreetLayout = { points: { Vector3 } }
 export type LotLayout = { position: Vector3, rotationY: number, tier: number }
 export type PlazaLayout = { position: Vector3, rotationY: number, tier: number, prop: string }
 export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
+-- Wave 2a: `ring` is the deck centreline's half-extent; `ramp.cell` is the ring cell holding the
+-- deck T-junction and `direction` ("+X" | "-X" | "+Z" | "-Z") points from it into the city.
+export type HighwayRampLayout = { cell: Vector3, direction: string }
+export type HighwayLayout = { ring: number, ramp: HighwayRampLayout }
+export type SubwayEntranceLayout = { position: Vector3, rotationY: number }
 
 export type EraLayout = {
 	plotSize: Vector3,
@@ -383,6 +402,9 @@ export type EraLayout = {
 	lots: { LotLayout }?,
 	plazas: { PlazaLayout }?,
 	treeZones: { TreeZoneLayout }?,
+	-- Wave 2a: absent means the era has no highway / subway dressing.
+	highway: HighwayLayout?,
+	subwayEntrances: { SubwayEntranceLayout }?,
 }
 
 -- CityDressing.json v1 mirror (M9); field names follow the JSON keys exactly. JSON null props
@@ -420,6 +442,11 @@ export type CityBudgetConfig = {
 	vehiclesMap: number,
 	-- Wave 1d; optional like roadPiecesNear. Cloned path-piece Models per plot.
 	pathPieces: number?,
+	-- Wave 1e; optional likewise. Row-placed lamp posts per plot (junction lamps share fillerPieces).
+	lampPosts: number?,
+	-- Wave 2a; optional likewise. Road-tile cells and highway cells per plot.
+	tileCells: number?,
+	highwayCells: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -440,9 +467,55 @@ export type CityPathsConfig = {
 	rimLeadSeconds: number, -- the rim is parented this long before its fill
 	dustSeconds: number, -- a dust burst crosses the piece in this long
 	rimNearOnly: boolean, -- far plots drop their rims, halving the part count
+	-- Wave 1e: studs the server raises every building model, so floors, ramps and steps lower
+	-- than fillHeight clear the spur that runs under them. Must stay above fillHeight.
+	buildingLift: number?,
 }
 -- Per era: the world-planar UV tile the bake used. An era without it draws Parts.
-export type CityEraPathsConfig = { tileStuds: number }
+-- Wave 1e: `surface` picks the plot-wide texture variant from owned slots (last owned upgrade
+-- wins, else `base`); "default" is the texture baked into the templates. `variants` is the look
+-- the parts fallback draws for a variant.
+export type CitySurfaceUpgrade = { slot: string, variant: string }
+export type CitySurfaceConfig = { base: string, upgrades: { CitySurfaceUpgrade } }
+export type CitySurfaceVariantLook = { material: string, color: { number } }
+export type CityEraPathsConfig = {
+	tileStuds: number,
+	surface: CitySurfaceConfig?,
+	variants: { [string]: CitySurfaceVariantLook }?,
+}
+-- Wave 2a: kit road tiles on a `tileStuds` lattice, one prop per cell chosen by the cell's
+-- visible connectivity. Excludes `paths` and `meander`. Spurs stay plain footpath Parts.
+export type CityTileLook = { width: number, material: string, color: { number } }
+export type CityTilePropsConfig = {
+	straight: string,
+	["end"]: string,
+	bend: string,
+	tee: string,
+	cross: string,
+	crossing: string?,
+}
+export type CityEraTilesConfig = {
+	tileStuds: number,
+	props: CityTilePropsConfig,
+	pavement: CityTileLook?,
+	spur: CityTileLook,
+}
+-- Wave 2a: an elevated ring drawn while `requiresSlot` is owned; its cars never take the ramp.
+export type CityHighwayPropsConfig = {
+	deck: string,
+	corner: string,
+	junction: string,
+	ramp: string,
+	sign: string?,
+}
+export type CityEraHighwayConfig = {
+	requiresSlot: string,
+	props: CityHighwayPropsConfig,
+	vehicles: { count: number, speed: number },
+	revealCellsPerSecond: number,
+}
+-- Wave 2a: street-corner entrances from the layout, shown while `requiresSlot` is owned.
+export type CityEraSubwayConfig = { requiresSlot: string, prop: string, maxPerPlot: number }
 export type CityEraRoadConfig = {
 	width: number,
 	material: string,
@@ -453,10 +526,26 @@ export type CityEraRoadConfig = {
 	laneOffsetFraction: number?,
 	meander: CityMeanderConfig?,
 	paths: CityEraPathsConfig?,
+	tiles: CityEraTilesConfig?,
 }
 export type CityEraTreesConfig = { maxCount: number, clearance: number, prop: string? }
 export type CityEraPropsConfig = { props: { string } }
-export type CityEraLampsConfig = { prop: string? }
+-- Wave 1e: `requiresSlot` replaces the lamps.firstTier gate with ownership of that slot;
+-- `placement` "row" lines the spine centrelines every `spacing` studs, `offset` outside the edge.
+export type CityEraLampsConfig = {
+	prop: string?,
+	requiresSlot: string?,
+	placement: string?, -- "junction" (default) | "row"
+	spacing: number?,
+	offset: number?,
+}
+-- Wave 1e: one prop at each node where three or more spine stretches meet.
+export type CityEraSignalsConfig = {
+	prop: string?,
+	requiresSlot: string?,
+	offset: number,
+	maxPerPlot: number,
+}
 export type CityEraVehiclesConfig = { props: { string }, perPlot: number, speed: number }
 export type CityEraDressingConfig = {
 	road: CityEraRoadConfig,
@@ -464,6 +553,9 @@ export type CityEraDressingConfig = {
 	houses: CityEraPropsConfig,
 	plazas: CityEraPropsConfig,
 	lamps: CityEraLampsConfig,
+	signals: CityEraSignalsConfig?,
+	highway: CityEraHighwayConfig?,
+	subway: CityEraSubwayConfig?,
 	vehicles: CityEraVehiclesConfig,
 }
 export type CityDressingConfig = {

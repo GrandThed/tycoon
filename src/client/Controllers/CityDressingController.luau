@@ -17,6 +17,10 @@
 -- and far plots alike; only their rims follow the near/far flip. A path revealed by a purchase on
 -- a near plot pops in with a dust burst; anything revealed while a build is still settling (join,
 -- rejoin, era rebuild) appears at once.
+--
+-- Wave 1e: the owned set also picks the plot's street surface (RoadGraph.SetSurface, before the
+-- renderer clones anything), and gates the lamp rows and crossing signals of eras whose config
+-- names an upgrade slot. Still nothing but what the server already replicates.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,6 +47,9 @@ local BASE_NAME = "Base"
 local ERA_NAME_ATTRIBUTE = "EraName"
 local GROWTH_TIER_ATTRIBUTE = "GrowthTier"
 local PLOT_INDEX_ATTRIBUTE = "PlotIndex"
+-- Wave 1e: a crossing prop waits until this many of its node's streets are drawn, so it never
+-- stands beside a single road (docs/INTERFACES.md "Wave 1e — Lamps").
+local SIGNAL_MIN_VISIBLE = 2
 
 type TreeInstance = { model: Model, stage: number }
 
@@ -56,7 +63,10 @@ type Build = {
 	houses: { [number]: Model },
 	plazas: { [number]: Model },
 	trees: { [number]: TreeInstance },
+	-- Keyed by junction slot id or, with row placement, by the post's plan key.
 	lamps: { [string]: Model },
+	signalSpots: { RoadGraph.SignalSpot },
+	signals: { [number]: Model }, -- crossing node -> prop
 	createdAt: number, -- os.clock when the build started
 }
 
@@ -147,6 +157,13 @@ local function clearLamps(build: Build): ()
 	table.clear(build.lamps)
 end
 
+local function clearSignals(build: Build): ()
+	for _, signal in build.signals do
+		signal:Destroy()
+	end
+	table.clear(build.signals)
+end
+
 local function clearBuild(entry: PlotEntry): ()
 	local build = entry.build
 	Traffic.ClearPlot(entry.index)
@@ -161,6 +178,7 @@ local function clearBuild(entry: PlotEntry): ()
 	RoadGraph.Destroy(build.roads)
 	clearTrees(build)
 	clearLamps(build)
+	clearSignals(build)
 	for _, model in build.houses do
 		model:Destroy()
 	end
@@ -210,7 +228,11 @@ local function newBuild(
 		roadWidth = roads.width,
 		centrelines = RoadGraph.AllCentrelines(roads),
 		junctionSlotIds = RoadGraph.JunctionSlotIds(roads),
+		streetLines = function(): RoadGraph.StreetLines
+			return RoadGraph.StreetLines(roads)
+		end,
 	})
+	local signals = era.signals
 	return {
 		eraName = eraName,
 		era = era,
@@ -222,6 +244,10 @@ local function newBuild(
 		plazas = {},
 		trees = {},
 		lamps = {},
+		signalSpots = if signals ~= nil and signals.prop ~= nil
+			then RoadGraph.SignalSpots(roads, signals.offset, signals.maxPerPlot)
+			else {},
+		signals = {},
 		createdAt = os.clock(),
 	}
 end
@@ -296,13 +322,46 @@ local function syncTrees(
 	end
 end
 
+-- Lamp posts down both sides of the drawn streets (wave 1e). The plan is fixed and capped; a post
+-- appears as soon as the piece it stands on is drawn, and never moves again.
+local function syncLampRow(build: Build, folder: Instance): ()
+	for _, post in build.plan.lampPosts do
+		local lamp: Model? = build.lamps[post.key]
+		if lamp ~= nil or not RoadGraph.PieceVisible(build.roads, post.pieceId) then
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			build.era.lamps.prop,
+			0,
+			build.plotFrame * CFrame.new(post.position) * CFrame.Angles(0, post.yaw, 0),
+			folder
+		)
+		if model ~= nil then
+			build.lamps[post.key] = model
+		end
+	end
+end
+
 local function syncLamps(
 	build: Build,
 	config: Types.CityDressingConfig,
 	tier: number,
-	folder: Instance
+	folder: Instance,
+	owned: { [string]: boolean }
 ): ()
-	if tier < config.lamps.firstTier then
+	-- Wave 1e: an era that names a street slot is lit by owning it, not by reaching a tier.
+	local requiresSlot = build.era.lamps.requiresSlot
+	if requiresSlot ~= nil then
+		if not owned[requiresSlot] then
+			clearLamps(build)
+			return
+		end
+	elseif tier < config.lamps.firstTier then
+		return
+	end
+	if build.era.lamps.placement == Scatter.ROW_PLACEMENT then
+		syncLampRow(build, folder)
 		return
 	end
 	-- Sorted so the attempt order never depends on dictionary iteration.
@@ -330,6 +389,37 @@ local function syncLamps(
 		)
 		if model ~= nil then
 			build.lamps[slotId] = model
+		end
+	end
+end
+
+-- Crossing signals (wave 1e): one prop per planned corner, while the slot that installs them is
+-- owned and the crossing itself is drawn. Absent config, a nil prop or a missing template is a
+-- plot with no signals and no error, like every other dressing feature.
+local function syncSignals(build: Build, folder: Instance, owned: { [string]: boolean }): ()
+	local signals = build.era.signals
+	if signals == nil or signals.prop == nil then
+		return
+	end
+	local requiresSlot = signals.requiresSlot
+	if requiresSlot ~= nil and not owned[requiresSlot] then
+		clearSignals(build)
+		return
+	end
+	for _, spot in build.signalSpots do
+		local placed: Model? = build.signals[spot.node]
+		if placed ~= nil or RoadGraph.VisibleAt(build.roads, spot.node) < SIGNAL_MIN_VISIBLE then
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			signals.prop,
+			0,
+			build.plotFrame * CFrame.new(spot.position) * CFrame.Angles(0, spot.yaw, 0),
+			folder
+		)
+		if model ~= nil then
+			build.signals[spot.node] = model
 		end
 	end
 end
@@ -406,11 +496,24 @@ local function sync(entry: PlotEntry): ()
 		return
 	end
 
+	-- The owned set is read once per layout per sync: the rebuild check, the spur loop, the
+	-- surface variant and the street-upgrade gates all ask for the same thing.
+	local ownedList: { string } = {}
+	local owned: { [string]: boolean } = {}
+	local ownedLayout: Types.EraLayout? = nil
+	local function readOwned(layout: Types.EraLayout): ()
+		if ownedLayout == layout then
+			return
+		end
+		ownedList, owned = ownedSlotIds(plot, layout)
+		ownedLayout = layout
+	end
+
 	local build = entry.build
 	if build ~= nil then
 		local rebuild = build.eraName ~= eraName or tier < entry.tier
 		if not rebuild then
-			local _, owned = ownedSlotIds(plot, build.layout)
+			readOwned(build.layout)
 			local missing = false
 			for _, slotId in RoadGraph.DrawnSlotIds(build.roads) do
 				if not owned[slotId] then
@@ -450,11 +553,15 @@ local function sync(entry: PlotEntry): ()
 	-- Buildings replicate over several frames after a join or rebuild; only a building that
 	-- appears once the build has settled for one LOD interval is a purchase worth animating.
 	local animate = entry.near and os.clock() - current.createdAt >= config.lod.refreshSeconds
-	for _, slotId in (ownedSlotIds(plot, current.layout)) do
+	readOwned(current.layout)
+	for _, slotId in ownedList do
 		if RoadGraph.AddSpur(current.roads, slotId, animate) then
 			roadsChanged = true
 		end
 	end
+	-- Before the flush that clones them: a piece must never appear in the surface it is about to
+	-- be repainted out of.
+	RoadGraph.SetSurface(current.roads, owned, animate)
 	-- One renderer update for every spur revealed above.
 	RoadGraph.Flush(current.roads)
 	RoadGraph.RefreshPieces(current.roads)
@@ -462,10 +569,12 @@ local function sync(entry: PlotEntry): ()
 
 	if entry.near then
 		syncTrees(current, config, tier, folder)
-		syncLamps(current, config, tier, folder)
+		syncLamps(current, config, tier, folder, owned)
+		syncSignals(current, folder, owned)
 	else
 		clearTrees(current)
 		clearLamps(current)
+		clearSignals(current)
 	end
 
 	local target = vehicleTargetFor(entry, current, config)

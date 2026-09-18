@@ -1,0 +1,10 @@
+{
+  "id": "TrafficLight",
+  "era": "Boomtown",
+  "scale": 9.0,
+  "footprint": [2, 2],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "traffic-light", "pos": [0, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-object-vertical", "pos": [0.03, 0.30, 0], "rotY": 180, "stage": 0}
+  ]
+}

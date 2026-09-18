@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Noise = require(script.Parent:WaitForChild("Noise"))
@@ -47,6 +48,17 @@ local NODE_KEY_SCALE = 10
 local STRAIGHT_DOT = 0.999
 local UP = Vector3.yAxis
 local QUARTER_TURN = math.pi / 2
+local FULL_TURN = 2 * math.pi
+-- Wave 1e: the surface baked into the path templates, and the era road material/colour in Parts.
+local DEFAULT_VARIANT = "default"
+-- A crossing is a node where this many spine stretches meet; a signal stands in the corner
+-- between the two arms with the widest usable gap, which is a real corner and never a road.
+local SIGNAL_MIN_ARMS = 3
+-- Geometry guards on that corner, not tunables: the corner sits `reach / sin(gap / 2)` from the
+-- node, so a gap under 30 degrees would fling it across the plot, and one over 171 has no
+-- bisector left to point along (the two arms are the same straight road).
+local SIGNAL_GAP_MIN = math.pi / 6
+local SIGNAL_GAP_MAX = math.pi * 0.95
 -- Kit tile exits at rotY 0 (city-kit-roads, measured by the Boomtown prop-builder): the T
 -- junction opens to -X, +X and +Z (straight kerb along -Z); the bend opens to -X and +Z.
 local JUNCTION_EXITS = { Vector3.new(-1, 0, 0), Vector3.new(1, 0, 0), Vector3.new(0, 0, 1) }
@@ -62,6 +74,18 @@ export type Junction = {
 	node: number?, -- the network node at `position`; nil when it joins none
 	approach: number, -- length of the spur's last section (0 for a zero-leg spur)
 }
+
+-- Wave 1e (row lamps): one spine piece's drawn centreline, in polyline order rather than the
+-- dust track's join-first order, and the piece id that must be drawn for a post on it to appear.
+-- `stretch` is that piece id's ordinal, so posts can be ordered numerically rather than by a
+-- string in which "L1_10" sorts before "L1_2".
+export type SpinePiece = { pieceId: string, stretch: number, points: { Vector3 } }
+-- A continuous run of pieces along one polyline; a piece outside the plan starts a new run.
+export type SpineRun = { polyline: number, pieces: { SpinePiece } }
+export type StreetLines = { runs: { SpineRun }, spurs: { { Vector3 } } }
+
+-- Wave 1e: the corner of a crossing a signal prop stands on.
+export type SignalSpot = { node: number, position: Vector3, yaw: number }
 
 -- Directed lanes, struct-of-arrays so the Heartbeat loop reads numbers without allocating.
 -- Positions are world space at the road top, already offset to the right-hand lane.
@@ -112,6 +136,7 @@ type Stretch = {
 	arcStart: number, -- arc length along its polyline at `a`, the meander's input
 	length: number,
 	group: number, -- the polyline segment (or connector) it belongs to
+	ordinal: number, -- its index within its polyline, the second half of the piece id
 	pieceId: string, -- baked piece id: "L<polyline>_<stretch within that polyline>"
 }
 
@@ -168,6 +193,8 @@ export type State = {
 	pieceSpecs: { [string]: PieceSpec },
 	-- Live.
 	near: boolean,
+	-- Wave 1e: the surface variant the whole plot wears; "" until the base is first applied.
+	surfaceVariant: string,
 	visible: { [number]: boolean }, -- stretch id -> revealed
 	-- Groups that have been revealed. Tracked explicitly because a revealed group may legitimately
 	-- draw zero Parts (its stretches outside the near budget), and it must still be redrawn on a
@@ -185,6 +212,9 @@ export type State = {
 	-- should appear with the dust effect.
 	pathsDirty: boolean,
 	pathsAnimate: boolean,
+	-- Wave 1e: the surface changed and the whole plot owes one puff, started by the same Flush so
+	-- it covers the pieces that flush is about to clone as well.
+	surfaceBurst: boolean,
 }
 
 -- Ranked by network distance from the entrance, ties by index: identical on every client.
@@ -197,12 +227,15 @@ local function byDistance(a: Ranked, b: Ranked): boolean
 	return a.distance < b.distance
 end
 
+-- The owned set a plot starts from, before any building has replicated (never written to).
+local NO_SLOTS_OWNED: { [string]: boolean } = {}
+
 local pathCache: { [Types.EraLayout]: PathData } = {}
 local pathPieceIds: (state: State) -> { string }
 
 local materialsByName: { [string]: Enum.Material }? = nil
 
-local function materialFor(name: string): Enum.Material
+local function materialOr(name: string, fallback: Enum.Material): Enum.Material
 	local lookup = materialsByName
 	if lookup == nil then
 		local built: { [string]: Enum.Material } = {}
@@ -212,7 +245,11 @@ local function materialFor(name: string): Enum.Material
 		lookup = built
 		materialsByName = built
 	end
-	return (lookup :: { [string]: Enum.Material })[name] or Enum.Material.Plastic
+	return (lookup :: { [string]: Enum.Material })[name] or fallback
+end
+
+local function materialFor(name: string): Enum.Material
+	return materialOr(name, Enum.Material.Plastic)
 end
 
 local function colorFor(rgb: { number }): Color3
@@ -866,6 +903,7 @@ local function buildNetwork(state: State): ()
 			arcStart = arcStart,
 			length = length,
 			group = groupIndex,
+			ordinal = 0,
 			pieceId = "",
 		})
 		local id = #state.stretches
@@ -918,6 +956,7 @@ local function buildNetwork(state: State): ()
 	for id, stretch in state.stretches do
 		local ordinal = (perPolyline[stretch.polyline] or 0) + 1
 		perPolyline[stretch.polyline] = ordinal
+		stretch.ordinal = ordinal
 		stretch.pieceId = string.format(SPINE_PIECE_FORMAT, stretch.polyline, ordinal)
 		state.stretchByPieceId[stretch.pieceId] = id
 	end
@@ -1378,6 +1417,113 @@ local function pathDataFor(state: State): PathData
 	return data
 end
 
+-- ------------------------------------------------------------------ surface (wave 1e)
+
+-- The uploaded images per variant name for this era, or nil while none are uploaded.
+local function eraVariantImages(state: State): { [string]: Types.AssetPathVariant }?
+	local assets = Catalog.GetAssetsConfig()
+	local pathsByEra = if assets ~= nil then assets.paths else nil
+	local eraPaths = if pathsByEra ~= nil then pathsByEra[state.context.eraName] else nil
+	return if eraPaths ~= nil then eraPaths.variants else nil
+end
+
+-- The variant the whole plot wears (docs/INTERFACES.md "Wave 1e — Surfaces"): the last owned
+-- upgrade, else the base, else "default". A variant whose images are not uploaded yet resolves to
+-- "default" as well, so a config that runs ahead of the texture pipeline still looks like today.
+local function resolveVariant(
+	state: State,
+	owned: { [string]: boolean }
+): (string, number?, number?)
+	local paths = state.context.era.road.paths
+	local surface = if paths ~= nil then paths.surface else nil
+	if surface == nil then
+		return DEFAULT_VARIANT, nil, nil
+	end
+	local name = surface.base
+	local upgrades = surface.upgrades
+	if type(upgrades) == "table" then
+		for _, upgrade in upgrades do
+			if owned[upgrade.slot] then
+				name = upgrade.variant
+			end
+		end
+	end
+	if name == DEFAULT_VARIANT then
+		return DEFAULT_VARIANT, nil, nil
+	end
+	local variants = eraVariantImages(state)
+	local images = if variants ~= nil then variants[name] else nil
+	local fillImageId = if images ~= nil then images.fillImageId else nil
+	local rimImageId = if images ~= nil then images.rimImageId else nil
+	if type(fillImageId) ~= "number" or type(rimImageId) ~= "number" then
+		return DEFAULT_VARIANT, nil, nil
+	end
+	if fillImageId <= 0 or rimImageId <= 0 then
+		return DEFAULT_VARIANT, nil, nil
+	end
+	return name, fillImageId, rimImageId
+end
+
+-- Parts mode repaints in place rather than redrawing: a variant changes the look of the roads,
+-- not their geometry, and a redraw would rebuild the lane graph and respawn the plot's vehicles.
+local function repaintParts(state: State): ()
+	local function paint(instances: { Instance }): ()
+		for _, instance in instances do
+			if instance:IsA("BasePart") then
+				instance.Material = state.material
+				instance.Color = state.color
+			end
+		end
+	end
+	for _, parts in state.groupParts do
+		paint(parts)
+	end
+	for _, parts in state.spurParts do
+		paint(parts)
+	end
+	paint(state.bendParts)
+end
+
+-- Applies the resolved variant to whichever renderer is drawing. `initial` is the base applied
+-- while the plot is still empty, so nothing is repainted and nothing puffs.
+local function setVariant(
+	state: State,
+	owned: { [string]: boolean },
+	animate: boolean,
+	initial: boolean
+): ()
+	local name, fillImageId, rimImageId = resolveVariant(state, owned)
+	if name == state.surfaceVariant then
+		return
+	end
+	state.surfaceVariant = name
+	local road = state.context.era.road
+	local paths = road.paths
+	local variants = if paths ~= nil then paths.variants else nil
+	-- "default" is the era's own road look by definition, whatever a `variants` entry might say.
+	local look = if name == DEFAULT_VARIANT or variants == nil then nil else variants[name]
+	-- An unknown Enum.Material name keeps the era's own road material rather than dropping the
+	-- whole plot to Plastic.
+	local material = materialFor(road.material)
+	state.material = if look ~= nil then materialOr(look.material, material) else material
+	state.color = if look ~= nil then colorFor(look.color) else colorFor(road.color)
+	local handle = state.paths
+	if handle ~= nil then
+		PathRenderer.SetSurface(handle, fillImageId, rimImageId)
+	end
+	if initial then
+		return
+	end
+	if handle ~= nil and handle.mode == "baked" then
+		-- Left to the flush: a purchase that changes the surface usually reveals a path as well,
+		-- and one puff over the whole new surface beats a puff over the new piece alone.
+		state.surfaceBurst = state.surfaceBurst or animate
+		state.pathsDirty = state.pathsDirty or animate
+		return
+	end
+	repaintParts(state)
+end
+
 -- After a silent renderer fallback: every revealed road again, as Parts.
 local function redrawParts(state: State): ()
 	state.lanes = nil
@@ -1437,6 +1583,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		pieceKeys = {},
 		pieceSpecs = {},
 		near = near,
+		surfaceVariant = "",
 		visible = {},
 		revealedGroups = {},
 		spurs = {},
@@ -1449,6 +1596,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		paths = nil,
 		pathsDirty = false,
 		pathsAnimate = false,
+		surfaceBurst = false,
 	}
 	buildNetwork(state)
 	buildShortestPaths(state)
@@ -1462,7 +1610,9 @@ function RoadGraph.new(context: Context, near: boolean): State
 			eraName = context.eraName,
 			config = context.config,
 			near = near,
-			color = state.color,
+			colorOf = function(): Color3
+				return state.color
+			end,
 			width = width,
 			centrelineOf = function(pieceId: string): { Vector3 }?
 				return pieceCentreline(state, pieceId)
@@ -1472,7 +1622,17 @@ function RoadGraph.new(context: Context, near: boolean): State
 			end,
 		})
 	end
+	-- The base surface before a single piece is cloned: a Boomtown plot must never flash asphalt
+	-- on its way to gravel.
+	setVariant(state, NO_SLOTS_OWNED, false, true)
 	return state
+end
+
+-- The plot-wide surface variant for the slots owned right now (docs/INTERFACES.md "Wave 1e").
+-- `animate` replays the dust over the drawn pieces, which only a purchase asks for: joins,
+-- rejoins and era rebuilds switch instantly, exactly as a revealed path does.
+function RoadGraph.SetSurface(state: State, owned: { [string]: boolean }, animate: boolean?): ()
+	setVariant(state, owned, animate == true, false)
 end
 
 -- Whether the plot's paths are drawn from the baked meshes rather than as Parts.
@@ -1578,12 +1738,20 @@ function RoadGraph.Flush(state: State): ()
 		return
 	end
 	local animate = state.pathsAnimate
+	local surfaceBurst = state.surfaceBurst
 	state.pathsDirty = false
 	state.pathsAnimate = false
+	state.surfaceBurst = false
 	local paths = state.paths
 	if paths ~= nil and paths.mode == "baked" then
+		local pieceIds = pathPieceIds(state)
 		-- A fallback inside Update redraws every revealed road with Parts.
-		PathRenderer.Update(paths, pathPieceIds(state), animate)
+		PathRenderer.Update(paths, pieceIds, animate)
+		-- Started last so it supersedes the reveal's puff (one burst runs per plot): the surface
+		-- arrived everywhere at once, including on the pieces Update just cloned.
+		if surfaceBurst then
+			PathRenderer.Burst(paths, pieceIds)
+		end
 	end
 end
 
@@ -1638,6 +1806,187 @@ function RoadGraph.JunctionSlotIds(state: State): { string }
 		end
 	end
 	return slotIds
+end
+
+-- Whether a baked piece is drawn right now: a row lamp post waits for the piece it stands on.
+function RoadGraph.PieceVisible(state: State, pieceId: string): boolean
+	local id = state.stretchByPieceId[pieceId]
+	if id == nil or not state.visible[id] then
+		return false
+	end
+	-- After a silent fallback the meandered Parts renderer draws the near budget rather than the
+	-- baked plan, so a post must not stand beside a stretch that renderer skipped. Straight eras
+	-- draw every visible stretch, near or far.
+	if RoadGraph.UsesPaths(state) or state.meander == nil then
+		return true
+	end
+	return state.nearStretchAllowed[id] == true
+end
+
+-- How many of a node's spine stretches are drawn; a signal waits for two, so it stands at a
+-- crossing that exists rather than beside a single street.
+function RoadGraph.VisibleAt(state: State, node: number): number
+	local stretches: { number } = state.nodeStretches[node] or {}
+	local count = 0
+	for _, id in stretches do
+		if state.visible[id] then
+			count += 1
+		end
+	end
+	return count
+end
+
+-- A stretch the plot can ever draw. Ownership plays no part, so a plan built from these is the
+-- same at any point in the plot's growth, like every other dressing plan.
+local function plannedStretch(state: State, id: number): boolean
+	if state.pathData ~= nil then
+		return state.pathStretchAllowed[id] == true
+	end
+	return state.groupAllowed[state.stretches[id].group] == true
+end
+
+-- One spine stretch's drawn centreline in polyline order (the dust track runs from the join end
+-- instead), so consecutive pieces of a street can be walked as one curve.
+local function stretchLine(state: State, id: number): { Vector3 }?
+	local stretch = state.stretches[id]
+	local data = state.pathData
+	if data == nil then
+		return (
+			centreline(
+				state,
+				stretch.a,
+				stretch.b,
+				stretch.arcStart,
+				state.polylinePhases[stretch.polyline]
+			)
+		)
+	end
+	local chain = data.stretchChains[id]
+	local arcs = data.stretchArcs[id]
+	if chain == nil or arcs == nil then
+		return nil
+	end
+	local network = data.network
+	local points: { Vector3 } = {}
+	local sampled = PathRibbon.Centreline(
+		network,
+		chain,
+		math.min(arcs[1], arcs[2]),
+		math.max(arcs[1], arcs[2]),
+		network.sampleSpacing
+	)
+	for _, point in sampled do
+		table.insert(points, Vector3.new(point[1], 0, point[2]))
+	end
+	return points
+end
+
+-- Wave 1e: every drawable spine piece as a drawn centreline, grouped into continuous runs along
+-- each polyline, plus every spur's drawn centreline. Scatter walks the runs to place lamp posts
+-- and keeps them off the spurs; nothing here depends on what is owned or on the renderer in use.
+function RoadGraph.StreetLines(state: State): StreetLines
+	local lines: StreetLines = { runs = {}, spurs = {} }
+	local segmentGroups = 0
+	for _, points in state.polylines do
+		segmentGroups += #points - 1
+	end
+	local open: { [number]: SpineRun } = {} -- polyline -> the run still being extended
+	for groupIndex, group in state.groups do
+		for _, id in group.stretches do
+			local stretch = state.stretches[id]
+			local points = if plannedStretch(state, id) then stretchLine(state, id) else nil
+			if points == nil then
+				-- A piece outside the plan breaks the street: a walk must not step over the gap.
+				open[stretch.polyline] = nil
+				continue
+			end
+			-- A connector is a short link onto another polyline, not a continuation of one.
+			local continues = groupIndex <= segmentGroups
+			local run: SpineRun? = if continues then open[stretch.polyline] else nil
+			if run == nil then
+				local fresh: SpineRun = { polyline = stretch.polyline, pieces = {} }
+				table.insert(lines.runs, fresh)
+				if continues then
+					open[stretch.polyline] = fresh
+				end
+				run = fresh
+			end
+			table.insert((run :: SpineRun).pieces, {
+				pieceId = stretch.pieceId,
+				stretch = stretch.ordinal,
+				points = points,
+			})
+		end
+	end
+	for _, slotId in state.spurSlotIds do
+		if state.spurAllowed[slotId] then
+			table.insert(
+				lines.spurs,
+				pieceCentreline(state, SPUR_PIECE_PREFIX .. slotId) or state.routes[slotId].points
+			)
+		end
+	end
+	return lines
+end
+
+-- Wave 1e: one spot per crossing (a node where SIGNAL_MIN_ARMS spine stretches meet), in the
+-- corner between the two arms with the widest usable gap, `offset` studs outside both road edges.
+-- Derived from the layout alone, so every client stands its signals in the same corners.
+function RoadGraph.SignalSpots(state: State, offset: number, maxCount: number): { SignalSpot }
+	local spots: { SignalSpot } = {}
+	local nodes: { number } = {}
+	for node, stretches in state.nodeStretches do
+		if #stretches >= SIGNAL_MIN_ARMS then
+			table.insert(nodes, node)
+		end
+	end
+	table.sort(nodes)
+	local reach = state.width / 2 + math.max(offset, 0)
+	for _, node in nodes do
+		if #spots >= maxCount then
+			break
+		end
+		local point = state.nodes[node]
+		local arms: { Vector3 } = {}
+		for _, id in state.nodeStretches[node] do
+			local stretch = state.stretches[id]
+			local far = if stretch.fromNode == node then stretch.b else stretch.a
+			local direction = unitOrNil(far - point)
+			if direction ~= nil then
+				table.insert(arms, direction)
+			end
+		end
+		if #arms < SIGNAL_MIN_ARMS then
+			continue
+		end
+		table.sort(arms, function(a: Vector3, b: Vector3): boolean
+			return math.atan2(a.Z, a.X) < math.atan2(b.Z, b.X)
+		end)
+		local corner: Vector3? = nil
+		local bestGap = 0
+		for index, arm in arms do
+			local following = arms[index % #arms + 1]
+			local gap = math.atan2(following.Z, following.X) - math.atan2(arm.Z, arm.X)
+			if gap <= 0 then
+				gap += FULL_TURN
+			end
+			if gap >= SIGNAL_GAP_MIN and gap <= SIGNAL_GAP_MAX and gap > bestGap then
+				corner = unitOrNil(arm + following)
+				bestGap = gap
+			end
+		end
+		if corner == nil then
+			continue
+		end
+		local bisector = corner :: Vector3
+		table.insert(spots, {
+			node = node,
+			position = point + bisector * (reach / math.sin(bestGap / 2)),
+			-- The corner direction points away from the crossing, and the prop faces it.
+			yaw = math.atan2(bisector.X, bisector.Z),
+		})
+	end
+	return spots
 end
 
 -- Lanes follow the same centreline function as the meandered rendering (whether or not the

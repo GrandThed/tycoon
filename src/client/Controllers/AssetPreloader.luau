@@ -30,8 +30,9 @@ local function contentFor(id: number): string
 	return ASSET_PREFIX .. string.format("%d", id)
 end
 
-local function queue(list: { string }, id: number): ()
-	if id <= 0 then
+-- A nil id is a key a hand-edited Assets.json never grew, and reads exactly like "not uploaded".
+local function queue(list: { string }, id: number?): ()
+	if id == nil or id <= 0 then
 		return -- 0 means "not uploaded yet"; never an error
 	end
 	local content = contentFor(id)
@@ -111,6 +112,21 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	if eraPaths ~= nil then
 		queue(content, eraPaths.fillImageId)
 		queue(content, eraPaths.rimImageId)
+		-- Wave 1e surface variants: two more images per variant, shared by every piece of the era,
+		-- warmed whether or not this plot has earned the upgrade yet.
+		local variants = eraPaths.variants
+		if type(variants) == "table" then
+			local variantNames: { string } = {}
+			for variantName in variants do
+				table.insert(variantNames, variantName)
+			end
+			table.sort(variantNames)
+			for _, variantName in variantNames do
+				local variant = variants[variantName]
+				queue(content, variant.fillImageId)
+				queue(content, variant.rimImageId)
+			end
+		end
 	end
 	for _, modelKey in modelKeys do
 		-- Only buildings wear VIP skins; a prop-only kit's VIP image would never be shown.
