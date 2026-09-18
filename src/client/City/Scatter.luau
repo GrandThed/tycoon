@@ -44,7 +44,7 @@ export type PlanInput = {
 	config: Types.CityDressingConfig,
 	era: Types.CityEraDressingConfig,
 	roadWidth: number,
-	-- RoadGraph.AllCentrelines: every potential road, straight and (ribbon eras) smoothed.
+	-- RoadGraph.AllCentrelines: every potential road, straight and (baked eras) smoothed.
 	centrelines: { { Vector3 } },
 	junctionSlotIds: { string }, -- RoadGraph.JunctionSlotIds (sorted)
 }

@@ -1,15 +1,24 @@
-"""Procedural tiling path texture for the ribbon renderer (INTERFACES "Wave 1c — ribbon paths").
+"""Procedural path textures for the baked-path renderer (INTERFACES "Wave 1d - baked paths").
 
 Needs numpy, which the system `py` lacks, so it runs under Blender's bundled Python:
   "/c/Program Files/Blender Foundation/Blender 5.2/5.2/python/bin/python.exe" tools/paths/texture.py --era Village
-  (optional: --out <png> [default assets/paths/village_path.png], --preview <png> for a 2x2 tile over grass)
+  (optional: --preview-dir <dir> for 2x2 tiled previews over the plot's ground colour)
 
-Deterministic: every random draw comes from one generator seeded per era, so the same numpy build
-writes the same bytes on every run (the uploaded asset must be reproducible from the repo).
+Writes assets/paths/<Era>_fill.png and <Era>_rim.png. Both are 1024x1024 **opaque** RGB, seamless
+on **both** axes, because the meshes carry world-planar UVs (u = x / tileStuds, v = z / tileStuds):
+two pieces that cover the same ground then sample the same texel, which is what makes a junction
+overlap and any z-fighting invisible, and a path may cross a tile in any direction, so the texture
+must carry no directional feature.
 
-Image x = u (along the path, seamless: every noise field is built in the Fourier domain on a
-periodic grid and pebbles wrap), image y = v (across the path; alpha fades irregularly to 0 at
-both edges). PNG writing is a tiny zlib encoder so no Pillow is needed.
+Deterministic: every draw comes from one generator seeded per era and layer, so the same numpy
+build writes the same bytes on every run - an uploaded asset must be reproducible from the repo.
+PNG writing is a tiny zlib encoder, so no Pillow is needed.
+
+Village is the look Ben approved in the C3 bake-off (tools/pathtest/textures.py, which now imports
+its fill and rim from here): warm stylised dirt, bold flat pebbles, luminance well above the grass,
+with the rim a darker desaturated copy so it reads as the trodden shoulder of the same path.
+Boomtown is asphalt with a lighter concrete **kerb** rim: the kerb is a separate image, not a
+darkened copy, because a kerb is lighter than its road, and it is the cue that reads at 45 studs.
 """
 
 from __future__ import annotations
@@ -27,16 +36,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CITY_DRESSING = REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json"
 OUT_DIR = REPO_ROOT / "assets" / "paths"
 
-W, H = 1024, 512  # u (along, textureLength studs) x v (across the whole mesh width)
-# Per-era look. Only Village has a ribbon in wave 1c; seed and colours are the approved mock's.
+P = 1024  # square, seamless on both axes; at tileStuds 11 that is ~93 px per stud
+
+# Per-era look. `ground` is the plot's baseColor (src/shared/Layouts/<Era>.luau) and is only used
+# by --preview-dir, so a preview shows the contrast a player actually sees.
 ERAS = {
-    "Village": {
-        "seed": 20260917,
-        "file": "village_path.png",
-        "base": (126, 99, 66),
-        "grass": (106, 127, 63),
-    },
+    "Village": {"fill_seed": 20260919, "rim": "darken", "ground": (106, 127, 63)},
+    "Boomtown": {"fill_seed": 20260921, "rim_seed": 20260922, "ground": (173, 138, 93)},
 }
+LUMA = np.array([0.2126, 0.7152, 0.0722])
+
+
+# ---------------------------------------------------------------- noise and output helpers
 
 
 def fourier_noise(rng, shape, beta, lo_cut=0.0, hi_cut=None):
@@ -45,7 +56,7 @@ def fourier_noise(rng, shape, beta, lo_cut=0.0, hi_cut=None):
     white = rng.standard_normal(shape)
     fy = np.fft.fftfreq(h)[:, None] * h
     fx = np.fft.fftfreq(w)[None, :] * w
-    # both axes in cycles per 1024 px, so features are round in pixels (the mesh maps ~125 px per stud both ways)
+    # both axes in cycles per 1024 px, so features are round in pixels
     f = np.sqrt((fx * 1024 / w) ** 2 + (fy * 1024 / h) ** 2)
     f[0, 0] = 1.0
     amp = 1.0 / f**beta
@@ -75,6 +86,14 @@ def smoothstep(e0, e1, x):
     return t * t * (3 - 2 * t)
 
 
+def srgb(c):
+    return np.array(c, dtype=np.float64) / 255.0
+
+
+def to8(x):
+    return (np.clip(x, 0, 1) * 255 + 0.5).astype(np.uint8)
+
+
 def write_png(path, rgba):
     h, w, c = rgba.shape
     raw = b"".join(b"\x00" + rgba[y].tobytes() for y in range(h))
@@ -90,152 +109,198 @@ def write_png(path, rgba):
     path.write_bytes(png)
 
 
-def mesh_width_factor(era):
-    """The alpha 0.5 line must sit on the mesh's nominal edge, so read the value PathRibbon uses
-    from config instead of keeping a second copy of it here."""
-    ribbon = json.loads(CITY_DRESSING.read_text(encoding="utf-8"))["eras"][era]["road"]["ribbon"]
-    return float(ribbon["meshWidthFactor"])
+def downsample(rgb8, factor):
+    """Box-filtered mip, like a GPU mip chain of an uploaded PNG."""
+    x = rgb8.astype(np.float64)
+    h, w = x.shape[0] // factor, x.shape[1] // factor
+    return x[: h * factor, : w * factor].reshape(h, factor, w, factor, -1).mean(axis=(1, 3))
 
 
-def generate(rng, edge_scale, base_rgb):
-    """RGBA uint8 (H, W, 4). The order of draws from rng is part of the approved look; keep it."""
-    base = np.array(base_rgb, dtype=np.float64) / 255.0
-    yy, _ = np.mgrid[0:H, 0:W].astype(np.float64)
-    v = (yy + 0.5) / H
+def tile_studs(era: str) -> float:
+    """The mesh UVs come from CityDressing.json, so the texture reads the same value rather than
+    keeping a second copy of it."""
+    dressing = json.loads(CITY_DRESSING.read_text(encoding="utf-8"))
+    return float(dressing["eras"][era]["road"]["paths"]["tileStuds"])
 
-    # ---- dirt albedo: low-frequency colour patches + mid mottling + fine grain
-    low = fourier_noise(rng, (H, W), 2.2, hi_cut=10)
-    mid = fourier_noise(rng, (H, W), 1.4, lo_cut=6, hi_cut=60)
-    grain = fourier_noise(rng, (H, W), 0.4, lo_cut=80)
-    warm = fourier_noise(rng, (H, W), 2.0, hi_cut=8)
-    light = 1.0 + 0.05 * low + 0.045 * mid + 0.045 * grain
-    colour = base[None, None, :] * light[..., None]
-    # warmer/ochre vs cooler/grey patches
-    colour += (0.028 * warm)[..., None] * np.array([1.0, 0.55, 0.05])
-    # compacted centre is a touch lighter and smoother, the shoulders a touch darker
-    across = np.abs(v - 0.5) * 2 * edge_scale  # 1.0 at the nominal edge
-    colour *= (1.04 - 0.09 * smoothstep(0.3, 1.1, across))[..., None]
 
-    # ---- height field: dirt relief + pebbles (domes), shaded by one light
-    height = 0.25 * mid + 0.35 * grain
-    peb_albedo = np.zeros((H, W, 3))
-    peb_mask = np.zeros((H, W))
-    for _ in range(400):
-        # more pebbles toward the shoulders, fewer in the worn middle; a few stray past the edge
-        side = rng.choice([-1.0, 1.0])
-        dist = np.clip(abs(rng.normal(0.58, 0.28)), 0.0, 0.98)
-        vy = 0.5 + side * dist * 0.5 / edge_scale
-        cy = vy * H
-        cx = rng.uniform(0, W)
-        r = rng.lognormal(np.log(4.2), 0.42)
-        r = float(np.clip(r, 2.6, 12.0))
-        ecc = rng.uniform(0.62, 1.0)
+# ---------------------------------------------------------------- shared stamping
+
+
+def stamp_planar(rng, count, r_range, palette, albedo, mask, placed, shadow_px):
+    """Flat pebbles that wrap on BOTH axes, never touching (a heap of overlapping stones reads as
+    gravel, not a path). Fills albedo and mask in place; `placed` carries the rejection test."""
+    stamped = 0
+    for _ in range(count * 40):
+        if stamped >= count:
+            break
+        r = float(rng.uniform(*r_range))
+        ecc = rng.uniform(0.62, 0.95)
         ang = rng.uniform(0, np.pi)
-        tone = rng.uniform(0.0, 1.0)
-        if tone < 0.55:
-            albedo = np.array([150, 140, 124]) / 255 * rng.uniform(0.85, 1.12)  # grey stone
-        elif tone < 0.85:
-            albedo = np.array([168, 142, 104]) / 255 * rng.uniform(0.85, 1.1)  # tan stone
-        else:
-            albedo = np.array([112, 96, 80]) / 255 * rng.uniform(0.85, 1.1)  # dark stone
-        rad = int(np.ceil(r + 3))
-        y0, y1 = int(max(0, cy - rad)), int(min(H, cy + rad + 1))
-        if y1 <= y0:
+        cx, cy = rng.uniform(0, P), rng.uniform(0, P)
+
+        def wrapped(a, b, n):
+            d = abs(a - b)
+            return min(d, n - d)
+
+        if any(wrapped(cx, px, P) ** 2 + wrapped(cy, py, P) ** 2 < (r + pr + shadow_px + 5) ** 2 for px, py, pr in placed):
             continue
-        ys = np.arange(y0, y1)[:, None]
-        xs = (np.arange(int(cx - rad), int(cx + rad) + 1) % W)[None, :]
-        dx = np.arange(int(cx - rad), int(cx + rad) + 1)[None, :] - cx
-        dy = ys - cy
+        placed.append((cx, cy, r))
+        stamped += 1
+        colour = palette[int(rng.integers(len(palette)))] * rng.uniform(0.93, 1.05)
+        rad = int(np.ceil(r + shadow_px + 3))
+        yr = np.arange(int(cy - rad), int(cy + rad) + 1)
+        xr = np.arange(int(cx - rad), int(cx + rad) + 1)
+        yi = (yr % P)[:, None]
+        xi = (xr % P)[None, :]
+        dy, dx = yr[:, None] - cy, xr[None, :] - cx
         ca, sa = np.cos(ang), np.sin(ang)
         lx = (dx * ca + dy * sa) / r
         ly = (-dx * sa + dy * ca) / (r * ecc)
-        d2 = lx * lx + ly * ly
-        dome = np.sqrt(np.clip(1 - d2, 0, 1)) * r * 0.55
-        inside = np.clip((1 - np.sqrt(d2)) * r * 0.9, 0, 1)  # 1px anti-aliased rim
-        yi = np.broadcast_to(ys, d2.shape)
-        xi = np.broadcast_to(xs, d2.shape)
-        height[yi, xi] = np.maximum(height[yi, xi], dome)
-        m_old = peb_mask[yi, xi]
-        m_new = np.maximum(m_old, inside)
-        blend = np.where(inside > m_old, inside, 0)[..., None]
-        speck = 1 + 0.08 * rng.standard_normal(d2.shape)
-        peb_albedo[yi, xi] = peb_albedo[yi, xi] * (1 - blend) + (albedo[None, None, :] * speck[..., None]) * blend
-        peb_mask[yi, xi] = m_new
-
-    colour = colour * (1 - peb_mask[..., None]) + peb_albedo * peb_mask[..., None]
-
-    # shading from the height field (light from upper-left of the image, soft)
-    gx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
-    gy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
-    nrm = np.stack([-gx, -gy, np.full_like(gx, 1.6)], axis=-1)
-    nrm /= np.linalg.norm(nrm, axis=-1, keepdims=True)
-    ldir = np.array([-0.45, -0.55, 0.7])
-    ldir /= np.linalg.norm(ldir)
-    lambert = np.clip((nrm * ldir).sum(-1), 0, 1) / ldir[2]
-    shade = 0.62 + 0.38 * lambert
-    # contact/drop shadow: height shifted toward bottom-right, darker where it towers over here
-    shifted = np.roll(np.roll(height, 2, axis=0), 2, axis=1)
-    shade -= np.clip((shifted - height) * 0.35, 0, 0.35)
-    colour *= shade[..., None]
-    # tiny specular glint on pebble tops
-    colour += (np.clip(lambert - 1.05, 0, 1) * 0.35 * peb_mask)[..., None]
-
-    # ---- alpha: soft, irregular fall-off toward both v edges
-    edge_top = fourier_noise_1d(rng, W, 1.2, hi_cut=22)
-    edge_bot = fourier_noise_1d(rng, W, 1.2, hi_cut=22)
-    fine = fourier_noise(rng, (H, W), 0.8, lo_cut=40)
-    nominal = 0.5 / edge_scale  # distance from centre (in v) where alpha should be 0.5
-    wobble = np.where(0.5 - v > 0, edge_top[None, :], edge_bot[None, :])
-    boundary = nominal + 0.035 * wobble + 0.012 * fine
-    dc = np.abs(v - 0.5)
-    soft = 0.075
-    alpha = 1 - smoothstep(boundary - soft, boundary + soft, dc)
-    # crumbly grain in the fade band
-    alpha = np.clip(alpha + 0.16 * fine * alpha * (1 - alpha) * 4, 0, 1)
-    # stray pebbles stay mostly opaque where they sit in the inner fade
-    alpha = np.maximum(alpha, peb_mask * smoothstep(0.37, 0.33, dc) * 0.95)
-    # Outer fade rows fade to a low-passed copy of the dirt, so a ribbon tip that squeezes these
-    # rows across the path (the cap collapses its inner columns toward the tip) shows no streaks.
-    fy = np.fft.fftfreq(H)[:, None] * 1024
-    fx = np.fft.fftfreq(W)[None, :] * 1024
-    lowpass = np.exp(-((fx**2 + fy**2) / 24.0**2))
-    flat = np.stack([np.real(np.fft.ifft2(np.fft.fft2(colour[..., i]) * lowpass)) for i in range(3)], axis=-1)
-    t_flat = smoothstep(0.31, 0.39, dc)[..., None]
-    colour = colour * (1 - t_flat) + flat * t_flat
-    # the mesh border itself must be fully transparent
-    alpha *= smoothstep(0.5, 0.47, dc)
-    # edge darkening where the dirt thins into grass
-    colour *= (0.9 + 0.1 * smoothstep(0.1, 0.7, alpha))[..., None]
-
-    rgb8 = (np.clip(colour, 0, 1) * 255 + 0.5).astype(np.uint8)
-    a8 = (np.clip(alpha, 0, 1) * 255 + 0.5).astype(np.uint8)
-    return np.dstack([rgb8, a8])
+        inside = np.clip((1 - np.sqrt(lx * lx + ly * ly)) * r * 0.8, 0, 1)
+        yb, xb = np.broadcast_to(yi, inside.shape), np.broadcast_to(xi, inside.shape)
+        blend = inside[..., None]
+        albedo[yb, xb] = albedo[yb, xb] * (1 - blend) + colour[None, None, :] * blend
+        mask[yb, xb] = np.maximum(mask[yb, xb], inside)
 
 
-def preview(rng, rgba, grass_rgb):
-    """2x2 tile composited over grass, to eyeball the seam and the edge (never uploaded)."""
-    grass_c = np.array(grass_rgb, dtype=np.float64) / 255.0
-    tile = np.tile(rgba, (2, 2, 1)).astype(np.float64) / 255
-    grass = grass_c[None, None, :] * (1 + 0.05 * np.tile(fourier_noise(rng, (H, W), 1.5, hi_cut=40), (2, 2)))[..., None]
-    comp = tile[..., :3] * tile[..., 3:4] + grass * (1 - tile[..., 3:4])
-    return (np.clip(comp, 0, 1) * 255 + 0.5).astype(np.uint8)
+def drop_shadow(albedo, mask, shadow_px, strength):
+    """One hard offset copy of the pebble mask: cel-style, instead of a lit dome, which is what
+    makes the stones read as bold shapes at the 1/8 mip."""
+    shadow = np.roll(np.roll(mask, shadow_px, axis=0), shadow_px, axis=1) * (1 - mask)
+    return albedo * (1 - strength * shadow[..., None])
+
+
+# ---------------------------------------------------------------- Village: stylised dirt
+
+
+def planar_fill(rng):
+    """The approved C3 fill: warm packed dirt, gentle two-tone worn blobs, a few bold flat pebbles
+    with one hard drop shadow each. No directional feature, because the mapping is world-planar."""
+    light = srgb((194, 155, 106))
+    dark = srgb((176, 137, 91))
+    blobs = fourier_noise(rng, (P, P), 2.0, lo_cut=4, hi_cut=14)  # ~0.8-2.5 stud patches
+    tone = smoothstep(-0.2, 0.2, blobs + 0.75)
+    colour = dark[None, None, :] * (1 - tone[..., None]) + light[None, None, :] * tone[..., None]
+    # a second, fainter tone step keeps large flat areas from reading as plastic
+    fine = fourier_noise(rng, (P, P), 1.6, lo_cut=12, hi_cut=45)
+    colour *= (1 + 0.035 * np.sign(fine) * smoothstep(0.1, 0.8, np.abs(fine)))[..., None]
+    albedo = colour.copy()
+    mask = np.zeros((P, P))
+    stones = [srgb((214, 200, 172)), srgb((150, 124, 98)), srgb((202, 186, 158))]
+    placed = []
+    shadow_px = 6
+    stamp_planar(rng, 40, (22, 38), stones, albedo, mask, placed, shadow_px)  # 0.47-0.82 studs
+    stamp_planar(rng, 80, (12, 19), stones, albedo, mask, placed, shadow_px)  # 0.26-0.41 studs
+    return to8(np.clip(drop_shadow(albedo, mask, shadow_px, 0.26), 0, 1))
+
+
+def planar_rim(fill_rgb):
+    """The approved C3 rim: the same image, darker and a little desaturated, so a rim beside a fill
+    reads as the trodden shoulder of the same path and two rims that overlap are identical texels."""
+    x = fill_rgb.astype(np.float64) / 255.0
+    lum = (x * LUMA).sum(-1, keepdims=True)
+    return to8(np.clip((x * 0.75 + lum * 0.25) * 0.72, 0, 1))
+
+
+# ---------------------------------------------------------------- Boomtown: asphalt and kerb
+
+
+def asphalt_fill(rng):
+    """Boomtown's road surface: dark blue-grey asphalt, large worn patches where the surface has
+    been resealed, and bold aggregate grains. Smaller and denser stones than the Village dirt,
+    because asphalt reads as grain rather than pebbles, but still stamped flat with one hard
+    shadow so something survives the 1/8 mip instead of greying out."""
+    light = srgb((102, 104, 110))
+    dark = srgb((88, 90, 96))
+    # Soft, low-contrast reseal patches: a cel-hard two-tone (which suits dirt) reads as camouflage
+    # on a road, so the ramp is wide and the two tones are only 14 levels apart.
+    blobs = fourier_noise(rng, (P, P), 2.0, lo_cut=3, hi_cut=11)  # ~1-3 stud patches
+    tone = smoothstep(-0.45, 0.45, blobs)
+    colour = dark[None, None, :] * (1 - tone[..., None]) + light[None, None, :] * tone[..., None]
+    mottle = fourier_noise(rng, (P, P), 1.5, lo_cut=10, hi_cut=48)
+    colour *= (1 + 0.035 * mottle)[..., None]
+    # The main signal is the grain: dense fine noise, which survives to about the 1/4 mip and
+    # averages to an even dark grey beyond it, which is what asphalt looks like from far away.
+    grain = fourier_noise(rng, (P, P), 0.5, lo_cut=60)
+    colour *= (1 + 0.055 * grain)[..., None]
+    albedo = colour.copy()
+    mask = np.zeros((P, P))
+    grains = [srgb((124, 124, 126)), srgb((104, 102, 100)), srgb((136, 134, 130))]
+    placed = []
+    shadow_px = 4
+    stamp_planar(rng, 45, (12, 19), grains, albedo, mask, placed, shadow_px)  # 0.26-0.41 studs
+    stamp_planar(rng, 110, (6, 10), grains, albedo, mask, placed, shadow_px)  # 0.13-0.22 studs
+    return to8(np.clip(drop_shadow(albedo, mask, shadow_px, 0.22), 0, 1))
+
+
+def concrete_rim(rng):
+    """Boomtown's kerb: pale cool concrete, faint slab mottling, a few chips. Much lighter than the
+    asphalt and desaturated against the warm plot ground, so the kerb line is the cue that carries
+    at 45 studs. It is drawn from scratch, not derived from the fill, because a darkened asphalt
+    would read as a shadow rather than a kerb."""
+    light = srgb((197, 196, 191))
+    dark = srgb((181, 180, 176))
+    blobs = fourier_noise(rng, (P, P), 2.1, lo_cut=3, hi_cut=9)  # ~1.5-4 stud slab tone
+    tone = smoothstep(-0.3, 0.3, blobs)
+    colour = dark[None, None, :] * (1 - tone[..., None]) + light[None, None, :] * tone[..., None]
+    grit = fourier_noise(rng, (P, P), 1.3, lo_cut=14, hi_cut=70)
+    colour *= (1 + 0.028 * grit)[..., None]
+    albedo = colour.copy()
+    mask = np.zeros((P, P))
+    chips = [srgb((150, 149, 144)), srgb((208, 207, 202))]
+    placed = []
+    shadow_px = 3
+    stamp_planar(rng, 26, (9, 15), chips, albedo, mask, placed, shadow_px)  # 0.19-0.32 studs
+    return to8(np.clip(drop_shadow(albedo, mask, shadow_px, 0.18), 0, 1))
+
+
+# ---------------------------------------------------------------- output
+
+
+def generate(era: str) -> dict:
+    spec = ERAS[era]
+    if spec.get("rim") == "darken":
+        fill = planar_fill(np.random.default_rng(spec["fill_seed"]))
+        return {"fill": fill, "rim": planar_rim(fill)}
+    return {
+        "fill": asphalt_fill(np.random.default_rng(spec["fill_seed"])),
+        "rim": concrete_rim(np.random.default_rng(spec["rim_seed"])),
+    }
+
+
+def preview(rgb, ground, path):
+    """2x2 tiles at full size, the 1/4 mip and the 1/8 mip over the plot's ground colour: checks
+    both seams and the distance read at once. Never uploaded."""
+    rows = []
+    for factor in (1, 4, 8):
+        m = downsample(rgb, factor) if factor > 1 else rgb.astype(np.float64)
+        m = np.repeat(np.repeat(m, factor, axis=0), factor, axis=1)
+        band = np.ones((24, 2 * P, 3)) * np.array(ground) / 255.0
+        rows += [band, np.tile(m, (2, 2, 1)) / 255.0]
+    img = to8(np.concatenate(rows, axis=0))
+    write_png(path, downsample(img, 4).round().astype(np.uint8))
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(description="Generate an era's tiling path texture.")
+    parser = argparse.ArgumentParser(description="Generate an era's baked-path fill and rim textures.")
     parser.add_argument("--era", required=True, choices=sorted(ERAS))
-    parser.add_argument("--out", help="PNG to write (default assets/paths/<file>)")
-    parser.add_argument("--preview", help="also write a 2x2 tiled preview over grass here")
+    parser.add_argument("--out-dir", help="write here instead of assets/paths")
+    parser.add_argument("--preview-dir", help="also write 2x2 tiled previews over the plot ground here")
     args = parser.parse_args(argv)
-    spec = ERAS[args.era]
-    out = Path(args.out) if args.out else OUT_DIR / spec["file"]
-    rng = np.random.default_rng(spec["seed"])
-    rgba = generate(rng, mesh_width_factor(args.era), spec["base"])
-    write_png(out, rgba)
-    print("wrote", out, rgba.shape)
-    if args.preview:
-        write_png(args.preview, preview(rng, rgba, spec["grass"]))
-        print("wrote", args.preview)
+    out_dir = Path(args.out_dir) if args.out_dir else OUT_DIR
+    studs = tile_studs(args.era)
+    images = generate(args.era)
+    for layer, rgb in images.items():
+        path = out_dir / f"{args.era}_{layer}.png"
+        write_png(path, rgb)
+        lum = (rgb.astype(float) * LUMA).sum(-1).mean()
+        print(f"wrote {path} {rgb.shape} mean luminance {lum:.0f}")
+        if args.preview_dir:
+            target = Path(args.preview_dir) / f"preview_{args.era}_{layer}.png"
+            preview(rgb, ERAS[args.era]["ground"], target)
+            print(f"wrote {target}")
+    ground_lum = (np.array(ERAS[args.era]["ground"], dtype=float) * LUMA).sum()
+    print(f"{args.era}: {studs:g} studs per tile ({P / studs:.0f} px per stud), ground luminance {ground_lum:.0f}")
     return 0
 
 

@@ -16,7 +16,8 @@ City-dressing props (M9) get their own table per era, listed only when the era h
 facts from tools/testfit/blueprints/_props/<Era>/, assets/build/stages/_props/<Era>/,
 Assets.json `props` (optional key) and templates/_props/<Era>/.
 
-Ribbon path textures (wave 1c) get one small table from Assets.json `pathTextures` (optional key).
+Baked paths (wave 1d) get one table from Assets.json `paths` (optional key): per era the piece
+count, the triangle total, the two texture ids and how far the pieces have travelled.
 
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
@@ -453,33 +454,62 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
             for index, (prop_name, cov) in enumerate(prop_rows, start=1):
                 lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
             lines.append("")
-    lines += render_path_textures(assets)
+    lines += render_paths(assets)
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
 
 
-def render_path_textures(assets: dict | None) -> list[str]:
-    block = assets.get("pathTextures") if assets is not None else None
+def render_paths(assets: dict | None) -> list[str]:
+    """One row per era with baked paths: how many pieces, what they cost, and where they are in
+    the pipeline. Triangles come from Assets.json (written by the uploader from the bake record),
+    so this table needs nothing from the gitignored build tree."""
+    block = assets.get("paths") if assets is not None else None
     lines = [
-        "## Path textures",
+        "## Baked paths",
         "",
-        "Ribbon path textures: `tools/paths/texture.py` -> `tools/assets/upload_path_texture.py` (Decal)",
-        "-> Studio harvest (`imageId`). An era without a harvested `imageId` draws its paths with Parts.",
+        "Pipeline: `tools/paths/texture.py` (two PNGs -> Decals) and `tools/paths/bake.py`"
+        " (two GLBs per piece -> Models) -> `tools/assets/upload_paths.py` -> Studio harvest"
+        " -> `tools/assets/gen_templates.py --paths` -> `templates/_paths/<Era>/<pieceId>.rbxmx`"
+        " -> `ReplicatedStorage/Assets/Paths/<Era>/`.",
+        "",
+        "An era without both harvested image ids, or a piece without both harvested mesh ids,"
+        " has no template and the plot draws its paths with Parts instead.",
         "",
     ]
     if not isinstance(block, dict) or not block:
-        return lines + ["No path textures listed in `Assets.json`.", ""]
-    lines += ["| Era | assetId | imageId | Status |", "|-----|---------|---------|--------|"]
+        return lines + ["No baked paths listed in `Assets.json`.", ""]
+    lines += [
+        "| Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |",
+        "|-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|",
+    ]
     for era in sorted(block):
         entry = block[era] if isinstance(block[era], dict) else {}
-        asset_id, image_id = entry.get("assetId") or 0, entry.get("imageId") or 0
-        if image_id:
-            status = "harvested"
-        elif asset_id:
+        pieces = entry.get("pieces") or {}
+        meshes = [(piece.get(layer) or {}) for piece in pieces.values() for layer in ("fill", "rim")]
+        uploaded = sum(1 for m in meshes if int(m.get("assetId") or 0) != 0)
+        harvested = sum(1 for m in meshes if int(m.get("meshId") or 0) != 0)
+        images = [int(entry.get(f"{layer}ImageId") or 0) for layer in ("fill", "rim")]
+        templates = sum(
+            1 for piece_id in pieces if (TEMPLATES_DIR / "_paths" / era / f"{piece_id}.rbxmx").is_file()
+        )
+        if not pieces:
+            status = "not baked"
+        elif uploaded == 0 and not any(int(entry.get(f"{layer}AssetId") or 0) for layer in ("fill", "rim")):
+            status = "baked, not uploaded"
+        elif uploaded < len(meshes):
+            status = "uploading"
+        elif harvested < len(meshes) or not all(images):
             status = "uploaded, awaiting harvest"
+        elif templates < len(pieces):
+            status = "harvested, templates stale"
         else:
-            status = "not uploaded"
-        lines.append(f"| {md_cell(era)} | {asset_id or NONE} | {image_id or NONE} | {status} |")
+            status = "in game"
+        lines.append(
+            f"| {md_cell(era)} | {len(pieces)} | {int(entry.get('triangles') or 0)} "
+            f"| {int(entry.get('fillAssetId') or 0) or NONE}/{images[0] or NONE} "
+            f"| {int(entry.get('rimAssetId') or 0) or NONE}/{images[1] or NONE} "
+            f"| {uploaded}/{len(meshes)} | {harvested}/{len(meshes)} | {templates}/{len(pieces)} | {status} |"
+        )
     return lines + [""]
 
 

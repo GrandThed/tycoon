@@ -5,7 +5,7 @@
 
 Uploads out/Lane.glb and out/Spur.glb as Model assets and the five texture PNGs (out/tex/) as
 Decals, using the pipeline's own helpers (tools/assets/upload_models.upload_glb,
-tools/assets/upload_path_texture.upload_decal; credentials from .env via tools/upload_audio.py).
+tools/assets/upload_paths.upload_decal; credentials from .env via tools/upload_audio.py).
 
 Idempotent: an entry whose assetId is non-zero and whose file still has the uploaded sha256 is
 skipped. A file that changed since its upload is uploaded again and its harvested ids are cleared,
@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(REPO, "tools", "assets"))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 from upload_audio import UploadError, load_env, require_credentials  # noqa: E402
 from upload_models import upload_glb  # noqa: E402
-from upload_path_texture import upload_decal  # noqa: E402
+from upload_paths import upload_decal  # noqa: E402
 
 ASSETS_JSON = os.path.join(HERE, "pathtest_assets.json")
 OUT = os.path.join(HERE, "out")

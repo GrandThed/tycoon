@@ -50,6 +50,9 @@ export type PlayerState = {
 	-- M6 (schema v3): Legacy shop purchases. `spent` is Legacy invested (never deducted from
 	-- `legacy` itself — the multiplier keeps counting it); perks maps perkId -> tier owned.
 	legacyShop: LegacyShopState,
+	-- C0 (schema v5): the Expeditions profile — Armory gear, materials, Valor, mission records.
+	-- Shared by both places (one ProfileStore key), so the combat place writes it directly.
+	combat: CombatProfile,
 }
 
 -- M6 Legacy shop (docs/INTERFACES.md "M6 contracts"). LegacyShop.json v1 mirror; perk ids are
@@ -101,6 +104,9 @@ export type Snapshot = {
 	-- what the server prices cash packs with, so the shop previews grants against THIS and
 	-- never reconstructs it client-side. Always present on a snapshot.
 	persistedIncomePerSecond: number,
+	-- C0: server-computed Armory.GearPower (0 when Armory.json is absent), so the Power readout
+	-- never re-derives it from the profile.
+	gearPower: number,
 	-- M2: present only on the first snapshot after an offline grant (elapsed >= 60 s).
 	welcomeBack: WelcomeBack?,
 }
@@ -116,6 +122,10 @@ export type Delta = {
 	settings: { music: boolean, sfx: boolean, vipSkins: boolean }?,
 	-- M6: the whole shop state whenever the legacyShop dirty flag flushes (a copy, never aliased).
 	legacyShop: LegacyShopState?,
+	-- C0: the whole combat profile whenever the combat dirty flag flushes (a deep copy, never
+	-- aliased), with the recomputed Gear Power alongside it.
+	combat: CombatProfile?,
+	gearPower: number?,
 }
 
 -- M5: sent on StateChanged while a player has no loaded state (safe mode), so the client can
@@ -132,11 +142,24 @@ export type LoadStatus = {
 
 export type ActionResult = {
 	-- M2 adds the era actions; for them slotId is "" (no slot involved). M6 adds buyPerk, for
-	-- which slotId carries the perkId (locked = not the next tier / no such perk).
-	action: "buy" | "levelUp" | "advanceEra" | "rebirth" | "buyPerk",
+	-- which slotId carries the perkId (locked = not the next tier / no such perk). C0 adds the
+	-- four combat actions; their slotId carries the weapon slot ("melee"/"ranged"), the mission
+	-- id, or the host userId as a string.
+	action: "buy"
+		| "levelUp"
+		| "advanceEra"
+		| "rebirth"
+		| "buyPerk"
+		| "buyGear"
+		| "ascend"
+		| "expedition"
+		| "joinRun",
 	slotId: string,
 	ok: boolean,
-	reason: ("insufficientFunds" | "locked" | "invalid")?,
+	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
+	-- run that is full or gone. insufficientFunds = materials/Valor short; locked = income/s
+	-- below the unlockRate, the Ascension cap, or a mission era above highestEra.
+	reason: ("insufficientFunds" | "locked" | "invalid" | "unavailable")?,
 }
 
 -- M3 presentation events (server → client, owner only, never on bulk restore), discriminated
@@ -248,15 +271,31 @@ export type AssetStage = { modelAssetId: number, parts: { AssetPart } }
 export type AssetTexture = { vipSwatchAssetId: number, vipImageId: number }
 -- 5 stages for `building` slots, 1 otherwise; keyed by modelName under the era name.
 export type AssetModel = { stages: { AssetStage } }
+-- One baked path mesh (fill or rim) and one era's set, keyed by pieceId ("L<polyline>_<stretch>"
+-- or "SP_<slotId>"); `tileStuds` is the world-planar UV tile the bake used.
+export type AssetPathMesh = {
+	assetId: number,
+	meshId: number,
+	size: { number },
+	offset: { number },
+}
+export type AssetPathPiece = { fill: AssetPathMesh, rim: AssetPathMesh }
+export type AssetPathsEra = {
+	tileStuds: number,
+	fillImageId: number,
+	rimImageId: number,
+	pieces: { [string]: AssetPathPiece },
+}
 export type AssetsConfig = {
 	version: number,
 	textures: { [string]: AssetTexture },
 	eras: { [string]: { [string]: AssetModel } },
 	-- v2 (M9): city-dressing props by era, then prop name; absent in v1 files.
 	props: { [string]: { [string]: AssetModel } }?,
-	-- M9 wave 1c: the path-ribbon texture per era (optional, additive). `imageId` is the Image the
-	-- ribbon and beam renderers use; a missing entry or 0 means the parts renderer.
-	pathTextures: { [string]: { assetId: number, imageId: number } }?,
+	-- v3 (M9 wave 1d): baked path meshes by era (optional, additive). The client never reads the
+	-- ids -- it clones the generated templates -- but the preloader warms them, and an era with no
+	-- entry simply has nothing to warm.
+	paths: { [string]: AssetPathsEra }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.
@@ -355,8 +394,8 @@ export type CityLodConfig = {
 	vehiclePlots: number,
 	refreshSeconds: number,
 }
--- Wave 1c: `renderer` is "auto" | "beam" | "parts" and forces a road renderer for Studio tests;
--- optional so an older file still typechecks (absent = "auto").
+-- Wave 1d: `renderer` is "auto" | "parts" and forces a road renderer for Studio tests; optional
+-- so an older file still typechecks (absent = "auto").
 export type CityRoadConfig = {
 	thickness: number,
 	laneOffsetFraction: number,
@@ -379,8 +418,8 @@ export type CityBudgetConfig = {
 	trees: number,
 	vehiclesPerPlot: number,
 	vehiclesMap: number,
-	-- Wave 1c; optional like roadPiecesNear. Triangle ceiling per plot for the ribbon renderer.
-	ribbonTriangles: number?,
+	-- Wave 1d; optional like roadPiecesNear. Cloned path-piece Models per plot.
+	pathPieces: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -392,17 +431,18 @@ export type CityMeanderConfig = {
 	segmentLength: number,
 	widthJitter: number,
 }
--- Wave 1c: smooth textured ribbon paths (docs/INTERFACES.md "Wave 1c — ribbon paths").
-export type CityRibbonConfig = {
-	textureLength: number, -- studs of path per texture repeat
-	meshWidthFactor: number, -- mesh width over nominal width (texture alpha 0.5 at the nominal edge)
-	cornerRadiusWidths: number,
-	sampleSpacing: number,
-	capLength: number,
-	flare: number,
-	layerLift: number,
-	growSeconds: number,
+-- Wave 1d: baked path meshes (docs/INTERFACES.md "Wave 1d — baked paths"). rimHeight and
+-- fillHeight are baked into the templates; the client reads only the appear effect and the rim
+-- LOD from here. A file without `paths` disables the baked renderer (the parts renderer draws).
+export type CityPathsConfig = {
+	rimHeight: number,
+	fillHeight: number,
+	rimLeadSeconds: number, -- the rim is parented this long before its fill
+	dustSeconds: number, -- a dust burst crosses the piece in this long
+	rimNearOnly: boolean, -- far plots drop their rims, halving the part count
 }
+-- Per era: the world-planar UV tile the bake used. An era without it draws Parts.
+export type CityEraPathsConfig = { tileStuds: number }
 export type CityEraRoadConfig = {
 	width: number,
 	material: string,
@@ -412,7 +452,7 @@ export type CityEraRoadConfig = {
 	-- Overrides road.laneOffsetFraction; Village sets 0 so carts run down the trail's middle.
 	laneOffsetFraction: number?,
 	meander: CityMeanderConfig?,
-	ribbon: CityRibbonConfig?,
+	paths: CityEraPathsConfig?,
 }
 export type CityEraTreesConfig = { maxCount: number, clearance: number, prop: string? }
 export type CityEraPropsConfig = { props: { string } }
@@ -435,8 +475,287 @@ export type CityDressingConfig = {
 	trees: CityTreesConfig,
 	lamps: CityLampsConfig,
 	vehicles: CityVehiclesConfig,
+	-- Wave 1d; optional so a pre-wave-1d file still typechecks (absent = no baked paths).
+	paths: CityPathsConfig?,
 	-- Keyed by era `name`; a missing era means no dressing for it.
 	eras: { [string]: CityEraDressingConfig },
+}
+
+-- C0 combat ("Expeditions", docs/INTERFACES.md "C0 contracts"). Armory.json / Combat.json /
+-- Places.json / Missions/*.json mirrors; field names follow the JSON keys exactly. Asset ids and
+-- place ids of 0 mean "not yet" and never error.
+
+-- The two permanent weapon slots. Also the ActionResult.slotId of buyGear/ascend.
+export type WeaponSlot = "melee" | "ranged"
+
+export type MissionRecord = { bestWave: number, bossClears: number, overdriveBest: number }
+
+-- Profile schema v5. materials is keyed by material name ("Timber") and never negative; gear and
+-- ascension hold a tier / Ascension level per slot (0 = starter / none); highestEra survives
+-- Rebirth and gates mission tiles; expeditionSince/expeditionSeconds are the away-time split the
+-- offline grant reads (both zeroed by ApplyOfflineGrant).
+export type CombatProfile = {
+	materials: { [string]: number },
+	valor: number,
+	gear: { melee: number, ranged: number },
+	ascension: { melee: number, ranged: number },
+	missions: { [string]: MissionRecord },
+	highestEra: number,
+	expeditionSince: number,
+	expeditionSeconds: number,
+	stats: { kills: number, wavesCleared: number, expeditions: number, cashFromCombat: number },
+}
+
+export type PlacesConfig = { version: number, hubPlaceId: number, combatPlaceId: number }
+
+-- Armory.json v1. `kind` and `fire` stay `string` because they are decoded from JSON, which Luau
+-- cannot narrow to a union. Melee classes carry range/arcDegrees/chain/windows/comboReset/
+-- finisherKnockback; ranged carry fire/cooldown/range plus the optional per-family fields.
+export type BandDef = { band: number, eraName: string, material: string }
+export type WeaponClassDef = {
+	kind: string,
+	range: number,
+	arcDegrees: number?,
+	chain: { number }?,
+	windows: { number }?,
+	comboReset: number?,
+	finisherKnockback: number?,
+	fire: string?,
+	cooldown: number?,
+	chargeSeconds: number?,
+	minDamageFraction: number?,
+	spreadDegrees: number?,
+	pierce: number?,
+}
+export type AbilityDef = {
+	kind: string,
+	cooldown: number,
+	damageMult: number,
+	radius: number?,
+	shots: number?,
+	knockback: number?,
+	stunSeconds: number?,
+	dashStuds: number?,
+	dotSeconds: number?,
+	dotTicks: number?,
+	pierce: number?,
+}
+-- `model` is a prop name under ReplicatedStorage/Assets/Props/<band eraName>/ ("" = no model, so
+-- the hands stay empty); `ability` keys ArmoryConfig.abilities ("" = none).
+export type WeaponStarterDef = {
+	name: string,
+	class: string,
+	damage: number,
+	hp: number,
+	ability: string,
+	model: string,
+}
+-- `cost` is in the band material; `unlockRate` is the persisted income/s the city must reach.
+export type WeaponTierDef = {
+	tier: number,
+	band: number,
+	cost: number,
+	unlockRate: number,
+	name: string,
+	class: string,
+	damage: number,
+	hp: number,
+	ability: string,
+	model: string,
+}
+export type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
+export type AscensionLevelDef = {
+	level: number,
+	materials: { [string]: number },
+	valor: number,
+	damageMult: number,
+	hpMult: number,
+	abilityMult: number,
+}
+export type AscensionConfig = {
+	requiresRebirth: number,
+	levelsPerRebirth: number,
+	levels: { AscensionLevelDef },
+}
+export type ArmoryConfig = {
+	version: number,
+	baseHp: number,
+	power: { hpWeight: number },
+	bands: { BandDef },
+	classes: { [string]: WeaponClassDef },
+	abilities: { [string]: AbilityDef },
+	-- Keyed by WeaponSlot; a map (not a record) because every lookup comes from a validated
+	-- client string or a config-driven loop.
+	slots: { [string]: ArmorySlotDef },
+	ascension: AscensionConfig,
+}
+
+-- Combat.json v1.
+export type CombatOfflineConfig = { expeditionEfficiency: number }
+-- No baseHp here: Armory.json owns it (Armory.MaxHp is the only thing that reads it), so the
+-- two can never drift apart.
+export type CombatPlayerConfig = {
+	respawnSeconds: number,
+	hitDistancePad: number,
+	breatherRegenPerSecond: number,
+	killCooldownRefundSeconds: number,
+}
+export type CombatRemotesConfig = {
+	attackCallsPerSecond: number,
+	abilityCallsPerSecond: number,
+	runListCallsPerSecond: number,
+	combatStateHz: number,
+}
+export type CombatDirectorConfig = {
+	windowSeconds: number,
+	tempoMin: number,
+	tempoMax: number,
+	mergeThreshold: number,
+	mergeTempo: number,
+	eliteTempo: number,
+	breatherSeconds: number,
+	breatherMaxSeconds: number,
+	maxAlive: number,
+	runCapSeconds: number,
+}
+export type CombatCoopConfig = {
+	maxParty: number,
+	joinUntilWave: number,
+	contributionFloor: number,
+	countPerExtraPlayer: number,
+	mentorRatio: number,
+	mentorValor: number,
+}
+export type CombatOverdriveConfig = {
+	requiresRebirth: number,
+	countMult: number,
+	hpMult: number,
+	damageMult: number,
+	spawnRateMult: number,
+	rewardMult: number,
+}
+export type CombatRegistryConfig = { mapName: string, ttlSeconds: number }
+export type CombatAnimationsConfig = {
+	enemyIdle: number,
+	enemyWalk: number,
+	enemyAttack: number,
+	enemyDeath: number,
+}
+-- Studio-only levers, named here so no attribute name is duplicated in code.
+export type CombatDebugConfig = {
+	missionAttribute: string,
+	overdriveAttribute: string,
+	grantMaterialsAttribute: string,
+	grantValorAttribute: string,
+}
+export type CombatConfig = {
+	version: number,
+	offline: CombatOfflineConfig,
+	player: CombatPlayerConfig,
+	remotes: CombatRemotesConfig,
+	director: CombatDirectorConfig,
+	coop: CombatCoopConfig,
+	overdrive: CombatOverdriveConfig,
+	registry: CombatRegistryConfig,
+	animations: CombatAnimationsConfig,
+	debug: CombatDebugConfig,
+}
+
+-- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
+export type EnemyDef = {
+	template: string,
+	kind: string,
+	hp: number,
+	damage: number,
+	speed: number,
+	reach: number,
+	attackCooldown: number,
+	cash: number,
+	materials: number,
+	elite: boolean,
+}
+-- The composition in force from `fromWave` until the next entry takes over.
+export type CompositionDef = { fromWave: number, weights: { [string]: number } }
+export type WaveTableDef = {
+	baseCount: number,
+	countPerWave: number,
+	hpGrowth: number,
+	damageGrowth: number,
+	rewardGrowth: number,
+	composition: { CompositionDef },
+}
+export type BossDef = {
+	template: string,
+	enemy: string,
+	hpMult: number,
+	damageMult: number,
+	cashMult: number,
+	materialsMult: number,
+	valor: number,
+}
+export type MissionConfig = {
+	version: number,
+	id: string,
+	era: number,
+	eraName: string,
+	name: string,
+	arena: string,
+	material: string,
+	waves: number,
+	bossWaves: { number },
+	recommendedPower: number,
+	targetMinutes: number,
+	targetWaveSeconds: number,
+	enemies: { [string]: EnemyDef },
+	waveTable: WaveTableDef,
+	-- Keyed by the wave number as a string ("5"), because JSON has no integer keys.
+	bosses: { [string]: BossDef },
+}
+
+-- Combat place run state (server to client on the RunState event). One authoritative payload for
+-- the whole HUD, so the client never derives a phase.
+export type RunPartyMember = {
+	userId: number,
+	name: string,
+	hp: number,
+	maxHp: number,
+	ready: boolean,
+}
+export type RunSummary = {
+	missionId: string,
+	overdrive: boolean,
+	wavesCleared: number,
+	cash: number,
+	materials: { [string]: number },
+	valor: number,
+	kills: number,
+	seconds: number,
+}
+export type RunState = {
+	kind: "run",
+	phase: "lobby" | "wave" | "breather" | "boss" | "summary" | "ended",
+	missionId: string,
+	overdrive: boolean,
+	wave: number,
+	waves: number,
+	alive: number,
+	tempo: number,
+	party: { RunPartyMember },
+	breatherEndsIn: number?,
+	summary: RunSummary?,
+}
+
+-- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub strips it
+-- before the RunList event, so a client can never teleport itself into a reserved server.
+export type ActiveRun = {
+	hostUserId: number,
+	hostName: string,
+	missionId: string,
+	era: number,
+	wave: number,
+	overdrive: boolean,
+	partySize: number,
+	accessCode: string,
 }
 
 return {}

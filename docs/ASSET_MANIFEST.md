@@ -202,14 +202,16 @@ Summary: 0/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
 | 23 | `TurretBase` | Raise Planetary Defense | unlock | — | — | — | 0/1 | — | — | — |
 | 24 | `LaunchTower` | Launch Tower | monument | — | — | — | 0/1 | — | — | — |
 
-## Path textures
+## Baked paths
 
-Ribbon path textures: `tools/paths/texture.py` -> `tools/assets/upload_path_texture.py` (Decal)
--> Studio harvest (`imageId`). An era without a harvested `imageId` draws its paths with Parts.
+Pipeline: `tools/paths/texture.py` (two PNGs -> Decals) and `tools/paths/bake.py` (two GLBs per piece -> Models) -> `tools/assets/upload_paths.py` -> Studio harvest -> `tools/assets/gen_templates.py --paths` -> `templates/_paths/<Era>/<pieceId>.rbxmx` -> `ReplicatedStorage/Assets/Paths/<Era>/`.
 
-| Era | assetId | imageId | Status |
-|-----|---------|---------|--------|
-| Village | 129735535354317 | 115163704776256 | harvested |
+An era without both harvested image ids, or a piece without both harvested mesh ids, has no template and the plot draws its paths with Parts instead.
+
+| Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |
+|-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|
+| Boomtown | 33 | 37308 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 66/66 | 66/66 | 33/33 | in game |
+| Village | 58 | 33380 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 116/116 | 116/116 | 58/58 | in game |
 
 ## Totals
 

@@ -20,10 +20,10 @@ kind "prop", and the merge step with --props takes only those lines (without it,
 and swatch lines), so each paste lands exactly where its emit came from. --assets-json and
 --luau redirect the files for dry runs.
 
-Ribbon path textures (Assets.json pathTextures.<Era>, uploaded as Decals by
-upload_path_texture.py) ride along in both modes with no flag of their own: an entry with an
-assetId but no imageId is emitted as kind "pathTexture", and either merge writes its imageId,
-because a path texture belongs to neither buildings nor props and should not wait on either paste.
+Baked paths (Assets.json paths.<Era>, uploaded by upload_paths.py) ride along in both modes with
+no flag of their own: a piece mesh with an assetId but no meshId is emitted as kind "pathPiece"
+and a texture Decal with no imageId as kind "pathTexture", and either merge writes them back,
+because paths belong to neither buildings nor props and should not wait on either paste.
 """
 
 from __future__ import annotations
@@ -97,6 +97,8 @@ for _, asset in ASSETS do
 		model = asset.model,
 		stage = asset.stage,
 		kit = asset.kit,
+		piece = asset.piece,
+		layer = asset.layer,
 		assetId = tostring(asset.id),
 		parts = {},
 	}
@@ -165,8 +167,13 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
         if asset_id == 0 or (not include_all and int(tex.get("vipImageId", 0)) != 0):
             continue
         lines.append(f"\t{{ kind = \"swatch\", kit = {lua_string(kit)}, id = {asset_id} }},")
-    for era, entry in pending_path_textures(assets, include_all):
-        lines.append(f"\t{{ kind = \"pathTexture\", era = {lua_string(era)}, id = {int(entry['assetId'])} }},")
+    for era, layer, asset_id in pending_path_textures(assets, include_all):
+        lines.append(f"\t{{ kind = \"pathTexture\", era = {lua_string(era)}, layer = {lua_string(layer)}, id = {asset_id} }},")
+    for era, piece_id, layer, asset_id in pending_path_pieces(assets, include_all):
+        lines.append(
+            f"\t{{ kind = \"pathPiece\", era = {lua_string(era)}, piece = {lua_string(piece_id)}, "
+            f"layer = {lua_string(layer)}, id = {asset_id} }},"
+        )
     flag = " --props" if props else ""
     text = LUAU_TEMPLATE % {
         "entries": "\n".join(lines) if lines else "\t-- nothing to harvest",
@@ -181,12 +188,27 @@ def emit(assets: dict, include_all: bool, props: bool, luau_path: str) -> int:
     return 0
 
 
-def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple[str, dict]]:
+def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple[str, str, int]]:
     out = []
-    for era in sorted(assets.get(cfg.PATH_TEXTURES_KEY, {})):
-        entry = assets[cfg.PATH_TEXTURES_KEY][era]
-        if int(entry.get("assetId", 0)) != 0 and (include_all or int(entry.get("imageId", 0)) == 0):
-            out.append((era, entry))
+    for era in sorted(assets.get(cfg.PATHS_KEY, {})):
+        entry = assets[cfg.PATHS_KEY][era]
+        for layer in cfg.PATH_LAYERS:
+            asset_id = int(entry.get(f"{layer}AssetId", 0))
+            if asset_id != 0 and (include_all or int(entry.get(f"{layer}ImageId", 0)) == 0):
+                out.append((era, layer, asset_id))
+    return out
+
+
+def pending_path_pieces(assets: dict, include_all: bool = False) -> list[tuple[str, str, str, int]]:
+    out = []
+    for era in sorted(assets.get(cfg.PATHS_KEY, {})):
+        pieces = assets[cfg.PATHS_KEY][era].get("pieces") or {}
+        for piece_id in sorted(pieces):
+            for layer in cfg.PATH_LAYERS:
+                mesh = pieces[piece_id].get(layer) or {}
+                asset_id = int(mesh.get("assetId", 0))
+                if asset_id != 0 and (include_all or int(mesh.get("meshId", 0)) == 0):
+                    out.append((era, piece_id, layer, asset_id))
     return out
 
 
@@ -305,22 +327,61 @@ def merge_swatch(assets: dict, rec: dict, force: bool) -> bool:
 
 
 def merge_path_texture(assets: dict, rec: dict, force: bool) -> bool:
-    era = rec.get("era")
-    entry = assets.get(cfg.PATH_TEXTURES_KEY, {}).get(era)
-    if entry is None:
-        warn(f"no pathTextures entry for era {era!r}; line skipped")
+    era, layer = rec.get("era"), rec.get("layer")
+    entry = assets.get(cfg.PATHS_KEY, {}).get(era)
+    if entry is None or layer not in cfg.PATH_LAYERS:
+        warn(f"no paths entry for era {era!r} layer {layer!r}; line skipped")
         return False
-    expected = int(entry.get("assetId", 0))
+    label = f"path texture {era} {layer}"
+    expected = int(entry.get(f"{layer}AssetId", 0))
     got = int(str(rec.get("assetId", "0")) or 0)
     if expected != got and not force:
-        warn(f"path texture {era}: printed asset {got} but Assets.json has {expected}; skipped")
+        warn(f"{label}: printed asset {got} but Assets.json has {expected}; skipped")
         return False
     image_id = int(str(rec.get("imageId", "0")) or 0)
     if image_id == 0:
-        warn(f"path texture {era}: no Decal Texture on the loaded asset (still in moderation?); skipped")
+        warn(f"{label}: no Decal Texture on the loaded asset (still in moderation?); skipped")
         return False
-    entry["imageId"] = image_id
-    log(f"path texture {era}: image {image_id}")
+    entry[f"{layer}ImageId"] = image_id
+    log(f"{label}: image {image_id}")
+    return True
+
+
+def merge_path_piece(assets: dict, rec: dict, force: bool) -> bool:
+    """One piece mesh: the MeshId, Size and offset from the glTF origin of the single MeshPart
+    Roblox built inside the uploaded Model. The offset comes back sign-negated in x and z, because
+    the importer turns the geometry 180 deg about Y; it is recorded exactly as Studio reported it
+    and gen_templates.py applies the turn."""
+    era, piece_id, layer = rec.get("era"), rec.get("piece"), rec.get("layer")
+    pieces = (assets.get(cfg.PATHS_KEY, {}).get(era) or {}).get("pieces") or {}
+    mesh = (pieces.get(piece_id) or {}).get(layer) if layer in cfg.PATH_LAYERS else None
+    if mesh is None:
+        warn(f"no paths entry for {era}/{piece_id}/{layer}; line skipped")
+        return False
+    label = f"path {era} {piece_id} {layer}"
+    expected = int(mesh.get("assetId", 0))
+    got = int(str(rec.get("assetId", "0")) or 0)
+    if expected != got and not force:
+        warn(f"{label}: printed asset {got} but Assets.json has {expected} (stale paste? use --force); skipped")
+        return False
+    parts = rec.get("parts") or []
+    if len(parts) != 1:
+        warn(f"{label}: expected exactly one MeshPart, got {len(parts)}; skipped")
+        return False
+    part = parts[0]
+    mesh_id = int(str(part.get("meshId", "0")) or 0)
+    if mesh_id == 0:
+        warn(f"{label}: MeshPart has no MeshId; skipped")
+        return False
+    if part.get("rotated"):
+        warn(f"{label}: MeshPart is rotated relative to the model beyond the importer's 180 deg turn")
+    mesh.update(
+        {
+            "meshId": mesh_id,
+            "size": [float(v) for v in part.get("size", [0, 0, 0])],
+            "offset": [float(v) for v in part.get("offset", [0, 0, 0])],
+        }
+    )
     return True
 
 
@@ -334,7 +395,10 @@ def list_missing(assets: dict, props: bool) -> list[str]:
         tex = assets["textures"][kit]
         if int(tex.get("vipSwatchAssetId", 0)) != 0 and int(tex.get("vipImageId", 0)) == 0:
             missing.append(f"VIP swatch {kit}")
-    missing += [f"path texture {era}" for era, _ in pending_path_textures(assets)]
+    missing += [f"path texture {era} {layer}" for era, layer, _ in pending_path_textures(assets)]
+    pieces = pending_path_pieces(assets)
+    if pieces:
+        missing.append(f"{len(pieces)} path piece mesh(es)")
     return missing
 
 
@@ -343,11 +407,13 @@ def merge(assets: dict, text: str, force: bool, props: bool) -> int:
     if not records:
         warn("no [HARVEST] lines found (copy the whole Output window after running harvest.luau)")
         return 1
-    models = swatches = path_textures = 0
+    models = swatches = path_textures = path_pieces = 0
     for rec in records:
         kind = rec.get("kind")
         if kind == "pathTexture":
             path_textures += merge_path_texture(assets, rec, force)
+        elif kind == "pathPiece":
+            path_pieces += merge_path_piece(assets, rec, force)
         elif props:
             if kind == "prop":
                 models += merge_model(assets, rec, force, "props")
@@ -366,13 +432,16 @@ def merge(assets: dict, text: str, force: bool, props: bool) -> int:
         log(f"merged {models} prop stage(s) into {os.path.relpath(cfg.ASSETS_PATH, cfg.REPO_ROOT)}")
     else:
         log(f"merged {models} model stage(s) and {swatches} swatch(es) into {os.path.relpath(cfg.ASSETS_PATH, cfg.REPO_ROOT)}")
-    if path_textures:
-        log(f"merged {path_textures} path texture(s)")
+    if path_textures or path_pieces:
+        log(f"merged {path_textures} path texture(s) and {path_pieces} path piece mesh(es)")
     missing = list_missing(assets, props)
     if missing:
         log("still missing harvest data: " + ", ".join(missing))
     else:
-        log(f"every uploaded asset is harvested; next: py tools/assets/gen_templates.py{' --props' if props else ''}")
+        commands = ["py tools/assets/gen_templates.py" + (" --props" if props else "")]
+        if path_textures or path_pieces:
+            commands.append("py tools/assets/gen_templates.py --paths")
+        log("every uploaded asset is harvested; next: " + ", then ".join(commands))
     return 0
 
 

@@ -1,6 +1,6 @@
 """Read, shape and write src/shared/Config/Assets.json (schema v1, INTERFACES.md "M7 contracts";
-v2 adds the city-dressing `props` block, "M9 contracts"; the optional `pathTextures` block is
-"Wave 1c — ribbon paths").
+v2 adds the city-dressing `props` block, "M9 contracts"; v3 adds the baked-path `paths` block,
+"Wave 1d — baked paths").
 
 Shared by upload_models.py (writes modelAssetId / vipSwatchAssetId), harvest.py (writes meshId,
 imageId, size, offset, vipImageId) and gen_templates.py (reads everything). Every writer goes
@@ -28,8 +28,10 @@ SCHEMA_VERSION = 1
 # A file only becomes v2 once it carries props, so building-only runs keep writing v1 byte for byte.
 PROPS_SCHEMA_VERSION = 2
 PROPS_KEY = "props"
-# Additive and optional (a missing key means no ribbon texture), so it bumps no schema version.
-PATH_TEXTURES_KEY = "pathTextures"
+# A file only becomes v3 once it carries baked paths, so props-only runs keep writing v2.
+PATHS_SCHEMA_VERSION = 3
+PATHS_KEY = "paths"
+PATH_LAYERS = ("fill", "rim")
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -136,11 +138,42 @@ def ensure_texture(assets: dict, kit: str) -> dict:
     return tex
 
 
-def ensure_path_texture(assets: dict, era: str) -> dict:
-    entry = assets.setdefault(PATH_TEXTURES_KEY, {}).setdefault(era, {})
-    entry.setdefault("assetId", 0)
-    entry.setdefault("imageId", 0)
+def empty_path_mesh() -> dict:
+    return {"assetId": 0, "meshId": 0, "size": [0, 0, 0], "offset": [0, 0, 0], "sha256": ""}
+
+
+def ensure_path_era(assets: dict, era: str, tile_studs: float, layout_hash: str, triangles: int = 0) -> dict:
+    """Pre-list an era's path block without touching ids; marks the file v3.
+
+    `sha256` per mesh and per texture is what makes a re-upload possible at all: a regenerated GLB
+    or PNG must go up again, and its harvested ids must be cleared, or Studio would show the old
+    art under an id that looks fresh."""
+    assets["version"] = max(int(assets.get("version", SCHEMA_VERSION)), PATHS_SCHEMA_VERSION)
+    entry = assets.setdefault(PATHS_KEY, {}).setdefault(era, {})
+    entry["tileStuds"] = tile_studs
+    entry["layoutHash"] = layout_hash
+    # Derived from the bake, but committed: assets/build is gitignored, and the manifest and any
+    # reviewer should be able to see what a plot's paths cost without re-running Blender.
+    entry["triangles"] = int(triangles or entry.get("triangles", 0))
+    for layer in PATH_LAYERS:
+        entry.setdefault(f"{layer}AssetId", 0)
+        entry.setdefault(f"{layer}ImageId", 0)
+        entry.setdefault(f"{layer}Sha256", "")
+    entry.setdefault("pieces", {})
     return entry
+
+
+def ensure_path_piece(assets: dict, era: str, piece_id: str) -> dict:
+    entry = assets[PATHS_KEY][era]["pieces"].setdefault(piece_id, {})
+    for layer in PATH_LAYERS:
+        mesh = entry.setdefault(layer, empty_path_mesh())
+        for key, default in empty_path_mesh().items():
+            mesh.setdefault(key, default)
+    return entry
+
+
+def path_piece_harvested(piece: dict) -> bool:
+    return all(int((piece.get(layer) or {}).get("meshId", 0)) != 0 for layer in PATH_LAYERS)
 
 
 def stage_harvested(stage: dict) -> bool:
@@ -186,12 +219,38 @@ def render_assets(assets: dict) -> str:
     if PROPS_KEY in assets:
         props = assets[PROPS_KEY]
         ordered[PROPS_KEY] = {era: {name: props[era][name] for name in sorted(props[era])} for era in sorted(props)}
-    if PATH_TEXTURES_KEY in assets:
-        paths = assets[PATH_TEXTURES_KEY]
-        ordered[PATH_TEXTURES_KEY] = {era: {"assetId": paths[era].get("assetId", 0), "imageId": paths[era].get("imageId", 0)} for era in sorted(paths)}
+    if PATHS_KEY in assets:
+        ordered[PATHS_KEY] = {era: render_path_era(assets[PATHS_KEY][era]) for era in sorted(assets[PATHS_KEY])}
     text = json.dumps(ordered, indent=2, ensure_ascii=False)
     text = _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
     return text + "\n"
+
+
+def render_path_era(entry: dict) -> dict:
+    """Fixed key order for one era's paths block (INTERFACES "Wave 1d - Pipeline")."""
+    out: dict = {
+        "tileStuds": entry.get("tileStuds", 0),
+        "layoutHash": entry.get("layoutHash", ""),
+        "triangles": int(entry.get("triangles", 0)),
+    }
+    for layer in PATH_LAYERS:
+        for suffix in ("AssetId", "ImageId", "Sha256"):
+            out[f"{layer}{suffix}"] = entry.get(f"{layer}{suffix}", 0 if suffix != "Sha256" else "")
+    pieces = entry.get("pieces") or {}
+    out["pieces"] = {
+        piece_id: {
+            layer: {
+                "assetId": int((pieces[piece_id].get(layer) or {}).get("assetId", 0)),
+                "meshId": int((pieces[piece_id].get(layer) or {}).get("meshId", 0)),
+                "size": list((pieces[piece_id].get(layer) or {}).get("size") or [0, 0, 0]),
+                "offset": list((pieces[piece_id].get(layer) or {}).get("offset") or [0, 0, 0]),
+                "sha256": str((pieces[piece_id].get(layer) or {}).get("sha256", "")),
+            }
+            for layer in PATH_LAYERS
+        }
+        for piece_id in sorted(pieces)
+    }
+    return out
 
 
 def save_assets(assets: dict) -> None:

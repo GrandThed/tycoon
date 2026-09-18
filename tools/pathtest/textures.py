@@ -31,7 +31,15 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "paths"))
-from texture import fourier_noise, fourier_noise_1d, smoothstep, write_png  # noqa: E402
+from texture import (  # noqa: E402
+    P,
+    fourier_noise,
+    fourier_noise_1d,
+    planar_fill,
+    planar_rim,
+    smoothstep,
+    write_png,
+)
 
 OUT = HERE / "out" / "tex"
 W, H = 1024, 512
@@ -210,75 +218,12 @@ def stylised(rng):
 
 
 # ---------------------------------------------------------------- planar (round 2: C2 / C3)
+#
+# The planar fill and rim are the variant Ben approved (C3), so they moved to
+# tools/paths/texture.py, where the real bake generates them per era; this file imports them so
+# the look test still reproduces P_fill.png and P_rim.png byte for byte.
 
-P = 1024  # square, seamless on both axes
-P_TILE = 11.0  # studs per repeat; must equal planar.py TILE (~93 px per stud)
-
-
-def stamp_planar(rng, count, r_range, palette, albedo, mask, placed, shadow_px):
-    """Flat pebbles that wrap on BOTH axes (the planar texture tiles in x and z), never touching."""
-    stamped = 0
-    for _ in range(count * 40):
-        if stamped >= count:
-            break
-        r = float(rng.uniform(*r_range))
-        ecc = rng.uniform(0.62, 0.95)
-        ang = rng.uniform(0, np.pi)
-        cx, cy = rng.uniform(0, P), rng.uniform(0, P)
-        def wrapped(a, b, n):
-            d = abs(a - b)
-            return min(d, n - d)
-        if any(wrapped(cx, px, P) ** 2 + wrapped(cy, py, P) ** 2 < (r + pr + shadow_px + 5) ** 2 for px, py, pr in placed):
-            continue
-        placed.append((cx, cy, r))
-        stamped += 1
-        colour = palette[int(rng.integers(len(palette)))] * rng.uniform(0.93, 1.05)
-        rad = int(np.ceil(r + shadow_px + 3))
-        yr = np.arange(int(cy - rad), int(cy + rad) + 1)
-        xr = np.arange(int(cx - rad), int(cx + rad) + 1)
-        yi = (yr % P)[:, None]
-        xi = (xr % P)[None, :]
-        dy, dx = yr[:, None] - cy, xr[None, :] - cx
-        ca, sa = np.cos(ang), np.sin(ang)
-        lx = (dx * ca + dy * sa) / r
-        ly = (-dx * sa + dy * ca) / (r * ecc)
-        inside = np.clip((1 - np.sqrt(lx * lx + ly * ly)) * r * 0.8, 0, 1)
-        yb, xb = np.broadcast_to(yi, inside.shape), np.broadcast_to(xi, inside.shape)
-        blend = inside[..., None]
-        albedo[yb, xb] = albedo[yb, xb] * (1 - blend) + colour[None, None, :] * blend
-        mask[yb, xb] = np.maximum(mask[yb, xb], inside)
-
-
-def planar_fill(rng):
-    """C's stylised look, opaque and tiling on both axes: warm packed dirt, gentle two-tone worn
-    blobs, a few bold flat pebbles with one hard drop shadow each. No directional feature (no wheel
-    tracks), because the mapping is world-planar and a path may cross the tile in any direction."""
-    light = srgb((194, 155, 106))
-    dark = srgb((176, 137, 91))
-    blobs = fourier_noise(rng, (P, P), 2.0, lo_cut=4, hi_cut=14)  # ~0.8-2.5 stud patches
-    tone = smoothstep(-0.2, 0.2, blobs + 0.75)
-    colour = dark[None, None, :] * (1 - tone[..., None]) + light[None, None, :] * tone[..., None]
-    # a second, fainter tone step keeps large flat areas from reading as plastic
-    fine = fourier_noise(rng, (P, P), 1.6, lo_cut=12, hi_cut=45)
-    colour *= (1 + 0.035 * np.sign(fine) * smoothstep(0.1, 0.8, np.abs(fine)))[..., None]
-    albedo = colour.copy()
-    mask = np.zeros((P, P))
-    stones = [srgb((214, 200, 172)), srgb((150, 124, 98)), srgb((202, 186, 158))]
-    placed = []
-    shadow_px = 6
-    stamp_planar(rng, 40, (22, 38), stones, albedo, mask, placed, shadow_px)  # 0.47-0.82 studs
-    stamp_planar(rng, 80, (12, 19), stones, albedo, mask, placed, shadow_px)  # 0.26-0.41 studs
-    shadow = np.roll(np.roll(mask, shadow_px, axis=0), shadow_px, axis=1) * (1 - mask)
-    out = albedo * (1 - 0.26 * shadow[..., None])
-    return to8(np.clip(out, 0, 1))
-
-
-def planar_rim(fill_rgb):
-    """C3's rim: the same image, darker and a little desaturated, so a rim beside a fill reads as
-    the trodden shoulder of the same path and two rims that overlap are identical texels."""
-    x = fill_rgb.astype(np.float64) / 255.0
-    lum = (x * np.array([0.2126, 0.7152, 0.0722])).sum(-1, keepdims=True)
-    return to8(np.clip((x * 0.75 + lum * 0.25) * 0.72, 0, 1))
+P_TILE = 11.0  # studs per repeat; must equal tools/paths/planargeom.py's tile (~93 px per stud)
 
 
 def planar_preview(rgb, path):

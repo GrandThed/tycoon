@@ -1,0 +1,108 @@
+<roblox version="4">
+  <Item class="Model" referent="RBX0">
+    <Properties>
+      <string name="Name">SP_departmentStore</string>
+      <bool name="NeedsPivotMigration">false</bool>
+      <CoordinateFrame name="WorldPivot">
+        <X>0</X>
+        <Y>0</Y>
+        <Z>0</Z>
+        <R00>1</R00>
+        <R01>0</R01>
+        <R02>0</R02>
+        <R10>0</R10>
+        <R11>1</R11>
+        <R12>0</R12>
+        <R20>0</R20>
+        <R21>0</R21>
+        <R22>1</R22>
+      </CoordinateFrame>
+    </Properties>
+    <Item class="MeshPart" referent="RBX1">
+      <Properties>
+        <string name="Name">Rim</string>
+        <bool name="Anchored">true</bool>
+        <CoordinateFrame name="CFrame">
+          <X>-0.0319</X>
+          <Y>0.0225</Y>
+          <Z>34.2</Z>
+          <R00>-1</R00>
+          <R01>0</R01>
+          <R02>0</R02>
+          <R10>0</R10>
+          <R11>1</R11>
+          <R12>0</R12>
+          <R20>0</R20>
+          <R21>0</R21>
+          <R22>-1</R22>
+        </CoordinateFrame>
+        <bool name="CanCollide">false</bool>
+        <bool name="CanQuery">false</bool>
+        <bool name="CanTouch">false</bool>
+        <bool name="CastShadow">false</bool>
+        <token name="CollisionFidelity">2</token>
+        <Color3uint8 name="Color3uint8">16777215</Color3uint8>
+        <Vector3 name="InitialSize">
+          <X>14.1957</X>
+          <Y>0.005</Y>
+          <Z>19.6</Z>
+        </Vector3>
+        <token name="Material">272</token>
+        <Content name="MeshContent">
+          <uri>rbxassetid://108095985724777</uri>
+        </Content>
+        <Vector3 name="size">
+          <X>14.1957</X>
+          <Y>0.005</Y>
+          <Z>19.6</Z>
+        </Vector3>
+        <Content name="TextureContent">
+          <uri>rbxassetid://115125466569784</uri>
+        </Content>
+      </Properties>
+    </Item>
+    <Item class="MeshPart" referent="RBX2">
+      <Properties>
+        <string name="Name">Fill</string>
+        <bool name="Anchored">true</bool>
+        <CoordinateFrame name="CFrame">
+          <X>0.19</X>
+          <Y>0.0725</Y>
+          <Z>34.2</Z>
+          <R00>-1</R00>
+          <R01>0</R01>
+          <R02>0</R02>
+          <R10>0</R10>
+          <R11>1</R11>
+          <R12>0</R12>
+          <R20>0</R20>
+          <R21>0</R21>
+          <R22>-1</R22>
+        </CoordinateFrame>
+        <bool name="CanCollide">false</bool>
+        <bool name="CanQuery">false</bool>
+        <bool name="CanTouch">false</bool>
+        <bool name="CastShadow">false</bool>
+        <token name="CollisionFidelity">2</token>
+        <Color3uint8 name="Color3uint8">16777215</Color3uint8>
+        <Vector3 name="InitialSize">
+          <X>13.4624</X>
+          <Y>0.005</Y>
+          <Z>19.6</Z>
+        </Vector3>
+        <token name="Material">272</token>
+        <Content name="MeshContent">
+          <uri>rbxassetid://102866667137540</uri>
+        </Content>
+        <Vector3 name="size">
+          <X>13.4624</X>
+          <Y>0.005</Y>
+          <Z>19.6</Z>
+        </Vector3>
+        <Content name="TextureContent">
+          <uri>rbxassetid://127993867745508</uri>
+        </Content>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>

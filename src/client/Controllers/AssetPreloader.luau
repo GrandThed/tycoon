@@ -5,9 +5,9 @@
 -- time from Assets.json; AwaitInstance lets PlotVisualsController hold a freshly replicated
 -- stage hidden until its actual MeshParts (which carry the server's VIP texture choice, not
 -- necessarily the Assets.json image) are loaded. M9: PreloadEra also warms the era's city
--- dressing props (Assets.json v2 `props`), which the City modules gate the same way. A
--- utility module, not a controller: it has
--- no Init/Start and Main.client does not boot it.
+-- dressing props (Assets.json v2 `props`) and baked path pieces (v3 `paths`), which the City
+-- modules gate the same way. A utility module, not a controller: it has no Init/Start and
+-- Main.client does not boot it.
 
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -82,6 +82,9 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	if config == nil then
 		return
 	end
+	-- Path pieces (v3) are two meshes and two shared images per era; a v1/v2 file has none.
+	local pathsByEra = config.paths
+	local eraPaths: Types.AssetPathsEra? = if pathsByEra ~= nil then pathsByEra[eraName] else nil
 	-- Buildings and (Assets.json v2) city-dressing props share one pass; a v1 file has no
 	-- `props` key and simply contributes nothing.
 	local propsByEra = config.props
@@ -97,7 +100,7 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 		table.insert(modelKeys, modelKey)
 		stageCount = math.max(stageCount, #assetModel.stages)
 	end
-	if #modelKeys == 0 then
+	if #modelKeys == 0 and eraPaths == nil then
 		return
 	end
 	table.sort(modelKeys)
@@ -105,6 +108,10 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	-- Textures first: one kit image colours many meshes, so it is the cheapest win.
 	local content: { string } = {}
 	local kits: { [string]: boolean } = {}
+	if eraPaths ~= nil then
+		queue(content, eraPaths.fillImageId)
+		queue(content, eraPaths.rimImageId)
+	end
 	for _, modelKey in modelKeys do
 		-- Only buildings wear VIP skins; a prop-only kit's VIP image would never be shown.
 		local isBuilding = string.sub(modelKey, 1, #BUILDING_KEY_PREFIX) == BUILDING_KEY_PREFIX
@@ -123,6 +130,19 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 			if texture ~= nil then
 				queue(content, texture.vipImageId)
 			end
+		end
+	end
+	-- Paths before the buildings' later stages: a plot's first purchase draws one immediately.
+	if eraPaths ~= nil and type(eraPaths.pieces) == "table" then
+		local pieceIds: { string } = {}
+		for pieceId in eraPaths.pieces do
+			table.insert(pieceIds, pieceId)
+		end
+		table.sort(pieceIds)
+		for _, pieceId in pieceIds do
+			local piece = eraPaths.pieces[pieceId]
+			queue(content, piece.fill.meshId)
+			queue(content, piece.rim.meshId)
 		end
 	end
 	-- Meshes by stage: every stage 0 (what a fresh plot shows) before any later growth stage.

@@ -64,17 +64,22 @@ end
 
 -- One waiter per template: forty trees cloned in one frame share a single PreloadAsync pass.
 -- The template (in ReplicatedStorage) carries the same MeshIds/TextureIDs as every clone.
-local function gate(template: Model, clone: Model): ()
+local function gate(template: Model, clone: Instance): ()
 	if loadedTemplates[template] then
 		return
 	end
 	local parts: { BasePart } = {}
 	local hasMesh = false
-	for _, descendant in clone:GetDescendants() do
-		if descendant:IsA("BasePart") then
-			table.insert(parts, descendant)
-			hasMesh = hasMesh or descendant:IsA("MeshPart")
+	local function collect(instance: Instance): ()
+		if instance:IsA("BasePart") then
+			table.insert(parts, instance)
+			hasMesh = hasMesh or instance:IsA("MeshPart")
 		end
+	end
+	-- The root too: a path rim is cloned on its own, not inside a model.
+	collect(clone)
+	for _, descendant in clone:GetDescendants() do
+		collect(descendant)
 	end
 	if not hasMesh then
 		return
@@ -119,6 +124,13 @@ function PropFactory.Seal(root: Instance): ()
 			sealPart(descendant)
 		end
 	end
+end
+
+-- Hides `clone` until `template`'s content has loaded (or the timeout), so a path piece and a
+-- building never flash grey. PathRenderer clones path templates itself (they are not staged
+-- props) and gates them through here, so the rule lives in one place.
+function PropFactory.Gate(template: Model, clone: Instance): ()
+	gate(template, clone)
 end
 
 function PropFactory.Template(eraName: string, propName: string?): Model?

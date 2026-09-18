@@ -12,5 +12,4 @@ import texture as paths_texture  # noqa: E402
 
 if __name__ == "__main__":
     out_dir = Path(sys.argv[1])
-    args = ["--era", "Village", "--out", str(out_dir / "village_path.png")]
-    sys.exit(paths_texture.main(args + ["--preview", str(out_dir / "village_path_tiled.png")]))
+    sys.exit(paths_texture.main(["--era", "Village", "--out-dir", str(out_dir), "--preview-dir", str(out_dir)]))

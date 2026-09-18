@@ -11,5 +11,5 @@ VIEWS="${1:-top,persp_front,persp_close,growth}"
 mkdir -p "$OUT"
 py tools/pathmock/pathgeom.py "$MESH" --grow "${PATHMOCK_GROW:-tentSmall}" --frames 6
 "$BPY" tools/pathmock/texture.py "$OUT"
-"$BLENDER" -b -P tools/pathmock/render.py -- --mesh "$MESH" --texture "$OUT/village_path.png" --out "$OUT" --views "$VIEWS" ${PATHMOCK_ARGS:-} 2>&1 | grep -E "pathmock|Error|Traceback" || true
+"$BLENDER" -b -P tools/pathmock/render.py -- --mesh "$MESH" --texture "$OUT/Village_fill.png" --out "$OUT" --views "$VIEWS" ${PATHMOCK_ARGS:-} 2>&1 | grep -E "pathmock|Error|Traceback" || true
 if [[ "$VIEWS" == *growth* ]]; then py tools/pathmock/strip.py "$OUT"; fi

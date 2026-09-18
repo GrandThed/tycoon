@@ -1,742 +1,532 @@
 --!strict
--- Draws a plot's ribbon paths (docs/INTERFACES.md "Wave 1c — ribbon paths": "Rendering, per
--- plot, by availability" and "Growth animation"). RoadGraph owns the network and visibility and
--- hands this module the visible spans; PathRibbon turns them into geometry.
+-- Draws a plot's paths from the baked meshes (docs/INTERFACES.md "Wave 1d — baked paths":
+-- "Client" and "Pieces"). RoadGraph owns the network, the visibility and the piece ids; this
+-- module only clones, poses and reveals.
 --
--- Renderers, best first: `ribbon` (one EditableMesh + MeshPart per layer), `beam` (flat Beams
--- between Attachments on one anchor Part), `parts` (RoadGraph's Wave 1b Parts, reached through
--- the `onParts` callback). Every failure, at creation or any later edit, destroys what this
--- renderer made and drops the plot to the next one silently: nothing is logged, because the
--- mesh APIs legitimately fail in published games without the owner's verification and when the
--- memory budget is exhausted.
+-- Two modes: `baked` clones ReplicatedStorage/Assets/Paths/<Era>/<pieceId> per visible piece;
+-- `parts` is RoadGraph's own Part renderer, reached through the `onParts` callback. Anything
+-- missing -- the Assets.Paths folder, the era folder, one piece's template, the `paths` config,
+-- or a forced `road.renderer` of "parts" -- drops the plot to `parts` silently: a path that is
+-- not uploaded yet must degrade, never error (M9 principles).
 --
--- Mesh space: every layer mesh is centred on the plot origin at Y 0. Two tiny bounds triangles
--- pin its extents to +-extent (and +-BOUNDS_HALF_HEIGHT), so the MeshPart's size and centre never
--- change as pieces are added, removed or grown, whichever way the engine derives them.
+-- The templates are generated with each MeshPart already at its plot-local position and carrying
+-- the 180 degree Y turn the Open Cloud import applies (tools/pathtest/gen_display.py), so a
+-- clone is only lifted onto the plot frame: it must never be turned again here.
 
-local AssetService = game:GetService("AssetService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
-local PathRibbon = require(script.Parent:WaitForChild("PathRibbon"))
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 
-export type Mode = "ribbon" | "beam" | "parts"
+export type Mode = "baked" | "parts"
 
-local RENDERER_BEAM = "beam"
+-- Rojo mapping and template shape frozen in docs/INTERFACES.md ("Wave 1d — Pipeline").
+local ASSETS_FOLDER = "Assets"
+local PATHS_FOLDER = "Paths"
+local RIM_PART_NAME = "Rim"
+local FILL_PART_NAME = "Fill"
 local RENDERER_PARTS = "parts"
-local MESH_PART_NAME = "PathRibbon"
-local BEAM_ANCHOR_NAME = "PathBeams"
-local ASSET_URI_PREFIX = "rbxassetid://"
--- Bounds triangles: small enough to be invisible, above and below the ribbon plane.
-local BOUNDS_HALF_HEIGHT = 0.05
-local BOUNDS_TRIANGLE_SIZE = 0.001
--- A cubic Bezier handle of a third of the chord matches a Catmull-Rom span's tangents.
-local BEZIER_HANDLE = 1 / 3
-local MAX_BEAM_SEGMENTS = 1000 -- Beam.Segments engine ceiling
--- Pieces whose ends differ by less than this are the same end when diffing for growth.
-local SAME_END = 0.05
 -- Diagnostic for Studio playtests on Workspace/CityDressing/Plot<n>: the renderer in use now.
 local RENDERER_ATTRIBUTE = "PathRenderer"
+
+-- Dust puff (Ben's choice for the appear effect). A built-in texture, so nothing to upload and
+-- no id that could be 0. The numbers are the look, not tunables: the only path the config sets
+-- is how long a burst takes to cross the piece.
+local DUST_PART_NAME = "PathDust"
+local DUST_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
+local DUST_PART_SIZE = 0.2
+local DUST_RATE = 90
+local DUST_LIFETIME_MIN = 0.35
+local DUST_LIFETIME_MAX = 0.7
+local DUST_SPEED_MIN = 1
+local DUST_SPEED_MAX = 3
+local DUST_RISE = 2 -- studs/s^2 upward: the puff drifts up and fades instead of hanging
+local DUST_SIZE_WIDTHS = 0.55 -- of the road width, so a 3-stud trail puffs smaller than asphalt
+local DUST_SIZE_GROWTH = 2
+local DUST_START_TRANSPARENCY = 0.45
+local DUST_SPREAD = 55
+local DUST_ROTATION = 180
+local DUST_ROTATION_SPEED = 60
+-- A burst shorter than this has no travel worth animating (a stub stretch), so it puffs in place.
+local MIN_BURST_LENGTH = 0.05
 
 export type Options = {
 	folder: Instance,
 	plotFrame: CFrame, -- the plot base's top-centre
 	eraName: string,
 	config: Types.CityDressingConfig,
-	ribbon: Types.CityRibbonConfig,
-	network: PathRibbon.Network,
-	fullTriangles: number, -- the whole potential network's triangles (ownership-independent)
-	extent: number, -- PathRibbon.Extent
-	color: Color3,
+	near: boolean,
+	color: Color3, -- the era's road colour, which tints the dust
+	width: number, -- the era's road width, which sizes the dust
+	-- The piece's smoothed centreline in plot-local studs, join end first, for the dust travel.
+	centrelineOf: (pieceId: string) -> { Vector3 }?,
 	onParts: () -> (), -- RoadGraph redraws every revealed road with Parts
 }
 
-type PieceRecord = {
-	piece: PathRibbon.Piece,
-	rows: { number },
-	vertexIds: { number },
-	uvIds: { number },
-	faceIds: { number },
-	positions: { number },
-	uvs: { number },
-	scratch: PathRibbon.Scratch?, -- set while the piece grows
+type Record = {
+	template: Model,
+	model: Model,
+	-- Parented under `model` while shown; `rim` is nil on a far plot with paths.rimNearOnly, and
+	-- `fill` is detached for paths.rimLeadSeconds while a piece appears.
+	rim: BasePart?,
+	fill: BasePart?,
 }
-
-type Layer = {
-	index: number,
-	mesh: EditableMesh,
-	normalId: number,
-	part: MeshPart?,
-	creating: boolean,
-	records: { [string]: PieceRecord },
-}
-
-type BeamRecord = { piece: PathRibbon.Piece, instances: { Instance }, tweens: { Tween } }
 
 export type Handle = {
 	mode: Mode,
 	options: Options,
-	texture: string,
+	paths: Types.CityPathsConfig,
 	destroyed: boolean,
-	pieces: { PathRibbon.Piece }, -- what should be drawn now
-	layers: { [number]: Layer },
-	beams: { [string]: BeamRecord },
-	anchor: Part?,
+	near: boolean,
+	records: { [string]: Record },
+	dustPart: Part?,
+	dustEmitter: ParticleEmitter?,
 }
 
-type GrowthJob = {
+-- One burst per plot at a time (the emitter is pooled per plot): a reveal while one runs
+-- supersedes it, so a fast buyer never queues seconds of dust.
+type Burst = {
 	handle: Handle,
-	layer: Layer,
-	record: PieceRecord,
-	growth: PathRibbon.Growth,
+	points: { Vector3 }, -- world space
+	arcs: { number }, -- cumulative length per point
+	total: number,
 	elapsed: number,
 }
 
--- All growing ribbons on the map share one Heartbeat connection, alive only while one grows.
-local jobs: { GrowthJob } = {}
-local growthConnection: RBXScriptConnection? = nil
--- Set once a mesh API call throws (e.g. a published game whose owner has not enabled the
--- Mesh / Image APIs): every later plot this session starts on beams instead of retrying and
--- staying invisible until its own fallback. A nil from an exhausted memory budget is transient
--- and does not set it.
-local meshApisBlocked = false
+-- Every running burst on the map shares one Heartbeat connection, alive only while one runs.
+local bursts: { Burst } = {}
+local burstConnection: RBXScriptConnection? = nil
 
-local function textureUri(eraName: string): string?
-	local assets = Catalog.GetAssetsConfig()
-	local textures = if assets ~= nil then assets.pathTextures else nil
-	local entry = if type(textures) == "table" then textures[eraName] else nil
-	local imageId = if type(entry) == "table" then entry.imageId else nil
-	if type(imageId) ~= "number" or imageId ~= imageId or imageId <= 0 then
-		return nil
-	end
-	return ASSET_URI_PREFIX .. string.format("%d", imageId)
+-- ------------------------------------------------------------------ templates
+
+local function eraFolder(eraName: string): Instance?
+	local assets = ReplicatedStorage:FindFirstChild(ASSETS_FOLDER)
+	local paths = if assets ~= nil then assets:FindFirstChild(PATHS_FOLDER) else nil
+	return if paths ~= nil then paths:FindFirstChild(eraName) else nil
 end
 
-local function layerOf(handle: Handle, piece: PathRibbon.Piece): number
-	return handle.options.network.chains[piece.chain].layer
+local function templateFor(eraName: string, pieceId: string): Model?
+	local era = eraFolder(eraName)
+	local template = if era ~= nil then era:FindFirstChild(pieceId) else nil
+	return if template ~= nil and template:IsA("Model") then template :: Model else nil
 end
 
--- How a new piece grows from what was drawn on its chain before: from the old end it extends,
--- or (a fresh run) from its end nearer the entrance. Nil when it merges runs or changes both
--- ends, which draws at once rather than moving anything already drawn.
-local function growthPlan(old: { PathRibbon.Piece }, piece: PathRibbon.Piece): PathRibbon.Growth?
-	local overlapping: { PathRibbon.Piece } = {}
-	for _, previous in old do
-		if
-			previous.chain == piece.chain
-			and previous.hi >= piece.lo - SAME_END
-			and previous.lo <= piece.hi + SAME_END
-		then
-			table.insert(overlapping, previous)
-		end
-	end
-	if #overlapping == 0 then
-		if piece.distHi <= piece.distLo then
-			return { anchor = piece.hi, towardHigh = false, progress = 0 }
-		end
-		return { anchor = piece.lo, towardHigh = true, progress = 0 }
-	end
-	if #overlapping ~= 1 then
-		return nil
-	end
-	local previous = overlapping[1]
-	if math.abs(previous.lo - piece.lo) < SAME_END and piece.hi > previous.hi + SAME_END then
-		return { anchor = previous.hi, towardHigh = true, progress = 0 }
-	end
-	if math.abs(previous.hi - piece.hi) < SAME_END and piece.lo < previous.lo - SAME_END then
-		return { anchor = previous.lo, towardHigh = false, progress = 0 }
-	end
-	return nil
+-- A clone's parts already sit at their plot-local CFrames, turned as the importer left them, so
+-- an identity pivot turns PivotTo into exactly "lift onto the plot" with no extra rotation.
+local function pose(handle: Handle, clone: Model): ()
+	clone.WorldPivot = CFrame.identity
+	clone:PivotTo(handle.options.plotFrame)
+	PropFactory.Seal(clone)
 end
 
--- ------------------------------------------------------------------ growth loop
+local function partNamed(model: Model, name: string): BasePart?
+	local child = model:FindFirstChild(name)
+	return if child ~= nil and child:IsA("BasePart") then child :: BasePart else nil
+end
 
-local fallback: (handle: Handle) -> ()
+-- ------------------------------------------------------------------ dust
 
-local function writeRecord(layer: Layer, record: PieceRecord, scratch: PathRibbon.Scratch): ()
-	local mesh = layer.mesh
-	local positions, uvs = record.positions, record.uvs
-	local vertexIds, uvIds = record.vertexIds, record.uvIds
-	for v = PathRibbon.VertexCount(scratch.first - 1), PathRibbon.VertexCount(scratch.last) - 1 do
-		mesh:SetPosition(
-			vertexIds[v + 1],
-			Vector3.new(positions[v * 3 + 1], 0, positions[v * 3 + 3])
-		)
-		mesh:SetUV(uvIds[v + 1], Vector2.new(uvs[v * 2 + 1], uvs[v * 2 + 2]))
+local function stopDust(handle: Handle): ()
+	local emitter = handle.dustEmitter
+	if emitter ~= nil then
+		emitter.Enabled = false
 	end
 end
 
--- One growth frame; returns whether the growth has finished. Module-level so the Heartbeat
--- step can pcall it without allocating a closure.
-local function stepJob(job: GrowthJob, dt: number): boolean
-	local handle = job.handle
-	local record = job.record
-	local scratch = record.scratch :: PathRibbon.Scratch
-	job.elapsed += dt
-	local seconds = handle.options.ribbon.growSeconds
-	local t = if seconds > 0 then math.min(job.elapsed / seconds, 1) else 1
-	-- Ease-out: the path shoots out of the junction and settles at the building.
-	job.growth.progress = 1 - (1 - t) ^ 3
-	PathRibbon.Fill(
-		handle.options.network,
-		record.piece,
-		record.rows,
-		job.growth,
-		record.positions,
-		record.uvs,
-		scratch
-	)
-	writeRecord(job.layer, record, scratch)
-	return t >= 1
-end
-
-local function stepGrowth(dt: number): ()
-	local failed: { Handle }? = nil
-	for index = #jobs, 1, -1 do
-		local job = jobs[index]
-		local handle = job.handle
-		if handle.destroyed or handle.mode ~= "ribbon" then
-			table.remove(jobs, index)
-			continue
-		end
-		local ok, finished = pcall(stepJob, job, dt)
-		if not ok then
-			table.remove(jobs, index)
-			local list = failed or {}
-			table.insert(list, handle)
-			failed = list
-		elseif finished then
-			job.record.scratch = nil
-			table.remove(jobs, index)
+local function dropBursts(handle: Handle): ()
+	for index = #bursts, 1, -1 do
+		if bursts[index].handle == handle then
+			table.remove(bursts, index)
 		end
 	end
-	if failed ~= nil then
-		for _, handle in failed do
-			if not handle.destroyed and handle.mode == "ribbon" then
-				fallback(handle)
-			end
-		end
-	end
-	if #jobs == 0 then
-		local connection = growthConnection
+	stopDust(handle)
+	if #bursts == 0 then
+		local connection = burstConnection
 		if connection ~= nil then
 			connection:Disconnect()
-			growthConnection = nil
+			burstConnection = nil
 		end
 	end
 end
 
-local function startJob(job: GrowthJob): ()
-	table.insert(jobs, job)
-	if growthConnection == nil then
-		growthConnection = RunService.Heartbeat:Connect(stepGrowth)
-	end
-end
-
-local function cancelJobs(handle: Handle, record: PieceRecord?): ()
-	for index = #jobs, 1, -1 do
-		local job = jobs[index]
-		if job.handle == handle and (record == nil or job.record == record) then
-			table.remove(jobs, index)
-		end
-	end
-	if #jobs == 0 then
-		local connection = growthConnection
-		if connection ~= nil then
-			connection:Disconnect()
-			growthConnection = nil
-		end
-	end
-end
-
--- ------------------------------------------------------------------ ribbon
-
-local function destroyRibbon(handle: Handle): ()
-	cancelJobs(handle, nil)
-	for _, layer in handle.layers do
-		local part = layer.part
-		if part ~= nil then
-			part:Destroy()
-		end
-		pcall(function()
-			layer.mesh:Destroy()
-		end)
-	end
-	table.clear(handle.layers)
-end
-
-local function addBoundsTriangle(
-	mesh: EditableMesh,
-	normalId: number,
-	corner: Vector3,
-	inward: number
-): ()
-	local a = mesh:AddVertex(corner)
-	local b = mesh:AddVertex(corner + Vector3.new(0, 0, inward))
-	local c = mesh:AddVertex(corner + Vector3.new(inward, 0, 0))
-	local face = mesh:AddTriangle(a, b, c)
-	local uv = mesh:AddUV(Vector2.zero)
-	mesh:SetFaceUVs(face, { uv, uv, uv })
-	mesh:SetFaceNormals(face, { normalId, normalId, normalId })
-end
-
-local function prepareMesh(mesh: EditableMesh, extent: number): number
-	local normalId = mesh:AddNormal(Vector3.yAxis)
-	addBoundsTriangle(
-		mesh,
-		normalId,
-		Vector3.new(-extent, BOUNDS_HALF_HEIGHT, -extent),
-		BOUNDS_TRIANGLE_SIZE
-	)
-	addBoundsTriangle(
-		mesh,
-		normalId,
-		Vector3.new(extent, -BOUNDS_HALF_HEIGHT, extent),
-		-BOUNDS_TRIANGLE_SIZE
-	)
-	return normalId
-end
-
-local function createLayer(handle: Handle, index: number): Layer
-	local ok, created = pcall(function(): EditableMesh
-		return AssetService:CreateEditableMesh()
-	end)
-	if not ok then
-		meshApisBlocked = true
-		error("EditableMesh unavailable")
-	end
-	-- The API returns nil when the memory budget is exhausted, despite its declared type.
-	local mesh = created :: EditableMesh?
-	if mesh == nil then
-		error("EditableMesh budget exhausted")
-	end
-	local editable = mesh :: EditableMesh
-	local prepared, normalId = pcall(prepareMesh, editable, handle.options.extent)
-	if not prepared then
-		-- Not in handle.layers yet, so no teardown would ever reach it.
-		pcall(editable.Destroy, editable)
-		error("EditableMesh setup failed")
-	end
-	local layer: Layer = {
-		index = index,
-		mesh = editable,
-		normalId = normalId,
-		part = nil,
-		creating = false,
-		records = {},
-	}
-	handle.layers[index] = layer
-	return layer
-end
-
-local function configurePart(handle: Handle, layer: Layer, part: MeshPart): ()
-	local options = handle.options
-	part.Name = MESH_PART_NAME .. tostring(layer.index)
-	part.Material = Enum.Material.SmoothPlastic
-	-- Shows through only if the texture's alpha ever reveals the part colour.
-	part.Color = options.color
-	part.TextureContent = Content.fromUri(handle.texture)
-	part.CastShadow = false
-	-- DoubleSided stays at its default (false): it is not writable from scripts.
-	part.CFrame = options.plotFrame
-		* CFrame.new(0, PathRibbon.LayerHeight(options.network, layer.index), 0)
-	PropFactory.Seal(part)
-	part.Parent = options.folder
-end
-
--- CreateMeshPartAsync yields, so it runs detached; the mesh keeps taking edits meanwhile and the
--- part shows them once it exists.
-local function ensurePart(handle: Handle, layer: Layer): ()
-	if layer.part ~= nil or layer.creating then
-		return
-	end
-	layer.creating = true
-	task.spawn(function()
-		local ok, result = pcall(function(): MeshPart
-			return AssetService:CreateMeshPartAsync(
-				Content.fromObject(layer.mesh),
-				{ CollisionFidelity = Enum.CollisionFidelity.Box }
-			)
-		end)
-		if not ok then
-			meshApisBlocked = true
-		end
-		local part = if ok then result :: MeshPart? else nil
-		if handle.destroyed or handle.mode ~= "ribbon" or handle.layers[layer.index] ~= layer then
-			if part ~= nil then
-				part:Destroy()
-			end
-			return
-		end
-		layer.creating = false
-		if part == nil then
-			fallback(handle)
-			return
-		end
-		local created = part :: MeshPart
-		if not pcall(configurePart, handle, layer, created) then
-			created:Destroy()
-			fallback(handle)
-			return
-		end
-		layer.part = created
-	end)
-end
-
-local function addPiece(
-	handle: Handle,
-	layer: Layer,
-	piece: PathRibbon.Piece,
-	growth: PathRibbon.Growth?
-): PieceRecord
-	local network = handle.options.network
-	local rows = PathRibbon.Rows(network, piece)
-	local vertexCount = PathRibbon.VertexCount(#rows)
-	local record: PieceRecord = {
-		piece = piece,
-		rows = rows,
-		vertexIds = table.create(vertexCount),
-		uvIds = table.create(vertexCount),
-		faceIds = {},
-		positions = table.create(vertexCount * 3),
-		uvs = table.create(vertexCount * 2),
-		scratch = nil,
-	}
-	PathRibbon.Fill(network, piece, rows, growth, record.positions, record.uvs)
-	local mesh = layer.mesh
-	local positions, uvs = record.positions, record.uvs
-	for v = 0, vertexCount - 1 do
-		record.vertexIds[v + 1] =
-			mesh:AddVertex(Vector3.new(positions[v * 3 + 1], 0, positions[v * 3 + 3]))
-		record.uvIds[v + 1] = mesh:AddUV(Vector2.new(uvs[v * 2 + 1], uvs[v * 2 + 2]))
-	end
-	local normalId = layer.normalId
-	local indices = PathRibbon.Triangles(#rows)
-	for i = 1, #indices, 3 do
-		local a, b, c = indices[i], indices[i + 1], indices[i + 2]
-		local face = mesh:AddTriangle(record.vertexIds[a], record.vertexIds[b], record.vertexIds[c])
-		mesh:SetFaceUVs(face, { record.uvIds[a], record.uvIds[b], record.uvIds[c] })
-		mesh:SetFaceNormals(face, { normalId, normalId, normalId })
-		table.insert(record.faceIds, face)
-	end
-	layer.records[piece.key] = record
-	return record
-end
-
-local function applyRibbon(handle: Handle, pieces: { PathRibbon.Piece }, animate: boolean): ()
-	local options = handle.options
-	local wanted: { [string]: boolean } = {}
-	local triangles = 0
-	for _, piece in pieces do
-		wanted[piece.key] = true
-		triangles += PathRibbon.TriangleCount(#PathRibbon.Rows(options.network, piece))
-	end
-	local budget = options.config.budget.ribbonTriangles
-	if type(budget) == "number" and triangles > budget then
-		error("ribbon triangle budget")
-	end
-
-	local removed: { PathRibbon.Piece } = {}
-	for _, layer in handle.layers do
-		local stale: { string } = {}
-		for key in layer.records do
-			if not wanted[key] then
-				table.insert(stale, key)
-			end
-		end
-		table.sort(stale)
-		for _, key in stale do
-			local record = layer.records[key]
-			cancelJobs(handle, record)
-			for _, face in record.faceIds do
-				layer.mesh:RemoveFace(face)
-			end
-			layer.records[key] = nil
-			table.insert(removed, record.piece)
-		end
-		if #stale > 0 then
-			layer.mesh:RemoveUnused()
-		end
-	end
-
-	for _, piece in pieces do
-		local index = layerOf(handle, piece)
-		local layer = handle.layers[index] or createLayer(handle, index)
-		if layer.records[piece.key] ~= nil then
-			continue
-		end
-		local growth = if animate then growthPlan(removed, piece) else nil
-		local record = addPiece(handle, layer, piece, growth)
-		if growth ~= nil then
-			record.scratch =
-				PathRibbon.NewScratch(handle.options.network, piece, record.rows, growth)
-			startJob({
-				handle = handle,
-				layer = layer,
-				record = record,
-				growth = growth,
-				elapsed = 0,
-			})
-		end
-		ensurePart(handle, layer)
-	end
-end
-
--- ------------------------------------------------------------------ beam
-
-local function destroyBeams(handle: Handle): ()
-	for _, record in handle.beams do
-		for _, tween in record.tweens do
-			tween:Cancel()
-		end
-	end
-	table.clear(handle.beams)
-	local anchor = handle.anchor
-	if anchor ~= nil then
-		anchor:Destroy()
-		handle.anchor = nil
-	end
-end
-
-local function ensureAnchor(handle: Handle): Part
-	local existing = handle.anchor
+local function ensureDust(handle: Handle): ParticleEmitter
+	local existing = handle.dustEmitter
 	if existing ~= nil then
 		return existing
 	end
-	local anchor = Instance.new("Part")
-	anchor.Name = BEAM_ANCHOR_NAME
-	anchor.Size = Vector3.one
-	anchor.Transparency = 1
-	anchor.CastShadow = false
-	anchor.CFrame = handle.options.plotFrame
-	PropFactory.Seal(anchor)
-	anchor.Parent = handle.options.folder
-	handle.anchor = anchor
-	return anchor
-end
-
-local function addBeams(
-	handle: Handle,
-	anchor: Part,
-	piece: PathRibbon.Piece,
-	growth: PathRibbon.Growth?
-): BeamRecord
 	local options = handle.options
-	local network = options.network
-	local ribbon = options.ribbon
-	local y = PathRibbon.LayerHeight(network, layerOf(handle, piece))
-	local knots = PathRibbon.Knots(network, piece, ribbon.textureLength)
-	local record: BeamRecord = { piece = piece, instances = {}, tweens = {} }
-	local attachments: { Attachment } = {}
-	for _, knot in knots do
-		local attachment = Instance.new("Attachment")
-		-- Axis (X) along the path so CurveSize bends along it; up (Y) is the beam's face normal,
-		-- which lays the width flat on the ground.
-		attachment.CFrame = CFrame.fromMatrix(
-			Vector3.new(knot.x, y, knot.z),
-			Vector3.new(knot.tx, 0, knot.tz),
-			Vector3.yAxis
-		)
-		attachment.Parent = anchor
-		table.insert(attachments, attachment)
-		table.insert(record.instances, attachment)
-	end
-	-- Spans on the growing side of the anchor, in reveal order.
-	local revealOrder: { [number]: number } = {}
-	if growth ~= nil then
-		local order: { number } = {}
-		for span = 1, #knots - 1 do
-			local mid = (knots[span].arc + knots[span + 1].arc) / 2
-			if
-				(growth.towardHigh and mid > growth.anchor)
-				or (not growth.towardHigh and mid < growth.anchor)
-			then
-				table.insert(order, span)
-			end
-		end
-		if not growth.towardHigh then
-			table.sort(order, function(a: number, b: number): boolean
-				return a > b
-			end)
-		end
-		for position, span in order do
-			revealOrder[span] = position
-		end
-	end
-	local revealCount = 0
-	for _ in revealOrder do
-		revealCount += 1
-	end
-	local step = if revealCount > 0 then ribbon.growSeconds / revealCount else 0
-	for span = 1, #knots - 1 do
-		local from, to = knots[span], knots[span + 1]
-		local chord = Vector3.new(to.x - from.x, 0, to.z - from.z).Magnitude
-		local beam = Instance.new("Beam")
-		beam.Attachment0 = attachments[span]
-		beam.Attachment1 = attachments[span + 1]
-		beam.FaceCamera = false
-		-- Lit like the ground it lies on (the default 0 renders it full-bright).
-		beam.LightInfluence = 1
-		beam.Texture = handle.texture
-		beam.TextureMode = Enum.TextureMode.Wrap
-		beam.TextureLength = ribbon.textureLength
-		beam.CurveSize0 = chord * BEZIER_HANDLE
-		beam.CurveSize1 = chord * BEZIER_HANDLE
-		beam.Segments = math.clamp(
-			math.ceil(chord / math.max(ribbon.sampleSpacing, 0.05)),
-			1,
-			MAX_BEAM_SEGMENTS
-		)
-		-- Higher layers render nearer the camera, so spurs sit on top of lanes.
-		beam.ZOffset = layerOf(handle, piece) * ribbon.layerLift
-		local order = revealOrder[span]
-		if order ~= nil and step > 0 then
-			beam.Width0 = 0
-			beam.Width1 = 0
-			local tween = TweenService:Create(
-				beam,
-				TweenInfo.new(
-					step,
-					Enum.EasingStyle.Quad,
-					Enum.EasingDirection.Out,
-					0,
-					false,
-					(order - 1) * step
-				),
-				{ Width0 = from.width, Width1 = to.width }
-			)
-			tween:Play()
-			table.insert(record.tweens, tween)
-		else
-			beam.Width0 = from.width
-			beam.Width1 = to.width
-		end
-		beam.Parent = anchor
-		table.insert(record.instances, beam)
-	end
-	return record
+	local part = Instance.new("Part")
+	part.Name = DUST_PART_NAME
+	part.Size = Vector3.one * DUST_PART_SIZE
+	part.Transparency = 1
+	part.CastShadow = false
+	part.CFrame = options.plotFrame
+	PropFactory.Seal(part)
+	part.Parent = options.folder
+	local size = math.max(options.width, DUST_PART_SIZE) * DUST_SIZE_WIDTHS
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = DUST_TEXTURE
+	emitter.Enabled = false
+	emitter.Rate = DUST_RATE
+	emitter.Color = ColorSequence.new(options.color)
+	emitter.Lifetime = NumberRange.new(DUST_LIFETIME_MIN, DUST_LIFETIME_MAX)
+	emitter.Speed = NumberRange.new(DUST_SPEED_MIN, DUST_SPEED_MAX)
+	emitter.SpreadAngle = Vector2.new(DUST_SPREAD, DUST_SPREAD)
+	emitter.Acceleration = Vector3.new(0, DUST_RISE, 0)
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, size),
+		NumberSequenceKeypoint.new(1, size * DUST_SIZE_GROWTH),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, DUST_START_TRANSPARENCY),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Rotation = NumberRange.new(-DUST_ROTATION, DUST_ROTATION)
+	emitter.RotSpeed = NumberRange.new(-DUST_ROTATION_SPEED, DUST_ROTATION_SPEED)
+	-- Lit like the ground it kicks up (the default 0 renders full-bright).
+	emitter.LightInfluence = 1
+	emitter.Parent = part
+	handle.dustPart = part
+	handle.dustEmitter = emitter
+	return emitter
 end
 
-local function applyBeam(handle: Handle, pieces: { PathRibbon.Piece }, animate: boolean): ()
-	local wanted: { [string]: boolean } = {}
-	for _, piece in pieces do
-		wanted[piece.key] = true
-	end
-	local removed: { PathRibbon.Piece } = {}
-	local stale: { string } = {}
-	for key in handle.beams do
-		if not wanted[key] then
-			table.insert(stale, key)
+local function burstPoint(burst: Burst, distance: number): Vector3
+	local arcs = burst.arcs
+	local points = burst.points
+	local target = math.clamp(distance, 0, burst.total)
+	local lo, hi = 1, #arcs
+	while hi - lo > 1 do
+		local mid = (lo + hi) // 2
+		if arcs[mid] <= target then
+			lo = mid
+		else
+			hi = mid
 		end
 	end
-	for _, key in stale do
-		local record = handle.beams[key]
-		for _, tween in record.tweens do
-			tween:Cancel()
-		end
-		for _, instance in record.instances do
-			instance:Destroy()
-		end
-		handle.beams[key] = nil
-		table.insert(removed, record.piece)
-	end
-	local anchor = ensureAnchor(handle)
-	for _, piece in pieces do
-		if handle.beams[piece.key] ~= nil then
+	local span = arcs[hi] - arcs[lo]
+	local t = if span < MIN_BURST_LENGTH then 0 else (target - arcs[lo]) / span
+	return points[lo]:Lerp(points[hi], t)
+end
+
+local function stepBursts(dt: number): ()
+	for index = #bursts, 1, -1 do
+		local burst = bursts[index]
+		local handle = burst.handle
+		local part = handle.dustPart
+		if handle.destroyed or handle.mode ~= "baked" or part == nil then
+			table.remove(bursts, index)
+			stopDust(handle)
 			continue
 		end
-		local growth = if animate then growthPlan(removed, piece) else nil
-		handle.beams[piece.key] = addBeams(handle, anchor, piece, growth)
+		burst.elapsed += dt
+		local seconds = handle.paths.dustSeconds
+		local t = if seconds > 0 then math.min(burst.elapsed / seconds, 1) else 1
+		part.CFrame = CFrame.new(burstPoint(burst, burst.total * t))
+		if t >= 1 then
+			stopDust(handle)
+			table.remove(bursts, index)
+		end
+	end
+	if #bursts == 0 then
+		local connection = burstConnection
+		if connection ~= nil then
+			connection:Disconnect()
+			burstConnection = nil
+		end
 	end
 end
 
--- ------------------------------------------------------------------ selection and fallback
+-- One burst over the whole batch of pieces revealed together, in reveal order (entrance
+-- outward), so a purchase reads as one puff running out to the new building.
+local function startBurst(handle: Handle, pieceIds: { string }): ()
+	local options = handle.options
+	local points: { Vector3 } = {}
+	local arcs: { number } = {}
+	local total = 0
+	-- Pieces revealed together are normally one chain running out from the entrance. A jump
+	-- bigger than a road width means they are not (two purchases in one frame), and the burst
+	-- ends there rather than streaking across the plot.
+	local gapLimit = math.max(options.width, 1)
+	for _, pieceId in pieceIds do
+		local line = options.centrelineOf(pieceId)
+		if line == nil then
+			continue
+		end
+		local broken = false
+		for _, point in line do
+			local world = options.plotFrame:PointToWorldSpace(point)
+			if #points > 0 then
+				local step = (world - points[#points]).Magnitude
+				if step < MIN_BURST_LENGTH then
+					continue -- the pieces meet at their join, so the shared point is dropped
+				end
+				if step > gapLimit then
+					broken = true
+					break
+				end
+				total += step
+			end
+			table.insert(points, world)
+			table.insert(arcs, total)
+		end
+		if broken then
+			break
+		end
+	end
+	if #points == 0 then
+		return
+	end
+	if #points == 1 then
+		-- A single sample has nowhere to travel; repeat it so the burst puffs in place.
+		table.insert(points, points[1])
+		table.insert(arcs, 0)
+	end
+	for index = #bursts, 1, -1 do
+		if bursts[index].handle == handle then
+			table.remove(bursts, index)
+		end
+	end
+	local emitter = ensureDust(handle)
+	local part = handle.dustPart
+	if part ~= nil then
+		part.CFrame = CFrame.new(points[1])
+	end
+	emitter.Enabled = true
+	table.insert(bursts, {
+		handle = handle,
+		points = points,
+		arcs = arcs,
+		total = total,
+		elapsed = 0,
+	})
+	if burstConnection == nil then
+		burstConnection = RunService.Heartbeat:Connect(stepBursts)
+	end
+end
+
+-- ------------------------------------------------------------------ pieces
+
+local function destroyRecord(record: Record): ()
+	local fill = record.fill
+	-- Detached mid-appearance: it is not under the model, so Destroy would not reach it.
+	if fill ~= nil and fill.Parent == nil then
+		fill:Destroy()
+	end
+	record.model:Destroy()
+end
+
+local function destroyPieces(handle: Handle): ()
+	for _, record in handle.records do
+		destroyRecord(record)
+	end
+	table.clear(handle.records)
+end
 
 local function setMode(handle: Handle, mode: Mode): ()
 	handle.mode = mode
 	handle.options.folder:SetAttribute(RENDERER_ATTRIBUTE, mode)
 end
 
-fallback = function(handle: Handle): ()
-	local from = handle.mode
-	destroyRibbon(handle)
-	destroyBeams(handle)
-	if from == "ribbon" then
-		setMode(handle, "beam")
-		if pcall(applyBeam, handle, handle.pieces, false) then
-			return
-		end
-		destroyBeams(handle)
+local function fallback(handle: Handle): ()
+	dropBursts(handle)
+	destroyPieces(handle)
+	local dust = handle.dustPart
+	if dust ~= nil then
+		dust:Destroy()
+		handle.dustPart = nil
+		handle.dustEmitter = nil
 	end
 	setMode(handle, "parts")
 	handle.options.onParts()
 end
 
-local PathRenderer = {}
-
--- The renderer a plot starts with. `parts` needs no handle; ribbon eras without a texture, a
--- forced "parts", and eras without `road.ribbon` all land there.
-function PathRenderer.Select(options: Options): Mode
-	local forced = options.config.road.renderer
-	if forced == RENDERER_PARTS or textureUri(options.eraName) == nil then
-		return "parts"
+-- Restores a rim dropped while the plot was far, from the template's own plot-local CFrame:
+-- the same lift `pose` applies to a whole model, for one part.
+local function showRim(handle: Handle, record: Record): ()
+	if record.rim ~= nil then
+		return
 	end
-	if forced == RENDERER_BEAM then
-		return "beam"
+	local source = partNamed(record.template, RIM_PART_NAME)
+	if source == nil then
+		return
 	end
-	local budget = options.config.budget.ribbonTriangles
-	if meshApisBlocked or (type(budget) == "number" and options.fullTriangles > budget) then
-		return "beam"
-	end
-	return "ribbon"
+	local rim = source:Clone()
+	rim.CFrame = handle.options.plotFrame * source.CFrame
+	PropFactory.Seal(rim)
+	PropFactory.Gate(record.template, rim)
+	rim.Parent = record.model
+	record.rim = rim
 end
 
--- A handle for a ribbon or beam plot, or nil when the plot draws Parts from the start. Either way
--- the plot folder's PathRenderer attribute names the renderer, and every fallback updates it.
+-- Clones one piece. False means its template is missing, which drops the whole plot to Parts:
+-- half a path network is worse than a consistent Part one.
+local function addPiece(handle: Handle, pieceId: string, animate: boolean): boolean
+	local template = templateFor(handle.options.eraName, pieceId)
+	if template == nil then
+		return false
+	end
+	local clone = template:Clone()
+	-- Hidden until its meshes and textures have loaded, exactly like a building.
+	PropFactory.Gate(template, clone)
+	pose(handle, clone)
+	clone.Name = pieceId
+	local record: Record = {
+		template = template,
+		model = clone,
+		rim = partNamed(clone, RIM_PART_NAME),
+		fill = partNamed(clone, FILL_PART_NAME),
+	}
+	local rim = record.rim
+	if rim ~= nil and handle.paths.rimNearOnly and not handle.near then
+		rim:Destroy()
+		record.rim = nil
+	end
+	local fill = record.fill
+	if animate and rim ~= nil and fill ~= nil then
+		-- The rim leads the fill by paths.rimLeadSeconds, so the path looks cut before it fills.
+		fill.Parent = nil
+	end
+	clone.Parent = handle.options.folder
+	handle.records[pieceId] = record
+	return true
+end
+
+local function applyBaked(handle: Handle, pieceIds: { string }, animate: boolean): ()
+	local wanted: { [string]: boolean } = {}
+	for _, pieceId in pieceIds do
+		wanted[pieceId] = true
+	end
+	local stale: { string } = {}
+	for pieceId in handle.records do
+		if not wanted[pieceId] then
+			table.insert(stale, pieceId)
+		end
+	end
+	table.sort(stale)
+	for _, pieceId in stale do
+		destroyRecord(handle.records[pieceId])
+		handle.records[pieceId] = nil
+	end
+
+	local revealed: { string } = {}
+	local pending: { Record } = {}
+	for _, pieceId in pieceIds do
+		if handle.records[pieceId] ~= nil then
+			continue
+		end
+		-- Far plots and rebuilds appear instantly; only a purchase on a near plot animates.
+		local effect = animate and handle.near
+		if not addPiece(handle, pieceId, effect) then
+			fallback(handle)
+			return
+		end
+		if effect then
+			table.insert(revealed, pieceId)
+			local record = handle.records[pieceId]
+			if record.fill ~= nil and record.fill.Parent == nil then
+				table.insert(pending, record)
+			end
+		end
+	end
+	if #pending > 0 then
+		-- One timer for the batch: every fill of this reveal lands together.
+		task.delay(math.max(handle.paths.rimLeadSeconds, 0), function()
+			if handle.destroyed or handle.mode ~= "baked" then
+				return
+			end
+			for _, record in pending do
+				local fill = record.fill
+				if fill ~= nil and fill.Parent == nil and record.model.Parent ~= nil then
+					fill.Parent = record.model
+				end
+			end
+		end)
+	end
+	if #revealed > 0 then
+		startBurst(handle, revealed)
+	end
+end
+
+-- ------------------------------------------------------------------ public
+
+local PathRenderer = {}
+
+-- The renderer a plot starts with. A forced "parts", a config without `paths`, and a missing
+-- template folder (nothing uploaded or harvested yet) all land on Parts.
+function PathRenderer.Select(options: Options): Mode
+	if options.config.road.renderer == RENDERER_PARTS then
+		return "parts"
+	end
+	if options.config.paths == nil or eraFolder(options.eraName) == nil then
+		return "parts"
+	end
+	return "baked"
+end
+
+-- A handle for a baked plot, or nil when the plot draws Parts from the start. Either way the
+-- plot folder's PathRenderer attribute names the renderer, and a fallback updates it.
 function PathRenderer.Create(options: Options): Handle?
-	local mode: Mode = PathRenderer.Select(options)
-	local texture = textureUri(options.eraName)
-	if mode == "parts" or texture == nil then
+	local paths = options.config.paths
+	if PathRenderer.Select(options) == "parts" or paths == nil then
 		options.folder:SetAttribute(RENDERER_ATTRIBUTE, "parts")
 		return nil
 	end
-	options.folder:SetAttribute(RENDERER_ATTRIBUTE, mode)
-	local handle: Handle = {
-		mode = mode,
+	options.folder:SetAttribute(RENDERER_ATTRIBUTE, "baked")
+	return {
+		mode = "baked",
 		options = options,
-		texture = texture,
+		paths = paths,
 		destroyed = false,
-		pieces = {},
-		layers = {},
-		beams = {},
-		anchor = nil,
+		near = options.near,
+		records = {},
+		dustPart = nil,
+		dustEmitter = nil,
 	}
-	return handle
 end
 
--- Draws exactly `spans` (the whole visible network, not a delta). `animate` grows every piece
--- that is new since the last call, all at once; the caller passes it only for purchases on near
--- plots, and batches a sync's reveals into one call so they never cancel each other.
-function PathRenderer.Update(handle: Handle, spans: { PathRibbon.Span }, animate: boolean): ()
-	if handle.destroyed or handle.mode == "parts" then
+-- Draws exactly `pieceIds` (the whole visible network, not a delta, in reveal order from the
+-- entrance outward). `animate` gives every piece new since the last call the appear effect; the
+-- caller passes it only for purchases, and batches one sync's reveals into a single call.
+function PathRenderer.Update(handle: Handle, pieceIds: { string }, animate: boolean): ()
+	if handle.destroyed or handle.mode ~= "baked" then
 		return
 	end
-	local ok, pieces = pcall(PathRibbon.Pieces, handle.options.network, spans)
-	if not ok then
-		fallback(handle)
+	applyBaked(handle, pieceIds, animate)
+end
+
+-- Far plots drop their rims (half the parts, and the fill is what reads at distance) and get
+-- them back when they are near again. Fills and the lane graph are untouched either way.
+function PathRenderer.SetNear(handle: Handle, near: boolean): ()
+	if handle.destroyed or handle.near == near then
 		return
 	end
-	-- Recorded first: a fallback redraws exactly this set.
-	handle.pieces = pieces
-	local apply = if handle.mode == "ribbon" then applyRibbon else applyBeam
-	if not pcall(apply, handle, pieces, animate) then
-		fallback(handle)
+	handle.near = near
+	if handle.mode ~= "baked" or not handle.paths.rimNearOnly then
+		return
+	end
+	local pieceIds: { string } = {}
+	for pieceId in handle.records do
+		table.insert(pieceIds, pieceId)
+	end
+	table.sort(pieceIds)
+	for _, pieceId in pieceIds do
+		local record = handle.records[pieceId]
+		if near then
+			showRim(handle, record)
+		else
+			local rim = record.rim
+			if rim ~= nil then
+				rim:Destroy()
+				record.rim = nil
+			end
+		end
+	end
+	if not near then
+		dropBursts(handle)
 	end
 end
 
@@ -745,8 +535,14 @@ function PathRenderer.Destroy(handle: Handle): ()
 		return
 	end
 	handle.destroyed = true
-	destroyRibbon(handle)
-	destroyBeams(handle)
+	dropBursts(handle)
+	destroyPieces(handle)
+	local dust = handle.dustPart
+	if dust ~= nil then
+		dust:Destroy()
+		handle.dustPart = nil
+		handle.dustEmitter = nil
+	end
 end
 
 return PathRenderer

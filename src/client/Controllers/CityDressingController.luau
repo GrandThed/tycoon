@@ -13,9 +13,10 @@
 -- vehicles) and the vehicle-plot selection refresh every lod.refreshSeconds on a task.delay
 -- chain. A missing (or pre-budget) CityDressing config means the controller does nothing at all.
 --
--- Wave 1c: ribbon-era roads are drawn by PathRenderer (through RoadGraph) on near and far plots
--- alike. A path revealed by a purchase on a near plot grows in; anything revealed while a build
--- is still settling (join, rejoin, era rebuild) appears at once.
+-- Wave 1d: paths in eras with baked meshes are drawn by PathRenderer (through RoadGraph) on near
+-- and far plots alike; only their rims follow the near/far flip. A path revealed by a purchase on
+-- a near plot pops in with a dust burst; anything revealed while a build is still settling (join,
+-- rejoin, era rebuild) appears at once.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

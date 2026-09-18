@@ -32,6 +32,11 @@ commands in `docs/MANUAL_STEPS.md` M7.
   strips and self-corrected via the render loop. **Use `model: "opus"` for blueprint builders**;
   the whole per-era routine is the `/build-assets <Era>` skill (`.claude/skills/build-assets/`).
 
+- **Open Cloud displayName is capped at 50 characters** (2026-09-17): a 51-char
+  `EraCityTycoon_Path_Boomtown_Fill_SP_departmentStore` failed with HTTP 400 INVALID_ARGUMENT
+  "Asset name length is invalid" — not an "Unknown Error". `upload_paths.py` now falls back to an
+  `ECT_…` prefix and hard-caps at 50; any new uploader with long ids needs the same guard.
+
 **Why:** the next session starts fresh and would otherwise repeat the rejected proposal or
 re-derive the kit and upload findings.
 

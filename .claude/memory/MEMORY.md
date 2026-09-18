@@ -6,3 +6,4 @@
 - [Assets direction 2026-09-15](assets-direction-2026-09-15.md) — growing buildings pipeline (M7 shipped for Village); harvest-paste routine, levers, kit facts; read docs/ASSET_RESEARCH.md first
 - [Era kits 2026-09-16](era-kits-2026-09-16.md) — Boomtown = city-kit-suburban+industrial ("lower, wider", only landmarks tall), Metropolis = city-kit-commercial (drafts in _drafts/)
 - [City dressing 2026-09-16](city-dressing-2026-09-16.md) — M9 rulings: client-side only, no collisions, car-kit = Boomtown+Metropolis, props in ReplicatedStorage; roads grow with buildings, paths = baked planar-UV opaque meshes + rim (C3, approved); EditableMesh rejected (no ID verification)
+- [Combat 2026-09-17](combat-2026-09-17.md) — Expeditions in a second place; Armory = weapons only (HP from weapons), income/s unlocks, fixed cash per enemy, join-in-progress co-op, Ascension+Overdrive; all subagents on Opus; milestones C0–C3
