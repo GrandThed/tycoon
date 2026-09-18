@@ -49,6 +49,13 @@ plain blocker *before* proposing a design that depends on it, not inside a multi
 - Stylised flat dirt (bold simple pebbles, no fine grain, no directional features), dirt luminance
   well above the grass (155 vs 118) — the earlier washed-out attempt matched the grass.
 
+**Shipped and closed 2026-09-18** (commits 5bb5ed7, 84659f8, eac824b): 91 pieces (Village 58,
+Boomtown 33) baked, uploaded, harvested, templated; client clones them (`baked` mode, `parts`
+fallback); new path = rim, then fill, then a dust burst. Piece ids `L<polyline>_<stretch>` /
+`SP_<slotId>` are mirrored by `tools/paths/network.py`; `bake.py --era <E> --list` is a gate that
+fails if client and bake disagree (it caught a 1.86-stud arc drift), and `streetplan.py` mirrors
+`budget.pathPieces`. Wave 2 (Metropolis, OrbitalColony, `cityDetail`) is untouched.
+
 **Why:** a fresh session would otherwise propose server-spawned dressing, collidable props, or
 mix car-kit into Village, and would re-open the M9 scope.
 
