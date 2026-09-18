@@ -253,6 +253,19 @@ subject it has no pieces for:
   farm -- mount lights on a roof or parapet.
 - **`road-bend` tiling** gives a pinwheel at rotY 0/90/180/270 and four quarter-annuli around a
   4-pointed star at 0/270/180/90. Neither makes a clean oval, so an athletics track is not available.
+- **Slant rise directions:** `tile-slant` / `tile-slantHigh` / `road-slant*` rise toward **+X at
+  rotY 0, -Z at 90, -X at 180, +Z at 270**. Wedges cannot rise diagonally, so where two perpendicular
+  runs meet there is always a cliff -- put it at a corner where it reads as a corner gap.
+- **Ground surfaces:** `road-straight` at rotY 0 is the best marked-field surface in the kit (dark
+  asphalt, pale raised kerb bands across the tile ends, thin white centre line); the same tile at
+  rotY 90 reads as a road, because the bands then run lengthwise. `road-split` reads as a junction
+  and `road-crossing` as a zebra crossing, so neither works as a field; `road-square` over a
+  `tile-low` apron reads as a pale platform with a dark inset. Overlapping coplanar road tiles need
+  ~0.005 units of y separation to kill z-fighting, which is invisible at 4x.
+- **The testfit camera sits in the (+X, -Z) quadrant at ~30 degrees elevation** -- +Z at screen
+  upper-left, +X lower-left, -X upper-right, -Z lower-right. A wall of height h hides roughly 1.73h
+  of ground behind it, so a model whose interior must stay visible (a stadium bowl, a courtyard) has
+  to keep **both** the +X and the -Z sides low, not just the front.
 
 ## city-kit-suburban and city-kit-industrial notes (Boomtown authoring, five builders, 2026-09-16)
 
