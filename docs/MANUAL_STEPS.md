@@ -555,7 +555,8 @@ already built/uploaded, so it's safe to re-run after fixing a blueprint.
 - [x] 8. The **100 uploads/month cap is audio only** (M3 section 3). Models have no documented
       monthly cap, and the evidence agrees: 91 model uploads (Tavern proof + the Village run) went
       through on 2026-09-15/16 on top of the 13 audio uploads already spent this month, with no
-      quota error. Expect M8's three eras at roughly 85 uploads each. One upload failed with
+      quota error. Boomtown (91) and Metropolis (89) followed on 2026-09-16/18, still with no
+      quota error — expect Orbital Colony at roughly the same size. One upload failed with
       Roblox's transient "Unknown Error"; the tool never re-uploads an id that is already
       non-zero, so simply re-run it (`--model <Name>` to target one slot).
 
@@ -583,6 +584,49 @@ already built/uploaded, so it's safe to re-run after fixing a blueprint.
       and the two-player check.
 
 <!-- M7 section complete. Do not delete completed sections above. -->
+
+---
+
+## M8 — Growing buildings: Boomtown, Metropolis, Orbital Colony
+
+Same pipeline as M7 — **nothing new to install, create or configure**. Per era you run M7 section
+2 steps 2–7 (blueprints → `merge_stages.py` → `upload_models.py` → harvest paste → `gen_templates.py`
+→ `rojo build`). The only Studio step is the **harvest paste**, and it is already done for every
+era that has shipped.
+
+### 1. Status — what is done and what is left
+
+- [x] 1. **Boomtown** (2026-09-16): 88 stage models + 3 VIP swatches uploaded, harvested,
+      24 templates in `templates/Boomtown/`. Nothing pending.
+- [x] 2. **Metropolis** (2026-09-18): 89 assets uploaded (88 stage models + the
+      `city-kit-commercial` VIP swatch), harvested on the first paste, 24 templates in
+      `templates/Metropolis/`. Nothing pending — go run `docs/PLAYTEST.md`
+      "M8 — Growing buildings (Metropolis)".
+- [ ] 3. **Orbital Colony**: not started. When its blueprints land you run the same M7 section 2
+      steps, including one harvest paste in the Studio command bar.
+
+### 2. Metropolis — two facts worth knowing before the playtest
+
+- [x] 4. **Only one new VIP swatch.** Metropolis buildings are `city-kit-commercial`, but the era
+      also uses `city-kit-roads` and `city-kit-suburban` pieces as props — those two swatches were
+      already uploaded for Boomtown, so only `city-kit-commercial` was new. Nothing to upload or
+      recreate on the Creator Hub; VIP still rides the existing `VIP` pass (M4 section 3).
+- [x] 5. **Stadium is 12×12, on purpose.** It is the first non-monument slot wider than 9×9
+      (12.00 × 12.91 × 10.40 studs, 52 pieces at stage 4) because `city-kit-commercial` has no
+      seating piece. If you ever re-render or re-merge it, `testfit.py` will not warn: the
+      blueprint declares `"footprint": [12, 12]` and `docs/INTERFACES.md` permits it.
+
+### 3. Metropolis has no city dressing yet
+
+- [ ] 6. Roads, paths, trees, filler houses, plazas and vehicles for Metropolis are **M9 wave 2**
+      (see the M9 section below) and have not been built. A Metropolis plot in Studio is
+      buildings, buy pads and grass. Nothing to do here — just don't file it as a bug.
+
+### 4. Nothing new to create on the Creator Hub
+
+- [x] 7. No game passes, developer products, or audio this milestone — M8 is content only.
+
+<!-- M8 section complete. Do not delete completed sections above. -->
 
 ---
 

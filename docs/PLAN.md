@@ -25,6 +25,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
 - [x] M7 — Growing buildings: pipeline + Village (review SHIP after two Warnings fixed, QA green;
   all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
+- [~] M8 — Growing buildings: the other three eras (content waves; **Boomtown shipped 2026-09-16**,
+  approved in Ben's Studio look with one fix; **Metropolis shipped 2026-09-18** — 24 blueprints,
+  89 assets uploaded and harvested, 24 templates, Stadium at a new 12×12 footprint, **playtest
+  pending**; Orbital Colony not started — see "M8" below)
 - [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
   contracts, layouts, pipeline, blueprints, client and prop uploads, harvest and 18 prop
   templates shipped 2026-09-16; **wave 1d baked paths shipped and approved in Studio
@@ -550,7 +554,8 @@ tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated so
   content only. **Kit decision 2026-09-16:** Boomtown = city-kit-suburban + city-kit-industrial,
   Metropolis = city-kit-commercial (drafts in `tools/testfit/blueprints/_drafts/`); see
   `docs/ASSET_RESEARCH.md` §4. Boomtown authoring restarts in a fresh session from
-  `docs/prompts/boomtown-suburban-industrial.md`.
+  `docs/prompts/boomtown-suburban-industrial.md`. **Now tracked in the M8 section below**
+  (Boomtown and Metropolis shipped; Orbital Colony open).
 - **lead, M9:** city dressing (roads, trees, filler, squares, vehicles) is now the M9 section
   below (contracts frozen 2026-09-16). Icons and the experience thumbnail move to M10.
 - **lead / economy-designer, open idea:** monument growth tied to era completion, raised at M7
@@ -563,6 +568,87 @@ tweening. QA green (`stylua`, `selene`, `luau-lsp analyze` with a regenerated so
 
 **Not in M7:** the other three eras (M8), ground/roads/props/icons (M9), monument growth tied to
 era completion (open idea, M8 at the earliest), runtime piece composition (rejected).
+
+---
+
+## M8 — Growing buildings: Boomtown, Metropolis, Orbital Colony
+
+**Goal:** run M7's pipeline (blueprints → merge → upload → harvest → templates) over the remaining
+three eras. Content only — no new tooling, no balance change, no Luau except fixes found in
+Studio. One era per wave; each wave is 24 blueprints authored by three Opus builders on disjoint
+slot sets, verified with `tools/testfit/testfit.py` strip renders and a per-era contact sheet Ben
+approves, then one upload run, one Studio harvest paste, and `gen_templates.py`.
+
+**Kit decision (2026-09-16, `docs/ASSET_RESEARCH.md` §4):** Boomtown = `city-kit-suburban` +
+`city-kit-industrial`, Metropolis = `city-kit-commercial`; `city-kit-roads` supplies street props
+to both. Each building kit belongs to exactly one era, so the eras differ by building type and
+height, not palette. `retro-urban-kit` was built and rejected by Ben (22 tiling textures the
+one-texture merge can't handle).
+
+| Owner | Tasks |
+|-------|-------|
+| lead | per-wave INTERFACES amendments (footprint rule, kit assignment), contact-sheet reviews |
+| asset builders (general-purpose ×3, Opus, disjoint slot sets) | 24 blueprints per era, each verified by strip render |
+| pipeline (lead) | `merge_stages.py` → `upload_models.py` → `harvest.py` → `gen_templates.py` per era |
+| docs-keeper | PLAYTEST section per era, MANUAL_STEPS status, `ASSET_MANIFEST.md` |
+
+**Wave 1 — Boomtown, shipped 2026-09-16** (Ben, on the contact sheet: "looks fantastic"): 24
+blueprints in `tools/testfit/blueprints/Boomtown/`, 88 stage models + 3 VIP swatches uploaded and
+harvested, 24 templates in `templates/Boomtown/`. Direction is **"lower, wider"** — ordinary
+slots top out around 13 studs and grow by width and clutter; only Fire Station (18.7) < Radio
+Station (21.3) < Clock Tower (25.8) are tall, leaving height to Metropolis. Ben's Studio look
+produced one content fix (Gas Station rebuilt with the fuel tank on the ground, `31310d2` /
+`f2c41e0`) plus two engine fixes shipped alongside: buildings sinking into plots, the VIP skin
+toggle and hiding buildings until assets load (`6498cc1`), and the plot ring resized so radial
+plot corners never overlap (`0a25412`). Checklist: `docs/PLAYTEST.md` "M8 — Growing buildings
+(Boomtown)"; known approximations and known minor flaws are recorded there so they aren't
+re-filed.
+
+**Wave 2 — Metropolis, shipped 2026-09-18 (playtest pending):** 24 blueprints in
+`tools/testfit/blueprints/Metropolis/`, **89 assets uploaded** (88 model stages + the
+`city-kit-commercial` VIP swatch), harvested on the first paste, 24 templates in
+`templates/Metropolis/`. This is the **tall commercial** era: stage-4 heights run Food Truck 3.3 →
+Office Tower 16.3 → Hotel Tower 18.8 → Bank Tower 21.5 → Broadcast Tower 28.6 → Skyscraper 35.6
+(monument), i.e. the price ramp is also the height ramp.
+
+**The one contract change this wave: Stadium is 12×12.** `city-kit-commercial` has no seating or
+terrace piece, and a 9×9 slot is 2.25 kit units against 1×1 tiles, so a ring of stands around a
+readable pitch always left a 1-stud hole; Stadium was rebuilt three times before Ben ruled it gets
+a **12×12 footprint** — the first non-monument slot to exceed 9×9. `docs/INTERFACES.md` (blueprint
+schema) now permits max `[12, 12]` **only where the kit cannot express the subject at 9×9**, and
+notes that clearance comes from harvested extents while the buy pad still sits `padOffset` studs
+off the front. Stadium is 12.00 × 12.91 × 10.40 studs, 52 pieces at stage 4. The M9 street-plan
+contract already carries the exception (`Metropolis stadium 12×12`).
+
+**No Luau or config logic changed in wave 2**, so there was no review or QA wave: `rojo build -o
+build/test.rbxl` succeeds, `gen_templates.py --check` and `gen_asset_manifest.py --check` both
+PASS, and `docs/ASSET_MANIFEST.md` now reports **72/96 slots** complete (Village, Boomtown and
+Metropolis at 24/24 blueprints/uploaded/harvested/templated; Orbital Colony 0/24).
+
+**Done when:** all three eras' slots spawn as merged-stage meshes from Rojo-built templates, each
+era's silhouette direction holds, VIP is a per-kit texture swap, placeholders still work with
+`Assets.json` absent, and each era's PLAYTEST section passes. **Playtest gate (wave 2):** Ben buys
+out a Metropolis plot, grows one building 0→100, and checks the Stadium and the skyline —
+`docs/PLAYTEST.md` "M8 — Growing buildings (Metropolis)".
+
+**Carried forward (owners assigned):**
+- **lead / asset builders, next M8 wave:** **Orbital Colony** — 24 blueprints on `space-kit`, same
+  pipeline. Every space-kit GLB is invalid glTF (a `tmpParent` node) and must be stripped before
+  upload, and glTF material colours are lost, so the kit needs a baked palette texture
+  (`docs/ASSET_RESEARCH.md` §3). Not started.
+- **lead, M9 wave 2:** Metropolis and Orbital Colony **city dressing** (street plan in
+  `src/shared/Layouts/*.luau`, props under `templates/_props/`, baked paths) plus the persisted
+  `cityDetail` setting. Metropolis buildings now exist, so the Metropolis half is unblocked; until
+  it ships a Metropolis plot is deliberately bare (PLAYTEST M8 Metropolis section 9).
+- **lead / economy-designer, open idea:** monument growth tied to era completion — raised at M7,
+  still not designed or scheduled.
+- **economy-designer / Ben:** cash-pack Robux pricing still follows the 1 : 2.2 : 4.2 ladder
+  (`docs/BALANCE.md`) whenever real prices are set — M8 doesn't touch monetization.
+- **economy-designer / lead:** the ambient-loop listen and the long-run lap-6+ sink (carried from
+  M6/M7) remain open, untouched by M8.
+
+**Not in M8:** city dressing (M9), icons and the experience thumbnail (M10), any balance or
+income change, runtime piece composition (rejected at M7).
 
 ---
 

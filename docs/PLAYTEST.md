@@ -1521,6 +1521,176 @@ These are recorded, accepted issues — check they look the way described, don't
 
 ---
 
+## M8 — Growing buildings (Metropolis)
+
+**Goal:** all 24 Metropolis slots have real meshes, same pipeline as M7's Village pass and M8's
+Boomtown pass — built from `city-kit-commercial`, with `city-kit-roads` and a few
+`city-kit-suburban` pieces as props. Direction this era is the opposite of Boomtown's: Metropolis
+is the **tall commercial** era — shops, offices and towers, topping out at a 35.6-stud skyscraper.
+This section assumes M7 and M8 Boomtown already passed — it doesn't repeat the `GrantCash` lever
+setup, growth-pop/sound mechanics, VIP-as-texture-swap mechanics, or the missing-config degrade
+check in depth; it re-checks them briefly on Metropolis models and spends the rest of the time on
+the new 12×12 Stadium, the skyline order, and telling Metropolis apart from Boomtown.
+**No Luau or config logic changed this wave** (content only), so there is no two-player pass in
+this section — M7 section 10 already covers stage replication.
+
+**Expect a bare plot — Metropolis city dressing does not exist yet.** Roads, paths, trees, filler
+houses, plazas and vehicles are **M9 wave 2**, and only Village and Boomtown have them today.
+A Metropolis plot is buildings, buy pads and grass, nothing else. Missing paths and props here are
+**not a bug** — see section 9.
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). Regenerate the sourcemap
+      before any `luau-lsp analyze` run: `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security).
+
+### 2. Reach Metropolis
+
+- [ ] 3. Press Play. Use the `GrantCash` Workspace attribute (M7 section 2 — select Workspace,
+      Properties → Attributes → **+**, name `GrantCash`, type **number**) to buy out whatever era
+      the save is in and advance until the era badge reads **"ERA 3" / "Metropolis"**. Metropolis
+      prices run into the trillions (the Skyscraper alone is 1.25T), so grant
+      `10000000000000` (10T) in one go rather than topping up per slot.
+- [ ] 4. Confirm the advance ceremony plays, the plot base recolors, and the Build panel rebuilds
+      to 24 fresh Metropolis rows — all locked except the free first slot (**Food Truck**,
+      cost 0).
+
+### 3. Buy every slot — meshes, no placeholders
+
+- [ ] 5. Re-add `GrantCash` as needed. In the Build panel, buy all 24 slots in the order listed
+      (Food Truck → Coffee Shop → Corner Shop → Apartment Block → Low-Rise Office → Lay the City
+      Grid → Supermarket → Bus Stop → High-Rise Apartments → Parking Garage → Shopping Mall →
+      Dig the Subway Line → Hospital → City Park → Office Tower → Hotel Tower → Build the Highway
+      Ramp → Stadium → Convention Center → Rooftop Garden → Bank Tower → Broadcast Tower → Open
+      the Finance District → Skyscraper).
+- [ ] 6. As each one appears, confirm it's a **textured stage-0 mesh** that reads as the thing its
+      row is named — no grey/untextured box, no floating placeholder label, no red error in
+      Output. Same check as M7 section 3 and M8 Boomtown section 3.
+
+### 4. Walk the plot — placement sanity
+
+- [ ] 7. Walk the entire plot ring at a few angles. Confirm: every model faces its buy pad, no
+      piece floats above the ground, nothing sinks into the ground, and no building clips badly
+      into a neighbouring slot's footprint or pad.
+- [ ] 8. Confirm the **Skyscraper** (monument, last slot) sits at the front of the plot facing
+      arriving players — it should read as the landmark you walk toward, the same role the Clock
+      Tower plays in Boomtown.
+
+### 5. Stadium — the first 12×12 slot (check this one on its own)
+
+`city-kit-commercial` has no seating or terrace piece, so the stands are assembled from other
+pieces, and the Stadium is the **first non-monument slot allowed to exceed 9×9**: it is
+12.00 × 12.91 × 10.40 studs at stage 4 (52 pieces). Give it its own pass.
+
+- [ ] 9. Stand over the Stadium at stage 0 and confirm the **marked pitch** in the middle is
+      clearly visible.
+- [ ] 10. Level it 0 → 10 → 25 → 50 → 100 with `GrantCash` and the ×1/×10/Max buttons. At **every**
+      stage including 100, confirm the pitch is still visible — stands must never close over it
+      or roof it in.
+- [ ] 11. Confirm the stands grow on the **back and far side**, leaving the front (pad side) open.
+- [ ] 12. Confirm the floodlights sit **on the stands/roofs** — none free-standing on the ground
+      next to the building.
+- [ ] 13. Confirm the **buy pad in front is still reachable and walkable**: the building's front
+      face is at z −4.40 and the pad sits 8 studs out, so there should be a clear gap. Walk your
+      character onto the pad from outside the plot ring and confirm nothing blocks the approach
+      and the level-up prompt still triggers from the pad.
+- [ ] 14. Confirm the extra width doesn't overlap an adjacent slot's footprint or pad at any
+      stage — the Stadium is the only slot that could, so check its two neighbours specifically.
+
+### 6. Grow one building through all five stages
+
+- [ ] 15. Use `GrantCash` and the ×1/×10/Max buttons to level the **Hotel Tower** from 0 to level
+      10, then 25, then 50, then 100. Confirm one growth pop + one milestone sound at each
+      crossing (not two, not zero — same check as M7 section 4), the model visibly grows taller
+      and more built-up at each stage, and it never flashes back to a smaller stage.
+- [ ] 16. Confirm the Build panel's growth hint line updates/merges the same way it did for
+      Village and Boomtown (M7 section 4, step 12).
+
+### 7. Skyline check — price order reads as height
+
+- [ ] 17. Level the **Broadcast Tower** and the **Bank Tower** to 100 as well (the Skyscraper is a
+      monument, single stage). Stand well back from the plot and compare heights by eye. Confirm
+      the order, tallest to shortest: **Skyscraper** (35.6 studs) > **Broadcast Tower** (28.6) >
+      **Bank Tower** (21.5) > **Hotel Tower** (18.8) > **Office Tower** (16.3).
+- [ ] 18. Confirm the **Skyscraper visibly crowns the plot** — it must be unmistakably the tallest
+      thing from every angle, not merely tied with the Broadcast Tower's mast. No cheaper slot
+      should out-top a more expensive one.
+
+### 8. Metropolis must not look like Boomtown
+
+- [ ] 19. Look at the plot as a whole and confirm it reads as a **city centre**: shops, offices and
+      towers, glass and concrete, things stacked upward. Boomtown is the "lower, wider" era —
+      ordinary slots capped around 13 studs, with only the Fire Station (18.7), Radio Station
+      (21.3) and Clock Tower (25.8) going higher. Metropolis's ordinary slots should read
+      noticeably taller and denser than that.
+- [ ] 20. If another player (or a second Local Server client) is on a Boomtown plot, compare the
+      two plots side by side from the hub and confirm you can tell the eras apart at a glance.
+      Otherwise compare against your memory of the M8 Boomtown pass — a Metropolis plot that
+      looks like suburban houses and low industrial sheds is the failure this step is hunting.
+
+### 9. No city dressing yet — confirm it's absent, not broken
+
+- [ ] 21. Confirm the Metropolis plot has **no roads, no paths, no trees, no filler houses, no
+      plaza and no vehicles**, and that Output has **no errors or warnings** about dressing,
+      props, or paths. `src/shared/Layouts/Metropolis.luau` has no street plan and
+      `templates/_props/Metropolis` doesn't exist yet, so the dressing controller has nothing to
+      build — silence is the correct behaviour.
+- [ ] 22. If you have a second player (or a spare save) on a **Village or Boomtown** plot, confirm
+      their dressing still appears normally — Metropolis's content must not have disturbed M9
+      wave 1.
+
+### 10. VIP skins
+
+- [ ] 23. If you don't already own the `VIP` pass on this profile, buy it now (Shop panel, same
+      flow as M4 section 3 / M7 section 5).
+- [ ] 24. With VIP owned, walk the plot and confirm Metropolis buildings show the recoloured
+      gold-tinted skin. The new swatch this wave is **`city-kit-commercial`**; the era also uses
+      `city-kit-roads` and `city-kit-suburban` pieces, whose swatches came from Boomtown — so
+      check a tower body (commercial), the **Build the Highway Ramp** unlock (roads), and the
+      **City Park** decor (suburban/roads). It should look like a colour swap, not a different
+      model. If you just bought VIP mid-session, confirm it applies without a rejoin.
+
+### 11. Mobile emulation pass (required every milestone)
+
+- [ ] 25. Device Emulator, **375×667** portrait. Walk the plot and open the Build panel. Confirm
+      the growth hint text and button layout haven't regressed from M7/M8's mobile passes, and
+      that the plot renders sensibly at this resolution — in particular that the tall towers
+      (Skyscraper, Broadcast Tower) don't clip the camera or push the UI off-screen when you
+      stand next to them.
+- [ ] 26. Stop Play.
+
+### What a bug looks like here
+
+- Any slot showing a grey/untextured mesh, a red error in Output, or a mesh at the wrong scale.
+- A building that doesn't read as the thing its Build-panel row names.
+- A building not facing its pad, floating, sunk, or badly clipping a neighbouring slot.
+- The Skyscraper not at the front of the plot, not facing arriving players, or not the tallest
+  thing on the plot.
+- **Stadium:** the pitch hidden or roofed over at any stage, stands growing across the front,
+  floodlights standing on the ground, or the buy pad unreachable/unwalkable.
+- Stadium's 12×12 footprint overlapping a neighbouring slot's footprint or pad.
+- Two pops or zero pops at a milestone crossing, or a milestone sound firing more than once.
+- Skyline order broken — any cheaper slot taller than a more expensive one.
+- The plot reading as Boomtown (low, wide, suburban) instead of a tall commercial city centre.
+- Any error or warning in Output about missing Metropolis dressing/props/paths (their **absence**
+  is expected; a complaint about it is not).
+- VIP showing a different-shaped model instead of a texture/colour change, or not applying live.
+
+### Sign-off
+
+- [ ] 27. All boxes above checked: reaching Metropolis, all 24 slots buying in as real meshes, a
+      full plot placement walk including the Skyscraper's position, the Stadium's own pass
+      (pitch visible at every stage, stands at the back, roof-mounted floodlights, walkable pad),
+      a full 0→100 growth run on the Hotel Tower, the skyline order, the Metropolis-vs-Boomtown
+      read, dressing confirmed absent and silent, VIP skins, and 375×667 mobile emulation.
+- [ ] 28. Tell Claude Code "M8 Metropolis assets playtest passed" (or report the exact failure and
+      step number).
+
+---
+
 ## M9 — City dressing (roads, trees, filler, squares, vehicles)
 
 **Goal:** plots read as a growing town, not 24 buildings on a lawn — roads connect what you own,
