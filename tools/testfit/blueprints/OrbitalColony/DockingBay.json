@@ -1,0 +1,27 @@
+{
+  "id": "DockingBay",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2, 0, -1.4], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "gate_simple", "pos": [-2.6, 0.1, -1.9], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrels", "pos": [-1.405, 0.1, -2.1], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "pipe_straight", "pos": [-1.5, 0.1, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "supports_high", "pos": [-2.6, 0.1, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "pipe_ringHigh", "pos": [-1.45, 0.1, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "machine_barrelLarge", "pos": [-1.4, 0.1, -2.2], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [2.5, 0.1, 1.095], "rotY": 180, "stage": 1},
+    {"kit": "space-kit", "model": "supports_high", "pos": [-2.6, 1.1, -0.9], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "stairs", "pos": [-1.7, 0.1, 2.6], "rotY": 90, "stage": 2},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [1.5, 0.1, 1.095], "rotY": 180, "stage": 2},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [1.45, 0.1, 0.65], "rotY": 180, "stage": 2},
+    {"kit": "space-kit", "model": "corridor_end", "pos": [-2.6, 2.1, -1.4], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "corridor_end", "pos": [1.4, 2.1, 2.6], "rotY": 180, "stage": 3},
+    {"kit": "space-kit", "model": "gate_complex", "pos": [-2.6, 0.1, -1.15], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "craft_racer", "pos": [-1.5, 0.1, -1.45], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [1.4, 3.1, 2.095], "rotY": 180, "stage": 4},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [0.9, 3.1, -1.4], "rotY": 270, "stage": 4},
+    {"kit": "space-kit", "model": "astronautA", "pos": [-2.3, 0.1, -2.285], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "barrels", "pos": [-2.805, 0.1, -0.65], "rotY": 0, "stage": 4}
+  ]
+}

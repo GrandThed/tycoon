@@ -1,0 +1,27 @@
+{
+  "id": "ResearchLab",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2, 0, -1.4], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "structure_detailed", "pos": [-1.5, 0.12, -1.9], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "desk_computerCorner", "pos": [-1.5, 0.12, -1.95], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "desk_chair", "pos": [2.15, 0.12, 1.35], "rotY": 180, "stage": 0},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [1.45, 0.12, 1.05], "rotY": 180, "stage": 0},
+    {"kit": "space-kit", "model": "corridor_detailed", "pos": [-1.55, 0.12, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "satelliteDish", "pos": [-2.55, 0.12, -0.865], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "barrels", "pos": [-2.605, 0.12, -1.55], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "platform_small", "pos": [-1.55, 1.23, -0.9], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "corridor_end", "pos": [-1.55, 1.33, -1.4], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "corridor_end", "pos": [2.45, 1.33, 2.6], "rotY": 180, "stage": 2},
+    {"kit": "space-kit", "model": "desk_computerScreen", "pos": [1.7, 0.12, 1], "rotY": 180, "stage": 2},
+    {"kit": "space-kit", "model": "platform_small", "pos": [-1.55, 2.34, -0.9], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [2.45, 2.44, 2.135], "rotY": 180, "stage": 3},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.055, 2.44, 2.6], "rotY": 90, "stage": 3},
+    {"kit": "space-kit", "model": "stairs", "pos": [-1.1, 1.13, -1.7], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "satelliteDish", "pos": [-1.55, 2.44, -0.845], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "machine_wireless", "pos": [2.5, 1.23, 1.1], "rotY": 180, "stage": 4},
+    {"kit": "space-kit", "model": "astronautA", "pos": [-2.2, 0.12, -2.285], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "machine_barrel", "pos": [-2.7, 0.12, -0.65], "rotY": 0, "stage": 4}
+  ]
+}

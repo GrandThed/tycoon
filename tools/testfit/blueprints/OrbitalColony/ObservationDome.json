@@ -1,0 +1,27 @@
+{
+  "id": "ObservationDome",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 0, 0.15], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "dome_small", "pos": [0, 0.4, 0.15], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "stairs_short", "pos": [-2.3, 0, -2.37], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "barrels", "pos": [-2.755, 0, -2.37], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 0.4, 0.15], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 0.8, 0.15], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "dome_small", "pos": [0, 1.2, 0.15], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "telescope", "pos": [0.25, 0, -0.85], "rotY": 90, "stage": 1},
+    {"kit": "orbital-kit", "model": "mast_segment", "pos": [0.96, 0, 0.15], "rotY": 0, "stage": 2},
+    {"kit": "orbital-kit", "model": "mast_segment", "pos": [0.96, 1, 0.15], "rotY": 0, "stage": 2},
+    {"kit": "orbital-kit", "model": "flag", "pos": [-0.95, 0, 0.15], "rotY": 90, "stage": 2},
+    {"kit": "space-kit", "model": "astronautA", "pos": [-1.15, 0, -2.435], "rotY": 0, "stage": 2},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 1.2, 0.15], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 1.6, 0.15], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0, 2, 0.15], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "dome_small", "pos": [0, 2.4, 0.15], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "dome_slit", "pos": [0, 2.4, 0.15], "rotY": 0, "stage": 4},
+    {"kit": "orbital-kit", "model": "mast_segment", "pos": [0.96, 2, 0.15], "rotY": 0, "stage": 4},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0, 0.5, -0.67], "rotY": 0, "stage": 4},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0, 0.9, -0.67], "rotY": 0, "stage": 4}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "HydroponicsDome",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "pieces": [
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [-0.3, 0, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "dome_small", "pos": [-0.3, 0.4, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "planter_tray", "pos": [-0.61, 0, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "planter_tray", "pos": [0.8, 0, 0.05], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "barrel", "pos": [-2, 0, -2.5], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "planter_tray", "pos": [0.41, 0, -0.7], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "tank_vertical", "pos": [0.82, 0, 0.84], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "barrel", "pos": [-0.98, 0, -2.25], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.3, 0.1, -0.52], "rotY": 0, "stage": 1},
+    {"kit": "orbital-kit", "model": "flag", "pos": [-0.6, 0, -1.09], "rotY": 0, "stage": 2},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.3, 0.25, -0.52], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "barrel", "pos": [-2.95, 0, -2.5], "rotY": 0, "stage": 2},
+    {"kit": "space-kit", "model": "barrel", "pos": [-1.65, 0.4, -0.55], "rotY": 0, "stage": 2},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [-0.3, 0.4, 0.3], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [-0.3, 0.8, 0.3], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "dome_small", "pos": [-0.3, 1.2, 0.3], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.3, 0.5, -0.52], "rotY": 0, "stage": 3},
+    {"kit": "orbital-kit", "model": "dome_medium", "pos": [-0.3, 1.2, 0.3], "rotY": 0, "stage": 4},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.3, 0.9, -0.52], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "barrel", "pos": [-1.7, 0, -2.5], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "barrel", "pos": [-1.38, 0, -2.52], "rotY": 0, "stage": 4}
+  ]
+}
