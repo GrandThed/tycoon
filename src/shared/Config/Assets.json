@@ -28,6 +28,10 @@
     "nature-kit": {
       "vipSwatchAssetId": 70411050112785,
       "vipImageId": 108673364610024
+    },
+    "stadium-kit": {
+      "vipSwatchAssetId": 118702759242238,
+      "vipImageId": 130142889110389
     }
   },
   "eras": {
@@ -2723,97 +2727,62 @@
       "Stadium": {
         "stages": [
           {
-            "modelAssetId": 126461096311654,
+            "modelAssetId": 111573273303851,
             "parts": [
               {
-                "kit": "city-kit-commercial",
-                "meshId": 78502630372187,
-                "imageId": 100750397531314,
-                "size": [2.0, 2.8, 8.0],
-                "offset": [4.96, 1.4, 0.4]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 102748071318026,
-                "imageId": 130771765354100,
-                "size": [12.0, 2.08, 10.4],
-                "offset": [0.0, 1.04, -0.8]
+                "kit": "stadium-kit",
+                "meshId": 120652916266116,
+                "imageId": 71401116826327,
+                "size": [12.0, 1.6, 10.4],
+                "offset": [0.0, 0.8, -0.8]
               }
             ]
           },
           {
-            "modelAssetId": 90784773841235,
+            "modelAssetId": 76803777539393,
             "parts": [
               {
-                "kit": "city-kit-commercial",
-                "meshId": 70433265332064,
-                "imageId": 100750397531314,
-                "size": [12.0, 3.84, 10.4],
-                "offset": [0.0, 1.92, -0.8]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 102748071318026,
-                "imageId": 130771765354100,
-                "size": [12.0, 2.08, 10.4],
-                "offset": [0.0, 1.04, -0.8]
+                "kit": "stadium-kit",
+                "meshId": 115300385678091,
+                "imageId": 71401116826327,
+                "size": [12.0, 3.6, 10.4],
+                "offset": [0.0, 1.8, -0.8]
               }
             ]
           },
           {
-            "modelAssetId": 110641391516654,
+            "modelAssetId": 98871429791472,
             "parts": [
               {
-                "kit": "city-kit-commercial",
-                "meshId": 96356155715481,
-                "imageId": 100750397531314,
-                "size": [12.0, 5.56, 10.4],
-                "offset": [0.0, 2.78, -0.8]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 112588145400998,
-                "imageId": 130771765354100,
-                "size": [12.0, 5.64, 10.4],
-                "offset": [0.0, 2.82, -0.8]
+                "kit": "stadium-kit",
+                "meshId": 139645584929475,
+                "imageId": 71401116826327,
+                "size": [12.0, 5.6, 10.4],
+                "offset": [0.0, 2.8, -0.8]
               }
             ]
           },
           {
-            "modelAssetId": 107644317096365,
+            "modelAssetId": 114285023089164,
             "parts": [
               {
-                "kit": "city-kit-commercial",
-                "meshId": 133758287470187,
-                "imageId": 100750397531314,
-                "size": [12.0, 10.0, 10.4],
-                "offset": [0.0, 5.0, -0.8]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 120803935575216,
-                "imageId": 130771765354100,
-                "size": [12.0, 10.08, 10.4],
-                "offset": [0.0, 5.04, -0.8]
+                "kit": "stadium-kit",
+                "meshId": 92948988517418,
+                "imageId": 71401116826327,
+                "size": [12.0, 8.32, 10.4],
+                "offset": [0.0, 4.16, -0.8]
               }
             ]
           },
           {
-            "modelAssetId": 126873811094561,
+            "modelAssetId": 99572646457625,
             "parts": [
               {
-                "kit": "city-kit-commercial",
-                "meshId": 76858702093610,
-                "imageId": 100750397531314,
-                "size": [12.0, 11.68, 10.4],
-                "offset": [0.0, 5.84, -0.8]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 132947583653506,
-                "imageId": 130771765354100,
-                "size": [12.0, 12.9095, 10.4],
-                "offset": [0.0, 6.4548, -0.8]
+                "kit": "stadium-kit",
+                "meshId": 106385031170676,
+                "imageId": 71401116826327,
+                "size": [12.0, 12.32, 10.4],
+                "offset": [0.0, 6.16, -0.8]
               }
             ]
           }
