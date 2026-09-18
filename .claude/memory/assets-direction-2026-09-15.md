@@ -43,3 +43,27 @@ re-derive the kit and upload findings.
 **How to apply:** before any asset design, read `docs/ASSET_RESEARCH.md` §2 and §7; prototype one
 growing building end to end before writing M7 contracts. Local research files live in
 `assets/research/2026-09-15/` (gitignored). See [[environment-2026-09-08]].
+
+- **Custom Blender geometry is a supported building source** (2026-09-18, Metropolis Stadium, Ben:
+  "looks good!"). When a kit simply lacks a piece the subject needs, generate one. Three
+  kit-assembled Stadium attempts failed because **none of the four City Kits has a grass or green
+  ground piece** (green is only awnings, planters, signs), and a stadium without a green pitch does
+  not read. The fix cost no tool changes:
+  - Kits are **pure folder convention** (`assets/kenney3d/<kit>/Models/GLB format/<model>.glb`,
+    `testfit.py` KITS_ROOT) — there is no registry to update, so a generated folder *is* a kit.
+  - `merge_stages.py` routes **colour-only materials** (no baseColorTexture) through `palette.py`
+    into a deterministic palette texture — the space-kit path. So custom pieces just carry plain
+    colour factors.
+  - Sample those colours from the era kit's own `colormap.png` and the result keeps the era palette.
+  - `/assets/` is gitignored, so **the generator script is the committed artifact** and the GLBs
+    regenerate — same pattern as `tools/pathmock/pathgeom.py`. See `tools/assets/stadium_kit.py`
+    (8 reusable modules: pitch, terrace, tier, roof, floodlight, scoreboard, hoarding, dugout).
+  - Judge look against the **plot base colour**, not testfit's near-white card. Metropolis is
+    (88, 90, 94); a dark pitch inside white stands vanished on it, and the white-background render
+    hid that from the lead through two review rounds.
+
+- **`upload_models.py` skips any stage whose `modelAssetId` is non-zero** — no content hash, no
+  `--force` (checked 2026-09-18). Changed geometry is therefore **silently never re-uploaded**; the
+  run just prints "already uploaded, skipped". Workaround: clear that stage's `modelAssetId` and
+  `parts` via `assets_config.save_assets` (never hand-rewrite Assets.json — `json.dumps` reformats
+  the whole file into a 7000-line diff). A sha256 check is still worth adding.
