@@ -67,12 +67,24 @@ export type SubwaySpot = {
 	exempt: boolean,
 }
 
+-- Wave 2a park strips: one planter down the centreline of a planned street, standing only while
+-- that ground is still a strip. (polyline, stretch, step) is the numeric order the cap is thinned
+-- over, for the same reason the row lamps carry one.
+export type ParkTree = {
+	polyline: number,
+	stretch: number,
+	step: number,
+	position: Vector3, -- plot-local, Y 0
+	yaw: number, -- radians
+}
+
 export type Plan = {
 	trees: { TreeSpot },
 	lotProps: { [number]: string }, -- lot index -> house prop (only lots inside the budget)
 	plazaAllowed: { [number]: boolean }, -- plaza index -> inside the budget
 	lampSlots: { [string]: boolean }, -- slots whose spur junction may carry a lamp
 	lampPosts: { LampPost }, -- row placement only, in sorted piece order
+	parkTrees: { ParkTree }, -- wave 2a, capped by road.tiles.parkStrips.maxTrees
 	subwayEntrances: { SubwaySpot }, -- wave 2a, capped by subway.maxPerPlot
 	vehicleProps: { string }, -- vehicle i's prop name
 }
@@ -752,6 +764,105 @@ local function streetTreeSpots(
 	return spots
 end
 
+-- Park-strip planters (docs/INTERFACES.md "Park strips in undrawn corridors"): a tree every
+-- `parkStrips.treeSpacing` studs down the centreline of every street the plot can ever draw. The
+-- controller shows one only while the strip under it is still down, so the row is a plan, not a
+-- placement. Like the row lamps this is a walk over the layout with no Random draw, so it shifts
+-- no other feature's stream, and the cap is thinned evenly over its own numeric order.
+local function parkStripTrees(
+	input: PlanInput,
+	streetLines: () -> RoadGraph.StreetLines
+): { ParkTree }
+	local tiles = input.era.road.tiles
+	local config = if tiles ~= nil then tiles.parkStrips else nil
+	if tiles == nil or config == nil or input.era.trees.prop == nil then
+		return {}
+	end
+	local spacing = config.treeSpacing
+	if type(spacing) ~= "number" or spacing < MIN_STEP then
+		return {}
+	end
+	-- A planter keeps the daylight a street tree keeps from the same solids; an era that plants
+	-- strips without paving blocks simply has no such distance to keep.
+	local clearance = if tiles.blocks ~= nil then math.max(tiles.blocks.treeClearance, 0) else 0
+	local spurWidth = math.max(tiles.spur.width, 0)
+	local footprints = footprintsFor(input)
+	local lines = streetLines()
+
+	local function blocked(point: Vector3): boolean
+		for _, footprint in footprints do
+			if insideFootprint(footprint, point, clearance) then
+				return true
+			end
+		end
+		-- The footpath to a building crosses the corridor it serves; a tree on it would block the
+		-- walk to the pad the moment its own street is still unpaved.
+		for _, spur in lines.spurs do
+			if nearLine(point, spur, spurWidth / 2 + clearance) then
+				return true
+			end
+		end
+		return false
+	end
+
+	local trees: { ParkTree } = {}
+	for _, run in lines.runs do
+		for _, piece in run.pieces do
+			local walked = 0 -- arc length from the start of this piece
+			local step = 0
+			for index = 2, #piece.points do
+				local from = piece.points[index - 1]
+				local span = piece.points[index] - from
+				local length = span.Magnitude
+				if length < MIN_STEP then
+					continue
+				end
+				local mark = (step + 1) * spacing
+				while mark <= walked + length do
+					step += 1
+					local position = from + span * ((mark - walked) / length)
+					if not blocked(position) then
+						table.insert(trees, {
+							polyline = run.polyline,
+							stretch = piece.stretch,
+							step = step,
+							position = flat(position),
+							-- Hashed, not drawn: the same planter turns the same way everywhere.
+							yaw = Noise.Hash(`{run.polyline}:{piece.stretch}:{step}`)
+								% FULL_CIRCLE_DEGREES
+								/ FULL_CIRCLE_DEGREES
+								* FULL_TURN,
+						})
+					end
+					mark = (step + 1) * spacing
+				end
+				walked += length
+			end
+		end
+	end
+	table.sort(trees, function(a: ParkTree, b: ParkTree): boolean
+		if a.polyline ~= b.polyline then
+			return a.polyline < b.polyline
+		end
+		if a.stretch ~= b.stretch then
+			return a.stretch < b.stretch
+		end
+		return a.step < b.step
+	end)
+	local cap = math.max(math.floor(numberOr(config.maxTrees, 0)), 0)
+	local count = #trees
+	if count <= cap then
+		return trees
+	end
+	local kept: { ParkTree } = {}
+	for index, tree in trees do
+		if (index * cap) // count ~= ((index - 1) * cap) // count then
+			table.insert(kept, tree)
+		end
+	end
+	return kept
+end
+
 function Scatter.Plan(input: PlanInput): Plan
 	local rng = Random.new(Scatter.Seed(input.plotIndex, input.eraName))
 	local era = input.era
@@ -786,6 +897,7 @@ function Scatter.Plan(input: PlanInput): Plan
 		plazaAllowed = {},
 		lampSlots = {},
 		lampPosts = {},
+		parkTrees = {},
 		subwayEntrances = {},
 		vehicleProps = {},
 	}
@@ -837,6 +949,7 @@ function Scatter.Plan(input: PlanInput): Plan
 		table.insert(plan.trees, spot)
 	end
 	plan.lampPosts = lampPosts(input, streetLines)
+	plan.parkTrees = parkStripTrees(input, streetLines)
 	plan.subwayEntrances = subwaySpots(input, streetLines)
 
 	local vehicleProps = era.vehicles.props

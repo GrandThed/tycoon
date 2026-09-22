@@ -97,6 +97,14 @@ STRAIGHT_ENOUGH = 0.9
 MIN_STEP = 0.05
 ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
 MIN_VEHICLE_STRETCH = 16.0
+# TileRenderer.luau ground-slab constants, mirrored (geometry, not tunables).
+BLOCK_DROP = 0.02  # a block slab's top, and a park strip's, sits this far under the kerb
+TOUCH_EPSILON = 1e-3  # rectangles that only touch are not an overlap
+# The corner squares of a cell's kerb, in the client's order: (x arm, z arm).
+CORNER_PAIRS = ((1, 2), (1, 4), (3, 2), (3, 4))
+HASH_MULTIPLIER = 31  # Noise.Hash
+HASH_MODULUS = 16777216
+FULL_CIRCLE_DEGREES = 360
 
 
 def blueprint_path(era_name, model_name, prop=False):
@@ -124,6 +132,68 @@ def right_of(direction):
     return (-direction[1], direction[0])
 
 
+def noise_hash(text):
+    """Noise.Hash: a 31-multiplier byte hash mod 2^24, identical on every client."""
+    value = 0
+    for byte in text.encode("utf-8"):
+        value = (value * HASH_MULTIPLIER + byte) % HASH_MODULUS
+    return value
+
+
+# -- ground rectangles (TileRenderer.luau: overlapping, subtract, cutAgainst) ----------------
+# A rect is (x0, x1, z0, z1) in plot-local studs, x0 <= x1 and z0 <= z1. The kerb, a block's
+# paving and a park strip are all cut by these three, so each covers its ground exactly once.
+
+
+def overlapping(a, b):
+    return (
+        min(a[1], b[1]) - max(a[0], b[0]) > TOUCH_EPSILON
+        and min(a[3], b[3]) - max(a[2], b[2]) > TOUCH_EPSILON
+    )
+
+
+def subtract(rect, cut, into):
+    """`rect` minus `cut`, as up to four rectangles: the strips left of, right of, below and
+    above the cut. The caller has already checked that they overlap."""
+
+    def keep(x0, x1, z0, z1):
+        if x1 - x0 > TOUCH_EPSILON and z1 - z0 > TOUCH_EPSILON:
+            into.append((x0, x1, z0, z1))
+
+    keep(rect[0], max(rect[0], cut[0]), rect[2], rect[3])
+    keep(min(rect[1], cut[1]), rect[1], rect[2], rect[3])
+    x0 = max(rect[0], cut[0])
+    x1 = min(rect[1], cut[1])
+    keep(x0, x1, rect[2], max(rect[2], cut[2]))
+    keep(x0, x1, min(rect[3], cut[3]), rect[3])
+
+
+def cut_against(candidate, laid, into):
+    """`candidate` minus every rectangle in `laid`, appended to `into`."""
+    pieces = [candidate]
+    for cut in laid:
+        if not pieces:
+            break
+        remainder = []
+        for piece in pieces:
+            if overlapping(piece, cut):
+                subtract(piece, cut, remainder)
+            else:
+                remainder.append(piece)
+        pieces = remainder
+    into.extend(pieces)
+
+
+def cell_rect(cell, step, reach):
+    """The square of half-size `reach` centred on lattice cell `cell`."""
+    return (
+        cell[0] * step - reach,
+        cell[0] * step + reach,
+        cell[1] * step - reach,
+        cell[1] * step + reach,
+    )
+
+
 # --------------------------------------------------------------------------
 # Scene assembly
 # --------------------------------------------------------------------------
@@ -143,6 +213,17 @@ class PlotScene:
         self.era_config_slots = {slot["id"]: slot for slot in era.config["slots"]}
         self.visible = self.visible_stretches()
         self.notes = []
+        # Set by the tile passes; empty in an era without `road.tiles`, so every later pass can
+        # read them without asking which kind of era it is.
+        self.planned_cells = {}  # (i, j) -> plan record, in the client's cell order
+        self.planned_stretches = []
+        self.drawn_order = []  # the drawn cells, in that same order (TileRenderer's `due`)
+        self.tile_cells = {}
+        self.tile_masks = {}
+        self.pavement_rects = []  # the kerb as geometry, for the strips to cut against
+        self.blocks = []
+        self.block_rects = []
+        self.strip_cells = set()
 
     # -- helpers ---------------------------------------------------------
 
@@ -355,77 +436,98 @@ class PlotScene:
                 (cell[0] * step, 0.0, cell[1] * step),
                 rot_y=quarters[cell] * 90.0,
             )
+        self.planned_cells = cells
+        self.planned_stretches = planned
         self.tile_cells = drawn
         self.tile_masks = masks
+        # TileRenderer's `due`: the drawn cells in plan order, which is the order the kerb and the
+        # park strips cut in. `sorted(drawn)` above only orders what the render draws over nothing.
+        self.drawn_order = [cell for cell in cells if cell in drawn]
         self.notes.append(f"{len(drawn)} tile cells drawn of {len(cells)} planned ({len(planned)} stretches)")
 
     def build_pavements(self):
-        """Pavement PER CELL (contract update 2026-09-22), never over asphalt: a tileStuds x width
-        strip flush against every side of a drawn cell that has no arm, plus a width x width square
-        at each corner whose two adjacent sides are both closed. A crossroads therefore gets no
-        pavement at all and a street end gets a U, and nothing has to overlap a junction the way
-        the old per-stretch kerbs did (16 of 36 of those lay on the asphalt).
+        """TileRenderer.cellSlabs + syncPavement, restated. Pavement PER CELL, never over asphalt:
+        a `pavement.width` band flush against every side of a drawn cell the asphalt does not leave,
+        plus a width x width square at each corner whose two adjacent arms are both closed. A
+        crossroads therefore gets no pavement at all and a street end gets a U, and nothing has to
+        overlap a junction the way the old per-stretch kerbs did.
 
-        Two cells either side of a gap can ask for the same rectangle, so rectangles are deduped on
-        their rounded geometry, and any rectangle that lands on another drawn cell is dropped --
-        two streets one cell apart would otherwise pave each other's road."""
+        A band that would lie over any *planned* cell's tile is dropped whole -- a cell that
+        arrives later must not find a kerb sitting on its asphalt -- and then each cell in turn
+        subtracts what is already laid from its own rectangles, so the ground is covered exactly
+        once. The order is the cell order, which is the plan order, so every client cuts the same
+        shapes and so does this tool."""
         era = self.era
         pavement = era.tiles.get("pavement")
         if pavement is None:
             return
-        width = float(pavement["width"])
+        width = max(float(pavement["width"]), MIN_STEP)
         colour = [int(v) for v in pavement["color"]]
         step = era.tile_studs
-        out = step / 2 + width / 2
-        rects = {}  # (x, z, sx, sz) -> nothing; the key is the dedupe
-        for cell in sorted(self.tile_cells):
+        half = step / 2
+        laid = self.pavement_rects
+        for cell in self.drawn_order:
             mask = self.tile_masks[cell]
-            centre = (cell[0] * step, cell[1] * step)
+            centre_x, centre_z = cell[0] * step, cell[1] * step
+            candidates = []
+
+            def add(x0, x1, z0, z1):
+                rect = (min(x0, x1), max(x0, x1), min(z0, z1), max(z0, z1))
+                if not self.overlaps_tile(rect):
+                    candidates.append(rect)
+
             for arm in range(1, 5):
                 if mask & (1 << (arm - 1)):
-                    continue
+                    continue  # the asphalt leaves the tile on this side
                 delta = ARM_STEPS[arm - 1]
-                size = (width, step) if delta[0] else (step, width)
-                rects[(
-                    round(centre[0] + delta[0] * out, 4),
-                    round(centre[1] + delta[1] * out, 4),
-                    size[0],
-                    size[1],
-                )] = None
+                out_x = delta[0] * (half + width) if delta[0] else half
+                out_z = delta[1] * (half + width) if delta[1] else half
+                add(
+                    centre_x + (delta[0] * half if delta[0] else -out_x),
+                    centre_x + out_x,
+                    centre_z + (delta[1] * half if delta[1] else -out_z),
+                    centre_z + out_z,
+                )
             # Corners: the two arms either side of the diagonal must both be missing, or the corner
             # square would stick out into a road that turns there.
-            for x_arm, z_arm in ((1, 2), (3, 2), (3, 4), (1, 4)):
+            for x_arm, z_arm in CORNER_PAIRS:
                 if mask & (1 << (x_arm - 1)) or mask & (1 << (z_arm - 1)):
                     continue
-                rects[(
-                    round(centre[0] + ARM_STEPS[x_arm - 1][0] * out, 4),
-                    round(centre[1] + ARM_STEPS[z_arm - 1][1] * out, 4),
-                    width,
-                    width,
-                )] = None
-        placed = 0
-        for index, (x, z, sx, sz) in enumerate(sorted(rects)):
-            if self.on_road_cell(x, z, sx, sz):
-                continue
-            self.box(f"Pavement{index}", (sx, self.thickness, sz), (x, 0.0, z), colour)
-            placed += 1
-        self.notes.append(f"{placed} pavement slabs ({len(rects) - placed} dropped onto road cells)")
+                offset_x = ARM_STEPS[x_arm - 1][0] + ARM_STEPS[z_arm - 1][0]
+                offset_z = ARM_STEPS[x_arm - 1][1] + ARM_STEPS[z_arm - 1][1]
+                add(
+                    centre_x + offset_x * half,
+                    centre_x + offset_x * (half + width),
+                    centre_z + offset_z * half,
+                    centre_z + offset_z * (half + width),
+                )
+            for candidate in candidates:
+                kept = []
+                cut_against(candidate, laid, kept)
+                laid.extend(kept)
+        for index, rect in enumerate(laid):
+            self.box(
+                f"Pavement{index}",
+                (rect[1] - rect[0], self.thickness, rect[3] - rect[2]),
+                ((rect[0] + rect[1]) / 2, 0.0, (rect[2] + rect[3]) / 2),
+                colour,
+            )
+        self.notes.append(f"{len(laid)} pavement slabs")
 
-    def on_road_cell(self, x, z, size_x, size_z):
-        """Whether an axis-aligned rectangle overlaps any drawn road cell (touching is fine)."""
+    def overlaps_tile(self, rect):
+        """TileRenderer.overlapsTile: whether a rectangle lies over any *planned* cell's tile.
+        Planned, not drawn -- see build_pavements."""
         step = self.era.tile_studs
-        low_i = streetplan.round_half((x - size_x / 2) / step)
-        high_i = streetplan.round_half((x + size_x / 2) / step)
-        low_j = streetplan.round_half((z - size_z / 2) / step)
-        high_j = streetplan.round_half((z + size_z / 2) / step)
-        for i in range(low_i - 1, high_i + 2):
-            for j in range(low_j - 1, high_j + 2):
-                if (i, j) not in self.tile_cells:
+        half = step / 2
+        from_i = math.floor((rect[0] - half) / step)
+        to_i = math.ceil((rect[1] + half) / step)
+        from_j = math.floor((rect[2] - half) / step)
+        to_j = math.ceil((rect[3] + half) / step)
+        for i in range(from_i, to_i + 1):
+            for j in range(from_j, to_j + 1):
+                if (i, j) not in self.planned_cells:
                     continue
-                if (
-                    abs(i * step - x) < (step + size_x) / 2 - 1e-6
-                    and abs(j * step - z) < (step + size_z) / 2 - 1e-6
-                ):
+                if overlapping(rect, cell_rect((i, j), step, half)):
                     return True
         return False
 
@@ -587,7 +689,6 @@ class PlotScene:
         """INTERFACES "Paved blocks": one slab per layout `blocks` rect, shown when any of its
         `slots` is owned, top at road.thickness / 2 - 0.02 so it never shares a plane with the
         pavement or a pad. No layout table means no slabs, which is today's behaviour."""
-        self.blocks = []
         era = self.era
         config = (era.tiles or {}).get("blocks")
         blocks = era.layout.get("blocks") or []
@@ -614,7 +715,206 @@ class PlotScene:
             )
             self.blocks.append({"min": (min(low[0], high[0]), min(low[1], high[1])),
                                 "max": (max(low[0], high[0]), max(low[1], high[1]))})
+            self.block_rects.append((
+                min(low[0], high[0]), max(low[0], high[0]),
+                min(low[1], high[1]), max(low[1], high[1]),
+            ))
         self.notes.append(f"{len(self.blocks)} paved blocks of {len(blocks)} in the layout")
+
+    def build_park_strips(self):
+        """TileRenderer.syncStrips, restated (INTERFACES "Park strips in undrawn corridors"): a
+        planned cell whose street has not grown yet is planted rather than left as bare ground
+        beside a dead-end sidewalk. The strip covers the cell and its pavement band, minus
+        everything already laid -- the tiles drawn so far, the kerb around them, the strips of the
+        cells before it in the plan, and the paved blocks, whose top it shares.
+
+        Tiles and strips share `budget.tileCells`; a cut band can need more than one Part, so the
+        ceiling is spent in Parts, in cell order (entrance outward), not counted in cells."""
+        era = self.era
+        config = (era.tiles or {}).get("parkStrips")
+        if config is None:
+            return
+        step = era.tile_studs
+        pavement = era.tiles.get("pavement")
+        reach = step / 2 + (max(float(pavement["width"]), 0.0) if pavement is not None else 0.0)
+        colour = [int(v) for v in config["color"]]
+        top = self.thickness / 2 - BLOCK_DROP
+        laid = []
+        drawn_count = 0
+        for cell in self.planned_cells:
+            if cell in self.tile_cells:
+                drawn_count += 1
+                laid.append(cell_rect(cell, step, step / 2))
+        # The client's `laid` takes the kerb and the block slabs out of two hash tables, whose order
+        # it does not control; every rectangle in both is disjoint from the others, so the ground a
+        # strip is left with is the same however they are ordered.
+        laid.extend(self.pavement_rects)
+        laid.extend(self.block_rects)
+        remaining = max(int(era.city.get("budget", {}).get("tileCells", 0)) - drawn_count, 0)
+        pieces = []
+        for cell in self.planned_cells:
+            if cell in self.tile_cells or remaining <= 0:
+                continue
+            kept = []
+            cut_against(cell_rect(cell, step, reach), laid, kept)
+            for piece in kept:
+                if remaining <= 0:
+                    break
+                remaining -= 1
+                laid.append(piece)
+                pieces.append(piece)
+                self.strip_cells.add(cell)
+        for index, rect in enumerate(pieces):
+            self.box(
+                f"ParkStrip{index}",
+                (rect[1] - rect[0], SLAB_THICKNESS, rect[3] - rect[2]),
+                ((rect[0] + rect[1]) / 2, top - SLAB_THICKNESS / 2, (rect[2] + rect[3]) / 2),
+                colour,
+            )
+        undrawn = len(self.planned_cells) - drawn_count
+        self.notes.append(
+            f"{len(pieces)} park-strip slabs over {len(self.strip_cells)} of {undrawn} undrawn cells"
+        )
+
+    def street_lines(self):
+        """RoadGraph.StreetLines, restated: every *plannable* spine piece as a centreline, grouped
+        into continuous runs along each polyline (a piece outside the plan breaks the run), plus
+        every allowed spur's centreline. Nothing here depends on what is owned or drawn."""
+        era, network = self.era, self.network
+        planned = set(self.planned_stretches)
+        # Baked piece ids: the n-th stretch of a polyline in creation order, exactly as RoadGraph
+        # numbers them, so a planter can be ordered by (polyline, stretch) rather than by a string
+        # in which "L1_10" sorts before "L1_2".
+        ordinals, per_polyline = {}, {}
+        for stretch_id, stretch in enumerate(network.stretches):
+            ordinal = per_polyline.get(stretch["polyline"], 0) + 1
+            per_polyline[stretch["polyline"]] = ordinal
+            ordinals[stretch_id] = ordinal
+        if era.meander is not None:
+            self.notes.append("meandering tiles era: street lines are drawn straight here")
+        segment_groups = sum(max(len(street) - 1, 0) for street in era.streets)
+        runs, open_runs = [], {}
+        for group_index, stretch_ids in enumerate(network.groups):
+            for stretch_id in stretch_ids:
+                stretch = network.stretches[stretch_id]
+                polyline = stretch["polyline"]
+                if stretch_id not in planned:
+                    open_runs.pop(polyline, None)  # a piece outside the plan breaks the street
+                    continue
+                # A connector is a short link onto another polyline, not a continuation of one.
+                continues = group_index < segment_groups
+                run = open_runs.get(polyline) if continues else None
+                if run is None:
+                    run = {"polyline": polyline, "pieces": []}
+                    runs.append(run)
+                    if continues:
+                        open_runs[polyline] = run
+                run["pieces"].append(
+                    {"stretch": ordinals[stretch_id], "points": [stretch["a"], stretch["b"]]}
+                )
+        _groups_allowed, spurs_allowed = network.straight_allocate()
+        spurs = [era.spurs[slot_id]["points"] for slot_id in spurs_allowed]
+        return runs, spurs
+
+    def park_strip_trees(self):
+        """Scatter.parkStripTrees, restated: a planter every `parkStrips.treeSpacing` studs down
+        the centreline of every street the plot can ever draw, the marks measured from each piece's
+        own start and the step counted whether or not the spot is taken. A spot inside any
+        footprint (by `blocks.treeClearance`) or on any allowed spur is dropped; the rest are
+        ordered (polyline, stretch, step) and thinned evenly to `parkStrips.maxTrees`."""
+        era = self.era
+        config = (era.tiles or {}).get("parkStrips")
+        if config is None or not era.dressing.get("trees", {}).get("prop"):
+            return []
+        spacing = config.get("treeSpacing")
+        if not isinstance(spacing, (int, float)) or spacing < MIN_STEP:
+            return []
+        # A planter keeps the daylight a street tree keeps from the same solids; an era that plants
+        # strips without paving blocks simply has no such distance to keep.
+        blocks = (era.tiles or {}).get("blocks")
+        clearance = max(float(blocks["treeClearance"]), 0.0) if blocks is not None else 0.0
+        spur_half = max(float(era.tiles["spur"]["width"]), 0.0) / 2 + clearance
+        footprints = self.footprints_for()
+        runs, spurs = self.street_lines()
+        spur_segments = [seg for spur in spurs for seg in streetplan.polyline_segments(spur)]
+
+        def blocked(point):
+            if any(self.inside_footprint(f, point, clearance) for f in footprints):
+                return True
+            # The footpath to a building crosses the corridor it serves.
+            return any(
+                streetplan.point_segment_distance(point, a, b)[0] <= spur_half
+                for a, b in spur_segments
+            )
+
+        trees = []
+        for run in runs:
+            for piece in run["pieces"]:
+                walked, step_index = 0.0, 0
+                for index in range(1, len(piece["points"])):
+                    start = piece["points"][index - 1]
+                    finish = piece["points"][index]
+                    span = (finish[0] - start[0], finish[1] - start[1])
+                    length = math.hypot(span[0], span[1])
+                    if length < MIN_STEP:
+                        continue
+                    mark = (step_index + 1) * spacing
+                    while mark <= walked + length:
+                        step_index += 1
+                        fraction = (mark - walked) / length
+                        point = (start[0] + span[0] * fraction, start[1] + span[1] * fraction)
+                        if not blocked(point):
+                            key = "{}:{}:{}".format(run["polyline"], piece["stretch"], step_index)
+                            trees.append(
+                                {
+                                    "polyline": run["polyline"],
+                                    "stretch": piece["stretch"],
+                                    "step": step_index,
+                                    "position": point,
+                                    # Hashed, not drawn: the same planter turns the same way
+                                    # on every client.
+                                    "yaw": noise_hash(key) % FULL_CIRCLE_DEGREES,
+                                }
+                            )
+                        mark = (step_index + 1) * spacing
+                    walked += length
+        trees.sort(key=lambda tree: (tree["polyline"], tree["stretch"], tree["step"]))
+        cap = max(int(math.floor(config.get("maxTrees", 0))), 0)
+        count = len(trees)
+        if count <= cap:
+            return trees
+        # Scatter's even thinning, the same integer test the row lamps use.
+        return [
+            tree
+            for index, tree in enumerate(trees, start=1)
+            if (index * cap) // count != ((index - 1) * cap) // count
+        ]
+
+    def build_park_trees(self):
+        """CityDressingController.syncParkTrees: a planter stands only while the cell under it is
+        still carrying a strip (TileRenderer.StripAt), at the fixed `parkStrips.treeStage`."""
+        era = self.era
+        config = (era.tiles or {}).get("parkStrips")
+        if config is None:
+            return
+        prop = era.dressing.get("trees", {}).get("prop")
+        path = blueprint_path(era.name, prop, prop=True)
+        stage = max(int(math.floor(config.get("treeStage", 0))), 0)
+        step = era.tile_studs
+        planned = self.park_strip_trees()
+        shown = 0
+        for index, tree in enumerate(planned):
+            if cell_at(step, tree["position"]) not in self.strip_cells:
+                continue
+            shown += 1
+            self.model(
+                f"ParkTree{index}",
+                path,
+                (tree["position"][0], 0.0, tree["position"][1]),
+                rot_y=tree["yaw"],
+                stage=stage,
+            )
+        self.notes.append(f"park planters: {shown} standing of {len(planned)} planned")
 
     # Scatter.luau's footprintsFor, mirrored: every rectangle a street tree may not stand in,
     # measured from the harvested parts in Assets.json (which every client reads identically), not
@@ -879,6 +1179,7 @@ class PlotScene:
         else:
             self.build_plain_streets()
         self.build_blocks()
+        self.build_park_strips()
         self.build_spurs()
         self.build_pads()
         self.build_buildings()
@@ -887,6 +1188,7 @@ class PlotScene:
         self.build_highway()
         self.build_subway()
         self.build_trees()
+        self.build_park_trees()
         self.build_street_vehicles()
         self.build_player()
         return self

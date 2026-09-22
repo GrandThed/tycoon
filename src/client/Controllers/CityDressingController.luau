@@ -24,7 +24,9 @@
 --
 -- Wave 2a: the same owned set drives the elevated highway ring and the subway entrances of a tiles
 -- era. The ring's cars are a second Traffic "plot" on the same map budget, keyed by the plot index
--- negated, so they are cleared and counted exactly like the street ones.
+-- negated, so they are cleared and counted exactly like the street ones. Park strips fill the
+-- corridors that have not grown yet; their planters are the one dressing prop that also goes away,
+-- as the tiles arrive under them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -68,6 +70,9 @@ type Build = {
 	houses: { [number]: Model },
 	plazas: { [number]: Model },
 	trees: { [number]: TreeInstance },
+	-- Wave 2a: planters on the park strips, by plan index. Unlike every other prop here they also
+	-- go away again -- when the street under them is paved.
+	parkTrees: { [number]: Model },
 	-- Keyed by junction slot id or, with row placement, by the post's plan key.
 	lamps: { [string]: Model },
 	signalSpots: { RoadGraph.SignalSpot },
@@ -162,6 +167,13 @@ local function clearTrees(build: Build): ()
 	table.clear(build.trees)
 end
 
+local function clearParkTrees(build: Build): ()
+	for _, tree in build.parkTrees do
+		tree:Destroy()
+	end
+	table.clear(build.parkTrees)
+end
+
 local function clearLamps(build: Build): ()
 	for _, lamp in build.lamps do
 		lamp:Destroy()
@@ -209,6 +221,7 @@ local function clearBuild(entry: PlotEntry): ()
 		Highway.Destroy(highway)
 	end
 	clearTrees(build)
+	clearParkTrees(build)
 	clearLamps(build)
 	clearSignals(build)
 	clearSubways(build)
@@ -335,6 +348,7 @@ local function newBuild(
 		houses = {},
 		plazas = {},
 		trees = {},
+		parkTrees = {},
 		lamps = {},
 		signalSpots = if signals ~= nil and signals.prop ~= nil
 			then RoadGraph.SignalSpots(roads, signals.offset, signals.maxPerPlot)
@@ -439,6 +453,40 @@ local function syncTrees(
 				existing.model:Destroy()
 			end
 			build.trees[index] = { model = model, stage = stage }
+		end
+	end
+end
+
+-- Park-strip planters (wave 2a): a tree stands while the strip under it is down and goes in the
+-- same sync the tiles land on that cell, so the dust burst covers the swap. Near plots only --
+-- a far plot draws the strip slabs alone.
+local function syncParkTrees(build: Build, folder: Instance): ()
+	local tiles = build.era.road.tiles
+	local parkStrips = if tiles ~= nil then tiles.parkStrips else nil
+	if parkStrips == nil then
+		return
+	end
+	local stage = math.max(math.floor(parkStrips.treeStage), 0)
+	for index, spot in build.plan.parkTrees do
+		local placed: Model? = build.parkTrees[index]
+		local wanted = RoadGraph.ParkStripAt(build.roads, spot.position)
+		if wanted == (placed ~= nil) then
+			continue
+		end
+		if placed ~= nil then
+			placed:Destroy()
+			build.parkTrees[index] = nil
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			build.era.trees.prop,
+			stage,
+			build.plotFrame * CFrame.new(spot.position) * CFrame.Angles(0, spot.yaw, 0),
+			folder
+		)
+		if model ~= nil then
+			build.parkTrees[index] = model
 		end
 	end
 end
@@ -822,11 +870,13 @@ local function sync(entry: PlotEntry): ()
 
 	if entry.near then
 		syncTrees(current, config, tier, folder, owned)
+		syncParkTrees(current, folder)
 		syncLamps(current, config, tier, folder, owned)
 		syncSignals(current, folder, owned)
 		syncSubway(current, folder, owned)
 	else
 		clearTrees(current)
+		clearParkTrees(current)
 		clearLamps(current)
 		clearSignals(current)
 		clearSubways(current)

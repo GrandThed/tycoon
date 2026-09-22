@@ -245,6 +245,17 @@
             "treeSpacing": 9,
             "treeInset": 0.5,
             "treeClearance": 1
+          },
+          "parkStrips": {
+            "material": "Grass",
+            "color": [
+              104,
+              146,
+              92
+            ],
+            "treeSpacing": 7,
+            "treeStage": 1,
+            "maxTrees": 24
           }
         }
       },

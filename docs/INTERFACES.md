@@ -2739,6 +2739,18 @@ Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked a
   planned by `Scatter` alongside zone trees (zones keep the remainder of the budget).
 - Absent `blocks` key or layout table = no slabs, no street trees (today's behaviour).
 
+### Park strips in undrawn corridors (`road.tiles.parkStrips`, Ben 2026-09-22)
+A junction whose other street has not grown yet must not show a dead-end sidewalk beside bare
+ground. Every planned street cell that is **not yet drawn** carries a park strip: one paved slab
+(`parkStrips.material/color`, same top as a block slab) covering the cell's `tileStuds²` plus its
+pavement band where that band is not already laid, and `trees.prop` at stage `parkStrips.treeStage`
+every `parkStrips.treeSpacing` studs along the cell run's centreline (a planter row), capped at
+`parkStrips.maxTrees` per plot and thinned evenly. When the stretch draws, its strip cells and
+trees are removed in the same update the tiles land (the dust burst covers the swap). Strips
+never overlap a drawn cell, a laid pavement slab, a block slab or a kiosk. Far plots draw the slabs
+only. Config: `{ "material": string, "color": [r,g,b], "treeSpacing": number, "treeStage": number, "maxTrees": number }`;
+absent = today's behaviour. `tools/testfit/plotrender.py --tier N` shows them for undrawn streets.
+
 ### Subway entrances (`subway`)
 - Layout (`EraLayout.subwayEntrances: { { position: Vector3, rotationY: number } }?`): 4–6 spots on
   pavement at street corners, spread over the whole plot, front (−Z convention) facing the

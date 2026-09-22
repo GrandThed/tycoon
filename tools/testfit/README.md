@@ -99,6 +99,14 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   outside the ring, looking up the entrance avenue.
 - Non-tile eras (Village, Boomtown) draw their spine as plain slabs of `road.width` in
   `road.color` -- deliberately the stand-in, not the baked mesh pieces, which `tools/paths` judges.
+- **Park strips** (`road.tiles.parkStrips`) are drawn for every planned cell whose street has not
+  grown yet, so `--tier N` is the way to look at them -- a finished plot has none. The kerb and the
+  strips share one cut (`cut_against`): each cell in turn subtracts what is already laid, in the
+  plan's cell order, so nothing is covered twice. Planters come from `Scatter.parkStripTrees`
+  (every `treeSpacing` studs from each piece's start, blocked by footprints and spurs, ordered
+  `(polyline, stretch, step)` and thinned to `maxTrees`) and stand only where a strip is still
+  down, at the fixed `treeStage`. Like the client, the strips cut against the tiles, the kerb and
+  the block slabs -- not against subway kiosks, which stand on top of them.
 - **Known deviation from the shipped client:** the ramp prop is placed with its highest cell one
   whole cell inward of the ring junction, which is what the contract describes and what
   `streetplan.py` checks (its three cells are `junction + direction * k`, k = 1..3, and its toe

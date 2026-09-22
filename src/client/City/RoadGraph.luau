@@ -1707,6 +1707,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 	if tilesConfig ~= nil then
 		local pavement = tilesConfig.pavement
 		local blocks = tilesConfig.blocks
+		local parkStrips = tilesConfig.parkStrips
 		local dressingPaths = context.config.paths
 		local budget = context.config.budget
 		local tiles = TileRenderer.Create({
@@ -1729,6 +1730,8 @@ function RoadGraph.new(context: Context, near: boolean): State
 			pavementColor = if pavement ~= nil then colorFor(pavement.color) else nil,
 			blockMaterial = if blocks ~= nil then materialFor(blocks.material) else nil,
 			blockColor = if blocks ~= nil then colorFor(blocks.color) else nil,
+			parkMaterial = if parkStrips ~= nil then materialFor(parkStrips.material) else nil,
+			parkColor = if parkStrips ~= nil then colorFor(parkStrips.color) else nil,
 			-- A config too old to carry the key falls back to the straight-road ceiling, exactly as
 			-- the baked plan does; zero cells would be a plot with no streets at all.
 			budgetCells = budgetValue(budget.tileCells, budgetValue(budget.roadPieces, 0)),
@@ -1745,6 +1748,10 @@ function RoadGraph.new(context: Context, near: boolean): State
 			end
 			state.tileStretchAllowed = TileRenderer.Plan(tiles, segments)
 			state.tiles = tiles
+			-- Park strips are drawn for the streets that have *not* grown, so a plot with nothing
+			-- revealed yet still has a first update to run. Only an era that configures them: no
+			-- key, no extra pass, and Village and Boomtown never reach this branch at all.
+			state.tilesDirty = parkStrips ~= nil
 		end
 	elseif road.paths ~= nil then
 		state.pathData = pathDataFor(state)
@@ -1788,6 +1795,13 @@ function RoadGraph.SetBlocks(state: State, owned: { [string]: boolean }, animate
 	if tiles ~= nil then
 		TileRenderer.SetOwned(tiles, owned, animate == true)
 	end
+end
+
+-- Whether a park strip is down where `position` (plot-local) stands, which is what a planter waits
+-- for. False in every era without tiles, so the controller can ask for any plot.
+function RoadGraph.ParkStripAt(state: State, position: Vector3): boolean
+	local tiles = state.tiles
+	return tiles ~= nil and TileRenderer.StripAt(tiles, position)
 end
 
 -- Whether the plot's paths are drawn from the baked meshes rather than as Parts.

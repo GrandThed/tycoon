@@ -505,12 +505,21 @@ export type CityTileBlocksConfig = {
 	treeInset: number,
 	treeClearance: number,
 }
+-- Planted paving over planned-but-undrawn street cells, replaced by tiles as streets grow.
+export type CityTileParkStripsConfig = {
+	material: string,
+	color: { number },
+	treeSpacing: number,
+	treeStage: number,
+	maxTrees: number,
+}
 export type CityEraTilesConfig = {
 	tileStuds: number,
 	props: CityTilePropsConfig,
 	pavement: CityTileLook?,
 	spur: CityTileLook,
 	blocks: CityTileBlocksConfig?,
+	parkStrips: CityTileParkStripsConfig?,
 }
 -- Wave 2a: an elevated ring drawn while `requiresSlot` is owned; its cars never take the ramp.
 export type CityHighwayPropsConfig = {

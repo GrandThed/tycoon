@@ -24,6 +24,7 @@ local Dust = require(script.Parent:WaitForChild("Dust"))
 local TILE_PART_NAME = "RoadTile"
 local PAVEMENT_PART_NAME = "Pavement"
 local BLOCK_PART_NAME = "BlockPaving"
+local STRIP_PART_NAME = "ParkStrip"
 local QUARTER_TURN = math.pi / 2
 local MIN_LENGTH = 0.05
 -- Four samples per cell: a walk along a stretch can then never skip over a whole cell.
@@ -94,6 +95,8 @@ export type Options = {
 	pavementColor: Color3?,
 	blockMaterial: Enum.Material?, -- nil when the era pays no blocks
 	blockColor: Color3?,
+	parkMaterial: Enum.Material?, -- nil when the era has no `tiles.parkStrips`
+	parkColor: Color3?,
 	budgetCells: number, -- CityDressing.json budget.tileCells
 	dustSeconds: number?, -- nil disables the appear puff (a config without `paths`)
 	near: boolean,
@@ -120,7 +123,11 @@ export type Handle = {
 	cellByKey: { [string]: number },
 	placed: { [number]: Placed }, -- cell index -> its prop or placeholder Part
 	pavement: { [string]: Instance }, -- rounded slab rectangle -> its kerb Part
+	pavementRects: { [string]: Rect }, -- the same slabs as geometry, for the strips to cut against
 	paved: { [number]: Instance }, -- block index -> its paving slab
+	strips: { [string]: Instance }, -- rounded rectangle -> its park-strip Part
+	stripCells: { [number]: boolean }, -- cell index -> carries a strip right now (planters ask)
+	drawn: { [number]: boolean }, -- cell index -> its tile is down, as of the last Update
 	dust: Dust.Handle,
 	-- Its own emitter: a block is laid in the same sync as the cells around it, and one handle
 	-- would let whichever burst starts last cancel the other.
@@ -288,6 +295,30 @@ local function subtract(rect: Rect, cut: Rect, into: { Rect }): ()
 	keep(x0, x1, math.min(rect.z1, cut.z1), rect.z1)
 end
 
+-- `candidate` minus every rectangle in `laid`, appended to `into`. The one place the cut is made,
+-- so the kerb and the park strips cover their ground exactly once by the same rule.
+local function cutAgainst(candidate: Rect, laid: { Rect }, into: { Rect }): ()
+	local pieces: { Rect } = { candidate }
+	local remainder: { Rect } = {}
+	for _, cut in laid do
+		if #pieces == 0 then
+			break
+		end
+		table.clear(remainder)
+		for _, piece in pieces do
+			if overlapping(piece, cut) then
+				subtract(piece, cut, remainder)
+			else
+				table.insert(remainder, piece)
+			end
+		end
+		pieces, remainder = remainder, pieces
+	end
+	for _, piece in pieces do
+		table.insert(into, piece)
+	end
+end
+
 -- Whether a rectangle would lie over any planned cell's tile. Planned, not drawn: a cell that
 -- arrives later must not find a kerb already sitting on its asphalt.
 local function overlapsTile(handle: Handle, rect: Rect): boolean
@@ -365,20 +396,24 @@ local function cellSlabs(handle: Handle, index: number, mask: number, into: { Re
 	end
 end
 
-local function placeSlab(handle: Handle, rect: Rect): Instance?
+-- One axis-aligned ground slab: the kerb, a block's paving and a park strip are the same Part with
+-- a different look and a different top, so the geometry is written once. `drop` sinks the top below
+-- the tile surface at thickness / 2.
+local function flatSlab(
+	handle: Handle,
+	rect: Rect,
+	name: string,
+	material: Enum.Material,
+	color: Color3,
+	drop: number
+): Instance
 	local options = handle.options
-	local material = options.pavementMaterial
-	local color = options.pavementColor
-	if material == nil or color == nil then
-		return nil
-	end
 	local part = Instance.new("Part")
-	part.Name = PAVEMENT_PART_NAME
+	part.Name = name
 	part.Size =
 		Vector3.new(rect.x1 - rect.x0, math.max(options.thickness, MIN_LENGTH), rect.z1 - rect.z0)
-	-- Top at thickness / 2, under the tile surface; axis-aligned, so no turn is needed.
 	part.CFrame = options.plotFrame
-		* CFrame.new((rect.x0 + rect.x1) / 2, 0, (rect.z0 + rect.z1) / 2)
+		* CFrame.new((rect.x0 + rect.x1) / 2, -drop, (rect.z0 + rect.z1) / 2)
 	part.Material = material
 	part.Color = color
 	part.TopSurface = Enum.SurfaceType.Smooth
@@ -389,6 +424,17 @@ local function placeSlab(handle: Handle, rect: Rect): Instance?
 	return part
 end
 
+local function placeSlab(handle: Handle, rect: Rect): Instance?
+	local options = handle.options
+	local material = options.pavementMaterial
+	local color = options.pavementColor
+	if material == nil or color == nil then
+		return nil
+	end
+	-- Top at thickness / 2, under the tile surface; axis-aligned, so no turn is needed.
+	return flatSlab(handle, rect, PAVEMENT_PART_NAME, material, color, 0)
+end
+
 -- Reconciles the kerb from the cells drawn right now: a cell that grows an arm drops the band on
 -- that side before the tile beside it lands, and everything still wanted keeps its Part.
 local function syncPavement(handle: Handle, due: { number }, masks: { [number]: number }): ()
@@ -396,35 +442,21 @@ local function syncPavement(handle: Handle, due: { number }, masks: { [number]: 
 	if handle.near and handle.options.tiles.pavement ~= nil then
 		local laid: { Rect } = {}
 		local candidates: { Rect } = {}
-		local pieces: { Rect } = {}
-		local remainder: { Rect } = {}
+		local kept: { Rect } = {}
 		for _, index in due do
 			table.clear(candidates)
 			cellSlabs(handle, index, masks[index], candidates)
 			for _, candidate in candidates do
-				table.clear(pieces)
-				table.insert(pieces, candidate)
-				for _, cut in laid do
-					table.clear(remainder)
-					for _, piece in pieces do
-						if overlapping(piece, cut) then
-							subtract(piece, cut, remainder)
-						else
-							table.insert(remainder, piece)
-						end
-					end
-					pieces, remainder = remainder, pieces
-					if #pieces == 0 then
-						break
-					end
-				end
-				for _, piece in pieces do
+				table.clear(kept)
+				cutAgainst(candidate, laid, kept)
+				for _, piece in kept do
 					table.insert(laid, piece)
 					wanted[rectKey(piece)] = piece
 				end
 			end
 		end
 	end
+	handle.pavementRects = wanted
 	for key, part in handle.pavement do
 		if wanted[key] == nil then
 			part:Destroy()
@@ -448,29 +480,111 @@ end
 -- underside rests on the plot top.
 local BLOCK_DROP = 0.02
 
+local function blockRect(block: Types.BlockLayout): Rect
+	return {
+		x0 = math.min(block.min.X, block.max.X),
+		x1 = math.max(block.min.X, block.max.X),
+		z0 = math.min(block.min.Z, block.max.Z),
+		z1 = math.max(block.min.Z, block.max.Z),
+	}
+end
+
 local function placeBlock(handle: Handle, block: Types.BlockLayout): Instance?
 	local options = handle.options
 	local material = options.blockMaterial
 	local color = options.blockColor
-	local sizeX = math.abs(block.max.X - block.min.X)
-	local sizeZ = math.abs(block.max.Z - block.min.Z)
-	if material == nil or color == nil or sizeX < MIN_LENGTH or sizeZ < MIN_LENGTH then
+	local rect = blockRect(block)
+	if
+		material == nil
+		or color == nil
+		or rect.x1 - rect.x0 < MIN_LENGTH
+		or rect.z1 - rect.z0 < MIN_LENGTH
+	then
 		return nil
 	end
-	local thickness = math.max(options.thickness, MIN_LENGTH)
-	local part = Instance.new("Part")
-	part.Name = BLOCK_PART_NAME
-	part.Size = Vector3.new(sizeX, thickness, sizeZ)
-	part.CFrame = options.plotFrame
-		* CFrame.new((block.min.X + block.max.X) / 2, -BLOCK_DROP, (block.min.Z + block.max.Z) / 2)
-	part.Material = material
-	part.Color = color
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.CastShadow = false
-	PropFactory.Seal(part)
-	part.Parent = options.folder
-	return part
+	return flatSlab(handle, rect, BLOCK_PART_NAME, material, color, BLOCK_DROP)
+end
+
+-- Park strips (docs/INTERFACES.md "Park strips in undrawn corridors"): a planned cell whose street
+-- has not grown yet is planted rather than left as bare ground beside a dead-end sidewalk. The
+-- strip covers the cell and its pavement band, minus everything already laid -- the tiles drawn so
+-- far, the kerb around them, the strips of the cells before it in the plan, and the paved blocks,
+-- whose top it shares (a layout's inset is a convention the client cannot verify, and two slabs on
+-- one plane z-fight). Far plots keep the strips: they are the slab half of the feature.
+local function syncStrips(handle: Handle): ()
+	local wanted: { [string]: Rect } = {}
+	local cells: { [number]: boolean } = {}
+	local options = handle.options
+	local parkStrips = options.tiles.parkStrips
+	local material = options.parkMaterial
+	local color = options.parkColor
+	if parkStrips ~= nil and material ~= nil and color ~= nil then
+		local tileStuds = options.tiles.tileStuds
+		local pavement = options.tiles.pavement
+		local reach = tileStuds / 2 + (if pavement ~= nil then math.max(pavement.width, 0) else 0)
+		local laid: { Rect } = {}
+		local drawnCount = 0
+		for index in handle.cells do
+			if handle.drawn[index] then
+				drawnCount += 1
+				local centre = handle.cells[index].position
+				table.insert(laid, {
+					x0 = centre.X - tileStuds / 2,
+					x1 = centre.X + tileStuds / 2,
+					z0 = centre.Z - tileStuds / 2,
+					z1 = centre.Z + tileStuds / 2,
+				})
+			end
+		end
+		for _, rect in handle.pavementRects do
+			table.insert(laid, rect)
+		end
+		for index in handle.paved do
+			table.insert(laid, blockRect(options.blocks[index]))
+		end
+		-- Tiles and strips share `budget.tileCells`. A cut band can need more than one Part, so the
+		-- ceiling is spent in Parts, cell order (entrance outward), rather than counted in cells.
+		local remaining = math.max(math.floor(options.budgetCells) - drawnCount, 0)
+		local kept: { Rect } = {}
+		for index, cell in handle.cells do
+			if handle.drawn[index] or remaining <= 0 then
+				continue
+			end
+			table.clear(kept)
+			cutAgainst({
+				x0 = cell.position.X - reach,
+				x1 = cell.position.X + reach,
+				z0 = cell.position.Z - reach,
+				z1 = cell.position.Z + reach,
+			}, laid, kept)
+			for _, piece in kept do
+				if remaining <= 0 then
+					break
+				end
+				remaining -= 1
+				table.insert(laid, piece)
+				wanted[rectKey(piece)] = piece
+				cells[index] = true
+			end
+		end
+	end
+	handle.stripCells = cells
+	for key, part in handle.strips do
+		if wanted[key] == nil then
+			part:Destroy()
+			handle.strips[key] = nil
+		end
+	end
+	if material == nil or color == nil then
+		return
+	end
+	for key, rect in wanted do
+		local existing: Instance? = handle.strips[key]
+		if existing == nil then
+			handle.strips[key] =
+				flatSlab(handle, rect, STRIP_PART_NAME, material, color, BLOCK_DROP)
+		end
+	end
 end
 
 local function clearPavement(handle: Handle): ()
@@ -478,6 +592,7 @@ local function clearPavement(handle: Handle): ()
 		part:Destroy()
 		handle.pavement[key] = nil
 	end
+	table.clear(handle.pavementRects)
 end
 
 -- ------------------------------------------------------------------ connectivity
@@ -566,6 +681,15 @@ function TileRenderer.ArmBit(arm: number): number
 	return armBit(arm)
 end
 
+-- Whether the cell holding `position` (plot-local) is carrying a park strip right now. A planter
+-- asks this rather than "is my stretch drawn": the cell a street shares with a crossing one is
+-- paved as soon as either draws, and a tree standing in it would then be standing on asphalt.
+function TileRenderer.StripAt(handle: Handle, position: Vector3): boolean
+	local cell = cellAt(handle.options.tiles.tileStuds, position)
+	local index = handle.cellByKey[keyFor(cell.X, cell.Y)]
+	return index ~= nil and handle.stripCells[index] == true
+end
+
 function TileRenderer.Create(options: Options): Handle?
 	if options.tiles.tileStuds < MIN_LENGTH then
 		return nil
@@ -578,7 +702,11 @@ function TileRenderer.Create(options: Options): Handle?
 		cellByKey = {},
 		placed = {},
 		pavement = {},
+		pavementRects = {},
 		paved = {},
+		strips = {},
+		stripCells = {},
+		drawn = {},
 		dust = Dust.Create(
 			options.folder,
 			options.plotFrame,
@@ -723,6 +851,9 @@ function TileRenderer.Update(handle: Handle, visible: { [number]: boolean }, ani
 	end
 
 	syncPavement(handle, due, masks)
+	handle.drawn = dueSet
+	-- After the kerb, so the strips cut against the bands this very update laid.
+	syncStrips(handle)
 
 	local dustSeconds = handle.options.dustSeconds
 	if not animate or not handle.near or #fresh == 0 or dustSeconds == nil then
@@ -749,10 +880,14 @@ function TileRenderer.SetNear(handle: Handle, near: boolean, visible: { [number]
 		Dust.Stop(handle.dust)
 		Dust.Stop(handle.blockDust)
 		clearPavement(handle)
+		-- The strips grow into the ground the kerb has just given up: a far plot draws the slabs
+		-- over the whole corridor, and its planters are cleared by the controller.
+		syncStrips(handle)
 		return
 	end
 	local due, _dueSet, masks = dueCells(handle, visible)
 	syncPavement(handle, due, masks)
+	syncStrips(handle)
 end
 
 -- The paved blocks of the slots owned right now. A block appears once any of its buildings is
@@ -789,8 +924,18 @@ function TileRenderer.SetOwned(handle: Handle, owned: { [string]: boolean }, ani
 			)
 		end
 	end
+	if #fresh == 0 then
+		return
+	end
+	-- A new slab takes back whatever strip ran over it (a layout whose block is not inset clear of
+	-- the corridor), so the two never share their plane. A plot with no strip down can only be one
+	-- whose streets are all drawn, or one whose first Update is still to come: a slab takes nothing
+	-- back there, and recomputing before the cells are drawn would lay strips only to drop them.
+	if next(handle.stripCells) ~= nil then
+		syncStrips(handle)
+	end
 	local dustSeconds = handle.options.dustSeconds
-	if animate and handle.near and #fresh > 0 and dustSeconds ~= nil then
+	if animate and handle.near and dustSeconds ~= nil then
 		Dust.Burst(handle.blockDust, fresh, handle.options.colorOf(), dustSeconds)
 	end
 end
@@ -811,6 +956,11 @@ function TileRenderer.Destroy(handle: Handle): ()
 		slab:Destroy()
 		handle.paved[index] = nil
 	end
+	for key, strip in handle.strips do
+		strip:Destroy()
+		handle.strips[key] = nil
+	end
+	table.clear(handle.stripCells)
 end
 
 return TileRenderer
