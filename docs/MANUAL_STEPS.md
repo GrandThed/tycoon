@@ -602,30 +602,77 @@ era that has shipped.
       `city-kit-commercial` VIP swatch), harvested on the first paste, 24 templates in
       `templates/Metropolis/`. Nothing pending — go run `docs/PLAYTEST.md`
       "M8 — Growing buildings (Metropolis)".
-- [ ] 3. **Orbital Colony**: not started. When its blueprints land you run the same M7 section 2
-      steps, including one harvest paste in the Studio command bar.
+- [x] 3. **Orbital Colony** (2026-09-22): **90 assets uploaded** (88 stage models + 2 VIP
+      swatches — one for `space-kit`, one for the generated `orbital-kit`), 90/90 on the first
+      run, **harvested in one paste** (91 loaded, 0 failed), 24 templates in
+      `templates/OrbitalColony/`. Nothing pending — go run `docs/PLAYTEST.md`
+      "M8 — Growing buildings (Orbital Colony)".
+- [x] 4. **M8 is complete.** `docs/ASSET_MANIFEST.md` reports **4 eras / 96 models**, every slot
+      blueprinted, uploaded, harvested and templated. The only Studio work left for M8 is the two
+      pending playtests (Metropolis and Orbital Colony).
 
 ### 2. Metropolis — two facts worth knowing before the playtest
 
-- [x] 4. **Only one new VIP swatch.** Metropolis buildings are `city-kit-commercial`, but the era
+- [x] 5. **Only one new VIP swatch.** Metropolis buildings are `city-kit-commercial`, but the era
       also uses `city-kit-roads` and `city-kit-suburban` pieces as props — those two swatches were
       already uploaded for Boomtown, so only `city-kit-commercial` was new. Nothing to upload or
       recreate on the Creator Hub; VIP still rides the existing `VIP` pass (M4 section 3).
-- [x] 5. **Stadium is 12×12, on purpose.** It is the first non-monument slot wider than 9×9
+- [x] 6. **Stadium is 12×12, on purpose.** It is the first non-monument slot wider than 9×9
       (12.00 × 12.91 × 10.40 studs, 52 pieces at stage 4) because `city-kit-commercial` has no
       seating piece. If you ever re-render or re-merge it, `testfit.py` will not warn: the
       blueprint declares `"footprint": [12, 12]` and `docs/INTERFACES.md` permits it.
 
 ### 3. Metropolis city dressing — now M9 wave 2a
 
-- [x] 6. **Superseded 2026-09-22.** Metropolis streets, the elevated highway, subway kiosks and
+- [x] 7. **Superseded 2026-09-22.** Metropolis streets, the elevated highway, subway kiosks and
       City Hall shipped as **M9 wave 2a**. The two harvest pastes they need are **M9 section 8**
       below; the playtest is `docs/PLAYTEST.md` "M9 — City dressing" section 4c. Orbital Colony
       dressing is still unbuilt (wave 2b).
 
-### 4. Nothing new to create on the Creator Hub
+### 4. Orbital Colony — three facts worth knowing before the playtest
 
-- [x] 7. No game passes, developer products, or audio this milestone — M8 is content only.
+- [x] 8. **Two new VIP swatches, not one.** The era is `space-kit` **plus** the generated
+      `orbital-kit`, and each kit bakes its own swatch — so a VIP check must look at both (a
+      space-kit body like Habitat Pod, and an orbital-kit subject like the Solar Array panels).
+      Nothing to create on the Creator Hub; VIP still rides the existing `VIP` pass (M4 section 3).
+- [x] 9. **Four slots are wider than 9×9, on purpose.** Fusion Reactor, Terraform Station and
+      Spaceport Terminal are `scale 3.6` with `"footprint": [12, 12]`; Rover Bay is `[12, 9]`.
+      `testfit.py` will not warn about them — the blueprints declare the footprint and
+      `docs/INTERFACES.md` permits it.
+- [x] 10. **The palette fix is in the uploaded textures.** space-kit's glTF colour factors are
+      sRGB-encoded, not linear, so `palette.py` carries `SRGB_FACTOR_KITS = {"space-kit"}`. If you
+      ever re-bake this era's swatches without that, the orange goes pale amber.
+
+### 5. Regenerating `orbital-kit` (only if you re-merge or re-render Orbital Colony)
+
+- [x] 11. **Not needed for the playtest** — everything is already uploaded, harvested and
+      templated. This is only for a fresh checkout or a blueprint change, because `/assets/` is
+      gitignored and the **generator script is the committed artifact** (same pattern as
+      `tools/assets/stadium_kit.py` for the Metropolis Stadium).
+- [x] 12. **Done for this wave** (that's how the era was built), but it is the **prerequisite
+      before any Orbital Colony `testfit.py` render or `merge_stages.py` run** on a fresh
+      checkout, from the repo root:
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/orbital_kit.py`
+      This writes the 21 `orbital-kit` pieces to
+      `assets/kenney3d/orbital-kit/Models/GLB format/`. Kits are pure folder convention, so there
+      is no registry to update. Skipping it makes every Orbital blueprint fail to find its
+      orbital-kit pieces.
+- [x] 13. Then continue with M7 section 2 steps 3–7 as normal.
+
+### 6. Known pipeline gap (unchanged — read before re-uploading changed geometry)
+
+- [x] 14. `upload_models.py` **skips any stage whose `modelAssetId` is non-zero** — there is no
+      content hash and no `--force`, so **changed geometry is silently never re-uploaded**; the run
+      just prints "already uploaded, skipped". To force one stage back through, clear its
+      `modelAssetId` and `parts` via `assets_config.save_assets` (never hand-edit `Assets.json` —
+      `json.dumps` reformats the whole file).
+- [x] 15. **Never run the upload/harvest tools in two sessions at once**, and commit
+      `src/shared/Config/Assets.json` right after each harvest. A concurrent session saved a stale
+      `Assets.json` over a wave's entries on 2026-09-18.
+
+### 7. Nothing new to create on the Creator Hub
+
+- [x] 16. No game passes, developer products, or audio this milestone — M8 is content only.
 
 <!-- M8 section complete. Do not delete completed sections above. -->
 

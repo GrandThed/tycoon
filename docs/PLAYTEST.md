@@ -1692,6 +1692,222 @@ colours sampled from the kit's own colormap). It is 12.00 × 12.32 × 10.40 stud
 
 ---
 
+## M8 — Growing buildings (Orbital Colony)
+
+**Goal:** all 24 Orbital Colony slots have real meshes — the **last era**, so after this pass every
+era in the game (4 eras / 96 models) is built. Same pipeline as M7 Village and M8 Boomtown and
+Metropolis, from `space-kit` plus a **generated `orbital-kit`** (21 pieces space-kit doesn't have:
+domes, tanks, solar panels, flag, holo beacon, mast, drill rig, lit window strips, pad markings).
+This section assumes M7 and the earlier M8 passes already ran — it doesn't re-explain the
+`GrantCash` lever, growth pops, VIP-as-texture-swap or the missing-config degrade; it re-checks
+them briefly and spends the time on the four things that are new here: **a near-black plot**,
+**three 12×12 landmarks plus a 12×9 Rover Bay**, **the Launch Tower silhouette**, and **the
+space-kit palette fix**.
+
+**No Luau or config logic changed this wave** (content only), so there is no two-player pass in
+this section — M7 section 10 already covers stage replication across clients.
+
+**Expect a bare plot — Orbital Colony city dressing does not exist yet.** Streets, paths, props,
+trees and vehicles for this era are **M9 wave 2b**, not started. Village, Boomtown and Metropolis
+have dressing; an Orbital plot is buildings, buy pads and regolith, nothing else. Missing paths and
+props here are **not a bug** — see section 10.
+
+**Reference renders** (open these alongside Studio and compare as you go):
+`assets/testfit/out/OrbitalColony/_contact_OrbitalColony.png` (white card) and
+`assets/testfit/out/OrbitalColony/_contact_OrbitalColony_dark.png` (**the dark-plot sheet — the one
+that matches what you'll see in Studio**).
+
+### 1. Rebuild first
+
+- [ ] 1. `$env:PATH = "$HOME\.rokit\bin;$env:PATH"` (PowerShell) then
+      `rojo build -o build/test.rbxl` (or reconnect `rojo serve`). Regenerate the sourcemap
+      before any `luau-lsp analyze` run: `rojo sourcemap default.project.json -o sourcemap.json`.
+- [ ] 2. Confirm **"Enable Studio Access to API Services"** is still ON (Game Settings →
+      Security).
+- [ ] 3. In Edit mode, confirm `ServerStorage.Assets.OrbitalColony` has **24 models**, each with
+      `Stage0`…`Stage4` (a single `Stage0` for the `unlock`/`decor`/`monument` slots: WalkwayTube,
+      OxygenTanks, SatelliteDish, TurretBase, ColonyFlag, RocksLarge, HoloBeacon, LaunchTower),
+      and that their mesh previews are **textured**, not grey.
+
+### 2. Reach the Orbital Colony
+
+- [ ] 4. Press Play. Use the `GrantCash` Workspace attribute (M7 section 2 — select Workspace,
+      Properties → Attributes → **+**, name `GrantCash`, type **number**) to buy out whatever era
+      the save is in and advance until the era badge reads **"ERA 4" / "Orbital Colony"**.
+- [ ] 5. Confirm the advance ceremony plays, the plot base recolors to the **near-black regolith**
+      (RGB 56, 53, 60), and the Build panel rebuilds to 24 fresh Orbital Colony rows — all locked
+      except the free first slot (**Landing Pad**, cost 0).
+
+### 3. Buy every slot — meshes, no placeholders
+
+- [ ] 6. Orbital prices run into the **quadrillions** (buying out the era costs about 2,346T, the
+      Launch Tower alone 460T). Set `GrantCash` to `3000000000000000` (3 quadrillion) in one go
+      rather than topping up per slot; re-add it as needed.
+- [ ] 7. In the Build panel, buy all 24 slots in the order listed (Landing Pad → Solar Array →
+      Habitat Pod → Hydroponics Dome → Oxygen Generator → Connect the Walkways → Crew Quarters →
+      Colony Flag → Research Lab → Rover Bay → Comms Array → Bring Life Support Online →
+      Mineral Extractor → Rock Garden → Observation Dome → Fusion Reactor → Establish the Orbital
+      Uplink → Docking Bay → Terraform Station → Holo Beacon → Medical Bay → Spaceport Terminal →
+      Raise Planetary Defense → Launch Tower).
+- [ ] 8. As each one appears, confirm it's a **textured stage-0 mesh** that reads as the thing its
+      row is named — no grey/untextured box, no floating placeholder label, no red error in
+      Output. Same check as M7 section 3 and the Boomtown/Metropolis section 3s.
+
+### 4. Walk the plot — placement sanity
+
+- [ ] 9. The layout is a **radial colony**: the Fusion Reactor is the core at plot centre, habitat
+      and science modules orbit it in two rings all facing inward, rim installations guard the
+      edge, and the Launch Tower flanked by the Spaceport Terminal and Medical Bay greets arriving
+      players at the front. Walk the whole plot at a few angles and confirm it reads that way.
+- [ ] 10. Confirm: every model faces its buy pad, no piece floats above the ground, nothing sinks
+      into the regolith, and no building clips into a neighbouring slot's footprint or pad.
+- [ ] 11. Confirm the **Launch Tower** (monument, last slot) sits at the front of the plot facing
+      arriving players — the same role the Castle Keep plays in Village, the Clock Tower in
+      Boomtown and the Skyscraper in Metropolis.
+
+### 5. Reading against a near-black plot (this era's own risk)
+
+The regolith base is RGB (56, 53, 60) — darker than any other era's plot, so anything dark or
+low-contrast can disappear into it. Every model was signed off on the **dark** contact sheet; this
+section confirms that survived into Studio.
+
+- [ ] 12. Stand back and look at the plot as a whole. Confirm **nothing reads as a hole in the
+      ground** — every building has a silhouette you can pick out against the base.
+- [ ] 13. **Solar Array** (slot 2, 6.4 studs — the shortest *building* on the plot): confirm the
+      **navy panels** are visibly distinct from the regolith under them, both from standing height
+      and from a low camera angle. Panels vanishing into the base are the single most likely
+      failure in this section.
+- [ ] 14. **Rock Garden** (`RocksLarge`, 3.2 studs — the shortest thing on the plot): confirm the
+      **salmon/orange rocks** read as objects sitting on the ground, not as a texture patch in it.
+- [ ] 15. **Landing Pad** and every other **pad marking** (the orbital-kit pad-marking piece, also
+      used around the Docking Bay and the Launch Tower): confirm the markings are legible from a
+      walking camera, not washed out into the base.
+- [ ] 16. Compare what you see against `_contact_OrbitalColony_dark.png`. Studio should look like
+      that sheet. If Studio is noticeably flatter or darker than the sheet, note which model and
+      report it — that's a real finding, not a rendering nitpick.
+
+### 6. The wide slots — three 12×12 landmarks and the 12×9 Rover Bay
+
+Four slots exceed the standard 9×9 footprint this era (`docs/INTERFACES.md`, Blueprints):
+**Fusion Reactor**, **Terraform Station** and **Spaceport Terminal** at `scale 3.6` with
+`[12, 12]` (space-kit's hex and long hangars are 12–13 studs at scale 4.0 and fit nothing
+smaller), and **Rover Bay** at `[12, 9]` (the kit's only garage fills 8 of 9 studs; depth stays 9
+so the buy pad is untouched). The tightest neighbour gaps anywhere on this plot are 13.4 studs
+(Colony Flag ↔ Mineral Extractor) and 17.2 studs (Rover Bay ↔ Holo Beacon), so there **is** room —
+this section proves it.
+
+- [ ] 17. Level each of the four to **100** (`GrantCash` + the ×1/×10/Max buttons) before checking
+      — a footprint only bites at stage 4.
+- [ ] 18. **Fusion Reactor** (plot centre): walk a full lap around it. Confirm you can walk between
+      it and each of its nearest neighbours (Landing Pad, Solar Array, Oxygen Generator, Crew
+      Quarters — all ~19.8 studs out) without getting stuck, and that it touches none of their
+      pads.
+- [ ] 19. **Terraform Station** (back-left ring): same lap. Its nearest neighbour is the Orbital
+      Uplink at ~19.8 studs — confirm a walkable lane between them.
+- [ ] 20. **Spaceport Terminal** (front-right, beside the monument): confirm it does **not** touch
+      the Launch Tower ~18.9 studs away, and that you can still walk between the two.
+- [ ] 21. **Rover Bay** (back-left, `[12, 9]`): confirm the extra **width** doesn't reach the Holo
+      Beacon (~17.2 studs) or the Colony Flag (~18 studs), and that its depth still leaves its pad
+      clear.
+- [ ] 22. **Buy pads on all four:** walk your character onto each pad from outside the plot ring.
+      Confirm nothing blocks the approach, you can stand on the pad, and the level-up prompt still
+      triggers from it. (Pads sit `padOffset` **8** studs off the front face this era.)
+
+### 7. Grow one building through all five stages
+
+- [ ] 23. Use `GrantCash` and the ×1/×10/Max buttons to level the **Research Lab** from 0 to level
+      10, then 25, then 50, then 100. Confirm one growth pop + one milestone sound at each
+      crossing (not two, not zero — same check as M7 section 4), the model visibly grows taller and
+      more built-up at each stage, and it never flashes back to a smaller stage.
+- [ ] 24. Confirm the Build panel's growth hint line updates/merges the same way it did for the
+      earlier eras (M7 section 4, step 12).
+
+### 8. Skyline check — the Launch Tower crowns the colony
+
+- [ ] 25. Level the **Terraform Station** and the **Comms Array** to 100 as well. Stand well back
+      and compare heights by eye. Confirm the order, tallest to shortest: **Launch Tower**
+      (42.8 studs, monument, single stage) > **Terraform Station** (23.0) > **Comms Array** (21.2)
+      > **Fusion Reactor** (16.9) ≈ **Spaceport Terminal** (16.5).
+- [ ] 26. From the **plot entrance** (where you arrive, at the front/−Z edge), confirm the **Launch
+      Tower's rocket is unobstructed** — nothing in front of it, and nothing tall enough beside it
+      to compete. It clears the next-tallest building by nearly 20 studs, so it must be the
+      unmistakable landmark of the final era from every angle.
+
+### 9. Kit colours — the palette fix (check this deliberately)
+
+space-kit's glTF colour factors turned out to be **sRGB-encoded, not linear**, so the baked palette
+swatches came out pale until `palette.py` was fixed this wave. This step verifies the fix reached
+the actual uploaded textures.
+
+- [ ] 27. Look at the orange trim across the colony (Habitat Pod, Crew Quarters, Docking Bay, the
+      Launch Tower's markings). Confirm it is **saturated Kenney orange (255, 160, 52)** — not a
+      pale, washed-out amber. Darks should read as slate (70, 76, 87), not grey mush.
+- [ ] 28. Compare against `_contact_OrbitalColony.png` and `_contact_OrbitalColony_dark.png`.
+      Studio colours should match the sheets. Pale amber anywhere means the fix didn't reach that
+      asset — report the model name.
+
+### 10. City dressing — expected absent (M9 wave 2b)
+
+- [ ] 29. Confirm the Orbital plot has **no** streets, paths, trees, plazas, lamps or vehicles, and
+      that Output is **silent about it** — no warning, no error, no red line about missing Orbital
+      props or paths. Their absence is by design until M9 wave 2b; a *complaint* about their
+      absence is a bug.
+- [ ] 30. If you have a second player (or a spare save) on a **Village, Boomtown or Metropolis**
+      plot, confirm their dressing still appears normally — Orbital content must not have disturbed
+      M9 waves 1 and 2a.
+
+### 11. VIP skins
+
+- [ ] 31. If you don't already own the `VIP` pass on this profile, buy it now (Shop panel, same
+      flow as M4 section 3 / M7 section 5).
+- [ ] 32. With VIP owned, walk the plot and confirm Orbital buildings show the recoloured skin.
+      **Two new swatches shipped this wave** — one for `space-kit`, one for the generated
+      `orbital-kit` — so check both: a space-kit body (**Habitat Pod**, **Docking Bay**) and an
+      orbital-kit subject (**Solar Array** panels, **Colony Flag**, **Holo Beacon**). It should
+      look like a colour swap, not a different model, and **both** kits should change — a building
+      where only part of the mesh recolors means one swatch is missing. If you just bought VIP
+      mid-session, confirm it applies without a rejoin.
+
+### 12. Mobile emulation pass (required every milestone)
+
+- [ ] 33. Device Emulator, **375×667** portrait. Walk the plot and open the Build panel. Confirm
+      the growth hint text and button layout haven't regressed from the earlier passes, and that
+      the plot renders sensibly at this resolution — in particular that the **Launch Tower** doesn't
+      clip the camera or push the UI off-screen when you stand at its base, and that the dark plot
+      doesn't crush the low models (Solar Array, Rock Garden) into the background at phone
+      brightness.
+- [ ] 34. Stop Play.
+
+### What a bug looks like here
+
+- Any slot showing a grey/untextured mesh, a red error in Output, or a mesh at the wrong scale.
+- A building that doesn't read as the thing its Build-panel row names.
+- A building not facing its pad, floating, sunk into the regolith, or clipping a neighbour.
+- **Anything that disappears into the near-black plot** — especially the Solar Array's navy panels,
+  the Rock Garden's rocks, or pad markings.
+- **Wide slots:** a 12×12 landmark or the 12×9 Rover Bay overlapping a neighbour's footprint or
+  pad, blocking the walkable lane between rings, or making its own buy pad unreachable.
+- The Launch Tower not at the front, not facing arriving players, obstructed from the entrance, or
+  not clearly the tallest thing on the plot.
+- Skyline order broken — any cheaper slot taller than a more expensive one.
+- **Pale, washed-out amber instead of saturated orange** — the palette fix didn't reach that asset.
+- VIP recoloring only part of a building (one of the two swatches missing), showing a
+  different-shaped model instead of a colour change, or not applying live.
+- Any error or warning in Output about missing Orbital dressing/props/paths (their **absence** is
+  expected; a complaint about it is not).
+
+### Sign-off
+
+- [ ] 35. All boxes above checked: reaching Orbital Colony, all 24 slots buying in as real meshes,
+      a full plot placement walk including the Launch Tower's position, the dark-plot contrast
+      pass, the four wide slots' own pass (walkable lanes and pads), a full 0→100 growth run on the
+      Research Lab, the skyline order and the unobstructed rocket, the orange/slate palette check,
+      dressing confirmed absent and silent, VIP on both new swatches, and 375×667 mobile emulation.
+- [ ] 36. Tell Claude Code "M8 Orbital Colony assets playtest passed" (or report the exact failure
+      and step number). That closes **M8 — every era now has real buildings**.
+
+---
+
 ## M9 — City dressing (roads, trees, filler, squares, vehicles)
 
 **Goal:** plots read as a growing town, not 24 buildings on a lawn — roads connect what you own,

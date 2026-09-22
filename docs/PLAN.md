@@ -25,10 +25,14 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   2026-09-09**, one UX fix from the playtest: pinned balance header + spendable/total in the top bar)
 - [x] M7 — Growing buildings: pipeline + Village (review SHIP after two Warnings fixed, QA green;
   all 24 Village slots harvested, uploaded, and templated; **playtest pending**)
-- [~] M8 — Growing buildings: the other three eras (content waves; **Boomtown shipped 2026-09-16**,
-  approved in Ben's Studio look with one fix; **Metropolis shipped 2026-09-18** — 24 blueprints,
-  89 assets uploaded and harvested, 24 templates, Stadium at a new 12×12 footprint, **playtest
-  pending**; Orbital Colony not started — see "M8" below)
+- [x] M8 — Growing buildings: the other three eras (**complete 2026-09-22**; content waves;
+  **Boomtown shipped 2026-09-16**, approved in Ben's Studio look with one fix; **Metropolis
+  shipped 2026-09-18** — 24 blueprints, 89 assets uploaded and harvested, 24 templates, Stadium at
+  a new 12×12 footprint; **Orbital Colony shipped 2026-09-22** — 24 blueprints, 90 assets uploaded
+  90/90 first try and harvested in one paste, 24 templates, a generated `orbital-kit`, three 12×12
+  landmarks and a 12×9 Rover Bay. **All 4 eras / 96 models now have real meshes**; Boomtown was approved
+  in a Studio look, the Metropolis and Orbital Colony **PLAYTEST sections are pending** — see
+  "M8" below)
 - [~] M9 — City dressing: roads, trees, filler, squares, vehicles (wave 1 review SHIP, QA green;
   contracts, layouts, pipeline, blueprints, client and prop uploads, harvest and 18 prop
   templates shipped 2026-09-16; **wave 1d baked paths shipped and approved in Studio
@@ -686,24 +690,76 @@ contract already carries the exception (`Metropolis stadium 12×12`).
 
 **No Luau or config logic changed in wave 2**, so there was no review or QA wave: `rojo build -o
 build/test.rbxl` succeeds, `gen_templates.py --check` and `gen_asset_manifest.py --check` both
-PASS, and `docs/ASSET_MANIFEST.md` now reports **72/96 slots** complete (Village, Boomtown and
-Metropolis at 24/24 blueprints/uploaded/harvested/templated; Orbital Colony 0/24).
+PASS, and `docs/ASSET_MANIFEST.md` reported **72/96 slots** complete at that point (Village,
+Boomtown and Metropolis at 24/24 blueprints/uploaded/harvested/templated; Orbital Colony 0/24 —
+closed by wave 3 below).
+
+**Wave 3 — Orbital Colony, shipped 2026-09-22 (playtest pending): M8 is complete.** 24
+blueprints in `tools/testfit/blueprints/OrbitalColony/`, **90 assets uploaded** (88 model stages +
+2 VIP swatches, 90/90 on the first run), harvested in **one paste** (91 loaded, 0 failed), 24
+templates in `templates/OrbitalColony/`. `docs/ASSET_MANIFEST.md` now reports **4 eras / 96
+models**, every slot of every era blueprinted, uploaded, harvested and templated. Commits:
+`8fa99d3` (orbital-kit generator), `bf39ee4` / `8cd589b` / `bf3e9d8` (blueprints), `faa9aae`
+(palette fix), `18a7024` (upload), plus the harvest/templates commit.
+
+**Three things were new this wave:**
+1. **A second generated kit, `orbital-kit`** (`tools/assets/orbital_kit.py`, 21 pieces: domes,
+   drums, telescope, planter tray, solar panels and tracker, flag, holo beacon, mast, tanks,
+   energy core, drill rig, lit window strip, pad marking). `space-kit` simply lacks these
+   subjects. Same `stadium_kit.py` pattern as Metropolis: the **script** is the committed
+   artifact and the GLBs regenerate under the gitignored `/assets/`, so a fresh checkout must run
+   the generator before any Orbital merge or re-render (`docs/MANUAL_STEPS.md` M8 section 5).
+2. **Contract changes** (already in `docs/INTERFACES.md`, Blueprints subsection): FusionReactor,
+   TerraformStation and SpaceportTerminal use **`scale 3.6` with footprint `[12, 12]`** —
+   space-kit's hex and long hangars are 12–13 studs at scale 4.0 and fit nothing — and RoverBay
+   uses **`[12, 9]`**, the kit's only garage filling 8 of 9 studs; depth stays 9 so the buy pad is
+   untouched.
+3. **A palette fix with an era-wide effect** (`faa9aae`): space-kit's glTF colour factors are
+   **sRGB-encoded, not linear**, so the baked swatches came out pale. `palette.py` now carries
+   `SRGB_FACTOR_KITS = {"space-kit"}` and the swatches are the true Kenney colours (orange
+   255, 160, 52; dark 70, 76, 87). PLAYTEST section 9 checks this in Studio deliberately —
+   "orange trim, not pale amber" — because it is the one fix a contact sheet can't fully prove.
+
+**Direction: silhouette by function, on a near-black plot.** The Orbital plot base is RGB
+(56, 53, 60), so every model was judged on a **dark-plot contact sheet**
+(`assets/testfit/out/OrbitalColony/_contact_OrbitalColony_dark.png`) as well as the white strip
+(`_contact_OrbitalColony.png`) — a white-card-only review would have hidden low-contrast models,
+the lesson already learned on the Metropolis Stadium. Stage-4 heights (studs): LaunchTower 42.8
+(monument) > TerraformStation 23.0 > CommsArray 21.2 > FusionReactor 16.9 ≈ SpaceportTerminal 16.5
+> DockingBay 13.4 = MedicalBay 13.4 > ObservationDome 13.0 > CrewQuarters 12.9 > ResearchLab 12.2
+> MineralExtractor 12.0 > OxygenGenerator 10.8 > RoverBay 10.4 > SatelliteDish 9.7 > TurretBase 9.2
+> HabitatPod 9.0 > ColonyFlag 8.8 = HoloBeacon 8.8 > HydroponicsDome 8.2 > OxygenTanks 7.4 >
+LandingPad 7.2 > SolarArray 6.4 > WalkwayTube 6.0 > RocksLarge 3.2. The Launch Tower clears the
+next-tallest by 19.8 studs, so the rocket is the unmistakable landmark of the last era.
+
+**No Luau or config logic changed in wave 3** (content only), so no review or QA wave:
+`rojo build -o build/test.rbxl` succeeds and `gen_templates.py --check` /
+`gen_asset_manifest.py --check` both PASS.
 
 **Done when:** all three eras' slots spawn as merged-stage meshes from Rojo-built templates, each
 era's silhouette direction holds, VIP is a per-kit texture swap, placeholders still work with
-`Assets.json` absent, and each era's PLAYTEST section passes. **Playtest gate (wave 2):** Ben buys
-out a Metropolis plot, grows one building 0→100, and checks the Stadium and the skyline —
-`docs/PLAYTEST.md` "M8 — Growing buildings (Metropolis)".
+`Assets.json` absent, and each era's PLAYTEST section passes. **All the build work is done as of
+2026-09-22**; the two open playtest gates are:
+- **Wave 2:** Ben buys out a Metropolis plot, grows one building 0→100, checks the Stadium and the
+  skyline — `docs/PLAYTEST.md` "M8 — Growing buildings (Metropolis)".
+- **Wave 3:** Ben buys out an Orbital Colony plot, grows one building 0→100, and checks the dark
+  plot contrast, the three 12×12 landmarks plus the 12×9 Rover Bay, the Launch Tower silhouette
+  and the kit colours — `docs/PLAYTEST.md` "M8 — Growing buildings (Orbital Colony)".
 
 **Carried forward (owners assigned):**
-- **lead / asset builders, next M8 wave:** **Orbital Colony** — 24 blueprints on `space-kit`, same
-  pipeline. Every space-kit GLB is invalid glTF (a `tmpParent` node) and must be stripped before
-  upload, and glTF material colours are lost, so the kit needs a baked palette texture
-  (`docs/ASSET_RESEARCH.md` §3). Not started.
-- **lead, M9 wave 2:** Metropolis and Orbital Colony **city dressing** (street plan in
+- **lead, pipeline gap (unchanged, still open):** `upload_models.py` **skips any stage whose
+  `modelAssetId` is non-zero** — no content hash, no `--force` — so changed geometry is silently
+  never re-uploaded. Workaround is clearing that stage's `modelAssetId`/`parts` via
+  `assets_config.save_assets`. A sha256 check is still worth adding; it bit nobody this wave but
+  it will.
+- **lead, M9 wave 2 leftover (not M8's):** `props/Metropolis/VehicleD S0` is uploaded but **not
+  harvested** — it belongs to the M9 wave 2 harvest paste (`docs/MANUAL_STEPS.md` M9 §8). The
+  Metropolis `CityHall` template came through in this wave's paste and is committed.
+- **lead, M9 wave 2b:** **Orbital Colony city dressing** (street plan in
   `src/shared/Layouts/*.luau`, props under `templates/_props/`, baked paths) plus the persisted
-  `cityDetail` setting. Metropolis buildings now exist, so the Metropolis half is unblocked; until
-  it ships a Metropolis plot is deliberately bare (PLAYTEST M8 Metropolis section 9).
+  `cityDetail` setting. With M8 complete, the Orbital buildings now exist, so wave 2b is fully
+  unblocked; until it ships an Orbital Colony plot is deliberately bare (PLAYTEST M8 Orbital
+  Colony section 10). Metropolis dressing shipped as M9 wave 2a on 2026-09-22.
 - **lead / economy-designer, open idea:** monument growth tied to era completion — raised at M7,
   still not designed or scheduled.
 - **economy-designer / Ben:** cash-pack Robux pricing still follows the 1 : 2.2 : 4.2 ladder
@@ -713,6 +769,9 @@ out a Metropolis plot, grows one building 0→100, and checks the Stadium and th
 
 **Not in M8:** city dressing (M9), icons and the experience thumbnail (M10), any balance or
 income change, runtime piece composition (rejected at M7).
+
+**M8 is the last content era.** Nothing further is planned here; new building work would be a new
+milestone, not another M8 wave.
 
 ---
 
@@ -902,9 +961,9 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   leaving it uploaded and unused costs nothing, but it is dead weight in the manifest.
 - **lead, wave 2b:** Orbital Colony has `lamps` but no `surface`, `variants`, `signals` or
   `tiles` keys, so it keeps today's behaviour until its street plan lands.
-- **lead / economy-designer, wave 2b:** the Orbital Colony street plan + prop blueprints (after
-  M8's Orbital buildings ship) and the persisted `cityDetail` setting — contracts already frozen
-  in INTERFACES, not started.
+- **lead / economy-designer, wave 2b:** the Orbital Colony street plan + prop blueprints and the
+  persisted `cityDetail` setting — contracts already frozen in INTERFACES, not started.
+  **Unblocked 2026-09-22: M8 is complete, so the Orbital buildings exist.**
 
 **Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
 base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.
