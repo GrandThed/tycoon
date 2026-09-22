@@ -1698,6 +1698,9 @@ config's `modelName` (PascalCase). The approved prototype is `Village/Tavern.jso
                                   // A non-monument slot may exceed [9, 9] (max [12, 12]) only where
                                   // the kit cannot express the building's subject at 9x9 -- so far
                                   // Metropolis Stadium, which needs a bowl around a readable pitch.
+                                  // Also OrbitalColony RoverBay [12, 9] (Ben, 2026-09-22): the
+                                  // kit's only garage fills 8 of 9 studs, so the rover yard needs
+                                  // the width; depth stays 9 so the buy pad is untouched.
                                   // Clearance is computed from harvested extents, not from this
                                   // number, so a wider slot needs no dressing change; but the buy
                                   // pad sits padOffset studs off the front (-Z), so keep the front
