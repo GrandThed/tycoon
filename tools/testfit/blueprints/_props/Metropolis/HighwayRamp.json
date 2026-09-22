@@ -3,15 +3,22 @@
   "era": "Metropolis",
   "scale": 7.0,
   "footprint": [21, 7],
-  "note": "three cells, origin = bottom-centre of the highest cell. Surface 1.01 u at x -0.5 (deck road level) down to 0.01 u at x +2.5 (street level): road-slant-high for the steep top cell, then the two-cell road-slant-curve which eases out flat where it meets the street.",
+  "note": "three cells, origin = bottom-centre of the highest cell. Surface 1.01 u at x -0.5 (deck road level) down to 0.01 u at x +2.5 (street level): road-slant-high for the steep top cell, then the two-cell road-slant-curve which eases out flat where it meets the street. Every slant piece in this kit is a ZERO-THICKNESS sheet, so the ramp needs a pier wherever it is off the ground: each pillar top is the sheet's lowest point over that pillar's own footprint, so nothing pokes through the road surface. Cell 3 (0.48 studs up at its centre) is close enough to the ground to need none.",
   "pieces": [
     {"kit": "city-kit-roads", "model": "road-slant-high", "pos": [0, 0.5, 0], "rotY": 180, "stage": 0},
     {"kit": "city-kit-roads", "model": "road-slant-high-barrier", "pos": [0, 0.5, 0], "rotY": 180, "stage": 0},
     {"kit": "city-kit-roads", "model": "road-slant-curve", "pos": [1.5, 0, 0], "rotY": 180, "stage": 0},
     {"kit": "city-kit-roads", "model": "road-slant-curve-barrier", "pos": [1.5, 0, 0], "rotY": 180, "stage": 0},
+
     {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0.455, -0.44], "rotY": 0, "stage": 0},
     {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, 0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0.455, 0.44], "rotY": 0, "stage": 0},
+
     {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, -0.44], "rotY": 0, "stage": 0},
-    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, 0.44], "rotY": 0, "stage": 0}
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, 0.44], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [1.0, -0.058, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [1.0, -0.058, 0.44], "rotY": 0, "stage": 0}
   ]
 }

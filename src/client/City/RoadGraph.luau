@@ -1706,6 +1706,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 	allocate(state)
 	if tilesConfig ~= nil then
 		local pavement = tilesConfig.pavement
+		local blocks = tilesConfig.blocks
 		local dressingPaths = context.config.paths
 		local budget = context.config.budget
 		local tiles = TileRenderer.Create({
@@ -1713,6 +1714,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 			plotFrame = context.plotFrame,
 			eraName = context.eraName,
 			tiles = tilesConfig,
+			blocks = context.layout.blocks or {},
 			thickness = state.thickness,
 			roadWidth = width,
 			-- Read at draw time, not copied: a surface variant repaints the road look, and a
@@ -1725,6 +1727,8 @@ function RoadGraph.new(context: Context, near: boolean): State
 			end,
 			pavementMaterial = if pavement ~= nil then materialFor(pavement.material) else nil,
 			pavementColor = if pavement ~= nil then colorFor(pavement.color) else nil,
+			blockMaterial = if blocks ~= nil then materialFor(blocks.material) else nil,
+			blockColor = if blocks ~= nil then colorFor(blocks.color) else nil,
 			-- A config too old to carry the key falls back to the straight-road ceiling, exactly as
 			-- the baked plan does; zero cells would be a plot with no streets at all.
 			budgetCells = budgetValue(budget.tileCells, budgetValue(budget.roadPieces, 0)),
@@ -1737,12 +1741,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 			local segments: { TileRenderer.Segment } = {}
 			for _, ranked in pathStretchOrder(state) do
 				local stretch = state.stretches[ranked.index]
-				table.insert(segments, {
-					id = ranked.index,
-					polyline = stretch.polyline,
-					a = stretch.a,
-					b = stretch.b,
-				})
+				table.insert(segments, { id = ranked.index, a = stretch.a, b = stretch.b })
 			end
 			state.tileStretchAllowed = TileRenderer.Plan(tiles, segments)
 			state.tiles = tiles
@@ -1779,6 +1778,16 @@ end
 -- rejoins and era rebuilds switch instantly, exactly as a revealed path does.
 function RoadGraph.SetSurface(state: State, owned: { [string]: boolean }, animate: boolean?): ()
 	setVariant(state, owned, animate == true, false)
+end
+
+-- The paved blocks of a tiles era for the slots owned right now (docs/INTERFACES.md "Paved
+-- blocks"); `animate` puffs a block bought just now, as a revealed path does. A no-op everywhere
+-- else, so the controller can call it for every era.
+function RoadGraph.SetBlocks(state: State, owned: { [string]: boolean }, animate: boolean?): ()
+	local tiles = state.tiles
+	if tiles ~= nil then
+		TileRenderer.SetOwned(tiles, owned, animate == true)
+	end
 end
 
 -- Whether the plot's paths are drawn from the baked meshes rather than as Parts.

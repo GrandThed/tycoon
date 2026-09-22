@@ -153,16 +153,111 @@ return {
 		-- fronts the east avenue from the east, in the z = -28 corridor row beside the arterial
 		{ position = Vector3.new(42.5, 0, -28), rotationY = 90, tier = 5, prop = "PlazaB" },
 	},
-	-- Greenery is whatever the grid leaves: the four corners inside the ring, the pocket west of
-	-- the stadium, the corridor east of the east avenue north of the shops, and the back verge on
-	-- the civic axis. Sum 24 = eras.Metropolis.trees.maxCount.
+	-- Greenery is whatever the grid leaves: the corners inside the ring, the pocket west of the
+	-- stadium, the corridor east of the east avenue north of the shops, and the back verge on the
+	-- civic axis. Street trees along the block edges are planned first and share the tree cap
+	-- (min of trees.maxCount and budget.trees, 40), so these zones only claim the remainder: the
+	-- block edges plan about 23 rows, and 15 zone trees leave a little headroom for the client,
+	-- whose blockers are the harvested model extents rather than the declared footprints.
 	treeZones = {
-		{ center = Vector3.new(-49, 0, -49), radius = 3, count = 4 },
-		{ center = Vector3.new(49, 0, -49), radius = 3, count = 4 },
-		{ center = Vector3.new(44, 0, 28), radius = 5, count = 4 },
-		{ center = Vector3.new(-48.5, 0, 24), radius = 3, count = 4 },
-		{ center = Vector3.new(0, 0, 48), radius = 4, count = 4 },
-		{ center = Vector3.new(49, 0, 49), radius = 3, count = 4 },
+		{ center = Vector3.new(-49, 0, -49), radius = 3, count = 3 },
+		{ center = Vector3.new(49, 0, -49), radius = 3, count = 3 },
+		{ center = Vector3.new(44, 0, 28), radius = 5, count = 2 },
+		{ center = Vector3.new(-48.5, 0, 24), radius = 3, count = 2 },
+		{ center = Vector3.new(0, 0, 48), radius = 4, count = 3 },
+		{ center = Vector3.new(49, 0, 49), radius = 3, count = 2 },
+	},
+	-- Paved blocks (INTERFACES "Paved blocks"): the ground between the streets, one slab per
+	-- rectangle, shown once any of its `slots` is owned and edged with street trees. Every rect
+	-- keeps 7.5 studs off a street centreline (road 3.5 + pavement 4), half a stud off the plazas
+	-- and the metro kiosks, and half a stud off its neighbours so no two slabs share a plane. They
+	-- do run under building footprints and pads -- and, since the amendment, out to the plot edge
+	-- under the elevated ring and its ramp, so the city has no bare band around it.
+	--
+	-- The pattern is the grid itself: four rects down each outer column, the front row split by the
+	-- entrance avenue, and one big slab over the whole middle north of that avenue's head. Where a
+	-- plaza or a kiosk bites into a column, the column is split instead of shrunk.
+	blocks = {
+		-- west outer column (x = -42 buildings), split by PlazaA at z = 0
+		{
+			min = Vector3.new(-59.5, 0, -59.5),
+			max = Vector3.new(-36, 0, -36.5),
+			slots = { "cornerShop" },
+		},
+		{
+			min = Vector3.new(-59.5, 0, -20),
+			max = Vector3.new(-36, 0, -7.5),
+			slots = { "apartmentBlockB" },
+		},
+		{
+			min = Vector3.new(-59.5, 0, 7.5),
+			max = Vector3.new(-36, 0, 59.5),
+			slots = { "officeTowerA", "stadium" },
+		},
+
+		-- front row either side of the entrance avenue; the east half stops at z = -37.5 to clear
+		-- the metro kiosk on that sidewalk
+		{
+			min = Vector3.new(-20, 0, -59.5),
+			max = Vector3.new(-8, 0, -36.5),
+			slots = { "foodTruck" },
+		},
+		{
+			min = Vector3.new(8, 0, -59.5),
+			max = Vector3.new(20, 0, -37.5),
+			slots = { "coffeeShop" },
+		},
+
+		-- the last five studs of the second row, still hemmed in by the entrance avenue
+		{
+			min = Vector3.new(-20, 0, -18.5),
+			max = Vector3.new(-8, 0, -13.5),
+			slots = { "officeLowRise" },
+		},
+		{
+			min = Vector3.new(8, 0, -18.5),
+			max = Vector3.new(20, 0, -13.5),
+			slots = { "supermarket" },
+		},
+
+		-- the whole middle north of the avenue's head: the civic axis, both inner columns and the
+		-- squares flanking City Hall, in one slab
+		{
+			min = Vector3.new(-20, 0, -13),
+			max = Vector3.new(20, 0, 31),
+			slots = {
+				"cityGrid",
+				"cityPark",
+				"rooftopGarden",
+				"shoppingMall",
+				"hospital",
+				"financeDistrict",
+				"skyscraper",
+			},
+		},
+		-- back row of the middle, inset on the west for the kiosk beside the west avenue
+		{
+			min = Vector3.new(-18, 0, 31.5),
+			max = Vector3.new(20, 0, 59.5),
+			slots = { "conventionCenter", "bankTower" },
+		},
+
+		-- east outer column (x = 42 buildings), split by PlazaB at z = -28 and the kiosk at z = 28
+		{
+			min = Vector3.new(36, 0, -59.5),
+			max = Vector3.new(59.5, 0, -36.5),
+			slots = { "apartmentBlockA" },
+		},
+		{
+			min = Vector3.new(36, 0, -20.5),
+			max = Vector3.new(59.5, 0, 25),
+			slots = { "parkingGarage", "busStop", "hotelTower" },
+		},
+		{
+			min = Vector3.new(36, 0, 31),
+			max = Vector3.new(59.5, 0, 59.5),
+			slots = { "broadcastTower" },
+		},
 	},
 	-- Elevated ring highway. ring = 56 puts the deck centreline on the outermost lattice
 	-- ring (cells 52.5..59.5): clear of the 46.5 block faces and the stadium at 48, inside

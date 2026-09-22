@@ -518,8 +518,30 @@
       "kit": "city-kit-roads",
       "model": "bridge-pillar-wide",
       "pos": [
+        0.44,
+        0.455,
+        0.56
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
         -0.44,
         0,
+        0.56
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        0.455,
         0.56
       ],
       "rotY": 270,
@@ -543,6 +565,28 @@
         -0.44,
         0,
         1.44
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.44,
+        -0.058,
+        2.0
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        -0.058,
+        2.0
       ],
       "rotY": 270,
       "stage": 0

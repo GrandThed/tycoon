@@ -2660,7 +2660,7 @@ The old `RoadIntersection` / `HighwayRamp` / `SubwayEntrance` blueprints, templa
 ### Tile streets (`road.tiles`) — Metropolis only
 Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked asphalt, Village trails.
 
-- `eras.<Era>.road.tiles`: `{ "tileStuds": number, "props": { "straight", "end", "bend", "tee", "cross", "crossing": string }, "pavement": { "width": number, "material": string, "color": [r,g,b] }?, "spur": { "width": number, "material": string, "color": [r,g,b] } }`.
+- `eras.<Era>.road.tiles`: `{ "tileStuds": number, "props": { "straight", "end", "bend", "tee", "cross", "crossing": string }, "pavement": { "width": number, "material": string, "color": [r,g,b] }?, "spur": { "width": number, "material": string, "color": [r,g,b] }, "blocks": {…}? }` (see "Paved blocks").
   Presence of `tiles` selects the tile renderer; it is mutually exclusive with `road.paths` and `road.meander`.
   Metropolis: `tileStuds` **7** (= 28 / 4, four tiles per block pitch; Ben's choice over 9.33),
   `road.width` becomes 7, and `junctionProp` / `bendProp` are removed.
@@ -2679,8 +2679,13 @@ Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked a
   in the renderer (geometry, not a tunable).
 - `crossing` replaces `straight` on the cell adjacent to a `cross`/`tee` cell when the run to the
   next junction is ≥ 3 cells (zebra at junction mouths), purely cosmetic.
-- **Pavement:** per visible stretch, one plain Part each side, `pavement.width` wide, top at
-  `road.thickness / 2`, same material/colour everywhere so overlaps at junctions are invisible.
+- **Pavement (per cell, 2026-09-22):** for every drawn road cell, one plain Part strip
+  `tileStuds × pavement.width` flush against each side **without** an arm, plus a
+  `pavement.width` square at each corner whose two adjacent sides are both closed; a corner shared
+  with a diagonal drawn cell has exactly **one owner** (the strip toward it is trimmed), no slab ever
+  intersects a road cell's `tileStuds²`, and no two slabs are coplanar — top `road.thickness / 2`.
+  A crossroads gets no pavement; a street end gets a U. Slabs are keyed by their rounded rect and
+  reconciled every update (a cell that gains an arm drops that side's strip).
 - **Spurs:** drawn by the existing parts renderer as a footpath with `tiles.spur` look from the
   kerb to the slot anchor (slot `spur` overrides still apply). Spurs never get tiles.
 - Surfaces (`SetSurface`), signals and row lamps work as in wave 1e; `road.paths.*` keys are
@@ -2709,6 +2714,30 @@ Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked a
 - Traffic: `highway.vehicles.count` cars loop the ring at deck height on the lane graph's usual
   offset (they never take the ramp). They count toward `budget.vehiclesPerPlot` / `vehiclesMap`.
 - Budget: `budget.highwayCells` (72).
+
+### Paved blocks (`road.tiles.blocks`, Ben 2026-09-22: "paved blocks + street trees")
+- Layout `EraLayout.blocks: { BlockLayout }?`, `BlockLayout = { min: Vector3, max: Vector3, slots: { string } }`:
+  axis-aligned ground rectangles (Y ignored) covering the ground between streets and out to the plot
+  edge, inset so they never overlap a road cell, a pavement strip, a plaza or a kiosk (they may run
+  under building footprints, pads and the elevated highway — its pillars stand on the slab, and the
+  slab top 0.08 stays under the ramp foot's tile); `slots` lists the building slots standing on the block.
+- Config `eras.<Era>.road.tiles.blocks: { "material": string, "color": [r,g,b], "treeSpacing": number, "treeInset": number, "treeClearance": number }?`
+  (`treeClearance` = studs a street tree keeps from any footprint, pad, spur or kiosk).
+- **Harvested offsets are in the template frame**: `Assets.json` `parts[].offset` carries the
+  importer's 180° turn and `gen_templates.harvested_cframe` places the mesh at `−offset`; every
+  client reader of those offsets (`Scatter.modelExtents`, `PropFactory.StageParts`) negates X and Z
+  the same way, and ignores stages whose parts have no `meshId` (pre-harvest offsets are unturned).
+- Street trees spawn only while **both** their block's slab is down and their spine piece is drawn.
+- A tiles layout needs parallel streets ≥ `2 × (road.width / 2 + pavement.width) + 1` studs apart
+  (`streetplan.py` checks it), or their pavement bands overlap.
+- Client: a block's slab (one Part, top `road.thickness / 2 - 0.02` so it never shares a plane with
+  pavement or pads) appears when **any** of its `slots` is owned; on a near plot after initial dressing
+  it appears with the dust burst, else instantly. Street trees: `trees.prop` posts every `treeSpacing`
+  studs along each slab edge that faces a **visible** street, `treeInset` studs inside the edge,
+  skipping spots inside any footprint/pad/spur/kiosk; they count toward `trees.maxCount` and
+  `budget.trees`, ordered numerically (block, edge, step) and thinned evenly like lamp rows. They are
+  planned by `Scatter` alongside zone trees (zones keep the remainder of the budget).
+- Absent `blocks` key or layout table = no slabs, no street trees (today's behaviour).
 
 ### Subway entrances (`subway`)
 - Layout (`EraLayout.subwayEntrances: { { position: Vector3, rotationY: number } }?`): 4–6 spots on

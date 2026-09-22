@@ -389,6 +389,8 @@ export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
 export type HighwayRampLayout = { cell: Vector3, direction: string }
 export type HighwayLayout = { ring: number, ramp: HighwayRampLayout }
 export type SubwayEntranceLayout = { position: Vector3, rotationY: number }
+-- Wave 2a blocks: a paved ground rectangle between streets, shown once any of its slots is owned.
+export type BlockLayout = { min: Vector3, max: Vector3, slots: { string } }
 
 export type EraLayout = {
 	plotSize: Vector3,
@@ -405,6 +407,7 @@ export type EraLayout = {
 	-- Wave 2a: absent means the era has no highway / subway dressing.
 	highway: HighwayLayout?,
 	subwayEntrances: { SubwayEntranceLayout }?,
+	blocks: { BlockLayout }?,
 }
 
 -- CityDressing.json v1 mirror (M9); field names follow the JSON keys exactly. JSON null props
@@ -494,11 +497,20 @@ export type CityTilePropsConfig = {
 	cross: string,
 	crossing: string?,
 }
+-- Paved block slabs with street trees along their street-facing edges.
+export type CityTileBlocksConfig = {
+	material: string,
+	color: { number },
+	treeSpacing: number,
+	treeInset: number,
+	treeClearance: number,
+}
 export type CityEraTilesConfig = {
 	tileStuds: number,
 	props: CityTilePropsConfig,
 	pavement: CityTileLook?,
 	spur: CityTileLook,
+	blocks: CityTileBlocksConfig?,
 }
 -- Wave 2a: an elevated ring drawn while `requiresSlot` is owned; its cars never take the ramp.
 export type CityHighwayPropsConfig = {

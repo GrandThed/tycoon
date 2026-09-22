@@ -55,6 +55,56 @@ stage) and run through the same tools with `--props`. **Careful: `upload_models.
 (only the network calls are skipped).** Check `git status` after a dry run rather than assuming the
 file is untouched.
 
+## Plot render
+
+`testfit.py` judges one building; `plotrender.py` judges a whole plot. It assembles every slot's
+building at its final stage, the streets, pavements, footpaths, pads, the elevated highway, subway
+kiosks, plazas, trees and traffic from the same sources the game uses, and renders it from the
+tycoon camera -- so an era's dressing can be looked at before anything goes into Studio.
+
+```
+py tools/testfit/plotrender.py Metropolis                      # plot_overview.png
+py tools/testfit/plotrender.py Metropolis --camera entrance
+py tools/testfit/plotrender.py Metropolis --camera ramp
+py tools/testfit/plotrender.py Metropolis --camera plaza
+py tools/testfit/plotrender.py Metropolis --camera cityhall
+py tools/testfit/plotrender.py Metropolis --camera 28,-28      # any plot-local x,z
+py tools/testfit/plotrender.py Metropolis --tier 3             # the plot partway through the era
+py tools/testfit/plotrender.py Metropolis --owned cityGrid,foodTruck
+py tools/testfit/plotrender.py Boomtown --camera overview
+```
+
+Output: `assets/testfit/out/<Era>/plot_<camera>.png`, 1600 x 1000 (`--out` renames the stem).
+About 60-100 s per render; most of that is importing the kit GLBs.
+
+- The driver runs under the system **`py`** (it imports `tools/streetplan.py`, which needs Pillow)
+  and shells out to Blender for `plotscene.py`, handing it the scene as a temp JSON of boxes and
+  blueprint placements. `BLENDER=<path>` overrides the Blender executable.
+- **Nothing is re-derived.** The layout, era config, `CityDressing.json`, the spurs, the road
+  network and the shortest-path visibility all come from `streetplan.Era` / `streetplan.Network`;
+  the tile lattice, the 16-entry connectivity table and the zebra rule mirror
+  `src/client/City/TileRenderer.luau`; the ring cycle and the ramp mirror `Highway.luau` and the
+  INTERFACES "Elevated highway" contract. Change a contract and change this with it.
+- `--tier N` on its own owns exactly what `sim_economy`'s greedy player has by tier N, so the
+  render shows the half-built plot the client would really draw. With no `--tier` the plot is
+  finished. `--owned` takes a comma list of slot ids and wins over `--tier`.
+- **Lighting is calibrated, not copied from `testfit.py`:** sun + fill + sky add up to about pi of
+  irradiance, so a surface renders near its authored colour. testfit's brighter rig blew the
+  Metropolis plot base (88, 90, 94) out to near-white, and the point of this render is to judge
+  the era ground colour, not a white card.
+- **Camera:** the same (+X, -Z) tycoon quadrant as `testfit.py`, so the plot's hub edge (-Z) faces
+  the viewer, but the aim point is recentred on the *projected* bounds and refitted a few times --
+  a 120-stud plot seen from a corner puts its near corner far off the view axis, and a
+  centre-aimed camera wastes half the frame. `entrance` is a fixed eye at character height just
+  outside the ring, looking up the entrance avenue.
+- Non-tile eras (Village, Boomtown) draw their spine as plain slabs of `road.width` in
+  `road.color` -- deliberately the stand-in, not the baked mesh pieces, which `tools/paths` judges.
+- **Known deviation from the shipped client:** the ramp prop is placed with its highest cell one
+  whole cell inward of the ring junction, which is what the contract describes and what
+  `streetplan.py` checks (its three cells are `junction + direction * k`, k = 1..3, and its toe
+  lands on the street's end cell). `Highway.luau` places it at the junction cell's *inner edge*,
+  half a cell further out. The render follows the contract.
+
 ## fantasy-town-kit notes (measured with `--dump-bounds`)
 
 - Wall panels (`wall*`, `wall-wood*`) are 1 x 1 x 0.1, bottom-origin, and occupy the +X face of

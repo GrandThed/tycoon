@@ -30,9 +30,9 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 |-----|------------|----------|-----------|-----------|
 | 1 — Village | 24/24 | 24/24 | 24/24 | 24/24 |
 | 2 — Boomtown | 24/24 | 24/24 | 24/24 | 24/24 |
-| 3 — Metropolis | 24/24 | 24/24 | 24/24 | 24/24 |
+| 3 — Metropolis | 24/24 | 24/24 | 23/24 | 24/24 |
 | 4 — Orbital Colony | 24/24 | 24/24 | 24/24 | 24/24 |
-| **Total** | 96/96 | 96/96 | 96/96 | 96/96 |
+| **Total** | 96/96 | 96/96 | 95/96 | 96/96 |
 
 ## Era 1 — Village
 
@@ -142,7 +142,7 @@ Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
 
 Blueprints: `tools/testfit/blueprints/Metropolis/` -- templates: `templates/Metropolis/` -- in game: `ServerStorage/Assets/Metropolis/`
 
-Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
+Summary: 24/24 blueprints, 24/24 uploaded, 23/24 harvested, 24/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -151,7 +151,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 3 | `CornerShop` | Corner Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 4 | `ApartmentBlockA` | Apartment Block | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 5 | `OfficeLowRise` | Low-Rise Office | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 6 | `CityHall` | Found City Hall | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `CityHall` | Found City Hall | unlock | yes | city-kit-commercial, city-kit-suburban, cityhall-kit | 1 | 1/1 | 1/1 | 0/1 | yes |
 | 7 | `Supermarket` | Supermarket | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 8 | `BusStop` | Bus Stop | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `ApartmentBlockB` | High-Rise Apartments | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
@@ -175,19 +175,19 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Metropolis/` -- templates: `templates/_props/Metropolis/` -- in game: `ReplicatedStorage/Assets/Props/Metropolis/`
 
-Summary: 21/21 blueprints, 21/21 uploaded, 21/21 harvested, 21/21 templated
+Summary: 21/21 blueprints, 21/21 uploaded, 18/21 harvested, 21/21 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
 | 1 | `HighwayCorner` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 2 | `HighwayDeck` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 3 | `HighwayJunction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `HighwayRamp` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `HighwayRamp` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | yes |
 | 5 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 6 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | yes |
+| 9 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | yes |
 | 10 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 11 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 12 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -247,4 +247,4 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 
 ## Totals
 
-96 models: 96/96 blueprints, 96/96 uploaded, 96/96 harvested, 96/96 templated
+96 models: 96/96 blueprints, 96/96 uploaded, 95/96 harvested, 96/96 templated

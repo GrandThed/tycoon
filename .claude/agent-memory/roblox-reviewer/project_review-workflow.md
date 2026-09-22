@@ -390,3 +390,32 @@ closed lane loop at a height, for the deck) and `EntrancePoint`. Deck cars are a
   Studio harvest paste + `gen_templates.py --props` had not run. `gen_templates --check` still
   PASSes and prints "uploaded but not harvested" — always check that line before calling a
   wave playtestable, because here it means the *entire* wave is invisible.
+
+**M9 wave 2a FIX ROUND (2026-09-22, paved blocks + street trees + per-cell pavement + the 180°
+template turn; FIX — 3 Criticals).** Durable lessons:
+- **Assets.json `offset` changes sign meaning with pipeline state.** `assets_config.py` writes the
+  merged-GLB (blueprint) centre when a stage is *uploaded*; `harvest.py` overwrites it with the
+  Studio-measured centre, which carries the importer's 180° turn (blueprint +7.0 → harvested
+  −6.965). So `meshId == 0` with a plausible `offset` is **not** a harvest. After commit b17718e
+  `gen_templates.harvested_cframe` places every mesh at `−offset` with R00=R22=−1, but
+  `Scatter.modelExtents` (`src/client/City/Scatter.luau`) still builds its footprint box from
+  `+offset` — so every clearance derived from harvested extents (zone trees, lots, plazas, lamp
+  rows, kiosks, street trees, the highway sign's `Scatter.Solids`) is **mirrored about the anchor**
+  by up to ~5.6 studs. Recurring pattern: *when a pipeline flips a coordinate convention, grep every
+  reader of the raw field, not just the writer.*
+- **Simulate the client's geometry in Python to test "no coplanar overlaps".** A ~60-line mirror of
+  `TileRenderer.cellSlabs` + `overlapsTile` over the Metropolis street lattice found 10 exact
+  `width × width` overlaps — one in each quadrant of every junction, where cell A's side strip and
+  the diagonally adjacent cell B's perpendicular strip both claim the corner. Brute-forcing 300
+  random growth states showed partial ownership is no worse. Cheap, decisive, no Studio.
+- Street-tree count mirror: 15 street + 24 zone = 39 of `budget.trees` 40 on Metropolis. Worth
+  re-running (import `tools/streetplan.py` as a module and reuse `Era`) whenever `blocks` change.
+- **`tools/testfit/plotrender.py` is now a SECOND py mirror** of the same contracts (Blender render
+  Ben uses as the Studio reference). It disagreed with `Scatter` on edge order, spot positions,
+  the faces-a-street test, the thinning formula and the cap source. Always diff the two mirrors.
+- `docs/INTERFACES.md` lagged the code again: the "Pavement: per visible stretch" bullet still
+  describes the renderer this round replaced. Check the contract text, not just the new section.
+- Diffing a tool against HEAD's copy needs the old script inside a tree that has `src/` — it
+  resolves paths from `Path(__file__).parents[1]`, so a bare scratchpad copy just tracebacks.
+- Another session edits the working tree mid-review (`docs/`, `.claude/memory/`). Snapshot
+  `git status` at the start and re-check at the end before attributing a change to the diff.

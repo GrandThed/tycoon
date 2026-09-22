@@ -383,16 +383,43 @@ local function syncFiller(build: Build, tier: number, folder: Instance): ()
 	end
 end
 
+-- Whether a paved block is down: any of its buildings owned, the rule TileRenderer lays it by.
+local function blockPaved(build: Build, index: number, owned: { [string]: boolean }): boolean
+	local blocks: { Types.BlockLayout } = build.layout.blocks or {}
+	local block = blocks[index]
+	if block == nil then
+		return false
+	end
+	for _, slotId in block.slots do
+		if owned[slotId] then
+			return true
+		end
+	end
+	return false
+end
+
 local function syncTrees(
 	build: Build,
 	config: Types.CityDressingConfig,
 	tier: number,
-	folder: Instance
+	folder: Instance,
+	owned: { [string]: boolean }
 ): ()
 	local propName = build.era.trees.prop
 	for index, spot in build.plan.trees do
 		local wanted = Scatter.TreeStage(spot, tier, config.trees.stages)
 		if wanted == nil then
+			continue
+		end
+		-- A street tree waits for both halves of its street: the spine piece it stands beside (a
+		-- neighbour's spur can draw that first) and the paving of its own block. A zone tree carries
+		-- neither and only waits for its birth tier.
+		local pieceId = spot.pieceId
+		local blockIndex = spot.blockIndex
+		if pieceId ~= nil and not RoadGraph.PieceVisible(build.roads, pieceId) then
+			continue
+		end
+		if blockIndex ~= nil and not blockPaved(build, blockIndex, owned) then
 			continue
 		end
 		local stage = PropFactory.ChosenStage(build.eraName, propName, wanted)
@@ -785,6 +812,8 @@ local function sync(entry: PlotEntry): ()
 	-- Before the flush that clones them: a piece must never appear in the surface it is about to
 	-- be repainted out of.
 	RoadGraph.SetSurface(current.roads, owned, animate)
+	-- Paved blocks follow the same owned set; the slab goes down before the trees on it.
+	RoadGraph.SetBlocks(current.roads, owned, animate)
 	-- One renderer update for every spur revealed above.
 	RoadGraph.Flush(current.roads)
 	RoadGraph.RefreshPieces(current.roads)
@@ -792,7 +821,7 @@ local function sync(entry: PlotEntry): ()
 	syncHighway(current, owned, animate)
 
 	if entry.near then
-		syncTrees(current, config, tier, folder)
+		syncTrees(current, config, tier, folder, owned)
 		syncLamps(current, config, tier, folder, owned)
 		syncSignals(current, folder, owned)
 		syncSubway(current, folder, owned)

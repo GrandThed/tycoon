@@ -234,11 +234,22 @@
               180,
               196
             ]
+          },
+          "blocks": {
+            "material": "Concrete",
+            "color": [
+              148,
+              152,
+              168
+            ],
+            "treeSpacing": 9,
+            "treeInset": 0.5,
+            "treeClearance": 1
           }
         }
       },
       "trees": {
-        "maxCount": 24,
+        "maxCount": 40,
         "clearance": 7,
         "prop": "TreeGrowing"
       },

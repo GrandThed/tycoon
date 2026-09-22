@@ -110,6 +110,14 @@ SUBWAY_CLEARANCE = 0.5  # daylight between an entrance and any footprint, pad or
 # takes whichever is bigger -- a stale file must never pass a plan the real prop will not fit.
 PLAZA_MIN_SIZE = (14.0, 14.0)
 PLAZA_EDGE_SLACK = 0.5  # how far the front edge may sit from the pavement's outer edge
+# Paved blocks (INTERFACES "Paved blocks"): slabs are Parts, so two of them meeting edge to edge
+# would share a plane and z-fight; the contract asks for daylight between neighbours instead.
+BLOCK_GAP = 0.5
+# Scatter.luau mirrors: an edge counts as fronting a street within `reach` of it and aligned to
+# better than STRAIGHT_ENOUGH. The clearance a street tree keeps off spurs and solids comes from
+# `road.tiles.blocks.treeClearance`; this is only the fallback for a config that predates the key.
+STREET_TREE_CLEARANCE = 1
+STRAIGHT_ENOUGH = 0.9
 # An entrance stands on the pavement it faces: its front edge may come this close to the asphalt.
 SUBWAY_STREET_REACH = 1.5
 
@@ -571,6 +579,17 @@ class Era:
             {"center": xz(z["center"]), "radius": z["radius"], "count": int(z["count"])}
             for z in self.layout.get("treeZones", [])
         ]
+        self.blocks = []
+        for entry in self.layout.get("blocks", []):
+            low, high = xz(entry["min"]), xz(entry["max"])
+            self.blocks.append(
+                {
+                    "min": low,
+                    "max": high,
+                    "slots": list(entry.get("slots", [])),
+                    "poly": [(low[0], low[1]), (high[0], low[1]), (high[0], high[1]), (low[0], high[1])],
+                }
+            )
         self.highway = self.layout.get("highway")
         highway_cfg = self.dressing.get("highway")
         ramp_prop = highway_cfg["props"]["ramp"] if highway_cfg else None
@@ -1258,6 +1277,170 @@ def subway_violations(era, cells):
     return messages
 
 
+def street_tree_spots(era):
+    """Scatter.streetTreeSpots, spot for spot: every `treeSpacing` from a block corner along each
+    block edge that runs alongside a street, `treeInset` inside the edge, dropping anything inside
+    a solid or on a spur. The client plans these before the zone trees and they share
+    `trees.maxCount` / `budget.trees`, so the tool has to count them to check that cap.
+
+    Footprints here are the tool's declared blueprint boxes rather than the client's harvested
+    extents, which are usually a little larger -- so this errs toward counting *more* spots, and
+    the budget check errs toward firing early."""
+    tiles = era.tiles
+    config = tiles.get("blocks") if tiles else None
+    if config is None or not era.blocks or not era.dressing["trees"].get("prop"):
+        return []
+    spacing = config.get("treeSpacing")
+    if not isinstance(spacing, (int, float)) or isinstance(spacing, bool) or spacing < MIN_LENGTH:
+        return []
+    inset = max(float(config.get("treeInset", 0)), 0.0)
+    # Daylight between a trunk and anything it stands beside, from the config the client reads.
+    clearance = max(float(config.get("treeClearance", STREET_TREE_CLEARANCE)), 0.0)
+    reach = era.width / 2 + 2 * era.pavement + clearance
+    spur_width = tiles["spur"]["width"] if tiles and "spur" in tiles else era.width
+    solids = [slot["footprint"] for slot in era.slots] + [slot["pad_poly"] for slot in era.slots]
+    solids += [lot["poly"] for lot in era.lots] + [plaza["poly"] for plaza in era.plazas]
+    solids += [entry["poly"] for entry in era.subways]
+    spur_segments = [seg for spur in era.spurs.values() for seg in polyline_segments(spur["points"])]
+
+    def nearest_piece(point):
+        best = (math.inf, None)
+        for _, a, b in era.spine_segments():
+            distance, _closest = point_segment_distance(point, a, b)
+            if distance < best[0]:
+                best = (distance, unit((b[0] - a[0], b[1] - a[1])))
+        return best
+
+    def blocked(point):
+        if any(point_polygon_distance(point, poly) < clearance for poly in solids):
+            return True
+        return any(
+            point_segment_distance(point, a, b)[0] < spur_width / 2 + clearance
+            for a, b in spur_segments
+        )
+
+    spots = []
+    for block in era.blocks:
+        min_x, max_x = min(block["min"][0], block["max"][0]), max(block["min"][0], block["max"][0])
+        min_z, max_z = min(block["min"][1], block["max"][1]), max(block["min"][1], block["max"][1])
+        edges = (
+            ((min_x, min_z), (max_x, min_z), (0.0, 1.0)),
+            ((max_x, min_z), (max_x, max_z), (-1.0, 0.0)),
+            ((min_x, max_z), (max_x, max_z), (0.0, -1.0)),
+            ((min_x, min_z), (min_x, max_z), (1.0, 0.0)),
+        )
+        for start, end, inward in edges:
+            length = math.dist(start, end)
+            if length < spacing:
+                continue
+            along = ((end[0] - start[0]) / length, (end[1] - start[1]) / length)
+            midpoint = (
+                (start[0] + end[0]) / 2 + inward[0] * inset,
+                (start[1] + end[1]) / 2 + inward[1] * inset,
+            )
+            distance, direction = nearest_piece(midpoint)
+            parallel = direction is not None and abs(direction[0] * along[0] + direction[1] * along[1]) > STRAIGHT_ENOUGH
+            if distance > reach or not parallel:
+                continue
+            for step in range(1, int(length // spacing) + 1):
+                position = (
+                    start[0] + along[0] * spacing * step + inward[0] * inset,
+                    start[1] + along[1] * spacing * step + inward[1] * inset,
+                )
+                if blocked(position) or nearest_piece(position)[1] is None:
+                    continue
+                spots.append(position)
+    return spots
+
+
+def parallel_street_violations(era):
+    """Two streets closer than both their pavements would overlap the strips into one slab of
+    concrete and leave no ground between them, which no block rect could then fill."""
+    messages = []
+    need = 2 * (era.width / 2 + era.pavement) + 1
+    segments = list(era.spine_segments())
+    for index, (line_a, a0, a1) in enumerate(segments):
+        for line_b, b0, b1 in segments[index + 1 :]:
+            axis_a = 0 if abs(a1[1] - a0[1]) < 1e-6 else (1 if abs(a1[0] - a0[0]) < 1e-6 else None)
+            axis_b = 0 if abs(b1[1] - b0[1]) < 1e-6 else (1 if abs(b1[0] - b0[0]) < 1e-6 else None)
+            if axis_a is None or axis_b is None or axis_a != axis_b:
+                continue
+            other = 1 - axis_a
+            gap = abs(a0[other] - b0[other])
+            if gap < 1e-6 or gap >= need - 1e-6:
+                continue  # collinear runs of one street, or far enough apart
+            lo_a, hi_a = sorted((a0[axis_a], a1[axis_a]))
+            lo_b, hi_b = sorted((b0[axis_a], b1[axis_a]))
+            if min(hi_a, hi_b) - max(lo_a, lo_b) <= 0:
+                continue  # they never run beside each other
+            messages.append(
+                f"streets {line_a + 1} {fmt(a0)}->{fmt(a1)} and {line_b + 1} {fmt(b0)}->{fmt(b1)}: "
+                f"{gap:g} studs apart, pavements overlap (need {need:g})"
+            )
+    return messages
+
+
+def block_violations(era, cells):
+    """Paved blocks: one slab per rect, so the rect has to stay off everything the client draws at
+    ground level -- road cells, the pavement strip either side of a centreline, plazas, kiosks and
+    the highway pillar band -- and off its neighbours. It may run under footprints and pads: that
+    is what makes a block read as one paved city block."""
+    messages, notes = [], []
+    # The amendment lets a slab run under the elevated deck and its ramp right out to the plot
+    # edge (the ramp foot's own road tile sits on top of it), so unlike a plaza or a kiosk a block
+    # has no business with the pillar band.
+    pavement_clear = era.width / 2 + era.pavement
+    known = {slot["id"]: slot for slot in era.slots}
+    listed = {}
+    for index, block in enumerate(era.blocks):
+        label = f"block {index + 1} {fmt(block['min'])}..{fmt(block['max'])}"
+        if block["max"][0] - block["min"][0] <= 0 or block["max"][1] - block["min"][1] <= 0:
+            messages.append(f"{label}: min is not below max on both axes")
+            continue
+        for corner in block["poly"]:
+            if abs(corner[0]) > era.half_x or abs(corner[1]) > era.half_z:
+                messages.append(f"{label}: leaves the plot")
+                break
+        for _, a, b in era.spine_segments():
+            d = segment_polygon_distance(a, b, block["poly"])
+            if d < pavement_clear - 1e-6:
+                messages.append(f"{label}: {d:.2f} from street {fmt(a)}->{fmt(b)} (need {pavement_clear:g}, road + pavement)")
+                break
+        for cell in cells:
+            if polygon_polygon_distance(block["poly"], era.cell_square(cell)) < 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                messages.append(f"{label}: covers the road cell {where}")
+                break
+        for j, plaza in enumerate(era.plazas):
+            if polygon_polygon_distance(block["poly"], plaza["poly"]) < 1e-6:
+                messages.append(f"{label}: overlaps plaza {j + 1}")
+        for j, entry in enumerate(era.subways):
+            if polygon_polygon_distance(block["poly"], entry["poly"]) < 1e-6:
+                messages.append(f"{label}: overlaps subway entrance {j + 1}")
+        for j, other in enumerate(era.blocks[index + 1 :], start=index + 2):
+            d = polygon_polygon_distance(block["poly"], other["poly"])
+            if d < BLOCK_GAP - 1e-6:
+                messages.append(f"{label}: {d:.2f} from block {j} (need {BLOCK_GAP}, or the two slabs share a plane)")
+        for slot_id in block["slots"]:
+            slot = known.get(slot_id)
+            if slot is None:
+                messages.append(f"{label}: lists {slot_id}, which is not a slot of this era")
+                continue
+            listed.setdefault(slot_id, []).append(index + 1)
+            if not point_in_polygon(slot["position"], block["poly"]):
+                messages.append(f"{label}: lists {slot_id}, whose anchor {fmt(slot['position'])} is outside it")
+    for slot_id, blocks in sorted(listed.items()):
+        if len(blocks) > 1:
+            messages.append(f"slot {slot_id} is listed on blocks {blocks}; its slab would be drawn twice")
+    if era.blocks:
+        homeless = [
+            slot["id"] for slot in era.slots if slot["type"] == "building" and slot["id"] not in listed
+        ]
+        if homeless:
+            notes.append(f"{len(homeless)} building slot(s) stand on no paved block: {', '.join(homeless)}")
+    return messages, notes
+
+
 def check(era, network, visible, unreachable):
     violations = []
     notes = []
@@ -1473,11 +1656,17 @@ def check(era, network, visible, unreachable):
                 add(f"{label}: its back is turned to the street it fronts")
 
     total = sum(zone["count"] for zone in era.zones)
-    max_count = era.dressing["trees"]["maxCount"]
+    # Wave 2a: street trees are planned first and the zones keep the remainder, so the cap is
+    # shared. budget.trees caps it too -- the client takes the lower of the two.
+    street_trees = len(street_tree_spots(era))
+    tree_cap = min(max(era.dressing["trees"]["maxCount"], 0), budget_value(era.city.get("budget", {}).get("trees"), math.inf))
     if not ZONE_COUNT[0] <= len(era.zones) <= ZONE_COUNT[1]:
         add(f"treeZones: {len(era.zones)}, need {ZONE_COUNT[0]}-{ZONE_COUNT[1]}")
-    if total > max_count:
-        add(f"treeZones: sum count {total} > trees.maxCount {max_count}")
+    if street_trees + total > tree_cap:
+        add(
+            f"trees: {street_trees} street + {total} zone = {street_trees + total} > cap {tree_cap:g} "
+            "(min of trees.maxCount and budget.trees) -- the client thins the street rows and drops zone trees"
+        )
     for i, zone in enumerate(era.zones):
         c = zone["center"]
         if abs(c[0]) > era.half_x or abs(c[1]) > era.half_z:
@@ -1486,6 +1675,8 @@ def check(era, network, visible, unreachable):
     # RoadGraph.allocate reserves for the whole network up front -- every stretch, every spur and
     # every bend node, drawn or not -- so a plan is only safe when the *reserved* total fits.
     near, far, detail = network.reserve()
+    detail["streetTrees"] = street_trees
+    detail["treeCap"] = tree_cap
     budget = era.city.get("budget", {})
     if far > budget.get("roadPieces", math.inf):
         add(
@@ -1520,6 +1711,8 @@ def check(era, network, visible, unreachable):
     if era.tiles is not None:
         for message in lattice_violations(era):
             add(message)
+        for message in parallel_street_violations(era):
+            add(message)
         tile_budget = budget_value(budget.get("tileCells"), math.inf)
         detail["tileCells"] = len(cells)
         if len(cells) > tile_budget:
@@ -1539,6 +1732,11 @@ def check(era, network, visible, unreachable):
     if era.subways or era.dressing.get("subway") is not None:
         for message in subway_violations(era, cells):
             add(message)
+    if era.blocks:
+        block_messages, block_notes = block_violations(era, cells)
+        for message in block_messages:
+            add(message)
+        notes += block_notes
 
     if era.meander is not None:
         notes.append(f"bend discs: {detail['bends']} reserved, {network.drawn_bends(visible)} drawn at full ownership")
@@ -1656,6 +1854,12 @@ def draw(era, network, visible, violations, trees, near, far, path):
         width=3,
     )
     canvas.text((MARGIN_PX, 18), f"{era.name} street plan -- FRONT (hub, -Z) is the top edge", font=big, fill=(20, 20, 20))
+
+    for index, block in enumerate(era.blocks):
+        # Under everything else: the slab is the ground the rest of the city stands on.
+        poly(block["poly"], fill=(214, 212, 220, 150), outline=(168, 168, 178), width=2)
+        c = px(((block["min"][0] + block["max"][0]) / 2, (block["min"][1] + block["max"][1]) / 2))
+        canvas.text((c[0] - 6, c[1] - 7), f"B{index + 1}", font=small, fill=(120, 120, 132))
 
     for zone in era.zones:
         c = px(zone["center"])
@@ -1843,6 +2047,8 @@ def draw(era, network, visible, violations, trees, near, far, path):
         entries.append(((190, 150, 90), "highway ramp cells"))
     if era.subways:
         entries.append(((210, 120, 50), "subway entrance (M = index)"))
+    if era.blocks:
+        entries.append(((214, 212, 220), "paved block (B = index)"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -1879,6 +2085,9 @@ def draw(era, network, visible, violations, trees, near, far, path):
     if era.subways:
         canvas.text((lx, y), f"subway entrances {len(era.subways)}", font=font, fill=(0, 0, 0))
         y += 18
+    if era.blocks:
+        canvas.text((lx, y), f"paved blocks {len(era.blocks)}", font=font, fill=(0, 0, 0))
+        y += 18
     colour = (0, 130, 0) if not violations else (200, 0, 0)
     canvas.text((lx, y), f"violations: {len(violations)}", font=big, fill=colour)
 
@@ -1900,10 +2109,17 @@ def main():
         draw(era, network, visible, violations, trees, near, far, path)
         overrides = [s["id"] for s in era.slots if era.spurs[s["id"]]["override"]]
         budget = city.get("budget", {})
+        zone_trees = sum(z["count"] for z in era.zones)
+        # An era with paved blocks shares its tree cap with the street rows, so its header reports
+        # the split; the others keep the zones-only line they have always printed.
+        trees = (
+            f"(street {detail['streetTrees']} + zone {zone_trees} / cap {detail['treeCap']:g})"
+            if era.blocks
+            else f"(sum {zone_trees} / max {era.dressing['trees']['maxCount']})"
+        )
         print(
             f"== {name}: road width {era.width:g}, {len(era.streets)} spines, {len(era.lots)} lots, "
-            f"{len(era.plazas)} plazas, {len(era.zones)} tree zones "
-            f"(sum {sum(z['count'] for z in era.zones)} / max {era.dressing['trees']['maxCount']})"
+            f"{len(era.plazas)} plazas, {len(era.zones)} tree zones {trees}"
         )
         print(f"   spur overrides: {', '.join(overrides) if overrides else 'none'}")
         print(
@@ -1944,6 +2160,11 @@ def main():
         if era.subways:
             spots = ", ".join(f"{fmt(entry['position'])}@{entry['rotation']:g}" for entry in era.subways)
             print(f"   subway entrances ({len(era.subways)}): {spots}")
+        if era.blocks:
+            paved = sum(
+                (block["max"][0] - block["min"][0]) * (block["max"][1] - block["min"][1]) for block in era.blocks
+            )
+            print(f"   paved blocks: {len(era.blocks)} rects, {paved:.0f} studs^2, {sum(len(b['slots']) for b in era.blocks)} slots on them")
         for zone, usable, _ in stats:
             print(
                 f"   tree zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "

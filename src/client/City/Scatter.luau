@@ -27,11 +27,20 @@ local UP = Vector3.yAxis
 local ROW_PLACEMENT = "row"
 -- Samples closer together than this are the same point, and the shortest leg worth walking.
 local MIN_STEP = 0.05
+-- How square a block edge and a street have to be for the edge to count as fronting that street.
+local STRAIGHT_ENOUGH = 0.9
+-- A street tree's turn is hashed into whole degrees, so it varies without touching the Random.
+local FULL_CIRCLE_DEGREES = 360
 
 export type TreeSpot = {
 	position: Vector3, -- plot-local, Y 0
 	yaw: number, -- radians
 	birthTier: number,
+	-- Wave 2a street trees: the spine piece this tree stands beside (as a row lamp carries one) and
+	-- the block it stands on, which has to be paved before it grows. A zone tree has neither and
+	-- appears on its birth tier alone.
+	pieceId: string?,
+	blockIndex: number?,
 }
 
 -- Wave 1e row lamps: `key` is the stable identity the controller diffs on, `pieceId` the spine
@@ -147,6 +156,12 @@ end
 -- largest future stage. Read from Assets.json, which the templates are generated from and which
 -- every client has identically from the first frame. A template's own `Base` is a 1x1 anchor
 -- (docs/INTERFACES.md "Template shape") and carries no footprint.
+--
+-- A harvested `offset` is in the imported frame, which the glTF import turned 180 degrees about Y;
+-- `gen_templates.harvested_cframe` negates x and z to put the mesh back at its blueprint
+-- coordinate, so a reader of Assets.json has to negate them too. A part with no mesh id has not
+-- been harvested at all -- its offset is still the unturned merged-GLB centre
+-- (tools/assets/assets_config.py) -- so it is skipped and the caller falls back to a placeholder.
 local function modelExtents(model: Types.AssetModel?): Extents?
 	if model == nil or type(model.stages) ~= "table" then
 		return nil
@@ -154,14 +169,20 @@ local function modelExtents(model: Types.AssetModel?): Extents?
 	local extents: Extents? = nil
 	for _, stage in model.stages do
 		for _, part in stage.parts do
-			if not isNumberTriple(part.size) or not isNumberTriple(part.offset) then
+			if
+				not isNumberTriple(part.size)
+				or not isNumberTriple(part.offset)
+				or type(part.meshId) ~= "number"
+				or part.meshId <= 0
+			then
 				continue
 			end
+			local centreX, centreZ = -part.offset[1], -part.offset[3]
 			local partExtents: Extents = {
-				minX = part.offset[1] - part.size[1] / 2,
-				maxX = part.offset[1] + part.size[1] / 2,
-				minZ = part.offset[3] - part.size[3] / 2,
-				maxZ = part.offset[3] + part.size[3] / 2,
+				minX = centreX - part.size[1] / 2,
+				maxX = centreX + part.size[1] / 2,
+				minZ = centreZ - part.size[3] / 2,
+				maxZ = centreZ + part.size[3] / 2,
 			}
 			local current = extents
 			if current == nil then
@@ -311,7 +332,7 @@ local function obstaclesFor(input: PlanInput, clearance: number): { Obstacle }
 	return obstacles
 end
 
-local function treeSpots(input: PlanInput, rng: Random): { TreeSpot }
+local function treeSpots(input: PlanInput, rng: Random, taken: number): { TreeSpot }
 	local era = input.era
 	local clearance = era.trees.clearance
 	local obstacles = obstaclesFor(input, clearance)
@@ -375,9 +396,21 @@ local function treeSpots(input: PlanInput, rng: Random): { TreeSpot }
 	if era.trees.prop == nil then
 		return {}
 	end
-	local cap = math.min(math.max(era.trees.maxCount, 0), input.config.budget.trees)
-	while #kept > cap do
-		table.remove(kept)
+	-- Street trees are placed first and count against the same ceiling; the zones take the rest.
+	local cap =
+		math.max(math.min(math.max(era.trees.maxCount, 0), input.config.budget.trees) - taken, 0)
+	-- Thinned evenly over the whole (zone, candidate) order rather than truncated, so every zone
+	-- keeps its share instead of the first ones spending the budget -- the row-lamp rule. A plot
+	-- whose zones already fit (no street trees took a share) keeps every candidate untouched.
+	local total = #kept
+	if total > cap then
+		local thinned: { TreeSpot } = {}
+		for index, spot in kept do
+			if (index * cap) // total ~= ((index - 1) * cap) // total then
+				table.insert(thinned, spot)
+			end
+		end
+		kept = thinned
 	end
 	-- Birth tiers spread evenly over the tiers (tier count = #thresholds, 5 in v1).
 	local tierCount = #input.config.tier.thresholds
@@ -589,19 +622,140 @@ local function subwaySpots(
 	return spots
 end
 
+-- Street trees (docs/INTERFACES.md "Paved blocks"): a tree every `treeSpacing` studs along each
+-- block edge that faces a street, `treeInset` inside the edge. An edge faces a street when a
+-- pavement strip runs within `pavement.width + 1` of it -- the strip reaches from `width / 2` to
+-- `width / 2 + pavement.width` off the centreline, hence the reach below. Like the row lamps this
+-- is a walk over the layout: it draws no numbers from the plan's Random, and each tree carries the
+-- spine piece it stands beside so it arrives with its street.
+local function streetTreeSpots(
+	input: PlanInput,
+	streetLines: () -> RoadGraph.StreetLines
+): { TreeSpot }
+	local tiles = input.era.road.tiles
+	local blocks: { Types.BlockLayout }? = input.layout.blocks
+	local config = if tiles ~= nil then tiles.blocks else nil
+	if config == nil or blocks == nil or input.era.trees.prop == nil then
+		return {}
+	end
+	local spacing = config.treeSpacing
+	if type(spacing) ~= "number" or spacing < MIN_STEP then
+		return {}
+	end
+	local pavementWidth = if tiles ~= nil and tiles.pavement ~= nil then tiles.pavement.width else 0
+	local spurWidth = if tiles ~= nil then tiles.spur.width else input.roadWidth
+	-- Daylight between a trunk and anything it stands beside (`blocks.treeClearance`).
+	local clearance = math.max(config.treeClearance, 0)
+	local reach = input.roadWidth / 2 + 2 * pavementWidth + clearance
+	local inset = math.max(config.treeInset, 0)
+	local lines = streetLines()
+	local footprints = footprintsFor(input)
+
+	-- The nearest point of any drawable spine piece, with that piece's id and its direction.
+	local function nearestPiece(point: Vector3): (number, string?, Vector3?)
+		local best, bestId, bestAlong = math.huge, nil, nil
+		for _, run in lines.runs do
+			for _, piece in run.pieces do
+				for index = 2, #piece.points do
+					local a, b = piece.points[index - 1], piece.points[index]
+					local closest = RoadGraph.ClosestOnSegment(point, a, b)
+					local distance = (closest - point).Magnitude
+					if distance < best then
+						best, bestId, bestAlong = distance, piece.pieceId, b - a
+					end
+				end
+			end
+		end
+		return best, bestId, bestAlong
+	end
+
+	local function blocked(point: Vector3): boolean
+		for _, footprint in footprints do
+			if insideFootprint(footprint, point, clearance) then
+				return true
+			end
+		end
+		for _, spur in lines.spurs do
+			if nearLine(point, spur, spurWidth / 2 + clearance) then
+				return true
+			end
+		end
+		return false
+	end
+
+	local spots: { TreeSpot } = {}
+	for blockIndex, block in blocks do
+		local minX, maxX = math.min(block.min.X, block.max.X), math.max(block.min.X, block.max.X)
+		local minZ, maxZ = math.min(block.min.Z, block.max.Z), math.max(block.min.Z, block.max.Z)
+		-- The four edges in a fixed order, each with the direction it is walked and the inward
+		-- normal the trees are inset along, so (block, edge, step) is a numeric order.
+		local edges = {
+			{
+				from = Vector3.new(minX, 0, minZ),
+				to = Vector3.new(maxX, 0, minZ),
+				inward = Vector3.new(0, 0, 1),
+			},
+			{
+				from = Vector3.new(maxX, 0, minZ),
+				to = Vector3.new(maxX, 0, maxZ),
+				inward = Vector3.new(-1, 0, 0),
+			},
+			{
+				from = Vector3.new(minX, 0, maxZ),
+				to = Vector3.new(maxX, 0, maxZ),
+				inward = Vector3.new(0, 0, -1),
+			},
+			{
+				from = Vector3.new(minX, 0, minZ),
+				to = Vector3.new(minX, 0, maxZ),
+				inward = Vector3.new(1, 0, 0),
+			},
+		}
+		for edgeIndex, edge in edges do
+			local span = edge.to - edge.from
+			local length = span.Magnitude
+			if length < spacing then
+				continue
+			end
+			local along = span / length
+			local midpoint = (edge.from + edge.to) / 2 + edge.inward * inset
+			local distance, _pieceId, direction = nearestPiece(midpoint)
+			-- Only an edge that runs alongside a street, not one that merely ends near its mouth.
+			local parallel = direction ~= nil
+				and math.abs((direction :: Vector3).Unit:Dot(along)) > STRAIGHT_ENOUGH
+			if distance > reach or not parallel then
+				continue
+			end
+			for step = 1, math.floor(length / spacing) do
+				local position = edge.from + along * (spacing * step) + edge.inward * inset
+				if blocked(position) then
+					continue
+				end
+				local _, pieceId = nearestPiece(position)
+				if pieceId == nil then
+					continue
+				end
+				table.insert(spots, {
+					blockIndex = blockIndex,
+					position = position,
+					-- Deterministic and stream-free: the same key gives the same turn everywhere.
+					yaw = Noise.Hash(`{blockIndex}:{edgeIndex}:{step}`)
+						% FULL_CIRCLE_DEGREES
+						/ FULL_CIRCLE_DEGREES
+						* FULL_TURN,
+					birthTier = 1,
+					pieceId = pieceId,
+				})
+			end
+		end
+	end
+	return spots
+end
+
 function Scatter.Plan(input: PlanInput): Plan
 	local rng = Random.new(Scatter.Seed(input.plotIndex, input.eraName))
 	local era = input.era
 	local layout = input.layout
-	local plan: Plan = {
-		trees = treeSpots(input, rng),
-		lotProps = {},
-		plazaAllowed = {},
-		lampSlots = {},
-		lampPosts = {},
-		subwayEntrances = {},
-		vehicleProps = {},
-	}
 	-- Both street-line readers share one sampling pass; neither runs in an era that needs neither.
 	local cachedLines: RoadGraph.StreetLines? = nil
 	local function streetLines(): RoadGraph.StreetLines
@@ -612,6 +766,29 @@ function Scatter.Plan(input: PlanInput): Plan
 		end
 		return lines :: RoadGraph.StreetLines
 	end
+	-- Walked before the zones and without a single Random draw, so every later feature sees exactly
+	-- the stream it saw before this wave; thinned evenly over its own numeric order, like row lamps.
+	local streetTrees = streetTreeSpots(input, streetLines)
+	local treeCap = math.min(math.max(era.trees.maxCount, 0), input.config.budget.trees)
+	local streetCount = #streetTrees
+	if streetCount > treeCap then
+		local thinned: { TreeSpot } = {}
+		for index, spot in streetTrees do
+			if (index * treeCap) // streetCount ~= ((index - 1) * treeCap) // streetCount then
+				table.insert(thinned, spot)
+			end
+		end
+		streetTrees = thinned
+	end
+	local plan: Plan = {
+		trees = treeSpots(input, rng, #streetTrees),
+		lotProps = {},
+		plazaAllowed = {},
+		lampSlots = {},
+		lampPosts = {},
+		subwayEntrances = {},
+		vehicleProps = {},
+	}
 
 	-- Filler budget, in layout order: plazas, then lots, then lamps.
 	local remaining = input.config.budget.fillerPieces
@@ -655,6 +832,9 @@ function Scatter.Plan(input: PlanInput): Plan
 				placed += 1
 			end
 		end
+	end
+	for _, spot in streetTrees do
+		table.insert(plan.trees, spot)
 	end
 	plan.lampPosts = lampPosts(input, streetLines)
 	plan.subwayEntrances = subwaySpots(input, streetLines)
