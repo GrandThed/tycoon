@@ -937,7 +937,7 @@ Metropolis plot — the designed degrade, not a bug — and `docs/ASSET_MANIFEST
       3. Output panel → right-click → **Select All** → **Ctrl+C**.
       4. `py tools/assets/harvest.py --props` — expect **3** merged records (`PlazaA`, `PlazaB`,
          `HighwayRamp`). Anything missed is listed and left untouched; re-run 1–4 for the rest.
-- [ ] 30. **Paste 2 — buildings (2 records: `CityHall` and the `cityhall-kit` VIP swatch).** Same Studio, same Command Bar:
+- [x] 30. **Paste 2 — buildings (2 records: `CityHall` and the `cityhall-kit` VIP swatch).** Same Studio, same Command Bar:
       1. `py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip`
       2. Command Bar → paste → Enter → wait for `[HARVEST-DONE]`.
       3. Output → **Select All** → **Ctrl+C**.

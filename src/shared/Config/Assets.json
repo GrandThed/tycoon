@@ -23,7 +23,7 @@
     },
     "cityhall-kit": {
       "vipSwatchAssetId": 108327471801850,
-      "vipImageId": 0
+      "vipImageId": 138181736471008
     },
     "fantasy-town-kit": {
       "vipSwatchAssetId": 113791458028891,
@@ -1900,22 +1900,22 @@
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.0, 6.2, 4.592],
-                "offset": [0.0, 6.1, 0.704]
+                "meshId": 70859499389043,
+                "imageId": 100750397531314,
+                "size": [8.0, 6.2, 4.5916],
+                "offset": [0.0, 6.1, -0.7042]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [7.36, 0.708, 1.2],
-                "offset": [0.0, 1.354, -3.402]
+                "meshId": 132568881159754,
+                "imageId": 75804611199159,
+                "size": [7.36, 0.7084, 1.2],
+                "offset": [0.0, 1.3542, 3.4023]
               },
               {
                 "kit": "cityhall-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 109102227033041,
+                "imageId": 111912843944585,
                 "size": [8.4, 20.68, 8.0],
                 "offset": [0.0, 10.34, 0.0]
               }
