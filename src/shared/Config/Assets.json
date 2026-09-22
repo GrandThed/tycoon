@@ -21,6 +21,10 @@
       "vipSwatchAssetId": 107168003366884,
       "vipImageId": 103539240545578
     },
+    "cityhall-kit": {
+      "vipSwatchAssetId": 108327471801850,
+      "vipImageId": 0
+    },
     "fantasy-town-kit": {
       "vipSwatchAssetId": 113791458028891,
       "vipImageId": 91158106530449
@@ -1892,28 +1896,28 @@
       "CityHall": {
         "stages": [
           {
-            "modelAssetId": 83657927747200,
+            "modelAssetId": 131312757759591,
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 139955198217770,
-                "imageId": 100750397531314,
-                "size": [8.0, 12.6, 4.5916],
-                "offset": [0.0, 8.3, -0.7042]
-              },
-              {
-                "kit": "city-kit-roads",
-                "meshId": 98367928179186,
-                "imageId": 130771765354100,
-                "size": [8.0, 16.5, 8.34],
-                "offset": [0.0, 8.25, 0.17]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.2, 4.592],
+                "offset": [0.0, 6.1, 0.704]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 132568881159754,
-                "imageId": 75804611199159,
-                "size": [7.36, 0.7084, 1.2],
-                "offset": [0.0, 1.3542, 3.4023]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.36, 0.708, 1.2],
+                "offset": [0.0, 1.354, -3.402]
+              },
+              {
+                "kit": "cityhall-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 20.68, 8.0],
+                "offset": [0.0, 10.34, 0.0]
               }
             ]
           }
@@ -6816,14 +6820,14 @@
       "HighwayRamp": {
         "stages": [
           {
-            "modelAssetId": 83661989527358,
+            "modelAssetId": 100997920601041,
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 131822294458189,
-                "imageId": 130771765354100,
-                "size": [21.07, 7.56, 7.14],
-                "offset": [-6.965, 3.78, 0.0]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [21.07, 7.966, 7.14],
+                "offset": [6.965, 3.577, 0.0]
               }
             ]
           }
