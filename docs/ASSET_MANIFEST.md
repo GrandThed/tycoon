@@ -175,31 +175,31 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Metropolis/` -- templates: `templates/_props/Metropolis/` -- in game: `ReplicatedStorage/Assets/Props/Metropolis/`
 
-Summary: 21/21 blueprints, 21/21 uploaded, 0/21 harvested, 0/21 templated
+Summary: 21/21 blueprints, 21/21 uploaded, 21/21 harvested, 21/21 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `HighwayCorner` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 2 | `HighwayDeck` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 3 | `HighwayJunction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 4 | `HighwayRamp` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 5 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 6 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 7 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 8 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 9 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
-| 10 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 11 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 12 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 13 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 14 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 15 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 16 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 0/1 | — |
-| 17 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 0/4 | — |
-| 18 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 19 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 20 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
-| 21 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 0/1 | — |
+| 1 | `HighwayCorner` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `HighwayDeck` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `HighwayJunction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `HighwayRamp` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 16 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 17 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 18 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 19 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 4 — Orbital Colony
 
