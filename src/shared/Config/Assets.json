@@ -29,6 +29,14 @@
       "vipSwatchAssetId": 70411050112785,
       "vipImageId": 108673364610024
     },
+    "orbital-kit": {
+      "vipSwatchAssetId": 98449645405610,
+      "vipImageId": 0
+    },
+    "space-kit": {
+      "vipSwatchAssetId": 73729864583389,
+      "vipImageId": 0
+    },
     "stadium-kit": {
       "vipSwatchAssetId": 118702759242238,
       "vipImageId": 130142889110389
@@ -5054,6 +5062,1447 @@
                 "imageId": 75804611199159,
                 "size": [13.9744, 25.8446, 13.996],
                 "offset": [0.0272, 12.9223, -0.002]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "OrbitalColony": {
+      "LandingPad": {
+        "stages": [
+          {
+            "modelAssetId": 131435307261537,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 1.8, 8.0],
+                "offset": [0.0, 0.9, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79767254736325,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.4, 0.08, 6.4],
+                "offset": [-1.2, 0.44, -0.32]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.02, 2.8, 8.02],
+                "offset": [0.01, 1.4, 0.01]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79251588590239,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.4, 0.08, 6.4],
+                "offset": [-1.2, 0.44, -0.32]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.36, 5.8, 8.02],
+                "offset": [0.18, 2.9, 0.01]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 96261351366921,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 0.72, 7.702],
+                "offset": [-0.4, 0.76, 0.331]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.36, 7.2, 8.02],
+                "offset": [0.18, 3.6, 0.01]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71913055016493,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 0.72, 7.702],
+                "offset": [-0.4, 0.76, 0.331]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.56, 7.2, 8.391],
+                "offset": [0.08, 3.6, -0.176]
+              }
+            ]
+          }
+        ]
+      },
+      "SolarArray": {
+        "stages": [
+          {
+            "modelAssetId": 117535846153172,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.376, 2.79],
+                "offset": [-2.2, 1.188, -3.0]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.68, 1.6, 3.086],
+                "offset": [2.64, 0.8, -2.797]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72566424253441,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 2.376, 5.71],
+                "offset": [0.0, 1.188, -1.54]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 1.6, 6.24],
+                "offset": [0.24, 0.8, -1.22]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 94596210357712,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 2.376, 5.817],
+                "offset": [0.0, 1.188, -1.594]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 1.6, 6.24],
+                "offset": [0.24, 0.8, -1.22]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137732406897510,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.68, 5.902, 8.985],
+                "offset": [-0.14, 2.951, -0.009]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 1.6, 7.166],
+                "offset": [0.24, 0.8, -0.757]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92979746654012,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 6.4, 8.985],
+                "offset": [0.0, 3.2, -0.009]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.48, 1.6, 7.166],
+                "offset": [0.24, 0.8, -0.757]
+              }
+            ]
+          }
+        ]
+      },
+      "HabitatPod": {
+        "stages": [
+          {
+            "modelAssetId": 79165799079855,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.0, 9.0],
+                "offset": [0.0, 2.0, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121639729193635,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.4, 9.0],
+                "offset": [0.0, 3.2, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98904799456379,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.946, 9.0],
+                "offset": [0.0, 3.473, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 129705516500252,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 8.0, 9.0],
+                "offset": [0.0, 4.0, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72322769297057,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 8.986, 9.0],
+                "offset": [0.0, 4.493, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "HydroponicsDome": {
+        "stages": [
+          {
+            "modelAssetId": 103492100281486,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.36, 3.8, 7.92],
+                "offset": [-0.26, 1.9, 0.44]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 1.0, 0.693],
+                "offset": [0.0, 0.5, -4.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 135429437097422,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.84, 5.0, 7.98],
+                "offset": [-0.02, 2.5, 0.47]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.88, 1.0, 1.693],
+                "offset": [2.04, 0.5, -3.5]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 126166607401327,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.84, 6.4, 8.94],
+                "offset": [-0.02, 3.2, -0.01]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.68, 2.6, 8.493],
+                "offset": [0.14, 1.3, -0.1]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87933188448447,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.84, 7.0, 8.94],
+                "offset": [-0.02, 3.5, -0.01]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.68, 2.6, 8.493],
+                "offset": [0.14, 1.3, -0.1]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 119946327212304,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.84, 8.2, 8.94],
+                "offset": [-0.02, 4.1, -0.01]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.68, 2.6, 8.573],
+                "offset": [0.14, 1.3, -0.14]
+              }
+            ]
+          }
+        ]
+      },
+      "OxygenGenerator": {
+        "stages": [
+          {
+            "modelAssetId": 120165259986291,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 3.132, 4.0],
+                "offset": [-0.1, 1.566, -1.8]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 78762716762867,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 3.132, 8.0],
+                "offset": [-0.07, 1.566, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 120391187526868,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 6.0, 8.0],
+                "offset": [-0.07, 3.0, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 124811058855450,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 8.4, 8.0],
+                "offset": [-0.07, 4.2, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 104206977240180,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 10.8, 8.0],
+                "offset": [-0.07, 5.4, 0.2]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkwayTube": {
+        "stages": [
+          {
+            "modelAssetId": 89230291357912,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.6, 0.72, 0.124],
+                "offset": [0.0, 3.76, -2.08]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.46, 6.0, 8.793],
+                "offset": [-0.15, 3.0, -0.004]
+              }
+            ]
+          }
+        ]
+      },
+      "CrewQuarters": {
+        "stages": [
+          {
+            "modelAssetId": 108971606343155,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.2, 4.0, 5.02],
+                "offset": [1.4, 2.0, -1.99]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 88801145282164,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.4, 8.9],
+                "offset": [0.0, 3.2, -0.05]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 73349239424485,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 7.96, 8.9],
+                "offset": [0.0, 3.98, -0.05]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121408495110098,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 11.92, 8.9],
+                "offset": [0.0, 5.96, -0.05]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110847723069351,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.28, 12.92, 8.9],
+                "offset": [0.14, 6.46, -0.05]
+              }
+            ]
+          }
+        ]
+      },
+      "ColonyFlag": {
+        "stages": [
+          {
+            "modelAssetId": 113058023594736,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.2, 8.8, 4.302],
+                "offset": [0.0, 4.4, -2.031]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.697, 3.573, 8.2],
+                "offset": [0.149, 1.786, -0.1]
+              }
+            ]
+          }
+        ]
+      },
+      "ResearchLab": {
+        "stages": [
+          {
+            "modelAssetId": 91649373251179,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.48, 8.0],
+                "offset": [0.0, 2.24, 0.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 83926720775255,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 5.32, 8.0],
+                "offset": [0.1, 2.66, 0.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 127673635108013,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 9.32, 8.0],
+                "offset": [0.1, 4.66, 0.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76647098903429,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 10.76, 8.0],
+                "offset": [0.1, 5.38, 0.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72245541324741,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.2, 12.226, 8.091],
+                "offset": [0.1, 6.113, 0.385]
+              }
+            ]
+          }
+        ]
+      },
+      "RoverBay": {
+        "stages": [
+          {
+            "modelAssetId": 98808502739747,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 1.968, 8.0],
+                "offset": [4.0, 0.984, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121163659825210,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.0, 4.0, 8.5],
+                "offset": [0.0, 2.0, 0.25]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 106958260529640,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.0, 4.4, 8.5],
+                "offset": [0.0, 2.2, 0.25]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 111968925722234,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.0, 6.8, 8.5],
+                "offset": [0.0, 3.4, 0.25]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101981017234026,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.4, 6.4, 2.4],
+                "offset": [-2.0, 7.2, 2.48]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.0, 6.8, 8.5],
+                "offset": [0.0, 3.4, 0.25]
+              }
+            ]
+          }
+        ]
+      },
+      "CommsArray": {
+        "stages": [
+          {
+            "modelAssetId": 101802817621781,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 7.826, 8.0],
+                "offset": [0.0, 3.913, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 102642312854379,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 12.4, 8.1],
+                "offset": [0.0, 6.2, 0.15]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 102603557159831,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 16.4, 8.2],
+                "offset": [0.0, 8.2, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 102337629992219,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.1, 18.4, 8.2],
+                "offset": [0.05, 9.2, 0.2]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109621630911853,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.26, 21.2, 8.2],
+                "offset": [0.13, 10.6, 0.2]
+              }
+            ]
+          }
+        ]
+      },
+      "OxygenTanks": {
+        "stages": [
+          {
+            "modelAssetId": 71835022069219,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.884, 7.0, 6.944],
+                "offset": [0.022, 3.9, 0.228]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.02, 5.6, 8.8],
+                "offset": [-0.01, 2.8, -0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "MineralExtractor": {
+        "stages": [
+          {
+            "modelAssetId": 127839162423368,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.6, 8.0, 3.6],
+                "offset": [-2.48, 4.0, 2.2]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.8, 1.6, 3.866],
+                "offset": [-3.0, 0.8, -1.693]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 132351978640231,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.6, 8.0, 3.6],
+                "offset": [-2.48, 4.0, 2.2]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 3.08, 4.64],
+                "offset": [-0.2, 1.54, -2.08]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 90932314917014,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.6, 8.0, 3.6],
+                "offset": [-2.48, 4.0, 2.2]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.757, 3.08, 6.051],
+                "offset": [-0.021, 1.54, -1.374]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110341003859750,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.6, 8.0, 3.6],
+                "offset": [-2.48, 4.0, 2.2]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.757, 4.0, 8.88],
+                "offset": [-0.021, 2.0, 0.04]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 75431253583792,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.28, 12.0, 3.88],
+                "offset": [-0.14, 6.0, 2.34]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.8, 4.48, 8.88],
+                "offset": [0.0, 2.24, 0.04]
+              }
+            ]
+          }
+        ]
+      },
+      "RocksLarge": {
+        "stages": [
+          {
+            "modelAssetId": 80778529614172,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.96, 3.15, 8.96],
+                "offset": [-0.0, 1.575, -0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ObservationDome": {
+        "stages": [
+          {
+            "modelAssetId": 103777047609973,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.4, 3.8, 6.4],
+                "offset": [0.0, 1.9, 0.6]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.52, 1.4, 1.986],
+                "offset": [-2.36, 0.7, -3.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137905183905534,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.4, 7.0, 7.9],
+                "offset": [0.0, 3.5, -0.15]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.52, 1.4, 1.986],
+                "offset": [-2.36, 0.7, -3.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 107790940898507,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.24, 8.0, 7.9],
+                "offset": [0.2, 4.0, -0.15]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.486, 3.173, 1.986],
+                "offset": [0.123, 1.586, -3.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138247554331914,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.24, 11.8, 7.9],
+                "offset": [0.2, 5.9, -0.15]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.486, 3.173, 1.986],
+                "offset": [0.123, 1.586, -3.48]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110119930939779,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.24, 13.0, 7.9],
+                "offset": [0.2, 6.5, -0.15]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.486, 3.173, 1.986],
+                "offset": [0.123, 1.586, -3.48]
+              }
+            ]
+          }
+        ]
+      },
+      "FusionReactor": {
+        "stages": [
+          {
+            "modelAssetId": 90920071122908,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.52, 3.96, 2.52],
+                "offset": [-1.98, 2.34, 2.16]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.38, 2.52, 7.2],
+                "offset": [-0.09, 1.26, 0.684]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 124834741927202,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.348, 4.5, 6.39],
+                "offset": [-2.394, 2.61, 0.225]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.38, 5.04, 7.2],
+                "offset": [-0.09, 2.52, 0.684]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121355462636611,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.848, 7.56, 7.56],
+                "offset": [-0.144, 4.14, 0.684]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 6.48, 11.615],
+                "offset": [0.0, 3.24, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 84374337253033,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.848, 11.16, 7.56],
+                "offset": [-0.144, 5.94, 0.684]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 6.48, 11.615],
+                "offset": [0.0, 3.24, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 84392419159367,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.848, 16.56, 8.984],
+                "offset": [-0.144, 8.64, -0.028]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 6.48, 11.615],
+                "offset": [0.0, 3.24, -0.024]
+              }
+            ]
+          }
+        ]
+      },
+      "SatelliteDish": {
+        "stages": [
+          {
+            "modelAssetId": 76698931744372,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.24, 5.0, 2.2],
+                "offset": [-2.88, 2.9, 2.88]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.1, 9.657, 8.02],
+                "offset": [0.03, 4.828, -0.01]
+              }
+            ]
+          }
+        ]
+      },
+      "DockingBay": {
+        "stages": [
+          {
+            "modelAssetId": 95074972929800,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.4, 4.72, 8.0],
+                "offset": [-0.2, 2.36, 0.4]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 105559962261306,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.448, 5.6, 8.709],
+                "offset": [-0.176, 2.8, 0.046]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 116012132953260,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.448, 8.4, 8.8],
+                "offset": [-0.176, 4.2, -0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87142517963427,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.448, 12.4, 8.8],
+                "offset": [-0.176, 6.2, -0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 80511815156767,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.8, 13.4, 8.8],
+                "offset": [0.0, 6.7, -0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TerraformStation": {
+        "stages": [
+          {
+            "modelAssetId": 99726567908385,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.2, 4.5, 1.98],
+                "offset": [0.0, 2.61, 2.664]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.2, 2.819, 7.2],
+                "offset": [0.0, 1.409, 0.684]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 74750702306141,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.56, 6.48, 7.56],
+                "offset": [0.0, 3.6, 0.684]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 5.4, 11.615],
+                "offset": [0.0, 2.7, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138502271164979,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.56, 6.48, 8.984],
+                "offset": [0.0, 3.6, -0.028]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 10.44, 11.615],
+                "offset": [0.0, 5.22, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121751637160881,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.632, 10.98, 8.984],
+                "offset": [-0.036, 5.85, -0.028]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 15.84, 11.615],
+                "offset": [0.0, 7.92, -0.024]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 82720936993236,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.704, 10.98, 8.984],
+                "offset": [0.0, 5.85, -0.028]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.776, 23.04, 11.615],
+                "offset": [0.0, 11.52, -0.024]
+              }
+            ]
+          }
+        ]
+      },
+      "HoloBeacon": {
+        "stages": [
+          {
+            "modelAssetId": 110016984322268,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.6, 8.8, 8.382],
+                "offset": [-0.1, 4.4, 0.009]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.04, 2.8, 8.0],
+                "offset": [0.0, 1.4, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "MedicalBay": {
+        "stages": [
+          {
+            "modelAssetId": 75829036510321,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 4.0, 6.88],
+                "offset": [1.0, 2.0, -1.04]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98562209412757,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.4, 8.88],
+                "offset": [0.0, 3.2, -0.04]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 140144418868027,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.377, 7.96, 8.88],
+                "offset": [-0.188, 3.98, -0.04]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 120597155148563,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.377, 11.92, 8.88],
+                "offset": [-0.188, 5.96, -0.04]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72330140369664,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.377, 13.36, 8.911],
+                "offset": [-0.188, 6.68, -0.025]
+              }
+            ]
+          }
+        ]
+      },
+      "SpaceportTerminal": {
+        "stages": [
+          {
+            "modelAssetId": 79721678716240,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.34, 3.6, 10.62],
+                "offset": [0.27, 1.8, -0.09]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110671252408877,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.34, 5.508, 10.62],
+                "offset": [0.27, 2.754, -0.09]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110608927053570,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.34, 7.236, 10.62],
+                "offset": [0.27, 3.618, -0.09]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 93448617557374,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.34, 10.8, 10.62],
+                "offset": [0.27, 5.4, -0.09]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89493434360068,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.808, 16.524, 10.62],
+                "offset": [0.036, 8.262, -0.09]
+              }
+            ]
+          }
+        ]
+      },
+      "TurretBase": {
+        "stages": [
+          {
+            "modelAssetId": 81193545339694,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.6, 0.72, 0.124],
+                "offset": [0.0, 2.76, -4.08]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.391, 9.2, 8.489],
+                "offset": [-0.033, 4.6, 0.144]
+              }
+            ]
+          }
+        ]
+      },
+      "LaunchTower": {
+        "stages": [
+          {
+            "modelAssetId": 91888060715120,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [13.6, 42.8, 13.806],
+                "offset": [-0.0, 21.4, -0.017]
               }
             ]
           }
