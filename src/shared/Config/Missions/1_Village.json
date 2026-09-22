@@ -12,15 +12,15 @@
 	"targetMinutes": 8,
 	"targetWaveSeconds": 30,
 	"enemies": {
-		"raider": { "template": "Raider", "kind": "melee", "hp": 115, "damage": 8, "speed": 14, "reach": 5, "attackCooldown": 1.2, "cash": 300, "materials": 1, "elite": false },
-		"archer": { "template": "Archer", "kind": "ranged", "hp": 75, "damage": 6, "speed": 12, "reach": 30, "attackCooldown": 1.8, "cash": 400, "materials": 1, "elite": false },
-		"brute": { "template": "Brute", "kind": "melee", "hp": 390, "damage": 18, "speed": 10, "reach": 6, "attackCooldown": 1.6, "cash": 1600, "materials": 4, "elite": true }
+		"raider": { "template": "Raider", "kind": "melee", "hp": 52, "damage": 3, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300, "materials": 1, "elite": false },
+		"archer": { "template": "Archer", "kind": "ranged", "hp": 34, "damage": 2, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400, "materials": 1, "elite": false },
+		"brute": { "template": "Brute", "kind": "melee", "hp": 176, "damage": 5, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600, "materials": 4, "elite": true }
 	},
 	"waveTable": {
 		"baseCount": 5,
-		"countPerWave": 0.6,
-		"hpGrowth": 0.08,
-		"damageGrowth": 0.08,
+		"countPerWave": 0.3,
+		"hpGrowth": 0.03,
+		"damageGrowth": 0.03,
 		"rewardGrowth": 0.1,
 		"composition": [
 			{ "fromWave": 1, "weights": { "raider": 1.0 } },
@@ -29,7 +29,7 @@
 		]
 	},
 	"bosses": {
-		"5": { "template": "RaiderChief", "enemy": "brute", "hpMult": 5.7, "damageMult": 1.5, "cashMult": 8.0, "materialsMult": 5.0, "valor": 10 },
-		"10": { "template": "Warlord", "enemy": "brute", "hpMult": 7.8, "damageMult": 2.0, "cashMult": 20.0, "materialsMult": 10.0, "valor": 25 }
+		"5": { "template": "RaiderChief", "enemy": "brute", "hpMult": 5.0, "damageMult": 1.0, "cashMult": 8.0, "materialsMult": 5.0, "valor": 10 },
+		"10": { "template": "Warlord", "enemy": "brute", "hpMult": 8.0, "damageMult": 1.0, "cashMult": 20.0, "materialsMult": 10.0, "valor": 25 }
 	}
 }

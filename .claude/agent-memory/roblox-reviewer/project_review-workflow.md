@@ -419,3 +419,49 @@ template turn; FIX — 3 Criticals).** Durable lessons:
   resolves paths from `Path(__file__).parents[1]`, so a bare scratchpad copy just tracebacks.
 - Another session edits the working tree mid-review (`docs/`, `.claude/memory/`). Snapshot
   `git status` at the start and re-check at the end before attributing a change to the diff.
+
+**C1 baseline (2026-09-22, Studio bridge + Village expedition — SHIP AFTER FIXES, 1 Critical +
+4 Majors).** The combat place gained its whole gameplay stack (`EnemyService` AI → `CombatService`
+hits → `WaveService` run loop → `DebugService` levers) plus `StudioBridge` (a DataStore handoff
+record + a delayed Kick standing in for `TeleportAsync` in Studio). Load-bearing shapes:
+- Boot order in `src/combat/server/Main.server.luau` is data → remotes → registry → arena →
+  enemies → hits → waves → debug → return, wired by **hooks, not requires** (`EnemyService.SetHooks`,
+  `CombatService.SetKillHandler`, `ArenaService.SetSnapshotSender`, `ReturnService.Init{rejoin}`),
+  because a service may never require the one above it. `Types.RunMember` lives in `Types.luau`
+  for exactly that reason.
+- `WaveService.flushPool` is the ONLY profile write under `src/combat`; it runs at wave clear and
+  once more in `EndRun` when `wave > clearedThrough` (so cleared / cap / wipe each flush exactly
+  once, merged pairs as one flush of count 2). `ReturnService` removes the member from the roster
+  BEFORE `DataService.Release`, which is what keeps a flush from racing a release.
+- **Recurring pattern (C1, the Critical):** a *yielding* infrastructure call placed directly in a
+  Heartbeat run loop makes the loop re-entrant. `WaveService.tick` → `ArenaService.PublishRun` →
+  `RunRegistry` MemoryStore `SetAsync` (+ 1/2/4 s retry backoff) sits between "wave cleared" and
+  `setPhase("breather")`, so every frame inside that yield re-enters the same branch; with the C1
+  `ForceRegistryFailure` lever on, one wave clear starts ~180 concurrent retry chains. Any
+  registry/DataStore call reached from a per-frame loop needs `task.spawn` + a single in-flight
+  guard, or a 1 Hz service tick of its own.
+- **Recurring pattern (C1):** a remote that repaints shared state must send the TRUE phase.
+  `ArenaService.SetReady` broadcasts `Broadcast("lobby")` unconditionally, so a modified client can
+  push phase `lobby` to the whole party at 10/s and (client-side) disable everyone's attack input.
+  `Admit`/`Remove` get it right (`if runFields.inRun then "wave" else "lobby"`).
+- Exploit surface that checked out: `CombatRemotes` validators reject NaN/inf vectors, cap
+  `targetIds` at `director.maxAlive` and demand positive integer ids; `swingSeq`/`seq` are
+  replay-drop counters only; melee/ranged cadence is re-gated on `os.clock()` against
+  `windows`/`cooldown × comboTimingTolerance`; `charge` is re-clamped to `elapsed / chargeSeconds`;
+  abilities cooldown per slot server-side; every id is re-resolved and re-checked for range+arc.
+  Rewards never come from a payload. `DebugService.OnRequest` and every `StudioBridge` function
+  return immediately outside `RunService:IsStudio()`.
+- Verification that paid off: both `rojo build`s + `luau-lsp analyze` per tree were green and found
+  nothing; the findings came from reading the run loop for yields and from arithmetic against the
+  JSON (`enemy.aggroRange` 80 vs the arena's 155-stud diagonal ⇒ enemies idle and the wave stalls;
+  `Theme.COMBAT_DEBUG_ROW_HEIGHT` 30 × MIN_SCALE 0.9167 = 27.5 px vs the 44 px rule).
+  `py tools/sim_combat.py --check` was red 4/10 at review time — the economy-designer was still
+  tuning `Combat.json`/`Missions/1_Village.json` in a concurrent session (status snapshot at the
+  end of the review showed both files newly modified; my memory's "another session edits the tree
+  mid-review" rule applied again).
+- Hub side: `sendExpeditionSummary` is correctly placed AFTER `EconomyService.SendSnapshot` (it
+  yields on a DataStore read in Studio), so the M4 "no yields before the offline grant" invariant
+  still holds. New trap instead: the `ExpeditionSummaryCard` is a full-screen scrim at
+  `ZINDEX_CARD`, created after `WelcomeBackCard` (same ZIndex), so on a return join it covers the
+  welcome-back card and its DoubleOffline offer. Whenever a new card fires on the join sequence,
+  check what else fires on that same join.

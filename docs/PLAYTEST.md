@@ -2811,3 +2811,298 @@ can be done in Studio** — Studio never teleports.
       published — the round trip, the offline credit and the ACTIVE RUNS list.
 - [ ] 62. Tell Claude Code "C0 expeditions playtest passed" (or report the exact failure and step
       number).
+
+## C1 — Studio bridge + Village expedition
+
+**Goal:** the whole expedition loop, **playable from Studio**. The hub can't teleport in Studio, so
+Depart now writes a handoff record to a DataStore and **kicks you**; you Stop Play, open the other
+`.rbxl`, and the run boots from that record. On the far side: Raider Woods, three enemy types, ten
+waves, bosses at 5 and 10, melee combo / bow / abilities, and a debug strip in both places.
+Numbers to cross-check: `docs/BALANCE.md` "C1". This section **replaces** C0 section 9 (the
+published round trip); C0 sections 1-8 still stand.
+
+### Before you start
+
+- Rebuild **both** places. PowerShell, from the repo root:
+  ```
+  $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+  rojo build -o build/test.rbxl
+  rojo build combat.project.json -o build/combat.rbxl
+  ```
+- **Game Settings → Security → Enable Studio Access to API Services must be ON.** The whole
+  bridge is a DataStore; with it OFF Depart refuses and warns once (that is section 3, step 24).
+- `src/shared/Config/Places.json` already holds the real ids (hub `140344407905104`, Expeditions
+  `74210626673425`), so the Expedition tiles are live. Nothing to publish this milestone.
+- Attributes go on **Workspace** (Explorer → Workspace → Properties → Attributes → **+**). Numbers
+  are consumed once per second and reset to `0`; strings reset to `""`; booleans are read as a
+  state unless the table says "consumed".
+
+  **Hub levers (`build/test.rbxl`)**
+
+  | Attribute | Type | Effect |
+  |---|---|---|
+  | `GrantCash` | number | pays that cash to every loaded player, once |
+  | `GrantMaterials` | number | that many units of the era's material (Village = Timber) |
+  | `GrantValor` | number | that much Valor |
+  | `DebugFakeRuns` | number | fills ACTIVE RUNS with N invented runs (max 8) |
+  | `ForceTeleportFailure` | boolean | **consumed once**: the next Depart fails the way a live `TeleportInitFailed` does |
+
+  **Expeditions levers (`build/combat.rbxl`)**
+
+  | Attribute | Type | Effect |
+  |---|---|---|
+  | `DebugMission` | string | mission id to load (`village`); only used when no handoff record |
+  | `DebugOverdrive` | boolean | Overdrive on/off for that boot |
+  | `DebugWave` | number | next wave to start is N (in the lobby: the run starts at N) |
+  | `DebugSpawn` | string | one enemy now: `raider`, `archer` or `brute` |
+  | `DebugGodMode` | boolean | **state**, not consumed: you take no damage |
+  | `DebugKillAll` | number ≥ 1 | every alive enemy dies with normal rewards |
+  | `DebugSetGear` | string | `melee=2,ranged=1` sets your weapons and re-applies Max HP |
+  | `DebugBots` | number | **state**: keep that many bots in the party (max 8) |
+  | `GrantMaterials` / `GrantValor` | number | as in the hub |
+  | `ForceRegistryFailure` | boolean | **sticky**: every MemoryStore registry call fails through its 3 warned retries |
+
+- Both places also have a Studio-only **`⚙ debug`** strip with a button per lever: bottom-left in
+  the hub, top-left in the Expeditions place. Neither exists in a published server.
+
+### 1. Hub debug strip and levers
+
+- [ ] 1. Open `build/test.rbxl`, press **Play**. Confirm **zero red errors** and that the city loop
+      (plot, buy pads, income, Build panel) behaves exactly as in M9.
+- [ ] 2. Bottom-left, above the bottom bar, find the **`⚙ debug`** tab. Tap it: it expands to
+      **`⚙ debug ▾`** and shows five buttons — **Grant $10K**, **Grant 25 Timber**,
+      **Grant 10 Valor**, **Fake runs ×3**, **Tele fail: OFF**.
+- [ ] 3. Tap **Grant $10K**. Confirm the top-bar cash rises by exactly 10,000 within a second.
+- [ ] 4. Tap **Grant 25 Timber**, then open **⚔ Armory**. Confirm the **Timber chip reads 25**.
+- [ ] 5. Tap **Grant 10 Valor**. (No Valor readout in the hub UI at C1 — the proof is the
+      Expedition report later. No error is the check here.)
+- [ ] 6. **Attribute path.** Add `GrantMaterials` = `10`. Within ~1 s Output warns
+      `[ArmoryService] GrantMaterials lever: granted 10 to 1 loaded player(s); attribute reset to 0`
+      and the attribute is back at `0`. The Timber chip reads **35**.
+- [ ] 7. Set your loadout for the run: buy **Wooden Sword** (10 Timber) in the Armory, then
+      **Short Bow** (10 Timber). Header reads `Max HP 130`, top bar reads `⚔ 48`. (Iron Sword is
+      income-gated; you'll set the recommended loadout with `DebugSetGear` in step 34.)
+- [ ] 8. Tap **Fake runs ×3**. Output warns
+      `[ExpeditionService] fakeRuns lever: 3 Studio-only run(s) in the join list`.
+- [ ] 9. Open **🗺 Expedition**. Confirm **ACTIVE RUNS** lists three rows — **Fake 1 / Fake 2 /
+      Fake 3**, each with a meta line like `village · Wave 1 · 1/4` and a **Join** button. An entry
+      must never show an access code or a server id.
+- [ ] 10. Tap **Join** on **Fake 1**. Confirm a toast
+      **"Departure failed — ForceTeleportFailure is on, or Studio has no API access"**, that you
+      **stay** on your plot, and that Output has **no red error**. (A fake run is deliberately
+      unjoinable; in Studio every refusal reads as that one message.)
+
+### 2. The bridge round trip — the heart of this milestone
+
+- [ ] 11. Still in `build/test.rbxl`, **🗺 Expedition** → **Depart** on **Raider Woods**.
+- [ ] 12. Confirm, in order:
+      - a toast **"Handoff saved — Stop Play, then open build/combat.rbxl"**,
+      - Output warns `[StudioBridge] <your name>: Handoff saved — Stop Play, then open build/combat.rbxl`,
+      - about **1 second later you are kicked**, with the same sentence in the kick dialog.
+      The kick **is** the teleport here. Being kicked instantly (no toast) or not at all is a bug.
+- [ ] 13. **Stop Play.** (Studio stays open; the profile is already released.)
+- [ ] 14. Prove the record beats the attribute: File → Open **`build/combat.rbxl`**, and set
+      Workspace attribute **`DebugMission`** to **`nonsense`**.
+- [ ] 15. Press **Play**. Confirm you spawn on the **`LobbyPad`** inside a fenced **green arena**
+      (110×110 with a few rocks/logs), the HUD title reads **`Raider Woods`** and the wave line
+      reads **`Lobby`** — the handoff record won over the bad attribute. Zero red errors.
+- [ ] 16. Confirm the bottom-left **HP** reads your Armory value (`HP 130 / 130` after step 7), not
+      100. A flat 100 means the profile did not carry over — check API access.
+- [ ] 17. **The record is consumed once.** Stop Play, press **Play** again. This time you should get
+      the **refusal path for `nonsense`**: no wave line, a "locked"/refusal toast, and **zero
+      errors**. Set `DebugMission` back to **`village`** and Play again — you are in Raider Woods.
+- [ ] 18. Tap **Ready**, play at least two waves (see section 4 for what to watch), then tap
+      **Return** — or let the run end and press **Return** on the summary card.
+- [ ] 19. Confirm: the **summary card** appears, then Output warns
+      `[StudioBridge] <your name>: Run over — Stop Play, then reopen build/test.rbxl` and you are
+      **kicked ~1 s later** with that message.
+- [ ] 20. **Stop Play**, re-open **`build/test.rbxl`**, press **Play**.
+- [ ] 21. Confirm the **EXPEDITION REPORT** card appears once: title **`Raider Woods`**, a
+      `Waves cleared N / 10 · best N` line, and rows for **Cash**, **Timber**, **Valor**, **Kills**
+      and **Time** matching what the combat summary card said. Tap **Nice** to dismiss; it must
+      **not** come back on the next Stop/Play.
+- [ ] 22. Confirm the **cash and Timber are actually in your profile** (top bar, Armory chip), not
+      just on the card — they were banked wave by wave during the run, before the trip home.
+- [ ] 23. **Welcome-back chaining.** If a **welcome-back / offline card** also appears on this join
+      (it will after a run of any length), confirm the order: **welcome-back card first**, its
+      "Double it" offer fully visible and tappable, and the EXPEDITION REPORT only appears **after**
+      you close it. The report covering the offer is the bug this check exists for.
+
+### 3. Forced failures (each one is reachable from Studio)
+
+- [ ] 24. **No API access.** Game Settings → Security → turn **Enable Studio Access to API
+      Services OFF**, Play the hub, tap **Depart**. Confirm: Output warns **once**
+      `[StudioBridge] handoff needs API access (Game Settings → Security → Enable Studio Access to
+      API Services)`, a toast **"Departure failed — ForceTeleportFailure is on, or Studio has no
+      API access"**, you **stay** on your plot with your city untouched, and you are **not**
+      kicked. Turn API access back **ON** before continuing.
+- [ ] 25. **`ForceTeleportFailure`, hub side.** Add Workspace boolean **`ForceTeleportFailure`** =
+      **true** (or tap **Tele fail: OFF** on the debug strip so it reads **`Tele fail: ON`** in
+      red). Tap **Depart**.
+- [ ] 26. Confirm: the same "Departure failed…" toast, you **stay** in the hub with your profile
+      re-loaded (cash/slots/income unchanged, no safe-mode card), the strip's button flips back to
+      **`Tele fail: OFF`**, and the attribute is back at **false** (consumed once).
+- [ ] 27. Tap **Depart** again with the lever now off. Confirm the normal handoff toast + kick, so
+      the failure really was one-shot. Stop Play **without** opening the combat place — the record
+      you just wrote is harmless (it expires after 15 minutes) but step 28 clears it.
+- [ ] 28. **`ForceTeleportFailure`, return side.** Open `build/combat.rbxl`, Play (it boots from
+      that record), tap **Ready** and then **Return**, having first set Workspace
+      **`ForceTeleportFailure`** = **true**.
+- [ ] 29. Confirm: the summary card appears, then a toast **"Studio can't teleport — reopen
+      build/test.rbxl for the hub"**, and you are **put back into the run** (HUD still there, you
+      are not kicked, not frozen, no error). Tap **Return** again — this time you are kicked
+      normally.
+- [ ] 30. **`ForceRegistryFailure`.** Back in `build/combat.rbxl`, add Workspace boolean
+      **`ForceRegistryFailure`** = **true**, then Play and **Ready** up. Confirm Output shows
+      repeated `[RunRegistry] … failed (attempt 1/2/3): …` warnings, that the **run still plays
+      normally** (waves spawn, damage lands, rewards bank) and that **no red error** appears. This
+      lever is sticky — set it back to **false** when you're done.
+- [ ] 31. **Stale record.** Optional: leave a handoff unconsumed for **15+ minutes**
+      (`handoffMaxAgeSeconds` 900) then open the combat place. Confirm it is ignored and the place
+      falls back to `DebugMission`, with no error.
+
+### 4. The Village run
+
+Set up: `build/combat.rbxl`, `DebugMission` = `village`, Play, and use
+**`DebugSetGear`** = **`melee=2,ranged=1`** (Iron Sword + Short Bow, power 57 — the recommended
+loadout the balance table is written for). Expect **~8:26** and roughly **139K cash / 248 Timber /
+35 Valor** for a full clear.
+
+- [ ] 32. In the lobby confirm the HUD: title **`Raider Woods`**, wave line **`Lobby`**, a party row
+      with your name and full HP, a **Ready** button and a **Return** button, and a wallet strip
+      (cash · Timber · Valor).
+- [ ] 33. Tap **Ready**. Confirm a **wave banner** and the wave line becoming **`Wave 1 / 10`**,
+      with **`Alive n · Left m`** beside it.
+- [ ] 34. Confirm **5 rust-coloured raiders** trickle in from the fence line (not all at once),
+      walk at you, and telegraph each swing with a short windup before it lands.
+- [ ] 35. **Melee.** Press **`1`** for the melee stance, then click three times in rhythm. Confirm
+      damage numbers pop on each hit, the **third hit is bigger (the finisher)** and knocks the
+      target back. Spamming faster than the combo window should simply drop hits — never an error.
+- [ ] 36. **Ranged.** Press **`2`**, then **hold** the mouse button to draw and release. Confirm a
+      longer hold does more damage than a tap, and that a shot into empty space does nothing (no
+      error, no toast).
+- [ ] 37. **Abilities.** Press **`Q`** (Whirlwind, 12 s) and **`E`** (Volley, 14 s) with enemies
+      nearby (the **starter** Stick and Sling have no ability, so this needs the weapons from step 7).
+      Confirm the ability button shows a **cooldown ring/timer**, that Whirlwind hits
+      everything around you and knocks it back, and that **kills shorten both cooldowns**.
+- [ ] 38. **Wave clear banks money.** When wave 1 clears, confirm a wave-clear banner, a
+      **breather** (`Breather — wave 1 / 10`) with your HP regenerating, and that the **wallet strip
+      cash and Timber go up at that moment**. Rewards are flushed per wave, not at the end.
+- [ ] 39. **Tempo dot.** Watch the small dot by the wave line change colour as you clear faster or
+      slower. At recommended power it should sit calm/neutral and **never** merge (a
+      **`Waves 4 + 5`** line means you are out-pacing the stream — correct at high gear, unusual
+      here).
+- [ ] 40. **Boss.** Reach **wave 5**. Confirm the wave line becomes **`Boss — Raider Chief`**, a
+      **boss health bar** appears at the top, the boss rig is visibly **bigger and dark red**, and
+      on its death a boss-down banner plus a **Valor** bump in the wallet strip.
+- [ ] 41. **Low HP.** When you drop below 30 % HP confirm a **red vignette** at the screen edges,
+      and that it clears when you heal in the breather.
+- [ ] 42. **Death.** Let yourself die (or set `DebugSetGear` = `melee=0,ranged=0` first). Alone,
+      confirm the run **ends** with the summary card, that it carries the
+      **"You went down — the rewards above are already banked"** line, and that the cash you had
+      already earned is **still on the card**. Losing banked rewards on death is a bug.
+- [ ] 43. **Full clear.** With `melee=2,ranged=1`, clear **wave 10** (Warlord). Confirm the summary
+      card shows `Waves cleared 10 / 10`, kills, cash, Timber, Valor and a time near **8:26**.
+- [ ] 44. **Mobile pass — 375×667 portrait.** Device Emulator, restart Play. Confirm: the attack
+      button is bottom-right and comfortably thumb-sized, the two ability buttons sit beside it,
+      the stance toggle is above them, the wave line / boss bar / party rows / wallet strip are all
+      on screen and unclipped, and **nothing overlaps** the HP bar or the Return button.
+- [ ] 45. At 375×667, fight a whole wave by **tapping only** (no keyboard). Confirm the soft-lock
+      picks the nearest enemy in front of you and that a hold-to-draw works on touch.
+- [ ] 46. **Mobile pass — 812×375 landscape.** Repeat 44-45. Confirm the HUD compresses rather than
+      clipping, and the summary card fits with its Return button reachable.
+- [ ] 47. On touch, confirm **reduced motion** is honoured: with Reduced motion ON in the hub's
+      Settings panel, the camera kick and particle bursts are damped and nothing else changes.
+
+### 5. Every lever, from the attribute and from the strip
+
+Run these mid-fight in `build/combat.rbxl`.
+
+- [ ] 48. Expand the top-left **`⚙ debug`** strip. Confirm the buttons: **Wave +1**,
+      **Spawn raider / Spawn archer / Spawn brute**, **God: off**, **Kill all**, **Melee +1**,
+      **Ranged +1**, **Bots +1**, **Bots −1**, **+25 mat**, **+10 Valor**.
+- [ ] 49. `DebugWave` = `7` (or **Wave +1**). Confirm the next wave that starts is wave 7 and the
+      wave line says so.
+- [ ] 50. `DebugSpawn` = `brute` (or **Spawn brute**). Confirm one dark-red brute appears at a rim
+      spawn and walks at you; the attribute resets to `""`.
+- [ ] 51. `DebugGodMode` = **true** (or **God: off** → **God: ON**). Confirm you stop taking damage
+      entirely; set it back to false and confirm damage resumes.
+- [ ] 52. `DebugKillAll` = `1` (or **Kill all**). Confirm every alive enemy dies **with normal
+      rewards** (wallet strip moves), not silently deleted.
+- [ ] 53. `DebugSetGear` = `melee=4,ranged=4` (or **Melee +1** / **Ranged +1**). Confirm your **HP
+      bar's maximum grows immediately** and your damage numbers jump. A tier that doesn't exist is
+      ignored with `[DebugService] setGear: no melee tier N` and **no** error.
+- [ ] 54. **`DebugBots` = `2`.** Confirm: two blue rigs named **Bot 1** and **Bot 2** join the
+      party, **two extra rows** appear in the party list, they walk at enemies and deal damage,
+      enemies target them, and the **wave count grows** (party of 3 spawns more enemies than a solo
+      wave).
+- [ ] 55. With the bots still in, clear a wave and then **Return**. Confirm the summary card shows
+      **only your share** of the wave pools — bots' shares are discarded, so your cash is lower than
+      the whole-wave total, never higher.
+- [ ] 56. Set `DebugBots` = `0` and confirm both rows disappear cleanly.
+- [ ] 57. `GrantMaterials` = `25` and `GrantValor` = `10` here (or **+25 mat** / **+10 Valor**).
+      Confirm the wallet strip updates immediately and both attributes reset to `0`.
+
+### 6. Two players in the arena (Local Server — multiplayer changed this milestone)
+
+- [ ] 58. In `build/combat.rbxl`: **Test → Start** with **2 Players** (Local Server), `DebugMission`
+      = `village`. Wait for both clients to spawn on the lobby pad.
+- [ ] 59. Confirm each client's party list shows **both players** with their own Max HP, and that
+      the run **only starts when both** have tapped **Ready** (Ready on one alone must not start
+      wave 1).
+- [ ] 60. Confirm a Ready **✓** set on client 1 is visible on client 2 within a second, and that
+      once the run has started Ready can no longer be toggled.
+- [ ] 61. Fight a wave on **both** clients. Confirm: each client sees the **same enemies in the same
+      places**, damage numbers from the other player appear, enemies split their aggro, and the
+      wave count is bigger than solo.
+- [ ] 62. On wave clear, confirm **both** wallet strips update and that the two amounts **differ by
+      damage done** — the player who did most of the damage gets most of the pool, and the one who
+      did least still gets a floor, never zero.
+- [ ] 63. Kill one player (let client 2 die). Confirm client 2 **respawns after ~8 s** at a player
+      spawn while client 1 is alive, and that the run does **not** end.
+- [ ] 64. Have both players die in the same wave. Confirm the run ends for both, each gets their
+      **own** summary card with their **own** numbers, and rewards are kept.
+- [ ] 65. On client 2 tap **Return** mid-run. Confirm client 2 is kicked (bridge) and **client 1's
+      party list drops to one row** with the run continuing.
+- [ ] 66. Confirm **no red errors** in either client's Output or the server's, then Stop.
+- [ ] 67. In `build/test.rbxl`: **Test → Start** with **2 Players**. On each client open the
+      **⚙ debug** strip and tap **Grant $10K**; confirm it pays **only the client that tapped it**
+      (the remote is per player, unlike the attribute, which pays both).
+
+### Report back
+
+Tell Claude Code, in one message:
+
+1. Did the round trip work end to end (Depart → kick → combat place from the record → Return →
+   kick → hub → EXPEDITION REPORT with matching numbers)?
+2. How long did a full 10-wave clear take at `melee=2,ranged=1`, and what cash / Timber / Valor did
+   the summary show? (Expected ~8:26, ~139K / 248 / 35.)
+3. Did the fight **feel** right — are waves 1-4 and 6-9 too empty, are the two boss waves the
+   danger, did you ever merge waves?
+4. Any lever that did nothing, any red error (with the step number), and anything clipped or
+   untappable at 375×667 or 812×375.
+5. Anything in the two-player pass that only one client saw.
+
+### Not a bug — don't report these
+
+- **Silence.** All 17 combat sound ids are `0` until the audio pass; the fight is meant to be mute.
+- **Placeholder enemies.** Plain R15 rigs, recoloured by type (raider rust, archer olive,
+  brute/boss dark red, bot blue). No enemy models exist yet.
+- **Empty hands.** No weapon models yet — the swing and draw are procedural poses on your arms.
+- **Other players' swings aren't animated.** Only your own character poses; the damage is real.
+- **The kick.** Both Depart and Return end in a kick: that is the Studio stand-in for a teleport.
+  Stop Play, open the other `.rbxl`.
+- **The bow can fire a full-charge shot instantly** if you waited a while between shots — the
+  charge is measured from your last shot. Known, fixed in C2.
+- **The arena is plain.** Grass floor, fence and a few rocks; dressing is not part of C1.
+- **ACTIVE RUNS is empty** unless you use `DebugFakeRuns`, and a fake run always refuses Join.
+- **Boss HP does not scale with party size** — a duo kills a boss twice as fast. Open C2 ruling.
+
+### Sign-off
+
+- [ ] 68. All boxes above checked: the hub debug strip and levers, the bridge round trip with the
+      EXPEDITION REPORT chained behind the welcome-back card, the four forced failures, a full
+      Village run on desktop plus the 375×667 and 812×375 passes, every debug lever from both the
+      attribute and the strip including `DebugBots = 2`, and the two-player Local Server pass.
+- [ ] 69. Tell Claude Code "C1 expedition playtest passed" (or report the exact failure and step
+      number).

@@ -1123,4 +1123,110 @@ plus MemoryStore access; join-in-progress registry entries exist but the hub Joi
 works on a published pair *and* after C2 wires party logic.
 
 - [x] C0 built and reviewed (definition of done in INTERFACES "C0 contracts")
-- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C0")
+- [~] Ben's Studio playtest (`docs/PLAYTEST.md` "C0") — **superseded by C1.** C0 sections 1-8 still
+      apply and are folded into the C1 pass; section 9 (the published round trip) is replaced by
+      the C1 Studio bridge round trip, which Ben can actually run.
+
+## C1 — Studio bridge + Village expedition
+
+**Goal:** make the whole expedition loop playable **from Studio**, and fill it with the Village
+fight. Ben cannot reach the published pair (audience-reach block, `docs/DISCOVERY_CHECKLIST.md`),
+so C1 ships a **Studio bridge** that replaces the one thing Studio cannot do — `TeleportAsync` —
+with a DataStore handoff record plus a kick, and leaves every other platform path (profile
+release, run registry, retries, failure recovery) running for real. On top of that: the Raider
+Woods arena, three enemy types, ten waves with two bosses, melee combo / ranged / abilities, the
+pacing director, hit feedback, and a debug strip in both places. Contracts:
+`docs/INTERFACES.md` "C1 contracts — Studio bridge + Village expedition" (2026-09-22).
+
+**Rulings that shape everything:**
+1. Every C1 feature must be reachable from Studio. Levers are `RunService:IsStudio()`-gated
+   Workspace attributes or the Studio-only debug strips — never a trick against the platform.
+2. The handoff record is a **hint, never an entitlement**: the combat place re-validates the
+   mission against the loaded profile exactly as it validates live teleport data.
+3. Nothing in `StudioBridge` or `DebugService` runs outside Studio; a published server behaves
+   exactly as it did at C0.
+4. **No enemy or weapon model is required.** Placeholder R15 rigs and empty hands are the
+   shipped default; models are a later props pass.
+5. All damage in both directions goes through `CombatService` — never Roblox touch/physics.
+6. Every subagent on the combat milestones runs on Opus.
+
+**Tasks (wave 1, parallel, disjoint):** luau-engineer A — combat core (`WaveService`,
+`EnemyService`, `CombatService`, `DebugService`, `ArenaService`, `Village` arena layout, `Types`,
+pure `Combat.luau`). luau-engineer B — Studio bridge (`StudioBridge`, `ExpeditionService`,
+`HubRemotes`, hub `Main.server.luau`, `ReturnService`, `RunRegistry`). ui-engineer A —
+`src/combat/client/**` (`InputController`, `WeaponController`, `CombatFxController`, `CombatHud`,
+`SummaryCard`, `DebugPanel`). ui-engineer B — hub client (`ExpeditionSummaryCard`, `DebugPanel`,
+`UIController`, `ExpeditionPanel`). economy-designer — `tools/sim_combat.py` run simulator,
+Village values, `docs/BALANCE.md` "C1". **Wave 2:** roblox-reviewer → qa-runner → docs-keeper.
+
+**Shipped (2026-09-22):**
+- **Studio bridge** — `src/server/Services/StudioBridge.luau` (shared Services folder, so both
+  places see it): DataStore `StudioHandoff`, key `p_<userId>`, records `depart` / `join` /
+  `return`, pcall + 3 retries + warn, records older than `handoffMaxAgeSeconds` (900 s) ignored
+  and removed, every field type-checked on read. `Depart(player, message)` warns and kicks after
+  1 s so the toast lands first.
+- **Hub** — `ExpeditionService.Depart`/`Join` run in bridge mode in Studio (no `ReserveServer`,
+  access code `"studio"`, real profile release, real failure recovery); `ForceTeleportFailure`
+  re-admits the player with `unavailable` and clears the record; hub `Main.server.luau` fires the
+  new `ExpeditionSummary` event from `TeleportData.summary` **or** `StudioBridge.ReadReturn`;
+  `HubRemotes` gains `ExpeditionSummary` and the `RequestDebug(lever, value)` intent (bucket
+  `calls`), handled by `ArmoryService` and ignored outside Studio (`grantCash`, `grantMaterials`,
+  `grantValor`, `fakeRuns`, `forceTeleportFailure`).
+- **Combat place** — `Village` arena layout (110x110 Grass floor, 4-stud fence, 8 rim spawns,
+  obstacles, `LobbyPad`) built by `ArenaService`; `EnemyService` (placeholder R15 rigs from
+  `CreateHumanoidModelFromDescription`, recoloured per key, boss/elite scaling, server-side
+  Motor6D windup and walk bob, `EnemyId`/`EnemyKey`/`DisplayName`/`IsBoss`/`Elite`/`Attacking`/
+  `Dead` attributes, AI at `tickHz` 10 inside `aggroRange` 80); `WaveService` (lobby → 10 waves →
+  summary, trickle spawns at `SpawnInterval`, `maxAlive` 24, tempo with a 15 s warmup, merges,
+  breathers with regen, bosses at waves 5 and 10, per-wave-clear pool split through
+  `ContributionShares`/`SplitPool` flushed to the profile plus a fresh Snapshot, run cap 1200 s);
+  `CombatService` (three-hit melee combo with server-clock windows and a finisher, ranged
+  `RequestFire` with server raycast and charge clamp, `RequestAbility` per slot with kill refunds,
+  `DamagePlayer` with god mode); `DebugService` (attribute poll + `RequestDebug`, bots up to 8);
+  `ReturnService` writes the return record and kicks in Studio; `RunRegistry` is no longer a
+  Studio no-op (real MemoryStore, in-memory stand-in under mock mode, `ForceRegistryFailure`).
+- **Combat client** — `InputController` (stance `1`/`2`, click/tap attack, hold-to-draw, `Q`/`E`
+  abilities, touch soft-lock inside `aimAssistDegrees` 20), `WeaponController` (prop when present,
+  procedural Motor6D poses otherwise), `CombatFxController` (damage numbers, Highlight flash,
+  hitstop, camera kick, dissolve, wave/merge/boss banners, low-HP vignette, attack tells, reduced
+  motion), `CombatHud` (wave line, boss bar, alive/left, tempo dot, wallet strip, party rows,
+  stance + ability buttons, run timer), `SummaryCard`, Studio-only `DebugPanel`.
+- **Hub client** — `ExpeditionSummaryCard` ("EXPEDITION REPORT") shown once on `ExpeditionSummary`
+  and **chained behind** the welcome-back card; Studio-only `DebugPanel` strip.
+- **Config/balance** — `Combat.json` gains `enemy`, `feedback`, the nine new `debug` keys and
+  `player`/`director` additions; `Sounds.json` gains 17 combat keys (all id 0 = silent);
+  `Missions/1_Village.json` retuned (enemy HP/damage/cooldowns, `countPerWave` 0.3, `hpGrowth`
+  and `damageGrowth` 0.03, boss multipliers); `director.windowSeconds` 15 → 10, `tempoMin` 0.7,
+  `mergeTempo` 1.25. `tools/sim_combat.py` replaces the closed-form DPS model with a full run
+  simulator; `--check` is green on **ten** assertions. Numbers: `docs/BALANCE.md` "C1".
+
+**Review outcome:** 1 Critical — a MemoryStore publish yielded inside the wave loop (now
+serialized off-thread). 4 Majors — Ready could be flapped mid-run, enemies idled outside aggro
+range, the expedition report covered the welcome-back "Double it" offer, and there was no reaper
+for enemies destroyed out of band. **All five fixed**; reviewer verdict SHIP AFTER FIXES → fixed.
+qa-runner: ALL GREEN for C1 (stylua, selene, both builds, both sourcemaps + luau-lsp, `sim_economy.py --check` unchanged, `sim_combat.py --check` 10/10, manifest). The only red is pre-existing at HEAD: `gen_templates.py --check` reports four M9 wave-2a Metropolis stages (CityHall, HighwayRamp, PlazaA, PlazaB) uploaded but never harvested — Ben's harvest paste, see MANUAL_STEPS M9.
+
+**Carried forward (owners assigned):**
+- **Ben, now:** run `docs/PLAYTEST.md` "C1" with **Enable Studio Access to API Services ON**
+  (`docs/MANUAL_STEPS.md` "C1"). Nothing to publish or upload this milestone.
+- **lead, C2:** other players' melee swings are not animated (only the local character poses).
+- **lead, C2:** the bow's charge is measured from time since the last shot, not from a separate
+  draw start — a player who waits between shots can fire an instant full-charge arrow.
+- **lead, C2:** the five UI modules copied verbatim into `src/combat/client/UI` are still copies
+  (carried from C0); dedupe when the combat client stops moving.
+- **lead, C2:** enemy colours are code constants in `EnemyService`, not config.
+- **economy-designer, C2:** re-measure `MELEE_CONTACT_SLOTS`, the enemy land rate and tempo-as-lag
+  against what Studio actually does (`docs/BALANCE.md` "What C2 should re-check").
+- **lead, open rulings for C2 (from C0):** boss HP vs party size, and whether the hub's
+  active-runs list stays same-server + friends or widens.
+
+**Known limits at C1:** no enemy or weapon models (placeholder rigs, empty hands — by design);
+all 17 combat sound ids are `0`, so the fight is silent; the Studio bridge replaces the teleport
+with a **kick**, so a Studio round trip is Stop Play → open the other `.rbxl`; without API access
+the bridge is inert (Depart answers `unavailable` and warns once) and the two places use separate
+mock profiles; co-op is only observable through `DebugBots` and a Local Server pair — party from
+the hub, join-in-progress and the Mentor bonus are C2; missions 2-4, the Ascension forge and
+Overdrive balance are C3.
+
+- [x] C1 built and reviewed (definition of done in INTERFACES "C1 contracts")
+- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C1")

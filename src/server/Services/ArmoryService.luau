@@ -19,6 +19,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local ExpeditionService = require(script.Parent:WaitForChild("ExpeditionService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 -- The Studio levers are polled, like EconomyService's GrantCash/GrantLegacy, so the value can be
@@ -180,6 +181,31 @@ local function consumeGrantLever(
 	)
 end
 
+-- GrantMaterials pays the material of the band matching the player's CURRENT era, which is the
+-- one their Armory tiers are priced in. Shared by the attribute and the RequestDebug lever.
+local function grantMaterialsTo(state: Types.PlayerState, value: number): ()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if armoryConfig == nil then
+		return
+	end
+	local material = Armory.BandMaterial(armoryConfig, state.era)
+	if material == nil then
+		return
+	end
+	state.combat.materials[material] = (state.combat.materials[material] or 0) + value
+end
+
+-- C1: the join list's Studio stand-in. Unlike the grant levers this one is not per player, so
+-- it gets its own consumer rather than consumeGrantLever's loop over loaded profiles.
+local function consumeFakeRunsLever(attribute: string): ()
+	local value = workspace:GetAttribute(attribute)
+	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+		return
+	end
+	workspace:SetAttribute(attribute, 0)
+	ExpeditionService.PublishFakeRuns(value)
+end
+
 local function consumeStudioLevers(): ()
 	local combatConfig = Catalog.GetCombatConfig()
 	local armoryConfig = Catalog.GetArmoryConfig()
@@ -187,19 +213,68 @@ local function consumeStudioLevers(): ()
 		return
 	end
 	local debugConfig = combatConfig.debug
-	consumeGrantLever(debugConfig.grantMaterialsAttribute, function(state, value)
-		local material = Armory.BandMaterial(armoryConfig :: Types.ArmoryConfig, state.era)
-		if material == nil then
-			return
-		end
-		state.combat.materials[material] = (state.combat.materials[material] or 0) + value
-	end)
+	consumeGrantLever(debugConfig.grantMaterialsAttribute, grantMaterialsTo)
 	consumeGrantLever(debugConfig.grantValorAttribute, function(state, value)
 		state.combat.valor += value
 	end)
+	consumeFakeRunsLever(debugConfig.fakeRunsAttribute)
+end
+
+-- A lever value that pays something out: positive and finite, so a corrupted materials, Valor
+-- or cash field can never be persisted from a typo in the Properties pane.
+local function grantAmount(value: any): number?
+	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
+		return nil
+	end
+	return value
 end
 
 local ArmoryService = {}
+
+-- RequestDebug (C1, docs/INTERFACES.md "Studio bridge" → "Hub side"). The same levers as the
+-- Workspace attributes, driven by the client DebugPanel's buttons, but for the calling player
+-- only. Outside Studio it does nothing at all: the remote exists in every build, the effects do
+-- not. Never yields, so the intent handler needs no thread of its own.
+function ArmoryService.HandleDebug(player: Player, lever: string, value: any): ()
+	if not isStudio then
+		return
+	end
+	if lever == "fakeRuns" then
+		-- 0 clears the list, which is why this lever is not routed through grantAmount.
+		ExpeditionService.PublishFakeRuns(if typeof(value) == "number" then value else 0)
+		return
+	end
+	if lever == "forceTeleportFailure" then
+		local combatConfig = Catalog.GetCombatConfig()
+		if combatConfig == nil then
+			return
+		end
+		-- The attribute stays the single source of truth (StudioBridge reads it), so the panel
+		-- and the Properties pane can never disagree.
+		workspace:SetAttribute(combatConfig.debug.forceTeleportFailureAttribute, value == true)
+		return
+	end
+	local amount = grantAmount(value)
+	local state = DataService.GetState(player)
+	if amount == nil or state == nil then
+		return
+	end
+	if lever == "grantCash" then
+		state.cash += amount
+		-- The attribute the client's leaderstats-style readouts mirror, as in EconomyService's
+		-- GrantCash lever; cash itself rides the normal dirty/delta path.
+		player:SetAttribute("Cash", state.cash)
+		EconomyService.MarkDirty(player, { cash = true })
+	elseif lever == "grantMaterials" then
+		grantMaterialsTo(state, amount)
+		EconomyService.MarkDirty(player, { combat = true })
+	elseif lever == "grantValor" then
+		state.combat.valor += amount
+		EconomyService.MarkDirty(player, { combat = true })
+	else
+		warn(`[ArmoryService] unknown debug lever "{lever}"`)
+	end
+end
 
 function ArmoryService.Init(): ()
 	-- Payload types are already validated by RemoteService; the casts narrow the varargs.

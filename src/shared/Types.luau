@@ -856,19 +856,82 @@ export type MissionConfig = {
 	bosses: { [string]: BossDef },
 }
 
+-- The four numbers Combat.EnemyStats resolves for one spawned enemy. Declared here as well as
+-- in Combat.luau (which is pure and cannot require this file) because it is the payload the
+-- combat services hand each other.
+export type EnemyStats = { hp: number, damage: number, cash: number, materials: number }
+
+-- C1: the arena a mission is fought in (Shared/Layouts/Arenas/<mission.arena>). Plain numbers and
+-- names rather than Vector3/Color3/Enum so the layout stays a data file: ArenaService converts.
+-- Origin is the arena centre, the floor's TOP face is y = 0, and every obstacle sits on it.
+export type ArenaObstacle = {
+	x: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+	material: string,
+	color: { number },
+}
+export type ArenaSurface = { material: string, color: { number } }
+export type ArenaPoint = { x: number, z: number }
+export type ArenaLayout = {
+	size: { x: number, z: number },
+	floor: ArenaSurface,
+	-- nil = open edges (no fence); `height` is studs above the floor.
+	wall: { height: number, material: string, color: { number } }?,
+	lobbyPad: ArenaPoint,
+	-- At least 4 / 8 respectively, both used round-robin.
+	playerSpawns: { ArenaPoint },
+	enemySpawns: { ArenaPoint },
+	obstacles: { ArenaObstacle },
+}
+
 -- Combat place run state (server to client on the RunState event). One authoritative payload for
 -- the whole HUD, so the client never derives a phase.
-export type RunPartyMember = {
+export type RunPhase = "lobby" | "wave" | "breather" | "boss" | "summary" | "ended"
+export type EnemyState = "idle" | "chasing" | "attacking" | "stunned" | "dead"
+-- One row of the HUD party list. `bot` rows are Studio debug rigs: they scale the wave and take
+-- aggro, but their reward share is discarded. `abilityReadyIn` is SECONDS remaining, so the
+-- client can draw a cooldown ring without knowing the server clock.
+export type PartyMember = {
 	userId: number,
 	name: string,
 	hp: number,
 	maxHp: number,
 	ready: boolean,
+	alive: boolean,
+	bot: boolean,
+	abilityReadyIn: { melee: number, ranged: number },
+	stance: WeaponSlot,
+}
+-- The server-side party record behind a PartyMember: it also holds the character, the ability
+-- cooldown stamps and the per-run bookkeeping the client never sees. Lives in Types (not in
+-- ArenaService) because EnemyService and CombatService take one as an argument, and a service
+-- may not require the service above it in the boot order.
+export type RunMember = {
+	userId: number,
+	name: string,
+	-- nil for a debug bot; every other field works the same for both.
+	player: Player?,
+	bot: boolean,
+	ready: boolean,
+	character: Model?,
+	humanoid: Humanoid?,
+	stance: WeaponSlot,
+	-- os.clock() stamps; a kill refunds killCooldownRefundSeconds off both.
+	abilityReadyAt: { melee: number, ranged: number },
+	godMode: boolean,
+	-- os.clock() the corpse may respawn at; 0 = alive or waiting on the run to end.
+	respawnAt: number,
+	spawnIndex: number,
 }
 export type RunSummary = {
 	missionId: string,
 	overdrive: boolean,
 	wavesCleared: number,
+	bestWave: number,
+	died: boolean,
 	cash: number,
 	materials: { [string]: number },
 	valor: number,
@@ -877,17 +940,65 @@ export type RunSummary = {
 }
 export type RunState = {
 	kind: "run",
-	phase: "lobby" | "wave" | "breather" | "boss" | "summary" | "ended",
+	phase: RunPhase,
 	missionId: string,
 	overdrive: boolean,
 	wave: number,
 	waves: number,
 	alive: number,
+	-- Still to spawn in the current wave.
+	remaining: number,
 	tempo: number,
-	party: { RunPartyMember },
+	-- True while the current wave is running as "Waves N + N+1".
+	merged: boolean,
+	party: { PartyMember },
 	breatherEndsIn: number?,
+	-- Seconds left before director.runCapSeconds ends the run.
+	runEndsIn: number,
+	boss: { name: string, hp: number, maxHp: number }?,
 	summary: RunSummary?,
 }
+
+-- Presentation events, batched per Heartbeat frame into one list per client. Damage numbers,
+-- highlights, banners and camera kick are drawn from these; nothing here is authoritative.
+export type CombatFxHit = {
+	kind: "hit",
+	enemyId: number,
+	amount: number,
+	finisher: boolean,
+	position: Vector3,
+	byUserId: number,
+}
+export type CombatFxKill = {
+	kind: "kill",
+	enemyId: number,
+	position: Vector3,
+	cash: number,
+	materials: number,
+	byUserId: number,
+}
+export type CombatFxPlayerHit = { kind: "playerHit", userId: number, amount: number }
+export type CombatFxAbility = {
+	kind: "ability",
+	userId: number,
+	key: string,
+	slot: WeaponSlot,
+	position: Vector3,
+	radius: number?,
+}
+export type CombatFxWave = { kind: "wave", wave: number, merged: boolean, boss: boolean }
+export type CombatFxBossDown = { kind: "bossDown", name: string, valor: number }
+export type CombatFxPlayerDown = { kind: "playerDown", userId: number, respawnIn: number? }
+export type CombatFxRefused = { kind: "refused", reason: "cooldown" | "dead" | "lobby" }
+export type CombatFx =
+	CombatFxHit
+	| CombatFxKill
+	| CombatFxPlayerHit
+	| CombatFxAbility
+	| CombatFxWave
+	| CombatFxBossDown
+	| CombatFxPlayerDown
+	| CombatFxRefused
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub strips it
 -- before the RunList event, so a client can never teleport itself into a reserved server.

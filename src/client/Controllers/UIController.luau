@@ -18,7 +18,9 @@
 -- RequestAscend) and the Expedition panel (RequestExpedition / RequestJoinRun /
 -- RequestRunList). Both are pure views of `state.combat` and the server's `gearPower`; with
 -- Armory.json or Combat.json absent, or on a server that never created the remotes, the
--- buttons simply do not exist and the HUD is exactly the M9 HUD.
+-- buttons simply do not exist and the HUD is exactly the M9 HUD. C1 adds the run report
+-- (the ExpeditionSummary event -> ExpeditionSummaryCard) and, in Studio only, the debug
+-- strip that drives the hub's RequestDebug levers.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -41,6 +43,8 @@ local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
 local ShopPanel = require(uiFolder:WaitForChild("ShopPanel"))
 local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
 local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
+local ExpeditionSummaryCard = require(uiFolder:WaitForChild("ExpeditionSummaryCard"))
+local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
 local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
 local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
@@ -107,6 +111,46 @@ end
 local function readGearPower(payload: { [string]: any }): number
 	local power = payload.gearPower
 	return if typeof(power) == "number" then power else 0
+end
+
+-- C1: the run report the hub forwards after a return teleport (or a Studio handoff record).
+-- It is presentation only — the rewards are already in the profile — so a malformed payload
+-- is dropped rather than half-drawn. `bestWave` and `died` are optional: a combat place that
+-- predates them omits them and the card falls back to wavesCleared / not died.
+local function readRunSummary(payload: any): Types.RunSummary?
+	if
+		typeof(payload) ~= "table"
+		or typeof(payload.missionId) ~= "string"
+		or typeof(payload.materials) ~= "table"
+		or typeof(payload.wavesCleared) ~= "number"
+		or typeof(payload.cash) ~= "number"
+		or typeof(payload.valor) ~= "number"
+		or typeof(payload.kills) ~= "number"
+		or typeof(payload.seconds) ~= "number"
+	then
+		return nil
+	end
+	local materials: { [string]: number } = {}
+	for name, amount in payload.materials do
+		if typeof(name) == "string" and typeof(amount) == "number" then
+			materials[name] = amount
+		end
+	end
+	local summary: any = {
+		missionId = payload.missionId,
+		overdrive = payload.overdrive == true,
+		wavesCleared = payload.wavesCleared,
+		cash = payload.cash,
+		materials = materials,
+		valor = payload.valor,
+		kills = payload.kills,
+		seconds = payload.seconds,
+		bestWave = if typeof(payload.bestWave) == "number"
+			then payload.bestWave
+			else payload.wavesCleared,
+		died = payload.died == true,
+	}
+	return summary :: Types.RunSummary
 end
 
 -- The delta's combat profile arrives from the network; only the full shape is trusted, and
@@ -278,6 +322,9 @@ local function boot(): ()
 	local requestExpedition: RemoteEvent? = nil
 	local requestJoinRun: RemoteEvent? = nil
 	local requestRunList: RemoteEvent? = nil
+	-- C1: the hub's Studio-only debug intent. Absent on a server that predates the Studio
+	-- bridge, which is exactly why the DebugPanel's taps are no-ops rather than errors.
+	local requestDebug: RemoteEvent? = nil
 	local combatRemotesReady = false
 	local function resolveCombatRemotes(): ()
 		requestBuyGear = remotesFolder:FindFirstChild("RequestBuyGear") :: RemoteEvent?
@@ -285,6 +332,7 @@ local function boot(): ()
 		requestExpedition = remotesFolder:FindFirstChild("RequestExpedition") :: RemoteEvent?
 		requestJoinRun = remotesFolder:FindFirstChild("RequestJoinRun") :: RemoteEvent?
 		requestRunList = remotesFolder:FindFirstChild("RequestRunList") :: RemoteEvent?
+		requestDebug = remotesFolder:FindFirstChild("RequestDebug") :: RemoteEvent?
 		-- One intent decides for all of them: RemoteService creates the whole set at once.
 		combatRemotesReady = requestBuyGear ~= nil
 	end
@@ -339,9 +387,19 @@ local function boot(): ()
 			player:Kick("Rejoin to load your save.")
 		end,
 	})
+	-- C1 review fix: the expedition report and the welcome-back card are both decided by the
+	-- same join, and every run is longer than welcomeBackMinSeconds, so they always collide.
+	-- The report is modal and would cover the welcome card's one DoubleOffline offer, so it
+	-- is held here until that card is gone. Forward declaration: the welcome card is built
+	-- long before the report card exists.
+	local pendingSummary: Types.RunSummary? = nil
+	local flushExpeditionSummary: () -> ()
 	local welcomeCard = WelcomeBackCard.new(screenGui, {
-		onVisibilityChanged = function()
+		onVisibilityChanged = function(visible: boolean)
 			applyLayout() -- the toast stacks below the card while it is visible
+			if not visible then
+				flushExpeditionSummary() -- the report waits its turn behind the offer
+			end
 		end,
 	})
 	local eraScreen = EraAdvanceScreen.new(screenGui)
@@ -542,6 +600,56 @@ local function boot(): ()
 			onClose = closePanels,
 		})
 	end
+	-- C1: the report of the run the player just came back from. Built with the Expeditions
+	-- surface (a hub without Combat.json can never receive an ExpeditionSummary) and shown
+	-- only when that event fires; it holds no state of its own between runs.
+	local summaryCard: ExpeditionSummaryCard.ExpeditionSummaryCardHandle? = nil
+	if hasExpeditions then
+		summaryCard = ExpeditionSummaryCard.new(screenGui, {
+			onClose = function()
+				-- The card is sized from its own content, so the HUD re-lays out once it
+				-- is gone: a rotation while the modal was up otherwise leaves the scale
+				-- it was shown with.
+				applyLayout()
+			end,
+		})
+	end
+	-- Shows a held report once nothing else owns the screen. Safe to call at any time: with
+	-- no report held, or with the welcome-back card still up, it does nothing.
+	flushExpeditionSummary = function(): ()
+		local summary = pendingSummary
+		local card = summaryCard
+		if summary == nil or card == nil or welcomeCard.IsVisible() then
+			return
+		end
+		pendingSummary = nil
+		card.Show(summary)
+		applyLayout() -- the card just sized itself to its rows; re-fit it
+	end
+
+	-- The event can land before or after the first snapshot, and only that snapshot decides
+	-- whether a welcome-back card exists at all, so the report is always parked first and
+	-- released by whichever of the two happens last.
+	local function showExpeditionSummary(summary: Types.RunSummary): ()
+		pendingSummary = summary
+		if model ~= nil then
+			flushExpeditionSummary()
+		end
+	end
+
+	-- C1 Studio bridge: a strip of buttons for the hub's debug levers. Studio-only by
+	-- construction — a live client never builds it, and the server ignores the intent
+	-- anyway, so the lever cannot be reached from a published place.
+	local debugPanel: DebugPanel.DebugPanelHandle? = nil
+	if RunService:IsStudio() then
+		debugPanel = DebugPanel.new(screenGui, {
+			onLever = function(lever: string, value: any)
+				if requestDebug ~= nil then
+					requestDebug:FireServer(lever, value)
+				end
+			end,
+		})
+	end
 	panels.build = buildPanel
 	panels.legacy = legacyPanel
 	panels.shop = shopPanel
@@ -700,6 +808,9 @@ local function boot(): ()
 			end
 			welcomeCard.Show(welcomeBack.grantedCash, welcomeBack.elapsedSeconds)
 		end
+		-- The join has settled: with no welcome-back card to wait for, a report held by the
+		-- ExpeditionSummary event goes up now.
+		flushExpeditionSummary()
 	end
 
 	local function applyDelta(payload: { [string]: any }): ()
@@ -776,11 +887,12 @@ local function boot(): ()
 		end
 	end
 
-	-- C0: why an expedition could not start, in the player's terms. Studio can never
-	-- teleport, and an unpublished second place is the same dead end with a different cause.
+	-- C0/C1: why an expedition could not start, in the player's terms. In Studio the bridge
+	-- only refuses when the failure lever is armed or the handoff store is unreachable; an
+	-- unpublished second place is the same dead end with a different cause.
 	local function expeditionUnavailableMessage(joining: boolean): string
 		if RunService:IsStudio() then
-			return "Studio can't teleport — open build/combat.rbxl"
+			return "Departure failed — ForceTeleportFailure is on, or Studio has no API access"
 		end
 		if placesConfig.combatPlaceId == 0 then
 			return "Expeditions aren't available yet"
@@ -788,6 +900,20 @@ local function boot(): ()
 		return if joining
 			then "That run is full or already over"
 			else "Couldn't start the expedition — try again"
+	end
+
+	-- C1: a Depart/Join answer releases the panel's in-flight lock, and it also means the
+	-- server has read (and reset) the forced-teleport-failure attribute, so the strip's
+	-- toggle must not keep claiming the lever is armed.
+	local function onExpeditionAnswer(): ()
+		local expedition = expeditionPanel
+		if expedition ~= nil then
+			expedition.ClearDeparting()
+		end
+		local strip = debugPanel
+		if strip ~= nil then
+			strip.SetForceTeleportFailure(false)
+		end
 	end
 
 	local function onCombatActionResult(payload: { [string]: any }): ()
@@ -823,6 +949,7 @@ local function boot(): ()
 		end
 		-- expedition / joinRun: nothing to flash (the tile may be off-screen and the failure
 		-- is about the world, not the row), so the toast carries the whole message.
+		onExpeditionAnswer()
 		local joining = action == "joinRun"
 		local message: string
 		if reason == "unavailable" then
@@ -849,7 +976,16 @@ local function boot(): ()
 			-- C0 is the first action that succeeds loudly: the teleport takes a moment and
 			-- the player has to know their tap was heard.
 			if payload.action == "expedition" or payload.action == "joinRun" then
-				toast.Show("Departing…", Theme.TOAST_SECONDS, false)
+				onExpeditionAnswer()
+				-- C1 Studio bridge: there is no teleport in Studio, only a handoff record
+				-- and a kick a second later, so the toast has to say what to do next.
+				toast.Show(
+					if RunService:IsStudio()
+						then "Handoff saved — Stop Play, then open build/combat.rbxl"
+						else "Departing…",
+					Theme.TOAST_SECONDS,
+					false
+				)
 			end
 			return
 		end
@@ -1051,6 +1187,14 @@ local function boot(): ()
 			panel.SetLayout(PanelDock.Compute(scale, size, panel.DesignHeight))
 		end
 		eraScreen.SetLayout(scale, size)
+		local card = summaryCard
+		if card ~= nil then
+			card.SetLayout(scale, size)
+		end
+		local strip = debugPanel
+		if strip ~= nil then
+			strip.SetLayout(scale)
+		end
 		ceremony.SetScale(scale)
 		loadScreen.SetScale(scale)
 		welcomeCard.SetLayout(scale, landscape)
@@ -1088,17 +1232,43 @@ local function boot(): ()
 		end)
 	end
 	connectRunList()
+	-- C1: the hub fires this once, on the join sequence, when the player came back from a
+	-- run (teleport data, or the Studio bridge's return record). Connected the same way as
+	-- RunList: whenever the event turns up, never waited for.
+	local summaryConnected = false
+	local function connectExpeditionSummary(): ()
+		local card = summaryCard
+		if summaryConnected or card == nil then
+			return
+		end
+		local event = remotesFolder:FindFirstChild("ExpeditionSummary")
+		if event == nil then
+			return
+		end
+		summaryConnected = true
+		local remote = event :: RemoteEvent
+		remote.OnClientEvent:Connect(function(payload: any)
+			local summary = readRunSummary(payload)
+			if summary ~= nil then
+				showExpeditionSummary(summary)
+			end
+		end)
+	end
+	connectExpeditionSummary()
 	-- Instant boot in both worlds: the HUD never waits on the combat remotes, it just picks
 	-- them up if the server creates them a moment later (and drops the listener once it has
 	-- everything it needs).
 	local function combatWiringComplete(): boolean
-		return combatRemotesReady and (expeditionPanel == nil or runListConnected)
+		return combatRemotesReady
+			and (expeditionPanel == nil or runListConnected)
+			and (summaryCard == nil or summaryConnected)
 	end
 	if (hasArmory or hasExpeditions) and not combatWiringComplete() then
 		local childAdded: RBXScriptConnection? = nil
 		childAdded = remotesFolder.ChildAdded:Connect(function()
 			resolveCombatRemotes()
 			connectRunList()
+			connectExpeditionSummary()
 			refreshCombatKeys()
 			refreshAll() -- the Power readout follows the same gate as the keys
 			local connection = childAdded

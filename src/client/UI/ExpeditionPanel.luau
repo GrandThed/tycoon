@@ -10,6 +10,10 @@
 -- is disabled and says so, a mission above `highestEra` is locked, and the runs list is
 -- empty until the server answers a RequestRunList. The list is polled only while the panel
 -- is open, so a closed panel costs the server nothing.
+--
+-- C1: a tapped Depart (or Join) locks every tile and Join button until UIController calls
+-- ClearDeparting from the matching ActionResult — a teleport takes seconds, and a second
+-- tap in that window is either wasted rate limit or a second reserved server.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -39,6 +43,7 @@ export type ExpeditionPanelHandle = {
 	DesignHeight: number,
 	Refresh: (state: Types.PlayerState, gearPower: number) -> (),
 	SetRuns: (runs: { Types.ActiveRun }) -> (),
+	ClearDeparting: () -> (),
 	SetOpen: (open: boolean) -> (),
 	IsOpen: () -> boolean,
 	SetLayout: (dock: PanelDock.Dock) -> (),
@@ -64,6 +69,11 @@ type RunRow = {
 }
 
 local NO_PLACE_MESSAGE = "Publish the Expeditions place first"
+local DEPARTING_TITLE = "…"
+-- C1: a Depart/Join tap is in flight until its ActionResult lands. The server always answers
+-- one, except when the rate limiter drops the intent silently, so the lock also expires on
+-- its own rather than stranding the panel.
+local DEPART_TIMEOUT_SECONDS = 8
 
 local ExpeditionPanel = {}
 
@@ -75,6 +85,13 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 	local lastPower = 0
 	local lastActionTime = 0
 	local overdrive = false
+	-- In-flight departure: which tile was tapped (nil for a Join), and a token so an expired
+	-- timeout never unlocks a newer tap.
+	local departingMissionId: string? = nil
+	local departing = false
+	local departToken = 0
+	-- Forward declaration: the tile/row handlers are built before the repaint helpers.
+	local beginDeparting: (missionId: string?) -> ()
 	-- Generation token for the polling loop: closing the panel (or opening it again)
 	-- invalidates every pending task.delay so only one loop is ever alive.
 	local pollToken = 0
@@ -296,10 +313,11 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		table.insert(
 			connections,
 			button.Activated:Connect(function()
-				if not tile.enabled then
+				if not tile.enabled or departing then
 					return
 				end
 				tryAction(function()
+					beginDeparting(mission.id)
 					deps.onDepart(mission.id, overdrive)
 				end)
 			end)
@@ -396,10 +414,11 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		table.insert(
 			connections,
 			button.Activated:Connect(function()
-				if row.hostUserId == 0 or not placeReady then
+				if row.hostUserId == 0 or not placeReady or departing then
 					return
 				end
 				tryAction(function()
+					beginDeparting(nil)
 					deps.onJoin(row.hostUserId)
 				end)
 			end)
@@ -440,8 +459,10 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 			elseif ratio >= Theme.POWER_RISKY_RATIO then Theme.COLOR_HIGHLIGHT
 			else Theme.COLOR_ERROR
 
-		local enabled = unlocked and placeReady
-		local title = "Depart"
+		local enabled = unlocked and placeReady and not departing
+		local title = if departing and mission.id == departingMissionId
+			then DEPARTING_TITLE
+			else "Depart"
 		if not placeReady then
 			title = "Soon"
 			tile.powerLabel.Text ..= " · " .. NO_PLACE_MESSAGE
@@ -519,9 +540,10 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 				.. tostring(combatConfig.coop.maxParty)
 				.. (if run.overdrive then " · Overdrive" else "")
 			row.frame.Visible = true
-			row.button.Active = placeReady
-			row.button.AutoButtonColor = placeReady
-			row.button.BackgroundTransparency = if placeReady then 0 else Theme.DIM_TRANSPARENCY
+			local joinable = placeReady and not departing
+			row.button.Active = joinable
+			row.button.AutoButtonColor = joinable
+			row.button.BackgroundTransparency = if joinable then 0 else Theme.DIM_TRANSPARENCY
 		end
 		for index = shown + 1, #runRows do
 			local row = runRows[index]
@@ -529,6 +551,46 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 			row.hostUserId = 0
 		end
 		runsEmptyLabel.Visible = shown == 0
+	end
+
+	-- Repaints everything the in-flight lock touches: the tiles through the usual paint
+	-- path, the Join rows directly (their text does not change).
+	local function paintDeparting(): ()
+		local state = lastState
+		if state ~= nil then
+			refresh(state, lastPower)
+		end
+		local joinable = placeReady and not departing
+		for _, row in runRows do
+			if row.frame.Visible then
+				row.button.Active = joinable
+				row.button.AutoButtonColor = joinable
+				row.button.BackgroundTransparency = if joinable then 0 else Theme.DIM_TRANSPARENCY
+			end
+		end
+	end
+
+	local function clearDeparting(): ()
+		if not departing then
+			return
+		end
+		departToken += 1
+		departing = false
+		departingMissionId = nil
+		paintDeparting()
+	end
+
+	beginDeparting = function(missionId: string?): ()
+		departToken += 1
+		local token = departToken
+		departing = true
+		departingMissionId = missionId
+		paintDeparting()
+		task.delay(DEPART_TIMEOUT_SECONDS, function()
+			if token == departToken then
+				clearDeparting()
+			end
+		end)
 	end
 
 	-- RequestRunList on open and on the interval while open; the loop dies with the panel.
@@ -568,6 +630,7 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		DesignHeight = panel.DesignHeight,
 		Refresh = refresh,
 		SetRuns = setRuns,
+		ClearDeparting = clearDeparting,
 		SetOpen = function(open: boolean)
 			panel.SetOpen(open)
 			if open then
@@ -580,6 +643,7 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 		SetLayout = panel.SetLayout,
 		Destroy = function()
 			pollToken += 1
+			departToken += 1 -- invalidates the pending in-flight timeout
 			for _, connection in connections do
 				connection:Disconnect()
 			end

@@ -1,14 +1,18 @@
 --!strict
--- Owns the Expeditions place HUD (C0 contract, docs/INTERFACES.md "Combat client"). Same
+-- Owns the Expeditions place HUD (C1 contract, docs/INTERFACES.md "Combat client"). Same
 -- shape as the hub's UIController: the client is a display and input device. It renders the
--- Snapshot and RunState the server pushes and sends Ready / Leave / RetryLoad intents with
--- no payload; it never decides a phase, a reward or a max HP. The Humanoid the server sized
--- with Armory.MaxHp is the only source for the HP bar.
+-- Snapshot and the RunState the server pushes, routes button presses into InputController,
+-- and sends Ready / Leave / RetryLoad / Debug intents. It never decides a phase, a reward,
+-- a cooldown or a max HP. The Humanoid the server sized with Armory.MaxHp is the only
+-- source for the HP bar.
+--
+-- This module is the one place that reads the profile: it forwards the equipped gear to
+-- InputController and WeaponController, the ability cooldowns to the HUD, and the mission
+-- material to CombatFxController. Everything else is pushed, never pulled.
 --
 -- Degrades like the hub: a profile that will not load shows the same safe-mode card instead
 -- of a kick, a RunState that never arrives leaves the HUD in its lobby state, and the
--- summary card renders dashes rather than inventing numbers. C0 has no combat input, so
--- `CombatFx` is not connected yet (C1 owns it).
+-- summary card renders dashes rather than inventing numbers.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,6 +21,7 @@ local RunService = game:GetService("RunService")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Armory = require(sharedFolder:WaitForChild("Armory"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -25,9 +30,15 @@ local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
 local SummaryCard = require(uiFolder:WaitForChild("SummaryCard"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
+local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
+local InputController = require(script.Parent:WaitForChild("InputController"))
+local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
+local CombatFxController = require(script.Parent:WaitForChild("CombatFxController"))
 
 local HUMANOID_WAIT_SECONDS = 5
+local MELEE_SLOT = "melee"
+local RANGED_SLOT = "ranged"
 
 local CombatUIController = {}
 
@@ -42,9 +53,17 @@ local function isRunState(payload: any): boolean
 		and typeof(payload.party) == "table"
 end
 
+-- Ability keys are config ids ("fanTheHammer"); the button shows them as words. Truncation
+-- on the button handles the long ones — the Q / E letter is the real affordance.
+local function prettify(key: string): string
+	local spaced = key:gsub("(%l)(%u)", "%1 %2")
+	return spaced:sub(1, 1):upper() .. spaced:sub(2)
+end
+
 local function boot(): ()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
+	local armoryConfig = Catalog.GetArmoryConfig()
 
 	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
@@ -54,6 +73,9 @@ local function boot(): ()
 	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
 	local requestReady = remotesFolder:WaitForChild("RequestReady") :: RemoteEvent
 	local requestLeave = remotesFolder:WaitForChild("RequestLeave") :: RemoteEvent
+	-- C1 adds RequestDebug; an older server build simply has no lever strip.
+	local requestDebug =
+		remotesFolder:WaitForChild("RequestDebug", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
 
 	local screenGui = Create("ScreenGui", {
 		Name = "ExpeditionHUD",
@@ -69,6 +91,7 @@ local function boot(): ()
 	-- both are dropped when the next character arrives so a respawn leaks nothing.
 	local healthConnections: { RBXScriptConnection } = {}
 	local applyLayout: () -> ()
+	local mission: Types.MissionConfig? = nil
 
 	-- Same client-side debounce as the hub's panels (review of 2026-09-17): ten taps on
 	-- Return must not become ten RequestLeave intents against the rate limit. One window for
@@ -101,12 +124,53 @@ local function boot(): ()
 		onLeave = function()
 			fireIntent(requestLeave)
 		end,
+		onStance = function()
+			InputController.ToggleStance()
+		end,
+		onAttackDown = function()
+			InputController.AttackDown()
+		end,
+		onAttackUp = function()
+			InputController.AttackUp()
+		end,
+		onAbility = function(slot: string)
+			InputController.UseAbility(slot)
+		end,
 	})
 	local summaryCard = SummaryCard.new(screenGui, {
 		onReturn = function()
 			fireIntent(requestLeave)
 		end,
 	})
+	-- Studio only, by contract: a live client never builds the strip at all, and the
+	-- server ignores the remote even if one were forged.
+	local debugPanel = if RunService:IsStudio()
+		then DebugPanel.new(screenGui, {
+			onLever = function(lever: string, value: any)
+				if requestDebug ~= nil then
+					requestDebug:FireServer(lever, value)
+				end
+			end,
+		})
+		else nil
+
+	-- The two ability buttons are named by the equipped weapons, so a tier change renames
+	-- them. A starter weapon has no ability and hides its button.
+	local function abilityInfo(slot: string, tier: number): CombatHud.AbilityInfo?
+		local cfg = armoryConfig
+		if cfg == nil then
+			return nil
+		end
+		local tierDef = Armory.TierDef(cfg, slot, tier)
+		if tierDef == nil or tierDef.ability == "" then
+			return nil
+		end
+		local ability = Armory.AbilityDef(cfg, tierDef.ability)
+		if ability == nil then
+			return nil
+		end
+		return { name = prettify(tierDef.ability), cooldown = ability.cooldown }
+	end
 
 	local function onSnapshot(payload: { [string]: any }): ()
 		local state = payload.state
@@ -133,6 +197,39 @@ local function boot(): ()
 			-- The arena's era decides the ambient bed, exactly as the hub's plot does.
 			SoundController.SetAmbientEra(eraName)
 		end
+
+		local combat = state.combat
+		if typeof(combat) ~= "table" then
+			return
+		end
+		local gear = combat.gear
+		local ascension = combat.ascension
+		if typeof(gear) == "table" and typeof(ascension) == "table" then
+			InputController.SetGear(gear)
+			WeaponController.SetGear(gear, ascension)
+			hud.SetAbilities({
+				melee = abilityInfo(MELEE_SLOT, gear.melee),
+				ranged = abilityInfo(RANGED_SLOT, gear.ranged),
+			})
+			if debugPanel ~= nil then
+				debugPanel.SetGear(gear.melee, gear.ranged)
+			end
+		end
+		-- Wallet: cash and Valor are always shown; the material chip needs the mission, so
+		-- it stays blank until the first RunState names one.
+		local materials = combat.materials
+		local materialName = if mission ~= nil then mission.material else ""
+		local amount = 0
+		if typeof(materials) == "table" and materialName ~= "" then
+			local owned = materials[materialName]
+			amount = if typeof(owned) == "number" then owned else 0
+		end
+		hud.SetWallet(
+			if typeof(state.cash) == "number" then state.cash else 0,
+			materialName,
+			amount,
+			if typeof(combat.valor) == "number" then combat.valor else 0
+		)
 	end
 
 	local function onLoadStatus(payload: { [string]: any }): ()
@@ -160,6 +257,7 @@ local function boot(): ()
 		end
 	end
 
+	local lastPhase = ""
 	local function onRunState(payload: any): ()
 		if not isRunState(payload) then
 			return
@@ -167,14 +265,39 @@ local function boot(): ()
 		local run = (payload :: any) :: Types.RunState
 		-- The run carries an id; the human-readable name lives in the mission config both
 		-- places share. A missing config degrades to the id, never to an error.
-		local mission = Catalog.GetMissionById(run.missionId)
-		hud.SetMission(if mission ~= nil then mission.name else run.missionId)
+		local hadMission = mission ~= nil
+		mission = Catalog.GetMissionById(run.missionId)
+		local missionConfig = mission
+		if not hadMission and missionConfig ~= nil then
+			-- The wallet's material chip needs the mission name, and the join Snapshot
+			-- arrived before this first RunState named one. Ask once for a fresh one.
+			requestSnapshot:FireServer()
+		end
+		hud.SetMission(if missionConfig ~= nil then missionConfig.name else run.missionId)
 		hud.SetRunState(run)
+		InputController.SetPhase(run.phase)
+		if missionConfig ~= nil then
+			CombatFxController.SetMaterial(missionConfig.material)
+		end
+		if debugPanel ~= nil then
+			debugPanel.SetWave(run.wave)
+			debugPanel.SetMission(missionConfig)
+		end
 		if run.phase == "summary" then
+			if lastPhase ~= "summary" then
+				SoundController.Play("runEnd")
+			end
 			summaryCard.Show(run.summary)
 		else
 			summaryCard.Hide()
 		end
+		-- A wave clear is the moment the pool is flushed, so ask for the Snapshot that
+		-- carries the new wallet instead of waiting for the next one.
+		if lastPhase == "wave" and run.phase == "breather" then
+			SoundController.Play("waveClear")
+			requestSnapshot:FireServer()
+		end
+		lastPhase = run.phase
 	end
 
 	local function onActionResult(payload: any): ()
@@ -209,6 +332,7 @@ local function boot(): ()
 		end
 		local function push(): ()
 			hud.SetHealth(humanoid.Health, humanoid.MaxHealth)
+			CombatFxController.SetHealth(humanoid.Health, humanoid.MaxHealth)
 		end
 		table.insert(healthConnections, humanoid.HealthChanged:Connect(push))
 		-- MaxHealth is set once by ArenaService on admit, which can land after this bind.
@@ -233,7 +357,19 @@ local function boot(): ()
 		summaryCard.SetScale(scale)
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
+		if debugPanel ~= nil then
+			debugPanel.SetLayout(scale, size)
+		end
 	end
+
+	InputController.SetStanceChanged(function(stance: string)
+		hud.SetStance(stance)
+	end)
+	CombatFxController.SetBannerHandler(function(title: string)
+		-- The banner fades; the toast is the record of it for anyone looking elsewhere.
+		toast.Show(title, Theme.TOAST_ERROR_SECONDS, false)
+	end)
+	hud.SetStance(InputController.GetStance())
 
 	stateChanged.OnClientEvent:Connect(onStateChanged)
 	actionResult.OnClientEvent:Connect(onActionResult)

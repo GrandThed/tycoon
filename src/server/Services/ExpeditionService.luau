@@ -11,6 +11,11 @@
 -- put the player back together: clear the in-flight guard, re-run the join sequence, hand back
 -- the departure stat, and tell the client. There are two such paths, and only one of them is a
 -- thrown call (see TeleportInitFailed in Init).
+--
+-- C1: in Studio the teleport is replaced by StudioBridge's handoff record and a kick
+-- (docs/INTERFACES.md "C1 contracts" → "Studio bridge"). Everything else — reservation-free
+-- access code, stamp, release, failure recovery — is the live path, so a Studio playtest
+-- exercises the same code Ben cannot reach on the published pair.
 
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
@@ -25,6 +30,7 @@ local Combat = require(sharedFolder:WaitForChild("Combat"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
+local StudioBridge = require(script.Parent:WaitForChild("StudioBridge"))
 
 -- Infrastructure retry policy, like DataService's: three attempts with 1 s / 2 s / 4 s backoff
 -- around each Teleport/MemoryStore call. Not balance, so not in Config/*.json.
@@ -41,6 +47,17 @@ local CODES_KEY_PREFIX = "code_"
 -- cost 50 of them per tap. Eight fills the visible list, and the panel refreshes every 10 s, so
 -- a longer list simply resolves over a couple of refreshes.
 local MAX_FRIEND_CHECKS_PER_CALL = 8
+-- C1 Studio bridge: there is no reserved server to teleport into, so the handoff record carries
+-- a marker instead of a real access code.
+local STUDIO_ACCESS_CODE = "studio"
+-- Studio-only stand-ins for other people's runs (the DebugFakeRuns attribute and the `fakeRuns`
+-- lever). They live in this module rather than in the MemoryStore registry because nothing
+-- outside this server may ever see them, and a run nobody hosts must never be advertised live.
+local FAKE_ACCESS_CODE = "fake"
+local FAKE_MISSION_ID = "village"
+-- The join list shows a handful of runs; more fakes would only push the real ones off it.
+local MAX_FAKE_RUNS = 8
+local BRIDGE_DEPART_MESSAGE = "Handoff saved — Stop Play, then open build/combat.rbxl"
 
 export type Hooks = {
 	-- Main's PlayerRemoving teardown, run before the teleport so the profile is free.
@@ -61,6 +78,9 @@ local departing: { [Player]: Departure } = {}
 -- Friend verdicts for this session, per requesting player, so a 10 s refresh loop does not
 -- re-ask Roblox about the same hosts. Cleared in Forget.
 local friendVerdicts: { [Player]: { [number]: boolean } } = {}
+-- Studio fake runs and the moment they expire, so the lever behaves like the registry's TTL.
+local fakeRuns: { Types.ActiveRun } = {}
+local fakeRunsExpireAt = 0
 
 local function sendResult(
 	player: Player,
@@ -90,12 +110,20 @@ local function callWithRetry<T>(description: string, call: () -> T): (boolean, T
 	return false, nil
 end
 
+-- Whether MemoryStore is reachable at all. C1: Studio is no longer excluded — with API access
+-- on, a Studio session talks to the real registry exactly as a live server does (the C1 bridge
+-- exists to make these platform paths playable); only ProfileStore's in-memory mock, i.e. no
+-- API access, still disables it. Checked per call: ProfileStore probes access asynchronously
+-- after require, so a boot-time verdict would be wrong.
+local function registryUnavailable(): boolean
+	return isStudio and DataService.IsMockMode()
+end
+
 -- Read-only view of the combat place's run registry. The hub never writes it: the place that
 -- owns a run owns its entry, so a hub bug can never advertise a run that does not exist.
 local function registryMap(): any?
 	local combatConfig = Catalog.GetCombatConfig()
-	if combatConfig == nil or isStudio then
-		-- MemoryStore needs API access; in Studio the run list is simply empty.
+	if combatConfig == nil or registryUnavailable() then
 		return nil
 	end
 	local mapName = combatConfig.registry.mapName
@@ -110,7 +138,7 @@ local function registryMap(): any?
 end
 
 local function codesMap(combatConfig: Types.CombatConfig): any?
-	if isStudio then
+	if registryUnavailable() then
 		return nil
 	end
 	local mapName = combatConfig.registry.mapName .. CODES_MAP_SUFFIX
@@ -171,7 +199,21 @@ local function asActiveRun(value: any): Types.ActiveRun?
 	return run :: Types.ActiveRun
 end
 
+-- Empty outside Studio and after the lever's TTL, so no other code path needs to know fakes
+-- exist.
+local function activeFakeRuns(): { Types.ActiveRun }
+	if not isStudio or os.clock() >= fakeRunsExpireAt then
+		return {}
+	end
+	return fakeRuns
+end
+
 local function readRegistryEntry(hostUserId: number): Types.ActiveRun?
+	for _, run in activeFakeRuns() do
+		if run.hostUserId == hostUserId then
+			return run
+		end
+	end
 	local map = registryMap()
 	if map == nil then
 		return nil
@@ -187,6 +229,9 @@ end
 
 local function readRegistryRuns(): { Types.ActiveRun }
 	local runs: { Types.ActiveRun } = {}
+	for _, run in activeFakeRuns() do
+		table.insert(runs, run)
+	end
 	local map = registryMap()
 	if map == nil then
 		return runs
@@ -230,9 +275,25 @@ local function abortDeparture(player: Player, departure: Departure): ()
 	EconomyService.MarkDirty(player, { combat = true })
 end
 
+-- Stamped before the release so the away window is already in the final save: the offline grant
+-- on return reads expeditionSeconds, and the combat place keeps adding to it.
+local function stampDeparture(state: Types.PlayerState): ()
+	state.combat.expeditionSince = os.time()
+	state.combat.expeditionSeconds = 0
+	state.combat.stats.expeditions += 1
+end
+
+-- The one failure that happens BEFORE the release (a handoff record that cannot be written), so
+-- the stamp is undone on the live profile rather than handed back on a reloaded one.
+local function unstampDeparture(state: Types.PlayerState): ()
+	state.combat.expeditionSince = 0
+	state.combat.expeditionSeconds = 0
+	state.combat.stats.expeditions = math.max(0, state.combat.stats.expeditions - 1)
+end
+
 -- Steps 3-7 of the contract, shared by Depart and Join: the checks that do not depend on how
 -- the run was chosen, then the reservation (or the joined run's code), then the handoff.
--- Returns true only when TeleportAsync was accepted, i.e. when the in-flight guard must stay.
+-- Returns true only when the handoff was accepted, i.e. when the in-flight guard must stay.
 local function teleportToRun(
 	player: Player,
 	departure: Departure,
@@ -242,10 +303,7 @@ local function teleportToRun(
 	accessCode: string?
 ): boolean
 	local places = Catalog.GetPlacesConfig()
-	if places.combatPlaceId == 0 or isStudio then
-		if isStudio then
-			warn("[ExpeditionService] Studio can't teleport — open build/combat.rbxl instead")
-		end
+	if places.combatPlaceId == 0 then
 		sendResult(player, departure.action, departure.slotId, false, "unavailable")
 		return false
 	end
@@ -256,23 +314,36 @@ local function teleportToRun(
 		sendResult(player, departure.action, departure.slotId, false, "unavailable")
 		return false
 	end
+	-- C1: in Studio the teleport itself is replaced by a DataStore handoff record plus a kick
+	-- (docs/INTERFACES.md "Studio bridge"); everything around it — the stamp, the release, the
+	-- failure recovery — is the live code path.
+	local bridged = StudioBridge.IsActive()
 
 	local code = accessCode
 	if code == nil or code == "" then
-		local ok, reserved = callWithRetry("ReserveServer", function(): string
-			local reservedCode = TeleportService:ReserveServer(places.combatPlaceId)
-			return reservedCode
-		end)
-		if not ok or reserved == nil or reserved == "" then
-			sendResult(player, departure.action, departure.slotId, false, "unavailable")
-			return false
-		end
-		code = reserved
-		-- The reserving server is the only one that ever sees this code, so it publishes it for
-		-- the combat server it is about to fill.
-		if not writeAccessCode(combatConfig, hostUserId, reserved, missionId, overdrive) then
-			sendResult(player, departure.action, departure.slotId, false, "unavailable")
-			return false
+		if bridged then
+			-- No reserved server exists, so the record carries a marker. It is still published
+			-- to the codes map (a no-op without API access): RunRegistry verifies the code
+			-- before the combat place advertises the run, so a Studio run publishes itself
+			-- exactly as a live one does.
+			code = STUDIO_ACCESS_CODE
+			writeAccessCode(combatConfig, hostUserId, STUDIO_ACCESS_CODE, missionId, overdrive)
+		else
+			local ok, reserved = callWithRetry("ReserveServer", function(): string
+				local reservedCode = TeleportService:ReserveServer(places.combatPlaceId)
+				return reservedCode
+			end)
+			if not ok or reserved == nil or reserved == "" then
+				sendResult(player, departure.action, departure.slotId, false, "unavailable")
+				return false
+			end
+			code = reserved
+			-- The reserving server is the only one that ever sees this code, so it publishes it
+			-- for the combat server it is about to fill.
+			if not writeAccessCode(combatConfig, hostUserId, reserved, missionId, overdrive) then
+				sendResult(player, departure.action, departure.slotId, false, "unavailable")
+				return false
+			end
 		end
 	end
 
@@ -282,12 +353,41 @@ local function teleportToRun(
 		sendResult(player, departure.action, departure.slotId, false, "unavailable")
 		return false
 	end
-	-- Stamped before the release so the away window is already in the final save: the offline
-	-- grant on return reads expeditionSeconds, and the combat place keeps adding to it.
-	state.combat.expeditionSince = os.time()
-	state.combat.expeditionSeconds = 0
-	state.combat.stats.expeditions += 1
+	stampDeparture(state)
 	EconomyService.RefreshPersistedRate(player)
+
+	if bridged then
+		local hint: StudioBridge.TeleportHint = {
+			missionId = missionId,
+			overdrive = overdrive,
+			hostUserId = hostUserId,
+			accessCode = code,
+		}
+		local kind: StudioBridge.HandoffKind = if departure.action == "expedition"
+			then "depart"
+			else "join"
+		if not StudioBridge.WriteDeparture(player, hint, kind) then
+			-- Nothing has been released yet, so the player simply stays in the hub with the
+			-- profile they already had; the stamp goes back with them.
+			unstampDeparture(state)
+			EconomyService.MarkDirty(player, { combat = true })
+			sendResult(player, departure.action, departure.slotId, false, "unavailable")
+			return false
+		end
+		serviceHooks.release(player)
+		if StudioBridge.TeleportShouldFail() then
+			-- The lever reproduces TeleportInitFailed, so it runs that handler's recovery, not a
+			-- Studio-only imitation of it. The record goes first: the arrival it describes is
+			-- never going to happen.
+			StudioBridge.ClearDeparture(player)
+			abortDeparture(player, departure)
+			return false
+		end
+		sendResult(player, departure.action, departure.slotId, true, nil)
+		StudioBridge.Depart(player, BRIDGE_DEPART_MESSAGE)
+		return true
+	end
+
 	sendResult(player, departure.action, departure.slotId, true, nil)
 
 	-- Frozen teardown order, then the handoff. The session must be released BEFORE the teleport
@@ -370,6 +470,12 @@ function ExpeditionService.Join(player: Player, hostUserId: number): ()
 	end
 	-- Yields (MemoryStore), which is why the guard is claimed after it rather than before.
 	local entry = readRegistryEntry(hostUserId)
+	if entry ~= nil and entry.accessCode == FAKE_ACCESS_CODE then
+		-- A Studio fake has no server behind it: the list exists to be looked at, and Join on
+		-- one shows exactly what a vanished run shows.
+		sendResult(player, "joinRun", slotId, false, "unavailable")
+		return
+	end
 	if
 		entry == nil
 		or entry.partySize >= combatConfig.coop.maxParty
@@ -417,8 +523,28 @@ function ExpeditionService.SendRunList(player: Player): ()
 	end
 	local visible: { Types.ActiveRun } = {}
 	local checks = 0
+	-- The access code never leaves the server: with it, any client could teleport itself into a
+	-- reserved server.
+	local function show(run: Types.ActiveRun): ()
+		table.insert(visible, {
+			hostUserId = run.hostUserId,
+			hostName = run.hostName,
+			missionId = run.missionId,
+			era = run.era,
+			wave = run.wave,
+			overdrive = run.overdrive,
+			partySize = run.partySize,
+			accessCode = "",
+		})
+	end
 	for _, run in runs do
 		if run.hostUserId == player.UserId then
+			continue
+		end
+		if run.accessCode == FAKE_ACCESS_CODE then
+			-- Studio fakes have no account behind them, and IsFriendsWithAsync on their
+			-- negative ids would throw and hide the very list the lever exists to show.
+			show(run)
 			continue
 		end
 		-- Joinable = a friend's run. Anything else stays invisible, so the list can never
@@ -437,21 +563,44 @@ function ExpeditionService.SendRunList(player: Player): ()
 			verdicts[run.hostUserId] = verdict
 		end
 		if verdict then
-			-- The access code never leaves the server: with it, any client could teleport
-			-- itself into a reserved server.
-			table.insert(visible, {
-				hostUserId = run.hostUserId,
-				hostName = run.hostName,
-				missionId = run.missionId,
-				era = run.era,
-				wave = run.wave,
-				overdrive = run.overdrive,
-				partySize = run.partySize,
-				accessCode = "",
-			})
+			show(run)
 		end
 	end
 	RemoteService.FireClient(player, "RunList", { runs = visible })
+end
+
+-- Studio lever (the DebugFakeRuns attribute and the RequestDebug `fakeRuns` button): fills the
+-- join list with runs that exist only in this server's memory, so the ACTIVE RUNS panel and its
+-- refusal path can be seen without a second published place. A no-op everywhere else, and the
+-- entries expire on the registry's own TTL so a forgotten lever does not outlive the session.
+function ExpeditionService.PublishFakeRuns(count: number): ()
+	if not isStudio then
+		return
+	end
+	local combatConfig = Catalog.GetCombatConfig()
+	-- count ~= count rejects NaN: a lever typed into the Properties pane can be anything.
+	if combatConfig == nil or count ~= count then
+		return
+	end
+	local wanted = math.clamp(math.floor(count), 0, MAX_FAKE_RUNS)
+	local mission = Catalog.GetMissionById(FAKE_MISSION_ID)
+	fakeRuns = {}
+	fakeRunsExpireAt = os.clock() + combatConfig.registry.ttlSeconds
+	for index = 1, wanted do
+		-- Negative host ids: no real account can collide with them, and Join recognises the
+		-- "fake" access code before anything tries to resolve one.
+		table.insert(fakeRuns, {
+			hostUserId = -index,
+			hostName = `Fake {index}`,
+			missionId = FAKE_MISSION_ID,
+			era = if mission ~= nil then mission.era else 1,
+			wave = index,
+			overdrive = false,
+			partySize = 1,
+			accessCode = FAKE_ACCESS_CODE,
+		})
+	end
+	warn(`[ExpeditionService] fakeRuns lever: {wanted} Studio-only run(s) in the join list`)
 end
 
 -- Called from Main's PlayerRemoving only — deliberately NOT from its releasePlayer, which the
@@ -467,8 +616,8 @@ function ExpeditionService.Init(serviceHooks: Hooks?): ()
 	-- TeleportAsync only THROWS for argument errors; an unpublished place, a throttle or a full
 	-- destination is refused asynchronously and surfaces here, after the pcall has already
 	-- returned true and the profile has already been released. Without this the player sits in
-	-- the hub with no profile, no plot and no card. Cannot be reproduced in Studio, where every
-	-- teleport is refused before it starts (see the Depart/isStudio branch).
+	-- the hub with no profile, no plot and no card. In Studio there is no teleport to refuse, so
+	-- the ForceTeleportFailure lever drives this same recovery from the bridge branch above.
 	TeleportService.TeleportInitFailed:Connect(
 		function(player: Player, teleportResult: Enum.TeleportResult, errorMessage: string)
 			local departure = departing[player]

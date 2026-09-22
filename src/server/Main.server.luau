@@ -23,6 +23,7 @@ local PlotService = require(servicesFolder:WaitForChild("PlotService"))
 local LegacyShopService = require(servicesFolder:WaitForChild("LegacyShopService"))
 local ArmoryService = require(servicesFolder:WaitForChild("ArmoryService"))
 local ExpeditionService = require(servicesFolder:WaitForChild("ExpeditionService"))
+local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local MonetizationService = require(servicesFolder:WaitForChild("MonetizationService"))
 local AnalyticsService = require(servicesFolder:WaitForChild("AnalyticsService"))
 
@@ -35,11 +36,89 @@ type Loader = (player: Player) -> Types.PlayerState?
 
 -- Players with a VIP skin rebuild already scheduled; flips inside the window share it.
 local pendingSkinRefresh: { [Player]: boolean } = {}
+-- Players who already saw their expedition card this session. Teleport data survives a re-run
+-- of the join sequence (a failed departure re-loads the profile), and the card must not come
+-- back with it; the Studio bridge's record is consumed on its first read and needs no guard.
+local summarySent: { [Player]: boolean } = {}
 
 -- Teardown order per contract: world first, emission state next, final save last (the tick
 -- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
 -- idempotent, so PlayerRemoving, the shutdown flush and a departing expedition may all run it
 -- for one player.
+-- The combat place's RunSummary as it arrives in teleport data: a hint like any other, so every
+-- field is type-checked before the client is told anything. bestWave/died are read leniently
+-- because a place build without C1's WaveService simply does not send them.
+local function asRunSummary(value: any): Types.RunSummary?
+	if typeof(value) ~= "table" then
+		return nil
+	end
+	local raw = value :: any
+	if
+		typeof(raw.missionId) ~= "string"
+		or typeof(raw.overdrive) ~= "boolean"
+		or typeof(raw.wavesCleared) ~= "number"
+		or typeof(raw.cash) ~= "number"
+		or typeof(raw.valor) ~= "number"
+		or typeof(raw.kills) ~= "number"
+		or typeof(raw.seconds) ~= "number"
+		or typeof(raw.materials) ~= "table"
+	then
+		return nil
+	end
+	local materials: { [string]: number } = {}
+	for material, amount in raw.materials :: { [string]: any } do
+		if typeof(material) == "string" and typeof(amount) == "number" then
+			materials[material] = amount
+		end
+	end
+	-- Built through `any`: bestWave/died land with C1's WaveService, so neither their absence
+	-- nor their arrival may break this build.
+	local summary: any = {
+		missionId = raw.missionId,
+		overdrive = raw.overdrive,
+		wavesCleared = raw.wavesCleared,
+		cash = raw.cash,
+		materials = materials,
+		valor = raw.valor,
+		kills = raw.kills,
+		seconds = raw.seconds,
+		bestWave = if typeof(raw.bestWave) == "number" then raw.bestWave else 0,
+		died = raw.died == true,
+	}
+	return summary :: Types.RunSummary
+end
+
+-- Live transport: the teleport data the combat place set on the way home. Wrapped in pcall
+-- because GetJoinData throws for a player who has already left.
+local function readTeleportSummary(player: Player): Types.RunSummary?
+	local ok, joinData = pcall(function(): any
+		return player:GetJoinData()
+	end)
+	if not ok or typeof(joinData) ~= "table" then
+		return nil
+	end
+	local data = (joinData :: any).TeleportData
+	if typeof(data) ~= "table" then
+		return nil
+	end
+	return asRunSummary((data :: any).summary)
+end
+
+-- Presentation only: the rewards are already in the profile the combat place saved, so a
+-- missing card never costs anything. In Studio the record the bridge wrote stands in for the
+-- teleport data (docs/INTERFACES.md "C1 contracts" → "Studio bridge").
+local function sendExpeditionSummary(player: Player): ()
+	if summarySent[player] then
+		return
+	end
+	local summary = readTeleportSummary(player) or StudioBridge.ReadReturn(player)
+	if summary == nil then
+		return
+	end
+	summarySent[player] = true
+	RemoteService.FireClient(player, "ExpeditionSummary", summary)
+end
+
 local function releasePlayer(player: Player): ()
 	pendingSkinRefresh[player] = nil
 	PlotService.Release(player)
@@ -74,6 +153,9 @@ local function runJoinSequence(player: Player, loader: Loader): ()
 	EconomyService.ApplyOfflineGrant(player)
 	PlotService.ClaimPlot(player)
 	EconomyService.SendSnapshot(player)
+	-- After the snapshot: the card is read against a client model that already has the wallet
+	-- the run paid into. Yields in Studio (the bridge reads a DataStore), so it goes last.
+	sendExpeditionSummary(player)
 end
 
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
@@ -186,11 +268,18 @@ RemoteService.SetHandler("RequestRunList", function(player: Player)
 	task.spawn(ExpeditionService.SendRunList, player)
 end)
 
+-- C1 Studio levers from the client DebugPanel. ArmoryService owns the lever table (it already
+-- owns the Workspace-attribute half) and ignores every call outside Studio.
+RemoteService.SetHandler("RequestDebug", function(player: Player, lever: any, value: any)
+	ArmoryService.HandleDebug(player, lever :: string, value)
+end)
+
 -- A real leave, as opposed to the release the expedition handoff runs mid-teleport: only here
 -- may the in-flight departure guard be forgotten, or a TeleportInitFailed arriving after the
 -- handoff released the profile would find no record to recover from.
 local function onPlayerRemoving(player: Player): ()
 	ExpeditionService.Forget(player)
+	summarySent[player] = nil
 	releasePlayer(player)
 end
 

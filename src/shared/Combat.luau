@@ -6,6 +6,9 @@
 -- function (and imports the sim_economy mirror of Economy for the cash multiplier).
 
 local Economy = require(script.Parent:WaitForChild("Economy"))
+-- C1: the hit/ability formulas start from the equipped weapon, and Armory owns that lookup.
+-- Armory is pure too, so this is not a cycle and sim_combat.py mirrors both files together.
+local Armory = require(script.Parent:WaitForChild("Armory"))
 
 -- Structural copies of the shapes in Types.luau: requiring Types would need more than `script`
 -- provides for a pure module, and the old solver compares nested tables invariantly, so every
@@ -147,9 +150,90 @@ type GameConfig = {
 	neighbors: { perPlayer: number, maxBonus: number },
 }
 
+-- Exact structural copies of Armory.luau's own local config types (which are not exported).
+-- The old solver compares nested tables invariantly, so every field below must stay in lockstep
+-- with Armory.luau AND Types.luau; a mismatch shows up as a type error at the first Armory call.
+type BandDef = { band: number, eraName: string, material: string }
+type WeaponClassDef = {
+	kind: string,
+	range: number,
+	arcDegrees: number?,
+	chain: { number }?,
+	windows: { number }?,
+	comboReset: number?,
+	finisherKnockback: number?,
+	fire: string?,
+	cooldown: number?,
+	chargeSeconds: number?,
+	minDamageFraction: number?,
+	spreadDegrees: number?,
+	pierce: number?,
+}
+type AbilityDef = {
+	kind: string,
+	cooldown: number,
+	damageMult: number,
+	radius: number?,
+	shots: number?,
+	knockback: number?,
+	stunSeconds: number?,
+	dashStuds: number?,
+	dotSeconds: number?,
+	dotTicks: number?,
+	pierce: number?,
+}
+type WeaponStarterDef = {
+	name: string,
+	class: string,
+	damage: number,
+	hp: number,
+	ability: string,
+	model: string,
+}
+type WeaponTierDef = {
+	tier: number,
+	band: number,
+	cost: number,
+	unlockRate: number,
+	name: string,
+	class: string,
+	damage: number,
+	hp: number,
+	ability: string,
+	model: string,
+}
+type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
+type AscensionLevelDef = {
+	level: number,
+	materials: { [string]: number },
+	valor: number,
+	damageMult: number,
+	hpMult: number,
+	abilityMult: number,
+}
+type AscensionConfig = {
+	requiresRebirth: number,
+	levelsPerRebirth: number,
+	levels: { AscensionLevelDef },
+}
+type ArmoryConfig = {
+	version: number,
+	baseHp: number,
+	power: { hpWeight: number },
+	bands: { BandDef },
+	classes: { [string]: WeaponClassDef },
+	abilities: { [string]: AbilityDef },
+	slots: { [string]: ArmorySlotDef },
+	ascension: AscensionConfig,
+}
+
 -- The slices of PlayerState these functions read; callers pass the whole state.
 type CombatOwner = { era: number, rebirthCount: number, combat: CombatProfile }
 type CashOwner = { legacy: number, legacyShop: LegacyShopState }
+
+-- One wave's unsplit reward pot, filled kill by kill and flushed at the wave clear.
+export type RewardPool = { cash: number, materials: number, valor: number, kills: number }
+export type RewardShare = { cash: number, materials: number, valor: number }
 
 -- One wave, fully resolved: how many enemies and by how much their stats and rewards are
 -- multiplied. `boss` is the entry for this wave when it is a boss wave.
@@ -385,6 +469,212 @@ function Combat.Tempo(
 	end
 	local actual = killsInWindow / windowSeconds
 	return math.clamp(actual / expectedKillsPerSecond, director.tempoMin, director.tempoMax)
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- C1: wave shaping and hit math. Still no RNG: every spawn order, interval and damage number is
+-- a function of config, wave and the profile, so tools/sim_combat.py reproduces a run exactly.
+-- ---------------------------------------------------------------------------------------------
+
+-- Deterministic largest-remainder allocation, then an interleave. The alternative (rolling a
+-- weighted die per spawn) would make two identical runs differ and the sim untrustworthy.
+-- Ties break on the key name ascending, which is why every loop below sorts first.
+function Combat.WaveComposition(count: number, weights: { [string]: number }): { string }
+	local keys: { string } = {}
+	local total = 0
+	for key, weight in weights do
+		if weight > 0 then
+			table.insert(keys, key)
+			total += weight
+		end
+	end
+	if count <= 0 or total <= 0 or #keys == 0 then
+		return {}
+	end
+	table.sort(keys)
+
+	local quota: { [string]: number } = {}
+	local fraction: { [string]: number } = {}
+	local assigned = 0
+	for _, key in keys do
+		local exact = count * weights[key] / total
+		local whole = math.floor(exact)
+		quota[key] = whole
+		fraction[key] = exact - whole
+		assigned += whole
+	end
+	-- Largest remainders take the rounding leftovers.
+	local byFraction = table.clone(keys)
+	table.sort(byFraction, function(a: string, b: string): boolean
+		if fraction[a] == fraction[b] then
+			return a < b
+		end
+		return fraction[a] > fraction[b]
+	end)
+	local leftover = count - assigned
+	local index = 1
+	while leftover > 0 do
+		local key = byFraction[index]
+		quota[key] += 1
+		leftover -= 1
+		index += 1
+		if index > #byFraction then
+			index = 1
+		end
+	end
+
+	-- Interleave: always place the key that is furthest behind its own quota, so a 70/30 wave
+	-- arrives mixed instead of as two blocks.
+	local placed: { [string]: number } = {}
+	for _, key in keys do
+		placed[key] = 0
+	end
+	local order: { string } = {}
+	for _ = 1, count do
+		local bestKey: string? = nil
+		local bestRatio = math.huge
+		for _, key in keys do
+			local target = quota[key]
+			if target > 0 and placed[key] < target then
+				local ratio = placed[key] / target
+				if ratio < bestRatio then
+					bestRatio = ratio
+					bestKey = key
+				end
+			end
+		end
+		if bestKey == nil then
+			break
+		end
+		placed[bestKey] += 1
+		table.insert(order, bestKey)
+	end
+	return order
+end
+
+-- Seconds between two spawns of the same wave: the whole wave is meant to land inside
+-- targetWaveSeconds, and a party killing fast (tempo > 1) gets it sooner.
+function Combat.SpawnInterval(
+	mission: MissionConfig,
+	spec: WaveSpec,
+	tempo: number,
+	overdrive: boolean,
+	combatCfg: CombatRules
+): number
+	if spec.count <= 0 or tempo <= 0 then
+		return mission.targetWaveSeconds
+	end
+	local rateMult = if overdrive then combatCfg.overdrive.spawnRateMult else NEUTRAL_MULT
+	return mission.targetWaveSeconds / spec.count / tempo / rateMult
+end
+
+-- The breather stretches when the party is struggling (tempo at tempoMin) and shrinks to the
+-- floor when they are ahead: the director only ever changes PACING, never enemy stats.
+function Combat.BreatherSeconds(tempo: number, director: CombatDirectorConfig): number
+	local span = 1 - director.tempoMin
+	local slowness = if span > 0 then math.clamp((1 - tempo) / span, 0, 1) else 0
+	return director.breatherSeconds
+		+ (director.breatherMaxSeconds - director.breatherSeconds) * slowness
+end
+
+-- Merge the next wave into this one: only when the party is both fast AND has already cleared
+-- most of what is on the field, so a merge never piles onto a party that is behind.
+function Combat.ShouldMerge(
+	tempo: number,
+	deadFraction: number,
+	director: CombatDirectorConfig
+): boolean
+	return tempo >= director.mergeTempo and deadFraction >= director.mergeThreshold
+end
+
+local function gearTier(state: CombatOwner, slot: string): number
+	if slot == "ranged" then
+		return state.combat.gear.ranged
+	end
+	return state.combat.gear.melee
+end
+
+local function ascensionTier(state: CombatOwner, slot: string): number
+	if slot == "ranged" then
+		return state.combat.ascension.ranged
+	end
+	return state.combat.ascension.melee
+end
+
+-- Step is 1..3 of the melee chain; the class's chain multiplier is the whole difference between
+-- a normal hit and the finisher (chain[3] = 1.6 in Armory.json), so no extra finisher factor.
+function Combat.MeleeDamage(cfg: ArmoryConfig, state: CombatOwner, step: number): number
+	local tier = gearTier(state, "melee")
+	local def = Armory.TierDef(cfg, "melee", tier)
+	if def == nil then
+		return 0
+	end
+	local class = Armory.ClassDef(cfg, def.class)
+	local chain = if class ~= nil then class.chain else nil
+	local stepMult = if chain ~= nil and chain[step] ~= nil then chain[step] else NEUTRAL_MULT
+	return Armory.WeaponDamage(cfg, "melee", tier, ascensionTier(state, "melee")) * stepMult
+end
+
+-- `charge` is the SERVER's clamped draw fraction (elapsed / chargeSeconds), never the client's
+-- claim. Non-charge families ignore it entirely.
+function Combat.RangedDamage(cfg: ArmoryConfig, state: CombatOwner, charge: number): number
+	local tier = gearTier(state, "ranged")
+	local def = Armory.TierDef(cfg, "ranged", tier)
+	if def == nil then
+		return 0
+	end
+	local base = Armory.WeaponDamage(cfg, "ranged", tier, ascensionTier(state, "ranged"))
+	local class = Armory.ClassDef(cfg, def.class)
+	if class == nil or class.fire ~= "charge" then
+		return base
+	end
+	local floorFraction = class.minDamageFraction or 0
+	return base * (floorFraction + (1 - floorFraction) * math.clamp(charge, 0, 1))
+end
+
+local function slotAbility(cfg: ArmoryConfig, state: CombatOwner, slot: string): AbilityDef?
+	local def = Armory.TierDef(cfg, slot, gearTier(state, slot))
+	if def == nil or def.ability == "" then
+		return nil
+	end
+	return Armory.AbilityDef(cfg, def.ability)
+end
+
+-- Ascension scales abilities on its own curve (abilityMult), which is why this is not simply
+-- WeaponDamage x damageMult.
+function Combat.AbilityDamage(cfg: ArmoryConfig, state: CombatOwner, slot: string): number
+	local ability = slotAbility(cfg, state, slot)
+	if ability == nil then
+		return 0
+	end
+	local ascLevel = ascensionTier(state, slot)
+	local levelDef = if ascLevel > 0 then cfg.ascension.levels[ascLevel] else nil
+	local ascMult = if levelDef ~= nil then levelDef.abilityMult else NEUTRAL_MULT
+	local base = Armory.WeaponDamage(cfg, slot, gearTier(state, slot), ascLevel)
+	return base * ability.damageMult * ascMult
+end
+
+-- 0 for a weapon with no ability: the caller reads that as "nothing to fire", never as "ready".
+function Combat.AbilityCooldown(cfg: ArmoryConfig, state: CombatOwner, slot: string): number
+	local ability = slotAbility(cfg, state, slot)
+	if ability == nil then
+		return 0
+	end
+	return ability.cooldown
+end
+
+-- Floors, so a wave can never pay out more than it banked. The per-player cash multiplier is
+-- applied by the caller on top of this share (it depends on the profile, which is not pure).
+function Combat.SplitPool(pool: RewardPool, shares: { [number]: number }): { [number]: RewardShare }
+	local split: { [number]: RewardShare } = {}
+	for userId, share in shares do
+		split[userId] = {
+			cash = math.floor(pool.cash * share),
+			materials = math.floor(pool.materials * share),
+			valor = math.floor(pool.valor * share),
+		}
+	end
+	return split
 end
 
 return Combat

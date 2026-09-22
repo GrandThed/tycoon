@@ -870,3 +870,225 @@ py tools/sim_combat.py --overdrive       # Overdrive run at its scaled recommend
 py tools/sim_combat.py --power 84        # tier 3/3 spot check
 py tools/sim_economy.py --check          # unchanged: every era still in band
 ```
+
+# C1 — The Village run simulator, and the pacing director
+
+`tools/sim_combat.py` keeps every C0 mirror and adds the nine C1 "Pure additions"
+(`wave_composition`, `spawn_interval`, `breather_seconds`, `should_merge`, `melee_damage`,
+`ranged_damage`, `ability_damage`, `ability_cooldown`, `split_pool`). Assertion 3's closed-form
+DPS model is **gone**: in its place `simulate_run` plays the whole run at `DT = 0.1 s`, exactly as
+`WaveService` is contracted to — trickle spawns at `SpawnInterval`, `maxAlive`, tempo from the
+kills in the last `windowSeconds` (pinned to 1.0 for `tempoWarmupSeconds`), a merge decision when
+a wave finishes spawning, `BreatherSeconds` with regen, the boss prepended to its wave, the elite
+rule at `eliteTempo`, pools flushed through `ContributionShares` + `SplitPool` at every wave
+clear, and the run ending on wave 10, `runCapSeconds` or death. `--trace` prints the wave
+timeline (it is the table below). Nothing is random; two runs of the same inputs are identical.
+
+Cash follows the server's **double floor**: `SplitPool` floors `pool.cash × share`, then the
+caller floors that share again against `Combat.CombatCashMult`. Every number below is at legacy 0
+with no Founder's Blessing, so that second multiplier is ×1.00 and only the first floor bites.
+
+## What the simulator assumes (and where it is pessimistic)
+
+| term | value | why |
+|------|-------|-----|
+| player DPS | melee `chain/windows x 0.7` + ranged `damage/cooldown x 0.5` | the C0 coefficients, unchanged, now expressed through `melee_damage` / `ranged_damage` |
+| abilities | cast the instant they are ready, AoE hits the field, kills refund `killCooldownRefundSeconds` | they were **absent** from the C0 model; here they are 10 % of the HP destroyed |
+| target priority | ordinary enemies before the boss, squishiest first, oldest to break ties | the greedy player, and the analogue of `sim_economy`'s greedy buyer |
+| melee reach | the melee term only lands once the target is inside `class.range + hitDistancePad` | an enemy walking in from the rim is bow-only damage for its first seconds |
+| `SPAWN_DISTANCE` 45 studs | rim spawn to a player fighting near the middle of the 110x110 arena | sets travel time, i.e. how long an enemy lives before it can hit anything, and it is a big part of the kill lag the tempo measures |
+| `MELEE_CONTACT_SLOTS` 4 | how many rigs fit on a reach-5 ring; the rest queue and do not swing | without it a wave-10 scrum would all connect at once |
+| enemy land rate | melee `min(speed / 16, 1)`, ranged `0.5` | the player moves: a speed-8 brute lands half its swings, a speed-14 raider seven eighths. This is what makes enemy `speed` a balance lever and a slow boss genuinely kitable |
+| player movement | **stands still** otherwise | every damage number below is an **upper bound**; a kiting player takes less |
+
+The one thing the model still cannot see is skill. It is calibrated so that a *mediocre* player at
+recommended gear finishes wave 10 at 15 % HP; a good one should finish comfortably.
+
+## How the director actually behaves (and why `windowSeconds` moved)
+
+`Tempo` measures kills per second against `count / targetWaveSeconds`, but `SpawnInterval`
+divides by that same tempo — so the stream the director measures is the stream the director
+controls. In steady state a party can only kill as fast as the spawner delivers, which means
+**tempo is a measure of the party's kill *lag*, not of its kill rate**, and it lives or dies on
+how the kills quantise inside `windowSeconds`:
+
+- At the contracted `windowSeconds 15`, with `targetWaveSeconds 30` and counts of 5–8, the window
+  is wide enough to hold the same number of kills whatever the lag. Measured at the merge check:
+  **0.50–0.80 at recommended power and 0.50–1.00 at twice recommended** — indistinguishable, both
+  parked near `tempoMin`, and `mergeTempo` unreachable for anyone. Waves ran 45–55 s against a
+  30 s target and the director was, in effect, switched off.
+- At **`windowSeconds 10`** the window holds one kill or two depending on the lag, and that is
+  exactly the fast/slow discriminator. Measured at the merge check: **0.70–0.87 at recommended
+  power, 1.20 → 1.50 → 1.71 → 2.00 at twice recommended** (it climbs because merged waves really
+  do double the kill rate), and **0.75–1.00 for the under-geared player**, who burns a backlog in
+  bursts and therefore reads *higher* than the recommended player on wave 1 — the one place the
+  metric is counter-intuitive, and the reason `mergeTempo` has to sit above that burst at 1.25.
+
+With that, the whole director is live and does what it says: `tempoMin 0.7` lets the stream slow
+for a party that is behind, `BreatherSeconds` stretches to its full `breatherMaxSeconds 14` at
+that floor and shrinks back to `breatherSeconds 6` once tempo reaches 1, and `ShouldMerge` needs
+**both** a fast party (`tempo ≥ 1.25`) and a cleared field (`deadFraction ≥ 0.7`). Measured
+merges: **0 at recommended power, 5 at twice recommended, 1 under-geared** (the backlog
+burst on wave 5 merges wave 6 into it, which is the wave they die on).
+
+Two notes for C2, neither blocking:
+
+1. **Tempo would be more robust measured directly as lag** — mean seconds from spawn to death
+   against `targetWaveSeconds / count` — instead of as a rate inside a window whose width has to
+   be tuned against the wave count. The signature could stay; only what `WaveService` feeds it
+   would change. As it stands, `windowSeconds` is load-bearing for missions 2–4 too: each new
+   mission must re-check that its counts and `targetWaveSeconds` still quantise usefully.
+2. **The merge check is continuous** (`MERGE_CHECK_CONTINUOUS = True`): once a wave has finished
+   spawning the sim re-reads `deadFraction` every tick until the wave ends, which is what
+   `WaveService` does. The tool carries the read-once reading behind the same flag and **every
+   assertion and every number in this section holds under both** — the only difference is the
+   under-geared player dying on wave 6 (continuous, the shipped reading) instead of wave 5. So the
+   reading is not load-bearing, but the two implementations agree.
+
+## Wave timeline at recommended power (`py tools/sim_combat.py --era 1 --trace`)
+
+Recommended power 60 resolves to **tier 2/1, Iron Sword + Short Bow** — the C1 rule is "the
+highest tiers whose summed power <= target, melee first", which is the strongest legal loadout at
+that power (tier 2/2 is 64 and over budget). Power 57, max HP 145, 46.1 DPS + abilities.
+
+| wave | start | end | length | n | flags | tempo | damage in | cash | Timber | HP left |
+|------|-------|-----|--------|---|-------|-------|-----------|------|--------|---------|
+| 1 | 0.0 | 25.1 | 25.1 | 5 | | 0.99 | 0 | 1,500 | 5 | 145/145 |
+| 2 | 39.1 | 76.4 | 37.3 | 5 | | 0.75 | 0 | 1,650 | 5 | 145/145 |
+| 3 | 90.5 | 129.5 | 39.0 | 6 | | 0.77 | 1 | 2,420 | 6 | 144/145 |
+| 4 | 143.6 | 182.9 | 39.3 | 6 | | 0.79 | 1 | 2,660 | 6 | 144/145 |
+| 5 | 197.0 | 237.0 | 40.0 | 7 | **BOSS** | 0.83 | 47 | 21,668 | 35 | 98/145 |
+| 6 | 243.1 | 276.7 | 33.6 | 7 | | 0.86 | 3 | 3,703 | 14 | 142/145 |
+| 7 | 290.7 | 325.4 | 34.7 | 7 | | 0.87 | 10 | 6,376 | 19 | 136/145 |
+| 8 | 339.4 | 374.1 | 34.7 | 7 | | 0.87 | 10 | 7,016 | 20 | 136/145 |
+| 9 | 388.1 | 422.8 | 34.7 | 7 | | 0.87 | 12 | 7,716 | 21 | 132/145 |
+| 10 | 436.8 | 506.5 | 69.7 | 9 | **BOSS** | 0.78 | 124 | 84,648 | 117 | 22/145 |
+
+- **8:26 wall clock** (507 s, 118 s of it breathers) against the 8 min target, band 4:00–12:00.
+  Ordinary waves average 38.8 s against `targetWaveSeconds 30`: the recommended player is keeping
+  up but never ahead, so the director holds tempo near 0.8 and hands them the long breather. The
+  trickle, not the player's DPS, sets every wave length in this table.
+- **No merges at recommended power** — merging is what the player earns by out-pacing the stream,
+  and at 2x power it fires five times and compresses the run to 5:41 (see the scenarios).
+- **Bosses are 22 % of the run and 76 % of the cash.** Wave 10 is the fight: 69.7 s, 124 damage,
+  and the player finishes at 22/145 (15 %) — below the `feedback.lowHpFraction 0.3` vignette for
+  the last half minute, which is exactly the intended ending.
+- Waves 1–4 and 6–9 cost 0–12 HP. Deliberate: at 46 DPS a 52-HP raider dies inside its own 0.3 s
+  windup plus 2.0 s cooldown, so on a slow stream it mostly never swings. The run's danger is
+  concentrated in the two boss waves, which is where the payday is too.
+
+**Kills per key:** 66 kills — raider 44, archer 16, brute 6 (of which 2 are the bosses).
+**Rewards:** 139,357 cash, 248 Timber, 35 Valor. Total damage taken 206, i.e. 1.4 health bars.
+
+## Run cash vs the era (assertion 4, unchanged rule)
+
+| quantity | value |
+|----------|-------|
+| full-run cash | 139,357 |
+| Village slot cost still owed at 12:21 (the recommended loadout's income gate) | 14,900,000 |
+| ratio | **0.94 %** (cap 25 %) |
+| ratio mid-era (20:55, 14,280,000 owed) | 0.98 % |
+| in income terms | ~2 s of the era's median rate 64.49K/s |
+
+C0's "about 1 % of the era per full run" target is preserved (it was 1.02 %), so nothing about the
+tycoon curve moves; `sim_economy.py --check` is byte-identical before and after this milestone.
+
+## The power scenarios
+
+| scenario | loadout | power | DPS | HP | result | cash |
+|----------|---------|-------|-----|----|--------|------|
+| 0.6x (36) | Stick + Sling | 34 | 22 | 100 | **dies on wave 6**, 4:03, killed by the Raider Chief in the merged wave 5 + 6 after four clean waves (13–14 HP each) | 8,230 |
+| recommended (60) | Iron Sword + Short Bow | 57 | 46 | 145 | clears 10/10 in 8:26, 0 merges, HP floor 15 % | 139,357 |
+| 2x (120) | Hatchet + Hunter Bow | 115 | 104 | 200 | clears in 5:41, **5 merges** from wave 6 on, tempo climbing 1.20 to 2.00, HP floor 32 % | 152,512 |
+| party 2, recommended | same | 57 | 46 each | 145 | 8:23, 102 kills | 169,314 pot, about 84,657 each |
+| party 4, recommended | same | 57 | 46 each | 145 | 8:39, 181 kills | 222,968 pot, about 55,742 each |
+| Overdrive at its recommended power (180) | Fire Axe + Longbow | 162 | 155 | 250 | **dies on wave 7** with no Ascension | 48,716 |
+| Overdrive at 180 **+ Ascension 1** | same gear | 289 | 310 | 325 | clears in 3:02 | ≈ 706K–722K (elite count varies with merges) |
+| Overdrive at 3x recommended (540) | Machete + Marshal Rifle | 507 | 881 | 460 | clears in 2:11 | 721,553 (x5.18) |
+
+Co-op is faster per kill and pays less per head, as at C0. **Overdrive at exactly
+`Combat.RecommendedPower` is lethal without Ascension and comfortable with Ascension 1** — and
+both gates are the same rebirth, so the panel's number is honest for anyone who can actually
+select Overdrive. That is why `Combat.json overdrive.*` was left alone, and why assertion 10's
+fixture is three times the *Overdrive* recommendation (540), which is what "Overdrive at
+recommended x 3" resolves to once `RecommendedPower` has already applied `hpMult`.
+
+## Values changed, and why
+
+`src/shared/Config/Missions/1_Village.json` (values only; keys frozen):
+
+| value | from | to | why |
+|-------|------|----|-----|
+| `raider.hp` / `archer.hp` / `brute.hp` | 115 / 75 / 390 | 52 / 34 / 176 | C0 doubled these to stretch the run, because its model priced a wave at `count x TTK`. Under the real director the **trickle** sets wave length (`targetWaveSeconds / count / tempo`), so enemy HP no longer buys time — it only buys *pressure*, because an enemy that lives longer stands in contact longer, and it buys kill *lag*, which is what the tempo metric reads. At the old HP the recommended player was at their DPS ceiling from wave 7 on, half of every late wave was alive at once, and the run died at wave 5. +20 % on these numbers already costs the merge behaviour and drops the HP floor to 3 %; +40 % kills the run. |
+| `raider.damage` / `archer.damage` / `brute.damage` | 8 / 6 / 18 | 3 / 2 / 5 | C0 flagged this explicitly ("either Village enemy damage comes down or weapon `hp` goes up — one or the other"). Damage came down: it is a one-file change, where raising weapon `hp` would move `GearPower`, `recommendedPower` and the whole C0 unlock table. At 145 max HP an 18-damage brute killed the recommended player in 8 hits; it now takes about 29, and a full run costs 206 damage = 1.4 health bars. |
+| `raider.attackCooldown` / `archer` / `brute` | 1.2 / 1.8 / 1.6 | 2.0 / 3.0 / 2.6 | The other half of the same budget, and the better half: a slower swing keeps the *per-hit number* readable (a raider still hits for 3–4, not 1) and leaves room for the `enemy.attackWindupSeconds 0.3` tell to matter. Sustained damage per enemy in contact: raider 1.31/s, archer 0.33/s, brute 0.96/s. |
+| `brute.speed` | 10 | 8 | Brutes and both bosses are built from this row, and a slow enemy is kitable: the land rate is `speed / 16`, so a brute now lands half its swings instead of five eighths. It is the only lever that makes a **long** boss fight survivable without making the boss's per-hit number silly, and "lumbering brute" is what the model wants anyway. |
+| `waveTable.countPerWave` | 0.6 | 0.3 | Counts run 5 to 8 instead of 5 to 10. Wave 10 with 10 bodies *plus* the Warlord was unsurvivable for the recommended player in every combination of the other values (the search tried 648 of them): the adds alone out-damaged the health bar. 0.5 still kills the run at wave 10 today. |
+| `waveTable.hpGrowth` | 0.08 | 0.03 | 1.08^9 = 2.0 on top of a growing count made wave 10 four times wave 1 in HP; since the wave window is fixed, that is four times the fraction of the wave spent in contact. 1.03^9 = 1.30 keeps the "busy fraction" between 40 % (wave 1) and 90 % (wave 10). |
+| `waveTable.damageGrowth` | 0.08 | 0.03 | Same argument on the other axis, and it is the knob that decides where the under-geared player dies: at 0.02 they survived to wave 9 (outside the 6 +- 2 assertion), at 0.03 the Chief kills them on wave 6. |
+| `bosses.5.hpMult` / `damageMult` | 5.7 / 1.5 | 5.0 / 1.0 | The Raider Chief is 990 HP, a 25 s fight and the gate that ends an under-geared run. Its *damage* multiplier is 1.0 because a boss is in contact for the **whole wave** (the player kills the adds first), so every point of boss damage is multiplied by about 40 s of exposure: 1.5 made it 130 damage, and no combination of the other values then left the recommended player alive at wave 10. A boss's identity here is its HP bar and its payday (`cashMult 8`), not its per-hit number. |
+| `bosses.10.hpMult` / `damageMult` | 7.8 / 2.0 | 8.0 / 1.0 | Warlord 1,837 HP — still "twice the Chief" as C0 intended (x1.86), and the longest fight in the run at 69.7 s. Same argument for `damageMult`; with the wave-10 `damageGrowth` on top it still hits harder per swing than the Chief (7 vs 6). |
+
+`src/shared/Config/Combat.json` (values only):
+
+| value | from | to | why |
+|-------|------|----|-----|
+| `director.windowSeconds` | 15 | 10 | The whole director hangs off this. At 15 s the kill window holds the same number of kills for a fast party and a slow one, so tempo read 0.5–0.8 for **everybody**, `mergeTempo` was unreachable at any value above 1, and waves ran 45–55 s against a 30 s target. At 10 s the window holds one kill or two depending on the party's kill lag, which is the discriminator the director was designed around: recommended power reads 0.70–0.87 and never merges, 2x reads 1.20–2.00 and merges five times. |
+| `director.tempoMin` | 0.5 | 0.7 | 0.5 let the stream run at half the design pace, which is where it parked: a 60 s wave with the player idle between spawns. 0.7 bounds the stretch at 43 s while still letting the director visibly slow down for a party that is behind — and, because `BreatherSeconds` ramps on `(1 − tempo) / (1 − tempoMin)`, a party sitting at this floor gets the full `breatherMaxSeconds 14` breather, which is the regen that keeps the recommended run alive. |
+| `director.mergeTempo` | 1.3 | 1.25 | The under-geared player burns their backlog in bursts and momentarily reads 1.20 on wave 1; the 2x player reads 1.50 at the wave-5 check. 1.25 is the gap between them. 1.3 also works today but leaves no room under the 1.50 reading if mission 2–4 counts shift. |
+
+Unchanged and why: every `Armory.json` number (no weapon `damage`, `hp`, `cost` or `unlockRate`
+moved, so the C0 unlock ladder and its era mapping are untouched); `director.{tempoMax,
+mergeThreshold, eliteTempo, breatherSeconds, breatherMaxSeconds, maxAlive, runCapSeconds,
+tempoWarmupSeconds}` — `mergeThreshold 0.7` and `breatherSeconds 6` are the C0 values and the run
+is identical with `breatherSeconds` anywhere in 6–10; `overdrive.*` (see the scenarios table);
+`coop.*`; `player.*` including `breatherRegenPerSecond 10` (12 and 16 made no difference — the
+player is topped up either way); every `enemy.*` and `feedback.*` key; the mission's `waves 10`,
+`bossWaves`, `baseCount 5`, `rewardGrowth 0.1`, `recommendedPower 60`, `targetMinutes 8`,
+`targetWaveSeconds 30`, the composition breakpoints (1 / 3 / 7), all enemy `cash` / `materials` /
+`reach`, and both bosses' `cashMult` / `materialsMult` / `valor`.
+
+## The ten assertions, as measured
+
+| # | assertion | measured |
+|---|-----------|----------|
+| 1 | unlock ladder monotonic, every band entry inside its era | b1t1 Village 0 %, b2t4 Boomtown 4 %, b3t7 Metropolis 4 %, b4t10 OrbitalColony 4 % |
+| 2 | gear at the era's median rate meets `recommendedPower` | Village median 64.49K/s gives tier 2/2, power 64 vs 60 |
+| 3 | recommended power clears 10 waves inside `targetMinutes` +-50 % | 10/10 in **8:26** vs 8 min (4:00-12:00), HP floor 15 % |
+| 4 | run cash <= 25 % of the era's remaining slot cost | **0.94 %** of 14,900,000 |
+| 5 | `ContributionShares`, 10:1 duo, veteran >= 75 % | 82.7 % |
+| 6 | `AwayEfficiency` endpoints | 0 s gives 0.50, whole absence gives 1.00 |
+| 7 | 2 x recommended triggers >= 1 merge | **5 merges**, run 5:41 |
+| 8 | 0.6 x recommended dies at wave 6 +- 2 | **died wave 6** at 4:03 |
+| 9 | `WaveComposition` returns exactly `count` keys, each within 1 of its share | 80 wave x party (1-4) x overdrive combinations, all exact |
+| 10 | Overdrive at recommended x 3 pays >= 3 x the normal run | 721,553 vs 139,357 = **x5.18** |
+
+Robustness: the whole set passes with `breatherSeconds` at 6, 7, 8, 9 and 10, and under **both**
+readings of the merge check, with the HP floor at 15 % and the run between 8:27 and 8:32
+throughout.
+
+## What C2 should re-check
+
+1. **Tempo as lag rather than rate**, and with it the `windowSeconds` dependency on wave count.
+2. **Enemy land rate.** `speed / 16` and a flat 0.5 for ranged are the sim's invention. Once the
+   real thing is played, measure hits-taken per enemy per life and replace them.
+3. **`MELEE_CONTACT_SLOTS`.** Four rigs on the ring is a guess with real balance weight — at 3 the
+   late waves lose a quarter of their damage. Count what actually connects in Studio.
+4. **Missions 2-4 (C3)** inherit this shape, not C0's: enemy `cash` x100 per era, materials flat,
+   enemy `hp` sized so a wave is 60-90 % of what the era's recommended DPS clears in
+   `targetWaveSeconds`, enemy `damage` sized so a full run costs 1.5-2 health bars, boss
+   `damageMult` at 1.0 until something shortens a boss's time in contact, and a fresh check that
+   the mission's counts still quantise usefully against `windowSeconds`.
+5. **The quiet waves.** Waves 1-4 and 6-9 cost the recommended player 0-12 HP; the danger is all
+   in the two boss waves. If playtest says the middle of the run reads as empty, the fix is
+   `baseCount` (more bodies per wave, same total), not enemy damage.
+
+## Commands used
+
+```
+py tools/sim_combat.py --check           # the ten C0+C1 assertions, exits 0
+py tools/sim_combat.py --era 1 --trace   # the wave timeline at 1x / 2x / 0.6x power
+py tools/sim_combat.py --party 4         # co-op wave counts and per-player cash
+py tools/sim_combat.py --overdrive       # Overdrive run at its scaled recommended power
+py tools/sim_economy.py --check          # unchanged, byte for byte, before and after
+```

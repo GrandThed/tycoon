@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-"""Armory-and-expedition simulator for Era City Tycoon (C0).
+"""Armory-and-expedition simulator for Era City Tycoon (C0 + C1).
 
 Mirrors `src/shared/Armory.luau` and `src/shared/Combat.luau` function for
-function (same names, snake_case) from the contract in `docs/INTERFACES.md`
-"C0 contracts -- Expeditions foundation", and reads the four real configs
+function (same names, snake_case) from the contracts in `docs/INTERFACES.md`
+"C0 contracts -- Expeditions foundation" and "C1 contracts -- Studio bridge +
+Village expedition" ("Pure additions"), and reads the four real configs
 (`Armory.json`, `Combat.json`, `Places.json`, `Missions/*.json`). The greedy
 tycoon curve is NOT re-derived here: `sim_economy.simulate_era` is imported and
 run exactly as `sim_economy.run_full`/`run_packs` do (legacy carried across
@@ -62,6 +63,41 @@ RUN_TIME_TOLERANCE = 0.5
 RUN_CASH_CAP_FRACTION = 0.25
 # Assertion 5's fixture: a 10:1 damage duo must leave the veteran >= 75 %.
 VETERAN_SHARE_FLOOR = 0.75
+# Assertion 7/8/10 fixtures: the power multiples the contract names.
+STRONG_POWER_MULT = 2.0
+WEAK_POWER_MULT = 0.6
+WEAK_DEATH_WAVE = 6
+WEAK_DEATH_TOLERANCE = 2
+OVERDRIVE_POWER_MULT = 3.0
+OVERDRIVE_CASH_MULT = 3.0
+# Run-simulator resolution and the spatial facts it needs. The arena is 110 x 110
+# with eight rim spawns (Layouts/Arenas/Village.luau), so a spawn is ~45 studs
+# from a player fighting near the middle; MELEE_CONTACT_SLOTS is how many rigs
+# fit shoulder to shoulder on a reach-5 ring around one player (the rest queue
+# behind and do not swing). None of these is a game constant -- the server uses
+# real positions -- but the run simulator needs them to turn "within reach" into
+# a number.
+DT = 0.1
+SPAWN_DISTANCE = 45.0
+MELEE_CONTACT_SLOTS = 4
+DASH_TARGETS = 2
+# The contract says a merge is decided "once the wave has finished spawning",
+# i.e. at that single instant, which is when `deadFraction` still carries
+# information (it is then (count - enemies still in flight) / count). The other
+# reading -- re-test every tick until the wave clears -- is what WaveService.tick
+# ships (lead ruling, C1 review): a merge may fire as kills accelerate after the
+# spawner has finished. Every assertion holds under both readings; the one-shot
+# variant stays behind the flag so a reviewer can reproduce BALANCE.md "C1"
+# either way (the under-geared player dies on wave 6 continuous, wave 5 one-shot).
+MERGE_CHECK_CONTINUOUS = True
+# The incoming-damage counterpart of MELEE_HIT_RATE / RANGED_UPTIME: the player
+# moves, so not every enemy swing lands. A melee enemy lands in proportion to how
+# well it can keep up (`speed` against the default R15 WalkSpeed), which makes a
+# slow boss genuinely kitable and turns enemy `speed` into a balance lever; a
+# ranged enemy shooting from 30 studs lands the same half its shots the player's
+# own ranged term assumes.
+PLAYER_WALK_SPEED = 16.0
+RANGED_ENEMY_LAND_RATE = 0.5
 
 
 # --------------------------------------------------------------------------
@@ -438,7 +474,157 @@ def tempo(kills_in_window, window_seconds, expected_kills_per_second, director):
 
 
 # --------------------------------------------------------------------------
-# The C0 DPS model (contract-fixed; not a game formula -- C1 owns the real one)
+# src/shared/Combat.luau mirror -- the C1 "Pure additions"
+# --------------------------------------------------------------------------
+
+
+def wave_composition(count, weights):
+    """Combat.WaveComposition -- which enemy key each of the `count` spawns is.
+
+    Largest-remainder apportionment: quota_k = count x w_k / sum(w), n_k =
+    floor(quota_k), the leftover picks go to the largest fractions (ties by key
+    name ascending). The ORDER is then `count` picks of the key with the
+    smallest placed_k / n_k ratio (ties by key name ascending), which interleaves
+    the keys -- 0.7/0.3 spawns R A R R A R R, not RRRRR AA. No RNG: the server
+    and this sim build the identical list for the identical wave."""
+    # Zero-weight keys are dropped before anything else, exactly as the Luau
+    # does, so they can never collect a rounding leftover.
+    positive = {key: weight for key, weight in weights.items() if weight > 0}
+    total = sum(positive.values())
+    if count <= 0 or total <= 0 or not positive:
+        return []
+    quota = {key: count * weight / total for key, weight in positive.items()}
+    picked = {key: math.floor(value) for key, value in quota.items()}
+    leftover = count - sum(picked.values())
+    if leftover > 0:
+        by_fraction = sorted(quota, key=lambda key: (-(quota[key] - picked[key]), key))
+        for key in by_fraction[:leftover]:
+            picked[key] += 1
+    placed = {key: 0 for key in picked}
+    order = []
+    for _ in range(count):
+        candidates = [key for key in picked if placed[key] < picked[key]]
+        if not candidates:
+            break
+        key = min(candidates, key=lambda name: (placed[name] / picked[name], name))
+        order.append(key)
+        placed[key] += 1
+    return order
+
+
+def spawn_interval(mission, spec, tempo_value, overdrive, combat_cfg):
+    """Combat.SpawnInterval -- targetWaveSeconds / count / tempo / spawnRateMult.
+
+    The trickle is what actually paces a wave: at tempo 1.0 the whole wave takes
+    `targetWaveSeconds` to walk in, however fast the player kills."""
+    # tempo is already clamped to [tempoMin, tempoMax] by Combat.Tempo and a
+    # count is always >= 1, so the guard never fires in a real run; it mirrors
+    # the Luau's own guard (which returns the whole wave window).
+    if spec["count"] <= 0 or tempo_value <= 0:
+        return mission["targetWaveSeconds"]
+    rate = combat_cfg["overdrive"]["spawnRateMult"] if overdrive else 1
+    return mission["targetWaveSeconds"] / spec["count"] / tempo_value / rate
+
+
+def breather_seconds(tempo_value, director):
+    """Combat.BreatherSeconds -- breatherSeconds at tempo >= 1, stretching to
+    breatherMaxSeconds as tempo falls to tempoMin. A struggling party gets the
+    long breather (and its regen); a fast one barely stops."""
+    span = director["breatherMaxSeconds"] - director["breatherSeconds"]
+    denominator = 1 - director["tempoMin"]
+    ratio = 0.0 if denominator == 0 else (1 - tempo_value) / denominator
+    return director["breatherSeconds"] + span * min(max(ratio, 0.0), 1.0)
+
+
+def should_merge(tempo_value, dead_fraction, director):
+    """Combat.ShouldMerge -- tempo >= mergeTempo AND deadFraction >= mergeThreshold.
+    Only asked once the wave has finished spawning."""
+    return tempo_value >= director["mergeTempo"] and dead_fraction >= director["mergeThreshold"]
+
+
+def equipped(cfg, state, slot):
+    """(tierDef, classDef) of the weapon in `slot`; (None, None) when either is
+    missing from Armory.json -- the degrade-quietly rule, so a bad config reads
+    as 0 damage instead of erroring. Not a contract function: the Luau inlines it."""
+    definition = tier_def(cfg, slot, state["combat"]["gear"][slot])
+    if definition is None:
+        return None, None
+    return definition, class_def(cfg, definition["class"])
+
+
+def melee_damage(cfg, state, step):
+    """Combat.MeleeDamage -- WeaponDamage(melee) x class.chain[step]."""
+    definition, cls = equipped(cfg, state, "melee")
+    if definition is None or cls is None or not cls.get("chain"):
+        return 0
+    chain = cls["chain"]
+    # Out-of-range steps fall back to x1, as the Luau's `chain[step] ~= nil` test
+    # does; the server wraps the combo at 3, so this is a guard, not a path.
+    step_mult = chain[step - 1] if 1 <= step <= len(chain) else 1
+    base = weapon_damage(
+        cfg, "melee", state["combat"]["gear"]["melee"], state["combat"]["ascension"]["melee"]
+    )
+    return base * step_mult
+
+
+def ranged_damage(cfg, state, charge):
+    """Combat.RangedDamage -- WeaponDamage(ranged), scaled by the draw for a
+    `charge` class (minDamageFraction at 0, full at 1); every other class fires
+    at full damage and ignores `charge`."""
+    definition, cls = equipped(cfg, state, "ranged")
+    if definition is None or cls is None:
+        return 0
+    base = weapon_damage(
+        cfg, "ranged", state["combat"]["gear"]["ranged"], state["combat"]["ascension"]["ranged"]
+    )
+    if cls.get("fire") != "charge":
+        return base
+    fraction = cls.get("minDamageFraction", 0)
+    return base * (fraction + (1 - fraction) * min(max(charge, 0.0), 1.0))
+
+
+def ability_damage(cfg, state, slot):
+    """Combat.AbilityDamage -- WeaponDamage(slot) x ability.damageMult x the
+    Ascension abilityMult (1 at level 0). 0 when the weapon has no ability."""
+    definition, _ = equipped(cfg, state, slot)
+    if definition is None:
+        return 0
+    definition_ability = ability_def(cfg, definition.get("ability", ""))
+    if definition_ability is None:
+        return 0
+    level = ascension_level_def(cfg, state["combat"]["ascension"][slot])
+    base = weapon_damage(cfg, slot, state["combat"]["gear"][slot], state["combat"]["ascension"][slot])
+    return base * definition_ability["damageMult"] * (level["abilityMult"] if level else 1)
+
+
+def ability_cooldown(cfg, state, slot):
+    """Combat.AbilityCooldown -- the ability's own cooldown (0 when it has none).
+    `killCooldownRefundSeconds` is applied by the caller, per kill."""
+    definition, _ = equipped(cfg, state, slot)
+    if definition is None:
+        return 0
+    definition_ability = ability_def(cfg, definition.get("ability", ""))
+    if definition_ability is None:
+        return 0
+    return definition_ability["cooldown"]
+
+
+def split_pool(pool, shares):
+    """Combat.SplitPool -- the wave pot cut by contribution share, floored per
+    currency (Waves section 6). Flooring every share means the pot never pays out
+    more than it holds; the remainder is dropped, not banked."""
+    out = {}
+    for user, share in shares.items():
+        out[user] = {
+            "cash": math.floor(pool["cash"] * share),
+            "materials": math.floor(pool["materials"] * share),
+            "valor": math.floor(pool["valor"] * share),
+        }
+    return out
+
+
+# --------------------------------------------------------------------------
+# The DPS terms (contract-fixed coefficients, used by the run simulator)
 # --------------------------------------------------------------------------
 
 
@@ -485,16 +671,26 @@ NO_ASCENSION = {"melee": 0, "ranged": 0}
 
 
 def gear_for_power(armory, target_power):
-    """The symmetric loadout whose Gear Power is closest to `target_power`
-    (ties go to the cheaper tier). Turns "run at 0.6x recommended power" into a
-    concrete pair of weapons."""
-    best = None
-    for gear in symmetric_loadouts(armory):
-        power = gear_power(armory, gear, NO_ASCENSION)
-        distance = abs(power - target_power)
-        if best is None or distance < best[0]:
-            best = (distance, gear, power)
-    return best[1], best[2]
+    """The loadout a player at Gear Power `target_power` is actually carrying:
+    the highest tiers whose summed power stays <= target, melee first (C1
+    contract). Melee-first matters because melee is ~75 % of modelled DPS, so
+    this is the strongest legal loadout at that power, not the symmetric one --
+    at 60 it is Iron Sword + Short Bow (57), not tier 2/2 (64, over budget).
+    Turns "recommended", "2x" and "0.6x" into one function."""
+    gear = {"melee": 0, "ranged": 0}
+    while True:
+        for slot in ("melee", "ranged"):
+            candidate = next_tier(armory, gear, slot)
+            if candidate is None:
+                continue
+            trial = dict(gear)
+            trial[slot] = candidate
+            if gear_power(armory, trial, NO_ASCENSION) <= target_power:
+                gear = trial
+                break
+        else:
+            break
+    return gear, gear_power(armory, gear, NO_ASCENSION)
 
 
 def highest_unlocked_gear(armory, income_per_second):
@@ -591,84 +787,417 @@ def first_crossing(curves, rate):
 # --------------------------------------------------------------------------
 
 
-def model_run(mission, armory, combat_cfg, gear, ascension, party, overdrive):
-    """Wave-by-wave model of one full mission at a fixed loadout."""
-    melee, ranged = loadout_dps(armory, gear, ascension)
-    dps = melee + ranged
-    rows = []
-    totals = {
-        "seconds": 0.0,
-        "cash": 0.0,
-        "materials": 0.0,
-        "valor": 0,
-        "kills": 0,
-        "boss_seconds": 0.0,
-    }
-    for wave in range(1, mission["waves"] + 1):
-        spec = wave_spec(mission, wave, party, overdrive, combat_cfg)
-        body = dict(spec)
-        body["boss"] = None
-        weights = spec["weights"]
-        weight_total = sum(weights.values()) or 1
-        avg_hp = 0.0
-        avg_cash = 0.0
-        avg_materials = 0.0
-        avg_enemy_dps = 0.0
-        for key, weight in weights.items():
-            stats = enemy_stats(mission, key, body)
-            share = weight / weight_total
-            avg_hp += share * stats["hp"]
-            avg_cash += share * stats["cash"]
-            avg_materials += share * stats["materials"]
-            avg_enemy_dps += share * stats["damage"] / mission["enemies"][key]["attackCooldown"]
-        ttk = avg_hp / dps if dps > 0 else float("inf")
-        seconds = spec["count"] * ttk / party
-        cash = spec["count"] * avg_cash
-        materials = spec["count"] * avg_materials
-        boss_row = None
-        if spec["boss"] is not None:
-            boss_key = spec["boss"]["enemy"]
-            boss_stats = enemy_stats(mission, boss_key, spec, True)
-            boss_ttk = boss_stats["hp"] / dps if dps > 0 else float("inf")
-            boss_row = {
-                "hp": boss_stats["hp"],
-                "ttk": boss_ttk,
-                "cash": boss_stats["cash"],
-                "materials": boss_stats["materials"],
-                "valor": boss_valor(mission, wave, overdrive, combat_cfg),
-                "dps_in": boss_stats["damage"]
-                / mission["enemies"][boss_key]["attackCooldown"],
-            }
-            seconds += boss_ttk / party
-            cash += boss_stats["cash"]
-            materials += boss_stats["materials"]
-            totals["valor"] += boss_row["valor"]
-            totals["boss_seconds"] += boss_ttk / party
-        rows.append(
+def player_model(armory, gear, ascension):
+    """The player as the run simulator sees them: two sustained DPS terms and
+    the abilities, all built from the C1 pure functions."""
+    state = {"combat": {"gear": dict(gear), "ascension": dict(ascension)}}
+    melee_def, melee_cls = equipped(armory, state, "melee")
+    ranged_def, ranged_cls = equipped(armory, state, "ranged")
+    chain_damage = 0.0
+    chain_seconds = 0.0
+    if melee_cls is not None and melee_cls.get("chain"):
+        for step in range(1, len(melee_cls["chain"]) + 1):
+            chain_damage += melee_damage(armory, state, step)
+            chain_seconds += melee_cls["windows"][step - 1]
+    melee = chain_damage / chain_seconds * MELEE_HIT_RATE if chain_seconds > 0 else 0.0
+    ranged = 0.0
+    if ranged_cls is not None and ranged_cls.get("cooldown"):
+        # charge 1.0: the model assumes a full draw, so the charge term is the
+        # class's full damage and RANGED_UPTIME absorbs the draw time.
+        ranged = ranged_damage(armory, state, 1.0) / ranged_cls["cooldown"] * RANGED_UPTIME
+    abilities = []
+    for slot, definition in (("melee", melee_def), ("ranged", ranged_def)):
+        if definition is None:
+            continue
+        entry = ability_def(armory, definition.get("ability", ""))
+        if entry is None:
+            continue
+        abilities.append(
             {
-                "wave": wave,
-                "count": spec["count"],
-                "avg_hp": avg_hp,
-                "ttk": ttk,
-                "seconds": seconds,
-                "cash": cash,
-                "materials": materials,
-                "boss": boss_row,
-                "enemy_dps": avg_enemy_dps,
+                "slot": slot,
+                "key": definition["ability"],
+                "def": entry,
+                "damage": ability_damage(armory, state, slot),
+                "cooldown": ability_cooldown(armory, state, slot),
             }
         )
-        totals["seconds"] += seconds
-        totals["cash"] += cash
-        totals["materials"] += materials
-        totals["kills"] += spec["count"] + (1 if boss_row else 0)
-    totals["dps"] = dps
-    totals["melee_dps"] = melee
-    totals["ranged_dps"] = ranged
-    totals["max_hp"] = max_hp(armory, gear, ascension)
-    totals["power"] = gear_power(armory, gear, ascension)
-    totals["breather_seconds"] = combat_cfg["director"]["breatherSeconds"] * (
-        mission["waves"] - 1
-    )
+    return {
+        "state": state,
+        "melee_dps": melee,
+        "ranged_dps": ranged,
+        "dps": melee + ranged,
+        "melee_range": melee_cls["range"] if melee_cls else 0,
+        "abilities": abilities,
+    }
+
+
+def ability_targets(ability, alive):
+    """Who one cast reaches. Positions are not simulated, so an `aoe` is taken to
+    cover the fight (its radius, 10-16 studs, is the whole melee scrum) capped by
+    `shots` when the ability has one, and a dash `burst` hits the DASH_TARGETS
+    enemies on the line. Documented as the model's most generous assumption."""
+    entry = ability["def"]
+    if entry["kind"] == "aoe":
+        limit = entry.get("shots") or len(alive)
+    elif entry.get("dashStuds"):
+        limit = DASH_TARGETS
+    else:
+        limit = entry.get("shots") or 1
+    return alive[:limit]
+
+
+def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive, cash_mult=1.0):
+    """One full run, played second by second by the C1 director.
+
+    Deterministic: no RNG anywhere. The loop advances DT at a time and runs the
+    contract's lifecycle -- trickle spawns at `SpawnInterval`, `maxAlive`, tempo
+    from the kills in the last `windowSeconds` (pinned to 1.0 for
+    `tempoWarmupSeconds`), `ShouldMerge` once a wave has finished spawning,
+    `BreatherSeconds` with regen between waves, the boss prepended to its wave,
+    the elite rule at `eliteTempo`, reward pools flushed through `SplitPool` at
+    every wave clear, and the run ending on wave 10, `runCapSeconds` or death.
+
+    Returns (rows, totals): one row per wave (start, end, count, merged, boss,
+    HP left) and the run aggregate."""
+    director = combat_cfg["director"]
+    player_cfg = combat_cfg["player"]
+    enemy_cfg = combat_cfg["enemy"]
+    party = max(int(party), 1)
+    model = player_model(armory, gear, ascension)
+    hp_max = max_hp(armory, gear, ascension)
+    hp = float(hp_max)
+    engage = model["melee_range"] + player_cfg["hitDistancePad"]
+    window = director["windowSeconds"]
+    warmup = director["tempoWarmupSeconds"]
+    refund = player_cfg["killCooldownRefundSeconds"]
+    floor_share = combat_cfg["coop"]["contributionFloor"]
+    counts = {
+        wave: wave_spec(mission, wave, party, overdrive, combat_cfg)["count"]
+        for wave in range(1, mission["waves"] + 1)
+    }
+
+    t = 0.0
+    seq = 0
+    hp_floor = float(hp_max)
+    alive = []
+    groups = []
+    rows = []
+    kill_times = []
+    kills_by_key = {}
+    ready_at = {"melee": 0.0, "ranged": 0.0}
+    payout = {"cash": 0, "materials": 0, "valor": 0, "kills": 0}
+    next_wave = 1
+    tempo_value = 1.0
+    breather_end = None
+    breather_total = 0.0
+    boss_seconds = 0.0
+    ability_damage_total = 0.0
+    damage_taken = 0.0
+    merges = 0
+    end_reason = None
+    died_wave = None
+
+    def start_wave(wave, merged):
+        nonlocal next_wave
+        spec = wave_spec(mission, wave, party, overdrive, combat_cfg)
+        order = wave_composition(spec["count"], spec["weights"])
+        # The elite rule: one extra elite when the party is running hot and the
+        # composition has an elite key at all (Village: brute, from wave 7).
+        if tempo_value >= director["eliteTempo"]:
+            elites = sorted(
+                key
+                for key, weight in spec["weights"].items()
+                if weight > 0 and mission["enemies"][key]["elite"]
+            )
+            if elites:
+                order.append(elites[0])
+        queue = [(key, False) for key in order]
+        if spec["boss"] is not None:
+            queue.insert(0, (spec["boss"]["enemy"], True))
+        groups.append(
+            {
+                "wave": wave,
+                "spec": spec,
+                "queue": queue,
+                "count": len(queue),
+                "spawned": 0,
+                "dead": 0,
+                "merged": merged,
+                "boss": spec["boss"] is not None,
+                "pool": {"cash": 0, "materials": 0, "valor": 0, "kills": 0},
+                "start": t,
+                "next_spawn": t,
+                "merge_done": False,
+                "taken_at_start": damage_taken,
+                "tempo_sum": 0.0,
+                "ticks": 0,
+                "dead_at_spawn_end": None,
+                "tempo_at_spawn_end": 0.0,
+            }
+        )
+        next_wave = wave + 1
+
+    def spawn(group):
+        nonlocal seq
+        key, is_boss = group["queue"][group["spawned"]]
+        stats = enemy_stats(mission, key, group["spec"], is_boss)
+        definition = mission["enemies"][key]
+        seq += 1
+        alive.append(
+            {
+                "key": key,
+                "hp": float(stats["hp"]),
+                "max_hp": stats["hp"],
+                "damage": stats["damage"],
+                "cash": stats["cash"],
+                "materials": stats["materials"],
+                "boss": is_boss,
+                "kind": definition["kind"],
+                "reach": definition["reach"],
+                "speed": definition["speed"],
+                "cooldown": definition["attackCooldown"],
+                "dist": SPAWN_DISTANCE,
+                "next_attack": None,
+                "seq": seq,
+                "group": group,
+                "land": (
+                    RANGED_ENEMY_LAND_RATE
+                    if definition["kind"] == "ranged"
+                    else min(definition["speed"] / PLAYER_WALK_SPEED, 1.0)
+                ),
+            }
+        )
+        group["spawned"] += 1
+
+    def hit(enemy, amount):
+        if enemy["hp"] <= 0:
+            return
+        enemy["hp"] -= amount
+        if enemy["hp"] > 0:
+            return
+        group = enemy["group"]
+        group["dead"] += 1
+        group["pool"]["cash"] += enemy["cash"]
+        group["pool"]["materials"] += enemy["materials"]
+        group["pool"]["kills"] += 1
+        if enemy["boss"]:
+            group["pool"]["valor"] += boss_valor(mission, group["wave"], overdrive, combat_cfg)
+        kills_by_key[enemy["key"]] = kills_by_key.get(enemy["key"], 0) + 1
+        kill_times.append(t)
+        # Every kill shortens both ability cooldowns (player.killCooldownRefundSeconds).
+        for slot in ready_at:
+            ready_at[slot] -= refund
+        alive.remove(enemy)
+
+    start_wave(1, False)
+    while end_reason is None:
+        # Tempo: kills inside the rolling window against the wave's expected pace.
+        while kill_times and kill_times[0] <= t - window:
+            kill_times.pop(0)
+        reference = (
+            groups[-1]["spec"]["count"]
+            if groups
+            else counts.get(min(next_wave, mission["waves"]), 1)
+        )
+        expected = reference / mission["targetWaveSeconds"]
+        tempo_value = (
+            1.0 if t < warmup else tempo(len(kill_times), window, expected, director)
+        )
+
+        if breather_end is not None:
+            hp = min(float(hp_max), hp + player_cfg["breatherRegenPerSecond"] * DT)
+            breather_total += DT
+            if t >= breather_end:
+                breather_end = None
+                start_wave(next_wave, False)
+        else:
+            for group in groups:
+                group["tempo_sum"] += tempo_value
+                group["ticks"] += 1
+                while (
+                    group["spawned"] < group["count"]
+                    and t >= group["next_spawn"]
+                    and len(alive) < director["maxAlive"]
+                ):
+                    spawn(group)
+                    group["next_spawn"] = t + spawn_interval(
+                        mission, group["spec"], tempo_value, overdrive, combat_cfg
+                    )
+                if group["spawned"] >= group["count"] and group["dead_at_spawn_end"] is None:
+                    group["dead_at_spawn_end"] = group["dead"] / max(group["count"], 1)
+                    group["tempo_at_spawn_end"] = tempo_value
+
+            # The merge is decided ONCE, at the instant the wave finishes
+            # spawning ("once the wave has finished spawning" in the contract).
+            # That single reading is what makes it a skill test: the deadFraction
+            # at that instant is (count - enemies still in flight) / count, so a
+            # party that is one enemy behind reads ~0.86 and a party that is
+            # three behind reads ~0.6. Re-checking every tick afterwards would
+            # instead let every wave drift up to 1.0 and merge unconditionally.
+            newest = groups[-1] if groups else None
+            if (
+                newest is not None
+                and not newest["merge_done"]
+                and newest["dead_at_spawn_end"] is not None
+            ):
+                if MERGE_CHECK_CONTINUOUS:
+                    fraction = newest["dead"] / max(newest["count"], 1)
+                    if should_merge(tempo_value, fraction, director):
+                        newest["merge_done"] = True
+                        if next_wave <= mission["waves"]:
+                            merges += 1
+                            start_wave(next_wave, True)
+                else:
+                    newest["merge_done"] = True
+                    if next_wave <= mission["waves"] and should_merge(
+                        tempo_value, newest["dead_at_spawn_end"], director
+                    ):
+                        merges += 1
+                        start_wave(next_wave, True)
+
+            # Target priority, the greedy player's: ordinary enemies before the
+            # boss, the squishiest first (archers, then raiders, then brutes),
+            # oldest to break ties. The melee term only lands once that target is
+            # inside the weapon's reach; the ranged term always applies.
+            if alive:
+                target = min(alive, key=lambda e: (e["boss"], e["max_hp"], e["seq"]))
+                amount = model["ranged_dps"] * party * DT
+                if target["dist"] <= engage:
+                    amount += model["melee_dps"] * party * DT
+                hit(target, amount)
+            for ability in model["abilities"]:
+                if alive and t >= ready_at[ability["slot"]]:
+                    for enemy in ability_targets(ability, list(alive)):
+                        ability_damage_total += min(ability["damage"] * party, enemy["hp"])
+                        hit(enemy, ability["damage"] * party)
+                    ready_at[ability["slot"]] = t + ability["cooldown"]
+
+            if any(enemy["boss"] for enemy in alive):
+                boss_seconds += DT
+            incoming = 0.0
+            melee_slots = MELEE_CONTACT_SLOTS * party
+            melee_used = 0
+            # Bosses take a ring slot first, then the oldest arrivals.
+            for enemy in sorted(alive, key=lambda e: (not e["boss"], e["seq"])):
+                if enemy["dist"] > enemy["reach"]:
+                    enemy["dist"] = max(enemy["reach"], enemy["dist"] - enemy["speed"] * DT)
+                    if enemy["dist"] <= enemy["reach"]:
+                        enemy["next_attack"] = t + enemy_cfg["attackWindupSeconds"]
+                if enemy["dist"] > enemy["reach"] or enemy["next_attack"] is None:
+                    continue
+                if enemy["kind"] == "melee":
+                    if melee_used >= melee_slots:
+                        # Queued outside the ring: it cannot reach the player yet.
+                        enemy["next_attack"] += DT
+                        continue
+                    melee_used += 1
+                if t >= enemy["next_attack"]:
+                    incoming += enemy["damage"] * enemy["land"]
+                    enemy["next_attack"] += enemy["cooldown"]
+            hp -= incoming / party
+            hp_floor = min(hp_floor, hp)
+            damage_taken += incoming / party
+
+            for group in list(groups):
+                if group["spawned"] < group["count"]:
+                    continue
+                if any(enemy["group"] is group for enemy in alive):
+                    continue
+                shares = contribution_shares({i: 1.0 for i in range(party)}, floor_share)
+                for share in split_pool(group["pool"], shares).values():
+                    # Double floor, exactly as Waves section 6 credits it: SplitPool
+                    # floors pool.cash x share, then the caller floors that share
+                    # again against CombatCashMult. `cash_mult` is 1.0 for every run
+                    # the tool reports (legacy 0, no Founder's Blessing).
+                    payout["cash"] += math.floor(share["cash"] * cash_mult)
+                    payout["materials"] += share["materials"]
+                    payout["valor"] += share["valor"]
+                payout["kills"] += group["pool"]["kills"]
+                rows.append(
+                    {
+                        "wave": group["wave"],
+                        "start": group["start"],
+                        "end": t,
+                        "count": group["count"],
+                        "merged": group["merged"],
+                        "boss": group["boss"],
+                        "hp": hp,
+                        "cash": group["pool"]["cash"],
+                        "materials": group["pool"]["materials"],
+                        "valor": group["pool"]["valor"],
+                        "kills": group["pool"]["kills"],
+                        "taken": damage_taken - group["taken_at_start"],
+                        "tempo": group["tempo_sum"] / max(group["ticks"], 1),
+                        "dead_at_spawn_end": group["dead_at_spawn_end"],
+                        "tempo_at_spawn_end": group["tempo_at_spawn_end"],
+                        "cleared": True,
+                    }
+                )
+                groups.remove(group)
+
+            if hp <= 0:
+                end_reason = "died"
+                died_wave = max(
+                    (g["wave"] for g in groups),
+                    default=(rows[-1]["wave"] if rows else 1),
+                )
+            elif not groups:
+                if next_wave > mission["waves"]:
+                    end_reason = "cleared"
+                else:
+                    breather_end = t + breather_seconds(tempo_value, director)
+
+        t += DT
+        if end_reason is None and t >= director["runCapSeconds"]:
+            end_reason = "cap"
+
+    for group in groups:
+        rows.append(
+            {
+                "wave": group["wave"],
+                "start": group["start"],
+                "end": t,
+                "count": group["count"],
+                "merged": group["merged"],
+                "boss": group["boss"],
+                "hp": hp,
+                "cash": group["pool"]["cash"],
+                "materials": group["pool"]["materials"],
+                "valor": group["pool"]["valor"],
+                "kills": group["pool"]["kills"],
+                "taken": damage_taken - group["taken_at_start"],
+                "tempo": group["tempo_sum"] / max(group["ticks"], 1),
+                "dead_at_spawn_end": group["dead_at_spawn_end"],
+                "tempo_at_spawn_end": group["tempo_at_spawn_end"],
+                "cleared": False,
+            }
+        )
+    rows.sort(key=lambda row: (row["wave"], row["start"]))
+    totals = {
+        "seconds": t,
+        "cash": payout["cash"],
+        "materials": payout["materials"],
+        "valor": payout["valor"],
+        "kills": payout["kills"],
+        "kills_by_key": kills_by_key,
+        "dps": model["dps"],
+        "melee_dps": model["melee_dps"],
+        "ranged_dps": model["ranged_dps"],
+        "ability_damage": ability_damage_total,
+        "max_hp": hp_max,
+        "power": gear_power(armory, gear, ascension),
+        "hp_left": hp,
+        "hp_floor": hp_floor,
+        "damage_taken": damage_taken,
+        "breather_seconds": breather_total,
+        "boss_seconds": boss_seconds,
+        "merges": merges,
+        "waves_cleared": sum(1 for row in rows if row["cleared"]),
+        "died": end_reason == "died",
+        "died_wave": died_wave,
+        "end_reason": end_reason,
+        "party": party,
+    }
     return rows, totals
 
 
@@ -742,8 +1271,10 @@ def print_unlock_table(armory, curves, missions):
     print()
 
 
-def print_run(mission, armory, combat_cfg, gear, ascension, party, overdrive, label, judge=True):
-    rows, totals = model_run(mission, armory, combat_cfg, gear, ascension, party, overdrive)
+def print_run(
+    mission, armory, combat_cfg, gear, ascension, party, overdrive, label, judge=True, trace=False
+):
+    rows, totals = simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive)
     melee_name = tier_def(armory, "melee", gear["melee"])["name"]
     ranged_name = tier_def(armory, "ranged", gear["ranged"])["name"]
     target = mission["targetMinutes"] * 60
@@ -761,57 +1292,91 @@ def print_run(mission, armory, combat_cfg, gear, ascension, party, overdrive, la
     )
     print(
         f"  DPS       : {totals['dps']:.1f} "
-        f"(melee {totals['melee_dps']:.1f} + ranged {totals['ranged_dps']:.1f}), "
-        f"party {party}"
+        f"(melee {totals['melee_dps']:.1f} + ranged {totals['ranged_dps']:.1f}) "
+        f"+ abilities, party {party}"
     )
     print(
-        f"  {'wave':>4} {'count':>6} {'avgHp':>9} {'TTK':>7} {'waveS':>8} "
-        f"{'cash':>10} {'mats':>7}  {'boss':<34}"
+        f"  {'wave':>4} {'start':>7} {'end':>7} {'len':>6} {'n':>4} {'flags':<10} "
+        f"{'tempo':>6} {'dmg in':>7} {'cash':>10} {'mats':>6} {'HP left':>9}"
     )
-    ordinary = [r["seconds"] - (r["boss"]["ttk"] / party if r["boss"] else 0) for r in rows]
-    for row, plain in zip(rows, ordinary):
-        boss = ""
+    for row in rows:
+        flags = []
+        if row["merged"]:
+            flags.append("merged")
         if row["boss"]:
-            boss = (
-                f"{row['boss']['hp']:,} hp / {row['boss']['ttk']:.0f}s / "
-                f"{row['boss']['valor']} valor"
-            )
-        # The flag judges the wave body only: a boss wave is meant to run long.
-        flag = "*" if plain > 2 * mission["targetWaveSeconds"] else " "
+            flags.append("BOSS")
+        if not row["cleared"]:
+            flags.append(totals["end_reason"] or "-")
+        length = row["end"] - row["start"]
         print(
-            f"  {row['wave']:>4} {row['count']:>6} {row['avg_hp']:>9,.0f} "
-            f"{row['ttk']:>7.2f} {row['seconds']:>7.1f}{flag} "
-            f"{row['cash']:>10,.0f} {row['materials']:>7.1f}  {boss:<34}"
+            f"  {row['wave']:>4} {row['start']:>7.1f} {row['end']:>7.1f} "
+            f"{length:>6.1f} {row['count']:>4} {'+'.join(flags):<10} "
+            f"{row['tempo']:>6.2f} {row['taken']:>7.0f} "
+            f"{row['cash']:>10,} {row['materials']:>6,} "
+            f"{row['hp']:>8.0f}/{totals['max_hp']:g}"
         )
     status = "OK" if low <= totals["seconds"] <= high else "MISS"
     if not judge:
         status += " (informational -- only the recommended-power run is asserted)"
+    ended = {
+        "cleared": f"cleared all {mission['waves']} waves",
+        "died": f"DIED on wave {totals['died_wave']}",
+        "cap": f"hit the {combat_cfg['director']['runCapSeconds']}s run cap",
+    }[totals["end_reason"]]
     print(
-        f"  total     : {se.fmt_time(totals['seconds'])} combat "
-        f"({totals['seconds']:.0f}s) + {totals['breather_seconds']:.0f}s breathers "
-        f"= {se.fmt_time(totals['seconds'] + totals['breather_seconds'])} wall clock"
+        f"  total     : {se.fmt_time(totals['seconds'])} wall clock "
+        f"({totals['seconds']:.0f}s, {totals['breather_seconds']:.0f}s of it breathers), "
+        f"{ended}"
     )
     print(
         f"  target    : {mission['targetMinutes']} min "
         f"({se.fmt_time(low)}-{se.fmt_time(high)} at +-50%): {status}"
     )
+    cleared = [r for r in rows if r["cleared"]]
+    lengths = [r["end"] - r["start"] for r in cleared] or [0]
     print(
-        f"  waves     : ordinary mean {sum(ordinary) / len(ordinary):.1f}s "
-        f"(target {mission['targetWaveSeconds']}s), longest {max(ordinary):.1f}s; "
-        f"bosses {totals['boss_seconds']:.0f}s "
-        f"({100 * totals['boss_seconds'] / totals['seconds']:.0f}% of the run)"
+        f"  waves     : {totals['waves_cleared']} cleared, mean "
+        f"{sum(lengths) / len(lengths):.1f}s (target {mission['targetWaveSeconds']}s), "
+        f"longest {max(lengths):.1f}s; {totals['merges']} merge(s); bosses "
+        f"{totals['boss_seconds']:.0f}s ({100 * totals['boss_seconds'] / totals['seconds']:.0f}% "
+        f"of the run)"
     )
     print(
-        f"  rewards   : {totals['cash']:,.0f} cash, {totals['materials']:,.0f} "
-        f"{mission['material']}, {totals['valor']} Valor, {totals['kills']} kills"
+        f"  health    : took {totals['damage_taken']:,.0f} damage, floor "
+        f"{totals['hp_floor']:.0f}/{totals['max_hp']:g} "
+        f"({100 * totals['hp_floor'] / totals['max_hp']:.0f}%), ended at "
+        f"{totals['hp_left']:.0f}"
     )
-    wall = totals["seconds"] + totals["breather_seconds"]
+    by_key = ", ".join(f"{key} {n}" for key, n in sorted(totals["kills_by_key"].items()))
+    print(
+        f"  rewards   : {totals['cash']:,} cash, {totals['materials']:,} "
+        f"{mission['material']}, {totals['valor']} Valor, {totals['kills']} kills ({by_key})"
+    )
+    print(
+        f"  abilities : {totals['ability_damage']:,.0f} damage "
+        f"({100 * totals['ability_damage'] / max(sum_enemy_hp(rows, totals), 1):.0f}% of the "
+        f"HP destroyed)"
+    )
     cap = combat_cfg["director"]["runCapSeconds"]
     print(
         f"  run cap   : {cap}s -- "
-        + ("fits" if wall <= cap else "OVER, the run would be cut short")
+        + ("fits" if totals["seconds"] <= cap else "OVER, the run would be cut short")
     )
+    if trace:
+        print(
+            "  trace     : wave / start s / count / merged? / boss? / end s / HP left "
+            "(the table above is that trace)"
+        )
     return rows, totals
+
+
+def sum_enemy_hp(rows, totals):
+    """Total enemy HP destroyed, inferred from the run's damage accounting: the
+    player's sustained DPS is not tracked per enemy, so the ability share is
+    reported against the HP the run actually removed."""
+    return totals["dps"] * (totals["seconds"] - totals["breather_seconds"]) + totals[
+        "ability_damage"
+    ]
 
 
 def print_cash_ratio(mission, armory, curves, totals):
@@ -859,27 +1424,31 @@ def print_cash_ratio(mission, armory, curves, totals):
 
 
 def print_survivability(combat_cfg, rows, totals):
-    """Informational only -- C1 owns the real hit model. Incoming damage is
-    modelled as ONE enemy in contact landing `contact` of its attacks."""
-    print("Survivability (informational -- no contract assertion until C1)")
-    regen = (
-        combat_cfg["player"]["breatherRegenPerSecond"] * combat_cfg["director"]["breatherSeconds"]
-    )
-    healed = regen * (len(rows) - 1)
-    for contact in (0.1, 0.25, 0.5):
-        taken = sum(r["enemy_dps"] * contact * r["seconds"] for r in rows)
-        taken += sum(r["boss"]["dps_in"] * contact * r["boss"]["ttk"] for r in rows if r["boss"])
-        deaths = max(taken - healed, 0) / totals["max_hp"]
-        print(
-            f"  1 enemy in contact, {contact:.0%} of attacks land: "
-            f"{taken:,.0f} damage taken - {healed:,.0f} regen = "
-            f"{deaths:.1f} deaths at {totals['max_hp']:g} max HP "
-            f"({deaths * combat_cfg['player']['respawnSeconds']:.0f}s of respawn)"
-        )
+    """Measured, not modelled: the run simulator tracks HP tick by tick, so this
+    is the actual damage taken with the actual regen, per wave."""
+    player_cfg = combat_cfg["player"]
+    print("Survivability (measured by the run simulator, standing player = upper bound)")
     print(
-        f"  breather regen   : {regen:g} HP x {len(rows) - 1} breathers "
-        f"({100 * regen / totals['max_hp']:.0f}% of max HP each), "
-        f"respawn {combat_cfg['player']['respawnSeconds']}s"
+        f"  damage taken     : {totals['damage_taken']:,.0f} over "
+        f"{se.fmt_time(totals['seconds'])} at {totals['max_hp']:g} max HP "
+        f"({totals['damage_taken'] / totals['max_hp']:.1f} full health bars)"
+    )
+    print(
+        f"  regen            : {player_cfg['breatherRegenPerSecond']:g} HP/s x "
+        f"{totals['breather_seconds']:.0f}s of breathers = "
+        f"{player_cfg['breatherRegenPerSecond'] * totals['breather_seconds']:,.0f} HP "
+        f"(capped at max HP each time)"
+    )
+    print(
+        f"  lowest HP        : {totals['hp_floor']:.0f} "
+        f"({100 * totals['hp_floor'] / totals['max_hp']:.0f}% of max; the "
+        f"feedback.lowHpFraction vignette trips at "
+        f"{100 * combat_cfg['feedback']['lowHpFraction']:.0f}%)"
+    )
+    worst = min(rows, key=lambda row: row["hp"])
+    print(
+        f"  tightest wave    : wave {worst['wave']} ended at {worst['hp']:.0f} HP"
+        + (f"; ran out on wave {totals['died_wave']}" if totals["died"] else "")
     )
     print()
 
@@ -997,7 +1566,7 @@ class Checks:
 
 def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md 'C0 contracts', six assertions)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C1 contracts, ten assertions)")
     curves = greedy_curves(game, eras)
 
     # 1. unlockRate non-decreasing per slot; each band's entry tier unlocks inside its era.
@@ -1058,25 +1627,30 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         )
     checks.verdict(ok2, "2 power at median  ", "; ".join(details))
 
-    # 3. Modelled run at recommended power inside targetMinutes +-50 %.
+    # 3. Simulated run at recommended power clears every wave inside targetMinutes +-50 %.
     details = []
     ok3 = True
+    baselines = {}
     for curve in curves:
         mission = missions.get(curve.index)
         if mission is None:
             continue
         gear, power = gear_for_power(armory, mission["recommendedPower"])
-        _, totals = model_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        baselines[mission["id"]] = totals
         target = mission["targetMinutes"] * 60
         inside = (
             target * (1 - RUN_TIME_TOLERANCE)
             <= totals["seconds"]
             <= target * (1 + RUN_TIME_TOLERANCE)
         )
-        ok3 = ok3 and inside
+        cleared = totals["waves_cleared"] >= mission["waves"]
+        ok3 = ok3 and inside and cleared
         details.append(
-            f"{mission['id']} {se.fmt_time(totals['seconds'])} vs target "
-            f"{mission['targetMinutes']} min at power {power}"
+            f"{mission['id']} {totals['waves_cleared']}/{mission['waves']} waves in "
+            f"{se.fmt_time(totals['seconds'])} vs target {mission['targetMinutes']} min "
+            f"at power {power} ({totals['end_reason']}, HP floor "
+            f"{100 * totals['hp_floor'] / totals['max_hp']:.0f}%)"
         )
     checks.verdict(ok3, "3 run length       ", "; ".join(details) or "no missions to model")
 
@@ -1088,7 +1662,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         if mission is None:
             continue
         gear, _ = gear_for_power(armory, mission["recommendedPower"])
-        _, totals = model_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        totals = baselines.get(mission["id"])
+        if totals is None:
+            _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
         rate = max(
             tier_unlock_rate(armory, "melee", gear["melee"]),
             tier_unlock_rate(armory, "ranged", gear["ranged"]),
@@ -1126,11 +1702,108 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         f"{all_away:.2f} (expedition {expedition})",
     )
 
+    # 7. Twice the recommended power makes the director merge at least one wave.
+    details = []
+    ok7 = True
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        gear, power = gear_for_power(armory, STRONG_POWER_MULT * mission["recommendedPower"])
+        _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        ok7 = ok7 and totals["merges"] >= 1
+        details.append(
+            f"{mission['id']} power {power} -> {totals['merges']} merge(s), "
+            f"{se.fmt_time(totals['seconds'])}"
+        )
+    checks.verdict(ok7, "7 merge at 2x      ", "; ".join(details) or "no missions to model")
+
+    # 8. Under-geared (0.6x) the run ends in death around wave 6.
+    details = []
+    ok8 = True
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        gear, power = gear_for_power(armory, WEAK_POWER_MULT * mission["recommendedPower"])
+        _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        wave = totals["died_wave"]
+        good = totals["died"] and abs(wave - WEAK_DEATH_WAVE) <= WEAK_DEATH_TOLERANCE
+        ok8 = ok8 and good
+        details.append(
+            f"{mission['id']} power {power} -> "
+            + (f"died wave {wave}" if totals["died"] else f"survived ({totals['end_reason']})")
+            + f" at {se.fmt_time(totals['seconds'])}"
+        )
+    checks.verdict(
+        ok8,
+        "8 under-geared     ",
+        "; ".join(details)
+        + f" (needs death on wave {WEAK_DEATH_WAVE} +-{WEAK_DEATH_TOLERANCE})",
+    )
+
+    # 9. WaveComposition returns exactly `count` keys, each within 1 of its share.
+    problems = []
+    checked = 0
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        for party in range(1, combat_cfg["coop"]["maxParty"] + 1):
+            for wave in range(1, mission["waves"] + 1):
+                for overdrive in (False, True):
+                    spec = wave_spec(mission, wave, party, overdrive, combat_cfg)
+                    order = wave_composition(spec["count"], spec["weights"])
+                    checked += 1
+                    if len(order) != spec["count"]:
+                        problems.append(
+                            f"{mission['id']} w{wave} p{party}: {len(order)} keys for "
+                            f"count {spec['count']}"
+                        )
+                        continue
+                    total_weight = sum(spec["weights"].values())
+                    for key, weight in spec["weights"].items():
+                        share = spec["count"] * weight / total_weight
+                        actual = order.count(key)
+                        if abs(actual - share) >= 1:
+                            problems.append(
+                                f"{mission['id']} w{wave} p{party} {key}: {actual} vs "
+                                f"share {share:.2f}"
+                            )
+    checks.verdict(
+        not problems,
+        "9 composition      ",
+        "; ".join(problems[:4])
+        if problems
+        else f"{checked} wave/party/overdrive combinations, exact count and every key "
+        f"within 1 of its weight share",
+    )
+
+    # 10. Overdrive at 3x recommended power pays at least 3x the normal run.
+    details = []
+    ok10 = True
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        base = baselines.get(mission["id"])
+        if base is None:
+            gear, _ = gear_for_power(armory, mission["recommendedPower"])
+            _, base = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
+        # "recommended" here is Combat.RecommendedPower under Overdrive (the
+        # mission's number x overdrive.hpMult), which is the figure the
+        # Expedition panel shows for an Overdrive run -- so the fixture is three
+        # times THAT, not three times the normal-mode number.
+        gear, power = gear_for_power(
+            armory, OVERDRIVE_POWER_MULT * recommended_power(mission, True, combat_cfg)
+        )
+        _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, True)
+        ratio = totals["cash"] / base["cash"] if base["cash"] > 0 else 0
+        ok10 = ok10 and ratio >= OVERDRIVE_CASH_MULT
+        details.append(
+            f"{mission['id']} {totals['cash']:,} vs {base['cash']:,} = x{ratio:.2f} "
+            f"at power {power} ({totals['waves_cleared']}/{mission['waves']} waves, "
+            f"{totals['end_reason']})"
+        )
+    checks.verdict(
+        ok10,
+        "10 overdrive cash  ",
+        "; ".join(details) + f" (needs >= x{OVERDRIVE_CASH_MULT:g})",
+    )
+
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all six assertions hold"
+            "PASS -- all ten assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -1147,7 +1820,10 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="run the six C0 assertions")
+    parser.add_argument("--check", action="store_true", help="run the ten C0/C1 assertions")
+    parser.add_argument(
+        "--trace", action="store_true", help="print the wave timeline of the simulated run"
+    )
     parser.add_argument("--era", type=int, help="report only this era's mission")
     parser.add_argument("--power", type=float, help="model the run at this Gear Power")
     parser.add_argument("--party", type=int, default=1, help="party size (default 1)")
@@ -1210,6 +1886,7 @@ def main():
                 args.overdrive,
                 label,
                 judge=first is None,
+                trace=args.trace,
             )
             print()
             if first is None:

@@ -7,9 +7,12 @@
 -- service, which refuses unknown values with an ActionResult.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Catalog"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
+
+local isStudio = RunService:IsStudio()
 
 -- Used when Combat.json is absent: the Expeditions feature is hidden then, so RequestRunList is
 -- never sent, and its bucket only needs a legal rate.
@@ -17,6 +20,11 @@ local DEFAULT_RUN_LIST_CALLS_PER_SECOND = 1
 -- A mission id is a short config key ("village"); anything longer is a malformed payload, not a
 -- lookup worth making.
 local MAX_MISSION_ID_LENGTH = 64
+-- RequestDebug (C1, Studio only): a lever name is a short identifier and its value is a number,
+-- a flag or a tiny string like "melee=3"; anything larger is a malformed payload. The handler
+-- ignores the whole intent outside Studio, so these bounds only keep the validator honest.
+local MAX_DEBUG_LEVER_LENGTH = 32
+local MAX_DEBUG_VALUE_LENGTH = 64
 
 local function isCountInRange(value: any): boolean
 	if typeof(value) ~= "number" or value ~= math.floor(value) then
@@ -30,8 +38,30 @@ local function isWeaponSlot(value: any): boolean
 	return value == "melee" or value == "ranged"
 end
 
-local function isUserId(value: any): boolean
-	return typeof(value) == "number" and value == math.floor(value) and value > 0
+-- A real host id is always positive. The Studio fake runs (C1 `fakeRuns` lever) host themselves
+-- on negative ids so Join can be refused on one, and ONLY Studio widens the rule: live, a
+-- negative id would buy a client a MemoryStore GetAsync on an arbitrary key at the prompt rate.
+local function isHostUserId(value: any): boolean
+	if typeof(value) ~= "number" or value ~= math.floor(value) then
+		return false
+	end
+	if value > 0 then
+		return true
+	end
+	return value < 0 and isStudio
+end
+
+-- Same rule as CombatRemotes' RequestDebug validator: NaN and ±inf are not lever values, and a
+-- number that survives into a grant would corrupt a persisted field.
+local function isDebugValue(value: any): boolean
+	local kind = typeof(value)
+	if kind == "nil" or kind == "boolean" then
+		return true
+	end
+	if kind == "number" then
+		return value == value and value ~= math.huge and value ~= -math.huge
+	end
+	return kind == "string" and #value <= MAX_DEBUG_VALUE_LENGTH
 end
 
 local remotesConfig = Catalog.GetGameConfig().remotes
@@ -135,7 +165,7 @@ local HubRemotes: RemoteService.RemoteDefs = {
 		RequestJoinRun = {
 			bucket = "prompt",
 			validate = function(args: RemoteService.PackedArgs): boolean
-				return args.n == 1 and isUserId(args[1])
+				return args.n == 1 and isHostUserId(args[1])
 			end,
 		},
 		RequestRunList = {
@@ -144,10 +174,21 @@ local HubRemotes: RemoteService.RemoteDefs = {
 				return args.n == 0
 			end,
 		},
+		-- C1. The Studio DebugPanel's buttons; ArmoryService.HandleDebug drops every call
+		-- outside Studio, so this is shape-checking a remote that does nothing in production.
+		RequestDebug = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 2
+					and typeof(args[1]) == "string"
+					and #args[1] <= MAX_DEBUG_LEVER_LENGTH
+					and isDebugValue(args[2])
+			end,
+		},
 	},
-	-- FxEvent (M3) and RunList (C0) are server → client only: presentation events and the run
-	-- registry answer, owner only, never on bulk restore.
-	events = { "StateChanged", "ActionResult", "FxEvent", "RunList" },
+	-- FxEvent (M3), RunList (C0) and ExpeditionSummary (C1) are server → client only:
+	-- presentation events and the run registry answer, owner only, never on bulk restore.
+	events = { "StateChanged", "ActionResult", "FxEvent", "RunList", "ExpeditionSummary" },
 	rates = {
 		calls = remotesConfig.callsPerSecond,
 		prompt = remotesConfig.promptCallsPerSecond,

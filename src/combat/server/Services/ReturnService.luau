@@ -11,7 +11,6 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
@@ -21,6 +20,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
+local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 
 -- Infrastructure retry policy, like DataService's: three attempts, 1 s / 2 s / 4 s backoff.
@@ -34,7 +34,6 @@ export type Hooks = {
 }
 
 local hooks: Hooks? = nil
-local isStudio = RunService:IsStudio()
 -- Present exactly while a trip home is in flight. RequestLeave shares the 10/s gameplay bucket,
 -- so without this ten taps on Return would start ten teleports and ten releases.
 local leaving: { [Player]: boolean } = {}
@@ -45,11 +44,20 @@ local function sendUnavailable(player: Player): ()
 	RemoteService.FireClient(player, "ActionResult", result)
 end
 
--- C0 runs award nothing (no enemies until C1), so the card shows zeros; the shape is already
--- the final one so the client never has to change.
-local function buildSummary(): Types.RunSummary
+-- The run's own numbers come from ArenaService.GetSummary (C1, luau-engineer A's WaveService
+-- feeds it). A build where it does not exist yet — or a player who was never admitted — still
+-- goes home, with the zeroed C0 card rather than an error on the way out. Built through `any`
+-- because Types.RunSummary gains bestWave/died in this same milestone.
+local function buildSummary(player: Player): Types.RunSummary
+	local getSummary = (ArenaService :: any).GetSummary
+	if typeof(getSummary) == "function" then
+		local ok, summary = pcall(getSummary, player.UserId)
+		if ok and typeof(summary) == "table" then
+			return summary :: Types.RunSummary
+		end
+	end
 	local mission = ArenaService.GetMission()
-	return {
+	local empty: any = {
 		missionId = if mission ~= nil then mission.id else "",
 		overdrive = ArenaService.IsOverdrive(),
 		wavesCleared = 0,
@@ -58,7 +66,10 @@ local function buildSummary(): Types.RunSummary
 		valor = 0,
 		kills = 0,
 		seconds = 0,
+		bestWave = 0,
+		died = false,
 	}
+	return empty :: Types.RunSummary
 end
 
 -- Shared by the retry-exhausted branch and TeleportInitFailed: the session is already released,
@@ -77,19 +88,38 @@ local ReturnService = {}
 
 -- Returns true only when TeleportAsync was accepted, i.e. when the in-flight guard must stay.
 local function trySendHome(player: Player, reason: string): boolean
-	local summaryState = ArenaService.BuildRunState("summary", buildSummary())
+	local summary = buildSummary(player)
+	local summaryState = ArenaService.BuildRunState("summary", summary)
 	RemoteService.FireClient(player, "RunState", summaryState)
 
 	local places = Catalog.GetPlacesConfig()
-	if places.hubPlaceId == 0 or isStudio then
+	if places.hubPlaceId == 0 then
 		-- Nowhere to go: keep the player (and their profile) exactly where they are, with the
 		-- summary card up, rather than releasing a session we cannot hand over.
-		warn(
-			`[ReturnService] cannot send {player.Name} home ({reason}):`
-				.. ` {if isStudio then "Studio cannot teleport" else "hub place id not set"}`
-		)
+		warn(`[ReturnService] cannot send {player.Name} home ({reason}): hub place id not set`)
 		sendUnavailable(player)
 		return false
+	end
+
+	-- C1: in Studio the trip home is a handoff record plus a kick (docs/INTERFACES.md "Studio
+	-- bridge" → "Combat side"). The release, the failure recovery and the summary itself are
+	-- the live code path; only TeleportAsync is replaced.
+	if StudioBridge.IsActive() then
+		if not StudioBridge.WriteReturn(player, summary) then
+			-- Nothing released: the player stays in the run with the summary card up, exactly
+			-- as they would with hubPlaceId = 0.
+			sendUnavailable(player)
+			return false
+		end
+		ArenaService.Remove(player)
+		DataService.Release(player)
+		if StudioBridge.TeleportShouldFail() then
+			-- The lever reproduces TeleportInitFailed, so it runs that handler's recovery.
+			abortReturn(player)
+			return false
+		end
+		StudioBridge.Depart(player, "Run over — Stop Play, then reopen build/test.rbxl")
+		return true
 	end
 
 	ArenaService.Remove(player)
@@ -139,8 +169,8 @@ function ReturnService.Init(serviceHooks: Hooks?): ()
 
 	-- TeleportAsync only THROWS for argument errors; an unpublished hub place, a throttle or a
 	-- full destination is refused asynchronously and lands here, after the pcall returned true
-	-- and the profile was already released. Cannot be reproduced in Studio, where the
-	-- hubPlaceId/isStudio branch above refuses the trip before it starts.
+	-- and the profile was already released. In Studio there is no teleport to refuse, so the
+	-- ForceTeleportFailure lever drives this same recovery from the bridge branch above.
 	TeleportService.TeleportInitFailed:Connect(
 		function(player: Player, teleportResult: Enum.TeleportResult, errorMessage: string)
 			if not leaving[player] then

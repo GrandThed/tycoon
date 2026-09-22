@@ -1082,3 +1082,88 @@ Both windows can stay connected at once; edits under `src/shared` and `src/serve
       Studio and stop with a toast, keeping the profile where it is. The `TeleportInitFailed`
       recovery paths therefore cannot be exercised in Studio at all — they were reviewed in code
       and have no playtest step.
+
+## C1 — Studio bridge + Village expedition
+
+**Nothing to publish, upload or create on the Creator Hub this milestone.** C1 exists precisely so
+the expedition loop can be exercised **inside Studio** while the experience is still blocked by
+audience reach (`docs/DISCOVERY_CHECKLIST.md`). The place ids from C0 are already in
+`src/shared/Config/Places.json` and are not touched.
+
+### 1. Rebuild both places (every time shared code changes)
+
+- [ ] 1. PowerShell, from the repo root:
+      ```
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      ```
+- [ ] 2. Or live-sync both at once, one Rojo process per project, and point each Studio window's
+      Rojo plugin at its own port:
+      ```
+      rojo serve                                   # hub, port 34872
+      rojo serve combat.project.json --port 34873  # Expeditions
+      ```
+
+### 2. API services must be ON (the bridge is a DataStore)
+
+- [ ] 3. In either place: **Home → Game Settings → Security → Enable Studio Access to API
+      Services** = **ON**. It is experience-wide, so both places share it.
+- [ ] 4. Sanity check: with it ON, Depart in Studio toasts "Handoff saved — Stop Play, then open
+      build/combat.rbxl". With it OFF, Output warns **once**
+      `[StudioBridge] handoff needs API access (Game Settings → Security → Enable Studio Access to
+      API Services)` and Depart refuses — that is the intended degrade, and `docs/PLAYTEST.md` "C1"
+      step 24 tests it deliberately.
+
+### 3. Run the C1 playtest
+
+- [ ] 5. `docs/PLAYTEST.md` "C1 — Studio bridge + Village expedition", all six sections. It needs
+      only Studio: no second account, no published place, no phone.
+
+### 4. If a handoff record gets stuck
+
+A handoff record is one DataStore key. It is written on Depart/Return, **consumed on the next
+boot** of the other place, and ignored + deleted once it is older than 15 minutes
+(`Combat.json debug.handoffMaxAgeSeconds` = 900). So "stuck" normally fixes itself — do this only
+if the combat place keeps booting into a mission you did not ask for.
+
+- Store name: **`StudioHandoff`** · key: **`p_<your userId>`** · value:
+  `{ kind = "depart" | "join" | "return", missionId, overdrive, hostUserId, accessCode, stamp }`
+  (a `return` record carries `summary` instead of the mission fields).
+
+- [ ] 6. **Option A — DataStore editor plugin.** Install any "DataStore Editor" plugin from the
+      Creator Store, open store `StudioHandoff`, find key `p_<userId>`, read or delete it.
+- [ ] 7. **Option B — Command Bar.** With **Play running** (so API access is live), View → Command
+      Bar, set the context dropdown to **Server**, and paste one line:
+      ```
+      local id = game.Players:GetPlayers()[1].UserId print(game:GetService("DataStoreService"):GetDataStore("StudioHandoff"):GetAsync("p_"..id))
+      ```
+      To clear it, same context:
+      ```
+      local id = game.Players:GetPlayers()[1].UserId game:GetService("DataStoreService"):GetDataStore("StudioHandoff"):RemoveAsync("p_"..id) print("handoff cleared")
+      ```
+- [ ] 8. Either way, run them in **Play mode**, not Edit mode — DataStore calls
+      from Edit mode do nothing.
+
+### 5. Combat audio — still to upload (not now)
+
+- [ ] 9. All **17** combat sound keys in `src/shared/Config/Sounds.json` are at id `0`, which
+      `SoundController` skips, so the fight is **silent on purpose**: `swing`, `finisher`,
+      `bowDraw`, `bowFire`, `gunFire`, `laser`, `abilityCast`, `enemyHit`, `enemyDeath`,
+      `playerHit`, `playerDown`, `waveStart`, `waveClear`, `bossStart`, `bossDown`, `runEnd`,
+      `lowHp`. Do **not** report silence as a bug in the C1 playtest.
+- [ ] 10. When they are uploaded, it is the same scripted route as the M3 sounds (this file, "M3 →
+      3. Audio upload"): add each key's source file to `tools/audio_map.json`, leave its `"id"` at
+      `0` in `Sounds.json`, then run `py tools/upload_audio.py` — it uploads only keys sitting at
+      `0`. `--audition` previews picks for free, `--dry-run` shows what would upload.
+- [ ] 11. **Quota check before that run:** Open Cloud allows 100 audio uploads per calendar month
+      on this ID-verified account; 13 were spent in September 2026. 17 more fits, but do it in one
+      month rather than spread across a re-pick.
+
+### 6. When the audience block lifts (not part of C1)
+
+- [ ] 12. Re-publish **both** places together (`docs/MANUAL_STEPS.md` "C0 → 4. Publish both
+      places") — they share `src/shared` and `src/server/Services`, so a hub-only publish leaves
+      the pair out of sync.
+- [ ] 13. Then, and only then, C0 `docs/PLAYTEST.md` section 9 (the real teleport round trip) is
+      worth running. In Studio it is permanently replaced by the C1 bridge.

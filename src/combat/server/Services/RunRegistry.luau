@@ -1,7 +1,8 @@
 --!strict
--- The MemoryStore run registry (docs/INTERFACES.md "C0 contracts" → "Combat place server").
--- This server advertises its own run so a friend in the hub can find and join it; the hub only
--- ever READS the sorted map, so a run can never be advertised by a server that is not hosting it.
+-- The MemoryStore run registry (docs/INTERFACES.md "C0 contracts" → "Combat place server",
+-- C1 "Studio bridge" → "Combat side"). This server advertises its own run so a friend in the
+-- hub can find and join it; the hub only ever READS the sorted map, so a run can never be
+-- advertised by a server that is not hosting it.
 --
 -- The reserved access code cannot be read back from any API, so the hub writes it to a
 -- server-only hash map beside the registry (`<mapName>Codes`, key `code_<hostUserId>`) and this
@@ -10,16 +11,24 @@
 -- is strictly better than advertising a code that cannot teleport anyone.
 --
 -- Every call is pcall + retry + warn and nothing depends on the result: a registry outage costs
--- join-in-progress, never the run itself. In Studio the whole module is a no-op (MemoryStore
--- needs API access, and a Studio playtest must not publish a server nobody can teleport into).
+-- join-in-progress, never the run itself.
+--
+-- C1: Studio is no longer a no-op. With API access on, a Studio session talks to the real
+-- MemoryStore exactly as a live server does; only ProfileStore's in-memory mock (no API access)
+-- swaps in the module-level tables below, which keep the same TTL semantics so a Local Server
+-- test in one Studio still sees its own run. The ForceRegistryFailure lever makes every call
+-- raise inside its pcall, so the backoff and the warns are exercised on demand.
 
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+
+local servicesFolder = script.Parent.Parent:WaitForChild("Services")
+local DataService = require(servicesFolder:WaitForChild("DataService"))
+local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 
 -- Infrastructure retry policy, like DataService's: three attempts, 1 s / 2 s / 4 s backoff.
 local RETRY_ATTEMPTS = 3
@@ -27,17 +36,70 @@ local RETRY_BASE_SECONDS = 1
 local CODES_MAP_SUFFIX = "Codes"
 local CODES_KEY_PREFIX = "code_"
 
-local isStudio = RunService:IsStudio()
+type MapKind = "runs" | "codes"
+-- The in-memory stand-in for one MemoryStore map: value plus the moment it expires, checked on
+-- read so an entry cannot outlive its TTL any more than a real one would.
+type MockEntry = { value: any, expiresAt: number }
+
 local sortedMap: any = nil
 local codesMap: any = nil
+local mockRuns: { [string]: MockEntry } = {}
+local mockCodes: { [string]: MockEntry } = {}
 -- Set by Main's BindToClose. The retry backoff yields, and a yield inside the shutdown handler
 -- would delay DataService.Release (the final save) behind a registry write nobody will read:
 -- the entry expires on its TTL anyway.
 local closing = false
 
-local function callWithRetry(description: string, call: () -> boolean): boolean
+-- Checked per call, never cached: ProfileStore probes API access asynchronously after require,
+-- so a verdict taken at Init would call every session a mock.
+local function useMock(): boolean
+	return StudioBridge.IsActive() and DataService.IsMockMode()
+end
+
+local function mockStore(kind: MapKind): { [string]: MockEntry }
+	return if kind == "codes" then mockCodes else mockRuns
+end
+
+-- Raised INSIDE every pcall'd body below, so the lever produces the same retries, warns and
+-- degraded behaviour a real MemoryStore outage would.
+local function failIfLeverSet(): ()
+	if StudioBridge.RegistryShouldFail() then
+		error("ForceRegistryFailure lever is on", 0)
+	end
+end
+
+local function getAsync(kind: MapKind, key: string): (boolean, any)
+	if useMock() then
+		return pcall(function(): any
+			failIfLeverSet()
+			local store = mockStore(kind)
+			local entry = store[key]
+			if entry == nil then
+				return nil
+			end
+			if os.clock() >= entry.expiresAt then
+				store[key] = nil
+				return nil
+			end
+			return entry.value
+		end)
+	end
+	local map = if kind == "codes" then codesMap else sortedMap
+	if map == nil then
+		return false, "registry unavailable"
+	end
+	return pcall(function(): any
+		failIfLeverSet()
+		return map:GetAsync(key)
+	end)
+end
+
+local function callWithRetry(description: string, call: () -> ()): boolean
 	for attempt = 1, RETRY_ATTEMPTS do
-		local ok, err = pcall(call)
+		local ok, err = pcall(function()
+			failIfLeverSet()
+			call()
+		end)
 		if ok then
 			return true
 		end
@@ -47,6 +109,36 @@ local function callWithRetry(description: string, call: () -> boolean): boolean
 		end
 	end
 	return false
+end
+
+local function setAsync(kind: MapKind, key: string, value: any, ttlSeconds: number): boolean
+	if useMock() then
+		return callWithRetry(`mock SetAsync {key}`, function()
+			mockStore(kind)[key] = { value = value, expiresAt = os.clock() + ttlSeconds }
+		end)
+	end
+	local map = if kind == "codes" then codesMap else sortedMap
+	if map == nil then
+		return false
+	end
+	return callWithRetry(`SetAsync {key}`, function()
+		map:SetAsync(key, value, ttlSeconds)
+	end)
+end
+
+local function removeAsync(kind: MapKind, key: string): boolean
+	if useMock() then
+		return callWithRetry(`mock RemoveAsync {key}`, function()
+			mockStore(kind)[key] = nil
+		end)
+	end
+	local map = if kind == "codes" then codesMap else sortedMap
+	if map == nil then
+		return false
+	end
+	return callWithRetry(`RemoveAsync {key}`, function()
+		map:RemoveAsync(key)
+	end)
 end
 
 local RunRegistry = {}
@@ -64,14 +156,11 @@ function RunRegistry.ResolveAccessCode(
 	missionId: string,
 	overdrive: boolean
 ): string?
-	local map = codesMap
-	if map == nil or closing then
+	if closing then
 		return nil
 	end
 	local key = CODES_KEY_PREFIX .. hostUserId
-	local ok, value = pcall(function(): any
-		return map:GetAsync(key)
-	end)
+	local ok, value = getAsync("codes", key)
 	if not ok then
 		warn(`[RunRegistry] codes GetAsync {hostUserId} failed: {value}`)
 		return nil
@@ -99,9 +188,8 @@ end
 -- Publishes (or refreshes) this run. Called on every admit and, from C1, on every wave, so the
 -- TTL keeps being pushed forward while the run is alive and a crashed server simply expires.
 function RunRegistry.Publish(run: Types.ActiveRun): ()
-	local map = sortedMap
 	local combatConfig = Catalog.GetCombatConfig()
-	if map == nil or combatConfig == nil or closing then
+	if combatConfig == nil or closing then
 		return
 	end
 	if run.accessCode == "" then
@@ -118,30 +206,24 @@ function RunRegistry.Publish(run: Types.ActiveRun): ()
 		partySize = run.partySize,
 		accessCode = run.accessCode,
 	}
-	local ttl = combatConfig.registry.ttlSeconds
-	callWithRetry(`SetAsync {run.hostUserId}`, function(): boolean
-		map:SetAsync(tostring(run.hostUserId), stored, ttl)
-		return true
-	end)
+	setAsync("runs", tostring(run.hostUserId), stored, combatConfig.registry.ttlSeconds)
 end
 
 -- Called when the last player leaves, so the hub stops offering a run nobody is in.
 function RunRegistry.Clear(hostUserId: number): ()
-	local map = sortedMap
-	if map == nil or closing then
+	if closing then
 		return
 	end
-	callWithRetry(`RemoveAsync {hostUserId}`, function(): boolean
-		map:RemoveAsync(tostring(hostUserId))
-		return true
-	end)
+	removeAsync("runs", tostring(hostUserId))
 end
 
 function RunRegistry.Init(): ()
 	local combatConfig = Catalog.GetCombatConfig()
-	if combatConfig == nil or isStudio then
+	if combatConfig == nil then
 		return
 	end
+	-- Resolved unconditionally (including in Studio): these calls build local handles, and
+	-- whether they are ever used is a per-call decision in useMock().
 	local mapName = combatConfig.registry.mapName
 	local ok, maps = pcall(function(): { any }
 		return {

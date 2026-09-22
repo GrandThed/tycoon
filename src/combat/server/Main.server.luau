@@ -22,9 +22,14 @@ local combatFolder = script.Parent:WaitForChild("Combat")
 
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
+local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local CombatRemotes = require(combatFolder:WaitForChild("CombatRemotes"))
 local RunRegistry = require(combatFolder:WaitForChild("RunRegistry"))
 local ArenaService = require(combatFolder:WaitForChild("ArenaService"))
+local EnemyService = require(combatFolder:WaitForChild("EnemyService"))
+local CombatService = require(combatFolder:WaitForChild("CombatService"))
+local WaveService = require(combatFolder:WaitForChild("WaveService"))
+local DebugService = require(combatFolder:WaitForChild("DebugService"))
 local ReturnService = require(combatFolder:WaitForChild("ReturnService"))
 
 type Service = {
@@ -37,10 +42,9 @@ type Loader = (player: Player) -> Types.PlayerState?
 -- Studio (or a standalone boot with no teleport data) plays the first mission unless the
 -- DebugMission attribute says otherwise.
 local DEFAULT_DEBUG_MISSION_ID = "village"
--- The away clock and the Studio levers share one 1 Hz accumulator.
+-- The away clock ticks once a second (the Studio levers moved to DebugService in C1).
 local TICK_INTERVAL_SECONDS = 1
 
-local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
 
 -- The combat place sends the same Snapshot shape as the hub so the client model is identical,
@@ -98,16 +102,43 @@ local function readTeleportHint(player: Player): (string?, boolean, number?)
 	return missionId, data.overdrive == true, hostUserId
 end
 
--- In Studio the Workspace attributes always win, so the place can be played on its own from
--- build/combat.rbxl with no hub and no teleport.
+-- C1: in Studio the hub cannot teleport, so it leaves a handoff record instead (docs/INTERFACES.md
+-- "Studio bridge"). The record is consumed once and validated EXACTLY like live teleport data —
+-- it is a hint from another session, not an entitlement.
+local function readArrival(player: Player): (string?, boolean, number?)
+	local ok, hint = pcall(StudioBridge.ReadArrival, player)
+	if not ok or typeof(hint) ~= "table" then
+		return nil, false, nil
+	end
+	local data = hint :: any
+	local missionId = if typeof(data.missionId) == "string" then data.missionId else nil
+	local hostUserId = if typeof(data.hostUserId) == "number"
+			and data.hostUserId == math.floor(data.hostUserId)
+			and data.hostUserId > 0
+		then data.hostUserId
+		else nil
+	return missionId, data.overdrive == true, hostUserId
+end
+
+-- Resolution order: live teleport data, then the Studio handoff record, then the Workspace
+-- attributes, then the default mission — so build/combat.rbxl still plays on its own with no
+-- hub, no teleport and no record.
 local function resolveRun(player: Player): (Types.MissionConfig?, boolean, number)
 	local combatConfig = Catalog.GetCombatConfig()
 	local missionId, overdrive, hintHostUserId = readTeleportHint(player)
 	if combatConfig == nil then
 		return nil, false, player.UserId
 	end
+	if missionId == nil then
+		local bridgeId, bridgeOverdrive, bridgeHost = readArrival(player)
+		if bridgeId ~= nil then
+			missionId = bridgeId
+			overdrive = bridgeOverdrive
+			hintHostUserId = bridgeHost
+		end
+	end
 	local resolvedId = missionId or ""
-	if isStudio or missionId == nil then
+	if missionId == nil then
 		local debugConfig = combatConfig.debug
 		local missionAttribute = workspace:GetAttribute(debugConfig.missionAttribute)
 		resolvedId = if typeof(missionAttribute) == "string" and missionAttribute ~= ""
@@ -164,6 +195,11 @@ end
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
 RemoteService.Configure(CombatRemotes)
 
+-- There is no Delta pipeline in this place (EconomyService is hub-only), so a fresh Snapshot is
+-- how a reward flush or a debug grant reaches the client. Main owns the Snapshot shape;
+-- WaveService and DebugService reach it through ArenaService.
+ArenaService.SetSnapshotSender(sendSnapshot)
+
 -- ReturnService needs the join sequence to re-admit a player whose teleport home failed, and
 -- only Main has it; handing it over as a hook keeps the service free of Main's requires.
 local returnBoot: Service = {
@@ -179,12 +215,25 @@ local returnBoot: Service = {
 	Start = ReturnService.Start,
 }
 
--- Boot order per contract: data, remotes, registry, arena, return.
+-- WaveService.Start() is "the lobby is ready, go", not a boot hook, so the boot pass gets its
+-- own adapter (same shape as returnBoot above).
+local waveBoot: Service = {
+	Init = WaveService.Init,
+	Start = WaveService.Boot,
+}
+
+-- Boot order per contract: data, remotes, registry, arena, enemies, hits, waves, debug, return.
+-- Enemies before hits because CombatService wires EnemyService's hooks in its own Init, and
+-- hits before waves because WaveService installs the kill handler on CombatService.
 local orderedServices: { Service } = {
 	DataService,
 	RemoteService,
 	RunRegistry,
 	ArenaService,
+	EnemyService,
+	CombatService,
+	waveBoot,
+	DebugService,
 	returnBoot,
 }
 
@@ -209,8 +258,19 @@ RemoteService.SetHandler("RequestRetryLoad", function(player: Player)
 	task.spawn(runJoinSequence, player, DataService.RetryLoadAsync)
 end)
 
+-- Ready is a toggle; the run starts the moment every non-bot member has it on. Deliberately
+-- here rather than in ArenaService: the roster service sits below WaveService in the boot order
+-- and may not require it.
 RemoteService.SetHandler("RequestReady", function(player: Player)
+	-- Both halves are guarded on the lobby: ArenaService ignores the toggle once the run is
+	-- under way, and nothing here may restart a run that is already going.
+	if WaveService.GetPhase() ~= "lobby" then
+		return
+	end
 	ArenaService.SetReady(player)
+	if ArenaService.AllReady() then
+		WaveService.Start()
+	end
 end)
 
 -- Yields (the teleport retries), so it gets its own thread.
@@ -218,59 +278,31 @@ RemoteService.SetHandler("RequestLeave", function(player: Player)
 	task.spawn(ReturnService.SendHome, player, "leave")
 end)
 
--- C1 owns the hit and ability math (server raycasts against the live wave). The handlers are
--- registered now so a validated intent is dropped deliberately, and the remotes exist for the
--- client to bind to from C0.
-RemoteService.SetHandler("RequestAttack", function() end)
-RemoteService.SetHandler("RequestAbility", function() end)
+-- The hit and ability math (server raycasts and arc checks against the live wave). Every
+-- payload here has already passed its validator; CombatService re-resolves every id.
+RemoteService.SetHandler(
+	"RequestAttack",
+	function(player: Player, swingSeq: number, targetIds: { number })
+		CombatService.OnAttack(player, swingSeq, targetIds)
+	end
+)
 
--- Studio levers (combat place half of the pair in ArmoryService): a positive number on
--- Workspace is consumed once and reset to 0, so materials and Valor can be handed out without
--- an enemy existing yet.
-local function consumeGrantLever(
-	attribute: string,
-	apply: (state: Types.PlayerState, value: number) -> ()
-): ()
-	local value = workspace:GetAttribute(attribute)
-	-- NaN/inf are refused too: Studio with API access writes a real profile, and a corrupted
-	-- materials or Valor field would survive the session.
-	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
-		return
+RemoteService.SetHandler(
+	"RequestFire",
+	function(player: Player, seq: number, origin: Vector3, direction: Vector3, charge: number)
+		CombatService.OnFire(player, seq, origin, direction, charge)
 	end
-	workspace:SetAttribute(attribute, 0)
-	local granted = 0
-	for _, player in Players:GetPlayers() do
-		local state = DataService.GetState(player)
-		if state == nil then
-			continue
-		end
-		apply(state, value)
-		-- No delta pipeline in this place (EconomyService is hub-only), so a fresh snapshot is
-		-- how the client sees the grant.
-		sendSnapshot(player)
-		granted += 1
-	end
-	warn(
-		`[Combat] {attribute} lever: granted {value} to {granted} loaded player(s);`
-			.. ` attribute reset to 0`
-	)
-end
+)
 
-local function consumeStudioLevers(): ()
-	local combatConfig = Catalog.GetCombatConfig()
-	local mission = ArenaService.GetMission()
-	if combatConfig == nil or mission == nil then
-		return
-	end
-	local material = mission.material
-	local debugConfig = combatConfig.debug
-	consumeGrantLever(debugConfig.grantMaterialsAttribute, function(state, value)
-		state.combat.materials[material] = (state.combat.materials[material] or 0) + value
-	end)
-	consumeGrantLever(debugConfig.grantValorAttribute, function(state, value)
-		state.combat.valor += value
-	end)
-end
+RemoteService.SetHandler("RequestAbility", function(player: Player, slot: string)
+	CombatService.OnAbility(player, slot)
+end)
+
+-- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
+-- handler itself refuses everything outside Studio.
+RemoteService.SetHandler("RequestDebug", function(player: Player, lever: string, value: any)
+	DebugService.OnRequest(player, lever, value)
+end)
 
 -- The away clock: every second an admitted player spends here is a second the hub pays at
 -- Combat.json's expeditionEfficiency when they get back.
@@ -298,9 +330,6 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 		return
 	end
 	tickExpeditionSeconds(ticks * TICK_INTERVAL_SECONDS)
-	if isStudio then
-		consumeStudioLevers()
-	end
 end)
 
 local function onPlayerAdded(player: Player): ()
@@ -311,6 +340,11 @@ end
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
 	ArenaService.Remove(player)
+	-- With the last member gone the run is over; a reserved server may be reused by a later
+	-- arrival, so the wave machine goes back to the lobby rather than staying in `summary`.
+	if ArenaService.GetMission() == nil then
+		WaveService.Reset()
+	end
 	DataService.Release(player)
 end
 

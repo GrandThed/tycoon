@@ -1,9 +1,10 @@
 --!strict
--- Run summary card (C0 contract, docs/INTERFACES.md "Combat client"): shown when RunState
--- arrives with phase "summary". In C0 every reward is zero — no enemy is fought until C1 —
--- so the card's job is to prove the round trip: it names the mission, lists the zeros the
--- server sent, and its Return button fires RequestLeave. Nothing is computed here; a
--- missing summary renders dashes rather than inventing numbers.
+-- Run summary card (C1 contract, docs/INTERFACES.md "Combat client"): shown when RunState
+-- arrives with phase "summary". Waves cleared, best wave, cash, materials, Valor, kills,
+-- time, and a "died" line when the run ended on the floor. Every number is the server's —
+-- rewards were already flushed to the profile at each wave clear, so this card only reads
+-- the RunSummary back. Nothing is computed here; a missing summary renders dashes rather
+-- than inventing numbers.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -94,8 +95,12 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	local titleLabel = line("Title", Theme.FONT_BOLD, Theme.TEXT_LARGE, Theme.COLOR_TEXT)
 	titleLabel.Text = "Expedition over"
 	local wavesLabel = line("Waves", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
+	local killsLabel = line("Kills", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
 	local rewardLabel = line("Reward", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_ACCENT)
 	local materialsLabel = line("Materials", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT_DIM)
+	-- Only shown when the run ended with the player down: it explains why the summary
+	-- arrived early, and the rewards above it are kept either way.
+	local diedLabel = line("Died", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_ERROR)
 
 	local returnButton = Create("TextButton", {
 		Name = "Return",
@@ -117,12 +122,16 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	local function show(summary: Types.RunSummary?): ()
 		if summary == nil then
 			wavesLabel.Text = "Waves cleared " .. BLANK
+			killsLabel.Text = ""
 			rewardLabel.Text = ""
 			materialsLabel.Text = ""
+			diedLabel.Visible = false
 		else
 			wavesLabel.Text = "Waves cleared "
 				.. Format.Cash(summary.wavesCleared)
-				.. " · Kills "
+				.. " · Best wave "
+				.. Format.Cash(summary.bestWave)
+			killsLabel.Text = "Kills "
 				.. Format.Cash(summary.kills)
 				.. " · "
 				.. Format.Duration(summary.seconds)
@@ -132,15 +141,23 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 				.. Format.Cash(summary.valor)
 				.. " Valor"
 				.. (if summary.overdrive then " · Overdrive" else "")
-			local parts: { string } = {}
+			diedLabel.Text = "You went down — the rewards above are already banked"
+			diedLabel.Visible = summary.died
+			-- Sorted BY MATERIAL NAME, the same ordering the hub's ExpeditionSummaryCard
+			-- uses: the table arrives over the network, so its iteration order is
+			-- undefined and the same run would otherwise read differently twice. Sorting
+			-- the rendered strings instead would order by the leading digit of the amount.
+			local names: { string } = {}
 			for material, amount in summary.materials do
-				if typeof(amount) == "number" and amount > 0 then
-					table.insert(parts, Format.Cash(amount) .. " " .. material)
+				if typeof(material) == "string" and typeof(amount) == "number" and amount > 0 then
+					table.insert(names, material)
 				end
 			end
-			-- Sorted so the same run always reads the same way (dictionary order is not
-			-- stable) and so C0's empty wallet says so instead of showing an empty line.
-			table.sort(parts)
+			table.sort(names)
+			local parts: { string } = {}
+			for _, material in names do
+				table.insert(parts, Format.Cash(summary.materials[material]) .. " " .. material)
+			end
 			materialsLabel.Text = if #parts > 0
 				then table.concat(parts, " · ")
 				else "No materials this run"

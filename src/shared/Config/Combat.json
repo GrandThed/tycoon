@@ -19,11 +19,11 @@
 		"combatStateHz": 4
 	},
 	"director": {
-		"windowSeconds": 15,
-		"tempoMin": 0.5,
+		"windowSeconds": 10,
+		"tempoMin": 0.7,
 		"tempoMax": 2.0,
 		"mergeThreshold": 0.7,
-		"mergeTempo": 1.3,
+		"mergeTempo": 1.25,
 		"eliteTempo": 1.6,
 		"breatherSeconds": 6,
 		"breatherMaxSeconds": 14,
