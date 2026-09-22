@@ -5,10 +5,15 @@
 		"respawnSeconds": 8,
 		"hitDistancePad": 3,
 		"breatherRegenPerSecond": 10,
-		"killCooldownRefundSeconds": 0.5
+		"killCooldownRefundSeconds": 0.5,
+		"comboTimingTolerance": 0.8,
+		"aimAssistDegrees": 20,
+		"corpseSeconds": 0.6,
+		"dashHitRadius": 4,
+		"burstConeDegrees": 60
 	},
 	"remotes": {
-		"attackCallsPerSecond": 8,
+		"attackCallsPerSecond": 12,
 		"abilityCallsPerSecond": 2,
 		"runListCallsPerSecond": 1,
 		"combatStateHz": 4
@@ -23,7 +28,8 @@
 		"breatherSeconds": 6,
 		"breatherMaxSeconds": 14,
 		"maxAlive": 24,
-		"runCapSeconds": 1200
+		"runCapSeconds": 1200,
+		"tempoWarmupSeconds": 15
 	},
 	"coop": {
 		"maxParty": 4,
@@ -43,10 +49,38 @@
 	},
 	"registry": { "mapName": "ActiveRuns", "ttlSeconds": 7200 },
 	"animations": { "enemyIdle": 0, "enemyWalk": 0, "enemyAttack": 0, "enemyDeath": 0 },
+	"enemy": {
+		"tickHz": 10,
+		"aggroRange": 80,
+		"retargetSeconds": 0.5,
+		"attackWindupSeconds": 0.3,
+		"eliteScale": 1.25,
+		"bossScale": 1.6
+	},
+	"feedback": {
+		"hitstopSeconds": 0.05,
+		"cameraKickDegrees": 0.6,
+		"damageNumberSeconds": 0.8,
+		"bannerSeconds": 2.0,
+		"lowHpFraction": 0.3
+	},
 	"debug": {
 		"missionAttribute": "DebugMission",
 		"overdriveAttribute": "DebugOverdrive",
 		"grantMaterialsAttribute": "GrantMaterials",
-		"grantValorAttribute": "GrantValor"
+		"grantValorAttribute": "GrantValor",
+		"waveAttribute": "DebugWave",
+		"spawnAttribute": "DebugSpawn",
+		"godModeAttribute": "DebugGodMode",
+		"killAllAttribute": "DebugKillAll",
+		"setGearAttribute": "DebugSetGear",
+		"botsAttribute": "DebugBots",
+		"fakeRunsAttribute": "DebugFakeRuns",
+		"forceTeleportFailureAttribute": "ForceTeleportFailure",
+		"forceRegistryFailureAttribute": "ForceRegistryFailure",
+		"handoffStoreName": "StudioHandoff",
+		"handoffMaxAgeSeconds": 900,
+		"botHp": 150,
+		"botDamagePerSecond": 12
 	}
 }

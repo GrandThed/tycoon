@@ -706,6 +706,11 @@ export type CombatPlayerConfig = {
 	hitDistancePad: number,
 	breatherRegenPerSecond: number,
 	killCooldownRefundSeconds: number,
+	comboTimingTolerance: number,
+	aimAssistDegrees: number,
+	corpseSeconds: number,
+	dashHitRadius: number,
+	burstConeDegrees: number,
 }
 export type CombatRemotesConfig = {
 	attackCallsPerSecond: number,
@@ -724,6 +729,7 @@ export type CombatDirectorConfig = {
 	breatherMaxSeconds: number,
 	maxAlive: number,
 	runCapSeconds: number,
+	tempoWarmupSeconds: number,
 }
 export type CombatCoopConfig = {
 	maxParty: number,
@@ -754,6 +760,35 @@ export type CombatDebugConfig = {
 	overdriveAttribute: string,
 	grantMaterialsAttribute: string,
 	grantValorAttribute: string,
+	waveAttribute: string,
+	spawnAttribute: string,
+	godModeAttribute: string,
+	killAllAttribute: string,
+	setGearAttribute: string,
+	botsAttribute: string,
+	fakeRunsAttribute: string,
+	forceTeleportFailureAttribute: string,
+	forceRegistryFailureAttribute: string,
+	handoffStoreName: string,
+	handoffMaxAgeSeconds: number,
+	botHp: number,
+	botDamagePerSecond: number,
+}
+-- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
+export type CombatEnemyConfig = {
+	tickHz: number,
+	aggroRange: number,
+	retargetSeconds: number,
+	attackWindupSeconds: number,
+	eliteScale: number,
+	bossScale: number,
+}
+export type CombatFeedbackConfig = {
+	hitstopSeconds: number,
+	cameraKickDegrees: number,
+	damageNumberSeconds: number,
+	bannerSeconds: number,
+	lowHpFraction: number,
 }
 export type CombatConfig = {
 	version: number,
@@ -765,6 +800,8 @@ export type CombatConfig = {
 	overdrive: CombatOverdriveConfig,
 	registry: CombatRegistryConfig,
 	animations: CombatAnimationsConfig,
+	enemy: CombatEnemyConfig,
+	feedback: CombatFeedbackConfig,
 	debug: CombatDebugConfig,
 }
 

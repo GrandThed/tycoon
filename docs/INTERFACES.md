@@ -3197,3 +3197,357 @@ exits 1 on any failure:
 - On a published pair of places: Depart → arrive → Return round-trip keeps cash and levels, and
   the welcome-back card pays the away time at `expeditionEfficiency`.
 - `py tools/sim_combat.py --check` passes; `sim_economy.py --check` output is unchanged.
+
+---
+
+# C1 contracts — Studio bridge + Village expedition (Ben, 2026-09-22)
+
+Ben cannot reach the published pair (audience-reach block, `docs/DISCOVERY_CHECKLIST.md`), so C1
+ships two things at once: a **Studio bridge** that makes every C0 platform path (teleport
+payloads, summary home, run registry, teleport failures) executable from Studio, and the **Village
+expedition** itself (arena, enemies, waves, melee/ranged/abilities, director, feedback). Every C0
+principle above still holds. Every subagent runs on Opus. Read the C0 contracts first; this
+section only adds to them.
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|-------|-------|
+| lead | this section, `Config/Combat.json` + `Config/Sounds.json` keys (applied), the config-type additions in `Types.luau` (applied before fan-out), routing |
+| luau-engineer **A** (combat core) | `src/combat/server/Main.server.luau`, `src/combat/server/Services/{ArenaService,CombatRemotes}.luau`, new `src/combat/server/Services/{WaveService,EnemyService,CombatService,DebugService}.luau`, new `src/shared/Layouts/Arenas/Village.luau`, `src/shared/Types.luau` (everything except the lead-applied config types), `src/shared/Combat.luau` |
+| luau-engineer **B** (Studio bridge) | new `src/server/Services/StudioBridge.luau`, `src/server/Services/ExpeditionService.luau`, `src/server/Services/HubRemotes.luau`, `src/server/Main.server.luau`, `src/server/Services/ArmoryService.luau` (hub debug remote only), `src/combat/server/Services/{ReturnService,RunRegistry}.luau` |
+| ui-engineer **A** (combat client) | `src/combat/client/**` |
+| ui-engineer **B** (hub client) | `src/client/Controllers/UIController.luau`, `src/client/UI/ExpeditionPanel.luau`, new `src/client/UI/{ExpeditionSummaryCard,DebugPanel}.luau`, `src/client/UI/BottomBar.luau` (only if a key is needed) |
+| economy-designer | values in `Missions/1_Village.json`, `Combat.json`, `Armory.json` (keys frozen), `tools/sim_combat.py`, `docs/BALANCE.md` "C1" |
+| roblox-reviewer → qa-runner → docs-keeper | after wave 1 |
+
+A and B both touch the combat place: A owns `Main.server.luau` and calls B's `StudioBridge` by
+the API below; B owns `ReturnService`/`RunRegistry` and calls A's `ArenaService`/`WaveService`
+by the APIs below. Neither edits the other's files; a needed change is reported to the lead.
+Frozen: everything frozen at C0, `DataService`, `ProfileSchema`, `EconomyService`, `RemoteService`.
+
+## Studio bridge (`src/server/Services/StudioBridge.luau`, B; lives in the shared Services folder so both places see it)
+
+Purpose: in Studio, replace the one thing Studio cannot do (`TeleportAsync`) with a **handoff
+record** and a kick, and let every other platform path run for real. Nothing in this module
+runs outside `RunService:IsStudio()`; every public function returns the "inactive" value
+immediately when not in Studio.
+
+```luau
+export type TeleportHint = { missionId: string, overdrive: boolean, hostUserId: number, accessCode: string? }
+
+StudioBridge.IsActive(): boolean                         -- RunService:IsStudio()
+StudioBridge.WriteDeparture(player, hint: TeleportHint, kind: "depart" | "join"): boolean
+   -- DataStore `Combat.json debug.handoffStoreName`, key "p_<userId>", value
+   -- { kind, missionId, overdrive, hostUserId, accessCode, stamp = os.time() }. pcall + 3 retries + warn.
+   -- Returns false (and warns "[StudioBridge] handoff needs API access" once) when DataService.IsMockMode().
+StudioBridge.ClearDeparture(player): ()                  -- RemoveAsync, used by the simulated teleport failure
+StudioBridge.ReadArrival(player): TeleportHint?          -- combat place: GetAsync then RemoveAsync (consumed once); nil when absent, mock, or kind == "return"
+StudioBridge.WriteReturn(player, summary: Types.RunSummary): boolean   -- value { kind = "return", summary, stamp }
+StudioBridge.ReadReturn(player): Types.RunSummary?       -- hub: consumed once; nil when absent/mock/other kind
+StudioBridge.TeleportShouldFail(): boolean               -- Workspace boolean attribute debug.forceTeleportFailureAttribute; read once and reset to false
+StudioBridge.RegistryShouldFail(): boolean               -- Workspace boolean attribute debug.forceRegistryFailureAttribute; sticky (not reset)
+StudioBridge.Depart(player, message: string): ()         -- task.delay(1, player.Kick) so the ActionResult/toast lands first; the kick is the Studio stand-in for leaving the server
+```
+
+A record older than `debug.handoffMaxAgeSeconds` is ignored and removed (a stale handoff from
+an aborted session must not hijack the next boot). Records are validated on read exactly like
+`readTeleportHint` validates `TeleportData` today (types, integer userId > 0, string ids).
+
+### Hub side (B: `ExpeditionService`, `Main.server.luau`)
+
+`ExpeditionService.Depart` step 3 becomes: `combatPlaceId == 0` → `unavailable` (unchanged);
+`StudioBridge.IsActive()` → steps 4–7 run in **bridge mode**: no `ReserveServer` (accessCode
+`"studio"`), step 5 as today, then `StudioBridge.WriteDeparture` (false → `unavailable`, nothing
+released), step 6 release, then `if StudioBridge.TeleportShouldFail()` → the **same** recovery the
+live `TeleportInitFailed` handler runs (re-load via `runJoinSequence`, `ActionResult{expedition,
+false, "unavailable"}`, `StudioBridge.ClearDeparture`) else `ActionResult{expedition, missionId,
+true}` and `StudioBridge.Depart(player, "Handoff saved — Stop Play, then open build/combat.rbxl")`.
+`Join` does the same with `kind = "join"` and the registry entry's access code; an entry whose
+`accessCode == "fake"` (see `DebugFakeRuns`) answers `unavailable`.
+
+Hub `Main.server.luau` join sequence, after a successful load: `summary = TeleportData.summary`
+(validated shape) `or StudioBridge.ReadReturn(player)`; when present fire the new hub event
+**`ExpeditionSummary`** `(summary: RunSummary)` to that player. Rewards are already in the
+profile; the event is presentation only. `HubRemotes` adds the event and the intent
+`RequestDebug(lever: string, value: any)` (bucket `calls`; validator: `args.n == 2`, string lever
+≤ 32 chars, value nil/boolean/number/string ≤ 64 chars). `ArmoryService` handles it and **ignores
+it outside Studio**: levers `grantCash`, `grantMaterials`, `grantValor` (same effect as the
+attributes, for the calling player only), `fakeRuns` (number N → `RunRegistry`-style entries via
+`ExpeditionService.PublishFakeRuns(N)`: hostUserId −1…−N, hostName "Fake N", `village`, wave N,
+partySize 1, accessCode `"fake"`, TTL from config), `forceTeleportFailure` (boolean → sets the
+Workspace attribute). The attribute path stays; the remote exists so the hub `DebugPanel` can
+drive it with buttons.
+
+### Combat side (A: `Main.server.luau`; B: `ReturnService`, `RunRegistry`)
+
+`resolveRun` order in Studio: `readTeleportHint` (never present in Studio) → `StudioBridge.ReadArrival`
+→ Workspace attributes → `DEFAULT_DEBUG_MISSION_ID`. A hint from the bridge is validated exactly
+like a live hint (mission exists, `Combat.MissionUnlocked` against the profile, host id). Outside
+Studio nothing changes.
+
+`ReturnService.SendHome` in Studio with `hubPlaceId ~= 0`: summary `RunState` as today, then
+`StudioBridge.WriteReturn`, `DataService.Release`, then `if StudioBridge.TeleportShouldFail()` →
+the same re-admit path as a live `TeleportInitFailed` (toast "couldn't send you home, try again")
+else `StudioBridge.Depart(player, "Run over — Stop Play, then reopen build/test.rbxl")`.
+`hubPlaceId == 0` keeps the C0 behaviour (stay + toast).
+
+`RunRegistry`: Studio is no longer a no-op. It uses the real MemoryStore unless
+`DataService.IsMockMode()`, in which case a module-level table with the same TTL semantics
+(expiry checked on read) stands in, so Local Server tests in one Studio still see their own run.
+When `StudioBridge.RegistryShouldFail()` every call raises inside the pcall body, so the retry
+backoff and warns are exercised. The hub's `SendRunList` reads through the same module (it
+already does; keep it so).
+
+## Combat core (A)
+
+### Arena — `src/shared/Layouts/Arenas/Village.luau`
+
+```luau
+export type ArenaLayout = {
+	size: { x: number, z: number },            -- floor, studs; origin at the centre, floor top at y = 0
+	floor: { material: string, color: { number } },   -- Enum.Material name, RGB 0–255
+	wall: { height: number, material: string, color: { number } }?,   -- nil = open edges
+	lobbyPad: { x: number, z: number },        -- C0's pad moves here (6×6 as today)
+	playerSpawns: { { x: number, z: number } },   -- ≥ 4, used round-robin
+	enemySpawns: { { x: number, z: number } },    -- ≥ 8 on the rim, used round-robin per spawn
+	obstacles: { { x: number, z: number, sx: number, sy: number, sz: number, material: string, color: { number } } },
+}
+```
+Village: 110 × 110 Grass floor, 4-stud wooden fence, 8 rim spawns, a handful of rock/log
+obstacles (plain Parts, `CanCollide` true so they block movement; enemies walk with `MoveTo`,
+no pathfinding, so obstacles stay small and off the spawn lines). `ArenaService.Init` builds all
+of it under `Workspace/Arena` (floor, walls, obstacles, `LobbyPad`); `Workspace/Enemies` is the
+enemy folder. Missing layout module → C0's bare pad (the run still works).
+
+### Types (A adds to `Types.luau`)
+
+```luau
+export type EnemyState = "idle" | "chasing" | "attacking" | "stunned" | "dead"
+export type RunPhase = "lobby" | "wave" | "breather" | "boss" | "summary" | "ended"   -- as C0
+export type PartyMember = { userId: number, name: string, hp: number, maxHp: number, ready: boolean,
+	alive: boolean, bot: boolean, abilityReadyIn: { melee: number, ranged: number }, stance: "melee" | "ranged" }
+export type RunState = { kind: "run", phase: RunPhase, missionId: string, overdrive: boolean,
+	wave: number, waves: number, alive: number, remaining: number,   -- remaining = still to spawn this wave
+	tempo: number, merged: boolean,                                     -- merged: this wave started as "Waves N + N+1"
+	party: { PartyMember }, breatherEndsIn: number?, runEndsIn: number,
+	boss: { name: string, hp: number, maxHp: number }?, summary: RunSummary? }
+export type CombatFx =
+	{ kind: "hit", enemyId: number, amount: number, finisher: boolean, position: Vector3, byUserId: number }
+	| { kind: "kill", enemyId: number, position: Vector3, cash: number, materials: number, byUserId: number }
+	| { kind: "playerHit", userId: number, amount: number }
+	| { kind: "ability", userId: number, key: string, slot: "melee" | "ranged", position: Vector3, radius: number? }
+	| { kind: "wave", wave: number, merged: boolean, boss: boolean }
+	| { kind: "bossDown", name: string, valor: number }
+	| { kind: "playerDown", userId: number, respawnIn: number? }
+	| { kind: "refused", reason: "cooldown" | "dead" | "lobby" }
+```
+`RunSummary` (C0) gains `bestWave: number` and `died: boolean`.
+
+### Enemy models (`EnemyService`)
+
+`EnemyService.Spawn(key, stats, isBoss, spawnIndex): Enemy` builds the rig from
+`ServerStorage/Enemies/<eraName>/<template>` when present, else a **placeholder**:
+`Players:CreateHumanoidModelFromDescription(HumanoidDescription.new(), Enum.HumanoidRigType.R15)`
+in pcall (failure → a 4-part block rig built in code), all BaseParts recoloured per key (Raider
+rust, Archer olive, Brute/bosses dark red), scaled by `enemy.eliteScale` / `enemy.bossScale`
+via `Humanoid` scale values. Model attributes the client reads: `EnemyId` (number, 1-based
+per run), `EnemyKey`, `DisplayName` (template name, "Raider Chief" for bosses), `IsBoss`,
+`Elite`, `Attacking` (true during the windup), `Dead` (set true `player.corpseSeconds` before
+`Destroy`). `Humanoid.MaxHealth/Health` = server HP (health replicates for free;
+`HealthDisplayDistance = 0`, `NameDisplayDistance = 0`, `BreakJointsOnDeath = false`),
+`WalkSpeed = speed`, root `SetNetworkOwner(nil)`. Enemies never damage Humanoids through Roblox
+touch/physics: **all damage in both directions goes through `CombatService`**. Enemy AI ticks
+at `enemy.tickHz`: target = nearest alive party member (players and bots) within
+`enemy.aggroRange`, re-picked every `enemy.retargetSeconds`; melee walks (`MoveTo`) until
+`distance ≤ reach` then attacks every `attackCooldown` with an `enemy.attackWindupSeconds` tell;
+ranged stops at `reach` and fires a server raycast at the target every `attackCooldown`, damage
+only on a hit. `stunUntil` freezes movement and attacks. Server-side procedural motion: a small
+Motor6D `C0` tween on the arms during the windup and a walk bob, so every client sees it (Roblox
+replicates server-set joints); `Combat.json animations.*` ids, when non-zero, play through an
+`Animator` instead.
+
+### Waves (`WaveService`)
+
+Run lifecycle, all on the server clock, one run per server:
+1. **lobby** → starts when every admitted, non-bot member is Ready (`ArenaService.SetReady`);
+   `WaveService.Start()`.
+2. Per wave `w`: `spec = Combat.WaveSpec(mission, w, partySize, overdrive, cfg)`,
+   `order = Combat.WaveComposition(spec.count, spec.weights)` (+1 elite when `tempo ≥ eliteTempo`
+   and the composition has an `elite = true` key; boss waves prepend `bosses[w]` with
+   `EnemyStats(…, isBoss = true)`); spawns are trickled every
+   `Combat.SpawnInterval(mission, spec, tempo, overdrive, cfg)` seconds at the next rim spawn,
+   never exceeding `director.maxAlive` alive; `partySize` counts players and bots.
+3. Tempo: `Combat.Tempo(killsInLastWindow, windowSeconds, spec.count / targetWaveSeconds, director)`,
+   but `1.0` until `director.tempoWarmupSeconds` have elapsed in the run.
+4. **Merge:** once the wave has finished spawning, if `Combat.ShouldMerge(tempo, deadFraction, director)`,
+   wave `w + 1` starts spawning immediately (`merged = true`, banner "Waves w + w+1");
+   otherwise the wave ends when all its enemies are dead → **breather** of
+   `Combat.BreatherSeconds(tempo, director)` with `player.breatherRegenPerSecond` HP regen.
+5. Boss waves show phase `boss` while the boss lives (`RunState.boss` filled).
+6. **Rewards** are credited per kill to the wave pool (`cash`, `materials`, `valor` from
+   `EnemyStats`/`BossValor`, kills) with per-user damage tracked; **at every wave clear** the
+   pool is split with `Combat.ContributionShares(damageByUser, coop.contributionFloor)` and
+   flushed to each player's profile via `Combat.SplitPool`: `cash += floor(cash × share × Combat.CombatCashMult(state, gameCfg, shopCfg))`,
+   `materials[mission.material] += floor(materials × share)`, `valor += floor(valor × share)`,
+   `stats.kills/wavesCleared/cashFromCombat`, `missions[id].bestWave = max`, `bossClears`.
+   Bots' shares are discarded. After each flush the player gets a fresh `StateChanged`
+   Snapshot so the HUD wallet is current. Nothing else in `src/combat` writes the profile.
+7. **End:** all waves cleared, `director.runCapSeconds` elapsed, or every non-bot member dead
+   → phase `summary` (per-player `RunState` with that player's `RunSummary`, `FireClient`),
+   `RunRegistry.Clear(host)`; the Return button (`RequestLeave`) works from any phase.
+8. Death: a dead player respawns at a player spawn after `player.respawnSeconds` if any other
+   member is alive; otherwise the run ends (rewards kept). `Humanoid.MaxHealth` is re-applied
+   from `Armory.MaxHp` on every spawn.
+
+`RunState` broadcasts at `remotes.combatStateHz` and immediately on phase changes.
+`CombatFx` are batched per Heartbeat frame into one `FireAllClients(list)`.
+`WaveService` exposes `Start()`, `GetPhase()`, `GetWave()`, `EndRun(reason)`, `ForceWave(n)`,
+`SpawnOne(key)`, `KillAll()`; `ArenaService` keeps `Admit/Remove/SetReady/BuildRunState/Broadcast`
+and gains `GetMembers(): { PartyMember }`, `AddBot(i)`, `RemoveBot(i)`, `GetSummary(userId): RunSummary`.
+
+### Hits (`CombatService`)
+
+- **Melee** `RequestAttack(swingSeq, targetIds)`: per player `{ step, lastSwingAt, seq }`.
+  `swingSeq ≤ seq` → drop. Elapsed since last swing `< windows[step] × player.comboTimingTolerance`
+  → drop with `refused cooldown`. Elapsed `> comboReset` → step 1, else step + 1 (wraps to 1
+  after 3). Damage `Combat.MeleeDamage(armoryCfg, state, step)`; each target: exists, alive,
+  distance from the attacker's root ≤ `class.range + player.hitDistancePad`, angle from the
+  root's look vector ≤ `arcDegrees / 2`. Step 3 is a **finisher** only if steps 1–2 landed
+  inside their windows on the server clock; a finisher also applies `finisherKnockback` as a
+  root velocity away from the attacker.
+- **Ranged** new intent `RequestFire(seq, origin: Vector3, direction: Vector3, charge: number)`
+  (bucket `attack`; validator: finite vectors, `charge` in [0, 1]). Origin within
+  `player.hitDistancePad` of the shooter's head; elapsed since last shot ≥ `class.cooldown ×
+  comboTimingTolerance`; for `fire == "charge"` the server clamps `charge ≤ elapsed / chargeSeconds`.
+  `Workspace:Raycast(origin, direction.Unit × range)` filtering party characters; hit enemy →
+  `Combat.RangedDamage(armoryCfg, state, charge)`; `pierce` continues the ray past up to `pierce`
+  enemies. No hit = miss, silently. Spread and aim assist are client-only.
+- **Abilities** `RequestAbility(slot)` (validator becomes `args.n == 1`, slot ∈ melee/ranged).
+  Cooldown per slot on the server clock (`abilityReadyAt`); every kill by that player refunds
+  `player.killCooldownRefundSeconds` on both. `aoe`: all enemies within `radius` of the root
+  (or the nearest `shots` when set) take `Combat.AbilityDamage(armoryCfg, state, slot)`;
+  `knockback` → velocity away; `stunSeconds` → `stunUntil`; `dotSeconds/dotTicks` → damage
+  spread over ticks. `burst`: `dashStuds` → damage every enemy within `player.dashHitRadius`
+  of the segment root → root + look × dashStuds (the client performs the dash visually);
+  otherwise the nearest `shots or 1` enemies inside `class.range` and a
+  `player.burstConeDegrees` cone (`pierce` lets one shot continue through that many).
+- Player damage: `CombatService.DamagePlayer(member, amount)`; god mode (debug) zeroes it.
+  Every enemy damage call records `damageByUser[enemyId][userId]`; the kill goes to the last hitter.
+
+### Pure additions (`Combat.luau`, A; mirrored by `sim_combat.py`)
+
+```luau
+Combat.WaveComposition(count, weights): { string }
+   -- quota_k = count × w_k / Σw; n_k = floor(quota_k); leftover to the largest fractions (ties: key name asc);
+   -- order: count picks, each time the key with the smallest placed_k / n_k (ties: key name asc). No RNG.
+Combat.SpawnInterval(mission, spec, tempo, overdrive, cfg): number   -- targetWaveSeconds / spec.count / tempo / (overdrive and spawnRateMult or 1)
+Combat.BreatherSeconds(tempo, director): number   -- breatherSeconds + (breatherMaxSeconds − breatherSeconds) × clamp((1 − tempo) / (1 − tempoMin), 0, 1)
+Combat.ShouldMerge(tempo, deadFraction, director): boolean            -- tempo ≥ mergeTempo and deadFraction ≥ mergeThreshold
+Combat.MeleeDamage(armoryCfg, state, step): number                    -- Armory.WeaponDamage(melee) × class.chain[step]
+Combat.RangedDamage(armoryCfg, state, charge): number                 -- WeaponDamage(ranged) × (charge class: minDamageFraction + (1 − minDamageFraction) × charge; else 1)
+Combat.AbilityDamage(armoryCfg, state, slot): number                  -- WeaponDamage(slot) × ability.damageMult × ascension.levels[level].abilityMult (1 at 0)
+Combat.AbilityCooldown(armoryCfg, state, slot): number                -- ability.cooldown
+Combat.SplitPool(pool, shares): { [userId]: { cash, materials, valor } }   -- floors, as in Waves §6
+```
+
+### Debug levers (`DebugService`, A; names in `Combat.json debug`, Studio only)
+
+Attributes on Workspace, consumed on the C0 1 Hz tick, **and** the intent `RequestDebug(lever, value)`
+(added to `CombatRemotes`, bucket `calls`, same validator as the hub's) whose handler applies the
+same table; outside Studio the handler returns. Levers: `wave` (number → the next wave to start
+is N; in lobby, the run starts at N), `spawn` (enemy key → one now, at the next rim spawn),
+`godMode` (boolean, per player for the remote, all players for the attribute), `killAll`
+(≥ 1 → every alive enemy dies with normal rewards), `setGear` (string `"melee=3,ranged=2"` →
+profile gear set, HP re-applied; the tier must exist), `bots` (number → that many bots),
+`grantMaterials`, `grantValor` (as C0). **Bots**: `DebugService.SetBots(n)` keeps n server
+rigs (placeholder rig, blue), fake userIds −1000 − i, names "Bot i", `PartyMember.bot = true`,
+HP `debug.botHp`, always Ready, walk toward the nearest enemy and deal `debug.botDamagePerSecond`
+in 0.5 s ticks within 8 studs through `CombatService`; enemies target them; they respawn like
+players. They exist so party scaling, shares and aggro can be seen from one client.
+
+## Combat client (ui-engineer A, `src/combat/client`)
+
+- **`InputController`** (new): a **stance** toggle (melee/ranged; keys `1`/`2`, HUD button).
+  Melee: tap/click → `RequestAttack(seq, ids)` with the enemy ids the client sees inside the
+  class arc (hint only). Ranged: `bow`/charge classes hold-to-draw (charge = held / chargeSeconds),
+  `semi` one shot per tap, `auto` fires while held at `cooldown`, `beam` semi with a visible
+  beam; all → `RequestFire(seq, origin = head, direction, charge)`. Touch: soft-lock on the
+  nearest enemy inside a `player.aimAssistDegrees` camera cone; PC: mouse direction with the
+  same assist. Abilities: two HUD buttons with cooldown rings (`Q`/`E`), → `RequestAbility(slot)`;
+  a local dash for `dashStuds` burst abilities. Never send damage.
+- **`WeaponController`** (new): attaches `ReplicatedStorage/Assets/Props/<eraName>/<model>` to
+  the right hand when present, else nothing (empty hands are the C1 default); procedural
+  Motor6D `C0` swing/draw poses on the local character timed to `class.windows`; other
+  players' swings are not animated in C1 (report as follow-up).
+- **`CombatFxController`** (new): consumes `CombatFx` batches — floating damage numbers
+  (finisher larger), `Highlight` flash, hitstop as a `feedback.hitstopSeconds` local freeze of
+  the enemy's visual (not physics), camera kick `feedback.cameraKickDegrees`, client-only
+  knockback nudge, death dissolve on `Dead` (transparency tween over `player.corpseSeconds`),
+  wave / merged / boss banners (`feedback.bannerSeconds`), low-HP vignette below
+  `feedback.lowHpFraction`, enemy attack tell from the `Attacking` attribute. Copy `floatText`
+  / `flashHighlight` / `burst` from `PlotVisualsController.luau` (:497 / :546 / :357) and
+  report the dedupe. Reduced motion: honour the hub `settings` the same way `PlotVisuals` does.
+- **`CombatHud`**: wave line ("Wave 3 / 10", "Waves 4 + 5", "Boss — Raider Chief" + boss bar),
+  alive/remaining, tempo dot, wallet strip (cash, mission material, Valor from the Snapshot),
+  party rows with alive/down state, stance and ability buttons, run timer.
+- **`SummaryCard`**: waves cleared, best wave, cash, materials, Valor, kills, time, "died"
+  line; Return → `RequestLeave`.
+- **`DebugPanel`** (new, `RunService:IsStudio()` only): collapsible strip of buttons for every
+  `RequestDebug` lever (Wave +1, Spawn raider/archer/brute, God, Kill all, Gear +1 melee /
+  ranged, Bots +1/−1, Grant 25 material, Grant 10 Valor).
+- Sounds: new `Sounds.json` keys (below) through the copied `SoundController`; id 0 = silent.
+- Layout checked at 375×667 and 812×375. Touch first: attack button bottom-right, abilities
+  beside it, stance toggle above; PC uses the same HUD with keys.
+
+## Hub client (ui-engineer B)
+
+- `ExpeditionSummaryCard.new(screenGui, { onClose })` shown on the new `ExpeditionSummary`
+  event: mission name, waves cleared / best wave, cash, materials, Valor, kills, time.
+- `DebugPanel.new(screenGui, { onLever(lever, value) })`, Studio only: Grant cash 10K, Grant
+  25 Timber, Grant 10 Valor, Fake runs ×3, Force teleport failure (toggle); `UIController` wires
+  it to `RequestDebug`. The Expedition panel's Depart handler shows "Handoff saved — Stop Play,
+  then open build/combat.rbxl" from the `ActionResult` in Studio (the kick follows 1 s later).
+
+## Config keys (lead-applied; values are economy-designer's)
+
+`Combat.json`: `player` gains `comboTimingTolerance, aimAssistDegrees, corpseSeconds,
+dashHitRadius, burstConeDegrees`; `director` gains `tempoWarmupSeconds`; new `enemy{ tickHz,
+aggroRange, retargetSeconds, attackWindupSeconds, eliteScale, bossScale }`; new `feedback{
+hitstopSeconds, cameraKickDegrees, damageNumberSeconds, bannerSeconds, lowHpFraction }`; `debug`
+gains `waveAttribute, spawnAttribute, godModeAttribute, killAllAttribute, setGearAttribute,
+botsAttribute, fakeRunsAttribute, forceTeleportFailureAttribute, forceRegistryFailureAttribute,
+handoffStoreName, handoffMaxAgeSeconds, botHp, botDamagePerSecond`. `remotes.attackCallsPerSecond`
+rises to 12 (the machine gun fires at 10/s). `Sounds.json sounds` gains `swing, finisher, bowDraw,
+bowFire, gunFire, laser, abilityCast, enemyHit, enemyDeath, playerHit, playerDown, waveStart,
+waveClear, bossStart, bossDown, runEnd, lowHp` (id 0 until uploaded; `SoundController` skips 0).
+
+## `tools/sim_combat.py` (economy-designer)
+
+Mirror every new pure function above (same names in snake_case). Replace assertion 3's DPS
+model with a **run simulator** that plays the director: composition, trickle spawns, tempo,
+merges, breathers, boss waves, the player's DPS from the melee chain/windows and ranged
+cooldown with hit rates 0.7 / 0.5 and an ability cast whenever ready, damage taken from enemies
+in reach, breather regen. `--trace` prints the wave timeline. Assertions (`--check`, exit 1 on any):
+1–2, 4–6 as C0; 3. recommended power clears 10 waves inside `targetMinutes` ±50 %;
+7. 2 × recommended power triggers ≥ 1 merge; 8. 0.6 × recommended dies at wave 6 ± 2;
+9. `WaveComposition` returns exactly `count` keys and matches the weights within 1 per key;
+10. Overdrive at recommended × 3 cash ≥ 3 × the normal run. `docs/BALANCE.md` "C1": the wave
+timeline at recommended power, kill counts per key, run cash vs era cost.
+
+## Definition of done (C1)
+
+- Both builds, both sourcemaps, `luau-lsp analyze`, stylua, selene, `sim_economy.py --check`
+  unchanged, `sim_combat.py --check` green (10 assertions), manifest/template checks green.
+- Studio, hub (`build/test.rbxl`, API access on): Depart on Raider Woods → toast "Handoff
+  saved…" → kicked after 1 s; `ForceTeleportFailure` instead re-admits with `unavailable` and
+  clears the handoff; `DebugFakeRuns` fills the ACTIVE RUNS list; Join on a fake → `unavailable`.
+- Studio, combat (`build/combat.rbxl`): boots from the handoff (mission and Overdrive from the
+  record, record consumed), else from `DebugMission`; Ready → wave 1 spawns 5 raiders that chase
+  and hit; melee combo, bow draw, Volley and Whirlwind all deal server-validated damage; wave
+  clears flush cash/Timber to the profile (wallet strip updates); boss at wave 5 and 10; run
+  ends on death (rewards kept) or wave 10 with the summary; Return writes the return record and
+  kicks; reopening the hub shows the `ExpeditionSummaryCard` with the same numbers.
+- `DebugBots = 2` adds two rows, scales wave count, and the summary shows only the player's share.
+- Every lever works from both the attribute and the `DebugPanel`; none does anything outside Studio.
+- No enemy or weapon model is required: placeholder rigs and empty hands are the shipped default.
