@@ -46,8 +46,8 @@
           <CoordinateFrame name="CFrame">
             <X>0</X>
             <Y>0.6694</Y>
-            <Z>0.0125</Z>
-            <R00>1</R00>
+            <Z>-0.0125</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -55,7 +55,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">false</bool>
           <bool name="CanQuery">false</bool>
@@ -86,10 +86,10 @@
           <string name="Name">nature-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.0562</X>
+            <X>0.0562</X>
             <Y>1.3298</Y>
-            <Z>-0.4547</Z>
-            <R00>1</R00>
+            <Z>0.4547</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -97,7 +97,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">false</bool>
           <bool name="CanQuery">false</bool>

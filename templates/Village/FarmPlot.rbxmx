@@ -44,10 +44,10 @@
           <string name="Name">nature-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.9396</X>
+            <X>-1.9396</X>
             <Y>0.4699</Y>
-            <Z>2.676</Z>
-            <R00>1</R00>
+            <Z>-2.676</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -55,7 +55,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -91,10 +91,10 @@
           <string name="Name">nature-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.9396</X>
+            <X>-1.9396</X>
             <Y>0.8699</Y>
-            <Z>1.376</Z>
-            <R00>1</R00>
+            <Z>-1.376</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -102,7 +102,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -138,10 +138,10 @@
           <string name="Name">nature-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>0.2</X>
+            <X>-0.2</X>
             <Y>0.8699</Y>
-            <Z>0.2</Z>
-            <R00>1</R00>
+            <Z>-0.2</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -149,7 +149,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -185,10 +185,10 @@
           <string name="Name">fantasy-town-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.94</X>
+            <X>0.94</X>
             <Y>2</Y>
-            <Z>0.8</Z>
-            <R00>1</R00>
+            <Z>-0.8</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -196,7 +196,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -226,10 +226,10 @@
           <string name="Name">nature-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>0.2</X>
+            <X>-0.2</X>
             <Y>2.4677</Y>
-            <Z>0.2</Z>
-            <R00>1</R00>
+            <Z>-0.2</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -237,7 +237,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -273,10 +273,10 @@
           <string name="Name">fantasy-town-kit</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-1.04</X>
+            <X>1.04</X>
             <Y>3.1414</Y>
-            <Z>-0.04</Z>
-            <R00>1</R00>
+            <Z>0.04</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -284,7 +284,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -317,7 +317,7 @@
             <X>0</X>
             <Y>2.4677</Y>
             <Z>0</Z>
-            <R00>1</R00>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -325,7 +325,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>

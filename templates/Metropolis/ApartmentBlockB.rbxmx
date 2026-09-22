@@ -44,10 +44,10 @@
           <string name="Name">city-kit-commercial</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.68</X>
+            <X>-1.68</X>
             <Y>2.586</Y>
-            <Z>-0.4</Z>
-            <R00>1</R00>
+            <Z>0.4</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -55,7 +55,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -85,10 +85,10 @@
           <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-2.2</X>
+            <X>2.2</X>
             <Y>1.134</Y>
-            <Z>3</Z>
-            <R00>1</R00>
+            <Z>-3</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -96,7 +96,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -132,10 +132,10 @@
           <string name="Name">city-kit-commercial</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.68</X>
+            <X>-1.68</X>
             <Y>2.586</Y>
-            <Z>-0.4</Z>
-            <R00>1</R00>
+            <Z>0.4</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -143,7 +143,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -173,10 +173,10 @@
           <string name="Name">city-kit-roads</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>4</X>
+            <X>-4</X>
             <Y>1.35</Y>
-            <Z>3.95</Z>
-            <R00>1</R00>
+            <Z>-3.95</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -184,7 +184,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -214,10 +214,10 @@
           <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.0704</X>
+            <X>0.0704</X>
             <Y>1.134</Y>
-            <Z>3.2581</Z>
-            <R00>1</R00>
+            <Z>-3.2581</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -225,7 +225,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -261,10 +261,10 @@
           <string name="Name">city-kit-commercial</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.68</X>
+            <X>-1.68</X>
             <Y>3.386</Y>
-            <Z>-0.4</Z>
-            <R00>1</R00>
+            <Z>0.4</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -272,7 +272,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -302,10 +302,10 @@
           <string name="Name">city-kit-roads</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>4</X>
+            <X>-4</X>
             <Y>1.35</Y>
-            <Z>3.95</Z>
-            <R00>1</R00>
+            <Z>-3.95</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -313,7 +313,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -343,10 +343,10 @@
           <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.8704</X>
+            <X>0.8704</X>
             <Y>1.134</Y>
-            <Z>3.2581</Z>
-            <R00>1</R00>
+            <Z>-3.2581</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -354,7 +354,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -390,10 +390,10 @@
           <string name="Name">city-kit-commercial</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>1.68</X>
+            <X>-1.68</X>
             <Y>6.3</Y>
-            <Z>-0.4</Z>
-            <R00>1</R00>
+            <Z>0.4</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -401,7 +401,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -431,10 +431,10 @@
           <string name="Name">city-kit-roads</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>4</X>
+            <X>-4</X>
             <Y>1.35</Y>
-            <Z>3.95</Z>
-            <R00>1</R00>
+            <Z>-3.95</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -442,7 +442,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -472,10 +472,10 @@
           <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.8704</X>
+            <X>0.8704</X>
             <Y>1.134</Y>
-            <Z>3.2581</Z>
-            <R00>1</R00>
+            <Z>-3.2581</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -483,7 +483,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -519,10 +519,10 @@
           <string name="Name">city-kit-commercial</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.0236</X>
+            <X>0.0236</X>
             <Y>6.3</Y>
-            <Z>-0.4</Z>
-            <R00>1</R00>
+            <Z>0.4</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -530,7 +530,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -560,10 +560,10 @@
           <string name="Name">city-kit-roads</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>4</X>
+            <X>-4</X>
             <Y>1.35</Y>
-            <Z>3.95</Z>
-            <R00>1</R00>
+            <Z>-3.95</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -571,7 +571,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -601,10 +601,10 @@
           <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
-            <X>-0.8704</X>
+            <X>0.8704</X>
             <Y>1.134</Y>
-            <Z>3.2581</Z>
-            <R00>1</R00>
+            <Z>-3.2581</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -612,7 +612,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>

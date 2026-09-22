@@ -46,8 +46,8 @@
           <CoordinateFrame name="CFrame">
             <X>0</X>
             <Y>1.6142</Y>
-            <Z>-0.0425</Z>
-            <R00>1</R00>
+            <Z>0.0425</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -55,7 +55,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>
@@ -87,8 +87,8 @@
           <CoordinateFrame name="CFrame">
             <X>0</X>
             <Y>1.154</Y>
-            <Z>-1.9559</Z>
-            <R00>1</R00>
+            <Z>1.9559</Z>
+            <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
             <R10>0</R10>
@@ -96,7 +96,7 @@
             <R12>0</R12>
             <R20>0</R20>
             <R21>0</R21>
-            <R22>1</R22>
+            <R22>-1</R22>
           </CoordinateFrame>
           <bool name="CanCollide">true</bool>
           <bool name="CanTouch">false</bool>

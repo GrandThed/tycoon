@@ -12,7 +12,9 @@ Template shape (frozen in INTERFACES.md "M7 contracts"):
       Part "Base"                  1 x 0.2 x 1 at the origin, invisible, anchored, no collision/query/touch
       Model "Stage0" .. "Stage4"   one per stage whose every part has been harvested
         MeshPart "<kit>"           MeshId/TextureID from Assets.json, Size = harvested size,
-                                   CFrame = harvested offset, anchored, CanCollide, Box collision
+                                   CFrame = the harvested offset put back through the importer's
+                                   180 deg Y turn (see `harvested_cframe`), so the template's -Z is
+                                   the blueprint's front; anchored, CanCollide, Box collision
 
 A template is only written when stage 0 is fully harvested (mesh ids non-zero); a later stage
 that is not yet harvested is left out and PlotService falls back to the highest present stage.
@@ -34,11 +36,10 @@ under templates/_paths/ -> ReplicatedStorage.Assets.Paths:
       MeshPart "Rim"             at paths.rimHeight above the plot top, rim texture
       MeshPart "Fill"            at paths.fillHeight, fill texture
 
-Both are sealed (anchored, no collide/query/touch, no shadow, Box collision) and turned 180 deg
-about Y (R00 = R22 = -1), because the Open Cloud glTF import turns the geometry by 180 deg: turning
-the part back puts every vertex at its plot-local coordinate, which is what keeps the world-planar
-UVs aligned between pieces. A piece is written only when both its meshes are harvested and its
-era has both harvested image ids; otherwise the client falls back to the Parts renderer.
+Both are sealed (anchored, no collide/query/touch, no shadow, Box collision) and placed by the same
+`harvested_cframe` as buildings and props. A piece is written only when both its meshes are
+harvested and its era has both harvested image ids; otherwise the client falls back to the Parts
+renderer.
 """
 
 from __future__ import annotations
@@ -104,6 +105,22 @@ def cframe(position, indent: str) -> list[str]:
     return coordinate_frame("CFrame", position, indent)
 
 
+def harvested_cframe(offset, indent: str, lift: float = 0.0) -> list[str]:
+    """The CFrame of one harvested mesh relative to the template's anchor.
+
+    Every model the Open Cloud glTF import produces arrives turned 180 deg about Y, because the
+    importer converts the glTF +Z-forward convention to Roblox's -Z-forward one. So a harvested
+    `offset` is the blueprint's offset with x and z negated, and the mesh inside points backwards.
+    Negating the offset back and turning the part by the same 180 deg undoes both at once: the
+    part lands at its blueprint coordinate with the blueprint's -Z front facing the template's -Z,
+    which is the front/pad side every consumer assumes (INTERFACES "Template shape"). Buildings,
+    props and baked path pieces all go through here; `lift` is the path layers' height above the
+    plot top and is 0 for the rest.
+    """
+    position = (-float(offset[0]), float(offset[1]) + lift, -float(offset[2]))
+    return coordinate_frame("CFrame", position, indent, turned=True)
+
+
 class Referents:
     def __init__(self):
         self.n = 0
@@ -119,7 +136,7 @@ def mesh_part_xml(part: dict, refs: Referents, indent: str, prop: bool) -> list[
     lines = [f'{indent}<Item class="MeshPart" referent="{refs.next()}">', f"{indent}  <Properties>"]
     lines.append(f'{p}<string name="Name">{escape(str(part["kit"]))}</string>')
     lines.append(f'{p}<bool name="Anchored">true</bool>')
-    lines += cframe(part.get("offset", [0, 0, 0]), p)
+    lines += harvested_cframe(part.get("offset", [0, 0, 0]), p)
     if prop:
         lines.append(f'{p}<bool name="CanCollide">false</bool>')
         lines.append(f'{p}<bool name="CanQuery">false</bool>')
@@ -193,16 +210,14 @@ def path_heights() -> tuple[float, float]:
 
 
 def path_mesh_xml(name: str, mesh: dict, image_id: int, height: float, refs: Referents, indent: str) -> list[str]:
-    """One sealed, textured path MeshPart. The harvested `offset` is the glTF bbox centre with x
-    and z negated (the importer's turn), so negating it back and turning the part by 180 deg puts
-    the mesh exactly where it was baked, in plot-local studs."""
+    """One sealed, textured path MeshPart, placed by `harvested_cframe` like every other harvested
+    mesh: undoing the importer's turn puts the piece exactly where it was baked, in plot-local
+    studs, which is what keeps the world-planar UVs aligned between overlapping pieces."""
     p = indent + "    "
-    offset = mesh.get("offset") or [0, 0, 0]
-    position = (-float(offset[0]), float(offset[1]) + height, -float(offset[2]))
     lines = [f'{indent}<Item class="MeshPart" referent="{refs.next()}">', f"{indent}  <Properties>"]
     lines.append(f'{p}<string name="Name">{name}</string>')
     lines.append(f'{p}<bool name="Anchored">true</bool>')
-    lines += coordinate_frame("CFrame", position, p, turned=True)
+    lines += harvested_cframe(mesh.get("offset") or [0, 0, 0], p, height)
     lines.append(f'{p}<bool name="CanCollide">false</bool>')
     lines.append(f'{p}<bool name="CanQuery">false</bool>')
     lines.append(f'{p}<bool name="CanTouch">false</bool>')
