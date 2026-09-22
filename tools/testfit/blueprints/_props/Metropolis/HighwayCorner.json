@@ -1,0 +1,16 @@
+{
+  "id": "HighwayCorner",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [7, 7],
+  "note": "deck bend joining -X <-> +Z like RoadBend: road-bend surface laid on the deck top (1.02 u), rails on the same base as HighwayDeck so the rail line is continuous.",
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0, 0.5, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-bend", "pos": [0, 1.02, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-bend-barrier", "pos": [0, 1.02, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, 0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, 0.44], "rotY": 0, "stage": 0}
+  ]
+}

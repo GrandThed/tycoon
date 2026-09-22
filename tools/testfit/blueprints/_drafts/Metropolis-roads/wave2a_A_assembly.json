@@ -1,0 +1,650 @@
+{
+  "id": "wave2a_A_assembly",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [
+    70,
+    70
+  ],
+  "note": "wave 2a assembly check (scratch): highway ring corner + decks + T + ramp landing on a tile street. Ground is the Metropolis plot base (88, 90, 94); the blue boxes are 2 x 5 x 1 stud characters.",
+  "ground": [
+    0.0975,
+    0.1022,
+    0.1119
+  ],
+  "players_world": [
+    [
+      -12.0,
+      0.0
+    ],
+    [
+      -3.0,
+      24.0
+    ],
+    [
+      10.0,
+      5.0
+    ]
+  ],
+  "camera": {
+    "dir": [
+      0.9,
+      0.62,
+      -1.25
+    ],
+    "target": [
+      -3.0,
+      4.0,
+      14.0
+    ],
+    "distance": 78.0,
+    "lens": 38.0
+  },
+  "pieces": [
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -3,
+        0.5,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bend",
+      "pos": [
+        -3,
+        1.02,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bend-barrier",
+      "pos": [
+        -3,
+        1.02,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -3.44,
+        0,
+        0.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.56,
+        0,
+        0.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -3.44,
+        0,
+        -0.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.56,
+        0,
+        -0.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -3,
+        0.5,
+        1
+      ],
+      "rotY": 180,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -3,
+        1.02,
+        1
+      ],
+      "rotY": 180,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -3.44,
+        0,
+        1.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.56,
+        0,
+        1.44
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -3.44,
+        0,
+        0.56
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.56,
+        0,
+        0.56
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -2,
+        0.5,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -2,
+        1.02,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.44,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -2.44,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -1.56,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -1.56,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -1,
+        0.5,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -1,
+        1.02,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -1.44,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -1.44,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.56,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.56,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        0,
+        0.5,
+        0
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-intersection",
+      "pos": [
+        0,
+        1.02,
+        0
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-intersection-barrier",
+      "pos": [
+        0,
+        1.02,
+        0
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.44,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.44,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        1,
+        0.5,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        1,
+        1.02,
+        0
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.56,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.56,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        1.44,
+        0,
+        -0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        1.44,
+        0,
+        0.44
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-high",
+      "pos": [
+        0,
+        0.5,
+        1
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-high-barrier",
+      "pos": [
+        0,
+        0.5,
+        1
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-curve",
+      "pos": [
+        0.0,
+        0,
+        2.5
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-curve-barrier",
+      "pos": [
+        0.0,
+        0,
+        2.5
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.44,
+        0,
+        0.56
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        0,
+        0.56
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        0.44,
+        0,
+        1.44
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar-wide",
+      "pos": [
+        -0.44,
+        0,
+        1.44
+      ],
+      "rotY": 270,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        4
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-crossroad",
+      "pos": [
+        0,
+        0,
+        5
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -1,
+        0,
+        5
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-end",
+      "pos": [
+        -2,
+        0,
+        5
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-crossing",
+      "pos": [
+        1,
+        0,
+        5
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-end",
+      "pos": [
+        2,
+        0,
+        5
+      ],
+      "rotY": 0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-crossing",
+      "pos": [
+        0,
+        0,
+        6
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-end",
+      "pos": [
+        0,
+        0,
+        7
+      ],
+      "rotY": 90,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "sign-highway",
+      "pos": [
+        2,
+        0,
+        1
+      ],
+      "rotY": 270,
+      "stage": 0
+    }
+  ]
+}

@@ -48,12 +48,23 @@ export type LampPost = {
 	yaw: number, -- radians, facing the road
 }
 
+-- Wave 2a: one subway entrance from the layout, tied to the spine piece it stands beside (as a row
+-- lamp is). `exempt` marks the entrance nearest the plot entrance, which shows as soon as the slot
+-- is owned, so buying the line always puts at least one staircase on the street.
+export type SubwaySpot = {
+	position: Vector3, -- plot-local, Y 0
+	rotationY: number,
+	pieceId: string?,
+	exempt: boolean,
+}
+
 export type Plan = {
 	trees: { TreeSpot },
 	lotProps: { [number]: string }, -- lot index -> house prop (only lots inside the budget)
 	plazaAllowed: { [number]: boolean }, -- plaza index -> inside the budget
 	lampSlots: { [string]: boolean }, -- slots whose spur junction may carry a lamp
 	lampPosts: { LampPost }, -- row placement only, in sorted piece order
+	subwayEntrances: { SubwaySpot }, -- wave 2a, capped by subway.maxPerPlot
 	vehicleProps: { string }, -- vehicle i's prop name
 }
 
@@ -68,16 +79,18 @@ export type PlanInput = {
 	-- RoadGraph.AllCentrelines: every potential road, straight and (baked eras) smoothed.
 	centrelines: { { Vector3 } },
 	junctionSlotIds: { string }, -- RoadGraph.JunctionSlotIds (sorted)
-	-- RoadGraph.StreetLines, called only by row placement: sampling every drawn curve is real
-	-- work and the other eras' lamps stand at junctions.
+	-- RoadGraph.StreetLines, called only by row lamps and subway entrances: sampling every drawn
+	-- curve is real work and the other eras' lamps stand at junctions.
 	streetLines: () -> RoadGraph.StreetLines,
+	-- RoadGraph.EntrancePoint, the plot's way in; nil when the layout has no streets.
+	entrance: Vector3?,
 }
 
 type Obstacle = { position: Vector3, radius: number }
 -- Model-space XZ rectangle around a bottom-centre anchor (front -Z), not necessarily centred.
-type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
+export type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
 -- Extents placed in the plot; `rotation` is the turn about Y only, with no translation.
-type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
+export type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
 
 local Scatter = {}
 
@@ -99,6 +112,11 @@ local function pickIndex(draw: number, count: number): number?
 		return nil
 	end
 	return math.min(math.floor(draw * count) + 1, count)
+end
+
+-- A half-written config key plans nothing rather than erroring in the middle of a sync.
+local function numberOr(value: any, fallback: number): number
+	return if type(value) == "number" and value == value then value else fallback
 end
 
 local function facingFor(rotationY: number): Vector3
@@ -241,6 +259,21 @@ local function footprintsFor(input: PlanInput): { Footprint }
 	for _, plaza in plazas do
 		add(plaza.position, plaza.rotationY, propExtents(plaza.prop))
 	end
+
+	-- Wave 2a: a subway kiosk is a solid like any other prop, so no tree and no row lamp is ever
+	-- planned on top of one. Its harvested bounds win; until the prop is uploaded it stands as the
+	-- layout's placeholder, the same stand-in an unharvested slot gets -- propExtents' "as large as
+	-- the era's largest slot" fallback would fence off a whole corner of a block.
+	local subway = input.era.subway
+	local entrances: { Types.SubwayEntranceLayout }? = layout.subwayEntrances
+	if subway ~= nil and entrances ~= nil then
+		local model: Types.AssetModel? = if eraProps ~= nil then eraProps[subway.prop] else nil
+		local extents = modelExtents(model)
+			or centredExtents(layout.placeholderSize.X, layout.placeholderSize.Z)
+		for _, entrance in entrances do
+			add(entrance.position, entrance.rotationY, extents)
+		end
+	end
 	return footprints
 end
 
@@ -369,7 +402,7 @@ end
 -- each spine run, alternating sides, `width / 2 + offset` outside the drawn centreline and facing
 -- it. The walk is a function of the layout alone, so it draws no numbers from the plan's Random
 -- and leaves every later feature's stream exactly as it was before this wave.
-local function lampPosts(input: PlanInput): { LampPost }
+local function lampPosts(input: PlanInput, streetLines: () -> RoadGraph.StreetLines): { LampPost }
 	local lamps = input.era.lamps
 	local spacing = lamps.spacing
 	if
@@ -380,7 +413,7 @@ local function lampPosts(input: PlanInput): { LampPost }
 	then
 		return {}
 	end
-	local lines = input.streetLines()
+	local lines = streetLines()
 	local footprints = footprintsFor(input)
 	local reach = input.roadWidth / 2 + math.max(lamps.offset or 0, 0)
 	local clearance = input.roadWidth / 2
@@ -483,6 +516,79 @@ local function lampPosts(input: PlanInput): { LampPost }
 	return kept
 end
 
+-- Subway entrances (docs/INTERFACES.md "Wave 2a — Subway entrances"): the layout's spots, capped
+-- by `subway.maxPerPlot`, each tied to the spine piece it stands nearest so it arrives with the
+-- street it belongs to. Like the row lamps this is a walk over the layout and draws no numbers
+-- from the plan's Random, so every later feature's stream is exactly what it was before wave 2a.
+local function subwaySpots(
+	input: PlanInput,
+	streetLines: () -> RoadGraph.StreetLines
+): { SubwaySpot }
+	local subway = input.era.subway
+	local entrances: { Types.SubwayEntranceLayout }? = input.layout.subwayEntrances
+	if subway == nil or entrances == nil or #entrances == 0 then
+		return {}
+	end
+	local cap = math.max(math.floor(numberOr(subway.maxPerPlot, 0)), 0)
+	local lines = streetLines()
+	local spots: { SubwaySpot } = {}
+	for _, entrance in entrances do
+		if #spots >= cap then
+			break
+		end
+		local position = flat(entrance.position)
+		-- A kiosk stands on the pavement of the street it opens onto, which is the street it faces
+		-- (front -Z, the slot convention). Two streets can be the same distance away -- a corner
+		-- spot, or a piece boundary exactly abeam -- and the one in front wins that tie, so an
+		-- entrance never binds to the cross street behind it.
+		local facing = facingFor(entrance.rotationY)
+		local nearestPiece: string? = nil
+		local nearestDistance = math.huge
+		local nearestAhead = false
+		for _, run in lines.runs do
+			for _, piece in run.pieces do
+				for index = 2, #piece.points do
+					local closest = RoadGraph.ClosestOnSegment(
+						position,
+						piece.points[index - 1],
+						piece.points[index]
+					)
+					local distance = (closest - position).Magnitude
+					local ahead = (closest - position):Dot(facing) > 0
+					local nearer = distance < nearestDistance - MIN_STEP
+					local tied = distance < nearestDistance + MIN_STEP
+						and ahead
+						and not nearestAhead
+					if nearer or tied then
+						nearestDistance, nearestPiece, nearestAhead = distance, piece.pieceId, ahead
+					end
+				end
+			end
+		end
+		table.insert(spots, {
+			position = position,
+			rotationY = entrance.rotationY,
+			pieceId = nearestPiece,
+			exempt = false,
+		})
+	end
+	-- The one nearest the way in is exempt from the visibility rule; with no street plan at all
+	-- the plot centre stands in for the entrance, which still picks the same spot on every client.
+	local reference = input.entrance or Vector3.zero
+	local chosen: SubwaySpot? = nil
+	local chosenDistance = math.huge
+	for _, spot in spots do
+		local distance = (spot.position - reference).Magnitude
+		if distance < chosenDistance then
+			chosenDistance, chosen = distance, spot
+		end
+	end
+	if chosen ~= nil then
+		chosen.exempt = true
+	end
+	return spots
+end
+
 function Scatter.Plan(input: PlanInput): Plan
 	local rng = Random.new(Scatter.Seed(input.plotIndex, input.eraName))
 	local era = input.era
@@ -493,8 +599,19 @@ function Scatter.Plan(input: PlanInput): Plan
 		plazaAllowed = {},
 		lampSlots = {},
 		lampPosts = {},
+		subwayEntrances = {},
 		vehicleProps = {},
 	}
+	-- Both street-line readers share one sampling pass; neither runs in an era that needs neither.
+	local cachedLines: RoadGraph.StreetLines? = nil
+	local function streetLines(): RoadGraph.StreetLines
+		local lines = cachedLines
+		if lines == nil then
+			lines = input.streetLines()
+			cachedLines = lines
+		end
+		return lines :: RoadGraph.StreetLines
+	end
 
 	-- Filler budget, in layout order: plazas, then lots, then lamps.
 	local remaining = input.config.budget.fillerPieces
@@ -539,7 +656,8 @@ function Scatter.Plan(input: PlanInput): Plan
 			end
 		end
 	end
-	plan.lampPosts = lampPosts(input)
+	plan.lampPosts = lampPosts(input, streetLines)
+	plan.subwayEntrances = subwaySpots(input, streetLines)
 
 	local vehicleProps = era.vehicles.props
 	local vehicleCap =
@@ -570,6 +688,25 @@ function Scatter.LampFrame(junction: RoadGraph.Junction, roadWidth: number): CFr
 	local stepBack = math.clamp(junction.approach, 0, roadWidth)
 	local position = junction.position - direction * stepBack + right * (roadWidth / 2)
 	return CFrame.lookAt(position, position - right)
+end
+
+-- Everything solid the planner already knows about a plot: every slot and its pad, every filler
+-- lot, plaza and subway kiosk. Shared so a caller placing something of its own (the highway sign)
+-- can ask the same question the trees and the row lamps do, instead of guessing.
+function Scatter.Solids(input: PlanInput): { Footprint }
+	return footprintsFor(input)
+end
+
+-- Whether a `margin`-radius square at `position` (plot-local) misses every solid. The margin is
+-- the thing's own half-extent, which makes the test exact for an axis-aligned prop and
+-- conservative for a turned one -- erring toward not placing it.
+function Scatter.Clear(solids: { Footprint }, position: Vector3, margin: number): boolean
+	for _, footprint in solids do
+		if insideFootprint(footprint, flat(position), margin) then
+			return false
+		end
+	end
+	return true
 end
 
 function Scatter.PropFrame(position: Vector3, rotationY: number): CFrame

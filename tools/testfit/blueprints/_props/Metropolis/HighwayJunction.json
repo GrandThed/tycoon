@@ -1,0 +1,16 @@
+{
+  "id": "HighwayJunction",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [7, 7],
+  "note": "deck T open -X/+X/+Z like RoadTee, closed -Z side railed by road-intersection-barrier. Pillars stay in the four corners so all three mouths are clear.",
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-bridge", "pos": [0, 0.5, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-intersection", "pos": [0, 1.02, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-intersection-barrier", "pos": [0, 1.02, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.44, 0, 0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, -0.44], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.44, 0, 0.44], "rotY": 0, "stage": 0}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "LampPost",
+  "era": "Metropolis",
+  "scale": 11.0,
+  "footprint": [2, 5],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "light-square-double", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

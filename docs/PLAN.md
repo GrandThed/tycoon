@@ -35,8 +35,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   2026-09-18** — 91 pieces for Village + Boomtown; **wave 1e street upgrades shipped
   2026-09-18** — Pave the Road / Pave Main Street / Streetlamp Row / Traffic Lights now change
   the streets, review no Criticals, QA green, harvest paste done 2026-09-18, **Studio playtest (PLAYTEST 4b) pending**
-  (`docs/MANUAL_STEPS.md` M9 §7); the full M9 checklist re-run is still open — see "M9" below;
-  wave 2 (Metropolis/OrbitalColony + `cityDetail`) not started)
+  (`docs/MANUAL_STEPS.md` M9 §7); **wave 2a Metropolis streets shipped 2026-09-22** — tile
+  streets, elevated ring highway, subway kiosks and Found City Hall, review SHIP after two
+  Majors fixed, **harvest paste owed** (`docs/MANUAL_STEPS.md` M9 §8) then playtest; the full M9
+  checklist re-run is still open — see "M9" below; wave 2b (Orbital Colony dressing +
+  `cityDetail`) not started)
 
 ---
 
@@ -226,6 +229,64 @@ top-left); reduce-motion = `TouchEnabled` OR `SavedQualityLevel` 1–3. Config/t
 v1.1 (`displayName`, per-slot `kit`), `Sounds.json`, `tools/gen_asset_manifest.py` (+ `--check`),
 `docs/ASSET_MANIFEST.md`. Repo hygiene: `.gitattributes` (LF), `.gitignore`, sourcemap
 regenerated. Reviewer verdict SHIP; QA green.
+
+**Shipped (wave 2a — Metropolis streets, highway, subway, 2026-09-22):** Metropolis gets its own
+street language and three slots change meaning. Still client-only apart from the era JSON (one
+renamed slot, two `streetOnly`); Village and Boomtown are untouched. Contracts:
+`docs/INTERFACES.md` "Wave 2a — Metropolis streets, highway, subway".
+
+- **Three slots change meaning:** `cityGrid` keeps its id (no profile migration) but becomes
+  **"Found City Hall"** — a real kit building, `modelName` `CityHall`, one stage because it is an
+  `unlock` slot, `rotationY` 0 at the plot centre facing the entrance. `subwayLine` and
+  `highwayRamp` become **`streetOnly`**: the server spawns an empty `Building_<id>` marker and the
+  client draws the infrastructure. The old `RoadIntersection` / `HighwayRamp` / `SubwayEntrance`
+  blueprints and templates stay in the repo, unused (same ruling as wave 1e).
+- **Tile streets (`road.tiles`, new `src/client/City/TileRenderer.luau`):** Ben chose Kenney
+  `city-kit-roads` tiles at **7 studs** (four per 28-stud block pitch) over baked meshes for this
+  era. The renderer rasterises the *visible* spine to cells and picks each cell's prop from its
+  **visible 4-neighbour connectivity** — `end` → `straight` → `bend` → `tee` → `cross` as the
+  network grows — with a zebra **`crossing`** cell at junction mouths on runs of ≥ 3 cells. Plain
+  **pavement Parts** run either side of each stretch, and a building's **footpath spur is clipped
+  at the pavement edge** so it never overlaps the asphalt. `budget.tileCells` 180; Metropolis uses
+  **38** at full ownership.
+- **Elevated ring highway (`highway`, new `Highway.luau`):** owning **Build the Highway Ramp**
+  draws a ring at `ring` **56** (deck road surface **7.07** studs, soffit **6.65**, so characters
+  walk under it — including at the plot entrance) with a single **3-cell ramp** descending east
+  into the arterial's west end at (−35, −28). On purchase the ring **builds outward from the ramp
+  in both directions** at `revealCellsPerSecond` 12 (≈ 5 s); joins, era rebuilds and far plots get
+  it instantly. **Two cars** loop the deck and never take the ramp. `budget.highwayCells` 72;
+  Metropolis uses **66**. The `HighwaySign` gantry is **skipped when it would clip a footprint** —
+  with today's 7-stud-wide sign that means it never appears on Metropolis.
+- **Subway (`subway`):** owning **Dig the Subway Line** places up to **5 `MetroEntrance` kiosks**
+  at street corners, each tied to its nearest spine stretch so it appears as that street becomes
+  visible; the kiosk nearest the plot entrance is exempt, so buying the slot always shows one. The
+  kiosk is **custom Blender geometry** (`tools/assets/metro_kit.py` → `assets/kenney3d/metro-kit/`,
+  colour-only materials routed through `palette.py`, the `stadium_kit.py` pattern) because no City
+  Kit has stairs going down.
+- **Layout (`src/shared/Layouts/Metropolis.luau`):** the **x = 0 civic axis is car-free** (entrance
+  avenue → City Hall at (0, 0, 0) → the Skyscraper monument moved to (0, 0, 28)); traffic avenues
+  at x = ±28 and the arterial at z = −28 make **4 polylines that form a tree** (a closed block
+  would leave one stretch never drawn). Moved slots: `financeDistrict` (14, 0, 28), `cityPark`
+  (−13, 0, 0), `rooftopGarden` (13, 0, 0), `busStop` (37, 0, 0), `subwayLine` (6.5, 0, −41),
+  `highwayRamp` (−35, 0, −21.5), Stadium pad at (−42, 0, 33) with `rotationY` 0; `padOffset` 7.5.
+  `py tools/streetplan.py Metropolis` now checks the lattice, the highway band, the ramp foot, the
+  entrance spots and the tree zones and is **green (0 violations)** — PNG at
+  `assets/testfit/out/Metropolis/streetplan.png`.
+- **Config (`CityDressing.json`):** `budget.tileCells` 180 and `budget.highwayCells` 72;
+  Metropolis `road.tiles`, `road.laneOffsetFraction` 0.2, `highway` (incl. `deckHeight` 7.07),
+  `subway`, and `houses.props` `[]` (the blocks are already full of buildings). A shared
+  `Dust.luau` now owns the burst effect for paths, tiles and surfaces.
+- **Degrades silently:** a missing `templates/_props/Metropolis` draws **grey placeholder cells**
+  and nothing else; a missing highway/subway prop or layout key draws nothing; no Output error in
+  any case.
+- **Assets:** 21 Metropolis props (`RoadStraight/End/Bend/Tee/Cross/Crossing`,
+  `HighwayDeck/Corner/Junction/Ramp/Sign`, `MetroEntrance`, `LampPost`, `TrafficLight`,
+  `VehicleA–D` at blueprint scale **1.8** so two 2.7-stud-wide cars pass on 5.6 studs of asphalt,
+  `TreeGrowing` S0–S3, `PlazaA/B`) plus `CityHall` merged and uploaded (commit `c9f7f37`) —
+  **not harvested yet**, that is Ben's one manual step below.
+- **Review (roblox-reviewer): no Criticals, verdict SHIP after the harvest.** Two Majors fixed —
+  the spur colour snapshot regressed Boomtown's gravel spurs, and the Metropolis footpath
+  overlapped the asphalt instead of stopping at the kerb — plus 9 minors and 3 tool nits.
 
 **Carried forward (owners assigned):**
 - ui-engineer, M4: landscape viewports narrower than ~690 px (e.g. 640×360) — the right-docked
@@ -813,29 +874,37 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   and `gen_asset_manifest.py --check` stale until the harvest paste below).
 
 **Carried forward (owners assigned):**
-- **Ben, before the wave 1e playtest:** one Studio **harvest paste** — `tools/assets/harvest.luau`
-  is already generated with exactly 6 records (2 props + 4 path textures) — then
-  `harvest.py --props`, `gen_templates.py --props`, `gen_asset_manifest.py` and `rojo build`.
-  Ordered steps: `docs/MANUAL_STEPS.md` "M9" §7. Until then Lanterns, Traffic Lights and both
-  surface variants are silently absent and `docs/ASSET_MANIFEST.md` is deliberately stale.
+- **Ben, before the wave 2a playtest:** **two** Studio harvest pastes for Metropolis — props
+  first (24 records: 21 props, `TreeGrowing` counting as 4 stages), then buildings (1 record,
+  `CityHall`) — then `gen_templates.py --props`, `gen_templates.py`, `--check`, the manifest and
+  `rojo build`. Ordered steps: `docs/MANUAL_STEPS.md` "M9" §8. Until then a Metropolis plot shows
+  **grey placeholder cells** and no highway, kiosks, trees, cars or City Hall mesh — the designed
+  degrade, not a bug — and `docs/ASSET_MANIFEST.md` reads 23/24 Metropolis templates on purpose.
+- [x] **Ben, wave 1e:** harvest paste done 2026-09-18 (2 props + 4 path variant textures);
+  `Village/Lantern` and `Boomtown/TrafficLight` templated, both surface variants have non-zero
+  image ids.
 - [x] **Ben, before playtest:** prop harvest paste done 2026-09-16 (24 stages, 0 failed); 18 prop
   templates generated and committed.
 - [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
   generated and committed; baked paths seen and approved in Studio.
-- **Ben, next:** re-run `docs/PLAYTEST.md` "M9 — City dressing" end to end in Studio (the path
-  steps 5b–5f, 20b and 23b–23c are new, and section 5b covers all of wave 1e); this ticks M9 `[x]`
-  above once passed.
-- **Ben / lead, open question (wave 1e):** today's Boomtown street plan has exactly **one** node
-  where three spine streets meet, so Install Traffic Lights buys **one** signal. More signals means
-  more cross streets in `src/shared/Layouts/Boomtown.luau` — a layout change Ben has to want.
-- **lead, before wave 2:** re-cut the ≤ ~1300-part budget line, which predates baked paths
-  (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail). Wave 1e adds up to
-  `budget.lampPosts` (16) lamp models plus signals per near plot on top of it.
-- **lead, wave 2:** Metropolis and Orbital Colony have `lamps` but no `surface`, `variants` or
-  `signals` keys, so they keep today's behaviour until their street plans land.
-- **lead / economy-designer, wave 2:** Metropolis and Orbital Colony street plans + prop
-  blueprints (after M8's Metropolis/Orbital buildings ship) and the persisted `cityDetail` setting
-  — contracts already frozen in INTERFACES, not started.
+- **Ben, next:** after the two pastes, run `docs/PLAYTEST.md` "M9 — City dressing" **section 4c
+  (wave 2a, Metropolis)** and then the rest of M9 end to end (the path steps 5b–5f, 20b, 23b–23c
+  and section 4b for wave 1e are still open); this ticks M9 `[x]` above once passed.
+- [x] **Ben / lead, closed (wave 1e):** Ben chose real cross streets, so the Boomtown plan has 5
+  polylines and **six** crossings — Install Traffic Lights now buys up to six signals.
+- **lead, before wave 2b:** re-cut the ≤ ~1300-part budget line, which predates baked paths and
+  tile streets (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail). Wave 1e adds
+  up to `budget.lampPosts` (16) lamps plus signals per near plot; **a full near Metropolis plot is
+  ≈ 220 dressing pieces** (38 tile cells + pavements, 66 highway cells, 5 kiosks, trees, plazas,
+  lamps, cars) — the highest of any era, and the number to re-cut against.
+- **lead, wave 2a watch item:** `HighwaySign` is uploaded but never placed on Metropolis (the
+  7-stud-wide gantry always clips a footprint). Either narrow the blueprint or drop the prop —
+  leaving it uploaded and unused costs nothing, but it is dead weight in the manifest.
+- **lead, wave 2b:** Orbital Colony has `lamps` but no `surface`, `variants`, `signals` or
+  `tiles` keys, so it keeps today's behaviour until its street plan lands.
+- **lead / economy-designer, wave 2b:** the Orbital Colony street plan + prop blueprints (after
+  M8's Orbital buildings ship) and the persisted `cityDetail` setting — contracts already frozen
+  in INTERFACES, not started.
 
 **Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
 base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.

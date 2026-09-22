@@ -200,6 +200,7 @@
     "Metropolis": {
       "road": {
         "width": 7,
+        "laneOffsetFraction": 0.2,
         "material": "Asphalt",
         "color": [
           60,
@@ -257,7 +258,8 @@
           "count": 2,
           "speed": 18
         },
-        "revealCellsPerSecond": 12
+        "revealCellsPerSecond": 12,
+        "deckHeight": 7.07
       },
       "subway": {
         "requiresSlot": "subwayLine",

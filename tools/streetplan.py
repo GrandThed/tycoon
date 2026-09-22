@@ -48,8 +48,9 @@ CITY_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json"
 BLUEPRINTS_DIR = REPO_ROOT / "tools" / "testfit" / "blueprints"
 OUT_DIR = REPO_ROOT / "assets" / "testfit" / "out"
 SIM_PATH = REPO_ROOT / "tools" / "sim_economy.py"
+ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
 
-DEFAULT_ERAS = ("Village", "Boomtown")
+DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis")  # every era with a street plan (wave 2a)
 
 # Contract rule values (INTERFACES.md "Layouts" and amendments), not game tunables.
 SLOT_FOOTPRINT_DEFAULT = 9
@@ -70,6 +71,10 @@ STREET_FURNITURE = {
     # P1 road-piece slots, plus P3: the monument on the main-street centreline and the decor
     # slot overlapping it (INTERFACES "Street-plan amendments").
     "Boomtown": ("paveMainStreet", "streetlampRow", "trafficLights", "clockTower", "fireHydrant"),
+    # Wave 2a: Metropolis' two streetOnly slots. The server spawns an empty marker for them, so
+    # their nominal 9x9 footprint is fiction -- only the pad is real, and it is meant to stand on
+    # the street furniture it names (the ramp foot, the kerb beside a metro entrance).
+    "Metropolis": ("subwayLine", "highwayRamp"),
 }
 # A lot "faces the road" when a spine centreline lies within this many studs of its front edge.
 LOT_FRONT_REACH = 10
@@ -85,6 +90,23 @@ FLOAT32_SLACK = 1e-4  # piece counts within this of a .5 rounding boundary count
 # city-kit-roads tile exits at rotY 0 (x, z): the T junction opens to -X, +X, +Z; the bend to -X, +Z.
 JUNCTION_EXITS = ((-1.0, 0.0), (1.0, 0.0), (0.0, 1.0))
 BEND_EXITS = ((-1.0, 0.0), (0.0, 1.0))
+# Wave 2a (INTERFACES "Wave 2a -- Metropolis streets, highway, subway"). Contract rules again,
+# not tunables; everything here only applies to an era whose CityDressing.json has road.tiles.
+# Fallback ramp length in whole cells, used only when Assets.json cannot be read: the real number
+# is measured off the built prop the way Highway.rampCells does (prop_cell_length below).
+RAMP_CELLS_FALLBACK = 3
+RAMP_DIRECTIONS = {"+X": (1.0, 0.0), "-X": (-1.0, 0.0), "+Z": (0.0, 1.0), "-Z": (0.0, -1.0)}
+SUBWAY_COUNT = (4, 6)
+# Measured bounds (x, z) of the built Metropolis/MetroEntrance prop at rotationY 0 -- front (stair
+# mouth) on -Z, origin bottom-centre. The blueprint's `footprint` key is only the envelope the
+# builder was briefed to fit inside, and the sidewalk an entrance stands on is exactly 6 studs
+# wide (road edge to block face), so the checker measures the prop and merely flags a blueprint
+# that declares less than the prop really is.
+METRO_ENTRANCE_EXTENTS = (4.90, 5.79)
+SUBWAY_CLEARANCE = 0.5  # daylight between an entrance and any footprint, pad or plaza
+# An entrance stands on the pavement it faces: its front edge may come this close to the asphalt.
+SUBWAY_STREET_REACH = 1.5
+
 # Spurs longer than this (anchor to join, ~11 studs of it under the building and pad) are listed so
 # "every path reads as a short front path" can be judged.
 LONG_SPUR = 22
@@ -393,6 +415,30 @@ def prop_footprint(era_name, prop_names, fallback):
     return best or fallback
 
 
+def prop_cell_length(era_name, prop_name, tile_studs, fallback):
+    """Highway.rampCells, off the same numbers: the built prop's X extent in whole cells. The
+    client measures the spawned parts at runtime; the harvested sizes and anchor-relative offsets
+    in Assets.json are those parts, so the tool reads them (and only reads -- another session may
+    own that file). A missing file, prop or stage degrades to `fallback`, as the client degrades
+    to drawing nothing."""
+    try:
+        assets = json.loads(ASSETS_PATH.read_text(encoding="utf-8"))
+        stages = assets["props"][era_name][prop_name]["stages"]
+        parts = stages[0]["parts"]
+    except (OSError, ValueError, KeyError, IndexError):
+        return fallback
+    low, high = math.inf, -math.inf
+    for part in parts:
+        centre, size = part.get("offset"), part.get("size")
+        if not centre or not size:
+            continue
+        low = min(low, centre[0] - size[0] / 2)
+        high = max(high, centre[0] + size[0] / 2)
+    if low > high or tile_studs <= 0:
+        return fallback
+    return max(1, int(round_half((high - low) / tile_studs)))
+
+
 def load_era_config(era_name):
     for path in ERAS_DIR.glob("*.json"):
         config = json.loads(path.read_text(encoding="utf-8"))
@@ -439,6 +485,13 @@ class Era:
         self.meander = road.get("meander")
         self.amplitude = self.meander["amplitude"] if self.meander else 0.0
         self.paths = road.get("paths")  # Wave 1d: baked pieces; absent means the parts renderer
+        # Wave 2a: presence of road.tiles selects the kit-tile renderer, which rasterises every
+        # street to whole cells of `tileStuds`. Everything lattice-shaped below is gated on it, so
+        # Village and Boomtown keep exactly the rules they had.
+        self.tiles = road.get("tiles")
+        self.tile_studs = float(self.tiles["tileStuds"]) if self.tiles else 0.0
+        pavement = (self.tiles or {}).get("pavement")
+        self.pavement = float(pavement["width"]) if pavement else 0.0
         plot = self.layout["plotSize"]
         self.half_x, self.half_z = plot[0] / 2, plot[2] / 2
         pad_size = self.layout["padSize"]
@@ -508,7 +561,54 @@ class Era:
             {"center": xz(z["center"]), "radius": z["radius"], "count": int(z["count"])}
             for z in self.layout.get("treeZones", [])
         ]
+        self.highway = self.layout.get("highway")
+        highway_cfg = self.dressing.get("highway")
+        ramp_prop = highway_cfg["props"]["ramp"] if highway_cfg else None
+        self.ramp_cells = (
+            prop_cell_length(name, ramp_prop, self.tile_studs, RAMP_CELLS_FALLBACK)
+            if ramp_prop
+            else RAMP_CELLS_FALLBACK
+        )
+        self.highway_sign = bool(highway_cfg and highway_cfg["props"].get("sign"))
+        subway = self.dressing.get("subway")
+        self.subway_prop = subway["prop"] if subway else None
+        self.subway_size = METRO_ENTRANCE_EXTENTS
+        self.subway_declared = prop_footprint(name, [self.subway_prop] if self.subway_prop else [], self.subway_size)
+        self.subways = []
+        for entry in self.layout.get("subwayEntrances", []):
+            position = xz(entry["position"])
+            rotation = entry["rotationY"]
+            self.subways.append(
+                {
+                    "position": position,
+                    "rotation": rotation,
+                    "facing": facing(rotation),
+                    "poly": square(position, self.subway_size[0], self.subway_size[1], rotation),
+                }
+            )
         self.spurs = {slot["id"]: self.spur_for(slot) for slot in self.slots}
+
+    def road_cells(self):
+        """Every lattice cell the tile renderer would rasterise the plan to, drawn or not. The
+        client picks a cell's prop from its visible neighbours, so the cell -- not the centreline
+        -- is the unit a pad, a plaza or a subway entrance has to stay off."""
+        cells = set()
+        if not self.tiles:
+            return cells
+        step = self.tile_studs
+        for _, a, b in self.spine_segments():
+            length = math.dist(a, b)
+            steps = max(1, int(length / (step / 2)))
+            for index in range(steps + 1):
+                p = lerp(a, b, index / steps)
+                cells.add((round_half(p[0] / step), round_half(p[1] / step)))
+        return cells
+
+    def cell_square(self, cell):
+        """The footprint of one lattice cell, keyed as (i, j) with centre (i * step, j * step)."""
+        step = self.tile_studs
+        centre = (cell[0] * step, cell[1] * step)
+        return square(centre, step, step, 0)
 
     def spine_segments(self):
         for index, street in enumerate(self.streets):
@@ -989,12 +1089,176 @@ def on_rounding_boundary(length, segment_length):
 # --------------------------------------------------------------------------
 
 
+def lattice_violations(era):
+    """Wave 2a grid rule: in a tiles era every streets point sits on the (step * i, step * j)
+    lattice and every segment is axis-aligned, because a street is a run of whole kit tiles and a
+    half-cell point would leave a gap the renderer cannot fill."""
+    messages = []
+    step = era.tile_studs
+    for index, street in enumerate(era.streets):
+        for p in street:
+            off = max(abs(p[axis] / step - round_half(p[axis] / step)) for axis in (0, 1))
+            if off > 1e-6:
+                messages.append(f"street {index + 1}: point {fmt(p)} is off the {step:g}-stud tile lattice")
+        for a, b in polyline_segments(street):
+            if abs(a[0] - b[0]) > 1e-6 and abs(a[1] - b[1]) > 1e-6:
+                messages.append(f"street {index + 1}: segment {fmt(a)}->{fmt(b)} is not axis-aligned")
+    return messages
+
+
+def ring_reach(poly):
+    """How far a footprint reaches from the plot centre along the worse axis -- the number the
+    square ring deck cares about."""
+    return max(max(abs(corner[0]), abs(corner[1])) for corner in poly)
+
+
+def highway_violations(era):
+    """Wave 2a elevated ring: the deck and its pillars are props on the street lattice, so they
+    are checked like streets (against footprints and pads), and the ramp has to land where a
+    street actually starts or it comes down on bare ground."""
+    messages = []
+    highway = era.highway
+    step = era.tile_studs
+    if step <= 0:
+        return [f"highway: {era.name} has no road.tiles, so the deck has no cell pitch"]
+    ring, half = float(highway["ring"]), step / 2
+    if abs(ring / step - round_half(ring / step)) > 1e-6:
+        messages.append(f"highway ring {ring:g} is off the {step:g}-stud lattice")
+    if ring + half > min(era.half_x, era.half_z) + 1e-6:
+        messages.append(f"highway ring {ring:g}: the deck band {ring - half:g}..{ring + half:g} leaves the plot")
+    inner = ring - half
+    # Nothing may stand in the band: pillars come down inside it all the way round.
+    for slot in era.slots:
+        if slot["id"] in era.furniture:
+            continue  # streetOnly: no model spawns, the 9x9 is nominal
+        for what, poly in (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])):
+            reach = ring_reach(poly)
+            if reach > inner - 1e-6:
+                messages.append(
+                    f"highway ring: {slot['id']} {what} reaches {reach:g} studs from the centre, "
+                    f"into the deck band {inner:g}..{ring + half:g}"
+                )
+    for index, plaza in enumerate(era.plazas):
+        reach = ring_reach(plaza["poly"])
+        if reach > inner - 1e-6:
+            messages.append(f"highway ring: plaza {index + 1} reaches {reach:g} studs, into the deck band")
+    for index, zone in enumerate(era.zones):
+        # A tree planted under the deck grows through it: Scatter knows nothing about the highway,
+        # so the zone itself has to stop short of the band.
+        reach = max(abs(zone["center"][0]), abs(zone["center"][1])) + zone["radius"]
+        if reach > inner - 1e-6:
+            messages.append(f"highway ring: tree zone {index + 1} reaches {reach:g} studs, into the deck band")
+
+    ramp = highway["ramp"]
+    cell = xz(ramp["cell"])
+    direction = RAMP_DIRECTIONS.get(ramp["direction"])
+    if direction is None:
+        return messages + [f"highway ramp: direction {ramp['direction']!r} is not one of {sorted(RAMP_DIRECTIONS)}"]
+    on_x = abs(abs(cell[0]) - ring) < 1e-6
+    on_z = abs(abs(cell[1]) - ring) < 1e-6
+    if not (on_x or on_z):
+        messages.append(f"highway ramp: cell {fmt(cell)} is not on the ring (|x| or |z| = {ring:g})")
+    if on_x and on_z:
+        # A corner cell carries the ring's own turn, so a deck T there would face sideways.
+        messages.append(f"highway ramp: cell {fmt(cell)} is a ring corner cell; the deck T needs a mid-side cell")
+    along = (0.0, 1.0) if on_x else (1.0, 0.0)  # the leg's own run; the ramp has to leave across it
+    inward = (-math.copysign(1.0, cell[0]), 0.0) if on_x else (0.0, -math.copysign(1.0, cell[1]))
+    if abs(direction[0] * along[0] + direction[1] * along[1]) > 1e-6:
+        messages.append(f"highway ramp: direction {ramp['direction']} runs along the ring leg, not off it")
+    elif direction != inward:
+        messages.append(f"highway ramp: direction {ramp['direction']} points out of the plot, not into the city")
+    cells = [(cell[0] + direction[0] * step * k, cell[1] + direction[1] * step * k) for k in range(1, era.ramp_cells + 1)]
+    foot = cells[-1]
+    ends = [point for street in era.streets for point in (street[0], street[-1])]
+    if not any(math.dist(foot, end) < 1e-6 for end in ends):
+        messages.append(
+            f"highway ramp: foot cell {fmt(foot)} ({era.ramp_cells} cells from the ring) is not the end of a "
+            "streets polyline, so the deck would land where no street starts"
+        )
+    for centre in cells:
+        poly = square(centre, step, step, 0)
+        for slot in era.slots:
+            if slot["id"] in era.furniture:
+                continue
+            for what, other in (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])):
+                if polygon_polygon_distance(poly, other) < 1e-6:
+                    messages.append(f"highway ramp: cell {fmt(centre)} crosses {slot['id']} {what}")
+    return messages
+
+
+def subway_violations(era, cells):
+    """Wave 2a entrances: on the pavement beside a street they face, off the asphalt, out of
+    everything else's way, and spread so the client has one to show in every quadrant."""
+    messages = []
+    half_road = era.width / 2
+    if not SUBWAY_COUNT[0] <= len(era.subways) <= SUBWAY_COUNT[1]:
+        messages.append(f"subwayEntrances: {len(era.subways)}, need {SUBWAY_COUNT[0]}-{SUBWAY_COUNT[1]}")
+    quadrants = {(entry["position"][0] >= 0, entry["position"][1] >= 0) for entry in era.subways}
+    if era.subways and len(quadrants) < 4:
+        messages.append(f"subwayEntrances: only {len(quadrants)} of the 4 quadrants have one")
+    if era.subway_declared[0] + 1e-6 < era.subway_size[0] or era.subway_declared[1] + 1e-6 < era.subway_size[1]:
+        messages.append(
+            f"{era.subway_prop} blueprint footprint {era.subway_declared} is smaller than the built prop "
+            f"{era.subway_size} -- the plan was checked against the prop"
+        )
+    ring_inner = float(era.highway["ring"]) - era.tile_studs / 2 if era.highway else math.inf
+    for index, entry in enumerate(era.subways):
+        label = f"subway entrance {index + 1} {fmt(entry['position'])}"
+        poly = entry["poly"]
+        for slot in era.slots:
+            # A streetOnly slot's footprint is nominal (no model spawns), but its pad is a real
+            # part an entrance must not stand in.
+            checks = [("pad", slot["pad_poly"])]
+            if slot["id"] not in era.furniture:
+                checks.append(("footprint", slot["footprint"]))
+            for what, other in checks:
+                d = polygon_polygon_distance(poly, other)
+                if d < SUBWAY_CLEARANCE - 1e-6:
+                    messages.append(f"{label}: {d:.2f} from {slot['id']} {what} (need {SUBWAY_CLEARANCE})")
+        for j, plaza in enumerate(era.plazas):
+            if polygon_polygon_distance(poly, plaza["poly"]) < SUBWAY_CLEARANCE - 1e-6:
+                messages.append(f"{label}: overlaps plaza {j + 1}")
+        for other in era.subways[index + 1 :]:
+            if polygon_polygon_distance(poly, other["poly"]) < SUBWAY_CLEARANCE - 1e-6:
+                messages.append(f"{label}: too close to another entrance")
+        # The kiosk stands on the pavement; the asphalt itself has to stay clear.
+        for cell in cells:
+            if polygon_polygon_distance(poly, era.cell_square(cell)) < 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                messages.append(f"{label}: stands on the road cell {where}")
+                break
+        if ring_reach(poly) > ring_inner - 1e-6:
+            messages.append(f"{label}: reaches into the highway pillar band")
+        face = entry["facing"]
+        front = (
+            entry["position"][0] + face[0] * era.subway_size[1] / 2,
+            entry["position"][1] + face[1] * era.subway_size[1] / 2,
+        )
+        nearest = min(
+            (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
+            key=lambda hit: hit[0],
+            default=None,
+        )
+        if nearest is None:
+            messages.append(f"{label}: there are no streets to face")
+        elif nearest[0] > half_road + SUBWAY_STREET_REACH:
+            messages.append(f"{label}: its front is {nearest[0]:.1f} studs from the nearest street, not on a pavement")
+        elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
+            messages.append(f"{label}: faces away from the street it stands on")
+    return messages
+
+
 def check(era, network, visible, unreachable):
     violations = []
     notes = []
     width = era.width
     half_road = width / 2 + era.amplitude
     spine_clear = half_road + SPINE_EXTRA_CLEARANCE
+    # Wave 2a: in a tiles era the pad belongs *on* the sidewalk. A corridor between two 9x9 blocks
+    # is 19 studs and road + pavement takes 15 of them, so a 6-deep pad in front of a facade always
+    # comes within width / 2 of the centreline -- and a smaller padOffset would put the pad inside
+    # the building instead. It only has to stay off the asphalt.
+    pad_clear = half_road if era.tiles is not None else spine_clear
 
     def add(message):
         violations.append(message)
@@ -1004,8 +1268,11 @@ def check(era, network, visible, unreachable):
     for index, ys in enumerate(era.street_y):
         if any(abs(y) > 1e-9 for y in ys):
             add(f"street {index + 1}: a point is not at Y 0")
-    limit_x = era.half_x - half_road - EDGE_MARGIN
-    limit_z = era.half_z - half_road - EDGE_MARGIN
+    # Wave 2a: a tile street carries a pavement strip either side, and that strip is what
+    # reaches the plot edge first, so the outermost legal centreline moves in by its width.
+    edge_half = half_road + era.pavement
+    limit_x = era.half_x - edge_half - EDGE_MARGIN
+    limit_z = era.half_z - edge_half - EDGE_MARGIN
     for index, street in enumerate(era.streets):
         if len(street) < 2:
             add(f"street {index + 1}: fewer than 2 points")
@@ -1017,17 +1284,26 @@ def check(era, network, visible, unreachable):
         for slot in era.slots:
             if slot["id"] in era.furniture:
                 continue
-            for what, poly in (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])):
+            for what, poly, need in (
+                ("footprint", slot["footprint"], spine_clear),
+                ("pad", slot["pad_poly"], pad_clear),
+            ):
                 d = segment_polygon_distance(a, b, poly)
-                if d < spine_clear - 1e-6:
-                    add(f"street {index + 1} {fmt(a)}->{fmt(b)}: {d:.2f} from {slot['id']} {what} (need {spine_clear:g})")
+                if d < need - 1e-6:
+                    add(f"street {index + 1} {fmt(a)}->{fmt(b)}: {d:.2f} from {slot['id']} {what} (need {need:g})")
         d = segment_polygon_distance(a, b, era.sign_poly)
         if d < spine_clear - 1e-6:
             add(f"street {index + 1} {fmt(a)}->{fmt(b)}: {d:.2f} from the Sign (need {spine_clear:g})")
 
     if era.streets:
         entrance = era.streets[0][0]
-        if entrance[1] > -era.half_z + ENTRANCE_EDGE_REACH or abs(entrance[0] - era.sign[0]) > ENTRANCE_SIGN_REACH:
+        # The entrance is measured from the front edge, except in a tiles era: there the
+        # front-most street line is the outermost lattice row whose pavement still fits on the
+        # plot (at 7-stud pitch on a 120 plot that row is 11 studs in, and no closer row exists).
+        front = -era.half_z
+        if era.tiles is not None:
+            front = -math.floor((era.half_z - edge_half) / era.tile_studs) * era.tile_studs
+        if entrance[1] > front + ENTRANCE_EDGE_REACH or abs(entrance[0] - era.sign[0]) > ENTRANCE_SIGN_REACH:
             add(f"entrance {fmt(entrance)} is not on the front edge near the Sign")
     for slot_id, join in unreachable:
         add(f"spur {slot_id}: join point {fmt(join)} is not reachable from the entrance")
@@ -1091,7 +1367,13 @@ def check(era, network, visible, unreachable):
     for slot in era.slots:
         own = (slot["footprint"], slot["pad_poly"])
         drawn += [(a, b, own) for a, b in polyline_segments(era.spurs[slot["id"]]["points"])]
-    if not LOT_COUNT[0] <= len(era.lots) <= LOT_COUNT[1]:
+    # Wave 2a: an era whose houses.props list is empty (Metropolis -- every block is already a
+    # building slot) draws no filler houses at all, so the 8-12 rule cannot apply. A lot authored
+    # anyway would be a silent no-op, which is worth a violation of its own.
+    if not era.dressing["houses"]["props"]:
+        if era.lots:
+            add(f"lots: {len(era.lots)} authored but eras.{era.name}.houses.props is empty, so none are drawn")
+    elif not LOT_COUNT[0] <= len(era.lots) <= LOT_COUNT[1]:
         add(f"lots: {len(era.lots)}, need {LOT_COUNT[0]}-{LOT_COUNT[1]}")
     for i, lot in enumerate(era.lots):
         label = f"lot {i + 1} {fmt(lot['position'])}"
@@ -1186,6 +1468,33 @@ def check(era, network, visible, unreachable):
                 f"(stretches {path_detail['pathStretches']}, spurs {path_detail['pathSpurs']}) "
                 "-- the client allocates spurs last, so the tail buildings would silently lose their paths"
             )
+    # Wave 2a. Each of these is a place the client fails silently: an off-lattice point leaves a
+    # hole between tiles, a deck over a roof or a ramp onto bare ground just looks wrong, and a
+    # cell budget overrun drops the tail of the network with no error.
+    cells = era.road_cells()
+    if era.tiles is not None:
+        for message in lattice_violations(era):
+            add(message)
+        tile_budget = budget_value(budget.get("tileCells"), math.inf)
+        detail["tileCells"] = len(cells)
+        if len(cells) > tile_budget:
+            add(f"tile cells {len(cells)} > budget.tileCells {tile_budget} -- the client would drop the tail")
+    if era.highway is not None:
+        for message in highway_violations(era):
+            add(message)
+        # Highway.place counts props, not cells: ringCycle walks four arms of 2 * half cells
+        # (corners counted once), the whole ramp is ONE prop however many cells it spans, and the
+        # optional sign at its foot is one more.
+        half_cells = int(round_half(float(era.highway["ring"]) / era.tile_studs)) if era.tile_studs else 0
+        highway_cells = 8 * half_cells + 1 + (1 if era.highway_sign else 0)
+        detail["highwayCells"] = highway_cells
+        highway_budget = budget_value(budget.get("highwayCells"), math.inf)
+        if highway_cells > highway_budget:
+            add(f"highway cells {highway_cells} > budget.highwayCells {highway_budget}")
+    if era.subways or era.dressing.get("subway") is not None:
+        for message in subway_violations(era, cells):
+            add(message)
+
     if era.meander is not None:
         notes.append(f"bend discs: {detail['bends']} reserved, {network.drawn_bends(visible)} drawn at full ownership")
         if detail["boundary"]:
@@ -1309,6 +1618,32 @@ def draw(era, network, visible, violations, trees, near, far, path):
         canvas.ellipse((c[0] - r, c[1] - r, c[0] + r, c[1] + r), fill=(60, 150, 60, 35), outline=(40, 120, 40), width=2)
         canvas.text((c[0] - 14, c[1] - 7), f"x{zone['count']}", font=font, fill=(20, 90, 20))
 
+    def rect(x0, z0, x1, z1, **kwargs):
+        poly([(x0, z0), (x1, z0), (x1, z1), (x0, z1)], **kwargs)
+
+    if era.tiles is not None:
+        # Wave 2a: the pavement strip either side of every centreline, then the cells the tile
+        # renderer rasterises the plan to. Drawn under the tier colouring so a pad or a subway
+        # entrance standing on asphalt is visible in the picture, not only in the violations.
+        pavement = era.tiles.get("pavement")
+        pavement_rgb = tuple(int(v) for v in pavement["color"]) if pavement else (176, 180, 196)
+        road_rgb = tuple(int(v) for v in era.dressing["road"]["color"])
+        for _, a, b in era.spine_segments():
+            length = math.dist(a, b)
+            if length < MIN_LENGTH:
+                continue
+            ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+            half = era.width / 2 + era.pavement
+            nx, nz = -uz * half, ux * half
+            a2 = (a[0] - ux * half, a[1] - uz * half)
+            b2 = (b[0] + ux * half, b[1] + uz * half)
+            poly(
+                [(a2[0] + nx, a2[1] + nz), (b2[0] + nx, b2[1] + nz), (b2[0] - nx, b2[1] - nz), (a2[0] - nx, a2[1] - nz)],
+                fill=pavement_rgb + (200,),
+            )
+        for cell in sorted(era.road_cells()):
+            poly(era.cell_square(cell), fill=road_rgb + (255,), outline=(20, 20, 24), width=1)
+
     nodes = [p for street in era.streets for p in street]
     nodes += [s["points"][-1] for s in era.spurs.values() if s["points"]]
     nodes += [s["points"][0] for s in era.spurs.values() if s["points"]]
@@ -1397,9 +1732,40 @@ def draw(era, network, visible, violations, trees, near, far, path):
         canvas.line([c, tip], fill=(10, 10, 10), width=3)
         canvas.text((c[0] - 4 * len(slot["id"]) / 1.6, c[1] - 18), slot["id"], font=small, fill=(0, 0, 0))
 
+    for index, entry in enumerate(era.subways):
+        poly(entry["poly"], fill=(210, 120, 50, 220), outline=(110, 55, 10), width=2)
+        c = px(entry["position"])
+        face = entry["facing"]
+        tip = px((entry["position"][0] + face[0] * 4, entry["position"][1] + face[1] * 4))
+        canvas.line([c, tip], fill=(110, 55, 10), width=2)
+        canvas.text((c[0] - 4, c[1] - 7), f"M{index + 1}", font=small, fill=(60, 25, 0))
+
     for p in trees:
         c = px(p)
         canvas.ellipse((c[0] - 4, c[1] - 4, c[0] + 4, c[1] + 4), fill=(30, 110, 40, 220))
+
+    highway = era.highway
+    if highway is not None and era.tile_studs > 0:
+        # The deck is elevated, so it is drawn last and half transparent: everything it covers is
+        # still walkable underneath (soffit >= 6 studs), the pillars are what the band reserves.
+        ring, half = float(highway["ring"]), era.tile_studs / 2
+        outer, inner = ring + half, ring - half
+        for x0, z0, x1, z1 in (
+            (-outer, -outer, outer, -inner),
+            (-outer, inner, outer, outer),
+            (-outer, -inner, -inner, inner),
+            (inner, -inner, outer, inner),
+        ):
+            rect(x0, z0, x1, z1, fill=(150, 150, 160, 130), outline=(70, 70, 82), width=2)
+        ramp = highway["ramp"]
+        cell = xz(ramp["cell"])
+        direction = RAMP_DIRECTIONS.get(ramp["direction"], (0.0, 0.0))
+        for k in range(1, era.ramp_cells + 1):
+            centre = (cell[0] + direction[0] * era.tile_studs * k, cell[1] + direction[1] * era.tile_studs * k)
+            poly(square(centre, era.tile_studs, era.tile_studs, 0), fill=(190, 150, 90, 170), outline=(120, 80, 20), width=2)
+            if k == era.ramp_cells:
+                c = px(centre)
+                canvas.text((c[0] - 14, c[1] - 7), "ramp", font=small, fill=(90, 55, 0))
 
     s = px(era.sign)
     canvas.rectangle((s[0] - 5, s[1] - 5, s[0] + 5, s[1] + 5), fill=(200, 30, 30))
@@ -1425,6 +1791,13 @@ def draw(era, network, visible, violations, trees, near, far, path):
         ((200, 180, 140), "plaza"),
         ((60, 150, 60), "tree zone (xN) / preview trees"),
     ]
+    if era.tiles is not None:
+        entries.append((tuple(int(v) for v in era.dressing["road"]["color"]), "kit road tile (cell)"))
+    if era.highway is not None:
+        entries.append(((150, 150, 160), "elevated ring deck / pillar band"))
+        entries.append(((190, 150, 90), "highway ramp cells"))
+    if era.subways:
+        entries.append(((210, 120, 50), "subway entrance (M = index)"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -1441,6 +1814,26 @@ def draw(era, network, visible, violations, trees, near, far, path):
     y += 18
     canvas.text((lx, y), f"road pieces reserved: near {near}, far {far}", font=font, fill=(0, 0, 0))
     y += 18
+    if era.tiles is not None:
+        canvas.text(
+            (lx, y),
+            f"tile cells {len(era.road_cells())} (pitch {era.tile_studs:g}, pavement {era.pavement:g})",
+            font=font,
+            fill=(0, 0, 0),
+        )
+        y += 18
+    if era.highway is not None:
+        ramp = era.highway["ramp"]
+        canvas.text(
+            (lx, y),
+            f"highway ring {era.highway['ring']:g}, ramp {fmt(xz(ramp['cell']))} {ramp['direction']}",
+            font=font,
+            fill=(0, 0, 0),
+        )
+        y += 18
+    if era.subways:
+        canvas.text((lx, y), f"subway entrances {len(era.subways)}", font=font, fill=(0, 0, 0))
+        y += 18
     colour = (0, 130, 0) if not violations else (200, 0, 0)
     canvas.text((lx, y), f"violations: {len(violations)}", font=big, fill=colour)
 
@@ -1488,6 +1881,24 @@ def main():
             )
         else:
             print("     baked paths: none (no eras.<Era>.road.paths; the parts renderer draws)")
+        if "tileCells" in detail:
+            print(
+                f"   kit tiles: {detail['tileCells']} cells / {budget.get('tileCells')} "
+                f"(pitch {era.tile_studs:g}, pavement {era.pavement:g} either side)"
+            )
+        if "highwayCells" in detail:
+            ramp = era.highway["ramp"]
+            foot_step = RAMP_DIRECTIONS.get(ramp["direction"], (0.0, 0.0))
+            cell = xz(ramp["cell"])
+            foot = (cell[0] + foot_step[0] * era.tile_studs * era.ramp_cells, cell[1] + foot_step[1] * era.tile_studs * era.ramp_cells)
+            print(
+                f"   highway: ring {era.highway['ring']:g}, {detail['highwayCells']} props / "
+                f"{budget.get('highwayCells')}, ramp {fmt(cell)} {ramp['direction']} "
+                f"x{era.ramp_cells} cells, foot {fmt(foot)}"
+            )
+        if era.subways:
+            spots = ", ".join(f"{fmt(entry['position'])}@{entry['rotation']:g}" for entry in era.subways)
+            print(f"   subway entrances ({len(era.subways)}): {spots}")
         for zone, usable, _ in stats:
             print(
                 f"   tree zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "

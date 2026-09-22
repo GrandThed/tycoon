@@ -1,0 +1,2414 @@
+{
+  "id": "proto_highway_corner",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [
+    120,
+    120
+  ],
+  "note": "close-up of the elevated corner: road-bend + road-bend-barrier laid on a road-bridge deck",
+  "ground": [
+    0.34509803921568627,
+    0.35294117647058826,
+    0.3686274509803922
+  ],
+  "camera": {
+    "dir": [
+      0.6,
+      0.5,
+      -1.35
+    ],
+    "target": [
+      -48,
+      7,
+      46
+    ],
+    "distance": 62,
+    "lens": 40
+  },
+  "players": [
+    [
+      -44.0,
+      40.0
+    ]
+  ],
+  "markers": [],
+  "pieces": [
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -46.667,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -46.667,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -50.774,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -42.56,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -37.333,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -37.333,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -41.44,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -33.226,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -28.0,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -28.0,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -32.107,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -23.893,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -18.667,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -18.667,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -22.774,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -14.56,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -9.333,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -9.333,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -13.44,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -5.226,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        9.333,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        9.333,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        5.226,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        13.44,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        18.667,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        18.667,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        14.56,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        22.774,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-intersection",
+      "pos": [
+        0,
+        4.947,
+        56.0
+      ],
+      "rotY": 180,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        0,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -56.0,
+        4.853,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -56.0,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        51.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        60.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bend",
+      "pos": [
+        -56.0,
+        9.707,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bend-barrier",
+      "pos": [
+        -56.0,
+        9.8,
+        56.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -56.0,
+        4.853,
+        46.667
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -56.0,
+        9.707,
+        46.667
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        42.56
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -56.0,
+        4.853,
+        37.333
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -56.0,
+        9.707,
+        37.333
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        33.227
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        41.44
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-bridge",
+      "pos": [
+        -56.0,
+        4.853,
+        28.0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight-barrier",
+      "pos": [
+        -56.0,
+        9.707,
+        28.0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.0,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        0.28,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -60.107,
+        2.52,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        23.893
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.0,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        0.28,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -51.893,
+        2.52,
+        32.107
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-high",
+      "pos": [
+        0,
+        4.853,
+        46.667
+      ],
+      "rotY": 270,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-barrier",
+      "pos": [
+        0,
+        6.627,
+        46.667
+      ],
+      "rotY": 270,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-high",
+      "pos": [
+        0,
+        0,
+        37.333
+      ],
+      "rotY": 270,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-barrier",
+      "pos": [
+        0,
+        1.773,
+        37.333
+      ],
+      "rotY": 270,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.0,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        -4.107,
+        0.28,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.0,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "bridge-pillar",
+      "pos": [
+        4.107,
+        0.28,
+        50.773
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        28.0
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        18.667
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        9.333
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "sign-highway",
+      "pos": [
+        4.667,
+        9.8,
+        60.0
+      ],
+      "rotY": 180,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "car-kit",
+      "model": "sedan",
+      "pos": [
+        0.0,
+        9.8,
+        58.0
+      ],
+      "rotY": 180,
+      "scale": 2.5,
+      "stage": 0
+    },
+    {
+      "kit": "car-kit",
+      "model": "truck",
+      "pos": [
+        -20.533,
+        9.8,
+        54.0
+      ],
+      "rotY": 0,
+      "scale": 2.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-h",
+      "pos": [
+        11.8,
+        0.0,
+        43.2
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-sign-street",
+      "pos": [
+        10.2,
+        0.0,
+        37.8
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "dumpster",
+      "pos": [
+        16.0,
+        0.0,
+        45.88
+      ],
+      "rotY": 90,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-suburban",
+      "model": "planter",
+      "pos": [
+        13.0,
+        0.0,
+        40.2
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "detail-awning",
+      "pos": [
+        15.8,
+        0.0,
+        39.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "detail-awning",
+      "pos": [
+        15.8,
+        0.0,
+        39.8
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-f",
+      "pos": [
+        16.0,
+        0.0,
+        43.2
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -16.0,
+        0.0,
+        40.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -16.0,
+        0.0,
+        44.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -12.0,
+        0.0,
+        40.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -12.0,
+        0.0,
+        44.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-skyscraper-b",
+      "pos": [
+        -14.0,
+        1.0,
+        43.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "light-curved",
+      "pos": [
+        -10.4,
+        1.0,
+        38.8
+      ],
+      "rotY": 90,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "light-curved",
+      "pos": [
+        -17.6,
+        1.0,
+        38.8
+      ],
+      "rotY": 270,
+      "scale": 4.0,
+      "stage": 0
+    }
+  ]
+}

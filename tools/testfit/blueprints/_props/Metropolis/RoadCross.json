@@ -1,0 +1,9 @@
+{
+  "id": "RoadCross",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [7, 7],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-crossroad", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

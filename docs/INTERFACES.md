@@ -2694,7 +2694,9 @@ Ben chose Kenney **city-kit-roads** tiles for Metropolis. Boomtown keeps baked a
   the 46.5 block faces and the 12×12 Stadium at 48, stays inside the 120 plot). `ramp.cell` is the
   ring cell that carries the deck T-junction; `direction` points from that cell **into the
   city**; the ramp foot must land on a lattice cell that is the end of a `streets` polyline.
-- Config `eras.<Era>.highway`: `{ "requiresSlot": string, "props": { "deck", "corner", "junction", "ramp", "sign": string? }, "vehicles": { "count": number, "speed": number }, "revealCellsPerSecond": number }`.
+- Config `eras.<Era>.highway`: `{ "requiresSlot": string, "props": { "deck", "corner", "junction", "ramp", "sign": string? }, "vehicles": { "count": number, "speed": number }, "revealCellsPerSecond": number, "deckHeight": number? }`.
+  `deckHeight` is the deck props' road-surface height in studs (Metropolis 7.07): a merged prop is
+  one MeshPart, so the client cannot measure the slab apart from its rails; absent = no deck cars.
 - Props (all `tileStuds` pitch, origin bottom-centre at ground level, pillars included so the
   client places one prop per cell): `HighwayDeck` (runs along **X**), `HighwayCorner` (joins
   −X ↔ +Z), `HighwayJunction` (deck T, closed −Z side faces outward), `HighwayRamp` (whole ramp as

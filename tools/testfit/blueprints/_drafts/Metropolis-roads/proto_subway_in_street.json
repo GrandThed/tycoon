@@ -1,0 +1,386 @@
+{
+  "id": "proto_subway_in_street",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [
+    120,
+    120
+  ],
+  "note": "the chosen subway entrance on the pavement corner of a scale-9.33 crossroad",
+  "ground": [
+    0.34509803921568627,
+    0.35294117647058826,
+    0.3686274509803922
+  ],
+  "camera": {
+    "dir": [
+      1,
+      0.55,
+      -1.35
+    ],
+    "target": [
+      5,
+      2,
+      -5
+    ],
+    "distance": 46,
+    "lens": 40
+  },
+  "players": [
+    [
+      12.0,
+      -5.5
+    ]
+  ],
+  "markers": [],
+  "pieces": [
+    {
+      "kit": "city-kit-roads",
+      "model": "road-crossroad",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -9.333,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        -9.333
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        9.333,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        9.333
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -18.667,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        -18.667
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        18.667,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        18.667
+      ],
+      "rotY": 90,
+      "scale": 9.333333333333334,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        -11.583,
+        -0.157,
+        -11.583
+      ],
+      "rotY": 0,
+      "scale": 13.833333333333332,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        -11.583,
+        -0.157,
+        11.583
+      ],
+      "rotY": 0,
+      "scale": 13.833333333333332,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        11.583,
+        -0.157,
+        -11.583
+      ],
+      "rotY": 0,
+      "scale": 13.833333333333332,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        11.583,
+        -0.157,
+        11.583
+      ],
+      "rotY": 0,
+      "scale": 13.833333333333332,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        7.6,
+        0.028,
+        -7.6
+      ],
+      "rotY": 0,
+      "scale": 4.6,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-square",
+      "pos": [
+        7.6,
+        0.096,
+        -7.25
+      ],
+      "rotY": 0,
+      "scale": 3.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-barrier",
+      "pos": [
+        7.6,
+        0.17,
+        -7.25
+      ],
+      "rotY": 90,
+      "scale": 3.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        7.6,
+        -0.13,
+        -8.65
+      ],
+      "rotY": 0,
+      "scale": 1.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        6.0,
+        0.16,
+        -6.7
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        9.2,
+        0.16,
+        -6.7
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        7.05,
+        0.16,
+        -5.75
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        8.15,
+        0.16,
+        -5.75
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-sign-street",
+      "pos": [
+        5.6,
+        0.18,
+        -9.5
+      ],
+      "rotY": 90,
+      "scale": 6.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-h",
+      "pos": [
+        -11.8,
+        0.0,
+        -15.2
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-sign-street",
+      "pos": [
+        -10.2,
+        0.0,
+        -9.8
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "dumpster",
+      "pos": [
+        -16.0,
+        0.0,
+        -17.88
+      ],
+      "rotY": 270,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-suburban",
+      "model": "planter",
+      "pos": [
+        -13.0,
+        0.0,
+        -12.2
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "detail-awning",
+      "pos": [
+        -15.8,
+        0.0,
+        -11.0
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "detail-awning",
+      "pos": [
+        -15.8,
+        0.0,
+        -11.8
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-f",
+      "pos": [
+        -16.0,
+        0.0,
+        -15.2
+      ],
+      "rotY": 180,
+      "scale": 4.0,
+      "stage": 0
+    }
+  ]
+}

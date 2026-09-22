@@ -348,3 +348,45 @@ map — pointing the hub map at src/combat yields bogus "Unknown require" noise)
   (only SoundController was sanctioned by the contract); both project files mount `src/shared`, so
   `src/shared/UI` is the dedupe. Combat place has no settings surface, so it must call
   `SoundController.ApplySettings(snapshot.state.settings)` or the player's mute is ignored.
+
+**M9 wave 2a (2026-09-22, Metropolis tile streets + ring highway + subway, SHIP with 1 Critical
+(pipeline) + 2 Majors — client-only).** `TileRenderer` rasterises the *visible* stretches onto the
+`tiles.tileStuds` lattice and picks each cell's prop from a 16-entry `PIECE_BY_MASK` table;
+`Highway` builds a 64-cell ring from `layout.highway` and reuses `TileRenderer.PieceForMask`/
+`ArmBit`; `Dust` is PathRenderer's burst extracted verbatim and now shared. `RoadGraph` gained
+`tiles`/`tileStretchAllowed`/`tilesDirty` (Flush → `TileRenderer.Update`), `LoopLanes` (standalone
+closed lane loop at a height, for the deck) and `EntrancePoint`. Deck cars are a second Traffic
+"plot" keyed `-plotIndex`, charged to `budget.vehiclesPerPlot`.
+- **Read-only verification that paid off here:** the Kenney kits ARE checked out at
+  `assets/kenney3d/<kit>/Models/GLB format/`, so a ~40-line GLB parser (chunks → accessors →
+  node translate/scale) settles "which way does this tile face" without Studio. Raised
+  (y = 0.02) sidewalk vertices are the tell: `road-straight` kerbs at z = ±0.45 spanning all x
+  ⇒ runs along **X**; `road-end` has an extra kerb at x ∈ [-0.5,-0.4] ⇒ open to **+X**;
+  `road-intersection` has a full strip at z ∈ [-0.5,-0.4] + two corner blocks at +Z ⇒ tee closed
+  **-Z**. All four canonical orientations in the contract verified true, and the whole 16-mask
+  rotation table checks out as `rotl(canonicalMask, quarters)` in 4 bits.
+- Also worked: `py tools/streetplan.py` (now covers Metropolis; 0 violations) and diffing its
+  Village/Boomtown output against `git show HEAD:tools/streetplan.py` run from a scratch copy —
+  proved "pixel-for-pixel unchanged" cheaply.
+- **Recurring pattern (wave 2a, new):** a refactor that *snapshots* a value another wave made
+  mutable. Wave 1e's `SetSurface` mutates `state.material`/`state.color`; wave 2a added
+  `state.spurMaterial`/`spurColor` computed once in `RoadGraph.new` from the era base, so
+  Village/Boomtown spurs drawn in the Parts **fallback** are painted the base look while the
+  spine wears the variant (Boomtown = asphalt spurs on a gravel spine). `TileRenderer.Options`
+  copies `roadMaterial`/`roadColor` the same way where `PathRenderer` deliberately takes a
+  `colorOf()` closure. Whenever a wave introduces a mutable piece of State, grep later waves for
+  fields initialised from the same source in a constructor.
+- **Recurring pattern (wave 2a):** stacked render heights are a contract nobody writes down.
+  Spur slab top = `thickness` (0.2), tile prop top = 0.14, pavement top = `thickness/2` (0.1),
+  lane Y = `thickness`. The spur runs to the spine *centreline* + `spurWidth/2`, so in a tiles
+  era it is a 3-stud concrete tongue **on top of** the asphalt at every building. Tabulate the Y
+  of every renderer in an era before judging "do these overlap".
+- Numbers for next time: Metropolis = 4 polylines / 7 spine groups / 38 tile cells of
+  `budget.tileCells` 180; ring 56 = half 8 = 64 cells + ramp + sign = 66 of `highwayCells` 72
+  (streetplan's mirror says 67 — it counts `RAMP_CELLS` 3 where the client places one prop);
+  ~220 pieces on a full near plot, well under the 640 estimate.
+- At review time **no wave-2a template existed** (`templates/_props/Metropolis/` absent,
+  `templates/Metropolis/CityHall.rbxmx` absent, every `meshId`/`imageId` 0): uploaded but the
+  Studio harvest paste + `gen_templates.py --props` had not run. `gen_templates --check` still
+  PASSes and prints "uploaded but not harvested" — always check that line before calling a
+  wave playtestable, because here it means the *entire* wave is invisible.

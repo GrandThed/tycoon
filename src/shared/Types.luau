@@ -513,6 +513,9 @@ export type CityEraHighwayConfig = {
 	props: CityHighwayPropsConfig,
 	vehicles: { count: number, speed: number },
 	revealCellsPerSecond: number,
+	-- Road-surface height of the deck props in studs. Merged props are one MeshPart, so the deck
+	-- cannot be measured apart from its rails; absent = no deck cars.
+	deckHeight: number?,
 }
 -- Wave 2a: street-corner entrances from the layout, shown while `requiresSlot` is owned.
 export type CityEraSubwayConfig = { requiresSlot: string, prop: string, maxPerPlot: number }

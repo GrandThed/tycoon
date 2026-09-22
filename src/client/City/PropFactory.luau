@@ -160,6 +160,44 @@ function PropFactory.ChosenStage(eraName: string, propName: string?, wanted: num
 	return pickStage(stages, wanted)
 end
 
+-- The template's anchor frame (its invisible bottom-centre `Base`) and the parts of the stage a
+-- Spawn with `wanted` would show. Lets a caller measure a prop -- the highway deck's driving
+-- height, a ramp's length -- from the template it is about to clone instead of from a literal.
+-- Nil and empty when the template, its stage or its Base is missing.
+function PropFactory.StageParts(
+	eraName: string,
+	propName: string?,
+	wanted: number
+): (CFrame?, { BasePart })
+	local empty: { BasePart } = {}
+	local template = PropFactory.Template(eraName, propName)
+	if template == nil then
+		return nil, empty
+	end
+	local base = template:FindFirstChild(TEMPLATE_BASE_NAME)
+	if base == nil or not base:IsA("BasePart") then
+		return nil, empty
+	end
+	local stages = stageChildren(template)
+	local container: Instance = template
+	if next(stages) ~= nil then
+		local chosen = pickStage(stages, wanted)
+		if chosen == nil then
+			return nil, empty
+		end
+		container = stages[chosen]
+	end
+	local parts: { BasePart } = {}
+	for _, descendant in container:GetDescendants() do
+		-- A legacy template without stages holds its Base alongside its geometry; the anchor is
+		-- not part of the shape being measured.
+		if descendant:IsA("BasePart") and descendant ~= base then
+			table.insert(parts, descendant)
+		end
+	end
+	return base.CFrame, parts
+end
+
 -- Clones the prop at the chosen stage, pivots its bottom-centre Base onto `cframe` (the
 -- spawnBuilding convention: front -Z), drops the invisible Base so a prop costs one piece,
 -- seals it, gates it on its content and parents it. Nil when the template or stage is missing.

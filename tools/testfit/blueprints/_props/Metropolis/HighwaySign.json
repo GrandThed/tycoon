@@ -1,0 +1,10 @@
+{
+  "id": "HighwaySign",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [7, 2],
+  "note": "roadside gantry sign; rotY 270 turns the kit's green face (local -X) to the project's -Z front.",
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "sign-highway", "pos": [0, 0, 0], "rotY": 270, "stage": 0}
+  ]
+}

@@ -18,7 +18,6 @@
 -- different image on the same meshes, so it costs two writes per live piece and nothing else.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -27,6 +26,7 @@ local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Them
 local AssetPreloader =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("AssetPreloader"))
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
+local Dust = require(script.Parent:WaitForChild("Dust"))
 
 export type Mode = "baked" | "parts"
 
@@ -39,27 +39,6 @@ local RENDERER_PARTS = "parts"
 -- Diagnostic for Studio playtests on Workspace/CityDressing/Plot<n>: the renderer in use now.
 local RENDERER_ATTRIBUTE = "PathRenderer"
 local ASSET_PREFIX = "rbxassetid://"
-
--- Dust puff (Ben's choice for the appear effect). A built-in texture, so nothing to upload and
--- no id that could be 0. The numbers are the look, not tunables: the only path the config sets
--- is how long a burst takes to cross the piece.
-local DUST_PART_NAME = "PathDust"
-local DUST_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
-local DUST_PART_SIZE = 0.2
-local DUST_RATE = 90
-local DUST_LIFETIME_MIN = 0.35
-local DUST_LIFETIME_MAX = 0.7
-local DUST_SPEED_MIN = 1
-local DUST_SPEED_MAX = 3
-local DUST_RISE = 2 -- studs/s^2 upward: the puff drifts up and fades instead of hanging
-local DUST_SIZE_WIDTHS = 0.55 -- of the road width, so a 3-stud trail puffs smaller than asphalt
-local DUST_SIZE_GROWTH = 2
-local DUST_START_TRANSPARENCY = 0.45
-local DUST_SPREAD = 55
-local DUST_ROTATION = 180
-local DUST_ROTATION_SPEED = 60
--- A burst shorter than this has no travel worth animating (a stub stretch), so it puffs in place.
-local MIN_BURST_LENGTH = 0.05
 
 export type Options = {
 	folder: Instance,
@@ -92,26 +71,13 @@ export type Handle = {
 	destroyed: boolean,
 	near: boolean,
 	records: { [string]: Record },
-	dustPart: Part?,
-	dustEmitter: ParticleEmitter?,
+	-- The pooled dust emitter of this plot (docs/INTERFACES.md "Wave 1d"), shared with the tile
+	-- renderer's implementation so a new street puffs the same way in every era.
+	dust: Dust.Handle,
 	-- Wave 1e surface variant; nil is "the texture baked into the templates".
 	fillImageId: number?,
 	rimImageId: number?,
 }
-
--- One burst per plot at a time (the emitter is pooled per plot): a reveal while one runs
--- supersedes it, so a fast buyer never queues seconds of dust.
-type Burst = {
-	handle: Handle,
-	points: { Vector3 }, -- world space
-	arcs: { number }, -- cumulative length per point
-	total: number,
-	elapsed: number,
-}
-
--- Every running burst on the map shares one Heartbeat connection, alive only while one runs.
-local bursts: { Burst } = {}
-local burstConnection: RBXScriptConnection? = nil
 
 -- ------------------------------------------------------------------ templates
 
@@ -216,184 +182,22 @@ end
 
 -- ------------------------------------------------------------------ dust
 
-local function stopDust(handle: Handle): ()
-	local emitter = handle.dustEmitter
-	if emitter ~= nil then
-		emitter.Enabled = false
-	end
-end
-
-local function dropBursts(handle: Handle): ()
-	for index = #bursts, 1, -1 do
-		if bursts[index].handle == handle then
-			table.remove(bursts, index)
-		end
-	end
-	stopDust(handle)
-	if #bursts == 0 then
-		local connection = burstConnection
-		if connection ~= nil then
-			connection:Disconnect()
-			burstConnection = nil
-		end
-	end
-end
-
-local function ensureDust(handle: Handle): ParticleEmitter
-	local existing = handle.dustEmitter
-	if existing ~= nil then
-		return existing
-	end
-	local options = handle.options
-	local part = Instance.new("Part")
-	part.Name = DUST_PART_NAME
-	part.Size = Vector3.one * DUST_PART_SIZE
-	part.Transparency = 1
-	part.CastShadow = false
-	part.CFrame = options.plotFrame
-	PropFactory.Seal(part)
-	part.Parent = options.folder
-	local size = math.max(options.width, DUST_PART_SIZE) * DUST_SIZE_WIDTHS
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Texture = DUST_TEXTURE
-	emitter.Enabled = false
-	emitter.Rate = DUST_RATE
-	emitter.Lifetime = NumberRange.new(DUST_LIFETIME_MIN, DUST_LIFETIME_MAX)
-	emitter.Speed = NumberRange.new(DUST_SPEED_MIN, DUST_SPEED_MAX)
-	emitter.SpreadAngle = Vector2.new(DUST_SPREAD, DUST_SPREAD)
-	emitter.Acceleration = Vector3.new(0, DUST_RISE, 0)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, size),
-		NumberSequenceKeypoint.new(1, size * DUST_SIZE_GROWTH),
-	})
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, DUST_START_TRANSPARENCY),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	emitter.Rotation = NumberRange.new(-DUST_ROTATION, DUST_ROTATION)
-	emitter.RotSpeed = NumberRange.new(-DUST_ROTATION_SPEED, DUST_ROTATION_SPEED)
-	-- Lit like the ground it kicks up (the default 0 renders full-bright).
-	emitter.LightInfluence = 1
-	emitter.Parent = part
-	handle.dustPart = part
-	handle.dustEmitter = emitter
-	return emitter
-end
-
-local function burstPoint(burst: Burst, distance: number): Vector3
-	local arcs = burst.arcs
-	local points = burst.points
-	local target = math.clamp(distance, 0, burst.total)
-	local lo, hi = 1, #arcs
-	while hi - lo > 1 do
-		local mid = (lo + hi) // 2
-		if arcs[mid] <= target then
-			lo = mid
-		else
-			hi = mid
-		end
-	end
-	local span = arcs[hi] - arcs[lo]
-	local t = if span < MIN_BURST_LENGTH then 0 else (target - arcs[lo]) / span
-	return points[lo]:Lerp(points[hi], t)
-end
-
-local function stepBursts(dt: number): ()
-	for index = #bursts, 1, -1 do
-		local burst = bursts[index]
-		local handle = burst.handle
-		local part = handle.dustPart
-		if handle.destroyed or handle.mode ~= "baked" or part == nil then
-			table.remove(bursts, index)
-			stopDust(handle)
-			continue
-		end
-		burst.elapsed += dt
-		local seconds = handle.paths.dustSeconds
-		local t = if seconds > 0 then math.min(burst.elapsed / seconds, 1) else 1
-		part.CFrame = CFrame.new(burstPoint(burst, burst.total * t))
-		if t >= 1 then
-			stopDust(handle)
-			table.remove(bursts, index)
-		end
-	end
-	if #bursts == 0 then
-		local connection = burstConnection
-		if connection ~= nil then
-			connection:Disconnect()
-			burstConnection = nil
-		end
-	end
-end
-
 -- One burst over the whole batch of pieces revealed together, in reveal order (entrance
--- outward), so a purchase reads as one puff running out to the new building.
+-- outward), so a purchase reads as one puff running out to the new building. Dust decides where
+-- the track breaks and how long it runs.
 local function startBurst(handle: Handle, pieceIds: { string }): ()
 	local options = handle.options
 	local points: { Vector3 } = {}
-	local arcs: { number } = {}
-	local total = 0
-	-- Pieces revealed together are normally one chain running out from the entrance. A jump
-	-- bigger than a road width means they are not (two purchases in one frame), and the burst
-	-- ends there rather than streaking across the plot.
-	local gapLimit = math.max(options.width, 1)
 	for _, pieceId in pieceIds do
 		local line = options.centrelineOf(pieceId)
 		if line == nil then
 			continue
 		end
-		local broken = false
 		for _, point in line do
-			local world = options.plotFrame:PointToWorldSpace(point)
-			if #points > 0 then
-				local step = (world - points[#points]).Magnitude
-				if step < MIN_BURST_LENGTH then
-					continue -- the pieces meet at their join, so the shared point is dropped
-				end
-				if step > gapLimit then
-					broken = true
-					break
-				end
-				total += step
-			end
-			table.insert(points, world)
-			table.insert(arcs, total)
-		end
-		if broken then
-			break
+			table.insert(points, options.plotFrame:PointToWorldSpace(point))
 		end
 	end
-	if #points == 0 then
-		return
-	end
-	if #points == 1 then
-		-- A single sample has nowhere to travel; repeat it so the burst puffs in place.
-		table.insert(points, points[1])
-		table.insert(arcs, 0)
-	end
-	for index = #bursts, 1, -1 do
-		if bursts[index].handle == handle then
-			table.remove(bursts, index)
-		end
-	end
-	local emitter = ensureDust(handle)
-	local part = handle.dustPart
-	if part ~= nil then
-		part.CFrame = CFrame.new(points[1])
-	end
-	-- Per burst, so the puff follows the surface the plot wears right now.
-	emitter.Color = ColorSequence.new(options.colorOf())
-	emitter.Enabled = true
-	table.insert(bursts, {
-		handle = handle,
-		points = points,
-		arcs = arcs,
-		total = total,
-		elapsed = 0,
-	})
-	if burstConnection == nil then
-		burstConnection = RunService.Heartbeat:Connect(stepBursts)
-	end
+	Dust.Burst(handle.dust, points, options.colorOf(), handle.paths.dustSeconds)
 end
 
 -- ------------------------------------------------------------------ pieces
@@ -420,14 +224,9 @@ local function setMode(handle: Handle, mode: Mode): ()
 end
 
 local function fallback(handle: Handle): ()
-	dropBursts(handle)
 	destroyPieces(handle)
-	local dust = handle.dustPart
-	if dust ~= nil then
-		dust:Destroy()
-		handle.dustPart = nil
-		handle.dustEmitter = nil
-	end
+	-- The plot draws Parts from here on, so its emitter never puffs again.
+	Dust.Destroy(handle.dust)
 	setMode(handle, "parts")
 	handle.options.onParts()
 end
@@ -575,8 +374,7 @@ function PathRenderer.Create(options: Options): Handle?
 		destroyed = false,
 		near = options.near,
 		records = {},
-		dustPart = nil,
-		dustEmitter = nil,
+		dust = Dust.Create(options.folder, options.plotFrame, options.width, options.width),
 		fillImageId = nil,
 		rimImageId = nil,
 	}
@@ -627,7 +425,7 @@ function PathRenderer.SetNear(handle: Handle, near: boolean): ()
 	-- A plot that goes far mid-burst stops puffing, whether or not its rims come off: otherwise
 	-- the dust (and the Heartbeat behind it) would run on across a plot nobody is standing on.
 	if not near then
-		dropBursts(handle)
+		Dust.Stop(handle.dust)
 	end
 	if handle.mode ~= "baked" or not handle.paths.rimNearOnly then
 		return
@@ -656,14 +454,8 @@ function PathRenderer.Destroy(handle: Handle): ()
 		return
 	end
 	handle.destroyed = true
-	dropBursts(handle)
+	Dust.Destroy(handle.dust)
 	destroyPieces(handle)
-	local dust = handle.dustPart
-	if dust ~= nil then
-		dust:Destroy()
-		handle.dustPart = nil
-		handle.dustEmitter = nil
-	end
 end
 
 return PathRenderer

@@ -1,0 +1,10 @@
+{
+  "id": "TrafficLight",
+  "era": "Metropolis",
+  "scale": 12.0,
+  "footprint": [7, 2],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "traffic-light-hanging", "pos": [0, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-roads", "model": "traffic-light-object-hanging", "pos": [0.085, 0.40, 0], "rotY": 270, "stage": 0}
+  ]
+}

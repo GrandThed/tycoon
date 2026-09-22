@@ -1,0 +1,9 @@
+{
+  "id": "RoadStraight",
+  "era": "Metropolis",
+  "scale": 7.0,
+  "footprint": [7, 7],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "road-straight", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

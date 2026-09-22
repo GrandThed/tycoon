@@ -1,0 +1,327 @@
+{
+  "id": "wave2a_B_context",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "note": "MetroEntrance on a pavement corner beside a scale-7 crossroad, Metropolis plot base",
+  "ground": [
+    0.34509803921568627,
+    0.35294117647058826,
+    0.3686274509803922
+  ],
+  "camera": {
+    "dir": [
+      1,
+      0.55,
+      -1.35
+    ],
+    "target": [
+      6.0,
+      2.2,
+      7.2
+    ],
+    "distance": 30,
+    "lens": 40
+  },
+  "players": [
+    [
+      10.5,
+      11.0
+    ]
+  ],
+  "markers": [
+    [
+      -12.25,
+      -12.25,
+      17.5,
+      17.5,
+      0.69,
+      0.706,
+      0.769,
+      0.12
+    ],
+    [
+      -12.25,
+      12.25,
+      17.5,
+      17.5,
+      0.69,
+      0.706,
+      0.769,
+      0.12
+    ],
+    [
+      12.25,
+      -12.25,
+      17.5,
+      17.5,
+      0.69,
+      0.706,
+      0.769,
+      0.12
+    ],
+    [
+      12.25,
+      12.25,
+      17.5,
+      17.5,
+      0.69,
+      0.706,
+      0.769,
+      0.12
+    ]
+  ],
+  "pieces": [
+    {
+      "kit": "city-kit-roads",
+      "model": "road-crossroad",
+      "pos": [
+        0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        7.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -7.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        7.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        -7.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        14.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -14.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        14.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        -14.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        21.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        -21.0,
+        0,
+        0
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        21.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-straight",
+      "pos": [
+        0,
+        0,
+        -21.0
+      ],
+      "rotY": 90,
+      "scale": 7.0,
+      "stage": 0
+    },
+    {
+      "kit": "metro-kit",
+      "model": "plinth",
+      "pos": [
+        6.0,
+        0.14,
+        7.2
+      ],
+      "rotY": 0,
+      "scale": 1.0,
+      "stage": 0
+    },
+    {
+      "kit": "metro-kit",
+      "model": "stairs",
+      "pos": [
+        6.0,
+        0.36,
+        6.55
+      ],
+      "rotY": 0,
+      "scale": 1.0,
+      "stage": 0
+    },
+    {
+      "kit": "metro-kit",
+      "model": "headhouse",
+      "pos": [
+        6.0,
+        0.36,
+        9.15
+      ],
+      "rotY": 0,
+      "scale": 1.0,
+      "stage": 0
+    },
+    {
+      "kit": "metro-kit",
+      "model": "canopy",
+      "pos": [
+        6.0,
+        2.69,
+        8.9
+      ],
+      "rotY": 0,
+      "scale": 1.0,
+      "stage": 0
+    },
+    {
+      "kit": "metro-kit",
+      "model": "pylon",
+      "pos": [
+        4.35,
+        1.37,
+        4.99
+      ],
+      "rotY": 0,
+      "scale": 1.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-l",
+      "pos": [
+        14.0,
+        0.14,
+        15.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-commercial",
+      "model": "building-c",
+      "pos": [
+        5.0,
+        0.14,
+        16.0
+      ],
+      "rotY": 0,
+      "scale": 4.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "light-curved",
+      "pos": [
+        12.5,
+        0.14,
+        4.6
+      ],
+      "rotY": 0,
+      "scale": 7.0,
+      "stage": 0
+    }
+  ]
+}

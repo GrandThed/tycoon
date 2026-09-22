@@ -1,0 +1,14 @@
+{
+  "id": "MetroEntrance",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [5, 6],
+  "note": "metro-kit is authored 1 unit = 1 stud, so scale is 1.0 and every pos below is in studs",
+  "pieces": [
+    {"kit": "metro-kit", "model": "plinth", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "metro-kit", "model": "stairs", "pos": [0, 0.22, -0.65], "rotY": 0, "stage": 0},
+    {"kit": "metro-kit", "model": "headhouse", "pos": [0, 0.22, 1.95], "rotY": 0, "stage": 0},
+    {"kit": "metro-kit", "model": "canopy", "pos": [0, 2.55, 1.7], "rotY": 0, "stage": 0},
+    {"kit": "metro-kit", "model": "pylon", "pos": [-1.65, 1.23, -2.21], "rotY": 0, "stage": 0}
+  ]
+}

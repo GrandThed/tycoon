@@ -1,0 +1,20 @@
+{
+  "id": "TreeGrowing",
+  "era": "Metropolis",
+  "scale": 5.0,
+  "footprint": [5, 5],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.22, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.22, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0, 0, 0.22], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0, 0, -0.22], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0, 0], "rotY": 35, "stage": 1},
+
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0.22, 0], "rotY": 70, "stage": 2},
+
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0, 0.44, 0], "rotY": 105, "stage": 3},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0.09, 0.26, 0.07], "rotY": 200, "stage": 3}
+  ]
+}

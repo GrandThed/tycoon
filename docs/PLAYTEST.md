@@ -1561,8 +1561,8 @@ A Metropolis plot is buildings, buy pads and grass, nothing else. Missing paths 
 ### 3. Buy every slot — meshes, no placeholders
 
 - [ ] 5. Re-add `GrantCash` as needed. In the Build panel, buy all 24 slots in the order listed
-      (Food Truck → Coffee Shop → Corner Shop → Apartment Block → Low-Rise Office → Lay the City
-      Grid → Supermarket → Bus Stop → High-Rise Apartments → Parking Garage → Shopping Mall →
+      (Food Truck → Coffee Shop → Corner Shop → Apartment Block → Low-Rise Office → Found City
+      Hall → Supermarket → Bus Stop → High-Rise Apartments → Parking Garage → Shopping Mall →
       Dig the Subway Line → Hospital → City Park → Office Tower → Hotel Tower → Build the Highway
       Ramp → Stadium → Convention Center → Rooftop Garden → Bank Tower → Broadcast Tower → Open
       the Finance District → Skyscraper).
@@ -1633,13 +1633,12 @@ colours sampled from the kit's own colormap). It is 12.00 × 12.32 × 10.40 stud
       Otherwise compare against your memory of the M8 Boomtown pass — a Metropolis plot that
       looks like suburban houses and low industrial sheds is the failure this step is hunting.
 
-### 9. No city dressing yet — confirm it's absent, not broken
+### 9. City dressing — **superseded by M9 wave 2a (2026-09-22)**
 
-- [ ] 21. Confirm the Metropolis plot has **no roads, no paths, no trees, no filler houses, no
-      plaza and no vehicles**, and that Output has **no errors or warnings** about dressing,
-      props, or paths. `src/shared/Layouts/Metropolis.luau` has no street plan and
-      `templates/_props/Metropolis` doesn't exist yet, so the dressing controller has nothing to
-      build — silence is the correct behaviour.
+- [ ] 21. **Stale step, skip it.** Metropolis now has a street plan and 21 props, so a Metropolis
+      plot is *meant* to show tile streets, pavements, a highway, kiosks, trees and cars. Test all
+      of that in "M9 — City dressing" **section 4c** instead; this step only applies to a build
+      from before 2026-09-22.
 - [ ] 22. If you have a second player (or a spare save) on a **Village or Boomtown** plot, confirm
       their dressing still appears normally — Metropolis's content must not have disturbed M9
       wave 1.
@@ -1714,11 +1713,15 @@ uploaded, world-planar-UV, fully opaque meshes, one Model per piece, cloned by t
 EditableMesh/EditableImage are **banned in this project**, so nothing here needs ID verification or
 a Creator Dashboard toggle.
 
-**Wave 1e adds street upgrades — do `docs/MANUAL_STEPS.md` "M9" §7 first.** Pave the Road, Pave
-Main Street, Streetlamp Row and Install Traffic Lights now change the streets (**section 4b**).
-Their two props and four surface textures are uploaded but **not harvested yet**: until you run
-that one paste, a Village plot stays dirt with no lanterns, Boomtown stays asphalt with no signals,
-and that is the designed silent degrade — not a bug, but also not a pass for section 4b.
+**Wave 1e — street upgrades (section 4b).** Pave the Road, Pave Main Street, Streetlamp Row and
+Install Traffic Lights change the streets. Their props and surface textures were harvested
+2026-09-18, so nothing is owed: just rebuild and run section 4b.
+
+**Wave 2a — Metropolis streets, highway, subway (section 4c) needs two harvest pastes first:**
+`docs/MANUAL_STEPS.md` "M9" §8. Metropolis uses **kit tile streets** (7-stud `city-kit-roads`
+tiles), not baked paths, plus an elevated ring highway, subway kiosks and a real City Hall. Until
+both pastes are done the streets draw as plain asphalt-coloured `RoadTile` Parts and nothing else
+appears — the designed silent degrade (step 12ae), but not a pass for section 4c.
 
 ### 1. Rebuild first
 
@@ -1832,9 +1835,9 @@ and that is the designed silent degrade — not a bug, but also not a pass for s
 ### 4b. Wave 1e — street upgrades (buy the slot, the street changes)
 
 Four slots that used to be names now change the streets. All client-side: nothing here is
-persisted or validated, so nothing in this section can break the economy. Needs the harvest paste
-in `docs/MANUAL_STEPS.md` "M9" §7 (see the note at the top of M9). Use `GrantCash` as everywhere
-else.
+persisted or validated, so nothing in this section can break the economy. Its harvest paste is
+already done (`docs/MANUAL_STEPS.md` "M9" §7), so a rebuild is all you need. Use `GrantCash` as
+everywhere else.
 
 **Village — Pave the Road (`dirtRoad`)**
 
@@ -1901,6 +1904,107 @@ else.
       The trails still turn cobble, **no lanterns** appear, and **Output has zero errors**. Rename
       back. (The same is true of `Boomtown/TrafficLight`, and of a variant whose textures were
       never harvested: the surface silently stays the default.)
+
+### 4c. Wave 2a — Metropolis streets, highway, subway
+
+Metropolis is the only era with **kit tile streets**: 7-stud `city-kit-roads` tiles, four per
+28-stud block, instead of baked path meshes. Three slots changed meaning — **Found City Hall**
+(was "Lay the City Grid", same slot id, so an old save keeps its ownership), **Build the Highway
+Ramp** and **Dig the Subway Line** (both now draw infrastructure and spawn **no building**). All
+client-side; nothing here can break the economy.
+
+**Do `docs/MANUAL_STEPS.md` "M9" §8 (two harvest pastes) before this section.**
+
+- [ ] 12q. **Reach Metropolis.** `GrantCash` `10000000000000` (10T), buy out the current era and
+      advance until the badge reads **"ERA 3" / "Metropolis"** (same as PLAYTEST "M8 — Metropolis"
+      section 2). Before buying anything, walk the plot: **bare ground** — no streets, no
+      pavements, no highway, no kiosks — and `GrowthTier` reads `0`.
+- [ ] 12r. **First purchase — one street, one footpath.** Buy the free **Food Truck**. Confirm: a
+      run of **tile cells** runs from the plot entrance to the building; the cell at the far end is
+      a **dead-end tile** (closed on three sides, not a straight piece hanging in the air); a
+      **concrete pavement** strip runs along **both** sides of the street; and a narrow concrete
+      **footpath** joins the building to the street and **stops at the pavement edge** — it must
+      never lie on top of the asphalt (that overlap was a bug fixed in review).
+- [ ] 12s. **Streets grow — watch the tile kinds change.** Keep buying with `GrantCash` and watch
+      one junction cell in particular. As the network reaches it, its tile changes **end →
+      straight → tee → cross**. A cell that changes kind **swaps in place with no dust puff**; a
+      brand-new cell **drops in with a dust puff**. Nothing else on the plot may flicker or
+      rebuild, and a moving car must not jump.
+- [ ] 12t. **Zebra crossings.** Where a street runs **3 or more cells** into a tee/cross, the cell
+      next to the junction is a **striped crossing tile**. Expect these at the avenue/arterial
+      junctions once those streets are drawn. Purely cosmetic: a missing one is a bug only if the
+      run is clearly ≥ 3 cells long.
+- [ ] 12u. **Cars keep to their lane.** Up to **four** street cars drive the network. Two cars
+      passing in opposite directions must stay on **their own side** of the 7-stud tile (they are
+      scaled down to 1.8 so two 2.7-stud bodies fit on 5.6 studs of asphalt) — bodies overlapping
+      the centreline is a bug. **No car ever drives the x = 0 civic axis** (entrance avenue → City
+      Hall → Skyscraper): that corridor is car-free by design.
+- [ ] 12v. **Found City Hall.** Buy it. Confirm a **real textured building** appears at the plot
+      **centre**, facing back down the civic axis toward the plot entrance, with its **buy pad in
+      front of it** and **no street cell underneath it**. A grey box, a road tile or nothing at all
+      means the `CityHall` harvest paste (MANUAL §8 step 23) did not land.
+- [ ] 12w. **Build the Highway Ramp — the ring builds out.** Buy it and watch from a distance:
+      **no building spawns** on the pad, and an **elevated ring** starts at the ramp on the west
+      side and **grows outward in both directions** until it closes, in roughly **5 seconds** (12
+      cells per second, 66 cells). The ramp is a single 3-cell slope descending **east** onto the
+      end of the cross street at x = −35.
+- [ ] 12x. **Walk under the deck.** Walk the whole ring line, and in particular **through the plot
+      entrance**, which passes beneath the deck. Confirm you walk under it everywhere with no
+      bump, no invisible wall and no camera clipping into a pillar. Getting stopped or having to
+      jump is a bug.
+- [ ] 12y. **Deck traffic.** Watch for 15 seconds: exactly **two** cars loop the ring on the deck,
+      stay on the deck surface (they must not sink into it or float above it), and **never take
+      the ramp** down to the streets.
+- [ ] 12z. **Rejoin and far plot.** Stop, Play again on the same save: the ring is **already
+      there, instantly, with no build-out animation**. Then fly out past ~290 studs: the far plot
+      keeps its **deck** but drops its **cars**.
+- [ ] 12aa. **Dig the Subway Line — kiosks appear with the streets.** Buy it. Confirm **no
+      building** spawns, and that **one `MetroEntrance` kiosk appears straight away** — the one
+      nearest the plot entrance always shows. Keep buying buildings: more kiosks appear **as their
+      own street becomes visible**, up to **five** on a fully grown plot. Each stands on the
+      pavement at a corner, facing the street, clear of pads, footprints and road cells.
+- [ ] 12ab. **Judge the kiosk.** It is custom geometry (no kit has stairs going down): a small
+      kiosk with a canopy, visible steps and a large **"M"** sign, about 5 × 6 studs. Report the
+      look; the lever is `tools/assets/metro_kit.py`, which is a re-generate/re-upload.
+- [ ] 12ac. **Two players (Local Server — multiplayer behaviour changed this wave).** Test →
+      Start with **2 Players**. Get Player 1's plot to Metropolis. With Player 2 watching that
+      plot, have Player 1 buy a building, then **Build the Highway Ramp**, then **Dig the Subway
+      Line**. Player 2 must see the **same tiles, the same pavements, the same ring and the same
+      kiosks**. A remote viewer far from the plot may get them without the build-out or the dust —
+      expected. Different tiles, a missing ring or missing kiosks are not. Vehicle positions
+      differing between the two clients is fine.
+- [ ] 12ad. **Village and Boomtown are unchanged.** On a Village plot: baked dirt/cobble trails,
+      `PathRenderer` reads `baked`. On a Boomtown plot: **gravel** before Pave Main Street,
+      asphalt + concrete kerb after — and check the **driveway spurs match the street** in both
+      states (a gravel street with asphalt spurs was a bug fixed in review, so look at it twice).
+      Nothing in Metropolis may have changed either era.
+- [ ] 12ae. **Missing props degrade silently.** In Edit mode rename
+      `ReplicatedStorage/Assets/Props/Metropolis` to `Metropolis_bak`, Play, reach Metropolis and
+      buy a few slots. Confirm the streets still draw as **plain asphalt-coloured `RoadTile`
+      Parts** (flat cells, no kerbs or markings), **no highway, kiosks, trees, plazas, lamps or
+      cars** appear, the game plays normally and **Output has zero errors**. Rename back.
+- [ ] 12af. **Mobile pass on Metropolis.** Device Emulator, **375×667** portrait, on a grown
+      Metropolis plot. Confirm the tiles, pavements and kiosks read at phone size (not a grey
+      mush), buy one slot and confirm the new cell and its dust look right, and buy or look at the
+      highway — the build-out must not visibly stall the frame rate. Open the Build panel and
+      confirm nothing in its layout regressed.
+- [ ] 12ag. **Counts.** On a fully owned near Metropolis plot, Command Bar:
+      ```
+      print(#workspace.CityDressing:FindFirstChild("Plot1"):GetChildren())
+      ```
+      (swap `Plot1` for your plot folder). Expect **≈ 220** children. The plan uses **38 of 180**
+      tile cells (`budget.tileCells`) and **66 of 72** highway cells (`budget.highwayCells`) —
+      report the number rather than pass/fail.
+
+**Known caveats — confirm they are present, don't report them as bugs**
+
+- The metro kiosk's stairwell **well is shallow**: at the game's camera angle a deep well shows
+  its own floor, so it is deliberately shallow rather than a real hole.
+- **No highway sign appears.** `HighwaySign` is uploaded but the client skips any sign that would
+  clip a building footprint, and today's 7-stud-wide gantry always would. Seeing none is correct.
+- Tile props are a hair wider than their 7-stud cell (**≈ 0.07 studs**), so neighbouring tiles
+  overlap slightly on purpose — that is what hides the seam. A visible **dark line or flicker**
+  between two tiles *is* a bug.
 
 ### 5. No collisions — walk through everything
 
@@ -2070,6 +2174,16 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
   the surface reverting, blinking or re-laying on a near/far flip or a rejoin; a vehicle
   respawning or jumping when the surface changes. Up to **six** Boomtown traffic lights are
   expected, one per drawn crossing.
+- **Wave 2a (Metropolis):** a street cell showing the wrong tile for its connections (a straight
+  piece at a dead end, a tee where four streets meet), a footpath lying on top of the asphalt, a
+  missing pavement on one side, or a car driving the car-free x = 0 civic axis; Found City Hall
+  spawning a grey box, off-centre, or facing away from the entrance; Build the Highway Ramp or Dig
+  the Subway Line spawning a **building**; the ring appearing all at once on purchase (it must
+  build out from the ramp) or **not** appearing instantly on a rejoin; a deck car taking the ramp,
+  sinking into the deck or leaving it; being blocked or having to jump to pass under the deck,
+  especially at the plot entrance; **no** kiosk after buying Dig the Subway Line, more than five,
+  or a kiosk on a road cell or inside a footprint; a Village or Boomtown plot changed by this wave
+  — especially Boomtown spurs that no longer match the street surface.
 - The player, camera, or a ProximityPrompt blocked by a tree, house, vehicle, or road tile.
 - Any dressing part with `CanCollide`/`CanQuery`/`CanTouch` true, or not `Anchored`.
 - Another player's client showing different roads/trees/houses than the owner sees (vehicle
@@ -2096,7 +2210,9 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
       asphalt + concrete kerb/lamps/cars, main-street spine, P1/P2 no-spur slots), the baked-path
       look and appear effect (5b–5c), `PathRenderer = baked` plus both silent fallbacks (5d–5f),
       all four wave 1e street upgrades with their surfaces, lanterns, lamp row and traffic
-      lights (12b–12p), no
+      lights (12b–12p), the whole wave 2a Metropolis pass — tile streets, crossings, pavements and
+      footpaths, Found City Hall, the highway ring build-out and walking under it, the subway
+      kiosks, the two-player parity check and the missing-props degrade (12q–12ag) — no
       collisions anywhere (including the Explorer flag check), identical dressing for a second
       player, near/far LOD and the rim drop, the traffic MicroProfiler check under 0.2 ms, the dust
       Heartbeat and path-triangle readings, the part counts, refresh stability, era-advance/

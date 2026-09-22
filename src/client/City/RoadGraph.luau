@@ -9,6 +9,10 @@
 -- the (meandered) centreline of the roads the near rendering draws — vehicles only run on near
 -- plots — and never changes on a near/far flip.
 --
+-- Wave 2a: eras with `road.tiles` hand the spine to TileRenderer, which rasterises the visible
+-- stretches onto the tile lattice and drops one kit prop per cell. Their spurs stay Parts here, in
+-- the narrower `tiles.spur` look, and the lane graph is unchanged.
+--
 -- Wave 1d: eras with `road.paths` hand drawing to PathRenderer, which clones the baked path
 -- meshes and falls back to the Parts here silently. Those plots have no near/far road rebuild
 -- (only their rims come and go); their lanes follow PathRibbon's meandered centreline -- the same
@@ -31,6 +35,7 @@ local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Noise = require(script.Parent:WaitForChild("Noise"))
 local PathRibbon = require(script.Parent:WaitForChild("PathRibbon"))
 local PathRenderer = require(script.Parent:WaitForChild("PathRenderer"))
+local TileRenderer = require(script.Parent:WaitForChild("TileRenderer"))
 
 local SPINE_PART_NAME = "Road"
 local SPUR_PART_NAME = "Spur"
@@ -162,6 +167,15 @@ export type State = {
 	thickness: number,
 	material: Enum.Material,
 	color: Color3,
+	-- Wave 2a: a tiles era draws its spurs as a narrow footpath with its own look. Nil elsewhere,
+	-- because the spine's look is live: wave 1e's surface variants repaint state.material/color and
+	-- a snapshot taken at build time would leave a Village spur dirt on a cobbled plot.
+	spurWidth: number,
+	spurMaterial: Enum.Material?,
+	spurColor: Color3?,
+	-- Studs from the spine centreline at which a tiles-era footpath stops: the outer edge of the
+	-- pavement, so the strip never runs onto (and floats over) a tile. Nil elsewhere.
+	spurClip: number?,
 	laneOffset: number,
 	meander: Types.CityMeanderConfig?,
 	polylines: { { Vector3 } },
@@ -189,6 +203,8 @@ export type State = {
 	-- Baked-piece plan: one cloned Model per stretch and per spur, capped by budget.pathPieces.
 	pathStretchAllowed: { [number]: boolean },
 	pathSpurAllowed: { [string]: boolean },
+	-- Tile plan (wave 2a): the stretches whose cells fit budget.tileCells.
+	tileStretchAllowed: { [number]: boolean },
 	pieceKeys: { string },
 	pieceSpecs: { [string]: PieceSpec },
 	-- Live.
@@ -208,6 +224,11 @@ export type State = {
 	lanes: Lanes?,
 	pathData: PathData?, -- eras with road.paths
 	paths: PathRenderer.Handle?, -- nil: Parts from the start
+	tiles: TileRenderer.Handle?, -- eras with road.tiles
+	-- Stretches revealed since the last Flush while TileRenderer draws, and whether any of them
+	-- should appear with the dust puff.
+	tilesDirty: boolean,
+	tilesAnimate: boolean,
 	-- Spurs revealed since the last Flush while PathRenderer draws, and whether any of them
 	-- should appear with the dust effect.
 	pathsDirty: boolean,
@@ -299,6 +320,12 @@ local function destroyAll(instances: { Instance }): ()
 end
 
 local RoadGraph = {}
+
+-- Shared with the controller so every budget key degrades the same way: a missing (or NaN) entry
+-- in a stale CityDressing.json falls back instead of drawing nothing or erroring.
+function RoadGraph.BudgetValue(value: number?, fallback: number): number
+	return budgetValue(value, fallback)
+end
 
 function RoadGraph.ClosestOnSegment(point: Vector3, a: Vector3, b: Vector3): (Vector3, number)
 	local ab = b - a
@@ -456,13 +483,16 @@ local function slab(
 	a: Vector3,
 	b: Vector3,
 	width: number,
-	extension: number
+	extension: number,
+	material: Enum.Material,
+	color: Color3,
+	centreY: number
 ): ()
 	local length = (b - a).Magnitude
 	if length < MIN_LENGTH then
 		return
 	end
-	local y = state.thickness / 2
+	local y = centreY
 	local mid = (a + b) / 2
 	local part = Instance.new("Part")
 	part.Name = name
@@ -470,8 +500,8 @@ local function slab(
 	-- Flat, turned about Y only: the top face stays flush at road.thickness everywhere.
 	part.CFrame = state.context.plotFrame
 		* CFrame.lookAt(Vector3.new(mid.X, y, mid.Z), Vector3.new(b.X, y, b.Z))
-	part.Material = state.material
-	part.Color = state.color
+	part.Material = material
+	part.Color = color
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.CastShadow = false
@@ -532,7 +562,18 @@ local function drawMeandered(
 			state.width + meander.widthJitter * Noise.Wave(arc, wavelength, phases[3], phases[4]),
 			MIN_LENGTH
 		)
-		slab(state, into, name, points[index - 1], points[index], width, width / 2)
+		slab(
+			state,
+			into,
+			name,
+			points[index - 1],
+			points[index],
+			width,
+			width / 2,
+			state.material,
+			state.color,
+			state.thickness / 2
+		)
 	end
 end
 
@@ -544,6 +585,10 @@ local function drawGroup(state: State, groupIndex: number): ()
 	end
 	local into = parts :: { Instance }
 	destroyAll(into)
+	-- Wave 2a: in a tiles era the spine is the tile cells, never a Part under them.
+	if state.tiles ~= nil then
+		return
+	end
 	local group = state.groups[groupIndex]
 	if meanderedNow(state) then
 		for _, id in group.stretches do
@@ -567,7 +612,18 @@ local function drawGroup(state: State, groupIndex: number): ()
 	local runEnd: Vector3? = nil
 	local function flush(): ()
 		if runStart ~= nil and runEnd ~= nil then
-			slab(state, into, SPINE_PART_NAME, runStart, runEnd, state.width, state.width)
+			slab(
+				state,
+				into,
+				SPINE_PART_NAME,
+				runStart,
+				runEnd,
+				state.width,
+				state.width,
+				state.material,
+				state.color,
+				state.thickness / 2
+			)
 		end
 		runStart, runEnd = nil, nil
 	end
@@ -581,6 +637,26 @@ local function drawGroup(state: State, groupIndex: number): ()
 		end
 	end
 	flush()
+end
+
+-- The footpath a spur draws. In a tiles era it stops `spurClip` studs short of the spine, at the
+-- outer edge of the pavement: the tile prop carries its own surface, and a strip crossing it would
+-- both float above it and z-fight the pavement. Every other era runs onto the centreline as before.
+local function spurDrawPoints(state: State, points: { Vector3 }): { Vector3 }
+	local clip = state.spurClip
+	if clip == nil or #points < 2 then
+		return points
+	end
+	local last, before = points[#points], points[#points - 1]
+	local direction = unitOrNil(last - before)
+	local trimmed = table.clone(points)
+	if direction == nil or (last - before).Magnitude <= clip then
+		-- Nothing of the last leg survives; the path ends at the corner before it.
+		table.remove(trimmed)
+		return trimmed
+	end
+	trimmed[#trimmed] = last - direction * clip
+	return trimmed
 end
 
 local function drawSpur(state: State, slotId: string): ()
@@ -618,15 +694,22 @@ local function drawSpur(state: State, slotId: string): ()
 		end
 		return
 	end
-	for index = 2, #points do
+	-- A footpath in its own look sits at the pavement's height, under the tile surface; a spur that
+	-- is the road itself keeps the road's live material, colour and top.
+	local footpath = state.spurMaterial ~= nil
+	local drawn = spurDrawPoints(state, points)
+	for index = 2, #drawn do
 		slab(
 			state,
 			into,
 			SPUR_PART_NAME,
-			points[index - 1],
-			points[index],
-			state.width,
-			state.width
+			drawn[index - 1],
+			drawn[index],
+			state.spurWidth,
+			state.spurWidth,
+			state.spurMaterial or state.material,
+			state.spurColor or state.color,
+			if footpath then 0 else state.thickness / 2
 		)
 	end
 end
@@ -1478,8 +1561,11 @@ local function repaintParts(state: State): ()
 	for _, parts in state.groupParts do
 		paint(parts)
 	end
-	for _, parts in state.spurParts do
-		paint(parts)
+	-- A tiles era's spurs are footpaths in their own look, not road in the plot's surface.
+	if state.tiles == nil then
+		for _, parts in state.spurParts do
+			paint(parts)
+		end
 	end
 	paint(state.bendParts)
 end
@@ -1543,6 +1629,9 @@ end
 function RoadGraph.new(context: Context, near: boolean): State
 	local road = context.era.road
 	local width = math.max(road.width, MIN_LENGTH)
+	local tilesConfig = road.tiles
+	local spurLook = if tilesConfig ~= nil then tilesConfig.spur else nil
+	local tilePavement = if tilesConfig ~= nil then tilesConfig.pavement else nil
 	local polylines = RoadGraph.ReadPolylines(context.layout)
 	local polylinePhases: { Noise.Phases } = {}
 	for index in polylines do
@@ -1557,8 +1646,18 @@ function RoadGraph.new(context: Context, near: boolean): State
 		thickness = math.max(context.config.road.thickness, MIN_LENGTH),
 		material = materialFor(road.material),
 		color = colorFor(road.color),
+		spurWidth = if spurLook ~= nil then math.max(spurLook.width, MIN_LENGTH) else width,
+		spurMaterial = if spurLook ~= nil then materialFor(spurLook.material) else nil,
+		spurColor = if spurLook ~= nil then colorFor(spurLook.color) else nil,
+		spurClip = if spurLook ~= nil
+			then width / 2
+				+ (if tilePavement ~= nil then math.max(tilePavement.width, 0) else 0)
+				+ math.max(spurLook.width, MIN_LENGTH) / 2
+			else nil,
 		laneOffset = laneFraction * width,
-		meander = road.meander,
+		-- Tiles exclude the meander and the baked paths (docs/INTERFACES.md "Wave 2a"): a kit tile
+		-- cannot wobble, so a config carrying both must not draw a wobbling Part under it.
+		meander = if tilesConfig ~= nil then nil else road.meander,
 		polylines = polylines,
 		polylinePhases = polylinePhases,
 		nodes = {},
@@ -1580,6 +1679,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		nearBendAllowed = {},
 		pathStretchAllowed = {},
 		pathSpurAllowed = {},
+		tileStretchAllowed = {},
 		pieceKeys = {},
 		pieceSpecs = {},
 		near = near,
@@ -1594,6 +1694,9 @@ function RoadGraph.new(context: Context, near: boolean): State
 		lanes = nil,
 		pathData = nil,
 		paths = nil,
+		tiles = nil,
+		tilesDirty = false,
+		tilesAnimate = false,
 		pathsDirty = false,
 		pathsAnimate = false,
 		surfaceBurst = false,
@@ -1601,7 +1704,45 @@ function RoadGraph.new(context: Context, near: boolean): State
 	buildNetwork(state)
 	buildShortestPaths(state)
 	allocate(state)
-	if road.paths ~= nil then
+	if tilesConfig ~= nil then
+		local pavement = tilesConfig.pavement
+		local dressingPaths = context.config.paths
+		local budget = context.config.budget
+		local tiles = TileRenderer.Create({
+			folder = context.folder,
+			plotFrame = context.plotFrame,
+			eraName = context.eraName,
+			tiles = tilesConfig,
+			thickness = state.thickness,
+			roadWidth = width,
+			-- Read at draw time, not copied: a surface variant repaints the road look, and a
+			-- placeholder cell or a dust puff must follow it like every other Part does.
+			materialOf = function(): Enum.Material
+				return state.material
+			end,
+			colorOf = function(): Color3
+				return state.color
+			end,
+			pavementMaterial = if pavement ~= nil then materialFor(pavement.material) else nil,
+			pavementColor = if pavement ~= nil then colorFor(pavement.color) else nil,
+			-- A config too old to carry the key falls back to the straight-road ceiling, exactly as
+			-- the baked plan does; zero cells would be a plot with no streets at all.
+			budgetCells = budgetValue(budget.tileCells, budgetValue(budget.roadPieces, 0)),
+			dustSeconds = if dressingPaths ~= nil then dressingPaths.dustSeconds else nil,
+			near = near,
+		})
+		if tiles ~= nil then
+			-- The same union of shortest paths the baked plan is spent over, nearest the entrance
+			-- first, so the cell budget runs out at the far end of the network and never mid-street.
+			local segments: { TileRenderer.Segment } = {}
+			for _, ranked in pathStretchOrder(state) do
+				local stretch = state.stretches[ranked.index]
+				table.insert(segments, { id = ranked.index, a = stretch.a, b = stretch.b })
+			end
+			state.tileStretchAllowed = TileRenderer.Plan(tiles, segments)
+			state.tiles = tiles
+		end
+	elseif road.paths ~= nil then
 		state.pathData = pathDataFor(state)
 		-- Also sets the plot folder's PathRenderer attribute (a Studio diagnostic).
 		state.paths = PathRenderer.Create({
@@ -1693,7 +1834,12 @@ function RoadGraph.AddSpur(state: State, slotId: string, animate: boolean?): boo
 		end
 	end
 	state.lanes = nil
-	if not drawsParts then
+	if state.tiles ~= nil then
+		-- The spine is cells, drawn by the flush below; the spur is a footpath Part either way.
+		state.tilesDirty = true
+		state.tilesAnimate = state.tilesAnimate or animate == true
+		drawSpur(state, slotId)
+	elseif not drawsParts then
 		state.pathsDirty = true
 		state.pathsAnimate = state.pathsAnimate or animate == true
 	else
@@ -1712,6 +1858,11 @@ function RoadGraph.SetNear(state: State, near: boolean): ()
 		return
 	end
 	state.near = near
+	local tiles = state.tiles
+	if tiles ~= nil then
+		TileRenderer.SetNear(tiles, near, state.visible)
+		return
+	end
 	local paths = state.paths
 	if paths ~= nil and paths.mode == "baked" then
 		PathRenderer.SetNear(paths, near)
@@ -1734,6 +1885,17 @@ end
 -- Hands every spur revealed since the last Flush to PathRenderer in one update, with the appear
 -- effect when any of them was a purchase. A fallback to Parts meanwhile already drew them.
 function RoadGraph.Flush(state: State): ()
+	local tiles = state.tiles
+	if tiles ~= nil then
+		if not state.tilesDirty then
+			return
+		end
+		local animate = state.tilesAnimate
+		state.tilesDirty = false
+		state.tilesAnimate = false
+		TileRenderer.Update(tiles, state.visible, animate)
+		return
+	end
 	if not state.pathsDirty then
 		return
 	end
@@ -1814,6 +1976,10 @@ function RoadGraph.PieceVisible(state: State, pieceId: string): boolean
 	if id == nil or not state.visible[id] then
 		return false
 	end
+	-- A tiles era draws the cells of its planned stretches and nothing else.
+	if state.tiles ~= nil then
+		return state.tileStretchAllowed[id] == true
+	end
 	-- After a silent fallback the meandered Parts renderer draws the near budget rather than the
 	-- baked plan, so a post must not stand beside a stretch that renderer skipped. Straight eras
 	-- draw every visible stretch, near or far.
@@ -1839,6 +2005,9 @@ end
 -- A stretch the plot can ever draw. Ownership plays no part, so a plan built from these is the
 -- same at any point in the plot's growth, like every other dressing plan.
 local function plannedStretch(state: State, id: number): boolean
+	if state.tiles ~= nil then
+		return state.tileStretchAllowed[id] == true
+	end
 	if state.pathData ~= nil then
 		return state.pathStretchAllowed[id] == true
 	end
@@ -2110,9 +2279,16 @@ local function buildLanes(state: State): Lanes
 	-- island when the budget runs out mid-network; a vehicle shuttling along a drawn piece of road
 	-- beats one driving over bare ground. Eras without meander draw everything visible, so they
 	-- take the whole network.
+	-- A tiles era leaves out a stretch whose cells missed budget.tileCells for the same reason: a
+	-- car must never drive down a street that was never laid.
 	local meandered = state.meander ~= nil
+	local tiled = state.tiles ~= nil
 	for id, stretch in state.stretches do
-		if state.visible[id] and (not meandered or state.nearStretchAllowed[id]) then
+		if
+			state.visible[id]
+			and (not meandered or state.nearStretchAllowed[id])
+			and (not tiled or state.tileStretchAllowed[id])
+		then
 			chain(
 				(
 					centreline(
@@ -2141,6 +2317,71 @@ local function buildLanes(state: State): Lanes
 	return lanes
 end
 
+-- A standalone closed lane loop through `points` (plot-local, in order) at `height` above the plot
+-- top: the highway's deck ring. Built here so the lane conventions -- right-hand offset, both
+-- directions, yaw facing the travel direction -- are written down once for every Traffic caller.
+function RoadGraph.LoopLanes(
+	plotFrame: CFrame,
+	points: { Vector3 },
+	height: number,
+	laneOffset: number
+): Lanes
+	local lanes: Lanes = {
+		count = 0,
+		to = {},
+		reverse = {},
+		origin = {},
+		direction = {},
+		length = {},
+		yaw = {},
+		outgoing = {},
+	}
+	local total = #points
+	if total < 2 then
+		return lanes
+	end
+	for node = 1, total do
+		lanes.outgoing[node] = {}
+	end
+	local function addLane(fromNode: number, toNode: number, a: Vector3, b: Vector3): number
+		local worldA = plotFrame:PointToWorldSpace(Vector3.new(a.X, height, a.Z))
+		local worldB = plotFrame:PointToWorldSpace(Vector3.new(b.X, height, b.Z))
+		local delta = worldB - worldA
+		local length = delta.Magnitude
+		local direction = delta / length
+		lanes.count += 1
+		local id = lanes.count
+		lanes.to[id] = toNode
+		lanes.origin[id] = worldA
+		lanes.direction[id] = direction
+		lanes.length[id] = length
+		lanes.yaw[id] = math.atan2(-direction.X, -direction.Z)
+		table.insert(lanes.outgoing[fromNode], id)
+		return id
+	end
+	for node = 1, total do
+		local following = node % total + 1
+		local a, b = points[node], points[following]
+		local along = unitOrNil(b - a)
+		if along == nil then
+			continue
+		end
+		local right = along:Cross(UP) * laneOffset
+		local forward = addLane(node, following, a + right, b + right)
+		local backward = addLane(following, node, b - right, a - right)
+		lanes.reverse[forward] = backward
+		lanes.reverse[backward] = forward
+	end
+	return lanes
+end
+
+-- The plot entrance (polyline 1, point 1), which dressing tied to "nearest the way in" measures
+-- from; nil when the layout has no street plan at all.
+function RoadGraph.EntrancePoint(state: State): Vector3?
+	local node = state.entrance
+	return if node ~= nil then state.nodes[node] else nil
+end
+
 -- Cached until a spur (and so possibly spine) appears; near/far never invalidates it.
 function RoadGraph.GetLanes(state: State): Lanes
 	local lanes = state.lanes
@@ -2155,6 +2396,10 @@ function RoadGraph.Destroy(state: State): ()
 	local paths = state.paths
 	if paths ~= nil then
 		PathRenderer.Destroy(paths)
+	end
+	local tiles = state.tiles
+	if tiles ~= nil then
+		TileRenderer.Destroy(tiles)
 	end
 	for _, parts in state.groupParts do
 		destroyAll(parts)

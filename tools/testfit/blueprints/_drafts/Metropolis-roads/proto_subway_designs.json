@@ -1,0 +1,401 @@
+{
+  "id": "proto_subway_designs",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [
+    120,
+    120
+  ],
+  "note": "A railed stairwell, B canopy head, C kerb cut; red patch = the 4.6 x 6 stud budget",
+  "ground": [
+    0.34509803921568627,
+    0.35294117647058826,
+    0.3686274509803922
+  ],
+  "camera": {
+    "dir": [
+      1,
+      0.55,
+      -1.4
+    ],
+    "target": [
+      0,
+      1.2,
+      0
+    ],
+    "distance": 27,
+    "lens": 40
+  },
+  "players": [
+    [
+      -8.0,
+      4.6
+    ],
+    [
+      0.0,
+      4.6
+    ],
+    [
+      8.0,
+      4.6
+    ]
+  ],
+  "markers": [
+    [
+      -8,
+      0,
+      4.6,
+      6.0,
+      0.7,
+      0.18,
+      0.14,
+      0.01
+    ],
+    [
+      0,
+      0,
+      4.6,
+      6.0,
+      0.7,
+      0.18,
+      0.14,
+      0.01
+    ],
+    [
+      8,
+      0,
+      4.6,
+      6.0,
+      0.7,
+      0.18,
+      0.14,
+      0.01
+    ]
+  ],
+  "pieces": [
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        -8.0,
+        0.028,
+        0.0
+      ],
+      "rotY": 0,
+      "scale": 4.6,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-square",
+      "pos": [
+        -8.0,
+        0.096,
+        0.2
+      ],
+      "rotY": 0,
+      "scale": 3.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -8.0,
+        -0.13,
+        -0.9
+      ],
+      "rotY": 0,
+      "scale": 1.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        -8.0,
+        -0.03,
+        -0.25
+      ],
+      "rotY": 0,
+      "scale": 0.8,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -9.55,
+        0.16,
+        -0.55
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -9.55,
+        0.16,
+        0.65
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -6.45,
+        0.16,
+        -0.55
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -6.45,
+        0.16,
+        0.65
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -8.55,
+        0.16,
+        1.7
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -7.45,
+        0.16,
+        1.7
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-sign-street",
+      "pos": [
+        -9.9,
+        0.18,
+        -1.9
+      ],
+      "rotY": 90,
+      "scale": 6.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        0.0,
+        0.028,
+        0.0
+      ],
+      "rotY": 0,
+      "scale": 4.6,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-square",
+      "pos": [
+        0.0,
+        0.096,
+        0.35
+      ],
+      "rotY": 0,
+      "scale": 3.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-barrier",
+      "pos": [
+        0.0,
+        0.17,
+        0.35
+      ],
+      "rotY": 90,
+      "scale": 3.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        0.0,
+        -0.13,
+        -1.05
+      ],
+      "rotY": 0,
+      "scale": 1.2,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -1.6,
+        0.16,
+        0.9
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        1.6,
+        0.16,
+        0.9
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        -0.55,
+        0.16,
+        1.85
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        0.55,
+        0.16,
+        1.85
+      ],
+      "rotY": 90,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-sign-street",
+      "pos": [
+        -2.0,
+        0.18,
+        -1.9
+      ],
+      "rotY": 90,
+      "scale": 6.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-low",
+      "pos": [
+        8.0,
+        0.02,
+        0.0
+      ],
+      "rotY": 0,
+      "scale": 5.0,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-square",
+      "pos": [
+        8.0,
+        0.092,
+        0.4
+      ],
+      "rotY": 0,
+      "scale": 3.4,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "road-slant-barrier",
+      "pos": [
+        8.0,
+        0.17,
+        0.4
+      ],
+      "rotY": 180,
+      "scale": 3.4,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "tile-high",
+      "pos": [
+        8.0,
+        -0.18,
+        -0.9
+      ],
+      "rotY": 0,
+      "scale": 1.4,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        6.25,
+        0.16,
+        1.0
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "construction-fence",
+      "pos": [
+        9.75,
+        0.16,
+        1.0
+      ],
+      "rotY": 0,
+      "scale": 5.5,
+      "stage": 0
+    },
+    {
+      "kit": "city-kit-roads",
+      "model": "sign-highway",
+      "pos": [
+        8.1,
+        0.16,
+        -2.1
+      ],
+      "rotY": 270,
+      "scale": 2.6,
+      "stage": 0
+    }
+  ]
+}

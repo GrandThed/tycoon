@@ -1,0 +1,9 @@
+{
+  "id": "VehicleB",
+  "era": "Metropolis",
+  "scale": 1.8,
+  "footprint": [3, 6],
+  "pieces": [
+    {"kit": "car-kit", "model": "delivery", "pos": [0, 0, -0.025], "rotY": 180, "stage": 0}
+  ]
+}

@@ -21,6 +21,10 @@
 -- Wave 1e: the owned set also picks the plot's street surface (RoadGraph.SetSurface, before the
 -- renderer clones anything), and gates the lamp rows and crossing signals of eras whose config
 -- names an upgrade slot. Still nothing but what the server already replicates.
+--
+-- Wave 2a: the same owned set drives the elevated highway ring and the subway entrances of a tiles
+-- era. The ring's cars are a second Traffic "plot" on the same map budget, keyed by the plot index
+-- negated, so they are cleared and counted exactly like the street ones.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,6 +39,7 @@ local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
 local cityFolder = script.Parent.Parent:WaitForChild("City")
 local PropFactory = require(cityFolder:WaitForChild("PropFactory"))
 local RoadGraph = require(cityFolder:WaitForChild("RoadGraph"))
+local Highway = require(cityFolder:WaitForChild("Highway"))
 local Scatter = require(cityFolder:WaitForChild("Scatter"))
 local Traffic = require(cityFolder:WaitForChild("Traffic"))
 
@@ -67,6 +72,9 @@ type Build = {
 	lamps: { [string]: Model },
 	signalSpots: { RoadGraph.SignalSpot },
 	signals: { [number]: Model }, -- crossing node -> prop
+	-- Wave 2a: nil in an era without a highway or without a `highway` layout table.
+	highway: Highway.Handle?,
+	subways: { [number]: Model }, -- plan index -> entrance prop
 	createdAt: number, -- os.clock when the build started
 }
 
@@ -79,6 +87,10 @@ type PlotEntry = {
 	near: boolean,
 	vehicleSelected: boolean,
 	vehicleTarget: number,
+	-- Wave 2a: cars looping the highway deck, counted against the same per-plot ceiling, and the
+	-- same "the map budget was full" retry flag the street vehicles carry.
+	highwayTarget: number,
+	highwayBlocked: boolean,
 	-- The last spawn placed fewer vehicles than models because the map budget was full.
 	vehiclesBlocked: boolean,
 	-- os.clock when a drawn spur's building was first seen missing; nil while none is. A server
@@ -164,10 +176,26 @@ local function clearSignals(build: Build): ()
 	table.clear(build.signals)
 end
 
+local function clearSubways(build: Build): ()
+	for _, entrance in build.subways do
+		entrance:Destroy()
+	end
+	table.clear(build.subways)
+end
+
+-- The highway's cars are their own Traffic plot; the index is negated so it can never collide with
+-- a street one (plots are numbered from 1).
+local function highwayPlotId(index: number): number
+	return -index
+end
+
 local function clearBuild(entry: PlotEntry): ()
 	local build = entry.build
 	Traffic.ClearPlot(entry.index)
+	Traffic.ClearPlot(highwayPlotId(entry.index))
 	entry.vehicleTarget = 0
+	entry.highwayTarget = 0
+	entry.highwayBlocked = false
 	entry.vehiclesBlocked = false
 	entry.suspectSince = nil
 	entry.confirmSuspect = false
@@ -176,9 +204,14 @@ local function clearBuild(entry: PlotEntry): ()
 	end
 	entry.build = nil
 	RoadGraph.Destroy(build.roads)
+	local highway = build.highway
+	if highway ~= nil then
+		Highway.Destroy(highway)
+	end
 	clearTrees(build)
 	clearLamps(build)
 	clearSignals(build)
+	clearSubways(build)
 	for _, model in build.houses do
 		model:Destroy()
 	end
@@ -218,7 +251,7 @@ local function newBuild(
 			schedule(entry)
 		end,
 	}, entry.near)
-	local plan = Scatter.Plan({
+	local planInput: Scatter.PlanInput = {
 		plotIndex = entry.index,
 		eraName = eraName,
 		plotSize = base.Size,
@@ -231,8 +264,67 @@ local function newBuild(
 		streetLines = function(): RoadGraph.StreetLines
 			return RoadGraph.StreetLines(roads)
 		end,
-	})
+		entrance = RoadGraph.EntrancePoint(roads),
+	}
+	local plan = Scatter.Plan(planInput)
 	local signals = era.signals
+	-- Wave 2a: the ring needs both the era's config and the layout's geometry; either missing is a
+	-- plot without a highway, silently.
+	local highwayConfig = era.highway
+	local highwayLayout = layout.highway
+	local highway: Highway.Handle? = nil
+	if highwayConfig ~= nil and highwayLayout ~= nil then
+		local tiles = era.road.tiles
+		local pavementWidth = if tiles ~= nil and tiles.pavement ~= nil
+			then tiles.pavement.width
+			else 0
+		local centrelines = planInput.centrelines
+		local highwaySolids: { Scatter.Footprint }? = nil
+		highway = Highway.Create({
+			folder = entry.folder,
+			plotFrame = plotFrame,
+			eraName = eraName,
+			config = highwayConfig,
+			layout = highwayLayout,
+			tileStuds = if tiles ~= nil then tiles.tileStuds else roads.width,
+			roadWidth = roads.width,
+			pavementWidth = pavementWidth,
+			laneOffset = roads.laneOffset,
+			budgetCells = RoadGraph.BudgetValue(
+				config.budget.highwayCells,
+				RoadGraph.BudgetValue(config.budget.roadPieces, 0)
+			),
+			near = entry.near,
+			-- The sign asks the planner the same question the trees do, and stays a road width and
+			-- kerb clear of every centreline the plot can ever draw, so it can never stand inside a
+			-- building, on a pad or over the asphalt. The solids are gathered lazily: only a plot
+			-- that owns the ramp and has a sign prop ever asks.
+			clearOf = function(position: Vector3, halfExtent: number): boolean
+				local solids = highwaySolids
+				if solids == nil then
+					solids = Scatter.Solids(planInput)
+					highwaySolids = solids
+				end
+				if not Scatter.Clear(solids :: { Scatter.Footprint }, position, halfExtent) then
+					return false
+				end
+				local keepOff = roads.width / 2 + pavementWidth + halfExtent
+				for _, line in centrelines do
+					for index = 2, #line do
+						local closest =
+							RoadGraph.ClosestOnSegment(position, line[index - 1], line[index])
+						if (closest - position).Magnitude < keepOff then
+							return false
+						end
+					end
+				end
+				return true
+			end,
+			onReady = function()
+				schedule(entry)
+			end,
+		})
+	end
 	return {
 		eraName = eraName,
 		era = era,
@@ -248,6 +340,8 @@ local function newBuild(
 			then RoadGraph.SignalSpots(roads, signals.offset, signals.maxPerPlot)
 			else {},
 		signals = {},
+		highway = highway,
+		subways = {},
 		createdAt = os.clock(),
 	}
 end
@@ -424,6 +518,74 @@ local function syncSignals(build: Build, folder: Instance, owned: { [string]: bo
 	end
 end
 
+-- Subway entrances (wave 2a): while the slot is owned, each planned spot appears with the street
+-- it was tied to; the one nearest the plot entrance never waits. Near plots only, like lamps.
+local function syncSubway(build: Build, folder: Instance, owned: { [string]: boolean }): ()
+	local subway = build.era.subway
+	if subway == nil then
+		return
+	end
+	if not owned[subway.requiresSlot] then
+		clearSubways(build)
+		return
+	end
+	for index, spot in build.plan.subwayEntrances do
+		local placed: Model? = build.subways[index]
+		if placed ~= nil then
+			continue
+		end
+		local pieceId = spot.pieceId
+		local due = spot.exempt or (pieceId ~= nil and RoadGraph.PieceVisible(build.roads, pieceId))
+		if not due then
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			subway.prop,
+			0,
+			build.plotFrame * Scatter.PropFrame(spot.position, spot.rotationY),
+			folder
+		)
+		if model ~= nil then
+			build.subways[index] = model
+		end
+	end
+end
+
+-- The elevated ring (wave 2a) follows its slot: bought on a near plot it builds outward from the
+-- ramp, and a sale it never sees (an era rebuild clears the whole plot) takes it down.
+local function syncHighway(build: Build, owned: { [string]: boolean }, animate: boolean): ()
+	local handle = build.highway
+	local config = build.era.highway
+	if handle == nil or config == nil then
+		return
+	end
+	Highway.SetOwned(handle, owned[config.requiresSlot] == true, animate)
+end
+
+local function highwayTargetFor(
+	entry: PlotEntry,
+	build: Build,
+	config: Types.CityDressingConfig
+): number
+	local handle = build.highway
+	local era = build.era.highway
+	if handle == nil or era == nil or not entry.near or not entry.vehicleSelected then
+		return 0
+	end
+	-- Lanes are nil until the ring is closed and its deck has been measured, so a deck template
+	-- that has not replicated yet simply means "not this sync" rather than cars stuck at 0 studs.
+	if Highway.Lanes(handle) == nil then
+		return 0
+	end
+	local vehicles = era.vehicles
+	if type(vehicles) ~= "table" then
+		return 0
+	end
+	local wanted = math.floor(RoadGraph.BudgetValue(vehicles.count, 0))
+	return math.clamp(wanted, 0, math.max(config.budget.vehiclesPerPlot, 0))
+end
+
 local function vehicleTargetFor(
 	entry: PlotEntry,
 	build: Build,
@@ -439,7 +601,12 @@ local function vehicleTargetFor(
 		return 0
 	end
 	local wanted = math.ceil(build.era.vehicles.perPlot * entry.tier / tierCount)
-	return math.clamp(wanted, 0, #build.plan.vehicleProps)
+	-- The deck's cars are part of the plot's share, so the streets take what is left of it. What is
+	-- actually on the deck, not what was asked for: cars the map budget refused must not go on
+	-- reserving street slots that nothing is using.
+	local room =
+		math.max(config.budget.vehiclesPerPlot - Traffic.Count(highwayPlotId(entry.index)), 0)
+	return math.clamp(wanted, 0, math.min(#build.plan.vehicleProps, room))
 end
 
 local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
@@ -479,6 +646,58 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 		config.budget.vehiclesMap
 	)
 	entry.vehiclesBlocked = placed < offered
+end
+
+-- The ring's cars ride the same Traffic loop on their own lane graph, so they never take the ramp
+-- and cost nothing beyond the models themselves.
+local function spawnHighwayVehicles(
+	entry: PlotEntry,
+	build: Build,
+	config: Types.CityDressingConfig
+): ()
+	local plotId = highwayPlotId(entry.index)
+	Traffic.ClearPlot(plotId)
+	entry.highwayBlocked = false
+	local handle = build.highway
+	local era = build.era.highway
+	if handle == nil or era == nil or entry.highwayTarget <= 0 then
+		return
+	end
+	local lanes = Highway.Lanes(handle)
+	if lanes == nil or lanes.count == 0 then
+		return
+	end
+	local props = build.plan.vehicleProps
+	if #props == 0 then
+		return
+	end
+	local models: { Model } = {}
+	for index = 1, entry.highwayTarget do
+		local model = PropFactory.Spawn(
+			build.eraName,
+			props[(index - 1) % #props + 1],
+			0,
+			CFrame.identity,
+			nil
+		)
+		if model ~= nil then
+			table.insert(models, model)
+		end
+	end
+	if #models == 0 then
+		return
+	end
+	local offered = #models
+	local placed = Traffic.SpawnPlot(
+		plotId,
+		lanes,
+		models,
+		era.vehicles.speed,
+		config.vehicles.turnSeconds,
+		entry.folder,
+		config.budget.vehiclesMap
+	)
+	entry.highwayBlocked = placed < offered
 end
 
 local function sync(entry: PlotEntry): ()
@@ -548,6 +767,10 @@ local function sync(entry: PlotEntry): ()
 
 	-- Roads grow with buildings, not tiers; near/far only swaps meandered and straight Parts.
 	RoadGraph.SetNear(current.roads, entry.near)
+	local highway = current.highway
+	if highway ~= nil then
+		Highway.SetNear(highway, entry.near)
+	end
 	local roadsChanged = entry.lanesStale
 	entry.lanesStale = false
 	-- Buildings replicate over several frames after a join or rebuild; only a building that
@@ -566,17 +789,32 @@ local function sync(entry: PlotEntry): ()
 	RoadGraph.Flush(current.roads)
 	RoadGraph.RefreshPieces(current.roads)
 	syncFiller(current, tier, folder)
+	syncHighway(current, owned, animate)
 
 	if entry.near then
 		syncTrees(current, config, tier, folder)
 		syncLamps(current, config, tier, folder, owned)
 		syncSignals(current, folder, owned)
+		syncSubway(current, folder, owned)
 	else
 		clearTrees(current)
 		clearLamps(current)
 		clearSignals(current)
+		clearSubways(current)
 	end
 
+	local deckTarget = highwayTargetFor(entry, current, config)
+	if deckTarget ~= entry.highwayTarget then
+		entry.highwayTarget = deckTarget
+		spawnHighwayVehicles(entry, current, config)
+	elseif
+		deckTarget > 0
+		and entry.highwayBlocked
+		and Traffic.Room(config.budget.vehiclesMap) > 0
+	then
+		-- Room freed elsewhere since the map budget cut the deck short.
+		spawnHighwayVehicles(entry, current, config)
+	end
 	local target = vehicleTargetFor(entry, current, config)
 	if target ~= entry.vehicleTarget then
 		entry.vehicleTarget = target
@@ -646,6 +884,8 @@ local function addPlot(plot: Instance): ()
 		near = false,
 		vehicleSelected = false,
 		vehicleTarget = 0,
+		highwayTarget = 0,
+		highwayBlocked = false,
 		vehiclesBlocked = false,
 		suspectSince = nil,
 		confirmSuspect = false,
@@ -758,6 +998,11 @@ local function refreshLod(config: Types.CityDressingConfig): ()
 			entry.vehiclesBlocked = false
 			Traffic.ClearPlot(entry.index)
 		end
+		if entry.highwayTarget > 0 and (not entry.near or not entry.vehicleSelected) then
+			entry.highwayTarget = 0
+			entry.highwayBlocked = false
+			Traffic.ClearPlot(highwayPlotId(entry.index))
+		end
 		local suspectSince = entry.suspectSince
 		if suspectSince ~= nil and now - suspectSince >= lod.refreshSeconds then
 			entry.confirmSuspect = true
@@ -766,7 +1011,7 @@ local function refreshLod(config: Types.CityDressingConfig): ()
 	end
 	if Traffic.Room(config.budget.vehiclesMap) > 0 then
 		for _, entry in entries do
-			if entry.vehiclesBlocked then
+			if entry.vehiclesBlocked or entry.highwayBlocked then
 				schedule(entry)
 			end
 		end

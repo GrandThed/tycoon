@@ -1,0 +1,53 @@
+{
+  "id": "CityHall",
+  "era": "Metropolis",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [-0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [0.5, 0.0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [-0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [0.5, 0.0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [-0.5, 0.25, 0.25], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [0.5, 0.25, 0.25], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [-0.75, 0.5, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [-0.25, 0.5, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [0.25, 0.5, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [0.75, 0.5, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [-0.75, 0.5, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [-0.25, 0.5, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [0.25, 0.5, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-k", "pos": [0.75, 0.5, 0.5], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-roads", "model": "tile-slant", "pos": [-0.5, 2.05, 0.25], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-slant", "pos": [0.5, 2.05, 0.25], "rotY": 180, "stage": 0},
+
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.9, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.6, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.3, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.3, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.6, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.9, 0.5, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.9, 1.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.6, 1.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [-0.3, 1.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.3, 1.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.6, 1.0, -0.55], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "bridge-pillar-wide", "pos": [0.9, 1.0, -0.55], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-commercial", "model": "detail-awning-wide", "pos": [0.0, 0.6, -0.15], "rotY": 180, "stage": 0},
+
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [-0.5, 1.5, -0.40], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "tile-high", "pos": [0.5, 1.5, -0.40], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [0.0, 2.25, 0.25], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-n", "pos": [0.0, 2.95, 0.25], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-roads", "model": "road-sign-empty", "pos": [0.0, 3.65, 0.25], "rotY": 0, "stage": 0},
+
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [0.85, 0.0, -1.06], "rotY": 90, "stage": 0},
+    {"kit": "city-kit-roads", "model": "light-curved", "pos": [-0.85, 0.0, -1.06], "rotY": 270, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.72, 0.25, -0.85], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.72, 0.25, -0.85], "rotY": 0, "stage": 0}
+  ]
+}
