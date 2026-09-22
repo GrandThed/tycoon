@@ -1,4 +1,9 @@
 --!strict
+-- COPY of src/client/UI/Theme.luau for the Expeditions place (C0): the two client trees
+-- never require across each other, so the combat HUD carries its own Theme. Everything
+-- above the "C0 combat place" block is verbatim; dedupe is a follow-up for a later
+-- milestone (report of 2026-09-17).
+--
 -- HUD look and feel: colors, fonts, pixel sizing for a 375x667 design canvas that one
 -- UIScale per HUD component stretches to the real viewport, and (M3) every presentation
 -- timing — tween durations, particle counts, auto-dismiss seconds, reduce-motion factors.
@@ -297,6 +302,24 @@ local Theme = {
 	LOAD_SLOW_SECONDS = 8, -- "still working" line after this long in the loading phase
 	LOAD_TICK_SECONDS = 0.25, -- countdown / slow-line refresh cadence
 	LOAD_RETRY_ACK_SECONDS = 5, -- "Retrying…" re-arms to Retry if no status answers by then
+
+	-- C0 combat place (src/combat/client): lobby/wave HUD and the summary card. The HP bar
+	-- reads the local Humanoid, the party list mirrors RunState.party, and the tempo dot
+	-- colours the director's pace — no combat input exists yet.
+	COMBAT_TEMPO_DOT_SIZE = 14,
+	COMBAT_TEMPO_CALM = 0.9, -- below this the director is holding back
+	COMBAT_TEMPO_HOT = 1.3, -- at or above this it is merging waves
+	COMBAT_HP_BAR_WIDTH = 200,
+	COMBAT_HP_BAR_HEIGHT = 18,
+	COMBAT_HP_LABEL_HEIGHT = 16,
+	COMBAT_PARTY_WIDTH = 160,
+	COMBAT_PARTY_ROW_HEIGHT = 34,
+	COMBAT_PARTY_BAR_HEIGHT = 6,
+	COMBAT_PARTY_NAME_HEIGHT = 16,
+	COMBAT_SUMMARY_WIDTH = 320,
+	-- Portrait cannot fit the HP block and both buttons on one line, so the HP block lifts
+	-- above the button row whenever their combined design width does not fit.
+	COMBAT_HP_BUTTONS_GAP = 8,
 
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,

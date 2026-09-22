@@ -1,0 +1,52 @@
+{
+	"version": 1,
+	"offline": { "expeditionEfficiency": 1.0 },
+	"player": {
+		"respawnSeconds": 8,
+		"hitDistancePad": 3,
+		"breatherRegenPerSecond": 10,
+		"killCooldownRefundSeconds": 0.5
+	},
+	"remotes": {
+		"attackCallsPerSecond": 8,
+		"abilityCallsPerSecond": 2,
+		"runListCallsPerSecond": 1,
+		"combatStateHz": 4
+	},
+	"director": {
+		"windowSeconds": 15,
+		"tempoMin": 0.5,
+		"tempoMax": 2.0,
+		"mergeThreshold": 0.7,
+		"mergeTempo": 1.3,
+		"eliteTempo": 1.6,
+		"breatherSeconds": 6,
+		"breatherMaxSeconds": 14,
+		"maxAlive": 24,
+		"runCapSeconds": 1200
+	},
+	"coop": {
+		"maxParty": 4,
+		"joinUntilWave": 9,
+		"contributionFloor": 0.1,
+		"countPerExtraPlayer": 0.6,
+		"mentorRatio": 0.1,
+		"mentorValor": 5
+	},
+	"overdrive": {
+		"requiresRebirth": 1,
+		"countMult": 1.5,
+		"hpMult": 3.0,
+		"damageMult": 2.0,
+		"spawnRateMult": 1.5,
+		"rewardMult": 4.0
+	},
+	"registry": { "mapName": "ActiveRuns", "ttlSeconds": 7200 },
+	"animations": { "enemyIdle": 0, "enemyWalk": 0, "enemyAttack": 0, "enemyDeath": 0 },
+	"debug": {
+		"missionAttribute": "DebugMission",
+		"overdriveAttribute": "DebugOverdrive",
+		"grantMaterialsAttribute": "GrantMaterials",
+		"grantValorAttribute": "GrantValor"
+	}
+}

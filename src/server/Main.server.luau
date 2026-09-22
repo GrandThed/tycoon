@@ -2,6 +2,8 @@
 -- Boot (frozen Init/Start order) + the per-player join/leave orchestration: Main owns the
 -- explicit sequence load → passes → offline grant → claim → snapshot, so no service assumes any
 -- PlayerAdded/PlayerRemoving ordering (docs/INTERFACES.md "M2 contracts", M5 safe mode).
+-- C0: it also owns the remote definitions handed to RemoteService and the release/rejoin hooks
+-- the expedition handoff borrows, which is what keeps ExpeditionService out of a require cycle.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,9 +17,12 @@ local servicesFolder = script.Parent:WaitForChild("Services")
 
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
+local HubRemotes = require(servicesFolder:WaitForChild("HubRemotes"))
 local EconomyService = require(servicesFolder:WaitForChild("EconomyService"))
 local PlotService = require(servicesFolder:WaitForChild("PlotService"))
 local LegacyShopService = require(servicesFolder:WaitForChild("LegacyShopService"))
+local ArmoryService = require(servicesFolder:WaitForChild("ArmoryService"))
+local ExpeditionService = require(servicesFolder:WaitForChild("ExpeditionService"))
 local MonetizationService = require(servicesFolder:WaitForChild("MonetizationService"))
 local AnalyticsService = require(servicesFolder:WaitForChild("AnalyticsService"))
 
@@ -28,6 +33,69 @@ type Service = {
 
 type Loader = (player: Player) -> Types.PlayerState?
 
+-- Players with a VIP skin rebuild already scheduled; flips inside the window share it.
+local pendingSkinRefresh: { [Player]: boolean } = {}
+
+-- Teardown order per contract: world first, emission state next, final save last (the tick
+-- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
+-- idempotent, so PlayerRemoving, the shutdown flush and a departing expedition may all run it
+-- for one player.
+local function releasePlayer(player: Player): ()
+	pendingSkinRefresh[player] = nil
+	PlotService.Release(player)
+	EconomyService.Cleanup(player)
+	DataService.Release(player)
+end
+
+-- Shared by the first join (LoadAsync) and a safe-mode retry (RetryLoadAsync). Yields.
+local function runJoinSequence(player: Player, loader: Loader): ()
+	local state = loader(player)
+	if state == nil then
+		-- Load failure, still-locked session, refused retry, or the player left mid-load (the
+		-- profile is released internally then). No kick (M5 safe mode): DataService has already
+		-- published the load status, and the player may retry or leave from the card.
+		return
+	end
+	if player.Parent == nil then
+		DataService.Release(player)
+		return
+	end
+	-- Passes first (yields): the offline grant must already see Offline Pro's wider cap
+	-- and full efficiency, and the join snapshot must report the paid income multipliers.
+	MonetizationService.RefreshPassesAsync(player)
+	-- Same "left during the yield" guard as above, phrased against Players so the solver
+	-- doesn't treat the already-narrowed player.Parent as non-nil.
+	if not player:IsDescendantOf(Players) then
+		DataService.Release(player)
+		return
+	end
+	-- Grant before claim/snapshot so the join snapshot already carries the earned cash
+	-- (and the welcomeBack card when elapsed >= 60 s and the grant was positive).
+	EconomyService.ApplyOfflineGrant(player)
+	PlotService.ClaimPlot(player)
+	EconomyService.SendSnapshot(player)
+end
+
+-- Configure before Init: RemoteService refuses to create any remote without its definitions.
+RemoteService.Configure(HubRemotes)
+
+-- ExpeditionService needs Main's own teardown and join sequence, and Main is the only place
+-- that has both; handing them over as hooks at Init keeps the service free of PlotService and
+-- MonetizationService requires (which would be a cycle through EconomyService).
+local expeditionBoot: Service = {
+	Init = function()
+		ExpeditionService.Init({
+			release = releasePlayer,
+			-- Not task.spawn'd: the handoff calls this on its own thread and needs the profile
+			-- to be back before it undoes the departure stamp.
+			rejoin = function(player: Player)
+				runJoinSequence(player, DataService.LoadAsync)
+			end,
+		})
+	end,
+	Start = ExpeditionService.Start,
+}
+
 -- Init/Start order is frozen in docs/INTERFACES.md.
 local orderedServices: { Service } = {
 	DataService,
@@ -36,6 +104,10 @@ local orderedServices: { Service } = {
 	PlotService,
 	-- M6: sells Legacy shop tiers; needs PlotService (cosmetics refresh) and nothing needs it.
 	LegacyShopService,
+	-- C0: the Armory sells weapon tiers against EconomyService's persisted rate; the expedition
+	-- handoff releases the profile and teleports. Nothing needs either of them.
+	ArmoryService,
+	expeditionBoot,
 	MonetizationService,
 	-- AnalyticsService goes last: it depends on nothing, and nothing depends on its Start.
 	AnalyticsService,
@@ -48,9 +120,6 @@ end
 for _, service in orderedServices do
 	service.Start()
 end
-
--- Players with a VIP skin rebuild already scheduled; flips inside the window share it.
-local pendingSkinRefresh: { [Player]: boolean } = {}
 
 -- RequestSetSetting (M3). The contract places this handler in DataService.Start, but marking
 -- the delta needs EconomyService, which already requires DataService — a require cycle. Main
@@ -87,35 +156,6 @@ RemoteService.SetHandler("RequestSetSetting", function(player: Player, key: any,
 	end)
 end)
 
--- Shared by the first join (LoadAsync) and a safe-mode retry (RetryLoadAsync). Yields.
-local function runJoinSequence(player: Player, loader: Loader): ()
-	local state = loader(player)
-	if state == nil then
-		-- Load failure, still-locked session, refused retry, or the player left mid-load (the
-		-- profile is released internally then). No kick (M5 safe mode): DataService has already
-		-- published the load status, and the player may retry or leave from the card.
-		return
-	end
-	if player.Parent == nil then
-		DataService.Release(player)
-		return
-	end
-	-- Passes first (yields): the offline grant must already see Offline Pro's wider cap
-	-- and full efficiency, and the join snapshot must report the paid income multipliers.
-	MonetizationService.RefreshPassesAsync(player)
-	-- Same "left during the yield" guard as above, phrased against Players so the solver
-	-- doesn't treat the already-narrowed player.Parent as non-nil.
-	if not player:IsDescendantOf(Players) then
-		DataService.Release(player)
-		return
-	end
-	-- Grant before claim/snapshot so the join snapshot already carries the earned cash
-	-- (and the welcomeBack card when elapsed >= 60 s and the grant was positive).
-	EconomyService.ApplyOfflineGrant(player)
-	PlotService.ClaimPlot(player)
-	EconomyService.SendSnapshot(player)
-end
-
 local function onPlayerAdded(player: Player): ()
 	task.spawn(runJoinSequence, player, DataService.LoadAsync)
 end
@@ -129,14 +169,29 @@ RemoteService.SetHandler("RequestRetryLoad", function(player: Player)
 	task.spawn(runJoinSequence, player, DataService.RetryLoadAsync)
 end)
 
--- Teardown order per contract: world first, emission state next, final save last (the tick
--- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
--- idempotent, so PlayerRemoving and the shutdown flush may both run it for one player.
+-- C0 expedition intents. Wired here (not in ExpeditionService.Init) because the handoff runs
+-- Main's own release/rejoin sequence; all three yield, so each gets its own thread.
+RemoteService.SetHandler(
+	"RequestExpedition",
+	function(player: Player, missionId: any, overdrive: any)
+		task.spawn(ExpeditionService.Depart, player, missionId :: string, overdrive :: boolean)
+	end
+)
+
+RemoteService.SetHandler("RequestJoinRun", function(player: Player, hostUserId: any)
+	task.spawn(ExpeditionService.Join, player, hostUserId :: number)
+end)
+
+RemoteService.SetHandler("RequestRunList", function(player: Player)
+	task.spawn(ExpeditionService.SendRunList, player)
+end)
+
+-- A real leave, as opposed to the release the expedition handoff runs mid-teleport: only here
+-- may the in-flight departure guard be forgotten, or a TeleportInitFailed arriving after the
+-- handoff released the profile would find no record to recover from.
 local function onPlayerRemoving(player: Player): ()
-	pendingSkinRefresh[player] = nil
-	PlotService.Release(player)
-	EconomyService.Cleanup(player)
-	DataService.Release(player)
+	ExpeditionService.Forget(player)
+	releasePlayer(player)
 end
 
 Players.PlayerAdded:Connect(onPlayerAdded)

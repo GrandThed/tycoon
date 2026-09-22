@@ -2,8 +2,9 @@
 -- ProfileStore-backed PlayerState persistence (spec §7, docs/INTERFACES.md "M2 contracts" +
 -- "M5 contracts — Hardening"). Internals (session locking, retries, BindToClose flushing) live
 -- in ProfileStore; this module exposes LoadAsync/RetryLoadAsync/GetState/SaveAsync/Release,
--- owns the schema template + migration mechanism, and owns each player's load status while
--- they sit in safe mode (no profile, no plot, no writes) after a failed load.
+-- runs the migration mechanism over the schema ProfileSchema owns (C0: shared with the
+-- Expeditions place), and owns each player's load status while they sit in safe mode (no
+-- profile, no plot, no writes) after a failed load.
 -- GetState returns nil until a load completes — all call sites are nil-tolerant by contract.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +12,7 @@ local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 -- ProfileStore is plain (non-strict) Luau; narrow interfaces below cover the surface we use.
@@ -42,9 +44,13 @@ type PlayerStore = {
 
 type LoadPhase = "loading" | "failed"
 
-local SCHEMA_VERSION = 4
-local STORE_NAME = "PlayerData"
-local PROFILE_KEY_PREFIX = "p_"
+-- The schema itself (version, store name, key prefix, template, migrations) lives in
+-- ProfileSchema so the combat place loads byte-identical profiles from the same store.
+local SCHEMA_VERSION = ProfileSchema.SCHEMA_VERSION
+local STORE_NAME = ProfileSchema.STORE_NAME
+local PROFILE_KEY_PREFIX = ProfileSchema.PROFILE_KEY_PREFIX
+local PROFILE_TEMPLATE = ProfileSchema.PROFILE_TEMPLATE
+local Migrations = ProfileSchema.Migrations
 -- Infrastructure retry policy, not game balance (ProfileStore retries the underlying DataStore
 -- calls itself; this only re-attempts a thrown StartSessionAsync/Save). Kept in code
 -- deliberately — Config/*.json is for gameplay constants.
@@ -62,49 +68,6 @@ local SAVE_CONFIRM_TIMEOUT_SECONDS = 10
 -- retries throttled DataStore calls internally and never surfaces them), so a boolean attribute
 -- on Workspace, toggled live in the Properties pane, stands in for one. Ignored outside Studio.
 local FORCE_LOAD_FAILURE_ATTRIBUTE = "ForceLoadFailure"
-
--- Template = schema v4, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
--- first-ever join (no offline grant, no welcome-back card).
-local PROFILE_TEMPLATE: Types.PlayerState = {
-	version = SCHEMA_VERSION,
-	cash = 0,
-	era = 1,
-	rebirthCount = 0,
-	legacy = 0,
-	slots = {},
-	passes = {},
-	processedReceipts = {},
-	lastSeen = 0,
-	incomeAtSave = 0,
-	stats = { totalCashAllTime = 0, erasCompleted = 0, playtimeSeconds = 0 },
-	settings = { music = true, sfx = true, vipSkins = true },
-	pendingDoubleOfflineAmount = 0,
-	legacyShop = { spent = 0, perks = {} },
-}
-
--- Migrations[n](state) upgrades schema n → n+1; the runner bumps state.version afterwards.
--- Additive and idempotent. Reconcile would also fill the new fields, but the version stamp must
--- advance so an old profile is provably upgraded once rather than reconciled forever.
-local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
-	[1] = function(state: Types.PlayerState): ()
-		if state.pendingDoubleOfflineAmount == nil then
-			state.pendingDoubleOfflineAmount = 0
-		end
-	end,
-	-- M6: the Legacy shop state (docs/INTERFACES.md "Profile schema v3").
-	[2] = function(state: Types.PlayerState): ()
-		if state.legacyShop == nil then
-			state.legacyShop = { spent = 0, perks = {} }
-		end
-	end,
-	-- VIP skins toggle (docs/INTERFACES.md "Amendment — VIP skins toggle"): default on, so an
-	-- existing VIP owner keeps the look they already had.
-	[3] = function(state: Types.PlayerState): ()
-		if state.settings.vipSkins == nil then
-			state.settings.vipSkins = true
-		end
-	end,
-}
 
 local playerStore: PlayerStore? = nil
 local profiles: { [Player]: Profile } = {}

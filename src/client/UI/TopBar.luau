@@ -1,5 +1,5 @@
 --!strict
--- Top HUD bar: cash, income/s, Legacy count (M2), era badge. Display-only by contract —
+-- Top HUD bar: cash, income/s, Gear Power (C0), Legacy count (M2), era badge. Display-only —
 -- UIController pushes every value from server state; nothing here computes cash, income,
 -- or legacy (docs/INTERFACES.md, M1/M2/M3 client contracts). Landscape (M3) parks the bar
 -- top-left so the docked side panel never overlaps it on a 667x375 phone. Until the first
@@ -18,6 +18,9 @@ local BLANK = "—"
 export type TopBarHandle = {
 	SetCash: (cash: number) -> (),
 	SetIncome: (incomePerSecond: number) -> (),
+	-- C0: Gear Power from the server's Armory.GearPower. nil hides it (no Armory config)
+	-- and hands the income/Legacy labels their pre-C0 columns back.
+	SetPower: (power: number?) -> (),
 	-- spendable is nil when there is no Legacy shop (empty perk config): total only.
 	SetLegacy: (legacy: number, spendable: number?) -> (),
 	SetEra: (eraIndex: number, displayName: string) -> (),
@@ -68,6 +71,28 @@ function TopBar.new(parent: Instance): TopBarHandle
 		Text = BLANK,
 		Parent = root,
 	}) :: TextLabel
+
+	-- C0: Gear Power. Hidden until the server pushes one, so a hub with no Armory config
+	-- shows the M9 bar. TextScaled (bounded) because "⚔ 12.4M" outgrows the column.
+	local powerLabel = Create("TextLabel", {
+		Name = "Power",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(14 + Theme.TOP_INCOME_WIDTH_POWER + Theme.TOP_POWER_GAP, 34),
+		Size = UDim2.fromOffset(Theme.TOP_POWER_WIDTH, 15),
+		Font = Theme.FONT,
+		TextSize = Theme.TEXT_SMALL,
+		TextColor3 = Theme.COLOR_ACCENT_ALT,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextScaled = true,
+		Visible = false,
+		Text = "",
+		Parent = root,
+	}) :: TextLabel
+	Create("UITextSizeConstraint", {
+		MinTextSize = Theme.TOP_POWER_MIN_TEXT,
+		MaxTextSize = Theme.TEXT_SMALL,
+		Parent = powerLabel,
+	})
 
 	-- M2 contract: Legacy is visible from era 1 so the first advance means something.
 	-- Right-aligned against the same text-column edge the cash/income labels stop at.
@@ -131,6 +156,20 @@ function TopBar.new(parent: Instance): TopBarHandle
 		Parent = badge,
 	}) :: TextLabel
 
+	-- The income line holds three fields at 375 px only while Gear Power is on screen, so
+	-- the two neighbours give up column width exactly then and take it back otherwise.
+	local function setPowerVisible(visible: boolean): ()
+		powerLabel.Visible = visible
+		incomeLabel.Size = UDim2.fromOffset(
+			if visible then Theme.TOP_INCOME_WIDTH_POWER else Theme.TOP_INCOME_WIDTH,
+			15
+		)
+		legacyLabel.Size = UDim2.fromOffset(
+			if visible then Theme.TOP_LEGACY_WIDTH_POWER else Theme.TOP_LEGACY_WIDTH,
+			15
+		)
+	end
+
 	local handle: TopBarHandle = {
 		SetCash = function(cash: number)
 			cashLabel.Text = "$" .. Format.Cash(cash)
@@ -138,6 +177,15 @@ function TopBar.new(parent: Instance): TopBarHandle
 		SetIncome = function(incomePerSecond: number)
 			-- Format.Rate keeps sub-1/s starters from rendering "0/s" (M3 contract).
 			incomeLabel.Text = Format.Rate(incomePerSecond) .. "/s"
+		end,
+		SetPower = function(power: number?)
+			if power == nil then
+				setPowerVisible(false)
+				return
+			end
+			-- Format.Cash, not tostring: Gear Power reaches six figures by Metropolis.
+			powerLabel.Text = "⚔ " .. Format.Cash(power)
+			setPowerVisible(true)
 		end,
 		SetLegacy = function(legacy: number, spendable: number?)
 			-- Spendable first: it is the number the player acts on; the lifetime total

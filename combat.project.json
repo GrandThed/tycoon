@@ -1,0 +1,62 @@
+{
+	"name": "EraCityTycoonExpeditions",
+	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies"],
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Shared": {
+				"$path": "src/shared"
+			},
+			"Packages": {
+				"$path": "Packages"
+			},
+			"Assets": {
+				"$className": "Folder",
+				"Props": {
+					"$className": "Folder",
+					"$path": { "optional": "templates/_props" }
+				}
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Server": {
+				"$className": "Folder",
+				"Main": {
+					"$path": "src/combat/server/Main.server.luau"
+				},
+				"Services": {
+					"$path": "src/server/Services"
+				},
+				"Combat": {
+					"$path": "src/combat/server/Services"
+				}
+			},
+			"ServerPackages": {
+				"$path": "ServerPackages"
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"$ignoreUnknownInstances": true,
+			"Enemies": {
+				"$className": "Folder",
+				"$path": { "optional": "templates/_enemies" }
+			}
+		},
+		"Workspace": {
+			"$className": "Workspace",
+			"$ignoreUnknownInstances": true
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"Client": {
+					"$path": "src/combat/client"
+				}
+			}
+		}
+	}
+}

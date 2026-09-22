@@ -628,3 +628,245 @@ py tools/sim_economy.py --check          # bands still pass, exits 0
 py tools/sim_economy.py --laps 2         # tier timeline per lap
 py tools/streetplan.py                   # street plans vs clearance rules (P1/P2), PNGs per era
 ```
+
+# C0 — Armory unlocks and the Village expedition
+
+New tool: `tools/sim_combat.py`. It mirrors `src/shared/Armory.luau` and `src/shared/Combat.luau`
+function for function (same names in snake_case, each with the Luau name in its docstring) from
+`docs/INTERFACES.md` "C0 contracts", reads the four real configs (`Armory.json`, `Combat.json`,
+`Places.json`, `Missions/*.json`), and **imports `sim_economy`** — `simulate_era(..., record_ips=True)`
+run era by era with Legacy carried, exactly as `run_full`/`run_packs` do — so the tycoon income
+curve is never re-derived and the two tools can never disagree. `--check` prints one verdict line
+per assertion and exits 1 on any failure; the default run prints the unlock ladder, the modelled
+Village run at recommended / 2× / 0.6× power, the cash-vs-era-cost ratio, a survivability estimate
+and spot checks of the helpers that have no table (`ContributionShares`, `AwayEfficiency`,
+`MentorBonus`, `Tempo`, `AscensionCap`, `CombatCashMult`, `CanBuy`, `CanAscend`).
+`--era N`, `--power P`, `--party N` and `--overdrive` override the modelled run.
+
+## The income curve the Armory gates ride on
+
+`unlockRate` is compared against `EconomyService.GetPersistedIncomePerSecond`, i.e. the city's
+live rate (Legacy, Founder's Blessing, passes and Premium in; neighbours pinned to 1). That rate
+is **not monotonic across the run**: advancing an era starts a fresh plot, so income collapses and
+climbs again much faster. Greedy, free, Legacy carried:
+
+| Era | length | start | median | peak |
+|-----|--------|-------|--------|------|
+| Village | 41:50 | 3/s | 64.49K/s | 698.65K/s |
+| Boomtown | 1:44:15 | 534/s | 34.07M/s | 155.42M/s |
+| Metropolis | 4:28:49 | 108.30K/s | 6.12B/s | 30.73B/s |
+| OrbitalColony | 9:25:10 | 18.87M/s | 1.07T/s | 5.35T/s |
+
+Two consequences drove every `unlockRate` below:
+
+1. **A band's entry tier must sit above the previous era's peak**, or the greedy player crosses it
+   in the previous era and the "new era, new weapons" beat is lost. That is why band 2 opens at
+   800K/s (Village peaks at 698.65K/s), band 3 at 200M/s (Boomtown peaks at 155.42M/s) and band 4
+   at 40B/s (Metropolis peaks at 30.73B/s).
+2. **Income per era grows ≈ ×200, not ×100.** The spec's "×100 per era" describes base costs and
+   incomes; the compounded curve (level-ups + Legacy) ends each era ≈ 200× above the previous one,
+   so the unlock ladder had to be spread over 12 decades of rate, not 8.
+
+## Unlock ladder (applied; melee and ranged ladders are identical per tier)
+
+Crossing times are the first second the greedy player's persisted rate reaches the gate; "run
+clock" is the same moment on the whole-playthrough clock.
+
+| tier | band | cost | unlockRate | crossed in | at | % of era | run clock | power (t/t) | modelled DPS |
+|------|------|------|-----------|------------|----|----------|-----------|-------------|--------------|
+| 1 | 1 Timber | 10 | 0/s | Village | 0:00 | 0 % | 0:00 | 48 | 33.5 |
+| 2 | 1 Timber | 60 | 15K/s | Village | 12:21 | 30 % | 12:21 | 64 | 50.3 |
+| 3 | 1 Timber | 180 | 120K/s | Village | 26:45 | 64 % | 26:45 | 84 | 72.9 |
+| 4 | 2 Steel | 10 | 800K/s | Boomtown | 4:28 | 4 % | 46:18 | 151 | 155.3 |
+| 5 | 2 Steel | 60 | 20M/s | Boomtown | 35:14 | 34 % | 1:17:04 | 230 | 216.5 |
+| 6 | 2 Steel | 180 | 70M/s | Boomtown | 1:18:34 | 75 % | 2:00:24 | 321 | 312.2 |
+| 7 | 3 Circuits | 10 | 200M/s | Metropolis | 9:41 | 4 % | 2:35:46 | 602 | 1165.6 |
+| 8 | 3 Circuits | 60 | 4B/s | Metropolis | 1:34:15 | 35 % | 4:00:20 | 696 | 1698.4 |
+| 9 | 3 Circuits | 180 | 15B/s | Metropolis | 3:33:41 | 79 % | 5:59:46 | 990 | 2458.9 |
+| 10 | 4 Alloy | 10 | 40B/s | OrbitalColony | 20:00 | 4 % | 7:14:54 | 2650 | 4600.0 |
+| 11 | 4 Alloy | 60 | 700B/s | OrbitalColony | 3:17:47 | 35 % | 10:12:41 | 3834 | 6726.7 |
+| 12 | 4 Alloy | 180 | 2.5T/s | OrbitalColony | 7:30:04 | 80 % | 14:24:58 | 6250 | 9337.8 |
+
+Shape of the ladder: **entry tier at ~4 % of its era, second tier at ~35 %, third at ~75–80 %**.
+Village is deliberately earlier (0 % / 30 % / 64 %) because it is the onboarding era and the first
+two upgrades should land while the player is still learning the loop.
+
+`power (t/t)` is `Armory.GearPower` with both slots at that tier and no Ascension. It is the number
+the Expedition panel compares with `recommendedPower`.
+
+## Materials and cost: a flat currency, one ladder per band
+
+Every band charges **10 / 60 / 180** of its own era material. Materials deliberately **do not
+inflate ×100 per era** the way cash does: each era's material is a separate currency whose only
+source is that era's mission, and a full run of any mission is designed to yield ~250–350 units.
+So the same ladder is the same number of runs in every band, and the ×100 cash curve stays the
+tycoon's business alone.
+
+Village yields **282 Timber** per full run, against **500 Timber** for the whole of band 1 in both
+slots (2 × (10 + 60 + 180)). That is the intended ~2 runs for a full band, with the income gates,
+not the materials, setting the calendar. Tier 1 stays at **10** so the Studio definition of done
+("buy Wooden Sword with 10 Timber via the `GrantMaterials` lever") still reads true, and so the
+first purchase is nearly free.
+
+Ascension (unchanged) costs 200 / 500 / 1200 of **all four** materials plus 50 / 120 / 250 Valor,
+i.e. roughly 1 / 2 / 4 runs of each era's mission per level, with Valor (35 per Village run, bosses
+only) the tighter half. At the top tier it multiplies Gear Power ×1.96 / ×3.40 / ×5.79.
+
+## Village expedition — the modelled run
+
+`Raider Woods`, 10 waves, bosses on 5 and 10, `recommendedPower 60`, `targetMinutes 8`,
+`targetWaveSeconds 30`. Recommended power resolves to the **tier 2/2** loadout (Iron Sword +
+Hunter Bow, power 64, max HP 155, modelled DPS 50.3 = 37.8 melee + 12.5 ranged).
+
+| wave | count | avg HP | TTK | wave s | cash | Timber | boss |
+|------|-------|--------|-----|--------|------|--------|------|
+| 1 | 5 | 115 | 2.29 | 11.4 | 1,500 | 5.0 | |
+| 2 | 6 | 124 | 2.47 | 14.8 | 1,980 | 6.0 | |
+| 3 | 6 | 120 | 2.38 | 14.3 | 2,396 | 6.0 | archers enter |
+| 4 | 7 | 130 | 2.58 | 18.0 | 3,072 | 7.0 | |
+| 5 | 7 | 140 | 2.78 | 79.6 | 22,122 | 36.0 | Raider Chief 3,024 hp / 60 s / 10 Valor |
+| 6 | 8 | 151 | 3.01 | 24.1 | 4,250 | 16.0 | |
+| 7 | 9 | 229 | 4.55 | 40.9 | 8,369 | 24.8 | brutes enter |
+| 8 | 9 | 247 | 4.92 | 44.2 | 9,208 | 26.1 | |
+| 9 | 10 | 267 | 5.31 | 53.1 | 11,252 | 30.5 | |
+| 10 | 10 | 288 | 5.74 | 178.3 | 87,831 | 124.5 | Warlord 6,081 hp / 121 s / 25 Valor |
+
+- **Total 7:58 of combat** (479 s) + 54 s of breathers = **8:52 wall clock**, against the 8 min
+  target (band 4:00–12:00). Ordinary waves average **29.8 s** against `targetWaveSeconds 30`;
+  the longest ordinary wave is 57.4 s and the shortest 11.4 s.
+- **Bosses are 38 % of the run** (60 s + 121 s) and **62 % of the cash**. That is deliberate: the
+  boss is the payday, so leaving at wave 9 costs most of the reward.
+- Full-run rewards: **151,981 cash, 282 Timber, 35 Valor, 79 kills**. Fits the 1200 s run cap with
+  668 s to spare.
+
+Other power levels and party sizes (same tables, `--power` / `--party` / `--overdrive`):
+
+| variant | loadout | DPS | combat time | verdict |
+|---------|---------|-----|-------------|---------|
+| 0.6× power (34) | starter Stick + Sling | 21.8 | 18:24 (+54 s) = 19:18 | fits the 1200 s cap with 41 s to spare — a first-ever run is viable, and reaching wave 5 (5:19) already pays 31,070 cash and 60 Timber |
+| recommended (60) | tier 2/2 | 50.3 | 7:58 | on target |
+| 2× power (120 → tier 4/4) | Hatchet + Revolver | 155.3 | 2:35 | 3× faster; band-2 gear trivialises Village, as intended |
+| party 4, recommended | tier 2/2 | 50.3 each | 4:13 | 217 kills, 255,828 cash total ≈ 64K each — co-op is faster but pays less per player |
+| Overdrive (rebirth 1+, recommended 180 → tier 4/4) | Hatchet + Revolver | 155.3 | 10:14 | 728,065 cash (×4.8), 1,488 Timber, 140 Valor; fits the cap |
+
+## Cash vs the tycoon (assertion 4)
+
+The reference moment is the second the greedy player's rate reaches the recommended loadout's gate
+(15K/s at **12:21** into Village) — the first moment they can actually field recommended gear.
+
+| quantity | value |
+|----------|-------|
+| full-run cash | 151,981 |
+| Village slot cost still owed at 12:21 | 14,900,000 |
+| ratio | **1.02 %** (cap 25 %) |
+| ratio mid-era (20:55, 14,280,000 owed) | 1.06 % |
+| in income terms | ~2 s of the era's median rate (64.49K/s) |
+
+The 25 % ceiling is very loose here, and the real constraint is the opposite one: because the
+tycoon curve is exponential while a mission's cash is fixed per enemy, combat cash can only ever
+be a garnish. The values were chosen for **≈ 1 % of the era's total slot cost per full run**, which
+is a meaningful boost early (~5 minutes of income at the 5-minute mark, ~17 s of it at the 10-minute mark) and irrelevant
+by the monument — and ten repeat runs (~80 min) still only buy 10 % of the era, so grinding the
+mission can never beat building the city. Enemy `cash` therefore still scales ×100 per era for
+missions 2–4 (C3), while materials do not.
+
+## The DPS model and its assumptions
+
+Fixed by the contract, and the sim mirrors it exactly:
+
+```
+melee DPS  = damage × mean(chain) / mean(windows) × 0.7      (hit rate)
+ranged DPS = damage / cooldown × 0.5                          (uptime)
+TTK        = hp / DPS
+wave time  = count × TTK / party
+```
+
+What that means, and what it leaves out:
+
+- `mean(chain) / mean(windows)` is the sustained damage rate of an **uninterrupted** three-hit
+  combo. Nothing models combo resets, travel time between targets, or the cleave on the finisher.
+- **Abilities are not in the model at all.** Every tier carries one (2.0–6.0× damage on a 10–16 s
+  cooldown), and `killCooldownRefundSeconds 0.5` shortens it further, so real DPS will be higher
+  than modelled — 15–30 % on a rough pass. Wave times are therefore an upper bound.
+- `chargeSeconds` is **not** in the ranged term, so a charge weapon (bow: 0.8 s charge + 0.6 s
+  cooldown) is modelled as if it fired every 0.6 s. The 0.5 uptime factor is absorbing that; for
+  semi/auto classes the same 0.5 is instead absorbing aim time and reloads. This is the least
+  trustworthy part of the model.
+- **Party size divides wave time but boss HP is untouched** (`WaveSpec` scales count only, by
+  design), so a 4-player party kills a boss 4× faster. Fine at C0 where nothing is fought; C2 has
+  to decide whether bosses get a party multiplier.
+- Breathers, respawns, the tempo director's wave merging and `maxAlive 24` are outside the model.
+  Breather time is reported beside the combat time, never inside it.
+
+Survivability is printed but **not asserted** — there is no hit-rate data yet. Under "one enemy in
+contact landing 10 % of its attacks for the whole run", the tier-2/2 player takes 1,186 damage,
+regenerates 540 across nine breathers and dies ~4 times (33 s of respawn). At 25 % contact it is
+~16 deaths, which would be unplayable. Village enemy `damage` was therefore left at the contract's
+8 / 6 / 18 rather than guessed at.
+
+## Values changed, and why
+
+`src/shared/Config/Armory.json` (values only; keys frozen):
+
+| value | from | to | why |
+|-------|------|----|-----|
+| `unlockRate` tiers 1–12 | 0, 30, 120, 1K, 4K, 12K, 100K, 400K, 1.2M, 10M, 40M, 120M | 0, 15K, 120K, 800K, 20M, 70M, 200M, 4B, 15B, 40B, 700B, 2.5T | The old ladder was calibrated ~200× low: the greedy player passes 120M/s in the first 15 minutes of Metropolis, so **every** tier unlocked inside Village or Boomtown and the band-to-era mapping collapsed. The new ladder puts each band's entry just above the previous era's peak and spaces the rest at ~35 % / ~75 % of the era. |
+| tier `cost` | 10/30/80, 20/60/150, 40/120/300, 80/240/600 | 10/60/180 in every band | Material supply does not inflate across eras (each era's material comes only from that era's mission, ~250–350 per run), so an escalating ladder would price bands 3–4 out of reach while band 1 stayed free. One ladder per band = the same ~2 runs per band everywhere. Tier 1 stays at 10 for the Studio definition of done. |
+
+`src/shared/Config/Missions/1_Village.json`:
+
+| value | from | to | why |
+|-------|------|----|-----|
+| `recommendedPower` | 40 | 60 | Must match `Armory.GearPower` at the tier the income gate hands out mid-Village. Tier 2/2 = 64, tier 1/1 = 48, tier 3/3 = 84; 60 sits just under tier 2/2 so the panel reads "recommended 60 — you 64" (green) with the gear the player actually owns at the era's median rate, and starter gear (34) reads red at 0.57. |
+| `raider.hp` / `archer.hp` / `brute.hp` | 60 / 40 / 240 | 115 / 75 / 390 | Total run HP is what sets the run length, and the old values left it well under target. ×1.9 on the base HP puts the ordinary waves at a 29.8 s mean (`targetWaveSeconds 30`) and the whole run at 7:58. |
+| `raider.cash` / `archer.cash` / `brute.cash` | 15 / 20 / 80 | 300 / 400 / 1600 | ×20, to bring a full run from 0.05 % to ~1 % of Village's slot cost — from unnoticeable to a real early-game boost, still 25× under the contract's 25 % ceiling. |
+| `waveTable.baseCount` | 4 | 5 | With `countPerWave` cut (below), wave 1 needed a floor that does not read as empty; 5 enemies × 2.29 s TTK = an 11 s opening wave. |
+| `waveTable.countPerWave` | 1 | 0.6 | Count growth (2.8× over 10 waves) plus HP growth plus the composition shift made wave 10 eight times wave 1 — an 11 s opener forced a 70 s closer. At 0.6 the count runs 5→10 and the wave-time spread is 5× instead of 8×. |
+| `waveTable.hpGrowth` | 0.12 | 0.08 | Same reason: 1.12^9 = 2.77 was too steep once enemy HP doubled. 1.08^9 = 2.00 keeps the last wave under 2× `targetWaveSeconds`. |
+| `bosses.5.hpMult` | 4.0 | 5.7 | "First boss ≈ 60 s at recommended DPS": 390 × 1.3605 (wave 5) × 5.7 = 3,024 HP ÷ 50.3 DPS = 60.1 s. |
+| `bosses.10.hpMult` | 8.0 | 7.8 | The Warlord is deliberately **twice** the Chief, not more: 6,081 HP = 121 s. With the higher base HP, 8.0 overshot. |
+
+Unchanged and why: `damageGrowth 0.08`, `rewardGrowth 0.1`, all enemy `damage`, `speed`, `reach`,
+`attackCooldown`, `materials`, the wave `composition` breakpoints (1 / 3 / 7), both bosses'
+`damageMult`, `cashMult`, `materialsMult` and `valor`, `waves 10`, `bossWaves [5, 10]`,
+`targetMinutes 8`, `targetWaveSeconds 30`, and every `Armory.json` `damage`, `hp`, class, ability
+and Ascension number. Nothing in `Combat.json` or `Places.json` was touched.
+
+## What C1 must re-check
+
+1. **Real hit rates.** The 0.7 melee / 0.5 ranged coefficients are placeholders. Once C1 can
+   measure swings-that-land and shots-that-land, re-run `--check`; if measured melee is below ~0.5
+   the Village run breaks the 12-minute ceiling.
+2. **Abilities in the DPS term.** They are 15–30 % of real DPS and completely absent here. Adding
+   them shortens every run; enemy HP, not the wave table, is the lever to put it back.
+3. **Survivability.** Pick a contact model from telemetry and add a seventh assertion ("≤ 4 deaths
+   at recommended power"). If contact lands above ~10 %, either Village enemy `damage` comes down
+   or weapon `hp` goes up — one or the other, not both.
+4. **Charge weapons.** If the bow's real cycle is `chargeSeconds + cooldown`, the ranged term needs
+   a class-aware denominator and the whole band-1 DPS column drops ~40 %.
+5. **Boss HP vs party size** (C2) and **missions 2–4** (C3): enemy `cash` ×100 per era, enemy `hp`
+   × the gear-damage ladder (≈ ×2.3 per band), materials flat.
+
+## One boss per boss wave (settled during C0 review)
+
+Every number above assumes the narrow reading of the boss multipliers: the wave body is ordinary
+even on a boss wave, and only the single boss entity takes `hpMult` / `damageMult` / `cashMult` /
+`materialsMult`. It matters because Village wave 10 is the one wave where the two readings differ —
+brutes enter at wave 7 and the Warlord is built from `brute`, so buffing the whole key would turn
+~1.5 ordinary brutes into Warlords: wave 10 57 s → 5:36, the run 7:58 → 10:37 and run cash
+151,981 → 259,502, all of it **still inside both assertions**, i.e. invisible to `--check`.
+`Combat.EnemyStats(mission, key, spec, isBoss)` now takes the flag and gates on
+`isBoss and boss ~= nil and boss.enemy == key`; `tools/sim_combat.py` gates on exactly the same two
+conditions, so the sim and the server agree. If a later mission ever wants a wave of mini-bosses,
+that is a new config shape, not this flag.
+
+## Commands used
+
+```
+py tools/sim_combat.py                   # unlock ladder + Village run at 1x / 2x / 0.6x power
+py tools/sim_combat.py --check           # the six C0 assertions, exits 0
+py tools/sim_combat.py --party 4         # co-op wave counts and per-player cash
+py tools/sim_combat.py --overdrive       # Overdrive run at its scaled recommended power
+py tools/sim_combat.py --power 84        # tier 3/3 spot check
+py tools/sim_economy.py --check          # unchanged: every era still in band
+```

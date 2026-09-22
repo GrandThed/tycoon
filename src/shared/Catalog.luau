@@ -23,6 +23,11 @@ local MONETIZATION_DEFAULT_RECEIPT_HISTORY_LIMIT = 200
 -- Stamped on the fallback config when LegacyShop.json is absent (mirrors its v1). No perks ⇒
 -- every Economy perk helper returns its neutral value and the client hides the shop.
 local LEGACY_SHOP_SCHEMA_VERSION = 1
+-- Stamped on the fallback config when Places.json is absent (mirrors its v1). Place ids of 0
+-- mean "not published yet": the hub disables the Expedition tiles and the combat place keeps the
+-- player in the lobby, exactly as the shipped all-zeros file does.
+local PLACES_SCHEMA_VERSION = 1
+local PLACES_UNPUBLISHED_ID = 0
 
 local cachedGameConfig: Types.GameConfig? = nil
 local cachedSoundsConfig: Types.SoundsConfig? = nil
@@ -33,6 +38,13 @@ local cachedMonetizationConfig: Types.MonetizationConfig? = nil
 local cachedLegacyShopConfig: Types.LegacyShopConfig? = nil
 local cachedAssetsConfig: Types.AssetsConfig? = nil
 local cachedCityDressingConfig: Types.CityDressingConfig? = nil
+local cachedArmoryConfig: Types.ArmoryConfig? = nil
+local cachedCombatConfig: Types.CombatConfig? = nil
+local cachedPlacesConfig: Types.PlacesConfig? = nil
+-- Mission configs are cached under both keys they are looked up by (era index and mission id),
+-- so neither lookup rescans the folder once it has resolved.
+local cachedMissionsByEra: { [number]: Types.MissionConfig } = {}
+local cachedMissionsById: { [string]: Types.MissionConfig } = {}
 
 local Catalog = {}
 
@@ -167,6 +179,107 @@ function Catalog.GetCityDressingConfig(): Types.CityDressingConfig?
 	cached = require(dressingModule) :: Types.CityDressingConfig
 	cachedCityDressingConfig = cached
 	return cached
+end
+
+-- Armory.json and Combat.json (C0) use the nil-is-the-signal pattern like Assets.json: nil hides
+-- the whole Expeditions feature (no Armory panel, no Expedition panel, no combat boot), so the
+-- hub is fully playable before the combat configs land. Re-checked per call until the module
+-- shows up (client replication order), cached from then on.
+function Catalog.GetArmoryConfig(): Types.ArmoryConfig?
+	local cached = cachedArmoryConfig
+	if cached ~= nil then
+		return cached
+	end
+	local armoryModule = configFolder:FindFirstChild("Armory")
+	if armoryModule == nil or not armoryModule:IsA("ModuleScript") then
+		return nil
+	end
+	cached = require(armoryModule) :: Types.ArmoryConfig
+	cachedArmoryConfig = cached
+	return cached
+end
+
+function Catalog.GetCombatConfig(): Types.CombatConfig?
+	local cached = cachedCombatConfig
+	if cached ~= nil then
+		return cached
+	end
+	local combatModule = configFolder:FindFirstChild("Combat")
+	if combatModule == nil or not combatModule:IsA("ModuleScript") then
+		return nil
+	end
+	cached = require(combatModule) :: Types.CombatConfig
+	cachedCombatConfig = cached
+	return cached
+end
+
+-- Places.json gets a neutral fallback instead (unlike Armory/Combat): the teleport paths must
+-- always have a pair of ids to check, and all-zeros is exactly the "not published yet" state.
+-- Fresh fallback table per call so a later-replicating module is picked up.
+function Catalog.GetPlacesConfig(): Types.PlacesConfig
+	local cached = cachedPlacesConfig
+	if cached ~= nil then
+		return cached
+	end
+	local placesModule = configFolder:FindFirstChild("Places")
+	if placesModule == nil or not placesModule:IsA("ModuleScript") then
+		return {
+			version = PLACES_SCHEMA_VERSION,
+			hubPlaceId = PLACES_UNPUBLISHED_ID,
+			combatPlaceId = PLACES_UNPUBLISHED_ID,
+		}
+	end
+	cached = require(placesModule) :: Types.PlacesConfig
+	cachedPlacesConfig = cached
+	return cached :: Types.PlacesConfig
+end
+
+-- Mission modules are named "<eraIndex>_<EraName>" under Config/Missions, resolved by numeric
+-- prefix exactly like era configs. nil = that era has no expedition yet (C0 ships Village only).
+function Catalog.GetMissionConfig(eraIndex: number): Types.MissionConfig?
+	local cached = cachedMissionsByEra[eraIndex]
+	if cached ~= nil then
+		return cached
+	end
+	local missionsFolder = configFolder:FindFirstChild("Missions")
+	if missionsFolder == nil then
+		return nil
+	end
+	local prefix = tostring(eraIndex) .. "_"
+	for _, child in missionsFolder:GetChildren() do
+		if child:IsA("ModuleScript") and string.sub(child.Name, 1, #prefix) == prefix then
+			local mission = require(child) :: Types.MissionConfig
+			cachedMissionsByEra[eraIndex] = mission
+			cachedMissionsById[mission.id] = mission
+			return mission
+		end
+	end
+	return nil
+end
+
+-- Mission ids ("village") are what the client sends and the run registry stores, so they are
+-- resolved by scanning the folder rather than by module name. Scans only until the id is found;
+-- a miss rescans next call, since the folder may still be replicating on the client.
+function Catalog.GetMissionById(id: string): Types.MissionConfig?
+	local cached = cachedMissionsById[id]
+	if cached ~= nil then
+		return cached
+	end
+	local missionsFolder = configFolder:FindFirstChild("Missions")
+	if missionsFolder == nil then
+		return nil
+	end
+	for _, child in missionsFolder:GetChildren() do
+		if child:IsA("ModuleScript") and string.match(child.Name, "^%d+_") ~= nil then
+			local mission = require(child) :: Types.MissionConfig
+			cachedMissionsByEra[mission.era] = mission
+			cachedMissionsById[mission.id] = mission
+			if mission.id == id then
+				return mission
+			end
+		end
+	end
+	return nil
 end
 
 -- Era config modules are named "<eraIndex>_<Name>" (e.g. "1_Village"); resolve by prefix.

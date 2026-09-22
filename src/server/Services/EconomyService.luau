@@ -9,6 +9,8 @@ local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Armory = require(sharedFolder:WaitForChild("Armory"))
+local Combat = require(sharedFolder:WaitForChild("Combat"))
 local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
@@ -21,6 +23,9 @@ export type DirtyFields = {
 	slotIds: { string }?,
 	settings: boolean?,
 	legacyShop: boolean?,
+	-- C0: the whole combat profile (Armory gear, materials, Valor, mission records). The only
+	-- way an Armory purchase or a combat reward reaches the client.
+	combat: boolean?,
 }
 type DirtyRecord = {
 	cash: boolean,
@@ -28,6 +33,7 @@ type DirtyRecord = {
 	slotIds: { [string]: boolean },
 	settings: boolean,
 	legacyShop: boolean,
+	combat: boolean,
 }
 
 -- Studio-only playtest lever (same pattern as DataService's ForceLoadFailure): Legacy only moves
@@ -68,11 +74,56 @@ local flushAccumulator = 0
 local function getDirtyRecord(player: Player): DirtyRecord
 	local record = dirtyRecords[player]
 	if record == nil then
-		record =
-			{ cash = false, income = false, slotIds = {}, settings = false, legacyShop = false }
+		record = {
+			cash = false,
+			income = false,
+			slotIds = {},
+			settings = false,
+			legacyShop = false,
+			combat = false,
+		}
 		dirtyRecords[player] = record
 	end
 	return record
+end
+
+-- Gear Power is server-computed so the HUD never re-derives it: 0 without Armory.json, which is
+-- also how the client knows to hide the readout.
+local function computeGearPower(state: Types.PlayerState): number
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if armoryConfig == nil then
+		return 0
+	end
+	return Armory.GearPower(armoryConfig, state.combat.gear, state.combat.ascension)
+end
+
+-- Deltas carry a deep copy by contract: the client merges the table straight into its model, so
+-- an aliased profile would let the UI mutate server state.
+local function copyCombatProfile(combat: Types.CombatProfile): Types.CombatProfile
+	local missions: { [string]: Types.MissionRecord } = {}
+	for missionId, record in combat.missions do
+		missions[missionId] = {
+			bestWave = record.bestWave,
+			bossClears = record.bossClears,
+			overdriveBest = record.overdriveBest,
+		}
+	end
+	return {
+		materials = table.clone(combat.materials),
+		valor = combat.valor,
+		gear = { melee = combat.gear.melee, ranged = combat.gear.ranged },
+		ascension = { melee = combat.ascension.melee, ranged = combat.ascension.ranged },
+		missions = missions,
+		highestEra = combat.highestEra,
+		expeditionSince = combat.expeditionSince,
+		expeditionSeconds = combat.expeditionSeconds,
+		stats = {
+			kills = combat.stats.kills,
+			wavesCleared = combat.stats.wavesCleared,
+			expeditions = combat.stats.expeditions,
+			cashFromCombat = combat.stats.cashFromCombat,
+		},
+	}
 end
 
 -- Passes and Premium are account properties, not session state, so they multiply the live,
@@ -215,6 +266,7 @@ local function flushDeltas(): ()
 				or record.income
 				or record.settings
 				or record.legacyShop
+				or record.combat
 				or next(record.slotIds) ~= nil
 			)
 		then
@@ -261,10 +313,17 @@ local function flushDeltas(): ()
 			delta.legacyShop =
 				{ spent = state.legacyShop.spent, perks = table.clone(state.legacyShop.perks) }
 		end
+		if record.combat then
+			-- Whole profile by contract (C0), deep-copied, with the Power readout alongside it
+			-- so the two can never disagree on the client.
+			delta.combat = copyCombatProfile(state.combat)
+			delta.gearPower = computeGearPower(state)
+		end
 		record.cash = false
 		record.income = false
 		record.settings = false
 		record.legacyShop = false
+		record.combat = false
 		table.clear(record.slotIds)
 		RemoteService.FireClient(player, "StateChanged", delta)
 	end
@@ -303,6 +362,7 @@ function EconomyService.SendSnapshot(player: Player): ()
 		state = state,
 		incomePerSecond = computeReportedIncomePerSecond(player, state),
 		persistedIncomePerSecond = livePersistedRate(player),
+		gearPower = computeGearPower(state),
 		welcomeBack = welcomeBack,
 	}
 	player:SetAttribute("Cash", state.cash)
@@ -333,6 +393,18 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 	-- lastSeen == 0 marks a first-ever join: nothing was earned, no card.
 	if state.lastSeen > 0 then
 		local elapsed = math.clamp(now - state.lastSeen, 0, cap)
+		-- C0: the slice of the absence the player spent inside the Expeditions place earns at
+		-- Combat.json's expeditionEfficiency instead (they were playing, not idle), the rest at
+		-- the normal rate. Skipped entirely when Combat.json is absent.
+		local combatConfig = Catalog.GetCombatConfig()
+		if combatConfig ~= nil then
+			efficiency = Combat.AwayEfficiency(
+				elapsed,
+				state.combat.expeditionSeconds,
+				efficiency,
+				combatConfig.offline.expeditionEfficiency
+			)
+		end
 		local granted = Economy.OfflineGrant(elapsed, state.incomeAtSave, cap, efficiency)
 		if isStudio then
 			-- Playtest diagnostic (Studio only): the grant is invisible next to the ×debug
@@ -363,6 +435,11 @@ function EconomyService.ApplyOfflineGrant(player: Player): ()
 	state.lastSeen = now
 	state.incomeAtSave =
 		computePersistedIncomePerSecond(player, state, Catalog.GetMonetizationConfig())
+	-- The expedition window is spent: whatever the player did while away has now been paid for,
+	-- so a second join must never re-apply it (and a crashed combat server cannot leave a
+	-- profile permanently marked as away).
+	state.combat.expeditionSince = 0
+	state.combat.expeditionSeconds = 0
 	-- Join sequence over: the income tick may now touch this player (see joinComplete).
 	joinComplete[player] = true
 end
@@ -496,6 +573,9 @@ function EconomyService.MarkDirty(player: Player, fields: DirtyFields): ()
 	end
 	if fields.legacyShop then
 		record.legacyShop = true
+	end
+	if fields.combat then
+		record.combat = true
 	end
 end
 

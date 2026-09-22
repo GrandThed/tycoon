@@ -3,116 +3,59 @@
 -- validation, so game services only ever see well-typed intents (docs/INTERFACES.md "Remotes").
 -- Rate-limit overflow and malformed payloads are dropped silently per contract: an ActionResult
 -- reply would require trusting an unvalidated slotId.
+--
+-- C0: the remote tables themselves are no longer here. Each place hands its own set to
+-- Configure() before Init — HubRemotes in the hub, CombatRemotes in the Expeditions place — so
+-- one module serves both trees and neither place can create the other's remotes.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Catalog = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Catalog"))
-
--- Every reserved remote exists from Init so the client can WaitForChild all of them.
--- FxEvent (M3) is server→client only: presentation events, owner only, never on bulk restore.
-local REMOTE_NAMES = {
-	"RequestSnapshot",
-	"RequestBuy",
-	"RequestLevelUp",
-	"RequestAdvanceEra",
-	"RequestRebirth",
-	"RequestSetSetting",
-	"RequestPrompt",
-	"RequestRetryLoad",
-	"RequestBuyPerk",
-	"StateChanged",
-	"ActionResult",
-	"FxEvent",
+export type PackedArgs = { n: number, [number]: any }
+export type Validator = (args: PackedArgs) -> boolean
+-- bucket names a shared refill rate in `rates`; the token bucket itself stays per remote, so
+-- two remotes on the same bucket each get that many calls per second (unchanged from M1).
+export type IntentDef = { validate: Validator, bucket: string }
+export type RemoteDefs = {
+	intents: { [string]: IntentDef },
+	events: { string },
+	rates: { [string]: number },
 }
 
-type PackedArgs = { n: number, [number]: any }
-type Validator = (args: PackedArgs) -> boolean
 type Handler = (player: Player, ...any) -> ()
 type Bucket = { tokens: number, last: number }
 
 local remotes: { [string]: RemoteEvent } = {}
 local handlers: { [string]: Handler } = {}
 local buckets: { [Player]: { [string]: Bucket } } = {}
+local defs: RemoteDefs? = nil
 
-local function isCountInRange(value: any): boolean
-	if typeof(value) ~= "number" or value ~= math.floor(value) then
-		return false
-	end
-	-- Contract range is 1..100 with maxLevel = 100; bound by config so they cannot drift apart.
-	return value >= 1 and value <= Catalog.GetGameConfig().maxLevel
-end
-
-local validators: { [string]: Validator } = {
-	RequestSnapshot = function(args: PackedArgs): boolean
-		return args.n == 0
-	end,
-	RequestBuy = function(args: PackedArgs): boolean
-		return args.n == 1 and typeof(args[1]) == "string"
-	end,
-	RequestLevelUp = function(args: PackedArgs): boolean
-		return args.n == 2 and typeof(args[1]) == "string" and isCountInRange(args[2])
-	end,
-	RequestAdvanceEra = function(args: PackedArgs): boolean
-		return args.n == 0
-	end,
-	RequestRebirth = function(args: PackedArgs): boolean
-		return args.n == 0
-	end,
-	RequestPrompt = function(args: PackedArgs): boolean
-		-- The key itself is resolved (and unknown keys dropped) by MonetizationService, which
-		-- owns the pass/product tables; the validator only guarantees the shape.
-		return args.n == 1 and typeof(args[1]) == "string"
-	end,
-	RequestSetSetting = function(args: PackedArgs): boolean
-		-- Only the Types.SettingKey values exist; anything else is a silent drop.
-		return args.n == 2
-			and (args[1] == "music" or args[1] == "sfx" or args[1] == "vipSkins")
-			and typeof(args[2]) == "boolean"
-	end,
-	RequestRetryLoad = function(args: PackedArgs): boolean
-		-- Shape only; the real throttle is DataService's retry cooldown (M5 safe mode).
-		return args.n == 0
-	end,
-	RequestBuyPerk = function(args: PackedArgs): boolean
-		-- The perk id is resolved (and unknown ids refused) by LegacyShopService, which owns
-		-- the purchase chain; shared callsPerSecond bucket (M6 — earned currency, no dialog).
-		return args.n == 1 and typeof(args[1]) == "string"
-	end,
-}
-
--- Resolved once in Init from Game.json, clamped to >= 1: a fractional refill rate would start
--- every bucket empty and silently disable the remote, which is worse than a loud warn.
+-- Resolved in Init from the configured rates, clamped to >= 1: a fractional refill rate would
+-- start every bucket empty and silently disable the remote, which is worse than a loud warn.
 local MIN_CALLS_PER_SECOND = 1
-local bucketRates = {
-	calls = MIN_CALLS_PER_SECOND,
-	prompt = MIN_CALLS_PER_SECOND,
-	snapshot = MIN_CALLS_PER_SECOND,
-}
+local bucketRates: { [string]: number } = {}
 
 local function clampRate(keyName: string, configured: number): number
 	if configured >= MIN_CALLS_PER_SECOND then
 		return configured
 	end
 	warn(
-		`[RemoteService] remotes.{keyName} = {configured} is below {MIN_CALLS_PER_SECOND};`
+		`[RemoteService] rate {keyName} = {configured} is below {MIN_CALLS_PER_SECOND};`
 			.. ` clamped (a lower rate would disable the remote)`
 	)
 	return MIN_CALLS_PER_SECOND
 end
 
--- RequestPrompt opens a modal OS purchase dialog rather than performing a game action, so it
--- gets its own much tighter budget (Game.json v1.4); RequestSnapshot answers with a full
--- state snapshot, the most expensive reply the server makes, so it gets its own too (v1.5).
--- Every other remote shares callsPerSecond.
 local function bucketCallsPerSecond(remoteName: string): number
-	if remoteName == "RequestPrompt" then
-		return bucketRates.prompt
+	local remoteDefs = defs
+	if remoteDefs == nil then
+		return MIN_CALLS_PER_SECOND
 	end
-	if remoteName == "RequestSnapshot" then
-		return bucketRates.snapshot
+	local intent = remoteDefs.intents[remoteName]
+	if intent == nil then
+		return MIN_CALLS_PER_SECOND
 	end
-	return bucketRates.calls
+	return bucketRates[intent.bucket] or MIN_CALLS_PER_SECOND
 end
 
 local function tryConsumeToken(player: Player, remoteName: string): boolean
@@ -143,11 +86,15 @@ local function dispatch(remoteName: string, player: Player, args: PackedArgs): (
 	if player.Parent == nil then
 		return
 	end
+	local remoteDefs = defs
+	if remoteDefs == nil then
+		return
+	end
 	if not tryConsumeToken(player, remoteName) then
 		return
 	end
-	local validator = validators[remoteName]
-	if validator == nil or not validator(args) then
+	local intent = remoteDefs.intents[remoteName]
+	if intent == nil or not intent.validate(args) then
 		return
 	end
 	local handler = handlers[remoteName]
@@ -158,6 +105,12 @@ local function dispatch(remoteName: string, player: Player, args: PackedArgs): (
 end
 
 local RemoteService = {}
+
+-- Must be called before Init. The place's boot script owns the definitions, so adding a remote
+-- never touches this module.
+function RemoteService.Configure(remoteDefs: RemoteDefs): ()
+	defs = remoteDefs
+end
 
 -- Handlers receive payloads already validated by the remote's validator above.
 function RemoteService.SetHandler(remoteName: string, handler: Handler): ()
@@ -185,25 +138,43 @@ function RemoteService.FireClient(player: Player, remoteName: string, payload: a
 end
 
 function RemoteService.Init(): ()
-	local remotesConfig = Catalog.GetGameConfig().remotes
-	bucketRates.calls = clampRate("callsPerSecond", remotesConfig.callsPerSecond)
-	bucketRates.prompt = clampRate("promptCallsPerSecond", remotesConfig.promptCallsPerSecond)
-	bucketRates.snapshot = clampRate("snapshotCallsPerSecond", remotesConfig.snapshotCallsPerSecond)
+	local remoteDefs = defs
+	if remoteDefs == nil then
+		-- Refusing to boot the remote layer is the safe failure: creating no remotes leaves the
+		-- client on its loading card, where creating unvalidated ones would expose every intent.
+		warn("[RemoteService] Init without Configure — no remotes created")
+		return
+	end
+
+	for bucketName, configured in remoteDefs.rates do
+		bucketRates[bucketName] = clampRate(bucketName, configured)
+	end
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Remotes"
 	folder.Parent = ReplicatedStorage
 
-	for _, remoteName in REMOTE_NAMES do
+	local function createRemote(remoteName: string): RemoteEvent
 		local remote = Instance.new("RemoteEvent")
 		remote.Name = remoteName
 		remote.Parent = folder
 		remotes[remoteName] = remote
+		return remote
 	end
 
-	-- Only remotes with a validator are client→server intents; connect their dispatchers.
-	for remoteName in validators do
-		local remote = remotes[remoteName]
+	-- Every remote exists from Init so the client can WaitForChild all of them. Events are
+	-- server → client only: no validator, no bucket, no OnServerEvent connection.
+	for _, remoteName in remoteDefs.events do
+		createRemote(remoteName)
+	end
+	for remoteName, intent in remoteDefs.intents do
+		if remoteDefs.rates[intent.bucket] == nil then
+			warn(
+				`[RemoteService] {remoteName} names bucket "{intent.bucket}", which has no rate;`
+					.. ` falling back to {MIN_CALLS_PER_SECOND}/s`
+			)
+		end
+		local remote = createRemote(remoteName)
 		remote.OnServerEvent:Connect(function(player: Player, ...: any)
 			dispatch(remoteName, player, table.pack(...))
 		end)

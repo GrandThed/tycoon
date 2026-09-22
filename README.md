@@ -5,8 +5,10 @@ metropolis, and finally an orbital colony. Completing an era resets your plot bu
 permanent **Legacy** — era progression is the prestige loop. Progress persists across sessions
 (ProfileStore), including offline earnings on rejoin. Optional, restrained monetization (game
 passes, time-priced cash packs, Premium) stays fully hidden until game-pass/product ids are
-created and pasted into config — see `docs/MANUAL_STEPS.md` M4. Built with Luau and Rojo. Full
-design in [`docs/SPEC.md`](docs/SPEC.md).
+created and pasted into config — see `docs/MANUAL_STEPS.md` M4. From C0 the experience has a
+**second place, "Expeditions"** (co-op wave defense): the hub's Armory buys weapons with era
+materials, and Depart teleports the same profile into `build/combat.rbxl`. Built with Luau and
+Rojo. Full design in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Quickstart
 
@@ -28,10 +30,13 @@ rokit install
 # 2. Install Luau dependencies into Packages/ and ServerPackages/
 wally install
 
-# 3a. One-shot build
+# 3a. One-shot build -- the hub place
 rojo build -o build/test.rbxl
 
-# 3b. OR live-sync while Studio is open (Rojo plugin → Connect)
+# 3b. One-shot build -- the Expeditions (combat) place, from C0 onward
+rojo build combat.project.json -o build/combat.rbxl
+
+# 3c. OR live-sync while Studio is open (Rojo plugin → Connect)
 rojo serve
 ```
 
@@ -40,6 +45,7 @@ Windows without the Store stub getting in the way):
 
 ```powershell
 py tools/sim_economy.py --check
+py tools/sim_combat.py --check        # Armory unlock ladder and run pacing (from C0)
 py tools/gen_asset_manifest.py        # regenerates docs/ASSET_MANIFEST.md from the era configs
 py tools/gen_asset_manifest.py --check
 ```
@@ -53,14 +59,18 @@ Line endings are LF everywhere (`.gitattributes` enforces it) — `stylua --chec
 ## Repo layout
 
 ```
-default.project.json     -- Rojo project: maps src/ into the Roblox DataModel
+default.project.json     -- Rojo project: the hub place, maps src/ into the Roblox DataModel
+combat.project.json      -- Rojo project: the Expeditions place (C0); shares src/shared and
+                             src/server/Services with the hub
 wally.toml                -- Luau package dependencies
 rokit.toml                 -- pinned CLI toolchain versions
 src/
   server/                 -- ServerScriptService/Server: services, server authority
   shared/                 -- ReplicatedStorage/Shared: Config/*.json, Types, pure Economy
   client/                 -- StarterPlayerScripts/Client: UI and controllers
-tools/                    -- sim_economy.py (M2), gen_asset_manifest.py (from M3 onward),
+  combat/                 -- the Expeditions place only (C0): server/ arena + return, client/ HUD
+tools/                    -- sim_economy.py (M2), sim_combat.py (C0), gen_asset_manifest.py
+                             (from M3 onward),
                              testfit/ + assets/ (from M7 onward) -- the growing-building pipeline
                              (both gain --props for city-dressing props, M9), streetplan.py (M9
                              street-plan check)

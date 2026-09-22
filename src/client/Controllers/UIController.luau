@@ -13,10 +13,16 @@
 -- (RequestRetryLoad) or Leave instead of a kick. M6 turns the Legacy panel into the
 -- Legacy shop: RequestBuyPerk intents, the legacyShop delta merge, perkBought / buyPerk
 -- feedback, and one automatic (dismissable, non-modal) open of the panel after a
--- ceremony when a tier has become affordable — earned currency, not Robux.
+-- ceremony when a tier has become affordable — earned currency, not Robux. C0 adds the
+-- Expeditions surface: the Gear Power readout, the Armory panel (RequestBuyGear /
+-- RequestAscend) and the Expedition panel (RequestExpedition / RequestJoinRun /
+-- RequestRunList). Both are pure views of `state.combat` and the server's `gearPower`; with
+-- Armory.json or Combat.json absent, or on a server that never created the remotes, the
+-- buttons simply do not exist and the HUD is exactly the M9 HUD.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -33,6 +39,8 @@ local BottomBar = require(uiFolder:WaitForChild("BottomBar"))
 local BuildPanel = require(uiFolder:WaitForChild("BuildPanel"))
 local LegacyPanel = require(uiFolder:WaitForChild("LegacyPanel"))
 local ShopPanel = require(uiFolder:WaitForChild("ShopPanel"))
+local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
+local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
 local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
 local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
@@ -51,11 +59,14 @@ type Model = {
 	-- pinned to 1). Tracked like incomePerSecond and never derived here: only the Shop's
 	-- pack preview reads it, and only the server may compute it (wave-2 ruling 4).
 	persistedIncomePerSecond: number,
+	-- C0: Armory.GearPower as the SERVER computed it (Snapshot and Delta both carry it).
+	-- The client never derives it, so a stale weapon table can never flatter the readout.
+	gearPower: number,
 }
 
 type PrestigeKind = "advance" | "rebirth"
 
-type PanelKey = "build" | "legacy" | "shop" | "settings"
+type PanelKey = "build" | "armory" | "expedition" | "legacy" | "shop" | "settings"
 
 -- Every dockable panel exposes this slice; UIController keeps one open at a time.
 type DockablePanel = {
@@ -89,6 +100,24 @@ end
 local function readPersistedRate(payload: { [string]: any }): number
 	local rate = payload.persistedIncomePerSecond
 	return if typeof(rate) == "number" then rate else 0
+end
+
+-- Same rule for Gear Power: absent means this server has no Armory, and 0 understates
+-- rather than promising a player power they do not have.
+local function readGearPower(payload: { [string]: any }): number
+	local power = payload.gearPower
+	return if typeof(power) == "number" then power else 0
+end
+
+-- The delta's combat profile arrives from the network; only the full shape is trusted, and
+-- it replaces `state.combat` wholesale (the server sends a copy, never a patch).
+local function isCombatProfile(source: any): boolean
+	return typeof(source) == "table"
+		and typeof(source.materials) == "table"
+		and typeof(source.gear) == "table"
+		and typeof(source.ascension) == "table"
+		and typeof(source.valor) == "number"
+		and typeof(source.highestEra) == "number"
 end
 
 -- All UI copy uses displayName (M3 contract); a config that predates it degrades to name.
@@ -225,6 +254,47 @@ local function boot(): ()
 	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
 	local requestBuyPerk = remotesFolder:WaitForChild("RequestBuyPerk") :: RemoteEvent
 
+	-- C0: nil config hides the whole feature (the nil-is-the-signal pattern), and a mission
+	-- list is only read once, since Config/Missions is static for the life of the server.
+	local armoryConfig = Catalog.GetArmoryConfig()
+	local combatConfig = Catalog.GetCombatConfig()
+	local placesConfig = Catalog.GetPlacesConfig()
+	local missions: { Types.MissionConfig } = {}
+	if combatConfig ~= nil then
+		for eraIndex = 1, Catalog.GetEraCount() do
+			local mission = Catalog.GetMissionConfig(eraIndex)
+			if mission ~= nil then
+				table.insert(missions, mission)
+			end
+		end
+	end
+	-- The combat remotes are created in one RemoteService.Init pass, which may not have run
+	-- when the HUD boots and never runs at all on a hub server that predates Expeditions.
+	-- Boot waits for neither case (review of 2026-09-17): the panels are built from config
+	-- alone, and their buttons appear the moment the remotes exist — now, or from the
+	-- ChildAdded listener further down.
+	local requestBuyGear: RemoteEvent? = nil
+	local requestAscend: RemoteEvent? = nil
+	local requestExpedition: RemoteEvent? = nil
+	local requestJoinRun: RemoteEvent? = nil
+	local requestRunList: RemoteEvent? = nil
+	local combatRemotesReady = false
+	local function resolveCombatRemotes(): ()
+		requestBuyGear = remotesFolder:FindFirstChild("RequestBuyGear") :: RemoteEvent?
+		requestAscend = remotesFolder:FindFirstChild("RequestAscend") :: RemoteEvent?
+		requestExpedition = remotesFolder:FindFirstChild("RequestExpedition") :: RemoteEvent?
+		requestJoinRun = remotesFolder:FindFirstChild("RequestJoinRun") :: RemoteEvent?
+		requestRunList = remotesFolder:FindFirstChild("RequestRunList") :: RemoteEvent?
+		-- One intent decides for all of them: RemoteService creates the whole set at once.
+		combatRemotesReady = requestBuyGear ~= nil
+	end
+	resolveCombatRemotes()
+	local hasArmory = armoryConfig ~= nil
+	-- The place id being 0 does NOT hide the panel: the contract wants the tiles visible and
+	-- disabled with "Publish the Expeditions place first", so the feature is discoverable
+	-- before the second place exists.
+	local hasExpeditions = combatConfig ~= nil and #missions > 0
+
 	local gameConfig = Catalog.GetGameConfig()
 	-- Static for the life of the server, so the Shop button's visibility is decided once.
 	local monetization = Catalog.GetMonetizationConfig()
@@ -300,9 +370,19 @@ local function boot(): ()
 			togglePanel(key)
 		end,
 	})
-	bottomBar.SetShopVisible(hasShopListableId(monetization))
+	bottomBar.SetKeyVisible("shop", hasShopListableId(monetization))
+	-- A panel whose intent does not exist yet would only be able to fail, so the key stays
+	-- hidden until the remotes are there.
+	local function refreshCombatKeys(): ()
+		bottomBar.SetKeyVisible("armory", hasArmory and combatRemotesReady)
+		bottomBar.SetKeyVisible("expedition", hasExpeditions and combatRemotesReady)
+	end
+	refreshCombatKeys()
 
 	togglePanel = function(panelKey: PanelKey): ()
+		if panels[panelKey] == nil then
+			return -- the feature's config is absent, so its panel was never built
+		end
 		local previous = openPanelKey
 		if previous ~= nil then
 			panels[previous].SetOpen(false)
@@ -419,10 +499,59 @@ local function boot(): ()
 		end,
 		onClose = closePanels,
 	})
+	-- C0: built only when the config AND the remotes exist, so every tap below has somewhere
+	-- to go. Intents carry a slot or a mission id and nothing else — no amounts, ever.
+	local armoryPanel: ArmoryPanel.ArmoryPanelHandle? = nil
+	if hasArmory and armoryConfig ~= nil then
+		armoryPanel = ArmoryPanel.new(screenGui, {
+			armoryConfig = armoryConfig,
+			onBuy = function(slot: ArmoryPanel.Slot)
+				if requestBuyGear ~= nil then
+					requestBuyGear:FireServer(slot)
+				end
+			end,
+			onAscend = function(slot: ArmoryPanel.Slot)
+				if requestAscend ~= nil then
+					requestAscend:FireServer(slot)
+				end
+			end,
+			onClose = closePanels,
+		})
+	end
+	local expeditionPanel: ExpeditionPanel.ExpeditionPanelHandle? = nil
+	if hasExpeditions and combatConfig ~= nil then
+		expeditionPanel = ExpeditionPanel.new(screenGui, {
+			missions = missions,
+			placesConfig = placesConfig,
+			combatConfig = combatConfig,
+			onDepart = function(missionId: string, overdrive: boolean)
+				if requestExpedition ~= nil then
+					requestExpedition:FireServer(missionId, overdrive)
+				end
+			end,
+			onJoin = function(hostUserId: number)
+				if requestJoinRun ~= nil then
+					requestJoinRun:FireServer(hostUserId)
+				end
+			end,
+			onRefreshRuns = function()
+				if requestRunList ~= nil then
+					requestRunList:FireServer()
+				end
+			end,
+			onClose = closePanels,
+		})
+	end
 	panels.build = buildPanel
 	panels.legacy = legacyPanel
 	panels.shop = shopPanel
 	panels.settings = settingsPanel
+	if armoryPanel ~= nil then
+		panels.armory = armoryPanel
+	end
+	if expeditionPanel ~= nil then
+		panels.expedition = expeditionPanel
+	end
 
 	local function applySettings(pushed: SettingsPanel.Settings): ()
 		localSettings = table.clone(pushed)
@@ -487,6 +616,17 @@ local function boot(): ()
 		-- Pack previews follow the persisted rate, which is what the server charges
 		-- against, and re-render on every push because that rate moves with the build.
 		shopPanel.Refresh(state, current.persistedIncomePerSecond, Catalog.GetEraConfig(state.era))
+		-- C0: nil hides the readout entirely on a hub without an Armory.
+		topBar.SetPower(if hasArmory and combatRemotesReady then current.gearPower else nil)
+		local armory = armoryPanel
+		if armory ~= nil then
+			-- The Armory gates on the PERSISTED rate, which is the one the server checks.
+			armory.Refresh(state, current.persistedIncomePerSecond)
+		end
+		local expedition = expeditionPanel
+		if expedition ~= nil then
+			expedition.Refresh(state, current.gearPower)
+		end
 		refreshBonuses()
 		refreshPreload(current)
 	end
@@ -506,6 +646,7 @@ local function boot(): ()
 			state = snapshot.state,
 			incomePerSecond = snapshot.incomePerSecond,
 			persistedIncomePerSecond = readPersistedRate(payload),
+			gearPower = readGearPower(payload),
 		}
 		if eraChanged then
 			-- Any open prestige screen described the era we just left; its numbers are stale.
@@ -592,6 +733,17 @@ local function boot(): ()
 		if isLegacyShopState(legacyShop) then
 			current.state.legacyShop = legacyShop :: Types.LegacyShopState
 		end
+		-- C0: the whole combat profile whenever the combat dirty flag flushes, with the new
+		-- Gear Power beside it. Replaced wholesale, never merged, like legacyShop.
+		local combat = delta.combat
+		if isCombatProfile(combat) then
+			current.state.combat = combat :: Types.CombatProfile
+		end
+		-- The contract ships gearPower as its own optional field beside it, so it is read
+		-- independently: a flush that only re-prices the loadout still moves the readout.
+		if typeof(delta.gearPower) == "number" then
+			current.gearPower = delta.gearPower
+		end
 		refreshAll()
 	end
 
@@ -624,9 +776,89 @@ local function boot(): ()
 		end
 	end
 
+	-- C0: why an expedition could not start, in the player's terms. Studio can never
+	-- teleport, and an unpublished second place is the same dead end with a different cause.
+	local function expeditionUnavailableMessage(joining: boolean): string
+		if RunService:IsStudio() then
+			return "Studio can't teleport — open build/combat.rbxl"
+		end
+		if placesConfig.combatPlaceId == 0 then
+			return "Expeditions aren't available yet"
+		end
+		return if joining
+			then "That run is full or already over"
+			else "Couldn't start the expedition — try again"
+	end
+
+	local function onCombatActionResult(payload: { [string]: any }): ()
+		local action = payload.action
+		local reason = payload.reason
+		local armory = armoryPanel
+		if action == "buyGear" or action == "ascend" then
+			local slot = payload.slotId
+			if armory ~= nil and (slot == "melee" or slot == "ranged") then
+				armory.FlashSlot(slot :: ArmoryPanel.Slot)
+			end
+			if reason == "insufficientFunds" then
+				SoundController.Play("insufficientFunds")
+			end
+			-- The Armory can be closed by the time a refusal lands (rate limit, a race with
+			-- the panel's close), so the reason is always said in words too.
+			local message: string
+			if action == "buyGear" then
+				message = if reason == "insufficientFunds"
+					then "Not enough materials"
+					elseif reason == "locked" then "Locked — your city's income is too low"
+					else "Can't buy that weapon right now"
+			else
+				message = if reason == "insufficientFunds"
+					then "Not enough materials or Valor"
+					elseif
+						reason == "locked"
+					then "Ascension is capped — Rebirth again to raise it"
+					else "Can't ascend right now"
+			end
+			toast.Show(message, Theme.TOAST_ERROR_SECONDS, true)
+			return
+		end
+		-- expedition / joinRun: nothing to flash (the tile may be off-screen and the failure
+		-- is about the world, not the row), so the toast carries the whole message.
+		local joining = action == "joinRun"
+		local message: string
+		if reason == "unavailable" then
+			message = expeditionUnavailableMessage(joining)
+		elseif reason == "locked" then
+			message = if joining
+				then "That run is locked for you"
+				else "That expedition is locked — advance your city first"
+		else
+			message = if joining then "Couldn't join that run" else "Can't depart right now"
+		end
+		toast.Show(message, Theme.TOAST_ERROR_SECONDS, true)
+	end
+
 	local function onActionResult(payload: any): ()
+		if typeof(payload) ~= "table" then
+			return
+		end
+		local isCombatAction = payload.action == "buyGear"
+			or payload.action == "ascend"
+			or payload.action == "expedition"
+			or payload.action == "joinRun"
+		if payload.ok == true then
+			-- C0 is the first action that succeeds loudly: the teleport takes a moment and
+			-- the player has to know their tap was heard.
+			if payload.action == "expedition" or payload.action == "joinRun" then
+				toast.Show("Departing…", Theme.TOAST_SECONDS, false)
+			end
+			return
+		end
 		-- Failure-only by contract, but stay safe against future success payloads.
-		if typeof(payload) ~= "table" or payload.ok ~= false then
+		if payload.ok ~= false then
+			return
+		end
+		if isCombatAction then
+			onCombatActionResult(payload)
 			return
 		end
 		local action = payload.action
@@ -812,7 +1044,9 @@ local function boot(): ()
 		)
 		local landscape = PanelDock.IsLandscape(size)
 		topBar.SetLayout(scale, landscape)
-		bottomBar.SetScale(scale)
+		-- C0: six keys share the bar, so it needs the viewport to pick a button width that
+		-- still fits a 375 px portrait canvas.
+		bottomBar.SetLayout(scale, size)
 		for _, panel in panels do
 			panel.SetLayout(PanelDock.Compute(scale, size, panel.DesignHeight))
 		end
@@ -831,6 +1065,48 @@ local function boot(): ()
 	stateChanged.OnClientEvent:Connect(onStateChanged)
 	actionResult.OnClientEvent:Connect(onActionResult)
 	fxEvent.OnClientEvent:Connect(onFxEvent)
+	-- C0: answers the panel's RequestRunList. The access code never reaches the client (the
+	-- server strips it), so this is a display list only. Connected once, whenever the event
+	-- turns up.
+	local runListConnected = false
+	local function connectRunList(): ()
+		local panel = expeditionPanel
+		if runListConnected or panel == nil then
+			return
+		end
+		local event = remotesFolder:FindFirstChild("RunList")
+		if event == nil then
+			return
+		end
+		runListConnected = true
+		local remote = event :: RemoteEvent
+		remote.OnClientEvent:Connect(function(payload: any)
+			if typeof(payload) ~= "table" or typeof(payload.runs) ~= "table" then
+				return
+			end
+			panel.SetRuns(payload.runs :: { Types.ActiveRun })
+		end)
+	end
+	connectRunList()
+	-- Instant boot in both worlds: the HUD never waits on the combat remotes, it just picks
+	-- them up if the server creates them a moment later (and drops the listener once it has
+	-- everything it needs).
+	local function combatWiringComplete(): boolean
+		return combatRemotesReady and (expeditionPanel == nil or runListConnected)
+	end
+	if (hasArmory or hasExpeditions) and not combatWiringComplete() then
+		local childAdded: RBXScriptConnection? = nil
+		childAdded = remotesFolder.ChildAdded:Connect(function()
+			resolveCombatRemotes()
+			connectRunList()
+			refreshCombatKeys()
+			refreshAll() -- the Power readout follows the same gate as the keys
+			local connection = childAdded
+			if combatWiringComplete() and connection ~= nil then
+				connection:Disconnect()
+			end
+		end)
+	end
 	player:GetAttributeChangedSignal("Cash"):Connect(onCashAttribute)
 	-- The neighbors bonus tracks the live player count, not a server push.
 	Players.PlayerAdded:Connect(refreshBonuses)

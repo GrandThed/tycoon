@@ -1,0 +1,35 @@
+{
+	"version": 1,
+	"id": "village",
+	"era": 1,
+	"eraName": "Village",
+	"name": "Raider Woods",
+	"arena": "Village",
+	"material": "Timber",
+	"waves": 10,
+	"bossWaves": [5, 10],
+	"recommendedPower": 60,
+	"targetMinutes": 8,
+	"targetWaveSeconds": 30,
+	"enemies": {
+		"raider": { "template": "Raider", "kind": "melee", "hp": 115, "damage": 8, "speed": 14, "reach": 5, "attackCooldown": 1.2, "cash": 300, "materials": 1, "elite": false },
+		"archer": { "template": "Archer", "kind": "ranged", "hp": 75, "damage": 6, "speed": 12, "reach": 30, "attackCooldown": 1.8, "cash": 400, "materials": 1, "elite": false },
+		"brute": { "template": "Brute", "kind": "melee", "hp": 390, "damage": 18, "speed": 10, "reach": 6, "attackCooldown": 1.6, "cash": 1600, "materials": 4, "elite": true }
+	},
+	"waveTable": {
+		"baseCount": 5,
+		"countPerWave": 0.6,
+		"hpGrowth": 0.08,
+		"damageGrowth": 0.08,
+		"rewardGrowth": 0.1,
+		"composition": [
+			{ "fromWave": 1, "weights": { "raider": 1.0 } },
+			{ "fromWave": 3, "weights": { "raider": 0.7, "archer": 0.3 } },
+			{ "fromWave": 7, "weights": { "raider": 0.55, "archer": 0.3, "brute": 0.15 } }
+		]
+	},
+	"bosses": {
+		"5": { "template": "RaiderChief", "enemy": "brute", "hpMult": 5.7, "damageMult": 1.5, "cashMult": 8.0, "materialsMult": 5.0, "valor": 10 },
+		"10": { "template": "Warlord", "enemy": "brute", "hpMult": 7.8, "damageMult": 2.0, "cashMult": 20.0, "materialsMult": 10.0, "valor": 25 }
+	}
+}

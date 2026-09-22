@@ -1,0 +1,79 @@
+{
+	"version": 1,
+	"baseHp": 100,
+	"power": { "hpWeight": 0.2 },
+	"bands": [
+		{ "band": 1, "eraName": "Village", "material": "Timber" },
+		{ "band": 2, "eraName": "Boomtown", "material": "Steel" },
+		{ "band": 3, "eraName": "Metropolis", "material": "Circuits" },
+		{ "band": 4, "eraName": "OrbitalColony", "material": "Alloy" }
+	],
+	"classes": {
+		"sword": { "kind": "melee", "range": 8, "arcDegrees": 110, "chain": [1.0, 1.0, 1.6], "windows": [0.35, 0.35, 0.5], "comboReset": 0.9, "finisherKnockback": 25 },
+		"axe": { "kind": "melee", "range": 9, "arcDegrees": 130, "chain": [1.0, 1.1, 1.8], "windows": [0.55, 0.55, 0.7], "comboReset": 1.1, "finisherKnockback": 40 },
+		"machete": { "kind": "melee", "range": 8, "arcDegrees": 100, "chain": [1.0, 1.0, 1.5], "windows": [0.28, 0.28, 0.4], "comboReset": 0.8, "finisherKnockback": 20 },
+		"energyBlade": { "kind": "melee", "range": 10, "arcDegrees": 140, "chain": [1.0, 1.0, 1.7], "windows": [0.3, 0.3, 0.45], "comboReset": 0.9, "finisherKnockback": 35 },
+		"bow": { "kind": "ranged", "fire": "charge", "chargeSeconds": 0.8, "minDamageFraction": 0.5, "cooldown": 0.6, "range": 60 },
+		"revolver": { "kind": "ranged", "fire": "semi", "cooldown": 0.35, "range": 50 },
+		"rifle": { "kind": "ranged", "fire": "semi", "cooldown": 0.5, "range": 70 },
+		"pistol": { "kind": "ranged", "fire": "semi", "cooldown": 0.25, "range": 50 },
+		"machineGun": { "kind": "ranged", "fire": "auto", "cooldown": 0.1, "range": 45, "spreadDegrees": 4 },
+		"laser": { "kind": "ranged", "fire": "beam", "cooldown": 0.5, "range": 70, "pierce": 3 },
+		"rail": { "kind": "ranged", "fire": "semi", "cooldown": 0.9, "range": 90, "pierce": 6 }
+	},
+	"abilities": {
+		"whirlwind": { "kind": "aoe", "cooldown": 12, "radius": 12, "damageMult": 2.0, "knockback": 30 },
+		"groundSlam": { "kind": "aoe", "cooldown": 14, "radius": 14, "damageMult": 2.5, "stunSeconds": 1.5 },
+		"dashStrike": { "kind": "burst", "cooldown": 10, "damageMult": 4.0, "dashStuds": 14 },
+		"bladeStorm": { "kind": "aoe", "cooldown": 16, "radius": 16, "damageMult": 1.0, "dotSeconds": 4, "dotTicks": 4 },
+		"volley": { "kind": "aoe", "cooldown": 14, "radius": 10, "damageMult": 1.5, "shots": 6 },
+		"fanTheHammer": { "kind": "burst", "cooldown": 10, "shots": 6, "damageMult": 1.2 },
+		"grenade": { "kind": "aoe", "cooldown": 12, "radius": 12, "damageMult": 3.0, "knockback": 20 },
+		"overcharge": { "kind": "burst", "cooldown": 12, "damageMult": 6.0, "pierce": 8 }
+	},
+	"slots": {
+		"melee": {
+			"starter": { "name": "Stick", "class": "sword", "damage": 8, "hp": 0, "ability": "", "model": "" },
+			"tiers": [
+				{ "tier": 1, "band": 1, "cost": 10, "unlockRate": 0, "name": "Wooden Sword", "class": "sword", "damage": 12, "hp": 20, "ability": "whirlwind", "model": "WeaponSwordI" },
+				{ "tier": 2, "band": 1, "cost": 60, "unlockRate": 15000, "name": "Iron Sword", "class": "sword", "damage": 18, "hp": 35, "ability": "whirlwind", "model": "WeaponSwordII" },
+				{ "tier": 3, "band": 1, "cost": 180, "unlockRate": 120000, "name": "Knight Sword", "class": "sword", "damage": 26, "hp": 50, "ability": "whirlwind", "model": "WeaponSwordIII" },
+				{ "tier": 4, "band": 2, "cost": 10, "unlockRate": 800000, "name": "Hatchet", "class": "axe", "damage": 60, "hp": 80, "ability": "groundSlam", "model": "WeaponAxeI" },
+				{ "tier": 5, "band": 2, "cost": 60, "unlockRate": 20000000, "name": "Fire Axe", "class": "axe", "damage": 90, "hp": 120, "ability": "groundSlam", "model": "WeaponAxeII" },
+				{ "tier": 6, "band": 2, "cost": 180, "unlockRate": 70000000, "name": "Foreman Axe", "class": "axe", "damage": 130, "hp": 170, "ability": "groundSlam", "model": "WeaponAxeIII" },
+				{ "tier": 7, "band": 3, "cost": 10, "unlockRate": 200000000, "name": "Machete", "class": "machete", "damage": 300, "hp": 250, "ability": "dashStrike", "model": "WeaponMacheteI" },
+				{ "tier": 8, "band": 3, "cost": 60, "unlockRate": 4000000000, "name": "Riot Blade", "class": "machete", "damage": 450, "hp": 350, "ability": "dashStrike", "model": "WeaponMacheteII" },
+				{ "tier": 9, "band": 3, "cost": 180, "unlockRate": 15000000000, "name": "Carbon Blade", "class": "machete", "damage": 650, "hp": 480, "ability": "dashStrike", "model": "WeaponMacheteIII" },
+				{ "tier": 10, "band": 4, "cost": 10, "unlockRate": 40000000000, "name": "Plasma Edge", "class": "energyBlade", "damage": 1500, "hp": 700, "ability": "bladeStorm", "model": "WeaponBladeI" },
+				{ "tier": 11, "band": 4, "cost": 60, "unlockRate": 700000000000, "name": "Ion Blade", "class": "energyBlade", "damage": 2200, "hp": 950, "ability": "bladeStorm", "model": "WeaponBladeII" },
+				{ "tier": 12, "band": 4, "cost": 180, "unlockRate": 2500000000000, "name": "Nova Blade", "class": "energyBlade", "damage": 3200, "hp": 1300, "ability": "bladeStorm", "model": "WeaponBladeIII" }
+			]
+		},
+		"ranged": {
+			"starter": { "name": "Sling", "class": "bow", "damage": 6, "hp": 0, "ability": "", "model": "" },
+			"tiers": [
+				{ "tier": 1, "band": 1, "cost": 10, "unlockRate": 0, "name": "Short Bow", "class": "bow", "damage": 10, "hp": 10, "ability": "volley", "model": "WeaponBowI" },
+				{ "tier": 2, "band": 1, "cost": 60, "unlockRate": 15000, "name": "Hunter Bow", "class": "bow", "damage": 15, "hp": 20, "ability": "volley", "model": "WeaponBowII" },
+				{ "tier": 3, "band": 1, "cost": 180, "unlockRate": 120000, "name": "Longbow", "class": "bow", "damage": 22, "hp": 30, "ability": "volley", "model": "WeaponBowIII" },
+				{ "tier": 4, "band": 2, "cost": 10, "unlockRate": 800000, "name": "Revolver", "class": "revolver", "damage": 45, "hp": 50, "ability": "fanTheHammer", "model": "WeaponRevolverI" },
+				{ "tier": 5, "band": 2, "cost": 60, "unlockRate": 20000000, "name": "Lever Rifle", "class": "rifle", "damage": 80, "hp": 80, "ability": "grenade", "model": "WeaponRifleI" },
+				{ "tier": 6, "band": 2, "cost": 180, "unlockRate": 70000000, "name": "Marshal Rifle", "class": "rifle", "damage": 115, "hp": 110, "ability": "grenade", "model": "WeaponRifleII" },
+				{ "tier": 7, "band": 3, "cost": 10, "unlockRate": 200000000, "name": "Service Pistol", "class": "pistol", "damage": 200, "hp": 160, "ability": "fanTheHammer", "model": "WeaponPistolI" },
+				{ "tier": 8, "band": 3, "cost": 60, "unlockRate": 4000000000, "name": "Machine Gun", "class": "machineGun", "damage": 110, "hp": 230, "ability": "grenade", "model": "WeaponMachineGunI" },
+				{ "tier": 9, "band": 3, "cost": 180, "unlockRate": 15000000000, "name": "Heavy Machine Gun", "class": "machineGun", "damage": 160, "hp": 320, "ability": "grenade", "model": "WeaponMachineGunII" },
+				{ "tier": 10, "band": 4, "cost": 10, "unlockRate": 40000000000, "name": "Laser Pistol", "class": "laser", "damage": 900, "hp": 450, "ability": "overcharge", "model": "WeaponLaserI" },
+				{ "tier": 11, "band": 4, "cost": 60, "unlockRate": 700000000000, "name": "Pulse Laser", "class": "laser", "damage": 1300, "hp": 620, "ability": "overcharge", "model": "WeaponLaserII" },
+				{ "tier": 12, "band": 4, "cost": 180, "unlockRate": 2500000000000, "name": "Rail Cannon", "class": "rail", "damage": 2600, "hp": 850, "ability": "overcharge", "model": "WeaponRailI" }
+			]
+		}
+	},
+	"ascension": {
+		"requiresRebirth": 1,
+		"levelsPerRebirth": 1,
+		"levels": [
+			{ "level": 1, "materials": { "Timber": 200, "Steel": 200, "Circuits": 200, "Alloy": 200 }, "valor": 50, "damageMult": 2.0, "hpMult": 1.5, "abilityMult": 1.5 },
+			{ "level": 2, "materials": { "Timber": 500, "Steel": 500, "Circuits": 500, "Alloy": 500 }, "valor": 120, "damageMult": 3.5, "hpMult": 2.2, "abilityMult": 2.0 },
+			{ "level": 3, "materials": { "Timber": 1200, "Steel": 1200, "Circuits": 1200, "Alloy": 1200 }, "valor": 250, "damageMult": 6.0, "hpMult": 3.2, "abilityMult": 2.8 }
+		]
+	}
+}
