@@ -143,19 +143,23 @@ return {
 	},
 	-- No lots: every block is already a building slot and eras.Metropolis.houses.props is
 	-- empty (INTERFACES "Wave 2a").
-	-- Public squares at the open ends of the z = 0 and z = 28 corridors, the only pockets
-	-- wide enough for a 12x12 plaza that no street, pad or ramp wants.
+	-- Public squares, 14x14 with the pavement apron in the prop, each turned to a traffic
+	-- avenue with its front edge flush against that avenue's outer pavement edge (centreline
+	-- +/- 7.5) so it reads as part of the street, not as an island. Both sit in the outer band
+	-- beyond the block columns, the only ground where 14 studs of depth fit off the carriageway.
 	plazas = {
-		{ position = Vector3.new(-45, 0, 0), rotationY = 0, tier = 3, prop = "PlazaA" },
-		{ position = Vector3.new(45, 0, 28), rotationY = 0, tier = 5, prop = "PlazaB" },
+		-- fronts the west avenue from the west, in the z = 0 corridor row
+		{ position = Vector3.new(-42.5, 0, 0), rotationY = 270, tier = 3, prop = "PlazaA" },
+		-- fronts the east avenue from the east, in the z = -28 corridor row beside the arterial
+		{ position = Vector3.new(42.5, 0, -28), rotationY = 90, tier = 5, prop = "PlazaB" },
 	},
-	-- Greenery is whatever the grid leaves: the four corners inside the ring, the pocket
-	-- west of the stadium, the corridor behind the east avenue and the back verge on the
-	-- civic axis. Sum 24 = eras.Metropolis.trees.maxCount.
+	-- Greenery is whatever the grid leaves: the four corners inside the ring, the pocket west of
+	-- the stadium, the corridor east of the east avenue north of the shops, and the back verge on
+	-- the civic axis. Sum 24 = eras.Metropolis.trees.maxCount.
 	treeZones = {
 		{ center = Vector3.new(-49, 0, -49), radius = 3, count = 4 },
 		{ center = Vector3.new(49, 0, -49), radius = 3, count = 4 },
-		{ center = Vector3.new(44, 0, -30), radius = 6, count = 4 },
+		{ center = Vector3.new(44, 0, 28), radius = 5, count = 4 },
 		{ center = Vector3.new(-48.5, 0, 24), radius = 3, count = 4 },
 		{ center = Vector3.new(0, 0, 48), radius = 4, count = 4 },
 		{ center = Vector3.new(49, 0, 49), radius = 3, count = 4 },
@@ -178,7 +182,7 @@ return {
 	subwayEntrances = {
 		{ position = Vector3.new(6.5, 0, -34.5), rotationY = 90 },
 		{ position = Vector3.new(-21.5, 0, -21.5), rotationY = 90 },
-		{ position = Vector3.new(34.5, 0, -21.5), rotationY = 90 },
+		{ position = Vector3.new(21.5, 0, -21.5), rotationY = 270 },
 		{ position = Vector3.new(-21.5, 0, 34), rotationY = 90 },
 		{ position = Vector3.new(34.5, 0, 28), rotationY = 90 },
 	},

@@ -104,6 +104,12 @@ SUBWAY_COUNT = (4, 6)
 # that declares less than the prop really is.
 METRO_ENTRANCE_EXTENTS = (4.90, 5.79)
 SUBWAY_CLEARANCE = 0.5  # daylight between an entrance and any footprint, pad or plaza
+# Wave 2a, after Ben's Studio look: a tiles-era plaza is 14 x 14 with the pavement apron built
+# into the prop, and its front (-Z at rotation 0) is flush with a street's pavement edge. The
+# blueprint may still declare the pre-resize envelope while the prop is reworked, so the checker
+# takes whichever is bigger -- a stale file must never pass a plan the real prop will not fit.
+PLAZA_MIN_SIZE = (14.0, 14.0)
+PLAZA_EDGE_SLACK = 0.5  # how far the front edge may sit from the pavement's outer edge
 # An entrance stands on the pavement it faces: its front edge may come this close to the asphalt.
 SUBWAY_STREET_REACH = 1.5
 
@@ -547,13 +553,17 @@ class Era:
         self.plazas = []
         for plaza in self.layout.get("plazas", []):
             position = xz(plaza["position"])
-            size = prop_footprint(name, [plaza["prop"]], (12, 12))
+            size = prop_footprint(name, [plaza["prop"]], PLAZA_MIN_SIZE if self.tiles else (12, 12))
+            if self.tiles is not None:
+                size = (max(size[0], PLAZA_MIN_SIZE[0]), max(size[1], PLAZA_MIN_SIZE[1]))
             self.plazas.append(
                 {
                     "position": position,
                     "rotation": plaza["rotationY"],
                     "tier": plaza["tier"],
                     "prop": plaza["prop"],
+                    "size": size,
+                    "facing": facing(plaza["rotationY"]),
                     "poly": square(position, size[0], size[1], plaza["rotationY"]),
                 }
             )
@@ -1259,6 +1269,7 @@ def check(era, network, visible, unreachable):
     # comes within width / 2 of the centreline -- and a smaller padOffset would put the pad inside
     # the building instead. It only has to stay off the asphalt.
     pad_clear = half_road if era.tiles is not None else spine_clear
+    cells = era.road_cells()  # empty unless the era draws kit tiles
 
     def add(message):
         violations.append(message)
@@ -1425,6 +1436,41 @@ def check(era, network, visible, unreachable):
         for _, a, b in era.spine_segments():
             if segment_polygon_distance(a, b, plaza["poly"]) < half_road - 1e-6:
                 add(f"{label}: sits on street {fmt(a)}->{fmt(b)}")
+        # Wave 2a: a plaza is a walk-in square now, so it takes the same clearances a kiosk does
+        # and, unlike one, it has to touch the street it belongs to.
+        for j, entry in enumerate(era.subways):
+            d = polygon_polygon_distance(plaza["poly"], entry["poly"])
+            if d < SUBWAY_CLEARANCE - 1e-6:
+                add(f"{label}: {d:.2f} from subway entrance {j + 1} (need {SUBWAY_CLEARANCE})")
+        for j, zone in enumerate(era.zones):
+            if point_polygon_distance(zone["center"], plaza["poly"]) < zone["radius"] - 1e-6:
+                add(f"{label}: tree zone {j + 1} overlaps it")
+        for cell in cells:
+            if polygon_polygon_distance(plaza["poly"], era.cell_square(cell)) < 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                add(f"{label}: covers the road cell {where}")
+                break
+        if era.pavement > 0:
+            face = plaza["facing"]
+            front = (
+                plaza["position"][0] + face[0] * plaza["size"][1] / 2,
+                plaza["position"][1] + face[1] * plaza["size"][1] / 2,
+            )
+            edge = era.width / 2 + era.pavement
+            nearest = min(
+                (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
+                key=lambda hit: hit[0],
+                default=None,
+            )
+            if nearest is None:
+                add(f"{label}: there is no street for it to front")
+            elif abs(nearest[0] - edge) > PLAZA_EDGE_SLACK:
+                add(
+                    f"{label}: its front edge is {nearest[0]:.2f} from the nearest centreline, not flush "
+                    f"with the pavement edge at {edge:g}"
+                )
+            elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
+                add(f"{label}: its back is turned to the street it fronts")
 
     total = sum(zone["count"] for zone in era.zones)
     max_count = era.dressing["trees"]["maxCount"]
@@ -1471,7 +1517,6 @@ def check(era, network, visible, unreachable):
     # Wave 2a. Each of these is a place the client fails silently: an off-lattice point leaves a
     # hole between tiles, a deck over a roof or a ramp onto bare ground just looks wrong, and a
     # cell budget overrun drops the tail of the network with no error.
-    cells = era.road_cells()
     if era.tiles is not None:
         for message in lattice_violations(era):
             add(message)

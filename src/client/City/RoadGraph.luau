@@ -1737,7 +1737,12 @@ function RoadGraph.new(context: Context, near: boolean): State
 			local segments: { TileRenderer.Segment } = {}
 			for _, ranked in pathStretchOrder(state) do
 				local stretch = state.stretches[ranked.index]
-				table.insert(segments, { id = ranked.index, a = stretch.a, b = stretch.b })
+				table.insert(segments, {
+					id = ranked.index,
+					polyline = stretch.polyline,
+					a = stretch.a,
+					b = stretch.b,
+				})
 			end
 			state.tileStretchAllowed = TileRenderer.Plan(tiles, segments)
 			state.tiles = tiles

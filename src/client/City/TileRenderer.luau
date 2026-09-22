@@ -95,13 +95,15 @@ export type Options = {
 	near: boolean,
 }
 
--- One spine stretch, already ranked from the plot entrance outward by RoadGraph.
-export type Segment = { id: number, a: Vector3, b: Vector3 }
+-- One spine stretch, already ranked from the plot entrance outward by RoadGraph. `polyline` is the
+-- street it belongs to, which is what makes a cell a crossing: two polylines through one cell.
+export type Segment = { id: number, polyline: number, a: Vector3, b: Vector3 }
 
 type Cell = {
 	i: number,
 	j: number,
 	position: Vector3, -- plot-local centre, Y 0
+	polylines: { [number]: boolean }, -- the streets through it; two or more make it a crossing
 	stretches: { number }, -- stretch ids covering this cell
 	links: { [number]: { number } }, -- arm -> stretch ids that join this cell to that neighbour
 }
@@ -240,6 +242,22 @@ end
 
 -- One kerb Part per side of a stretch. Same material and colour everywhere, so the overlaps where
 -- two stretches meet are invisible; the top sits at road.thickness / 2, under the tile surface.
+-- Whether the cell a stretch ends on carries another street: its tile is a tee or a crossroads,
+-- and a kerb laid across it would run over the asphalt (Ben's playtest).
+local function crossingAt(handle: Handle, point: Vector3): boolean
+	local tileStuds = handle.options.tiles.tileStuds
+	local cell = cellAt(tileStuds, point)
+	local index = handle.cellByKey[keyFor(cell.X, cell.Y)]
+	if index == nil then
+		return false
+	end
+	local seen = 0
+	for _ in handle.cells[index].polylines do
+		seen += 1
+	end
+	return seen > 1
+end
+
 local function placePavement(handle: Handle, segment: Segment): ()
 	local options = handle.options
 	local pavement = options.tiles.pavement
@@ -257,13 +275,23 @@ local function placePavement(handle: Handle, segment: Segment): ()
 	local right = along:Cross(Vector3.yAxis)
 	local width = math.max(pavement.width, MIN_LENGTH)
 	local thickness = math.max(options.thickness, MIN_LENGTH)
+	-- Held back half a cell at a crossing so the kerb stops at the junction tile's edge; elsewhere
+	-- it runs half a width past the end, so kerbs close around a corner.
+	local tileStuds = options.tiles.tileStuds
+	local startBack = if crossingAt(handle, segment.a) then tileStuds / 2 else -width / 2
+	local endBack = if crossingAt(handle, segment.b) then tileStuds / 2 else -width / 2
+	local from = segment.a + along * startBack
+	local to = segment.b - along * endBack
+	local span = (to - from).Magnitude
+	if span < MIN_LENGTH then
+		return
+	end
 	local parts: { Instance } = {}
 	for _, side in { 1, -1 } do
-		local mid = (segment.a + segment.b) / 2 + right * (side * (options.roadWidth + width) / 2)
+		local mid = (from + to) / 2 + right * (side * (options.roadWidth + width) / 2)
 		local part = Instance.new("Part")
 		part.Name = PAVEMENT_PART_NAME
-		-- Overlapped by a width at each end, so the kerbs close around a corner.
-		part.Size = Vector3.new(width, thickness, length + width)
+		part.Size = Vector3.new(width, thickness, span)
 		part.CFrame = options.plotFrame
 			* CFrame.lookAt(
 				Vector3.new(mid.X, 0, mid.Z),
@@ -399,6 +427,7 @@ function TileRenderer.Plan(handle: Handle, segments: { Segment }): { [number]: b
 					i = cell.X,
 					j = cell.Y,
 					position = Vector3.new(cell.X * tileStuds, 0, cell.Y * tileStuds),
+					polylines = {},
 					stretches = {},
 					links = {},
 				})
@@ -406,6 +435,7 @@ function TileRenderer.Plan(handle: Handle, segments: { Segment }): { [number]: b
 				handle.cellByKey[key] = index
 			end
 			local record = handle.cells[index]
+			record.polylines[segment.polyline] = true
 			if record.stretches[#record.stretches] ~= segment.id then
 				table.insert(record.stretches, segment.id)
 			end

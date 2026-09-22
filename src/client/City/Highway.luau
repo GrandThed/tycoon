@@ -101,9 +101,10 @@ end
 
 -- ------------------------------------------------------------------ measuring the ramp
 
--- How far a prop reaches from its anchor along each axis, measured on the template it is about to
--- be cloned from: the ramp's reach along +X is where its low end touches down, and the sign's
--- widest half-extent is how far it must stand off the road not to hang over it.
+-- How far a prop reaches from its anchor, measured on the template it is about to be cloned from:
+-- how far the ramp runs to its low end (where it touches down) and the widest half-extent of a
+-- prop (how far a sign must stand off the road not to hang over it). The prop descends toward its
+-- own +X, so its reach is the far edge of its geometry on that side.
 local function reachOf(handle: Handle, propName: string?): (number?, number?)
 	local options = handle.options
 	local anchor, parts = PropFactory.StageParts(options.eraName, propName, 0)
@@ -111,14 +112,14 @@ local function reachOf(handle: Handle, propName: string?): (number?, number?)
 		return nil, nil
 	end
 	local frame = anchor :: CFrame
-	local alongX, half = 0, 0
+	local descent, half = 0, 0
 	for _, part in parts do
 		local centre = frame:PointToObjectSpace(part.Position)
 		local size = part.Size
-		alongX = math.max(alongX, centre.X + size.X / 2)
+		descent = math.max(descent, centre.X + size.X / 2)
 		half = math.max(half, math.abs(centre.X) + size.X / 2, math.abs(centre.Z) + size.Z / 2)
 	end
-	return alongX, half
+	return descent, half
 end
 
 -- ------------------------------------------------------------------ plan
@@ -239,7 +240,7 @@ local function placeRamp(handle: Handle): ()
 		signProp,
 		options.plotFrame
 			* CFrame.new(spot.X, 0, spot.Z)
-			-- Front (-Z at rotation 0) turned to face back along the ramp.
+			-- Front (-Z at rotation 0) faces back along the ramp.
 			* CFrame.Angles(0, math.atan2(direction.X, direction.Z), 0)
 	)
 end
