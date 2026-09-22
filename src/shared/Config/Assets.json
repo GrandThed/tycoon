@@ -6772,8 +6772,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 114513246375486,
+                "imageId": 130771765354100,
                 "size": [7.14, 7.7, 7.14],
                 "offset": [0.0, 3.85, 0.0]
               }
@@ -6788,8 +6788,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 104244568071932,
+                "imageId": 130771765354100,
                 "size": [7.14, 7.7, 7.14],
                 "offset": [0.0, 3.85, 0.0]
               }
@@ -6804,8 +6804,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 78779134201337,
+                "imageId": 130771765354100,
                 "size": [7.14, 7.7, 7.14],
                 "offset": [0.0, 3.85, 0.0]
               }
@@ -6820,10 +6820,10 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 131822294458189,
+                "imageId": 130771765354100,
                 "size": [21.07, 7.56, 7.14],
-                "offset": [6.965, 3.78, 0.0]
+                "offset": [-6.965, 3.78, 0.0]
               }
             ]
           }
@@ -6836,10 +6836,10 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [7.0, 4.952, 0.927],
-                "offset": [0.0, 2.476, -0.288]
+                "meshId": 121145949155471,
+                "imageId": 130771765354100,
+                "size": [7.0, 4.9516, 0.9266],
+                "offset": [0.0, 2.4758, 0.2883]
               }
             ]
           }
@@ -6852,8 +6852,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 118648089184104,
+                "imageId": 130771765354100,
                 "size": [0.55, 6.6, 4.675],
                 "offset": [0.0, 3.3, 0.0]
               }
@@ -6868,10 +6868,10 @@
             "parts": [
               {
                 "kit": "metro-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 130247699252407,
+                "imageId": 131612791169105,
                 "size": [4.9, 5.98, 5.79],
-                "offset": [0.0, 2.99, -0.095]
+                "offset": [0.0, 2.99, 0.095]
               }
             ]
           }
@@ -6884,24 +6884,24 @@
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [9.786, 3.8, 11.6],
+                "meshId": 94021257837703,
+                "imageId": 100750397531314,
+                "size": [9.7856, 3.8, 11.6],
                 "offset": [0.0, 1.984, 0.0]
               },
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 98064889935634,
+                "imageId": 130771765354100,
                 "size": [12.0, 7.764, 12.0],
                 "offset": [0.0, 3.882, 0.0]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [11.2, 4.024, 9.37],
-                "offset": [-0.002, 2.096, 0.001]
+                "meshId": 129252794534428,
+                "imageId": 75804611199159,
+                "size": [11.2, 4.024, 9.3702],
+                "offset": [0.0023, 2.096, -0.0009]
               }
             ]
           }
@@ -6914,24 +6914,24 @@
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [11.293, 2.8, 5.392],
-                "offset": [-0.354, 1.484, -2.896]
+                "meshId": 116781390181598,
+                "imageId": 100750397531314,
+                "size": [11.2928, 2.8, 5.3916],
+                "offset": [0.3536, 1.484, 2.8958]
               },
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 98709178081341,
+                "imageId": 130771765354100,
                 "size": [12.0, 4.484, 12.0],
                 "offset": [0.0, 2.242, 0.0]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [9.869, 4.024, 4.043],
-                "offset": [-0.065, 2.096, 3.219]
+                "meshId": 76420611863998,
+                "imageId": 75804611199159,
+                "size": [9.8694, 4.024, 4.0428],
+                "offset": [0.0653, 2.096, -3.2191]
               }
             ]
           }
@@ -6944,8 +6944,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 85648495843635,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -6960,8 +6960,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100626128125699,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -6976,8 +6976,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 116884717791225,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -6992,8 +6992,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 138622649680245,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -7008,8 +7008,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 103033082932926,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -7024,8 +7024,8 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 71331626778584,
+                "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
               }
@@ -7040,10 +7040,10 @@
             "parts": [
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [3.54, 6.109, 1.411],
-                "offset": [1.23, 3.055, -0.166]
+                "meshId": 123435821289131,
+                "imageId": 130771765354100,
+                "size": [3.54, 6.1091, 1.4112],
+                "offset": [-1.23, 3.0546, 0.1656]
               }
             ]
           }
@@ -7056,10 +7056,10 @@
             "parts": [
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 103301524781611,
+                "imageId": 75804611199159,
                 "size": [3.7, 2.835, 2.0],
-                "offset": [-0.003, 1.418, 0.0]
+                "offset": [0.0029, 1.4175, 0.0]
               }
             ]
           },
@@ -7068,10 +7068,10 @@
             "parts": [
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 127343520701645,
+                "imageId": 75804611199159,
                 "size": [3.7, 3.835, 3.7],
-                "offset": [-0.003, 1.917, -0.003]
+                "offset": [0.0029, 1.9175, 0.0029]
               }
             ]
           },
@@ -7080,10 +7080,10 @@
             "parts": [
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 84061983076112,
+                "imageId": 75804611199159,
                 "size": [3.7, 4.935, 3.7],
-                "offset": [-0.003, 2.467, -0.003]
+                "offset": [0.0029, 2.4675, 0.0029]
               }
             ]
           },
@@ -7092,10 +7092,10 @@
             "parts": [
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 71434132138377,
+                "imageId": 75804611199159,
                 "size": [3.7, 6.035, 3.7],
-                "offset": [-0.003, 3.017, -0.003]
+                "offset": [0.0029, 3.0175, 0.0029]
               }
             ]
           }
@@ -7108,8 +7108,8 @@
             "parts": [
               {
                 "kit": "car-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 90402634479946,
+                "imageId": 130972008306861,
                 "size": [2.7, 2.34, 5.58],
                 "offset": [0.0, 1.17, 0.0]
               }
@@ -7124,8 +7124,8 @@
             "parts": [
               {
                 "kit": "car-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135394614723248,
+                "imageId": 130972008306861,
                 "size": [2.7, 2.97, 5.85],
                 "offset": [0.0, 1.485, 0.0]
               }
@@ -7140,8 +7140,8 @@
             "parts": [
               {
                 "kit": "car-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 88339471519739,
+                "imageId": 130972008306861,
                 "size": [2.7, 2.34, 5.13],
                 "offset": [0.0, 1.17, 0.0]
               }
@@ -7156,8 +7156,8 @@
             "parts": [
               {
                 "kit": "car-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 72186725052143,
+                "imageId": 130972008306861,
                 "size": [2.7, 2.43, 4.95],
                 "offset": [0.0, 1.215, 0.0]
               }
