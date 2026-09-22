@@ -29,6 +29,10 @@
       "vipSwatchAssetId": 113791458028891,
       "vipImageId": 91158106530449
     },
+    "garage-kit": {
+      "vipSwatchAssetId": 87697179794186,
+      "vipImageId": 0
+    },
     "nature-kit": {
       "vipSwatchAssetId": 70411050112785,
       "vipImageId": 108673364610024
@@ -1896,28 +1900,28 @@
       "CityHall": {
         "stages": [
           {
-            "modelAssetId": 131312757759591,
+            "modelAssetId": 97250050931457,
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 70859499389043,
-                "imageId": 100750397531314,
-                "size": [8.0, 6.2, 4.5916],
-                "offset": [0.0, 6.1, -0.7042]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.974, 12.316, 5.24],
+                "offset": [0.0, 6.158, 0.56]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.6, 5.78, 4.0],
+                "offset": [0.0, 2.89, -2.5]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 132568881159754,
-                "imageId": 75804611199159,
-                "size": [7.36, 0.7084, 1.2],
-                "offset": [0.0, 1.3542, 3.4023]
-              },
-              {
-                "kit": "cityhall-kit",
-                "meshId": 109102227033041,
-                "imageId": 111912843944585,
-                "size": [8.4, 20.68, 8.0],
-                "offset": [0.0, 10.34, 0.0]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.56, 0.708, 1.2],
+                "offset": [0.0, 0.434, -1.682]
               }
             ]
           }
@@ -2182,62 +2186,62 @@
       "ParkingGarage": {
         "stages": [
           {
-            "modelAssetId": 122197393630579,
+            "modelAssetId": 134240854411715,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 108746839606005,
-                "imageId": 130771765354100,
-                "size": [8.0, 2.08, 8.471],
-                "offset": [0.0, 1.04, 0.2355]
+                "kit": "garage-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.98, 2.35, 8.98],
+                "offset": [0.0, 1.175, 0.0]
               }
             ]
           },
           {
-            "modelAssetId": 111613143135087,
+            "modelAssetId": 90901400139693,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 84878417373317,
-                "imageId": 130771765354100,
-                "size": [8.0, 4.16, 8.471],
-                "offset": [0.0, 2.08, 0.2355]
+                "kit": "garage-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.98, 4.77, 8.98],
+                "offset": [0.0, 2.285, 0.0]
               }
             ]
           },
           {
-            "modelAssetId": 140341921533300,
+            "modelAssetId": 119964658446762,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 133787510839694,
-                "imageId": 130771765354100,
-                "size": [8.0, 6.24, 8.471],
-                "offset": [0.0, 3.12, 0.2355]
+                "kit": "garage-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.98, 7.52, 8.98],
+                "offset": [0.0, 3.66, 0.0]
               }
             ]
           },
           {
-            "modelAssetId": 102965081505534,
+            "modelAssetId": 128830670590444,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 90934340873666,
-                "imageId": 130771765354100,
-                "size": [8.0, 8.64, 8.471],
-                "offset": [0.0, 4.32, 0.2355]
+                "kit": "garage-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.98, 11.0, 8.98],
+                "offset": [0.0, 5.4, 0.0]
               }
             ]
           },
           {
-            "modelAssetId": 106932615803679,
+            "modelAssetId": 116962035546465,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 139714483725706,
-                "imageId": 130771765354100,
-                "size": [8.0, 9.0695, 8.471],
-                "offset": [0.0, 4.5347, 0.2355]
+                "kit": "garage-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.98, 13.9, 8.98],
+                "offset": [0.0, 6.85, 0.0]
               }
             ]
           }
@@ -6772,14 +6776,14 @@
       "HighwayCorner": {
         "stages": [
           {
-            "modelAssetId": 72941998228222,
+            "modelAssetId": 118610773509012,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 114513246375486,
-                "imageId": 130771765354100,
-                "size": [7.14, 7.7, 7.14],
-                "offset": [0.0, 3.85, 0.0]
+                "kit": "highway-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.093, 7.87, 7.093],
+                "offset": [0.023, 3.935, -0.023]
               }
             ]
           }
@@ -6788,14 +6792,14 @@
       "HighwayDeck": {
         "stages": [
           {
-            "modelAssetId": 105995681605024,
+            "modelAssetId": 124265149891233,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 104244568071932,
-                "imageId": 130771765354100,
-                "size": [7.14, 7.7, 7.14],
-                "offset": [0.0, 3.85, 0.0]
+                "kit": "highway-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.0, 7.87, 7.16],
+                "offset": [0.0, 3.935, 0.0]
               }
             ]
           }
@@ -6804,14 +6808,14 @@
       "HighwayJunction": {
         "stages": [
           {
-            "modelAssetId": 89710816652245,
+            "modelAssetId": 123289613551654,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 78779134201337,
-                "imageId": 130771765354100,
-                "size": [7.14, 7.7, 7.14],
-                "offset": [0.0, 3.85, 0.0]
+                "kit": "highway-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.0, 7.87, 7.07],
+                "offset": [0.0, 3.935, -0.035]
               }
             ]
           }
@@ -6820,14 +6824,14 @@
       "HighwayRamp": {
         "stages": [
           {
-            "modelAssetId": 100997920601041,
+            "modelAssetId": 139474470005084,
             "parts": [
               {
-                "kit": "city-kit-roads",
-                "meshId": 110010705686674,
-                "imageId": 130771765354100,
-                "size": [21.07, 7.966, 7.14],
-                "offset": [-6.965, 3.577, 0.0]
+                "kit": "highway-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [21.0, 14.043, 7.16],
+                "offset": [7.0, 0.848, 0.0]
               }
             ]
           }
