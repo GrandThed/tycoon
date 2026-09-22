@@ -30,9 +30,9 @@ non-zero `meshId`. **Template** -- `templates/<Era>/<ModelName>.rbxmx` exists.
 |-----|------------|----------|-----------|-----------|
 | 1 — Village | 24/24 | 24/24 | 24/24 | 24/24 |
 | 2 — Boomtown | 24/24 | 24/24 | 24/24 | 24/24 |
-| 3 — Metropolis | 24/24 | 24/24 | 23/24 | 23/24 |
-| 4 — Orbital Colony | 24/24 | 0/24 | 0/24 | 0/24 |
-| **Total** | 96/96 | 72/96 | 71/96 | 71/96 |
+| 3 — Metropolis | 24/24 | 24/24 | 24/24 | 24/24 |
+| 4 — Orbital Colony | 24/24 | 24/24 | 24/24 | 24/24 |
+| **Total** | 96/96 | 96/96 | 96/96 | 96/96 |
 
 ## Era 1 — Village
 
@@ -142,7 +142,7 @@ Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
 
 Blueprints: `tools/testfit/blueprints/Metropolis/` -- templates: `templates/Metropolis/` -- in game: `ServerStorage/Assets/Metropolis/`
 
-Summary: 24/24 blueprints, 24/24 uploaded, 23/24 harvested, 23/24 templated
+Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -151,7 +151,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 23/24 harvested, 23/24 templated
 | 3 | `CornerShop` | Corner Shop | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 4 | `ApartmentBlockA` | Apartment Block | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 5 | `OfficeLowRise` | Low-Rise Office | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 6 | `CityHall` | Found City Hall | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 0/1 | — |
+| 6 | `CityHall` | Found City Hall | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `Supermarket` | Supermarket | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 8 | `BusStop` | Bus Stop | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `ApartmentBlockB` | High-Rise Apartments | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
@@ -205,34 +205,34 @@ Summary: 21/21 blueprints, 21/21 uploaded, 0/21 harvested, 0/21 templated
 
 Blueprints: `tools/testfit/blueprints/OrbitalColony/` -- templates: `templates/OrbitalColony/` -- in game: `ServerStorage/Assets/OrbitalColony/`
 
-Summary: 24/24 blueprints, 0/24 uploaded, 0/24 harvested, 0/24 templated
+Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `LandingPad` | Landing Pad | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 2 | `SolarArray` | Solar Array | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 3 | `HabitatPod` | Habitat Pod | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 4 | `HydroponicsDome` | Hydroponics Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 5 | `OxygenGenerator` | Oxygen Generator | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 6 | `WalkwayTube` | Connect the Walkways | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 7 | `CrewQuarters` | Crew Quarters | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 8 | `ColonyFlag` | Colony Flag | decor | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 9 | `ResearchLab` | Research Lab | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 10 | `RoverBay` | Rover Bay | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 11 | `CommsArray` | Comms Array | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 12 | `OxygenTanks` | Bring Life Support Online | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 13 | `MineralExtractor` | Mineral Extractor | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 14 | `RocksLarge` | Rock Garden | decor | yes | space-kit | 1 | 1/1 | — | — | — |
-| 15 | `ObservationDome` | Observation Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 16 | `FusionReactor` | Fusion Reactor | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 18 | `DockingBay` | Docking Bay | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 19 | `TerraformStation` | Terraform Station | building | yes | orbital-kit, space-kit | 5 | 5/5 | — | — | — |
-| 20 | `HoloBeacon` | Holo Beacon | decor | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 21 | `MedicalBay` | Medical Bay | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 22 | `SpaceportTerminal` | Spaceport Terminal | building | yes | space-kit | 5 | 5/5 | — | — | — |
-| 23 | `TurretBase` | Raise Planetary Defense | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | — | — | — |
-| 24 | `LaunchTower` | Launch Tower | monument | yes | space-kit | 1 | 1/1 | — | — | — |
+| 1 | `LandingPad` | Landing Pad | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 2 | `SolarArray` | Solar Array | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 3 | `HabitatPod` | Habitat Pod | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 4 | `HydroponicsDome` | Hydroponics Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 5 | `OxygenGenerator` | Oxygen Generator | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 6 | `WalkwayTube` | Connect the Walkways | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `CrewQuarters` | Crew Quarters | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 8 | `ColonyFlag` | Colony Flag | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `ResearchLab` | Research Lab | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 10 | `RoverBay` | Rover Bay | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 11 | `CommsArray` | Comms Array | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 12 | `OxygenTanks` | Bring Life Support Online | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `MineralExtractor` | Mineral Extractor | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 14 | `RocksLarge` | Rock Garden | decor | yes | space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `ObservationDome` | Observation Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 16 | `FusionReactor` | Fusion Reactor | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `DockingBay` | Docking Bay | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 19 | `TerraformStation` | Terraform Station | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 20 | `HoloBeacon` | Holo Beacon | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `MedicalBay` | Medical Bay | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 22 | `SpaceportTerminal` | Spaceport Terminal | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 23 | `TurretBase` | Raise Planetary Defense | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 24 | `LaunchTower` | Launch Tower | monument | yes | space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Baked paths
 
@@ -247,4 +247,4 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 
 ## Totals
 
-96 models: 96/96 blueprints, 72/96 uploaded, 71/96 harvested, 71/96 templated
+96 models: 96/96 blueprints, 96/96 uploaded, 96/96 harvested, 96/96 templated
