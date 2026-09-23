@@ -54,7 +54,20 @@
 			"StarterPlayerScripts": {
 				"$className": "StarterPlayerScripts",
 				"Client": {
-					"$path": "src/combat/client"
+					"$className": "Folder",
+					"Main": { "$path": "src/combat/client/Main.client.luau" },
+					"UI": {
+						"$path": "src/combat/client/UI",
+						"Create": { "$path": "src/client/UI/Create.luau" },
+						"Motion": { "$path": "src/client/UI/Motion.luau" },
+						"Toast": { "$path": "src/client/UI/Toast.luau" },
+						"LoadScreen": { "$path": "src/client/UI/LoadScreen.luau" },
+						"Theme": { "$path": "src/client/UI/Theme.luau" }
+					},
+					"Controllers": {
+						"$path": "src/combat/client/Controllers",
+						"SoundController": { "$path": "src/client/Controllers/SoundController.luau" }
+					}
 				}
 			}
 		}

@@ -44,9 +44,9 @@
 				{ "tier": 7, "band": 3, "cost": 10, "unlockRate": 200000000, "name": "Machete", "class": "machete", "damage": 300, "hp": 250, "ability": "dashStrike", "model": "WeaponMacheteI" },
 				{ "tier": 8, "band": 3, "cost": 60, "unlockRate": 4000000000, "name": "Riot Blade", "class": "machete", "damage": 450, "hp": 350, "ability": "dashStrike", "model": "WeaponMacheteII" },
 				{ "tier": 9, "band": 3, "cost": 180, "unlockRate": 15000000000, "name": "Carbon Blade", "class": "machete", "damage": 650, "hp": 480, "ability": "dashStrike", "model": "WeaponMacheteIII" },
-				{ "tier": 10, "band": 4, "cost": 10, "unlockRate": 40000000000, "name": "Plasma Edge", "class": "energyBlade", "damage": 1500, "hp": 700, "ability": "bladeStorm", "model": "WeaponBladeI" },
-				{ "tier": 11, "band": 4, "cost": 60, "unlockRate": 700000000000, "name": "Ion Blade", "class": "energyBlade", "damage": 2200, "hp": 950, "ability": "bladeStorm", "model": "WeaponBladeII" },
-				{ "tier": 12, "band": 4, "cost": 180, "unlockRate": 2500000000000, "name": "Nova Blade", "class": "energyBlade", "damage": 3200, "hp": 1300, "ability": "bladeStorm", "model": "WeaponBladeIII" }
+				{ "tier": 10, "band": 4, "cost": 10, "unlockRate": 40000000000, "name": "Plasma Edge", "class": "energyBlade", "damage": 1500, "hp": 700, "ability": "bladeStorm", "model": "WeaponBladeI", "partyEffect": "rally" },
+				{ "tier": 11, "band": 4, "cost": 60, "unlockRate": 700000000000, "name": "Ion Blade", "class": "energyBlade", "damage": 2200, "hp": 950, "ability": "bladeStorm", "model": "WeaponBladeII", "partyEffect": "rally" },
+				{ "tier": 12, "band": 4, "cost": 180, "unlockRate": 2500000000000, "name": "Nova Blade", "class": "energyBlade", "damage": 3200, "hp": 1300, "ability": "bladeStorm", "model": "WeaponBladeIII", "partyEffect": "warcry" }
 			]
 		},
 		"ranged": {
@@ -75,5 +75,9 @@
 			{ "level": 2, "materials": { "Timber": 500, "Steel": 500, "Circuits": 500, "Alloy": 500 }, "valor": 120, "damageMult": 3.5, "hpMult": 2.2, "abilityMult": 2.0 },
 			{ "level": 3, "materials": { "Timber": 1200, "Steel": 1200, "Circuits": 1200, "Alloy": 1200 }, "valor": 250, "damageMult": 6.0, "hpMult": 3.2, "abilityMult": 2.8 }
 		]
+	},
+	"partyEffects": {
+		"rally": { "kind": "rally", "radius": 20, "healFraction": 0.25 },
+		"warcry": { "kind": "warcry", "radius": 20, "damageMult": 1.25, "seconds": 6 }
 	}
 }

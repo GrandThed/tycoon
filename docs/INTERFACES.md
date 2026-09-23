@@ -3779,3 +3779,258 @@ timeline at recommended power, kill counts per key, run cash vs era cost.
 - `DebugBots = 2` adds two rows, scales wave count, and the summary shows only the player's share.
 - Every lever works from both the attribute and the `DebugPanel`; none does anything outside Studio.
 - No enemy or weapon model is required: placeholder rigs and empty hands are the shipped default.
+
+---
+
+# C2 contracts — Co-op: party, join-in-progress, contribution, Mentor (Ben, 2026-09-23)
+
+The game is published (both place ids live in `Places.json`), so C2 is verified **twice**: the
+Studio bridge + debug levers for every path, and a published round trip with two accounts.
+Ben's rulings (2026-09-23):
+
+1. **Boss HP scales with party size**: `× (1 + coop.bossHpPerExtraPlayer × (partySize − 1))`,
+   0.75 to start. Regular enemies still scale by count only; tempo still never touches HP/damage.
+2. **The run list shows runs in this hub server, friends' runs, and public runs from any
+   server.** A host can make a run friends-only with the "Open to public" toggle (default
+   `coop.publicByDefault` = true). Private runs are visible only to friends and same-server players.
+3. **Hub party = invite + accept** among players in the same hub server. The leader picks the
+   mission; Depart sends the whole party to one reserved server in ONE `TeleportAsync`.
+4. **Missions are host-gated.** A guest may fight any mission its host unlocked (the design's
+   "the newbie still brings home Steel"). The gate is enforced through the server-only
+   `RunTicket`, never through teleport data.
+5. Nothing new is persisted: **no schema change** (ProfileSchema stays v6). The hub party lives in
+   memory only and re-forms after the group return from agreeing teleport hints.
+
+Lead-applied before fan-out (do not redo): the five UI copies + `SoundController` copy in
+`src/combat/client` are deleted and `combat.project.json` maps the hub originals into the combat
+client (`Client/UI/{Create,Motion,Toast,LoadScreen,Theme}`, `Client/Controllers/SoundController`);
+the combat Theme block moved verbatim into `src/client/UI/Theme.luau`. All `Types.luau` additions
+below, and the new `Combat.json` / `Armory.json` / `Missions/1_Village.json` keys, are in.
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|-------|-------|
+| lead | this section, `Types.luau`, config keys (applied), `combat.project.json` (applied), routing |
+| luau-engineer **A** (combat server) | `src/combat/server/**` (Main, ArenaService, WaveService, CombatService, EnemyService, DebugService, CombatRemotes, ReturnService, RunRegistry), `src/shared/Combat.luau` |
+| luau-engineer **B** (hub server) | `src/server/Services/{PartyService (new), ExpeditionService, HubRemotes, StudioBridge, ArmoryService}.luau`, `src/server/Main.server.luau` |
+| ui-engineer **A** (combat client) | `src/combat/client/**` |
+| ui-engineer **B** (hub client) | `src/client/UI/**` (incl. the now-shared `Theme.luau`), `src/client/Controllers/UIController.luau`, new `src/client/UI/PartyInviteToast.luau` |
+| economy-designer | values of `Combat.json coop.*`, `Armory.json partyEffects` + `partyEffect` tier keys (keys frozen), `tools/sim_combat.py`, `docs/BALANCE.md` "C2" |
+| roblox-reviewer → qa-runner → docs-keeper | after wave 1 |
+
+A calls B's `StudioBridge` by the API below; B's `ExpeditionService` writes the `RunTicket` A's
+`RunRegistry` reads. **`Theme.luau` is shared by both clients:** ui-engineer B owns it; ui-engineer
+A may only add constants inside a block headed `-- C2 combat client` placed directly after the
+"C0 combat place" block, and must re-read the file before each edit. Nobody touches
+`src/client/City/**` or `src/client/Controllers/{CityDressingController,PlotVisualsController}`
+(another session, M9 wave 2d, owns them). Frozen: everything frozen at C1, `Economy.luau`,
+`Catalog.luau`, `Armory.luau`, `ProfileSchema`, `DataService`, `EconomyService`, `RemoteService`.
+
+## Types (applied, `src/shared/Types.luau`)
+
+`ActionResult.action` + `"party"`; `reason` + `"full" | "over" | "busy" | "expired" | "notLeader"`.
+`WeaponTierDef.partyEffect: string?`, `PartyEffectDef`, `ArmoryConfig.partyEffects`.
+`CombatCoopConfig` + `bossHpPerExtraPlayer, mentorMinDamageShare, inviteSeconds, lobbyWaitSeconds,
+returnGroupSeconds, reformSeconds, publicByDefault`. `CombatRegistryConfig` + `listCacheSeconds,
+listMax, friendChecksPerCall` (replaces the `MAX_FRIEND_CHECKS_PER_CALL` code constant).
+`CombatEnemyConfig` + `defaultColor, bossColor, botColor`; `EnemyDef.color?` (replaces the colour
+constants in `EnemyService` and `ArenaService.BOT_COLOR`). `CombatDebugConfig` + `botIncomeRate,
+fakePartyAttribute, fakeInviteAttribute`. `PartyMember` + `host, waiting, damageShare`.
+`RunMember` + `waiting, incomeRate, drawStartedAt, empoweredUntil, empowerMult`. `RunSummary` +
+`mentorValor, damageShare`. `RunState` + `returnIn?`. `CombatFx` + `swing`, `partyEffect`,
+`mentor`; `refused.reason` + `"waiting"`. `ActiveRun` + `public, memberIds`. New: `RunTicket`
+(with `privateServerId`), `RunRelation`, `RunListEntry`, `HubPartyMember`, `HubPartyInvite`,
+`HubParty`, `PartyInviteEvent`, `PartyHint`, `ReturnData`.
+
+## Remotes
+
+Hub intents (all validated in `HubRemotes`; userIds must be integers ≠ 0, negative only in Studio):
+
+| Remote | Payload | Bucket |
+|---|---|---|
+| `RequestExpedition` | `(missionId: string, overdrive: boolean, public: boolean)` — **changed** | prompt |
+| `RequestPartyInvite` | `(userId: number)` | calls |
+| `RequestPartyRespond` | `(leaderUserId: number, accept: boolean)` | calls |
+| `RequestPartyLeave` | `()` | calls |
+| `RequestPartyKick` | `(userId: number)` | calls |
+
+Hub events: **`PartyState`** `(party: HubParty?)` to every member (and `nil` to anyone who just
+left); **`PartyInvite`** `(PartyInviteEvent)` to the invitee only; `RunList` payload becomes
+`{ runs: { RunListEntry } }` (no `ActiveRun` ever reaches a client). `RequestDebug` gains levers
+`fakeParty` (number 0–3) and `fakeInvite` (true).
+
+Combat intents: **`RequestDraw`** `()` bucket `attack` — the bow's draw start. `RequestDebug`
+gains lever `admitCheck` (true). Combat events unchanged; `CombatFx` gains the three kinds above.
+
+## Hub party (`PartyService`, B, hub only; inert in the combat place)
+
+```luau
+PartyService.Invite(leader: Player, userId: number): ()          -- ActionResult{party, tostring(userId), ok, reason}
+PartyService.Respond(player: Player, leaderUserId: number, accept: boolean): ()
+PartyService.Leave(player: Player): ()
+PartyService.Kick(leader: Player, userId: number): ()
+PartyService.Get(player: Player): Types.HubParty?
+PartyService.Members(player: Player): { Player }                 -- real players only, leader first
+PartyService.IsLeader(player: Player): boolean                   -- true when solo too
+PartyService.OfferReform(player: Player, hint: Types.PartyHint): ()
+PartyService.Forget(player: Player): ()                          -- PlayerRemoving
+```
+
+- Invite: sender is solo or the leader (else `notLeader`); target is another player in this
+  server (else `invalid`), not in a party and not departing (`busy`), and members + pending <
+  `coop.maxParty` (`full`). The invite expires after `coop.inviteSeconds` (`expired` on a late
+  accept). Accepting while in another party → `busy`. A solo inviter becomes leader when the first
+  invite is accepted; a party that drops to one member dissolves; a leaving leader passes
+  leadership to the next member in join order.
+- `PartyState` goes to every member after each change; pending invites carry `expiresIn`.
+- Studio levers (Workspace attribute `debug.fakePartyAttribute` / `fakeInviteAttribute`, and the
+  `RequestDebug` levers): `fakeParty n` gives the player's party n fake members (ids −1…−n,
+  names "Fake 1"…), `fakeInvite` sends the player an invite from a fake leader (id −9). Fake
+  members are skipped at Depart with a toast; in a fake-led party Depart answers `notLeader`.
+  Inert outside `RunService:IsStudio()`.
+
+## Departure, join and the run list (`ExpeditionService`, B)
+
+- **Depart** (`RequestExpedition`): a party member who is not the leader → `notLeader`. The
+  mission gate is the **leader's** `MissionUnlocked`. Members not loaded or already departing are
+  left behind with `busy`. One `ReserveServer` → `(accessCode, privateServerId)`; the hub writes
+  `RunTicket{ accessCode, privateServerId, missionId, overdrive, public, expected = departing
+  userIds }` to the existing `ActiveRunsCodes` hash map (key `code_<leaderUserId>`), then for each
+  member: stamp, `RefreshPersistedRate`, release; then ONE `TeleportAsync(combatPlaceId, players,
+  options)` with the C1 teleport data `{ missionId, overdrive, hostUserId = leader }`. Any failure
+  → the C1 recovery for **every** member. Bridge mode: `privateServerId = "studio"`, one
+  `WriteDeparture` per member, and every member is kicked.
+- **Join** (`RequestJoinRun`): personal. The requester leaves their hub party first. The hub
+  pre-filters against the registry snapshot (`full` if `partySize >= maxParty`, `over` if
+  `wave > joinUntilWave`) and visibility (public, or a friend, or a member in this server, else
+  `unavailable`). **No mission-unlock check for joiners** (host-gated). The combat place re-checks
+  everything on arrival.
+- **Run list** (`RequestRunList`): one `GetRangeAsync(Ascending, 50)` per hub server per
+  `registry.listCacheSeconds`, shared by every requester. Per requester: drop their own run,
+  drop runs that are not joinable, tag `relation` (`server` if a `memberIds` entry is in this
+  server, else `friend` via cached `IsFriendsWithAsync` capped at `registry.friendChecksPerCall`,
+  else `public` if `run.public`, else hidden), order server → friend → public then by wave, cap at
+  `registry.listMax`. `DebugFakeRuns` fakes alternate `public` true/false with relation
+  `public`/`friend`.
+- **Arrival home** (hub `Main.server.luau`): `ReturnData` from `TeleportData` (validated shape)
+  or `StudioBridge.ReadReturn`. `summaries[tostring(userId)]` → `ExpeditionSummary` (C1 card);
+  `refused` → `ActionResult{ joinRun, "", false, refused }`; `party` → `PartyService.OfferReform`.
+  A party re-forms only among members who arrive within `coop.reformSeconds` with **identical**
+  hints (same leader, same memberIds); leader = the hint's leader if present, else the first
+  arrival. A forged hint can therefore only pull in players whose own hints agree.
+
+## Studio bridge (B)
+
+`WriteReturn(player, data: Types.ReturnData): boolean` and `ReadReturn(player): Types.ReturnData?`
+replace the summary-only forms (record `{ kind = "return", data, stamp }`, every field
+type-checked on read). Everything else is unchanged.
+
+## Combat place (A)
+
+- **Ticket**: `RunRegistry.ResolveTicket(hostUserId, missionId, overdrive): Types.RunTicket?`
+  replaces `ResolveAccessCode`: same read and checks, plus `ticket.privateServerId ==
+  game.PrivateServerId` (`"studio"` in bridge mode). No ticket → the run is private, has no
+  expected list, and every arrival is unlock-checked as at C1.
+- **Admission** — one function `ArenaService.CheckAdmission(player, hint): "ok" | "full" | "over" | "locked"`,
+  run for every arrival before `Admit`: `over` if phase is `summary`/`ended`, or the player is not
+  in `ticket.expected` and the wave is past `coop.joinUntilWave`; `full` if seats (humans + bots)
+  ≥ `coop.maxParty` and the player is not already a member; `locked` if there is no ticket and
+  `MissionUnlocked` fails for this player (with a ticket, only the host is checked). Refusal →
+  `ReturnService.Refuse(player, reason)` (a `ReturnData` with no summaries and `refused`).
+- **Wave boundary entry**: a player (or debug bot) admitted during `wave`/`boss` is `waiting`:
+  placed on the LobbyPad, not targetable, takes no damage, attacks refused with `refused
+  "waiting"`. A co-op death (another non-waiting human still alive) respawns onto the LobbyPad as
+  `waiting`. At each wave boundary (the breather after a cleared wave/merged group, and
+  `beginWave`) every waiting member is pivoted to a player spawn at full HP. A death with no other
+  fighting human alive is a wipe (C1 rule). Arrivals in `lobby`/`breather` enter immediately.
+- **Lobby start**: all humans ready **and** every `ticket.expected` userId admitted, or
+  `coop.lobbyWaitSeconds` since the first arrival with all present humans ready.
+- **Boss HP**: `Combat.WaveSpec` returns `bossHpMult = 1 + coop.bossHpPerExtraPlayer × extras`
+  (same `extras = max(partySize, 1) − 1` it uses for count); `Combat.EnemyStats(..., isBoss =
+  true)` multiplies HP by it after the boss and Overdrive multipliers. Non-bosses ignore it.
+  `sim_combat.py` mirrors both exactly.
+- **Contribution**: `CombatService` keeps a run-wide damage map next to the per-flush tally;
+  `PartyMember.damageShare` and `RunSummary.damageShare` are raw shares of it.
+- **Mentor bonus**: at the flush of a cleared group that contained a boss, for each human h:
+  mentees = other members present (humans and bots) whose raw share of THAT flush's tally ≥
+  `coop.mentorMinDamageShare`; `bonus = Combat.MentorBonus(cfg, h.incomeRate, menteeRates)`.
+  Pays Valor to h's profile, adds to `summary.valor` and `summary.mentorValor`, and emits
+  `CombatFx mentor`. `incomeRate` = the profile's `incomeAtSave` at admit (the hub refreshed it at
+  departure); bots use `debug.botIncomeRate` and are never mentors.
+- **Party effects**: when a `RequestAbility("melee")` cast succeeds and the caster's melee tier
+  has `partyEffect`, apply `Armory.json partyEffects[key]` to every other alive, non-waiting
+  member within `radius`: `rally` heals `healFraction × MaxHp` (clamped); `warcry` sets
+  `empoweredUntil = now + seconds`, `empowerMult = damageMult`, and every `DealDamage` by an
+  empowered member multiplies by it. Emit `CombatFx partyEffect`.
+- **Swing replication**: every swing `OnAttack` validates (even with zero targets) queues
+  `CombatFx swing{ userId, step }` to every member except the swinger.
+- **Bow charge fix**: `RequestDraw` stamps `drawStartedAt` for a `fire == "charge"` class;
+  `OnFire` caps charge at `(now − drawStartedAt) / chargeSeconds` only when `drawStartedAt >
+  lastShotAt`, else 0; the stamp resets after each shot.
+- **Registry**: `ActiveRun.public` from the ticket (false without one), `memberIds` = humans;
+  `RunRegistry.Publish` sets the sort key to `wave` while joinable and `1000 + wave` once full or
+  past `joinUntilWave`, so an ascending range returns joinable runs first.
+- **Group return**: `RunState.returnIn` counts `coop.returnGroupSeconds` down on the summary;
+  then `ReturnService.SendHomeGroup(players, reason)` releases every remaining human and sends
+  them in ONE `TeleportAsync(hubPlaceId, players, options)` with `ReturnData{ summaries, party =
+  { leaderUserId = host if present else first, memberIds } }`. `RequestLeave` before that goes
+  home alone (`ReturnData` with only its own summary, no party). Bridge mode: one `WriteReturn` per
+  member, then kick each.
+- **Colours** from `Combat.json enemy.*Color` and `EnemyDef.color`.
+- **Studio lever** `admitCheck` (`RequestDebug`, Studio only) runs `CheckAdmission` for the
+  calling player and toasts the verdict without sending anyone home — the same function a real
+  arrival runs. Bots added mid-wave wait for the boundary like joiners.
+
+## Combat client (ui-engineer A)
+
+Party rows: ★ for the host, "joins next wave" / "back next wave" when `waiting`, damage share
+as a percentage. Local waiting banner "You'll join at the next wave". Other players' `swing` fx
+play the procedural combo pose on their characters. `RequestDraw` fires on draw start for charge
+weapons. `partyEffect` fx: radius ring at the caster, a pulse on each target, toast "Rally from
+<name>" / "War cry from <name>" for the local target. `mentor` fx: "+N Valor · Mentor" on the
+local mentor. Summary card: damage share, the Mentor line when `mentorValor > 0`, "Returning
+together in Ns" from `returnIn`, plus the existing Return button (goes alone). DebugPanel:
+an `admitCheck` button.
+
+## Hub client (ui-engineer B)
+
+`ExpeditionPanel`: a party strip (members with ★ leader, pending invites with countdown, Invite →
+picker of other players in the server, Leave, Kick for the leader); non-leaders see mission tiles
+disabled with "Your party leader picks the mission"; an "Open to public" toggle beside Overdrive
+(default `coop.publicByDefault`) → `RequestExpedition(missionId, overdrive, public)`. Run list
+grouped "In this server" / "Friends" / "Open runs" by `relation`; rows show the mission's display
+name, host, Wave N, n/max, Overdrive. Empty text "No runs to join right now." New
+`PartyInviteToast`: non-blocking, "<leader> invited you to an expedition party", Accept / Decline
+(≥ 44 px), auto-dismiss at `expiresIn`. `UIController` wires `PartyState` / `PartyInvite` and the
+new refusal copy (full: "That run is full", over: "That run has moved past joining", busy:
+"They're already in a party", expired: "That invite expired", notLeader: "Only the party leader
+can do that"). Hub `DebugPanel`: `fakeParty` (+1 up to 3, then clear) and `fakeInvite` buttons.
+
+## Balance (economy-designer)
+
+`sim_combat.py` mirrors `bossHpMult` and uses `mentor_bonus` in the run model. New `--check`
+assertions: (11) a boss wave at party N ∈ {2, 3, 4}, equal per-player recommended power, lasts
+within ±35 % of solo; (12) a 10:1-rate duo at a boss clear pays the mentor exactly
+`mentorValor`, an equal-rate duo pays 0; (13) the mentee floor: a member under
+`mentorMinDamageShare` earns its mentor nothing. Tune `bossHpPerExtraPlayer`, `partyEffects`
+values and `mentorMinDamageShare`; `sim_economy.py --check` unchanged. `docs/BALANCE.md` "C2":
+the party table (1–4 players: run time, boss time, per-player cash), Mentor Valor per run.
+
+## Definition of done (C2)
+
+- Both builds, both sourcemaps, `luau-lsp analyze`, stylua, selene, `sim_economy.py --check`
+  unchanged, `sim_combat.py --check` green (13 assertions), manifest/template checks green; the
+  combat build contains exactly one `Client/UI` and one `Client/Controllers`.
+- Studio hub, Local Server with 2 players: invite → toast → Accept → both see the party strip;
+  decline, expiry, kick and leave all update both; a non-leader's Depart → "Only the party
+  leader…"; the leader's Depart writes a handoff for both and kicks both.
+- Studio hub, solo: `fakeParty` / `fakeInvite` drive every party UI state; `DebugFakeRuns` shows
+  grouped rows.
+- Studio combat: a bot added mid-wave waits on the pad and enters at the boundary; with 3 bots
+  `admitCheck` says `full`; at `DebugWave 10` it says `over`; a boss with 2 bots has 2.5× the
+  solo HP; bots at income 0 make the player earn the Mentor Valor at wave 5; another Local Server
+  player's combo is animated; a bow shot after waiting without a draw is a weak shot.
+- Published, two accounts: party Depart lands both in one server; account A's public run is
+  joinable by non-friend account B mid-run (B enters at the next wave); a friends-only run is
+  hidden from B; after the run both return together and the party re-forms.

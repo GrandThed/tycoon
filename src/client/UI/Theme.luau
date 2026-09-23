@@ -298,6 +298,130 @@ local Theme = {
 	LOAD_TICK_SECONDS = 0.25, -- countdown / slow-line refresh cadence
 	LOAD_RETRY_ACK_SECONDS = 5, -- "Retrying…" re-arms to Retry if no status answers by then
 
+	-- C0 combat place (src/combat/client): lobby/wave HUD and the summary card. The HP bar
+	-- reads the local Humanoid, the party list mirrors RunState.party, and the tempo dot
+	-- colours the director's pace — no combat input exists yet.
+	COMBAT_TEMPO_DOT_SIZE = 14,
+	COMBAT_TEMPO_CALM = 0.9, -- below this the director is holding back
+	COMBAT_TEMPO_HOT = 1.3, -- at or above this it is merging waves
+	COMBAT_HP_BAR_WIDTH = 200,
+	COMBAT_HP_BAR_HEIGHT = 18,
+	COMBAT_HP_LABEL_HEIGHT = 16,
+	COMBAT_PARTY_WIDTH = 160,
+	COMBAT_PARTY_ROW_HEIGHT = 34,
+	COMBAT_PARTY_BAR_HEIGHT = 6,
+	COMBAT_PARTY_NAME_HEIGHT = 16,
+	COMBAT_SUMMARY_WIDTH = 320,
+	-- Portrait cannot fit the HP block and both buttons on one line, so the HP block lifts
+	-- above the button row whenever their combined design width does not fit.
+	COMBAT_HP_BUTTONS_GAP = 8,
+
+	-- C1 combat controls. Touch-first: the attack button owns the bottom-right thumb arc,
+	-- the two ability buttons stack immediately left of it and the stance pill sits above
+	-- them. Every one of these is at or above TAP_TARGET_MIN / MIN_SCALE (44 / 0.9167 = 48
+	-- design px), so nothing shrinks below a 44 physical px target on the smallest viewport.
+	COMBAT_ATTACK_BUTTON_SIZE = 80,
+	COMBAT_ABILITY_BUTTON_SIZE = 56,
+	COMBAT_CONTROL_GAP = 8,
+	COMBAT_STANCE_WIDTH = 116,
+	COMBAT_STANCE_HEIGHT = 48,
+	COMBAT_ABILITY_KEY_HEIGHT = 12,
+	COMBAT_ABILITY_NAME_HEIGHT = 12,
+	COMBAT_ABILITY_MIN_TEXT = 8,
+	-- No image asset exists for a radial sweep (every id in the project is still 0), so a
+	-- cooldown "ring" is a dark wipe that falls from the top of the round button plus the
+	-- remaining whole seconds. Same information, zero assets.
+	COMBAT_ABILITY_COOLDOWN_TRANSPARENCY = 0.35,
+
+	-- Wallet strip (cash, mission material, Valor) under the run header, and the boss bar
+	-- under that. Both are centred in portrait and left-aligned in landscape, like the header.
+	COMBAT_WALLET_WIDTH = 352,
+	COMBAT_WALLET_HEIGHT = 26,
+	COMBAT_WALLET_GAP = 6,
+	COMBAT_WALLET_MIN_TEXT = 9,
+	COMBAT_BOSS_WIDTH = 300,
+	COMBAT_BOSS_BAR_HEIGHT = 14,
+	COMBAT_BOSS_LABEL_HEIGHT = 16,
+	COMBAT_HEADER_TIMER_WIDTH = 74,
+	COMBAT_PARTY_DOWN_TRANSPARENCY = 0.55,
+	COMBAT_TIMER_TICK_SECONDS = 0.25,
+
+	-- C1 feedback (CombatFxController). Durations that the server owns arrive in
+	-- Combat.json `feedback`; only the presentation shape lives here.
+	COMBAT_DAMAGE_TEXT_SIZE = 20,
+	COMBAT_DAMAGE_FINISHER_TEXT_SIZE = 30,
+	COMBAT_DAMAGE_BILLBOARD_WIDTH = 140,
+	COMBAT_DAMAGE_BILLBOARD_HEIGHT = 40,
+	COMBAT_DAMAGE_RISE = 4.5,
+	COMBAT_DAMAGE_JITTER = 1.2, -- studs of sideways offset so stacked numbers stay readable
+	COMBAT_DAMAGE_MAX_ACTIVE = 24, -- a merged wave can land dozens of hits in one frame
+	COMBAT_KILL_PARTICLES = 10,
+	COMBAT_HIT_HIGHLIGHT_SECONDS = 0.16,
+	COMBAT_HIT_HIGHLIGHT_FILL = 0.55,
+	COMBAT_TELL_HIGHLIGHT_FILL = 0.75,
+	COMBAT_KNOCKBACK_STUDS = 1.6,
+	COMBAT_KNOCKBACK_SECONDS = 0.18,
+	COMBAT_CAMERA_KICK_DECAY = 9, -- per second; the kick is gone inside ~0.2 s
+	COMBAT_ABILITY_RING_SECONDS = 0.35,
+	COMBAT_ABILITY_RING_HEIGHT = 0.4,
+	COMBAT_BANNER_WIDTH = 340,
+	COMBAT_BANNER_HEIGHT = 58,
+	COMBAT_BANNER_TEXT = 28,
+	COMBAT_BANNER_SUB_TEXT = 14,
+	COMBAT_BANNER_TOP_FRACTION = 0.22,
+	-- Vignette: four edge bars with a UIGradient fade, because there is no vignette image
+	-- asset. Pulses while the local HP is under feedback.lowHpFraction.
+	COMBAT_VIGNETTE_THICKNESS = 96,
+	COMBAT_VIGNETTE_TRANSPARENCY = 0.35,
+	COMBAT_VIGNETTE_PULSE_SECONDS = 1.1,
+	COMBAT_HURT_FLASH_TRANSPARENCY = 0.75,
+	COMBAT_HURT_FLASH_SECONDS = 0.25,
+
+	-- C1 weapon visuals (WeaponController): procedural Motor6D poses on the local rig and a
+	-- tracer per shot. Angles are degrees; the pose engine converts.
+	COMBAT_SWING_WINDUP_FRACTION = 0.35, -- share of the class window spent winding up
+	COMBAT_SWING_WINDUP_DEGREES = -55,
+	COMBAT_SWING_STRIKE_DEGREES = 95,
+	COMBAT_SWING_SETTLE_SECONDS = 0.12,
+	COMBAT_DRAW_DEGREES = 80,
+	COMBAT_SHOOT_KICK_DEGREES = 25,
+	COMBAT_SHOOT_KICK_SECONDS = 0.1,
+	COMBAT_TRACER_SECONDS = 0.06,
+	COMBAT_BEAM_SECONDS = 0.16,
+	COMBAT_TRACER_WIDTH = 0.12,
+	COMBAT_BEAM_WIDTH = 0.35,
+	COMBAT_WEAPON_WAIT_SECONDS = 3, -- WaitForChild budget for the hand and the prop folder
+	-- Grip placement of a weapon prop in the right hand. No weapon prop has been authored
+	-- yet (empty hands are the shipped C1 default), so these are the neutral "held blade"
+	-- values a first prop will be modelled against, not measurements.
+	COMBAT_GRIP_FORWARD = 0.6,
+	COMBAT_GRIP_UP = -0.4,
+	COMBAT_GRIP_PITCH_DEGREES = -90,
+
+	-- C1 input. The dash a burst ability performs locally; the server already resolved the
+	-- damage along the same segment, so this is presentation that never changes a hit.
+	COMBAT_DASH_SECONDS = 0.18,
+	COMBAT_DASH_MAX_FORCE = 100000,
+	COMBAT_REMOTE_WAIT_SECONDS = 10, -- a remote C1 adds may be missing in an older build
+	-- Workspace/Enemies is built by ArenaService at server boot, so it is normally already
+	-- replicated; the budget only covers a slow join. Missing means "safe mode, no arena".
+	COMBAT_ARENA_WAIT_SECONDS = 20,
+
+	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
+	-- either orientation.
+	-- Rows are 48 design px like the hub's DebugPanel, because 48 x MIN_SCALE is exactly
+	-- the 44 physical px tap target; the strip wraps into two columns and scrolls rather
+	-- than scaling itself down to fit a short landscape viewport.
+	COMBAT_DEBUG_WIDTH = 196,
+	COMBAT_DEBUG_ROW_HEIGHT = 48,
+	COMBAT_DEBUG_GAP = 6,
+	COMBAT_DEBUG_COLUMNS = 2,
+	COMBAT_DEBUG_TOGGLE_SIZE = 48,
+	COMBAT_DEBUG_TEXT = 11,
+	COMBAT_DEBUG_GRANT_MATERIALS = 25,
+	COMBAT_DEBUG_GRANT_VALOR = 10,
+	COMBAT_DEBUG_MAX_SPAWN_KEYS = 3,
+
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,
 	ZINDEX_DIALOG = 20,

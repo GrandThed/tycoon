@@ -37,7 +37,14 @@
 		"contributionFloor": 0.1,
 		"countPerExtraPlayer": 0.6,
 		"mentorRatio": 0.1,
-		"mentorValor": 5
+		"mentorValor": 5,
+		"bossHpPerExtraPlayer": 0.75,
+		"mentorMinDamageShare": 0.02,
+		"inviteSeconds": 30,
+		"lobbyWaitSeconds": 30,
+		"returnGroupSeconds": 15,
+		"reformSeconds": 60,
+		"publicByDefault": true
 	},
 	"overdrive": {
 		"requiresRebirth": 1,
@@ -47,7 +54,13 @@
 		"spawnRateMult": 1.5,
 		"rewardMult": 4.0
 	},
-	"registry": { "mapName": "ActiveRuns", "ttlSeconds": 7200 },
+	"registry": {
+		"mapName": "ActiveRuns",
+		"ttlSeconds": 7200,
+		"listCacheSeconds": 5,
+		"listMax": 20,
+		"friendChecksPerCall": 8
+	},
 	"animations": { "enemyIdle": 0, "enemyWalk": 0, "enemyAttack": 0, "enemyDeath": 0 },
 	"enemy": {
 		"tickHz": 10,
@@ -55,7 +68,10 @@
 		"retargetSeconds": 0.5,
 		"attackWindupSeconds": 0.3,
 		"eliteScale": 1.25,
-		"bossScale": 1.6
+		"bossScale": 1.6,
+		"defaultColor": [128, 96, 96],
+		"bossColor": [96, 26, 30],
+		"botColor": [70, 120, 190]
 	},
 	"feedback": {
 		"hitstopSeconds": 0.05,
@@ -81,6 +97,9 @@
 		"handoffStoreName": "StudioHandoff",
 		"handoffMaxAgeSeconds": 900,
 		"botHp": 150,
-		"botDamagePerSecond": 12
+		"botDamagePerSecond": 12,
+		"botIncomeRate": 0,
+		"fakePartyAttribute": "DebugFakeParty",
+		"fakeInviteAttribute": "DebugFakeInvite"
 	}
 }

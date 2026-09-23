@@ -156,13 +156,27 @@ export type ActionResult = {
 		| "buyGear"
 		| "ascend"
 		| "expedition"
-		| "joinRun",
+		| "joinRun"
+		| "party",
 	slotId: string,
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
 	-- run that is full or gone. insufficientFunds = materials/Valor short; locked = income/s
 	-- below the unlockRate, the Ascension cap, or a mission era above highestEra.
-	reason: ("insufficientFunds" | "locked" | "invalid" | "unavailable")?,
+	-- C2 (slotId = the other player's userId as a string for "party"): full = party or run at
+	-- maxParty; over = run past joinUntilWave or ended; busy = invitee already in a party or
+	-- departing; expired = invite timed out or withdrawn; notLeader = only the leader may do that.
+	reason: (
+		"insufficientFunds"
+		| "locked"
+		| "invalid"
+		| "unavailable"
+		| "full"
+		| "over"
+		| "busy"
+		| "expired"
+		| "notLeader"
+	)?,
 }
 
 -- M3 presentation events (server → client, owner only, never on bulk restore), discriminated
@@ -745,8 +759,19 @@ export type WeaponTierDef = {
 	hp: number,
 	ability: string,
 	model: string,
+	-- C2: key into ArmoryConfig.partyEffects, fired on allies when this weapon's ability is cast.
+	partyEffect: string?,
 }
 export type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
+-- C2: rally heals allies (never the caster) by healFraction of their MaxHp; warcry multiplies
+-- allies' outgoing damage by damageMult for `seconds`. Allies within `radius` of the caster.
+export type PartyEffectDef = {
+	kind: "rally" | "warcry",
+	radius: number,
+	healFraction: number?,
+	damageMult: number?,
+	seconds: number?,
+}
 export type AscensionLevelDef = {
 	level: number,
 	materials: { [string]: number },
@@ -771,6 +796,7 @@ export type ArmoryConfig = {
 	-- client string or a config-driven loop.
 	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
+	partyEffects: { [string]: PartyEffectDef },
 }
 
 -- Combat.json v1.
@@ -814,6 +840,21 @@ export type CombatCoopConfig = {
 	countPerExtraPlayer: number,
 	mentorRatio: number,
 	mentorValor: number,
+	-- C2. Boss HP × (1 + bossHpPerExtraPlayer × (partySize − 1)); regular enemies still scale
+	-- by count only.
+	bossHpPerExtraPlayer: number,
+	-- A mentee counts toward MentorBonus only if its raw (pre-floor) damage share of the boss
+	-- wave reached this, so an idle alt cannot farm Valor for its main.
+	mentorMinDamageShare: number,
+	inviteSeconds: number,
+	-- The lobby starts once every expected member is ready, or this long after the first arrival.
+	lobbyWaitSeconds: number,
+	-- Summary shown this long, then every remaining human goes home in ONE group teleport.
+	returnGroupSeconds: number,
+	-- A returning party re-forms in the hub only among members who arrive within this window.
+	reformSeconds: number,
+	-- Default of the Expedition panel's "Open to public" toggle.
+	publicByDefault: boolean,
 }
 export type CombatOverdriveConfig = {
 	requiresRebirth: number,
@@ -823,7 +864,15 @@ export type CombatOverdriveConfig = {
 	spawnRateMult: number,
 	rewardMult: number,
 }
-export type CombatRegistryConfig = { mapName: string, ttlSeconds: number }
+-- C2: listCacheSeconds = one registry read per hub server per window, shared by every viewer;
+-- listMax = rows sent per RunList; friendChecksPerCall = IsFriendsWithAsync fan-out cap.
+export type CombatRegistryConfig = {
+	mapName: string,
+	ttlSeconds: number,
+	listCacheSeconds: number,
+	listMax: number,
+	friendChecksPerCall: number,
+}
 export type CombatAnimationsConfig = {
 	enemyIdle: number,
 	enemyWalk: number,
@@ -849,6 +898,11 @@ export type CombatDebugConfig = {
 	handoffMaxAgeSeconds: number,
 	botHp: number,
 	botDamagePerSecond: number,
+	-- C2: the income/s a debug bot reports to MentorBonus (0 = every bot is a mentee).
+	botIncomeRate: number,
+	-- C2 hub levers (RequestDebug "fakeParty" / "fakeInvite" use the same names).
+	fakePartyAttribute: string,
+	fakeInviteAttribute: string,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -858,6 +912,10 @@ export type CombatEnemyConfig = {
 	attackWindupSeconds: number,
 	eliteScale: number,
 	bossScale: number,
+	-- C2: colours moved out of EnemyService. RGB 0-255; EnemyDef.color overrides defaultColor.
+	defaultColor: { number },
+	bossColor: { number },
+	botColor: { number },
 }
 export type CombatFeedbackConfig = {
 	hitstopSeconds: number,
@@ -893,6 +951,7 @@ export type EnemyDef = {
 	cash: number,
 	materials: number,
 	elite: boolean,
+	color: { number }?,
 }
 -- The composition in force from `fromWave` until the next entry takes over.
 export type CompositionDef = { fromWave: number, weights: { [string]: number } }
@@ -980,6 +1039,11 @@ export type PartyMember = {
 	bot: boolean,
 	abilityReadyIn: { melee: number, ranged: number },
 	stance: WeaponSlot,
+	-- C2. host = the run's hostUserId. waiting = arrived or died mid-wave; enters at the next wave
+	-- boundary, untargetable meanwhile. damageShare = raw share of the run's damage so far, 0-1.
+	host: boolean,
+	waiting: boolean,
+	damageShare: number,
 }
 -- The server-side party record behind a PartyMember: it also holds the character, the ability
 -- cooldown stamps and the per-run bookkeeping the client never sees. Lives in Types (not in
@@ -1001,6 +1065,14 @@ export type RunMember = {
 	-- os.clock() the corpse may respawn at; 0 = alive or waiting on the run to end.
 	respawnAt: number,
 	spawnIndex: number,
+	-- C2: see PartyMember.waiting. incomeRate = profile incomeAtSave at admit (bots:
+	-- debug.botIncomeRate). drawStartedAt = os.clock() of the last RequestDraw, 0 = none.
+	-- empoweredUntil/empowerMult = an active warcry.
+	waiting: boolean,
+	incomeRate: number,
+	drawStartedAt: number,
+	empoweredUntil: number,
+	empowerMult: number,
 }
 export type RunSummary = {
 	missionId: string,
@@ -1013,6 +1085,9 @@ export type RunSummary = {
 	valor: number,
 	kills: number,
 	seconds: number,
+	-- C2: Valor from MentorBonus (already included in `valor`), and the raw run damage share.
+	mentorValor: number,
+	damageShare: number,
 }
 export type RunState = {
 	kind: "run",
@@ -1033,6 +1108,8 @@ export type RunState = {
 	runEndsIn: number,
 	boss: { name: string, hp: number, maxHp: number }?,
 	summary: RunSummary?,
+	-- C2: seconds until the group return home during "summary"; nil otherwise.
+	returnIn: number?,
 }
 
 -- Presentation events, batched per Heartbeat frame into one list per client. Damage numbers,
@@ -1065,7 +1142,23 @@ export type CombatFxAbility = {
 export type CombatFxWave = { kind: "wave", wave: number, merged: boolean, boss: boolean }
 export type CombatFxBossDown = { kind: "bossDown", name: string, valor: number }
 export type CombatFxPlayerDown = { kind: "playerDown", userId: number, respawnIn: number? }
-export type CombatFxRefused = { kind: "refused", reason: "cooldown" | "dead" | "lobby" }
+export type CombatFxRefused = {
+	kind: "refused",
+	reason: "cooldown" | "dead" | "lobby" | "waiting",
+}
+-- C2. swing: a validated melee swing (step 1-3), sent to everyone except the swinger so other
+-- players' combos animate. partyEffect: rally/warcry landed on targetIds. mentor: Valor paid to
+-- userId for carrying `mentees` players through a boss wave.
+export type CombatFxSwing = { kind: "swing", userId: number, step: number }
+export type CombatFxPartyEffect = {
+	kind: "partyEffect",
+	userId: number,
+	key: string,
+	position: Vector3,
+	radius: number,
+	targetIds: { number },
+}
+export type CombatFxMentor = { kind: "mentor", userId: number, valor: number, mentees: number }
 export type CombatFx =
 	CombatFxHit
 	| CombatFxKill
@@ -1075,9 +1168,13 @@ export type CombatFx =
 	| CombatFxBossDown
 	| CombatFxPlayerDown
 	| CombatFxRefused
+	| CombatFxSwing
+	| CombatFxPartyEffect
+	| CombatFxMentor
 
--- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub strips it
--- before the RunList event, so a client can never teleport itself into a reserved server.
+-- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
+-- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
+-- reserved server. C2: `public` comes from the RunTicket; memberIds = humans in the run now.
 export type ActiveRun = {
 	hostUserId: number,
 	hostName: string,
@@ -1087,6 +1184,57 @@ export type ActiveRun = {
 	overdrive: boolean,
 	partySize: number,
 	accessCode: string,
+	public: boolean,
+	memberIds: { number },
+}
+
+-- C2: the server-only record the hub writes to the ActiveRunsCodes hash map at departure. The
+-- combat place trusts it (a server wrote it) and never the teleport data for these fields.
+-- expected = the departing party's userIds, host included. privateServerId = ReserveServer's
+-- second return ("studio" in bridge mode): the combat server honours a ticket only when it equals
+-- game.PrivateServerId, so a client-forged teleport into a public server can never claim one.
+export type RunTicket = {
+	accessCode: string,
+	privateServerId: string,
+	missionId: string,
+	overdrive: boolean,
+	public: boolean,
+	expected: { number },
+}
+
+-- C2: one row of the hub RunList event. Only joinable runs are sent (seat free, wave <=
+-- joinUntilWave). relation orders the list: runs with a member in this hub server, then
+-- friends' runs, then public runs.
+export type RunRelation = "server" | "friend" | "public"
+export type RunListEntry = {
+	hostUserId: number,
+	hostName: string,
+	missionId: string,
+	wave: number,
+	overdrive: boolean,
+	partySize: number,
+	relation: RunRelation,
+}
+
+-- C2 hub party (PartyService, never persisted). Sent on the PartyState event to every member
+-- and to anyone with a pending invite from it; nil = not in a party.
+export type HubPartyMember = { userId: number, name: string }
+export type HubPartyInvite = { userId: number, name: string, expiresIn: number }
+export type HubParty = {
+	leaderUserId: number,
+	members: { HubPartyMember },
+	pending: { HubPartyInvite },
+}
+-- The PartyInvite event, to the invitee only.
+export type PartyInviteEvent = { leaderUserId: number, leaderName: string, expiresIn: number }
+
+-- C2: teleport data (and Studio return record) on the way home. A hint, never an entitlement:
+-- summaries are display-only; a party re-forms only among members whose OWN hints agree.
+export type PartyHint = { leaderUserId: number, memberIds: { number } }
+export type ReturnData = {
+	summaries: { [string]: RunSummary },
+	party: PartyHint?,
+	refused: ("full" | "over" | "locked")?,
 }
 
 return {}
