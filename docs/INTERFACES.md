@@ -2832,7 +2832,9 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
 - **Stable streams:** each new category draws from its own `Random.new(plotSeed + SALT)` (salts are
   module constants in `Scatter`: greenery 7001, parked 7002, walkers 7003, ambient 7004), after
   the existing plan. Only the lot count may shift existing lamp/vehicle picks, which is cosmetic.
-- `Theme.reducedMotion` true → no smoke, no birds, walkers glide without bob.
+- `Theme.lowEndDevice` true → no smoke, no birds (spec §10: low-end = no particles; touch alone
+  keeps them, most players are on phones). `Theme.reducedMotion` (touch or low-end) → walkers
+  glide without bob.
 
 ### Lots (more houses)
 - `LotLayout` gains `kind: ("house" | "small")?`, default `"house"`. Per era,
@@ -2918,6 +2920,9 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
   Far plots keep lots and houses (they are city silhouette) and drop greenery, parked, walkers,
   smoke and birds. The PLAN target is re-cut from measurement in the playtest; the step for
   Traffic + Walkers + Ambient together must stay **< 0.3 ms** with every map cap reached.
+- **`cityDetail` (wave 2b, lands on main first):** when false, wave 2c also halves greenery and
+  drops parked vehicles, walkers, smoke and birds (lots stay). Wired by the lead at merge, since the
+  setting does not exist on this branch.
 
 ### Types (`Types.luau`, ui-engineer this wave)
 `LotKind`, `LotLayout.kind`, `ParkingSpotLayout`, `EraLayout.greeneryZones`/`parking`,

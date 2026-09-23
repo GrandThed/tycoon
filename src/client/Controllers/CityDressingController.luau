@@ -27,6 +27,11 @@
 -- negated, so they are cleared and counted exactly like the street ones. Park strips fill the
 -- corridors that have not grown yet; their planters are the one dressing prop that also goes away,
 -- as the tiles arrive under them.
+--
+-- Wave 2c ("living city"): near plots also get greenery, parked vehicles, chimney smoke and bird
+-- flocks, and the vehicle plots get walkers on their own loop (Walkers) with their own map budget.
+-- All of it is planned by Scatter from salted streams, grows with the tier, and goes on far plots;
+-- lots and their houses stay, since they are the city's silhouette.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -44,6 +49,8 @@ local RoadGraph = require(cityFolder:WaitForChild("RoadGraph"))
 local Highway = require(cityFolder:WaitForChild("Highway"))
 local Scatter = require(cityFolder:WaitForChild("Scatter"))
 local Traffic = require(cityFolder:WaitForChild("Traffic"))
+local Walkers = require(cityFolder:WaitForChild("Walkers"))
+local Ambient = require(cityFolder:WaitForChild("Ambient"))
 
 -- World naming frozen since M1/M9 (docs/INTERFACES.md), shared with PlotVisualsController.
 local PLOTS_FOLDER = "Plots"
@@ -80,6 +87,10 @@ type Build = {
 	-- Wave 2a: nil in an era without a highway or without a `highway` layout table.
 	highway: Highway.Handle?,
 	subways: { [number]: Model }, -- plan index -> entrance prop
+	-- Wave 2c, near plots only: plan index -> prop, and lot index -> the plume on its house.
+	greenery: { [number]: Model },
+	parked: { [number]: Model },
+	smoke: { [number]: Attachment },
 	createdAt: number, -- os.clock when the build started
 }
 
@@ -98,6 +109,12 @@ type PlotEntry = {
 	highwayBlocked: boolean,
 	-- The last spawn placed fewer vehicles than models because the map budget was full.
 	vehiclesBlocked: boolean,
+	-- Wave 2c: walkers (on the vehicle plots) and birds (on near plots), each with the same
+	-- "the map budget was full" retry flag.
+	walkerTarget: number,
+	walkersBlocked: boolean,
+	flockTarget: number,
+	birdsBlocked: boolean,
 	-- os.clock when a drawn spur's building was first seen missing; nil while none is. A server
 	-- cosmetics refresh respawns every building in one frame but replication spreads it over
 	-- several, so a missing building is only trusted after a full LOD interval.
@@ -195,6 +212,28 @@ local function clearSubways(build: Build): ()
 	table.clear(build.subways)
 end
 
+local function clearGreenery(build: Build): ()
+	for _, piece in build.greenery do
+		piece:Destroy()
+	end
+	table.clear(build.greenery)
+end
+
+local function clearParked(build: Build): ()
+	for _, vehicle in build.parked do
+		vehicle:Destroy()
+	end
+	table.clear(build.parked)
+end
+
+-- The houses stay (far plots keep them); only the plumes on them go.
+local function clearSmoke(build: Build): ()
+	for _, plume in build.smoke do
+		plume:Destroy()
+	end
+	table.clear(build.smoke)
+end
+
 -- The highway's cars are their own Traffic plot; the index is negated so it can never collide with
 -- a street one (plots are numbered from 1).
 local function highwayPlotId(index: number): number
@@ -205,6 +244,12 @@ local function clearBuild(entry: PlotEntry): ()
 	local build = entry.build
 	Traffic.ClearPlot(entry.index)
 	Traffic.ClearPlot(highwayPlotId(entry.index))
+	Walkers.ClearPlot(entry.index)
+	Ambient.ClearPlot(entry.index)
+	entry.walkerTarget = 0
+	entry.walkersBlocked = false
+	entry.flockTarget = 0
+	entry.birdsBlocked = false
 	entry.vehicleTarget = 0
 	entry.highwayTarget = 0
 	entry.highwayBlocked = false
@@ -225,6 +270,9 @@ local function clearBuild(entry: PlotEntry): ()
 	clearLamps(build)
 	clearSignals(build)
 	clearSubways(build)
+	clearGreenery(build)
+	clearParked(build)
+	clearSmoke(build)
 	for _, model in build.houses do
 		model:Destroy()
 	end
@@ -359,6 +407,9 @@ local function newBuild(
 		signals = {},
 		highway = highway,
 		subways = {},
+		greenery = {},
+		parked = {},
+		smoke = {},
 		createdAt = os.clock(),
 	}
 end
@@ -780,6 +831,222 @@ local function spawnHighwayVehicles(
 	entry.highwayBlocked = placed < offered
 end
 
+-- Wave 2c greenery: a zone piece appears on its tier, a garnish piece with its lot's house.
+local function syncGreenery(build: Build, tier: number, folder: Instance): ()
+	for index, spot in build.plan.greenery do
+		local placed: Model? = build.greenery[index]
+		if placed ~= nil then
+			continue
+		end
+		local lot = spot.lot
+		local spotTier = spot.tier
+		local house: Model? = if lot ~= nil then build.houses[lot] else nil
+		local due = if lot ~= nil then house ~= nil else spotTier ~= nil and spotTier <= tier
+		if not due then
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			spot.prop,
+			0,
+			build.plotFrame * CFrame.new(spot.position) * CFrame.Angles(0, spot.yaw, 0),
+			folder
+		)
+		if model ~= nil then
+			build.greenery[index] = model
+		end
+	end
+end
+
+-- Wave 2c parked vehicles: on their tier, with their lot's house when they have one, and only
+-- once the street beside them is drawn -- a car parked beside bare ground reads as a mistake.
+local function syncParked(build: Build, tier: number, folder: Instance): ()
+	for index, spot in build.plan.parked do
+		local placed: Model? = build.parked[index]
+		if placed ~= nil or spot.tier > tier then
+			continue
+		end
+		local lot = spot.lot
+		local pieceId = spot.pieceId
+		local house: Model? = if lot ~= nil then build.houses[lot] else nil
+		if lot ~= nil and house == nil then
+			continue
+		end
+		if pieceId == nil or not RoadGraph.PieceVisible(build.roads, pieceId) then
+			continue
+		end
+		local model = PropFactory.Spawn(
+			build.eraName,
+			spot.prop,
+			0,
+			build.plotFrame * Scatter.PropFrame(spot.position, spot.rotationY),
+			folder
+		)
+		if model ~= nil then
+			build.parked[index] = model
+		end
+	end
+end
+
+-- Whether `list` names `value`: the smoke config's era filter.
+local function listHas(list: { string }?, value: string): boolean
+	if type(list) ~= "table" then
+		return false
+	end
+	for _, item in list do
+		if item == value then
+			return true
+		end
+	end
+	return false
+end
+
+-- Wave 2c chimney smoke: one plume on each placed house whose prop has a chimney offset, from the
+-- smoke tier, in the eras the config names, and never under reduced motion.
+local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: number): ()
+	local ambient = config.ambient
+	local smoke = if ambient ~= nil then ambient.smoke else nil
+	if
+		smoke == nil
+		or not Ambient.Enabled()
+		or not listHas(smoke.eras, build.eraName)
+		or tier < smoke.firstTier
+		or type(smoke.props) ~= "table"
+	then
+		clearSmoke(build)
+		return
+	end
+	local lots: { Types.LotLayout } = build.layout.lots or {}
+	for index, house in build.houses do
+		local plume: Attachment? = build.smoke[index]
+		if plume ~= nil then
+			continue
+		end
+		local lot = lots[index]
+		local propName = build.plan.lotProps[index]
+		local offset = if propName ~= nil then smoke.props[propName] else nil
+		if lot == nil or type(offset) ~= "table" then
+			continue
+		end
+		local x, y, z = offset[1], offset[2], offset[3]
+		if type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" then
+			continue
+		end
+		local chimney = build.plotFrame
+			* Scatter.PropFrame(lot.position, lot.rotationY)
+			* CFrame.new(x, y, z)
+		local added = Ambient.AddSmoke(house, chimney, smoke)
+		if added ~= nil then
+			build.smoke[index] = added
+		end
+	end
+end
+
+-- Walkers stroll the same nearest plots the cars drive on, from the era's first walker tier.
+local function walkerTargetFor(entry: PlotEntry, build: Build): number
+	local pedestrians = build.era.pedestrians
+	if
+		pedestrians == nil
+		or not entry.near
+		or not entry.vehicleSelected
+		or entry.tier < pedestrians.firstTier
+	then
+		return 0
+	end
+	return math.min(Scatter.PerTier(pedestrians.perTier, entry.tier), #build.plan.walkerProps)
+end
+
+local function spawnWalkers(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
+	Walkers.ClearPlot(entry.index)
+	entry.walkersBlocked = false
+	local pedestrians = build.era.pedestrians
+	if pedestrians == nil or entry.walkerTarget <= 0 then
+		return
+	end
+	local lanes = RoadGraph.WalkLanes(build.roads, pedestrians.offset)
+	if lanes.count == 0 then
+		return
+	end
+	local models: { Model } = {}
+	for index = 1, entry.walkerTarget do
+		local model =
+			PropFactory.Spawn(build.eraName, build.plan.walkerProps[index], 0, CFrame.identity, nil)
+		if model ~= nil then
+			table.insert(models, model)
+		end
+	end
+	if #models == 0 then
+		return
+	end
+	local offered = #models
+	local placed = Walkers.SpawnPlot(
+		entry.index,
+		lanes,
+		models,
+		pedestrians.speed,
+		pedestrians.bobHeight,
+		pedestrians.bobHz,
+		entry.folder,
+		RoadGraph.BudgetValue(config.budget.walkersMap, 0)
+	)
+	entry.walkersBlocked = placed < offered
+end
+
+local function birdsConfig(config: Types.CityDressingConfig): Types.BirdsConfig?
+	local ambient = config.ambient
+	return if ambient ~= nil then ambient.birds else nil
+end
+
+-- Birds circle over the groves of near plots only, from the flock tier, never under reduced motion.
+local function flockTargetFor(
+	entry: PlotEntry,
+	build: Build,
+	config: Types.CityDressingConfig
+): number
+	local birds = birdsConfig(config)
+	if birds == nil or not entry.near or not Ambient.Enabled() or entry.tier < birds.firstTier then
+		return 0
+	end
+	return math.min(Scatter.PerTier(birds.flocksPerTier, entry.tier), #build.plan.flocks)
+end
+
+local function spawnFlocks(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
+	Ambient.ClearPlot(entry.index)
+	entry.birdsBlocked = false
+	local birds = birdsConfig(config)
+	if birds == nil or entry.flockTarget <= 0 then
+		return
+	end
+	local flocks = table.move(build.plan.flocks, 1, entry.flockTarget, 1, {})
+	local models: { Model } = {}
+	for _, flock in flocks do
+		for _ = 1, #flock.birds do
+			local model = PropFactory.Spawn(build.eraName, birds.prop, 0, CFrame.identity, nil)
+			if model == nil then
+				-- No Bird template for this era: no flocks, silently.
+				for _, spawned in models do
+					spawned:Destroy()
+				end
+				return
+			end
+			table.insert(models, model)
+		end
+	end
+	if #models == 0 then
+		return
+	end
+	local placed = Ambient.SpawnFlocks(
+		entry.index,
+		build.plotFrame,
+		flocks,
+		birds,
+		models,
+		entry.folder,
+		RoadGraph.BudgetValue(config.budget.birdsMap, 0)
+	)
+	entry.birdsBlocked = placed < #models
+end
+
 local function sync(entry: PlotEntry): ()
 	local config = dressingConfig()
 	if config == nil or entries[entry.plot] ~= entry then
@@ -879,12 +1146,18 @@ local function sync(entry: PlotEntry): ()
 		syncLamps(current, config, tier, folder, owned)
 		syncSignals(current, folder, owned)
 		syncSubway(current, folder, owned)
+		syncGreenery(current, tier, folder)
+		syncParked(current, tier, folder)
+		syncSmoke(current, config, tier)
 	else
 		clearTrees(current)
 		clearParkTrees(current)
 		clearLamps(current)
 		clearSignals(current)
 		clearSubways(current)
+		clearGreenery(current)
+		clearParked(current)
+		clearSmoke(current)
 	end
 
 	local deckTarget = highwayTargetFor(entry, current, config)
@@ -912,6 +1185,31 @@ local function sync(entry: PlotEntry): ()
 		else
 			spawnVehicles(entry, current, config)
 		end
+	end
+
+	local walkerTarget = walkerTargetFor(entry, current)
+	local walkersMap = RoadGraph.BudgetValue(config.budget.walkersMap, 0)
+	local pedestrians = current.era.pedestrians
+	if walkerTarget ~= entry.walkerTarget then
+		entry.walkerTarget = walkerTarget
+		spawnWalkers(entry, current, config)
+	elseif walkerTarget > 0 and entry.walkersBlocked and Walkers.Room(walkersMap) > 0 then
+		spawnWalkers(entry, current, config)
+	elseif roadsChanged and walkerTarget > 0 and pedestrians ~= nil then
+		if Walkers.Count(entry.index) > 0 then
+			Walkers.SetLanes(entry.index, RoadGraph.WalkLanes(current.roads, pedestrians.offset))
+		else
+			spawnWalkers(entry, current, config)
+		end
+	end
+
+	local flockTarget = flockTargetFor(entry, current, config)
+	local birdsMap = RoadGraph.BudgetValue(config.budget.birdsMap, 0)
+	if flockTarget ~= entry.flockTarget then
+		entry.flockTarget = flockTarget
+		spawnFlocks(entry, current, config)
+	elseif flockTarget > 0 and entry.birdsBlocked and Ambient.Room(birdsMap) > 0 then
+		spawnFlocks(entry, current, config)
 	end
 end
 
@@ -971,6 +1269,10 @@ local function addPlot(plot: Instance): ()
 		highwayTarget = 0,
 		highwayBlocked = false,
 		vehiclesBlocked = false,
+		walkerTarget = 0,
+		walkersBlocked = false,
+		flockTarget = 0,
+		birdsBlocked = false,
 		suspectSince = nil,
 		confirmSuspect = false,
 		lanesStale = false,
@@ -1087,6 +1389,17 @@ local function refreshLod(config: Types.CityDressingConfig): ()
 			entry.highwayBlocked = false
 			Traffic.ClearPlot(highwayPlotId(entry.index))
 		end
+		-- Wave 2c: walkers and birds free their map budget the same way, before any sync spawns.
+		if entry.walkerTarget > 0 and (not entry.near or not entry.vehicleSelected) then
+			entry.walkerTarget = 0
+			entry.walkersBlocked = false
+			Walkers.ClearPlot(entry.index)
+		end
+		if entry.flockTarget > 0 and not entry.near then
+			entry.flockTarget = 0
+			entry.birdsBlocked = false
+			Ambient.ClearPlot(entry.index)
+		end
 		local suspectSince = entry.suspectSince
 		if suspectSince ~= nil and now - suspectSince >= lod.refreshSeconds then
 			entry.confirmSuspect = true
@@ -1096,6 +1409,15 @@ local function refreshLod(config: Types.CityDressingConfig): ()
 	if Traffic.Room(config.budget.vehiclesMap) > 0 then
 		for _, entry in entries do
 			if entry.vehiclesBlocked or entry.highwayBlocked then
+				schedule(entry)
+			end
+		end
+	end
+	local walkersRoom = Walkers.Room(RoadGraph.BudgetValue(config.budget.walkersMap, 0)) > 0
+	local birdsRoom = Ambient.Room(RoadGraph.BudgetValue(config.budget.birdsMap, 0)) > 0
+	if walkersRoom or birdsRoom then
+		for _, entry in entries do
+			if (walkersRoom and entry.walkersBlocked) or (birdsRoom and entry.birdsBlocked) then
 				schedule(entry)
 			end
 		end

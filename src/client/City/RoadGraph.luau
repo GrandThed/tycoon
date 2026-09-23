@@ -226,6 +226,9 @@ export type State = {
 	bendParts: { Instance },
 	pieces: { [string]: Model },
 	lanes: Lanes?,
+	-- Wave 2c: the walker lanes and the offset they were built at, dropped with `lanes`.
+	walkLanes: Lanes?,
+	walkOffset: number,
 	pathData: PathData?, -- eras with road.paths
 	paths: PathRenderer.Handle?, -- nil: Parts from the start
 	tiles: TileRenderer.Handle?, -- eras with road.tiles
@@ -1617,6 +1620,7 @@ end
 -- After a silent renderer fallback: every revealed road again, as Parts.
 local function redrawParts(state: State): ()
 	state.lanes = nil
+	state.walkLanes = nil
 	for groupIndex in state.revealedGroups do
 		drawGroup(state, groupIndex)
 	end
@@ -1696,6 +1700,8 @@ function RoadGraph.new(context: Context, near: boolean): State
 		bendParts = {},
 		pieces = {},
 		lanes = nil,
+		walkLanes = nil,
+		walkOffset = 0,
 		pathData = nil,
 		paths = nil,
 		tiles = nil,
@@ -1875,6 +1881,7 @@ function RoadGraph.AddSpur(state: State, slotId: string, animate: boolean?): boo
 		end
 	end
 	state.lanes = nil
+	state.walkLanes = nil
 	if state.tiles ~= nil then
 		-- The spine is cells, drawn by the flush below; the spur is a footpath Part either way.
 		state.tilesDirty = true
@@ -2358,6 +2365,197 @@ local function buildLanes(state: State): Lanes
 	return lanes
 end
 
+-- Cuts `trimStart` studs of arc off the front of a polyline and `trimEnd` off the back; nil when
+-- nothing is left.
+local function trimmed(points: { Vector3 }, trimStart: number, trimEnd: number): { Vector3 }?
+	local total = 0
+	for index = 2, #points do
+		total += (points[index] - points[index - 1]).Magnitude
+	end
+	local from, to = trimStart, total - trimEnd
+	if to - from < MIN_LENGTH then
+		return nil
+	end
+	local kept: { Vector3 } = {}
+	local arc = 0
+	for index = 2, #points do
+		local a, b = points[index - 1], points[index]
+		local length = (b - a).Magnitude
+		local startArc, endArc = arc, arc + length
+		arc = endArc
+		if length < MIN_LENGTH or endArc < from or startArc > to then
+			continue
+		end
+		if #kept == 0 then
+			table.insert(kept, a:Lerp(b, math.clamp((from - startArc) / length, 0, 1)))
+		end
+		table.insert(kept, a:Lerp(b, math.clamp((to - startArc) / length, 0, 1)))
+	end
+	return if #kept >= 2 then kept else nil
+end
+
+-- Wave 2c walker lanes (docs/INTERFACES.md "Wave 2c — Pedestrians"): the same drawn stretches and
+-- spurs the vehicle lanes follow, `offset` studs out on both sides, at the height a pedestrian
+-- stands at (a tiles era's pavement top, the ground elsewhere). Built separately from the vehicle
+-- lanes rather than by widening them because a footpath is not a carriageway: a spur's lanes are
+-- pulled in to the spur's own edges, start at the building's pad instead of its anchor (nobody
+-- walks through the house) and stop at the kerb; the join to the street is the walker crossing
+-- to its next lane, which Walkers draws as a stroll. Network nodes keep their ids so a spur's end
+-- and the street it meets are one node.
+local function buildWalkLanes(state: State, offset: number): Lanes
+	local lanes: Lanes = {
+		count = 0,
+		to = {},
+		reverse = {},
+		origin = {},
+		direction = {},
+		length = {},
+		yaw = {},
+		outgoing = {},
+	}
+	local nodeCount = 0
+	local function freshNode(): number
+		nodeCount += 1
+		lanes.outgoing[nodeCount] = {}
+		return nodeCount
+	end
+	for _ = 1, #state.nodes do
+		freshNode()
+	end
+	local frame = state.context.plotFrame
+	local height = if state.tiles ~= nil then state.thickness / 2 else 0
+	local function addLane(fromNode: number, toNode: number, a: Vector3, b: Vector3): number
+		local worldA = frame:PointToWorldSpace(Vector3.new(a.X, height, a.Z))
+		local worldB = frame:PointToWorldSpace(Vector3.new(b.X, height, b.Z))
+		local delta = worldB - worldA
+		local length = delta.Magnitude
+		local direction = delta / length
+		lanes.count += 1
+		local id = lanes.count
+		lanes.to[id] = toNode
+		lanes.origin[id] = worldA
+		lanes.direction[id] = direction
+		lanes.length[id] = length
+		lanes.yaw[id] = math.atan2(-direction.X, -direction.Z)
+		table.insert(lanes.outgoing[fromNode], id)
+		return id
+	end
+	local function chainBetween(
+		points: { Vector3 },
+		firstNode: number,
+		lastNode: number,
+		side: number
+	): ()
+		local previous = firstNode
+		local last = #points
+		for index = 2, last do
+			local a, b = points[index - 1], points[index]
+			if (b - a).Magnitude < MIN_LENGTH then
+				continue
+			end
+			local current = if index == last then lastNode else freshNode()
+			local right = ((b - a).Unit):Cross(UP) * side
+			local forward = addLane(previous, current, a + right, b + right)
+			local backward = addLane(current, previous, b - right, a - right)
+			lanes.reverse[forward] = backward
+			lanes.reverse[backward] = forward
+			previous = current
+		end
+	end
+
+	local data = state.pathData
+	local baked = data ~= nil and RoadGraph.UsesPaths(state)
+	local meandered = state.meander ~= nil
+	local tiled = state.tiles ~= nil
+	local function sampled(chainIndex: number, a: number, b: number): { Vector3 }
+		local network = (data :: PathData).network
+		local points: { Vector3 } = {}
+		for _, point in PathRibbon.Centreline(network, chainIndex, a, b, network.sampleSpacing) do
+			table.insert(points, Vector3.new(point[1], 0, point[2]))
+		end
+		return points
+	end
+
+	for id, stretch in state.stretches do
+		if not state.visible[id] then
+			continue
+		end
+		if baked then
+			local chainIndex = (data :: PathData).stretchChains[id]
+			if chainIndex == nil or not state.pathStretchAllowed[id] then
+				continue
+			end
+			local arcs = (data :: PathData).stretchArcs[id]
+			chainBetween(
+				sampled(chainIndex, arcs[1], arcs[2]),
+				stretch.fromNode,
+				stretch.toNode,
+				offset
+			)
+		elseif
+			(not meandered or state.nearStretchAllowed[id])
+			and (not tiled or state.tileStretchAllowed[id])
+		then
+			local points = centreline(
+				state,
+				stretch.a,
+				stretch.b,
+				stretch.arcStart,
+				state.polylinePhases[stretch.polyline]
+			)
+			chainBetween(points, stretch.fromNode, stretch.toNode, offset)
+		end
+	end
+
+	local layout = state.context.layout
+	local spurSide = math.min(offset, state.spurWidth / 2)
+	for _, slotId in state.spurSlotIds do
+		local route = state.spurs[slotId]
+		local slot = layout.slots[slotId]
+		if route == nil or slot == nil then
+			continue
+		end
+		local points: { Vector3 }? = nil
+		if baked then
+			local network = (data :: PathData).network
+			local chainIndex = network.spurChains[slotId]
+			if chainIndex ~= nil and state.pathSpurAllowed[slotId] then
+				local lo, hi = PathRibbon.FullSpan(network, chainIndex)
+				points = sampled(chainIndex, lo, hi)
+			end
+		elseif not meandered or state.nearSpurAllowed[slotId] then
+			local joined: { Vector3 } = {}
+			local arc = 0
+			for index = 2, #route.points do
+				local a, b = route.points[index - 1], route.points[index]
+				local leg = centreline(state, a, b, arc, route.phases)
+				for legIndex, point in leg do
+					if legIndex > 1 or #joined == 0 then
+						table.insert(joined, point)
+					end
+				end
+				arc += (b - a).Magnitude
+			end
+			points = joined
+		end
+		if points == nil or #points < 2 then
+			continue
+		end
+		-- From the pad's inner edge (the building's door) to the kerb of the street it joins.
+		local padCentre = slot.padPosition
+			or slot.position + facingFor(slot.rotationY) * layout.padOffset
+		local door =
+			math.max((flat(padCentre) - flat(slot.position)).Magnitude - layout.padSize.Z / 2, 0)
+		local node = route.junction.node
+		local kerb = if node ~= nil then state.width / 2 else 0
+		local walk = trimmed(points, door, kerb)
+		if walk ~= nil then
+			chainBetween(walk, freshNode(), node or freshNode(), spurSide)
+		end
+	end
+	return lanes
+end
+
 -- A standalone closed lane loop through `points` (plot-local, in order) at `height` above the plot
 -- top: the highway's deck ring. Built here so the lane conventions -- right-hand offset, both
 -- directions, yaw facing the travel direction -- are written down once for every Traffic caller.
@@ -2433,6 +2631,18 @@ function RoadGraph.GetLanes(state: State): Lanes
 	return lanes :: Lanes
 end
 
+-- Wave 2c: walker lanes `offset` studs out on both sides of every drawn street, cached like
+-- GetLanes (a new spur or a renderer fallback drops them; near/far never does).
+function RoadGraph.WalkLanes(state: State, offset: number): Lanes
+	local lanes = state.walkLanes
+	if lanes == nil or state.walkOffset ~= offset then
+		lanes = buildWalkLanes(state, math.max(offset, 0))
+		state.walkLanes = lanes
+		state.walkOffset = offset
+	end
+	return lanes :: Lanes
+end
+
 function RoadGraph.Destroy(state: State): ()
 	local paths = state.paths
 	if paths ~= nil then
@@ -2459,6 +2669,7 @@ function RoadGraph.Destroy(state: State): ()
 	table.clear(state.revealedGroups)
 	table.clear(state.spurs)
 	state.lanes = nil
+	state.walkLanes = nil
 end
 
 return RoadGraph

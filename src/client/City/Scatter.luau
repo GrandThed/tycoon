@@ -9,6 +9,10 @@
 -- row lamp posts are walked off the streets and draw nothing. Rejection tests use every road the plot
 -- can ever have, never the roads drawn so far, and budgets are allocated in layout order, so
 -- the plan is the same on every client, on rejoin, and at any point in the plot's growth.
+--
+-- Wave 2c: greenery, parked vehicles, walkers and bird flocks each draw from their own Random,
+-- seeded with the plot seed plus a frozen salt, after all of the above; the only draw the wave
+-- adds to the main stream is one per new lot, which may shift lamp and vehicle picks (cosmetic).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -25,6 +29,17 @@ local FULL_TURN = 2 * math.pi
 local UP = Vector3.yAxis
 -- Wave 1e: lamps down both sides of the streets instead of one at a spur junction.
 local ROW_PLACEMENT = "row"
+-- Wave 2c: the lot kind that draws from `houses.smallProps`; anything else is a house.
+local SMALL_LOT = "small"
+-- Wave 2c: each new category draws from its own stream, salted off the plot seed and consumed
+-- after the existing plan, so adding one never moves a tree, lamp or vehicle (docs/INTERFACES.md
+-- "Wave 2c — Principles"; the salts are frozen there).
+local GREENERY_SALT = 7001
+local PARKED_SALT = 7002
+local WALKERS_SALT = 7003
+local AMBIENT_SALT = 7004
+-- Garnish goes on one of a lot's four sides, in the lot's own frame (front -Z faces the street).
+local LOT_SIDES = 4
 -- Samples closer together than this are the same point, and the shortest leg worth walking.
 local MIN_STEP = 0.05
 -- How square a block edge and a street have to be for the edge to count as fronting that street.
@@ -87,6 +102,43 @@ export type Plan = {
 	parkTrees: { ParkTree }, -- wave 2a, capped by road.tiles.parkStrips.maxTrees
 	subwayEntrances: { SubwaySpot }, -- wave 2a, capped by subway.maxPerPlot
 	vehicleProps: { string }, -- vehicle i's prop name
+	-- Wave 2c, each from its own salted stream after everything above.
+	greenery: { GreenerySpot }, -- capped by budget.greenery
+	parked: { ParkedSpot }, -- capped by budget.parked
+	walkerProps: { string }, -- walker i's prop name, capped by budget.walkersPerPlot
+	flocks: { Flock }, -- flock i circles the ((i - 1) % #treeZones + 1)th zone
+}
+
+-- Wave 2c greenery: a zone piece carries the tier it appears at; a lot garnish piece carries its
+-- lot instead and shows while that lot's house stands.
+export type GreenerySpot = {
+	position: Vector3, -- plot-local, Y 0
+	yaw: number, -- radians
+	prop: string,
+	tier: number?,
+	lot: number?,
+}
+
+-- Wave 2c parked vehicles: one per layout spot inside the budget. `tier` already folds in the
+-- era's cumulative `parked.perTier`; `pieceId` is the spine piece beside the spot, which must be
+-- drawn before the vehicle appears (nil: no street beside it, so it never does).
+export type ParkedSpot = {
+	position: Vector3, -- plot-local, Y 0
+	rotationY: number,
+	prop: string,
+	tier: number,
+	lot: number?,
+	pieceId: string?,
+}
+
+-- Wave 2c birds: one flock circling a tree zone centre. The per-bird numbers are unit draws in
+-- [0, 1); Ambient turns them into the flock's shape, which is look rather than plan.
+export type BirdDraw = { lead: number, radial: number, lift: number }
+export type Flock = {
+	center: Vector3, -- plot-local, Y 0
+	phase: number, -- radians
+	clockwise: boolean,
+	birds: { BirdDraw },
 }
 
 export type PlanInput = {
@@ -260,7 +312,9 @@ local function subwayFootprints(input: PlanInput): { Footprint }
 	return kiosks
 end
 
-local function footprintsFor(input: PlanInput): { Footprint }
+-- Every solid of the plot, plus (wave 2c) each lot's own footprint by lot index, so greenery can
+-- garnish a lot from just outside the rectangle that lot reserves.
+local function solidsFor(input: PlanInput): ({ Footprint }, { [number]: Footprint })
 	local layout = input.layout
 	local assets = Catalog.GetAssetsConfig()
 	local eraModels: { [string]: Types.AssetModel }? = if assets ~= nil
@@ -314,18 +368,29 @@ local function footprintsFor(input: PlanInput): { Footprint }
 	end
 
 	-- A lot's house is picked only after the trees (fixed draw order), so a lot reserves the
-	-- union of every house prop the era could place on it.
-	local lotExtents = propExtents(nil)
-	local houseProps = input.era.houses.props
-	if #houseProps > 0 then
-		lotExtents = table.clone(propExtents(houseProps[1]))
-		for index = 2, #houseProps do
-			widen(lotExtents, propExtents(houseProps[index]))
+	-- union of every house prop the era could place on it -- per kind since wave 2c, so a small
+	-- lot reserves only what a small prop can cover.
+	local function poolExtents(pool: { string }?): Extents
+		if type(pool) ~= "table" or #pool == 0 then
+			return propExtents(nil)
 		end
+		local union = table.clone(propExtents(pool[1]))
+		for index = 2, #pool do
+			widen(union, propExtents(pool[index]))
+		end
+		return union
 	end
+	local houseExtents = poolExtents(input.era.houses.props)
+	local smallExtents = poolExtents(input.era.houses.smallProps)
+	local lotFootprints: { [number]: Footprint } = {}
 	local lots: { Types.LotLayout } = layout.lots or {}
-	for _, lot in lots do
-		add(lot.position, lot.rotationY, lotExtents)
+	for index, lot in lots do
+		add(
+			lot.position,
+			lot.rotationY,
+			if lot.kind == SMALL_LOT then smallExtents else houseExtents
+		)
+		lotFootprints[index] = footprints[#footprints]
 	end
 	local plazas: { Types.PlazaLayout } = layout.plazas or {}
 	for _, plaza in plazas do
@@ -335,7 +400,11 @@ local function footprintsFor(input: PlanInput): { Footprint }
 	for _, kiosk in subwayFootprints(input) do
 		table.insert(footprints, kiosk)
 	end
-	return footprints
+	return footprints, lotFootprints
+end
+
+local function footprintsFor(input: PlanInput): { Footprint }
+	return (solidsFor(input))
 end
 
 local function insideFootprint(footprint: Footprint, point: Vector3, margin: number): boolean
@@ -910,6 +979,353 @@ local function parkStripTrees(
 	return kept
 end
 
+-- The highest count a cumulative `perTier` list reaches, which is what a plan is drawn up for.
+local function perTierMax(perTier: { number }?): number
+	if type(perTier) ~= "table" then
+		return 0
+	end
+	local best = 0
+	for _, value in perTier do
+		best = math.max(best, math.floor(numberOr(value, 0)))
+	end
+	return best
+end
+
+-- The first tier at which a cumulative `perTier` list shows `rank` pieces; nil when it never does.
+local function tierForRank(perTier: { number }, rank: number): number?
+	local running = 0
+	for tier, value in perTier do
+		running = math.max(running, math.floor(numberOr(value, 0)))
+		if running >= rank then
+			return tier
+		end
+	end
+	return nil
+end
+
+-- A wave 2c budget key a stale config lacks turns its feature off rather than guessing a ceiling.
+local function budgetCap(value: number?): number
+	return math.max(math.floor(numberOr(value, 0)), 0)
+end
+
+local function nonEmptyList(value: any): boolean
+	return type(value) == "table" and #value > 0
+end
+
+-- The spine piece drawn nearest `point`, over every piece the plot can ever draw.
+local function nearestPieceId(lines: RoadGraph.StreetLines, point: Vector3): string?
+	local best, bestId = math.huge, nil
+	for _, run in lines.runs do
+		for _, piece in run.pieces do
+			for index = 2, #piece.points do
+				local closest =
+					RoadGraph.ClosestOnSegment(point, piece.points[index - 1], piece.points[index])
+				local distance = (closest - point).Magnitude
+				if distance < best then
+					best, bestId = distance, piece.pieceId
+				end
+			end
+		end
+	end
+	return bestId
+end
+
+-- The XZ union of an era prop list's harvested bounds, nil while none of them is harvested.
+local function harvestedUnion(eraName: string, names: { string }): Extents?
+	local assets = Catalog.GetAssetsConfig()
+	local propsByEra = if assets ~= nil then assets.props else nil
+	local eraProps: { [string]: Types.AssetModel }? = if propsByEra ~= nil
+		then propsByEra[eraName]
+		else nil
+	if eraProps == nil then
+		return nil
+	end
+	local union: Extents? = nil
+	for _, name in names do
+		local extents = modelExtents(eraProps[name])
+		if extents == nil then
+			continue
+		end
+		local current = union
+		if current == nil then
+			union = table.clone(extents)
+		else
+			widen(current, extents)
+		end
+	end
+	return union
+end
+
+-- A point on one side of a lot's rectangle, in the lot's own frame (front -Z faces the street):
+-- side 1 left, 2 right, 3 back, 4 front; `along` runs 0..1 down that side, `out` beyond it.
+local function lotSidePoint(extents: Extents, side: number, along: number, out: number): Vector3
+	local alongX = extents.minX + along * (extents.maxX - extents.minX)
+	local alongZ = extents.minZ + along * (extents.maxZ - extents.minZ)
+	if side == 1 then
+		return Vector3.new(extents.minX - out, 0, alongZ)
+	elseif side == 2 then
+		return Vector3.new(extents.maxX + out, 0, alongZ)
+	elseif side == 3 then
+		return Vector3.new(alongX, 0, extents.maxZ + out)
+	end
+	return Vector3.new(alongX, 0, extents.minZ - out)
+end
+
+-- Parked vehicles (docs/INTERFACES.md "Wave 2c — Parked vehicles"): the layout's spots in
+-- (tier, index) order, capped by the cumulative `parked.perTier` and `budget.parked`. One prop
+-- draw per spot, kept or not, so a spot's pick never depends on the ones before it being kept.
+local function parkedSpots(
+	input: PlanInput,
+	rng: Random,
+	streetLines: () -> RoadGraph.StreetLines
+): { ParkedSpot }
+	local parked = input.era.parked
+	local spots: { Types.ParkingSpotLayout }? = input.layout.parking
+	if parked == nil or spots == nil or #spots == 0 or not nonEmptyList(parked.props) then
+		return {}
+	end
+	local cap = math.min(perTierMax(parked.perTier), budgetCap(input.config.budget.parked))
+	local picks: { string } = {}
+	for index in spots do
+		picks[index] = parked.props[pickIndex(rng:NextNumber(), #parked.props) :: number]
+	end
+	local order: { number } = {}
+	for index in spots do
+		table.insert(order, index)
+	end
+	table.sort(order, function(a: number, b: number): boolean
+		local tierA, tierB = numberOr(spots[a].tier, 0), numberOr(spots[b].tier, 0)
+		if tierA ~= tierB then
+			return tierA < tierB
+		end
+		return a < b
+	end)
+	local lines = streetLines()
+	local planned: { ParkedSpot } = {}
+	for rank, index in order do
+		local rankTier = tierForRank(parked.perTier, rank)
+		if rank > cap or rankTier == nil then
+			break
+		end
+		local spot = spots[index]
+		local position = flat(spot.position)
+		table.insert(planned, {
+			position = position,
+			rotationY = numberOr(spot.rotationY, 0),
+			prop = picks[index],
+			tier = math.max(numberOr(spot.tier, 0), rankTier),
+			lot = spot.lot,
+			pieceId = nearestPieceId(lines, position),
+		})
+	end
+	return planned
+end
+
+-- Greenery (docs/INTERFACES.md "Wave 2c — Greenery"): zone pieces spread round-robin over the
+-- zones so each tier step greens every zone a little, then garnish around each lot that holds a
+-- house, lots taken in (tier, index) order so the budget runs out on the latest ones. Every
+-- candidate costs a fixed four draws, kept or rejected, so the stream never depends on a test.
+local function greenerySpots(input: PlanInput, plan: Plan, rng: Random): { GreenerySpot }
+	local era = input.era
+	local greenery = era.greenery
+	if greenery == nil or not nonEmptyList(greenery.props) then
+		return {}
+	end
+	local budget = budgetCap(input.config.budget.greenery)
+	local zoneCap = math.min(perTierMax(greenery.perTier), budget)
+	local props = greenery.props
+	local clearance = math.max(numberOr(greenery.clearance, 0), 0)
+	-- A piece counts as a disc of half the spacing, so two neighbours at most touch.
+	local reach = clearance / 2
+	local meander = era.road.meander
+	local tiles = era.road.tiles
+	local pavement = if tiles ~= nil and tiles.pavement ~= nil then tiles.pavement.width else 0
+	local roadKeep = input.roadWidth / 2
+		+ (if meander ~= nil then meander.amplitude else 0)
+		+ math.max(pavement, 0)
+		+ math.max(numberOr(greenery.roadClearance, 0), 0)
+	-- Walkers stroll along the verge; a bush on their line would have them walk through it.
+	local pedestrians = era.pedestrians
+	if pedestrians ~= nil then
+		roadKeep = math.max(roadKeep, numberOr(pedestrians.offset, 0) + reach)
+	end
+	local margin = input.config.trees.edgeMargin
+	local halfX = input.plotSize.X / 2 - margin
+	local halfZ = input.plotSize.Z / 2 - margin
+	-- The plot sign straddles the front (-Z) edge centre (PlotService.buildWorld).
+	local sign = Vector3.new(0, 0, -input.plotSize.Z / 2)
+	local solids, lotFootprints = solidsFor(input)
+	-- Parked vehicles stand on their bays whatever the tier; a hedge must not grow under one.
+	local parkedExtents = if era.parked ~= nil
+		then harvestedUnion(input.eraName, era.parked.props)
+		else nil
+	for _, spot in plan.parked do
+		table.insert(solids, {
+			origin = spot.position,
+			rotation = CFrame.Angles(0, math.rad(spot.rotationY), 0),
+			extents = parkedExtents or centredExtents(0, 0),
+		})
+	end
+	local taken: { Vector3 } = {}
+	for _, tree in plan.trees do
+		table.insert(taken, tree.position)
+	end
+
+	local function accepted(point: Vector3): boolean
+		if math.abs(point.X) > halfX or math.abs(point.Z) > halfZ then
+			return false
+		end
+		if (point - sign).Magnitude < era.trees.clearance then
+			return false
+		end
+		for _, footprint in solids do
+			if insideFootprint(footprint, point, reach) then
+				return false
+			end
+		end
+		for _, other in taken do
+			if (other - point).Magnitude < clearance then
+				return false
+			end
+		end
+		for _, line in input.centrelines do
+			if nearLine(point, line, roadKeep) then
+				return false
+			end
+		end
+		return true
+	end
+
+	local byZone: { { GreenerySpot } } = {}
+	local zones: { Types.TreeZoneLayout } = input.layout.greeneryZones or {}
+	for zoneIndex, zone in zones do
+		local kept: { GreenerySpot } = {}
+		byZone[zoneIndex] = kept
+		local radius = math.max(numberOr(zone.radius, 0), 0)
+		for _ = 1, math.max(math.floor(numberOr(zone.count, 0)), 0) do
+			local radial = radius * math.sqrt(rng:NextNumber())
+			local angle = FULL_TURN * rng:NextNumber()
+			local yaw = FULL_TURN * rng:NextNumber()
+			local prop = props[pickIndex(rng:NextNumber(), #props) :: number]
+			local point = Vector3.new(
+				zone.center.X + radial * math.cos(angle),
+				0,
+				zone.center.Z + radial * math.sin(angle)
+			)
+			if accepted(point) then
+				table.insert(taken, point)
+				table.insert(kept, { position = point, yaw = yaw, prop = prop })
+			end
+		end
+	end
+	local spots: { GreenerySpot } = {}
+	local round = 1
+	local more = true
+	while more and #spots < zoneCap do
+		more = false
+		for _, kept in byZone do
+			local spot = kept[round]
+			if spot == nil then
+				continue
+			end
+			more = true
+			if #spots < zoneCap then
+				spot.tier = tierForRank(greenery.perTier, #spots + 1)
+				table.insert(spots, spot)
+			end
+		end
+		round += 1
+	end
+
+	local perLot = math.max(math.floor(numberOr(greenery.lotGarnish, 0)), 0)
+	local lots: { Types.LotLayout } = input.layout.lots or {}
+	local lotOrder: { number } = {}
+	for index in lots do
+		if plan.lotProps[index] ~= nil and lotFootprints[index] ~= nil then
+			table.insert(lotOrder, index)
+		end
+	end
+	table.sort(lotOrder, function(a: number, b: number): boolean
+		local tierA, tierB = numberOr(lots[a].tier, 0), numberOr(lots[b].tier, 0)
+		if tierA ~= tierB then
+			return tierA < tierB
+		end
+		return a < b
+	end)
+	-- A hair beyond the reach the solids test keeps, so a garnish clears its own lot.
+	local out = reach + MIN_STEP
+	for _, lotIndex in lotOrder do
+		local footprint = lotFootprints[lotIndex]
+		for _ = 1, perLot do
+			local side = pickIndex(rng:NextNumber(), LOT_SIDES) :: number
+			local along = rng:NextNumber()
+			local yaw = FULL_TURN * rng:NextNumber()
+			local prop = props[pickIndex(rng:NextNumber(), #props) :: number]
+			if #spots >= budget then
+				continue
+			end
+			local localPoint = lotSidePoint(footprint.extents, side, along, out)
+			local point = flat(footprint.origin + footprint.rotation:PointToWorldSpace(localPoint))
+			if accepted(point) then
+				table.insert(taken, point)
+				table.insert(spots, { position = point, yaw = yaw, prop = prop, lot = lotIndex })
+			end
+		end
+	end
+	return spots
+end
+
+-- Walkers (docs/INTERFACES.md "Wave 2c — Pedestrians"): one prop draw per walker the era can
+-- ever show, so the tier only decides how many of them walk.
+local function walkerProps(input: PlanInput, rng: Random): { string }
+	local pedestrians = input.era.pedestrians
+	if pedestrians == nil or not nonEmptyList(pedestrians.props) then
+		return {}
+	end
+	local cap =
+		math.min(perTierMax(pedestrians.perTier), budgetCap(input.config.budget.walkersPerPlot))
+	local picks: { string } = {}
+	for index = 1, cap do
+		picks[index] = pedestrians.props[pickIndex(rng:NextNumber(), #pedestrians.props) :: number]
+	end
+	return picks
+end
+
+-- Bird flocks (docs/INTERFACES.md "Wave 2c — Ambient"): flock i circles tree zone
+-- ((i - 1) % #zones + 1). Two draws per flock and three per bird, whatever is later shown.
+local function flocks(input: PlanInput, rng: Random): { Flock }
+	local ambient = input.config.ambient
+	local birds = if ambient ~= nil then ambient.birds else nil
+	local zones: { Types.TreeZoneLayout } = input.layout.treeZones or {}
+	if birds == nil or #zones == 0 then
+		return {}
+	end
+	-- One plot can never show more birds than the whole map may.
+	local perFlock = math.min(
+		math.max(math.floor(numberOr(birds.birdsPerFlock, 0)), 0),
+		budgetCap(input.config.budget.birdsMap)
+	)
+	local planned: { Flock } = {}
+	for index = 1, perTierMax(birds.flocksPerTier) do
+		local zone = zones[(index - 1) % #zones + 1]
+		local flock: Flock = {
+			center = flat(zone.center),
+			phase = FULL_TURN * rng:NextNumber(),
+			clockwise = rng:NextNumber() < 0.5,
+			birds = {},
+		}
+		for _ = 1, perFlock do
+			table.insert(flock.birds, {
+				lead = rng:NextNumber(),
+				radial = rng:NextNumber(),
+				lift = rng:NextNumber(),
+			})
+		end
+		table.insert(planned, flock)
+	end
+	return planned
+end
+
 function Scatter.Plan(input: PlanInput): Plan
 	local rng = Random.new(Scatter.Seed(input.plotIndex, input.eraName))
 	local era = input.era
@@ -947,6 +1363,10 @@ function Scatter.Plan(input: PlanInput): Plan
 		parkTrees = {},
 		subwayEntrances = {},
 		vehicleProps = {},
+		greenery = {},
+		parked = {},
+		walkerProps = {},
+		flocks = {},
 	}
 
 	-- Filler budget, in layout order: plazas, then lots, then lamps.
@@ -960,10 +1380,13 @@ function Scatter.Plan(input: PlanInput): Plan
 		end
 	end
 	local houseProps = era.houses.props
-	for index in lots do
-		local pick = pickIndex(rng:NextNumber(), #houseProps)
+	local smallProps: { string } = era.houses.smallProps or {}
+	for index, lot in lots do
+		-- One draw per lot whatever its kind, so a lot's kind never shifts the stream behind it.
+		local pool = if lot.kind == SMALL_LOT then smallProps else houseProps
+		local pick = pickIndex(rng:NextNumber(), #pool)
 		if pick ~= nil and remaining > 0 then
-			plan.lotProps[index] = houseProps[pick]
+			plan.lotProps[index] = pool[pick]
 			remaining -= 1
 		end
 	end
@@ -1008,7 +1431,28 @@ function Scatter.Plan(input: PlanInput): Plan
 			plan.vehicleProps[index] = vehicleProps[pick]
 		end
 	end
+
+	-- Wave 2c: new streams only, so nothing above moves when these keys arrive or change.
+	local seed = Scatter.Seed(input.plotIndex, input.eraName)
+	local parkedRng = Random.new(seed + PARKED_SALT)
+	plan.parked = parkedSpots(input, parkedRng, streetLines)
+	local greeneryRng = Random.new(seed + GREENERY_SALT)
+	plan.greenery = greenerySpots(input, plan, greeneryRng)
+	plan.walkerProps = walkerProps(input, Random.new(seed + WALKERS_SALT))
+	plan.flocks = flocks(input, Random.new(seed + AMBIENT_SALT))
 	return plan
+end
+
+-- How many of a cumulative `perTier` list show at `tier` (tier 0, or a malformed entry, is none).
+function Scatter.PerTier(perTier: { number }?, tier: number): number
+	if type(perTier) ~= "table" or tier < 1 then
+		return 0
+	end
+	local count = 0
+	for index = 1, math.min(tier, #perTier) do
+		count = math.max(count, math.floor(numberOr(perTier[index], 0)))
+	end
+	return count
 end
 
 -- A tree's visible stage at a tier, or nil before its birth tier.

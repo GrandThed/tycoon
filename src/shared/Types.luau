@@ -381,7 +381,10 @@ export type SlotLayout = {
 -- M9 street plan (docs/INTERFACES.md "Layouts"). Positions are studs relative to the plot
 -- centre at Y 0; rotationY follows the slot convention (front −Z).
 export type StreetLayout = { points: { Vector3 } }
-export type LotLayout = { position: Vector3, rotationY: number, tier: number }
+-- Wave 2c: a "small" lot draws from `houses.smallProps` and reserves only those props' footprint;
+-- absent means "house".
+export type LotKind = "house" | "small"
+export type LotLayout = { position: Vector3, rotationY: number, tier: number, kind: LotKind? }
 export type PlazaLayout = { position: Vector3, rotationY: number, tier: number, prop: string }
 export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
 -- Wave 2a: `ring` is the deck centreline's half-extent; `ramp.cell` is the ring cell holding the
@@ -391,6 +394,9 @@ export type HighwayLayout = { ring: number, ramp: HighwayRampLayout }
 export type SubwayEntranceLayout = { position: Vector3, rotationY: number }
 -- Wave 2a blocks: a paved ground rectangle between streets, shown once any of its slots is owned.
 export type BlockLayout = { min: Vector3, max: Vector3, slots: { string } }
+-- Wave 2c: a parked-vehicle spot. `lot` (an index into `lots`) makes it a driveway shown only with
+-- that lot's house; without it the spot is a kerb bay.
+export type ParkingSpotLayout = { position: Vector3, rotationY: number, tier: number, lot: number? }
 
 export type EraLayout = {
 	plotSize: Vector3,
@@ -408,6 +414,9 @@ export type EraLayout = {
 	highway: HighwayLayout?,
 	subwayEntrances: { SubwayEntranceLayout }?,
 	blocks: { BlockLayout }?,
+	-- Wave 2c: absent means no greenery zones / no parked vehicles.
+	greeneryZones: { TreeZoneLayout }?,
+	parking: { ParkingSpotLayout }?,
 }
 
 -- CityDressing.json v1 mirror (M9); field names follow the JSON keys exactly. JSON null props
@@ -450,6 +459,12 @@ export type CityBudgetConfig = {
 	-- Wave 2a; optional likewise. Road-tile cells and highway cells per plot.
 	tileCells: number?,
 	highwayCells: number?,
+	-- Wave 2c; optional likewise. Per plot (near only) except the two map-wide caps.
+	greenery: number?,
+	parked: number?,
+	walkersPerPlot: number?,
+	walkersMap: number?,
+	birdsMap: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -571,16 +586,59 @@ export type CityEraSignalsConfig = {
 	maxPerPlot: number,
 }
 export type CityEraVehiclesConfig = { props: { string }, perPlot: number, speed: number }
+-- Wave 2c (docs/INTERFACES.md "Wave 2c — living city"). Every `perTier` is cumulative and indexed
+-- by tier (1-5); tier 0 shows none.
+export type CityEraHousesConfig = { props: { string }, smallProps: { string }? }
+export type GreeneryConfig = {
+	props: { string },
+	perTier: { number },
+	lotGarnish: number, -- pieces around each visible lot
+	clearance: number, -- studs between pieces
+	roadClearance: number, -- studs beyond the road edge
+}
+export type ParkedConfig = { props: { string }, perTier: { number } }
+export type PedestrianConfig = {
+	firstTier: number,
+	perTier: { number },
+	offset: number, -- studs off the street centreline, both sides
+	speed: number,
+	bobHeight: number,
+	bobHz: number,
+	props: { string },
+}
+export type SmokeConfig = {
+	firstTier: number,
+	eras: { string },
+	props: { [string]: { number } }, -- house prop -> chimney offset [x, y, z] in the prop frame
+	rate: number,
+	lifetime: number,
+	size: { number }, -- [start, end] studs
+	color: { number }, -- RGB 0-255
+}
+export type BirdsConfig = {
+	firstTier: number,
+	flocksPerTier: { number },
+	birdsPerFlock: number,
+	radius: number,
+	height: number,
+	speed: number, -- studs per second along the circle
+	prop: string,
+}
+export type AmbientConfig = { smoke: SmokeConfig?, birds: BirdsConfig? }
 export type CityEraDressingConfig = {
 	road: CityEraRoadConfig,
 	trees: CityEraTreesConfig,
-	houses: CityEraPropsConfig,
+	houses: CityEraHousesConfig,
 	plazas: CityEraPropsConfig,
 	lamps: CityEraLampsConfig,
 	signals: CityEraSignalsConfig?,
 	highway: CityEraHighwayConfig?,
 	subway: CityEraSubwayConfig?,
 	vehicles: CityEraVehiclesConfig,
+	-- Wave 2c; absent = that feature off for the era.
+	greenery: GreeneryConfig?,
+	parked: ParkedConfig?,
+	pedestrians: PedestrianConfig?,
 }
 export type CityDressingConfig = {
 	version: number,
@@ -593,6 +651,8 @@ export type CityDressingConfig = {
 	vehicles: CityVehiclesConfig,
 	-- Wave 1d; optional so a pre-wave-1d file still typechecks (absent = no baked paths).
 	paths: CityPathsConfig?,
+	-- Wave 2c; absent = no chimney smoke and no birds anywhere.
+	ambient: AmbientConfig?,
 	-- Keyed by era `name`; a missing era means no dressing for it.
 	eras: { [string]: CityEraDressingConfig },
 }

@@ -333,6 +333,8 @@ local Theme = {
 	ACTION_DEBOUNCE_SECONDS = 0.2,
 
 	reducedMotion = UserInputService.TouchEnabled or isLowEndDevice(),
+	-- Particles and ambient city life drop only on this, not on touch alone (spec section 10).
+	lowEndDevice = isLowEndDevice(),
 }
 
 return Theme
