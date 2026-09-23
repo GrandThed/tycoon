@@ -1054,14 +1054,14 @@ Metropolis) uploads from its own worktree at the same time. Rules:
 - Finish emit → paste → merge → commit for one before starting the other.
 - Never run upload or harvest tools in both sessions at once.
 
-- [ ] 43. **Lead (Claude Code) — merge.** Repo root, Git Bash:
+- [x] 43. **Lead (Claude Code) — merge.** Repo root, Git Bash:
       `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era OrbitalColony`
-- [ ] 44. **Lead (Claude Code) — upload**, dry run then real:
+- [x] 44. **Lead (Claude Code) — upload**, dry run then real:
       `py tools/assets/upload_models.py --props --era OrbitalColony --dry-run`
       `py tools/assets/upload_models.py --props --era OrbitalColony`
       Re-run on "Unknown Error" (idempotent). Commit `src/shared/Config/Assets.json` right away.
       (`--dry-run` also writes `Assets.json` — never while the other session owns it.)
-- [ ] 45. **Ben — the props paste (16 records).** Studio open in **Edit mode, not Play**:
+- [x] 45. **Ben — the props paste (16 records).** Studio open in **Edit mode, not Play**:
       1. `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
       2. Studio → **Command Bar** → paste → Enter → wait for `[HARVEST-DONE]` in Output.
       3. Output panel → right-click → **Select All** → **Ctrl+C**.
@@ -1070,32 +1070,32 @@ Metropolis) uploads from its own worktree at the same time. Rules:
          Anything missed is listed and left untouched; re-run 1–4 for the rest.
       Run 1 and 4 from **this** repo (`C:\Users\benja\Desktop\tycoon`), not the wave 2c
       worktree — each worktree has its own `Assets.json`.
-- [ ] 46. **Templates:**
+- [x] 46. **Templates:**
       ```
       py tools/assets/gen_templates.py --props
       py tools/assets/gen_templates.py --check
       ```
       `--check` must exit 0.
-- [ ] 47. **Build:** `rojo build -o build/test.rbxl` (or resync `rojo serve`).
-- [ ] 48. **Manifest:**
+- [x] 47. **Build:** `rojo build -o build/test.rbxl` (or resync `rojo serve`).
+- [x] 48. **Manifest:**
       ```
       py tools/gen_asset_manifest.py
       py tools/gen_asset_manifest.py --check
       ```
       "Props — Orbital Colony" must read **13/13 uploaded, 13/13 harvested, 13/13 templated**.
-- [ ] 49. **Confirm in Studio Explorer, then commit** `src/shared/Config/Assets.json` **and**
+- [x] 49. **Confirm in Studio Explorer, then commit** `src/shared/Config/Assets.json` **and**
       `templates/_props/OrbitalColony/` **in the same commit**:
       1. `ReplicatedStorage.Assets.Props.OrbitalColony.TubeEnd.Stage0` — glass tube with an
          airlock cap.
       2. `ReplicatedStorage.Assets.Props.OrbitalColony.MonorailTrack.Stage0` — beam on a pier.
       3. `ReplicatedStorage.Assets.Props.OrbitalColony.MonorailTrain.Stage0` — two-car train.
       4. `ReplicatedStorage.Assets.Props.OrbitalColony.Rocks` has `Stage0`–`Stage3`.
-- [ ] 50. **If a record is missing after the paste:** re-run step 45. Do **not** re-run
+- [x] 50. **If a record is missing after the paste:** re-run step 45. Do **not** re-run
       `upload_models.py` to "fix" it — a non-zero `modelAssetId` is never re-uploaded.
-- [ ] 51. **Publish both places together** (the `cityDetail` setting moved the profile to
+- [x] 51. **Publish both places together** (the `cityDetail` setting moved the profile to
       **schema v6**): hub `build/test.rbxl` and Expeditions `build/combat.rbxl`, exactly as C0 §4
       steps 8–9 below. An old place only warns on a v6 profile, but publish both anyway.
-- [ ] 52. Then run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4f (Orbital) and 4g
+- [x] 52. Then run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4f (Orbital) and 4g
       (City detail)**.
 
 **Nothing new on the Creator Hub** for wave 2b: no passes, products or audio.

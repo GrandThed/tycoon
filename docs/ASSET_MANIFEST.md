@@ -238,23 +238,23 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/OrbitalColony/` -- templates: `templates/_props/OrbitalColony/` -- in game: `ReplicatedStorage/Assets/Props/OrbitalColony/`
 
-Summary: 13/13 blueprints, 0/13 uploaded, 0/13 harvested, 0/13 templated
+Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `HouseA` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
-| 2 | `HouseB` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
-| 3 | `LampPost` | — | prop | yes | orbital-kit | 1 | 0/1 | — | — | — |
-| 4 | `MonorailCorner` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
-| 5 | `MonorailTrack` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
-| 6 | `MonorailTrain` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
-| 7 | `PlazaA` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
-| 8 | `Rocks` | — | prop | yes | space-kit | 4 | 0/4 | — | — | — |
-| 9 | `TubeBend` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
-| 10 | `TubeCross` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
-| 11 | `TubeEnd` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
-| 12 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
-| 13 | `TubeTee` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 1 | `HouseA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `HouseB` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `LampPost` | — | prop | yes | orbital-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `MonorailCorner` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `MonorailTrack` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `MonorailTrain` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `PlazaA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `Rocks` | — | prop | yes | space-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 9 | `TubeBend` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `TubeCross` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `TubeEnd` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `TubeTee` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Baked paths
 
