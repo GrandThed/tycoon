@@ -109,6 +109,34 @@ CORNER_PAIRS = ((1, 2), (1, 4), (3, 2), (3, 4))
 HASH_MULTIPLIER = 31  # Noise.Hash
 HASH_MODULUS = 16777216
 FULL_CIRCLE_DEGREES = 360
+# Placeholder boxes for a prop whose blueprint or kit GLBs do not exist yet, so a render made while
+# the props are still being authored reads as the finished plot would: (width X, height, depth Z)
+# in studs, standing on the prop's origin, in the colour the prop is meant to be. Scene-only numbers.
+PLACEHOLDER_TUBE_HEIGHT = 4.5
+PLACEHOLDER_HULL = [215, 222, 232]
+PLACEHOLDER_ROCK = [232, 132, 99]
+PLACEHOLDER_ORANGE = [255, 160, 52]
+PLACEHOLDER_TRACK = (0.8, 1.6)  # beam depth and width under the wheel plane
+PLACEHOLDER_PIER = 1.0
+PLACEHOLDERS = {
+    "train": ((2.6, 3.0, 8.0), PLACEHOLDER_HULL),
+    "tree": ((2.4, 1.4, 2.4), PLACEHOLDER_ROCK),
+    "house": ((6.0, 4.0, 6.0), PLACEHOLDER_HULL),
+    "plaza": ((12.0, 0.4, 12.0), PLACEHOLDER_HULL),
+    "lamp": ((0.5, 5.0, 0.5), PLACEHOLDER_ORANGE),
+    "vehicle": ((2.4, 1.6, 4.5), PLACEHOLDER_ORANGE),
+    "kiosk": ((4.0, 3.0, 5.0), PLACEHOLDER_HULL),
+}
+
+
+def placeholder_box(size, color, offset=(0.0, 0.0, 0.0)):
+    """One placeholder box in a model's own frame: `offset` is its bottom-centre."""
+    return {"size": [round(v, 4) for v in size], "offset": [round(v, 4) for v in offset], "color": list(color)}
+
+
+def placeholder_for(role):
+    size, color = PLACEHOLDERS[role]
+    return [placeholder_box(size, color)]
 
 
 def blueprint_path(era_name, model_name, prop=False):
@@ -215,11 +243,12 @@ def cell_rect(cell, step, reach):
 
 
 class PlotScene:
-    def __init__(self, era, network, owned, tier):
+    def __init__(self, era, network, owned, tier, staged=False):
         self.era = era
         self.network = network
         self.owned = owned
         self.tier = tier
+        self.staged = staged  # --tier given: trees show their stage at that tier, not the last
         self.boxes = []
         self.models = []
         self.rng = random.Random(f"{era.name}:plotrender")
@@ -239,6 +268,7 @@ class PlotScene:
         self.blocks = []
         self.block_rects = []
         self.strip_cells = set()
+        self.missing = {}  # blueprint name -> how many placements fell back to a placeholder
 
     # -- helpers ---------------------------------------------------------
 
@@ -254,13 +284,27 @@ class PlotScene:
             }
         )
 
-    def model(self, name, path, pos, rot_y=0.0, stage=None):
+    def model(self, name, path, pos, rot_y=0.0, stage=None, placeholder=None, wanted=None):
+        """One blueprint placement. `placeholder` is a list of boxes (placeholder_box) in the
+        model's own frame that plotscene draws instead when the blueprint is missing, unusable or
+        places no kit piece (its GLBs are not generated yet); `wanted` names the blueprint for the
+        report when `path` is None. Without a placeholder a missing blueprint draws nothing."""
         if path is None:
-            self.notes.append(f"no blueprint for {name} (nothing drawn)")
-            return
-        entry = {"name": name, "blueprint": str(path), "pos": [round(v, 4) for v in pos], "rotY": round(rot_y, 4)}
+            label = wanted or name
+            if not placeholder:
+                self.notes.append(f"no blueprint for {label} (nothing drawn)")
+                return
+            self.missing[label] = self.missing.get(label, 0) + 1
+        entry = {
+            "name": name,
+            "blueprint": str(path) if path is not None else None,
+            "pos": [round(v, 4) for v in pos],
+            "rotY": round(rot_y, 4),
+        }
         if stage is not None:
             entry["stage"] = stage
+        if placeholder:
+            entry["placeholder"] = placeholder
         self.models.append(entry)
 
     def ribbon(self, name, a, b, width, top, color, cap=True):
@@ -318,7 +362,8 @@ class PlotScene:
         # Brighter than whatever the pad stands on. Against bare plot base that is the base itself;
         # on an era with pavement and paved blocks a tint of the base would be *darker* than the
         # paving around it and the pads would read as potholes.
-        surround = ((era.tiles or {}).get("pavement") or {}).get("color")
+        tiles = era.tiles or {}
+        surround = (tiles.get("pavement") or tiles.get("blocks") or {}).get("color")
         colour = tint(self.base_rgb, PAD_TINT)
         if surround is not None:
             bright = tint([int(v) for v in surround], PAD_ON_PAVING_TINT)
@@ -367,6 +412,8 @@ class PlotScene:
                 blueprint_path(era.name, name, prop=True),
                 (lot["position"][0], 0.0, lot["position"][1]),
                 rot_y=lot["rotation"],
+                placeholder=placeholder_for("house"),
+                wanted=name,
             )
 
     # -- streets ---------------------------------------------------------
@@ -443,6 +490,7 @@ class PlotScene:
                         crossings.add(cell)
                         break
 
+        colour = [int(v) for v in era.dressing["road"]["color"]]
         for cell in sorted(drawn):
             kind = "crossing" if cell in crossings else kinds[cell]
             self.model(
@@ -450,6 +498,8 @@ class PlotScene:
                 blueprint_path(era.name, props.get(kind, ""), prop=True),
                 (cell[0] * step, 0.0, cell[1] * step),
                 rot_y=quarters[cell] * 90.0,
+                placeholder=tile_placeholder(kind, step, era.width, colour),
+                wanted=props.get(kind) or kind,
             )
         self.planned_cells = cells
         self.planned_stretches = planned
@@ -577,6 +627,10 @@ class PlotScene:
     # -- highway, subway, dressing ---------------------------------------
 
     def build_highway(self):
+        """Highway.luau's ring: one prop per lattice cell at half-extent `ring`, its kind and turn
+        from the connectivity table. With a `ramp` in the layout one mid-side cell is the deck T and
+        the ramp prop descends into the city (wave 2a); without one it is the plain loop -- deck and
+        corner only -- that Orbital's monorail runs on (wave 2b)."""
         era = self.era
         highway = era.highway
         config = era.dressing.get("highway")
@@ -589,18 +643,22 @@ class PlotScene:
         if half < 1:
             return
         cycle = ring_cycle(half)
-        ramp = highway["ramp"]
-        requested = streetplan.xz(ramp["cell"])
-        junction_index = min(
-            range(len(cycle)),
-            key=lambda i: math.dist((cycle[i][0] * step, cycle[i][1] * step), requested),
-        )
-        direction = RAMP_DIRECTIONS.get(ramp["direction"])
-        junction = cycle[junction_index]
-        if direction is None:
-            inward = (-junction[0], -junction[1])
-            direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
         props = config["props"]
+        ramp = highway.get("ramp")
+        loop = ramp is None
+        junction_index, direction = None, None
+        if not loop:
+            requested = streetplan.xz(ramp["cell"])
+            junction_index = min(
+                range(len(cycle)),
+                key=lambda i: math.dist((cycle[i][0] * step, cycle[i][1] * step), requested),
+            )
+            direction = RAMP_DIRECTIONS.get(ramp["direction"])
+            junction = cycle[junction_index]
+            if direction is None:
+                inward = (-junction[0], -junction[1])
+                direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
+        deck_height = config.get("deckHeight")
         count = len(cycle)
         for index, cell in enumerate(cycle):
             previous = cycle[(index - 1) % count]
@@ -615,13 +673,20 @@ class PlotScene:
                 if arm is not None:
                     mask |= 1 << (arm - 1)
             kind, quarters = PIECE_BY_MASK[mask & 15]
-            name = props["deck"] if kind == "straight" else props["corner"] if kind == "bend" else props["junction"]
+            role = "deck" if kind == "straight" else "corner" if kind == "bend" else "junction"
+            name = props.get(role)
             self.model(
                 f"Ring{cell[0]}_{cell[1]}",
-                blueprint_path(era.name, name, prop=True),
+                blueprint_path(era.name, name or "", prop=True),
                 (cell[0] * step, 0.0, cell[1] * step),
                 rot_y=quarters * 90.0,
+                placeholder=ring_placeholder(kind, step, deck_height, PLACEHOLDER_HULL),
+                wanted=name or role,
             )
+        self.notes.append(f"highway: {'loop' if loop else 'ring + ramp'}, {count} cells")
+        if loop:
+            self.build_loop_vehicles(half * step, config)
+            return
 
         # Highway.placeRamp: the prop is anchored at the centre of the first whole cell inward of
         # the junction, so its high end is flush with the junction cell's inward edge, its three
@@ -637,11 +702,41 @@ class PlotScene:
         )
         self.build_deck_cars(half * step, config)
 
+    def vehicle_props(self, config):
+        """INTERFACES wave 2b: `highway.vehicleProps`, defaulting to the era's street vehicles."""
+        props = config.get("vehicleProps")
+        if props is None:
+            props = self.era.dressing.get("vehicles", {}).get("props") or []
+        return list(props)
+
+    def build_loop_vehicles(self, ring, config):
+        """Highway.Lanes in loop mode: the train rides the ring's centreline (lane offset 0 -- a
+        monorail is one beam) at deckHeight. Where on the loop is a moment in Traffic's clock, so
+        the render spaces `vehicles.count` trains evenly from the middle of the -Z (entrance) leg."""
+        vehicles = config.get("vehicles") or {}
+        height = config.get("deckHeight")
+        props = self.vehicle_props(config)
+        if height is None or not props:
+            return
+        count = int(vehicles.get("count", 1))
+        perimeter = 8 * ring
+        for index in range(count):
+            position, heading = loop_point(ring, index * perimeter / max(count, 1))
+            name = props[index % len(props)]
+            self.model(
+                f"Train{index}",
+                blueprint_path(self.era.name, name, prop=True),
+                (position[0], float(height), position[1]),
+                rot_y=facing_rot(heading),
+                placeholder=placeholder_for("train"),
+                wanted=name,
+            )
+
     def build_deck_cars(self, ring, config):
         era = self.era
         vehicles = config.get("vehicles") or {}
         height = config.get("deckHeight")
-        props = era.dressing.get("vehicles", {}).get("props") or []
+        props = self.vehicle_props(config)
         if height is None or not props:
             return
         lane = era.width * float(era.dressing["road"].get("laneOffsetFraction", era.city["road"]["laneOffsetFraction"]))
@@ -699,6 +794,8 @@ class PlotScene:
                 blueprint_path(era.name, plaza["prop"], prop=True),
                 (plaza["position"][0], 0.0, plaza["position"][1]),
                 rot_y=plaza["rotation"],
+                placeholder=placeholder_for("plaza"),
+                wanted=plaza["prop"],
             )
 
     # -- paved blocks and street trees ------------------------------------
@@ -1207,9 +1304,40 @@ class PlotScene:
                 continue
             shown.append(point)
         zone, _ = streetplan.scatter_trees(era)
-        zone = zone[: max(cap - len(street), 0)]
-        for index, point in enumerate(shown + zone):
-            self.model("Tree" + str(index), path, (point[0], 0.0, point[1]), rot_y=self.rng.randrange(4) * 90.0)
+        zone_cap = max(cap - len(street), 0)
+        total = len(zone)
+        if total > zone_cap:
+            # Scatter.zoneTrees thins the (zone, candidate) order evenly, it does not truncate it.
+            zone = [
+                point
+                for index, point in enumerate(zone, start=1)
+                if (index * zone_cap) // total != ((index - 1) * zone_cap) // total
+            ]
+        # Scatter: a zone tree's birth tier spreads evenly over the tiers and it grows one stage
+        # per tier after that (Scatter.TreeStage); a street tree is born at tier 1. The finished
+        # render (no --tier) shows every tree at its final stage.
+        tier_count = len(era.city["tier"]["thresholds"])
+        stages = int(era.city["trees"]["stages"])
+        placements = [(point, 1) for point in shown]
+        placements += [(point, 1 + (index * tier_count) // len(zone)) for index, point in enumerate(zone)]
+        drawn = 0
+        for index, (point, birth) in enumerate(placements):
+            stage = None
+            if self.staged:
+                if self.tier < birth:
+                    continue
+                stage = min(max(self.tier - birth, 0), max(stages - 1, 0))
+            drawn += 1
+            self.model(
+                "Tree" + str(index),
+                path,
+                (point[0], 0.0, point[1]),
+                rot_y=self.rng.randrange(4) * 90.0,
+                stage=stage,
+                placeholder=placeholder_for("tree"),
+                wanted=prop,
+            )
+        self.notes.append(f"trees ({prop}): {drawn} drawn of {len(placements)} planned")
         if self.blocks:
             self.notes.append(
                 "trees: " + str(len(shown)) + " street (planned " + str(len(street)) + ") + "
@@ -1333,6 +1461,71 @@ def run_cells(kinds, masks, cell, arm):
             break
         current = step_cell(current, arm)
     return count
+
+
+# The arms each tile kind is open on at rotationY 0 (INTERFACES "Tile streets", canonical
+# orientation): the placeholder is drawn in the prop's own frame, so it turns with the prop.
+CANONICAL_ARMS = {
+    "straight": (1, 3),
+    "crossing": (1, 3),
+    "end": (1,),
+    "bend": (3, 4),
+    "tee": (1, 3, 4),
+    "cross": (1, 2, 3, 4),
+}
+
+
+def tile_placeholder(kind, step, width, color):
+    """A tube/road stand-in for one cell: a `width` square hub plus a half-cell arm on every side
+    the kind is open on, so ends, bends and tees read as themselves and neighbours meet."""
+    height = PLACEHOLDER_TUBE_HEIGHT
+    boxes = [placeholder_box((width, height, width), color)]
+    reach = (step - width) / 2
+    for arm in CANONICAL_ARMS.get(kind, ()):
+        dx, dz = ARM_STEPS[arm - 1]
+        centre = (dx * (width / 2 + reach / 2), 0.0, dz * (width / 2 + reach / 2))
+        size = (reach if dx else width, height, reach if dz else width)
+        boxes.append(placeholder_box(size, color, centre))
+    return boxes
+
+
+def ring_placeholder(kind, step, deck_height, color):
+    """A track stand-in for one ring cell: a beam under the wheel plane along every open arm and a
+    pier at the cell centre. Without a deckHeight there is no plane to hang it from: nothing."""
+    if deck_height is None:
+        return None
+    depth, width = PLACEHOLDER_TRACK
+    base = float(deck_height) - depth
+    boxes = [
+        placeholder_box((PLACEHOLDER_PIER, base, PLACEHOLDER_PIER), color),
+        placeholder_box((width, depth, width), color, (0.0, base, 0.0)),
+    ]
+    reach = (step - width) / 2
+    for arm in CANONICAL_ARMS.get(kind, ()):
+        dx, dz = ARM_STEPS[arm - 1]
+        offset = width / 2 + reach / 2
+        boxes.append(
+            placeholder_box(
+                (reach if dx else width, depth, reach if dz else width), color, (dx * offset, base, dz * offset)
+            )
+        )
+    return boxes
+
+
+def loop_point(ring, distance):
+    """The point `distance` studs round the square loop of half-extent `ring`, counter-clockwise
+    (+X along the -Z leg first) from the middle of the -Z leg, and the heading there."""
+    legs = (
+        ((0.0, -ring), (1.0, 0.0)),
+        ((ring, 0.0), (0.0, 1.0)),
+        ((0.0, ring), (-1.0, 0.0)),
+        ((-ring, 0.0), (0.0, -1.0)),
+    )
+    distance = distance % (8 * ring) + ring  # measured from the -Z leg's middle
+    leg = int(distance // (2 * ring)) % 4
+    along = distance % (2 * ring) - ring
+    centre, heading = legs[leg]
+    return (centre[0] + heading[0] * along, centre[1] + heading[1] * along), heading
 
 
 def ring_cycle(half):
@@ -1534,7 +1727,7 @@ def main():
         CAMERAS["point"]["at"] = (x, z)
         camera_name = "point"
 
-    scene = PlotScene(era, network, owned, 5 if tier is None else tier).build()
+    scene = PlotScene(era, network, owned, 5 if tier is None else tier, staged=tier is not None).build()
     stem = args.out or f"plot_{args.camera.replace(',', '_')}"
     out_path = OUT_ROOT / era.name / f"{stem}.png"
     scene_spec = {
@@ -1554,6 +1747,9 @@ def main():
     print(f"   {len(scene.visible)} of {len(network.stretches)} spine stretches visible")
     for note in scene.notes:
         print(f"   note: {note}")
+    if scene.missing:
+        listed = ", ".join(f"{name} x{count}" for name, count in sorted(scene.missing.items()))
+        print(f"   MISSING blueprints (drawn as placeholder boxes): {listed}")
     if scene.unreachable:
         print(f"   WARNING: no route from the entrance to {', '.join(sorted(scene.unreachable))}")
     run_blender(scene_spec, args.blender)

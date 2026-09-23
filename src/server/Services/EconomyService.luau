@@ -306,6 +306,7 @@ local function flushDeltas(): ()
 				music = state.settings.music,
 				sfx = state.settings.sfx,
 				vipSkins = state.settings.vipSkins,
+				cityDetail = state.settings.cityDetail,
 			}
 		end
 		if record.legacyShop then

@@ -1,0 +1,11 @@
+{
+  "id": "HouseA",
+  "era": "OrbitalColony",
+  "scale": 3.2,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "orbital-kit", "model": "drum_medium", "pos": [0.0, 0.0, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "dome_medium", "pos": [0.0, 0.4, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "gate_simple", "pos": [-2.0, 0.0, -2.19], "rotY": 0, "stage": 0}
+  ]
+}

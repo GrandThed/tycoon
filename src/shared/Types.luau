@@ -45,7 +45,7 @@ export type PlayerState = {
 	lastSeen: number,
 	incomeAtSave: number,
 	stats: { totalCashAllTime: number, erasCompleted: number, playtimeSeconds: number },
-	settings: { music: boolean, sfx: boolean, vipSkins: boolean },
+	settings: { music: boolean, sfx: boolean, vipSkins: boolean, cityDetail: boolean },
 	-- M5 (schema v2): the DoubleOffline amount a still-open purchase dialog is for, so a
 	-- receipt delivered in a later session (player left with the dialog up) still grants it.
 	-- 0 means "no reservation".
@@ -122,7 +122,7 @@ export type Delta = {
 	persistedIncomePerSecond: number?,
 	slots: { [string]: SlotState }?,
 	-- M3: the whole settings table whenever a RequestSetSetting write lands.
-	settings: { music: boolean, sfx: boolean, vipSkins: boolean }?,
+	settings: { music: boolean, sfx: boolean, vipSkins: boolean, cityDetail: boolean }?,
 	-- M6: the whole shop state whenever the legacyShop dirty flag flushes (a copy, never aliased).
 	legacyShop: LegacyShopState?,
 	-- C0: the whole combat profile whenever the combat dirty flag flushes (a deep copy, never
@@ -242,7 +242,7 @@ export type MonetizationConfig = {
 }
 
 -- RequestSetSetting keys; anything else is dropped by the remote validator.
-export type SettingKey = "music" | "sfx" | "vipSkins"
+export type SettingKey = "music" | "sfx" | "vipSkins" | "cityDetail"
 
 -- Sounds.json v1 mirror; field names follow the JSON keys exactly.
 export type SoundGroupName = "SFX" | "Music" | "UI"
@@ -390,7 +390,7 @@ export type TreeZoneLayout = { center: Vector3, radius: number, count: number }
 -- Wave 2a: `ring` is the deck centreline's half-extent; `ramp.cell` is the ring cell holding the
 -- deck T-junction and `direction` ("+X" | "-X" | "+Z" | "-Z") points from it into the city.
 export type HighwayRampLayout = { cell: Vector3, direction: string }
-export type HighwayLayout = { ring: number, ramp: HighwayRampLayout }
+export type HighwayLayout = { ring: number, ramp: HighwayRampLayout? }
 export type SubwayEntranceLayout = { position: Vector3, rotationY: number }
 -- Wave 2a blocks: a paved ground rectangle between streets, shown once any of its slots is owned.
 export type BlockLayout = { min: Vector3, max: Vector3, slots: { string } }
@@ -512,7 +512,7 @@ export type CityTilePropsConfig = {
 	cross: string,
 	crossing: string?,
 }
--- Paved block slabs with street trees along their street-facing edges.
+-- Paved block slabs with street trees along their street-facing edges (treeSpacing 0 = none).
 export type CityTileBlocksConfig = {
 	material: string,
 	color: { number },
@@ -537,11 +537,12 @@ export type CityEraTilesConfig = {
 	parkStrips: CityTileParkStripsConfig?,
 }
 -- Wave 2a: an elevated ring drawn while `requiresSlot` is owned; its cars never take the ramp.
+-- Wave 2b: junction and ramp are absent in loop mode (Orbital monorail) — a plain closed ring.
 export type CityHighwayPropsConfig = {
 	deck: string,
 	corner: string,
-	junction: string,
-	ramp: string,
+	junction: string?,
+	ramp: string?,
 	sign: string?,
 }
 export type CityEraHighwayConfig = {
@@ -549,6 +550,8 @@ export type CityEraHighwayConfig = {
 	props: CityHighwayPropsConfig,
 	vehicles: { count: number, speed: number },
 	revealCellsPerSecond: number,
+	-- Wave 2b: the props that run on the deck; absent = the era's vehicles.props (Metropolis cars).
+	vehicleProps: { string }?,
 	-- Road-surface height of the deck props in studs. Merged props are one MeshPart, so the deck
 	-- cannot be measured apart from its rails; absent = no deck cars.
 	deckHeight: number?,
@@ -644,6 +647,8 @@ export type CityEraDressingConfig = {
 }
 export type CityDressingConfig = {
 	version: number,
+	-- Wave 2b: what "City detail" off keeps (trees, park planters) as a share of the normal cap.
+	detail: { treeShare: number }?,
 	tier: CityTierConfig,
 	lod: CityLodConfig,
 	road: CityRoadConfig,

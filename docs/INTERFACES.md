@@ -2806,10 +2806,82 @@ asphalt; Boomtown's stay 2.5); `TreeGrowing`, `PlazaA`, `PlazaB`. Metropolis `ho
 - Other players' plots match; rejoin is instant; missing props/layout keys draw nothing, silently.
 - `py tools/streetplan.py Metropolis` is green; Village and Boomtown are pixel-for-pixel unchanged.
 
+## Wave 2b — Orbital Colony dressing (Ben, 2026-09-23)
+
+Orbital reuses the Metropolis machinery: the **tile renderer** (with generated tube props), the
+**Highway module in loop mode** (monorail), **paved blocks** (decking), tree zones (rocks). Ben's
+choices: **enclosed corridor tubes** as the walkways, **only the monorail train** moves (no ground
+vehicles), **decking pads under module clusters + rocks/craters** on the open regolith.
+
+### Layout — relaid on the Metropolis lattice
+`src/shared/Layouts/OrbitalColony.luau` is **re-authored** (positions are not persisted): the 16
+building slots on the 4×4 block grid at x,z ∈ {±14, ±42} (12×12 slots keep the contract's
+footprint rules), the monument `launchTower` on the x = 0 axis, unlock/decor slots on corridor
+edges as Metropolis did; `streets` (tube runs) on the 7-stud lattice, axis-aligned, a tree;
+`blocks` (decking rects, to the plot edge under the monorail band), `treeZones` (rock fields on the
+open regolith), 6–10 `lots` (small domes), 1 plaza, `highway = { ring = 56 }` with **no `ramp`**
+(loop mode), no `subwayEntrances`. `tools/streetplan.py` gains OrbitalColony in `DEFAULT_ERAS`
+and must be green; the tree-budget gate counts rocks.
+
+### Tubes (`road.tiles`, generated `tube-kit`)
+- Props `TubeStraight / TubeEnd / TubeBend / TubeTee / TubeCross` (no `crossing`), one per cell,
+  same canonical orientations as the Metropolis tiles (straight along X, end open +X, bend −X↔+Z,
+  tee closed −Z), pitch 7, from a committed generator `tools/assets/tube_kit.py` (space-kit
+  palette): a pressurised glass corridor **4 studs wide × ~4.5 tall** on a 7-long decking strip,
+  white frames, light-blue "glass" (opaque colour, no transparency), an airlock cap on `TubeEnd`,
+  ≤ 400 tris per piece. Tubes stand on the regolith/decking; there is **no pavement band**
+  (`pavement` absent) and **no park strips** (`parkStrips` absent — an undrawn arm is simply a
+  capped tube end, which reads fine).
+- `road.width` 4; spurs are Metal decking strips (`tiles.spur`) from the tube to the module door.
+- Tubes are dressing: no collisions, characters walk through them like trees.
+
+### Monorail (`highway` in loop mode)
+- `walkwayNetwork` keeps its id and cost, becomes `streetOnly`, is renamed **"Build the Monorail"**.
+- Config `eras.OrbitalColony.highway`: `props` has only `deck` (`MonorailTrack`, straight beam +
+  pier, runs along X) and `corner` (`MonorailCorner`, −X↔+Z); **`junction` and `ramp` are optional
+  in the type**; `vehicleProps: ["MonorailTrain"]` (new optional key, default = era `vehicles.props`),
+  `vehicles.count` 1, `deckHeight` 7.07 (train wheel plane), soffit ≥ 6.0 so characters pass under.
+  Generated `tools/assets/monorail_kit.py` (space-kit palette; space-kit's own monorail pieces are
+  not pitch-7 and stay unused): track straight 7 long, corner, pier; train = one prop, ≤ 8 studs
+  long, origin bottom-centre at the wheel plane, nose −Z like every vehicle.
+- Client `Highway`: when `layout.highway.ramp` is nil, build the plain loop (no junction/ramp),
+  reveal outward both ways from the loop cell nearest the plot entrance; vehicles = `vehicleProps`.
+  Far plots: track only.
+
+### Decking, rocks, domes, lights
+- `road.tiles.blocks`: Metal decking (96,98,108) with **`treeSpacing` 0 = no edge trees** (new rule,
+  any era).
+- `trees`: `prop: "Rocks"` — a 4-stage prop (S0 pebbles → S3 crystal outcrop) so the existing
+  stage-by-tier growth reads as a rock garden filling in; `maxCount` 30; zones on the open regolith.
+- `houses.props ["HouseA","HouseB"]` = small orbital-kit domes on `lots`; `plazas.props ["PlazaA"]`
+  = an observation platform; `lamps.prop "LampPost"` = light panel on a mast (tier/junction rule).
+- `vehicles.props []`, `perPlot` 0 — nothing drives; `cityDetail`'s vehicle rule is moot here.
+
+### `cityDetail` (contract below, amended)
+Profile schema goes to the **next version** (combat already took v5); everything else as written.
+
+### Ownership (wave 2b)
+- lead: this section, `Types.luau`, `CityDressing.json`.
+- economy-designer: `Layouts/OrbitalColony.luau`, `Eras/4_OrbitalColony.json`, `tools/streetplan.py`.
+- luau-engineer: `ProfileSchema`/`DataService` migration, `RemoteService` validator, settings delta.
+- ui-engineer: `src/client/City/*` (Highway loop mode, `treeSpacing` 0, no-pavement tiles path),
+  `CityDressingController` (cityDetail live re-evaluation), `UI/SettingsPanel.luau` row.
+- prop-builders: A `tube_kit.py` + Tube props; B `monorail_kit.py` + track/corner/train; C Rocks
+  S0–S3, HouseA/B, PlazaA, LampPost (`_props/OrbitalColony/`). Renders on the (56,53,60) base.
+- plotrender: OrbitalColony renders (tube tiles, loop, decking, rocks).
+
+### Done when
+Fresh Orbital plot: bare regolith (nothing drawn); each module grows the tube network with correct
+ends/bends/tees/crosses and a decking spur; decking appears under a block with its first module;
+rocks fill the zones by tier; Build the Monorail spawns no building and the loop builds out with
+one train circling at 7.07; domes and the platform appear by tier; `cityDetail` off halves rocks,
+removes lamps, keeps the train on the local plot only, live; other eras unchanged;
+`streetplan.py` green for all four eras.
+
 ## Wave 2 — `cityDetail` setting (after wave 1 is in Studio)
 
 Same pattern as the VIP-skins amendment: `settings.cityDetail: boolean`, default `true`;
-`Types.SettingKey` gains `"cityDetail"`; profile schema v5 with an additive migration;
+`Types.SettingKey` gains `"cityDetail"`; profile schema v6 (combat took v5) with an additive migration;
 `RequestSetSetting` accepts the key (same validator and rate limit); the settings delta carries
 it; SettingsPanel gains a row "City detail" visible to everyone; the controller treats `false` as
 "halve `trees.maxCount`, no lamps, vehicles on the local plot only" and re-evaluates live.
@@ -2923,8 +2995,8 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
   smoke and birds. The PLAN target is re-cut from measurement in the playtest; the step for
   Traffic + Walkers + Ambient together must stay **< 0.3 ms** with every map cap reached.
 - **`cityDetail` (wave 2b, lands on main first):** when false, wave 2c also halves greenery and
-  drops parked vehicles, walkers, smoke and birds (lots stay). Wired by the lead at merge, since the
-  setting does not exist on this branch.
+  drops parked vehicles, walkers, smoke and birds (lots stay). Wired at merge in `detailPolicy`
+  (`greeneryShare` = `detail.treeShare`, even thinning by plan index; `living` false).
 
 ### Types (`Types.luau`, ui-engineer this wave)
 `LotKind`, `LotLayout.kind`, `ParkingSpotLayout`, `EraLayout.greeneryZones`/`parking`,

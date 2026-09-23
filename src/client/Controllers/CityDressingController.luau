@@ -28,6 +28,11 @@
 -- corridors that have not grown yet; their planters are the one dressing prop that also goes away,
 -- as the tiles arrive under them.
 --
+-- Wave 2b: the ring may run in loop mode (the Orbital monorail) with its own deck vehicles, and the
+-- player's `cityDetail` setting (pushed by UIController through SetCityDetail) thins what every
+-- plot shows. The whole "detail off" rule lives in `detailPolicy`; the plan never changes with it,
+-- so turning detail back on restores exactly what was there, and a flip only re-syncs the plots.
+--
 -- Wave 2c ("living city"): near plots also get greenery, parked vehicles, chimney smoke and bird
 -- flocks, and the vehicle plots get walkers on their own loop (Walkers) with their own map budget.
 -- All of it is planned by Scatter from salted streams, grows with the tier, and goes on far plots;
@@ -64,11 +69,25 @@ local PLOT_INDEX_ATTRIBUTE = "PlotIndex"
 -- Wave 1e: a crossing prop waits until this many of its node's streets are drawn, so it never
 -- stands beside a single road (docs/INTERFACES.md "Wave 1e — Lamps").
 local SIGNAL_MIN_VISIBLE = 2
+-- `detail.treeShare` for a config that predates the key: the contract's "halve".
+local DEFAULT_TREE_SHARE = 0.5
 -- Wave 2c: how far walkers keep from solids when `pedestrians.clearance` is missing (lead ruling,
 -- the figure's half-width plus a hand's breadth); the config value wins whenever it is present.
 local DEFAULT_WALK_CLEARANCE = 0.6
 
 type TreeInstance = { model: Model, stage: number }
+
+-- What the `cityDetail` setting allows right now. A nil cap = every planned tree / planter.
+type DetailPolicy = {
+	treeCap: number?,
+	parkTreeCap: number?,
+	lamps: boolean,
+	vehiclesLocalOnly: boolean,
+	-- Wave 2c: the share of planned greenery kept, and whether parked cars, walkers, smoke and
+	-- birds show at all. Houses are never thinned: they are the city's silhouette.
+	greeneryShare: number,
+	living: boolean,
+}
 
 type Build = {
 	eraName: string,
@@ -136,6 +155,8 @@ local player = Players.LocalPlayer
 local entries: { [Instance]: PlotEntry } = {}
 local rootFolder: Folder? = nil
 local started = false
+-- The profile default; an old snapshot without the key never reaches SetCityDetail as false.
+local cityDetail = true
 
 -- Silent degradation (M9 principles): a config file too old to carry the part ceilings can't be
 -- allocated against, so it counts as no config at all rather than erroring mid-build.
@@ -145,6 +166,45 @@ local function dressingConfig(): Types.CityDressingConfig?
 		return nil
 	end
 	return config
+end
+
+-- The single place the `cityDetail` setting turns into rules, so a later dressing kind that detail
+-- off should also drop is added here and nowhere else. Detail on is the unrestricted policy, which
+-- leaves every sync path exactly as it was before the setting existed.
+local function detailPolicy(
+	era: Types.CityEraDressingConfig,
+	config: Types.CityDressingConfig
+): DetailPolicy
+	if cityDetail then
+		return {
+			treeCap = nil,
+			parkTreeCap = nil,
+			lamps = true,
+			vehiclesLocalOnly = false,
+			greeneryShare = 1,
+			living = true,
+		}
+	end
+	local detail = config.detail
+	local share = math.clamp(
+		RoadGraph.BudgetValue(if detail ~= nil then detail.treeShare else nil, DEFAULT_TREE_SHARE),
+		0,
+		1
+	)
+	local full = math.min(math.max(era.trees.maxCount, 0), config.budget.trees)
+	local tiles = era.road.tiles
+	local parkStrips = if tiles ~= nil then tiles.parkStrips else nil
+	local parkFull = if parkStrips ~= nil
+		then math.max(RoadGraph.BudgetValue(parkStrips.maxTrees, 0), 0)
+		else 0
+	return {
+		treeCap = math.floor(full * share),
+		parkTreeCap = math.floor(parkFull * share),
+		lamps = false,
+		vehiclesLocalOnly = true,
+		greeneryShare = share,
+		living = false,
+	}
 end
 
 local function baseOf(plot: Instance): BasePart?
@@ -359,6 +419,7 @@ local function newBuild(
 			roadWidth = roads.width,
 			pavementWidth = pavementWidth,
 			laneOffset = roads.laneOffset,
+			entrance = planInput.entrance,
 			budgetCells = RoadGraph.BudgetValue(
 				config.budget.highwayCells,
 				RoadGraph.BudgetValue(config.budget.roadPieces, 0)
@@ -472,15 +533,40 @@ local function blockPaved(build: Build, index: number, owned: { [string]: boolea
 	return false
 end
 
+-- The plan indices a capped policy keeps, thinned evenly over the plan's order (the row-lamp rule)
+-- so every zone, block and street keeps its share. Nil when the cap keeps them all.
+local function keptIndices(total: number, cap: number?): { [number]: boolean }?
+	if cap == nil or total <= cap then
+		return nil
+	end
+	local kept: { [number]: boolean } = {}
+	for index = 1, total do
+		if (index * cap) // total ~= ((index - 1) * cap) // total then
+			kept[index] = true
+		end
+	end
+	return kept
+end
+
 local function syncTrees(
 	build: Build,
 	config: Types.CityDressingConfig,
 	tier: number,
 	folder: Instance,
-	owned: { [string]: boolean }
+	owned: { [string]: boolean },
+	policy: DetailPolicy
 ): ()
 	local propName = build.era.trees.prop
+	local kept = keptIndices(#build.plan.trees, policy.treeCap)
 	for index, spot in build.plan.trees do
+		if kept ~= nil and not kept[index] then
+			local existing = build.trees[index]
+			if existing ~= nil then
+				existing.model:Destroy()
+				build.trees[index] = nil
+			end
+			continue
+		end
 		local wanted = Scatter.TreeStage(spot, tier, config.trees.stages)
 		if wanted == nil then
 			continue
@@ -520,7 +606,7 @@ end
 -- Park-strip planters (wave 2a): a tree stands while the strip under it is down and goes in the
 -- same sync the tiles land on that cell, so the dust burst covers the swap. Near plots only --
 -- a far plot draws the strip slabs alone.
-local function syncParkTrees(build: Build, folder: Instance): ()
+local function syncParkTrees(build: Build, folder: Instance, policy: DetailPolicy): ()
 	local tiles = build.era.road.tiles
 	local parkStrips = if tiles ~= nil then tiles.parkStrips else nil
 	if parkStrips == nil then
@@ -529,9 +615,11 @@ local function syncParkTrees(build: Build, folder: Instance): ()
 	-- A config too old (or too new) to carry a sane stage plants the youngest one rather than
 	-- erroring on a NaN, like every other budget read.
 	local stage = math.max(math.floor(RoadGraph.BudgetValue(parkStrips.treeStage, 0)), 0)
+	local kept = keptIndices(#build.plan.parkTrees, policy.parkTreeCap)
 	for index, spot in build.plan.parkTrees do
 		local placed: Model? = build.parkTrees[index]
-		local wanted = RoadGraph.ParkStripAt(build.roads, spot.position)
+		local wanted = (kept == nil or kept[index] == true)
+			and RoadGraph.ParkStripAt(build.roads, spot.position)
 		if wanted == (placed ~= nil) then
 			continue
 		end
@@ -700,14 +788,31 @@ local function syncHighway(build: Build, owned: { [string]: boolean }, animate: 
 	Highway.SetOwned(handle, owned[config.requiresSlot] == true, animate)
 end
 
+local function localPlotIndex(): number?
+	local value = player:GetAttribute(PLOT_INDEX_ATTRIBUTE)
+	return if typeof(value) == "number" then value else nil
+end
+
+-- Whether the policy lets this plot run vehicles at all (street and deck alike).
+local function vehiclesAllowed(entry: PlotEntry, policy: DetailPolicy): boolean
+	return not policy.vehiclesLocalOnly or entry.index == localPlotIndex()
+end
+
 local function highwayTargetFor(
 	entry: PlotEntry,
 	build: Build,
-	config: Types.CityDressingConfig
+	config: Types.CityDressingConfig,
+	policy: DetailPolicy
 ): number
 	local handle = build.highway
 	local era = build.era.highway
-	if handle == nil or era == nil or not entry.near or not entry.vehicleSelected then
+	if
+		handle == nil
+		or era == nil
+		or not entry.near
+		or not entry.vehicleSelected
+		or not vehiclesAllowed(entry, policy)
+	then
 		return 0
 	end
 	-- Lanes are nil until the ring is closed and its deck has been measured, so a deck template
@@ -726,12 +831,14 @@ end
 local function vehicleTargetFor(
 	entry: PlotEntry,
 	build: Build,
-	config: Types.CityDressingConfig
+	config: Types.CityDressingConfig,
+	policy: DetailPolicy
 ): number
 	local tierCount = #config.tier.thresholds
 	if
 		not entry.near
 		or not entry.vehicleSelected
+		or not vehiclesAllowed(entry, policy)
 		or tierCount <= 0
 		or entry.tier < config.vehicles.firstTier
 	then
@@ -804,7 +911,9 @@ local function spawnHighwayVehicles(
 	if lanes == nil or lanes.count == 0 then
 		return
 	end
-	local props = build.plan.vehicleProps
+	-- Wave 2b: an era can run its own props on the deck (the monorail train); without the key the
+	-- ring takes the street's seeded picks, as the Metropolis cars always have.
+	local props = era.vehicleProps or build.plan.vehicleProps
 	if #props == 0 then
 		return
 	end
@@ -838,9 +947,19 @@ local function spawnHighwayVehicles(
 end
 
 -- Wave 2c greenery: a zone piece appears on its tier, a garnish piece with its lot's house.
-local function syncGreenery(build: Build, tier: number, folder: Instance): ()
+local function syncGreenery(build: Build, tier: number, folder: Instance, policy: DetailPolicy): ()
+	local share = policy.greeneryShare
 	for index, spot in build.plan.greenery do
 		local placed: Model? = build.greenery[index]
+		-- Even thinning by plan index, so detail back on restores exactly the pieces it hid.
+		local kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
+		if not kept then
+			if placed ~= nil then
+				placed:Destroy()
+				build.greenery[index] = nil
+			end
+			continue
+		end
 		if placed ~= nil then
 			continue
 		end
@@ -1003,10 +1122,11 @@ local function walkLanesFor(build: Build, pedestrians: Types.PedestrianConfig): 
 end
 
 -- Walkers stroll the same nearest plots the cars drive on, from the era's first walker tier.
-local function walkerTargetFor(entry: PlotEntry, build: Build): number
+local function walkerTargetFor(entry: PlotEntry, build: Build, policy: DetailPolicy): number
 	local pedestrians = build.era.pedestrians
 	if
 		pedestrians == nil
+		or not policy.living
 		or not entry.near
 		or not entry.vehicleSelected
 		or entry.tier < RoadGraph.BudgetValue(pedestrians.firstTier, math.huge)
@@ -1062,11 +1182,13 @@ end
 local function flockTargetFor(
 	entry: PlotEntry,
 	build: Build,
-	config: Types.CityDressingConfig
+	config: Types.CityDressingConfig,
+	policy: DetailPolicy
 ): number
 	local birds = birdsConfig(config)
 	if
 		birds == nil
+		or not policy.living
 		or not entry.near
 		or not Ambient.Enabled()
 		or not listHas(birds.eras, build.eraName)
@@ -1207,15 +1329,25 @@ local function sync(entry: PlotEntry): ()
 	syncFiller(current, tier, folder)
 	syncHighway(current, owned, animate)
 
+	local policy = detailPolicy(current.era, config)
 	if entry.near then
-		syncTrees(current, config, tier, folder, owned)
-		syncParkTrees(current, folder)
-		syncLamps(current, config, tier, folder, owned)
+		syncTrees(current, config, tier, folder, owned, policy)
+		syncParkTrees(current, folder, policy)
+		if policy.lamps then
+			syncLamps(current, config, tier, folder, owned)
+		else
+			clearLamps(current)
+		end
 		syncSignals(current, folder, owned)
 		syncSubway(current, folder, owned)
-		syncGreenery(current, tier, folder)
-		syncParked(current, tier, folder)
-		syncSmoke(current, config, tier)
+		syncGreenery(current, tier, folder, policy)
+		if policy.living then
+			syncParked(current, tier, folder)
+			syncSmoke(current, config, tier)
+		else
+			clearParked(current)
+			clearSmoke(current)
+		end
 	else
 		clearTrees(current)
 		clearParkTrees(current)
@@ -1227,7 +1359,7 @@ local function sync(entry: PlotEntry): ()
 		clearSmoke(current)
 	end
 
-	local deckTarget = highwayTargetFor(entry, current, config)
+	local deckTarget = highwayTargetFor(entry, current, config, policy)
 	if deckTarget ~= entry.highwayTarget then
 		entry.highwayTarget = deckTarget
 		spawnHighwayVehicles(entry, current, config)
@@ -1239,7 +1371,7 @@ local function sync(entry: PlotEntry): ()
 		-- Room freed elsewhere since the map budget cut the deck short.
 		spawnHighwayVehicles(entry, current, config)
 	end
-	local target = vehicleTargetFor(entry, current, config)
+	local target = vehicleTargetFor(entry, current, config, policy)
 	if target ~= entry.vehicleTarget then
 		entry.vehicleTarget = target
 		spawnVehicles(entry, current, config)
@@ -1254,7 +1386,7 @@ local function sync(entry: PlotEntry): ()
 		end
 	end
 
-	local walkerTarget = walkerTargetFor(entry, current)
+	local walkerTarget = walkerTargetFor(entry, current, policy)
 	local walkersMap = RoadGraph.BudgetValue(config.budget.walkersMap, 0)
 	local pedestrians = current.era.pedestrians
 	if walkerTarget ~= entry.walkerTarget then
@@ -1270,7 +1402,7 @@ local function sync(entry: PlotEntry): ()
 		end
 	end
 
-	local flockTarget = flockTargetFor(entry, current, config)
+	local flockTarget = flockTargetFor(entry, current, config, policy)
 	local birdsMap = RoadGraph.BudgetValue(config.budget.birdsMap, 0)
 	if flockTarget ~= entry.flockTarget then
 		entry.flockTarget = flockTarget
@@ -1385,11 +1517,6 @@ local function addPlot(plot: Instance): ()
 		end)
 	)
 	schedule(entry)
-end
-
-local function localPlotIndex(): number?
-	local value = player:GetAttribute(PLOT_INDEX_ATTRIBUTE)
-	return if typeof(value) == "number" then value else nil
 end
 
 type Ranked = { entry: PlotEntry, score: number }
@@ -1526,6 +1653,20 @@ local CityDressingController = {}
 
 function CityDressingController.Init(): ()
 	-- Needs replicated remotes and plots; everything happens in Start so Init stays yield-free.
+end
+
+-- UIController calls this with every trusted settings table (join snapshot, settings delta, and the
+-- local tap ahead of the server's echo). A flip re-syncs every plot: trees are thinned or restored
+-- from the unchanged plan, lamps cleared or re-placed, and vehicle targets re-evaluated, while the
+-- roads, blocks, highway and filler are left exactly as they are.
+function CityDressingController.SetCityDetail(enabled: boolean): ()
+	if enabled == cityDetail then
+		return
+	end
+	cityDetail = enabled
+	for _, entry in entries do
+		schedule(entry)
+	end
 end
 
 function CityDressingController.Start(): ()

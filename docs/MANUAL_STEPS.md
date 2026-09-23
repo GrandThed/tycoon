@@ -749,13 +749,17 @@ Run in this order from the repo root; every step is idempotent, same as M7.
 - [x] 10c. (done 2026-09-22) **Wave 2a added 21 Metropolis props + the `CityHall` building** —
       uploaded (commit `c9f7f37`), harvested in two pastes and templated (commits `b0ce9ab`,
       `33b2b54`, `f6556d8`). Section 8 below is kept as the routine; nothing is owed there.
-- [ ] 10d. **Wave 2a fix round (2026-09-22) re-uploaded four assets** after Ben's first Studio
+- [x] 10d. (done 2026-09-22) **Wave 2a fix round (2026-09-22) re-uploaded four assets** after Ben's first Studio
       playtest — props `PlazaA`, `PlazaB`, `HighwayRamp` and the building `CityHall` (rebuilt on a
       new `cityhall-kit`). Their ids are back to `0`, so they need **two more pastes**:
       **section 9 below**. Until then those four draw as grey placeholders (no plazas, a
       placeholder ramp, no City Hall mesh) — the designed degrade, not a bug. **All templates
       were also regenerated** for the glTF importer's 180° turn (see section 9's note); that part
       needs no paste, only a `rojo build`.
+- [x] 10e. (done 2026-09-23) **Wave 2a third round** — highway kit, `ParkingGarage`, `CityHall`
+      harvested and templated: section 10 below.
+- [ ] 10f. **Wave 2b (2026-09-23) added 13 Orbital Colony props (16 stages)** — blueprints only;
+      **not merged, uploaded or harvested yet**: section 11 below.
 
 ### 4. Nothing new to create on the Creator Hub
 
@@ -972,7 +976,7 @@ All of it is done: both pastes were run, templates generated and committed (comm
       30). Do **not** run `upload_models.py` again to "fix" it — a stage with a non-zero
       `modelAssetId` is never re-uploaded, so a re-run prints "already uploaded, skipped".
 
-### 10. Wave 2a third round — highway kit, parking garage, City Hall: **two** harvest pastes (OWED — do this one)
+### 10. Wave 2a third round — highway kit, parking garage, City Hall: **two** harvest pastes (**DONE 2026-09-23**, commit `3613cfc` — nothing owed)
 
 After your **second** wave 2a Studio playtest (2026-09-22) three things were rebuilt and
 **re-uploaded** (commit `a0763f9`):
@@ -1031,16 +1035,70 @@ parking garage** and **no City Hall mesh** on a Metropolis plot — the designed
       37). Do **not** run `upload_models.py` again to "fix" it — a stage with a non-zero
       `modelAssetId` is never re-uploaded, so a re-run prints "already uploaded, skipped".
 
-### 11. Wave 2b (Orbital Colony, `cityDetail` setting) — not started
+### 11. Wave 2b — Orbital Colony dressing + `cityDetail`: upload, then **one** props paste (OWED)
 
-- [x] 12. **Metropolis (wave 2a) is built and uploaded 2026-09-22** — its two harvest pastes are
-      **section 8** above, not here. It uses kit **tile streets**, not baked paths, so sections 6–7
-      (bake, path textures, variants) do **not** apply to it.
-- [ ] 12b. **Orbital Colony (wave 2b) — not started.** It repeats sections 2–3 (props pipeline)
-      once its buildings ship (M8's remaining era), plus a `SettingsPanel` row for `cityDetail` —
-      no manual/Studio steps beyond the same pipeline run and one harvest paste. Orbital Colony
-      has no `surface`/`variants`/`signals`/`tiles` config yet, so waves 1e and 2a do nothing on
-      it.
+Wave 2b (2026-09-23) dresses the Orbital Colony: tube corridors, a monorail loop, decking, rocks,
+domes, a platform and light masts. **13 props, 16 stages**, all custom or space/orbital-kit:
+- tubes `TubeStraight`, `TubeEnd`, `TubeBend`, `TubeTee`, `TubeCross` (`tools/assets/tube_kit.py`)
+- monorail `MonorailTrack`, `MonorailCorner`, `MonorailTrain` (`tools/assets/monorail_kit.py`)
+- `Rocks` (4 stages S0–S3), `HouseA`, `HouseB`, `PlazaA`, `LampPost`
+- blueprints: `tools/testfit/blueprints/_props/OrbitalColony/`
+
+**No buildings changed** — only a props paste. Until it is done an Orbital plot shows **grey tube
+slabs, no monorail, no rocks, domes, platform or lamps** — the designed degrade, not a bug.
+
+**Concurrent session warning.** The wave 2c session ("living city": Village, Boomtown,
+Metropolis) uploads from its own worktree at the same time. Rules:
+- Do its paste and this one **separately, never interleaved**.
+- **Announce** each paste before you start it ("starting the Orbital props paste").
+- Finish emit → paste → merge → commit for one before starting the other.
+- Never run upload or harvest tools in both sessions at once.
+
+- [x] 43. **Lead (Claude Code) — merge.** Repo root, Git Bash:
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era OrbitalColony`
+- [x] 44. **Lead (Claude Code) — upload**, dry run then real:
+      `py tools/assets/upload_models.py --props --era OrbitalColony --dry-run`
+      `py tools/assets/upload_models.py --props --era OrbitalColony`
+      Re-run on "Unknown Error" (idempotent). Commit `src/shared/Config/Assets.json` right away.
+      (`--dry-run` also writes `Assets.json` — never while the other session owns it.)
+- [x] 45. **Ben — the props paste (16 records).** Studio open in **Edit mode, not Play**:
+      1. `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
+      2. Studio → **Command Bar** → paste → Enter → wait for `[HARVEST-DONE]` in Output.
+      3. Output panel → right-click → **Select All** → **Ctrl+C**.
+      4. `py tools/assets/harvest.py --props` — expect **16** merged records: 5 tubes,
+         3 monorail, `Rocks` ×4 stages, `HouseA`, `HouseB`, `PlazaA`, `LampPost`.
+         Anything missed is listed and left untouched; re-run 1–4 for the rest.
+      Run 1 and 4 from **this** repo (`C:\Users\benja\Desktop\tycoon`), not the wave 2c
+      worktree — each worktree has its own `Assets.json`.
+- [x] 46. **Templates:**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --check
+      ```
+      `--check` must exit 0.
+- [x] 47. **Build:** `rojo build -o build/test.rbxl` (or resync `rojo serve`).
+- [x] 48. **Manifest:**
+      ```
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+      "Props — Orbital Colony" must read **13/13 uploaded, 13/13 harvested, 13/13 templated**.
+- [x] 49. **Confirm in Studio Explorer, then commit** `src/shared/Config/Assets.json` **and**
+      `templates/_props/OrbitalColony/` **in the same commit**:
+      1. `ReplicatedStorage.Assets.Props.OrbitalColony.TubeEnd.Stage0` — glass tube with an
+         airlock cap.
+      2. `ReplicatedStorage.Assets.Props.OrbitalColony.MonorailTrack.Stage0` — beam on a pier.
+      3. `ReplicatedStorage.Assets.Props.OrbitalColony.MonorailTrain.Stage0` — two-car train.
+      4. `ReplicatedStorage.Assets.Props.OrbitalColony.Rocks` has `Stage0`–`Stage3`.
+- [x] 50. **If a record is missing after the paste:** re-run step 45. Do **not** re-run
+      `upload_models.py` to "fix" it — a non-zero `modelAssetId` is never re-uploaded.
+- [x] 51. **Publish both places together** (the `cityDetail` setting moved the profile to
+      **schema v6**): hub `build/test.rbxl` and Expeditions `build/combat.rbxl`, exactly as C0 §4
+      steps 8–9 below. An old place only warns on a v6 profile, but publish both anyway.
+- [x] 52. Then run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4f (Orbital) and 4g
+      (City detail)**.
+
+**Nothing new on the Creator Hub** for wave 2b: no passes, products or audio.
 
 
 ---

@@ -1,0 +1,10 @@
+{
+  "id": "TubeBend",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [7, 7],
+  "note": "Bend joining -X <-> +Z through a 4.8-square junction node (5.0 tall, lit hatch on the roof). Arms stop at exactly x = -3.5 and z = +3.5; the closed +X and -Z node faces carry a window. tube-kit, studs, scale 1.0.",
+  "pieces": [
+    {"kit": "tube-kit", "model": "tube-bend", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

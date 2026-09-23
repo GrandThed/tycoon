@@ -53,6 +53,7 @@ local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
+local CityDressingController = require(script.Parent:WaitForChild("CityDressingController"))
 
 type Model = {
 	plotIndex: number,
@@ -227,8 +228,8 @@ local function totalLevels(state: Types.PlayerState): number
 end
 
 -- Settings arrive from the network; only a table with music and sfx booleans is trusted.
--- A missing vipSkins reads as true (the profile default) so a server build that predates
--- the key still delivers music/sfx instead of the whole table being rejected.
+-- A missing vipSkins or cityDetail reads as true (the profile default) so a server build that
+-- predates the key still delivers music/sfx instead of the whole table being rejected.
 local function readSettings(source: any): SettingsPanel.Settings?
 	if
 		typeof(source) ~= "table"
@@ -241,6 +242,7 @@ local function readSettings(source: any): SettingsPanel.Settings?
 		music = source.music,
 		sfx = source.sfx,
 		vipSkins = source.vipSkins ~= false,
+		cityDetail = source.cityDetail ~= false,
 	}
 end
 
@@ -369,7 +371,8 @@ local function boot(): ()
 	local openPanelKey: PanelKey? = nil
 	-- Mirrors state.settings, but exists before the first snapshot so a toggle pressed
 	-- during loading still reaches SoundController (M3 carry-over b).
-	local localSettings: SettingsPanel.Settings = { music = true, sfx = true, vipSkins = true }
+	local localSettings: SettingsPanel.Settings =
+		{ music = true, sfx = true, vipSkins = true, cityDetail = true }
 
 	-- Forward declarations: layout and panel wiring reference each other.
 	local applyLayout: () -> ()
@@ -545,10 +548,14 @@ local function boot(): ()
 				localSettings.music = value
 			elseif key == "sfx" then
 				localSettings.sfx = value
-			else
+			elseif key == "vipSkins" then
 				localSettings.vipSkins = value
+			else
+				localSettings.cityDetail = value
 			end
 			SoundController.ApplySettings(localSettings)
+			-- Thinning the city is local-only display, so it follows the tap at once too.
+			CityDressingController.SetCityDetail(localSettings.cityDetail)
 			local current = model
 			if current ~= nil then
 				current.state.settings = table.clone(localSettings)
@@ -664,6 +671,7 @@ local function boot(): ()
 	local function applySettings(pushed: SettingsPanel.Settings): ()
 		localSettings = table.clone(pushed)
 		SoundController.ApplySettings(localSettings)
+		CityDressingController.SetCityDetail(localSettings.cityDetail)
 		settingsPanel.SetSettings(localSettings)
 	end
 

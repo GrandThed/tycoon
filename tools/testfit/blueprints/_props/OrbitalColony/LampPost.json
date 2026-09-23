@@ -1,0 +1,12 @@
+{
+  "id": "LampPost",
+  "era": "OrbitalColony",
+  "scale": 4.0,
+  "footprint": [3.4, 3.4],
+  "pieces": [
+    {"kit": "orbital-kit", "model": "mast_segment", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0.0, 0.7, -0.135], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0.0, 0.7, 0.135], "rotY": 180, "stage": 0},
+    {"kit": "orbital-kit", "model": "mast_tip", "pos": [0.0, 1.0, 0.0], "rotY": 0, "stage": 0}
+  ]
+}

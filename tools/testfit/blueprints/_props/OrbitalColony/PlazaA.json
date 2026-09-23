@@ -1,0 +1,22 @@
+{
+  "id": "PlazaA",
+  "era": "OrbitalColony",
+  "scale": 6.0,
+  "footprint": [12, 12],
+  "pieces": [
+    {"kit": "space-kit", "model": "platform_large", "pos": [-2.0, 0.0, -1.5], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-2.5, 0.1, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.5, 0.1, -1.0], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [-1.0, 0.1, 2.5], "rotY": 90, "stage": 0},
+    {"kit": "space-kit", "model": "rail_middle", "pos": [1.0, 0.1, -1.5], "rotY": 270, "stage": 0},
+    {"kit": "space-kit", "model": "supports_low", "pos": [-2.45, 0.1, -1.05], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "satelliteDish_large", "pos": [-2.45, 0.6, -0.95], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.45, 0.3, 0.02], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "telescope", "pos": [0.5, 0.1, 0.2], "rotY": 270, "stage": 0},
+    {"kit": "space-kit", "model": "desk_chairStool", "pos": [-1.7, 0.1, -1.65], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "desk_chairStool", "pos": [-1.35, 0.1, -1.7], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "planter_tray", "pos": [0.35, 0.1, 0.78], "rotY": 0, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [0.97, 0.1, -0.5], "rotY": 270, "stage": 0},
+    {"kit": "orbital-kit", "model": "light_panel", "pos": [-0.97, 0.1, -0.5], "rotY": 90, "stage": 0}
+  ]
+}

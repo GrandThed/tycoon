@@ -1,0 +1,10 @@
+{
+  "id": "TubeEnd",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [7, 7],
+  "note": "Dead end: open to +X, airlock block (4.7 wide, 5.0 tall) with the door facing -X at x -3.15..-2.55; the deck runs on to x = -3.5 as a landing. tube-kit, studs, scale 1.0, origin bottom centre of the cell.",
+  "pieces": [
+    {"kit": "tube-kit", "model": "tube-end", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

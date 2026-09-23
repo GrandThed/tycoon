@@ -7748,6 +7748,273 @@
         ]
       }
     },
+    "OrbitalColony": {
+      "HouseA": {
+        "stages": [
+          {
+            "modelAssetId": 75445015601816,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 130616376160535,
+                "imageId": 101025632384804,
+                "size": [5.12, 4.0, 5.12],
+                "offset": [0.0, 2.0, -0.32]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 122914873627764,
+                "imageId": 117016605432909,
+                "size": [3.2, 3.456, 1.6],
+                "offset": [0.0, 1.728, 2.208]
+              }
+            ]
+          }
+        ]
+      },
+      "HouseB": {
+        "stages": [
+          {
+            "modelAssetId": 115485207550618,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 78416775484289,
+                "imageId": 101025632384804,
+                "size": [5.25, 4.05, 5.94],
+                "offset": [-0.225, 2.025, -0.03]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 71920333914605,
+                "imageId": 117016605432909,
+                "size": [2.475, 1.5, 4.7475],
+                "offset": [0.0, 0.75, 0.5362]
+              }
+            ]
+          }
+        ]
+      },
+      "LampPost": {
+        "stages": [
+          {
+            "modelAssetId": 71165821553065,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 120910506289590,
+                "imageId": 101025632384804,
+                "size": [3.2, 6.4, 2.4],
+                "offset": [0.0, 3.2, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "MonorailCorner": {
+        "stages": [
+          {
+            "modelAssetId": 112434597510594,
+            "parts": [
+              {
+                "kit": "monorail-kit",
+                "meshId": 77322773026321,
+                "imageId": 115089666037780,
+                "size": [4.31, 7.08, 4.31],
+                "offset": [1.345, 3.54, -1.345]
+              }
+            ]
+          }
+        ]
+      },
+      "MonorailTrack": {
+        "stages": [
+          {
+            "modelAssetId": 134472958732811,
+            "parts": [
+              {
+                "kit": "monorail-kit",
+                "meshId": 73756716467952,
+                "imageId": 115089666037780,
+                "size": [7.0, 7.085, 1.9],
+                "offset": [0.0, 3.5425, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "MonorailTrain": {
+        "stages": [
+          {
+            "modelAssetId": 106812009298164,
+            "parts": [
+              {
+                "kit": "monorail-kit",
+                "meshId": 123848097582864,
+                "imageId": 115089666037780,
+                "size": [2.2, 2.08, 7.9],
+                "offset": [0.0, 1.04, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "PlazaA": {
+        "stages": [
+          {
+            "modelAssetId": 122373043216146,
+            "parts": [
+              {
+                "kit": "orbital-kit",
+                "meshId": 82292430839569,
+                "imageId": 101025632384804,
+                "size": [11.826, 5.0706, 11.16],
+                "offset": [0.0, 3.1353, -0.18]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 129062245170246,
+                "imageId": 117016605432909,
+                "size": [12.0, 8.4851, 12.0],
+                "offset": [0.0, 4.2426, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Rocks": {
+        "stages": [
+          {
+            "modelAssetId": 70551988424365,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 133563277351035,
+                "imageId": 117016605432909,
+                "size": [3.1637, 0.5952, 3.3555],
+                "offset": [-0.0753, 0.2976, 0.1402]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 139046718589149,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 111219948354911,
+                "imageId": 117016605432909,
+                "size": [3.5127, 0.96, 3.5031],
+                "offset": [0.0992, 0.48, 0.0665]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 117081265915150,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 137312270584537,
+                "imageId": 117016605432909,
+                "size": [3.8172, 1.6, 3.7788],
+                "offset": [-0.0531, 0.8, -0.0714]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76218215848183,
+            "parts": [
+              {
+                "kit": "space-kit",
+                "meshId": 95676167832658,
+                "imageId": 117016605432909,
+                "size": [3.9819, 1.76, 3.9443],
+                "offset": [-0.007, 0.88, 0.0114]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeBend": {
+        "stages": [
+          {
+            "modelAssetId": 124800671294223,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 72824830221117,
+                "imageId": 98891889068319,
+                "size": [5.92, 5.3, 5.92],
+                "offset": [0.54, 2.65, -0.54]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeCross": {
+        "stages": [
+          {
+            "modelAssetId": 72908001738442,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 74295601454821,
+                "imageId": 98891889068319,
+                "size": [7.0, 5.3, 7.0],
+                "offset": [0.0, 2.65, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeEnd": {
+        "stages": [
+          {
+            "modelAssetId": 139163214479485,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 82988796377503,
+                "imageId": 98891889068319,
+                "size": [7.0, 5.0, 4.7],
+                "offset": [0.0, 2.5, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeStraight": {
+        "stages": [
+          {
+            "modelAssetId": 85040425180224,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 102429756077911,
+                "imageId": 98891889068319,
+                "size": [7.0, 4.6, 4.2],
+                "offset": [0.0, 2.3, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeTee": {
+        "stages": [
+          {
+            "modelAssetId": 115423452817973,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 138724164931622,
+                "imageId": 98891889068319,
+                "size": [7.0, 5.3, 5.92],
+                "offset": [0.0, 2.65, -0.54]
+              }
+            ]
+          }
+        ]
+      }
+    },
     "Village": {
       "Bird": {
         "stages": [
