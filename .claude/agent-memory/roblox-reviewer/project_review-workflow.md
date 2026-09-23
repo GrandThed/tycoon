@@ -554,3 +554,17 @@ fail) and are clean; every prop goes through `PropFactory.Spawn` → `sealPart`,
   → feature absent".
 - The lead committed into the worktree mid-review (HEAD moved to f97499a); re-run `git log` before
   reporting and name the commit reviewed.
+
+**M9 wave 2d (2026-09-23, half-size cars ×4 traffic, 2 parked per bay; + merge_stages mirrored-node
+winding fix; SHIP w/ 1 Major).** Client+config only; `PropFactory.Spawn(..., scale)` ScaleTo's about
+the Base PrimaryPart before PivotTo, factor 1 never calls it; Traffic/Walkers read part offsets after.
+- **Blender is installed** (`C:/Program Files/Blender Foundation/Blender 5.2/blender.exe`). A 30-line
+  `-b --factory-startup --python` script settles mesh-API questions empirically: on 5.2.1,
+  `Mesh.transform(det<0)` leaves winding AND custom corner normals inward, and `Mesh.flip_normals()`
+  flips both (corner normals follow). Measure "outward faces / corners vs centroid" before/after.
+- **Recurring pattern (new): density ×N on a no-headway Traffic loop.** Every car shares one speed and
+  there is no spacing rule, so two cars merging at a junction within ~length/speed stay fused until a
+  branch splits them; overlap frequency scales ~N². Ask for headway or entry-occupancy on hop.
+- Parked packing pattern: extra draws appended after the first-pick loop on the salted stream keeps
+  the old plan; greenery keeps full-size bay solids via `bayPosition` + one solid per bay.
+- plotrender.py ignores `vehicles.scale` and renders no parked cars — the Studio reference drifts.
