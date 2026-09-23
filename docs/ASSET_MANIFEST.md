@@ -214,7 +214,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 3 | `HabitatPod` | Habitat Pod | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 4 | `HydroponicsDome` | Hydroponics Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 5 | `OxygenGenerator` | Oxygen Generator | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 6 | `WalkwayTube` | Connect the Walkways | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `WalkwayTube` | Build the Monorail | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `CrewQuarters` | Crew Quarters | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 8 | `ColonyFlag` | Colony Flag | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `ResearchLab` | Research Lab | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
@@ -233,6 +233,28 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 22 | `SpaceportTerminal` | Spaceport Terminal | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 23 | `TurretBase` | Raise Planetary Defense | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 24 | `LaunchTower` | Launch Tower | monument | yes | space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+
+### Props — Orbital Colony
+
+Blueprints: `tools/testfit/blueprints/_props/OrbitalColony/` -- templates: `templates/_props/OrbitalColony/` -- in game: `ReplicatedStorage/Assets/Props/OrbitalColony/`
+
+Summary: 13/13 blueprints, 0/13 uploaded, 0/13 harvested, 0/13 templated
+
+| # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
+|---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
+| 1 | `HouseA` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 2 | `HouseB` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 3 | `LampPost` | — | prop | yes | orbital-kit | 1 | 0/1 | — | — | — |
+| 4 | `MonorailCorner` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
+| 5 | `MonorailTrack` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
+| 6 | `MonorailTrain` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
+| 7 | `PlazaA` | — | prop | yes | orbital-kit, space-kit | 1 | 0/1 | — | — | — |
+| 8 | `Rocks` | — | prop | yes | space-kit | 4 | 0/4 | — | — | — |
+| 9 | `TubeBend` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 10 | `TubeCross` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 11 | `TubeEnd` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 12 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 13 | `TubeTee` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
 
 ## Baked paths
 

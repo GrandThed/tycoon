@@ -1848,7 +1848,10 @@ the actual uploaded textures.
 
 ### 10. City dressing — expected absent (M9 wave 2b)
 
-- [ ] 29. Confirm the Orbital plot has **no** streets, paths, trees, plazas, lamps or vehicles, and
+**Superseded 2026-09-23:** M9 wave 2b now dresses the Orbital Colony. Skip steps 29–30 and run
+`M9 — City dressing` sections 4f and 4g instead.
+
+- [ ] 29. (superseded) Confirm the Orbital plot has **no** streets, paths, trees, plazas, lamps or vehicles, and
       that Output is **silent about it** — no warning, no error, no red line about missing Orbital
       props or paths. Their absence is by design until M9 wave 2b; a *complaint* about their
       absence is a bug.
@@ -1939,12 +1942,12 @@ plus an elevated ring highway, subway kiosks and a real City Hall.
 
 **Wave 2a fix round (section 4d).** Its two pastes were done 2026-09-22 — nothing owed.
 
-**Wave 2a third round (section 4e) needs two pastes first:** `docs/MANUAL_STEPS.md` "M9" §10 —
-props (**4 records**: `HighwayDeck`, `HighwayCorner`, `HighwayJunction`, `HighwayRamp`) and
-buildings (**7 records**: `ParkingGarage` stages 0-4, `CityHall`, the `garage-kit` swatch), all
-re-uploaded after your **second** Studio look. Without them the highway and the ramp are grey
-placeholders, the parking garage is a placeholder and City Hall has no mesh — the designed silent
-degrade (step 12ae), but not a pass for sections 4c/4d/4e.
+**Wave 2a third round (section 4e).** Its two pastes were done 2026-09-23 — nothing owed.
+
+**Wave 2b — Orbital Colony + City detail (sections 4f and 4g) needs one props paste first:**
+`docs/MANUAL_STEPS.md` "M9" §11 (16 records: tubes, monorail, rocks, domes, platform, lamp).
+Without it an Orbital plot shows grey tube slabs and no monorail, rocks or domes — the designed
+degrade (step 12bs), not a pass for 4f. Section 4g (City detail) needs no assets.
 
 **What changed in the third round:** park strips (grass + planters) fill every planned street cell
 that has **not** grown yet, so no more dead-end sidewalk beside bare ground; the highway is a
@@ -2397,6 +2400,133 @@ should look like those.
   `city-kit-commercial` has no civic piece and you asked for kit-only.
 - **No highway sign appears** (same as sections 4c/4d): the 7-stud gantry always clips a footprint.
 
+### 4f. Wave 2b — Orbital Colony dressing (tubes, monorail, decking, rocks)
+
+Orbital only. Do `docs/MANUAL_STEPS.md` "M9" §11 (one props paste) first, then
+`rojo build -o build/test.rbxl`.
+
+Reference renders (Studio should match): `assets/testfit/out/OrbitalColony/plot_overview.png`,
+`plot_entrance.png`, `plot_tier2.png` (`py tools/testfit/plotrender.py OrbitalColony`).
+
+- [ ] 12bd. **Reach Orbital.** Workspace attribute `GrantCash` = `10000000000000`, buy out and
+      advance each era until the top bar reads **ERA 4**.
+- [ ] 12be. **Fresh plot = bare regolith.** Before buying anything, walk the plot. Expect:
+      - no tubes, decking, rocks, domes, lamps or monorail;
+      - Output silent about Orbital props.
+      A pre-drawn tube grid or green park strips here is the bug (Metropolis-only feature).
+- [ ] 12bf. **First module grows a tube.** Buy one building on the central axis. Expect:
+      - a glass tube (white frames, light-blue glass, ~4 wide × 4.5 tall) from the plot entrance
+        up the middle to that module;
+      - a Metal decking **spur** from the tube to the module door;
+      - a capped **airlock** on every dead end;
+      - the dust burst as it appears.
+      **No pavement beside the tube — by design.**
+- [ ] 12bg. **Tube pieces follow the connections.** Buy modules on the side tubes (x = ±28) and
+      the cross tube (z = −28). Check each cell:
+      - dead end → `TubeEnd` with airlock;
+      - through run → straight;
+      - a turn where only one arm has grown → bend;
+      - three arms → tee; four arms (centre of the cross tube) → cross.
+      Bug: an open tube mouth, the wrong piece, a gap or an overlap between cells.
+- [ ] 12bh. **Decking under clusters.** Buy the first module of a cluster. Expect:
+      - a dark-grey Metal decking slab under that cluster, appearing with the module;
+      - no trees or rocks on its edge;
+      - bare regolith between clusters (decking is **only** under clusters).
+      Bug: a slab flickering against a tube or spur, or decking with no module on it.
+- [ ] 12bi. **Rocks grow by tier.** Keep buying and watch the 6 rock fields (front corners, the
+      middle and back corridors). Expect:
+      - rocks appear tier by tier and grow pebbles → crystal outcrop;
+      - never on decking, a tube, a pad or inside a building;
+      - at most **30**.
+- [ ] 12bj. **Domes and the platform by tier.**
+      - tier 2: first small dome;
+      - tier 3: the observation platform beside the central tube, two more domes;
+      - tiers 4–5: the back-corridor domes (7 domes in all).
+      Each dome faces a tube; none sits on a tube or footprint.
+- [ ] 12bk. **Lamps.** From tier 3, a light panel on a mast at every second tube junction (max 10).
+      None standing inside a tube.
+- [ ] 12bl. **Build the Monorail.** Buy **Build the Monorail** (pad front-right of the entrance).
+      Expect:
+      - **no building** spawns;
+      - the beam on piers builds out **both ways from the entrance side** and closes the loop
+        around the plot (ring 56);
+      - no ramp, no junction.
+- [ ] 12bm. **The train.** Watch a full lap. Expect:
+      - **one two-car train**, nose first, at beam height (7.07);
+      - it **stays on the beam through all four corners** (the reviewer's fix) — a slight
+        overhang on corners is known;
+      - no jump when the lap wraps.
+- [ ] 12bn. **Walk under the beam.** Walk out through the plot entrance and along the ring: no
+      bump, no invisible wall, no camera stuck in a pier (soffit 6.10). Walk **through** a tube:
+      you pass through (tubes are dressing — known).
+- [ ] 12bo. **No ground vehicles** anywhere on the plot — by design.
+- [ ] 12bp. **Rejoin.** Stop, Play again. The whole loop is there **at once** (no build-out), the
+      train is running, and tubes/rocks/domes are in the same places.
+- [ ] 12bq. **Mobile — Device Emulator, 375×667 portrait.** On a partly grown Orbital plot:
+      tubes, decking, rocks, domes, the beam and the train all read at phone size; buy one module
+      and confirm the tube reveal and dust with no visible stall; open the Build panel — no layout
+      regression.
+- [ ] 12br. **Two players (Local Server — dressing changed).** Test → Start, **2 Players**. Get
+      Player 1 to Orbital. Player 2 watches while Player 1 buys a module, then Build the Monorail.
+      Player 2 must see the **same tubes, decking, rocks, domes and loop**. Train position may
+      differ; a far viewer may get no burst — both expected.
+- [ ] 12bs. **Degrade.** Edit mode: rename `ReplicatedStorage/Assets/Props/OrbitalColony` →
+      `OrbitalColony_bak`. Play, reach Orbital, buy a few modules and the monorail. Expect:
+      - tubes draw as **grey slabs**;
+      - no monorail, rocks, domes, platform or lamps;
+      - buildings and economy normal;
+      - **Output: zero errors.**
+      Stop, rename it back, rebuild.
+- [ ] 12bt. **Counts.** On a fully grown Orbital plot with the monorail, Command Bar:
+      `print(#workspace.CityDressing:FindFirstChild("Plot1"):GetChildren())` (swap in your
+      `Plot<n>`) and `print(#workspace.CityDressing:GetDescendants())`. Report both.
+- [ ] 12bu. **Other eras unchanged.** Glance at a Village, Boomtown and Metropolis plot (second
+      player or a spare save): same dressing as before this wave.
+
+**Known caveats for this section — don't report them as bugs**
+
+- Tubes are dressing: you walk straight through them.
+- The train overhangs the beam slightly on corners.
+- A fresh Orbital plot is bare: the future tube grid is **not** pre-drawn (unlike Metropolis park
+  strips). An undrawn arm is just a capped tube end.
+- Nothing drives on the ground; the train is the only mover.
+
+### 4g. Wave 2b — "City detail" setting
+
+A personal setting that thins the dressing on low-end devices. Needs no assets. **Do step 12bv
+first**, on the first Play after the rebuild.
+
+- [ ] 12bv. **Old save loads with it on.** Your Studio save predates this build (schema v5).
+      First Play after the rebuild: open **Settings** (⚙ in the bottom bar). Expect:
+      - **City detail** row reads **ON**;
+      - cash, era, slots, Music/Sound effects and (VIP) VIP building skins unchanged;
+      - Armory weapons and materials intact;
+      - no Output error about the profile.
+- [ ] 12bw. **Toggle off, live.** On a tier-5 plot with lamps (Village with Pave the Road,
+      Boomtown with Streetlamp Row, or Orbital), and a second plot with cars in view, tap City
+      detail **OFF**. Within a second, expect:
+      - trees / rocks / Metropolis park planters drop to about **half**;
+      - **all lamps and lanterns vanish**;
+      - your **own** plot keeps its cars / deck cars / train; **other plots'** vehicles vanish;
+      - roads, tubes, buildings and decking **do not flicker or rebuild**.
+- [ ] 12bx. **Toggle back on.** The **same** trees/rocks return in the **same** spots, lamps and
+      other plots' vehicles return. Nothing moves.
+- [ ] 12by. **Persists.** Leave it OFF, Stop, Play. Settings still reads OFF and the plot is
+      thinned from the first frame. Turn it back ON afterwards.
+- [ ] 12bz. **Spam.** Tap the toggle ~10 times fast. It ends in the last state you tapped, the
+      plot matches it, no Output error.
+- [ ] 12ca. **Two players (Local Server).** 2 Players. Player 2 turns City detail OFF, Player 1
+      leaves it ON. Player 1 still sees everything on both plots; only Player 2's view thins. The
+      setting is per player.
+- [ ] 12cb. **Mobile — Device Emulator, 375×667 portrait.** Open Settings. The row list
+      **scrolls** (VIP owners see four rows) and City detail is reachable and tappable. Toggle it:
+      same result as 12bw.
+- [ ] 12cc. **Stop Play.** Report: any wrong tube piece or open mouth, the train leaving the beam,
+      decking/rocks overlaps, the counts from 12bt, and whether City detail OFF visibly helps.
+
+**Publishing note:** the setting moved the profile to schema v6. Publish the hub **and**
+Expeditions together (`docs/MANUAL_STEPS.md` "M9" §11 step 51).
+
 ### 5. No collisions — walk through everything
 
 - [ ] 13. On either plot at tier 5: walk **through** a tree, **through** a filler house, and
@@ -2604,6 +2734,16 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
   daylight between the highway deck and its piers, or a gap/step where the ramp meets the deck;
   a parking garage that still reads as stacked streets; City Hall missing its flags or pad-facing
   front.
+- **Wave 2b (Orbital):** a pre-drawn tube grid on a fresh plot; an open tube mouth or the wrong
+  tube piece; decking under no module or between clusters; a rock on decking, a tube or inside a
+  footprint, or more than 30; Build the Monorail spawning a building; the loop appearing all at
+  once on purchase (or **not** at once on rejoin); the train leaving the beam, driving tail-first
+  or jumping at the lap wrap; being blocked under the beam; any ground vehicle; any Output error
+  with `Props/OrbitalColony` renamed.
+- **City detail:** an old save loading with it OFF; lamps or other plots' vehicles still showing
+  when OFF; your own plot's vehicles vanishing; roads/buildings rebuilding on a flip; different
+  trees coming back when ON; the setting not surviving a rejoin; one player's setting changing
+  another player's view.
 
 ### Sign-off
 
@@ -2618,7 +2758,10 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
       pass — buildings facing their pads in **every** era, nose-first cars, per-cell pavement,
       paved blocks and street trees, the flush plazas and the pillared ramp (12ah–12aq), the
       third-round pass — park strips and their swap to tiles, the girder highway on piers, the
-      ramp meeting the deck, the grown parking garage and the kit-only City Hall (12ar–12bc) — no
+      ramp meeting the deck, the grown parking garage and the kit-only City Hall (12ar–12bc), the
+      wave 2b Orbital pass — bare start, tube pieces, decking, rocks, domes, lamps, the monorail
+      loop and train, parity and the degrade (12bd–12bu), and the City detail setting — migration,
+      live toggle, persistence, two players, 375×667 (12bv–12cc) — no
       collisions anywhere (including the Explorer flag check), identical dressing for a second
       player, near/far LOD and the rim drop, the traffic MicroProfiler check under 0.2 ms, the dust
       Heartbeat and path-triangle readings, the part counts, refresh stability, era-advance/

@@ -48,10 +48,12 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   shipped 2026-09-22** after Ben's second Studio look — park strips (grass + planters) on every
   planned-but-undrawn street cell, the highway rebuilt on a custom `highway-kit` (box girder on
   piers), `ParkingGarage` rebuilt on a custom `garage-kit` and City Hall rebuilt **kit-only**;
-  **one props paste (4 records) + one buildings paste (7 records) owed**
-  (`docs/MANUAL_STEPS.md` M9 §10) then playtest; the full M9
-  checklist re-run is still open — see "M9" below; wave 2b (Orbital Colony dressing +
-  `cityDetail`) not started)
+  both pastes done and templated 2026-09-23 (commit `3613cfc`), signed off; **wave 2b Orbital
+  Colony dressing + `cityDetail` shipped 2026-09-23** — tube corridors, monorail loop, decking,
+  rock fields, domes and the persisted "City detail" setting, review no Criticals (two Majors
+  fixed); **Orbital props not yet merged/uploaded; then one props paste (16 records) owed**
+  (`docs/MANUAL_STEPS.md` M9 §11), then PLAYTEST M9 sections 4f + 4g; the full M9 checklist
+  re-run is still open — see "M9" below)
 
 ---
 
@@ -853,7 +855,7 @@ era's silhouette direction holds, VIP is a per-kit texture swap, placeholders st
 - **lead, M9 wave 2 leftover (not M8's):** `props/Metropolis/VehicleD S0` is uploaded but **not
   harvested** — it belongs to the M9 wave 2 harvest paste (`docs/MANUAL_STEPS.md` M9 §8). The
   Metropolis `CityHall` template came through in this wave's paste and is committed.
-- **lead, M9 wave 2b:** **Orbital Colony city dressing** (street plan in
+- [x] **lead, M9 wave 2b (closed 2026-09-23, code shipped; props paste owed in M9):** **Orbital Colony city dressing** (street plan in
   `src/shared/Layouts/*.luau`, props under `templates/_props/`, baked paths) plus the persisted
   `cityDetail` setting. With M8 complete, the Orbital buildings now exist, so wave 2b is fully
   unblocked; until it ships an Orbital Colony plot is deliberately bare (PLAYTEST M8 Orbital
@@ -1030,12 +1032,49 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   selene `LegacyPanel` warning, `src/combat` luau-lsp diagnostics that need the combat sourcemap,
   and `gen_asset_manifest.py --check` stale until the harvest paste below).
 
+**Shipped (wave 2b — Orbital Colony dressing + `cityDetail`, 2026-09-23):** Orbital reuses the
+Metropolis machinery. Contracts: `docs/INTERFACES.md` "Wave 2b — Orbital Colony dressing" and
+"Wave 2 — `cityDetail` setting". Ben's choices (2026-09-23): **enclosed corridor tubes** as the
+walkways, **only the monorail train moves** (no ground vehicles), **decking pads under module
+clusters + rocks/craters** on the regolith. He approved the full-plot render with three tweaks:
+decking only under clusters, rocks clear of buildings, entrance pier moved.
+
+- **Layout re-laid on the Metropolis lattice** (`src/shared/Layouts/OrbitalColony.luau`): 4×4
+  blocks at x,z ∈ {±14, ±42}; `launchTower` at (0, 42) on the x = 0 axis; the 12×12 slots at
+  ±43.5 with explicit pads; `walkwayNetwork` pad at (6.5, −34.5). Tubes: central x = 0 (z −49 →
+  21), cross tube z = −28, side tubes x = ±28 — a tree, not a loop. 7 dome lots, one observation
+  platform (`PlazaA`) at (−9.5, 0), 6 rock zones (30 rocks), 12 decking rects. `streetplan.py`
+  green for all four eras.
+- **Tubes** = `road.tiles` with generated `tube-kit` props (`TubeStraight/End/Bend/Tee/Cross`,
+  `tools/assets/tube_kit.py`): a 4-wide glass corridor, capped airlock on every dead end, Metal
+  decking spurs to each module door. **No pavement and no park strips** by design.
+- **Monorail** = the Highway module in **loop mode** (no ramp, no junction): `walkwayNetwork` is
+  now **"Build the Monorail"**, `streetOnly`; ring 56, beam top 7.07, soffit 6.10; the loop reveals
+  both ways from the cell nearest the entrance; **one two-car `MonorailTrain`** rides the beam
+  centreline (`tools/assets/monorail_kit.py`, new optional `highway.vehicleProps`).
+- **Decking** = paved blocks in Metal (96, 98, 108) with the new `treeSpacing` 0 rule (no edge
+  trees, any era). **Rocks** = a 4-stage `Rocks` prop (pebbles → crystal outcrop) in the tree
+  slot, `maxCount` 30. `HouseA/B` domes, `PlazaA` platform, `LampPost` light mast. No vehicles.
+- **`cityDetail` setting:** profile **schema v6** (additive; old saves get `true`),
+  `RequestSetSetting("cityDetail")` on the same validator and rate limit, Settings panel row
+  **"City detail"** (the panel's four rows now scroll). Off = trees, rocks and park planters
+  thinned to `detail.treeShare` 0.5, no lamps, vehicles (street + deck/monorail) on the local plot
+  only; re-evaluated live through one policy function `detailPolicy`. **Publish the hub and
+  Expeditions places together** (an old place only warns on a v6 profile).
+- **Review (roblox-reviewer): no Criticals.** Majors fixed: the train left the beam at monorail
+  corners (its lane now follows the arc); rock zones sat on decking (layout inset).
+- **Render reference:** `assets/testfit/out/OrbitalColony/plot_overview.png`, `plot_entrance.png`,
+  `plot_tier2.png` (`py tools/testfit/plotrender.py OrbitalColony`).
+- **Known, not bugs:** tubes are dressing (players walk through them); the train overhangs the
+  beam slightly on corners; the future tube grid is **not** pre-drawn (unlike Metropolis park
+  strips) — a fresh Orbital plot is bare regolith.
+
 **Carried forward (owners assigned):**
 - [x] **Ben, wave 2a:** both Metropolis pastes done 2026-09-22 — props (24 records) and buildings
   (`CityHall`); 21 prop templates committed (commits `b0ce9ab`, `33b2b54`, `f6556d8`).
 - [x] **Ben, wave 2a fix round:** both pastes done 2026-09-22 — props (`PlazaA`, `PlazaB`,
   `HighwayRamp`) and buildings (`CityHall`); templates committed (commits `08643ef`, `ad67484`).
-- **Ben, before the wave 2a playtest (third round):** **two more pastes**, because the highway,
+- [x] **Ben, before the wave 2a playtest (third round), done 2026-09-23 (commit `3613cfc`):** **two more pastes**, because the highway,
   the parking garage and City Hall were rebuilt and re-uploaded — props (**4 records**:
   `HighwayDeck`, `HighwayCorner`, `HighwayJunction`, `HighwayRamp`), then buildings (**7
   records**: `ParkingGarage` stages 0-4, `CityHall`, the `garage-kit` VIP swatch) — then
@@ -1055,7 +1094,20 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   templates generated and committed.
 - [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
   generated and committed; baked paths seen and approved in Studio.
-- **Ben, next:** after the two pastes, run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4c,
+- **lead, wave 2b — upload first:** merge and upload the 13 Orbital props (16 stages) —
+  `merge_stages.py --props --era OrbitalColony`, `upload_models.py --props --era OrbitalColony` —
+  and commit `Assets.json` straight after. Steps: `docs/MANUAL_STEPS.md` M9 §11.
+- **Ben, wave 2b — one props paste (16 records):** after the upload, per M9 §11; then
+  `gen_templates.py --props`, `--check`, manifest, commit `Assets.json` **with** the templates.
+  The wave 2c session ("living city") uploads from its own worktree at the same time: **do its
+  paste and this one separately, never interleaved, each announced.** Until the paste an Orbital
+  plot draws grey tube slabs, no monorail, no rocks or domes — the designed degrade.
+- **Ben, wave 2b — publish both places together** (hub + Expeditions): the profile is now v6.
+- **Ben, next:** PLAYTEST M9 **sections 4f (Orbital) and 4g (`cityDetail`)**, then the rest of M9
+  end to end.
+- **lead, wave 2b watch items:** the train's slight overhang on corners; tubes are walk-through;
+  if Ben wants the future tube grid pre-drawn like Metropolis park strips, that is a new rule.
+- **Ben, earlier (still open):** after the two pastes, run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4c,
   4d and 4e (wave 2a, Metropolis)** and then the rest of M9 end to end (the path steps 5b–5f, 20b,
   23b–23c and section 4b for wave 1e are still open); this ticks M9 `[x]` above once passed.
 - **Ben / lead, wave 2a third round — two looks to judge, not bugs:** (a) a **fresh** Metropolis
@@ -1072,17 +1124,18 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   ≈ 220 dressing pieces** (38 tile cells + pavements, 66 highway cells, 5 kiosks, trees, plazas,
   lamps, cars) — the highest of any era, and the number to re-cut against. The fix round adds up
   to **12 block slabs** and raises `trees.maxCount` **24 → 40**, and pavement is now per cell, so
-  re-measure with PLAYTEST step 12ag rather than trusting 220.
+  re-measure with PLAYTEST step 12ag rather than trusting 220. Wave 2b adds the Orbital count
+  (tube cells, the monorail loop cells, 12 decking slabs, 30 rocks) — PLAYTEST step 12bt.
 - **lead, wave 2a watch item:** `HighwaySign` is uploaded but never placed on Metropolis (the
   7-stud-wide gantry always clips a footprint). Either narrow the blueprint or drop the prop —
   leaving it uploaded and unused costs nothing, but it is dead weight in the manifest. The third
   round's `highway-kit` covers **deck, corner, junction and ramp only**, so the sign is still the
   old kit piece.
-- **lead, wave 2b:** Orbital Colony has `lamps` but no `surface`, `variants`, `signals` or
-  `tiles` keys, so it keeps today's behaviour until its street plan lands.
-- **lead / economy-designer, wave 2b:** the Orbital Colony street plan + prop blueprints and the
-  persisted `cityDetail` setting — contracts already frozen in INTERFACES, not started.
-  **Unblocked 2026-09-22: M8 is complete, so the Orbital buildings exist.**
+- [x] **lead, wave 2b (closed 2026-09-23):** Orbital Colony now has `tiles` (tubes), `highway`
+  (monorail loop), decking blocks and rocks; still no `surface`, `variants` or `signals` — none
+  needed.
+- [x] **lead / economy-designer, wave 2b (closed 2026-09-23):** Orbital street plan, 13 prop
+  blueprints and the persisted `cityDetail` setting shipped — see the wave 2b block above.
 
 **Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
 base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.
