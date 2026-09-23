@@ -1,4 +1,4 @@
-M9 wave 2a, "Metropolis streets, highway, subway", decided by Ben 2026-09-18 and shipped 2026-09-22.
+M9 wave 2a, "Metropolis streets, highway, subway", decided by Ben 2026-09-18 and shipped 2026-09-22; **playtest signed off 2026-09-23** (Ben: "everything looks good").
 Contract: `docs/INTERFACES.md` "Wave 2a — Metropolis streets, highway, subway".
 
 - **Metropolis streets are Kenney city-kit-roads tiles at 7 studs** (= 28 / 4, four per block pitch),
@@ -22,6 +22,13 @@ Contract: `docs/INTERFACES.md` "Wave 2a — Metropolis streets, highway, subway"
 - Review lesson: a refactor that snapshots a value an earlier wave made mutable (`setVariant` mutates
   `state.material/color`) silently regresses the older eras; tabulate every renderer's Y before judging
   overlaps (spur top 0.2 vs tile top 0.14 floated the footpath).
+- Third round (2026-09-22/23) after Ben's second look: undrawn street cells are **green park strips
+  with planters** (swap to tiles as streets grow; a brand-new plot shows the whole grid green);
+  **custom generated kits are the normal answer when a Kenney kit lacks a piece**: `highway_kit.py`
+  (box-girder deck + piers replaced stacked road tiles), `garage_kit.py` (open decks), `metro_kit.py`.
+  City Hall ended **kit-only, 12 studs, white block + canopy + flags** — the custom dome was rejected
+  as "too big, ugly"; commercial kit has no civic piece. `tools/testfit/plotrender.py` (whole-plot
+  render, `--tier N`) is the reference Ben compares Studio against; keep it a verbatim client mirror.
 - Process: agents killed by the monthly spend limit resume cleanly with a `SendMessage` to the same id
   ("run `git status`, continue from where you stopped") — no measured kit facts lost.
 
