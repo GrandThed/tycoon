@@ -217,11 +217,14 @@ return {
 	-- Planters and hedges (wave 2c) keep 8 studs off every centreline (road, pavement and the
 	-- walkers), so they only fit on open paving: behind City Hall, at the head of the civic axis
 	-- beside the townhouse, and round the bus stop east of the east avenue.
+	-- `count` is the candidates the client draws, not what grows: it never redraws a rejected one and
+	-- keeps greenery.clearance between pieces, so counts are sized from tools/streetplan.py's
+	-- simulated yield (10th percentile at or above perTier's tier-5 count).
 	greeneryZones = {
-		{ center = Vector3.new(1, 0, 13), radius = 4, count = 7 },
-		{ center = Vector3.new(3, 0, 39), radius = 4, count = 6 },
-		{ center = Vector3.new(47, 0, -3), radius = 4, count = 5 },
-		{ center = Vector3.new(47, 0, 7), radius = 4, count = 5 },
+		{ center = Vector3.new(1, 0, 13), radius = 4, count = 11 },
+		{ center = Vector3.new(3, 0, 39), radius = 4, count = 10 },
+		{ center = Vector3.new(47, 0, -3), radius = 4, count = 9 },
+		{ center = Vector3.new(47, 0, 7), radius = 4, count = 9 },
 	},
 	-- Paved blocks (INTERFACES "Paved blocks"): the ground between the streets, one slab per
 	-- rectangle, shown once any of its `slots` is owned and edged with street trees. Every rect

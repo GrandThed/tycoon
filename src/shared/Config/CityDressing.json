@@ -170,7 +170,8 @@
           4,
           5
         ],
-        "offset": 1.3,
+        "offset": 1.6,
+        "clearance": 0.6,
         "speed": 2.5,
         "bobHeight": 0.12,
         "bobHz": 2.2,
@@ -245,7 +246,7 @@
         "requiresSlot": "streetlampRow",
         "placement": "row",
         "spacing": 24,
-        "offset": 0.8
+        "offset": 1.2
       },
       "vehicles": {
         "props": [
@@ -259,7 +260,7 @@
       "signals": {
         "prop": "TrafficLight",
         "requiresSlot": "trafficLights",
-        "offset": 0.8,
+        "offset": 1.5,
         "maxPerPlot": 6
       },
       "greenery": {
@@ -272,13 +273,13 @@
         ],
         "perTier": [
           4,
-          10,
+          8,
+          12,
           16,
-          22,
-          28
+          20
         ],
         "lotGarnish": 1,
-        "clearance": 2.5,
+        "clearance": 2.2,
         "roadClearance": 0.5
       },
       "parked": {
@@ -304,7 +305,8 @@
           6,
           7
         ],
-        "offset": 4.8,
+        "offset": 4.35,
+        "clearance": 0.6,
         "speed": 3,
         "bobHeight": 0.1,
         "bobHz": 2.4,
@@ -446,11 +448,11 @@
           2,
           5,
           8,
-          12,
-          16
+          11,
+          14
         ],
         "lotGarnish": 2,
-        "clearance": 2,
+        "clearance": 1.8,
         "roadClearance": 0.5
       },
       "parked": {
@@ -477,6 +479,7 @@
           8
         ],
         "offset": 5.5,
+        "clearance": 0.6,
         "speed": 3.2,
         "bobHeight": 0.08,
         "bobHz": 2.6,
@@ -604,6 +607,11 @@
     },
     "birds": {
       "firstTier": 2,
+      "eras": [
+        "Village",
+        "Boomtown",
+        "Metropolis"
+      ],
       "flocksPerTier": [
         0,
         1,

@@ -150,10 +150,23 @@ PARK_TIERS = (2, 5)  # parked vehicles start at tier 2 (INTERFACES "Done when")
 PARK_ROAD_GAP = 0.5  # off every lane strip: this far outside the drawn road edge
 PARK_GAP = 0.5  # daylight to footprints, pads, lots, plazas, kiosks and other bays
 PARK_STREET_REACH = 6.0  # a bay's near edge within this of the drawn road edge, or it is not kerbside
-# Walkers are chunky ~1-stud figures on a lane `pedestrians.offset` off each centreline; a bay keeps
-# this much daylight from the lane line so nobody walks through a parked car.
-WALKER_HALF = 0.5
+# Half a walker's width, arm to arm (tools/assets/people_kit.py ARM_OUT). A bay keeps this plus
+# PARK_GAP from a walk lane line, and a walker this far out from its lane must clear the cars.
+WALKER_HALF = 0.42
 GREENERY_ZONE_COUNT = (2, 8)
+# Walk lanes are clipped wherever they pass within `pedestrians.clearance` of a solid; the tool
+# samples every lane this finely to find the clipped runs.
+WALK_SAMPLE = 0.25
+POST_FALLBACK = 0.5  # base width of a lamp or signal whose prop is not harvested yet
+# RoadGraph.SignalSpots constants, mirrored.
+SIGNAL_MIN_ARMS = 3
+SIGNAL_GAP_MIN = math.pi / 6
+SIGNAL_GAP_MAX = math.pi * 0.95
+# Greenery yield (Scatter.greenerySpots draws exactly `count` candidates per zone and never redraws
+# one it rejects): simulated over this many seeds; the plan fails when this quantile of the yield
+# falls short of perTier's tier-5 count.
+GREENERY_SEEDS = 120
+GREENERY_QUANTILE = 0.10
 
 # Spurs longer than this (anchor to join, ~11 studs of it under the building and pad) are listed so
 # "every path reads as a short front path" can be judged.
@@ -1601,26 +1614,305 @@ def ramp_squares(era):
     ]
 
 
-def walk_lines(era):
-    """Where walkers go (INTERFACES "Pedestrians"): `pedestrians.offset` either side of every
-    spine centreline and every spur. On a tiles era's narrow footpath spurs the street offset
-    would put walkers beside the buildings, so the tool assumes they keep to the footpath there."""
+def spur_path_width(era):
+    """RoadGraph's state.spurWidth: a tiles era's footpath width, the road width elsewhere."""
+    if era.tiles and "spur" in era.tiles:
+        return float(era.tiles["spur"]["width"])
+    return era.width
+
+
+def trimmed(points, start, back):
+    """RoadGraph.trimmed: the part of a polyline from arc `start` to `back` short of its end."""
+    total = sum(math.dist(a, b) for a, b in polyline_segments(points))
+    stop = total - back
+    if stop - start < MIN_LENGTH:
+        return None
+    kept, arc = [], 0.0
+    for a, b in polyline_segments(points):
+        length = math.dist(a, b)
+        if length < MIN_LENGTH:
+            continue
+        lo, hi = max(start, arc), min(stop, arc + length)
+        if hi > lo:
+            p, q = lerp(a, b, (lo - arc) / length), lerp(a, b, (hi - arc) / length)
+            if not kept or math.dist(kept[-1], p) > 1e-9:
+                kept.append(p)
+            kept.append(q)
+        arc += length
+    return kept if len(kept) >= 2 else None
+
+
+def offset_polyline(points, off):
+    """Each segment moved `off` to its right (RoadGraph: (b - a).Unit:Cross(UP) * side)."""
+    segments = []
+    for a, b in polyline_segments(points):
+        d = unit((b[0] - a[0], b[1] - a[1]))
+        if d is None:
+            continue
+        r = (-d[1] * off, d[0] * off)
+        segments.append(((a[0] + r[0], a[1] + r[1]), (b[0] + r[0], b[1] + r[1])))
+    return segments
+
+
+def walk_lanes(era, network, visible):
+    """RoadGraph.buildWalkLanes at full ownership, on straight centrelines (a meander moves lanes and
+    the things beside them alike): both sides of every drawn stretch at `pedestrians.offset`, and
+    both sides of every drawn spur at min(offset, spurWidth / 2), from the pad's inner edge (the
+    door) to the kerb of the street it joins."""
     config = era.dressing.get("pedestrians")
     if not config or "offset" not in config:
         return []
-    offset = float(config["offset"])
-    lines = []
-    runs = [(a, b, offset) for _, a, b in era.spine_segments()]
-    spur_offset = min(offset, spur_half_width(era)) if era.tiles else offset
-    runs += [(a, b, spur_offset) for a, b in spur_segments(era)]
-    for a, b, off in runs:
-        direction = unit((b[0] - a[0], b[1] - a[1]))
-        if direction is None:
+    offset = max(float(config["offset"]), 0.0)
+    lanes = []
+    for sid in sorted(visible):
+        stretch = network.stretches[sid]
+        for side in (1, -1):
+            segments = offset_polyline([stretch["a"], stretch["b"]], offset * side)
+            if segments:
+                lanes.append({"kind": "street", "key": sid, "owner": None, "segments": segments})
+    spur_side = min(offset, spur_path_width(era) / 2)
+    for slot in era.slots:
+        spur = era.spurs[slot["id"]]
+        if spur["none"] or len(spur["points"]) < 2:
             continue
-        nx, nz = -direction[1] * off, direction[0] * off
-        lines.append(((a[0] + nx, a[1] + nz), (b[0] + nx, b[1] + nz)))
-        lines.append(((a[0] - nx, a[1] - nz), (b[0] - nx, b[1] - nz)))
-    return lines
+        door = max(math.dist(slot["pad"], slot["position"]) - era.pad_size[1] / 2, 0.0)
+        kerb = era.width / 2 if spur["joins"] else 0.0
+        walk = trimmed(spur["points"], door, kerb)
+        if walk is None:
+            continue
+        for side in (1, -1):
+            segments = offset_polyline(walk, spur_side * side)
+            if segments:
+                lanes.append({"kind": "spur", "key": slot["id"], "owner": slot["id"], "segments": segments})
+    return lanes
+
+
+def walk_lines(era, network, visible):
+    return [segment for lane in walk_lanes(era, network, visible) for segment in lane["segments"]]
+
+
+def post_size(era, prop):
+    """Base width of a pole prop: its narrower harvested extent (an arm or a lamp head is up high,
+    out of a walker's way)."""
+    extents = harvested_extents(era.name, prop) if prop else None
+    return min(extents[0], extents[2]) if extents else POST_FALLBACK
+
+
+def planner_solids(era):
+    """Scatter.solidsFor with the declared footprints: every slot that spawns a model, every pad,
+    lot, plaza and subway kiosk, as (name, kind, polygon, owning slot id or None)."""
+    street_only = {slot["id"] for slot in era.config["slots"] if slot.get("streetOnly")}
+    solids = []
+    for slot in era.slots:
+        if slot["id"] not in street_only:
+            solids.append((f"{slot['id']} footprint", "slot footprint", slot["footprint"], slot["id"]))
+        solids.append((f"{slot['id']} pad", "pad", slot["pad_poly"], slot["id"]))
+    solids += [(f"lot {j + 1}", f"{lot['kind']} lot", lot["poly"], None) for j, lot in enumerate(era.lots)]
+    solids += [(f"plaza {j + 1}", "plaza", plaza["poly"], None) for j, plaza in enumerate(era.plazas)]
+    solids += [(f"subway entrance {j + 1}", "subway kiosk", entry["poly"], None) for j, entry in enumerate(era.subways)]
+    return solids
+
+
+def row_lamp_posts(era, network):
+    """Scatter.lampPosts ("row" placement): a post every `spacing` of arc along each street run,
+    alternating sides, width / 2 + offset out, dropped inside a solid or within width / 2 of another
+    street or a spur, thinned evenly to budget.lampPosts. A run is taken as the stretches its
+    polyline owns, in order -- the client's runs may split a shared ring differently, so treat the
+    positions as a close mirror, not an exact one."""
+    lamps = era.dressing.get("lamps") or {}
+    spacing = lamps.get("spacing")
+    if not lamps.get("prop") or lamps.get("placement") != "row" or not spacing or spacing < MIN_LENGTH:
+        return []
+    reach = era.width / 2 + max(float(lamps.get("offset", 0)), 0.0)
+    clearance = era.width / 2
+    solids = [poly for _, _, poly, _ in planner_solids(era)]
+    spurs = spur_segments(era)
+    posts = []
+    for polyline in range(len(era.streets)):
+        ids = [sid for sid, s in enumerate(network.stretches) if s["polyline"] == polyline and s["segment"] is not None]
+        ids.sort(key=lambda sid: (network.stretches[sid]["segment"], network.stretches[sid]["t0"]))
+        points, arcs, total = [], [], 0.0
+        for sid in ids:
+            for p in (network.stretches[sid]["a"], network.stretches[sid]["b"]):
+                if points:
+                    advance = math.dist(p, points[-1])
+                    if advance < MIN_LENGTH:
+                        continue
+                    total += advance
+                points.append(p)
+                arcs.append(total)
+        if len(points) < 2:
+            continue
+        others = [(a, b) for index, a, b in era.spine_segments() if index != polyline]
+        index = 1
+        for step in range(1, int(total // spacing) + 1):
+            target = spacing * step
+            while index < len(arcs) - 1 and arcs[index] < target:
+                index += 1
+            a, b = points[index - 1], points[index]
+            d = unit((b[0] - a[0], b[1] - a[1]))
+            if d is None:
+                continue
+            hand = 1 if step % 2 == 1 else -1
+            span = arcs[index] - arcs[index - 1]
+            base = lerp(a, b, (target - arcs[index - 1]) / span if span > 0 else 0.0)
+            position = (base[0] - d[1] * hand * reach, base[1] + d[0] * hand * reach)
+            if any(point_in_polygon(position, poly) for poly in solids):
+                continue
+            if any(point_segment_distance(position, p, q)[0] < clearance for p, q in others + spurs):
+                continue
+            posts.append(position)
+    cap = int(budget_value(era.city.get("budget", {}).get("lampPosts"), era.city["lamps"]["maxPerPlot"]))
+    count = len(posts)
+    if count <= cap:
+        return posts
+    return [post for i, post in enumerate(posts, start=1) if (i * cap) // count != ((i - 1) * cap) // count]
+
+
+def junction_lamp_spots(era):
+    """Scatter.LampFrame at every spur junction ("junction" placement). The client lights a seeded
+    subset; every candidate is returned, since any of them may be one that is lit."""
+    lamps = era.dressing.get("lamps") or {}
+    if not lamps.get("prop") or lamps.get("placement", "junction") != "junction":
+        return []
+    spots = []
+    for slot in era.slots:
+        spur = era.spurs[slot["id"]]
+        if not spur["joins"] or len(spur["points"]) < 2:
+            continue
+        a, b = spur["points"][-2], spur["points"][-1]
+        d = unit((b[0] - a[0], b[1] - a[1]))
+        if d is None:
+            continue
+        back = max(0.0, min(math.dist(a, b), era.width))
+        right = (-d[1], d[0])
+        spots.append((b[0] - d[0] * back + right[0] * era.width / 2, b[1] - d[1] * back + right[1] * era.width / 2))
+    return spots
+
+
+def signal_spots(era, network):
+    """RoadGraph.SignalSpots: at each node where three or more stretches meet, in node order, the
+    corner of the widest usable gap, `offset` outside both road edges, capped at maxPerPlot."""
+    config = era.dressing.get("signals")
+    if not config or not config.get("prop"):
+        return []
+    reach = era.width / 2 + max(float(config.get("offset", 0)), 0.0)
+    cap = config.get("maxPerPlot", math.inf)
+    spots = []
+    for node, stretch_ids in enumerate(network.node_stretches):
+        if len(spots) >= cap:
+            break
+        if len(stretch_ids) < SIGNAL_MIN_ARMS:
+            continue
+        point = network.nodes[node]
+        arms = []
+        for sid in stretch_ids:
+            stretch = network.stretches[sid]
+            far = stretch["b"] if stretch["from"] == node else stretch["a"]
+            d = unit((far[0] - point[0], far[1] - point[1]))
+            if d is not None:
+                arms.append(d)
+        if len(arms) < SIGNAL_MIN_ARMS:
+            continue
+        arms.sort(key=lambda v: math.atan2(v[1], v[0]))
+        corner, best = None, 0.0
+        for i, arm in enumerate(arms):
+            following = arms[(i + 1) % len(arms)]
+            angle = math.atan2(following[1], following[0]) - math.atan2(arm[1], arm[0])
+            if angle <= 0:
+                angle += math.tau
+            if SIGNAL_GAP_MIN <= angle <= SIGNAL_GAP_MAX and angle > best:
+                corner, best = unit((arm[0] + following[0], arm[1] + following[1])), angle
+        if corner is None:
+            continue
+        distance = reach / math.sin(best / 2)
+        spots.append((point[0] + corner[0] * distance, point[1] + corner[1] * distance))
+    return spots
+
+
+def street_posts(era, network):
+    """(kind, polygon) for every lamp post and signal the client may stand beside a street."""
+    posts = []
+    lamps = era.dressing.get("lamps") or {}
+    size = post_size(era, lamps.get("prop"))
+    posts += [("row lamp", square(p, size, size, 0)) for p in row_lamp_posts(era, network)]
+    posts += [("junction lamp", square(p, size, size, 0)) for p in junction_lamp_spots(era)]
+    signals = era.dressing.get("signals") or {}
+    size = post_size(era, signals.get("prop"))
+    posts += [("signal", square(p, size, size, 0)) for p in signal_spots(era, network)]
+    return posts
+
+
+def walk_clip_report(era, network, visible):
+    """Where the client clips walk lanes: every stretch of a lane that passes within
+    `pedestrians.clearance` of a solid other than a pad (a spur's lanes never clip on their own building).
+    Returns (clip count, clips by kind of solid, violations). A clip is only a dead end, so it is
+    information; a street whose lanes are clipped end to end on *both* sides has nowhere to walk."""
+    config = era.dressing.get("pedestrians")
+    if not config:
+        return 0, {}, []
+    clearance = max(float(config.get("clearance", 0)), 0.0)
+    # Pads are flat and walkable, so walkers cross them (lead ruling, 2026-09-23).
+    solids = [(kind, poly, owner) for _, kind, poly, owner in planner_solids(era) if kind != "pad"]
+    solids += [(kind, poly, None) for kind, poly in street_posts(era, network)]
+    boxes = []
+    for kind, poly, owner in solids:
+        xs, zs = [p[0] for p in poly], [p[1] for p in poly]
+        boxes.append((min(xs) - clearance, max(xs) + clearance, min(zs) - clearance, max(zs) + clearance, kind, poly, owner))
+    clips, hits, sides = 0, {}, {}
+    for lane in walk_lanes(era, network, visible):
+        flags = []
+        for a, b in lane["segments"]:
+            steps = max(1, int(math.dist(a, b) / WALK_SAMPLE))
+            for k in range(steps + 1):
+                q = lerp(a, b, k / steps)
+                hit = None
+                for x0, x1, z0, z1, kind, poly, owner in boxes:
+                    if owner is not None and owner == lane["owner"]:
+                        continue
+                    if not (x0 <= q[0] <= x1 and z0 <= q[1] <= z1):
+                        continue
+                    if point_in_polygon(q, poly) or point_polygon_distance(q, poly) < clearance - 1e-6:
+                        hit = kind
+                        break
+                flags.append(hit)
+        previous = None
+        for hit in flags:
+            if hit is not None and previous is None:
+                clips += 1
+                hits[hit] = hits.get(hit, 0) + 1
+            previous = hit
+        sides.setdefault((lane["kind"], lane["key"]), []).append(bool(flags) and all(flag is not None for flag in flags))
+    violations = []
+    for (kind, key), clipped in sides.items():
+        if kind == "street" and len(clipped) == 2 and all(clipped):
+            stretch = network.stretches[key]
+            violations.append(
+                f"walk lanes: street {fmt(stretch['a'])}->{fmt(stretch['b'])} is clipped end to end on both "
+                "sides, so no walker can use it"
+            )
+    return clips, hits, violations
+
+
+def walker_vehicle_violations(era):
+    """A walker on its lane must clear the cars on theirs: offset - WALKER_HALF >= the vehicle lane
+    offset + half the widest harvested vehicle."""
+    config = era.dressing.get("pedestrians")
+    vehicles = era.dressing.get("vehicles") or {}
+    if not config or "offset" not in config:
+        return []
+    fraction = era.dressing["road"].get("laneOffsetFraction", era.city["road"]["laneOffsetFraction"])
+    widths = [e[0] for e in (harvested_extents(era.name, p) for p in vehicles.get("props", [])) if e]
+    if not widths:
+        return []
+    car_edge = fraction * era.width + max(widths) / 2
+    walker_edge = float(config["offset"]) - WALKER_HALF
+    if walker_edge < car_edge - 1e-6:
+        return [
+            f"pedestrians.offset {config['offset']:g}: a walker reaches {walker_edge:.2f} from the centreline, "
+            f"into the cars (to {car_edge:.2f})"
+        ]
+    return []
 
 
 def lot_count_violations(era):
@@ -1777,7 +2069,8 @@ def parking_violations(era, network, visible):
     spur_half = spur_half_width(era)
     spines = [(a, b) for _, a, b in era.spine_segments()]
     spurs = spur_segments(era)
-    lanes = walk_lines(era)
+    # A bay keeps clear of the walk lanes as they are drawn at full ownership.
+    lanes = walk_lines(era, network, visible)
     solids = []
     for slot in era.slots:
         if slot["id"] not in era.furniture:
@@ -1787,6 +2080,8 @@ def parking_violations(era, network, visible):
     solids += [(f"plaza {j + 1}", plaza["poly"]) for j, plaza in enumerate(era.plazas)]
     solids += [(f"subway entrance {j + 1}", entry["poly"]) for j, entry in enumerate(era.subways)]
     solids += [("the Sign", era.sign_poly)]
+    # Lamp posts and signals, the row lamps included: a car parked across a lantern reads as a crash.
+    solids += [(f"a {kind}", poly) for kind, poly in street_posts(era, network)]
     solids += [("a ring pier", pier) for pier in pier_squares(era)]
     solids += [("the highway ramp", ramp) for ramp in ramp_squares(era)]
     # A path only counts as a kerb where it is out in the open: the stretch under its own building
@@ -1907,14 +2202,18 @@ def greenery_violations(era):
     keep, _, solids = greenery_rules(era)
     lines = [(a, b) for _, a, b in era.spine_segments()] + spur_segments(era)
     inner = float(era.highway["ring"]) - era.tile_studs / 2 if era.highway else math.inf
-    _, stats = scatter_greenery(era)
-    if per_tier:
-        # The client draws `count` candidates per zone and never redraws a rejected one, so what a
-        # zone yields is its count times the share of it that is plantable.
-        expected = sum(zone["count"] * usable for zone, usable, _ in stats)
-        if expected < per_tier[-1] - 1e-6:
+    if per_tier and zones:
+        yields = greenery_yields(era)
+        low = yields[int(GREENERY_QUANTILE * (len(yields) - 1))]
+        median = yields[len(yields) // 2]
+        notes.append(
+            f"greenery zone yield over {len(yields)} seeds: min {yields[0]}, "
+            f"p{int(GREENERY_QUANTILE * 100)} {low}, median {median} (perTier tier 5 = {per_tier[-1]})"
+        )
+        if low < per_tier[-1]:
             messages.append(
-                f"greeneryZones yield about {expected:.1f} pieces (count x plantable share), fewer than perTier's {per_tier[-1]}"
+                f"greeneryZones: the {int(GREENERY_QUANTILE * 100)}th-percentile yield is {low} pieces, fewer than "
+                f"perTier's {per_tier[-1]} (the client draws `count` candidates per zone and never redraws)"
             )
     for index, zone in enumerate(zones):
         label = f"greenery zone {index + 1} {fmt(zone['center'])}"
@@ -1928,6 +2227,102 @@ def greenery_violations(era):
         if max(abs(c[0]), abs(c[1])) + zone["radius"] > inner - 1e-6:
             messages.append(f"{label}: reaches into the ring pillar band")
     return messages, notes
+
+
+def _boxed(polys, margin):
+    """(x0, x1, z0, z1, poly) with the box grown by `margin`, so a point test can skip most polygons."""
+    boxed = []
+    for poly in polys:
+        xs, zs = [p[0] for p in poly], [p[1] for p in poly]
+        boxed.append((min(xs) - margin, max(xs) + margin, min(zs) - margin, max(zs) + margin, poly))
+    return boxed
+
+
+def _near_any(p, boxed, margin):
+    for x0, x1, z0, z1, poly in boxed:
+        if x0 <= p[0] <= x1 and z0 <= p[1] <= z1:
+            if point_in_polygon(p, poly) or point_polygon_distance(p, poly) < margin:
+                return True
+    return False
+
+
+def greenery_yields(era, seeds=GREENERY_SEEDS):
+    """Sorted zone-piece yields of Scatter.greenerySpots over `seeds` random streams: the zone trees
+    are drawn first (Scatter.treeSpots: `count` draws per zone, thinned to the tree cap after the
+    street trees), then each greenery zone draws exactly `count` candidates and keeps those that
+    pass every rule *and* stand `clearance` from every tree and every piece already kept. The
+    result is capped at perTier's tier-5 count, as the client caps it."""
+    config = era.dressing["greenery"]
+    per_tier = config.get("perTier") or [0]
+    zone_cap = min(per_tier[-1], budget_value(era.city.get("budget", {}).get("greenery"), math.inf))
+    keep, clearance, solids = greenery_rules(era)
+    lines = [(a, b) for _, a, b in era.spine_segments()] + spur_segments(era)
+    edge = era.city["trees"]["edgeMargin"]
+    half_x, half_z = era.half_x - edge, era.half_z - edge
+    sign_keep = era.dressing["trees"]["clearance"]
+    boxed = _boxed(solids, clearance / 2)
+
+    trees_cfg = era.dressing["trees"]
+    tree_clear = trees_cfg["clearance"]
+    anchors = [s["position"] for s in era.slots] + [s["pad"] for s in era.slots]
+    anchors += [lot["position"] for lot in era.lots] + [p["position"] for p in era.plazas] + [era.sign]
+    tree_road = era.width / 2 + era.amplitude + era.city["trees"]["roadClearance"]
+    footprint_margin = era.city["trees"]["footprintMargin"]
+    tree_solids = [poly for _, _, poly, _ in planner_solids(era)]
+    tree_boxed = _boxed(tree_solids, footprint_margin)
+    street_trees = street_tree_spots(era) if trees_cfg.get("prop") else []
+    tree_cap = max(
+        min(max(trees_cfg["maxCount"], 0), budget_value(era.city.get("budget", {}).get("trees"), math.inf)) - len(street_trees),
+        0,
+    )
+
+    def near_line(p, limit):
+        return any(point_segment_distance(p, a, b)[0] < limit for a, b in lines)
+
+    def tree_ok(p):
+        if abs(p[0]) > half_x or abs(p[1]) > half_z:
+            return False
+        if any(math.dist(p, a) < tree_clear for a in anchors):
+            return False
+        if _near_any(p, tree_boxed, footprint_margin):
+            return False
+        return not any(point_segment_distance(p, a, b)[0] < tree_road for a, b in lines)
+
+    def piece_ok(p):
+        if abs(p[0]) > half_x or abs(p[1]) > half_z or math.dist(p, era.sign) < sign_keep:
+            return False
+        if _near_any(p, boxed, clearance / 2):
+            return False
+        return not near_line(p, keep)
+
+    yields = []
+    for seed in range(seeds):
+        rng = random.Random(seed * 7919 + 7001)
+        trees = []
+        if trees_cfg.get("prop"):
+            for zone in era.zones:
+                for _ in range(max(int(zone["count"]), 0)):
+                    radial, angle = zone["radius"] * math.sqrt(rng.random()), math.tau * rng.random()
+                    rng.random()
+                    p = (zone["center"][0] + radial * math.cos(angle), zone["center"][1] + radial * math.sin(angle))
+                    if tree_ok(p):
+                        trees.append(p)
+            if len(trees) > tree_cap:
+                total = len(trees)
+                trees = [t for i, t in enumerate(trees, start=1) if (i * tree_cap) // total != ((i - 1) * tree_cap) // total]
+        taken = trees + street_trees
+        kept = 0
+        for zone in era.greenery_zones:
+            for _ in range(max(int(zone["count"]), 0)):
+                radial, angle = zone["radius"] * math.sqrt(rng.random()), math.tau * rng.random()
+                rng.random()
+                rng.random()
+                p = (zone["center"][0] + radial * math.cos(angle), zone["center"][1] + radial * math.sin(angle))
+                if piece_ok(p) and all(math.dist(p, q) >= clearance for q in taken):
+                    taken.append(p)
+                    kept += 1
+        yields.append(min(kept, zone_cap))
+    return sorted(yields)
 
 
 def scatter_greenery(era):
@@ -2092,6 +2487,11 @@ def check(era, network, visible, unreachable):
             add(message)
     for message in parking_violations(era, network, visible):
         add(message)
+    for message in walker_vehicle_violations(era):
+        add(message)
+    clips, clip_kinds, clip_messages = walk_clip_report(era, network, visible)
+    for message in clip_messages:
+        add(message)
     greenery_messages, greenery_notes = greenery_violations(era)
     for message in greenery_messages:
         add(message)
@@ -2165,6 +2565,11 @@ def check(era, network, visible, unreachable):
         c = zone["center"]
         if abs(c[0]) > era.half_x or abs(c[1]) > era.half_z:
             add(f"tree zone {i + 1}: centre {fmt(c)} outside the plot")
+        # Client trees do not know about parked bays (so existing trees never shift), so a grove
+        # and a bay must simply never share ground.
+        for j, spot in enumerate(era.parking):
+            if point_in_polygon(c, spot["poly"]) or point_polygon_distance(c, spot["poly"]) < zone["radius"] - 1e-6:
+                add(f"tree zone {i + 1} {fmt(c)} r{zone['radius']:g}: reaches parking {j + 1} {fmt(spot['position'])}")
 
     # RoadGraph.allocate reserves for the whole network up front -- every stretch, every spur and
     # every bend node, drawn or not -- so a plan is only safe when the *reserved* total fits.
@@ -2239,6 +2644,9 @@ def check(era, network, visible, unreachable):
                 f"{detail['boundary']} road run(s) sit exactly on a .5 piece-rounding boundary; counted high, "
                 "the client may use one piece fewer each (float32)"
             )
+    if era.dressing.get("pedestrians"):
+        detail["walkClips"] = clips
+        detail["walkClipKinds"] = clip_kinds
     return violations, notes, near, far, detail
 
 
@@ -2283,8 +2691,6 @@ def scatter_trees(era):
     footprint_margin = era.city["trees"]["footprintMargin"]
     solids = [s["footprint"] for s in era.slots] + [s["pad_poly"] for s in era.slots]
     solids += [lot["poly"] for lot in era.lots] + [plaza["poly"] for plaza in era.plazas]
-    # Wave 2c: a grove must not grow through a parked car either.
-    solids += [spot["poly"] for spot in era.parking]
     rng = random.Random(era.name)
     placed = []
     stats = []
@@ -2475,7 +2881,7 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         tag = "s" if lot["kind"] == "small" else "L"
         canvas.text((c[0] - 14, c[1] - 7), f"{tag}{int(lot['tier'])}#{index + 1}", font=small, fill=(90, 50, 20))
 
-    for a, b in walk_lines(era):
+    for a, b in walk_lines(era, network, visible):
         canvas.line([px(a), px(b)], fill=(220, 60, 150, 110), width=1)
 
     for index, spot in enumerate(era.parking):
@@ -2726,6 +3132,9 @@ def main():
                 f"   greenery zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "
                 f"{usable * 100:.0f}% plantable, preview fits {kept}"
             )
+        if "walkClips" in detail:
+            kinds = ", ".join(f"{kind} {count}" for kind, count in sorted(detail["walkClipKinds"].items()))
+            print(f"   walk lanes: {detail['walkClips']} clipped runs at full ownership ({kinds or 'none'})")
         for note in notes:
             print(f"   note: {note}")
         for violation in violations:

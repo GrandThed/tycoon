@@ -163,8 +163,15 @@ type Obstacle = { position: Vector3, radius: number }
 -- Model-space XZ rectangle around a bottom-centre anchor (front -Z), not necessarily centred.
 export type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
 -- Extents placed in the plot; `rotation` is the turn about Y only, with no translation.
--- `slotId` (wave 2c) marks a slot's own building and pad, which that slot's footpath may cross.
-export type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents, slotId: string? }
+-- `slotId` (wave 2c) marks a slot's own building and pad, which that slot's footpath may cross;
+-- `pad` marks a buy pad, which is flat walkable ground to a walker.
+export type Footprint = {
+	origin: Vector3,
+	rotation: CFrame,
+	extents: Extents,
+	slotId: string?,
+	pad: boolean?,
+}
 -- An axis-aligned plot-local rectangle, the shape TileRenderer cuts its slabs against.
 export type Rect = { x0: number, x1: number, z0: number, z1: number }
 
@@ -367,6 +374,7 @@ local function solidsFor(input: PlanInput): ({ Footprint }, { [number]: Footprin
 			or slotLayout.position + facingFor(slotLayout.rotationY) * layout.padOffset
 		-- Pads are placed unrotated in the plot frame (PlotService.padWorldCFrame).
 		add(padCentre, 0, centredExtents(layout.padSize.X, layout.padSize.Z), slotId)
+		footprints[#footprints].pad = true
 	end
 
 	-- A lot's house is picked only after the trees (fixed draw order), so a lot reserves the
@@ -1493,7 +1501,14 @@ function Scatter.WalkSolids(
 	input: PlanInput,
 	furniture: { { frame: CFrame, prop: string? } }
 ): { Footprint }
-	local solids = footprintsFor(input)
+	-- Pads are flat ground a walker crosses (a Metropolis block pad covers the pavement); every
+	-- other solid stays.
+	local solids: { Footprint } = {}
+	for _, footprint in footprintsFor(input) do
+		if not footprint.pad then
+			table.insert(solids, footprint)
+		end
+	end
 	for _, item in furniture do
 		local prop = item.prop
 		local extents = if prop ~= nil then harvestedUnion(input.eraName, { prop }) else nil

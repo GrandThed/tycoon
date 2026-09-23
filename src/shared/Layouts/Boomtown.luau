@@ -211,15 +211,17 @@ return {
 	},
 	-- Frontage houses: the pair the ring's front leg still has room for either side of the cross
 	-- street, two more facing the cross street from the clock tower's block, the east lay-by and
-	-- the two quiet corners by the bowling alley and the cinema.
+	-- the two quiet corners by the bowling alley and the cinema. The five on the ring stand half a
+	-- stud or more further back than the road rule needs (wave 2c), so the walkers' lane on the
+	-- verge (pedestrians.offset + clearance) passes their fronts without clipping.
 	lots = {
-		{ position = Vector3.new(-41, 0, -45.5), rotationY = 0, tier = 2 },
-		{ position = Vector3.new(41, 0, -45.5), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(-41, 0, -44.9), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(41, 0, -44.9), rotationY = 0, tier = 2 },
 		{ position = Vector3.new(-20, 0, -32), rotationY = 0, tier = 3 },
 		{ position = Vector3.new(20, 0, -32), rotationY = 0, tier = 3 },
-		{ position = Vector3.new(42, 0, -21.5), rotationY = 270, tier = 4 },
-		{ position = Vector3.new(-42, 0, 18.5), rotationY = 90, tier = 4 },
-		{ position = Vector3.new(42, 0, -11), rotationY = 270, tier = 5 },
+		{ position = Vector3.new(41.4, 0, -21.5), rotationY = 270, tier = 4 },
+		{ position = Vector3.new(-41.5, 0, 18.5), rotationY = 90, tier = 4 },
+		{ position = Vector3.new(41.4, 0, -11), rotationY = 270, tier = 5 },
 		{ position = Vector3.new(-44, 0, 44), rotationY = 0, tier = 5 },
 		-- Wave 2c: the town fills in behind its storefronts. Sheds ("small", 6x6 cap) take the
 		-- yards behind the shop rows and the civic row; the three new houses take the only ground
@@ -281,14 +283,17 @@ return {
 	-- inside the town they are small beds in the yards behind the shop rows and the civic row;
 	-- two larger beds fill the gaps in the back treeline (the west one shares its ground with the
 	-- cinema-side shed's parked car, so it draws more candidates).
+	-- `count` is the candidates the client draws, not what grows: it never redraws a rejected one and
+	-- keeps greenery.clearance between pieces, so counts are sized from tools/streetplan.py's
+	-- simulated yield (10th percentile at or above perTier's tier-5 count).
 	greeneryZones = {
-		{ center = Vector3.new(25, 0, 17), radius = 3, count = 4 },
-		{ center = Vector3.new(-23, 0, -23), radius = 3, count = 4 },
-		{ center = Vector3.new(17, 0, -23), radius = 3, count = 4 },
-		{ center = Vector3.new(-23, 0, 33), radius = 3, count = 4 },
-		{ center = Vector3.new(23, 0, 39), radius = 3, count = 4 },
-		{ center = Vector3.new(-23, 0, -3), radius = 3, count = 4 },
-		{ center = Vector3.new(-24, 0, 54), radius = 4, count = 7 },
-		{ center = Vector3.new(25, 0, 53), radius = 5, count = 8 },
+		{ center = Vector3.new(25, 0, 17), radius = 3, count = 8 },
+		{ center = Vector3.new(-23, 0, -23), radius = 3, count = 8 },
+		{ center = Vector3.new(17, 0, -23), radius = 3, count = 8 },
+		{ center = Vector3.new(-23, 0, 33), radius = 3, count = 8 },
+		{ center = Vector3.new(23, 0, 39), radius = 3, count = 8 },
+		{ center = Vector3.new(-23, 0, -3), radius = 3, count = 8 },
+		{ center = Vector3.new(-24, 0, 54), radius = 4, count = 11 },
+		{ center = Vector3.new(25, 0, 53), radius = 5, count = 12 },
 	},
 }

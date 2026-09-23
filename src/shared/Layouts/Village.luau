@@ -219,7 +219,7 @@ return {
 		-- 13-15: round the square and at the head of the farm track
 		{ position = Vector3.new(17, 0, -1), rotationY = 0, tier = 3, kind = "small" },
 		{ position = Vector3.new(-6, 0, 8), rotationY = 0, tier = 3, kind = "small" },
-		{ position = Vector3.new(35, 0, -25), rotationY = 90, tier = 3, kind = "small" },
+		{ position = Vector3.new(36, 0, -25), rotationY = 90, tier = 3, kind = "small" },
 		-- 16-18: by the farm, the stables and the woodcutter
 		{ position = Vector3.new(43, 0, 1), rotationY = 90, tier = 4, kind = "small" },
 		{ position = Vector3.new(39, 0, 20), rotationY = 0, tier = 4, kind = "small" },
@@ -235,7 +235,7 @@ return {
 	parking = {
 		{ position = Vector3.new(-3, 0, -18), rotationY = 0, tier = 2 },
 		{ position = Vector3.new(-42, 0, -34), rotationY = 0, tier = 2, lot = 9 },
-		{ position = Vector3.new(30, 0, -25), rotationY = 0, tier = 3, lot = 15 },
+		{ position = Vector3.new(31, 0, -25), rotationY = 0, tier = 3, lot = 15 },
 		{ position = Vector3.new(4, 0, 1), rotationY = 0, tier = 3 },
 		{ position = Vector3.new(32, 0, 17), rotationY = 90, tier = 4, lot = 17 },
 		{ position = Vector3.new(-24, 0, 20), rotationY = 0, tier = 5, lot = 19 },
@@ -258,13 +258,16 @@ return {
 	-- Bushes, flower beds and hedges (wave 2c): cottage gardens by the square and the campsite
 	-- lane, the hedgerows along the farms on the east edge, and the smithy's back fence. None
 	-- overlaps a grove, whose trees would crowd the pieces out.
+	-- `count` is the candidates the client draws, not what grows: it never redraws a rejected one and
+	-- keeps greenery.clearance between pieces, so counts are sized from tools/streetplan.py's
+	-- simulated yield (10th percentile at or above perTier's tier-5 count).
 	greeneryZones = {
-		{ center = Vector3.new(-15, 0, -9), radius = 5, count = 5 },
-		{ center = Vector3.new(-11, 0, 11), radius = 5, count = 5 },
-		{ center = Vector3.new(-53, 0, -9), radius = 5, count = 5 },
-		{ center = Vector3.new(51, 0, -7), radius = 5, count = 4 },
-		{ center = Vector3.new(53, 0, 7), radius = 5, count = 4 },
-		{ center = Vector3.new(49, 0, 21), radius = 5, count = 5 },
-		{ center = Vector3.new(33, 0, 51), radius = 5, count = 5 },
+		{ center = Vector3.new(-15, 0, -9), radius = 5, count = 8 },
+		{ center = Vector3.new(-11, 0, 11), radius = 5, count = 8 },
+		{ center = Vector3.new(-53, 0, -9), radius = 5, count = 8 },
+		{ center = Vector3.new(51, 0, -7), radius = 5, count = 7 },
+		{ center = Vector3.new(53, 0, 7), radius = 5, count = 7 },
+		{ center = Vector3.new(49, 0, 21), radius = 5, count = 8 },
+		{ center = Vector3.new(33, 0, 51), radius = 5, count = 8 },
 	},
 }

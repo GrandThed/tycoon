@@ -104,6 +104,7 @@ export type WalkSolid = {
 	rotation: CFrame,
 	extents: { minX: number, maxX: number, minZ: number, maxZ: number },
 	slotId: string?,
+	pad: boolean?, -- carried over from Scatter.Footprint; pads never reach the walk solids
 }
 
 -- Directed lanes, struct-of-arrays so the Heartbeat loop reads numbers without allocating.
@@ -2470,8 +2471,8 @@ local function buildWalkLanes(
 		lanes.reverse[backward] = forward
 	end
 
-	-- Each solid once: its grown rectangle and a bounding circle that rules most segments out
-	-- before the exact clip.
+	-- Each solid once: its own rectangle and a bounding circle (grown by `clearance`) that rules
+	-- most segments out before the exact clip.
 	type Prepared = {
 		solid: WalkSolid,
 		centre: Vector3,
@@ -2484,24 +2485,101 @@ local function buildWalkLanes(
 	local prepared: { Prepared } = {}
 	for _, solid in solids do
 		local extents = solid.extents
-		local minX, maxX = extents.minX - clearance, extents.maxX + clearance
-		local minZ, maxZ = extents.minZ - clearance, extents.maxZ + clearance
-		local middle = Vector3.new((minX + maxX) / 2, 0, (minZ + maxZ) / 2)
+		local middle =
+			Vector3.new((extents.minX + extents.maxX) / 2, 0, (extents.minZ + extents.maxZ) / 2)
 		table.insert(prepared, {
 			solid = solid,
 			centre = flat(solid.origin + solid.rotation:PointToWorldSpace(middle)),
-			radius = Vector3.new(maxX - minX, 0, maxZ - minZ).Magnitude / 2,
-			minX = minX,
-			maxX = maxX,
-			minZ = minZ,
-			maxZ = maxZ,
+			radius = Vector3.new(extents.maxX - extents.minX, 0, extents.maxZ - extents.minZ).Magnitude
+					/ 2
+				+ clearance,
+			minX = extents.minX,
+			maxX = extents.maxX,
+			minZ = extents.minZ,
+			maxZ = extents.maxZ,
 		})
 	end
 
-	-- The parameter spans of p -> q inside any grown solid, sorted and merged (Liang-Barsky per
-	-- solid, in the solid's own frame).
+	-- The parameter span of the segment lp + t * (dx, dz), t in [0, 1], inside an axis-aligned
+	-- rectangle (Liang-Barsky), or nil.
+	local function rectSpan(
+		lp: Vector3,
+		dx: number,
+		dz: number,
+		minX: number,
+		maxX: number,
+		minZ: number,
+		maxZ: number
+	): (number?, number?)
+		local t0, t1 = 0, 1
+		for _, pair in
+			{
+				{ -dx, lp.X - minX },
+				{ dx, maxX - lp.X },
+				{ -dz, lp.Z - minZ },
+				{ dz, maxZ - lp.Z },
+			}
+		do
+			local pk, qk = pair[1], pair[2]
+			if pk == 0 then
+				if qk < 0 then
+					return nil, nil
+				end
+			else
+				local r = qk / pk
+				if pk < 0 then
+					t0 = math.max(t0, r)
+				else
+					t1 = math.min(t1, r)
+				end
+			end
+		end
+		if t0 < t1 then
+			return t0, t1
+		end
+		return nil, nil
+	end
+
+	-- The parameter span of the same segment inside a disc of radius `clearance`, or nil.
+	local function discSpan(
+		lp: Vector3,
+		dx: number,
+		dz: number,
+		cx: number,
+		cz: number
+	): (number?, number?)
+		local fx, fz = lp.X - cx, lp.Z - cz
+		local a = dx * dx + dz * dz
+		local b = 2 * (fx * dx + fz * dz)
+		local c = fx * fx + fz * fz - clearance * clearance
+		if a <= 0 then
+			return nil, nil
+		end
+		local discriminant = b * b - 4 * a * c
+		if discriminant <= 0 then
+			return nil, nil
+		end
+		local root = math.sqrt(discriminant)
+		local t0 = math.max((-b - root) / (2 * a), 0)
+		local t1 = math.min((-b + root) / (2 * a), 1)
+		if t0 < t1 then
+			return t0, t1
+		end
+		return nil, nil
+	end
+
+	-- The parameter spans of p -> q that are inside a solid or closer than `clearance` to its
+	-- rectangle, sorted (tools/streetplan.py walk_clip_report mirrors this rule exactly). In the
+	-- solid's own frame that region is the rectangle grown along X, grown along Z, and a disc of
+	-- radius `clearance` on each corner -- a rounded rectangle, so a corner blocks no more than the
+	-- clearance asks for.
 	local function blockedSpans(p: Vector3, q: Vector3, ownSlot: string?): { { number } }
 		local spans: { { number } } = {}
+		local function add(t0: number?, t1: number?): ()
+			if t0 ~= nil and t1 ~= nil then
+				table.insert(spans, { t0, t1 })
+			end
+		end
 		for _, item in prepared do
 			if ownSlot ~= nil and item.solid.slotId == ownSlot then
 				continue
@@ -2514,33 +2592,14 @@ local function buildWalkLanes(
 			local lp = solid.rotation:PointToObjectSpace(flat(p) - flat(solid.origin))
 			local lq = solid.rotation:PointToObjectSpace(flat(q) - flat(solid.origin))
 			local dx, dz = lq.X - lp.X, lq.Z - lp.Z
-			local t0, t1 = 0, 1
-			local inside = true
-			for _, pair in
-				{
-					{ -dx, lp.X - item.minX },
-					{ dx, item.maxX - lp.X },
-					{ -dz, lp.Z - item.minZ },
-					{ dz, item.maxZ - lp.Z },
-				}
-			do
-				local pk, qk = pair[1], pair[2]
-				if pk == 0 then
-					if qk < 0 then
-						inside = false
-						break
-					end
-				else
-					local r = qk / pk
-					if pk < 0 then
-						t0 = math.max(t0, r)
-					else
-						t1 = math.min(t1, r)
-					end
-				end
-			end
-			if inside and t0 < t1 then
-				table.insert(spans, { t0, t1 })
+			local minX, maxX, minZ, maxZ = item.minX, item.maxX, item.minZ, item.maxZ
+			add(rectSpan(lp, dx, dz, minX - clearance, maxX + clearance, minZ, maxZ))
+			add(rectSpan(lp, dx, dz, minX, maxX, minZ - clearance, maxZ + clearance))
+			if clearance > 0 then
+				add(discSpan(lp, dx, dz, minX, minZ))
+				add(discSpan(lp, dx, dz, maxX, minZ))
+				add(discSpan(lp, dx, dz, minX, maxZ))
+				add(discSpan(lp, dx, dz, maxX, maxZ))
 			end
 		end
 		table.sort(spans, function(a: { number }, b: { number }): boolean
