@@ -49,5 +49,6 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/street-upgrades-2026-09-18.md
 @.claude/memory/metropolis-streets-2026-09-22.md
 @.claude/memory/template-turn-2026-09-22.md
+@.claude/memory/orbital-dressing-2026-09-23.md
 @.claude/memory/audience-reach-2026-09-18.md
 @.claude/memory/studio-bridge-2026-09-22.md
