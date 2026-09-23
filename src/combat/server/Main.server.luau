@@ -4,8 +4,9 @@
 -- requires only DataService and RemoteService from it: PlotService, EconomyService,
 -- MonetizationService, LegacyShopService and ArmoryService are hub-only and stay inert.
 --
--- The teleport data is a HINT, never an entitlement: the mission it names is re-checked against
--- the loaded profile, and a refusal sends the player straight home.
+-- The teleport data is a HINT, never an entitlement: every arrival goes through
+-- ArenaService.CheckAdmission (C2: the host gate comes from the server-written RunTicket, never
+-- from teleport data), and a refusal sends the player straight home with the reason.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -38,6 +39,10 @@ type Service = {
 }
 
 type Loader = (player: Player) -> Types.PlayerState?
+-- "arrival" = a fresh join or a safe-mode retry (admission applies); "rejoin" = a player who was
+-- a member moments ago and whose trip home failed. Re-running admission on a rejoin could refuse
+-- them (the run moved past joinUntilWave) and bounce them through the failing teleport forever.
+type JoinKind = "arrival" | "rejoin"
 
 -- Studio (or a standalone boot with no teleport data) plays the first mission unless the
 -- DebugMission attribute says otherwise.
@@ -78,6 +83,15 @@ local function sendSnapshot(player: Player): ()
 	RemoteService.FireClient(player, "StateChanged", snapshot)
 end
 
+-- Integer and non-zero; negative only in Studio, where Local Server test players have
+-- negative ids and a party handoff names one as host.
+local function isHostId(value: any): boolean
+	if typeof(value) ~= "number" or value ~= math.floor(value) or value == 0 then
+		return false
+	end
+	return value > 0 or RunService:IsStudio()
+end
+
 -- The hub's teleport data: { missionId, overdrive, hostUserId }. It never carries the reserved
 -- access code (the teleporting client can read teleport data) — the code comes from the
 -- server-only MemoryStore hash map that RunRegistry verifies. Wrapped in pcall because
@@ -94,11 +108,7 @@ local function readTeleportHint(player: Player): (string?, boolean, number?)
 		return nil, false, nil
 	end
 	local missionId = if typeof(data.missionId) == "string" then data.missionId else nil
-	local hostUserId = if typeof(data.hostUserId) == "number"
-			and data.hostUserId == math.floor(data.hostUserId)
-			and data.hostUserId > 0
-		then data.hostUserId
-		else nil
+	local hostUserId = if isHostId(data.hostUserId) then data.hostUserId else nil
 	return missionId, data.overdrive == true, hostUserId
 end
 
@@ -112,11 +122,7 @@ local function readArrival(player: Player): (string?, boolean, number?)
 	end
 	local data = hint :: any
 	local missionId = if typeof(data.missionId) == "string" then data.missionId else nil
-	local hostUserId = if typeof(data.hostUserId) == "number"
-			and data.hostUserId == math.floor(data.hostUserId)
-			and data.hostUserId > 0
-		then data.hostUserId
-		else nil
+	local hostUserId = if isHostId(data.hostUserId) then data.hostUserId else nil
 	return missionId, data.overdrive == true, hostUserId
 end
 
@@ -150,8 +156,9 @@ local function resolveRun(player: Player): (Types.MissionConfig?, boolean, numbe
 	return Catalog.GetMissionById(resolvedId), overdrive, hintHostUserId or player.UserId
 end
 
--- Shared by the first join (LoadAsync) and a safe-mode retry (RetryLoadAsync). Yields.
-local function runJoinSequence(player: Player, loader: Loader): ()
+-- Shared by the first join (LoadAsync), a safe-mode retry (RetryLoadAsync) and a rejoin after a
+-- failed trip home. Yields.
+local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): ()
 	local state = loader(player)
 	if state == nil then
 		-- Load failure, still-locked session, refused retry, or the player left mid-load. No
@@ -166,29 +173,29 @@ local function runJoinSequence(player: Player, loader: Loader): ()
 	Combat.TouchHighestEra(state)
 
 	local mission, overdrive, hostUserId = resolveRun(player)
-	local combatConfig = Catalog.GetCombatConfig()
-	if
-		mission == nil
-		or combatConfig == nil
-		or not Combat.MissionUnlocked(state, mission, overdrive, combatConfig)
-	then
-		-- The hint asked for something this profile has not unlocked (or the configs are
-		-- missing): straight home, which in Studio means "stay with a toast".
-		ReturnService.SendHome(player, "locked")
+	if mission == nil or Catalog.GetCombatConfig() == nil then
+		-- The hint named no mission this build knows (or the configs are missing).
+		ReturnService.Refuse(player, "locked")
 		return
 	end
-	ArenaService.Admit(player, mission, overdrive, hostUserId)
-	-- The hint is only a request: this server may already be running a DIFFERENT mission (a
-	-- joiner arriving into a run in progress, or a reused reserved server), and that run is
-	-- what the player was just admitted to. Re-check the entitlement against it.
-	local joined = ArenaService.GetMission()
-	if
-		joined == nil
-		or not Combat.MissionUnlocked(state, joined, ArenaService.IsOverdrive(), combatConfig)
-	then
-		ReturnService.SendHome(player, "locked")
+	-- The first arrival opens the run it asked for and reads the hub's ticket; everyone else
+	-- joins the run already here. Yields on that MemoryStore read.
+	ArenaService.EnsureRun(mission, overdrive, hostUserId, player.Name)
+	if not player:IsDescendantOf(Players) then
+		-- Left during the ticket read: PlayerRemoving has already run, so undo what it could not.
+		ArenaService.ResetIfEmpty()
+		DataService.Release(player)
 		return
 	end
+	if kind == "arrival" then
+		local verdict = ArenaService.CheckAdmission(player, { probe = false })
+		if verdict ~= "ok" then
+			ReturnService.Refuse(player, verdict)
+			return
+		end
+	end
+	-- No yield between the verdict and the admit, so the seat it counted is still free.
+	ArenaService.Admit(player)
 	sendSnapshot(player)
 end
 
@@ -208,7 +215,7 @@ local returnBoot: Service = {
 			-- Not task.spawn'd: the failure path calls this on its own thread and the profile
 			-- must be back before it re-admits the player.
 			rejoin = function(player: Player)
-				runJoinSequence(player, DataService.LoadAsync)
+				runJoinSequence(player, DataService.LoadAsync, "rejoin")
 			end,
 		})
 	end,
@@ -255,12 +262,16 @@ RemoteService.SetHandler("RequestRetryLoad", function(player: Player)
 	if DataService.GetState(player) ~= nil or DataService.IsLoading(player) then
 		return
 	end
-	task.spawn(runJoinSequence, player, DataService.RetryLoadAsync)
+	task.spawn(function()
+		runJoinSequence(player, DataService.RetryLoadAsync, "arrival")
+	end)
 end)
 
--- Ready is a toggle; the run starts the moment every non-bot member has it on. Deliberately
--- here rather than in ArenaService: the roster service sits below WaveService in the boot order
--- and may not require it.
+-- Ready is a toggle. The run starts by the C2 lobby rule (ArenaService.CanStart): everyone here
+-- ready AND the whole departing party in, or lobbyWaitSeconds after the first arrival. The
+-- timeout half is polled by WaveService; this handler gives the instant start. Deliberately here
+-- rather than in ArenaService: the roster service sits below WaveService in the boot order and
+-- may not require it.
 RemoteService.SetHandler("RequestReady", function(player: Player)
 	-- Both halves are guarded on the lobby: ArenaService ignores the toggle once the run is
 	-- under way, and nothing here may restart a run that is already going.
@@ -268,12 +279,13 @@ RemoteService.SetHandler("RequestReady", function(player: Player)
 		return
 	end
 	ArenaService.SetReady(player)
-	if ArenaService.AllReady() then
+	if ArenaService.CanStart() then
 		WaveService.Start()
 	end
 end)
 
--- Yields (the teleport retries), so it gets its own thread.
+-- Yields (the teleport retries), so it gets its own thread. Goes home alone, before or
+-- instead of the group return.
 RemoteService.SetHandler("RequestLeave", function(player: Player)
 	task.spawn(ReturnService.SendHome, player, "leave")
 end)
@@ -293,6 +305,10 @@ RemoteService.SetHandler(
 		CombatService.OnFire(player, seq, origin, direction, charge)
 	end
 )
+
+RemoteService.SetHandler("RequestDraw", function(player: Player)
+	CombatService.OnDraw(player)
+end)
 
 RemoteService.SetHandler("RequestAbility", function(player: Player, slot: string)
 	CombatService.OnAbility(player, slot)
@@ -333,13 +349,17 @@ RunService.Heartbeat:Connect(function(deltaTime: number)
 end)
 
 local function onPlayerAdded(player: Player): ()
-	task.spawn(runJoinSequence, player, DataService.LoadAsync)
+	task.spawn(function()
+		runJoinSequence(player, DataService.LoadAsync, "arrival")
+	end)
 end
 
 -- Teardown: leave the party (which clears the registry entry with the last member), then the
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
 	ArenaService.Remove(player)
+	-- A refused first arrival opened a run but was never a member, so Remove did nothing.
+	ArenaService.ResetIfEmpty()
 	-- With the last member gone the run is over; a reserved server may be reused by a later
 	-- arrival, so the wave machine goes back to the lobby rather than staying in `summary`.
 	if ArenaService.GetMission() == nil then

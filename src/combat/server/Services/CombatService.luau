@@ -7,6 +7,10 @@
 -- The client sends INTENTS only — a swing counter, an aim ray, a slot name. It never sends
 -- damage, never names an amount, and every id it does send is re-resolved against the live wave
 -- and re-checked for range, arc and cooldown on the server clock.
+--
+-- C2 (docs/INTERFACES.md "C2 contracts" -> "Combat place (A)"): the run-wide damage map behind
+-- every damage share, the warcry/rally party effects, swing replication to the other players,
+-- the waiting state (no attacks, no damage taken) and the bow's server-stamped draw.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,6 +36,7 @@ local DEFAULT_CHARGE_SECONDS = 1
 local MELEE_STEPS = 3
 -- A burst ability with no `radius` still has to find something: the class range is its reach.
 local DEFAULT_ABILITY_RANGE = 40
+local NEUTRAL_EMPOWER = 1
 
 type Attacker = {
 	seq: number,
@@ -47,6 +52,11 @@ type Attacker = {
 local attackers: { [number]: Attacker } = {}
 -- Per-wave damage tally, drained by WaveService at every wave clear.
 local damageTally: { [number]: number } = {}
+-- The same damage for the whole run, never drained mid-run: PartyMember.damageShare and
+-- RunSummary.damageShare are raw shares of it. Departed members and bots stay in it, so a share
+-- is "of everything this run dealt", not "of whoever is still here".
+local runDamage: { [number]: number } = {}
+local runDamageTotal = 0
 -- Batched once per Heartbeat frame: one FireClient per player instead of one per hit.
 local broadcastQueue: { Types.CombatFx } = {}
 local privateQueue: { [Player]: { Types.CombatFx } } = {}
@@ -84,7 +94,7 @@ local function pushFxTo(player: Player, fx: Types.CombatFx): ()
 	table.insert(queue, fx)
 end
 
-local function refuse(player: Player, reason: "cooldown" | "dead" | "lobby"): ()
+local function refuse(player: Player, reason: "cooldown" | "dead" | "lobby" | "waiting"): ()
 	pushFxTo(player, { kind = "refused", reason = reason })
 end
 
@@ -141,8 +151,15 @@ function CombatService.DealDamage(
 	if amount <= 0 or enemy.dead then
 		return false
 	end
+	-- Warcry: every point an empowered member deals, from any source, takes the multiplier.
+	local dealer = ArenaService.GetMember(byUserId)
+	if dealer ~= nil and os.clock() < dealer.empoweredUntil then
+		amount *= dealer.empowerMult
+	end
 	local rounded = math.max(1, math.round(amount))
 	damageTally[byUserId] = (damageTally[byUserId] or 0) + rounded
+	runDamage[byUserId] = (runDamage[byUserId] or 0) + rounded
+	runDamageTotal += rounded
 	local position = enemy.root.Position
 	local killed = EnemyService.Damage(enemy, rounded, byUserId)
 	CombatService.PushFx({
@@ -158,7 +175,9 @@ end
 
 -- Damage TO a party member (enemies only; there is no friendly fire). God mode zeroes it.
 function CombatService.DamagePlayer(member: Types.RunMember, amount: number): ()
-	if member.godMode or amount <= 0 then
+	-- A member waiting on the pad for the wave boundary cannot be hurt (an attack already wound
+	-- up when they died and respawned there must not land).
+	if member.godMode or member.waiting or amount <= 0 then
 		return
 	end
 	local humanoid = member.humanoid
@@ -207,8 +226,19 @@ function CombatService.TakeDamageTally(): { [number]: number }
 	return tally
 end
 
+-- Run start and reset: both the per-flush tally and the run-wide map start over.
 function CombatService.ResetDamageTally(): ()
 	damageTally = {}
+	runDamage = {}
+	runDamageTotal = 0
+end
+
+-- Raw (pre-floor) share of everything dealt this run, 0-1.
+function CombatService.DamageShare(userId: number): number
+	if runDamageTotal <= 0 then
+		return 0
+	end
+	return (runDamage[userId] or 0) / runDamageTotal
 end
 
 local function canAct(player: Player): (Types.RunMember?, Types.PlayerState?, Types.ArmoryConfig?)
@@ -218,6 +248,10 @@ local function canAct(player: Player): (Types.RunMember?, Types.PlayerState?, Ty
 	end
 	if not ArenaService.InRun() then
 		refuse(player, "lobby")
+		return nil, nil, nil
+	end
+	if member.waiting then
+		refuse(player, "waiting")
 		return nil, nil, nil
 	end
 	if not ArenaService.IsAlive(member) then
@@ -286,6 +320,15 @@ function CombatService.OnAttack(player: Player, swingSeq: number, targetIds: { n
 	-- The stance the HUD draws is inferred from what the player actually does, so no extra
 	-- remote is needed to keep the party row honest.
 	member.stance = "melee"
+	-- Every validated swing, hit or whiff, so the other players see the combo pose. Not to the
+	-- swinger, whose client already animated it locally.
+	local swing: Types.CombatFx = { kind = "swing", userId = member.userId, step = step }
+	for _, other in ArenaService.GetMembers() do
+		local otherPlayer = other.player
+		if otherPlayer ~= nil and otherPlayer ~= player then
+			pushFxTo(otherPlayer, swing)
+		end
+	end
 
 	local finisher = step == MELEE_STEPS and attacker.chainOk
 	local damage = Combat.MeleeDamage(armoryConfig, state, step)
@@ -362,7 +405,8 @@ function CombatService.OnFire(
 
 	local now = os.clock()
 	local cooldown = class.cooldown or DEFAULT_RANGED_COOLDOWN
-	local elapsed = now - attacker.lastShotAt
+	local previousShotAt = attacker.lastShotAt
+	local elapsed = now - previousShotAt
 	if elapsed < cooldown * combatConfig.player.comboTimingTolerance then
 		refuse(player, "cooldown")
 		return
@@ -372,9 +416,15 @@ function CombatService.OnFire(
 
 	local resolvedCharge = math.clamp(charge, 0, 1)
 	if class.fire == "charge" then
-		-- The draw cannot be longer than the time actually spent holding.
+		-- C2 bow fix: the charge is capped by the time since the SERVER stamped the draw
+		-- (RequestDraw). The C1 cap measured from the last shot, so waiting around without
+		-- drawing made every shot a full-charge shot. A draw older than the last shot was spent
+		-- by it, so no fresh draw means a weak shot.
 		local chargeSeconds = class.chargeSeconds or DEFAULT_CHARGE_SECONDS
-		resolvedCharge = math.clamp(math.min(resolvedCharge, elapsed / chargeSeconds), 0, 1)
+		local drawAt = member.drawStartedAt
+		local cap = if drawAt > previousShotAt then (now - drawAt) / chargeSeconds else 0
+		resolvedCharge = math.clamp(math.min(resolvedCharge, cap), 0, 1)
+		member.drawStartedAt = 0
 	end
 	local damage = Combat.RangedDamage(armoryConfig, state, resolvedCharge)
 	if damage <= 0 then
@@ -415,6 +465,19 @@ function CombatService.OnFire(
 		budget -= (result.Position - from).Magnitude
 		from = result.Position
 	end
+end
+
+-- The bow's draw start. Only a charge-fire class stamps; anything else has nothing to charge.
+function CombatService.OnDraw(player: Player): ()
+	local member, state, armoryConfig = canAct(player)
+	if member == nil or state == nil or armoryConfig == nil then
+		return
+	end
+	local class = equipped(state, armoryConfig, "ranged")
+	if class == nil or class.kind ~= "ranged" or class.fire ~= "charge" then
+		return
+	end
+	member.drawStartedAt = os.clock()
 end
 
 local function enemiesInRadius(
@@ -478,6 +541,56 @@ local function applyAbilityHit(
 	if stun ~= nil and stun > 0 then
 		EnemyService.Stun(enemy, stun)
 	end
+end
+
+-- Rally / warcry (Armory.json partyEffects), fired by a successful melee ability cast when the
+-- caster's melee tier names one. Lands on every OTHER alive, non-waiting member in the radius.
+local function applyPartyEffect(
+	caster: Types.RunMember,
+	state: Types.PlayerState,
+	armoryConfig: Types.ArmoryConfig,
+	from: Vector3
+): ()
+	local def = Armory.TierDef(armoryConfig, "melee", state.combat.gear.melee)
+	-- The starter weapon has no partyEffect field at all, hence the untyped read.
+	local key = if def ~= nil then (def :: any).partyEffect else nil
+	local effects = armoryConfig.partyEffects
+	if typeof(key) ~= "string" or effects == nil then
+		return
+	end
+	local effect = effects[key]
+	if effect == nil then
+		warn(`[CombatService] unknown partyEffect "{key}"`)
+		return
+	end
+	local now = os.clock()
+	local targetIds: { number } = {}
+	for _, other in ArenaService.GetMembers() do
+		if other == caster or not ArenaService.IsFighting(other) then
+			continue
+		end
+		local root = rootOf(other)
+		local humanoid = other.humanoid
+		if root == nil or humanoid == nil or (root.Position - from).Magnitude > effect.radius then
+			continue
+		end
+		if effect.kind == "rally" then
+			local heal = (effect.healFraction or 0) * humanoid.MaxHealth
+			humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + heal)
+		else
+			other.empoweredUntil = now + (effect.seconds or 0)
+			other.empowerMult = effect.damageMult or NEUTRAL_EMPOWER
+		end
+		table.insert(targetIds, other.userId)
+	end
+	CombatService.PushFx({
+		kind = "partyEffect",
+		userId = caster.userId,
+		key = key,
+		position = from,
+		radius = effect.radius,
+		targetIds = targetIds,
+	})
 end
 
 function CombatService.OnAbility(player: Player, slot: string): ()
@@ -565,6 +678,9 @@ function CombatService.OnAbility(player: Player, slot: string): ()
 		position = from,
 		radius = effectRadius,
 	})
+	if slot == "melee" then
+		applyPartyEffect(member, state, armoryConfig, from)
+	end
 end
 
 local function flushFx(): ()
@@ -600,6 +716,7 @@ function CombatService.Init(): ()
 		damagePlayer = CombatService.DamagePlayer,
 		onKilled = onEnemyKilled,
 	})
+	ArenaService.SetShareSource(CombatService.DamageShare)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		attackers[player.UserId] = nil
 		privateQueue[player] = nil

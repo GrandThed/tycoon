@@ -9,6 +9,9 @@
 --   attribute is reset the moment it is read, so one edit fires exactly once.
 -- * STATES (godMode, bots) are read every tick and left alone, because "god mode is on" and
 --   "there are two bots" are conditions, not events.
+--
+-- C2 adds `admitCheck` (remote only): the caller is judged by the SAME CheckAdmission a real
+-- arrival runs, as a stranger arriving now, and gets the verdict as a toast; nobody is sent home.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,6 +24,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
+local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 local CombatService = require(script.Parent:WaitForChild("CombatService"))
@@ -145,6 +149,36 @@ function DebugService.SetBots(count: number): ()
 	end
 end
 
+-- Spelled out so the literal types survive: a singleton union returned across modules reaches
+-- the caller as plain `string` under the old solver.
+local function refusalReason(verdict: string): ("full" | "over" | "locked")?
+	if verdict == "full" then
+		return "full"
+	elseif verdict == "over" then
+		return "over"
+	elseif verdict == "locked" then
+		return "locked"
+	end
+	return nil
+end
+
+-- The verdict as the ActionResult the combat client toasts (slotId "admitCheck" marks it as the
+-- lever's answer, not a real refusal), plus a line in Output for the playtest notes.
+local function admitCheck(player: Player?): ()
+	if player == nil then
+		return
+	end
+	local verdict = ArenaService.CheckAdmission(player, { probe = true })
+	print(`[DebugService] admitCheck for {player.Name}: {verdict}`)
+	local result: Types.ActionResult = {
+		action = "joinRun",
+		slotId = "admitCheck",
+		ok = verdict == "ok",
+		reason = refusalReason(verdict),
+	}
+	RemoteService.FireClient(player, "ActionResult", result)
+end
+
 -- The lever table itself. `player` is nil for the attribute path (everyone) and the caller for
 -- the remote path.
 local function applyLever(player: Player?, lever: string, value: any): ()
@@ -164,6 +198,8 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 		grantMaterials(player, value)
 	elseif lever == "grantValor" and typeof(value) == "number" then
 		grantValor(player, value)
+	elseif lever == "admitCheck" then
+		admitCheck(player)
 	else
 		warn(`[DebugService] unknown or mistyped lever "{lever}"`)
 	end
@@ -245,7 +281,8 @@ local function tickBots(debugConfig: Types.CombatDebugConfig, delta: number): ()
 	botAccumulator = 0
 	local damage = debugConfig.botDamagePerSecond * elapsed
 	for _, member in ArenaService.GetMembers() do
-		if not member.bot or not ArenaService.IsAlive(member) then
+		-- A bot parked on the pad for the wave boundary sits it out like a waiting joiner.
+		if not member.bot or not ArenaService.IsFighting(member) then
 			continue
 		end
 		local character = member.character

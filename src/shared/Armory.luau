@@ -58,6 +58,7 @@ type WeaponTierDef = {
 	hp: number,
 	ability: string,
 	model: string,
+	partyEffect: string?,
 }
 type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
 type AscensionLevelDef = {
@@ -73,6 +74,13 @@ type AscensionConfig = {
 	levelsPerRebirth: number,
 	levels: { AscensionLevelDef },
 }
+type PartyEffectDef = {
+	kind: "rally" | "warcry",
+	radius: number,
+	healFraction: number?,
+	damageMult: number?,
+	seconds: number?,
+}
 type ArmoryConfig = {
 	version: number,
 	baseHp: number,
@@ -82,6 +90,7 @@ type ArmoryConfig = {
 	abilities: { [string]: AbilityDef },
 	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
+	partyEffects: { [string]: PartyEffectDef },
 }
 
 -- Exact structural copy of Types.MissionRecord/CombatProfile (nested tables must match

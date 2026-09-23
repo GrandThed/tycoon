@@ -4,6 +4,8 @@
 -- attributes: every button fires RequestDebug(lever, value) and the server ignores the
 -- intent outside Studio, so this panel carries no entitlement and grants nothing by itself.
 -- UIController only builds it when RunService:IsStudio(), so a live client never has it.
+-- C2 adds the party levers: `fakeParty` (fake members, stepped +1 to 3 then cleared) and
+-- `fakeInvite` (an invite from a fake leader), which drive every party UI state solo.
 --
 -- Collapsed to a single "⚙ debug" tab by default: the hub HUD is the thing being tested,
 -- and an expanded strip must not be what the tester is looking at. It sits above the bottom
@@ -18,6 +20,9 @@ export type Deps = { onLever: (lever: string, value: any) -> () }
 
 export type DebugPanelHandle = {
 	SetForceTeleportFailure: (value: boolean) -> (),
+	-- C2: how many fake members the player's party has now (from PartyState), so the
+	-- fakeParty button always offers the next step from the server's truth.
+	SetFakePartyCount: (count: number) -> (),
 	SetLayout: (scale: number) -> (),
 	Destroy: () -> (),
 }
@@ -38,6 +43,8 @@ local CASH_GRANT = 10000
 local MATERIAL_GRANT = 25
 local VALOR_GRANT = 10
 local FAKE_RUNS = 3
+-- C2 contract: `fakeParty` takes 0–3 fake members; the button steps +1 and wraps to clear.
+local FAKE_PARTY_MAX = 3
 
 local DebugPanel = {}
 
@@ -45,6 +52,7 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	local connections: { RBXScriptConnection } = {}
 	local expanded = false
 	local forceTeleportFailure = false
+	local fakePartyCount = 0
 
 	local root = Create("Frame", {
 		Name = "DebugPanel",
@@ -169,6 +177,24 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	end)
 	paintTeleportButton()
 
+	local fakePartyButton: TextButton
+	local function paintFakePartyButton(): ()
+		fakePartyButton.Text = if fakePartyCount >= FAKE_PARTY_MAX
+			then "Clear fake party"
+			else "Fake party +1 (" .. tostring(fakePartyCount) .. ")"
+	end
+	fakePartyButton = makeButton("Fake party +1 (0)", function()
+		local nextCount = if fakePartyCount >= FAKE_PARTY_MAX then 0 else fakePartyCount + 1
+		-- Optimistic so rapid taps step; the next PartyState overwrites it with the truth.
+		fakePartyCount = nextCount
+		paintFakePartyButton()
+		deps.onLever("fakeParty", nextCount)
+	end)
+	paintFakePartyButton()
+	makeButton("Fake invite", function()
+		deps.onLever("fakeInvite", true)
+	end)
+
 	local rowCount = math.ceil(buttonCount / COLUMNS)
 	local bodyHeight = rowCount * BUTTON_HEIGHT
 		+ math.max(rowCount - 1, 0) * BUTTON_GAP
@@ -200,6 +226,10 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 			end
 			forceTeleportFailure = value
 			paintTeleportButton()
+		end,
+		SetFakePartyCount = function(count: number)
+			fakePartyCount = math.clamp(count, 0, FAKE_PARTY_MAX)
+			paintFakePartyButton()
 		end,
 		SetLayout = function(scale: number)
 			uiScale.Scale = scale

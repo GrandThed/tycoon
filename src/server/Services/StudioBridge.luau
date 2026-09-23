@@ -2,11 +2,12 @@
 -- The Studio stand-in for the one thing Studio cannot do (docs/INTERFACES.md "C1 contracts" →
 -- "Studio bridge"). Ben cannot reach the published pair of places, so a Studio playtest has to
 -- be able to walk the whole expedition loop: the hub writes a HANDOFF RECORD to a DataStore and
--- kicks, the Expeditions place reads it on boot, and the trip home writes the summary the same
+-- kicks, the Expeditions place reads it on boot, and the trip home writes the ReturnData the same
 -- way. Everything else (profile release, registry, retries, failure recovery) runs for real.
 --
 -- Nothing in this module does anything outside RunService:IsStudio(): every public function
 -- returns the "inactive" value immediately, so a live server behaves exactly as it did at C0.
+-- The one exception is ParseReturnData, a pure validator the hub also runs on live teleport data.
 --
 -- The record is a HINT, never an entitlement, exactly like teleport data: the combat place
 -- re-checks the mission against the loaded profile, and every field is type-checked on read.
@@ -110,8 +111,19 @@ local function keyFor(player: Player): string
 	return KEY_PREFIX .. player.UserId
 end
 
-local function isPositiveInteger(value: any): boolean
-	return typeof(value) == "number" and value == math.floor(value) and value > 0
+-- Studio only, so negative ids are legal: Local Server test players have them (C2 co-op tests
+-- run two of them). Zero, fractions and ±inf are still malformed.
+local function isUserId(value: any): boolean
+	return typeof(value) == "number"
+		and value == math.floor(value)
+		and value ~= 0
+		and math.abs(value) < 2 ^ 53
+end
+
+-- The same rule for data that may come from a live teleport, where only a real account id is
+-- legal and a negative one can only be forged.
+local function isLiveUserId(value: any): boolean
+	return isUserId(value) and (value > 0 or isStudio)
 end
 
 local function removeRecord(player: Player): ()
@@ -162,9 +174,16 @@ local function readRecord(player: Player): any?
 	return record
 end
 
+local function numberOr(value: any, fallback: number): number
+	if typeof(value) == "number" and value == value then
+		return value
+	end
+	return fallback
+end
+
 -- Validated exactly like a live TeleportData summary: the transport differs, the trust does not.
--- bestWave/died are read leniently because they arrive with C1's WaveService and an older record
--- (or an older place build) simply does not carry them.
+-- The fields a newer combat build adds (bestWave/died at C1, mentorValor/damageShare at C2) are
+-- read leniently, so an older place build only costs the line it does not send.
 local function readSummary(value: any): Types.RunSummary?
 	if typeof(value) ~= "table" then
 		return nil
@@ -188,9 +207,7 @@ local function readSummary(value: any): Types.RunSummary?
 			materials[material] = amount
 		end
 	end
-	-- Built through `any`: the optional fields are A's (Types.RunSummary gains bestWave/died in
-	-- this same milestone), so neither their absence nor their arrival may break this build.
-	local summary: any = {
+	local summary: Types.RunSummary = {
 		missionId = raw.missionId,
 		overdrive = raw.overdrive,
 		wavesCleared = raw.wavesCleared,
@@ -199,16 +216,90 @@ local function readSummary(value: any): Types.RunSummary?
 		valor = raw.valor,
 		kills = raw.kills,
 		seconds = raw.seconds,
-		bestWave = if typeof(raw.bestWave) == "number" then raw.bestWave else 0,
+		bestWave = numberOr(raw.bestWave, 0),
 		died = raw.died == true,
+		mentorValor = numberOr(raw.mentorValor, 0),
+		damageShare = numberOr(raw.damageShare, 0),
 	}
-	return summary :: Types.RunSummary
+	return summary
+end
+
+local function maxParty(): number
+	local combatConfig = Catalog.GetCombatConfig()
+	return if combatConfig ~= nil then combatConfig.coop.maxParty else 1
+end
+
+local function readPartyHint(value: any): Types.PartyHint?
+	if typeof(value) ~= "table" then
+		return nil
+	end
+	local raw = value :: any
+	if not isLiveUserId(raw.leaderUserId) or typeof(raw.memberIds) ~= "table" then
+		return nil
+	end
+	local memberIds: { number } = {}
+	for _, userId in raw.memberIds :: { any } do
+		if not isLiveUserId(userId) or #memberIds >= maxParty() then
+			return nil
+		end
+		table.insert(memberIds, userId)
+	end
+	return { leaderUserId = raw.leaderUserId, memberIds = memberIds }
+end
+
+-- A summary for a player the ReturnData names is copied only when its key is a userId string;
+-- anything past a full party's worth of keys is ignored rather than walked.
+local function readSummaries(value: any): { [string]: Types.RunSummary }?
+	if typeof(value) ~= "table" then
+		return nil
+	end
+	local summaries: { [string]: Types.RunSummary } = {}
+	local count = 0
+	for key, entry in value :: { [any]: any } do
+		if count >= maxParty() then
+			break
+		end
+		if typeof(key) == "string" and isLiveUserId(tonumber(key)) then
+			local summary = readSummary(entry)
+			if summary ~= nil then
+				summaries[key] = summary
+				count += 1
+			end
+		end
+	end
+	return summaries
 end
 
 local StudioBridge = {}
 
 function StudioBridge.IsActive(): boolean
 	return isStudio
+end
+
+-- The one validator for a ReturnData, whichever transport carried it: the hub runs it on live
+-- TeleportData too, so it is the single exception to "does nothing outside Studio" — it is pure
+-- and touches no DataStore. nil = malformed; every field is copied, never aliased.
+function StudioBridge.ParseReturnData(value: any): Types.ReturnData?
+	if typeof(value) ~= "table" then
+		return nil
+	end
+	local raw = value :: any
+	local summaries = readSummaries(raw.summaries)
+	if summaries == nil then
+		return nil
+	end
+	local refused = raw.refused
+	if refused ~= nil and refused ~= "full" and refused ~= "over" and refused ~= "locked" then
+		return nil
+	end
+	local party: Types.PartyHint? = nil
+	if raw.party ~= nil then
+		party = readPartyHint(raw.party)
+		if party == nil then
+			return nil
+		end
+	end
+	return { summaries = summaries, party = party, refused = refused }
 end
 
 -- The hub's stand-in for TeleportAsync's teleport data. False means the record could not be
@@ -255,7 +346,7 @@ function StudioBridge.ReadArrival(player: Player): TeleportHint?
 	if
 		typeof(record.missionId) ~= "string"
 		or record.missionId == ""
-		or not isPositiveInteger(record.hostUserId)
+		or not isUserId(record.hostUserId)
 	then
 		warn(`[StudioBridge] malformed handoff for {player.Name}; falling back to the attributes`)
 		return nil
@@ -268,21 +359,22 @@ function StudioBridge.ReadArrival(player: Player): TeleportHint?
 	}
 end
 
--- Combat place, on the trip home: the stand-in for TeleportAsync's `{ summary = … }`.
-function StudioBridge.WriteReturn(player: Player, summary: Types.RunSummary): boolean
+-- Combat place, on the trip home: the stand-in for TeleportAsync's ReturnData (C2: summaries for
+-- every member, the party hint, or a refusal).
+function StudioBridge.WriteReturn(player: Player, data: Types.ReturnData): boolean
 	if not isStudio then
 		return false
 	end
 	return writeRecord(player, `return SetAsync {player.UserId}`, {
 		kind = "return",
-		summary = summary,
+		data = data,
 		stamp = os.time(),
 	})
 end
 
--- Hub, on join. Presentation only: the rewards are already in the profile the combat place
--- saved, so a missing or malformed record costs the card, never the cash.
-function StudioBridge.ReadReturn(player: Player): Types.RunSummary?
+-- Hub, on join. Presentation and re-form hints only: the rewards are already in the profile the
+-- combat place saved, so a missing or malformed record costs the card, never the cash.
+function StudioBridge.ReadReturn(player: Player): Types.ReturnData?
 	if not isStudio then
 		return nil
 	end
@@ -291,11 +383,11 @@ function StudioBridge.ReadReturn(player: Player): Types.RunSummary?
 		return nil
 	end
 	removeRecord(player)
-	local summary = readSummary(record.summary)
-	if summary == nil then
-		warn(`[StudioBridge] malformed return record for {player.Name}; no summary card`)
+	local data = StudioBridge.ParseReturnData(record.data)
+	if data == nil then
+		warn(`[StudioBridge] malformed return record for {player.Name}; ignored`)
 	end
-	return summary
+	return data
 end
 
 -- Studio lever (playtest-repro-methods: a failure path needs a lever that really reaches it).

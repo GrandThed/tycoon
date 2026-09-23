@@ -27,7 +27,10 @@
 		"bossStart": { "id": 0, "group": "SFX", "volume": 1.0 },
 		"bossDown": { "id": 0, "group": "SFX", "volume": 1.0 },
 		"runEnd": { "id": 0, "group": "SFX", "volume": 0.9 },
-		"lowHp": { "id": 0, "group": "SFX", "volume": 0.5 }
+		"lowHp": { "id": 0, "group": "SFX", "volume": 0.5 },
+		"partyRally": { "id": 0, "group": "SFX", "volume": 0.8 },
+		"partyWarcry": { "id": 0, "group": "SFX", "volume": 0.8 },
+		"mentor": { "id": 0, "group": "SFX", "volume": 0.8 }
 	},
 	"ambient": {
 		"Village": { "id": 96294045773577, "group": "Music", "volume": 0.25 },

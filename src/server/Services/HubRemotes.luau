@@ -38,11 +38,12 @@ local function isWeaponSlot(value: any): boolean
 	return value == "melee" or value == "ranged"
 end
 
--- A real host id is always positive. The Studio fake runs (C1 `fakeRuns` lever) host themselves
--- on negative ids so Join can be refused on one, and ONLY Studio widens the rule: live, a
--- negative id would buy a client a MemoryStore GetAsync on an arbitrary key at the prompt rate.
-local function isHostUserId(value: any): boolean
-	if typeof(value) ~= "number" or value ~= math.floor(value) then
+-- A real account id is always positive. Studio widens the rule to negative ids, and ONLY Studio:
+-- Local Server test players and the C1/C2 fakes (fake runs, fake party members) live there.
+-- Live, a negative id would buy a client a MemoryStore GetAsync on an arbitrary key at the
+-- prompt rate. ±inf and fractions are never ids.
+local function isUserId(value: any): boolean
+	if typeof(value) ~= "number" or value ~= math.floor(value) or math.abs(value) >= 2 ^ 53 then
 		return false
 	end
 	if value > 0 then
@@ -152,26 +153,53 @@ local HubRemotes: RemoteService.RemoteDefs = {
 			end,
 		},
 		-- Departing reserves a server and teleports, so it shares the prompt budget rather than
-		-- the gameplay one.
+		-- the gameplay one. C2 adds `public` (the "Open to public" toggle).
 		RequestExpedition = {
 			bucket = "prompt",
 			validate = function(args: RemoteService.PackedArgs): boolean
-				return args.n == 2
+				return args.n == 3
 					and typeof(args[1]) == "string"
 					and #args[1] <= MAX_MISSION_ID_LENGTH
 					and typeof(args[2]) == "boolean"
+					and typeof(args[3]) == "boolean"
 			end,
 		},
 		RequestJoinRun = {
 			bucket = "prompt",
 			validate = function(args: RemoteService.PackedArgs): boolean
-				return args.n == 1 and isHostUserId(args[1])
+				return args.n == 1 and isUserId(args[1])
 			end,
 		},
 		RequestRunList = {
 			bucket = "runList",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 0
+			end,
+		},
+		-- C2 hub party. The target is resolved (and anyone not in this server refused) by
+		-- PartyService; the validator only guarantees an id-shaped number.
+		RequestPartyInvite = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isUserId(args[1])
+			end,
+		},
+		RequestPartyRespond = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 2 and isUserId(args[1]) and typeof(args[2]) == "boolean"
+			end,
+		},
+		RequestPartyLeave = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 0
+			end,
+		},
+		RequestPartyKick = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isUserId(args[1])
 			end,
 		},
 		-- C1. The Studio DebugPanel's buttons; ArmoryService.HandleDebug drops every call
@@ -186,9 +214,17 @@ local HubRemotes: RemoteService.RemoteDefs = {
 			end,
 		},
 	},
-	-- FxEvent (M3), RunList (C0) and ExpeditionSummary (C1) are server → client only:
-	-- presentation events and the run registry answer, owner only, never on bulk restore.
-	events = { "StateChanged", "ActionResult", "FxEvent", "RunList", "ExpeditionSummary" },
+	-- FxEvent (M3), RunList (C0), ExpeditionSummary (C1), PartyState and PartyInvite (C2) are
+	-- server → client only: presentation events and query answers, never on bulk restore.
+	events = {
+		"StateChanged",
+		"ActionResult",
+		"FxEvent",
+		"RunList",
+		"ExpeditionSummary",
+		"PartyState",
+		"PartyInvite",
+	},
 	rates = {
 		calls = remotesConfig.callsPerSecond,
 		prompt = remotesConfig.promptCallsPerSecond,

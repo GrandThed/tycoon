@@ -77,7 +77,7 @@
 		]
 	},
 	"partyEffects": {
-		"rally": { "kind": "rally", "radius": 20, "healFraction": 0.25 },
+		"rally": { "kind": "rally", "radius": 20, "healFraction": 0.15 },
 		"warcry": { "kind": "warcry", "radius": 20, "damageMult": 1.25, "seconds": 6 }
 	}
 }

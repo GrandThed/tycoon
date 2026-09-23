@@ -10,8 +10,10 @@
 --    weapon class's `windows`. C0 is used, not Transform, so the default Animate script
 --    keeps running underneath instead of fighting us.
 --
--- Other players' swings are not animated in C1 (reported as a follow-up): their weapons are
--- not replicated and the server sends no per-swing fx for them.
+-- C2: other players' swings arrive as `CombatFx swing{userId, step}` and play the same
+-- procedural combo on THEIR shoulder, locally. A C0 written on this client never replicates
+-- and the owner's client poses its own copy, so the two never fight. Their weapon class is
+-- not sent, so a remote swing uses one fixed presentation window.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,12 +47,19 @@ local armoryConfig: Types.ArmoryConfig? = nil
 local gear: SlotTiers = { melee = 0, ranged = 0 }
 local stance = MELEE_SLOT
 
+-- One posable shoulder. `token` invalidates the delayed legs of a superseded pose.
+type PoseRig = {
+	motor: Motor6D?,
+	base: CFrame,
+	tween: Tween?,
+	token: number,
+}
+
 local character: Model? = nil
-local shoulder: Motor6D? = nil
-local shoulderBase: CFrame = CFrame.identity
+local localPose: PoseRig = { motor = nil, base = CFrame.identity, tween = nil, token = 0 }
+-- Other players' rigs, weak-keyed so a respawned or departed character simply drops out.
+local remotePoses: { [Model]: PoseRig } = setmetatable({}, { __mode = "k" }) :: any
 local weapon: Instance? = nil
-local activeTween: Tween? = nil
-local poseToken = 0
 local connections: { RBXScriptConnection } = {}
 
 local function slotTier(slot: string): number
@@ -166,41 +175,95 @@ local function refreshWeapon(): ()
 	attachTo(hand, template:Clone())
 end
 
-local function cancelPose(): ()
-	poseToken += 1
-	local tween = activeTween
-	activeTween = nil
+local function cancelRig(rig: PoseRig): ()
+	rig.token += 1
+	local tween = rig.tween
+	rig.tween = nil
 	if tween ~= nil then
 		tween:Cancel()
 	end
-	local motor = shoulder
+	local motor = rig.motor
 	if motor ~= nil then
-		motor.C0 = shoulderBase
+		motor.C0 = rig.base
 	end
 end
 
+local function cancelPose(): ()
+	cancelRig(localPose)
+end
+
 -- One pose leg: tween the shoulder to `degrees` about its own X axis over `seconds`.
-local function poseTo(degrees: number, seconds: number, style: Enum.EasingStyle): Tween?
-	local motor = shoulder
+local function rigPoseTo(
+	rig: PoseRig,
+	degrees: number,
+	seconds: number,
+	style: Enum.EasingStyle
+): Tween?
+	local motor = rig.motor
 	if motor == nil then
 		return nil
 	end
-	local goal = shoulderBase * CFrame.Angles(math.rad(degrees), 0, 0)
+	local goal = rig.base * CFrame.Angles(math.rad(degrees), 0, 0)
 	local tween = TweenService:Create(
 		motor,
 		Motion.Info(math.max(seconds, 0), style, Enum.EasingDirection.Out),
 		{ C0 = goal }
 	)
-	activeTween = tween
+	rig.tween = tween
 	tween:Play()
 	return tween
+end
+
+local function poseTo(degrees: number, seconds: number, style: Enum.EasingStyle): Tween?
+	return rigPoseTo(localPose, degrees, seconds, style)
+end
+
+-- Wind up against the swing, then strike through it, then settle, all inside
+-- `windowSeconds` so the pose and the server's combo clock agree.
+local function swingRig(rig: PoseRig, step: number, windowSeconds: number): ()
+	if rig.motor == nil then
+		return
+	end
+	cancelRig(rig)
+	local token = rig.token
+	local total = math.max(windowSeconds, Theme.COMBAT_SWING_SETTLE_SECONDS)
+	local windupSeconds = total * Theme.COMBAT_SWING_WINDUP_FRACTION
+	-- The finisher (step 3) travels further, which is the only cue that the combo landed.
+	local strike = Theme.COMBAT_SWING_STRIKE_DEGREES * (if step >= 3 then 1.25 else 1)
+	rigPoseTo(rig, Theme.COMBAT_SWING_WINDUP_DEGREES, windupSeconds, Enum.EasingStyle.Quad)
+	task.delay(Motion.Seconds(windupSeconds), function()
+		if token ~= rig.token then
+			return
+		end
+		local tween = rigPoseTo(rig, strike, total - windupSeconds, Enum.EasingStyle.Back)
+		if tween == nil then
+			return
+		end
+		tween.Completed:Once(function()
+			if token ~= rig.token then
+				return
+			end
+			rigPoseTo(rig, 0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
+		end)
+	end)
+end
+
+-- No yield: a remote character whose arm has not streamed in yet is skipped for this swing
+-- and found on the next one.
+local function findShoulder(rig: Model): Motor6D?
+	local parent = findFirst(rig, SHOULDER_PARENTS)
+	if parent == nil then
+		return nil
+	end
+	local motor = findFirst(parent, SHOULDER_NAMES)
+	return if motor ~= nil and motor:IsA("Motor6D") then motor else nil
 end
 
 local function bindCharacter(rig: Model): ()
 	cancelPose()
 	character = rig
-	shoulder = nil
-	shoulderBase = CFrame.identity
+	localPose.motor = nil
+	localPose.base = CFrame.identity
 	task.spawn(function()
 		local parent: Instance? = nil
 		for _, name in SHOULDER_PARENTS do
@@ -216,8 +279,8 @@ local function bindCharacter(rig: Model): ()
 		if motor == nil or not motor:IsA("Motor6D") or character ~= rig then
 			return
 		end
-		shoulder = motor
-		shoulderBase = motor.C0
+		localPose.motor = motor
+		localPose.base = motor.C0
 		refreshWeapon()
 	end)
 end
@@ -252,39 +315,39 @@ function WeaponController.SetStance(nextStance: string): ()
 	refreshWeapon()
 end
 
--- Wind up against the swing, then strike through it. The whole thing takes the class's
--- window for this step, so the pose and the server's combo clock agree.
+-- The local swing, timed by the equipped class's window for this step.
 function WeaponController.Swing(step: number, windowSeconds: number): ()
-	if shoulder == nil then
+	swingRig(localPose, step, windowSeconds)
+end
+
+-- Another player's validated swing. The base C0 is captured the first time a rig is seen
+-- (at rest, since nothing posed it yet) and reused, so overlapping swings never drift the arm.
+function WeaponController.SwingOther(userId: number, step: number): ()
+	local player = Players:GetPlayerByUserId(userId)
+	if player == nil or player == Players.LocalPlayer then
+		return -- bots and departed players have nothing to pose; our own swing is local
+	end
+	local rig = player.Character
+	if rig == nil then
 		return
 	end
-	cancelPose()
-	poseToken += 1
-	local token = poseToken
-	local total = math.max(windowSeconds, Theme.COMBAT_SWING_SETTLE_SECONDS)
-	local windupSeconds = total * Theme.COMBAT_SWING_WINDUP_FRACTION
-	-- The finisher (step 3) travels further, which is the only cue that the combo landed.
-	local strike = Theme.COMBAT_SWING_STRIKE_DEGREES * (if step >= 3 then 1.25 else 1)
-	poseTo(Theme.COMBAT_SWING_WINDUP_DEGREES, windupSeconds, Enum.EasingStyle.Quad)
-	task.delay(Motion.Seconds(windupSeconds), function()
-		if token ~= poseToken then
+	local pose = remotePoses[rig]
+	local motor = if pose ~= nil then pose.motor else nil
+	if pose == nil or motor == nil or motor.Parent == nil then
+		local found = findShoulder(rig)
+		if found == nil then
 			return
 		end
-		local tween = poseTo(strike, total - windupSeconds, Enum.EasingStyle.Back)
-		if tween == nil then
-			return
-		end
-		tween.Completed:Once(function()
-			if token ~= poseToken then
-				return
-			end
-			poseTo(0, Theme.COMBAT_SWING_SETTLE_SECONDS, Enum.EasingStyle.Quad)
-		end)
-	end)
+		pose = { motor = found, base = found.C0, tween = nil, token = 0 }
+		remotePoses[rig] = pose
+	end
+	if pose ~= nil then
+		swingRig(pose, step, Theme.COMBAT_REMOTE_SWING_SECONDS)
+	end
 end
 
 function WeaponController.Draw(chargeSeconds: number): ()
-	if shoulder == nil then
+	if localPose.motor == nil then
 		return
 	end
 	cancelPose()
@@ -292,7 +355,7 @@ function WeaponController.Draw(chargeSeconds: number): ()
 end
 
 function WeaponController.Release(): ()
-	if shoulder == nil then
+	if localPose.motor == nil then
 		return
 	end
 	cancelPose()
@@ -316,7 +379,7 @@ function WeaponController.Shoot(
 	range: number,
 	fireKind: string
 ): ()
-	if shoulder ~= nil then
+	if localPose.motor ~= nil then
 		cancelPose()
 		poseTo(
 			Theme.COMBAT_SHOOT_KICK_DEGREES,
@@ -361,13 +424,13 @@ end
 -- Hitstop, C1 form: the swing that just connected stops dead for `seconds` and then
 -- finishes. See the CombatFxController header for why the enemy's own rig is not frozen.
 function WeaponController.Hitstop(seconds: number): ()
-	local tween = activeTween
+	local tween = localPose.tween
 	if tween == nil or seconds <= 0 or Theme.reducedMotion then
 		return
 	end
 	tween:Pause()
 	task.delay(seconds, function()
-		if activeTween == tween and tween.PlaybackState == Enum.PlaybackState.Paused then
+		if localPose.tween == tween and tween.PlaybackState == Enum.PlaybackState.Paused then
 			tween:Play()
 		end
 	end)
@@ -379,6 +442,10 @@ function WeaponController.Destroy(): ()
 	end
 	table.clear(connections)
 	cancelPose()
+	for _, pose in remotePoses do
+		cancelRig(pose)
+	end
+	table.clear(remotePoses)
 	clearWeapon()
 end
 

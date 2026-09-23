@@ -50,7 +50,15 @@ export type CombatHudHandle = {
 	Destroy: () -> (),
 }
 
-type PartyRow = { frame: Frame, nameLabel: TextLabel, fill: Frame }
+type PartyRow = {
+	frame: Frame,
+	nameLabel: TextLabel,
+	shareLabel: TextLabel,
+	-- A waiting member's HP is not in play, so its bar gives way to a status line.
+	track: Frame,
+	statusLabel: TextLabel,
+	fill: Frame,
+}
 type AbilityButton = {
 	button: TextButton,
 	nameLabel: TextLabel,
@@ -62,10 +70,16 @@ type AbilityButton = {
 
 local BLANK = "—"
 local LOBBY_TEXT = "Lobby"
+local WAITING_TEXT = "You'll join at the next wave"
+local HOST_MARK = "★ "
+local PERCENT = 100
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 
 local CombatHud = {}
+
+-- CombatFxController toasts the same words when the server refuses a waiting player's tap.
+CombatHud.WAITING_TEXT = WAITING_TEXT
 
 function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local connections: { RBXScriptConnection } = {}
@@ -74,6 +88,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local runEndsIn = 0
 	local lastTickAt = os.clock()
 	local stance = MELEE_SLOT
+	-- userIds seen fighting (not waiting) in a wave this session. A waiting member who has
+	-- fought went down and is "back next wave"; anyone else just arrived and "joins next
+	-- wave". PartyMember carries only the flag, so the history is ours.
+	local seenFighting: { [number]: boolean } = {}
 
 	local function bar(parentFrame: Frame, name: string, height: number): Frame
 		local track = Create("Frame", {
@@ -472,6 +490,34 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = stanceButton })
 	local stanceScale = Create("UIScale", { Parent = stanceButton }) :: UIScale
 
+	-- C2: shown while the local player is `waiting` (arrived or went down mid-wave). Mid
+	-- screen, below the tallest party list, because both thumb corners are taken; inactive,
+	-- so it never swallows a camera drag.
+	local waitingFrame = Create("Frame", {
+		Name = "Waiting",
+		Active = false,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, Theme.COMBAT_WAITING_TOP_FRACTION),
+		Size = UDim2.fromOffset(Theme.COMBAT_WAITING_WIDTH, Theme.COMBAT_WAITING_HEIGHT),
+		BackgroundColor3 = Theme.COLOR_BG,
+		BackgroundTransparency = Theme.BG_TRANSPARENCY,
+		BorderSizePixel = 0,
+		Visible = false,
+		Parent = parent,
+	}) :: Frame
+	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = waitingFrame })
+	local waitingScale = Create("UIScale", { Parent = waitingFrame }) :: UIScale
+	Create("TextLabel", {
+		Name = "Text",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Theme.FONT_BOLD,
+		TextSize = Theme.TEXT_MEDIUM,
+		TextColor3 = Theme.COLOR_TEXT,
+		Text = WAITING_TEXT,
+		Parent = waitingFrame,
+	})
+
 	local function makePartyRow(index: number): PartyRow
 		local frame = Create("Frame", {
 			Name = "Member" .. tostring(index),
@@ -490,15 +536,29 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			PaddingTop = UDim.new(0, Theme.BUTTON_TEXT_PAD),
 			Parent = frame,
 		})
+		-- The name gives up the right edge to the damage share; the share never truncates.
 		local nameLabel = Create("TextLabel", {
 			Name = "Name",
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, Theme.COMBAT_PARTY_NAME_HEIGHT),
+			Size = UDim2.new(1, -Theme.COMBAT_PARTY_SHARE_WIDTH, 0, Theme.COMBAT_PARTY_NAME_HEIGHT),
 			Font = Theme.FONT,
 			TextSize = Theme.TEXT_SMALL,
 			TextColor3 = Theme.COLOR_TEXT,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextTruncate = Enum.TextTruncate.AtEnd,
+			Text = "",
+			Parent = frame,
+		}) :: TextLabel
+		local shareLabel = Create("TextLabel", {
+			Name = "Share",
+			AnchorPoint = Vector2.new(1, 0),
+			BackgroundTransparency = 1,
+			Position = UDim2.fromScale(1, 0),
+			Size = UDim2.fromOffset(Theme.COMBAT_PARTY_SHARE_WIDTH, Theme.COMBAT_PARTY_NAME_HEIGHT),
+			Font = Theme.FONT_BOLD,
+			TextSize = Theme.TEXT_SMALL,
+			TextColor3 = Theme.COLOR_HIGHLIGHT,
+			TextXAlignment = Enum.TextXAlignment.Right,
 			Text = "",
 			Parent = frame,
 		}) :: TextLabel
@@ -509,9 +569,26 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			BackgroundTransparency = 1,
 			Parent = frame,
 		}) :: Frame
+		local statusLabel = Create("TextLabel", {
+			Name = "Status",
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(0, Theme.COMBAT_PARTY_NAME_HEIGHT),
+			Size = UDim2.new(1, 0, 0, Theme.COMBAT_PARTY_STATUS_HEIGHT),
+			Font = Theme.FONT,
+			TextSize = Theme.TEXT_SMALL,
+			TextColor3 = Theme.COLOR_ACCENT_ALT,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			Text = "",
+			Visible = false,
+			Parent = frame,
+		}) :: TextLabel
 		return {
 			frame = frame,
 			nameLabel = nameLabel,
+			shareLabel = shareLabel,
+			track = track,
+			statusLabel = statusLabel,
 			fill = bar(track, "Bar", Theme.COMBAT_PARTY_BAR_HEIGHT),
 		}
 	end
@@ -590,6 +667,9 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end
 
 		local localUserId = Players.LocalPlayer.UserId
+		local localWaiting = false
+		-- A share only means something with company; solo it would always read 100%.
+		local showShare = #run.party > 1 and phase ~= "lobby"
 		local shown = 0
 		for _, member in run.party do
 			if typeof(member) ~= "table" or typeof(member.name) ~= "string" then
@@ -601,12 +681,33 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 				row = makePartyRow(shown)
 				partyRows[shown] = row
 			end
+			-- Fields C2 added are read defensively, so an older server build renders as C1.
+			local waiting = member.waiting == true and fighting
+			if fighting and not waiting and member.alive then
+				seenFighting[member.userId] = true
+			end
+			if waiting and member.userId == localUserId then
+				localWaiting = true
+			end
 			local suffix = if phase == "lobby" and member.ready
 				then " ✓"
 				elseif not member.alive then " · DOWN"
 				elseif member.bot then " · BOT"
 				else ""
-			row.nameLabel.Text = member.name .. suffix
+			row.nameLabel.Text = (if member.host == true then HOST_MARK else "")
+				.. member.name
+				.. suffix
+			local share = member.damageShare
+			row.shareLabel.Text = if showShare and typeof(share) == "number"
+				then Format.Cash(math.round(math.clamp(share, 0, 1) * PERCENT)) .. "%"
+				else ""
+			row.track.Visible = not waiting
+			row.statusLabel.Visible = waiting
+			if waiting then
+				row.statusLabel.Text = if seenFighting[member.userId]
+					then "back next wave"
+					else "joins next wave"
+			end
 			row.nameLabel.TextColor3 = if member.alive
 				then Theme.COLOR_TEXT
 				else Theme.COLOR_TEXT_DIM
@@ -628,6 +729,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end
 		for index = shown + 1, #partyRows do
 			partyRows[index].frame.Visible = false
+		end
+		waitingFrame.Visible = localWaiting
+		if phase == "summary" or phase == "ended" then
+			table.clear(seenFighting) -- nothing carries past a run
 		end
 	end
 
@@ -735,6 +840,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			attackScale.Scale = scale
 			abilityScale.Scale = scale
 			stanceScale.Scale = scale
+			waitingScale.Scale = scale
 			-- UIScale multiplies size, not position offsets, so margins scale by hand.
 			local margin = Theme.SCREEN_MARGIN * scale
 			local bottom = Theme.PADDING * scale
@@ -809,6 +915,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			attackButton:Destroy()
 			abilityFrame:Destroy()
 			stanceButton:Destroy()
+			waitingFrame:Destroy()
 		end,
 	}
 	handle.SetStance(MELEE_SLOT)

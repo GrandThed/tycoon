@@ -1,7 +1,8 @@
 --!strict
 -- The arena, the party roster and the authoritative RunState (docs/INTERFACES.md "C0 contracts"
--- → "Combat place server", "C1 contracts" → "Arena"). C1 replaces C0's bare pad with the
--- mission's own layout and gives every member the record the AI and the hit math read.
+-- → "Combat place server", "C1 contracts" → "Arena", "C2 contracts" → "Combat place (A)"). C1
+-- replaces C0's bare pad with the mission's own layout and gives every member the record the AI
+-- and the hit math read; C2 adds the run ticket, admission, and the wave-boundary entry rule.
 --
 -- The weapons decide max HP, so the Humanoid is resized from the PROFILE on every spawn — never
 -- from anything the client sent, and never from the teleport data.
@@ -17,6 +18,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Combat = require(sharedFolder:WaitForChild("Combat"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -34,9 +36,17 @@ local SPAWN_SIZE = Vector3.new(6, 1, 6)
 -- Studs above the floor a character is placed at, so nobody spawns inside the geometry.
 local SPAWN_CLEARANCE = 4
 local WALL_THICKNESS = 1
-local BOT_COLOR = Color3.fromRGB(70, 120, 190)
 local BOT_USER_ID_BASE = -1000
 local DEFAULT_BOT_HP = 150
+local NEUTRAL_EMPOWER = 1
+
+-- The verdict every arrival gets before Admit. "ok" admits; anything else is a refusal the hub
+-- shows on the way back (ReturnData.refused).
+export type Admission = "ok" | "full" | "over" | "locked"
+-- probe = the admitCheck lever: judge the caller as a STRANGER arriving right now (their own seat
+-- still counted, their membership and any expected-list entry ignored), so one Studio client can
+-- see the verdict a real joiner would get without anyone being sent home.
+export type AdmissionHint = { probe: boolean }
 
 local partyOrder: { number } = {}
 local party: { [number]: Types.RunMember } = {}
@@ -48,8 +58,17 @@ local runMission: Types.MissionConfig? = nil
 local runOverdrive = false
 local hostUserId = 0
 local hostName = ""
--- The verified reserved code this run is reachable at; nil = unjoinable (nothing published).
-local runAccessCode: string? = nil
+-- The verified hub ticket; nil = a private run (no code, no expected list, nothing published).
+local runTicket: Types.RunTicket? = nil
+-- True while the first arrival's ResolveTicket is in flight. Later arrivals park on
+-- ticketWaiters until it lands, because admission reads the ticket (host gate, expected list).
+local ticketPending = false
+local ticketWaiters: { thread } = {}
+-- os.clock() of the first admit of this run, for coop.lobbyWaitSeconds.
+local firstArrivalAt = 0
+-- Every userId admitted at least once this run: an expected member who arrived and then left
+-- must not hold the lobby for the whole wait.
+local everAdmitted: { [number]: boolean } = {}
 local warnedUnjoinable = false
 local characterConnections: { [Player]: { RBXScriptConnection } } = {}
 local arenaFolder: Folder? = nil
@@ -61,9 +80,12 @@ local spawnCursor = 0
 local runStartedAt = 0
 local combatConfig: Types.CombatConfig? = nil
 local sendSnapshot: ((player: Player) -> ())? = nil
+-- CombatService's run-wide raw damage share. Handed in (CombatService sits above this service).
+local shareSource: ((userId: number) -> number)? = nil
 
 -- Everything WaveService owns in the RunState payload, defaulted to the lobby.
-type RunFields = {
+export type RunFields = {
+	phase: Types.RunPhase,
 	wave: number,
 	alive: number,
 	remaining: number,
@@ -73,8 +95,10 @@ type RunFields = {
 	runEndsIn: number,
 	boss: { name: string, hp: number, maxHp: number }?,
 	inRun: boolean,
+	returnIn: number?,
 }
 local runFields: RunFields = {
+	phase = "lobby",
 	wave = 0,
 	alive = 0,
 	remaining = 0,
@@ -84,6 +108,7 @@ local runFields: RunFields = {
 	runEndsIn = 0,
 	boss = nil,
 	inRun = false,
+	returnIn = nil,
 }
 
 local ArenaService = {}
@@ -273,6 +298,11 @@ local function nextPlayerSpawn(): CFrame
 	return CFrame.new(point + Vector3.new(0, SPAWN_CLEARANCE, 0))
 end
 
+-- A wave or boss fight is under way: anyone entering now waits on the pad for the boundary.
+local function midWave(): boolean
+	return runFields.phase == "wave" or runFields.phase == "boss"
+end
+
 -- The profile is authoritative for max HP. Without Armory.json the Humanoid keeps its default
 -- 100, which is the degrade path, not an error.
 local function applyMaxHp(member: Types.RunMember): ()
@@ -311,6 +341,8 @@ local function emptySummary(): Types.RunSummary
 		valor = 0,
 		kills = 0,
 		seconds = 0,
+		mentorValor = 0,
+		damageShare = 0,
 	}
 end
 
@@ -323,10 +355,23 @@ local function summaryFor(userId: number): Types.RunSummary
 	return summary
 end
 
+local function damageShareOf(userId: number): number
+	local source = shareSource
+	if source == nil then
+		return 0
+	end
+	return source(userId)
+end
+
 function ArenaService.IsAlive(member: Types.RunMember): boolean
 	local humanoid = member.humanoid
 	local character = member.character
 	return humanoid ~= nil and character ~= nil and character.Parent ~= nil and humanoid.Health > 0
+end
+
+-- In the fight right now: alive and not parked on the pad for the next wave boundary.
+function ArenaService.IsFighting(member: Types.RunMember): boolean
+	return not member.waiting and ArenaService.IsAlive(member)
 end
 
 local function memberEntry(member: Types.RunMember): Types.PartyMember
@@ -345,6 +390,9 @@ local function memberEntry(member: Types.RunMember): Types.PartyMember
 			ranged = math.max(0, member.abilityReadyAt.ranged - now),
 		},
 		stance = member.stance,
+		host = member.userId == hostUserId,
+		waiting = member.waiting,
+		damageShare = damageShareOf(member.userId),
 	}
 end
 
@@ -377,10 +425,31 @@ function ArenaService.BuildRunState(
 		runEndsIn = runFields.runEndsIn,
 		boss = runFields.boss,
 		summary = summary,
+		returnIn = if phase == "summary" then runFields.returnIn else nil,
 	}
 end
 
+function ArenaService.GetSummary(userId: number): Types.RunSummary
+	local summary = summaryFor(userId)
+	summary.seconds = math.floor(ArenaService.RunSeconds())
+	summary.damageShare = damageShareOf(userId)
+	return summary
+end
+
+local function sendSummaryTo(player: Player, userId: number): ()
+	RemoteService.FireClient(
+		player,
+		"RunState",
+		ArenaService.BuildRunState("summary", ArenaService.GetSummary(userId))
+	)
+end
+
+-- The summary is per player (their own share), so that phase cannot reuse a single payload.
 function ArenaService.Broadcast(phase: Types.RunPhase): ()
+	if phase == "summary" then
+		ArenaService.BroadcastSummary()
+		return
+	end
 	local runState = ArenaService.BuildRunState(phase, nil)
 	for _, userId in partyOrder do
 		local member = party[userId]
@@ -391,33 +460,18 @@ function ArenaService.Broadcast(phase: Types.RunPhase): ()
 	end
 end
 
--- The summary is per player (their own share), so this one cannot reuse a single payload.
 function ArenaService.BroadcastSummary(): ()
 	for _, userId in partyOrder do
 		local member = party[userId]
 		local player = if member ~= nil then member.player else nil
 		if player ~= nil then
-			RemoteService.FireClient(
-				player,
-				"RunState",
-				ArenaService.BuildRunState("summary", summaryFor(userId))
-			)
+			sendSummaryTo(player, userId)
 		end
 	end
 end
 
 -- WaveService pushes the wave-facing half of RunState here every time it changes.
-function ArenaService.SetRunFields(fields: {
-	wave: number,
-	alive: number,
-	remaining: number,
-	tempo: number,
-	merged: boolean,
-	breatherEndsIn: number?,
-	runEndsIn: number,
-	boss: { name: string, hp: number, maxHp: number }?,
-	inRun: boolean,
-}): ()
+function ArenaService.SetRunFields(fields: RunFields): ()
 	runFields = fields
 end
 
@@ -431,12 +485,56 @@ function ArenaService.SetSnapshotSender(sender: (player: Player) -> ()): ()
 	sendSnapshot = sender
 end
 
+-- CombatService hands its run-wide share lookup over at Init.
+function ArenaService.SetShareSource(source: (userId: number) -> number): ()
+	shareSource = source
+end
+
 -- Used after a reward flush so the HUD wallet strip is current; Main owns the Snapshot shape.
 function ArenaService.SendSnapshot(player: Player): ()
 	local sender = sendSnapshot
 	if sender ~= nil then
 		sender(player)
 	end
+end
+
+local function humanIds(): { number }
+	local ids: { number } = {}
+	for _, userId in partyOrder do
+		local member = party[userId]
+		if member ~= nil and not member.bot then
+			table.insert(ids, userId)
+		end
+	end
+	return ids
+end
+
+local function isExpected(userId: number): boolean
+	local ticket = runTicket
+	return ticket ~= nil and table.find(ticket.expected, userId) ~= nil
+end
+
+-- Seats held for expected party members still loading in. Only in the lobby: once the run is
+-- under way a no-show has had lobbyWaitSeconds, and an expected latecomer is admitted on the
+-- same seat check as anyone else. `except` drops the arrival's own reservation.
+local function reservedSeats(except: number?): number
+	local ticket = runTicket
+	if ticket == nil or runFields.phase ~= "lobby" then
+		return 0
+	end
+	local reserved = 0
+	for _, userId in ticket.expected do
+		if userId ~= except and not everAdmitted[userId] and party[userId] == nil then
+			reserved += 1
+		end
+	end
+	return reserved
+end
+
+-- Humans + bots + seats held for the departing party. Also what the registry advertises as
+-- partySize, so the hub's `full` pre-filter agrees with the admission check here.
+local function seatsTaken(except: number?): number
+	return #partyOrder + reservedSeats(except)
 end
 
 -- RunRegistry.Publish and .Clear YIELD: they retry with a task.wait backoff, so with the
@@ -457,15 +555,15 @@ local function publishNow(): ()
 	if mission == nil or hostUserId == 0 then
 		return
 	end
-	local accessCode = runAccessCode
-	if accessCode == nil then
-		-- No verified reserved code: the run is playable but nobody can teleport into it, so it
-		-- is deliberately not advertised (warned once per run rather than on every admit).
+	local ticket = runTicket
+	if ticket == nil then
+		-- No verified ticket: the run is playable but nobody can teleport into it, so it is
+		-- deliberately not advertised (warned once per run rather than on every admit).
 		if not warnedUnjoinable then
 			warnedUnjoinable = true
 			warn(
-				`[ArenaService] run {mission.id} for host {hostUserId} has no verified access`
-					.. ` code; it will not appear in any run list`
+				`[ArenaService] run {mission.id} for host {hostUserId} has no verified ticket;`
+					.. ` it will not appear in any run list`
 			)
 		end
 		return
@@ -477,8 +575,10 @@ local function publishNow(): ()
 		era = mission.era,
 		wave = runFields.wave,
 		overdrive = runOverdrive,
-		partySize = #partyOrder,
-		accessCode = accessCode,
+		partySize = seatsTaken(nil),
+		accessCode = ticket.accessCode,
+		public = ticket.public,
+		memberIds = humanIds(),
 	})
 end
 
@@ -530,6 +630,63 @@ function ArenaService.ClearRegistry(host: number): ()
 	clearRun(host)
 end
 
+-- The run is over: a reserved server can be reused by a later arrival (or by a rejoin after a
+-- failed trip home), and leaving the old mission, host and ticket in place would advertise a run
+-- that no longer exists.
+local function resetRun(): ()
+	-- Queued, not called: this runs from PlayerRemoving and from ReturnService immediately
+	-- before DataService.Release, and the registry retry backoff must never delay a save.
+	clearRun(hostUserId)
+	runMission = nil
+	runOverdrive = false
+	hostUserId = 0
+	hostName = ""
+	runTicket = nil
+	firstArrivalAt = 0
+	everAdmitted = {}
+	warnedUnjoinable = false
+	EnemyService.SetMission(nil)
+end
+
+local function humanCount(): number
+	local humans = 0
+	for _, userId in partyOrder do
+		local member = party[userId]
+		if member ~= nil and not member.bot then
+			humans += 1
+		end
+	end
+	return humans
+end
+
+-- Places a (re)spawned body by the wave-boundary rule: mid-wave it waits on the pad, in a
+-- breather it goes straight to a player spawn, in the lobby or on the summary it stays home.
+local function placeBody(member: Types.RunMember, character: Model): ()
+	if midWave() then
+		member.waiting = true
+		character:PivotTo(lobbyCFrame())
+	elseif runFields.inRun then
+		member.waiting = false
+		character:PivotTo(nextPlayerSpawn())
+	else
+		member.waiting = false
+		character:PivotTo(lobbyCFrame())
+	end
+end
+
+-- Sends the roster to the party, or just this player's summary card when the run is over.
+local function announce(player: Player?): ()
+	local phase: Types.RunPhase = runFields.phase
+	if phase == "summary" and player ~= nil then
+		local member = byPlayer[player]
+		if member ~= nil then
+			sendSummaryTo(player, member.userId)
+		end
+		return
+	end
+	ArenaService.Broadcast(phase)
+end
+
 local function watchCharacter(member: Types.RunMember, character: Model): ()
 	member.character = character
 	member.humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -555,29 +712,107 @@ local function watchCharacter(member: Types.RunMember, character: Model): ()
 	)
 end
 
--- The mission and the Overdrive flag are decided by the FIRST admitted player: everyone else
--- joins the run that is already here, whatever their teleport data claimed.
-function ArenaService.Admit(
-	player: Player,
+-- Sets up the run the FIRST arrival asked for; everyone after joins the run already here,
+-- whatever their teleport data claimed. Yields: the first call reads the hub's ticket from
+-- MemoryStore, and later arrivals wait for that read so admission sees the real ticket.
+function ArenaService.EnsureRun(
 	mission: Types.MissionConfig,
 	overdrive: boolean,
-	runHostUserId: number?
+	runHostUserId: number,
+	arrivalName: string
 ): ()
-	if runMission == nil then
-		runMission = mission
-		runOverdrive = overdrive
-		hostUserId = runHostUserId or player.UserId
-		hostName = player.Name
-		-- Resolved once per run: the code is fixed for the life of the reserved server.
-		runAccessCode = RunRegistry.ResolveAccessCode(hostUserId, mission.id, overdrive)
-		EnemyService.SetMission(mission)
-		runStartedAt = os.clock()
+	if runMission ~= nil then
+		if ticketPending then
+			table.insert(ticketWaiters, coroutine.running())
+			coroutine.yield()
+		end
+		return
+	end
+	runMission = mission
+	runOverdrive = overdrive
+	hostUserId = runHostUserId
+	-- Replaced by the host's own name when the host arrives; until then (or if the host never
+	-- does) the run is listed under whoever opened it.
+	hostName = arrivalName
+	runTicket = nil
+	firstArrivalAt = 0
+	everAdmitted = {}
+	EnemyService.SetMission(mission)
+	runStartedAt = os.clock()
+	ensureArena(mission.arena)
+
+	ticketPending = true
+	-- Resolved once per run: the ticket is fixed for the life of the reserved server.
+	local ticket = RunRegistry.ResolveTicket(runHostUserId, mission.id, overdrive)
+	ticketPending = false
+	-- A reset cannot land during the read (ResetIfEmpty waits on ticketPending), so the run
+	-- this ticket belongs to is still the current one.
+	runTicket = ticket
+	local waiters = ticketWaiters
+	ticketWaiters = {}
+	for _, thread in waiters do
+		task.spawn(thread)
+	end
+end
+
+-- One function for every arrival (and for the admitCheck lever), run before Admit. Order
+-- matters: `over` beats `full` beats `locked`, so the hub shows the most permanent reason.
+function ArenaService.CheckAdmission(player: Player, hint: AdmissionHint): Admission
+	local mission = runMission
+	local config = combatConfig
+	if mission == nil or config == nil then
+		return "locked"
+	end
+	local coop = config.coop
+	local probe = hint.probe
+	local phase = runFields.phase
+	if phase == "summary" or phase == "ended" then
+		return "over"
+	end
+	local expected = not probe and isExpected(player.UserId)
+	if not expected and runFields.wave > coop.joinUntilWave then
+		return "over"
+	end
+	local member = if probe then nil else byPlayer[player]
+	if member == nil then
+		local seats = if probe then seatsTaken(nil) else seatsTaken(player.UserId)
+		if seats >= coop.maxParty then
+			return "full"
+		end
+	end
+	-- Host-gated (Ben's ruling): with a ticket the hub already checked the leader's unlock at
+	-- departure and joiners fight on the host's entitlement, so only the host is re-checked.
+	-- Without one nothing vouches for anybody and every arrival is checked as at C1.
+	local mustCheck = runTicket == nil or (not probe and player.UserId == hostUserId)
+	if mustCheck then
+		local state = DataService.GetState(player)
+		if state == nil or not Combat.MissionUnlocked(state, mission, runOverdrive, config) then
+			return "locked"
+		end
+	end
+	return "ok"
+end
+
+-- Adds an arrival that CheckAdmission let in. Mid-wave it waits on the lobby pad for the next
+-- boundary; in the lobby or a breather it enters at once.
+function ArenaService.Admit(player: Player): ()
+	local mission = runMission
+	if mission == nil then
+		return
 	end
 	ensureArena(mission.arena)
+	if player.UserId == hostUserId then
+		hostName = player.Name
+	end
+	everAdmitted[player.UserId] = true
+	if firstArrivalAt == 0 then
+		firstArrivalAt = os.clock()
+	end
 
 	local member = byPlayer[player]
 	if member == nil then
-		member = {
+		local state = DataService.GetState(player)
+		local newMember: Types.RunMember = {
 			userId = player.UserId,
 			name = player.Name,
 			player = player,
@@ -590,9 +825,16 @@ function ArenaService.Admit(
 			godMode = false,
 			respawnAt = 0,
 			spawnIndex = 0,
+			waiting = midWave(),
+			-- The hub refreshed incomeAtSave at departure, so this is the city's current rate.
+			incomeRate = if state ~= nil then state.incomeAtSave else 0,
+			drawStartedAt = 0,
+			empoweredUntil = 0,
+			empowerMult = NEUTRAL_EMPOWER,
 		}
-		party[player.UserId] = member
-		byPlayer[player] = member
+		member = newMember
+		party[player.UserId] = newMember
+		byPlayer[player] = newMember
 		table.insert(partyOrder, player.UserId)
 		memberCache = nil
 		summaries[player.UserId] = emptySummary()
@@ -605,13 +847,10 @@ function ArenaService.Admit(
 					return
 				end
 				watchCharacter(live, character)
-				-- Mid-run respawns land next to the fight, not back on the lobby pad.
-				if runFields.inRun then
-					character:PivotTo(nextPlayerSpawn())
-				else
-					character:PivotTo(lobbyCFrame())
-				end
-				ArenaService.Broadcast(if runFields.inRun then "wave" else "lobby")
+				-- A co-op death respawns here: mid-wave onto the pad as waiting, in a breather
+				-- straight back into the fight.
+				placeBody(live, character)
+				announce(nil)
 			end)
 		)
 	end
@@ -623,28 +862,33 @@ function ArenaService.Admit(
 	local character = player.Character
 	if character ~= nil then
 		watchCharacter(member, character)
-		-- A joiner arriving into a run in progress lands at a player spawn, not on the lobby pad
-		-- in the middle of the fight.
-		character:PivotTo(if runFields.inRun then nextPlayerSpawn() else lobbyCFrame())
+		placeBody(member, character)
 	end
 	publishRun()
-	ArenaService.Broadcast(if runFields.inRun then "wave" else "lobby")
+	-- On the summary phase this sends only this player's card: a rejoin after a failed trip home
+	-- lands back on it rather than on an empty lobby.
+	announce(player)
 end
 
--- RequestReady toggles: the button is the same button in both directions, and Main starts wave 1
--- once every non-bot member is ready. Ignored once the run is under way — RequestReady shares
--- the 10/s gameplay bucket, so without this guard a modified client could flap the whole party's
--- phase back to "lobby" ten times a second and freeze everyone's HUD and input.
+-- RequestReady toggles: the button is the same button in both directions. Ignored once the run
+-- is under way — RequestReady shares the 10/s gameplay bucket, so without this guard a modified
+-- client could flap the whole party's phase back to "lobby" ten times a second.
 function ArenaService.SetReady(player: Player): ()
 	local member = byPlayer[player]
-	if member == nil or runFields.inRun then
+	if member == nil or runFields.inRun or runFields.phase ~= "lobby" then
 		return
 	end
 	member.ready = not member.ready
 	ArenaService.Broadcast("lobby")
 end
 
-function ArenaService.AllReady(): boolean
+-- The lobby start rule: every present human ready, AND either the whole departing party is in or
+-- coop.lobbyWaitSeconds have passed since the first arrival. Bots are always ready.
+function ArenaService.CanStart(): boolean
+	local config = combatConfig
+	if runMission == nil or config == nil or ticketPending then
+		return false
+	end
 	local humans = 0
 	for _, userId in partyOrder do
 		local member = party[userId]
@@ -655,7 +899,38 @@ function ArenaService.AllReady(): boolean
 			end
 		end
 	end
-	return humans > 0
+	if humans == 0 then
+		return false
+	end
+	local ticket = runTicket
+	if ticket ~= nil then
+		for _, userId in ticket.expected do
+			if not everAdmitted[userId] then
+				return firstArrivalAt > 0
+					and os.clock() - firstArrivalAt >= config.coop.lobbyWaitSeconds
+			end
+		end
+	end
+	return true
+end
+
+-- The wave boundary (a breather begins, or a wave begins): everyone parked on the pad enters the
+-- fight at a player spawn with full HP. WaveService broadcasts right after.
+function ArenaService.ReleaseWaiting(): ()
+	for _, userId in partyOrder do
+		local member = party[userId]
+		if member == nil or not member.waiting then
+			continue
+		end
+		member.waiting = false
+		local character = member.character
+		local humanoid = member.humanoid
+		if character == nil or humanoid == nil or humanoid.Health <= 0 then
+			continue
+		end
+		humanoid.Health = humanoid.MaxHealth
+		character:PivotTo(nextPlayerSpawn())
+	end
 end
 
 function ArenaService.IsAdmitted(player: Player): boolean
@@ -672,6 +947,10 @@ end
 
 function ArenaService.GetHostUserId(): number
 	return hostUserId
+end
+
+function ArenaService.GetPhase(): Types.RunPhase
+	return runFields.phase
 end
 
 -- The server-side records (character, cooldown stamps): the client payload list is what
@@ -705,6 +984,7 @@ function ArenaService.GetMemberFor(player: Player): Types.RunMember?
 	return byPlayer[player]
 end
 
+-- Humans + bots, waiting or not: the count wave size and boss HP scale by.
 function ArenaService.PartySize(): number
 	return #partyOrder
 end
@@ -720,17 +1000,31 @@ function ArenaService.MarkRunStarted(): ()
 	runStartedAt = os.clock()
 end
 
+local function placeBot(member: Types.RunMember, model: Model): ()
+	if midWave() then
+		member.waiting = true
+		model:PivotTo(lobbyCFrame())
+	else
+		member.waiting = false
+		model:PivotTo(nextPlayerSpawn())
+	end
+end
+
 -- Debug bots (Studio only, DebugService.SetBots): server rigs that hold a party slot so party
--- scaling, aggro and the contribution split can be seen from a single client.
+-- scaling, aggro and the contribution split can be seen from a single client. A bot added
+-- mid-wave waits for the boundary exactly like a joiner.
 function ArenaService.AddBot(index: number): Types.RunMember?
 	local userId = BOT_USER_ID_BASE - index
 	if party[userId] ~= nil then
 		return party[userId]
 	end
-	local model, humanoid, _root = EnemyService.BuildRig(BOT_COLOR)
+	local config = combatConfig
+	if config == nil then
+		-- Bots are a DebugService lever, which needs Combat.json anyway.
+		return nil
+	end
+	local model, humanoid, _root = EnemyService.BuildRig(colorOf(config.enemy.botColor))
 	model.Name = `Bot_{index}`
-	model:PivotTo(nextPlayerSpawn())
-	model.Parent = workspace
 	local member: Types.RunMember = {
 		userId = userId,
 		name = `Bot {index}`,
@@ -745,13 +1039,21 @@ function ArenaService.AddBot(index: number): Types.RunMember?
 		godMode = false,
 		respawnAt = 0,
 		spawnIndex = index,
+		waiting = false,
+		incomeRate = config.debug.botIncomeRate,
+		drawStartedAt = 0,
+		empoweredUntil = 0,
+		empowerMult = NEUTRAL_EMPOWER,
 	}
+	placeBot(member, model)
+	model.Parent = workspace
 	applyMaxHp(member)
 	party[userId] = member
 	table.insert(partyOrder, userId)
 	memberCache = nil
 	summaries[userId] = emptySummary()
-	ArenaService.Broadcast(if runFields.inRun then "wave" else "lobby")
+	publishRun()
+	ArenaService.Broadcast(runFields.phase)
 	return member
 end
 
@@ -772,32 +1074,28 @@ function ArenaService.RemoveBot(index: number): ()
 		table.remove(partyOrder, position)
 	end
 	memberCache = nil
-	ArenaService.Broadcast(if runFields.inRun then "wave" else "lobby")
+	publishRun()
+	ArenaService.Broadcast(runFields.phase)
 end
 
 -- Bots have no Roblox respawn path of their own, so the wave loop asks for one here.
 function ArenaService.RespawnBot(member: Types.RunMember): ()
-	if not member.bot then
+	local config = combatConfig
+	if not member.bot or config == nil then
 		return
 	end
 	local old = member.character
 	if old ~= nil then
 		old:Destroy()
 	end
-	local model, humanoid, _root = EnemyService.BuildRig(BOT_COLOR)
+	local model, humanoid, _root = EnemyService.BuildRig(colorOf(config.enemy.botColor))
 	model.Name = `Bot_{member.spawnIndex}`
-	model:PivotTo(nextPlayerSpawn())
+	placeBot(member, model)
 	model.Parent = workspace
 	member.character = model
 	member.humanoid = humanoid
 	member.respawnAt = 0
 	applyMaxHp(member)
-end
-
-function ArenaService.GetSummary(userId: number): Types.RunSummary
-	local summary = summaryFor(userId)
-	summary.seconds = math.floor(ArenaService.RunSeconds())
-	return summary
 end
 
 -- WaveService credits the split of a cleared wave here so the card and the profile agree.
@@ -816,6 +1114,13 @@ function ArenaService.CreditSummary(
 	if materials > 0 and material ~= "" then
 		summary.materials[material] = (summary.materials[material] or 0) + materials
 	end
+end
+
+-- Mentor Valor is part of `valor` AND shown on its own line, so both move together.
+function ArenaService.CreditMentor(userId: number, valor: number): ()
+	local summary = summaryFor(userId)
+	summary.valor += valor
+	summary.mentorValor += valor
 end
 
 function ArenaService.MarkWaveCleared(wave: number, count: number): ()
@@ -853,31 +1158,22 @@ function ArenaService.Remove(player: Player): ()
 		characterConnections[player] = nil
 	end
 
-	local humans = 0
-	for _, userId in partyOrder do
-		local other = party[userId]
-		if other ~= nil and not other.bot then
-			humans += 1
-		end
-	end
-	if humans == 0 then
-		-- Queued, not called: this runs from PlayerRemoving and from ReturnService immediately
-		-- before DataService.Release, and the registry retry backoff must never delay a save.
-		clearRun(hostUserId)
-		-- The run is over: a reserved server can be reused by a later arrival (or by a rejoin
-		-- after a failed trip home), and leaving the old mission, host and access code in place
-		-- would advertise a run that no longer exists.
-		runMission = nil
-		runOverdrive = false
-		hostUserId = 0
-		hostName = ""
-		runAccessCode = nil
-		warnedUnjoinable = false
-		EnemyService.SetMission(nil)
+	if humanCount() == 0 then
+		resetRun()
 		return
 	end
 	publishRun()
-	ArenaService.Broadcast(if runFields.inRun then "wave" else "lobby")
+	ArenaService.Broadcast(runFields.phase)
+end
+
+-- For an arrival that opened the run and was then refused (or left mid-load) without ever being
+-- admitted: Remove never ran for them, so the run they opened would otherwise linger. Never
+-- during the first ticket read, whose arrival is about to be admitted.
+function ArenaService.ResetIfEmpty(): ()
+	if runMission == nil or ticketPending or humanCount() > 0 then
+		return
+	end
+	resetRun()
 end
 
 function ArenaService.Init(): ()
@@ -889,7 +1185,7 @@ function ArenaService.Init(): ()
 	buildFallbackArena(folder)
 
 	-- Roblox owns the respawn timer, so the contract's respawnSeconds is set here rather than
-	-- re-implemented: CharacterAdded then places the player at an arena spawn.
+	-- re-implemented: CharacterAdded then places the player by the wave-boundary rule.
 	local config = combatConfig
 	if config ~= nil then
 		Players.RespawnTime = config.player.respawnSeconds

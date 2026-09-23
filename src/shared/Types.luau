@@ -1217,7 +1217,7 @@ export type RunListEntry = {
 }
 
 -- C2 hub party (PartyService, never persisted). Sent on the PartyState event to every member
--- and to anyone with a pending invite from it; nil = not in a party.
+-- (invitees get PartyInvite instead); nil = not in a party.
 export type HubPartyMember = { userId: number, name: string }
 export type HubPartyInvite = { userId: number, name: string, expiresIn: number }
 export type HubParty = {

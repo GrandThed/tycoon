@@ -206,6 +206,17 @@ local Theme = {
 	POWER_READY_RATIO = 1,
 	POWER_RISKY_RATIO = 0.7,
 
+	-- C2 hub party (ExpeditionPanel party strip + PartyInviteToast). Member, pending-invite
+	-- and picker rows are one line tall with a 48 px action button (48 x MIN_SCALE = 44
+	-- physical px). The countdowns on pending invites and on the invite card repaint on the
+	-- tick; the deadline itself comes from the server's `expiresIn`.
+	PARTY_ROW_HEIGHT = 52,
+	PARTY_TICK_SECONDS = 1,
+	PARTY_INVITE_CARD_WIDTH = 312,
+	PARTY_INVITE_TITLE_HEIGHT = 20,
+	PARTY_INVITE_BODY_HEIGHT = 36,
+	PARTY_INVITE_GAP = 8,
+
 	-- M3: era-advance screen. A fixed-aspect card that still fits a 320 px tall viewport
 	-- at MIN_SCALE (340x300 -> 312x275 physical) so nothing clips in landscape.
 	ERA_SCREEN_WIDTH = 340,
@@ -315,6 +326,23 @@ local Theme = {
 	-- Portrait cannot fit the HP block and both buttons on one line, so the HP block lifts
 	-- above the button row whenever their combined design width does not fit.
 	COMBAT_HP_BUTTONS_GAP = 8,
+
+	-- C2 combat client (src/combat/client, ui-engineer A): co-op party rows, the waiting
+	-- banner and party fx. Presentation only; every co-op number arrives in RunState/CombatFx.
+	COMBAT_PARTY_SHARE_WIDTH = 36, -- right edge of a party row, fits "100%"
+	COMBAT_PARTY_STATUS_HEIGHT = 14, -- "joins next wave" line that replaces a waiting HP bar
+	-- Mid screen, under the tallest (4-row) party list in portrait and clear of both thumb
+	-- corners at 375x667, 812x375 and 1920x1080.
+	COMBAT_WAITING_TOP_FRACTION = 0.55,
+	COMBAT_WAITING_WIDTH = 260,
+	COMBAT_WAITING_HEIGHT = 40,
+	COMBAT_WAITING_TOAST_COOLDOWN = 3, -- seconds between "waiting" refusal toasts
+	-- Another player's swing: their weapon class is not sent, so one fixed pose window.
+	COMBAT_REMOTE_SWING_SECONDS = 0.35,
+	COMBAT_PARTY_RING_SECONDS = 0.6,
+	COMBAT_PARTY_RING_TRANSPARENCY = 0.35,
+	COMBAT_PARTY_PULSE_SECONDS = 0.5,
+	COMBAT_PARTY_PULSE_FILL = 0.45,
 
 	-- C1 combat controls. Touch-first: the attack button owns the bottom-right thumb arc,
 	-- the two ability buttons stack immediately left of it and the stance pill sits above

@@ -214,6 +214,11 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("+" .. tostring(Theme.COMBAT_DEBUG_GRANT_VALOR) .. " Valor", function()
 		deps.onLever("grantValor", Theme.COMBAT_DEBUG_GRANT_VALOR)
 	end)
+	-- C2: runs the server's CheckAdmission for this player and toasts the verdict; nobody
+	-- is sent home.
+	leverButton("Admit check", function()
+		deps.onLever("admitCheck", true)
+	end)
 
 	local handle: DebugPanelHandle = {
 		SetMission = function(mission: Types.MissionConfig?)

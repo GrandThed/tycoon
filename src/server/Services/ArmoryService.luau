@@ -20,6 +20,7 @@ local Combat = require(sharedFolder:WaitForChild("Combat"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local ExpeditionService = require(script.Parent:WaitForChild("ExpeditionService"))
+local PartyService = require(script.Parent:WaitForChild("PartyService"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
 -- The Studio levers are polled, like EconomyService's GrantCash/GrantLegacy, so the value can be
@@ -28,6 +29,9 @@ local LEVER_INTERVAL_SECONDS = 1
 
 local isStudio = RunService:IsStudio()
 local leverAccumulator = 0
+-- DebugFakeParty is sticky like DebugBots (a count to play under, not an event), so it applies
+-- to every player whenever the typed value changes.
+local appliedFakeParty: number? = nil
 
 local function sendResult(
 	player: Player,
@@ -206,6 +210,29 @@ local function consumeFakeRunsLever(attribute: string): ()
 	ExpeditionService.PublishFakeRuns(value)
 end
 
+-- C2 party levers. fakeParty applies to everyone in the server (the attribute has no owner);
+-- fakeInvite is consumed once like the grant levers.
+local function consumeFakePartyLever(attribute: string): ()
+	local value = workspace:GetAttribute(attribute)
+	if typeof(value) ~= "number" or value ~= value or value == appliedFakeParty then
+		return
+	end
+	appliedFakeParty = value
+	for _, player in Players:GetPlayers() do
+		PartyService.DebugFakeParty(player, value)
+	end
+end
+
+local function consumeFakeInviteLever(attribute: string): ()
+	if workspace:GetAttribute(attribute) ~= true then
+		return
+	end
+	workspace:SetAttribute(attribute, false)
+	for _, player in Players:GetPlayers() do
+		PartyService.DebugFakeInvite(player)
+	end
+end
+
 local function consumeStudioLevers(): ()
 	local combatConfig = Catalog.GetCombatConfig()
 	local armoryConfig = Catalog.GetArmoryConfig()
@@ -218,6 +245,8 @@ local function consumeStudioLevers(): ()
 		state.combat.valor += value
 	end)
 	consumeFakeRunsLever(debugConfig.fakeRunsAttribute)
+	consumeFakePartyLever(debugConfig.fakePartyAttribute)
+	consumeFakeInviteLever(debugConfig.fakeInviteAttribute)
 end
 
 -- A lever value that pays something out: positive and finite, so a corrupted materials, Valor
@@ -242,6 +271,17 @@ function ArmoryService.HandleDebug(player: Player, lever: string, value: any): (
 	if lever == "fakeRuns" then
 		-- 0 clears the list, which is why this lever is not routed through grantAmount.
 		ExpeditionService.PublishFakeRuns(if typeof(value) == "number" then value else 0)
+		return
+	end
+	if lever == "fakeParty" then
+		-- 0 clears the fakes; PartyService clamps to the seats a party has.
+		PartyService.DebugFakeParty(player, if typeof(value) == "number" then value else 0)
+		return
+	end
+	if lever == "fakeInvite" then
+		if value == true then
+			PartyService.DebugFakeInvite(player)
+		end
 		return
 	end
 	if lever == "forceTeleportFailure" then

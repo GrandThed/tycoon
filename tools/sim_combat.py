@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-"""Armory-and-expedition simulator for Era City Tycoon (C0 + C1).
+"""Armory-and-expedition simulator for Era City Tycoon (C0 + C1 + C2).
 
 Mirrors `src/shared/Armory.luau` and `src/shared/Combat.luau` function for
 function (same names, snake_case) from the contracts in `docs/INTERFACES.md`
 "C0 contracts -- Expeditions foundation" and "C1 contracts -- Studio bridge +
-Village expedition" ("Pure additions"), and reads the four real configs
+Village expedition" ("Pure additions") and "C2 contracts -- Co-op" (boss HP
+by party size, the Mentor bonus at boss clears, party effects), and reads the four real configs
 (`Armory.json`, `Combat.json`, `Places.json`, `Missions/*.json`). The greedy
 tycoon curve is NOT re-derived here: `sim_economy.simulate_era` is imported and
 run exactly as `sim_economy.run_full`/`run_packs` do (legacy carried across
@@ -27,7 +28,7 @@ model; breather time is reported beside the combat time, never inside it.
 
 Usage:
   py tools/sim_combat.py                  # unlock table + Village run report
-  py tools/sim_combat.py --check          # the six C0 assertions; exit 1 on any
+  py tools/sim_combat.py --check          # the thirteen C0-C2 assertions; exit 1 on any
   py tools/sim_combat.py --era 1          # only that era's mission
   py tools/sim_combat.py --power 84       # model the run at a given Gear Power
   py tools/sim_combat.py --party 4        # party size for the modelled run
@@ -63,6 +64,13 @@ RUN_TIME_TOLERANCE = 0.5
 RUN_CASH_CAP_FRACTION = 0.25
 # Assertion 5's fixture: a 10:1 damage duo must leave the veteran >= 75 %.
 VETERAN_SHARE_FLOOR = 0.75
+# C2 fixtures (docs/INTERFACES.md "C2 contracts", Balance). Assertion 11: a boss
+# wave at party 2-4, everyone at the recommended power, lasts within +-35 % of
+# the solo boss wave. Assertion 12: a 10:1 income duo pays the mentor exactly
+# mentorValor at a boss clear. The rates are fixture numbers, not game values.
+BOSS_WAVE_TOLERANCE = 0.35
+MENTOR_HOST_RATE = 10000.0
+MENTOR_RATE_RATIO = 10.0
 # Assertion 7/8/10 fixtures: the power multiples the contract names.
 STRONG_POWER_MULT = 2.0
 WEAK_POWER_MULT = 0.6
@@ -378,6 +386,9 @@ def wave_spec(mission, wave, party_size, overdrive, combat_cfg):
         * (over["damageMult"] if overdrive else 1),
         "rewardMult": (1 + table["rewardGrowth"]) ** (wave - 1)
         * (over["rewardMult"] if overdrive else 1),
+        # C2: the boss is one body whatever the party size, so it scales in HP
+        # instead of count. Same `extras` as the count term.
+        "bossHpMult": 1 + coop["bossHpPerExtraPlayer"] * extras,
         "boss": mission["bosses"].get(str(wave)),
         "weights": wave_weights(mission, wave),
     }
@@ -395,12 +406,16 @@ def enemy_stats(mission, key, spec, is_boss=False):
     boss = spec["boss"]
     if not (is_boss and boss is not None and boss["enemy"] == key):
         boss = None
-    hp_mult = spec["hpMult"] * (boss["hpMult"] if boss else 1)
+    # HP is multiplied left to right exactly as the Luau writes it --
+    # round(enemy.hp * spec.hpMult * boss.hpMult * spec.bossHpMult) -- because
+    # regrouping the factors can move a product across a .5 by one ulp.
+    boss_hp = boss["hpMult"] if boss else 1
+    party_hp = spec.get("bossHpMult", 1) if boss else 1
     damage_mult = spec["damageMult"] * (boss["damageMult"] if boss else 1)
     cash_mult = spec["rewardMult"] * (boss["cashMult"] if boss else 1)
     materials_mult = spec["rewardMult"] * (boss["materialsMult"] if boss else 1)
     return {
-        "hp": luau_round(enemy["hp"] * hp_mult),
+        "hp": luau_round(enemy["hp"] * spec["hpMult"] * boss_hp * party_hp),
         "damage": luau_round(enemy["damage"] * damage_mult),
         "cash": luau_round(enemy["cash"] * cash_mult),
         "materials": luau_round(enemy["materials"] * materials_mult),
@@ -846,7 +861,33 @@ def ability_targets(ability, alive):
     return alive[:limit]
 
 
-def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive, cash_mult=1.0):
+IDLE_MODEL = {"melee_dps": 0.0, "ranged_dps": 0.0, "dps": 0.0, "melee_range": 0, "abilities": []}
+
+
+def party_members(gear, ascension, party, rate=0.0):
+    """`party` identical humans at one loadout and income rate -- the C1 party."""
+    return [
+        {"gear": dict(gear), "ascension": dict(ascension), "rate": rate, "bot": False}
+        for _ in range(max(int(party), 1))
+    ]
+
+
+def member_party_effect(armory, member):
+    """The Armory.json partyEffects row this member's melee tier carries, or None.
+    A member dict may force one with `party_effect` (the proxy runs that measure
+    an effect's size at Village scale, where no band-4 blade exists)."""
+    key = member.get("party_effect")
+    if key is None:
+        definition = tier_def(armory, "melee", member["gear"]["melee"])
+        key = definition.get("partyEffect") if definition else None
+    if not key:
+        return None
+    return armory.get("partyEffects", {}).get(key)
+
+
+def simulate_run(
+    mission, armory, combat_cfg, gear, ascension, party, overdrive, cash_mult=1.0, members=None
+):
     """One full run, played second by second by the C1 director.
 
     Deterministic: no RNG anywhere. The loop advances DT at a time and runs the
@@ -857,20 +898,43 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
     the elite rule at `eliteTempo`, reward pools flushed through `SplitPool` at
     every wave clear, and the run ending on wave 10, `runCapSeconds` or death.
 
+    C2: the party is a list of `members` ({gear, ascension, rate, bot}); without
+    one it is `party` copies of `gear`. Each member has its own DPS, abilities
+    and cooldowns; every point of damage is credited to whoever dealt it, into a
+    run-wide map and a per-flush tally that is drained at every group clear
+    (CombatService.TakeDamageTally). The pot is split by the tally's
+    ContributionShares (bots' shares discarded), a kill refunds the KILLER's
+    cooldowns only, and at the flush of a group that held a boss every human
+    earns MentorBonus over the members whose raw tally share is at least
+    `coop.mentorMinDamageShare`. HP stays one pooled bar at the members' mean
+    max HP taking `incoming / party` (the C1 model); a rally therefore heals
+    (n - 1) / n of its healFraction into that bar.
+
     Returns (rows, totals): one row per wave (start, end, count, merged, boss,
     HP left) and the run aggregate."""
     director = combat_cfg["director"]
     player_cfg = combat_cfg["player"]
     enemy_cfg = combat_cfg["enemy"]
-    party = max(int(party), 1)
-    model = player_model(armory, gear, ascension)
-    hp_max = max_hp(armory, gear, ascension)
+    coop = combat_cfg["coop"]
+    if members is None:
+        members = party_members(gear, ascension, party)
+    party = len(members)
+    # An `idle` member is present (it scales the waves and takes its share of
+    # the hits) but deals no damage: the AFK alt the Mentor floor exists for.
+    models = [
+        IDLE_MODEL if m.get("idle") else player_model(armory, m["gear"], m["ascension"])
+        for m in members
+    ]
+    effects = [member_party_effect(armory, m) for m in members]
+    hp_max = sum(max_hp(armory, m["gear"], m["ascension"]) for m in members) / party
     hp = float(hp_max)
-    engage = model["melee_range"] + player_cfg["hitDistancePad"]
+    pad = player_cfg["hitDistancePad"]
+    engages = [model["melee_range"] + pad for model in models]
     window = director["windowSeconds"]
     warmup = director["tempoWarmupSeconds"]
     refund = player_cfg["killCooldownRefundSeconds"]
-    floor_share = combat_cfg["coop"]["contributionFloor"]
+    floor_share = coop["contributionFloor"]
+    min_mentee_share = coop["mentorMinDamageShare"]
     counts = {
         wave: wave_spec(mission, wave, party, overdrive, combat_cfg)["count"]
         for wave in range(1, mission["waves"] + 1)
@@ -884,18 +948,27 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
     rows = []
     kill_times = []
     kills_by_key = {}
-    ready_at = {"melee": 0.0, "ranged": 0.0}
+    ready_at = [{"melee": 0.0, "ranged": 0.0} for _ in members]
+    empowered_until = [0.0] * party
+    empower_mult = [1.0] * party
+    run_damage = [0.0] * party
+    tally = [0.0] * party
+    earned = [{"cash": 0, "materials": 0, "valor": 0, "mentor": 0} for _ in members]
+    effect_casts = {"rally": 0, "warcry": 0}
+    rally_healed = 0.0
     payout = {"cash": 0, "materials": 0, "valor": 0, "kills": 0}
     next_wave = 1
     tempo_value = 1.0
     breather_end = None
     breather_total = 0.0
     boss_seconds = 0.0
+    boss_seconds_by_wave = {}
     ability_damage_total = 0.0
     damage_taken = 0.0
     merges = 0
     end_reason = None
     died_wave = None
+    mentor_events = []
 
     def start_wave(wave, merged):
         nonlocal next_wave
@@ -933,6 +1006,7 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
                 "ticks": 0,
                 "dead_at_spawn_end": None,
                 "tempo_at_spawn_end": 0.0,
+                "boss_hp": None,
             }
         )
         next_wave = wave + 1
@@ -943,6 +1017,8 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
         stats = enemy_stats(mission, key, group["spec"], is_boss)
         definition = mission["enemies"][key]
         seq += 1
+        if is_boss:
+            group["boss_hp"] = stats["hp"]
         alive.append(
             {
                 "key": key,
@@ -969,12 +1045,23 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
         )
         group["spawned"] += 1
 
-    def hit(enemy, amount):
+    def hit(enemy, credits):
+        """Apply {member index: damage} to one enemy; credit what actually
+        landed (overkill is not damage) pro rata; the killer is the member with
+        the largest part of the killing blow."""
         if enemy["hp"] <= 0:
-            return
-        enemy["hp"] -= amount
+            return 0.0
+        total = sum(credits.values())
+        if total <= 0:
+            return 0.0
+        dealt = min(total, enemy["hp"])
+        for index, amount in credits.items():
+            part = dealt * amount / total
+            run_damage[index] += part
+            tally[index] += part
+        enemy["hp"] -= total
         if enemy["hp"] > 0:
-            return
+            return dealt
         group = enemy["group"]
         group["dead"] += 1
         group["pool"]["cash"] += enemy["cash"]
@@ -984,10 +1071,76 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
             group["pool"]["valor"] += boss_valor(mission, group["wave"], overdrive, combat_cfg)
         kills_by_key[enemy["key"]] = kills_by_key.get(enemy["key"], 0) + 1
         kill_times.append(t)
-        # Every kill shortens both ability cooldowns (player.killCooldownRefundSeconds).
-        for slot in ready_at:
-            ready_at[slot] -= refund
+        # A kill shortens the killer's two cooldowns (CombatService.onEnemyKilled).
+        killer = max(credits, key=lambda index: (credits[index], -index))
+        for slot in ready_at[killer]:
+            ready_at[killer][slot] -= refund
         alive.remove(enemy)
+        return dealt
+
+    def mult(index):
+        return empower_mult[index] if t < empowered_until[index] else 1.0
+
+    def cast_party_effect(caster):
+        nonlocal hp, rally_healed
+        effect = effects[caster]
+        if effect is None or party < 2:
+            return
+        effect_casts[effect["kind"]] = effect_casts.get(effect["kind"], 0) + 1
+        if effect["kind"] == "rally":
+            # Every other member heals healFraction of max HP; in the pooled bar
+            # that is (n - 1) / n of it. The radius is assumed to cover the scrum.
+            before = hp
+            hp = min(float(hp_max), hp + effect["healFraction"] * hp_max * (party - 1) / party)
+            rally_healed += hp - before
+        elif effect["kind"] == "warcry":
+            for index in range(party):
+                if index != caster:
+                    empowered_until[index] = t + effect["seconds"]
+                    empower_mult[index] = effect["damageMult"]
+
+    def flush(group):
+        total = sum(tally)
+        by_user = {i: tally[i] for i in range(party)}
+        shares = contribution_shares(by_user, floor_share)
+        for index, share in split_pool(group["pool"], shares).items():
+            if members[index]["bot"]:
+                continue  # bots' shares are discarded
+            # Double floor, exactly as Waves section 6 credits it: SplitPool
+            # floors pool.cash x share, then the caller floors that share
+            # again against CombatCashMult. `cash_mult` is 1.0 for every run
+            # the tool reports (legacy 0, no Founder's Blessing).
+            cash = math.floor(share["cash"] * cash_mult)
+            earned[index]["cash"] += cash
+            earned[index]["materials"] += share["materials"]
+            earned[index]["valor"] += share["valor"]
+            payout["cash"] += cash
+            payout["materials"] += share["materials"]
+            payout["valor"] += share["valor"]
+        if group["boss"] and total > 0:
+            for host in range(party):
+                if members[host]["bot"]:
+                    continue  # bots are never mentors
+                mentee_rates = [
+                    members[j]["rate"]
+                    for j in range(party)
+                    if j != host and tally[j] / total >= min_mentee_share
+                ]
+                bonus = mentor_bonus(combat_cfg, members[host]["rate"], mentee_rates)
+                if bonus > 0:
+                    earned[host]["mentor"] += bonus
+                    earned[host]["valor"] += bonus
+                    payout["valor"] += bonus
+                mentor_events.append(
+                    {
+                        "wave": group["wave"],
+                        "host": host,
+                        "bonus": bonus,
+                        "shares": [tally[j] / total for j in range(party)],
+                    }
+                )
+        for index in range(party):
+            tally[index] = 0.0
 
     start_wave(1, False)
     while end_reason is None:
@@ -1058,22 +1211,34 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
             # Target priority, the greedy player's: ordinary enemies before the
             # boss, the squishiest first (archers, then raiders, then brutes),
             # oldest to break ties. The melee term only lands once that target is
-            # inside the weapon's reach; the ranged term always applies.
+            # inside the weapon's reach; the ranged term always applies. The whole
+            # party focuses the same target (the pooled-position model).
             if alive:
                 target = min(alive, key=lambda e: (e["boss"], e["max_hp"], e["seq"]))
-                amount = model["ranged_dps"] * party * DT
-                if target["dist"] <= engage:
-                    amount += model["melee_dps"] * party * DT
-                hit(target, amount)
-            for ability in model["abilities"]:
-                if alive and t >= ready_at[ability["slot"]]:
-                    for enemy in ability_targets(ability, list(alive)):
-                        ability_damage_total += min(ability["damage"] * party, enemy["hp"])
-                        hit(enemy, ability["damage"] * party)
-                    ready_at[ability["slot"]] = t + ability["cooldown"]
+                credits = {}
+                for index, model in enumerate(models):
+                    amount = model["ranged_dps"] * DT
+                    if target["dist"] <= engages[index]:
+                        amount += model["melee_dps"] * DT
+                    if amount > 0:
+                        credits[index] = amount * mult(index)
+                hit(target, credits)
+            for index, model in enumerate(models):
+                for ability in model["abilities"]:
+                    if alive and t >= ready_at[index][ability["slot"]]:
+                        damage = ability["damage"] * mult(index)
+                        for enemy in ability_targets(ability, list(alive)):
+                            ability_damage_total += hit(enemy, {index: damage})
+                        ready_at[index][ability["slot"]] = t + ability["cooldown"]
+                        if ability["slot"] == "melee":
+                            cast_party_effect(index)
 
             if any(enemy["boss"] for enemy in alive):
                 boss_seconds += DT
+                for enemy in alive:
+                    if enemy["boss"]:
+                        wave = enemy["group"]["wave"]
+                        boss_seconds_by_wave[wave] = boss_seconds_by_wave.get(wave, 0.0) + DT
             incoming = 0.0
             melee_slots = MELEE_CONTACT_SLOTS * party
             melee_used = 0
@@ -1103,15 +1268,7 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
                     continue
                 if any(enemy["group"] is group for enemy in alive):
                     continue
-                shares = contribution_shares({i: 1.0 for i in range(party)}, floor_share)
-                for share in split_pool(group["pool"], shares).values():
-                    # Double floor, exactly as Waves section 6 credits it: SplitPool
-                    # floors pool.cash x share, then the caller floors that share
-                    # again against CombatCashMult. `cash_mult` is 1.0 for every run
-                    # the tool reports (legacy 0, no Founder's Blessing).
-                    payout["cash"] += math.floor(share["cash"] * cash_mult)
-                    payout["materials"] += share["materials"]
-                    payout["valor"] += share["valor"]
+                flush(group)
                 payout["kills"] += group["pool"]["kills"]
                 rows.append(
                     {
@@ -1121,6 +1278,7 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
                         "count": group["count"],
                         "merged": group["merged"],
                         "boss": group["boss"],
+                        "boss_hp": group["boss_hp"],
                         "hp": hp,
                         "cash": group["pool"]["cash"],
                         "materials": group["pool"]["materials"],
@@ -1160,6 +1318,7 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
                 "count": group["count"],
                 "merged": group["merged"],
                 "boss": group["boss"],
+                "boss_hp": group["boss_hp"],
                 "hp": hp,
                 "cash": group["pool"]["cash"],
                 "materials": group["pool"]["materials"],
@@ -1173,6 +1332,7 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
             }
         )
     rows.sort(key=lambda row: (row["wave"], row["start"]))
+    total_damage = sum(run_damage)
     totals = {
         "seconds": t,
         "cash": payout["cash"],
@@ -1180,23 +1340,36 @@ def simulate_run(mission, armory, combat_cfg, gear, ascension, party, overdrive,
         "valor": payout["valor"],
         "kills": payout["kills"],
         "kills_by_key": kills_by_key,
-        "dps": model["dps"],
-        "melee_dps": model["melee_dps"],
-        "ranged_dps": model["ranged_dps"],
+        "dps": sum(model["dps"] for model in models) / party,
+        "melee_dps": sum(model["melee_dps"] for model in models) / party,
+        "ranged_dps": sum(model["ranged_dps"] for model in models) / party,
         "ability_damage": ability_damage_total,
         "max_hp": hp_max,
-        "power": gear_power(armory, gear, ascension),
+        "power": gear_power(armory, members[0]["gear"], members[0]["ascension"]),
         "hp_left": hp,
         "hp_floor": hp_floor,
         "damage_taken": damage_taken,
         "breather_seconds": breather_total,
         "boss_seconds": boss_seconds,
+        "boss_seconds_by_wave": boss_seconds_by_wave,
         "merges": merges,
         "waves_cleared": sum(1 for row in rows if row["cleared"]),
         "died": end_reason == "died",
         "died_wave": died_wave,
         "end_reason": end_reason,
         "party": party,
+        "members": [
+            dict(
+                earned[i],
+                damage_share=(run_damage[i] / total_damage if total_damage > 0 else 0.0),
+                rate=members[i]["rate"],
+                bot=members[i]["bot"],
+            )
+            for i in range(party)
+        ],
+        "mentor_events": mentor_events,
+        "effect_casts": effect_casts,
+        "rally_healed": rally_healed,
     }
     return rows, totals
 
@@ -1453,6 +1626,70 @@ def print_survivability(combat_cfg, rows, totals):
     print()
 
 
+def print_coop(mission, armory, combat_cfg, overdrive):
+    """C2: the party table (equal members at the recommended power) and the
+    Mentor Valor a mixed-rate party earns per run. Everything is per player."""
+    coop = combat_cfg["coop"]
+    gear, _ = gear_for_power(armory, recommended_power(mission, overdrive, combat_cfg))
+    print(
+        f"Co-op -- {mission['name']}, everyone at the recommended power "
+        f"(bossHpPerExtraPlayer {coop['bossHpPerExtraPlayer']}, "
+        f"countPerExtraPlayer {coop['countPerExtraPlayer']})"
+    )
+    print(
+        f"  {'party':>5} {'result':<8} {'run':>6} {'boss5':>6} {'boss10':>7} {'boss HP':>13} "
+        f"{'cash/p':>9} {'mats/p':>7} {'valor/p':>8} {'HP floor':>9}"
+    )
+    for party in range(1, coop["maxParty"] + 1):
+        rows, totals = simulate_run(
+            mission, armory, combat_cfg, gear, NO_ASCENSION, party, overdrive
+        )
+        boss_hp = "/".join(str(row["boss_hp"]) for row in rows if row["boss"])
+        by_wave = totals["boss_seconds_by_wave"]
+        waves = sorted(int(w) for w in mission["bosses"])
+        print(
+            f"  {party:>5} {totals['end_reason']:<8} {se.fmt_time(totals['seconds']):>6} "
+            f"{by_wave.get(waves[0], 0):>5.1f}s {by_wave.get(waves[-1], 0):>6.1f}s "
+            f"{boss_hp:>13} {totals['cash'] // party:>9,} {totals['materials'] // party:>7,} "
+            f"{totals['valor'] / party:>8.1f} {100 * totals['hp_floor'] / totals['max_hp']:>8.0f}%"
+        )
+    strong, _ = gear_for_power(armory, STRONG_POWER_MULT * mission["recommendedPower"])
+    starter = {"melee": 0, "ranged": 0}
+    host = MENTOR_HOST_RATE
+    newbie = host / MENTOR_RATE_RATIO
+    scenarios = [
+        ("veteran + starter-gear newbie", [(gear, host, False), (starter, newbie, False)]),
+        ("veteran + equal-rate friend", [(gear, host, False), (gear, host, False)]),
+        ("2x veteran + three newbies", [(strong, host, False)] + [(starter, newbie, False)] * 3),
+        (
+            "three 2x veterans + one newbie",
+            [(strong, host, False)] * 3 + [(starter, newbie, False)],
+        ),
+        ("veteran + idle alt", [(gear, host, False), (gear, newbie, True)]),
+    ]
+    print(
+        f"  Mentor Valor per run (mentorValor {coop['mentorValor']} per mentee per boss clear, "
+        f"mentee rate < {coop['mentorRatio']} x host, mentee share >= "
+        f"{coop['mentorMinDamageShare']:.0%} of the boss flush; host {se.fmt_cash(host)}/s, "
+        f"newbie {se.fmt_cash(newbie)}/s)"
+    )
+    for label, specs in scenarios:
+        members = [
+            {"gear": dict(g), "ascension": dict(NO_ASCENSION), "rate": r, "bot": False, "idle": i}
+            for g, r, i in specs
+        ]
+        _, totals = simulate_run(
+            mission, armory, combat_cfg, None, None, len(members), overdrive, members=members
+        )
+        parts = ", ".join(
+            f"{'idle' if specs[i][2] else 'm' + str(i + 1)} {m['damage_share']:.0%} dmg "
+            f"{m['valor']} Valor ({m['mentor']} Mentor)"
+            for i, m in enumerate(totals["members"])
+        )
+        print(f"    {label:<32} {parts}")
+    print()
+
+
 def print_helpers(armory, combat_cfg, game, shop):
     """Spot checks of the shared helpers that have no pacing table of their own."""
     print("Shared-module spot checks")
@@ -1550,8 +1787,32 @@ def print_helpers(armory, combat_cfg, game, shop):
 
 
 # --------------------------------------------------------------------------
-# --check: the six assertions in docs/INTERFACES.md "tools/sim_combat.py"
+# --check: the C0 + C1 + C2 assertions in docs/INTERFACES.md
 # --------------------------------------------------------------------------
+
+
+def boss_wave_lengths(mission, armory, combat_cfg, gear, party):
+    """{boss wave: seconds from its start to its clear} for an equal party."""
+    rows, _ = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, party, False)
+    return {
+        row["wave"]: row["end"] - row["start"] for row in rows if row["boss"] and row["cleared"]
+    }
+
+
+def mentor_run(mission, armory, combat_cfg, specs):
+    """The Mentor events of one run; `specs` = [(gear, incomeRate, idle)]."""
+    members = [
+        {"gear": dict(g), "ascension": dict(NO_ASCENSION), "rate": rate, "bot": False, "idle": idle}
+        for g, rate, idle in specs
+    ]
+    _, totals = simulate_run(
+        mission, armory, combat_cfg, None, None, len(members), False, members=members
+    )
+    return totals["mentor_events"]
+
+
+def first_boss_flush(events):
+    return min((e["wave"] for e in events), default=None)
 
 
 class Checks:
@@ -1566,7 +1827,7 @@ class Checks:
 
 def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md C0 + C1 contracts, ten assertions)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 contracts, thirteen assertions)")
     curves = greedy_curves(game, eras)
 
     # 1. unlockRate non-decreasing per slot; each band's entry tier unlocks inside its era.
@@ -1799,11 +2060,103 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         "; ".join(details) + f" (needs >= x{OVERDRIVE_CASH_MULT:g})",
     )
 
+
+    # 11. Boss waves at party 2-4 (equal per-player recommended power) last
+    #     within +-35 % of the solo boss wave: bossHpPerExtraPlayer keeps the
+    #     boss a fight however many players bring their DPS to it.
+    details = []
+    ok11 = True
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        gear, _ = gear_for_power(armory, mission["recommendedPower"])
+        solo = boss_wave_lengths(mission, armory, combat_cfg, gear, 1)
+        for party in range(2, combat_cfg["coop"]["maxParty"] + 1):
+            lengths = boss_wave_lengths(mission, armory, combat_cfg, gear, party)
+            parts = []
+            for wave, seconds in sorted(solo.items()):
+                party_seconds = lengths.get(wave)
+                ratio = party_seconds / seconds if party_seconds and seconds > 0 else 0.0
+                ok11 = ok11 and abs(ratio - 1) <= BOSS_WAVE_TOLERANCE
+                parts.append(f"w{wave} {party_seconds or 0:.1f}s x{ratio:.2f}")
+            details.append(f"p{party} " + ", ".join(parts))
+        details.insert(
+            0,
+            f"{mission['id']} solo "
+            + ", ".join(f"w{w} {s:.1f}s" for w, s in sorted(solo.items())),
+        )
+    checks.verdict(
+        ok11,
+        "11 party boss waves",
+        "; ".join(details) + f" (bossHpPerExtraPlayer "
+        f"{combat_cfg['coop']['bossHpPerExtraPlayer']}, needs x{1 - BOSS_WAVE_TOLERANCE:.2f}"
+        f"-x{1 + BOSS_WAVE_TOLERANCE:.2f})",
+    )
+
+    # 12. A 10:1-rate duo pays the mentor exactly mentorValor at a boss clear;
+    #     an equal-rate duo pays nobody.
+    details = []
+    ok12 = True
+    valor = combat_cfg["coop"]["mentorValor"]
+    low_rate = MENTOR_HOST_RATE / MENTOR_RATE_RATIO
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        gear, _ = gear_for_power(armory, mission["recommendedPower"])
+        wide = mentor_run(
+            mission, armory, combat_cfg, [(gear, MENTOR_HOST_RATE, False), (gear, low_rate, False)]
+        )
+        first = first_boss_flush(wide)
+        paid = {e["host"]: e["bonus"] for e in wide if e["wave"] == first}
+        ok12 = ok12 and first is not None and paid.get(0) == valor and paid.get(1) == 0
+        pair = [(gear, MENTOR_HOST_RATE, False), (gear, MENTOR_HOST_RATE, False)]
+        equal = mentor_run(mission, armory, combat_cfg, pair)
+        equal_paid = sum(e["bonus"] for e in equal)
+        ok12 = ok12 and equal_paid == 0
+        details.append(
+            f"{mission['id']} 10:1 duo at the wave-{first} boss clear: mentor {paid.get(0)}, "
+            f"mentee {paid.get(1)} (mentorValor {valor}); equal duo pays {equal_paid} all run"
+        )
+    checks.verdict(ok12, "12 mentor duo      ", "; ".join(details) or "no missions to model")
+
+    # 13. The mentee floor: a member under mentorMinDamageShare (an idle alt)
+    #     earns its mentor nothing, while a genuine starter-gear newbie in the
+    #     strongest party the fixtures build still clears it.
+    details = []
+    ok13 = True
+    floor = combat_cfg["coop"]["mentorMinDamageShare"]
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        gear, _ = gear_for_power(armory, mission["recommendedPower"])
+        idle = mentor_run(
+            mission, armory, combat_cfg, [(gear, MENTOR_HOST_RATE, False), (gear, low_rate, True)]
+        )
+        idle_paid = sum(e["bonus"] for e in idle if e["host"] == 0)
+        idle_share = max((e["shares"][1] for e in idle), default=0.0)
+        strong, _ = gear_for_power(armory, STRONG_POWER_MULT * mission["recommendedPower"])
+        starter = {"melee": 0, "ranged": 0}
+        mixed = mentor_run(
+            mission,
+            armory,
+            combat_cfg,
+            [(strong, MENTOR_HOST_RATE, False)] * 3 + [(starter, low_rate, False)],
+        )
+        newbie_share = min((e["shares"][3] for e in mixed), default=0.0)
+        mixed_paid = sum(e["bonus"] for e in mixed if e["host"] == 0)
+        blocked = idle_paid == 0 and idle_share < floor
+        counted = newbie_share >= floor and mixed_paid > 0
+        ok13 = ok13 and blocked and counted
+        details.append(
+            f"{mission['id']} idle mentee share {idle_share:.1%} -> mentor paid {idle_paid}; "
+            f"starter-gear newbie beside three 2x veterans, lowest boss-flush share "
+            f"{newbie_share:.1%} -> each veteran paid {mixed_paid}"
+        )
+    checks.verdict(
+        ok13,
+        "13 mentee floor    ",
+        "; ".join(details) + f" (mentorMinDamageShare {floor:.0%})",
+    )
+
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all ten assertions hold"
+            "PASS -- all thirteen assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -1820,7 +2173,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="run the ten C0/C1 assertions")
+    parser.add_argument("--check", action="store_true", help="run the thirteen C0-C2 assertions")
     parser.add_argument(
         "--trace", action="store_true", help="print the wave timeline of the simulated run"
     )
@@ -1893,6 +2246,7 @@ def main():
                 first = (rows, totals)
         print_cash_ratio(mission, armory, curves, first[1])
         print_survivability(combat_cfg, first[0], first[1])
+        print_coop(mission, armory, combat_cfg, args.overdrive)
     print_helpers(armory, combat_cfg, game, shop)
     sys.exit(0)
 

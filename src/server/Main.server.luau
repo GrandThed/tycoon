@@ -23,6 +23,7 @@ local PlotService = require(servicesFolder:WaitForChild("PlotService"))
 local LegacyShopService = require(servicesFolder:WaitForChild("LegacyShopService"))
 local ArmoryService = require(servicesFolder:WaitForChild("ArmoryService"))
 local ExpeditionService = require(servicesFolder:WaitForChild("ExpeditionService"))
+local PartyService = require(servicesFolder:WaitForChild("PartyService"))
 local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local MonetizationService = require(servicesFolder:WaitForChild("MonetizationService"))
 local AnalyticsService = require(servicesFolder:WaitForChild("AnalyticsService"))
@@ -36,61 +37,16 @@ type Loader = (player: Player) -> Types.PlayerState?
 
 -- Players with a VIP skin rebuild already scheduled; flips inside the window share it.
 local pendingSkinRefresh: { [Player]: boolean } = {}
--- Players who already saw their expedition card this session. Teleport data survives a re-run
--- of the join sequence (a failed departure re-loads the profile), and the card must not come
--- back with it; the Studio bridge's record is consumed on its first read and needs no guard.
-local summarySent: { [Player]: boolean } = {}
+-- Players whose trip home was already handled this session. Teleport data survives a re-run of
+-- the join sequence (a failed departure re-loads the profile), and neither the card nor the party
+-- re-form may come back with it; the Studio bridge's record is consumed on its first read.
+local returnHandled: { [Player]: boolean } = {}
 
--- Teardown order per contract: world first, emission state next, final save last (the tick
--- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
--- idempotent, so PlayerRemoving, the shutdown flush and a departing expedition may all run it
--- for one player.
--- The combat place's RunSummary as it arrives in teleport data: a hint like any other, so every
--- field is type-checked before the client is told anything. bestWave/died are read leniently
--- because a place build without C1's WaveService simply does not send them.
-local function asRunSummary(value: any): Types.RunSummary?
-	if typeof(value) ~= "table" then
-		return nil
-	end
-	local raw = value :: any
-	if
-		typeof(raw.missionId) ~= "string"
-		or typeof(raw.overdrive) ~= "boolean"
-		or typeof(raw.wavesCleared) ~= "number"
-		or typeof(raw.cash) ~= "number"
-		or typeof(raw.valor) ~= "number"
-		or typeof(raw.kills) ~= "number"
-		or typeof(raw.seconds) ~= "number"
-		or typeof(raw.materials) ~= "table"
-	then
-		return nil
-	end
-	local materials: { [string]: number } = {}
-	for material, amount in raw.materials :: { [string]: any } do
-		if typeof(material) == "string" and typeof(amount) == "number" then
-			materials[material] = amount
-		end
-	end
-	-- Built through `any`: bestWave/died land with C1's WaveService, so neither their absence
-	-- nor their arrival may break this build.
-	local summary: any = {
-		missionId = raw.missionId,
-		overdrive = raw.overdrive,
-		wavesCleared = raw.wavesCleared,
-		cash = raw.cash,
-		materials = materials,
-		valor = raw.valor,
-		kills = raw.kills,
-		seconds = raw.seconds,
-		bestWave = if typeof(raw.bestWave) == "number" then raw.bestWave else 0,
-		died = raw.died == true,
-	}
-	return summary :: Types.RunSummary
-end
-
--- Live transport: the teleport data the combat place set on the way home. Wrapped in pcall
--- because GetJoinData throws for a player who has already left.
-local function readTeleportSummary(player: Player): Types.RunSummary?
+-- Live transport: the ReturnData the combat place set on the way home. TeleportData is
+-- client-forgeable, so it is a hint: validated field by field, display-only for the summaries,
+-- and a party hint only ever matches hints that agree with it. Wrapped in pcall because
+-- GetJoinData throws for a player who has already left.
+local function readTeleportReturn(player: Player): Types.ReturnData?
 	local ok, joinData = pcall(function(): any
 		return player:GetJoinData()
 	end)
@@ -98,27 +54,50 @@ local function readTeleportSummary(player: Player): Types.RunSummary?
 		return nil
 	end
 	local data = (joinData :: any).TeleportData
-	if typeof(data) ~= "table" then
+	if data == nil then
 		return nil
 	end
-	return asRunSummary((data :: any).summary)
+	return StudioBridge.ParseReturnData(data)
 end
 
--- Presentation only: the rewards are already in the profile the combat place saved, so a
--- missing card never costs anything. In Studio the record the bridge wrote stands in for the
--- teleport data (docs/INTERFACES.md "C1 contracts" → "Studio bridge").
-local function sendExpeditionSummary(player: Player): ()
-	if summarySent[player] then
+-- The trip home (docs/INTERFACES.md "C2 contracts" → "Arrival home"): the player's own summary
+-- card, a refused join, and the party re-form. Rewards are already in the profile, so a missing
+-- or malformed ReturnData costs presentation only. In Studio the bridge's record stands in for
+-- the teleport data.
+local function handleReturn(player: Player): ()
+	if returnHandled[player] then
 		return
 	end
-	local summary = readTeleportSummary(player) or StudioBridge.ReadReturn(player)
-	if summary == nil then
+	local data = readTeleportReturn(player) or StudioBridge.ReadReturn(player)
+	if data == nil or not player:IsDescendantOf(Players) then
 		return
 	end
-	summarySent[player] = true
-	RemoteService.FireClient(player, "ExpeditionSummary", summary)
+	returnHandled[player] = true
+	local summary = data.summaries[tostring(player.UserId)]
+	if summary ~= nil then
+		RemoteService.FireClient(player, "ExpeditionSummary", summary)
+	end
+	local refused = data.refused
+	if refused ~= nil then
+		-- Re-narrowed: the literal union widens to string once it is read back off the table.
+		local reason: "full" | "over" | "locked" = if refused == "full"
+			then "full"
+			elseif refused == "over" then "over"
+			else "locked"
+		local result: Types.ActionResult =
+			{ action = "joinRun", slotId = "", ok = false, reason = reason }
+		RemoteService.FireClient(player, "ActionResult", result)
+	end
+	local party = data.party
+	if party ~= nil then
+		PartyService.OfferReform(player, party)
+	end
 end
 
+-- Teardown order per contract: world first, emission state next, final save last (the tick
+-- rule keeps lastSeen/incomeAtSave fresh, so Release needs no extra stamping). Every step is
+-- idempotent, so PlayerRemoving, the shutdown flush and a departing expedition may all run it
+-- for one player.
 local function releasePlayer(player: Player): ()
 	pendingSkinRefresh[player] = nil
 	PlotService.Release(player)
@@ -155,7 +134,7 @@ local function runJoinSequence(player: Player, loader: Loader): ()
 	EconomyService.SendSnapshot(player)
 	-- After the snapshot: the card is read against a client model that already has the wallet
 	-- the run paid into. Yields in Studio (the bridge reads a DataStore), so it goes last.
-	sendExpeditionSummary(player)
+	handleReturn(player)
 end
 
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
@@ -164,6 +143,15 @@ RemoteService.Configure(HubRemotes)
 -- ExpeditionService needs Main's own teardown and join sequence, and Main is the only place
 -- that has both; handing them over as hooks at Init keeps the service free of PlotService and
 -- MonetizationService requires (which would be a cycle through EconomyService).
+-- C2 hub party. Hub only: the combat place maps the same Services folder but never calls this,
+-- so PartyService stays inert there. Its busy hook is ExpeditionService's in-flight guard.
+local partyBoot: Service = {
+	Init = function()
+		PartyService.Init({ isBusy = ExpeditionService.IsDeparting })
+	end,
+	Start = PartyService.Start,
+}
+
 local expeditionBoot: Service = {
 	Init = function()
 		ExpeditionService.Init({
@@ -189,6 +177,7 @@ local orderedServices: { Service } = {
 	-- C0: the Armory sells weapon tiers against EconomyService's persisted rate; the expedition
 	-- handoff releases the profile and teleports. Nothing needs either of them.
 	ArmoryService,
+	partyBoot,
 	expeditionBoot,
 	MonetizationService,
 	-- AnalyticsService goes last: it depends on nothing, and nothing depends on its Start.
@@ -255,8 +244,14 @@ end)
 -- Main's own release/rejoin sequence; all three yield, so each gets its own thread.
 RemoteService.SetHandler(
 	"RequestExpedition",
-	function(player: Player, missionId: any, overdrive: any)
-		task.spawn(ExpeditionService.Depart, player, missionId :: string, overdrive :: boolean)
+	function(player: Player, missionId: any, overdrive: any, public: any)
+		task.spawn(
+			ExpeditionService.Depart,
+			player,
+			missionId :: string,
+			overdrive :: boolean,
+			public :: boolean
+		)
 	end
 )
 
@@ -278,8 +273,9 @@ end)
 -- may the in-flight departure guard be forgotten, or a TeleportInitFailed arriving after the
 -- handoff released the profile would find no record to recover from.
 local function onPlayerRemoving(player: Player): ()
+	PartyService.Forget(player)
 	ExpeditionService.Forget(player)
-	summarySent[player] = nil
+	returnHandled[player] = nil
 	releasePlayer(player)
 end
 

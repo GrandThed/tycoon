@@ -39,6 +39,7 @@ local CombatFxController = require(script.Parent:WaitForChild("CombatFxControlle
 local HUMANOID_WAIT_SECONDS = 5
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
+local ADMIT_CHECK_LEVER = "admitCheck"
 
 local CombatUIController = {}
 
@@ -283,11 +284,16 @@ local function boot(): ()
 			debugPanel.SetWave(run.wave)
 			debugPanel.SetMission(missionConfig)
 		end
+		CombatFxController.SetParty(run.party)
 		if run.phase == "summary" then
 			if lastPhase ~= "summary" then
 				SoundController.Play("runEnd")
 			end
-			summaryCard.Show(run.summary)
+			local returnIn = run.returnIn
+			summaryCard.Show(run.summary, {
+				partySize = #run.party,
+				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
+			})
 		else
 			summaryCard.Hide()
 		end
@@ -301,7 +307,20 @@ local function boot(): ()
 	end
 
 	local function onActionResult(payload: any): ()
-		if typeof(payload) ~= "table" or payload.ok ~= false then
+		if typeof(payload) ~= "table" then
+			return
+		end
+		-- The Studio admitCheck lever answers with its verdict, success included, tagged by
+		-- slotId so it never reads as a real refusal.
+		if payload.slotId == ADMIT_CHECK_LEVER and RunService:IsStudio() then
+			local verdict = if payload.ok == true
+				then "ok"
+				elseif typeof(payload.reason) == "string" then payload.reason
+				else "?"
+			toast.Show("Admit check: " .. verdict, Theme.TOAST_ERROR_SECONDS, payload.ok ~= true)
+			return
+		end
+		if payload.ok ~= false then
 			return
 		end
 		local reason = payload.reason
@@ -314,6 +333,10 @@ local function boot(): ()
 				else "Can't travel right now — staying in the lobby"
 		elseif reason == "locked" then
 			message = "That expedition is locked for you"
+		elseif reason == "full" then
+			message = "That run is full"
+		elseif reason == "over" then
+			message = "That run has moved past joining"
 		else
 			message = "Can't do that right now"
 		end
@@ -368,6 +391,9 @@ local function boot(): ()
 	CombatFxController.SetBannerHandler(function(title: string)
 		-- The banner fades; the toast is the record of it for anyone looking elsewhere.
 		toast.Show(title, Theme.TOAST_ERROR_SECONDS, false)
+	end)
+	CombatFxController.SetToastHandler(function(text: string)
+		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
 	end)
 	hud.SetStance(InputController.GetStance())
 

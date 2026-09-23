@@ -37,6 +37,7 @@ type EnemyDef = {
 	cash: number,
 	materials: number,
 	elite: boolean,
+	color: { number }?,
 }
 type CompositionDef = { fromWave: number, weights: { [string]: number } }
 type WaveTableDef = {
@@ -81,6 +82,13 @@ type CombatCoopConfig = {
 	countPerExtraPlayer: number,
 	mentorRatio: number,
 	mentorValor: number,
+	bossHpPerExtraPlayer: number,
+	mentorMinDamageShare: number,
+	inviteSeconds: number,
+	lobbyWaitSeconds: number,
+	returnGroupSeconds: number,
+	reformSeconds: number,
+	publicByDefault: boolean,
 }
 type CombatOverdriveConfig = {
 	requiresRebirth: number,
@@ -201,6 +209,7 @@ type WeaponTierDef = {
 	hp: number,
 	ability: string,
 	model: string,
+	partyEffect: string?,
 }
 type ArmorySlotDef = { starter: WeaponStarterDef, tiers: { WeaponTierDef } }
 type AscensionLevelDef = {
@@ -216,6 +225,13 @@ type AscensionConfig = {
 	levelsPerRebirth: number,
 	levels: { AscensionLevelDef },
 }
+type PartyEffectDef = {
+	kind: "rally" | "warcry",
+	radius: number,
+	healFraction: number?,
+	damageMult: number?,
+	seconds: number?,
+}
 type ArmoryConfig = {
 	version: number,
 	baseHp: number,
@@ -225,6 +241,7 @@ type ArmoryConfig = {
 	abilities: { [string]: AbilityDef },
 	slots: { [string]: ArmorySlotDef },
 	ascension: AscensionConfig,
+	partyEffects: { [string]: PartyEffectDef },
 }
 
 -- The slices of PlayerState these functions read; callers pass the whole state.
@@ -236,12 +253,14 @@ export type RewardPool = { cash: number, materials: number, valor: number, kills
 export type RewardShare = { cash: number, materials: number, valor: number }
 
 -- One wave, fully resolved: how many enemies and by how much their stats and rewards are
--- multiplied. `boss` is the entry for this wave when it is a boss wave.
+-- multiplied. `boss` is the entry for this wave when it is a boss wave. `bossHpMult` (C2) is the
+-- party-size HP factor that only the boss entity takes; see EnemyStats.
 export type WaveSpec = {
 	count: number,
 	hpMult: number,
 	damageMult: number,
 	rewardMult: number,
+	bossHpMult: number,
 	boss: BossDef?,
 	weights: { [string]: number },
 }
@@ -294,8 +313,12 @@ local function weightsForWave(mission: MissionConfig, wave: number): { [string]:
 	return weights
 end
 
--- Party size scales COUNT only (never enemy HP or damage): more players must not make each
--- enemy tankier. Overdrive is the only thing that raises hp/damage.
+-- Party size scales COUNT for ordinary enemies (never their HP or damage): more players must not
+-- make each raider tankier. Overdrive is the only thing that raises hp/damage across the board.
+-- C2 (Ben's ruling): the ONE boss entity is the exception, because a boss that melts in seconds
+-- under four players is no boss. tools/sim_combat.py mirrors this exactly:
+--   extras     = max(partySize, 1) - 1
+--   bossHpMult = 1 + coop.bossHpPerExtraPlayer * extras
 function Combat.WaveSpec(
 	mission: MissionConfig,
 	wave: number,
@@ -319,6 +342,7 @@ function Combat.WaveSpec(
 			* (if overdrive then overdriveCfg.damageMult else NEUTRAL_MULT),
 		rewardMult = (1 + waveTable.rewardGrowth) ^ (wave - 1)
 			* (if overdrive then overdriveCfg.rewardMult else NEUTRAL_MULT),
+		bossHpMult = 1 + combatCfg.coop.bossHpPerExtraPlayer * extras,
 		boss = mission.bosses[tostring(wave)],
 		weights = weightsForWave(mission, wave),
 	}
@@ -328,6 +352,10 @@ end
 -- only thing that moves them. The boss multipliers ride on the ONE entity the spawner marks with
 -- `isBoss` -- never on the ordinary enemies of the same key, which would have turned every brute
 -- in Village wave 10 into a Warlord (the sim measured 7:58 -> 10:37). nil for an unknown key.
+-- C2: the boss entity's HP also takes spec.bossHpMult, applied AFTER the boss and Overdrive
+-- multipliers and before the single rounding:
+--   hp = round(enemy.hp * spec.hpMult * boss.hpMult * spec.bossHpMult)   -- boss entity
+--   hp = round(enemy.hp * spec.hpMult)                                   -- everything else
 function Combat.EnemyStats(
 	mission: MissionConfig,
 	key: string,
@@ -346,8 +374,9 @@ function Combat.EnemyStats(
 	local bossDamage = if applyBoss and boss ~= nil then boss.damageMult else NEUTRAL_MULT
 	local bossCash = if applyBoss and boss ~= nil then boss.cashMult else NEUTRAL_MULT
 	local bossMaterials = if applyBoss and boss ~= nil then boss.materialsMult else NEUTRAL_MULT
+	local partyHp = if applyBoss then spec.bossHpMult else NEUTRAL_MULT
 	return {
-		hp = math.round(enemy.hp * spec.hpMult * bossHp),
+		hp = math.round(enemy.hp * spec.hpMult * bossHp * partyHp),
 		damage = math.round(enemy.damage * spec.damageMult * bossDamage),
 		cash = math.round(enemy.cash * spec.rewardMult * bossCash),
 		materials = math.round(enemy.materials * spec.rewardMult * bossMaterials),

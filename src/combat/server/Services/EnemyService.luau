@@ -11,7 +11,8 @@
 --   the kill callback through SetHooks, which is what keeps the requires acyclic.
 --
 -- No model is required to ship: a cloned placeholder R15 rig (and, if even that fails, a block
--- rig built in code) is the default, recoloured per enemy key.
+-- rig built in code) is the default, recoloured per enemy key from the mission's EnemyDef.color
+-- or Combat.json enemy.defaultColor / bossColor (C2 moved the colours out of code).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,17 +23,6 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
--- Presentation constants, deliberately not in Combat.json: the C1 contract freezes that file's
--- keys, and a colour per enemy key is content rather than balance. Moving them into the mission
--- JSON is a follow-up.
-local KEY_COLORS: { [string]: Color3 } = {
-	raider = Color3.fromRGB(150, 84, 54),
-	archer = Color3.fromRGB(110, 122, 70),
-	brute = Color3.fromRGB(120, 44, 44),
-}
-local DEFAULT_ENEMY_COLOR = Color3.fromRGB(128, 96, 96)
-local BOSS_COLOR = Color3.fromRGB(96, 26, 30)
-local BOT_FALLBACK_COLOR = Color3.fromRGB(70, 120, 190)
 -- Two enemies handed the same rim spawn would arrive inside each other, so each one is nudged
 -- around a small ring by its own id. Deterministic: no RNG anywhere in a run.
 local SPAWN_RING_RADIUS = 3.5
@@ -129,11 +119,16 @@ local function humanise(name: string): string
 	return spaced
 end
 
-local function colorFor(key: string, isBoss: boolean): Color3
+local function rgb(values: { number }): Color3
+	return Color3.fromRGB(values[1] or 255, values[2] or 255, values[3] or 255)
+end
+
+local function colorFor(def: Types.EnemyDef, isBoss: boolean, config: Types.CombatConfig): Color3
 	if isBoss then
-		return BOSS_COLOR
+		return rgb(config.enemy.bossColor)
 	end
-	return KEY_COLORS[key] or DEFAULT_ENEMY_COLOR
+	local own = def.color
+	return rgb(if own ~= nil then own else config.enemy.defaultColor)
 end
 
 local function paint(model: Model, color: Color3): ()
@@ -242,11 +237,11 @@ local function buildRig(): (Model, Humanoid, BasePart)
 	return buildBlockRig()
 end
 
--- Shared with ArenaService, which dresses debug bots in the same placeholder rig. Returns an
--- unparented model.
-function EnemyService.BuildRig(color: Color3?): (Model, Humanoid, BasePart)
+-- Shared with ArenaService, which dresses debug bots in the same placeholder rig (painted
+-- Combat.json enemy.botColor). Returns an unparented model.
+function EnemyService.BuildRig(color: Color3): (Model, Humanoid, BasePart)
 	local model, humanoid, root = buildRig()
-	paint(model, color or BOT_FALLBACK_COLOR)
+	paint(model, color)
 	return model, humanoid, root
 end
 
@@ -452,7 +447,7 @@ function EnemyService.Spawn(
 	end
 	if not authoredUsed then
 		model, humanoid, root = buildRig()
-		paint(model, colorFor(key, isBoss))
+		paint(model, colorFor(def, isBoss, config))
 	end
 
 	local enemyId = nextEnemyId
@@ -627,7 +622,12 @@ function EnemyService.ClearAll(): ()
 	table.clear(byId)
 end
 
+-- nil = not a target. A member waiting on the lobby pad for the next wave boundary (C2) is
+-- untargetable, which is what keeps a joiner safe until they enter the fight.
 local function memberRoot(member: Types.RunMember): BasePart?
+	if member.waiting then
+		return nil
+	end
 	local character = member.character
 	if character == nil or character.Parent == nil then
 		return nil

@@ -1002,7 +1002,7 @@ tycoon curve moves; `sim_economy.py --check` is byte-identical before and after 
 | 2x (120) | Hatchet + Hunter Bow | 115 | 104 | 200 | clears in 5:41, **5 merges** from wave 6 on, tempo climbing 1.20 to 2.00, HP floor 32 % | 152,512 |
 | party 2, recommended | same | 57 | 46 each | 145 | 8:23, 102 kills | 169,314 pot, about 84,657 each |
 | party 4, recommended | same | 57 | 46 each | 145 | 8:39, 181 kills | 222,968 pot, about 55,742 each |
-| Overdrive at its recommended power (180) | Fire Axe + Longbow | 162 | 155 | 250 | **dies on wave 7** with no Ascension | 48,716 |
+| Overdrive at its recommended power (180) | Fire Axe + Longbow | 162 | 155 | 250 | **dies on wave 5** (1:10) with no Ascension (corrected at C2; the tool has always said 5) | 48,716 |
 | Overdrive at 180 **+ Ascension 1** | same gear | 289 | 310 | 325 | clears in 3:02 | ≈ 706K–722K (elite count varies with merges) |
 | Overdrive at 3x recommended (540) | Machete + Marshal Rifle | 507 | 881 | 460 | clears in 2:11 | 721,553 (x5.18) |
 
@@ -1091,4 +1091,143 @@ py tools/sim_combat.py --era 1 --trace   # the wave timeline at 1x / 2x / 0.6x p
 py tools/sim_combat.py --party 4         # co-op wave counts and per-player cash
 py tools/sim_combat.py --overdrive       # Overdrive run at its scaled recommended power
 py tools/sim_economy.py --check          # unchanged, byte for byte, before and after
+```
+
+# C2 — Co-op: boss HP by party size, the Mentor bonus, party effects
+
+`tools/sim_combat.py` now simulates each party member separately. A member is
+`{gear, ascension, rate, bot, idle}`, and each one has its own DPS, abilities and cooldowns.
+Every point of damage is credited to whoever dealt it, both into a run-wide map and into the
+per-flush tally, which is drained at every group clear (`CombatService.TakeDamageTally`). The
+pot is split by that tally's `ContributionShares`, and bots' shares are discarded. A kill
+refunds **only the killer's** cooldowns, as `CombatService.onEnemyKilled` does; C1 refunded
+everyone. At the flush of a group that held a boss, each human earns `MentorBonus` over the
+other members whose raw tally share is at least `coop.mentorMinDamageShare`. HP is still the C1
+model: one pooled bar at the members' mean max HP, taking `incoming / party`. A rally therefore
+heals (n − 1)/n of its fraction into that bar.
+
+Solo runs are **byte-identical** to C1, so assertions 1–10 did not move. Equal parties move by
+about 1 % because the refund now goes to the killer only (party 2 at `bossHpPerExtraPlayer 0`:
+8:17 against C1's 8:24). The C1 "party 2 / party 4" rows are superseded by the table below.
+
+## Boss HP mirror (must match `Combat.luau` exactly)
+
+```
+extras     = max(partySize, 1) - 1                      -- same extras as the count term
+bossHpMult = 1 + coop.bossHpPerExtraPlayer * extras     -- WaveSpec
+hp (boss)  = round(enemy.hp * spec.hpMult * boss.hpMult * spec.bossHpMult)   -- left to right
+hp (other) = round(enemy.hp * spec.hpMult)
+```
+
+The sim multiplies in the Luau's left-to-right order. If the factors are regrouped, a product
+can cross .5 by one ulp and the rounded HP would disagree.
+
+## The party table (`py tools/sim_combat.py --era 1`, everyone at recommended power 60)
+
+| party | result | run | Chief alive | Warlord alive | boss HP (w5 / w10) | cash / player | Timber / player | Valor / player | HP floor |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | cleared | 8:26 | 39.8 s | 69.6 s | 990 / 1,837 | 139,357 | 248 | 35.0 | 15 % |
+| 2 | cleared | 8:36 | 34.2 s | 62.7 s | 1,733 / 3,215 | 84,654 | 159 | 16.5 | 68 % |
+| 3 | cleared | 8:45 | 33.7 s | 63.3 s | 2,476 / 4,593 | 64,774 | 128 | 11.0 | 77 % |
+| 4 | cleared | 8:52 | 32.6 s | 61.4 s | 3,219 / 5,971 | 55,741 | 114 | 8.0 | 85 % |
+
+Boss **waves** (start to clear, which is what assertion 11 measures) run 40.0 / 69.7 s solo
+and range from x0.88 to x1.08 of that at party 2–4. They sit well inside the ±35 % band
+because the trickle, not DPS, sets a wave's length (C1). A four-player party kills the Warlord
+about 12 % sooner than a solo player. Four players bring four times the DPS, while the boss has
+only 3.25 times the HP.
+
+## Values changed, and why
+
+| value | from | to | why |
+|---|---|---|---|
+| `Combat.json coop.bossHpPerExtraPlayer` | 0.75 | **0.75** (kept) | Swept 0.5 / 0.6 / 0.75 / 0.9 / 1.0. At 1.0 the boss lives exactly as long as solo; at 0.5 the Warlord dies 21 % sooner at party 4. The sim assumes **perfect focus fire**: every member hits the same target with no travel and no spread. That is its most generous party assumption, so the real co-op boss fight runs longer than the sim's. At 0.75 the modelled boss lives 9–18 % shorter than solo, which in play should land at about solo length. A party should feel stronger, not punished for grouping. Studio DoD check: two bots give 1 + 0.75 × 2 = **2.5×** solo HP. |
+| `Combat.json coop.mentorRatio` | 0.1 | **0.125** | The contract's own fixture, a 10:1 income duo, sits **exactly on the threshold** at 0.1. `MentorBonus` tests `rate < hostRate × mentorRatio` strictly, so 10,000 × 0.1 = 1,000 is not `<` 1,000, and assertion 12 failed. Whether 10:1 qualifies would come down to float rounding (64,490 × 0.1 happens to be 6,449.000000000001). At 0.125 a mentor is anyone whose city earns **8× or more**, and 10:1 has margin. A same-era newbie (Village early game at ~1K/s against a veteran at the 64K/s median) qualifies either way. |
+| `Combat.json coop.mentorMinDamageShare` | 0.02 | **0.01** | The floor exists to stop an **idle alt** from farming Valor. Idle means 0 % of the tally, so any positive floor blocks it. Measured lowest boss-flush share for a Stick + Sling newbie: 27 % beside one recommended veteran, 5.4 % beside three 2x veterans, but **1.4 %** at the Warlord beside three veterans at 2x the Overdrive recommendation. Guests may join the host's Overdrive runs (missions are host-gated), so that is a real carry. At 0.02 it paid on wave 5 and not on wave 10; at 0.01 it pays both. 1 % of a four-player boss flush is about 10 s of starter-weapon damage, so it still demands actual fighting. Beside **3x**-Overdrive veterans the newbie deals 0.4–0.5 %; no floor that means anything can include that, and that player is spectating, not being mentored. |
+| `Armory.json partyEffects.rally.healFraction` | 0.25 | **0.15** | See party effects below. |
+| `Armory.json partyEffects.warcry` | 1.25 / 6 s / 20 | kept | See party effects below. |
+| `Armory.json partyEffects.rally.radius` | 20 | kept | This is at least the 16-stud `bladeStorm` radius, so anyone fighting inside the caster's AoE is covered. |
+
+`mentorValor 5`, `countPerExtraPlayer 0.6`, `contributionFloor 0.1`, `joinUntilWave 9`,
+`maxParty 4` and every timing key (`inviteSeconds`, `lobbyWaitSeconds`, `returnGroupSeconds`,
+`reformSeconds`) are unchanged. The timing keys are UX, not balance.
+
+## Mentor Valor per run (host 10K/s, newbie 1K/s, Village, recommended power)
+
+| party | Mentor Valor per run | notes |
+|---|---|---|
+| veteran + starter-gear newbie | **10** to the veteran (5 at the Chief, 5 at the Warlord) | veteran total 32 Valor against 17 in an equal duo |
+| veteran + equal-rate friend | 0 | assertion 12's negative case |
+| 2x veteran + three newbies | **30** to the veteran | 46 Valor total, 1.3x a solo run's 35 |
+| three 2x veterans + one newbie | **10** to each veteran | newbie at 5 % of the boss flush |
+| veteran + idle alt | 0 | the alt is at 0 % of the tally; it still collects 3 Valor via `contributionFloor` (see C3) |
+
+Mentoring is worth 10 Valor per mentee per run, 20 % of Ascension 1's 50 Valor. It is enough to
+be a reason to carry a friend, while a veteran with three mentees stays below 1.5x a solo run.
+
+## Party effects (band 4 only: tiers 10–11 `rally`, tier 12 `warcry`)
+
+No Orbital mission exists yet, so the effects were measured on a **proxy**: Village Overdrive at
+its recommended power (180, tier 5/3), which solo players die in. The leader is forced to carry
+the effect, and it triggers on the leader's melee ability (`groundSlam`, 14 s cooldown, standing
+in for `bladeStorm`'s 16 s). The sim puts every ally inside the radius on every cast, so the
+effects' real value is **lower** than this.
+
+| party 4, Overdrive 180 | result | run | HP floor | healed |
+|---|---|---|---|---|
+| no effect | died wave 10 | 2:36 | 0 % | 0 |
+| rally 0.10 | cleared | 3:06 | 44 % | 187 |
+| **rally 0.15** | cleared | 3:06 | **56 %** | 254 |
+| rally 0.25 | cleared | 3:06 | 70 % | 291 = **all** damage taken |
+| **warcry 1.25 × 6 s** | cleared | 2:33 | **12 %** | — |
+| warcry 1.15 × 6 s | died wave 10 | 2:33 | 0 % | — |
+
+- **Rally 0.25 → 0.15.** At 0.25 the rally healed back every point the party took, and the
+  allies' health bars stopped mattering. At 0.15 it still turns a wipe into a clear with a
+  56 % floor. With real spacing it lands closer to the 0.10 row, which still clears.
+- **Warcry kept at 1.25× for 6 s.** On a 16 s `bladeStorm` cooldown it is up about 40 % of the
+  time, so allies deal about +10 % damage. That is far below a tier step (tier 11 → 12 is +45 %
+  damage), so it never replaces gear. At 1.15 it no longer changed the outcome. Tier 12 swaps
+  rally for warcry, trading survival for speed: the warcry run is 33 s faster with a lower HP
+  floor. Neither dominates, so the upgrade never feels like a loss.
+
+## The three new assertions, as measured
+
+| # | assertion | measured |
+|---|---|---|
+| 11 | boss wave at party 2/3/4 (equal recommended power) within ±35 % of solo | solo 40.0 / 69.7 s; p2 x1.07 / x0.90, p3 x1.08 / x0.91, p4 x1.05 / x0.88 |
+| 12 | 10:1-rate duo pays the mentor exactly `mentorValor` at a boss clear; equal duo pays 0 | 5 to the mentor and 0 to the mentee at the wave-5 clear; the equal duo pays 0 all run |
+| 13 | a member under `mentorMinDamageShare` earns its mentor nothing | idle mentee at 0.0 % pays 0; positive control: a starter-gear newbie at 5.4 % beside three 2x veterans pays each veteran 10 |
+
+## What C3 should re-check
+
+1. **Per-head rewards fall steeply in co-op.** A four-player party earns 40 % of the solo cash
+   and 23 % of the solo Valor per player. Boss pots are 76 % of run cash and all of the
+   non-Mentor Valor, and they do not scale with party size. Suggested formula change for the
+   lead, not needed for C2: scale a boss's `cash`/`materials` in `EnemyStats` and `BossValor`
+   by `spec.bossHpMult`. Per-head boss reward would then be (1 + 0.75(n − 1)) / n, which is
+   81 % at four players.
+2. **Co-op is much safer than solo.** The HP floor is 68–85 % at party 2–4 against 15 % solo,
+   because the pooled bar splits incoming damage by n while enemy count grows only 0.6 per
+   extra player. Measure real per-player damage taken in the published two-account test before
+   touching `countPerExtraPlayer`.
+3. **The idle alt still collects `contributionFloor` (10 %) of every pot**, 3 Valor per run
+   here. Mentor pays it nothing, but the floor predates C2. A share floor that requires
+   `damage > 0` would close it (Luau change in `ContributionShares`).
+4. **Overdrive party outcomes are not monotonic** at exactly the recommended power: party 3
+   clears in 3:19, while parties 2 and 4 die (merges and count rounding). Recheck once
+   Ascension players exist, since without Ascension that power is lethal by design (C1).
+5. **Party effects on a real band-4 mission.** Re-run the proxy table on Orbital's mission with
+   `bladeStorm`, and count in Studio how often allies are actually inside 20 studs.
+6. **Studio DoD note.** "Bots at income 0 make the player earn the Mentor Valor" needs the
+   player's persisted `incomeAtSave` > 0 (at 0 the test is 0 < 0). Buy anything in the hub
+   before departing.
+
+## Commands used
+
+```
+py tools/sim_combat.py --check              # thirteen assertions, exits 0
+py tools/sim_combat.py --era 1              # adds the Co-op section: party table + Mentor per run
+py tools/sim_combat.py --era 1 --overdrive  # the same tables under Overdrive
+py tools/sim_economy.py --check             # unchanged, byte for byte, before and after
 ```

@@ -56,6 +56,9 @@ local onStanceChanged: ((Stance) -> ())? = nil
 local requestAttack: RemoteEvent? = nil
 local requestFire: RemoteEvent? = nil
 local requestAbility: RemoteEvent? = nil
+-- C2: the bow's draw start. The server caps a shot's charge by the time since this stamp, so
+-- a release with no draw before it is a weak shot however long the button was held.
+local requestDraw: RemoteEvent? = nil
 
 local attackSeq = 0
 local fireSeq = 0
@@ -340,6 +343,10 @@ local function beginRanged(): ()
 	end
 	local fire = class.fire
 	if fire == "charge" then
+		local drawRemote = requestDraw
+		if drawRemote ~= nil and inPlay() and localRig() ~= nil then
+			drawRemote:FireServer()
+		end
 		chargeStartedAt = os.clock()
 		WeaponController.Draw(class.chargeSeconds or 1)
 		SoundController.Play("bowDraw")
@@ -513,6 +520,9 @@ function InputController.Start(): ()
 		if requestFire == nil then
 			warn("[InputController] RequestFire missing — ranged attacks are disabled")
 		end
+		-- C2 adds RequestDraw; without it a C1 server still takes the client's charge.
+		requestDraw =
+			remotes:WaitForChild("RequestDraw", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
 	end)
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
 	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))

@@ -9,6 +9,10 @@
 --   a disconnect, a wipe or a crash costs at most the wave in progress. This is the only place
 --   under src/combat that writes a profile, and it writes nothing but cash, materials, valor,
 --   combat stats and the mission record.
+--
+-- C2 adds the co-op edges: the lobby start rule (ArenaService.CanStart), the wave boundary that
+-- lets waiting members in, the Mentor bonus at a boss clear, and the group return home after
+-- coop.returnGroupSeconds on the summary card.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -23,6 +27,7 @@ local DataService = require(servicesFolder:WaitForChild("DataService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 local CombatService = require(script.Parent:WaitForChild("CombatService"))
+local ReturnService = require(script.Parent:WaitForChild("ReturnService"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
@@ -49,6 +54,8 @@ local spawnCursor = 0
 local nextSpawnAt = 0
 local breatherUntil = 0
 local runEndsAt = 0
+-- os.clock() the summary card sends everyone home together; 0 = no group return pending.
+local returnAt = 0
 local tempo = 1
 local pool = { cash = 0, materials = 0, valor = 0, kills = 0 }
 local killsByUser: { [number]: number } = {}
@@ -83,18 +90,19 @@ local function pushRunFields(): ()
 	if boss ~= nil and not boss.dead then
 		bossInfo = { name = boss.displayName, hp = boss.hp, maxHp = boss.maxHp }
 	end
+	local now = os.clock()
 	ArenaService.SetRunFields({
+		phase = phase,
 		wave = wave,
 		alive = aliveEnemies(),
 		remaining = #pending,
 		tempo = tempo,
 		merged = merged,
-		breatherEndsIn = if phase == "breather"
-			then math.max(0, breatherUntil - os.clock())
-			else nil,
-		runEndsIn = if runEndsAt > 0 then math.max(0, runEndsAt - os.clock()) else 0,
+		breatherEndsIn = if phase == "breather" then math.max(0, breatherUntil - now) else nil,
+		runEndsIn = if runEndsAt > 0 then math.max(0, runEndsAt - now) else 0,
 		boss = bossInfo,
 		inRun = phase == "wave" or phase == "breather" or phase == "boss",
+		returnIn = if phase == "summary" and returnAt > 0 then math.max(0, returnAt - now) else nil,
 	})
 end
 
@@ -205,6 +213,9 @@ local function beginWave(waveNumber: number): ()
 	merged = false
 	spawnedThisGroup = 0
 	bossEnemy = nil
+	-- A wave boundary: anyone who arrived (or died) mid-wave enters now. Before queueWave, so
+	-- they count as fighters for everything this wave does.
+	ArenaService.ReleaseWaiting()
 	queueWave(mission, combatConfig, waveNumber)
 	setPhase("wave")
 	broadcast()
@@ -220,15 +231,69 @@ local function missionRecord(state: Types.PlayerState, missionId: string): Types
 	return record
 end
 
+-- Mentor bonus at a cleared boss group (docs/INTERFACES.md "C2 contracts"): each human is paid
+-- Combat.MentorBonus against the rates of the OTHER members present whose raw share of THIS
+-- flush reached coop.mentorMinDamageShare, so an idle alt parked in the party earns its main
+-- nothing. Bots report debug.botIncomeRate and are never mentors.
+local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: number }): ()
+	local total = 0
+	for _, damage in tally do
+		total += damage
+	end
+	if total <= 0 then
+		return
+	end
+	local coop = combatConfig.coop
+	local members = ArenaService.GetMembers()
+	for _, mentor in members do
+		local player = mentor.player
+		if mentor.bot or player == nil then
+			continue
+		end
+		local state = DataService.GetState(player)
+		if state == nil then
+			continue
+		end
+		local menteeRates: { number } = {}
+		for _, other in members do
+			if
+				other ~= mentor
+				and (tally[other.userId] or 0) / total >= coop.mentorMinDamageShare
+			then
+				table.insert(menteeRates, other.incomeRate)
+			end
+		end
+		local bonus = Combat.MentorBonus(combatConfig, mentor.incomeRate, menteeRates)
+		if bonus <= 0 then
+			continue
+		end
+		state.combat.valor += bonus
+		ArenaService.CreditMentor(mentor.userId, bonus)
+		CombatService.PushFx({
+			kind = "mentor",
+			userId = mentor.userId,
+			valor = bonus,
+			-- MentorBonus pays mentorValor per carried member, so this recovers the head count.
+			mentees = if coop.mentorValor > 0 then math.round(bonus / coop.mentorValor) else 0,
+		})
+	end
+end
+
 -- The wave pot, split by damage share with a floor and written straight into the profiles. Bots
--- take a share so party scaling is honest, and then it is discarded.
-local function flushPool(waveNumber: number, waveCount: number): ()
+-- take a share so party scaling is honest, and then it is discarded. `cleared` = the group was
+-- actually beaten (not the partial flush at a wipe or the run cap), the only case that can pay
+-- the Mentor bonus.
+local function flushPool(waveNumber: number, waveCount: number, cleared: boolean): ()
 	local mission = ArenaService.GetMission()
 	local combatConfig = config()
 	if mission == nil or combatConfig == nil then
 		return
 	end
 	local tally = CombatService.TakeDamageTally()
+	if cleared and bossClearsThisFlush > 0 then
+		-- Before the per-member loop below, whose snapshot then carries the Mentor Valor too.
+		payMentors(combatConfig, tally)
+	end
 	local shares = Combat.ContributionShares(tally, combatConfig.coop.contributionFloor)
 	local split = Combat.SplitPool(pool, shares)
 	local gameConfig = Catalog.GetGameConfig()
@@ -292,13 +357,15 @@ function WaveService.EndRun(reason: string): ()
 	-- cleared though, so bestWave is credited to the last wave actually finished (0 when they
 	-- died in wave 1) and wavesCleared gains nothing.
 	if wave > clearedThrough then
-		flushPool(clearedThrough, 0)
+		flushPool(clearedThrough, 0, false)
 	end
 	pending = {}
 	spec = nil
 	bossEnemy = nil
 	EnemyService.ClearAll()
 	phase = "summary"
+	local combatConfig = config()
+	returnAt = if combatConfig ~= nil then os.clock() + combatConfig.coop.returnGroupSeconds else 0
 	pushRunFields()
 	ArenaService.BroadcastSummary()
 	-- Queued, never awaited: this runs inside the Heartbeat tick and the registry retries with a
@@ -367,23 +434,37 @@ local function spawnNext(mission: Types.MissionConfig, combatConfig: Types.Comba
 	end
 end
 
-local function anyHumanAlive(): boolean
-	local humans = 0
+-- Humans in the fight (waiting members are on the pad and do not count), how many of those are
+-- alive, and how many humans are alive on the pad.
+local function humanCounts(): (number, number, number)
+	local fighters = 0
+	local fightersAlive = 0
+	local waitingAlive = 0
 	for _, member in ArenaService.GetMembers() do
 		if member.bot then
 			continue
 		end
-		humans += 1
-		if ArenaService.IsAlive(member) then
-			return true
+		local alive = ArenaService.IsAlive(member)
+		if member.waiting then
+			if alive then
+				waitingAlive += 1
+			end
+			continue
+		end
+		fighters += 1
+		if alive then
+			fightersAlive += 1
 		end
 	end
-	-- A party of nothing but bots (or nobody at all) cannot wipe; the run cap ends it instead.
-	return humans == 0
+	return fighters, fightersAlive, waitingAlive
 end
 
 local function tickBots(combatConfig: Types.CombatConfig): ()
 	local now = os.clock()
+	local fighters, fightersAlive = humanCounts()
+	-- As at C1: bots come back only while a human is still fighting (or there are none at all,
+	-- a bots-only Studio run that only the run cap ends).
+	local mayRespawn = fightersAlive > 0 or fighters == 0
 	for _, member in ArenaService.GetMembers() do
 		if not member.bot then
 			continue
@@ -394,7 +475,7 @@ local function tickBots(combatConfig: Types.CombatConfig): ()
 		end
 		if member.respawnAt == 0 then
 			member.respawnAt = now + combatConfig.player.respawnSeconds
-		elseif now >= member.respawnAt and anyHumanAlive() then
+		elseif now >= member.respawnAt and mayRespawn then
 			ArenaService.RespawnBot(member)
 		end
 	end
@@ -424,13 +505,45 @@ local function advanceAfterBreather(mission: Types.MissionConfig): ()
 	beginWave(nextWave)
 end
 
+-- The group return: once, when the summary countdown runs out. Everyone still here goes home in
+-- ONE teleport with the party hint, so the hub can re-form the party. Spawned: it yields.
+local function tickSummary(): ()
+	if returnAt <= 0 or os.clock() < returnAt then
+		return
+	end
+	returnAt = 0
+	pushRunFields()
+	local players: { Player } = {}
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		if player ~= nil then
+			table.insert(players, player)
+		end
+	end
+	if #players > 0 then
+		task.spawn(ReturnService.SendHomeGroup, players, "runOver")
+	end
+end
+
 local function tick(delta: number): ()
 	local mission = ArenaService.GetMission()
 	local combatConfig = config()
 	if mission == nil or combatConfig == nil then
 		return
 	end
-	if phase == "lobby" or phase == "summary" or phase == "ended" then
+	if phase == "lobby" then
+		-- The expected-party / lobbyWaitSeconds half of the start rule has no event of its own,
+		-- so it is polled here; RequestReady also checks it for an instant start.
+		if ArenaService.CanStart() then
+			WaveService.Start()
+		end
+		return
+	end
+	if phase == "summary" then
+		tickSummary()
+		return
+	end
+	if phase == "ended" then
 		return
 	end
 
@@ -442,9 +555,20 @@ local function tick(delta: number): ()
 		WaveService.EndRun("runCap")
 		return
 	end
-	if not anyHumanAlive() then
-		WaveService.EndRun("wipe")
-		return
+	local fighters, fightersAlive, waitingAlive = humanCounts()
+	if fightersAlive == 0 then
+		if fighters > 0 then
+			-- A death with no other fighting human alive is a wipe (C1 rule), even with a joiner
+			-- on the pad.
+			WaveService.EndRun("wipe")
+			return
+		end
+		if waitingAlive > 0 then
+			-- Every fighter LEFT (nobody died): the joiners on the pad take over now rather than
+			-- watching an unattended wave until the run cap.
+			ArenaService.ReleaseWaiting()
+			broadcast()
+		end
 	end
 
 	if phase == "breather" then
@@ -490,13 +614,15 @@ local function tick(delta: number): ()
 	-- Wave (or merged pair) cleared.
 	local count = wave - clearedThrough
 	clearedThrough = wave
-	flushPool(wave, count)
+	flushPool(wave, count, true)
 	ArenaService.PublishRun()
 	if wave >= mission.waves then
 		WaveService.EndRun("cleared")
 		return
 	end
 	breatherUntil = now + Combat.BreatherSeconds(tempo, combatConfig.director)
+	-- The breather is a wave boundary: the waiting enter now, so they get the regen too.
+	ArenaService.ReleaseWaiting()
 	setPhase("breather")
 end
 
@@ -521,6 +647,7 @@ function WaveService.Start(): ()
 	CombatService.ResetDamageTally()
 	ArenaService.MarkRunStarted()
 	runEndsAt = os.clock() + combatConfig.director.runCapSeconds
+	returnAt = 0
 	beginWave(startWave)
 end
 
@@ -599,6 +726,7 @@ function WaveService.Reset(): ()
 	spawnCursor = 0
 	breatherUntil = 0
 	runEndsAt = 0
+	returnAt = 0
 	tempo = 1
 	bossEnemy = nil
 	killStamps = {}

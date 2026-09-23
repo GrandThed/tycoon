@@ -4,7 +4,8 @@
 -- own remotes and none of the hub's.
 --
 -- RequestAttack/RequestAbility exist from C0 with their validators and their own tight buckets;
--- C1 owns their handlers (hit resolution is server-side raycasts against the live wave).
+-- C1 owns their handlers (hit resolution is server-side raycasts against the live wave). C2 adds
+-- RequestDraw on the same attack bucket.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -120,6 +121,14 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 					and args[4] == args[4]
 					and args[4] >= 0
 					and args[4] <= 1
+			end,
+		},
+		-- C2: the bow's draw start. It carries nothing; the server stamps its own clock, and
+		-- OnFire caps the charge by the time since this stamp, so a shot with no draw is weak.
+		RequestDraw = {
+			bucket = "attack",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 0
 			end,
 		},
 		RequestAbility = {

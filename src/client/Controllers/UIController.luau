@@ -20,7 +20,9 @@
 -- Armory.json or Combat.json absent, or on a server that never created the remotes, the
 -- buttons simply do not exist and the HUD is exactly the M9 HUD. C1 adds the run report
 -- (the ExpeditionSummary event -> ExpeditionSummaryCard) and, in Studio only, the debug
--- strip that drives the hub's RequestDebug levers.
+-- strip that drives the hub's RequestDebug levers. C2 adds the hub party: PartyState feeds
+-- the Expedition panel's party strip, PartyInvite raises the non-blocking PartyInviteToast,
+-- and the four RequestParty* intents are the only way the client touches a party.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,6 +47,7 @@ local ArmoryPanel = require(uiFolder:WaitForChild("ArmoryPanel"))
 local ExpeditionPanel = require(uiFolder:WaitForChild("ExpeditionPanel"))
 local ExpeditionSummaryCard = require(uiFolder:WaitForChild("ExpeditionSummaryCard"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
+local PartyInviteToast = require(uiFolder:WaitForChild("PartyInviteToast"))
 local SettingsPanel = require(uiFolder:WaitForChild("SettingsPanel"))
 local EraAdvanceScreen = require(uiFolder:WaitForChild("EraAdvanceScreen"))
 local Ceremony = require(uiFolder:WaitForChild("Ceremony"))
@@ -152,6 +155,80 @@ local function readRunSummary(payload: any): Types.RunSummary?
 		died = payload.died == true,
 	}
 	return summary :: Types.RunSummary
+end
+
+-- C2: PartyState payload. Entries with a bad shape are dropped rather than the whole party,
+-- but a party without a numeric leader or member list is not a party.
+local function readHubParty(payload: any): Types.HubParty?
+	if
+		typeof(payload) ~= "table"
+		or typeof(payload.leaderUserId) ~= "number"
+		or typeof(payload.members) ~= "table"
+	then
+		return nil
+	end
+	local members: { Types.HubPartyMember } = {}
+	for _, member in payload.members do
+		if
+			typeof(member) == "table"
+			and typeof(member.userId) == "number"
+			and typeof(member.name) == "string"
+		then
+			table.insert(members, { userId = member.userId, name = member.name })
+		end
+	end
+	local pending: { Types.HubPartyInvite } = {}
+	if typeof(payload.pending) == "table" then
+		for _, invite in payload.pending do
+			if
+				typeof(invite) == "table"
+				and typeof(invite.userId) == "number"
+				and typeof(invite.name) == "string"
+				and typeof(invite.expiresIn) == "number"
+			then
+				table.insert(
+					pending,
+					{ userId = invite.userId, name = invite.name, expiresIn = invite.expiresIn }
+				)
+			end
+		end
+	end
+	return { leaderUserId = payload.leaderUserId, members = members, pending = pending }
+end
+
+local function readPartyInvite(payload: any): Types.PartyInviteEvent?
+	if
+		typeof(payload) ~= "table"
+		or typeof(payload.leaderUserId) ~= "number"
+		or typeof(payload.leaderName) ~= "string"
+		or typeof(payload.expiresIn) ~= "number"
+	then
+		return nil
+	end
+	return {
+		leaderUserId = payload.leaderUserId,
+		leaderName = payload.leaderName,
+		expiresIn = payload.expiresIn,
+	}
+end
+
+-- C2 refusal copy for the co-op reasons (contract wording). `full` on a party action is the
+-- party at maxParty, not a run, so it gets its own line.
+local function coopReasonMessage(action: string, reason: any): string?
+	if reason == "full" then
+		return if action == "party" then "Your party is full" else "That run is full"
+	elseif reason == "over" then
+		return "That run has moved past joining"
+	elseif reason == "busy" then
+		return if action == "expedition"
+			then "Not everyone in your party could depart"
+			else "They're already in a party"
+	elseif reason == "expired" then
+		return "That invite expired"
+	elseif reason == "notLeader" then
+		return "Only the party leader can do that"
+	end
+	return nil
 end
 
 -- The delta's combat profile arrives from the network; only the full shape is trusted, and
@@ -327,6 +404,11 @@ local function boot(): ()
 	-- C1: the hub's Studio-only debug intent. Absent on a server that predates the Studio
 	-- bridge, which is exactly why the DebugPanel's taps are no-ops rather than errors.
 	local requestDebug: RemoteEvent? = nil
+	-- C2 party intents, created in the same RemoteService pass as the rest.
+	local requestPartyInvite: RemoteEvent? = nil
+	local requestPartyRespond: RemoteEvent? = nil
+	local requestPartyLeave: RemoteEvent? = nil
+	local requestPartyKick: RemoteEvent? = nil
 	local combatRemotesReady = false
 	local function resolveCombatRemotes(): ()
 		requestBuyGear = remotesFolder:FindFirstChild("RequestBuyGear") :: RemoteEvent?
@@ -335,6 +417,10 @@ local function boot(): ()
 		requestJoinRun = remotesFolder:FindFirstChild("RequestJoinRun") :: RemoteEvent?
 		requestRunList = remotesFolder:FindFirstChild("RequestRunList") :: RemoteEvent?
 		requestDebug = remotesFolder:FindFirstChild("RequestDebug") :: RemoteEvent?
+		requestPartyInvite = remotesFolder:FindFirstChild("RequestPartyInvite") :: RemoteEvent?
+		requestPartyRespond = remotesFolder:FindFirstChild("RequestPartyRespond") :: RemoteEvent?
+		requestPartyLeave = remotesFolder:FindFirstChild("RequestPartyLeave") :: RemoteEvent?
+		requestPartyKick = remotesFolder:FindFirstChild("RequestPartyKick") :: RemoteEvent?
 		-- One intent decides for all of them: RemoteService creates the whole set at once.
 		combatRemotesReady = requestBuyGear ~= nil
 	end
@@ -406,6 +492,21 @@ local function boot(): ()
 		end,
 	})
 	local eraScreen = EraAdvanceScreen.new(screenGui)
+	-- C2: stacks under the welcome-back card and above the error toast, so its visibility
+	-- re-runs the layout like the welcome card's does.
+	local inviteToast: PartyInviteToast.PartyInviteToastHandle? = nil
+	if hasExpeditions then
+		inviteToast = PartyInviteToast.new(screenGui, {
+			onRespond = function(leaderUserId: number, accept: boolean)
+				if requestPartyRespond ~= nil then
+					requestPartyRespond:FireServer(leaderUserId, accept)
+				end
+			end,
+			onVisibilityChanged = function()
+				applyLayout()
+			end,
+		})
+	end
 
 	-- String-keyed so the three panels can be registered after their deps exist below.
 	local panels: { [string]: DockablePanel } = {}
@@ -589,9 +690,9 @@ local function boot(): ()
 			missions = missions,
 			placesConfig = placesConfig,
 			combatConfig = combatConfig,
-			onDepart = function(missionId: string, overdrive: boolean)
+			onDepart = function(missionId: string, overdrive: boolean, public: boolean)
 				if requestExpedition ~= nil then
-					requestExpedition:FireServer(missionId, overdrive)
+					requestExpedition:FireServer(missionId, overdrive, public)
 				end
 			end,
 			onJoin = function(hostUserId: number)
@@ -602,6 +703,21 @@ local function boot(): ()
 			onRefreshRuns = function()
 				if requestRunList ~= nil then
 					requestRunList:FireServer()
+				end
+			end,
+			onPartyInvite = function(userId: number)
+				if requestPartyInvite ~= nil then
+					requestPartyInvite:FireServer(userId)
+				end
+			end,
+			onPartyLeave = function()
+				if requestPartyLeave ~= nil then
+					requestPartyLeave:FireServer()
+				end
+			end,
+			onPartyKick = function(userId: number)
+				if requestPartyKick ~= nil then
+					requestPartyKick:FireServer(userId)
 				end
 			end,
 			onClose = closePanels,
@@ -955,12 +1071,32 @@ local function boot(): ()
 			toast.Show(message, Theme.TOAST_ERROR_SECONDS, true)
 			return
 		end
+		if action == "party" then
+			-- A refused invite frees its picker row; a late Accept retires the card.
+			local expedition = expeditionPanel
+			if expedition ~= nil then
+				expedition.ClearInviteSent()
+			end
+			local card = inviteToast
+			if card ~= nil and reason == "expired" then
+				card.Dismiss(tonumber(payload.slotId))
+			end
+			toast.Show(
+				coopReasonMessage(action, reason) or "Couldn't update your party",
+				Theme.TOAST_ERROR_SECONDS,
+				true
+			)
+			return
+		end
 		-- expedition / joinRun: nothing to flash (the tile may be off-screen and the failure
 		-- is about the world, not the row), so the toast carries the whole message.
 		onExpeditionAnswer()
 		local joining = action == "joinRun"
 		local message: string
-		if reason == "unavailable" then
+		local coopMessage = coopReasonMessage(action, reason)
+		if coopMessage ~= nil then
+			message = coopMessage
+		elseif reason == "unavailable" then
 			message = expeditionUnavailableMessage(joining)
 		elseif reason == "locked" then
 			message = if joining
@@ -980,6 +1116,7 @@ local function boot(): ()
 			or payload.action == "ascend"
 			or payload.action == "expedition"
 			or payload.action == "joinRun"
+			or payload.action == "party"
 		if payload.ok == true then
 			-- C0 is the first action that succeeds loudly: the teleport takes a moment and
 			-- the player has to know their tap was heard.
@@ -1209,6 +1346,13 @@ local function boot(): ()
 		local stackedAbove = if welcomeCard.IsVisible()
 			then welcomeCard.DesignHeight() + Theme.TOAST_GAP
 			else 0
+		local inviteCard = inviteToast
+		if inviteCard ~= nil then
+			inviteCard.SetLayout(scale, landscape, stackedAbove)
+			if inviteCard.IsVisible() then
+				stackedAbove += inviteCard.DesignHeight() + Theme.TOAST_GAP
+			end
+		end
 		toast.SetLayout(scale, landscape, stackedAbove)
 	end
 
@@ -1236,7 +1380,7 @@ local function boot(): ()
 			if typeof(payload) ~= "table" or typeof(payload.runs) ~= "table" then
 				return
 			end
-			panel.SetRuns(payload.runs :: { Types.ActiveRun })
+			panel.SetRuns(payload.runs :: { Types.RunListEntry })
 		end)
 	end
 	connectRunList()
@@ -1263,6 +1407,76 @@ local function boot(): ()
 		end)
 	end
 	connectExpeditionSummary()
+	-- C2: PartyState reaches every member and, per Types, anyone with a pending invite from
+	-- that party. The panel shows only a party this player is a MEMBER of; a state that lists
+	-- them as neither member nor invitee means that leader's invite is gone (withdrawn,
+	-- expired or filled), so its card goes too.
+	local localUserId = player.UserId
+	local function onPartyState(payload: any): ()
+		local party = readHubParty(payload)
+		local mine: Types.HubParty? = nil
+		local invited = false
+		if party ~= nil then
+			for _, member in party.members do
+				if member.userId == localUserId then
+					mine = party
+				end
+			end
+			for _, invite in party.pending do
+				if invite.userId == localUserId then
+					invited = true
+				end
+			end
+		end
+		local expedition = expeditionPanel
+		if expedition ~= nil then
+			expedition.SetParty(mine)
+		end
+		local card = inviteToast
+		if card ~= nil then
+			if mine ~= nil then
+				card.Dismiss(nil) -- in a party now, so no other invite can be accepted
+			elseif party ~= nil and not invited then
+				card.Dismiss(party.leaderUserId)
+			end
+		end
+		local strip = debugPanel
+		if strip ~= nil then
+			local fakeCount = 0
+			if mine ~= nil then
+				for _, member in mine.members do
+					if member.userId < 0 then
+						fakeCount += 1
+					end
+				end
+			end
+			strip.SetFakePartyCount(fakeCount)
+		end
+	end
+	local function onPartyInvite(payload: any): ()
+		local invite = readPartyInvite(payload)
+		local card = inviteToast
+		if invite ~= nil and card ~= nil then
+			card.Show(invite)
+		end
+	end
+	local partyConnected = false
+	local function connectParty(): ()
+		if partyConnected or not hasExpeditions then
+			return
+		end
+		local stateEvent = remotesFolder:FindFirstChild("PartyState")
+		local inviteEvent = remotesFolder:FindFirstChild("PartyInvite")
+		if stateEvent == nil or inviteEvent == nil then
+			return
+		end
+		partyConnected = true
+		local stateRemote = stateEvent :: RemoteEvent
+		local inviteRemote = inviteEvent :: RemoteEvent
+		stateRemote.OnClientEvent:Connect(onPartyState)
+		inviteRemote.OnClientEvent:Connect(onPartyInvite)
+	end
+	connectParty()
 	-- Instant boot in both worlds: the HUD never waits on the combat remotes, it just picks
 	-- them up if the server creates them a moment later (and drops the listener once it has
 	-- everything it needs).
@@ -1270,6 +1484,7 @@ local function boot(): ()
 		return combatRemotesReady
 			and (expeditionPanel == nil or runListConnected)
 			and (summaryCard == nil or summaryConnected)
+			and (not hasExpeditions or partyConnected)
 	end
 	if (hasArmory or hasExpeditions) and not combatWiringComplete() then
 		local childAdded: RBXScriptConnection? = nil
@@ -1277,6 +1492,7 @@ local function boot(): ()
 			resolveCombatRemotes()
 			connectRunList()
 			connectExpeditionSummary()
+			connectParty()
 			refreshCombatKeys()
 			refreshAll() -- the Power readout follows the same gate as the keys
 			local connection = childAdded

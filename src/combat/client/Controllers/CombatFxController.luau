@@ -20,6 +20,11 @@
 -- Reduce motion (Theme.reducedMotion: touch or low graphics, spec section 10) drops
 -- particles, the camera kick, the knockback nudge and the ability ring; the text, the
 -- banners and the sounds always play, because they carry information.
+--
+-- C2 co-op fx follow a finer split, because reducedMotion is true on EVERY touch device and
+-- a party buff is information, not decoration: the rally / war cry ring still shows on a
+-- phone (at full size, fading, no growth) and drops only on Theme.lowEndDevice; the pulse on
+-- each target is a short Highlight flash, never particles.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -36,6 +41,7 @@ local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
 local Theme = require(uiFolder:WaitForChild("Theme"))
 local Motion = require(uiFolder:WaitForChild("Motion"))
+local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 
@@ -51,6 +57,8 @@ local DEFAULT_DAMAGE_SECONDS = 0.8
 local DEFAULT_BANNER_SECONDS = 2
 local DEFAULT_LOW_HP_FRACTION = 0.3
 local DEFAULT_CORPSE_SECONDS = 0.6
+-- The HUD's waiting banner words, so a refused tap and the banner agree.
+local WAITING_TEXT = CombatHud.WAITING_TEXT
 
 type EnemyFx = {
 	model: Model,
@@ -65,6 +73,7 @@ type EnemyFx = {
 local CombatFxController = {}
 
 local combatConfig: Types.CombatConfig? = nil
+local armoryConfig: Types.ArmoryConfig? = nil
 local materialName = ""
 local activeNumbers = 0
 local cameraKickPitch = 0
@@ -87,6 +96,11 @@ local enemyFx: { [Instance]: EnemyFx } = {}
 local enemiesById: { [number]: Model } = {}
 local connections: { RBXScriptConnection } = {}
 local onBanner: ((string) -> ())? = nil
+local onToast: ((string) -> ())? = nil
+-- userId -> display name from the last RunState party, so a buff can say who cast it
+-- (bots have negative ids and no Player to ask).
+local partyNames: { [number]: string } = {}
+local lastWaitingToastAt = -math.huge
 
 local function feedback(): Types.CombatFeedbackConfig?
 	local cfg = combatConfig
@@ -648,6 +662,156 @@ local function onPlayerDown(fx: { [string]: any }): ()
 	showBanner("You're down", sub, bannerSeconds())
 end
 
+local function toast(text: string): ()
+	local handler = onToast
+	if handler ~= nil then
+		handler(text)
+	end
+end
+
+local function nameOf(userId: number): string
+	local known = partyNames[userId]
+	if known ~= nil then
+		return known
+	end
+	local player = Players:GetPlayerByUserId(userId)
+	return if player ~= nil then player.DisplayName else "an ally"
+end
+
+local function onSwing(fx: { [string]: any }): ()
+	local userId = fx.userId
+	local step = fx.step
+	if typeof(userId) ~= "number" or typeof(step) ~= "number" or userId == localUserId() then
+		return
+	end
+	WeaponController.SwingOther(userId, math.clamp(math.floor(step), 1, 3))
+end
+
+-- Radius ring at the caster. Unlike abilityRing it survives reducedMotion (see the header):
+-- on a touch device it appears at full size and only fades.
+local function partyRing(position: Vector3, radius: number, color: Color3): ()
+	if Theme.lowEndDevice or radius <= 0 then
+		return
+	end
+	local diameter = radius * 2
+	local startDiameter = if Theme.reducedMotion then diameter else 1
+	local part = Create("Part", {
+		Name = "FxPartyRing",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Shape = Enum.PartType.Cylinder,
+		Material = Enum.Material.Neon,
+		Color = color,
+		Transparency = Theme.COMBAT_PARTY_RING_TRANSPARENCY,
+		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, startDiameter, startDiameter),
+		CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90)),
+		Parent = Workspace,
+	}) :: Part
+	local tween = TweenService:Create(part, Motion.Info(Theme.COMBAT_PARTY_RING_SECONDS), {
+		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, diameter, diameter),
+		Transparency = 1,
+	})
+	tween.Completed:Once(function()
+		part:Destroy()
+	end)
+	tween:Play()
+end
+
+-- A short Highlight flash on an ally's character. At most coop.maxParty per cast, so a
+-- fresh instance per pulse stays far below the engine's Highlight budget.
+local function pulseCharacter(userId: number, color: Color3): ()
+	local player = Players:GetPlayerByUserId(userId)
+	local rig = if player ~= nil then player.Character else nil
+	if rig == nil then
+		return
+	end
+	local highlight = Create("Highlight", {
+		Name = "FxPartyPulse",
+		FillColor = color,
+		OutlineColor = color,
+		FillTransparency = Theme.COMBAT_PARTY_PULSE_FILL,
+		OutlineTransparency = 0,
+		DepthMode = Enum.HighlightDepthMode.Occluded,
+		Parent = rig,
+	}) :: Highlight
+	local tween = TweenService:Create(
+		highlight,
+		Motion.Info(Theme.COMBAT_PARTY_PULSE_SECONDS),
+		{ FillTransparency = 1, OutlineTransparency = 1 }
+	)
+	tween.Completed:Once(function()
+		highlight:Destroy()
+	end)
+	tween:Play()
+end
+
+local function onPartyEffect(fx: { [string]: any }): ()
+	local position = fx.position
+	local key = fx.key
+	local casterId = fx.userId
+	if typeof(position) ~= "Vector3" or typeof(key) ~= "string" or typeof(casterId) ~= "number" then
+		return
+	end
+	-- The effect's kind comes from the shared Armory config; the key is the fallback so an
+	-- unknown key still reads as something rather than nothing.
+	local cfg = armoryConfig
+	local def = if cfg ~= nil then cfg.partyEffects[key] else nil
+	local kind = if def ~= nil then def.kind else key
+	local rally = kind == "rally"
+	local color = if rally then Theme.COLOR_ACCENT else Theme.COLOR_HIGHLIGHT
+	local radius = fx.radius
+	partyRing(position, if typeof(radius) == "number" then radius else 0, color)
+
+	local targets = fx.targetIds
+	if typeof(targets) ~= "table" then
+		return
+	end
+	local me = localUserId()
+	for _, targetId in targets :: { any } do
+		if typeof(targetId) ~= "number" then
+			continue
+		end
+		pulseCharacter(targetId, color)
+		if targetId == me then
+			SoundController.Play(if rally then "partyRally" else "partyWarcry")
+			toast((if rally then "Rally from " else "War cry from ") .. nameOf(casterId))
+		end
+	end
+end
+
+local function onMentor(fx: { [string]: any }): ()
+	local valor = fx.valor
+	if fx.userId ~= localUserId() or typeof(valor) ~= "number" then
+		return
+	end
+	local text = "+" .. Format.Cash(valor) .. " Valor · Mentor"
+	SoundController.Play("mentor")
+	toast(text)
+	local rig = Players.LocalPlayer.Character
+	local head = if rig ~= nil then rig:FindFirstChild("Head") else nil
+	if head ~= nil and head:IsA("BasePart") then
+		floatText(head.Position, text, Theme.COLOR_HIGHLIGHT, true)
+	end
+end
+
+-- Only "waiting" speaks: the other refusals answer an input the player already saw fail (a
+-- swing inside its own window), but a waiting player tapping Attack needs to know why
+-- nothing happens. Throttled, because every tap of a held button is refused again.
+local function onRefused(fx: { [string]: any }): ()
+	if fx.reason ~= "waiting" then
+		return
+	end
+	local now = os.clock()
+	if now - lastWaitingToastAt < Theme.COMBAT_WAITING_TOAST_COOLDOWN then
+		return
+	end
+	lastWaitingToastAt = now
+	toast(WAITING_TEXT)
+end
+
 local function applyFx(fx: any): ()
 	if typeof(fx) ~= "table" or typeof(fx.kind) ~= "string" then
 		return
@@ -668,9 +832,15 @@ local function applyFx(fx: any): ()
 		onBossDown(payload)
 	elseif kind == "playerDown" then
 		onPlayerDown(payload)
+	elseif kind == "swing" then
+		onSwing(payload)
+	elseif kind == "partyEffect" then
+		onPartyEffect(payload)
+	elseif kind == "mentor" then
+		onMentor(payload)
+	elseif kind == "refused" then
+		onRefused(payload)
 	end
-	-- "refused" is deliberately silent: it answers an input the player already saw fail
-	-- (a swing inside its own window), and a toast per mistimed tap would be noise.
 end
 
 local function onCombatFx(batch: any): ()
@@ -830,6 +1000,7 @@ end
 
 function CombatFxController.Init(): ()
 	combatConfig = Catalog.GetCombatConfig()
+	armoryConfig = Catalog.GetArmoryConfig()
 end
 
 function CombatFxController.Start(): ()
@@ -885,6 +1056,26 @@ end
 -- the banner still sees what the director did.
 function CombatFxController.SetBannerHandler(handler: (string) -> ()): ()
 	onBanner = handler
+end
+
+-- C2 personal notices (a buff landed on you, your Mentor Valor, a waiting refusal) go to
+-- the HUD toast only; they are not wave events, so they never take the banner.
+function CombatFxController.SetToastHandler(handler: (string) -> ()): ()
+	onToast = handler
+end
+
+-- Pushed from every RunState so a caster is named even when it is a debug bot.
+function CombatFxController.SetParty(party: { Types.PartyMember }): ()
+	table.clear(partyNames)
+	for _, member in party do
+		if
+			typeof(member) == "table"
+			and typeof(member.userId) == "number"
+			and typeof(member.name) == "string"
+		then
+			partyNames[member.userId] = member.name
+		end
+	end
 end
 
 function CombatFxController.Destroy(): ()
