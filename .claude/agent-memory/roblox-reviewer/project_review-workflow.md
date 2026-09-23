@@ -554,3 +554,40 @@ fail) and are clean; every prop goes through `PropFactory.Spawn` → `sealPart`,
   → feature absent".
 - The lead committed into the worktree mid-review (HEAD moved to f97499a); re-run `git log` before
   reporting and name the commit reviewed.
+
+**M9 wave 2d (2026-09-23, half-size cars ×4 traffic, 2 parked per bay; + merge_stages mirrored-node
+winding fix; SHIP w/ 1 Major).** Client+config only; `PropFactory.Spawn(..., scale)` ScaleTo's about
+the Base PrimaryPart before PivotTo, factor 1 never calls it; Traffic/Walkers read part offsets after.
+- **Blender is installed** (`C:/Program Files/Blender Foundation/Blender 5.2/blender.exe`). A 30-line
+  `-b --factory-startup --python` script settles mesh-API questions empirically: on 5.2.1,
+  `Mesh.transform(det<0)` leaves winding AND custom corner normals inward, and `Mesh.flip_normals()`
+  flips both (corner normals follow). Measure "outward faces / corners vs centroid" before/after.
+- **Recurring pattern (new): density ×N on a no-headway Traffic loop.** Every car shares one speed and
+  there is no spacing rule, so two cars merging at a junction within ~length/speed stay fused until a
+  branch splits them; overlap frequency scales ~N². Ask for headway or entry-occupancy on hop.
+- Parked packing pattern: extra draws appended after the first-pick loop on the salted stream keeps
+  the old plan; greenery keeps full-size bay solids via `bayPosition` + one solid per bay.
+- plotrender.py ignores `vehicles.scale` and renders no parked cars — the Studio reference drifts.
+
+**C2 co-op (2026-09-23, worktree `tycoon-c2` branch `c2-coop`, commits 2b6a9bb+3d8f99d — SHIP AFTER
+FIXES: 0 Critical, 3 Majors).** Hub `PartyService` (memory-only invite/accept, re-form from identical
+return hints keyed `leader|sorted ids`), `ExpeditionService` group Depart (one ReserveServer → RunTicket
+in `ActiveRunsCodes` hash map → release all → ONE TeleportAsync), combat `ArenaService.CheckAdmission`
++ waiting state + one-slot registry mailbox, `WaveService` payMentors/group return, boss HP ×
+`bossHpMult` (sim mirror exact). Both builds, both luau-lsp trees, stylua, selene (1 pre-existing
+LegacyPanel shadowing warning), `sim_combat.py --check` 13/13 all green; findings came from reading.
+Exploit surface that checked out: ticket `privateServerId` vs `game.PrivateServerId`, RunListEntry has
+no accessCode, Join re-applies list visibility, negative ids Studio-only in all five validators, every
+lever IsStudio-gated, waiting members untargetable (memberRoot nil) and undamageable.
+- **Recurring pattern (new): a "skip the check on rejoin" rule keyed on the CALL SITE, not on prior
+  state.** Combat `runJoinSequence(..., "rejoin")` skips CheckAdmission, but `abortReturn` is also
+  reached from `SendHome` by a never-admitted (refused) player, so refuse → failed trip → Return →
+  failed trip admits them past full/over/locked (deterministic in Studio with ForceTeleportFailure).
+  Whenever a bypass is justified by "they were a member moments ago", check every path into it.
+- **Recurring pattern: reward conditions checked on the beneficiary's partners but not on the
+  beneficiary.** Mentor bonus requires mentees ≥ mentorMinDamageShare but not the mentor; a waiting
+  joiner parked on the pad is paid at the boss flush.
+- One-slot "newest intent wins" mailbox can drop a queued CLEAR when a publish follows; and nothing
+  stops a publish of an ended run (Remove during `summary`). Keep clear/publish separate + phase-gate.
+- Invite remotes need a per-target cooldown: resend restarts the timer, fires the toast + a sound at
+  the calls bucket rate (10/s).

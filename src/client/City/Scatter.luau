@@ -22,6 +22,7 @@ local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 
 local RoadGraph = require(script.Parent:WaitForChild("RoadGraph"))
 local Noise = require(script.Parent:WaitForChild("Noise"))
+local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 
 -- Seed formula frozen by the contract.
 local SEED_PLOT_MULTIPLIER = 7919
@@ -38,6 +39,11 @@ local GREENERY_SALT = 7001
 local PARKED_SALT = 7002
 local WALKERS_SALT = 7003
 local AMBIENT_SALT = 7004
+-- Wave 2d: studs between two cars packed into one bay when `parked.gap` is absent (the contract's
+-- default, not a tunable of its own).
+local DEFAULT_PARKED_GAP = 0.3
+-- Wave 2d: a `parked.perBay` typo must not multiply the parked stream's draws without bound.
+local MAX_PER_BAY = 4
 -- Garnish goes on one of a lot's four sides, in the lot's own frame (front -Z faces the street).
 local LOT_SIDES = 4
 -- Samples closer together than this are the same point, and the shortest leg worth walking.
@@ -119,16 +125,19 @@ export type GreenerySpot = {
 	lot: number?,
 }
 
--- Wave 2c parked vehicles: one per layout spot inside the budget. `tier` already folds in the
--- era's cumulative `parked.perTier`; `pieceId` is the spine piece beside the spot, which must be
--- drawn before the vehicle appears (nil: no street beside it, so it never does).
+-- Wave 2c parked vehicles, one entry per car (wave 2d packs up to `parked.perBay` into a bay).
+-- `tier` already folds in the era's cumulative `parked.perTier`; `pieceId` is the spine piece
+-- beside the bay, which must be drawn before the car appears (nil: no street beside it, so it
+-- never does). Cars of one bay are consecutive and share `bay` and `bayPosition`.
 export type ParkedSpot = {
-	position: Vector3, -- plot-local, Y 0
+	position: Vector3, -- plot-local, Y 0: this car's anchor
 	rotationY: number,
 	prop: string,
 	tier: number,
 	lot: number?,
 	pieceId: string?,
+	bay: number, -- the bay's rank in (tier, index) order
+	bayPosition: Vector3, -- plot-local, Y 0: the layout spot
 }
 
 -- Wave 2c birds: one flock circling a tree zone centre. The per-bird numbers are unit draws in
@@ -1084,9 +1093,75 @@ local function lotSidePoint(extents: Extents, side: number, along: number, out: 
 	return Vector3.new(alongX, 0, extents.minZ - out)
 end
 
--- Parked vehicles (docs/INTERFACES.md "Wave 2c — Parked vehicles"): the layout's spots in
--- (tier, index) order, capped by the cumulative `parked.perTier` and `budget.parked`. One prop
--- draw per spot, kept or not, so a spot's pick never depends on the ones before it being kept.
+-- A harvested prop's XZ bounds about its anchor at `scale`, nil before it is harvested.
+local function scaledExtents(eraName: string, propName: string, scale: number): Extents?
+	local extents = harvestedUnion(eraName, { propName })
+	if extents == nil then
+		return nil
+	end
+	return {
+		minX = extents.minX * scale,
+		maxX = extents.maxX * scale,
+		minZ = extents.minZ * scale,
+		maxZ = extents.maxZ * scale,
+	}
+end
+
+-- Wave 2d: where `props` sit end to end along a bay's long axis (the car's own Z, front -Z),
+-- centred on the bay with `gap` between them -- each car's anchor Z in the bay frame. The bay is
+-- `bayLength` long about `centre`; nil when the row is longer than that, the length is unknown,
+-- or anything in the row is not harvested yet, and the bay keeps its first car alone.
+local function packBay(
+	eraName: string,
+	props: { string },
+	scale: number,
+	gap: number,
+	bayLength: number?,
+	centre: number
+): { number }?
+	if bayLength == nil then
+		return nil
+	end
+	local lengths: { number } = {}
+	local fronts: { number } = {}
+	local total = gap * (#props - 1)
+	for index, name in props do
+		local extents = scaledExtents(eraName, name, scale)
+		if extents == nil then
+			return nil
+		end
+		lengths[index] = extents.maxZ - extents.minZ
+		fronts[index] = extents.minZ
+		total += lengths[index]
+	end
+	if total > bayLength then
+		return nil
+	end
+	local anchors: { number } = {}
+	local cursor = centre - total / 2
+	for index in props do
+		anchors[index] = cursor - fronts[index]
+		cursor += lengths[index] + gap
+	end
+	return anchors
+end
+
+-- A bay's ground (wave 2d): the pool's built-size harvested union, and the length a row of packed
+-- cars may fill -- `parked.bayLength` when set, else that union's length (nil before harvest).
+local function bayShape(eraName: string, parked: Types.ParkedConfig): (Extents?, number?)
+	local union = harvestedUnion(eraName, parked.props)
+	local configured = numberOr(parked.bayLength, 0)
+	if configured > 0 and configured < math.huge then
+		return union, configured
+	end
+	return union, if union ~= nil then union.maxZ - union.minZ else nil
+end
+
+-- Parked vehicles (docs/INTERFACES.md "Wave 2c — Parked vehicles", "Wave 2d"): the layout's spots
+-- in (tier, index) order, as many bays as the cumulative `parked.perTier` names, and cars into
+-- them until `budget.parked` (which counts cars) runs out. One prop draw per spot, kept or not, so
+-- a spot's pick never depends on the ones before it being kept; wave 2d's extra cars per bay draw
+-- after all of those, so a bay's first car is the pick it always had.
 local function parkedSpots(
 	input: PlanInput,
 	rng: Random,
@@ -1097,11 +1172,26 @@ local function parkedSpots(
 	if parked == nil or spots == nil or #spots == 0 or not nonEmptyList(parked.props) then
 		return {}
 	end
-	local cap = math.min(perTierMax(parked.perTier), budgetCap(input.config.budget.parked))
+	local bayCap = perTierMax(parked.perTier)
+	local carsLeft = budgetCap(input.config.budget.parked)
 	local picks: { string } = {}
 	for index in spots do
 		picks[index] = parked.props[pickIndex(rng:NextNumber(), #parked.props) :: number]
 	end
+	local perBay = math.clamp(math.floor(numberOr(parked.perBay, 1)), 1, MAX_PER_BAY)
+	local extraPicks: { { string } } = {}
+	for index in spots do
+		local extra: { string } = {}
+		for car = 2, perBay do
+			extra[car - 1] = parked.props[pickIndex(rng:NextNumber(), #parked.props) :: number]
+		end
+		extraPicks[index] = extra
+	end
+	local scale = PropFactory.ScaleOf(parked.scale)
+	local gap = math.max(numberOr(parked.gap, DEFAULT_PARKED_GAP), 0)
+	-- The row is centred on the pool's union, the ground a single car always stood on.
+	local bayExtents, bayLength = bayShape(input.eraName, parked)
+	local bayCentre = if bayExtents ~= nil then (bayExtents.minZ + bayExtents.maxZ) / 2 else 0
 	local order: { number } = {}
 	for index in spots do
 		table.insert(order, index)
@@ -1116,7 +1206,7 @@ local function parkedSpots(
 	local lines = streetLines()
 	local planned: { ParkedSpot } = {}
 	for rank, index in order do
-		if rank > cap then
+		if rank > bayCap or carsLeft <= 0 then
 			break
 		end
 		local rankTier = tierForRank(parked.perTier, rank)
@@ -1125,14 +1215,41 @@ local function parkedSpots(
 		end
 		local spot = spots[index]
 		local position = flat(spot.position)
-		table.insert(planned, {
-			position = position,
-			rotationY = numberOr(spot.rotationY, 0),
-			prop = picks[index],
-			tier = math.max(numberOr(spot.tier, 0), rankTier),
-			lot = spot.lot,
-			pieceId = nearestPieceId(lines, position),
-		})
+		local rotationY = numberOr(spot.rotationY, 0)
+		local tier = math.max(numberOr(spot.tier, 0), rankTier)
+		local pieceId = nearestPieceId(lines, position)
+		local props: { string } = { picks[index] }
+		for _, name in extraPicks[index] do
+			if #props >= carsLeft then
+				break
+			end
+			table.insert(props, name)
+		end
+		local anchors = if #props > 1
+			then packBay(input.eraName, props, scale, gap, bayLength, bayCentre)
+			else nil
+		if anchors == nil then
+			-- A lone car keeps the anchor it always had.
+			props = { props[1] }
+			anchors = { 0 }
+		end
+		local along = anchors :: { number }
+		-- The car frame's +Z in the plot, as Scatter.PropFrame turns it.
+		local radians = math.rad(rotationY)
+		local axis = Vector3.new(math.sin(radians), 0, math.cos(radians))
+		for car, name in props do
+			table.insert(planned, {
+				position = if along[car] == 0 then position else position + axis * along[car],
+				rotationY = rotationY,
+				prop = name,
+				tier = tier,
+				lot = spot.lot,
+				pieceId = pieceId,
+				bay = rank,
+				bayPosition = position,
+			})
+		end
+		carsLeft -= #props
 	end
 	return planned
 end
@@ -1171,14 +1288,31 @@ local function greenerySpots(input: PlanInput, plan: Plan, rng: Random): { Green
 	-- The plot sign straddles the front (-Z) edge centre (PlotService.buildWorld).
 	local sign = Vector3.new(0, 0, -input.plotSize.Z / 2)
 	local solids, lotFootprints = solidsFor(input)
-	-- Parked vehicles stand on their bays whatever the tier; a hedge must not grow under one.
+	-- Parked vehicles stand on their bays whatever the tier; a hedge must not grow under one. The
+	-- whole bay stays clear -- the built-size union, stretched about its centre to `bayLength` when
+	-- that is longer -- not just the scaled cars packed into it.
 	local parked = era.parked
-	local parkedExtents = if parked ~= nil and nonEmptyList(parked.props)
-		then harvestedUnion(input.eraName, parked.props)
-		else nil
+	local parkedExtents: Extents? = nil
+	if parked ~= nil and nonEmptyList(parked.props) then
+		local union, length = bayShape(input.eraName, parked)
+		if union ~= nil then
+			local grown = table.clone(union)
+			if length ~= nil and length > union.maxZ - union.minZ then
+				local centre = (union.minZ + union.maxZ) / 2
+				grown.minZ = centre - length / 2
+				grown.maxZ = centre + length / 2
+			end
+			parkedExtents = grown
+		end
+	end
+	local lastBay = 0
 	for _, spot in plan.parked do
+		if spot.bay == lastBay then
+			continue
+		end
+		lastBay = spot.bay
 		table.insert(solids, {
-			origin = spot.position,
+			origin = spot.bayPosition,
 			rotation = CFrame.Angles(0, math.rad(spot.rotationY), 0),
 			extents = parkedExtents or centredExtents(0, 0),
 		})

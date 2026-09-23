@@ -14,4 +14,8 @@
 - [Studio bridge 2026-09-22](studio-bridge-2026-09-22.md) — C1: Studio handoff record + kick replaces TeleportAsync, levers = attribute + RequestDebug, placeholder enemies, windowSeconds 10 load-bearing, no yields in the run loop
 - [Orbital dressing 2026-09-23](orbital-dressing-2026-09-23.md) — M9 wave 2b: Orbital relaid on the lattice, tube-kit walkways, monorail loop (Highway loop mode, arc lanes), decking under clusters only, Rocks zones; cityDetail = schema v6 + `detailPolicy`; worktree/announce-ack protocol with the wave 2c session
 - [Living city 2026-09-23](living-city-2026-09-23.md) — M9 wave 2c: denser lots/greenery/parked/walkers/smoke/birds per tier; ambient gates on lowEndDevice (reducedMotion = all touch); walk lanes clip at solids except pads; parallel-session worktree workflow
+<<<<<<< HEAD
 - [Co-op 2026-09-23](coop-2026-09-23.md) — C2 rulings: boss HP scales with party, public+friends+server run list, invite/accept party, host-gated missions via RunTicket privateServerId; Rojo $path child duplication
+=======
+- [Small cars 2026-09-23](small-cars-2026-09-23.md) — wave 2d: runtime ScaleTo for dressing props (no re-upload), lane-hold stops fused traffic, merge_stages flips winding for mirrored kit nodes
+>>>>>>> main

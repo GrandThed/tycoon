@@ -8,6 +8,12 @@
 -- blend facing and the lane-change offset over vehicles.turnSeconds, write one CFrame per
 -- part into the pre-allocated `cframes` array, then a single BulkMoveTo. The arrays are
 -- rebuilt only when vehicles are added or removed; the loop allocates no tables.
+--
+-- Wave 2d spacing: every car on a plot drives at one speed, so two cars that reach a node
+-- together would take the same lane and ride fused for the rest of their lives. Each lane keeps
+-- the time it is free again (a car entered it and has since moved its own length plus
+-- `vehicles.followGap`); a car at a node only takes a free lane -- the U-turn at a dead end too --
+-- and waits at the node while none is. A lane's freedom always expires, so a wait never deadlocks.
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -21,11 +27,17 @@ type Lanes = RoadGraph.Lanes
 local MAX_LANE_HOPS_PER_FRAME = 8
 local HALF_TURN = math.pi
 local FULL_TURN = 2 * math.pi
+-- The contract's fallback when an era has no `vehicles.followGap` (a stale config file).
+local DEFAULT_FOLLOW_GAP = 0.6
 
 type Vehicle = {
 	plotId: number,
 	model: Model,
 	lanes: Lanes,
+	-- The free-again time of each lane of `lanes`, shared by every vehicle on that graph.
+	freeAt: { number },
+	-- Seconds this car keeps a lane it enters: (its length + followGap) / speed.
+	hold: number,
 	lane: number,
 	distance: number,
 	speed: number,
@@ -46,41 +58,91 @@ local parts: { BasePart } = {}
 local offsets: { CFrame } = {}
 local cframes: { CFrame } = {}
 local heartbeat: RBXScriptConnection? = nil
+-- Seconds of Heartbeat since the module loaded: the clock every lane's free-again time is on.
+local clock = 0
+-- Keyed weakly by the lane graph, so a graph RoadGraph has dropped takes its array with it.
+local freeAtByLanes: { [Lanes]: { number } } = setmetatable({} :: any, { __mode = "k" })
 -- Unseeded on purpose: route choices are cosmetic and allowed to differ per client.
 local rng = Random.new()
+
+local function numberOr(value: number?, fallback: number): number
+	return if type(value) == "number" and value == value then value else fallback
+end
 
 local function wrapAngle(angle: number): number
 	return (angle + HALF_TURN) % FULL_TURN - HALF_TURN
 end
 
-local function nextLane(lanes: Lanes, lane: number): number
+local function freeAtFor(lanes: Lanes): { number }
+	local freeAt = freeAtByLanes[lanes]
+	if freeAt == nil then
+		local created: { number } = table.create(lanes.count, -math.huge)
+		freeAtByLanes[lanes] = created
+		return created
+	end
+	return freeAt
+end
+
+-- A random free outgoing lane that is not the way back; at a dead end the way back, if it is free.
+-- Nil when every candidate is taken, and the car waits at the node for a frame.
+local function nextLane(lanes: Lanes, lane: number, freeAt: { number }): number?
 	local back = lanes.reverse[lane]
 	local outgoing = lanes.outgoing[lanes.to[lane]]
-	local choices = #outgoing
-	for _, candidate in outgoing do
-		if candidate == back then
-			choices -= 1
-		end
-	end
-	if choices <= 0 then
-		return back
-	end
-	local pick = rng:NextInteger(1, choices)
+	local forward = 0
+	local free = 0
 	for _, candidate in outgoing do
 		if candidate ~= back then
+			forward += 1
+			if freeAt[candidate] <= clock then
+				free += 1
+			end
+		end
+	end
+	if forward == 0 then
+		return if freeAt[back] <= clock then back else nil
+	end
+	if free == 0 then
+		return nil
+	end
+	local pick = rng:NextInteger(1, free)
+	for _, candidate in outgoing do
+		if candidate ~= back and freeAt[candidate] <= clock then
 			pick -= 1
 			if pick == 0 then
 				return candidate
 			end
 		end
 	end
-	return back
+	return nil
+end
+
+-- Marks `lane` taken until a car `along` studs into it has moved its hold clear of the start.
+local function claim(vehicle: Vehicle, lane: number, along: number): ()
+	local freeAt = vehicle.freeAt
+	local freeFrom = clock + vehicle.hold - (if vehicle.speed > 0 then along / vehicle.speed else 0)
+	if freeFrom > freeAt[lane] then
+		freeAt[lane] = freeFrom
+	end
 end
 
 local function frameFor(position: Vector3, yaw: number): CFrame
 	local c, s = math.cos(yaw), math.sin(yaw)
 	-- CFrame.Angles(0, yaw, 0) + position in one constructor (one allocation instead of three).
 	return CFrame.new(position.X, position.Y, position.Z, c, 0, s, 0, 1, 0, -s, 0, c)
+end
+
+-- A model's extent along its own Z (front -Z), from part offsets taken at an identity pivot.
+local function lengthOf(modelParts: { BasePart }, partOffsets: { CFrame }): number
+	local low, high = math.huge, -math.huge
+	for index, part in modelParts do
+		local offset = partOffsets[index]
+		local size = part.Size
+		local _, _, _, _, _, _, _, _, _, r20, r21, r22 = offset:GetComponents()
+		local half = (math.abs(r20) * size.X + math.abs(r21) * size.Y + math.abs(r22) * size.Z) / 2
+		low = math.min(low, offset.Z - half)
+		high = math.max(high, offset.Z + half)
+	end
+	return if low <= high then high - low else 0
 end
 
 local function rebuildArrays(): ()
@@ -113,6 +175,7 @@ local function pruneDetached(): ()
 end
 
 local function step(dt: number): ()
+	clock += dt
 	for _, vehicle in vehicles do
 		local lanes = vehicle.lanes
 		local turnSeconds = vehicle.turnSeconds
@@ -125,10 +188,17 @@ local function step(dt: number): ()
 				distance = 0
 				break
 			end
+			local following = nextLane(lanes, lane, vehicle.freeAt)
+			if following == nil then
+				-- Every way on is taken: wait at the node and ask again next frame.
+				distance = lanes.length[lane]
+				break
+			end
 			distance -= lanes.length[lane]
 			local laneEnd = lanes.origin[lane] + lanes.direction[lane] * lanes.length[lane]
 			local residual = vehicle.blendOffset * (1 - alpha)
-			lane = nextLane(lanes, lane)
+			lane = following
+			claim(vehicle, lane, 0)
 			-- Straight hops produce a zero offset and equal yaw, so only real turns blend.
 			vehicle.blendOffset = laneEnd + residual - lanes.origin[lane]
 			vehicle.fromYaw = vehicle.renderYaw
@@ -178,8 +248,10 @@ end
 
 local function seat(vehicle: Vehicle, lanes: Lanes, lane: number, distance: number): ()
 	vehicle.lanes = lanes
+	vehicle.freeAt = freeAtFor(lanes)
 	vehicle.lane = lane
 	vehicle.distance = math.clamp(distance, 0, lanes.length[lane])
+	claim(vehicle, vehicle.lane, vehicle.distance)
 end
 
 local function removeWhere(plotId: number): ()
@@ -202,18 +274,22 @@ local Traffic = {}
 
 -- Replaces the plot's vehicles with `models` (pivoted with their bottom-centre at
 -- CFrame.identity, as PropFactory.Spawn(…, CFrame.identity, nil) leaves them), spaced evenly
--- along the road network, alternating directions. Traffic owns the models from here on and
--- destroys any it has no room or road for; `mapVehicleBudget` is the whole-map vehicle cap
--- (CityDressing.json budget.vehiclesMap). Returns how many vehicles were placed.
+-- along the road network, alternating directions, and never closer than the longest car plus
+-- `followGap` (vehicles.followGap) to the next one going the same way -- a short network takes
+-- fewer cars. Traffic owns the models from here on and destroys any it has no room or road for;
+-- `mapVehicleBudget` is the whole-map vehicle cap (CityDressing.json budget.vehiclesMap).
+-- Returns how many vehicles were placed, and whether the map budget (not the road) refused any,
+-- which is the only shortfall a later retry can fix.
 function Traffic.SpawnPlot(
 	plotId: number,
 	lanes: Lanes,
 	models: { Model },
 	speed: number,
 	turnSeconds: number,
+	followGap: number?,
 	parent: Instance,
 	mapVehicleBudget: number
-): number
+): (number, boolean)
 	removeWhere(plotId)
 
 	-- Each two-way road piece counted once (the lane with the lower id of its pair).
@@ -224,12 +300,35 @@ function Traffic.SpawnPlot(
 		end
 	end
 	local room = mapVehicleBudget - #vehicles
-	local count = math.min(#models, room)
+	local budgetLimited = room < #models
+	local gap = math.max(numberOr(followGap, DEFAULT_FOLLOW_GAP), 0)
+	local driveSpeed = math.max(speed, 0)
+
+	-- Read off the clones as spawned, so a wave 2d ScaleTo (done about the base, before this) is
+	-- already in every offset: a half-size car rides at half the height with no correction here.
+	local measured: { { parts: { BasePart }, offsets: { CFrame }, length: number } } = {}
+	local spacing = gap
+	for index, model in models do
+		local modelParts: { BasePart } = {}
+		local partOffsets: { CFrame } = {}
+		for _, descendant in model:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				table.insert(modelParts, descendant)
+				table.insert(partOffsets, descendant.CFrame)
+			end
+		end
+		local length = lengthOf(modelParts, partOffsets)
+		measured[index] = { parts = modelParts, offsets = partOffsets, length = length }
+		spacing = math.max(spacing, length + gap)
+	end
+	-- Alternate cars share a direction, so same-way neighbours start 2 * total / count apart.
+	local fits = if spacing > 0 then math.max(math.floor(2 * total / spacing), 1) else #models
+	local count = math.min(#models, room, fits)
 	if total <= 0 or count <= 0 then
 		for _, model in models do
 			model:Destroy()
 		end
-		return 0
+		return 0, budgetLimited
 	end
 
 	for index, model in models do
@@ -256,21 +355,16 @@ function Traffic.SpawnPlot(
 			distance = lanes.length[chosen] - along
 		end
 
-		local modelParts: { BasePart } = {}
-		local partOffsets: { CFrame } = {}
-		for _, descendant in model:GetDescendants() do
-			if descendant:IsA("BasePart") then
-				table.insert(modelParts, descendant)
-				table.insert(partOffsets, descendant.CFrame)
-			end
-		end
+		local shape = measured[index]
 		local vehicle: Vehicle = {
 			plotId = plotId,
 			model = model,
 			lanes = lanes,
+			freeAt = freeAtFor(lanes),
+			hold = if driveSpeed > 0 then (shape.length + gap) / driveSpeed else 0,
 			lane = lane,
 			distance = 0,
-			speed = math.max(speed, 0),
+			speed = driveSpeed,
 			turnSeconds = math.max(turnSeconds, 0),
 			blendElapsed = 0,
 			fromYaw = lanes.yaw[lane],
@@ -278,8 +372,8 @@ function Traffic.SpawnPlot(
 			renderYaw = lanes.yaw[lane],
 			partStart = 0,
 			partCount = 0,
-			partOffsets = partOffsets,
-			modelParts = modelParts,
+			partOffsets = shape.offsets,
+			modelParts = shape.parts,
 		}
 		seat(vehicle, lanes, lane, distance)
 		vehicle.blendElapsed = vehicle.turnSeconds
@@ -288,15 +382,15 @@ function Traffic.SpawnPlot(
 			lanes.origin[vehicle.lane] + lanes.direction[vehicle.lane] * vehicle.distance,
 			vehicle.renderYaw
 		)
-		for partIndex, part in modelParts do
-			part.CFrame = frame * partOffsets[partIndex]
+		for partIndex, part in shape.parts do
+			part.CFrame = frame * shape.offsets[partIndex]
 		end
 		model.Parent = parent
 		table.insert(vehicles, vehicle)
 	end
 	rebuildArrays()
 	updateConnection()
-	return count
+	return count, budgetLimited
 end
 
 -- The plot's road network changed: move each of its vehicles onto the nearest lane of the new

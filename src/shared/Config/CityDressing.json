@@ -26,14 +26,14 @@
     "roadPiecesNear": 160,
     "fillerPieces": 45,
     "trees": 40,
-    "vehiclesPerPlot": 8,
-    "vehiclesMap": 24,
+    "vehiclesPerPlot": 32,
+    "vehiclesMap": 96,
     "pathPieces": 120,
     "lampPosts": 24,
     "tileCells": 180,
     "highwayCells": 72,
     "greenery": 48,
-    "parked": 16,
+    "parked": 32,
     "walkersPerPlot": 8,
     "walkersMap": 24,
     "birdsMap": 18
@@ -131,7 +131,8 @@
           "Cart"
         ],
         "perPlot": 3,
-        "speed": 5
+        "speed": 5,
+        "followGap": 0.6
       },
       "greenery": {
         "props": [
@@ -257,8 +258,10 @@
           "VehicleB",
           "VehicleC"
         ],
-        "perPlot": 6,
-        "speed": 10
+        "perPlot": 24,
+        "scale": 0.5,
+        "speed": 10,
+        "followGap": 0.6
       },
       "signals": {
         "prop": "TrafficLight",
@@ -291,6 +294,10 @@
           "ParkedB",
           "ParkedC"
         ],
+        "scale": 0.5,
+        "perBay": 2,
+        "bayLength": 7.5,
+        "gap": 0.3,
         "perTier": [
           0,
           3,
@@ -436,8 +443,10 @@
           "VehicleC",
           "VehicleD"
         ],
-        "perPlot": 8,
-        "speed": 12
+        "perPlot": 32,
+        "scale": 0.5,
+        "speed": 12,
+        "followGap": 0.6
       },
       "greenery": {
         "props": [
@@ -464,6 +473,10 @@
           "ParkedB",
           "ParkedC"
         ],
+        "scale": 0.5,
+        "perBay": 2,
+        "bayLength": 6.0,
+        "gap": 0.3,
         "perTier": [
           0,
           4,

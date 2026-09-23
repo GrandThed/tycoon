@@ -284,11 +284,12 @@ class PlotScene:
             }
         )
 
-    def model(self, name, path, pos, rot_y=0.0, stage=None, placeholder=None, wanted=None):
+    def model(self, name, path, pos, rot_y=0.0, stage=None, placeholder=None, wanted=None, scale=1.0):
         """One blueprint placement. `placeholder` is a list of boxes (placeholder_box) in the
         model's own frame that plotscene draws instead when the blueprint is missing, unusable or
         places no kit piece (its GLBs are not generated yet); `wanted` names the blueprint for the
-        report when `path` is None. Without a placeholder a missing blueprint draws nothing."""
+        report when `path` is None. Without a placeholder a missing blueprint draws nothing.
+        `scale` (wave 2d) is the client's runtime Model:ScaleTo about the bottom-centre anchor."""
         if path is None:
             label = wanted or name
             if not placeholder:
@@ -303,6 +304,8 @@ class PlotScene:
         }
         if stage is not None:
             entry["stage"] = stage
+        if scale != 1.0:
+            entry["scale"] = round(scale, 4)
         if placeholder:
             entry["placeholder"] = placeholder
         self.models.append(entry)
@@ -702,6 +705,13 @@ class PlotScene:
         )
         self.build_deck_cars(half * step, config)
 
+    def vehicle_scale(self):
+        """PropFactory.ScaleOf(vehicles.scale): street and deck cars alike (wave 2d)."""
+        value = (self.era.dressing.get("vehicles") or {}).get("scale")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value < math.inf:
+            return 1.0
+        return float(value)
+
     def vehicle_props(self, config):
         """INTERFACES wave 2b: `highway.vehicleProps`, defaulting to the era's street vehicles."""
         props = config.get("vehicleProps")
@@ -730,6 +740,7 @@ class PlotScene:
                 rot_y=facing_rot(heading),
                 placeholder=placeholder_for("train"),
                 wanted=name,
+                scale=self.vehicle_scale(),
             )
 
     def build_deck_cars(self, ring, config):
@@ -755,6 +766,7 @@ class PlotScene:
                 blueprint_path(era.name, props[index % len(props)], prop=True),
                 (position[0], float(height), position[1]),
                 rot_y=facing_rot(heading),
+                scale=self.vehicle_scale(),
             )
 
     def build_subway(self):
@@ -1348,9 +1360,14 @@ class PlotScene:
         """Cars on the longest visible stretches, on the right of their travel direction (Traffic's
         lane graph is the centreline offset by laneOffsetFraction * width to the right)."""
         era = self.era
+        if era.dressing.get("parked"):
+            self.notes.append("parked cars not drawn")
         props = era.dressing.get("vehicles", {}).get("props") or []
         if not props or not self.visible:
             return
+        scale = self.vehicle_scale()
+        if scale != 1.0:
+            self.notes.append(f"cars at vehicles.scale {scale:g}")
         lane = era.width * float(era.dressing["road"].get("laneOffsetFraction", era.city["road"]["laneOffsetFraction"]))
         candidates = sorted(
             (self.network.stretches[i] for i in self.visible if self.network.stretches[i]["length"] >= MIN_VEHICLE_STRETCH),
@@ -1372,6 +1389,7 @@ class PlotScene:
                 blueprint_path(era.name, props[index % len(props)], prop=True),
                 (centre[0] + right[0] * lane, 0.0, centre[1] + right[1] * lane),
                 rot_y=facing_rot(heading),
+                scale=scale,
             )
 
     def build_player(self):

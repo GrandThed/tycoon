@@ -114,6 +114,15 @@ end
 
 local PropFactory = {}
 
+-- Wave 2d: a config `scale` as the factor Spawn applies. Missing, NaN or non-positive is 1, so a
+-- half-written key keeps the prop at its built size rather than erroring or vanishing.
+function PropFactory.ScaleOf(value: any): number
+	if type(value) ~= "number" or value ~= value or value <= 0 or value == math.huge then
+		return 1
+	end
+	return value
+end
+
 -- Applied to fresh Parts and to every clone: a stale template may still carry collision flags.
 function PropFactory.Seal(root: Instance): ()
 	if root:IsA("BasePart") then
@@ -201,12 +210,15 @@ end
 -- Clones the prop at the chosen stage, pivots its bottom-centre Base onto `cframe` (the
 -- spawnBuilding convention: front -Z), drops the invisible Base so a prop costs one piece,
 -- seals it, gates it on its content and parents it. Nil when the template or stage is missing.
+-- `scale` (wave 2d, see ScaleOf) shrinks or grows the clone about that Base before it is placed,
+-- so it keeps standing on the ground; 1 or nil never calls ScaleTo.
 function PropFactory.Spawn(
 	eraName: string,
 	propName: string?,
 	wanted: number,
 	cframe: CFrame,
-	parent: Instance?
+	parent: Instance?,
+	scale: number?
 ): Model?
 	local template = PropFactory.Template(eraName, propName)
 	if template == nil then
@@ -231,6 +243,12 @@ function PropFactory.Spawn(
 	local base = clone:FindFirstChild(TEMPLATE_BASE_NAME)
 	if base ~= nil and base:IsA("BasePart") then
 		clone.PrimaryPart = base
+	end
+	-- While the Base is still the PrimaryPart, so the pivot ScaleTo keeps fixed is the
+	-- bottom-centre anchor and not the bounding-box centre it would fall back to without one.
+	local factor = PropFactory.ScaleOf(scale)
+	if factor ~= 1 then
+		clone:ScaleTo(factor)
 	end
 	clone:PivotTo(cframe)
 	if base ~= nil and base:IsA("BasePart") then
