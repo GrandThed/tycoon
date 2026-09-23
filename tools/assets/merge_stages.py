@@ -304,6 +304,10 @@ def holder_matrix(piece: Piece) -> Matrix:
 def instance_mesh(src: bpy.types.Mesh, matrix: Matrix, slots: list[SlotInfo], paint: KitPaint) -> bpy.types.Mesh:
     mesh = src.copy()
     mesh.transform(matrix)
+    # A mirrored kit node (detail-tank, the dumpster's right lid) bakes inside out unless its
+    # winding is reversed too; Roblox culls back faces, so the camera side would vanish.
+    if matrix.determinant() < 0:
+        mesh.flip_normals()
     uv_layer = mesh.uv_layers.active or (mesh.uv_layers[0] if mesh.uv_layers else mesh.uv_layers.new(name="UVMap"))
     colour_slots = {i: s for i, s in enumerate(slots) if s.image is None}
     if colour_slots:
