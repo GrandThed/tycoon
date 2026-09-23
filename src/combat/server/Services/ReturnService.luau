@@ -3,8 +3,8 @@
 -- "Combat place (A)"). Three exits, one shape: every trip home carries a Types.ReturnData.
 -- * SendHome: one player leaves on their own (Return button, a rejoin that cannot be admitted):
 --   only their own summary, no party hint.
--- * SendHomeGroup: the summary countdown ran out; everyone still here goes in ONE teleport with
---   every summary plus the party hint, so the hub can re-form the party.
+-- * SendHomeGroup: the summary countdown ran out; the departed hub party goes in ONE teleport
+--   with its summaries plus the party hint, so the hub can re-form it; mid-run joiners go alone.
 -- * Refuse: an arrival CheckAdmission turned away (full / over / locked), before any admit.
 --
 -- Nothing here writes cash, lastSeen, incomeAtSave or slots: the hub owns the city economy, and
@@ -142,8 +142,20 @@ end
 
 local ReturnService = {}
 
--- Returns true only when the trip was accepted, i.e. when the in-flight guard must stay.
-local function trySendHome(player: Player, reason: string): boolean
+-- The recovery for a failed trip: a member goes back into the run, anyone else (a refused
+-- arrival pressing Return) only gets the profile back. Re-admitting a non-member here would skip
+-- CheckAdmission entirely (a fifth seat, a late join, a locked mission).
+local function abortFor(player: Player, kind: LeaveKind): ()
+	if kind == "refused" then
+		abortRefusal(player)
+	else
+		abortReturn(player)
+	end
+end
+
+-- Returns true only when the trip was accepted, i.e. when the in-flight guard must stay. `kind`
+-- was decided BEFORE ArenaService.Remove, while membership could still be read.
+local function trySendHome(player: Player, reason: string, kind: LeaveKind): boolean
 	local summary = buildSummary(player)
 	local summaryState = ArenaService.BuildRunState("summary", summary)
 	-- Going alone: the group countdown does not apply to this card.
@@ -175,7 +187,7 @@ local function trySendHome(player: Player, reason: string): boolean
 		DataService.Release(player)
 		if StudioBridge.TeleportShouldFail() then
 			-- The lever reproduces TeleportInitFailed, so it runs that handler's recovery.
-			abortReturn(player)
+			abortFor(player, kind)
 			return false
 		end
 		StudioBridge.Depart(player, BRIDGE_HOME_MESSAGE)
@@ -189,7 +201,7 @@ local function trySendHome(player: Player, reason: string): boolean
 	if teleportWithRetry(places.hubPlaceId, { player }, data, player.Name) then
 		return true
 	end
-	abortReturn(player)
+	abortFor(player, kind)
 	return false
 end
 
@@ -199,15 +211,18 @@ function ReturnService.SendHome(player: Player, reason: string): ()
 	if leaving[player] ~= nil then
 		return
 	end
-	leaving[player] = "home"
-	if not trySendHome(player, reason) then
+	local kind: LeaveKind = if ArenaService.IsAdmitted(player) then "home" else "refused"
+	leaving[player] = kind
+	if not trySendHome(player, reason, kind) then
 		leaving[player] = nil
 	end
 end
 
--- Yields. The end-of-run group return: every summary rides in one ReturnData, and the party hint
--- names the host as leader when the host is still here (else the first player), so the hub can
--- re-form the party from members whose own hints agree.
+-- Yields. The end-of-run group return. The party hint lists only the humans still here who
+-- DEPARTED together (ticket.expected): a stranger who joined mid-run was never in that hub party,
+-- so the hub must not pull them into it. Leader = the host if present, else the first of them;
+-- fewer than two left means no party to re-form, so no hint. The party goes in ONE teleport with
+-- its members' summaries; everyone else goes on their own with only their own summary.
 function ReturnService.SendHomeGroup(players: { Player }, reason: string): ()
 	local group: { Player } = {}
 	for _, player in players do
@@ -233,22 +248,43 @@ function ReturnService.SendHomeGroup(players: { Player }, reason: string): ()
 	end
 
 	local summaries: { [string]: Types.RunSummary } = {}
-	local memberIds: { number } = {}
+	local partyPlayers: { Player } = {}
+	local partyIds: { number } = {}
 	for _, player in group do
 		leaving[player] = "home"
 		summaries[tostring(player.UserId)] = buildSummary(player)
-		table.insert(memberIds, player.UserId)
+		if ArenaService.IsExpected(player.UserId) then
+			table.insert(partyPlayers, player)
+			table.insert(partyIds, player.UserId)
+		end
 	end
-	local host = ArenaService.GetHostUserId()
-	local leaderUserId = if table.find(memberIds, host) ~= nil then host else memberIds[1]
-	local data: Types.ReturnData = {
-		summaries = summaries,
-		party = { leaderUserId = leaderUserId, memberIds = memberIds },
-	}
+	local partyData: Types.ReturnData? = nil
+	if #partyIds >= 2 then
+		local host = ArenaService.GetHostUserId()
+		local partySummaries: { [string]: Types.RunSummary } = {}
+		for _, userId in partyIds do
+			partySummaries[tostring(userId)] = summaries[tostring(userId)]
+		end
+		partyData = {
+			summaries = partySummaries,
+			party = {
+				leaderUserId = if table.find(partyIds, host) ~= nil then host else partyIds[1],
+				memberIds = partyIds,
+			},
+		}
+	else
+		partyPlayers = {}
+	end
+	local function soloData(player: Player): Types.ReturnData
+		local key = tostring(player.UserId)
+		return { summaries = { [key] = summaries[key] } }
+	end
 
 	if StudioBridge.IsActive() then
 		local sent: { Player } = {}
 		for _, player in group do
+			local inParty = table.find(partyPlayers, player) ~= nil
+			local data = if inParty and partyData ~= nil then partyData else soloData(player)
 			if StudioBridge.WriteReturn(player, data) then
 				table.insert(sent, player)
 			else
@@ -279,12 +315,27 @@ function ReturnService.SendHomeGroup(players: { Player }, reason: string): ()
 		ArenaService.Remove(player)
 		DataService.Release(player)
 	end
-	if teleportWithRetry(places.hubPlaceId, group, data, `party of {#group}`) then
-		return
+	-- One batch per teleport: the party together, each stranger alone. In parallel, and each
+	-- failed batch recovers its own members (each rejoin yields on its own profile load).
+	local batches: { { players: { Player }, data: Types.ReturnData } } = {}
+	if partyData ~= nil then
+		table.insert(batches, { players = partyPlayers, data = partyData })
 	end
-	-- Each rejoin yields on its own profile load; in parallel so nobody waits on the others.
 	for _, player in group do
-		task.spawn(abortReturn, player)
+		if table.find(partyPlayers, player) == nil then
+			table.insert(batches, { players = { player }, data = soloData(player) })
+		end
+	end
+	for _, batch in batches do
+		task.spawn(function()
+			local description = `{#batch.players} player(s)`
+			if teleportWithRetry(places.hubPlaceId, batch.players, batch.data, description) then
+				return
+			end
+			for _, player in batch.players do
+				task.spawn(abortReturn, player)
+			end
+		end)
 	end
 end
 
@@ -342,7 +393,7 @@ function ReturnService.Init(serviceHooks: Hooks?): ()
 	-- ForceTeleportFailure lever drives this same recovery from the bridge branches above.
 	TeleportService.TeleportInitFailed:Connect(
 		function(player: Player, teleportResult: Enum.TeleportResult, errorMessage: string)
-			local kind = leaving[player]
+			local kind: LeaveKind? = leaving[player]
 			if kind == nil then
 				return
 			end
@@ -350,11 +401,7 @@ function ReturnService.Init(serviceHooks: Hooks?): ()
 				`[ReturnService] teleport refused for {player.Name}`
 					.. ` ({teleportResult.Name}): {errorMessage}`
 			)
-			if kind == "refused" then
-				abortRefusal(player)
-			else
-				abortReturn(player)
-			end
+			abortFor(player, kind)
 		end
 	)
 end

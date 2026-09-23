@@ -1101,8 +1101,9 @@ Every point of damage is credited to whoever dealt it, both into a run-wide map 
 per-flush tally, which is drained at every group clear (`CombatService.TakeDamageTally`). The
 pot is split by that tally's `ContributionShares`, and bots' shares are discarded. A kill
 refunds **only the killer's** cooldowns, as `CombatService.onEnemyKilled` does; C1 refunded
-everyone. At the flush of a group that held a boss, each human earns `MentorBonus` over the
-other members whose raw tally share is at least `coop.mentorMinDamageShare`. HP is still the C1
+everyone. At the flush of a group that held a boss, each human **whose own raw tally share is at least
+`coop.mentorMinDamageShare`** (lead ruling, C2 review) earns `MentorBonus` over the other members
+whose raw tally share clears the same floor. An idle or waiting high-income player earns nothing. HP is still the C1
 model: one pooled bar at the members' mean max HP, taking `incoming / party`. A rally therefore
 heals (n − 1)/n of its fraction into that bar.
 
@@ -1161,6 +1162,7 @@ only 3.25 times the HP.
 | 2x veteran + three newbies | **30** to the veteran | 46 Valor total, 1.3x a solo run's 35 |
 | three 2x veterans + one newbie | **10** to each veteran | newbie at 5 % of the boss flush |
 | veteran + idle alt | 0 | the alt is at 0 % of the tally; it still collects 3 Valor via `contributionFloor` (see C3) |
+| idle veteran + fighting newbie | 0 | the mentor floor (lead ruling): the veteran is at 0 % of the tally, so the qualifying newbie earns it nothing |
 
 Mentoring is worth 10 Valor per mentee per run, 20 % of Ascension 1's 50 Valor. It is enough to
 be a reason to carry a friend, while a veteran with three mentees stays below 1.5x a solo run.
@@ -1197,7 +1199,7 @@ effects' real value is **lower** than this.
 |---|---|---|
 | 11 | boss wave at party 2/3/4 (equal recommended power) within ±35 % of solo | solo 40.0 / 69.7 s; p2 x1.07 / x0.90, p3 x1.08 / x0.91, p4 x1.05 / x0.88 |
 | 12 | 10:1-rate duo pays the mentor exactly `mentorValor` at a boss clear; equal duo pays 0 | 5 to the mentor and 0 to the mentee at the wave-5 clear; the equal duo pays 0 all run |
-| 13 | a member under `mentorMinDamageShare` earns its mentor nothing | idle mentee at 0.0 % pays 0; positive control: a starter-gear newbie at 5.4 % beside three 2x veterans pays each veteran 10 |
+| 13 | a member under `mentorMinDamageShare` earns its mentor nothing, and a mentor under it earns nothing | idle mentee at 0.0 % pays 0; an idle mentor beside a fighting 1:10 mentee is paid 0; positive control: a starter-gear newbie at 5.4 % beside three 2x veterans pays each veteran 10 |
 
 ## What C3 should re-check
 

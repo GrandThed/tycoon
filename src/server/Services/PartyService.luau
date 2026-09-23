@@ -50,6 +50,10 @@ local partyOf: { [number]: Party } = {}
 local offers: { [number]: { [number]: Party } } = {}
 -- Identical return hints share a key; see OfferReform.
 local reformGroups: { [string]: ReformGroup } = {}
+-- leader userId → target userId → when the last invite went out / when the target declined.
+-- Anti-spam: every invite fires a toast and a sound on the target's screen.
+type InviteLog = { sentAt: number, declinedAt: number? }
+local inviteLog: { [number]: { [number]: InviteLog } } = {}
 local inviteSeq = 0
 
 local function coopConfig(): Types.CombatCoopConfig?
@@ -208,7 +212,20 @@ local function removeMember(party: Party, userId: number, notify: boolean): ()
 		return
 	end
 	if party.leaderUserId == userId then
-		setLeader(party, party.members[1])
+		-- The earliest remaining REAL member: a Studio fake cannot pick a mission, so a party
+		-- left with only fakes has nobody to lead it and dissolves.
+		local nextLeader: number? = nil
+		for _, memberId in party.members do
+			if not party.fakes[memberId] then
+				nextLeader = memberId
+				break
+			end
+		end
+		if nextLeader == nil then
+			dissolve(party)
+			return
+		end
+		setLeader(party, nextLeader)
 	end
 	broadcast(party)
 end
@@ -317,18 +334,35 @@ function PartyService.Invite(leader: Player, userId: number): ()
 		sendResult(leader, slotId, false, "busy")
 		return
 	end
-	local seconds = coop.inviteSeconds
-	-- A re-sent invite restarts its clock; it does not take a second seat.
-	local resend = party ~= nil and party.pending[userId] ~= nil
-	if not resend then
-		local seats = if party ~= nil then #party.members + pendingCount(party) else 1
-		if seats >= coop.maxParty then
-			sendResult(leader, slotId, false, "full")
-			return
-		end
+	-- Spam guard, all answered "busy": an invite already pending is never re-sent (no second
+	-- toast), a re-invite waits inviteCooldownSeconds after the last one, and a decline blocks
+	-- this leader from this target for declineBlockSeconds.
+	local now = os.clock()
+	local byTarget = inviteLog[leader.UserId]
+	local log = if byTarget ~= nil then byTarget[userId] else nil
+	if
+		(party ~= nil and party.pending[userId] ~= nil)
+		or (log ~= nil and now - log.sentAt < coop.inviteCooldownSeconds)
+		or (
+			log ~= nil
+			and log.declinedAt ~= nil
+			and now - log.declinedAt < coop.declineBlockSeconds
+		)
+	then
+		sendResult(leader, slotId, false, "busy")
+		return
 	end
+	local seats = if party ~= nil then #party.members + pendingCount(party) else 1
+	if seats >= coop.maxParty then
+		sendResult(leader, slotId, false, "full")
+		return
+	end
+	local seconds = coop.inviteSeconds
 	local owned: Party = party or newParty(leader.UserId, leader.DisplayName)
 	partyOf[leader.UserId] = owned
+	local sentLog: { [number]: InviteLog } = byTarget or {}
+	inviteLog[leader.UserId] = sentLog
+	sentLog[userId] = { sentAt = now, declinedAt = nil }
 	addInvite(owned, userId, target.DisplayName, seconds)
 	sendResult(leader, slotId, true, nil)
 	sendInviteEvent(target, owned, seconds)
@@ -356,6 +390,11 @@ function PartyService.Respond(player: Player, leaderUserId: number, accept: bool
 	end
 	-- A decline needs no reply to the decliner: the leader's strip updating is the answer.
 	if not accept then
+		local byTarget = inviteLog[leaderUserId]
+		local log = if byTarget ~= nil then byTarget[player.UserId] else nil
+		if log ~= nil then
+			log.declinedAt = os.clock()
+		end
 		withdrawInvite(party, player.UserId)
 		settle(party)
 		return
@@ -549,6 +588,10 @@ end
 -- PlayerRemoving. Same as Leave, minus the reply, plus every invite the player was holding.
 function PartyService.Forget(player: Player): ()
 	local userId = player.UserId
+	inviteLog[userId] = nil
+	for _, byTarget in inviteLog do
+		byTarget[userId] = nil
+	end
 	local party = partyOf[userId]
 	if party ~= nil then
 		if #party.members <= 1 then

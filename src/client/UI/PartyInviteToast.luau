@@ -5,8 +5,9 @@
 -- no entitlement: both buttons only fire RequestPartyRespond(leaderUserId, accept) and the
 -- server decides (a late Accept comes back as ActionResult "expired").
 --
--- Only the newest invite is shown: a second invite replaces the first, which the server
--- still lets expire on its own. The card stacks below the welcome-back card and above the
+-- Only the newest invite is shown: a second invite from another leader replaces the first,
+-- which the server still lets expire on its own; a repeat from the leader already showing
+-- only moves the deadline. The card stacks below the welcome-back card and above the
 -- error toast; UIController passes the offset and reads DesignHeight for the toast.
 
 local Create = require(script.Parent:WaitForChild("Create"))
@@ -165,6 +166,14 @@ function PartyInviteToast.new(parent: Instance, deps: Deps): PartyInviteToastHan
 	end
 
 	local function show(invite: Invite): ()
+		local showing = current
+		if visible and showing ~= nil and showing.leaderUserId == invite.leaderUserId then
+			-- Same leader again (a re-send): the countdown loop already running reads
+			-- `deadline`, so moving it is the whole update; no replay, no second sound.
+			deadline = os.clock() + math.max(invite.expiresIn, 0)
+			paintCountdown()
+			return
+		end
 		activeToken += 1
 		local token = activeToken
 		current = invite

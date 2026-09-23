@@ -187,7 +187,9 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		DataService.Release(player)
 		return
 	end
-	if kind == "arrival" then
+	-- The bypass is only for someone who really was a member of THIS run a moment ago; anyone
+	-- else (a refused arrival, or a rejoin into a run that reset meanwhile) is judged afresh.
+	if kind == "arrival" or not ArenaService.WasAdmitted(player.UserId) then
 		local verdict = ArenaService.CheckAdmission(player, { probe = false })
 		if verdict ~= "ok" then
 			ReturnService.Refuse(player, verdict)
@@ -358,13 +360,9 @@ end
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
 	ArenaService.Remove(player)
-	-- A refused first arrival opened a run but was never a member, so Remove did nothing.
+	-- A refused first arrival opened a run but was never a member, so Remove did nothing. Either
+	-- reset also puts the wave machine back in the lobby (ArenaService's reset hook).
 	ArenaService.ResetIfEmpty()
-	-- With the last member gone the run is over; a reserved server may be reused by a later
-	-- arrival, so the wave machine goes back to the lobby rather than staying in `summary`.
-	if ArenaService.GetMission() == nil then
-		WaveService.Reset()
-	end
 	DataService.Release(player)
 end
 

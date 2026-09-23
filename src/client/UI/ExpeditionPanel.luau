@@ -60,6 +60,8 @@ export type ExpeditionPanelHandle = {
 	-- Drops the picker's "Sent" marks after a refused invite, so the row can be tapped again.
 	ClearInviteSent: () -> (),
 	ClearDeparting: () -> (),
+	-- True while this player's own Depart/Join tap is waiting for its ActionResult.
+	IsDeparting: () -> boolean,
 	SetOpen: (open: boolean) -> (),
 	IsOpen: () -> boolean,
 	SetLayout: (dock: PanelDock.Dock) -> (),
@@ -1107,6 +1109,9 @@ function ExpeditionPanel.new(parent: Instance, deps: Deps): ExpeditionPanelHandl
 			paintPicker()
 		end,
 		ClearDeparting = clearDeparting,
+		IsDeparting = function()
+			return departing
+		end,
 		SetOpen = function(open: boolean)
 			panel.SetOpen(open)
 			isOpen = open

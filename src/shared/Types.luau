@@ -847,6 +847,9 @@ export type CombatCoopConfig = {
 	-- wave reached this, so an idle alt cannot farm Valor for its main.
 	mentorMinDamageShare: number,
 	inviteSeconds: number,
+	-- Re-inviting the same player waits this long; a decline blocks that leader for declineBlockSeconds.
+	inviteCooldownSeconds: number,
+	declineBlockSeconds: number,
 	-- The lobby starts once every expected member is ready, or this long after the first arrival.
 	lobbyWaitSeconds: number,
 	-- Summary shown this long, then every remaining human goes home in ONE group teleport.

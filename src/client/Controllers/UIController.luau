@@ -213,16 +213,21 @@ local function readPartyInvite(payload: any): Types.PartyInviteEvent?
 end
 
 -- C2 refusal copy for the co-op reasons (contract wording). `full` on a party action is the
--- party at maxParty, not a run, so it gets its own line.
-local function coopReasonMessage(action: string, reason: any): string?
+-- party at maxParty, not a run, so it gets its own line. `busy` on an expedition reaches two
+-- readers: the leader who tapped Depart (someone could not come) and a member the party
+-- left behind, who never tapped anything (`tappedDepart` false).
+local function coopReasonMessage(action: string, reason: any, tappedDepart: boolean): string?
 	if reason == "full" then
 		return if action == "party" then "Your party is full" else "That run is full"
 	elseif reason == "over" then
 		return "That run has moved past joining"
 	elseif reason == "busy" then
-		return if action == "expedition"
-			then "Not everyone in your party could depart"
-			else "They're already in a party"
+		if action == "expedition" then
+			return if tappedDepart
+				then "Not everyone in your party could depart"
+				else "You stayed behind — the party departed"
+		end
+		return "They're already in a party"
 	elseif reason == "expired" then
 		return "That invite expired"
 	elseif reason == "notLeader" then
@@ -1082,18 +1087,22 @@ local function boot(): ()
 				card.Dismiss(tonumber(payload.slotId))
 			end
 			toast.Show(
-				coopReasonMessage(action, reason) or "Couldn't update your party",
+				coopReasonMessage(action, reason, false) or "Couldn't update your party",
 				Theme.TOAST_ERROR_SECONDS,
 				true
 			)
 			return
 		end
 		-- expedition / joinRun: nothing to flash (the tile may be off-screen and the failure
-		-- is about the world, not the row), so the toast carries the whole message.
+		-- is about the world, not the row), so the toast carries the whole message. Read the
+		-- in-flight lock before onExpeditionAnswer releases it: it says whether this player
+		-- tapped Depart or was left behind by the leader's.
+		local panel = expeditionPanel
+		local tappedDepart = panel ~= nil and panel.IsDeparting()
 		onExpeditionAnswer()
 		local joining = action == "joinRun"
 		local message: string
-		local coopMessage = coopReasonMessage(action, reason)
+		local coopMessage = coopReasonMessage(action, reason, tappedDepart)
 		if coopMessage ~= nil then
 			message = coopMessage
 		elseif reason == "unavailable" then

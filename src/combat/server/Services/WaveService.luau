@@ -247,7 +247,14 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 	local members = ArenaService.GetMembers()
 	for _, mentor in members do
 		local player = mentor.player
-		if mentor.bot or player == nil then
+		-- Same floor as a mentee (lead ruling): a mentor parked on the pad, or one who let the
+		-- party carry the boss, earns nothing for "carrying".
+		if
+			mentor.bot
+			or player == nil
+			or mentor.waiting
+			or (tally[mentor.userId] or 0) / total < coop.mentorMinDamageShare
+		then
 			continue
 		end
 		local state = DataService.GetState(player)
@@ -740,6 +747,7 @@ end
 
 function WaveService.Init(): ()
 	CombatService.SetKillHandler(onEnemyKilled)
+	ArenaService.SetResetHook(WaveService.Reset)
 end
 
 -- The boot hook, NOT the run start: Start() above is the contract's "the lobby is ready, go".

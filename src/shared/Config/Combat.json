@@ -41,6 +41,8 @@
 		"bossHpPerExtraPlayer": 0.75,
 		"mentorMinDamageShare": 0.01,
 		"inviteSeconds": 30,
+		"inviteCooldownSeconds": 10,
+		"declineBlockSeconds": 60,
 		"lobbyWaitSeconds": 30,
 		"returnGroupSeconds": 15,
 		"reformSeconds": 60,

@@ -82,6 +82,8 @@ local combatConfig: Types.CombatConfig? = nil
 local sendSnapshot: ((player: Player) -> ())? = nil
 -- CombatService's run-wide raw damage share. Handed in (CombatService sits above this service).
 local shareSource: ((userId: number) -> number)? = nil
+-- WaveService.Reset, handed in for the same reason: called whenever the run resets.
+local resetHook: (() -> ())? = nil
 
 -- Everything WaveService owns in the RunState payload, defaulted to the lobby.
 export type RunFields = {
@@ -485,6 +487,10 @@ function ArenaService.SetSnapshotSender(sender: (player: Player) -> ()): ()
 	sendSnapshot = sender
 end
 
+function ArenaService.SetResetHook(hook: () -> ()): ()
+	resetHook = hook
+end
+
 -- CombatService hands its run-wide share lookup over at Init.
 function ArenaService.SetShareSource(source: (userId: number) -> number): ()
 	shareSource = source
@@ -541,18 +547,22 @@ end
 -- registry failing a single call parks for seven seconds. Every caller here is on a path that
 -- must not yield — the wave loop's Heartbeat tick (a yield there re-enters tick() with the
 -- wave-clear branch still true and flushes the same pot again) and the teardown that runs just
--- before DataService.Release. So the registry is driven by ONE worker thread with a one-slot
--- mailbox: the newest intent wins, a publish requested mid-flight is coalesced, and a clear
--- that lands after a publish still ends up last because both go through the same queue.
+-- before DataService.Release. So the registry is driven by ONE worker thread with a mailbox:
+-- pending clears are kept per host and always run before a publish, and publishes coalesce
+-- into one flag. A publish can therefore never swallow a clear, and a publish queued behind a
+-- clear re-reads the live state (publishNow refuses an ended or reset run) so it cannot
+-- resurrect the entry the clear just removed.
 local registryBusy = false
-local registryWanted: string? = nil
-local registryClearHost = 0
+local publishWanted = false
+local clearsWanted: { [number]: boolean } = {}
 
 -- Yields. Only ever called from the worker thread below, and it re-reads the live run state so
 -- a coalesced publish always advertises the LATEST wave and party size.
 local function publishNow(): ()
 	local mission = runMission
-	if mission == nil or hostUserId == 0 then
+	local phase = runFields.phase
+	if mission == nil or hostUserId == 0 or phase == "summary" or phase == "ended" then
+		-- A finished run stops being joinable the moment it ends (WaveService clears it then).
 		return
 	end
 	local ticket = runTicket
@@ -586,16 +596,19 @@ local function pumpRegistry(): ()
 	if registryBusy then
 		return
 	end
-	local wanted = registryWanted
-	if wanted == nil then
+	local clearHost = next(clearsWanted)
+	if clearHost == nil and not publishWanted then
 		return
 	end
-	registryWanted = nil
 	registryBusy = true
-	local host = registryClearHost
+	if clearHost ~= nil then
+		clearsWanted[clearHost] = nil
+	else
+		publishWanted = false
+	end
 	task.spawn(function()
-		if wanted == "clear" then
-			RunRegistry.Clear(host)
+		if clearHost ~= nil then
+			RunRegistry.Clear(clearHost)
 		else
 			publishNow()
 		end
@@ -605,7 +618,7 @@ local function pumpRegistry(): ()
 end
 
 local function publishRun(): ()
-	registryWanted = "publish"
+	publishWanted = true
 	pumpRegistry()
 end
 
@@ -614,8 +627,7 @@ local function clearRun(host: number): ()
 		-- Nothing was ever advertised (no host resolved), so there is nothing to withdraw.
 		return
 	end
-	registryClearHost = host
-	registryWanted = "clear"
+	clearsWanted[host] = true
 	pumpRegistry()
 end
 
@@ -637,6 +649,22 @@ local function resetRun(): ()
 	-- Queued, not called: this runs from PlayerRemoving and from ReturnService immediately
 	-- before DataService.Release, and the registry retry backoff must never delay a save.
 	clearRun(hostUserId)
+	-- Debug bots belong to the run: left behind they would hold seats in whatever run this
+	-- reserved server hosts next. DebugService reads the live count, so it re-adds them only
+	-- if its lever still asks for them once a new run opens.
+	for _, userId in table.clone(partyOrder) do
+		local member = party[userId]
+		if member ~= nil and member.bot then
+			local character = member.character
+			if character ~= nil then
+				character:Destroy()
+			end
+			party[userId] = nil
+			summaries[userId] = nil
+			table.remove(partyOrder, table.find(partyOrder, userId) :: number)
+		end
+	end
+	memberCache = nil
 	runMission = nil
 	runOverdrive = false
 	hostUserId = 0
@@ -646,6 +674,12 @@ local function resetRun(): ()
 	everAdmitted = {}
 	warnedUnjoinable = false
 	EnemyService.SetMission(nil)
+	-- The wave machine goes back to the lobby with the run, so a rejoin after a failed group
+	-- return opens a fresh lobby instead of landing on a stale summary card.
+	local hook = resetHook
+	if hook ~= nil then
+		hook()
+	end
 end
 
 local function humanCount(): number
@@ -935,6 +969,21 @@ end
 
 function ArenaService.IsAdmitted(player: Player): boolean
 	return byPlayer[player] ~= nil
+end
+
+-- Admitted to THIS run at some point (a rejoin after a failed trip home may skip admission only
+-- then; the set empties when the run resets).
+function ArenaService.WasAdmitted(userId: number): boolean
+	return everAdmitted[userId] == true
+end
+
+-- In the ticket's expected list: departed from the hub together, i.e. the hub party.
+function ArenaService.IsExpected(userId: number): boolean
+	return isExpected(userId)
+end
+
+function ArenaService.BotCount(): number
+	return #partyOrder - humanCount()
 end
 
 function ArenaService.GetMission(): Types.MissionConfig?

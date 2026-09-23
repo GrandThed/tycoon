@@ -574,8 +574,13 @@ end
 
 -- The departing group for a leader: the leader first, then every party member who can go.
 -- Returns whether a REAL member stays behind (still loading, already departing, or no seat);
--- Studio fakes are skipped with a warn only, since the client has no copy for them.
-local function departingGroup(leader: Player, coop: Types.CombatCoopConfig): ({ Player }, boolean)
+-- each such member present is told `busy` too. Studio fakes are skipped with a warn only,
+-- since the client has no copy for them.
+local function departingGroup(
+	leader: Player,
+	missionId: string,
+	coop: Types.CombatCoopConfig
+): ({ Player }, boolean)
 	local group: { Player } = { leader }
 	local party = PartyService.Get(leader)
 	if party == nil then
@@ -602,11 +607,34 @@ local function departingGroup(leader: Player, coop: Types.CombatCoopConfig): ({ 
 			or #group >= coop.maxParty
 		then
 			leftBehind = true
+			-- An already-departing member is mid-teleport on their own run; only the ones who
+			-- simply could not come are told.
+			if member ~= nil and departing[member] == nil then
+				sendResult(member, "expedition", missionId, false, "busy")
+			end
 			continue
 		end
 		table.insert(group, member)
 	end
 	return group, leftBehind
+end
+
+-- Depart fixes the group before its yields (reservation, ticket); anyone who left the party
+-- meanwhile (Leave, a kick) stays behind and gives up their claim. The leader is always kept.
+local function keepPartyMembers(leader: Player, group: { Player }): { Player }
+	local current: { [Player]: boolean } = {}
+	for _, member in PartyService.Members(leader) do
+		current[member] = true
+	end
+	local kept: { Player } = {}
+	for _, member in group do
+		if member == leader or current[member] then
+			table.insert(kept, member)
+		else
+			departing[member] = nil
+		end
+	end
+	return kept
 end
 
 local ExpeditionService = {}
@@ -655,7 +683,7 @@ function ExpeditionService.Depart(
 
 	-- Nothing above yields, so the checks and the claims below cannot interleave.
 	local departure: Departure = { action = "expedition", slotId = missionId }
-	local group, leftBehind = departingGroup(player, combatConfig.coop)
+	local group, leftBehind = departingGroup(player, missionId, combatConfig.coop)
 	for _, member in group do
 		departing[member] = departure
 	end
@@ -681,6 +709,7 @@ function ExpeditionService.Depart(
 		privateServerId = if typeof(reserved[2]) == "string" then reserved[2] else ""
 	end
 
+	group = keepPartyMembers(player, group)
 	local members, anchored = pruneGroup(group)
 	if not anchored then
 		abandon(group, departure)
@@ -706,7 +735,9 @@ function ExpeditionService.Depart(
 		return
 	end
 
-	handOff(members, {
+	-- The ticket write yielded too; the ticket's expected list may name someone who then left,
+	-- which only makes the lobby wait lobbyWaitSeconds for them.
+	handOff(keepPartyMembers(player, members), {
 		departure = departure,
 		missionId = missionId,
 		overdrive = overdrive,

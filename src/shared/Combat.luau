@@ -85,6 +85,8 @@ type CombatCoopConfig = {
 	bossHpPerExtraPlayer: number,
 	mentorMinDamageShare: number,
 	inviteSeconds: number,
+	inviteCooldownSeconds: number,
+	declineBlockSeconds: number,
 	lobbyWaitSeconds: number,
 	returnGroupSeconds: number,
 	reformSeconds: number,

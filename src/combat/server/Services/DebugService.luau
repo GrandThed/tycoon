@@ -38,7 +38,6 @@ local BOT_REACH_STUDS = 8
 local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
 local botAccumulator = 0
-local botCount = 0
 local levelConnection: RBXScriptConnection? = nil
 
 local DebugService = {}
@@ -139,13 +138,14 @@ end
 -- Bots exist so party scaling, aggro and the contribution split can be seen from one client.
 function DebugService.SetBots(count: number): ()
 	local wanted = math.clamp(math.floor(count), 0, MAX_BOTS)
-	while botCount < wanted do
-		botCount += 1
-		ArenaService.AddBot(botCount)
-	end
-	while botCount > wanted do
-		ArenaService.RemoveBot(botCount)
-		botCount -= 1
+	-- Indices, not a local counter: a run reset drops every bot, and the live roster is the
+	-- only count that stays true across it. AddBot/RemoveBot are idempotent per index.
+	for index = 1, MAX_BOTS do
+		if index <= wanted then
+			ArenaService.AddBot(index)
+		else
+			ArenaService.RemoveBot(index)
+		end
 	end
 end
 
@@ -262,7 +262,12 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	-- States, read but never reset.
 	setGodMode(nil, workspace:GetAttribute(debugConfig.godModeAttribute) == true)
 	local bots = workspace:GetAttribute(debugConfig.botsAttribute)
-	if typeof(bots) == "number" and math.floor(bots) ~= botCount then
+	-- Only while a run is open: bots belong to a run, and a reset has just removed them.
+	if
+		typeof(bots) == "number"
+		and ArenaService.GetMission() ~= nil
+		and math.floor(bots) ~= ArenaService.BotCount()
+	then
 		DebugService.SetBots(bots)
 	end
 end
@@ -270,7 +275,7 @@ end
 -- Bots walk at the nearest enemy and chip at it through CombatService, so their damage lands in
 -- the same tally the contribution split reads.
 local function tickBots(debugConfig: Types.CombatDebugConfig, delta: number): ()
-	if botCount == 0 then
+	if ArenaService.BotCount() == 0 then
 		return
 	end
 	botAccumulator += delta

@@ -1121,6 +1121,20 @@ def simulate_run(
             for host in range(party):
                 if members[host]["bot"]:
                     continue  # bots are never mentors
+                if tally[host] / total < min_mentee_share:
+                    # Lead ruling (C2 review): a mentor must have fought too --
+                    # an idle high-income player in the run earns nothing. The
+                    # sim has no `waiting` state; a waiting member deals 0 and
+                    # fails this same test.
+                    mentor_events.append(
+                        {
+                            "wave": group["wave"],
+                            "host": host,
+                            "bonus": 0,
+                            "shares": [tally[j] / total for j in range(party)],
+                        }
+                    )
+                    continue
                 mentee_rates = [
                     members[j]["rate"]
                     for j in range(party)
@@ -1666,10 +1680,11 @@ def print_coop(mission, armory, combat_cfg, overdrive):
             [(strong, host, False)] * 3 + [(starter, newbie, False)],
         ),
         ("veteran + idle alt", [(gear, host, False), (gear, newbie, True)]),
+        ("idle veteran + newbie", [(gear, host, True), (starter, newbie, False)]),
     ]
     print(
         f"  Mentor Valor per run (mentorValor {coop['mentorValor']} per mentee per boss clear, "
-        f"mentee rate < {coop['mentorRatio']} x host, mentee share >= "
+        f"mentee rate < {coop['mentorRatio']} x host, mentor and mentee shares >= "
         f"{coop['mentorMinDamageShare']:.0%} of the boss flush; host {se.fmt_cash(host)}/s, "
         f"newbie {se.fmt_cash(newbie)}/s)"
     )
@@ -2138,13 +2153,20 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         )
         newbie_share = min((e["shares"][3] for e in mixed), default=0.0)
         mixed_paid = sum(e["bonus"] for e in mixed if e["host"] == 0)
-        blocked = idle_paid == 0 and idle_share < floor
+        # The mentor floor: an idle high-income member beside a fighting,
+        # qualifying newbie earns nothing either.
+        idle_host = mentor_run(
+            mission, armory, combat_cfg, [(gear, MENTOR_HOST_RATE, True), (gear, low_rate, False)]
+        )
+        idle_host_paid = sum(e["bonus"] for e in idle_host if e["host"] == 0)
+        blocked = idle_paid == 0 and idle_share < floor and idle_host_paid == 0
         counted = newbie_share >= floor and mixed_paid > 0
         ok13 = ok13 and blocked and counted
         details.append(
             f"{mission['id']} idle mentee share {idle_share:.1%} -> mentor paid {idle_paid}; "
             f"starter-gear newbie beside three 2x veterans, lowest boss-flush share "
-            f"{newbie_share:.1%} -> each veteran paid {mixed_paid}"
+            f"{newbie_share:.1%} -> each veteran paid {mixed_paid}; idle mentor beside a "
+            f"fighting 1:10 mentee -> paid {idle_host_paid}"
         )
     checks.verdict(
         ok13,
