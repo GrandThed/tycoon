@@ -26,14 +26,14 @@
     "roadPiecesNear": 160,
     "fillerPieces": 45,
     "trees": 40,
-    "vehiclesPerPlot": 8,
-    "vehiclesMap": 24,
+    "vehiclesPerPlot": 32,
+    "vehiclesMap": 96,
     "pathPieces": 120,
     "lampPosts": 24,
     "tileCells": 180,
     "highwayCells": 72,
     "greenery": 48,
-    "parked": 16,
+    "parked": 32,
     "walkersPerPlot": 8,
     "walkersMap": 24,
     "birdsMap": 18
@@ -257,7 +257,8 @@
           "VehicleB",
           "VehicleC"
         ],
-        "perPlot": 6,
+        "perPlot": 24,
+        "scale": 0.5,
         "speed": 10
       },
       "signals": {
@@ -291,6 +292,9 @@
           "ParkedB",
           "ParkedC"
         ],
+        "scale": 0.5,
+        "perBay": 2,
+        "bayLength": 7.5,
         "perTier": [
           0,
           3,
@@ -436,7 +440,8 @@
           "VehicleC",
           "VehicleD"
         ],
-        "perPlot": 8,
+        "perPlot": 32,
+        "scale": 0.5,
         "speed": 12
       },
       "greenery": {
@@ -464,6 +469,9 @@
           "ParkedB",
           "ParkedC"
         ],
+        "scale": 0.5,
+        "perBay": 2,
+        "bayLength": 6.0,
         "perTier": [
           0,
           4,

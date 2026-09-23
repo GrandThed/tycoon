@@ -35,6 +35,7 @@ Exit code 1 when any violation is found.
 from __future__ import annotations
 
 import importlib.util
+import itertools
 import json
 import math
 import random
@@ -162,6 +163,9 @@ PARK_STREET_REACH = 6.0  # a bay's near edge within this of the drawn road edge,
 # Half a walker's width, arm to arm (tools/assets/people_kit.py ARM_OUT). A bay keeps this plus
 # PARK_GAP from a walk lane line, and a walker this far out from its lane must clear the cars.
 WALKER_HALF = 0.42
+# Wave 2d: studs between two cars packed into one bay when `parked.gap` is absent (Scatter's
+# DEFAULT_PARKED_GAP, mirrored).
+PARKED_GAP_DEFAULT = 0.3
 GREENERY_ZONE_COUNT = (2, 8)
 # Walk lanes are clipped wherever they pass within `pedestrians.clearance` of a solid; the tool
 # samples every lane this finely to find the clipped runs.
@@ -521,6 +525,83 @@ def harvested_extents(era_name, prop_name):
     return tuple(high[axis] - low[axis] for axis in range(3))
 
 
+def config_scale(config):
+    """PropFactory.ScaleOf, mirrored: a config `scale` that is missing, NaN or not positive is 1."""
+    value = (config or {}).get("scale")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value or value <= 0 or value == math.inf:
+        return 1.0
+    return float(value)
+
+
+def scaled_extents(era_name, prop_name, scale):
+    """harvested_extents at the runtime scale the client spawns the prop with (wave 2d)."""
+    extents = harvested_extents(era_name, prop_name)
+    return tuple(axis * scale for axis in extents) if extents else None
+
+
+def walker_half(era):
+    """WALKER_HALF at the era's `pedestrians.scale`."""
+    return WALKER_HALF * config_scale(era.dressing.get("pedestrians"))
+
+
+def union_length(era_name, prop_names):
+    """Scatter.harvestedUnion's Z length (the car's long axis) at the built size, None before any
+    of them is harvested. Offsets are only sign-flipped by the import turn, so min/max of |z| spans
+    are taken over the raw offsets and give the same length."""
+    try:
+        assets = json.loads(ASSETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    low, high = math.inf, -math.inf
+    for name in prop_names:
+        try:
+            stages = assets["props"][era_name][name]["stages"]
+        except (KeyError, TypeError):
+            continue
+        for stage in stages:
+            for part in stage.get("parts", []):
+                centre, size = part.get("offset"), part.get("size")
+                if not part.get("meshId") or not centre or not size:
+                    continue
+                low = min(low, centre[2] - size[2] / 2)
+                high = max(high, centre[2] + size[2] / 2)
+    return high - low if low <= high else None
+
+
+def bay_length(era_name, config):
+    """Scatter's packing length: `parked.bayLength` when it is a positive finite number, else the
+    pool's built-size union length (None before any of it is harvested)."""
+    value = (config or {}).get("bayLength")
+    if not isinstance(value, bool) and isinstance(value, (int, float)) and value == value and 0 < value < math.inf:
+        return float(value)
+    return union_length(era_name, (config or {}).get("props") or [])
+
+
+def bay_packing(era):
+    """Scatter.packBay over every ordered pick of `perBay` cars from `parked.props`: (perBay, how
+    many of those rows fit, how many there are, the longest row that fits). A row fits when its
+    scaled lengths plus `gap` between them are within bay_length; a row that does not keeps one car."""
+    config = era.dressing.get("parked") or {}
+    props = config.get("props") or []
+    per_bay = max(int(math.floor(float(config.get("perBay", 1)))), 1)
+    if per_bay <= 1 or not props:
+        return per_bay, 0, 0, 0.0
+    scale = config_scale(config)
+    spacing = max(float(config.get("gap", PARKED_GAP_DEFAULT)), 0.0)
+    bay = bay_length(era.name, config)
+    lengths = [scaled_extents(era.name, name, scale) for name in props]
+    fits, total, longest = 0, 0, 0.0
+    for row in itertools.product(range(len(props)), repeat=per_bay):
+        total += 1
+        if bay is None or any(lengths[i] is None for i in row):
+            continue
+        length = sum(lengths[i][2] for i in row) + spacing * (per_bay - 1)
+        if length <= bay + 1e-9:
+            fits += 1
+            longest = max(longest, length)
+    return per_bay, fits, total, longest
+
+
 def gap(p, q):
     """Daylight between two convex polygons, 0 when they touch, overlap or one holds the other
     (polygon_polygon_distance alone misses a large p wholly containing q)."""
@@ -673,6 +754,11 @@ class Era:
         bay = PARKING_BAY.get(name, PARKING_BAY["Boomtown"])
         for _, footprint in declared_footprints(name, parked.get("props", [])):
             bay = (max(bay[0], footprint[0]), max(bay[1], footprint[1]))
+        # Wave 2d: packed cars stay inside bay_length (Scatter.packBay), so a bay at least that
+        # long holds every row the client can draw.
+        packed = bay_length(name, parked) if int(parked.get("perBay", 1) or 1) > 1 else None
+        if packed:
+            bay = (bay[0], max(bay[1], packed))
         self.bay = bay
         self.parking = []
         for spot in self.layout.get("parking", []):
@@ -1977,11 +2063,12 @@ def walker_vehicle_violations(era):
     if not config or "offset" not in config:
         return []
     fraction = era.dressing["road"].get("laneOffsetFraction", era.city["road"]["laneOffsetFraction"])
-    widths = [e[0] for e in (harvested_extents(era.name, p) for p in vehicles.get("props", [])) if e]
+    scale = config_scale(vehicles)
+    widths = [e[0] for e in (scaled_extents(era.name, p, scale) for p in vehicles.get("props", [])) if e]
     if not widths:
         return []
     car_edge = fraction * era.width + max(widths) / 2
-    walker_edge = float(config["offset"]) - WALKER_HALF
+    walker_edge = float(config["offset"]) - walker_half(era)
     if walker_edge < car_edge - 1e-6:
         return [
             f"pedestrians.offset {config['offset']:g}: a walker reaches {walker_edge:.2f} from the centreline, "
@@ -2133,8 +2220,12 @@ def parking_violations(era, network, visible):
         if problem:
             messages.append(problem)
         cap = budget_value(era.city.get("budget", {}).get("parked"), math.inf)
-        if per_tier and per_tier[-1] > cap:
-            messages.append(f"{label_cfg}.perTier reaches {per_tier[-1]} > budget.parked {cap:g}")
+        # perTier counts bays, budget.parked counts cars (wave 2d), and every bay may take perBay.
+        per_bay = max(int(math.floor(float(config.get("perBay", 1)))), 1)
+        if per_tier and per_tier[-1] * per_bay > cap:
+            messages.append(
+                f"{label_cfg}.perTier reaches {per_tier[-1]} bays x perBay {per_bay} > budget.parked {cap:g} cars"
+            )
     if per_tier:
         for tier in range(1, 6):
             available = sum(1 for spot in era.parking if effective_spot_tier(era, spot) <= tier)
@@ -2192,8 +2283,8 @@ def parking_violations(era, network, visible):
                 messages.append(f"{label}: on the path {fmt(a)}->{fmt(b)}")
         for a, b in lanes:
             d = segment_polygon_distance(a, b, poly)
-            if d < WALKER_HALF + PARK_GAP - 1e-6:
-                messages.append(f"{label}: {d:.2f} from the walk lane {fmt(a)}->{fmt(b)} (need {WALKER_HALF + PARK_GAP:g})")
+            if d < walker_half(era) + PARK_GAP - 1e-6:
+                messages.append(f"{label}: {d:.2f} from the walk lane {fmt(a)}->{fmt(b)} (need {walker_half(era) + PARK_GAP:g})")
                 break
         for name, solid in solids:
             if gap(poly, solid) < PARK_GAP - 1e-6:
@@ -3216,6 +3307,12 @@ def main():
                 f"   parking: {len(era.parking)} spots ({driveways} driveways), bay {era.bay[0]:g}x{era.bay[1]:g}, "
                 f"available by tier 1-5 {counts}, perTier {(era.dressing.get('parked') or {}).get('perTier')}"
             )
+            per_bay, fits, rows, longest = bay_packing(era)
+            if rows:
+                print(
+                    f"   bay packing: perBay {per_bay}, {fits}/{rows} prop rows fit "
+                    f"(longest {longest:.2f}); the rest keep one car"
+                )
         for zone, usable, kept in greenery_stats:
             print(
                 f"   greenery zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "

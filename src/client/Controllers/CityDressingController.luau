@@ -864,13 +864,17 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 		return
 	end
 	local models: { Model } = {}
+	-- Scaled about the base before Traffic reads the part offsets, so the smaller car rides the
+	-- road surface with no height correction of its own.
+	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
 	for index = 1, entry.vehicleTarget do
 		local model = PropFactory.Spawn(
 			build.eraName,
 			build.plan.vehicleProps[index],
 			0,
 			CFrame.identity,
-			nil
+			nil,
+			scale
 		)
 		if model ~= nil then
 			table.insert(models, model)
@@ -918,13 +922,16 @@ local function spawnHighwayVehicles(
 		return
 	end
 	local models: { Model } = {}
+	-- Wave 2d: the deck runs at the street cars' scale, whichever props it carries.
+	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
 	for index = 1, entry.highwayTarget do
 		local model = PropFactory.Spawn(
 			build.eraName,
 			props[(index - 1) % #props + 1],
 			0,
 			CFrame.identity,
-			nil
+			nil,
+			scale
 		)
 		if model ~= nil then
 			table.insert(models, model)
@@ -986,6 +993,8 @@ end
 -- Wave 2c parked vehicles: on their tier, with their lot's house when they have one, and only
 -- once the street beside them is drawn -- a car parked beside bare ground reads as a mistake.
 local function syncParked(build: Build, tier: number, folder: Instance): ()
+	local parked = build.era.parked
+	local scale = PropFactory.ScaleOf(if parked ~= nil then parked.scale else nil)
 	for index, spot in build.plan.parked do
 		local placed: Model? = build.parked[index]
 		if placed ~= nil or spot.tier > tier then
@@ -1005,7 +1014,8 @@ local function syncParked(build: Build, tier: number, folder: Instance): ()
 			spot.prop,
 			0,
 			build.plotFrame * Scatter.PropFrame(spot.position, spot.rotationY),
-			folder
+			folder,
+			scale
 		)
 		if model ~= nil then
 			build.parked[index] = model
@@ -1148,9 +1158,16 @@ local function spawnWalkers(entry: PlotEntry, build: Build, config: Types.CityDr
 		return
 	end
 	local models: { Model } = {}
+	local scale = PropFactory.ScaleOf(pedestrians.scale)
 	for index = 1, entry.walkerTarget do
-		local model =
-			PropFactory.Spawn(build.eraName, build.plan.walkerProps[index], 0, CFrame.identity, nil)
+		local model = PropFactory.Spawn(
+			build.eraName,
+			build.plan.walkerProps[index],
+			0,
+			CFrame.identity,
+			nil,
+			scale
+		)
 		if model ~= nil then
 			table.insert(models, model)
 		end

@@ -3030,6 +3030,29 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
 - `py tools/streetplan.py <Era>` green for all three; stylua, selene, luau-lsp, `rojo build`,
   `gen_templates.py --check` clean; reviewer greps the collision flags on every new part.
 
+## Wave 2d — small cars, dense traffic (Ben, 2026-09-23)
+
+Ben, after the wave 2c playtest: "make the cars 50% smaller and place 300% more cars". Rulings:
+Boomtown **and** Metropolis; moving cars ×4, parked cars ×2 (two per existing bay, no layout
+change). Client + config only, **no re-upload**: the scale is applied at runtime.
+
+- Per era, optional: `vehicles.scale`, `parked.scale`, `pedestrians.scale` (default 1). A
+  spawned vehicle/walker template is scaled with `Model:ScaleTo(scale)` about its base pivot
+  before it is placed, so it stays on the ground. Everything that reads a vehicle's harvested
+  extents (lane spacing, bay packing, clearance) multiplies by the same scale. Metropolis deck
+  cars (`Highway`, `highway.vehicleProps` else `vehicles.props`) use `vehicles.scale` too.
+- Boomtown and Metropolis: `vehicles.scale` 0.5, `parked.scale` 0.5; `pedestrians.scale` 1.
+- `parked.perBay` (default 1): cars per bay, packed end to end along the bay's long axis, centred,
+  with `parked.gap` (default 0.3) between them, using scaled harvested lengths; a bay whose cars do
+  not fit keeps one car. Boomtown and Metropolis: 2. `perTier` still counts bays.
+  `parked.bayLength` (default: the full-size parked footprint length) is the packing length;
+  Boomtown 7.5, Metropolis 6.0 (the layout's bays), so every two-car combination fits.
+- Counts: `vehicles.perPlot` Boomtown 6 → 24, Metropolis 8 → 32; `budget.vehiclesPerPlot` 8 → 32,
+  `budget.vehiclesMap` 24 → 96, `budget.parked` 16 → 32. Traffic, Walkers and Ambient together must
+  still stay **< 0.3 ms** per frame with every map cap reached (PLAYTEST).
+- Village carts, Orbital rovers/monorail and every other prop are unchanged.
+
+
 ## Waves
 
 1. **Wave 1 (parallel, disjoint):** luau-engineer (types, CityGrowth, attributes, Catalog);

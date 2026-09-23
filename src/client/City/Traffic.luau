@@ -256,6 +256,8 @@ function Traffic.SpawnPlot(
 			distance = lanes.length[chosen] - along
 		end
 
+		-- Read off the clone as spawned, so a wave 2d ScaleTo (done about the base, before this) is
+		-- already in every offset: a half-size car rides at half the height with no correction here.
 		local modelParts: { BasePart } = {}
 		local partOffsets: { CFrame } = {}
 		for _, descendant in model:GetDescendants() do

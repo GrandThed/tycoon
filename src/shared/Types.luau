@@ -588,7 +588,13 @@ export type CityEraSignalsConfig = {
 	offset: number,
 	maxPerPlot: number,
 }
-export type CityEraVehiclesConfig = { props: { string }, perPlot: number, speed: number }
+export type CityEraVehiclesConfig = {
+	props: { string },
+	perPlot: number,
+	speed: number,
+	-- Wave 2d: runtime Model:ScaleTo of every moving car, deck cars included (absent = 1).
+	scale: number?,
+}
 -- Wave 2c (docs/INTERFACES.md "Wave 2c — living city"). Every `perTier` is cumulative and indexed
 -- by tier (1-5); tier 0 shows none.
 export type CityEraHousesConfig = { props: { string }, smallProps: { string }? }
@@ -599,7 +605,15 @@ export type GreeneryConfig = {
 	clearance: number, -- studs between pieces
 	roadClearance: number, -- studs beyond the road edge
 }
-export type ParkedConfig = { props: { string }, perTier: { number } }
+export type ParkedConfig = {
+	props: { string },
+	perTier: { number }, -- counts bays
+	-- Wave 2d; absent = 1 car per bay at scale 1, 0.3 studs between packed cars.
+	scale: number?,
+	perBay: number?,
+	gap: number?,
+	bayLength: number?, -- packing length; absent = the pool's built-size footprint length
+}
 export type PedestrianConfig = {
 	firstTier: number,
 	perTier: { number },
@@ -609,6 +623,7 @@ export type PedestrianConfig = {
 	bobHeight: number,
 	bobHz: number,
 	props: { string },
+	scale: number?, -- wave 2d: runtime Model:ScaleTo of every walker (absent = 1)
 }
 export type SmokeConfig = {
 	firstTier: number,
