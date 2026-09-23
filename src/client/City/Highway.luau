@@ -11,6 +11,11 @@
 -- Cars loop the deck on their own lane graph (RoadGraph.LoopLanes) driven by the one Traffic
 -- Heartbeat; they never take the ramp, because the ramp is not in that graph. They ride at
 -- `highway.deckHeight` from the config; without it the ring is drawn but stays empty.
+--
+-- Wave 2b loop mode: a layout without `ramp` (the Orbital monorail) is a plain closed ring of deck
+-- and corner cells with no junction, ramp or sign. It reveals outward from the ring cell nearest
+-- the plot entrance, since there is no ramp to grow from, and its vehicles ride the centreline: a
+-- monorail is one beam, and the street lane offset would hang the train beside it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -35,6 +40,8 @@ local ARM_NAMES: { string } = { "+X", "-Z", "-X", "+Z" }
 local KIND_STRAIGHT = "straight"
 local KIND_BEND = "bend"
 -- A reveal slower than this would take minutes to close the ring; a config of 0 means "instant".
+-- Interior samples of a loop-mode corner arc: enough that a train never cuts visibly across it.
+local CORNER_ARC_SAMPLES = 3
 local MIN_REVEAL_RATE = 0.1
 
 export type Options = {
@@ -47,6 +54,9 @@ export type Options = {
 	roadWidth: number,
 	pavementWidth: number, -- the era's kerb width; the sign stands clear of it
 	laneOffset: number, -- the same right-hand lane offset the streets use
+	-- RoadGraph.EntrancePoint: where a loop-mode ring starts its reveal. Nil falls back to the
+	-- middle of the ring's front (-Z) side, the edge every plot is entered from.
+	entrance: Vector3?,
 	budgetCells: number, -- CityDressing.json budget.highwayCells
 	near: boolean,
 	-- Whether a square of `halfExtent` at a plot-local point is clear of everything else the plot
@@ -65,10 +75,12 @@ export type Handle = {
 	ready: boolean,
 	-- Bumped by every clear and every near/far flip, so a reveal started earlier stops quietly.
 	generation: number,
-	cells: { RingCell }, -- reveal order: the junction first, then outward both ways
+	cells: { RingCell }, -- reveal order: the start cell first, then outward both ways
 	corners: { Vector3 }, -- plot-local ring corners, the lane graph's loop
-	direction: Vector3, -- from the junction cell into the city
-	junction: Vector3, -- the junction cell's centre, plot-local
+	-- False in loop mode: no junction, no ramp, no sign, and vehicles on the centreline.
+	hasRamp: boolean,
+	direction: Vector3, -- from the junction cell into the city (unused in loop mode)
+	junction: Vector3, -- the start cell's centre, plot-local
 	near: boolean,
 	placed: { Instance },
 	lanes: RoadGraph.Lanes?,
@@ -270,7 +282,9 @@ end
 local function placeAll(handle: Handle): ()
 	-- The ramp first, so it holds its two pieces of the budget and the reveal has something to
 	-- grow out of.
-	placeRamp(handle)
+	if handle.hasRamp then
+		placeRamp(handle)
+	end
 	for index = 1, #handle.cells do
 		placeCell(handle, index)
 	end
@@ -282,7 +296,9 @@ end
 local function reveal(handle: Handle, generation: number): ()
 	local rate = math.max(numberOr(handle.options.config.revealCellsPerSecond, 0), MIN_REVEAL_RATE)
 	local step = 1 / rate
-	placeRamp(handle)
+	if handle.hasRamp then
+		placeRamp(handle)
+	end
 	for index = 1, #handle.cells do
 		if handle.destroyed or handle.generation ~= generation then
 			return
@@ -294,6 +310,36 @@ local function reveal(handle: Handle, generation: number): ()
 		return
 	end
 	finish(handle)
+end
+
+-- The loop-mode lane polyline. A corner prop's beam is a quarter circle of radius tileStuds / 2
+-- about the cell corner inside the ring, from one leg's cell-edge midpoint to the other's, so the
+-- lane follows that arc instead of cutting to the corner cell's centre -- a train on a single beam
+-- would otherwise swing off it at every turn.
+local function arcedCorners(corners: { Vector3 }, tileStuds: number): { Vector3 }
+	local radius = tileStuds / 2
+	local count = #corners
+	local points: { Vector3 } = {}
+	for index, centre in corners do
+		local previous = corners[(index - 2) % count + 1]
+		local following = corners[index % count + 1]
+		local inward = centre - previous
+		local outward = following - centre
+		if inward.Magnitude < MIN_LENGTH or outward.Magnitude < MIN_LENGTH then
+			table.insert(points, centre)
+			continue
+		end
+		local along, across = inward.Unit, outward.Unit
+		local pivot = centre - along * radius + across * radius
+		for step = 0, CORNER_ARC_SAMPLES + 1 do
+			local angle = step / (CORNER_ARC_SAMPLES + 1) * QUARTER_TURN
+			table.insert(
+				points,
+				pivot + (along * math.sin(angle) - across * math.cos(angle)) * radius
+			)
+		end
+	end
+	return points
 end
 
 -- ------------------------------------------------------------------ public
@@ -312,14 +358,24 @@ function Highway.Create(options: Options): Handle?
 		return nil
 	end
 	local ramp = options.layout.ramp
-	local requested = if type(ramp) == "table" then ramp.cell else nil
-	-- Without a ramp cell there is no junction and no way down: no ring, silently.
-	if typeof(requested) ~= "Vector3" then
-		return nil
+	local hasRamp = ramp ~= nil
+	local requested: Vector3
+	if ramp ~= nil then
+		local cell: any = if type(ramp) == "table" then ramp.cell else nil
+		-- A ramp table without a usable cell is a half-written layout, not loop mode: no ring,
+		-- silently, rather than a ring whose ramp is missing.
+		if typeof(cell) ~= "Vector3" then
+			return nil
+		end
+		requested = cell
+	else
+		local entrance = options.entrance
+		requested = if entrance ~= nil then entrance else Vector3.new(0, 0, -half * tileStuds)
 	end
 	local cycle, corners = ringCycle(half, tileStuds)
 	-- The layout gives the ramp cell in plot-local studs like every other layout position; taking
-	-- the nearest ring cell also swallows a plan that named it by lattice index.
+	-- the nearest ring cell also swallows a plan that named it by lattice index. A tie keeps the
+	-- first cell in cycle order, so every client starts a loop's reveal on the same cell.
 	local junctionIndex, bestDistance = 1, math.huge
 	for index, cell in cycle do
 		local centre = Vector3.new(cell.X * tileStuds, 0, cell.Y * tileStuds)
@@ -330,7 +386,9 @@ function Highway.Create(options: Options): Handle?
 	end
 	local junction = cycle[junctionIndex]
 	local junctionCentre = Vector3.new(junction.X * tileStuds, 0, junction.Y * tileStuds)
-	local armIndex = armIndexFor(if type(ramp.direction) == "string" then ramp.direction else nil)
+	local armIndex = if ramp ~= nil
+		then armIndexFor(if type(ramp.direction) == "string" then ramp.direction else nil)
+		else nil
 	-- An unknown direction points into the city, which is the only way a ramp can ever run.
 	local direction = if armIndex ~= nil
 		then ARM_VECTORS[armIndex]
@@ -365,7 +423,7 @@ function Highway.Create(options: Options): Handle?
 				end
 			end
 		end
-		if index == junctionIndex then
+		if hasRamp and index == junctionIndex then
 			mask = bit32.bor(mask, TileRenderer.ArmBit(armIndexOf(direction)))
 		end
 		local kind, quarters = TileRenderer.PieceForMask(mask)
@@ -384,6 +442,7 @@ function Highway.Create(options: Options): Handle?
 		generation = 0,
 		cells = cells,
 		corners = corners,
+		hasRamp = hasRamp,
 		direction = direction,
 		junction = junctionCentre,
 		near = options.near,
@@ -393,8 +452,8 @@ function Highway.Create(options: Options): Handle?
 end
 
 -- `owned` is the slot the era config names; `animate` is the caller's "this was a purchase just
--- now" flag. A purchase on a near plot builds the ring out from the ramp; joins, era rebuilds and
--- far plots get it in one frame.
+-- now" flag. A purchase on a near plot builds the ring out from the ramp (in loop mode, from the
+-- cell nearest the entrance); joins, era rebuilds and far plots get it in one frame.
 function Highway.SetOwned(handle: Handle, owned: boolean, animate: boolean): ()
 	if handle.destroyed or handle.owned == owned then
 		return
@@ -447,12 +506,20 @@ function Highway.Lanes(handle: Handle): RoadGraph.Lanes?
 	if surface == nil or surface <= 0 then
 		return nil
 	end
-	local lanes = RoadGraph.LoopLanes(
-		handle.options.plotFrame,
-		handle.corners,
-		surface,
-		handle.options.laneOffset
-	)
+	-- Cars on the wide Metropolis deck keep the corner-centre loop they always drove.
+	local lanes = if handle.hasRamp
+		then RoadGraph.LoopLanes(
+			handle.options.plotFrame,
+			handle.corners,
+			surface,
+			handle.options.laneOffset
+		)
+		else RoadGraph.LoopLanes(
+			handle.options.plotFrame,
+			arcedCorners(handle.corners, handle.options.tileStuds),
+			surface,
+			0
+		)
 	handle.lanes = lanes
 	return lanes
 end

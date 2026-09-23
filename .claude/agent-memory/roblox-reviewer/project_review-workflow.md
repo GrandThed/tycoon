@@ -511,3 +511,46 @@ owned, tier).build()` runs without Blender and exposes `boxes`, `models`, `tile_
   builds its `laid` cut list by iterating two hash tables (`pavementRects`, `paved`), so the *piece*
   decomposition — and therefore which strips survive the shared `budget.tileCells` — is not provably
   equal on two clients (never binds at 38 cells of 180).
+
+**M9 wave 2b (2026-09-23, Orbital dressing + cityDetail, SHIP with 2 Majors).** Server side is tiny
+and clean: schema v6 migration `[5]` (if-nil, runs after `Reconcile` in both places), validator
+whitelist + `DataService.SetSetting` branch + delta field; Main.server's RequestSetSetting only
+rebuilds for `vipSkins`, so cityDetail costs the server one bool write. Client: `detailPolicy` in
+CityDressingController is the one policy function; thinning reuses the `(i*cap)//total` rule;
+`Highway` loop mode = `hasRamp` flag (Metropolis path byte-identical). Missing tile templates draw
+`placeholderCell` slabs (so an unharvested tiles era is still playable).
+- Verification that worked: `streetplan.py` Village/Boomtown/Metropolis text AND PNG md5 identical
+  between HEAD tools and working tools (both run in scratch trees with the working `src/`); stub-bpy
+  import of `tools/assets/{tube,monorail}_kit.py` gives tris/bounds/open arms + determinism in 30 lines.
+- **Recurring pattern (new): a lane graph through ring-corner CELL CENTRES is fine for cars on a
+  7-wide deck but not for a vehicle that must sit on a narrow beam.** `RoadGraph.LoopLanes` goes
+  corner-centre to corner-centre and Traffic pivots there; MonorailCorner's beam is a 3.5-radius arc
+  about the inner cell corner, so the train leaves the 1.6 beam by up to 1.45 studs at each corner.
+  Whenever a vehicle rides a prop, compare its lane polyline with the prop's own centreline.
+- **Recurring pattern: layout comments lie about containment.** Orbital's comment says "rock fields
+  on the open regolith" while every one of the six zone centres lies inside a decking `blocks` rect
+  that runs to the plot edge. Check zone centres against block rects numerically; streetplan does not.
+- Git Bash trap: `grep -c $'\r' file` matched every line here (reported CRLF on LF files). Count CRs
+  with `tr -cd '\r' < f | wc -c` instead.
+- `docs/ASSET_MANIFEST.md` goes stale on any era-JSON rename (slot name column); gen_asset_manifest
+  run from a scratch copy without `assets/` prints "n/a" columns, so diff only the changed rows.
+
+**M9 wave 2c (2026-09-23, living city, worktree `tycoon-wave2c`, SHIP AFTER FIXES: 0 Critical, 4
+Majors).** Client-only confirmed (server reads only tier thresholds + buildingLift). New modules
+Walkers/Ambient copy Traffic's shape (connect Heartbeat only while live, BulkMoveTo, prune on pcall
+fail) and are clean; every prop goes through `PropFactory.Spawn` → `sealPart`, smoke is an Attachment.
+- **Recurring pattern (new): a new lateral LINE (walker lane, lamp row) must be checked against every
+  existing solid on that line, not just the new category.** Boomtown walkers at `pedestrians.offset`
+  4.8 = row-lamp reach (4 + 0.8) exactly, and 0.2 inside the front of 6 existing house lots (front
+  4.6 from centreline); Metropolis walkers at 5.5 run through all 5 subway kiosks (kiosk from 3.6).
+  streetplan checked only bays vs walk lanes. Probe: import `tools/streetplan.py` as a module
+  (`sp.Era`, `sp.Network`, `sp.visible_network`) from a scratch script and measure lines vs polys.
+- **Recurring pattern: "expected yield = count × plantable share" ignores the pieces' own spacing.**
+  A Monte Carlo of the client rule (count draws, no redraw, mutual clearance) gave median zone yields
+  21/17/12 vs perTier max 24/28/16 → tiers 4–5 add no zone greenery though streetplan is green.
+- **Degradation trap:** `tier < cfg.firstTier` and `tierForRank(nil, ...)` evaluated before a cap
+  check turn a removed config key into a runtime error inside deferred `sync` / `Scatter.Plan`.
+  Grep every new `cfg.x` compare/iterate for a `numberOr`/type guard when a contract says "missing key
+  → feature absent".
+- The lead committed into the worktree mid-review (HEAD moved to f97499a); re-run `git log` before
+  reporting and name the commit reviewed.

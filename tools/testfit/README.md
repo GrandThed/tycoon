@@ -72,6 +72,7 @@ py tools/testfit/plotrender.py Metropolis --camera 28,-28      # any plot-local 
 py tools/testfit/plotrender.py Metropolis --tier 3             # the plot partway through the era
 py tools/testfit/plotrender.py Metropolis --owned cityGrid,foodTruck
 py tools/testfit/plotrender.py Boomtown --camera overview
+py tools/testfit/plotrender.py OrbitalColony --tier 2 --out plot_tier2
 ```
 
 Output: `assets/testfit/out/<Era>/plot_<camera>.png`, 1600 x 1000 (`--out` renames the stem).
@@ -110,6 +111,25 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   `treeSpacing`, one planter to a lattice cell, blocked by footprints and spurs, ordered
   `(polyline, stretch, step)` and thinned to `maxTrees`; they stand only where a strip is still
   down, at the fixed `treeStage`.
+- **Orbital Colony (wave 2b)** reuses every tiles-era pass: tube props are the tiles (no
+  `pavement`, no `parkStrips`, so both passes draw nothing), `blocks` are the decking with
+  `treeSpacing` 0 (no edge trees), and the `highway` is drawn in **loop mode** when the layout has
+  no `ramp`: deck and corner props only, no junction, ramp or sign, exactly as `Highway.luau`
+  masks it. Deck vehicles come from `highway.vehicleProps` (default: the era's street vehicles);
+  in loop mode they ride the centreline (the client's lane offset is 0 there), spaced evenly from
+  the middle of the -Z leg at `deckHeight`.
+- **Trees by tier:** with `--tier N` each tree shows `Scatter.TreeStage` at that tier (zone trees'
+  birth tiers spread evenly, street trees born at 1; zone candidates are thinned evenly to the cap
+  like the client, not truncated). Without `--tier` every tree is at its final stage.
+- **Placeholders:** a prop whose blueprint is missing, unusable or places no kit piece (GLBs not
+  generated yet) is drawn as grey-box stand-ins in the colour it is meant to be -- tube cells as a
+  hub plus open arms, ring cells as a beam under `deckHeight` on a pier -- and the driver prints a
+  `MISSING blueprints` line (Blender logs the no-GLB ones). A render with placeholders is a layout
+  check, not a look check.
+- **Colour, as the game shows it:** colour-only kit materials render with metallic 0 (the palette
+  bake drops it), and `space-kit`'s factors are decoded from sRGB once on import (palette.py
+  `SRGB_FACTOR_KITS`, restated in `plotscene.py`), so its orange and dark slate match the game
+  rather than washing out as they do in the single-building `testfit.py` strips.
 - **Known deviation from the shipped client:** the ramp prop is placed with its highest cell one
   whole cell inward of the ring junction, which is what the contract describes and what
   `streetplan.py` checks (its three cells are `junction + direction * k`, k = 1..3, and its toe

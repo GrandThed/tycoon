@@ -117,7 +117,7 @@ local HubRemotes: RemoteService.RemoteDefs = {
 			validate = function(args: RemoteService.PackedArgs): boolean
 				-- Only the Types.SettingKey values exist; anything else is a silent drop.
 				return args.n == 2
-					and (args[1] == "music" or args[1] == "sfx" or args[1] == "vipSkins")
+					and (args[1] == "music" or args[1] == "sfx" or args[1] == "vipSkins" or args[1] == "cityDetail")
 					and typeof(args[2]) == "boolean"
 			end,
 		},

@@ -3,7 +3,8 @@
 -- the toggle at once (UIController applies it to SoundController and fires
 -- RequestSetSetting); the next snapshot/delta is authoritative and SetSettings re-paints
 -- from it. The VIP skins row (2026-09-16 amendment) exists only for VIP owners: hidden, not
--- disabled, so non-VIP players never see a setting they cannot use.
+-- disabled, so non-VIP players never see a setting they cannot use. The City detail row (M9
+-- wave 2) is for everyone: off thins the city dressing on low-end devices.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -17,7 +18,7 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
-export type Settings = { music: boolean, sfx: boolean, vipSkins: boolean }
+export type Settings = { music: boolean, sfx: boolean, vipSkins: boolean, cityDetail: boolean }
 
 export type Deps = {
 	onToggle: (key: Types.SettingKey, value: boolean) -> (),
@@ -40,10 +41,21 @@ local ROWS: { { key: Types.SettingKey, label: string } } = {
 	{ key = "music", label = "Music" },
 	{ key = "sfx", label = "Sound effects" },
 	{ key = "vipSkins", label = "VIP building skins" },
+	{ key = "cityDetail", label = "City detail" },
 }
 
 -- Rows shown only while the player owns the VIP pass.
 local VIP_ONLY: { [string]: boolean } = { vipSkins = true }
+
+-- Tall enough for every row at once (a VIP owner sees them all), never shorter than the compact
+-- sheet the panel always had; a viewport too short for it scrolls instead of clipping a toggle.
+local DESIGN_HEIGHT = math.max(
+	Theme.PANEL_HEIGHT_COMPACT,
+	Theme.HEADER_HEIGHT
+		+ Theme.PADDING
+		+ #ROWS * Theme.SETTINGS_ROW_HEIGHT
+		+ (#ROWS - 1) * Theme.ROW_SPACING
+)
 
 local SettingsPanel = {}
 
@@ -54,13 +66,25 @@ function SettingsPanel.new(parent: Instance, deps: Deps): SettingsPanelHandle
 	local panel = Panel.new(parent, {
 		name = "SettingsPanel",
 		title = "Settings",
-		designHeight = Theme.PANEL_HEIGHT_COMPACT,
+		designHeight = DESIGN_HEIGHT,
 		onClose = deps.onClose,
 	})
+	local list = Create("ScrollingFrame", {
+		Name = "Rows",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.new(),
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollBarThickness = Theme.SCROLLBAR_THICKNESS,
+		ScrollBarImageColor3 = Theme.COLOR_TEXT_DIM,
+		Parent = panel.Content,
+	}) :: ScrollingFrame
 	Create("UIListLayout", {
 		Padding = UDim.new(0, Theme.ROW_SPACING),
 		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = panel.Content,
+		Parent = list,
 	})
 
 	local function paint(toggle: ToggleRow): ()
@@ -80,7 +104,7 @@ function SettingsPanel.new(parent: Instance, deps: Deps): SettingsPanelHandle
 			Visible = not VIP_ONLY[entry.key],
 			BackgroundColor3 = Theme.COLOR_ROW,
 			BorderSizePixel = 0,
-			Parent = panel.Content,
+			Parent = list,
 		}) :: Frame
 		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = row })
 		Create("TextLabel", {

@@ -1,0 +1,10 @@
+{
+  "id": "TubeCross",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [7, 7],
+  "note": "Crossroads: node with four arms, each stopping at exactly +-3.5. tube-kit, studs, scale 1.0.",
+  "pieces": [
+    {"kit": "tube-kit", "model": "tube-cross", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

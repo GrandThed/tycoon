@@ -307,6 +307,8 @@ function DataService.SetSetting(player: Player, key: Types.SettingKey, value: bo
 		state.settings.sfx = value
 	elseif key == "vipSkins" then
 		state.settings.vipSkins = value
+	elseif key == "cityDetail" then
+		state.settings.cityDetail = value
 	else
 		-- Only the remote validator whitelists keys today; a future direct caller must not be
 		-- able to write an unknown key into the profile.

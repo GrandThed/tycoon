@@ -33,6 +33,57 @@ from blueprint import BlueprintError, load_blueprint  # noqa: E402
 SUN_ENERGY = 2.3
 FILL_ENERGY = 0.55
 
+# tools/assets/palette.py SRGB_FACTOR_KITS, restated (Blender's Python cannot import it): kits whose
+# authors wrote sRGB values straight into baseColorFactor. The game bakes those factors x 255 into
+# the palette texture as sRGB; Blender's importer reads them as linear and would wash space-kit's
+# orange out to pale amber and its dark slate to mid-grey, so they are decoded once here.
+SRGB_FACTOR_KITS = frozenset({"space-kit"})
+
+
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+class PlotPieceCache(testfit.PieceCache):
+    """testfit's cache, with each kit's colour-only materials made to render as the game shows
+    them. merge_stages routes every colour-only material through palette.py into a flat texture,
+    so in game it is neither metallic nor shiny: metallic goes to 0 (space-kit is authored
+    metallic 1, which renders near-black under this sky). A material is fixed exactly once, the
+    first time its kit piece is imported, so nothing is converted twice."""
+
+    def __init__(self, library_collection):
+        super().__init__(library_collection)
+        self.fixed = set()
+
+    def get(self, kit, model):
+        fresh = (kit, model) not in self.templates
+        roots = super().get(kit, model)
+        if fresh and roots:
+            for obj in testfit.all_descendants(roots):
+                if obj.type != "MESH":
+                    continue
+                for slot in obj.material_slots:
+                    self.fix(kit, slot.material)
+        return roots
+
+    def fix(self, kit, material):
+        if material is None or material.name in self.fixed or not material.use_nodes:
+            return
+        self.fixed.add(material.name)
+        bsdf = material.node_tree.nodes.get("Principled BSDF")
+        if bsdf is None or bsdf.inputs["Base Color"].is_linked:
+            return  # textured: the colormap is already sRGB and imported as such
+        if kit in SRGB_FACTOR_KITS:
+            colour = bsdf.inputs["Base Color"].default_value
+            bsdf.inputs["Base Color"].default_value = (
+                srgb_to_linear(colour[0]),
+                srgb_to_linear(colour[1]),
+                srgb_to_linear(colour[2]),
+                colour[3],
+            )
+        if not bsdf.inputs["Metallic"].is_linked:
+            bsdf.inputs["Metallic"].default_value = 0.0
+
 
 def log(msg):
     print(f"[plotrender] {msg}", flush=True)
@@ -80,8 +131,30 @@ def build_box(spec, collection, materials):
     return obj
 
 
-def build_model(spec, cache, collection, blueprints, missing):
+def build_placeholder(spec, collection, materials):
+    """The boxes plotrender asked for in place of a model it could not draw, in the model's own
+    frame (offset = a box's bottom-centre), turned with it and unscaled -- they are in studs."""
+    root = bpy.data.objects.new(spec.get("name", "Placeholder"), None)
+    root.location = to_blender(spec["pos"])
+    root.rotation_euler = (0.0, 0.0, math.radians(spec.get("rotY", 0.0)))
+    collection.objects.link(root)
+    for index, box in enumerate(spec["placeholder"]):
+        size, offset = box["size"], box["offset"]
+        obj = testfit.make_box(
+            f"{root.name}_ph{index}",
+            (size[0], size[2], size[1]),
+            to_blender((offset[0], offset[1] + size[1] / 2, offset[2])),
+            materials.get(box["color"], 0.6),
+            collection,
+        )
+        obj.parent = root
+
+
+def build_model(spec, cache, collection, blueprints, missing, materials):
     path = spec["blueprint"]
+    if path is None:
+        build_placeholder(spec, collection, materials)
+        return 0
     entry = blueprints.get(path, False)
     if entry is False:
         try:
@@ -91,7 +164,9 @@ def build_model(spec, cache, collection, blueprints, missing):
             entry = None
         blueprints[path] = entry
     if entry is None:
-        missing.add(os.path.basename(path))
+        missing[os.path.basename(path)] = missing.get(os.path.basename(path), 0) + 1
+        if spec.get("placeholder"):
+            build_placeholder(spec, collection, materials)
         return 0
     stage = spec.get("stage")
     if stage is None:
@@ -116,6 +191,12 @@ def build_model(spec, cache, collection, blueprints, missing):
         collection.objects.link(holder)
         cache.instantiate(roots, holder, collection)
         placed += 1
+    if placed == 0:
+        # A blueprint whose kit GLBs are not generated yet: stand the placeholder in for it.
+        name = os.path.basename(path)
+        missing[name + " (no GLBs)"] = missing.get(name + " (no GLBs)", 0) + 1
+        if spec.get("placeholder"):
+            build_placeholder(spec, collection, materials)
     return placed
 
 
@@ -202,12 +283,12 @@ def main():
     for box in scene_spec.get("boxes", []):
         build_box(box, plot, materials)
 
-    cache = testfit.PieceCache(library)
+    cache = PlotPieceCache(library)
     blueprints = {}
-    missing = set()
+    missing = {}
     pieces = 0
     for model in scene_spec.get("models", []):
-        pieces += build_model(model, cache, plot, blueprints, missing)
+        pieces += build_model(model, cache, plot, blueprints, missing, materials)
 
     setup_lights(scene, scene_spec.get("sky", [200, 214, 232]))
     setup_camera(scene, scene_spec["camera"])
@@ -218,7 +299,8 @@ def main():
         f"{pieces} kit pieces"
     )
     if missing:
-        log(f"WARNING: {len(missing)} blueprint(s) unusable: {', '.join(sorted(missing))}")
+        listed = ", ".join(f"{name} x{count}" for name, count in sorted(missing.items()))
+        log(f"WARNING: {len(missing)} blueprint(s) unusable, placeholder where one was given: {listed}")
     render(scene, scene_spec["out"], scene_spec.get("size", [1600, 1000]))
     log(f"wrote {scene_spec['out']}")
 

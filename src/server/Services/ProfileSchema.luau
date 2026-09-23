@@ -11,11 +11,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
-local SCHEMA_VERSION = 5
+local SCHEMA_VERSION = 6
 local STORE_NAME = "PlayerData"
 local PROFILE_KEY_PREFIX = "p_"
 
--- Template = schema v5, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
+-- Template = schema v6, the exact PlayerState shape in Types.luau. lastSeen = 0 marks a
 -- first-ever join (no offline grant, no welcome-back card).
 local PROFILE_TEMPLATE: Types.PlayerState = {
 	version = SCHEMA_VERSION,
@@ -29,7 +29,7 @@ local PROFILE_TEMPLATE: Types.PlayerState = {
 	lastSeen = 0,
 	incomeAtSave = 0,
 	stats = { totalCashAllTime = 0, erasCompleted = 0, playtimeSeconds = 0 },
-	settings = { music = true, sfx = true, vipSkins = true },
+	settings = { music = true, sfx = true, vipSkins = true, cityDetail = true },
 	pendingDoubleOfflineAmount = 0,
 	legacyShop = { spent = 0, perks = {} },
 	combat = {
@@ -90,6 +90,13 @@ local Migrations: { [number]: (state: Types.PlayerState) -> () } = {
 		-- the era on the existing table is what actually unlocks a veteran's missions, and it is
 		-- monotonic, so re-running it can never lower the value.
 		state.combat.highestEra = math.max(state.combat.highestEra, state.era, 1)
+	end,
+	-- M9 wave 2b: the cityDetail dressing toggle (docs/INTERFACES.md "Wave 2 — cityDetail
+	-- setting"). Default on, so an existing city keeps the full dressing it was designed with.
+	[5] = function(state: Types.PlayerState): ()
+		if state.settings.cityDetail == nil then
+			state.settings.cityDetail = true
+		end
 	end,
 }
 

@@ -23,7 +23,7 @@ the purchase order and tier times from tools/sim_economy.py's greedy player. The
 numbers are the contract's own rule values and the preview's drawing constants, named below.
 
 Usage:
-  py tools/streetplan.py                # Village and Boomtown (wave 1)
+  py tools/streetplan.py                # every era with a street plan (DEFAULT_ERAS)
   py tools/streetplan.py Metropolis     # any era(s) by name
 Exit code 1 when any violation is found.
 """
@@ -50,7 +50,7 @@ OUT_DIR = REPO_ROOT / "assets" / "testfit" / "out"
 SIM_PATH = REPO_ROOT / "tools" / "sim_economy.py"
 ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
 
-DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis")  # every era with a street plan (wave 2a)
+DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis", "OrbitalColony")  # every era with a street plan (wave 2b)
 
 # Contract rule values (INTERFACES.md "Layouts" and amendments), not game tunables.
 SLOT_FOOTPRINT_DEFAULT = 9
@@ -59,6 +59,8 @@ SPINE_EXTRA_CLEARANCE = 1  # spine clear of slots/pads/Sign by width/2 (+ meande
 LOT_SLOT_CLEARANCE = 6
 STREET_COUNT = (2, 5)
 LOT_COUNT = (8, 12)
+# Wave 2b: the Orbital plot is a full 4x4 module grid with no pavement, so it takes 6-10 small domes.
+LOT_COUNT_BY_ERA = {"OrbitalColony": (6, 10)}
 LOT_TIERS = (2, 5)
 PLAZA_COUNT = (1, 2)
 PLAZA_TIERS = (3, 5)
@@ -75,6 +77,8 @@ STREET_FURNITURE = {
     # their nominal 9x9 footprint is fiction -- only the pad is real, and it is meant to stand on
     # the street furniture it names (the ramp foot, the kerb beside a metro entrance).
     "Metropolis": ("subwayLine", "highwayRamp"),
+    # Wave 2b: Build the Monorail is streetOnly the same way; its pad stands in a tube corner.
+    "OrbitalColony": ("walkwayNetwork",),
 }
 # A lot "faces the road" when a spine centreline lies within this many studs of its front edge.
 LOT_FRONT_REACH = 10
@@ -110,9 +114,14 @@ SUBWAY_CLEARANCE = 0.5  # daylight between an entrance and any footprint, pad or
 # takes whichever is bigger -- a stale file must never pass a plan the real prop will not fit.
 PLAZA_MIN_SIZE = (14.0, 14.0)
 PLAZA_EDGE_SLACK = 0.5  # how far the front edge may sit from the pavement's outer edge
+# Wave 2b: a tiles era without pavement (Orbital tubes) has no apron to build in, so its plaza is
+# the prop's own blueprint footprint (this fallback when the blueprint declares none) and its front
+# is flush with the tube cell edge instead.
+PLAZA_BARE_SIZE = (12.0, 12.0)
 # Paved blocks (INTERFACES "Paved blocks"): slabs are Parts, so two of them meeting edge to edge
 # would share a plane and z-fight; the contract asks for daylight between neighbours instead.
 BLOCK_GAP = 0.5
+ZONE_SOLID_CLEARANCE = 3  # wave 2b: a rock zone circle's daylight to any footprint or pad
 # Scatter.luau mirrors: an edge counts as fronting a street within `reach` of it and aligned to
 # better than STRAIGHT_ENOUGH. The clearance a street tree keeps off spurs and solids comes from
 # `road.tiles.blocks.treeClearance`; this is only the fallback for a config that predates the key.
@@ -561,8 +570,9 @@ class Era:
         self.plazas = []
         for plaza in self.layout.get("plazas", []):
             position = xz(plaza["position"])
-            size = prop_footprint(name, [plaza["prop"]], PLAZA_MIN_SIZE if self.tiles else (12, 12))
-            if self.tiles is not None:
+            paved = self.tiles is not None and self.pavement > 0
+            size = prop_footprint(name, [plaza["prop"]], PLAZA_MIN_SIZE if paved else PLAZA_BARE_SIZE if self.tiles else (12, 12))
+            if paved:
                 size = (max(size[0], PLAZA_MIN_SIZE[0]), max(size[1], PLAZA_MIN_SIZE[1]))
             self.plazas.append(
                 {
@@ -592,7 +602,9 @@ class Era:
             )
         self.highway = self.layout.get("highway")
         highway_cfg = self.dressing.get("highway")
-        ramp_prop = highway_cfg["props"]["ramp"] if highway_cfg else None
+        # Wave 2b: `junction` and `ramp` are optional (loop mode), in the config and the layout.
+        ramp_prop = highway_cfg["props"].get("ramp") if highway_cfg else None
+        self.highway_ramp = self.highway.get("ramp") if self.highway else None
         self.ramp_cells = (
             prop_cell_length(name, ramp_prop, self.tile_studs, RAMP_CELLS_FALLBACK)
             if ramp_prop
@@ -1135,6 +1147,59 @@ def lattice_violations(era):
     return messages
 
 
+def rect_overlap(p, q):
+    """Overlap area of the axis-aligned boxes around two polygons; every rotation in a layout is a
+    quarter turn, so for the checks below the boxes are the shapes themselves. Touching is 0."""
+    width = min(max(c[0] for c in p), max(c[0] for c in q)) - max(min(c[0] for c in p), min(c[0] for c in q))
+    depth = min(max(c[1] for c in p), max(c[1] for c in q)) - max(min(c[1] for c in p), min(c[1] for c in q))
+    return max(width, 0.0) * max(depth, 0.0)
+
+
+def cell_violations(era, cells):
+    """Wave 2b: the whole lattice cell is the road, whatever width the tile draws inside it (a tube
+    is 4 wide in a 7 cell), so pads, real footprints, lots and rock zones stay off every cell a
+    street rasterises to. Flush against a cell edge is fine -- that is where a pad belongs."""
+    messages = []
+    solids = []
+    for slot in era.slots:
+        solids.append((f"{slot['id']} pad", slot["pad_poly"]))
+        if slot["id"] not in era.furniture:
+            solids.append((f"{slot['id']} footprint", slot["footprint"]))
+    solids += [(f"lot {i + 1}", lot["poly"]) for i, lot in enumerate(era.lots)]
+    for cell in sorted(cells):
+        square_ = era.cell_square(cell)
+        where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+        for name, poly in solids:
+            if rect_overlap(poly, square_) > 1e-6:
+                messages.append(f"{name} stands on the road cell {where}")
+        for i, zone in enumerate(era.zones):
+            if point_polygon_distance(zone["center"], square_) < zone["radius"] - 1e-6 or point_in_polygon(zone["center"], square_):
+                messages.append(f"tree zone {i + 1} reaches onto the road cell {where}")
+    return messages
+
+
+def bare_zone_violations(era):
+    """Wave 2b (Ben's look): in an era whose decking carries no trees (`treeSpacing` 0) the decking
+    sits only under module clusters and the rocks belong on the bare regolith between them, so no
+    zone centre may fall inside a block rect, and every zone circle keeps ZONE_SOLID_CLEARANCE off
+    each footprint and pad -- a rock field crowding a module reads as rubble against its wall."""
+    messages = []
+    for i, zone in enumerate(era.zones):
+        label = f"tree zone {i + 1} {fmt(zone['center'])}"
+        for j, block in enumerate(era.blocks):
+            if point_in_polygon(zone["center"], block["poly"]):
+                messages.append(f"{label}: centre is on decking block {j + 1}, not bare regolith")
+        for slot in era.slots:
+            checks = [("pad", slot["pad_poly"])]
+            if slot["id"] not in era.furniture:
+                checks.append(("footprint", slot["footprint"]))
+            for what, poly in checks:
+                gap = point_polygon_distance(zone["center"], poly) - zone["radius"]
+                if point_in_polygon(zone["center"], poly) or gap < ZONE_SOLID_CLEARANCE - 1e-6:
+                    messages.append(f"{label}: {gap:.2f} from {slot['id']} {what} (need {ZONE_SOLID_CLEARANCE})")
+    return messages
+
+
 def ring_reach(poly):
     """How far a footprint reaches from the plot centre along the worse axis -- the number the
     square ring deck cares about."""
@@ -1178,7 +1243,9 @@ def highway_violations(era):
         if reach > inner - 1e-6:
             messages.append(f"highway ring: tree zone {index + 1} reaches {reach:g} studs, into the deck band")
 
-    ramp = highway["ramp"]
+    ramp = era.highway_ramp
+    if ramp is None:
+        return messages  # loop mode (wave 2b): no deck T, no ramp, no foot to land
     cell = xz(ramp["cell"])
     direction = RAMP_DIRECTIONS.get(ramp["direction"])
     if direction is None:
@@ -1567,8 +1634,10 @@ def check(era, network, visible, unreachable):
     if not era.dressing["houses"]["props"]:
         if era.lots:
             add(f"lots: {len(era.lots)} authored but eras.{era.name}.houses.props is empty, so none are drawn")
-    elif not LOT_COUNT[0] <= len(era.lots) <= LOT_COUNT[1]:
-        add(f"lots: {len(era.lots)}, need {LOT_COUNT[0]}-{LOT_COUNT[1]}")
+    else:
+        low, high = LOT_COUNT_BY_ERA.get(era.name, LOT_COUNT)
+        if not low <= len(era.lots) <= high:
+            add(f"lots: {len(era.lots)}, need {low}-{high}")
     for i, lot in enumerate(era.lots):
         label = f"lot {i + 1} {fmt(lot['position'])}"
         if not LOT_TIERS[0] <= lot["tier"] <= LOT_TIERS[1]:
@@ -1628,18 +1697,20 @@ def check(era, network, visible, unreachable):
         for j, zone in enumerate(era.zones):
             if point_polygon_distance(zone["center"], plaza["poly"]) < zone["radius"] - 1e-6:
                 add(f"{label}: tree zone {j + 1} overlaps it")
+        # Overlap, not touch: a plaza of a pavement-less era stands flush against the cell edge.
         for cell in cells:
-            if polygon_polygon_distance(plaza["poly"], era.cell_square(cell)) < 1e-6:
+            if rect_overlap(plaza["poly"], era.cell_square(cell)) > 1e-6:
                 where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
                 add(f"{label}: covers the road cell {where}")
                 break
-        if era.pavement > 0:
+        if era.tiles is not None:
             face = plaza["facing"]
             front = (
                 plaza["position"][0] + face[0] * plaza["size"][1] / 2,
                 plaza["position"][1] + face[1] * plaza["size"][1] / 2,
             )
-            edge = era.width / 2 + era.pavement
+            # With no pavement the plaza fronts the tube cell itself (wave 2b).
+            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.tile_studs / 2
             nearest = min(
                 (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
                 key=lambda hit: hit[0],
@@ -1650,7 +1721,7 @@ def check(era, network, visible, unreachable):
             elif abs(nearest[0] - edge) > PLAZA_EDGE_SLACK:
                 add(
                     f"{label}: its front edge is {nearest[0]:.2f} from the nearest centreline, not flush "
-                    f"with the pavement edge at {edge:g}"
+                    f"with the {'pavement' if era.pavement > 0 else 'tube cell'} edge at {edge:g}"
                 )
             elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
                 add(f"{label}: its back is turned to the street it fronts")
@@ -1713,6 +1784,8 @@ def check(era, network, visible, unreachable):
             add(message)
         for message in parallel_street_violations(era):
             add(message)
+        for message in cell_violations(era, cells):
+            add(message)
         tile_budget = budget_value(budget.get("tileCells"), math.inf)
         detail["tileCells"] = len(cells)
         if len(cells) > tile_budget:
@@ -1724,13 +1797,18 @@ def check(era, network, visible, unreachable):
         # (corners counted once), the whole ramp is ONE prop however many cells it spans, and the
         # optional sign at its foot is one more.
         half_cells = int(round_half(float(era.highway["ring"]) / era.tile_studs)) if era.tile_studs else 0
-        highway_cells = 8 * half_cells + 1 + (1 if era.highway_sign else 0)
+        ramp_props = (1 + (1 if era.highway_sign else 0)) if era.highway_ramp is not None else 0
+        highway_cells = 8 * half_cells + ramp_props
         detail["highwayCells"] = highway_cells
         highway_budget = budget_value(budget.get("highwayCells"), math.inf)
         if highway_cells > highway_budget:
             add(f"highway cells {highway_cells} > budget.highwayCells {highway_budget}")
     if era.subways or era.dressing.get("subway") is not None:
         for message in subway_violations(era, cells):
+            add(message)
+    blocks_cfg = (era.tiles or {}).get("blocks")
+    if era.blocks and blocks_cfg is not None and not blocks_cfg.get("treeSpacing"):
+        for message in bare_zone_violations(era):
             add(message)
     if era.blocks:
         block_messages, block_notes = block_violations(era, cells)
@@ -2006,10 +2084,10 @@ def draw(era, network, visible, violations, trees, near, far, path):
             (inner, -inner, outer, inner),
         ):
             rect(x0, z0, x1, z1, fill=(150, 150, 160, 130), outline=(70, 70, 82), width=2)
-        ramp = highway["ramp"]
-        cell = xz(ramp["cell"])
-        direction = RAMP_DIRECTIONS.get(ramp["direction"], (0.0, 0.0))
-        for k in range(1, era.ramp_cells + 1):
+        ramp = era.highway_ramp or {}
+        cell = xz(ramp["cell"]) if ramp else (0.0, 0.0)
+        direction = RAMP_DIRECTIONS.get(ramp.get("direction"), (0.0, 0.0))
+        for k in range(1, (era.ramp_cells if ramp else 0) + 1):
             centre = (cell[0] + direction[0] * era.tile_studs * k, cell[1] + direction[1] * era.tile_studs * k)
             poly(square(centre, era.tile_studs, era.tile_studs, 0), fill=(190, 150, 90, 170), outline=(120, 80, 20), width=2)
             if k == era.ramp_cells:
@@ -2044,7 +2122,8 @@ def draw(era, network, visible, violations, trees, near, far, path):
         entries.append((tuple(int(v) for v in era.dressing["road"]["color"]), "kit road tile (cell)"))
     if era.highway is not None:
         entries.append(((150, 150, 160), "elevated ring deck / pillar band"))
-        entries.append(((190, 150, 90), "highway ramp cells"))
+        if era.highway_ramp is not None:
+            entries.append(((190, 150, 90), "highway ramp cells"))
     if era.subways:
         entries.append(((210, 120, 50), "subway entrance (M = index)"))
     if era.blocks:
@@ -2074,10 +2153,11 @@ def draw(era, network, visible, violations, trees, near, far, path):
         )
         y += 18
     if era.highway is not None:
-        ramp = era.highway["ramp"]
+        ramp = era.highway_ramp
+        where = f"ramp {fmt(xz(ramp['cell']))} {ramp['direction']}" if ramp else "loop, no ramp"
         canvas.text(
             (lx, y),
-            f"highway ring {era.highway['ring']:g}, ramp {fmt(xz(ramp['cell']))} {ramp['direction']}",
+            f"highway ring {era.highway['ring']:g}, {where}",
             font=font,
             fill=(0, 0, 0),
         )
@@ -2147,8 +2227,10 @@ def main():
                 f"   kit tiles: {detail['tileCells']} cells / {budget.get('tileCells')} "
                 f"(pitch {era.tile_studs:g}, pavement {era.pavement:g} either side)"
             )
-        if "highwayCells" in detail:
-            ramp = era.highway["ramp"]
+        if "highwayCells" in detail and era.highway_ramp is None:
+            print(f"   highway: ring {era.highway['ring']:g}, {detail['highwayCells']} props / {budget.get('highwayCells')}, loop (no ramp)")
+        elif "highwayCells" in detail:
+            ramp = era.highway_ramp
             foot_step = RAMP_DIRECTIONS.get(ramp["direction"], (0.0, 0.0))
             cell = xz(ramp["cell"])
             foot = (cell[0] + foot_step[0] * era.tile_studs * era.ramp_cells, cell[1] + foot_step[1] * era.tile_studs * era.ramp_cells)

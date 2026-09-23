@@ -56,10 +56,11 @@
 		{
 			"id": "walkwayNetwork",
 			"type": "unlock",
-			"name": "Connect the Walkways",
+			"name": "Build the Monorail",
 			"modelName": "WalkwayTube",
-			"description": "pressurized walkway tube between pads",
-			"kit": "Space Kit",
+			"streetOnly": true,
+			"description": "an elevated monorail loop on piers circles the colony, one train riding it",
+			"kit": "Custom (monorail-kit)",
 			"baseCost": 220000000000,
 			"baseIncome": 0,
 			"multiplier": 0.05

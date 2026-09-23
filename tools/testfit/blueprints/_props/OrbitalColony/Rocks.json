@@ -1,0 +1,15 @@
+{
+  "id": "Rocks",
+  "era": "OrbitalColony",
+  "scale": 3.2,
+  "footprint": [4, 4],
+  "pieces": [
+    {"kit": "space-kit", "model": "rocks_smallA", "pos": [-2.0, 0.0, -1.445], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rocks_smallB", "pos": [-1.845, 0.0, -1.69], "rotY": 0, "stage": 0},
+    {"kit": "space-kit", "model": "rock", "pos": [-2.15, 0.0, -1.445], "rotY": 0, "stage": 1},
+    {"kit": "space-kit", "model": "meteor_half", "pos": [2.18, 0.0, 1.68], "rotY": 180, "stage": 2},
+    {"kit": "space-kit", "model": "rock_largeA", "pos": [-1.385, 0.0, 2.16], "rotY": 90, "stage": 2},
+    {"kit": "space-kit", "model": "rock_crystalsLargeB", "pos": [-2.14, 0.0, -1.645], "rotY": 0, "stage": 3},
+    {"kit": "space-kit", "model": "rock_crystals", "pos": [-1.755, 0.0, -1.69], "rotY": 0, "stage": 3}
+  ]
+}

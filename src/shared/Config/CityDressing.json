@@ -48,6 +48,9 @@
     "firstTier": 2,
     "turnSeconds": 0.5
   },
+  "detail": {
+    "treeShare": 0.5
+  },
   "eras": {
     "Village": {
       "road": {
@@ -310,7 +313,7 @@
     },
     "OrbitalColony": {
       "road": {
-        "width": 6,
+        "width": 4,
         "material": "Metal",
         "color": [
           214,
@@ -318,12 +321,42 @@
           222
         ],
         "junctionProp": null,
-        "bendProp": null
+        "bendProp": null,
+        "tiles": {
+          "tileStuds": 7,
+          "props": {
+            "straight": "TubeStraight",
+            "end": "TubeEnd",
+            "bend": "TubeBend",
+            "tee": "TubeTee",
+            "cross": "TubeCross"
+          },
+          "spur": {
+            "width": 3,
+            "material": "Metal",
+            "color": [
+              170,
+              174,
+              184
+            ]
+          },
+          "blocks": {
+            "material": "Metal",
+            "color": [
+              96,
+              98,
+              108
+            ],
+            "treeSpacing": 0,
+            "treeInset": 0,
+            "treeClearance": 1
+          }
+        }
       },
       "trees": {
-        "maxCount": 0,
-        "clearance": 7,
-        "prop": null
+        "maxCount": 30,
+        "clearance": 5,
+        "prop": "Rocks"
       },
       "houses": {
         "props": [
@@ -339,11 +372,25 @@
       "lamps": {
         "prop": "LampPost"
       },
-      "vehicles": {
-        "props": [
-          "Rover"
+      "highway": {
+        "requiresSlot": "walkwayNetwork",
+        "props": {
+          "deck": "MonorailTrack",
+          "corner": "MonorailCorner"
+        },
+        "vehicleProps": [
+          "MonorailTrain"
         ],
-        "perPlot": 2,
+        "vehicles": {
+          "count": 1,
+          "speed": 14
+        },
+        "revealCellsPerSecond": 12,
+        "deckHeight": 7.07
+      },
+      "vehicles": {
+        "props": [],
+        "perPlot": 0,
         "speed": 6
       }
     }
