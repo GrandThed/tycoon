@@ -496,7 +496,7 @@
     },
     "OrbitalColony": {
       "road": {
-        "width": 4,
+        "width": 3,
         "material": "Metal",
         "color": [
           214,

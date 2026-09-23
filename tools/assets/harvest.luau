@@ -10,22 +10,11 @@
 -- and Position relative to the inner model's pivot, which is the glTF origin (bottom-centre of
 -- the footprint; docs/ASSET_RESEARCH.md section 3).
 local ASSETS = {
-	{ kind = "prop", era = "OrbitalColony", model = "HouseA", stage = 0, id = 75445015601816 },
-	{ kind = "prop", era = "OrbitalColony", model = "HouseB", stage = 0, id = 115485207550618 },
-	{ kind = "prop", era = "OrbitalColony", model = "LampPost", stage = 0, id = 71165821553065 },
-	{ kind = "prop", era = "OrbitalColony", model = "MonorailCorner", stage = 0, id = 112434597510594 },
-	{ kind = "prop", era = "OrbitalColony", model = "MonorailTrack", stage = 0, id = 134472958732811 },
-	{ kind = "prop", era = "OrbitalColony", model = "MonorailTrain", stage = 0, id = 106812009298164 },
-	{ kind = "prop", era = "OrbitalColony", model = "PlazaA", stage = 0, id = 122373043216146 },
-	{ kind = "prop", era = "OrbitalColony", model = "Rocks", stage = 0, id = 70551988424365 },
-	{ kind = "prop", era = "OrbitalColony", model = "Rocks", stage = 1, id = 139046718589149 },
-	{ kind = "prop", era = "OrbitalColony", model = "Rocks", stage = 2, id = 117081265915150 },
-	{ kind = "prop", era = "OrbitalColony", model = "Rocks", stage = 3, id = 76218215848183 },
-	{ kind = "prop", era = "OrbitalColony", model = "TubeBend", stage = 0, id = 124800671294223 },
-	{ kind = "prop", era = "OrbitalColony", model = "TubeCross", stage = 0, id = 72908001738442 },
-	{ kind = "prop", era = "OrbitalColony", model = "TubeEnd", stage = 0, id = 139163214479485 },
-	{ kind = "prop", era = "OrbitalColony", model = "TubeStraight", stage = 0, id = 85040425180224 },
-	{ kind = "prop", era = "OrbitalColony", model = "TubeTee", stage = 0, id = 115423452817973 },
+	{ kind = "prop", era = "OrbitalColony", model = "TubeBend", stage = 0, id = 100314997016789 },
+	{ kind = "prop", era = "OrbitalColony", model = "TubeCross", stage = 0, id = 120294412447761 },
+	{ kind = "prop", era = "OrbitalColony", model = "TubeEnd", stage = 0, id = 109252075474584 },
+	{ kind = "prop", era = "OrbitalColony", model = "TubeStraight", stage = 0, id = 99571103036289 },
+	{ kind = "prop", era = "OrbitalColony", model = "TubeTee", stage = 0, id = 139148513061464 },
 }
 
 local InsertService = game:GetService("InsertService")

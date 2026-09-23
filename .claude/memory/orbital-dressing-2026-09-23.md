@@ -24,6 +24,11 @@ Contract: `docs/INTERFACES.md` "Wave 2b — Orbital Colony dressing".
   Ben's pastes separate, second-to-merge rebases, Assets.json conflicts keep both eras. One of its
   subagents ran `taskkill /F /IM py.exe` — never kill by image name; it kills every session's tools.
 
+- **Palette cache trap (2026-09-23):** `merge_stages.py` reuses a cached `assets/build/palettes/<kit>.{json,png}`
+  without checking it against the kit's current colours, so after a colour-only kit REDESIGN the new
+  colours get snapped to the nearest OLD swatches silently. Delete that kit's palette files before the
+  merge (the tube half-pipe redo needed this). A hash check in merge_stages is still worth adding.
+
 **Why:** a fresh session would re-propose rovers, a radial layout, decking to the plot edge, or a
 client-side arc-less loop lane.
 
