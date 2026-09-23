@@ -465,3 +465,49 @@ record + a delayed Kick standing in for `TeleportAsync` in Studio). Load-bearing
   `ZINDEX_CARD`, created after `WelcomeBackCard` (same ZIndex), so on a return join it covers the
   welcome-back card and its DoubleOffline offer. Whenever a new card fires on the join sequence,
   check what else fires on that same join.
+
+**M9 wave 2a PARK STRIPS + highway/garage kits (2026-09-22, commit 4a91a9f + untracked generators —
+FIX, 1 Critical + 2 Majors).** The park-strip geometry itself is clean: a 120-line audit that imports
+`tools/testfit/plotrender.py` as a module, builds `PlotScene` for 48 Metropolis ownership states and
+checks every ground box for coplanar overlap found **zero** strip/planter faults (the 1817 hits are all
+`Pavement` vs `Spur` at y = 0.1, identical Concrete 176,180,196, so invisible — the footpath spur's
+`centreY` is 0 since the fix round, exactly the pavement top). Reusable: `PlotScene(era, network,
+owned, tier).build()` runs without Blender and exposes `boxes`, `models`, `tile_cells`,
+`planned_cells`, `pavement_rects`, `block_rects`, `strip_cells`.
+- **Recurring pattern (new, highest-value here): a walk the contract describes "along the run" that
+  is implemented per *piece* duplicates a spot at every shared node.** `Scatter.parkStripTrees`
+  resets `walked`/`step` inside `for _, piece in run.pieces`, where the sibling `lampPosts`
+  deliberately stitches a run into one curve first ("so the spacing carries across the pieces of a
+  street"). Result on Metropolis: 24 planned planters contain two exact duplicates — (0, −28) and
+  (−28, −28), the two central crossings — spawned as two overlapping TreeGrowing models with
+  different hashed yaws, plus one lost mark on the polyline with 5- and 9-stud pieces. Whenever a
+  new feature walks `RoadGraph.StreetLines`, diff its loop against `lampPosts` line by line.
+- **`tools/testfit/plotrender.py` can disagree with the client ON PURPOSE.** Its module docstring
+  says "Where the two differ the CONTRACT wins" and it places the highway ramp half a cell further
+  in than `Highway.placeRamp` does. So the render Ben uses as the Studio reference cannot show a
+  placement bug in the client. Read that docstring before treating a plotrender PNG as evidence.
+- **Polyline numbering differs by one between the trees:** client `for polylineIndex, points in
+  polylines` is 1-based, `streetplan.Network` / plotrender use `enumerate` (0-based). Harmless for
+  ordering, but any `Noise.Hash` key built from it (`{polyline}:{stretch}:{step}`) yields different
+  values in the tool than in the game — planter yaws diverge.
+- **Measure a generated kit without Blender:** stub `bpy` (`sys.modules["bpy"] = ModuleType(...)`)
+  and import `tools/assets/<kit>_kit.py` — the `Part`/`sweep`/`pier` classes are pure Python, so
+  `part.bounds()` and `part.tris` verify contract numbers (highway: surface 7.07, soffit 6.10,
+  parapet 7.87, deck z ±3.58, ramp x −3.5…17.5 falling 7.07→0.07). A ~110-line GLB reader (chunks →
+  accessors → node TRS) then composes a whole blueprint's bbox from `assets/kenney3d/<kit>/Models/
+  GLB format/*.glb`: ParkingGarage 8.98², CityHall 8.97 × 7.68 front at −4.50.
+- **The harvest batch is a gate nobody checks.** `tools/assets/harvest.luau`'s `ASSETS` list must
+  name every model whose `modelAssetId` changed. This round it listed only the four Highway props
+  while `CityHall` and `ParkingGarage` had also been re-uploaded (commit a0763f9), so
+  `py tools/assets/gen_templates.py --check` FAILs with 6 problems and calls all six committed
+  `.rbxmx` **strays** — regenerating deletes them and those slots spawn placeholders. Always run
+  that check and read the "stray" lines, not just the "uploaded but not harvested" ones.
+- `Highway.placeRamp` puts the ramp prop origin at `junction + direction * tileStuds/2`, but the
+  prop's own origin is its first cell's CENTRE, so the ramp's 7.07 high end lands on the junction
+  cell centre and dives under the junction deck: a ~1.32-stud step at the mouth. Same convention as
+  the old kit blueprint, so it predates the new geometry; it is only now legible.
+- Minor but recurring: `CityDressingController` reads `parkStrips.treeStage` with a bare
+  `math.floor` while every sibling uses `RoadGraph.BudgetValue`/`numberOr`; `TileRenderer.syncStrips`
+  builds its `laid` cut list by iterating two hash tables (`pavementRects`, `paved`), so the *piece*
+  decomposition — and therefore which strips survive the shared `budget.tileCells` — is not provably
+  equal on two clients (never binds at 38 cells of 180).
