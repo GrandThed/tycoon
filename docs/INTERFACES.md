@@ -2907,7 +2907,7 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
 ### Ambient (smoke, birds)
 - New module `src/client/City/Ambient.luau`, one Heartbeat only while something is live.
 - `ambient.smoke = { firstTier, eras: {string}, props: { [propName]: {number} }, rate, lifetime,
-  size: {number}, color: {number} }`. `props` maps a house prop name to a chimney offset
+  size: {number}, color: {number} }`. `props` maps `"<Era>/<Prop>"` (or a bare prop name) to a chimney offset
   `[x, y, z]` in the prop frame; a placed house of that prop gets one ParticleEmitter there
   (`smoke_main.dds`, like Dust). Village and Boomtown only.
 - `ambient.birds = { firstTier, flocksPerTier: {number}, birdsPerFlock, radius, height, speed,

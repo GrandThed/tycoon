@@ -16,6 +16,10 @@ not what happens to be visible at full ownership. Change RoadGraph and this file
 The PNG's meander is a visual stand-in (different noise, node-distance taper): judge shape and
 widths from it, never exact clearance near nodes.
 
+Wave 2c ("living city") adds lots by kind (house 9x9 / small 6x6, small under the ring deck), the
+parked bays (off every lane strip and walk lane, kerbside, on a street that is drawn) and the
+greenery zones (Scatter.greenerySpots' road keep and blockers), all drawn in the PNG.
+
 Numbers come from their owners, never from this file: road width, meander, tree rules and budgets
 from Config/CityDressing.json, slot and prop footprints from the testfit blueprints (contract
 defaults 9x9 / monument 14x14 when a blueprint has none), pad and plot sizes from the layout, and
@@ -56,10 +60,8 @@ DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis")  # every era with a street 
 SLOT_FOOTPRINT_DEFAULT = 9
 MONUMENT_FOOTPRINT_DEFAULT = 14
 SPINE_EXTRA_CLEARANCE = 1  # spine clear of slots/pads/Sign by width/2 (+ meander) + this
-LOT_SLOT_CLEARANCE = 6
+LOT_SLOT_CLEARANCE = 6  # a "house" lot's centre from any slot footprint (M9 "Layouts")
 STREET_COUNT = (2, 5)
-LOT_COUNT = (8, 12)
-LOT_TIERS = (2, 5)
 PLAZA_COUNT = (1, 2)
 PLAZA_TIERS = (3, 5)
 ZONE_COUNT = (3, 6)
@@ -120,6 +122,38 @@ STREET_TREE_CLEARANCE = 1
 STRAIGHT_ENOUGH = 0.9
 # An entrance stands on the pavement it faces: its front edge may come this close to the asphalt.
 SUBWAY_STREET_REACH = 1.5
+
+# Wave 2c (INTERFACES "Wave 2c -- living city"). Contract caps and minimums again, not tunables.
+# A lot reserves its kind's cap, not the props' current size: the client sizes a lot from the
+# union of that kind's harvested props, and a builder may grow a prop up to the cap later.
+LOT_KINDS = {"house": (9.0, 9.0), "small": (6.0, 6.0)}
+SMALL_LOT_MAX_HEIGHT = 6.0  # a "small" lot may stand under the ring deck
+LOT_MINIMUM = {"Village": 18, "Boomtown": 18, "Metropolis": 10}
+LOT_TIERS = (1, 5)
+LOT_PER_TIER = 2  # every tier step adds visible houses
+# Eras outside wave 2c (OrbitalColony, wave 2b) keep the M9 rule unchanged.
+LEGACY_LOT_COUNT = (8, 12)
+LEGACY_LOT_TIERS = (2, 5)
+# A small lot tucks in behind a block or beside a slot, so it only keeps daylight from a slot's
+# footprint (a house keeps LOT_SLOT_CLEARANCE from its centre, as before). Pads keep 1 stud either way.
+SMALL_LOT_SLOT_GAP = 0.5
+# Ring pier, measured off tools/assets/highway_kit.py: one per deck cell at the cell centre, the
+# hammerhead cap flaring to PIER_CAP_HALF_Z_TOP = 2.40 across the ring above 5.35 studs, which is
+# lower than a 6-stud small lot. The plinth is narrower; the cap is what a roof would hit.
+PIER_HALF = 2.4
+PIER_GAP = 0.5
+# Parked bays, from the built props plus daylight (lead, 2026-09-23): Boomtown cars are up to
+# 3.75 x 7.13, Metropolis ParkedC is 2.56 x 5.52, Village CartParked 2.23 x 3.47. A bay is the
+# larger of this and its props' declared footprints.
+PARKING_BAY = {"Village": (3.0, 4.5), "Boomtown": (4.0, 7.5), "Metropolis": (3.0, 6.0)}
+PARK_TIERS = (2, 5)  # parked vehicles start at tier 2 (INTERFACES "Done when")
+PARK_ROAD_GAP = 0.5  # off every lane strip: this far outside the drawn road edge
+PARK_GAP = 0.5  # daylight to footprints, pads, lots, plazas, kiosks and other bays
+PARK_STREET_REACH = 6.0  # a bay's near edge within this of the drawn road edge, or it is not kerbside
+# Walkers are chunky ~1-stud figures on a lane `pedestrians.offset` off each centreline; a bay keeps
+# this much daylight from the lane line so nobody walks through a parked car.
+WALKER_HALF = 0.5
+GREENERY_ZONE_COUNT = (2, 8)
 
 # Spurs longer than this (anchor to join, ~11 studs of it under the building and pad) are listed so
 # "every path reads as a short front path" can be judged.
@@ -429,6 +463,48 @@ def prop_footprint(era_name, prop_names, fallback):
     return best or fallback
 
 
+def declared_footprints(era_name, prop_names):
+    """(name, (x, z)) for every named prop blueprint that declares a footprint."""
+    found = []
+    for name in prop_names:
+        path = BLUEPRINTS_DIR / "_props" / era_name / f"{name}.json"
+        if not path.exists():
+            continue
+        footprint = json.loads(path.read_text(encoding="utf-8")).get("footprint")
+        if footprint:
+            found.append((name, (float(footprint[0]), float(footprint[1]))))
+    return found
+
+
+def harvested_extents(era_name, prop_name):
+    """(x, y, z) size of a harvested prop's stage 0 in Assets.json -- what the client measures --
+    or None before the prop is harvested. Offsets carry the importer's 180-degree turn, which
+    flips signs but not extents, so no un-turning is needed here."""
+    try:
+        assets = json.loads(ASSETS_PATH.read_text(encoding="utf-8"))
+        parts = assets["props"][era_name][prop_name]["stages"][0]["parts"]
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+    low = [math.inf, math.inf, math.inf]
+    high = [-math.inf, -math.inf, -math.inf]
+    for part in parts:
+        centre, size = part.get("offset"), part.get("size")
+        if not part.get("meshId") or not centre or not size:
+            continue
+        for axis in range(3):
+            low[axis] = min(low[axis], centre[axis] - size[axis] / 2)
+            high[axis] = max(high[axis], centre[axis] + size[axis] / 2)
+    if low[0] > high[0]:
+        return None
+    return tuple(high[axis] - low[axis] for axis in range(3))
+
+
+def gap(p, q):
+    """Daylight between two convex polygons, 0 when they touch, overlap or one holds the other
+    (polygon_polygon_distance alone misses a large p wholly containing q)."""
+    return min(polygon_polygon_distance(p, q), polygon_polygon_distance(q, p))
+
+
 def prop_cell_length(era_name, prop_name, tile_studs, fallback):
     """Highway.rampCells, off the same numbers: the built prop's X extent in whole cells. The
     client measures the spawned parts at runtime; the harvested sizes and anchor-relative offsets
@@ -545,19 +621,46 @@ class Era:
 
         self.streets = [[xz(p) for p in street["points"]] for street in self.layout.get("streets", [])]
         self.street_y = [[p[1] for p in street["points"]] for street in self.layout.get("streets", [])]
-        house_size = prop_footprint(name, self.dressing["houses"]["props"], (SLOT_FOOTPRINT_DEFAULT, SLOT_FOOTPRINT_DEFAULT))
+        # Wave 2c: a lot is a "house" (houses.props) or a "small" (houses.smallProps) and reserves
+        # its kind's contract cap, whatever the props measure today.
+        houses = self.dressing.get("houses", {})
+        self.lot_props = {"house": list(houses.get("props", [])), "small": list(houses.get("smallProps", []))}
         self.lots = []
         for lot in self.layout.get("lots", []):
             position = xz(lot["position"])
+            kind = lot.get("kind", "house")
+            size = LOT_KINDS.get(kind, LOT_KINDS["house"])
             self.lots.append(
                 {
                     "position": position,
                     "rotation": lot["rotationY"],
                     "tier": lot["tier"],
-                    "poly": square(position, house_size[0], house_size[1], lot["rotationY"]),
-                    "depth": house_size[1],
+                    "kind": kind,
+                    "poly": square(position, size[0], size[1], lot["rotationY"]),
+                    "depth": size[1],
                 }
             )
+        parked = self.dressing.get("parked") or {}
+        bay = PARKING_BAY.get(name, PARKING_BAY["Boomtown"])
+        for _, footprint in declared_footprints(name, parked.get("props", [])):
+            bay = (max(bay[0], footprint[0]), max(bay[1], footprint[1]))
+        self.bay = bay
+        self.parking = []
+        for spot in self.layout.get("parking", []):
+            position = xz(spot["position"])
+            self.parking.append(
+                {
+                    "position": position,
+                    "rotation": spot["rotationY"],
+                    "tier": spot["tier"],
+                    "lot": int(spot["lot"]) if spot.get("lot") is not None else None,
+                    "poly": square(position, bay[0], bay[1], spot["rotationY"]),
+                }
+            )
+        self.greenery_zones = [
+            {"center": xz(z["center"]), "radius": z["radius"], "count": int(z["count"])}
+            for z in self.layout.get("greeneryZones", [])
+        ]
         self.plazas = []
         for plaza in self.layout.get("plazas", []):
             position = xz(plaza["position"])
@@ -1441,6 +1544,427 @@ def block_violations(era, cells):
     return messages, notes
 
 
+# --------------------------------------------------------------------------
+# Wave 2c -- living city: lots by kind, parked bays, greenery zones
+# --------------------------------------------------------------------------
+
+
+def band(a, b, half):
+    """A street's ground as a rectangle `half` either side of a-b with square ends `half` past
+    each end -- the shape a tile street and its pavement actually cover, corners included."""
+    length = math.dist(a, b)
+    if length < MIN_LENGTH:
+        return square(a, half * 2, half * 2, 0)
+    ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+    nx, nz = -uz * half, ux * half
+    a2 = (a[0] - ux * half, a[1] - uz * half)
+    b2 = (b[0] + ux * half, b[1] + uz * half)
+    return [(a2[0] + nx, a2[1] + nz), (b2[0] + nx, b2[1] + nz), (b2[0] - nx, b2[1] - nz), (a2[0] - nx, a2[1] - nz)]
+
+
+def spur_half_width(era):
+    """A tiles era draws spurs as narrower footpaths (road.tiles.spur.width); elsewhere a spur is
+    as wide as the road."""
+    if era.tiles and "spur" in era.tiles:
+        return float(era.tiles["spur"]["width"]) / 2
+    return era.width / 2 + era.amplitude
+
+
+def spur_segments(era):
+    return [seg for spur in era.spurs.values() for seg in polyline_segments(spur["points"]) if math.dist(*seg) >= MIN_LENGTH]
+
+
+def pier_squares(era):
+    """One square per ring cell, PIER_HALF either side of the cell centre (the pier cap)."""
+    if era.highway is None or era.tile_studs <= 0:
+        return []
+    ring = float(era.highway["ring"])
+    cells = int(round_half(ring / era.tile_studs))
+    centres = set()
+    for i in range(-cells, cells + 1):
+        along = i * era.tile_studs
+        for c in ((along, -ring), (along, ring), (-ring, along), (ring, along)):
+            centres.add((round(c[0], 6), round(c[1], 6)))
+    return [square(c, PIER_HALF * 2, PIER_HALF * 2, 0) for c in sorted(centres)]
+
+
+def ramp_squares(era):
+    if era.highway is None or era.tile_studs <= 0:
+        return []
+    ramp = era.highway["ramp"]
+    cell = xz(ramp["cell"])
+    direction = RAMP_DIRECTIONS.get(ramp["direction"], (0.0, 0.0))
+    step = era.tile_studs
+    return [
+        square((cell[0] + direction[0] * step * k, cell[1] + direction[1] * step * k), step, step, 0)
+        for k in range(1, era.ramp_cells + 1)
+    ]
+
+
+def walk_lines(era):
+    """Where walkers go (INTERFACES "Pedestrians"): `pedestrians.offset` either side of every
+    spine centreline and every spur. On a tiles era's narrow footpath spurs the street offset
+    would put walkers beside the buildings, so the tool assumes they keep to the footpath there."""
+    config = era.dressing.get("pedestrians")
+    if not config or "offset" not in config:
+        return []
+    offset = float(config["offset"])
+    lines = []
+    runs = [(a, b, offset) for _, a, b in era.spine_segments()]
+    spur_offset = min(offset, spur_half_width(era)) if era.tiles else offset
+    runs += [(a, b, spur_offset) for a, b in spur_segments(era)]
+    for a, b, off in runs:
+        direction = unit((b[0] - a[0], b[1] - a[1]))
+        if direction is None:
+            continue
+        nx, nz = -direction[1] * off, direction[0] * off
+        lines.append(((a[0] + nx, a[1] + nz), (b[0] + nx, b[1] + nz)))
+        lines.append(((a[0] - nx, a[1] - nz), (b[0] - nx, b[1] - nz)))
+    return lines
+
+
+def lot_count_violations(era):
+    messages = []
+    for kind in sorted({lot["kind"] for lot in era.lots}):
+        count = sum(1 for lot in era.lots if lot["kind"] == kind)
+        if kind not in LOT_KINDS:
+            messages.append(f"lots: {count} of kind {kind!r}, which is not one of {sorted(LOT_KINDS)}")
+        elif not era.lot_props[kind]:
+            key = "props" if kind == "house" else "smallProps"
+            messages.append(f"lots: {count} {kind} lot(s) authored but eras.{era.name}.houses.{key} is empty, so none are drawn")
+    for kind, props in era.lot_props.items():
+        cap = LOT_KINDS[kind]
+        for name, footprint in declared_footprints(era.name, props):
+            if footprint[0] > cap[0] + 1e-6 or footprint[1] > cap[1] + 1e-6:
+                messages.append(f"houses: {name} blueprint footprint {footprint} exceeds the {kind} cap {cap}")
+        for name in props:
+            extents = harvested_extents(era.name, name)
+            if extents is None:
+                continue
+            if extents[0] > cap[0] + 0.05 or extents[2] > cap[1] + 0.05:
+                messages.append(f"houses: {name} harvests {extents[0]:.2f} x {extents[2]:.2f}, over the {kind} cap {cap}")
+            if kind == "small" and extents[1] > SMALL_LOT_MAX_HEIGHT + 0.05:
+                messages.append(f"houses: {name} harvests {extents[1]:.2f} tall, over the small cap {SMALL_LOT_MAX_HEIGHT}")
+    if not any(era.lot_props.values()):
+        return messages
+    if era.name not in LOT_MINIMUM:
+        if not LEGACY_LOT_COUNT[0] <= len(era.lots) <= LEGACY_LOT_COUNT[1]:
+            messages.append(f"lots: {len(era.lots)}, need {LEGACY_LOT_COUNT[0]}-{LEGACY_LOT_COUNT[1]}")
+        return messages
+    minimum = LOT_MINIMUM[era.name]
+    if len(era.lots) < minimum:
+        messages.append(f"lots: {len(era.lots)}, need at least {minimum}")
+    for tier in range(LOT_TIERS[0], LOT_TIERS[1] + 1):
+        count = sum(1 for lot in era.lots if lot["tier"] == tier)
+        if count < LOT_PER_TIER:
+            messages.append(f"lots: tier {tier} adds {count}, need at least {LOT_PER_TIER} so every tier step shows new houses")
+    # budget.fillerPieces holds plazas, lots and junction lamps together (row lamps have their own).
+    lamps = era.dressing.get("lamps") or {}
+    junction_lamps = era.city["lamps"]["maxPerPlot"] if lamps.get("prop") and lamps.get("placement", "junction") == "junction" else 0
+    filler = len(era.lots) + len(era.plazas) + junction_lamps
+    cap = budget_value(era.city.get("budget", {}).get("fillerPieces"), math.inf)
+    if filler > cap:
+        messages.append(
+            f"filler pieces {filler} (lots {len(era.lots)} + plazas {len(era.plazas)} + junction lamps {junction_lamps}) "
+            f"> budget.fillerPieces {cap:g}"
+        )
+    return messages
+
+
+def lot_violations(era, index, lot, drawn, cells):
+    """Every placement rule for one lot. `drawn` is the full-ownership road set check() builds
+    (visible stretches plus every spur, each with the polygons its own building may hide it in)."""
+    messages = []
+    label = f"lot {index + 1} {fmt(lot['position'])} {lot['kind']}"
+    poly = lot["poly"]
+    small = lot["kind"] == "small"
+    tiers = LOT_TIERS if era.name in LOT_MINIMUM else LEGACY_LOT_TIERS
+    if not tiers[0] <= lot["tier"] <= tiers[1]:
+        messages.append(f"{label}: tier {lot['tier']:g} outside {tiers}")
+    for slot in era.slots:
+        furniture = slot["id"] in era.furniture and era.tiles is not None  # streetOnly: no model spawns
+        if not furniture:
+            if small:
+                d = gap(poly, slot["footprint"])
+                if d < SMALL_LOT_SLOT_GAP - 1e-6:
+                    messages.append(f"{label}: {d:.2f} from {slot['id']} footprint (need {SMALL_LOT_SLOT_GAP})")
+            else:
+                d = point_polygon_distance(lot["position"], slot["footprint"])
+                if d < LOT_SLOT_CLEARANCE - 1e-6:
+                    messages.append(f"{label}: {d:.2f} from {slot['id']} footprint (need {LOT_SLOT_CLEARANCE})")
+                if gap(poly, slot["footprint"]) <= 0:
+                    messages.append(f"{label}: house overlaps {slot['id']}")
+        if gap(poly, slot["pad_poly"]) < 1:
+            messages.append(f"{label}: house touches the {slot['id']} pad")
+    if gap(poly, era.sign_poly) < 1:
+        messages.append(f"{label}: house touches the Sign")
+    half_road = era.width / 2 + era.amplitude
+    for _, a, b in era.spine_segments():
+        if era.tiles is not None:
+            # A tile street's pavement is part of the street: the house stands behind it.
+            d = gap(poly, band(a, b, era.width / 2 + era.pavement))
+            if d < 0.5 - 1e-6:
+                messages.append(f"{label}: {d:.2f} from the pavement of street {fmt(a)}->{fmt(b)} (need 0.5)")
+        elif segment_polygon_distance(a, b, poly) < half_road + 0.5:
+            messages.append(f"{label}: house sits on street {fmt(a)}->{fmt(b)}")
+    for j, other in enumerate(era.lots):
+        if j != index and gap(poly, other["poly"]) < 1:
+            messages.append(f"{label}: house overlaps lot {j + 1}")
+    for j, plaza in enumerate(era.plazas):
+        if gap(poly, plaza["poly"]) < 1:
+            messages.append(f"{label}: house overlaps plaza {j + 1}")
+    for j, entry in enumerate(era.subways):
+        if gap(poly, entry["poly"]) < SUBWAY_CLEARANCE - 1e-6:
+            messages.append(f"{label}: too close to subway entrance {j + 1}")
+    for corner in poly:
+        if abs(corner[0]) > era.half_x - 1 or abs(corner[1]) > era.half_z - 1:
+            messages.append(f"{label}: house leaves the plot")
+            break
+    if era.highway is not None:
+        inner = float(era.highway["ring"]) - era.tile_studs / 2
+        if ring_reach(poly) > inner + 1e-6 and not small:
+            messages.append(f"{label}: reaches {ring_reach(poly):g} studs, under the ring deck (from {inner:g}), so it must be small")
+        for pier in pier_squares(era):
+            if gap(poly, pier) < PIER_GAP - 1e-6:
+                messages.append(f"{label}: within {PIER_GAP} of a ring pier")
+                break
+        for ramp in ramp_squares(era):
+            if gap(poly, ramp) < 0.5 - 1e-6:
+                messages.append(f"{label}: under the highway ramp")
+                break
+    face = facing(lot["rotation"])
+    front = (lot["position"][0] + face[0] * lot["depth"] / 2, lot["position"][1] + face[1] * lot["depth"] / 2)
+    nearest = min((nearest_outside(front, a, b, own) for a, b, own in drawn), key=lambda item: item[0])
+    facing_dot = (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1]
+    if nearest[0] > LOT_FRONT_REACH or facing_dot < 0:
+        messages.append(f"{label}: does not face a drawn road (nearest {nearest[0]:.1f} studs from its front)")
+    return messages
+
+
+def per_tier_list(config, key, label):
+    """A cumulative perTier list: five non-decreasing non-negative numbers, or a message."""
+    values = config.get(key)
+    if not isinstance(values, list) or len(values) != 5:
+        return None, f"{label}.{key} must list 5 numbers (tiers 1-5)"
+    if any(v < 0 for v in values) or any(values[i] > values[i + 1] for i in range(4)):
+        return None, f"{label}.{key} {values} must be non-negative and non-decreasing (it is cumulative)"
+    return values, None
+
+
+def parking_violations(era, network, visible):
+    messages = []
+    config = era.dressing.get("parked")
+    label_cfg = f"eras.{era.name}.parked"
+    if era.parking and not config:
+        messages.append(f"parking: {len(era.parking)} spots authored but {label_cfg} is absent, so none are drawn")
+    per_tier = None
+    if config:
+        if not config.get("props"):
+            messages.append(f"{label_cfg}.props is empty")
+        per_tier, problem = per_tier_list(config, "perTier", label_cfg)
+        if problem:
+            messages.append(problem)
+        cap = budget_value(era.city.get("budget", {}).get("parked"), math.inf)
+        if per_tier and per_tier[-1] > cap:
+            messages.append(f"{label_cfg}.perTier reaches {per_tier[-1]} > budget.parked {cap:g}")
+    if per_tier:
+        for tier in range(1, 6):
+            available = sum(1 for spot in era.parking if effective_spot_tier(era, spot) <= tier)
+            if available < per_tier[tier - 1]:
+                messages.append(f"parking: {available} spots by tier {tier}, but perTier asks for {per_tier[tier - 1]}")
+
+    half_road = era.width / 2 + era.amplitude
+    spur_half = spur_half_width(era)
+    spines = [(a, b) for _, a, b in era.spine_segments()]
+    spurs = spur_segments(era)
+    lanes = walk_lines(era)
+    solids = []
+    for slot in era.slots:
+        if slot["id"] not in era.furniture:
+            solids.append((f"{slot['id']} footprint", slot["footprint"]))
+        solids.append((f"{slot['id']} pad", slot["pad_poly"]))
+    solids += [(f"lot {j + 1}", lot["poly"]) for j, lot in enumerate(era.lots)]
+    solids += [(f"plaza {j + 1}", plaza["poly"]) for j, plaza in enumerate(era.plazas)]
+    solids += [(f"subway entrance {j + 1}", entry["poly"]) for j, entry in enumerate(era.subways)]
+    solids += [("the Sign", era.sign_poly)]
+    solids += [("a ring pier", pier) for pier in pier_squares(era)]
+    solids += [("the highway ramp", ramp) for ramp in ramp_squares(era)]
+    # A path only counts as a kerb where it is out in the open: the stretch under its own building
+    # is hidden, and a bay behind that building is not beside anything.
+    open_path = []
+    for slot in era.slots:
+        for a, b in polyline_segments(era.spurs[slot["id"]]["points"]):
+            steps = max(1, int(math.dist(a, b) / 0.5))
+            open_path += [
+                q for q in (lerp(a, b, k / steps) for k in range(steps + 1)) if not point_in_polygon(q, slot["footprint"])
+            ]
+    for index, spot in enumerate(era.parking):
+        label = f"parking {index + 1} {fmt(spot['position'])}"
+        poly = spot["poly"]
+        if not PARK_TIERS[0] <= spot["tier"] <= PARK_TIERS[1]:
+            messages.append(f"{label}: tier {spot['tier']:g} outside {PARK_TIERS}")
+        if spot["lot"] is not None:
+            if not 1 <= spot["lot"] <= len(era.lots):
+                messages.append(f"{label}: lot {spot['lot']} is not a lot of this layout")
+            elif gap(poly, era.lots[spot["lot"] - 1]["poly"]) > 3:
+                messages.append(f"{label}: a driveway spot, but {gap(poly, era.lots[spot['lot'] - 1]['poly']):.1f} studs from lot {spot['lot']}")
+        for a, b in spines:
+            if era.tiles is not None:
+                d = gap(poly, band(a, b, era.width / 2))
+            else:
+                d = segment_polygon_distance(a, b, poly) - half_road
+            if d < PARK_ROAD_GAP - 1e-6:
+                messages.append(f"{label}: {d:.2f} outside the road edge of {fmt(a)}->{fmt(b)} (need {PARK_ROAD_GAP})")
+        for a, b in spurs:
+            d = segment_polygon_distance(a, b, poly) - spur_half
+            if d < PARK_ROAD_GAP - 1e-6:
+                messages.append(f"{label}: on the path {fmt(a)}->{fmt(b)}")
+        for a, b in lanes:
+            d = segment_polygon_distance(a, b, poly)
+            if d < WALKER_HALF + PARK_GAP - 1e-6:
+                messages.append(f"{label}: {d:.2f} from the walk lane {fmt(a)}->{fmt(b)} (need {WALKER_HALF + PARK_GAP:g})")
+                break
+        for name, solid in solids:
+            if gap(poly, solid) < PARK_GAP - 1e-6:
+                messages.append(f"{label}: {gap(poly, solid):.2f} from {name} (need {PARK_GAP})")
+        for j, other in enumerate(era.parking):
+            if j > index and gap(poly, other["poly"]) < PARK_GAP - 1e-6:
+                messages.append(f"{label}: overlaps parking {j + 1}")
+        for corner in poly:
+            if abs(corner[0]) > era.half_x - 0.5 or abs(corner[1]) > era.half_z - 0.5:
+                messages.append(f"{label}: leaves the plot")
+                break
+        kerb = min(
+            [segment_polygon_distance(a, b, poly) - half_road for a, b in spines]
+            + [point_polygon_distance(q, poly) - spur_half for q in open_path]
+        )
+        if kerb > PARK_STREET_REACH:
+            messages.append(f"{label}: {kerb:.1f} studs from any road edge, not kerbside")
+        # The controller shows a spot only while its nearest spine stretch is drawn.
+        nearest = min(
+            range(len(network.stretches)),
+            key=lambda sid: point_segment_distance(spot["position"], network.stretches[sid]["a"], network.stretches[sid]["b"])[0],
+            default=None,
+        )
+        if nearest is not None and nearest not in visible:
+            messages.append(f"{label}: its nearest street stretch is never drawn, so the car never appears")
+    return messages
+
+
+def effective_spot_tier(era, spot):
+    """A driveway spot shows only once its lot does."""
+    tier = spot["tier"]
+    if spot["lot"] is not None and 1 <= spot["lot"] <= len(era.lots):
+        tier = max(tier, era.lots[spot["lot"] - 1]["tier"])
+    return tier
+
+
+def greenery_rules(era):
+    """(keep from every centreline, piece spacing, blockers) -- Scatter.greenerySpots' numbers:
+    road width / 2 + meander + pavement + roadClearance, raised to pedestrians.offset + spacing / 2
+    where walkers stroll, from every spine *and* spur centreline; blockers are kept spacing / 2 off."""
+    config = era.dressing.get("greenery") or {}
+    clearance = max(float(config.get("clearance", 0)), 0.0)
+    keep = era.width / 2 + era.amplitude + era.pavement + max(float(config.get("roadClearance", 0)), 0.0)
+    pedestrians = era.dressing.get("pedestrians")
+    if pedestrians:
+        keep = max(keep, float(pedestrians.get("offset", 0)) + clearance / 2)
+    solids = [slot["footprint"] for slot in era.slots if slot["id"] not in era.furniture]
+    solids += [slot["pad_poly"] for slot in era.slots]
+    solids += [lot["poly"] for lot in era.lots] + [plaza["poly"] for plaza in era.plazas]
+    solids += [entry["poly"] for entry in era.subways] + [spot["poly"] for spot in era.parking]
+    solids += pier_squares(era) + ramp_squares(era)
+    return keep, clearance, solids
+
+
+def greenery_violations(era):
+    messages, notes = [], []
+    config = era.dressing.get("greenery")
+    zones = era.greenery_zones
+    label_cfg = f"eras.{era.name}.greenery"
+    if zones and not config:
+        messages.append(f"greeneryZones: {len(zones)} authored but {label_cfg} is absent, so nothing is planted")
+    if not config:
+        return messages, notes
+    if not config.get("props"):
+        messages.append(f"{label_cfg}.props is empty")
+    per_tier, problem = per_tier_list(config, "perTier", label_cfg)
+    if problem:
+        messages.append(problem)
+    if not GREENERY_ZONE_COUNT[0] <= len(zones) <= GREENERY_ZONE_COUNT[1]:
+        messages.append(f"greeneryZones: {len(zones)}, need {GREENERY_ZONE_COUNT[0]}-{GREENERY_ZONE_COUNT[1]}")
+    total = sum(zone["count"] for zone in zones)
+    garnish = float(config.get("lotGarnish", 0)) * len(era.lots)
+    cap = budget_value(era.city.get("budget", {}).get("greenery"), math.inf)
+    if per_tier:
+        if total < per_tier[-1]:
+            messages.append(f"greeneryZones hold {total} pieces, fewer than perTier's {per_tier[-1]}")
+        if per_tier[-1] + garnish > cap:
+            messages.append(
+                f"greenery at tier 5: zones {per_tier[-1]} + lot garnish {garnish:g} = {per_tier[-1] + garnish:g} "
+                f"> budget.greenery {cap:g}"
+            )
+    keep, _, solids = greenery_rules(era)
+    lines = [(a, b) for _, a, b in era.spine_segments()] + spur_segments(era)
+    inner = float(era.highway["ring"]) - era.tile_studs / 2 if era.highway else math.inf
+    _, stats = scatter_greenery(era)
+    if per_tier:
+        # The client draws `count` candidates per zone and never redraws a rejected one, so what a
+        # zone yields is its count times the share of it that is plantable.
+        expected = sum(zone["count"] * usable for zone, usable, _ in stats)
+        if expected < per_tier[-1] - 1e-6:
+            messages.append(
+                f"greeneryZones yield about {expected:.1f} pieces (count x plantable share), fewer than perTier's {per_tier[-1]}"
+            )
+    for index, zone in enumerate(zones):
+        label = f"greenery zone {index + 1} {fmt(zone['center'])}"
+        c = zone["center"]
+        if abs(c[0]) > era.half_x or abs(c[1]) > era.half_z:
+            messages.append(f"{label}: centre outside the plot")
+        if any(point_segment_distance(c, a, b)[0] < keep for a, b in lines):
+            messages.append(f"{label}: centre sits on a road (need {keep:g} from every centreline)")
+        if any(point_in_polygon(c, solid) for solid in solids):
+            messages.append(f"{label}: centre is inside a footprint, pad, lot, plaza or bay")
+        if max(abs(c[0]), abs(c[1])) + zone["radius"] > inner - 1e-6:
+            messages.append(f"{label}: reaches into the ring pillar band")
+    return messages, notes
+
+
+def scatter_greenery(era):
+    """Preview of the greenery rules (INTERFACES "Greenery"): candidates in each zone, kept when
+    clear of roads by roadClearance, of every footprint/pad/lot/plaza/bay and of each other. The
+    RNG is not the client's, so this shows where pieces can land and how crowded a zone is."""
+    config = era.dressing.get("greenery")
+    if not config:
+        return [], []
+    keep, clearance, solids = greenery_rules(era)
+    lines = [(a, b) for _, a, b in era.spine_segments()] + spur_segments(era)
+    edge = era.city["trees"]["edgeMargin"]
+    sign_keep = era.dressing["trees"]["clearance"]
+    rng = random.Random(era.name + "greenery")
+    placed, stats = [], []
+    for zone in era.greenery_zones:
+        kept, usable, samples = [], 0, 400
+        for _ in range(samples):
+            angle = rng.random() * math.tau
+            radius = zone["radius"] * math.sqrt(rng.random())
+            p = (zone["center"][0] + math.cos(angle) * radius, zone["center"][1] + math.sin(angle) * radius)
+            if abs(p[0]) > era.half_x - edge or abs(p[1]) > era.half_z - edge:
+                continue
+            if math.dist(p, era.sign) < sign_keep:
+                continue
+            if any(point_segment_distance(p, a, b)[0] < keep for a, b in lines):
+                continue
+            if any(point_in_polygon(p, solid) or point_polygon_distance(p, solid) < clearance / 2 for solid in solids):
+                continue
+            usable += 1
+            if len(kept) < zone["count"] and all(math.dist(p, q) >= clearance for q in placed + kept):
+                kept.append(p)
+        stats.append((zone, usable / samples, len(kept)))
+        placed += kept
+    return placed, stats
+
+
 def check(era, network, visible, unreachable):
     violations = []
     notes = []
@@ -1561,47 +2085,17 @@ def check(era, network, visible, unreachable):
     for slot in era.slots:
         own = (slot["footprint"], slot["pad_poly"])
         drawn += [(a, b, own) for a, b in polyline_segments(era.spurs[slot["id"]]["points"])]
-    # Wave 2a: an era whose houses.props list is empty (Metropolis -- every block is already a
-    # building slot) draws no filler houses at all, so the 8-12 rule cannot apply. A lot authored
-    # anyway would be a silent no-op, which is worth a violation of its own.
-    if not era.dressing["houses"]["props"]:
-        if era.lots:
-            add(f"lots: {len(era.lots)} authored but eras.{era.name}.houses.props is empty, so none are drawn")
-    elif not LOT_COUNT[0] <= len(era.lots) <= LOT_COUNT[1]:
-        add(f"lots: {len(era.lots)}, need {LOT_COUNT[0]}-{LOT_COUNT[1]}")
+    for message in lot_count_violations(era):
+        add(message)
     for i, lot in enumerate(era.lots):
-        label = f"lot {i + 1} {fmt(lot['position'])}"
-        if not LOT_TIERS[0] <= lot["tier"] <= LOT_TIERS[1]:
-            add(f"{label}: tier {lot['tier']} outside {LOT_TIERS}")
-        for slot in era.slots:
-            d = point_polygon_distance(lot["position"], slot["footprint"])
-            if d < LOT_SLOT_CLEARANCE - 1e-6:
-                add(f"{label}: {d:.2f} from {slot['id']} footprint (need {LOT_SLOT_CLEARANCE})")
-            if polygon_polygon_distance(lot["poly"], slot["footprint"]) <= 0:
-                add(f"{label}: house overlaps {slot['id']}")
-            if polygon_polygon_distance(lot["poly"], slot["pad_poly"]) < 1:
-                add(f"{label}: house touches the {slot['id']} pad")
-        if polygon_polygon_distance(lot["poly"], era.sign_poly) < 1:
-            add(f"{label}: house touches the Sign")
-        for _, a, b in era.spine_segments():
-            if segment_polygon_distance(a, b, lot["poly"]) < half_road + 0.5:
-                add(f"{label}: house sits on street {fmt(a)}->{fmt(b)}")
-        for j, other in enumerate(era.lots):
-            if j > i and polygon_polygon_distance(lot["poly"], other["poly"]) < 1:
-                add(f"{label}: house overlaps lot {j + 1}")
-        for j, plaza in enumerate(era.plazas):
-            if polygon_polygon_distance(lot["poly"], plaza["poly"]) < 1:
-                add(f"{label}: house overlaps plaza {j + 1}")
-        for corner in lot["poly"]:
-            if abs(corner[0]) > era.half_x - 1 or abs(corner[1]) > era.half_z - 1:
-                add(f"{label}: house leaves the plot")
-                break
-        face = facing(lot["rotation"])
-        front = (lot["position"][0] + face[0] * lot["depth"] / 2, lot["position"][1] + face[1] * lot["depth"] / 2)
-        nearest = min((nearest_outside(front, a, b, own) for a, b, own in drawn), key=lambda item: item[0])
-        facing_dot = (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1]
-        if nearest[0] > LOT_FRONT_REACH or facing_dot < 0:
-            add(f"{label}: does not face a drawn road (nearest {nearest[0]:.1f} studs from its front)")
+        for message in lot_violations(era, i, lot, drawn, cells):
+            add(message)
+    for message in parking_violations(era, network, visible):
+        add(message)
+    greenery_messages, greenery_notes = greenery_violations(era)
+    for message in greenery_messages:
+        add(message)
+    notes += greenery_notes
 
     if not PLAZA_COUNT[0] <= len(era.plazas) <= PLAZA_COUNT[1]:
         add(f"plazas: {len(era.plazas)}, need {PLAZA_COUNT[0]}-{PLAZA_COUNT[1]}")
@@ -1789,6 +2283,8 @@ def scatter_trees(era):
     footprint_margin = era.city["trees"]["footprintMargin"]
     solids = [s["footprint"] for s in era.slots] + [s["pad_poly"] for s in era.slots]
     solids += [lot["poly"] for lot in era.lots] + [plaza["poly"] for plaza in era.plazas]
+    # Wave 2c: a grove must not grow through a parked car either.
+    solids += [spot["poly"] for spot in era.parking]
     rng = random.Random(era.name)
     placed = []
     stats = []
@@ -1826,7 +2322,7 @@ def wobble(arc, phase):
     return 0.65 * math.sin(arc * 0.35 + phase) + 0.35 * math.sin(arc * 0.93 + phase * 1.7)
 
 
-def draw(era, network, visible, violations, trees, near, far, path):
+def draw(era, network, visible, violations, trees, greenery, near, far, path):
     size_x = int(era.half_x * 2 * PX_PER_STUD + MARGIN_PX * 2)
     size_z = int(era.half_z * 2 * PX_PER_STUD + MARGIN_PX * 2)
     image = Image.new("RGB", (size_x + LEGEND_PX, size_z), (245, 243, 236))
@@ -1961,13 +2457,37 @@ def draw(era, network, visible, violations, trees, near, far, path):
         c = px(plaza["position"])
         canvas.text((c[0] - 30, c[1] - 7), f"{plaza['prop']} T{int(plaza['tier'])}", font=font, fill=(60, 40, 10))
 
-    for lot in era.lots:
-        poly(lot["poly"], fill=(240, 210, 170, 220), outline=(150, 100, 60), width=2)
+    for zone in era.greenery_zones:
+        c = px(zone["center"])
+        r = zone["radius"] * PX_PER_STUD
+        canvas.ellipse((c[0] - r, c[1] - r, c[0] + r, c[1] + r), fill=(150, 210, 60, 40), outline=(110, 170, 20), width=2)
+        canvas.text((c[0] - 14, c[1] + 4), f"g{zone['count']}", font=small, fill=(70, 120, 0))
+
+    for index, lot in enumerate(era.lots):
+        if lot["kind"] == "small":
+            poly(lot["poly"], fill=(250, 228, 196, 220), outline=(190, 120, 60), width=1)
+        else:
+            poly(lot["poly"], fill=(240, 210, 170, 220), outline=(150, 100, 60), width=2)
         c = px(lot["position"])
         face = facing(lot["rotation"])
         tip = px((lot["position"][0] + face[0] * lot["depth"] / 2, lot["position"][1] + face[1] * lot["depth"] / 2))
         canvas.line([c, tip], fill=(150, 100, 60), width=2)
-        canvas.text((c[0] - 12, c[1] - 7), f"L{int(lot['tier'])}", font=font, fill=(90, 50, 20))
+        tag = "s" if lot["kind"] == "small" else "L"
+        canvas.text((c[0] - 14, c[1] - 7), f"{tag}{int(lot['tier'])}#{index + 1}", font=small, fill=(90, 50, 20))
+
+    for a, b in walk_lines(era):
+        canvas.line([px(a), px(b)], fill=(220, 60, 150, 110), width=1)
+
+    for index, spot in enumerate(era.parking):
+        poly(spot["poly"], fill=(60, 60, 70, 200), outline=(250, 250, 250), width=1)
+        c = px(spot["position"])
+        if spot["lot"] is not None and 1 <= spot["lot"] <= len(era.lots):
+            canvas.line([c, px(era.lots[spot["lot"] - 1]["position"])], fill=(60, 60, 70, 160), width=1)
+        canvas.text((c[0] - 8, c[1] - 6), f"P{int(spot['tier'])}", font=small, fill=(255, 255, 255))
+
+    for p in greenery:
+        c = px(p)
+        canvas.ellipse((c[0] - 2.5, c[1] - 2.5, c[0] + 2.5, c[1] + 2.5), fill=(120, 190, 40, 230))
 
     for slot in era.slots:
         fill = (120, 120, 200, 150) if slot["type"] == "building" else (170, 170, 170, 150)
@@ -2036,7 +2556,10 @@ def draw(era, network, visible, violations, trees, near, far, path):
         ((170, 170, 170), "unlock/decor slot"),
         ((230, 180, 60), "monument"),
         ((90, 200, 220), "pad"),
-        ((240, 210, 170), "filler lot (L = tier)"),
+        ((240, 210, 170), "filler lot (L = house, s = small; tier#index)"),
+        ((60, 60, 70), "parked bay (P = tier; line = its lot)"),
+        ((150, 210, 60), "greenery zone (gN) / preview pieces"),
+        ((220, 60, 150), "walk lanes (pedestrians.offset)"),
         ((200, 180, 140), "plaza"),
         ((60, 150, 60), "tree zone (xN) / preview trees"),
     ]
@@ -2059,7 +2582,21 @@ def draw(era, network, visible, violations, trees, near, far, path):
     meander = f", meander {era.amplitude:g}" if era.meander else ""
     canvas.text((lx, y), f"road width {era.width:g}{meander}", font=font, fill=(0, 0, 0))
     y += 18
-    canvas.text((lx, y), f"spines {len(era.streets)}, lots {len(era.lots)}", font=font, fill=(0, 0, 0))
+    small_lots = sum(1 for lot in era.lots if lot["kind"] == "small")
+    canvas.text(
+        (lx, y),
+        f"spines {len(era.streets)}, lots {len(era.lots)} ({small_lots} small)",
+        font=font,
+        fill=(0, 0, 0),
+    )
+    y += 18
+    canvas.text(
+        (lx, y),
+        f"parking {len(era.parking)}, greenery zones {len(era.greenery_zones)} "
+        f"({sum(z['count'] for z in era.greenery_zones)} pieces)",
+        font=font,
+        fill=(0, 0, 0),
+    )
     y += 18
     canvas.text((lx, y), f"plazas {len(era.plazas)}, trees {sum(z['count'] for z in era.zones)}", font=font, fill=(0, 0, 0))
     y += 18
@@ -2105,8 +2642,9 @@ def main():
         visible, unreachable = visible_network(era, network, greedy_buy_tiers(name, city))
         violations, notes, near, far, detail = check(era, network, visible, unreachable)
         trees, stats = scatter_trees(era)
+        greenery, greenery_stats = scatter_greenery(era)
         path = OUT_DIR / name / "streetplan.png"
-        draw(era, network, visible, violations, trees, near, far, path)
+        draw(era, network, visible, violations, trees, greenery, near, far, path)
         overrides = [s["id"] for s in era.slots if era.spurs[s["id"]]["override"]]
         budget = city.get("budget", {})
         zone_trees = sum(z["count"] for z in era.zones)
@@ -2169,6 +2707,24 @@ def main():
             print(
                 f"   tree zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "
                 f"{usable * 100:.0f}% of the circle is plantable"
+            )
+        if era.lots:
+            by_tier = {t: [lot["kind"][0] for lot in era.lots if lot["tier"] == t] for t in range(1, 6)}
+            print(
+                "   lots by tier (h = house, s = small): "
+                + ", ".join(f"T{t} {''.join(sorted(kinds)) or '-'}" for t, kinds in by_tier.items())
+            )
+        if era.parking:
+            counts = [sum(1 for spot in era.parking if effective_spot_tier(era, spot) <= t) for t in range(1, 6)]
+            driveways = sum(1 for spot in era.parking if spot["lot"] is not None)
+            print(
+                f"   parking: {len(era.parking)} spots ({driveways} driveways), bay {era.bay[0]:g}x{era.bay[1]:g}, "
+                f"available by tier 1-5 {counts}, perTier {(era.dressing.get('parked') or {}).get('perTier')}"
+            )
+        for zone, usable, kept in greenery_stats:
+            print(
+                f"   greenery zone {fmt(zone['center'])} r{zone['radius']:g} x{zone['count']}: "
+                f"{usable * 100:.0f}% plantable, preview fits {kept}"
             )
         for note in notes:
             print(f"   note: {note}")

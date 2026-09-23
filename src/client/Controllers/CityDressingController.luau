@@ -924,7 +924,10 @@ local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: n
 		end
 		local lot = lots[index]
 		local propName = build.plan.lotProps[index]
-		local offset = if propName ~= nil then smoke.props[propName] else nil
+		-- Keyed "Era/Prop" first: Village and Boomtown both have a HouseA with different chimneys.
+		local offset = if propName ~= nil
+			then smoke.props[build.eraName .. "/" .. propName] or smoke.props[propName]
+			else nil
 		if lot == nil or type(offset) ~= "table" then
 			continue
 		end

@@ -196,6 +196,11 @@ return {
 	-- Filler cottages, each facing a drawn lane or a building's path. The early tiers sit by the
 	-- entrance, the campsite and the farm track near the hub; the last take the keep's forecourt
 	-- and the two back corners, the only other spots a 9x9 house clears every road.
+	--
+	-- Wave 2c: the rest are "small" lots (6x6 cap), because no other 9x9 clears every road. They
+	-- follow the village outward tier by tier: huts by the campsite and the keep lane first, then
+	-- the keep's side and the smithy, cottages round the square, then the farms and the stables,
+	-- and last the lanes behind the market and the homes.
 	lots = {
 		{ position = Vector3.new(-34, 0, -53.5), rotationY = 270, tier = 2 },
 		{ position = Vector3.new(-20.5, 0, -1), rotationY = 0, tier = 2 },
@@ -205,6 +210,35 @@ return {
 		{ position = Vector3.new(18.5, 0, 54.5), rotationY = 0, tier = 4 },
 		{ position = Vector3.new(-50.5, 0, 53), rotationY = 270, tier = 5 },
 		{ position = Vector3.new(1, 0, -50.5), rotationY = 180, tier = 5 },
+		-- 9-10: behind the campfire and beside the keep lane
+		{ position = Vector3.new(-39, 0, -28), rotationY = 180, tier = 1, kind = "small" },
+		{ position = Vector3.new(-18, 0, -31), rotationY = 270, tier = 1, kind = "small" },
+		-- 11-12: the keep's east flank and the smithy's back
+		{ position = Vector3.new(7, 0, -42), rotationY = 90, tier = 2, kind = "small" },
+		{ position = Vector3.new(-48, 0, -18), rotationY = 270, tier = 2, kind = "small" },
+		-- 13-15: round the square and at the head of the farm track
+		{ position = Vector3.new(17, 0, -1), rotationY = 0, tier = 3, kind = "small" },
+		{ position = Vector3.new(-6, 0, 8), rotationY = 0, tier = 3, kind = "small" },
+		{ position = Vector3.new(35, 0, -25), rotationY = 90, tier = 3, kind = "small" },
+		-- 16-18: by the farm, the stables and the woodcutter
+		{ position = Vector3.new(43, 0, 1), rotationY = 90, tier = 4, kind = "small" },
+		{ position = Vector3.new(39, 0, 20), rotationY = 0, tier = 4, kind = "small" },
+		{ position = Vector3.new(-40, 0, 15), rotationY = 0, tier = 4, kind = "small" },
+		-- 19-21: behind the homes, and a pair behind the tavern
+		{ position = Vector3.new(-30, 0, 20), rotationY = 270, tier = 5, kind = "small" },
+		{ position = Vector3.new(29, 0, 32), rotationY = 90, tier = 5, kind = "small" },
+		{ position = Vector3.new(30, 0, 40), rotationY = 90, tier = 5, kind = "small" },
+	},
+	-- Parked carts (wave 2c): mostly beside the cottages that own them (`lot` = index above), plus
+	-- one on the keep lane and one on the market square. Each stands off the trail and off the
+	-- walkers' line along its edge.
+	parking = {
+		{ position = Vector3.new(-42, 0, -34), rotationY = 0, tier = 2, lot = 9 },
+		{ position = Vector3.new(-3, 0, -18), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(30, 0, -25), rotationY = 0, tier = 3, lot = 15 },
+		{ position = Vector3.new(4, 0, 1), rotationY = 0, tier = 3 },
+		{ position = Vector3.new(32, 0, 17), rotationY = 90, tier = 4, lot = 17 },
+		{ position = Vector3.new(-24, 0, 20), rotationY = 0, tier = 5, lot = 19 },
 	},
 	-- Trade yard in the open front corner beside the trade route's cart, seen from the hub.
 	plazas = {
@@ -220,5 +254,17 @@ return {
 		{ center = Vector3.new(50, 0, -24), radius = 5, count = 5 },
 		{ center = Vector3.new(-51, 0, -46), radius = 5, count = 4 },
 		{ center = Vector3.new(-33, 0, 44), radius = 4, count = 4 },
+	},
+	-- Bushes, flower beds and hedges (wave 2c): cottage gardens by the square and the campsite
+	-- lane, the hedgerows along the farms on the east edge, and the smithy's back fence. None
+	-- overlaps a grove, whose trees would crowd the pieces out.
+	greeneryZones = {
+		{ center = Vector3.new(-15, 0, -9), radius = 5, count = 5 },
+		{ center = Vector3.new(-11, 0, 11), radius = 5, count = 5 },
+		{ center = Vector3.new(-53, 0, -9), radius = 5, count = 5 },
+		{ center = Vector3.new(51, 0, -7), radius = 5, count = 4 },
+		{ center = Vector3.new(53, 0, 7), radius = 5, count = 4 },
+		{ center = Vector3.new(49, 0, 21), radius = 5, count = 5 },
+		{ center = Vector3.new(33, 0, 51), radius = 5, count = 5 },
 	},
 }

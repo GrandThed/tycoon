@@ -141,8 +141,56 @@ return {
 		},
 		{ points = { Vector3.new(28, 0, -42), Vector3.new(28, 0, -28), Vector3.new(28, 0, 42) } },
 	},
-	-- No lots: every block is already a building slot and eras.Metropolis.houses.props is
-	-- empty (INTERFACES "Wave 2a").
+	-- Filler housing (wave 2c). Every block is a building slot, so lots only fit round the edge:
+	-- two apartment houses in the pockets between the outer columns and the stadium / metro
+	-- kiosk, each facing its avenue, and townhouses ("small", 6x6, <= 6 tall) in the front and
+	-- back bands behind the block rows. Those bands reach half a stud under the ring deck, which is
+	-- why they are small, and stop half a stud short of the pier caps (tools/streetplan.py checks
+	-- both). Each townhouse faces the avenue or the block path beside it.
+	lots = {
+		-- 1-2: either side of the entrance avenue, the first thing past the ring
+		{ position = Vector3.new(-12, 0, -50), rotationY = 270, tier = 1, kind = "small" },
+		{ position = Vector3.new(12, 0, -50), rotationY = 90, tier = 1, kind = "small" },
+		-- 3-4: the two front corners behind the corner shop and apartment block A
+		{ position = Vector3.new(-40, 0, -50), rotationY = 270, tier = 2, kind = "small" },
+		{ position = Vector3.new(39, 0, -50), rotationY = 90, tier = 2, kind = "small" },
+		-- 5-6: apartment houses in the west and east pockets, facing the avenues
+		{ position = Vector3.new(-42, 0, 24.5), rotationY = 270, tier = 3 },
+		{ position = Vector3.new(42.5, 0, 28), rotationY = 90, tier = 3 },
+		-- 7-8: the back band behind the convention centre and the bank tower
+		{ position = Vector3.new(-17, 0, 50), rotationY = 90, tier = 4, kind = "small" },
+		{ position = Vector3.new(16, 0, 50), rotationY = 270, tier = 4, kind = "small" },
+		-- 9-10: behind the broadcast tower and at the head of the civic axis
+		{ position = Vector3.new(39, 0, 50), rotationY = 90, tier = 5, kind = "small" },
+		{ position = Vector3.new(-4, 0, 39), rotationY = 0, tier = 5, kind = "small" },
+	},
+	-- Parked cars (wave 2c), 3 x 6 bays. The avenues' pavements carry the walkers, so bays go
+	-- where no walk lane runs: nose-in rows past the dead ends of the two avenues (half a stud off
+	-- the end cell, half a stud short of the ring's pier caps), one bay either side of City Hall's
+	-- forecourt (the office and the supermarket leave room for no more), and the two apartment
+	-- houses' drives (`lot` = index above).
+	parking = {
+		-- tier 2: City Hall's forecourt and the first bay past each front avenue end
+		{ position = Vector3.new(-7, 0, -12), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(7, 0, -12), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(-29.5, 0, -50), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(29.5, 0, -50), rotationY = 0, tier = 2 },
+		-- tier 3: the apartment drives and the next front bays
+		{ position = Vector3.new(-50, 0, 28), rotationY = 0, tier = 3, lot = 5 },
+		{ position = Vector3.new(36, 0, 34), rotationY = 0, tier = 3, lot = 6 },
+		{ position = Vector3.new(-26, 0, -50), rotationY = 0, tier = 3 },
+		{ position = Vector3.new(26, 0, -50), rotationY = 0, tier = 3 },
+		-- tier 4: the ends of the front rows and the bay behind the convention centre
+		{ position = Vector3.new(-33, 0, -50), rotationY = 0, tier = 4 },
+		{ position = Vector3.new(33, 0, -50), rotationY = 0, tier = 4 },
+		{ position = Vector3.new(44, 0, -50), rotationY = 0, tier = 4 },
+		{ position = Vector3.new(-12, 0, 50), rotationY = 0, tier = 4 },
+		-- tier 5: past the back avenue ends
+		{ position = Vector3.new(-29.5, 0, 49), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(-26, 0, 49), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(26, 0, 49), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(29.5, 0, 49), rotationY = 0, tier = 5 },
+	},
 	-- Public squares, 14x14 with the pavement apron in the prop, each turned to a traffic
 	-- avenue with its front edge flush against that avenue's outer pavement edge (centreline
 	-- +/- 7.5) so it reads as part of the street, not as an island. Both sit in the outer band
@@ -153,19 +201,27 @@ return {
 		-- fronts the east avenue from the east, in the z = -28 corridor row beside the arterial
 		{ position = Vector3.new(42.5, 0, -28), rotationY = 90, tier = 5, prop = "PlazaB" },
 	},
-	-- Greenery is whatever the grid leaves: the corners inside the ring, the pocket west of the
-	-- stadium, the corridor east of the east avenue north of the shops, and the back verge on the
+	-- Greenery is whatever the grid leaves: the corners inside the ring and the back verge on the
 	-- civic axis. Street trees along the block edges are planned first and share the tree cap
 	-- (min of trees.maxCount and budget.trees, 40), so these zones only claim the remainder: the
-	-- block edges plan about 23 rows, and 15 zone trees leave a little headroom for the client,
-	-- whose blockers are the harvested model extents rather than the declared footprints.
+	-- block edges plan about 16 rows now the lots take some of their edges, and 14 zone trees leave
+	-- headroom for the client, whose blockers are the harvested model extents rather than the
+	-- declared footprints. The two pockets beside the outer columns became apartment lots in wave
+	-- 2c, so their groves went. The first two zones also carry the bird flocks.
 	treeZones = {
 		{ center = Vector3.new(-49, 0, -49), radius = 3, count = 3 },
 		{ center = Vector3.new(49, 0, -49), radius = 3, count = 3 },
-		{ center = Vector3.new(44, 0, 28), radius = 5, count = 2 },
-		{ center = Vector3.new(-48.5, 0, 24), radius = 3, count = 2 },
-		{ center = Vector3.new(0, 0, 48), radius = 4, count = 3 },
-		{ center = Vector3.new(49, 0, 49), radius = 3, count = 2 },
+		{ center = Vector3.new(0, 0, 48), radius = 4, count = 5 },
+		{ center = Vector3.new(49, 0, 49), radius = 3, count = 3 },
+	},
+	-- Planters and hedges (wave 2c) keep 8 studs off every centreline (road, pavement and the
+	-- walkers), so they only fit on open paving: behind City Hall, at the head of the civic axis
+	-- beside the townhouse, and round the bus stop east of the east avenue.
+	greeneryZones = {
+		{ center = Vector3.new(1, 0, 13), radius = 4, count = 7 },
+		{ center = Vector3.new(3, 0, 39), radius = 4, count = 6 },
+		{ center = Vector3.new(47, 0, -3), radius = 4, count = 5 },
+		{ center = Vector3.new(47, 0, 7), radius = 4, count = 5 },
 	},
 	-- Paved blocks (INTERFACES "Paved blocks"): the ground between the streets, one slab per
 	-- rectangle, shown once any of its `slots` is owned and edged with street trees. Every rect

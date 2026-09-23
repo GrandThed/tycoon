@@ -221,21 +221,74 @@ return {
 		{ position = Vector3.new(-42, 0, 18.5), rotationY = 90, tier = 4 },
 		{ position = Vector3.new(42, 0, -11), rotationY = 270, tier = 5 },
 		{ position = Vector3.new(-44, 0, 44), rotationY = 0, tier = 5 },
+		-- Wave 2c: the town fills in behind its storefronts. Sheds ("small", 6x6 cap) take the
+		-- yards behind the shop rows and the civic row; the three new houses take the only ground
+		-- left that clears a 9x9: the lot east of the hot-dog stand and the two back corners.
+		-- 9-10: the clock tower's east yard and the lot behind the hot-dog stand
+		{ position = Vector3.new(11, 0, -29), rotationY = 0, tier = 1, kind = "small" },
+		{ position = Vector3.new(30, 0, -21), rotationY = 0, tier = 1 },
+		-- 11-12: behind the diner and the gas station, facing the service-lane driveways
+		{ position = Vector3.new(-24, 0, 8), rotationY = 90, tier = 2, kind = "small" },
+		{ position = Vector3.new(24, 0, 8), rotationY = 270, tier = 2, kind = "small" },
+		-- 13-14: behind the hot-dog stand and beside the park
+		{ position = Vector3.new(25, 0, -11), rotationY = 270, tier = 3, kind = "small" },
+		{ position = Vector3.new(-42, 0, 28), rotationY = 90, tier = 3, kind = "small" },
+		-- 15-16: behind the laundromat and between the cinema and the bank
+		{ position = Vector3.new(25, 0, 33), rotationY = 270, tier = 4, kind = "small" },
+		{ position = Vector3.new(-24, 0, 40), rotationY = 90, tier = 4, kind = "small" },
+		-- 17-18: the two back corners
+		{ position = Vector3.new(48, 0, 47), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(-54, 0, 47), rotationY = 0, tier = 5 },
+	},
+	-- Parked cars (wave 2c): 4 x 7.5 bays. Main street's frontage is all pads and walkers, so the
+	-- kerb bays sit in the alleys between the storefronts, nosed toward main street, and behind
+	-- the civic row; driveway bays (`lot` = index above) stand beside the new houses and sheds.
+	parking = {
+		-- tier 2: beside the newsstand, the hot-dog stand's alley and the first house's drive
+		{ position = Vector3.new(-16, 0, -25), rotationY = 90, tier = 2 },
+		{ position = Vector3.new(13, 0, -8), rotationY = 90, tier = 2 },
+		{ position = Vector3.new(23, 0, -22), rotationY = 0, tier = 2, lot = 10 },
+		-- tier 3: the next alleys down and the shed behind the hot-dog stand
+		{ position = Vector3.new(-16, 0, -8), rotationY = 90, tier = 3 },
+		{ position = Vector3.new(-13, 0, 8), rotationY = 90, tier = 3 },
+		{ position = Vector3.new(33, 0, -12), rotationY = 0, tier = 3, lot = 13 },
+		-- tier 4: the east alley and the sheds behind the laundromat and the cinema
+		{ position = Vector3.new(13, 0, 8), rotationY = 90, tier = 4 },
+		{ position = Vector3.new(26, 0, 26), rotationY = 90, tier = 4, lot = 15 },
+		{ position = Vector3.new(-24, 0, 49), rotationY = 0, tier = 4, lot = 16 },
+		-- tier 5: the back corner house and between the civic buildings
+		{ position = Vector3.new(56, 0, 45), rotationY = 0, tier = 5, lot = 17 },
+		{ position = Vector3.new(-8, 0, 44), rotationY = 0, tier = 5 },
+		{ position = Vector3.new(8, 0, 44), rotationY = 0, tier = 5 },
 	},
 	-- A park on the empty lot behind the motel and grocery.
 	plazas = {
 		{ position = Vector3.new(-29.5, 0, 23), rotationY = 0, tier = 3, prop = "PlazaA" },
 	},
-	-- Main street, the cross street and the service lanes fill the town centre, so the greenery is
-	-- the east lot, the two pockets beside the west park, and the treeline along the back fence
-	-- behind the civic row. The clock tower's block, which used to hold two groves, is now the
-	-- cross street and the two houses that face it.
+	-- Main street, the cross street and the service lanes fill the town centre, and the wave 2c
+	-- houses and sheds took the east lot and the pockets beside the park, so the trees are a
+	-- treeline along the back fence behind the civic row, out to both back corners. The two
+	-- corner groves come first because the first zones also carry the bird flocks, and the
+	-- corners are the only ones with no tall civic building under the circle.
 	treeZones = {
-		{ center = Vector3.new(31, 0, -16), radius = 5, count = 6 },
-		{ center = Vector3.new(-25, 0, 12), radius = 3, count = 3 },
-		{ center = Vector3.new(-44, 0, 27), radius = 3, count = 3 },
-		{ center = Vector3.new(-23, 0, 53), radius = 5, count = 5 },
+		{ center = Vector3.new(-38, 0, 54), radius = 4, count = 5 },
+		{ center = Vector3.new(54, 0, 54), radius = 4, count = 3 },
+		{ center = Vector3.new(-8, 0, 52), radius = 4, count = 5 },
 		{ center = Vector3.new(14, 0, 53), radius = 5, count = 5 },
-		{ center = Vector3.new(46, 0, 46), radius = 4, count = 4 },
+		{ center = Vector3.new(38, 0, 52), radius = 4, count = 5 },
+	},
+	-- Bushes, planters and hedges (wave 2c) keep a walker's width off every street and path, so
+	-- inside the town they are small beds in the yards behind the shop rows and the civic row;
+	-- two larger beds fill the gaps in the back treeline (the west one shares its ground with the
+	-- cinema-side shed's parked car, so it draws more candidates).
+	greeneryZones = {
+		{ center = Vector3.new(25, 0, 17), radius = 3, count = 4 },
+		{ center = Vector3.new(-23, 0, -23), radius = 3, count = 4 },
+		{ center = Vector3.new(17, 0, -23), radius = 3, count = 4 },
+		{ center = Vector3.new(-23, 0, 33), radius = 3, count = 4 },
+		{ center = Vector3.new(23, 0, 39), radius = 3, count = 4 },
+		{ center = Vector3.new(-23, 0, -3), radius = 3, count = 4 },
+		{ center = Vector3.new(-24, 0, 54), radius = 4, count = 7 },
+		{ center = Vector3.new(25, 0, 53), radius = 5, count = 8 },
 	},
 }
