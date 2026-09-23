@@ -6536,6 +6536,86 @@
           }
         ]
       },
+      "Bird": {
+        "stages": [
+          {
+            "modelAssetId": 79062183868912,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.896, 0.238, 0.728],
+                "offset": [0.0, 0.119, -0.028]
+              }
+            ]
+          }
+        ]
+      },
+      "BushA": {
+        "stages": [
+          {
+            "modelAssetId": 122629318708407,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.523, 0.837, 1.015],
+                "offset": [0.034, 0.419, 0.013]
+              }
+            ]
+          }
+        ]
+      },
+      "BushB": {
+        "stages": [
+          {
+            "modelAssetId": 74971872181799,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.118, 0.972, 1.024],
+                "offset": [0.001, 0.486, 0.007]
+              }
+            ]
+          }
+        ]
+      },
+      "FlowerBedA": {
+        "stages": [
+          {
+            "modelAssetId": 115956508677055,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.0, 0.63, 2.0],
+                "offset": [0.0, 0.315, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "HedgeA": {
+        "stages": [
+          {
+            "modelAssetId": 82662438337598,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 1.02, 0.952],
+                "offset": [0.0, 0.51, 0.002]
+              }
+            ]
+          }
+        ]
+      },
       "HouseA": {
         "stages": [
           {
@@ -6600,6 +6680,38 @@
           }
         ]
       },
+      "HouseE": {
+        "stages": [
+          {
+            "modelAssetId": 78996224009461,
+            "parts": [
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.32, 4.55, 8.872],
+                "offset": [-0.04, 2.275, 0.034]
+              }
+            ]
+          }
+        ]
+      },
+      "HouseF": {
+        "stages": [
+          {
+            "modelAssetId": 77767203598312,
+            "parts": [
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.24, 3.068, 8.088],
+                "offset": [-0.08, 1.534, -0.358]
+              }
+            ]
+          }
+        ]
+      },
       "Junction": {
         "stages": [
           {
@@ -6632,6 +6744,70 @@
           }
         ]
       },
+      "ParkedA": {
+        "stages": [
+          {
+            "modelAssetId": 74288770520768,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.25, 2.75, 7.125],
+                "offset": [0.0, 1.375, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkedB": {
+        "stages": [
+          {
+            "modelAssetId": 125072681368735,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.75, 3.25, 6.75],
+                "offset": [0.0, 1.625, -0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkedC": {
+        "stages": [
+          {
+            "modelAssetId": 90395918478417,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.25, 2.75, 6.375],
+                "offset": [0.0, 1.375, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "PlanterA": {
+        "stages": [
+          {
+            "modelAssetId": 98646989509455,
+            "parts": [
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 0.708, 1.2],
+                "offset": [0.0, 0.354, -0.002]
+              }
+            ]
+          }
+        ]
+      },
       "PlazaA": {
         "stages": [
           {
@@ -6650,6 +6826,52 @@
                 "imageId": 75804611199159,
                 "size": [11.7481, 4.108, 12.286],
                 "offset": [-0.0046, 2.054, 0.257]
+              }
+            ]
+          }
+        ]
+      },
+      "ShedA": {
+        "stages": [
+          {
+            "modelAssetId": 137835658874569,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.724, 2.429, 3.373],
+                "offset": [0.0, 1.215, 1.02]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.066, 0.034, 2.04],
+                "offset": [-0.323, 0.017, -1.7]
+              }
+            ]
+          }
+        ]
+      },
+      "ShedB": {
+        "stages": [
+          {
+            "modelAssetId": 113523789889279,
+            "parts": [
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.854, 3.449, 4.726],
+                "offset": [0.0, 1.725, 0.51]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.55, 0.602, 1.36],
+                "offset": [1.275, 0.301, -2.312]
               }
             ]
           }
@@ -6770,9 +6992,201 @@
             ]
           }
         ]
+      },
+      "WalkerA": {
+        "stages": [
+          {
+            "modelAssetId": 101387037268953,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.75],
+                "offset": [0.0, 0.875, -0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerB": {
+        "stages": [
+          {
+            "modelAssetId": 112384316973937,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerC": {
+        "stages": [
+          {
+            "modelAssetId": 115521760380453,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerD": {
+        "stages": [
+          {
+            "modelAssetId": 114973827984389,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.61],
+                "offset": [0.0, 0.875, 0.025]
+              }
+            ]
+          }
+        ]
       }
     },
     "Metropolis": {
+      "ApartmentA": {
+        "stages": [
+          {
+            "modelAssetId": 112646883708491,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.932, 9.548, 7.007],
+                "offset": [0.0, 4.774, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ApartmentB": {
+        "stages": [
+          {
+            "modelAssetId": 134283716901481,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 11.6, 8.0],
+                "offset": [0.0, 5.8, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ApartmentC": {
+        "stages": [
+          {
+            "modelAssetId": 123821780911114,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.5, 13.65, 6.5],
+                "offset": [0.0, 6.825, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "Bird": {
+        "stages": [
+          {
+            "modelAssetId": 106177695308827,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.896, 0.238, 0.728],
+                "offset": [0.0, 0.119, -0.028]
+              }
+            ]
+          }
+        ]
+      },
+      "BushA": {
+        "stages": [
+          {
+            "modelAssetId": 95017393897437,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.523, 0.837, 1.015],
+                "offset": [0.034, 0.419, 0.013]
+              }
+            ]
+          }
+        ]
+      },
+      "BushB": {
+        "stages": [
+          {
+            "modelAssetId": 136240266664146,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.118, 0.972, 1.024],
+                "offset": [0.001, 0.486, 0.007]
+              }
+            ]
+          }
+        ]
+      },
+      "FlowerBedA": {
+        "stages": [
+          {
+            "modelAssetId": 70778928082503,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.0, 0.63, 2.0],
+                "offset": [0.0, 0.315, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "HedgeA": {
+        "stages": [
+          {
+            "modelAssetId": 104947938604103,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 1.02, 0.952],
+                "offset": [0.0, 0.51, 0.002]
+              }
+            ]
+          }
+        ]
+      },
       "HighwayCorner": {
         "stages": [
           {
@@ -6880,6 +7294,70 @@
                 "imageId": 131612791169105,
                 "size": [4.9, 5.98, 5.79],
                 "offset": [0.0, 2.99, 0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkedA": {
+        "stages": [
+          {
+            "modelAssetId": 97216544371363,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.34, 1.98, 5.13],
+                "offset": [0.0, 0.99, 0.009]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkedB": {
+        "stages": [
+          {
+            "modelAssetId": 116297358394144,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.7, 2.34, 4.86],
+                "offset": [0.0, 1.17, -0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "ParkedC": {
+        "stages": [
+          {
+            "modelAssetId": 81865766471570,
+            "parts": [
+              {
+                "kit": "car-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.56, 2.56, 5.52],
+                "offset": [0.0, 1.28, -0.008]
+              }
+            ]
+          }
+        ]
+      },
+      "PlanterA": {
+        "stages": [
+          {
+            "modelAssetId": 87880788765880,
+            "parts": [
+              {
+                "kit": "garden-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.6, 1.24, 1.6],
+                "offset": [0.0, 0.62, 0.0]
               }
             ]
           }
@@ -7041,6 +7519,38 @@
           }
         ]
       },
+      "TownhouseA": {
+        "stages": [
+          {
+            "modelAssetId": 77536827374124,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.833, 4.267, 3.597],
+                "offset": [0.0, 2.133, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TownhouseB": {
+        "stages": [
+          {
+            "modelAssetId": 102976623952280,
+            "parts": [
+              {
+                "kit": "city-kit-commercial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.689, 4.267, 3.597],
+                "offset": [-0.072, 2.133, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "TrafficLight": {
         "stages": [
           {
@@ -7172,9 +7682,121 @@
             ]
           }
         ]
+      },
+      "WalkerA": {
+        "stages": [
+          {
+            "modelAssetId": 72643396797300,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerB": {
+        "stages": [
+          {
+            "modelAssetId": 72553316392869,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerC": {
+        "stages": [
+          {
+            "modelAssetId": 139986250778311,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerD": {
+        "stages": [
+          {
+            "modelAssetId": 94094173888307,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.75, 0.56],
+                "offset": [0.0, 0.875, 0.0]
+              }
+            ]
+          }
+        ]
       }
     },
     "Village": {
+      "Bird": {
+        "stages": [
+          {
+            "modelAssetId": 91015324267902,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.896, 0.238, 0.728],
+                "offset": [0.0, 0.119, -0.028]
+              }
+            ]
+          }
+        ]
+      },
+      "BushA": {
+        "stages": [
+          {
+            "modelAssetId": 77830628076974,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.717, 1.442, 2.677],
+                "offset": [-0.087, 0.521, 0.067]
+              }
+            ]
+          }
+        ]
+      },
+      "BushB": {
+        "stages": [
+          {
+            "modelAssetId": 130059113708908,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.872, 1.736, 1.678],
+                "offset": [0.0, 0.618, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "Cart": {
         "stages": [
           {
@@ -7193,6 +7815,123 @@
                 "imageId": 96503344088534,
                 "size": [1.3435, 1.3596, 2.0876],
                 "offset": [-0.0562, 1.3298, -0.4547]
+              }
+            ]
+          }
+        ]
+      },
+      "CartParked": {
+        "stages": [
+          {
+            "modelAssetId": 77763307356371,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.233, 2.151, 3.475],
+                "offset": [0.0, 1.076, 0.0]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.062, 0.866, 1.775],
+                "offset": [-0.281, 1.058, 0.125]
+              }
+            ]
+          }
+        ]
+      },
+      "CottageA": {
+        "stages": [
+          {
+            "modelAssetId": 74453466590559,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.369, 5.2, 3.52],
+                "offset": [-0.009, 2.6, 0.32]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.373, 1.467, 4.858],
+                "offset": [1.309, 0.574, 0.189]
+              }
+            ]
+          }
+        ]
+      },
+      "CottageB": {
+        "stages": [
+          {
+            "modelAssetId": 86612427734495,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.52, 5.2, 5.553],
+                "offset": [-0.0, 2.6, -0.103]
+              },
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.137, 0.936, 1.596],
+                "offset": [-0.068, 0.308, -1.476]
+              }
+            ]
+          }
+        ]
+      },
+      "FlowerBedA": {
+        "stages": [
+          {
+            "modelAssetId": 108633725080450,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.163, 1.17, 1.973],
+                "offset": [-0.144, 0.385, -0.01]
+              }
+            ]
+          }
+        ]
+      },
+      "FlowerBedB": {
+        "stages": [
+          {
+            "modelAssetId": 127943199639145,
+            "parts": [
+              {
+                "kit": "nature-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.795, 0.97, 1.949],
+                "offset": [-0.041, 0.285, 0.002]
+              }
+            ]
+          }
+        ]
+      },
+      "HedgeA": {
+        "stages": [
+          {
+            "modelAssetId": 99026867139393,
+            "parts": [
+              {
+                "kit": "fantasy-town-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.4, 1.6],
+                "offset": [0.0, 1.2, 0.0]
               }
             ]
           }
@@ -7332,6 +8071,70 @@
                 "imageId": 96503344088534,
                 "size": [2.8499, 11.302, 2.4681],
                 "offset": [0.0, 5.451, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerA": {
+        "stages": [
+          {
+            "modelAssetId": 104639536919416,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.88, 1.85, 0.61],
+                "offset": [0.0, 0.925, 0.005]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerB": {
+        "stages": [
+          {
+            "modelAssetId": 133910162510946,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.77, 0.73],
+                "offset": [0.0, 0.885, 0.085]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerC": {
+        "stages": [
+          {
+            "modelAssetId": 104307771867509,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.88, 1.82, 0.88],
+                "offset": [0.0, 0.91, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "WalkerD": {
+        "stages": [
+          {
+            "modelAssetId": 101180048217569,
+            "parts": [
+              {
+                "kit": "people-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.9, 1.75, 0.56],
+                "offset": [0.03, 0.875, 0.0]
               }
             ]
           }
