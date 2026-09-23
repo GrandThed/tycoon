@@ -1,4 +1,4 @@
-M9 wave 2b, "Orbital Colony dressing + cityDetail", decided by Ben 2026-09-23 and committed e0821e6.
+M9 wave 2b, "Orbital Colony dressing + cityDetail", decided by Ben 2026-09-23, committed e0821e6, **playtest signed off 2026-09-23** ("looks good"); tubes were redone once as **white half-pipes with grey support rings, 1.9 studs tall** (the 4.5-tall glass corridor "seemed off"). Main then fast-forwarded to the wave 2c living-city branch (3769c2a).
 Contract: `docs/INTERFACES.md` "Wave 2b — Orbital Colony dressing".
 
 - Ben's choices: **enclosed corridor tubes** as the walkways (rejected: decking paths, monorail-only
