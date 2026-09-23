@@ -797,7 +797,10 @@ class PlotScene:
         for group_index, stretch_ids in enumerate(network.groups):
             for stretch_id in stretch_ids:
                 stretch = network.stretches[stretch_id]
-                polyline = stretch["polyline"]
+                # streetplan counts polylines from 0, RoadGraph from 1 (Luau array iteration), and
+                # the number is part of a planter's yaw hash key, so it is converted here rather
+                # than left to read "close enough".
+                polyline = stretch["polyline"] + 1
                 if stretch_id not in planned:
                     open_runs.pop(polyline, None)  # a piece outside the plan breaks the street
                     continue

@@ -126,6 +126,9 @@ export type Handle = {
 	pavementRects: { [string]: Rect }, -- the same slabs as geometry, for the strips to cut against
 	paved: { [number]: Instance }, -- block index -> its paving slab
 	strips: { [string]: Instance }, -- rounded rectangle -> its park-strip Part
+	-- Ground a strip may not cover however empty it looks: the subway kiosks, whose steps sink into
+	-- the paving. Handed over after the plan, because only the planner reads a prop's extents.
+	keepOut: { Rect },
 	stripCells: { [number]: boolean }, -- cell index -> carries a strip right now (planters ask)
 	drawn: { [number]: boolean }, -- cell index -> its tile is down, as of the last Update
 	dust: Dust.Handle,
@@ -262,7 +265,7 @@ local KEY_SCALE = 10
 -- Rectangles that only touch are fine; this keeps float noise from reading as an overlap.
 local TOUCH_EPSILON = 1e-3
 
-type Rect = { x0: number, x1: number, z0: number, z1: number }
+export type Rect = { x0: number, x1: number, z0: number, z1: number }
 
 local function rectKey(rect: Rect): string
 	return string.format(
@@ -522,26 +525,36 @@ local function syncStrips(handle: Handle): ()
 		local tileStuds = options.tiles.tileStuds
 		local pavement = options.tiles.pavement
 		local reach = tileStuds / 2 + (if pavement ~= nil then math.max(pavement.width, 0) else 0)
-		local laid: { Rect } = {}
+		-- Everything that is not a strip: the drawn tiles, the kerb around them, the paved blocks
+		-- and the kiosks. Sorted by key rather than left in table order -- two of these three come
+		-- from dictionaries, and the order the cuts are made in decides how many Parts a cut band
+		-- takes, which the budget below is spent in.
+		local taken: { Rect } = {}
 		local drawnCount = 0
-		for index in handle.cells do
+		for index, cell in handle.cells do
 			if handle.drawn[index] then
 				drawnCount += 1
-				local centre = handle.cells[index].position
-				table.insert(laid, {
-					x0 = centre.X - tileStuds / 2,
-					x1 = centre.X + tileStuds / 2,
-					z0 = centre.Z - tileStuds / 2,
-					z1 = centre.Z + tileStuds / 2,
+				table.insert(taken, {
+					x0 = cell.position.X - tileStuds / 2,
+					x1 = cell.position.X + tileStuds / 2,
+					z0 = cell.position.Z - tileStuds / 2,
+					z1 = cell.position.Z + tileStuds / 2,
 				})
 			end
 		end
 		for _, rect in handle.pavementRects do
-			table.insert(laid, rect)
+			table.insert(taken, rect)
 		end
 		for index in handle.paved do
-			table.insert(laid, blockRect(options.blocks[index]))
+			table.insert(taken, blockRect(options.blocks[index]))
 		end
+		for _, rect in handle.keepOut do
+			table.insert(taken, rect)
+		end
+		table.sort(taken, function(a: Rect, b: Rect): boolean
+			return rectKey(a) < rectKey(b)
+		end)
+		local laid: { Rect } = table.clone(taken)
 		-- Tiles and strips share `budget.tileCells`. A cut band can need more than one Part, so the
 		-- ceiling is spent in Parts, cell order (entrance outward), rather than counted in cells.
 		local remaining = math.max(math.floor(options.budgetCells) - drawnCount, 0)
@@ -550,13 +563,14 @@ local function syncStrips(handle: Handle): ()
 			if handle.drawn[index] or remaining <= 0 then
 				continue
 			end
-			table.clear(kept)
-			cutAgainst({
+			local candidate: Rect = {
 				x0 = cell.position.X - reach,
 				x1 = cell.position.X + reach,
 				z0 = cell.position.Z - reach,
 				z1 = cell.position.Z + reach,
-			}, laid, kept)
+			}
+			table.clear(kept)
+			cutAgainst(candidate, laid, kept)
 			for _, piece in kept do
 				if remaining <= 0 then
 					break
@@ -565,6 +579,13 @@ local function syncStrips(handle: Handle): ()
 				table.insert(laid, piece)
 				wanted[rectKey(piece)] = piece
 				cells[index] = true
+			end
+			if #kept == 0 then
+				-- Nothing of its own to lay, but a junction cell is usually swallowed whole by the
+				-- strips of the cells before it: that ground is still grass, so its planter stays.
+				table.clear(kept)
+				cutAgainst(candidate, taken, kept)
+				cells[index] = #kept > 0
 			end
 		end
 	end
@@ -681,6 +702,18 @@ function TileRenderer.ArmBit(arm: number): number
 	return armBit(arm)
 end
 
+-- The ground the park strips must leave alone (the subway kiosks). Set once, right after the plan
+-- that measured them and before the first Update, so no strip is ever laid and taken back again.
+function TileRenderer.SetKeepOut(handle: Handle, rects: { Rect }): ()
+	if handle.destroyed then
+		return
+	end
+	handle.keepOut = rects
+	if next(handle.stripCells) ~= nil then
+		syncStrips(handle)
+	end
+end
+
 -- Whether the cell holding `position` (plot-local) is carrying a park strip right now. A planter
 -- asks this rather than "is my stretch drawn": the cell a street shares with a crossing one is
 -- paved as soon as either draws, and a tree standing in it would then be standing on asphalt.
@@ -706,6 +739,7 @@ function TileRenderer.Create(options: Options): Handle?
 		paved = {},
 		strips = {},
 		stripCells = {},
+		keepOut = {},
 		drawn = {},
 		dust = Dust.Create(
 			options.folder,

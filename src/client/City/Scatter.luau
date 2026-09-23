@@ -112,6 +112,8 @@ type Obstacle = { position: Vector3, radius: number }
 export type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
 -- Extents placed in the plot; `rotation` is the turn about Y only, with no translation.
 export type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
+-- An axis-aligned plot-local rectangle, the shape TileRenderer cuts its slabs against.
+export type Rect = { x0: number, x1: number, z0: number, z1: number }
 
 local Scatter = {}
 
@@ -147,6 +149,12 @@ end
 
 local function flat(point: Vector3): Vector3
 	return Vector3.new(point.X, 0, point.Z)
+end
+
+-- The lattice cell a plot-local point falls in, rounded exactly as TileRenderer rounds it so a
+-- planter and the strip it stands on always agree on which cell they are in.
+local function cellKey(point: Vector3, tileStuds: number): string
+	return string.format("%d:%d", math.round(point.X / tileStuds), math.round(point.Z / tileStuds))
 end
 
 local function centredExtents(sizeX: number, sizeZ: number): Extents
@@ -221,6 +229,37 @@ local function slotModelNames(eraName: string): { [string]: string }
 	return names
 end
 
+-- Wave 2a: a subway kiosk is a solid like any other prop, so no tree and no row lamp is ever
+-- planned on top of one, and no park strip is laid under one (its steps sink into the paving). Its
+-- harvested bounds win; until the prop is uploaded it stands as the layout's placeholder, the same
+-- stand-in an unharvested slot gets -- the "as large as the era's largest slot" fallback the other
+-- props take would fence off a whole corner of a block.
+local function subwayFootprints(input: PlanInput): { Footprint }
+	local layout = input.layout
+	local subway = input.era.subway
+	local entrances: { Types.SubwayEntranceLayout }? = layout.subwayEntrances
+	if subway == nil or entrances == nil then
+		return {}
+	end
+	local assets = Catalog.GetAssetsConfig()
+	local propsByEra = if assets ~= nil then assets.props else nil
+	local eraProps: { [string]: Types.AssetModel }? = if propsByEra ~= nil
+		then propsByEra[input.eraName]
+		else nil
+	local model: Types.AssetModel? = if eraProps ~= nil then eraProps[subway.prop] else nil
+	local extents = modelExtents(model)
+		or centredExtents(layout.placeholderSize.X, layout.placeholderSize.Z)
+	local kiosks: { Footprint } = {}
+	for _, entrance in entrances do
+		table.insert(kiosks, {
+			origin = flat(entrance.position),
+			rotation = CFrame.Angles(0, math.rad(entrance.rotationY), 0),
+			extents = extents,
+		})
+	end
+	return kiosks
+end
+
 local function footprintsFor(input: PlanInput): { Footprint }
 	local layout = input.layout
 	local assets = Catalog.GetAssetsConfig()
@@ -293,19 +332,8 @@ local function footprintsFor(input: PlanInput): { Footprint }
 		add(plaza.position, plaza.rotationY, propExtents(plaza.prop))
 	end
 
-	-- Wave 2a: a subway kiosk is a solid like any other prop, so no tree and no row lamp is ever
-	-- planned on top of one. Its harvested bounds win; until the prop is uploaded it stands as the
-	-- layout's placeholder, the same stand-in an unharvested slot gets -- propExtents' "as large as
-	-- the era's largest slot" fallback would fence off a whole corner of a block.
-	local subway = input.era.subway
-	local entrances: { Types.SubwayEntranceLayout }? = layout.subwayEntrances
-	if subway ~= nil and entrances ~= nil then
-		local model: Types.AssetModel? = if eraProps ~= nil then eraProps[subway.prop] else nil
-		local extents = modelExtents(model)
-			or centredExtents(layout.placeholderSize.X, layout.placeholderSize.Z)
-		for _, entrance in entrances do
-			add(entrance.position, entrance.rotationY, extents)
-		end
+	for _, kiosk in subwayFootprints(input) do
+		table.insert(footprints, kiosk)
 	end
 	return footprints
 end
@@ -779,7 +807,8 @@ local function parkStripTrees(
 		return {}
 	end
 	local spacing = config.treeSpacing
-	if type(spacing) ~= "number" or spacing < MIN_STEP then
+	-- No lattice, no cells to plant on: a tile pitch of zero is a config that draws no streets.
+	if type(spacing) ~= "number" or spacing < MIN_STEP or tiles.tileStuds < MIN_STEP then
 		return {}
 	end
 	-- A planter keeps the daylight a street tree keeps from the same solids; an era that plants
@@ -806,37 +835,55 @@ local function parkStripTrees(
 	end
 
 	local trees: { ParkTree } = {}
+	local taken: { [string]: boolean } = {}
 	for _, run in lines.runs do
+		-- The run as one curve, exactly as the row lamps walk it: the spacing carries across the
+		-- pieces of a street, so a 5-cell stretch followed by a 9-cell one plants an even row
+		-- instead of restarting -- and losing a mark -- at the joint.
+		local points: { Vector3 } = {}
+		local arcs: { number } = {}
+		local pieces: { RoadGraph.SpinePiece } = {}
+		local total = 0
 		for _, piece in run.pieces do
-			local walked = 0 -- arc length from the start of this piece
-			local step = 0
-			for index = 2, #piece.points do
-				local from = piece.points[index - 1]
-				local span = piece.points[index] - from
-				local length = span.Magnitude
-				if length < MIN_STEP then
-					continue
-				end
-				local mark = (step + 1) * spacing
-				while mark <= walked + length do
-					step += 1
-					local position = from + span * ((mark - walked) / length)
-					if not blocked(position) then
-						table.insert(trees, {
-							polyline = run.polyline,
-							stretch = piece.stretch,
-							step = step,
-							position = flat(position),
-							-- Hashed, not drawn: the same planter turns the same way everywhere.
-							yaw = Noise.Hash(`{run.polyline}:{piece.stretch}:{step}`)
-								% FULL_CIRCLE_DEGREES
-								/ FULL_CIRCLE_DEGREES
-								* FULL_TURN,
-						})
+			for _, point in piece.points do
+				if #points > 0 then
+					local advance = (point - points[#points]).Magnitude
+					if advance < MIN_STEP then
+						continue
 					end
-					mark = (step + 1) * spacing
+					total += advance
 				end
-				walked += length
+				table.insert(points, point)
+				table.insert(arcs, total)
+				table.insert(pieces, piece)
+			end
+		end
+		local index = 2
+		for step = 1, math.floor(total / spacing) do
+			local target = spacing * step
+			while index < #arcs and arcs[index] < target do
+				index += 1
+			end
+			local a, b = points[index - 1], points[index]
+			local position =
+				flat(a:Lerp(b, (target - arcs[index - 1]) / (arcs[index] - arcs[index - 1])))
+			local piece = pieces[index]
+			-- One planter to a cell: two polylines meeting at a junction would otherwise each
+			-- plant one in it, and the strip under them is a single square of grass.
+			local cell = cellKey(position, tiles.tileStuds)
+			if not taken[cell] and not blocked(position) then
+				taken[cell] = true
+				table.insert(trees, {
+					polyline = run.polyline,
+					stretch = piece.stretch,
+					step = step,
+					position = position,
+					-- Hashed, not drawn: the same planter turns the same way everywhere.
+					yaw = Noise.Hash(`{run.polyline}:{piece.stretch}:{step}`)
+						% FULL_CIRCLE_DEGREES
+						/ FULL_CIRCLE_DEGREES
+						* FULL_TURN,
+				})
 			end
 		end
 	end
@@ -1000,6 +1047,40 @@ function Scatter.Clear(solids: { Footprint }, position: Vector3, margin: number)
 		end
 	end
 	return true
+end
+
+-- Wave 2a: every subway kiosk's ground as an axis-aligned plot-local rectangle (the corners of its
+-- extents turned by its rotation, then bounded), which is the shape the tile renderer cuts its park
+-- strips around. Empty in an era without kiosks, so the caller can ask for any plot.
+function Scatter.KioskRects(input: PlanInput): { Rect }
+	local rects: { Rect } = {}
+	for _, kiosk in subwayFootprints(input) do
+		local extents = kiosk.extents
+		local rect: Rect? = nil
+		for _, corner in
+			{
+				Vector3.new(extents.minX, 0, extents.minZ),
+				Vector3.new(extents.maxX, 0, extents.minZ),
+				Vector3.new(extents.minX, 0, extents.maxZ),
+				Vector3.new(extents.maxX, 0, extents.maxZ),
+			}
+		do
+			local point = kiosk.origin + kiosk.rotation:PointToWorldSpace(corner)
+			local current = rect
+			if current == nil then
+				rect = { x0 = point.X, x1 = point.X, z0 = point.Z, z1 = point.Z }
+			else
+				current.x0 = math.min(current.x0, point.X)
+				current.x1 = math.max(current.x1, point.X)
+				current.z0 = math.min(current.z0, point.Z)
+				current.z1 = math.max(current.z1, point.Z)
+			end
+		end
+		if rect ~= nil then
+			table.insert(rects, rect)
+		end
+	end
+	return rects
 end
 
 function Scatter.PropFrame(position: Vector3, rotationY: number): CFrame

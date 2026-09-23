@@ -44,8 +44,12 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   Majors fixed, both harvest pastes done 2026-09-22; **wave 2a fix round shipped 2026-09-22**
   after Ben's first Studio look — the glTF importer's 180° Y turn is now compensated for
   **buildings and props in every era**, plus per-cell pavement, paved blocks with street trees,
-  14×14 plazas, a rebuilt City Hall and a ramp on pillars; **one props paste + one buildings
-  paste owed** (`docs/MANUAL_STEPS.md` M9 §9) then playtest; the full M9
+  14×14 plazas and a ramp on pillars, both pastes done 2026-09-22; **wave 2a third round
+  shipped 2026-09-22** after Ben's second Studio look — park strips (grass + planters) on every
+  planned-but-undrawn street cell, the highway rebuilt on a custom `highway-kit` (box girder on
+  piers), `ParkingGarage` rebuilt on a custom `garage-kit` and City Hall rebuilt **kit-only**;
+  **one props paste (4 records) + one buildings paste (7 records) owed**
+  (`docs/MANUAL_STEPS.md` M9 §10) then playtest; the full M9
   checklist re-run is still open — see "M9" below; wave 2b (Orbital Colony dressing +
   `cityDetail`) not started)
 
@@ -338,8 +342,49 @@ renamed slot, two `streetOnly`); Village and Boomtown are untouched. Contracts:
   rather than re-deriving it, and it is now **the reference Ben compares Studio against** — the
   M9 lead renders and reviews the PNGs **before asking for any Studio look**.
 - **Assets owed:** `PlazaA`, `PlazaB`, `HighwayRamp` (props) and `CityHall` (building) were
-  re-uploaded, so their `meshId` / `imageId` are zeroed until Ben runs **one props paste (3
-  records) and one buildings paste (1 record)** — `docs/MANUAL_STEPS.md` "M9" §9.
+  re-uploaded; both pastes were run 2026-09-22 (commits `08643ef`, `ad67484`).
+
+**Shipped (wave 2a third round — after Ben's second Studio playtest, 2026-09-22):** four notes
+from Ben — a junction whose other street had not grown showed a **dead-end sidewalk beside bare
+ground**; the parking garage was "streets stacked up"; the highway was "just some street below it
+to raise it"; the dome City Hall was "way too big, way off, ugly". Still client-only apart from
+the era JSON `kit` strings. Contracts: `docs/INTERFACES.md` "Wave 2a" → "### Park strips in
+undrawn corridors", "### Elevated highway", "### Paved blocks".
+
+- **Park strips (`road.tiles.parkStrips`, Ben: "fill with a small park strip"):** every
+  **planned-but-undrawn** street cell now carries a **Grass slab** (104, 146, 92) covering the
+  cell and its unlaid pavement band, plus one **`TreeGrowing` stage-1 planter per cell** along the
+  run's centreline (cap **24** per plot, thinned evenly). When the stretch draws, its strips and
+  planters are removed **in the same update the tiles land**, so the dust burst covers the swap.
+  A fresh Metropolis plot therefore shows the **whole future street grid as green strips** instead
+  of bare ground — that is the intended look. Client only (`TileRenderer`, `Scatter`, `RoadGraph`,
+  `CityDressingController`); mirrored offline by `py tools/testfit/plotrender.py Metropolis
+  --tier 2` → `assets/testfit/out/Metropolis/plot_tier2.png`.
+- **Highway rebuilt on a custom kit (`tools/assets/highway_kit.py` → `highway-kit`):** a real
+  **box-girder deck on concrete piers**, with barriers and lane lines, at blueprint scale **1.0**
+  — road surface **7.07**, soffit **6.10** (characters still walk under it, including at the plot
+  entrance). Same prop names, origins and orientations as before, so the **client is unchanged**
+  except one fix: the ramp's first cell now sits **fully inward** from the junction cell.
+  Re-uploaded: `HighwayDeck`, `HighwayCorner`, `HighwayJunction`, `HighwayRamp`.
+- **ParkingGarage rebuilt on a custom kit (`tools/assets/garage_kit.py` → `garage-kit`):** lot,
+  deck, ramp, column, core, booth, barrier, sign and cars — **5 stages, 2.35 → 13.8 studs,
+  ≤ 3,000 tris**, so it grows from a surface lot to a four-deck garage instead of reading as
+  stacked streets.
+- **City Hall rebuilt kit-only** (Ben: "modern civic, kit only"): **12.3 studs**, three white
+  bays, a canopy entrance, **3 flag masts**, planters and lamps, **9.6k tris**. The generated
+  `tools/assets/cityhall_kit.py` was **deleted** and the slot's description/`kit` strings updated.
+  **Honest caveat:** `city-kit-commercial` has no civic piece, so it reads as a *white civic block
+  with flags*, not a landmark town hall.
+- **Config/manifest:** era JSON `kit` strings for custom-kit slots now read `Custom (<kit>)`;
+  `docs/ASSET_MANIFEST.md` regenerated (4 eras, 96 models).
+- **Review (roblox-reviewer):** one Critical — the **harvest sequencing** below. Two Majors fixed:
+  duplicate planters at cells shared by two junctions, and the ramp origin half a cell inside the
+  junction. Minors fixed: a nil guard, deterministic strip ordering, the kiosk cut and a coplanar
+  spur top.
+- **Assets owed:** the four highway props, `ParkingGarage` ×5 stages, `CityHall` and the
+  `garage-kit` VIP swatch were re-uploaded (commit `a0763f9`), so their `meshId` / `imageId` are
+  zeroed until Ben runs **one props paste (4 records) and one buildings paste (7 records)** —
+  `docs/MANUAL_STEPS.md` "M9" §10.
 
 **Carried forward (owners assigned):**
 - ui-engineer, M4: landscape viewports narrower than ~690 px (e.g. 640×360) — the right-docked
@@ -988,14 +1033,17 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
 **Carried forward (owners assigned):**
 - [x] **Ben, wave 2a:** both Metropolis pastes done 2026-09-22 — props (24 records) and buildings
   (`CityHall`); 21 prop templates committed (commits `b0ce9ab`, `33b2b54`, `f6556d8`).
-- **Ben, before the wave 2a playtest (fix round):** **two more pastes**, because four assets were
-  re-uploaded — props (**3 records**: `PlazaA`, `PlazaB`, `HighwayRamp`), then buildings
-  (**1 record**: `CityHall`) — then `gen_templates.py --props`, `gen_templates.py`, `--check`,
-  `rojo build`, the manifest, and commit `Assets.json` **with** the templates. Ordered steps:
-  `docs/MANUAL_STEPS.md` "M9" §9. Until then those four show as **grey placeholders** (no plazas,
-  a placeholder ramp, no City Hall mesh) — the designed degrade, not a bug — and
-  `docs/ASSET_MANIFEST.md` reads Metropolis **23/24 buildings and 18/21 props harvested**
-  (totals 95/96) on purpose.
+- [x] **Ben, wave 2a fix round:** both pastes done 2026-09-22 — props (`PlazaA`, `PlazaB`,
+  `HighwayRamp`) and buildings (`CityHall`); templates committed (commits `08643ef`, `ad67484`).
+- **Ben, before the wave 2a playtest (third round):** **two more pastes**, because the highway,
+  the parking garage and City Hall were rebuilt and re-uploaded — props (**4 records**:
+  `HighwayDeck`, `HighwayCorner`, `HighwayJunction`, `HighwayRamp`), then buildings (**7
+  records**: `ParkingGarage` stages 0-4, `CityHall`, the `garage-kit` VIP swatch) — then
+  `gen_templates.py --props`, `gen_templates.py`, `--check`, `rojo build`, the manifest, and
+  commit `Assets.json` **with** the templates. Ordered steps: `docs/MANUAL_STEPS.md` "M9" §10.
+  Until then those show as **grey placeholders** (a placeholder deck, corner, junction and ramp,
+  a placeholder parking garage, no City Hall mesh) — the designed degrade, not a bug — and
+  `docs/ASSET_MANIFEST.md` counts them as un-harvested on purpose.
 - **lead, standing rule from the fix round:** render the plot offline
   (`py tools/testfit/plotrender.py <Era> --camera overview|entrance|ramp|plaza|cityhall`) and
   review `assets/testfit/out/<Era>/plot_*.png` **before** asking Ben for a Studio look. The first
@@ -1007,9 +1055,15 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   templates generated and committed.
 - [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
   generated and committed; baked paths seen and approved in Studio.
-- **Ben, next:** after the two pastes, run `docs/PLAYTEST.md` "M9 — City dressing" **section 4c
-  (wave 2a, Metropolis)** and then the rest of M9 end to end (the path steps 5b–5f, 20b, 23b–23c
-  and section 4b for wave 1e are still open); this ticks M9 `[x]` above once passed.
+- **Ben, next:** after the two pastes, run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4c,
+  4d and 4e (wave 2a, Metropolis)** and then the rest of M9 end to end (the path steps 5b–5f, 20b,
+  23b–23c and section 4b for wave 1e are still open); this ticks M9 `[x]` above once passed.
+- **Ben / lead, wave 2a third round — two looks to judge, not bugs:** (a) a **fresh** Metropolis
+  plot is now covered in green park strips (the whole future street grid) until the streets grow;
+  (b) City Hall is kit-only, so it reads as a white civic block with flags — `city-kit-commercial`
+  has no dome, portico or clock piece. If either misses, the lever is the blueprint
+  (`tools/testfit/blueprints/Metropolis/CityHall.json`) or `road.tiles.parkStrips` in
+  `CityDressing.json`.
 - [x] **Ben / lead, closed (wave 1e):** Ben chose real cross streets, so the Boomtown plan has 5
   polylines and **six** crossings — Install Traffic Lights now buys up to six signals.
 - **lead, before wave 2b:** re-cut the ≤ ~1300-part budget line, which predates baked paths and
@@ -1021,7 +1075,9 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   re-measure with PLAYTEST step 12ag rather than trusting 220.
 - **lead, wave 2a watch item:** `HighwaySign` is uploaded but never placed on Metropolis (the
   7-stud-wide gantry always clips a footprint). Either narrow the blueprint or drop the prop —
-  leaving it uploaded and unused costs nothing, but it is dead weight in the manifest.
+  leaving it uploaded and unused costs nothing, but it is dead weight in the manifest. The third
+  round's `highway-kit` covers **deck, corner, junction and ramp only**, so the sign is still the
+  old kit piece.
 - **lead, wave 2b:** Orbital Colony has `lamps` but no `surface`, `variants`, `signals` or
   `tiles` keys, so it keeps today's behaviour until its street plan lands.
 - **lead / economy-designer, wave 2b:** the Orbital Colony street plan + prop blueprints and the

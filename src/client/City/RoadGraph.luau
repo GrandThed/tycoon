@@ -45,6 +45,10 @@ local SPINE_PIECE_FORMAT = "L%d_%d"
 local SPUR_PIECE_PREFIX = "SP_"
 local SPUR_PIECE_PATTERN = "^SP_(.+)$"
 local BEND_PART_NAME = "RoadBend"
+-- A tiles-era footpath is dropped this far under the kerb it runs off (TileRenderer keeps the
+-- block and park slabs twice as far down), so none of the four ground planes coincide: a spur
+-- that crosses another street's pavement band would otherwise z-fight it.
+local SPUR_DROP = 0.01
 -- Points closer than this are the same point; also the shortest leg worth a Part or an edge.
 local MIN_LENGTH = 0.05
 -- Graph nodes merge on a 1 / NODE_KEY_SCALE stud grid so float noise never splits a corner.
@@ -694,8 +698,8 @@ local function drawSpur(state: State, slotId: string): ()
 		end
 		return
 	end
-	-- A footpath in its own look sits at the pavement's height, under the tile surface; a spur that
-	-- is the road itself keeps the road's live material, colour and top.
+	-- A footpath in its own look sits just under the kerb, under the tile surface; a spur that is
+	-- the road itself keeps the road's live material, colour and top.
 	local footpath = state.spurMaterial ~= nil
 	local drawn = spurDrawPoints(state, points)
 	for index = 2, #drawn do
@@ -709,7 +713,7 @@ local function drawSpur(state: State, slotId: string): ()
 			state.spurWidth,
 			state.spurMaterial or state.material,
 			state.spurColor or state.color,
-			if footpath then 0 else state.thickness / 2
+			if footpath then -SPUR_DROP else state.thickness / 2
 		)
 	end
 end
@@ -1794,6 +1798,15 @@ function RoadGraph.SetBlocks(state: State, owned: { [string]: boolean }, animate
 	local tiles = state.tiles
 	if tiles ~= nil then
 		TileRenderer.SetOwned(tiles, owned, animate == true)
+	end
+end
+
+-- The ground a tiles era's park strips must not cover (the subway kiosks, which the planner is the
+-- only reader of harvested extents for). A no-op in every other era.
+function RoadGraph.SetTileKeepOut(state: State, rects: { TileRenderer.Rect }): ()
+	local tiles = state.tiles
+	if tiles ~= nil then
+		TileRenderer.SetKeepOut(tiles, rects)
 	end
 end
 

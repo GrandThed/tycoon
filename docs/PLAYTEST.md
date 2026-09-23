@@ -1937,11 +1937,18 @@ Install Traffic Lights change the streets. Their props and surface textures were
 2026-09-22. Metropolis uses **kit tile streets** (7-stud `city-kit-roads` tiles), not baked paths,
 plus an elevated ring highway, subway kiosks and a real City Hall.
 
-**Wave 2a fix round (section 4d) needs two more small pastes first:** `docs/MANUAL_STEPS.md` "M9"
-§9 — props (3 records: `PlazaA`, `PlazaB`, `HighwayRamp`) and buildings (1 record: `CityHall`),
-all four re-uploaded after your first Studio look. Without them there are no plazas, the ramp is a
-grey placeholder and City Hall has no mesh — the designed silent degrade (step 12ae), but not a
-pass for sections 4c/4d.
+**Wave 2a fix round (section 4d).** Its two pastes were done 2026-09-22 — nothing owed.
+
+**Wave 2a third round (section 4e) needs two pastes first:** `docs/MANUAL_STEPS.md` "M9" §10 —
+props (**4 records**: `HighwayDeck`, `HighwayCorner`, `HighwayJunction`, `HighwayRamp`) and
+buildings (**7 records**: `ParkingGarage` stages 0-4, `CityHall`, the `garage-kit` swatch), all
+re-uploaded after your **second** Studio look. Without them the highway and the ramp are grey
+placeholders, the parking garage is a placeholder and City Hall has no mesh — the designed silent
+degrade (step 12ae), but not a pass for sections 4c/4d/4e.
+
+**What changed in the third round:** park strips (grass + planters) fill every planned street cell
+that has **not** grown yet, so no more dead-end sidewalk beside bare ground; the highway is a
+box-girder deck on piers; the parking garage grows lot to four decks; City Hall is kit-only.
 
 **One change touches every era.** Roblox's glTF import turns every model 180° about Y; the
 template generator now compensates for **buildings and props**, not just paths. So after this
@@ -2139,7 +2146,7 @@ Metropolis is the only era with **kit tile streets**: 7-stud `city-kit-roads` ti
 Ramp** and **Dig the Subway Line** (both now draw infrastructure and spawn **no building**). All
 client-side; nothing here can break the economy.
 
-**Do `docs/MANUAL_STEPS.md` "M9" §9 (two small harvest pastes) before this section.** §8's
+**Do `docs/MANUAL_STEPS.md` "M9" §10 (two harvest pastes) before this section.** §8's and §9's
 pastes are already done.
 
 - [ ] 12q. **Reach Metropolis.** `GrantCash` `10000000000000` (10T), buy out the current era and
@@ -2173,15 +2180,17 @@ pastes are already done.
       Hall → Skyscraper): that corridor is car-free by design. **Every car drives nose-first** —
       windscreen leading, boot trailing. A car driving backwards means the template turn fix did
       not land (rebuild first, then report).
-- [ ] 12v. **Found City Hall (rebuilt this round).** Buy it. Confirm a **white hall with a dome**
-      (drum, lantern, clock face, columns and a pediment, ~21 studs tall) appears at the plot
-      **centre**, facing back down the civic axis toward the plot entrance, with its **buy pad in
-      front of it** and **no street cell underneath it**. A grey box, a road tile or nothing at all
-      means the `CityHall` harvest paste (MANUAL §9 step 30) did not land.
-- [ ] 12v2. **Dome from the entrance.** Walk to the **plot entrance** and look up the civic axis:
-      the **dome must be clearly visible** over the street, the building reading as the centre of
-      the city. If the hall is hidden behind the nearer buildings, say so — the lever is
-      `tools/assets/cityhall_kit.py` (re-generate + re-upload).
+- [ ] 12v. **Found City Hall (rebuilt kit-only in the third round).** Buy it. Confirm a **white
+      civic block** — three bays, a **canopy over the entrance**, **three flag masts**, planters
+      and lamps, about **12.3 studs** tall — appears at the plot **centre**, facing back down the
+      civic axis toward the plot entrance, with its **buy pad in front of it** and **no street cell
+      underneath it**. A grey box, a road tile or nothing at all means the `CityHall` harvest paste
+      (MANUAL §10 step 37) did not land. The old dome version is gone on purpose (you called it
+      "way too big, way off, ugly").
+- [ ] 12v2. **City Hall from the entrance.** Walk to the **plot entrance** and look up the civic
+      axis: the hall must read as the **centre of the city** (flags visible over the street)
+      without towering over the blocks. Judge the look in section 4e step 12az — the lever is the
+      blueprint `tools/testfit/blueprints/Metropolis/CityHall.json`.
 - [ ] 12w. **Build the Highway Ramp — the ring builds out.** Buy it and watch from a distance:
       **no building spawns** on the pad, and an **elevated ring** starts at the ramp on the west
       side and **grows outward in both directions** until it closes, in roughly **5 seconds** (12
@@ -2255,8 +2264,8 @@ pastes are already done.
 
 Everything fixed after your **first** wave 2a Studio look. One item here is cross-era: the glTF
 importer's 180° Y turn is now compensated for **buildings and props**, so Village, Boomtown,
-Metropolis and Orbital Colony all changed facing. Do `docs/MANUAL_STEPS.md` "M9" §9 first, then
-`rojo build -o build/test.rbxl`.
+Metropolis and Orbital Colony all changed facing. Its own pastes (§9) are done; do
+`docs/MANUAL_STEPS.md` "M9" §10 first, then `rojo build -o build/test.rbxl`.
 
 Optional reference: the same plot rendered offline is at
 `assets/testfit/out/Metropolis/plot_overview.png` (and `plot_entrance/ramp/plaza/cityhall.png`).
@@ -2314,6 +2323,79 @@ Studio should look like those; a clear difference is worth reporting on its own.
   the client skips it.
 - The metro kiosk's **stairwell well is shallow** on purpose (a deep well shows its own floor at
   this camera angle).
+
+### 4e. Wave 2a third round — park strips, girder highway, parking garage, kit-only City Hall
+
+Everything fixed after your **second** wave 2a Studio look. Metropolis only; no other era changed.
+Do `docs/MANUAL_STEPS.md` "M9" §10 (two pastes) first, then `rojo build -o build/test.rbxl`.
+
+Optional reference: the same plot rendered offline at half growth is
+`assets/testfit/out/Metropolis/plot_tier2.png` (`py tools/testfit/plotrender.py Metropolis
+--tier 2`); the full-growth renders are `plot_overview/entrance/ramp/plaza/cityhall.png`. Studio
+should look like those.
+
+- [ ] 12ar. **A fresh Metropolis plot is green, not bare.** Reach Metropolis (`GrantCash`
+      `10000000000000`, buy out, advance) and before buying anything walk the plot. Confirm the
+      **whole future street grid reads as green park strips** — grass slabs on every planned
+      street cell — with **planters** (small trees) spaced along each run. Bare brown ground where
+      a street will later run is the bug.
+- [ ] 12as. **No more dead-end sidewalk beside bare ground.** Buy 2-3 buildings and walk to a
+      **junction where only one of the two streets has grown**. Confirm the ungrown arm continues
+      as a **park strip**, not as a pavement stub next to nothing. A sidewalk running into bare
+      ground is the exact fault this round fixes.
+- [ ] 12at. **Strips swap to tiles as the street grows.** Stand where a park strip runs and buy the
+      building that extends that street. Confirm the strip's slabs **and** its planters vanish in
+      the **same moment** the tiles land, covered by the dust burst — never tiles on top of grass,
+      never a planter left standing in the road, never a one-frame gap of bare ground.
+- [ ] 12au. **Strips stay out of everything else.** Walk the edges: a park strip must never overlap
+      a drawn road tile, a laid pavement strip, a paved block slab or a metro kiosk. Planters are
+      capped at **24** per plot, so on a big plot some runs are thinner — expected.
+- [ ] 12av. **Highway is a real girder deck now.** Buy **Build the Highway Ramp** and look at the
+      ring from the side and from underneath. Confirm a **solid box-girder deck carried on
+      concrete piers**, with **barriers** along the edges and **lane lines** on the surface — not
+      a strip of street floating on a wall. Daylight through the deck, a missing pier, or a pier
+      standing in mid-air is the bug.
+- [ ] 12aw. **Walk under the deck again.** Walk the ring line and **through the plot entrance**
+      beneath the deck: you must pass under everywhere with no bump, no invisible wall and no
+      camera clipping into a pier (soffit is 6.10 studs, deck surface 7.07).
+- [ ] 12ax. **Ramp meets the deck and the street.** Look at the ramp's **top**: it must sit flush
+      against the junction deck, with its **first cell fully inward** from the junction — no
+      overlap onto the ring, no step, no gap. Then look at its **toe**: it must meet the street
+      surface flush. Cars on the deck still never take the ramp.
+- [ ] 12ay. **Parking garage grows lot to decks.** Buy **ParkingGarage** and grow it through all
+      five stages (keep buying upgrades with `GrantCash`). Confirm stage 1 is a **surface lot**
+      (booth, barrier, painted bays, a few cars) and it grows to a **four-deck garage** about
+      **13.8 studs** tall with ramps, columns and a sign. It must read as a garage, not as
+      "streets stacked up" (your words last round).
+- [ ] 12az. **City Hall, judged.** Stand on the buy pad and then at the plot entrance. Confirm the
+      white civic block with its canopy and **three flags** reads as the centre of the city, at a
+      size that fits the blocks around it. Report your verdict either way — this is the third
+      version.
+- [ ] 12ba. **Mobile pass — Device Emulator, 375×667 portrait.** On a Metropolis plot at **partial**
+      growth (so strips and tiles are both visible): the park strips, planters, girder highway,
+      garage and City Hall all read at phone size; buy one slot and confirm the strip-to-tile swap
+      and its dust look right with no visible frame-rate stall; open the Build panel and confirm
+      nothing in its layout regressed.
+- [ ] 12bb. **Two players (Local Server — dressing changed this round).** Test -> Start with
+      **2 Players**. Get Player 1 to Metropolis. With Player 2 watching that plot, Player 1 buys a
+      building that extends a street, then **Build the Highway Ramp**, then **Found City Hall**.
+      Player 2 must see the **same park strips, the same strip-to-tile swap, the same deck and
+      ramp and the same hall**. A far viewer may get them with no burst — expected. Different
+      strips, a planter left behind on one client, or a different deck is not.
+- [ ] 12bc. **Stop Play.** Report: anything left behind after a strip swap, any daylight under the
+      deck or gap at the ramp top, your verdict on the garage and on City Hall, and the child
+      count from step 12ag (park strips add slabs and planters, so expect it higher on a partly
+      grown plot).
+
+**Known caveats for this section — don't report them as bugs**
+
+- A **brand-new** Metropolis plot is covered in green: the whole future street grid shows as park
+  strips before any street exists. That is the design, not a rendering fault.
+- The planter uses the shared `TreeGrowing` prop, so it can look **tall** next to the two-storey
+  blocks. Say so if it bothers you, but it is known.
+- **City Hall reads as a white civic block with flags**, not a domed town hall:
+  `city-kit-commercial` has no civic piece and you asked for kit-only.
+- **No highway sign appears** (same as sections 4c/4d): the 7-stud gantry always clips a footprint.
 
 ### 5. No collisions — walk through everything
 
@@ -2516,6 +2598,12 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
 - Pavement or a block slab lying **over asphalt**, a gap at a bend, a strip across a road mouth, or
   two slabs flickering where they meet.
 - A plaza with bare ground between it and the avenue, or a ramp with daylight under its middle.
+- **Third round (Metropolis):** a pavement stub running into bare ground at a half-grown junction;
+  a park strip left under a drawn street tile, or a planter still standing in the road after the
+  street grows; two planters on the same cell; bare ground where a planned street has not grown;
+  daylight between the highway deck and its piers, or a gap/step where the ramp meets the deck;
+  a parking garage that still reads as stacked streets; City Hall missing its flags or pad-facing
+  front.
 
 ### Sign-off
 
@@ -2528,8 +2616,9 @@ Do each of these **in Edit mode, before pressing Play** (the controller reads co
       footpaths, Found City Hall, the highway ring build-out and walking under it, the subway
       kiosks, the two-player parity check and the missing-props degrade (12q–12ag), the fix-round
       pass — buildings facing their pads in **every** era, nose-first cars, per-cell pavement,
-      paved blocks and street trees, the flush plazas, the domed City Hall and the pillared ramp
-      (12ah–12aq) — no
+      paved blocks and street trees, the flush plazas and the pillared ramp (12ah–12aq), the
+      third-round pass — park strips and their swap to tiles, the girder highway on piers, the
+      ramp meeting the deck, the grown parking garage and the kit-only City Hall (12ar–12bc) — no
       collisions anywhere (including the Explorer flag check), identical dressing for a second
       player, near/far LOD and the rim drop, the traffic MicroProfiler check under 0.2 ms, the dust
       Heartbeat and path-triangle readings, the part counts, refresh stability, era-advance/

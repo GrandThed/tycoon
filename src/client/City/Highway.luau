@@ -187,13 +187,17 @@ local function placeCell(handle: Handle, index: number): ()
 	)
 end
 
--- The ramp hangs off the junction cell's inward edge and descends along `direction`; the optional
--- sign stands at its foot, on one side of the street, facing back up the ramp.
+-- The ramp starts at the first whole cell inward of the junction and descends along `direction`;
+-- the optional sign stands at its foot, on one side of the street, facing back up the ramp.
+-- The prop fills whole cells from its own anchor, which is that first cell's *centre*, not the
+-- junction's edge: anchored half a cell short it would start descending under the junction prop
+-- and step down visibly at its mouth (docs/INTERFACES.md "Elevated highway", and what
+-- streetplan/plotrender draw).
 local function placeRamp(handle: Handle): ()
 	local options = handle.options
 	local direction = handle.direction
 	local quarters = armIndexOf(direction) - 1
-	local foot = handle.junction + direction * (options.tileStuds / 2)
+	local foot = handle.junction + direction * options.tileStuds
 	place(
 		handle,
 		options.config.props.ramp,

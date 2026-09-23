@@ -280,6 +280,9 @@ local function newBuild(
 		entrance = RoadGraph.EntrancePoint(roads),
 	}
 	local plan = Scatter.Plan(planInput)
+	-- Before the first Flush lays anything: the park strips leave the kiosks' ground alone, and the
+	-- planner is the only reader of a prop's harvested extents.
+	RoadGraph.SetTileKeepOut(roads, Scatter.KioskRects(planInput))
 	local signals = era.signals
 	-- Wave 2a: the ring needs both the era's config and the layout's geometry; either missing is a
 	-- plot without a highway, silently.
@@ -466,7 +469,9 @@ local function syncParkTrees(build: Build, folder: Instance): ()
 	if parkStrips == nil then
 		return
 	end
-	local stage = math.max(math.floor(parkStrips.treeStage), 0)
+	-- A config too old (or too new) to carry a sane stage plants the youngest one rather than
+	-- erroring on a NaN, like every other budget read.
+	local stage = math.max(math.floor(RoadGraph.BudgetValue(parkStrips.treeStage, 0)), 0)
 	for index, spot in build.plan.parkTrees do
 		local placed: Model? = build.parkTrees[index]
 		local wanted = RoadGraph.ParkStripAt(build.roads, spot.position)

@@ -58,8 +58,8 @@
 			"type": "unlock",
 			"name": "Found City Hall",
 			"modelName": "CityHall",
-			"description": "columned city hall with clock tower and awning over the steps",
-			"kit": "City Kit (Commercial) + City Kit (Roads)",
+			"description": "white civic hall with canopy entrance, flag masts and a planted forecourt",
+			"kit": "City Kit (Commercial) + City Kit (Roads) + City Kit (Suburban)",
 			"baseCost": 600000000,
 			"baseIncome": 0,
 			"multiplier": 0.05
@@ -103,7 +103,7 @@
 			"name": "Parking Garage",
 			"modelName": "ParkingGarage",
 			"description": "multi-level parking garage with ramp",
-			"kit": "City Kit (Industrial)",
+			"kit": "Custom (garage-kit)",
 			"baseCost": 5400000000,
 			"baseIncome": 7800000
 		},
@@ -124,7 +124,7 @@
 			"modelName": "SubwayEntrance",
 			"streetOnly": true,
 			"description": "metro kiosks with stairs down appear on street corners across the city",
-			"kit": "City Kit (Roads)",
+			"kit": "Custom (metro-kit)",
 			"baseCost": 40000000000,
 			"baseIncome": 0,
 			"multiplier": 0.08
@@ -179,7 +179,7 @@
 			"modelName": "HighwayRamp",
 			"streetOnly": true,
 			"description": "elevated highway rings the city on pylons, with a ramp down to the streets",
-			"kit": "City Kit (Roads)",
+			"kit": "Custom (highway-kit)",
 			"baseCost": 300000000000,
 			"baseIncome": 0,
 			"multiplier": 0.1
