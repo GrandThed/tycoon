@@ -54,9 +54,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   fixed); Orbital props uploaded, harvested and templated 2026-09-23 (commit `9202896`), PLAYTEST
   M9 sections 4f + 4g pending; **wave 2c "living city" built 2026-09-23** (Village, Boomtown,
   Metropolis) — more houses, greenery, parked cars, more traffic, walkers, chimney smoke and bird
-  flocks, all keyed to `GrowthTier`; 48 props uploaded, harvested (48/48) and templated, **awaiting
-  Ben's Studio playtest (PLAYTEST M9 section 4h)**; the full M9 checklist re-run is still open —
-  see "M9" below)
+  flocks, all keyed to `GrowthTier`; 48 props uploaded, harvested (48/48) and templated; **main fast-forwarded to the
+  merged tree 2026-09-23 (`3769c2a`) and Ben signed off waves 2b and 2c the same day ("looks
+  good, lets finish this") — M9 is complete**; carried forward: the 12cx MicroProfiler number and
+  the 12cy part counts were not reported, so the part-budget re-cut stays a lead watch item)
 
 ---
 
@@ -1150,14 +1151,17 @@ Contract: `docs/INTERFACES.md` "Wave 2c — living city". Branch `m9-wave2c-livi
   harvested, templated, manifest regenerated.
 - [x] **Ben, wave 2c — one props paste (48 records)** (done 2026-09-23, commit `d02e38a`):
   harvested 48/48 and templated.
-- **lead, wave 2c:** merge `m9-wave2c-living-city` into main once Ben has played it.
-- **Ben, wave 2c — next:** rebuild, then run PLAYTEST M9 **section 4h** (living city). Report the
-  12cx MicroProfiler number and the Boomtown look checks 12cz–12dc.
+- [x] **lead, wave 2c:** `m9-wave2c-living-city` fast-forwarded into main 2026-09-23 (`3769c2a`);
+  worktree removed, branch kept.
+- [x] **Ben, wave 2c:** PLAYTEST M9 section 4h played and signed off 2026-09-23 (12cx/12cy numbers
+  not reported — re-measure whenever a performance question comes up).
 - **lead, wave 2c watch items:** Traffic + Walkers + Ambient Heartbeat must stay < 0.3 ms with
   every map cap reached (PLAYTEST 12cx); re-cut the part budget with lots 21/18/10 plus up to
   48 greenery and 16 parked per near plot (PLAYTEST 12cy).
 - **Ben, wave 2b — publish both places together** (hub + Expeditions): the profile is now v6.
-- **Ben, next:** PLAYTEST M9 **sections 4f (Orbital) and 4g (`cityDetail`)**, then the rest of M9
+- [x] **Ben:** PLAYTEST M9 sections 4f (Orbital) and 4g (`cityDetail`) signed off 2026-09-23 (tubes
+  redone once as half-pipes, commit `379786d`).
+- ~~**Ben, next:** PLAYTEST M9 **sections 4f (Orbital) and 4g (`cityDetail`)**, then the rest of M9~~
   end to end.
 - **lead, wave 2b watch items:** the train's slight overhang on corners; tubes are walk-through;
   if Ben wants the future tube grid pre-drawn like Metropolis park strips, that is a new rule.
