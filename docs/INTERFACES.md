@@ -2814,6 +2814,143 @@ Same pattern as the VIP-skins amendment: `settings.cityDetail: boolean`, default
 it; SettingsPanel gains a row "City detail" visible to everyone; the controller treats `false` as
 "halve `trees.maxCount`, no lamps, vehicles on the local plot only" and re-evaluates live.
 
+## Wave 2c — living city (Ben, 2026-09-23)
+
+Ben: "make the cities more alive, with more houses and trees and vehicles when the cities
+progress". Rulings: growth stays keyed to `GrowthTier` (purchases and levels, no clock); scope is
+**Village, Boomtown, Metropolis** (OrbitalColony is wave 2b, another session); all four kinds of
+life ship: more lots, greenery, parked + more moving vehicles, pedestrians + ambient (chimney
+smoke, birds). No day-night cycle, no lit windows. Built on branch `m9-wave2c-living-city` in the
+worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
+
+### Principles (unchanged from M9, restated because every new piece must obey them)
+- Client only. No server file, remote, attribute or profile change. Every client derives the same
+  dressing from `(era, tier, owned slots, plot seed)`.
+- Every dressing part: `Anchored` true, `CanCollide`/`CanQuery`/`CanTouch` false.
+- Every number in `CityDressing.json`. Missing prop, layout key or config key → that feature is
+  absent, silently. Far plots (LOD) drop every new category.
+- **Stable streams:** each new category draws from its own `Random.new(plotSeed + SALT)` (salts are
+  module constants in `Scatter`: greenery 7001, parked 7002, walkers 7003, ambient 7004), after
+  the existing plan. Only the lot count may shift existing lamp/vehicle picks, which is cosmetic.
+- `Theme.reducedMotion` true → no smoke, no birds, walkers glide without bob.
+
+### Lots (more houses)
+- `LotLayout` gains `kind: ("house" | "small")?`, default `"house"`. Per era,
+  `houses.smallProps: { string }` (new) lists the props a `"small"` lot draws from; `houses.props`
+  stays the `"house"` list. `Scatter.footprintsFor` takes extents **per kind** (union of that
+  kind's harvested props), so a small lot reserves a small footprint.
+- Footprint caps: `"house"` ≤ 9×9 studs; `"small"` ≤ 6×6 studs and ≤ 6.0 studs tall. The
+  Metropolis contract line "`houses.props` becomes `[]` and its layout has no `lots`" is
+  superseded: Metropolis now has lots in the outer bands and corners; any lot whose footprint
+  lies under the ring deck (soffit 6.65) must be `"small"`.
+- Targets (economy-designer places as many as clear every road, pad, slot and plaza — these are
+  minimums): Village **≥ 18** lots (8 existing kept, same positions and tiers), Boomtown **≥ 18**
+  (8 kept), Metropolis **≥ 10**. New lots spread over tiers 1–5 with **≥ 2 new lots per tier**, so
+  every tier step adds visible houses. A lot's `rotationY` faces its nearest street.
+- `budget.fillerPieces` 25 → **45** (plazas + lots + junction lamps, as today).
+- Props: Village `CottageA`, `CottageB` (small; Village kits). Boomtown `HouseE`, `HouseF`
+  (house; suburban `building-type-f`/`-h`, the two Boomtown has not used) and `ShedA`, `ShedB`
+  (small; suburban/industrial). Metropolis `ApartmentA–C` (house; `low-detail-building-*` /
+  `building-n` from city-kit-commercial that no slot uses) and `TownhouseA`, `TownhouseB` (small,
+  ≤ 6.0 tall). Filler must not reuse a slot's silhouette (M9 props rule).
+
+### Greenery (bushes, hedges, flower beds)
+- Per era: `greenery = { props: {string}, perTier: {number}, lotGarnish: number, clearance:
+  number, roadClearance: number }`. `perTier[t]` (length 5) is the cumulative zone-piece count at
+  tier t (tier 0 → none). `lotGarnish` = pieces placed around each **visible** lot (seeded
+  offsets just outside the lot footprint, never on a road or path strip).
+- Layouts gain `greeneryZones: { TreeZoneLayout }?` (same shape as `treeZones`; may reuse the
+  same centres). Pieces keep `clearance` from each other and `roadClearance` from road strips,
+  and never enter a slot footprint or pad.
+- Single-stage props, one merged MeshPart each, no growth animation (a pop-in with the existing
+  dust burst is fine).
+- `budget.greenery` = **48** per plot, near plots only.
+- Props: Village `BushA`, `BushB`, `FlowerBedA`, `FlowerBedB`, `HedgeA` (nature-kit bushes and
+  flowers, fantasy-town-kit hedges). Boomtown/Metropolis `BushA`, `BushB`, `FlowerBedA`, `HedgeA`,
+  `PlanterA` from a generated **`garden-kit`** (`tools/assets/garden_kit.py`, colours sampled from
+  the City Kits' `colormap.png`, 1 unit = 1 stud) plus suburban `planter`/`fence-low` (the existing
+  Metropolis exception for suburban planters covers them).
+
+### Parked vehicles, and more moving ones
+- Layouts gain `parking: { { position: Vector3, rotationY: number, tier: number, lot: number? } }?`.
+  A spot with `lot = n` (index into `lots`) shows only when that lot does (driveways); others are
+  kerb bays. A spot must sit fully off every lane strip (≥ 0.5 stud clear of the drawn road edge)
+  and show only once the street beside it is drawn (the controller checks the spot's nearest
+  road segment is visible; if not, skip).
+- Per era: `parked = { props: {string}, perTier: {number} }` (cumulative, like greenery).
+  `budget.parked` = **16** per plot, near only.
+- Props: Village `CartParked` (cart-high or the Cart reused — builder's call). Boomtown
+  `ParkedA–C` (car-kit `hatchback-sports`, `suv`, `sedan-sports` at scale 2.5). Metropolis
+  `ParkedA–C` (car-kit `hatchback-sports`, `suv`, `garbage-truck` at ≈ 1.8, body ≤ 2.7 wide).
+  Bays: Boomtown ≈ 4×7 studs, Metropolis ≈ 3×5.
+- Moving: `vehicles.perPlot` Village 2 → 3, Boomtown 4 → 6, Metropolis 6 → 8;
+  `budget.vehiclesPerPlot` 6 → 8, `budget.vehiclesMap` 20 → 24.
+
+### Pedestrians (walkers)
+- New module `src/client/City/Walkers.luau`: its own pool and Heartbeat (BulkMoveTo), same
+  shape as `Traffic` (`SpawnPlot`, `SetLanes`, `ClearPlot`, `Count`), budgeted separately.
+- New `RoadGraph.WalkLanes(state, offset): Lanes` builds lanes over the same visible stretches and
+  spurs at lateral offset `pedestrians.offset` on **both** sides of each street. At a node a
+  walker takes a random outgoing walk lane; crossing a carriageway at a junction is allowed.
+- Per era `pedestrians = { firstTier, perTier: {number}, offset, speed, bobHeight, bobHz,
+  props: {string} }`. Offsets: Metropolis on the pavement (road half-width + pavement/2 ≈ 5.5),
+  Boomtown on the verge (≈ 4.8), Village at the trail edge (≈ 1.3, clear of the carts at 0).
+- `budget.walkersPerPlot` = **8**, `budget.walkersMap` = **24**; walkers run on the same nearest
+  `lod.vehiclePlots` plots as cars.
+- Props: generated **`people-kit`** (`tools/assets/people_kit.py`, Blender, 1 unit = 1 stud):
+  chunky flat-shaded toy figures, one merged MeshPart each, **≈ 1.6–2.0 studs tall** (under a kit
+  door), era outfits via colour factors: `WalkerA–D` per era (Village smocks/aprons, Boomtown
+  casual, Metropolis suits). Motion = walk along the lane + vertical bob; no rig, no animation IDs.
+
+### Ambient (smoke, birds)
+- New module `src/client/City/Ambient.luau`, one Heartbeat only while something is live.
+- `ambient.smoke = { firstTier, eras: {string}, props: { [propName]: {number} }, rate, lifetime,
+  size: {number}, color: {number} }`. `props` maps a house prop name to a chimney offset
+  `[x, y, z]` in the prop frame; a placed house of that prop gets one ParticleEmitter there
+  (`smoke_main.dds`, like Dust). Village and Boomtown only.
+- `ambient.birds = { firstTier, flocksPerTier: {number}, birdsPerFlock, radius, height, speed,
+  prop }`. A flock circles over a `treeZones` centre with seeded phase; birds are a generated
+  `Bird` prop (people-kit) in each era's `_props`. All three eras (Metropolis = pigeons, grey).
+- `budget.birdsMap` = **18**; near plots only.
+
+### Budget and LOD
+- New near-plot maximum per plot: lots ≤ 45 filler, greenery 48, parked 16, walkers 8, birds 6.
+  Far plots keep lots and houses (they are city silhouette) and drop greenery, parked, walkers,
+  smoke and birds. The PLAN target is re-cut from measurement in the playtest; the step for
+  Traffic + Walkers + Ambient together must stay **< 0.3 ms** with every map cap reached.
+
+### Types (`Types.luau`, ui-engineer this wave)
+`LotKind`, `LotLayout.kind`, `ParkingSpotLayout`, `EraLayout.greeneryZones`/`parking`,
+`GreeneryConfig`, `ParkedConfig`, `PedestrianConfig`, `SmokeConfig`, `BirdsConfig`,
+`AmbientConfig`; `CityEraDressingConfig` gains `greenery`, `parked`, `pedestrians`,
+`houses.smallProps`; `CityDressingConfig` gains `ambient`; `CityBudgetConfig` gains `greenery`,
+`parked`, `walkersPerPlot`, `walkersMap`, `birdsMap`. All new fields optional.
+
+### Ownership (wave 2c, disjoint)
+- lead: this section; the merge → upload → harvest → templates run (announced to the wave 2b
+  session first, never concurrent with it).
+- economy-designer: `src/shared/Layouts/{Village,Boomtown,Metropolis}.luau` (lots, greeneryZones,
+  parking), `src/shared/Config/CityDressing.json` (all wave 2c keys for the three eras, top-level
+  `ambient`, budget keys; **never** `eras.OrbitalColony`), `tools/streetplan.py` (lot/parking
+  clearance checks + the new layers in its PNG, three eras only).
+- ui-engineer: `src/shared/Types.luau` (the types above only), `src/client/City/{Scatter,RoadGraph,
+  Walkers,Ambient}.luau`, `src/client/Controllers/{CityDressingController,AssetPreloader}.luau`.
+  `Traffic.luau` is read-only unless a shared helper must move out of it.
+- kit-builder: `tools/assets/{garden_kit,people_kit}.py`; `_props/*/Walker*.json`, `Bird.json`,
+  and the Boomtown/Metropolis greenery blueprints.
+- prop-builders Village / Boomtown / Metropolis: that era's new lot and parked-vehicle blueprints
+  (+ Village greenery) under `tools/testfit/blueprints/_props/<Era>/`, strips in
+  `assets/testfit/out/<Era>/`.
+
+### Done when
+- Village, Boomtown, Metropolis at tier 1…5: each tier step visibly adds houses, greenery and
+  (from tier 2) parked vehicles, walkers and birds; Village/Boomtown chimneys smoke from their
+  tier. Nothing overlaps a road, pad or building; no walker walks through a house.
+- Tier 0 plots look exactly as today; Orbital Colony is untouched by this wave.
+- Removing any new prop template or config key removes that feature only, no Output error.
+- `py tools/streetplan.py <Era>` green for all three; stylua, selene, luau-lsp, `rojo build`,
+  `gen_templates.py --check` clean; reviewer greps the collision flags on every new part.
+
 ## Waves
 
 1. **Wave 1 (parallel, disjoint):** luau-engineer (types, CityGrowth, attributes, Catalog);
