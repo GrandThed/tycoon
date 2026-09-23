@@ -1944,10 +1944,13 @@ plus an elevated ring highway, subway kiosks and a real City Hall.
 
 **Wave 2a third round (section 4e).** Its two pastes were done 2026-09-23 — nothing owed.
 
-**Wave 2b — Orbital Colony + City detail (sections 4f and 4g) needs one props paste first:**
-`docs/MANUAL_STEPS.md` "M9" §11 (16 records: tubes, monorail, rocks, domes, platform, lamp).
-Without it an Orbital plot shows grey tube slabs and no monorail, rocks or domes — the designed
-degrade (step 12bs), not a pass for 4f. Section 4g (City detail) needs no assets.
+**Wave 2b — Orbital Colony + City detail (sections 4f and 4g).** Its props paste was done
+2026-09-23 (16 records) — nothing owed. Section 4g (City detail) needs no assets.
+
+**Wave 2c — living city (section 4h).** Its props paste was done 2026-09-23 (48 records) —
+nothing owed. More houses, greenery, parked cars, more traffic, walkers, chimney smoke and bird
+flocks in Village, Boomtown and Metropolis, all growing with `GrowthTier`. It also **moves a few
+approved Boomtown things** (lamp and signal offsets, five ring lots, tree zones) — steps 12cz–12dc.
 
 **What changed in the third round:** park strips (grass + planters) fill every planned street cell
 that has **not** grown yet, so no more dead-end sidewalk beside bare ground; the highway is a
@@ -2526,6 +2529,152 @@ first**, on the first Play after the rebuild.
 
 **Publishing note:** the setting moved the profile to schema v6. Publish the hub **and**
 Expeditions together (`docs/MANUAL_STEPS.md` "M9" §11 step 51).
+
+### 4h. Wave 2c — living city (houses, greenery, parked cars, walkers, smoke, birds)
+
+Village, Boomtown and Metropolis only. Client-only cosmetics, all keyed to the plot's
+`GrowthTier`. The 48 props are already harvested and templated (2026-09-23) — nothing owed, just
+rebuild.
+
+**What to expect per era at tier 5 (maximums):**
+
+| | Village | Boomtown | Metropolis |
+|---|---|---|---|
+| Filler lots | 21 (cottages on small 6×6 lots) | 18 (`HouseE/F`, sheds) | 10 (apartments, townhouses) |
+| Greenery (zones, + garnish per lot) | 24 | 20 | 14 |
+| Parked | 6 carts | 12 cars | 16 cars |
+| Moving vehicles | 3 carts | 6 cars | 8 cars |
+| Walkers (from tier 2) | 5 | 7 | 8 |
+| Walker line | trail edge | asphalt edge | pavement |
+| Chimney smoke (from tier 2) | yes | yes | **no** |
+| Bird flocks (from tier 2) | 1 at tiers 2–3, 2 at tiers 4–5 | same | same (grey pigeons) |
+
+Greenery is capped at **48** pieces per plot. Reference street plans:
+`assets/testfit/out/<Era>/streetplan.png` (`py tools/streetplan.py <Era>`).
+
+**Setup**
+
+- [ ] 12cd. **Rebuild.** `rojo build -o build/test.rbxl` (or resync `rojo serve`). In Edit mode,
+      Explorer: `ReplicatedStorage.Assets.Props.Village.CottageA`,
+      `ReplicatedStorage.Assets.Props.Boomtown.WalkerA` and
+      `ReplicatedStorage.Assets.Props.Metropolis.Bird` all exist.
+- [ ] 12ce. **Graphics not low-end.** Play → Esc → Settings → Graphics Mode **Automatic** (or
+      Manual at **4 or higher**). Levels 1–3 count as low-end and hide smoke and birds (tested
+      on purpose in 12cs).
+
+**Village, tier by tier** (fresh save; watch `GrowthTier` on `Workspace/Plots/Plot_<n>`
+Attributes; use the `GrantCash` Workspace attribute + Build panel ×1/×10/Max to climb)
+
+- [ ] 12cf. **Tier 0 = unchanged.** Before buying: no cottages, bushes, flower beds, hedges, carts,
+      walkers, smoke or birds. Same bare plot as before this wave.
+- [ ] 12cg. **Tier 1** (first buy). Expect:
+      - at least 2 new houses/cottages appear (dust burst);
+      - about 4 greenery pieces (bushes, flower beds, hedges) plus 1 piece beside each visible lot;
+      - **no** parked carts, walkers, smoke or birds yet.
+- [ ] 12ch. **Tier 2.** Expect:
+      - more cottages and greenery;
+      - up to 2 **parked carts**, each beside a **drawn** trail (never beside bare grass);
+      - walkers (≈ 1.75 studs, chunky toy figures in smocks/aprons) walking the trail edge, gently
+        bobbing;
+      - **chimney smoke** rising from `HouseA`, `HouseB` and the cottages;
+      - **one bird flock** (3 birds) circling above a tree grove.
+- [ ] 12ci. **Tiers 3 → 5.** Every tier step adds houses **and** greenery. At tier 5: 21 filler
+      lots shown, up to 6 parked carts, 3 moving carts, 5 walkers, 2 flocks.
+- [ ] 12cj. **No overlaps.** Walk the whole plot. Bug if any of these sits on a trail, a pad or
+      inside a building/footprint:
+      - a cottage, bush, flower bed, hedge or parked cart;
+      - a walker walking **through** a house, lantern or building.
+
+**Boomtown, tier by tier** (buy out Village, Advance Era)
+
+- [ ] 12ck. **Tier 0 = unchanged** (right after advancing): no new houses, greenery, parked cars,
+      walkers, smoke or birds.
+- [ ] 12cl. **Tiers 1 → 5.** Expect by tier 5:
+      - new `HouseE`/`HouseF` houses and small sheds, each facing a street;
+      - bushes, hedges, flower beds and planters (garden-kit), tidy around lots;
+      - up to 12 **parked cars** in kerb bays or driveways, fully off the asphalt;
+      - 6 moving cars, 7 walkers on the asphalt edge (casual outfits), clear of the cars;
+      - smoke from `HouseA`–`HouseE` chimneys (`HouseF` and sheds have none — by design);
+      - 2 bird flocks.
+- [ ] 12cm. **Parked only beside drawn streets.** At tier 2–3, find a bay on a street that is
+      **not drawn yet** (bays are marked on `assets/testfit/out/Boomtown/streetplan.png`): empty.
+      Buy the building whose street passes it: the bay can now fill. Bug: a parked car beside
+      grass or in the carriageway.
+
+**Metropolis, tier by tier** (advance again)
+
+- [ ] 12cn. **Tier 0 = unchanged.** Then tiers 1 → 5. Expect by tier 5:
+      - 10 filler lots: apartments (`ApartmentA–C`) and townhouses; townhouses under the ring
+        deck **do not poke through** it (soffit 6.65);
+      - greenery and planters in the outer bands and corners;
+      - up to 16 parked cars beside drawn tile streets, none on a tile;
+      - 8 moving cars; 8 walkers in suits **on the pavement**;
+      - **no chimney smoke** (Metropolis is not a smoke era);
+      - grey pigeon flocks over the groves.
+
+**All three eras**
+
+- [ ] 12co. **Walkers turn back.** Follow one walker to the end of its line. It **turns back** at a
+      lamp, lantern, kiosk, signal, house or building — never walks through it. Crossing the
+      carriageway at a junction is allowed.
+- [ ] 12cp. **No collisions.** Walk your avatar through a walker, a parked car, a bush and a
+      cottage: no bump, no prompt blocked.
+- [ ] 12cq. **Far plot (LOD).** From a tier-5 plot, fly **> 290 studs** away. On that plot:
+      greenery, parked cars, walkers, smoke and birds **vanish**; filler houses **stay**. Fly back:
+      all return within ~1 s, same spots.
+- [ ] 12cr. **City detail OFF / ON.** Settings → **City detail** OFF. Within a second:
+      - greenery drops to about **half**;
+      - parked cars, walkers, smoke and birds **gone**;
+      - filler houses **stay**; roads and buildings don't flicker.
+      Turn it ON: the **exact same** greenery, parked cars and houses come back in the **same**
+      spots. Bug: anything in a new place after the round trip.
+- [ ] 12cs. **Low-end device.** Esc → Settings → Graphics Mode **Manual**, quality **1–3**. Stop,
+      Play again (read once at start). Expect: no smoke, no birds; walkers **glide without bob**;
+      everything else unchanged. Put Graphics Mode back to **Automatic**, Stop, Play. If Studio
+      does not keep the graphics setting between Plays, skip and say so.
+- [ ] 12ct. **Mobile — Device Emulator, 375×667 portrait.** On a tier-5 Boomtown or Village plot:
+      - walkers **glide without bob** (touch = reduced motion);
+      - chimney smoke and birds **still show** (phones keep them);
+      - buy one slot: no visible stall; Build panel and Settings unchanged.
+- [ ] 12cu. **Two players (Local Server, 2 Players).** Player 1 at tier 3+ in any of the three eras.
+      Player 2 looks at Player 1's plot: **same** houses, greenery and parked cars in the **same**
+      spots. Positions of walkers, moving cars and birds may differ — expected.
+- [ ] 12cv. **Tier-0 plot and Orbital unchanged.** A tier-0 plot looks as before. An Orbital plot
+      (4f) has no walkers, greenery, parked cars, smoke or birds.
+- [ ] 12cw. **Degrade.** Edit mode: rename `ReplicatedStorage/Assets/Props/Metropolis/Bird` →
+      `Bird_bak`. Play a Metropolis plot at tier 2+: no pigeons, everything else normal,
+      **Output: zero errors.** Stop, rename it back.
+- [ ] 12cx. **MicroProfiler < 0.3 ms.** Local Server, **3 Players**, each pushes a plot to tier 5
+      (mix of eras is fine). On one client stand where all 3 plots are near (< 250 studs), Ctrl+F6.
+      In the client Heartbeat find the dressing connections: one each for Traffic (cars),
+      Walkers and Ambient (birds) — rows may be labelled by the client script, not the module.
+      Their **sum** must stay **under 0.3 ms** across several frames. Report the number.
+- [ ] 12cy. **Counts.** Command Bar on a tier-5 plot:
+      `print(#workspace.CityDressing:FindFirstChild("Plot1"):GetDescendants())` (swap in your
+      `Plot<n>`) and `print(#workspace.CityDressing:GetDescendants())`. Report both per era.
+
+**Boomtown look changes to eyeball (previously approved things moved)**
+
+- [ ] 12cz. **Lamp row** (Streetlamp Row owned): lamps now stand **1.2** studs off the road edge
+      (was 0.8) — on the verge, not in the kerb or the asphalt, and walkers pass inside them.
+- [ ] 12da. **Traffic lights** (Install Traffic Lights owned): signals stand **1.5** off (was 0.8)
+      on each corner, clear of the carriageway and the walkers.
+- [ ] 12db. **Ring lots 1, 2, 5, 6, 7** sit 0.5–0.6 studs further back. No house touches a street;
+      nothing looks misaligned with its neighbours.
+- [ ] 12dc. **Trees moved once.** Boomtown and Metropolis tree zones were re-planned, so trees
+      stand in **different** spots than your last session — expected, once. Village bay 3 and
+      lot 15 moved 1 stud. Judge only: does anything now look worse?
+- [ ] 12dd. **Stop Play. Report:** any overlap (12cj/12cm/12cn), a walker through a solid, the
+      12cx number, the 12cy counts, and a yes/no on 12cz–12dc.
+
+**Known caveats for this section — don't report them as bugs**
+
+- Walkers are taller than kit doors on purpose (anything door-sized is a speck at this camera).
+- Walkers cross the carriageway at junctions; they have no animation, only a bob.
+- Walkers, moving cars and birds are in different positions for different players.
+- Not every house smokes: Village `HouseC`, Boomtown `HouseF` and sheds have no chimney.
+- Trees in Boomtown and Metropolis moved once after this rebuild.
+- No day-night cycle and no lit windows — not in this wave.
 
 ### 5. No collisions — walk through everything
 

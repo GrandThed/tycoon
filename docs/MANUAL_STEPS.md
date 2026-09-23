@@ -758,8 +758,11 @@ Run in this order from the repo root; every step is idempotent, same as M7.
       needs no paste, only a `rojo build`.
 - [x] 10e. (done 2026-09-23) **Wave 2a third round** — highway kit, `ParkingGarage`, `CityHall`
       harvested and templated: section 10 below.
-- [ ] 10f. **Wave 2b (2026-09-23) added 13 Orbital Colony props (16 stages)** — blueprints only;
-      **not merged, uploaded or harvested yet**: section 11 below.
+- [x] 10f. (done 2026-09-23, commit `9202896`) **Wave 2b added 13 Orbital Colony props
+      (16 stages)** — merged, uploaded, harvested and templated: section 11 below.
+- [x] 10g. (done 2026-09-23, commits `0b5d08d`, `d02e38a`) **Wave 2c added 48 living-city props**
+      (Village 13, Boomtown 17, Metropolis 18) — merged, uploaded, harvested 48/48 and templated:
+      section 12 below.
 
 ### 4. Nothing new to create on the Creator Hub
 
@@ -1035,7 +1038,7 @@ parking garage** and **no City Hall mesh** on a Metropolis plot — the designed
       37). Do **not** run `upload_models.py` again to "fix" it — a stage with a non-zero
       `modelAssetId` is never re-uploaded, so a re-run prints "already uploaded, skipped".
 
-### 11. Wave 2b — Orbital Colony dressing + `cityDetail`: upload, then **one** props paste (OWED)
+### 11. Wave 2b — Orbital Colony dressing + `cityDetail`: upload, then **one** props paste (**DONE 2026-09-23**, commit `9202896` — nothing owed)
 
 Wave 2b (2026-09-23) dresses the Orbital Colony: tube corridors, a monorail loop, decking, rocks,
 domes, a platform and light masts. **13 props, 16 stages**, all custom or space/orbital-kit:
@@ -1099,6 +1102,64 @@ Metropolis) uploads from its own worktree at the same time. Rules:
       (City detail)**.
 
 **Nothing new on the Creator Hub** for wave 2b: no passes, products or audio.
+
+### 12. Wave 2c — living city: 48 props, **one** props paste (**DONE 2026-09-23**, commits `0b5d08d`, `d02e38a` — nothing owed)
+
+Wave 2c adds houses, greenery, parked cars, walkers and birds to Village, Boomtown and Metropolis.
+Built in the worktree `C:\Users\benja\Desktop\tycoon-wave2c` (branch `m9-wave2c-living-city`).
+**48 single-stage props, no buildings changed:**
+- Village (13): `CottageA`, `CottageB`, `BushA`, `BushB`, `FlowerBedA`, `FlowerBedB`, `HedgeA`,
+  `CartParked`, `WalkerA`–`WalkerD`, `Bird`
+- Boomtown (17): `HouseE`, `HouseF`, `ShedA`, `ShedB`, `BushA`, `BushB`, `FlowerBedA`, `HedgeA`,
+  `PlanterA`, `ParkedA`–`ParkedC`, `WalkerA`–`WalkerD`, `Bird`
+- Metropolis (18): `ApartmentA`–`ApartmentC`, `TownhouseA`, `TownhouseB`, `BushA`, `BushB`,
+  `FlowerBedA`, `HedgeA`, `PlanterA`, `ParkedA`–`ParkedC`, `WalkerA`–`WalkerD`, `Bird`
+- blueprints: `tools/testfit/blueprints/_props/<Era>/`
+
+Two new generated kits (`assets/` is gitignored — the scripts are the committed artifacts, the
+GLBs regenerate):
+- `garden-kit` — `tools/assets/garden_kit.py`: bushes, hedges, flower beds, planters for
+  Boomtown/Metropolis (City Kits palette, 1 unit = 1 stud).
+- `people-kit` — `tools/assets/people_kit.py`: walkers ≈ 1.75 studs, birds (blueprint scale 1.4).
+
+- [x] 53. **Regenerate the kits** (only if a kit script changed; repo root, Git Bash):
+      ```
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/garden_kit.py
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/people_kit.py
+      ```
+      Writes `assets/kenney3d/garden-kit/Models/GLB format/` and
+      `assets/kenney3d/people-kit/Models/GLB format/` (`people_kit.py` imports its mesh
+      helpers from `garden_kit.py`, so keep the two scripts together).
+- [x] 54. **Street-plan check:** `py tools/streetplan.py Village`, `Boomtown`, `Metropolis` — all
+      green (lots per kind, parking, greenery yield, walk-lane clipping).
+- [x] 55. **Lead — merge**, one era at a time:
+      `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era <Era>`
+      (`<Era>` = `Village`, `Boomtown`, `Metropolis`).
+- [x] 56. **Lead — upload** (48 props), dry run then real, per era:
+      `py tools/assets/upload_models.py --props --era <Era> --dry-run`
+      `py tools/assets/upload_models.py --props --era <Era>`
+      Committed as `0b5d08d`. Never at the same time as another session's upload or harvest.
+- [x] 57. **Ben — the props paste (48 records)**, done 2026-09-23, 48/48. Studio in **Edit mode**,
+      commands run from the **worktree**, not `C:\Users\benja\Desktop\tycoon`:
+      1. `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
+      2. Studio → **Command Bar** → paste → Enter → wait for `[HARVEST-DONE]`.
+      3. Output → right-click → **Select All** → **Ctrl+C**.
+      4. `py tools/assets/harvest.py --props` — expect **48** merged records.
+- [x] 58. **Templates:**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --check
+      ```
+      Committed with `Assets.json` as `d02e38a`.
+- [x] 59. **Manifest:** `py tools/gen_asset_manifest.py` then `--check`.
+- [ ] 60. **Ben — rebuild and playtest:** `rojo build -o build/test.rbxl`, then `docs/PLAYTEST.md`
+      "M9 — City dressing" **section 4h**.
+- 61. **If a record goes missing later:** re-run step 57 only. Do **not** re-run
+      `upload_models.py` — a non-zero `modelAssetId` is never re-uploaded.
+
+**Nothing new on the Creator Hub** for wave 2c: no passes, products or audio. No profile change,
+so no need to publish the Expeditions place for this wave.
+
 
 
 ---

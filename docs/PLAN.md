@@ -51,9 +51,12 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   both pastes done and templated 2026-09-23 (commit `3613cfc`), signed off; **wave 2b Orbital
   Colony dressing + `cityDetail` shipped 2026-09-23** — tube corridors, monorail loop, decking,
   rock fields, domes and the persisted "City detail" setting, review no Criticals (two Majors
-  fixed); **Orbital props not yet merged/uploaded; then one props paste (16 records) owed**
-  (`docs/MANUAL_STEPS.md` M9 §11), then PLAYTEST M9 sections 4f + 4g; the full M9 checklist
-  re-run is still open — see "M9" below)
+  fixed); Orbital props uploaded, harvested and templated 2026-09-23 (commit `9202896`), PLAYTEST
+  M9 sections 4f + 4g pending; **wave 2c "living city" built 2026-09-23** (Village, Boomtown,
+  Metropolis) — more houses, greenery, parked cars, more traffic, walkers, chimney smoke and bird
+  flocks, all keyed to `GrowthTier`; 48 props uploaded, harvested (48/48) and templated, **awaiting
+  Ben's Studio playtest (PLAYTEST M9 section 4h)**; the full M9 checklist re-run is still open —
+  see "M9" below)
 
 ---
 
@@ -891,8 +894,8 @@ a few vehicles move along the roads — without a measurable frame cost. Decided
 3. **car-kit belongs to Boomtown and Metropolis.** Village gets carts (nature-kit), Orbital a
    rover only if space-kit has one.
 
-**Growth tier.** `score = owned × 10 + Σ levels`; tier = number of thresholds
-`[10, 80, 250, 600, 1200]` reached (pure `CityGrowth.luau`, mirrored in the sim; constants in
+**Growth tier.** `score = owned × 50 + Σ levels` (`ownedWeight`); tier = number of thresholds
+`[50, 400, 950, 1350, 1600]` reached (pure `CityGrowth.luau`, mirrored in the sim; constants in
 `Config/CityDressing.json`). Tuning target: tier 1 on the first purchase, tier 3 at ~40 % and
 tier 5 at ~80 % of the era's target duration.
 
@@ -1000,7 +1003,7 @@ tunable is in `CityDressing.json` (v3). Contracts: `docs/INTERFACES.md` "Wave 1e
   dust puff along every visible trail on a near plot. **`Lantern`** props (fantasy-town-kit
   `lantern`, blueprint scale 3.2, 4.98 studs) line the visible spine trails: spacing 16, offset
   1.2, ≈ 15 on a fully grown plot (11 main lane, 1 campsite lane, 1 farm track, 2 cottage lane),
-  cap `budget.lampPosts` 16.
+  cap `budget.lampPosts` 24.
 - **Boomtown `paveMainStreet`:** streets are **`gravel`** until it is owned, then today's asphalt +
   concrete kerb (`default`). A fresh Boomtown plot never shows a frame of asphalt.
 - **Boomtown `streetlampRow`:** now gates **all** Boomtown lamps — the tier-3 junction rule no
@@ -1069,6 +1072,53 @@ decking only under clusters, rocks clear of buildings, entrance pier moved.
   beam slightly on corners; the future tube grid is **not** pre-drawn (unlike Metropolis park
   strips) — a fresh Orbital plot is bare regolith.
 
+**Shipped (wave 2c — living city, 2026-09-23; built, awaiting Ben's Studio playtest):** Ben: "make
+the cities more alive, with more houses and trees and vehicles when the cities progress".
+Contract: `docs/INTERFACES.md` "Wave 2c — living city". Branch `m9-wave2c-living-city`
+(worktree `C:\Users\benja\Desktop\tycoon-wave2c`), merged with main's wave 2b.
+
+- **Scope:** Village, Boomtown, Metropolis only (Orbital untouched). Client only — no server,
+  remote, attribute or profile change. Growth keyed to `GrowthTier` (no clock).
+- **Lots:** Village **21**, Boomtown **18**, Metropolis **10**, ≥ 2 new per tier 1–5. New lot
+  `kind` `"small"` (≤ 6×6, ≤ 6.0 tall) next to `"house"` (≤ 9×9); footprints measured per kind.
+  - Village: `CottageA/B` (small, 6×6 lots).
+  - Boomtown: `HouseE/F` (house), `ShedA/B` (small).
+  - Metropolis: `ApartmentA–C` (house), `TownhouseA/B` (small; any lot under the ring deck).
+  - `budget.fillerPieces` 25 → 45.
+- **Greenery:** layout `greeneryZones` + garnish around each visible lot. Cumulative
+  `greenery.perTier`: Village [4, 9, 14, 19, 24], Boomtown [4, 8, 12, 16, 20], Metropolis
+  [2, 5, 8, 11, 14]; `budget.greenery` 48, near plots only.
+- **Parked vehicles:** kerb bays and driveways (layout `parking`), shown only beside a drawn
+  street; max 6 / 12 / 16 (Village carts / Boomtown cars / Metropolis cars); `budget.parked` 16.
+- **Moving vehicles:** `perPlot` Village 2 → 3, Boomtown 4 → 6, Metropolis 6 → 8;
+  `budget.vehiclesPerPlot` 8, `budget.vehiclesMap` 20 → 24.
+- **Walkers** (`src/client/City/Walkers.luau`): from tier 2, ≤ 8 per near plot, 24 per map, on the
+  3 nearest plots. Offsets: Village 1.6 (trail edge), Boomtown 4.35 (asphalt edge, clear of cars),
+  Metropolis 5.5 (pavement). Walk lanes are **clipped at every solid except pads**; walkers turn
+  back there.
+- **Ambient** (`src/client/City/Ambient.luau`): chimney smoke from tier 2 on Village + Boomtown
+  houses (offsets keyed `"Era/Prop"`); bird flocks from tier 2 over tree zones in all three eras
+  (`budget.birdsMap` 18).
+- **Device rules:** smoke and birds are off **only** on low-end devices (`Theme.lowEndDevice`,
+  saved graphics quality 1–3); phones keep them. Walkers glide without bob under `reducedMotion`
+  (every touch device).
+- **City detail OFF** (wave 2b setting): greenery halved (`detail.treeShare`); parked cars,
+  walkers, smoke and birds off; houses stay. Far plots drop the same set.
+- **Generated kits (Blender):** `tools/assets/garden_kit.py` (`garden-kit`: bushes, hedges, flower
+  beds, planters for Boomtown/Metropolis) and `tools/assets/people_kit.py` (`people-kit`: walkers
+  ≈ 1.75 studs, birds at blueprint scale 1.4).
+- **Assets:** 48 props (Village 13, Boomtown 17, Metropolis 18) uploaded, harvested (Ben's paste
+  2026-09-23, 48/48) and templated (commits `0b5d08d`, `d02e38a`).
+- **`tools/streetplan.py`** now checks lots per kind, parking bays, greenery yield (120-seed Monte
+  Carlo, p10 ≥ `perTier[5]`) and walk-lane clipping; green for all three eras.
+- **Review fixes:** walkers passed through lots, kiosks and lamps (lanes now clip); a missing wave
+  2c key disables its feature instead of throwing; Boomtown walker offset 4.35.
+- **Visible changes to approved looks (Ben to eyeball, PLAYTEST 12cz–12dc):**
+  - Boomtown `lamps.offset` 0.8 → 1.2, `signals.offset` 0.8 → 1.5;
+  - Boomtown ring lots 1, 2, 5, 6, 7 nudged 0.5–0.6 studs back;
+  - Boomtown and Metropolis tree zones re-planned (existing trees move once);
+  - Village parking bay 3 and lot 15 moved 1 stud.
+
 **Carried forward (owners assigned):**
 - [x] **Ben, wave 2a:** both Metropolis pastes done 2026-09-22 — props (24 records) and buildings
   (`CityHall`); 21 prop templates committed (commits `b0ce9ab`, `33b2b54`, `f6556d8`).
@@ -1094,14 +1144,18 @@ decking only under clusters, rocks clear of buildings, entrance pier moved.
   templates generated and committed.
 - [x] **Ben, wave 1d:** path harvest paste done 2026-09-18 (186 assets, 91 pieces); templates
   generated and committed; baked paths seen and approved in Studio.
-- **lead, wave 2b — upload first:** merge and upload the 13 Orbital props (16 stages) —
-  `merge_stages.py --props --era OrbitalColony`, `upload_models.py --props --era OrbitalColony` —
-  and commit `Assets.json` straight after. Steps: `docs/MANUAL_STEPS.md` M9 §11.
-- **Ben, wave 2b — one props paste (16 records):** after the upload, per M9 §11; then
-  `gen_templates.py --props`, `--check`, manifest, commit `Assets.json` **with** the templates.
-  The wave 2c session ("living city") uploads from its own worktree at the same time: **do its
-  paste and this one separately, never interleaved, each announced.** Until the paste an Orbital
-  plot draws grey tube slabs, no monorail, no rocks or domes — the designed degrade.
+- [x] **lead, wave 2b — upload** (done 2026-09-23, commit `d21c3dd`): 13 Orbital props
+  (16 stages) merged and uploaded.
+- [x] **Ben, wave 2b — one props paste (16 records)** (done 2026-09-23, commit `9202896`):
+  harvested, templated, manifest regenerated.
+- [x] **Ben, wave 2c — one props paste (48 records)** (done 2026-09-23, commit `d02e38a`):
+  harvested 48/48 and templated.
+- **lead, wave 2c:** merge `m9-wave2c-living-city` into main once Ben has played it.
+- **Ben, wave 2c — next:** rebuild, then run PLAYTEST M9 **section 4h** (living city). Report the
+  12cx MicroProfiler number and the Boomtown look checks 12cz–12dc.
+- **lead, wave 2c watch items:** Traffic + Walkers + Ambient Heartbeat must stay < 0.3 ms with
+  every map cap reached (PLAYTEST 12cx); re-cut the part budget with lots 21/18/10 plus up to
+  48 greenery and 16 parked per near plot (PLAYTEST 12cy).
 - **Ben, wave 2b — publish both places together** (hub + Expeditions): the profile is now v6.
 - **Ben, next:** PLAYTEST M9 **sections 4f (Orbital) and 4g (`cityDetail`)**, then the rest of M9
   end to end.
@@ -1120,7 +1174,7 @@ decking only under clusters, rocks clear of buildings, entrance pier moved.
   polylines and **six** crossings — Install Traffic Lights now buys up to six signals.
 - **lead, before wave 2b:** re-cut the ≤ ~1300-part budget line, which predates baked paths and
   tile streets (PLAYTEST step 25 now asks Ben to report counts instead of pass/fail). Wave 1e adds
-  up to `budget.lampPosts` (16) lamps plus signals per near plot; **a full near Metropolis plot was
+  up to `budget.lampPosts` (now 24) lamps plus signals per near plot; **a full near Metropolis plot was
   ≈ 220 dressing pieces** (38 tile cells + pavements, 66 highway cells, 5 kiosks, trees, plazas,
   lamps, cars) — the highest of any era, and the number to re-cut against. The fix round adds up
   to **12 block slabs** and raises `trees.maxCount` **24 → 40**, and pavement is now per cell, so
@@ -1138,7 +1192,8 @@ decking only under clusters, rocks clear of buildings, entrance pier moved.
   blueprints and the persisted `cityDetail` setting shipped — see the wave 2b block above.
 
 **Not in M9:** icons and the experience thumbnail (M10), ground textures on the plot base (the
-base stays a tinted part), pedestrians/NPCs, day-night lighting, any server-side dressing.
+base stays a tinted part), interactive NPCs (wave 2c walkers are cosmetic only), day-night
+lighting, lit windows, any server-side dressing.
 
 ---
 

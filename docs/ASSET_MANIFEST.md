@@ -71,17 +71,30 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Village/` -- templates: `templates/_props/Village/` -- in game: `ReplicatedStorage/Assets/Props/Village/`
 
-Summary: 7/7 blueprints, 7/7 uploaded, 7/7 harvested, 7/7 templated
+Summary: 20/20 blueprints, 20/20 uploaded, 20/20 harvested, 20/20 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 2 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 3 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `Lantern` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 1 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `BushA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `BushB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `CartParked` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `CottageA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `CottageB` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `FlowerBedA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `FlowerBedB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `HedgeA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `Lantern` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 16 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 17 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 19 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 2 — Boomtown
 
@@ -120,23 +133,40 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Boomtown/` -- templates: `templates/_props/Boomtown/` -- in game: `ReplicatedStorage/Assets/Props/Boomtown/`
 
-Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
+Summary: 30/30 blueprints, 30/30 uploaded, 30/30 harvested, 30/30 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
 | 1 | `Bend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 2 | `HouseA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 3 | `HouseB` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `HouseC` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `HouseD` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 10 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 11 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 13 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `BushA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `BushB` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `FlowerBedA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `HedgeA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `HouseA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `HouseB` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `HouseC` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `HouseD` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `HouseE` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `HouseF` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `Junction` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `ParkedA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 16 | `ParkedB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 17 | `ParkedC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `PlanterA` | — | prop | yes | city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 19 | `PlazaA` | — | prop | yes | city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `ShedA` | — | prop | yes | city-kit-industrial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `ShedB` | — | prop | yes | city-kit-industrial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 22 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 23 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 24 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 25 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 26 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 27 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 28 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 29 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 30 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 3 — Metropolis
 
@@ -175,31 +205,49 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Metropolis/` -- templates: `templates/_props/Metropolis/` -- in game: `ReplicatedStorage/Assets/Props/Metropolis/`
 
-Summary: 21/21 blueprints, 21/21 uploaded, 21/21 harvested, 21/21 templated
+Summary: 39/39 blueprints, 39/39 uploaded, 39/39 harvested, 39/39 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `HighwayCorner` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 2 | `HighwayDeck` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 3 | `HighwayJunction` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `HighwayRamp` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 10 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 11 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 13 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 14 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 15 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 16 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 17 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 18 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 19 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 20 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 21 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 1 | `ApartmentA` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `ApartmentB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `ApartmentC` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `BushA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `BushB` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `FlowerBedA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `HedgeA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `HighwayCorner` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 10 | `HighwayDeck` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 11 | `HighwayJunction` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `HighwayRamp` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 13 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 15 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 16 | `ParkedA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 17 | `ParkedB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 18 | `ParkedC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 19 | `PlanterA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 21 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 22 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 23 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 24 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 25 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 26 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 27 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 28 | `TownhouseA` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 29 | `TownhouseB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 30 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 31 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 32 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 33 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 34 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 35 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 36 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 37 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 38 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 39 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 4 — Orbital Colony
 
