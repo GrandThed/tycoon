@@ -1397,4 +1397,106 @@ the hub, join-in-progress and the Mentor bonus are C2; missions 2-4, the Ascensi
 Overdrive balance are C3.
 
 - [x] C1 built and reviewed (definition of done in INTERFACES "C1 contracts")
-- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C1")
+- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C1") — still open; folded into the C2 playtest
+
+## C2 — Co-op: party, join-in-progress, contribution, Mentor
+
+**Goal:** play expeditions together. A hub party (invite + accept, same server) departs as one
+group to one reserved server; anyone can join a run in progress from a grouped run list (this
+server, friends, public runs from any server); late arrivals and co-op deaths wait for the next
+wave boundary; boss HP scales with party size; a high-income player carrying a newcomer earns a
+Mentor Valor bonus; band-4 melee tiers get party effects; the party returns home together and
+re-forms. The game is published (both ids live in `Places.json`), so C2 is verified **twice**:
+Studio bridge + levers, and a published two-account round trip. Contracts: `docs/INTERFACES.md`
+"C2 contracts — Co-op" (2026-09-23); balance: `docs/BALANCE.md` "C2"; memory:
+`.claude/memory/coop-2026-09-23.md`.
+
+**Rulings that shape everything (Ben, 2026-09-23):**
+1. Boss HP × `(1 + coop.bossHpPerExtraPlayer × extras)`, 0.75. Regular enemies still scale by count only.
+2. Run list = this hub server + friends + public runs from any server. Host toggle "Open to
+   public" (default `coop.publicByDefault` true); a private run shows only to friends and
+   same-server players.
+3. Hub party = invite + accept, same server. The leader picks the mission. One `ReserveServer`,
+   ONE group `TeleportAsync`.
+4. Missions are host-gated: a guest may fight any mission the host unlocked. The gate is the
+   server-only `RunTicket` (its `privateServerId` must equal `game.PrivateServerId`), never
+   teleport data.
+5. Nothing new persisted (ProfileSchema stays v6). The party lives in memory and re-forms from
+   agreeing teleport hints only.
+
+**Tasks (one wave, parallel, disjoint):** lead — contracts, `Types.luau`, config keys, combat
+client UI dedupe via `combat.project.json`. luau-engineer A — combat server (`ArenaService`,
+`WaveService`, `CombatService`, `EnemyService`, `DebugService`, `ReturnService`, `RunRegistry`,
+`CombatRemotes`, `Main`), pure `Combat.luau`. luau-engineer B — hub server (new `PartyService`,
+`ExpeditionService`, `HubRemotes`, `StudioBridge`, `ArmoryService`, `Main`). ui-engineer A —
+`src/combat/client/**`. ui-engineer B — hub client (`ExpeditionPanel`, new `PartyInviteToast`,
+`UIController`, `DebugPanel`, shared `Theme`). economy-designer — `coop.*` and `partyEffects`
+values, `sim_combat.py`, `BALANCE.md` "C2". **Wave 2:** roblox-reviewer → qa-runner → docs-keeper.
+Ran in worktree `C:\Users\benja\Desktop\tycoon-c2` (branch `c2-coop`); main (M9 wave 2d) merged in.
+
+**Shipped (2026-09-23):**
+- **Hub party** — `PartyService`: invite + accept; invites expire after `inviteSeconds` 30;
+  re-invite cooldown `inviteCooldownSeconds` 10; a decline blocks that leader → target for
+  `declineBlockSeconds` 60; leader handover in join order; a party of one dissolves. Studio
+  levers `fakeParty` (attribute `DebugFakeParty`, sticky number 0–3) and `fakeInvite` (attribute
+  `DebugFakeInvite`, boolean, consumed once), plus hub debug strip buttons.
+- **Party Depart** — one `ReserveServer`, a `RunTicket` (`privateServerId`, `public`,
+  `expected`) in `ActiveRunsCodes`, then ONE group `TeleportAsync`; any failure runs the C1
+  recovery for every member. Bridge mode writes one handoff per member and kicks each.
+- **Join** — personal (leaves your hub party first); hub pre-filters `full` / `over` /
+  visibility; no unlock check for guests (host-gated). "Open to public" toggle beside Overdrive.
+  Run list grouped IN THIS SERVER / FRIENDS / OPEN RUNS, one `GetRangeAsync` per hub server per
+  `listCacheSeconds` 5, capped at `listMax` 20, friend checks capped at 8 per call.
+- **Combat admission** — `ArenaService.CheckAdmission` → `ok` / `full` / `over` / `locked` for
+  every arrival; a refusal goes home with its reason. Studio lever `admitCheck` (combat debug
+  strip "Admit check") runs the same function and toasts the verdict.
+- **Wave-boundary entry** — joiners, co-op deaths and bots added mid-wave wait on the LobbyPad
+  (untargetable, no damage, attacks refused) and enter at the next boundary. The lobby waits for
+  every expected member, or `lobbyWaitSeconds` 30 after the first arrival once all present are ready.
+- **Boss HP** × (1 + 0.75 × extras), mirrored in `sim_combat.py`.
+- **Mentor bonus** — at a boss-group flush, a human earns `mentorValor` 5 per member whose
+  income is below `mentorRatio` 0.125 of theirs (mentor earns 8× or more). Mentor and mentee
+  both need ≥ `mentorMinDamageShare` 1 % of that flush. Bots count as income 0, never mentor.
+- **Party effects** — melee tiers 10–11 `rally` (heal 0.15 × MaxHp, radius 20), tier 12
+  `warcry` (1.25× damage for 6 s, radius 20), on a successful melee ability.
+- **C1 carry-overs closed** — other players' swings replicate (`CombatFx swing`); the bow's
+  charge counts from a new `RequestDraw` stamp (no free full-charge shot after waiting); enemy
+  colours moved to `Combat.json enemy.*Color` / `EnemyDef.color`; the combat client UI copies
+  are gone (`combat.project.json` maps the hub originals: one `Client/UI`, one `Client/Controllers`).
+- **Group return** — summary counts down `returnGroupSeconds` 15, then one `TeleportAsync` home
+  with a party hint; the party re-forms (`reformSeconds` 60) only among the original hub party
+  whose hints agree. Return before the countdown goes home alone.
+- **Client** — hub party strip, invite picker, Kick / Leave, `PartyInviteToast`, co-op refusal
+  copy; combat HUD ★ host, "joins next wave" / "back next wave", damage %, waiting banner,
+  rally / war cry / Mentor fx, summary damage share + Mentor line + "Returning together in …".
+
+**Review outcome:** 0 Critical, 3 Majors — admission bypass through a failed refusal/return, an
+idle mentor still paid, invite spam — plus 6 Minors. **All fixed** in commit `0362634`.
+qa-runner: ALL GREEN — stylua, selene (known `LegacyPanel` warning only), both `rojo build`s,
+both luau-lsp runs, `sim_economy.py --check` unchanged, `sim_combat.py --check` 13/13,
+`gen_templates.py --check` + manifest after merging main (wave 2d).
+
+**Carried forward (owners assigned):**
+- **Ben, now:** republish **both** places (`docs/MANUAL_STEPS.md` "C2"), then run
+  `docs/PLAYTEST.md` "C2". That pass **folds in the still-open C1 playtest**; C1's box stays
+  unticked until Ben confirms it.
+- **lead, C3 (`BALANCE.md` "C2"):** co-op pays ~40 % of solo cash per head at 4 players (23 % of
+  Valor). Suggestion: scale boss cash / materials / Valor by `bossHpMult` (→ 81 % per head).
+- **lead, C3:** an idle alt still collects the `contributionFloor` share (3 Valor/run); a floor
+  that requires damage > 0 would close it (`ContributionShares`).
+- **economy-designer, C3:** co-op is much safer than solo (HP floor 68–85 % vs 15 %) — measure
+  real damage taken in the published test before touching `countPerExtraPlayer`; Overdrive party
+  outcomes are not monotonic at recommended power; re-run party effects on a real band-4 mission.
+- **lead, later:** remote swings play on a fixed 0.35 s window, not the swinger's real timing.
+- **lead, later:** "back next wave" needs the client to have seen that member fight; a client
+  that arrived after the death shows "joins next wave" instead.
+
+**Known limits at C2:** Studio Local Server test players have **negative ids** (−1, −2 …), so
+friend checks never match there — the FRIENDS group is only visible with `DebugFakeRuns`; a
+`full` refusal needs 4 seats (Studio: bots + `admitCheck`; published: four accounts); the Mentor
+check needs the player's saved income > 0 (buy something in the hub first); combat sounds still
+id 0 (silent); enemies and weapons still placeholders; missions 2–4, Ascension and Overdrive
+balance are C3.
+
+- [x] C2 built and reviewed (definition of done in INTERFACES "C2 contracts")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "C2", Studio + published; folds in the open C1 pass)

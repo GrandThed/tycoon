@@ -227,7 +227,8 @@ local function coopReasonMessage(action: string, reason: any, tappedDepart: bool
 				then "Not everyone in your party could depart"
 				else "You stayed behind — the party departed"
 		end
-		return "They're already in a party"
+		-- Also the invite spam guard (re-invite cooldown, decline block), so no claim about why.
+		return "They can't be invited right now"
 	elseif reason == "expired" then
 		return "That invite expired"
 	elseif reason == "notLeader" then

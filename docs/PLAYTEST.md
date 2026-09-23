@@ -3487,3 +3487,211 @@ Tell Claude Code, in one message:
       attribute and the strip including `DebugBots = 2`, and the two-player Local Server pass.
 - [ ] 69. Tell Claude Code "C1 expedition playtest passed" (or report the exact failure and step
       number).
+
+## C2 — Co-op (party, join-in-progress, Mentor)
+
+**Goal:** expeditions together. Hub party (invite + accept) departs as one group; anyone can join
+a run mid-way from a grouped list; late arrivals and co-op deaths wait for the next wave; boss HP
+grows with party size; carrying a newcomer pays a Mentor bonus; the party comes home together and
+re-forms. Numbers: `docs/BALANCE.md` "C2". **This pass also covers the still-open C1 playtest** —
+run C1 sections 2 and 4 once alongside it (or skim them if already done).
+
+### Before you start
+
+- Rebuild both places (`docs/MANUAL_STEPS.md` "C2" step 1). **Enable Studio Access to API
+  Services** must be ON.
+- Sections 1–4 and 6 are **Studio**. Section 5 is the **published game** with two accounts and
+  needs both places republished first (`docs/MANUAL_STEPS.md` "C2" §4).
+- **Local Server:** Studio **Test** tab → **Clients and Servers** → set players to **2** (or 3) →
+  **Start**. One Server window + one window per player (`Player1`, `Player2`). Test players have
+  **negative ids** (−1, −2), so they are never "friends" — expected.
+- New levers (Workspace attributes; Studio only, inert when published):
+
+  | Attribute | Place | Type | Effect | Debug strip button |
+  |---|---|---|---|---|
+  | `DebugFakeParty` | hub | number 0–3 | **sticky**: every player's party gets N fake members "Fake 1…N" | **Fake party +1 (n)** → after 3: **Clear fake party** |
+  | `DebugFakeInvite` | hub | boolean | **consumed once**: an invite from fake leader "Fake 9" | **Fake invite** |
+  | — | Expeditions | — | runs the real admission check on you and toasts the verdict | **Admit check** |
+
+- Levers from C1 still used here: `GrantCash`, `DebugFakeRuns`, `ForceTeleportFailure` (hub);
+  `DebugMission`, `DebugWave`, `DebugBots`, `DebugSetGear`, `DebugGodMode`, `DebugKillAll` (Expeditions).
+
+### 1. Studio hub, solo — party UI through the levers (`build/test.rbxl`, Play)
+
+- [ ] 1. Play. Zero red errors. Open **🗺 Expedition**. Top of the panel: **PARTY** header,
+      hint "Invite players in this server to depart together.", buttons **Invite** and **Leave**.
+- [ ] 2. Tap **Invite**. The picker says **"No one else is in this server."** and the button
+      reads **Done**. Tap **Done** to close it.
+- [ ] 3. Below Raider Woods: an **Open to public** toggle reading **ON** (default). Tap it → **OFF**,
+      tap again → **ON**. (Overdrive stays hidden below Rebirth 1.)
+- [ ] 4. Debug strip (bottom-left **⚙ debug**) → **Fake party +1 (0)**. Party strip shows
+      **★ <you>** and **Fake 1**; the button now reads **Fake party +1 (1)**. Output warns
+      `[PartyService] fakeParty lever: 1 Studio-only member(s) for <you>`.
+- [ ] 5. Tap it twice more → 4 rows (you + Fake 1–3), button reads **Clear fake party**.
+      Tap once more → strip back to just you.
+- [ ] 6. **Attribute path:** Workspace attribute `DebugFakeParty` = `2` → two fakes appear within ~1 s;
+      set it to `0` → they go. (It is sticky: the value stays until you change it.)
+- [ ] 7. Set `DebugFakeParty` = `1`. As leader tap **Kick** on Fake 1's row → the row goes and the
+      party dissolves to just you. Set the attribute back to `0`.
+- [ ] 8. **Depart with fakes:** `DebugFakeParty` = `1`, then **Depart** on Raider Woods. Output
+      warns `[ExpeditionService] Studio fake party member Fake 1 stays in the hub`, then the normal
+      "Handoff saved — Stop Play, then open build/combat.rbxl" toast and a kick ~1 s later. Stop
+      Play; set `DebugFakeParty` to `0` before the next Play. (The unused handoff expires in 15 min,
+      or consume it by opening `build/combat.rbxl` once.)
+- [ ] 9. Play again. Tap **Fake invite**. A card slides in: **"Party invite · 30s"**, body
+      **"Fake 9 invited you to an expedition party"**, buttons **Decline** / **Accept**. The seconds
+      count down; at 0 the card leaves by itself.
+- [ ] 10. **Fake invite** again → **Accept**. Party strip: **★ Fake 9** and you. The Raider Woods
+      tile is disabled with **"Your party leader picks the mission"**.
+- [ ] 11. Tap **Leave** → strip back to just you, tile enabled again.
+- [ ] 12. **Fake invite** → **Decline** → card closes, no party, no error.
+- [ ] 13. **Grouped run list:** Workspace `DebugFakeRuns` = `3`. Under **JOIN A RUN**: an
+      **OPEN RUNS** group with Fake 1 and Fake 3, a **FRIENDS** group with Fake 2. Each row: mission
+      name, host, Wave N, 1/4, a **Join** button. No access code or server id anywhere.
+- [ ] 14. **Join** on Fake 1 → toast "Departure failed — ForceTeleportFailure is on, or Studio has
+      no API access", you stay (fakes are unjoinable by design). No red error.
+- [ ] 15. Clear the fakes (wait, or Stop). With none: the list reads **"No runs to join right now."**
+
+### 2. Studio hub, Local Server with 2 players — the real party
+
+- [ ] 16. `build/test.rbxl` → Test → Clients and Servers → **2** players → Start.
+- [ ] 17. Player1: Expedition → **Invite** → picker lists **Player2** → tap its **Invite** → it
+      reads **Sent**. Player1's strip shows Player2 as pending with a countdown.
+- [ ] 18. Player2: the invite card appears ("Player1 invited you…"). Tap **Accept**. **Both**
+      windows now show **★ Player1** and **Player2** within ~1 s.
+- [ ] 19. Player2: the tile is disabled with "Your party leader picks the mission".
+- [ ] 20. Player1: **Kick** on Player2's row. Both strips update (Player2 back to solo, Player1 solo).
+- [ ] 21. **Cooldown (be quick):** Player1 invites Player2, Player2 accepts at once, Player1 kicks
+      at once, then re-invites **within 10 s of the first invite** → toast **"They can't be
+      invited right now"**. After 10 s the invite goes through.
+- [ ] 22. **Decline block:** Player2 taps **Decline**. Player1 re-invites at once → same
+      "They can't be invited right now" toast; the invite only goes through after **60 s**.
+- [ ] 23. **Expiry:** invite, let Player2 ignore it for 30 s. Card closes on Player2, the pending row
+      disappears on Player1. (Kick on a pending row withdraws the invite early.)
+- [ ] 24. **Leave:** re-form the party; Player2 taps **Leave** → both solo (a party of one dissolves).
+- [ ] 25. Optional, 3 players: party of three; leader taps **Leave** → the next member who joined
+      becomes ★ leader on every window.
+- [ ] 26. **Group departure failure:** re-form Player1 + Player2. In the **Server** window's Explorer
+      set Workspace `ForceTeleportFailure` = true. Player1 **Depart**. **Both** get the "Departure
+      failed…" toast, **both** stay with cities intact, nobody kicked, attribute back to false.
+- [ ] 27. **Group departure:** Player1 **Depart** again. **Both** get "Handoff saved — Stop Play,
+      then open build/combat.rbxl" and **both** are kicked ~1 s later. Stop.
+
+### 3. Studio Expeditions, Local Server with 2 players — the party run and group return
+
+- [ ] 28. Open `build/combat.rbxl` → Clients and Servers → **2** players → Start (the two handoffs
+      from step 27 are consumed). Both land in Raider Woods, party rows show **★ Player1** and Player2.
+- [ ] 29. Player1 taps **Ready** alone → the run does **not** start. Player2 **Ready** → wave 1.
+- [ ] 30. **Swings replicate:** Player1 does a 3-hit melee combo; on Player2's screen Player1's arms
+      animate the combo (C1's "other swings aren't animated" is fixed).
+- [ ] 31. **Co-op death:** let Player2 die while Player1 lives (Player1 can set `DebugGodMode`).
+      Player2 reappears on the **LobbyPad**, banner **"You'll join at the next wave"**, party row
+      **"back next wave"**; enemies ignore Player2 and Player2's attacks do nothing. At the next
+      breather Player2 is moved into the arena at **full HP**. (This replaces C1 step 63's 8 s respawn.)
+- [ ] 32. **Party effect:** Player1 `DebugSetGear` = `melee=10` (Plasma Edge). Stand next to Player2
+      in a fight and press **Q**. A ring shows at Player1, a pulse on Player2, and Player2 gets the
+      toast **"Rally from Player1"** with a visible heal. `melee=12` → **"War cry from Player1"** and
+      Player2's damage numbers are ~25 % bigger for 6 s. Out of range (> 20 studs): nothing.
+- [ ] 33. Each summary shows **"Your damage share N%"**. Finish or wipe the run.
+- [ ] 34. **Group return:** the summary card counts **"Returning together in …"** from 15 s. At 0
+      **both** are kicked with "Run over — Stop Play, then reopen build/test.rbxl". Stop.
+- [ ] 35. Open `build/test.rbxl` → Clients and Servers → **2** → Start (within 15 min, before the
+      handoff goes stale). Both get their EXPEDITION REPORT, and the **party re-forms**: both
+      strips show ★ Player1 + Player2.
+- [ ] 36. Repeat 27–29 once more, but this time Player2 taps **Return** on the summary **before**
+      the countdown ends → Player2 goes home alone. In the hub afterwards: **no** party re-forms.
+
+### 4. Studio Expeditions, solo — bots, admission, boss HP, Mentor, bow
+
+Setup: in `build/test.rbxl` (Play, solo) buy at least one building, then **Depart** — the
+departure saves your current income, which the Mentor check needs (> 0). Stop, open
+`build/combat.rbxl`, Play (the handoff boots Raider Woods), `DebugSetGear` = `melee=2,ranged=1`.
+To read server values: Test tab → **Client/Server** toggle → Server.
+
+- [ ] 37. **Admit check** (combat debug strip, top-left) in the lobby → toast **"Admit check: ok"**.
+- [ ] 38. `DebugBots` = `3` (Bot 1–3 join, 4 seats) → **Admit check** → **"Admit check: full"**.
+      Set `DebugBots` = `2`.
+- [ ] 39. **Boss HP:** `DebugWave` = `5`, **Ready**. When the Raider Chief spawns, select its
+      **Humanoid** in the Server view: `MaxHealth` ≈ **2,476** (2.5× solo). Replay with
+      `DebugBots` = `0` (and `DebugMission` = `village`): ≈ **990**.
+- [ ] 40. **Mentor:** with 2 bots, kill the wave-5 boss while hitting it yourself. At the clear:
+      **"+10 Valor · Mentor"** pops for you, and the summary later shows **"Mentor bonus +10 Valor
+      (included above)"**. Nothing at all → check the setup (income must be > 0).
+- [ ] 41. **Idle mentor gets nothing:** same setup, turn `DebugGodMode` on and do **not** attack
+      during the boss wave; let the bots kill it (1–2 min). No Mentor popup.
+- [ ] 42. **Bot added mid-wave waits:** during a wave set `DebugBots` +1. The new bot stands on the
+      LobbyPad with **"joins next wave"** in its party row and enters at the next breather.
+- [ ] 43. **Over:** `DebugWave` = `10`, let wave 10 start, **Admit check** → **"Admit check: over"**.
+- [ ] 44. **Bow draw fix:** `DebugSetGear` = `ranged=1`, press **2**, wait 5 s without holding,
+      then tap-release fast at an enemy → a **weak** shot (about half). Hold ~1 s and release → full
+      damage. A strong shot from a quick tap after waiting is the old bug.
+- [ ] 45. **Enemy colours** unchanged: raiders rust, archers olive, brutes/bosses dark red, bots blue.
+
+### 5. Published game — two accounts (A = main, B = second, NOT friends)
+
+Needs both places republished (`docs/MANUAL_STEPS.md` "C2" §4). Real teleports, no kicks.
+
+- [ ] 46. **Solo round trip (C0 §9):** A joins the hub, notes cash / era / Power / Max HP / one slot
+      level → **Depart** → teleported to Raider Woods, HP = Max HP. Ready, clear 1–2 waves,
+      **Return** → back on A's plot, everything intact, EXPEDITION REPORT shown, welcome-back card
+      pays the away time at full rate. No doubled or reset values.
+- [ ] 47. **Public join mid-run:** A departs with **Open to public ON** and starts wave 1. B in the
+      hub → Expedition → **OPEN RUNS** lists A's run (Raider Woods, A, Wave N, 1/4) within ~10 s.
+      B taps **Join** during a wave → B lands on the LobbyPad with "You'll join at the next wave";
+      A sees B as "joins next wave"; B enters at the next breather.
+- [ ] 48. B taps **Return** mid-run → B goes home alone with a report; A's party list drops to 1.
+- [ ] 49. **Friends-only hidden:** A departs again with **Open to public OFF**. B's list shows
+      **"No runs to join right now."** for the whole run.
+- [ ] 50. **Over:** with A's public run in B's list, once A reaches **wave 10** the row disappears
+      from B's list within ~10 s. (If B taps Join on a stale row: toast "That run has moved past joining".)
+- [ ] 51. **Party depart together:** get both in the same hub server (with no other players online
+      they usually are; else friend B and use Join on A's profile). A invites B → B accepts →
+      A **Depart**. Both land in **one** server with both party rows; the run starts only when both are Ready.
+- [ ] 52. **Mentor (if A earns ≥ 8× B's income/s):** both hit the wave-5 boss. A gets
+      "+5 Valor · Mentor"; B gets none.
+- [ ] 53. **Group return:** let the run end. Both summaries count "Returning together in …"; at 0
+      both land in the **same** hub server, each gets their report, and the party strip shows
+      ★ A + B again.
+- [ ] 54. **Crash exit:** B closes the app while in a run, then rejoins the hub → profile loads, no
+      "already in a session" error, away time credited.
+- [ ] 55. `full` (4 seats) cannot be reached with two accounts — covered by step 38.
+
+### 6. Mobile (Device Emulator, Studio)
+
+- [ ] 56. Hub at **375×667**: **Fake invite** → the card fits on screen, **Accept** and **Decline**
+      are big enough to hit with a thumb (≥ 44 px), the countdown is readable, the city stays usable
+      behind it.
+- [ ] 57. `DebugFakeParty` = `3` → Expedition panel: 4 party rows, Kick buttons, **Invite** /
+      **Leave**, **Open to public** toggle and the three run groups (`DebugFakeRuns` = `3`) all fit
+      or scroll; nothing clipped.
+- [ ] 58. Combat at **375×667** with `DebugBots` = `2`: party rows show ★, % and
+      "joins next wave" without overlapping the HP bar; the waiting banner does not cover the
+      attack button; the summary card's share, Mentor and "Returning together" lines fit with
+      **Return** reachable.
+- [ ] 59. Repeat 56–58 at **667×375 landscape**.
+
+### Not a bug — don't report these
+
+- Studio test players are never "friends" (negative ids); the FRIENDS group only shows fake runs.
+- Every refusal of a fake run reads "Departure failed — ForceTeleportFailure is on…".
+- A mid-run joiner is never in the re-formed party — only the original hub party re-forms.
+- A joiner whose client never saw a member fight shows "joins next wave", not "back next wave".
+- Other players' swings play a fixed-length pose (0.35 s), not their exact timing.
+- Silence, placeholder rigs and empty hands (as C1).
+
+### What a bug looks like here
+
+- A party change seen by only one window; a pending invite that never expires.
+- A non-leader able to Depart, or a fake-led party departing.
+- One member teleported/kicked and the other left with no toast.
+- A private run visible to a non-friend in another server; any access code or server id in a row.
+- A joiner fighting (or being hit) before the next wave boundary.
+- Boss HP not growing with party size; Mentor paid to an idle mentor or with zero saved income.
+- A full-strength bow shot from a quick tap after waiting.
+- After the group return: two different hub servers, or no party re-formed.
+- **Any red error** in Output (client or server).
+
+### Sign-off
+
+- [ ] 60. Sections 1–4 and 6 in Studio, section 5 on the published game, plus the C1 pass.
+- [ ] 61. Tell Claude Code "C2 co-op playtest passed" (and "C1 passed"), or the failing step number.

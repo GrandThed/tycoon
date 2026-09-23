@@ -1221,9 +1221,9 @@ Both windows can stay connected at once; edits under `src/shared` and `src/serve
 
 ### 4. Publish both places
 
-- [ ] 8. **Hub:** open `build/test.rbxl` → **File → Publish to Roblox** (it already maps to the
+- [x] 8. (done by 2026-09-23 — the game is published; C2 republishes both) **Hub:** open `build/test.rbxl` → **File → Publish to Roblox** (it already maps to the
       start place; if Studio asks, pick *Era City Tycoon* → the start place, **Overwrite**).
-- [ ] 9. **Expeditions:** open `build/combat.rbxl` → **File → Publish to Roblox As…** → choose
+- [x] 9. (done by 2026-09-23) **Expeditions:** open `build/combat.rbxl` → **File → Publish to Roblox As…** → choose
       *Era City Tycoon* → **`Expeditions`** → **Create/Overwrite**. Double-check the place name in
       the dialog: publishing the combat build over the **start place** replaces your hub.
 - [ ] 10. Re-publish **both** after any future rebuild that touches shared code — they share
@@ -1347,3 +1347,73 @@ if the combat place keeps booting into a mission you did not ask for.
       the pair out of sync.
 - [ ] 13. Then, and only then, C0 `docs/PLAYTEST.md` section 9 (the real teleport round trip) is
       worth running. In Studio it is permanently replaced by the C1 bridge.
+
+## C2 — Co-op: party, join-in-progress, Mentor
+
+**Nothing to upload and nothing to create on the Creator Hub.** No new game passes, products,
+sounds or meshes. Both places changed (hub `PartyService`/`ExpeditionService`, combat admission,
+shared `Combat.luau`, configs), so the one real job is to **republish both places together**.
+Place ids (already in `src/shared/Config/Places.json`, do not edit): hub **`140344407905104`**,
+Expeditions **`74210626673425`**.
+
+### 1. Rebuild both places (after the `c2-coop` branch is merged to main)
+
+- [ ] 1. PowerShell, from the repo root (`C:\Users\benja\Desktop\tycoon`):
+      ```
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      ```
+- [ ] 2. Both commands must print no error. Building from the worktree
+      (`C:\Users\benja\Desktop\tycoon-c2`) works too, but publish from the merged main.
+
+### 2. Studio setting (once, experience-wide)
+
+- [ ] 3. In either place: **Home → Game Settings → Security → Enable Studio Access to API
+      Services** = **ON**. The Studio bridge, the party handoff and `admitCheck` all need it.
+      Already ON from C1 — just confirm.
+
+### 3. Run the Studio part of the playtest first
+
+- [ ] 4. `docs/PLAYTEST.md` "C2" sections 1–4 and 6 (Studio only). Publishing a broken hub to the live
+      game is worse than waiting a day.
+
+### 4. Republish BOTH places (same sitting, one after the other)
+
+- [ ] 5. **Hub:** open `build/test.rbxl` → **File → Publish to Roblox**. If asked, pick
+      *Era Tycoon: Village to Space (BETA)* → the **start place** → **Overwrite**.
+- [ ] 6. **Expeditions:** open `build/combat.rbxl` → **File → Publish to Roblox As…** → the same
+      experience → **`Expeditions`** → **Overwrite**. Read the place name in the dialog twice:
+      publishing the combat build over the start place replaces your hub.
+- [ ] 7. Never publish only one. They share `src/shared` and `src/server/Services`; a C2 hub
+      sending parties to a C1 combat place would reject the new ticket and teleport shape.
+- [ ] 8. Wait ~1 minute, then on the Creator Hub → experience → **Places** confirm both rows show
+      today's "last updated" time. Old servers keep running the old code: on the experience card
+      **⋯ → Restart servers** (older UI: "Shut Down All Servers") so nobody lands in a C1 server.
+
+### 5. What the published checks need
+
+- [ ] 9. A **second Roblox account (B)**. Best on a second device (phone or second PC); a
+      second browser profile on the same PC also works, one account per window.
+- [ ] 10. For the "public join by a non-friend" check, B must **not** be friends with your main
+      account (A). For the "friends-only" check that stays true. If you want to also check the
+      FRIENDS group later, friend them afterwards.
+- [ ] 11. Both accounts must be able to open the game. If the game page still says
+      "No disponible" for B, see `docs/DISCOVERY_CHECKLIST.md` §0 (audience reach) — add B as a
+      playtester / collaborator or set the audience so B's age group can play.
+- [ ] 12. For the Mentor check, A's city must earn **8× or more** of B's income/s (a fresh B
+      account at the start of Village is fine against any grown A city).
+- [ ] 13. A `full` refusal needs **4 seats**. With two accounts it cannot be triggered on the
+      published game; the Studio `admitCheck` + bots step in PLAYTEST covers it.
+
+### 6. Then run the published part
+
+- [ ] 14. `docs/PLAYTEST.md` "C2" section 5 (published, two accounts). Its first steps are the
+      C0 section 9 round trip, which is finally runnable.
+
+### 7. Not needed this milestone (for the record)
+
+- [ ] 15. No DataStore or schema change: ProfileSchema stays v6, so no migration to watch.
+- [ ] 16. No MemoryStore setup: the `ActiveRuns` sorted map and `ActiveRunsCodes` hash map
+      already work on any published place.
+- [ ] 17. Combat sounds are still all id `0` (silent) — the upload stays as in "C1 → 5".
