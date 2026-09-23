@@ -233,8 +233,8 @@ return {
 	-- one on the keep lane and one on the market square. Each stands off the trail and off the
 	-- walkers' line along its edge.
 	parking = {
-		{ position = Vector3.new(-42, 0, -34), rotationY = 0, tier = 2, lot = 9 },
 		{ position = Vector3.new(-3, 0, -18), rotationY = 0, tier = 2 },
+		{ position = Vector3.new(-42, 0, -34), rotationY = 0, tier = 2, lot = 9 },
 		{ position = Vector3.new(30, 0, -25), rotationY = 0, tier = 3, lot = 15 },
 		{ position = Vector3.new(4, 0, 1), rotationY = 0, tier = 3 },
 		{ position = Vector3.new(32, 0, 17), rotationY = 90, tier = 4, lot = 17 },

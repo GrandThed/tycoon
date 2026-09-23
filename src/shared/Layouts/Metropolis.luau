@@ -155,8 +155,8 @@ return {
 		{ position = Vector3.new(-40, 0, -50), rotationY = 270, tier = 2, kind = "small" },
 		{ position = Vector3.new(39, 0, -50), rotationY = 90, tier = 2, kind = "small" },
 		-- 5-6: apartment houses in the west and east pockets, facing the avenues
-		{ position = Vector3.new(-42, 0, 24.5), rotationY = 270, tier = 3 },
-		{ position = Vector3.new(42.5, 0, 28), rotationY = 90, tier = 3 },
+		{ position = Vector3.new(-42, 0, 24.5), rotationY = 270, tier = 3, kind = "house" },
+		{ position = Vector3.new(42.5, 0, 28), rotationY = 90, tier = 3, kind = "house" },
 		-- 7-8: the back band behind the convention centre and the bank tower
 		{ position = Vector3.new(-17, 0, 50), rotationY = 90, tier = 4, kind = "small" },
 		{ position = Vector3.new(16, 0, 50), rotationY = 270, tier = 4, kind = "small" },
