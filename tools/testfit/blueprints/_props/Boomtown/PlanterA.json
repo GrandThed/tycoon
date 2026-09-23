@@ -1,0 +1,10 @@
+{
+  "id": "PlanterA",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [2, 2],
+  "note": "the suburban kit's own planter (the houses carry the same one), not garden-kit's concrete planter, which stays Metropolis-only",
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

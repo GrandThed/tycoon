@@ -1,0 +1,10 @@
+{
+  "id": "BushA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "nature-kit", "model": "plant_bushDetailed", "pos": [-0.06, 0, 0.05], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bush", "pos": [0.12, 0, -0.12], "rotY": 0, "stage": 0}
+  ]
+}

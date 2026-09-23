@@ -1,0 +1,12 @@
+{
+  "id": "ApartmentB",
+  "era": "Metropolis",
+  "scale": 8.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-commercial", "model": "low-detail-building-wide-b", "pos": [0, 0, -0.25], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "low-detail-building-wide-b", "pos": [0, 0, 0.25], "rotY": 180, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-a", "pos": [0.12, 1.0, -0.12], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "detail-parasol-b", "pos": [-0.14, 1.0, 0.12], "rotY": 0, "stage": 0}
+  ]
+}

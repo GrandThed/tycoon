@@ -1,0 +1,21 @@
+{
+  "id": "CottageB",
+  "era": "Village",
+  "scale": 3.2,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-door", "pos": [0, 0, 0.3], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [0, 0, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.3], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.3], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0, 1, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [0, 1, 0.05], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence-gate", "pos": [0, 0, -0.4], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.05, 0, -0.38], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.05, 0, -0.38], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.32, 0, -0.62], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [0.34, 0, -0.38], "rotY": 60, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.32, 0, -0.6], "rotY": 20, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bushSmall", "pos": [-0.32, 0, -0.38], "rotY": 0, "stage": 0}
+  ]
+}

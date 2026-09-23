@@ -1,0 +1,10 @@
+{
+  "id": "Bird",
+  "era": "Metropolis",
+  "scale": 1.4,
+  "footprint": [1, 1],
+  "note": "people-kit is authored 1 unit = 1 stud (tools/assets/people_kit.py), so scale is 1.0; front -Z is the direction of flight",
+  "pieces": [
+    {"kit": "people-kit", "model": "bird-grey", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

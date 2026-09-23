@@ -1,0 +1,10 @@
+{
+  "id": "BushA",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "garden-kit is authored 1 unit = 1 stud (tools/assets/garden_kit.py), so scale is 1.0",
+  "pieces": [
+    {"kit": "garden-kit", "model": "bush-a", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

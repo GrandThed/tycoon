@@ -1,0 +1,16 @@
+{
+  "id": "ShedA",
+  "era": "Boomtown",
+  "scale": 3.4,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-p", "pos": [0, 0, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [-0.3, 0, -0.4], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-short", "pos": [-0.3, 0, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [-0.66, 0, -0.4], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-short", "pos": [-0.66, 0, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-short", "pos": [0.55, 0, -0.3], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-short", "pos": [0.55, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-short", "pos": [0.55, 0, -0.7], "rotY": 0, "stage": 0}
+  ]
+}

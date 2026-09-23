@@ -1,0 +1,9 @@
+{
+  "id": "HedgeA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [5, 2],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "hedge-large", "pos": [0, 0, 0.3], "rotY": 90, "stage": 0}
+  ]
+}

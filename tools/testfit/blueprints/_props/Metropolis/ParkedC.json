@@ -1,0 +1,9 @@
+{
+  "id": "ParkedC",
+  "era": "Metropolis",
+  "scale": 1.6,
+  "footprint": [3, 6],
+  "pieces": [
+    {"kit": "car-kit", "model": "garbage-truck", "pos": [0, 0, 0.02], "rotY": 180, "stage": 0}
+  ]
+}

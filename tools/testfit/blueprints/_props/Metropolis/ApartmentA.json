@@ -1,0 +1,9 @@
+{
+  "id": "ApartmentA",
+  "era": "Metropolis",
+  "scale": 3.85,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-commercial", "model": "building-n", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

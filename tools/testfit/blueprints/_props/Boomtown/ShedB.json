@@ -1,0 +1,11 @@
+{
+  "id": "ShedB",
+  "era": "Boomtown",
+  "scale": 3.4,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "city-kit-industrial", "model": "building-t", "pos": [0, 0, 0.15], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0.1, 0, -0.68], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [0.55, 0, -0.72], "rotY": 0, "stage": 0}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "id": "CartParked",
+  "era": "Village",
+  "scale": 2.5,
+  "footprint": [3, 5],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "cart-high", "pos": [0, 0, -0.05], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [0.12, 0.3, 0.3], "rotY": 15, "stage": 0},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.1, 0.3, 0.05], "rotY": 0, "stage": 0}
+  ]
+}

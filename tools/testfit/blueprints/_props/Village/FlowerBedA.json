@@ -1,0 +1,15 @@
+{
+  "id": "FlowerBedA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "nature-kit", "model": "grass_leafsLarge", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.12, 0, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redB", "pos": [0.1, 0, -0.14], "rotY": 70, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.14, 0, 0.08], "rotY": 140, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redC", "pos": [-0.02, 0, 0.14], "rotY": 200, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowB", "pos": [-0.18, 0, 0.1], "rotY": 260, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [0.02, 0, -0.01], "rotY": 310, "stage": 0}
+  ]
+}

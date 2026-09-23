@@ -1,0 +1,10 @@
+{
+  "id": "TownhouseA",
+  "era": "Metropolis",
+  "scale": 3.3,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "city-kit-commercial", "model": "building-c", "pos": [0.442, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-commercial", "model": "building-h", "pos": [-0.442, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

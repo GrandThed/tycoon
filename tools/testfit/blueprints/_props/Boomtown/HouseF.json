@@ -1,0 +1,16 @@
+{
+  "id": "HouseF",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-h", "pos": [-0.2, 0, 0.2], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.83, 0, -0.9], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.83, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.83, 0, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-stones-long", "pos": [-0.2, 0, -0.85], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "fence-low", "pos": [-0.35, 0, -0.62], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "tree-large", "pos": [0.85, 0, 0.8], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "planter", "pos": [-0.85, 0, -0.95], "rotY": 0, "stage": 0}
+  ]
+}
