@@ -175,7 +175,7 @@ def build_model(spec, cache, collection, blueprints, missing, materials):
     root.location = to_blender(spec["pos"])
     root.rotation_euler = (0.0, 0.0, math.radians(spec.get("rotY", 0.0)))
     # The blueprint's own scale turns kit units into studs; every other number here is studs.
-    root.scale = (entry.scale,) * 3
+    root.scale = (entry.scale * float(spec.get("scale", 1.0)),) * 3
     collection.objects.link(root)
     placed = 0
     for piece in entry.pieces:

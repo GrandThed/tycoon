@@ -42,6 +42,8 @@ local AMBIENT_SALT = 7004
 -- Wave 2d: studs between two cars packed into one bay when `parked.gap` is absent (the contract's
 -- default, not a tunable of its own).
 local DEFAULT_PARKED_GAP = 0.3
+-- Wave 2d: a `parked.perBay` typo must not multiply the parked stream's draws without bound.
+local MAX_PER_BAY = 4
 -- Garnish goes on one of a lot's four sides, in the lot's own frame (front -Z faces the street).
 local LOT_SIDES = 4
 -- Samples closer together than this are the same point, and the shortest leg worth walking.
@@ -1144,6 +1146,17 @@ local function packBay(
 	return anchors
 end
 
+-- A bay's ground (wave 2d): the pool's built-size harvested union, and the length a row of packed
+-- cars may fill -- `parked.bayLength` when set, else that union's length (nil before harvest).
+local function bayShape(eraName: string, parked: Types.ParkedConfig): (Extents?, number?)
+	local union = harvestedUnion(eraName, parked.props)
+	local configured = numberOr(parked.bayLength, 0)
+	if configured > 0 and configured < math.huge then
+		return union, configured
+	end
+	return union, if union ~= nil then union.maxZ - union.minZ else nil
+end
+
 -- Parked vehicles (docs/INTERFACES.md "Wave 2c — Parked vehicles", "Wave 2d"): the layout's spots
 -- in (tier, index) order, as many bays as the cumulative `parked.perTier` names, and cars into
 -- them until `budget.parked` (which counts cars) runs out. One prop draw per spot, kept or not, so
@@ -1165,7 +1178,7 @@ local function parkedSpots(
 	for index in spots do
 		picks[index] = parked.props[pickIndex(rng:NextNumber(), #parked.props) :: number]
 	end
-	local perBay = math.max(math.floor(numberOr(parked.perBay, 1)), 1)
+	local perBay = math.clamp(math.floor(numberOr(parked.perBay, 1)), 1, MAX_PER_BAY)
 	local extraPicks: { { string } } = {}
 	for index in spots do
 		local extra: { string } = {}
@@ -1176,16 +1189,9 @@ local function parkedSpots(
 	end
 	local scale = PropFactory.ScaleOf(parked.scale)
 	local gap = math.max(numberOr(parked.gap, DEFAULT_PARKED_GAP), 0)
-	-- The bay is `parked.bayLength` long; without it, what one car of the pool occupied at its
-	-- built size (the unscaled harvested union), which the layout was authored around. Either way
-	-- the row is centred on that union, the ground a single car always stood on.
-	local bayExtents = if perBay > 1 then harvestedUnion(input.eraName, parked.props) else nil
+	-- The row is centred on the pool's union, the ground a single car always stood on.
+	local bayExtents, bayLength = bayShape(input.eraName, parked)
 	local bayCentre = if bayExtents ~= nil then (bayExtents.minZ + bayExtents.maxZ) / 2 else 0
-	local configured = numberOr(parked.bayLength, 0)
-	local bayLength: number? = if configured > 0 and configured < math.huge
-		then configured
-		elseif bayExtents ~= nil then bayExtents.maxZ - bayExtents.minZ
-		else nil
 	local order: { number } = {}
 	for index in spots do
 		table.insert(order, index)
@@ -1283,12 +1289,22 @@ local function greenerySpots(input: PlanInput, plan: Plan, rng: Random): { Green
 	local sign = Vector3.new(0, 0, -input.plotSize.Z / 2)
 	local solids, lotFootprints = solidsFor(input)
 	-- Parked vehicles stand on their bays whatever the tier; a hedge must not grow under one. The
-	-- whole bay (one built-size car of the pool) stays clear, not just the scaled cars packed into
-	-- it, so wave 2d's smaller cars move no greenery.
+	-- whole bay stays clear -- the built-size union, stretched about its centre to `bayLength` when
+	-- that is longer -- not just the scaled cars packed into it.
 	local parked = era.parked
-	local parkedExtents = if parked ~= nil and nonEmptyList(parked.props)
-		then harvestedUnion(input.eraName, parked.props)
-		else nil
+	local parkedExtents: Extents? = nil
+	if parked ~= nil and nonEmptyList(parked.props) then
+		local union, length = bayShape(input.eraName, parked)
+		if union ~= nil then
+			local grown = table.clone(union)
+			if length ~= nil and length > union.maxZ - union.minZ then
+				local centre = (union.minZ + union.maxZ) / 2
+				grown.minZ = centre - length / 2
+				grown.maxZ = centre + length / 2
+			end
+			parkedExtents = grown
+		end
+	end
 	local lastBay = 0
 	for _, spot in plan.parked do
 		if spot.bay == lastBay then

@@ -166,6 +166,7 @@ WALKER_HALF = 0.42
 # Wave 2d: studs between two cars packed into one bay when `parked.gap` is absent (Scatter's
 # DEFAULT_PARKED_GAP, mirrored).
 PARKED_GAP_DEFAULT = 0.3
+MAX_PER_BAY = 4  # Scatter's MAX_PER_BAY, mirrored: perBay is clamped to 1..this
 GREENERY_ZONE_COUNT = (2, 8)
 # Walk lanes are clipped wherever they pass within `pedestrians.clearance` of a solid; the tool
 # samples every lane this finely to find the clipped runs.
@@ -568,6 +569,14 @@ def union_length(era_name, prop_names):
     return high - low if low <= high else None
 
 
+def per_bay(config):
+    """Scatter's `parked.perBay`: floored, clamped to 1..MAX_PER_BAY, 1 when missing or not a number."""
+    value = (config or {}).get("perBay", 1)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != value:
+        return 1
+    return min(max(int(math.floor(value)), 1), MAX_PER_BAY) if value != math.inf else MAX_PER_BAY
+
+
 def bay_length(era_name, config):
     """Scatter's packing length: `parked.bayLength` when it is a positive finite number, else the
     pool's built-size union length (None before any of it is harvested)."""
@@ -583,23 +592,23 @@ def bay_packing(era):
     scaled lengths plus `gap` between them are within bay_length; a row that does not keeps one car."""
     config = era.dressing.get("parked") or {}
     props = config.get("props") or []
-    per_bay = max(int(math.floor(float(config.get("perBay", 1)))), 1)
-    if per_bay <= 1 or not props:
-        return per_bay, 0, 0, 0.0
+    cars = per_bay(config)
+    if cars <= 1 or not props:
+        return cars, 0, 0, 0.0
     scale = config_scale(config)
     spacing = max(float(config.get("gap", PARKED_GAP_DEFAULT)), 0.0)
     bay = bay_length(era.name, config)
     lengths = [scaled_extents(era.name, name, scale) for name in props]
     fits, total, longest = 0, 0, 0.0
-    for row in itertools.product(range(len(props)), repeat=per_bay):
+    for row in itertools.product(range(len(props)), repeat=cars):
         total += 1
         if bay is None or any(lengths[i] is None for i in row):
             continue
-        length = sum(lengths[i][2] for i in row) + spacing * (per_bay - 1)
+        length = sum(lengths[i][2] for i in row) + spacing * (cars - 1)
         if length <= bay + 1e-9:
             fits += 1
             longest = max(longest, length)
-    return per_bay, fits, total, longest
+    return cars, fits, total, longest
 
 
 def gap(p, q):
@@ -756,7 +765,7 @@ class Era:
             bay = (max(bay[0], footprint[0]), max(bay[1], footprint[1]))
         # Wave 2d: packed cars stay inside bay_length (Scatter.packBay), so a bay at least that
         # long holds every row the client can draw.
-        packed = bay_length(name, parked) if int(parked.get("perBay", 1) or 1) > 1 else None
+        packed = bay_length(name, parked) if per_bay(parked) > 1 else None
         if packed:
             bay = (bay[0], max(bay[1], packed))
         self.bay = bay
@@ -2221,10 +2230,10 @@ def parking_violations(era, network, visible):
             messages.append(problem)
         cap = budget_value(era.city.get("budget", {}).get("parked"), math.inf)
         # perTier counts bays, budget.parked counts cars (wave 2d), and every bay may take perBay.
-        per_bay = max(int(math.floor(float(config.get("perBay", 1)))), 1)
-        if per_tier and per_tier[-1] * per_bay > cap:
+        cars = per_bay(config)
+        if per_tier and per_tier[-1] * cars > cap:
             messages.append(
-                f"{label_cfg}.perTier reaches {per_tier[-1]} bays x perBay {per_bay} > budget.parked {cap:g} cars"
+                f"{label_cfg}.perTier reaches {per_tier[-1]} bays x perBay {cars} > budget.parked {cap:g} cars"
             )
     if per_tier:
         for tier in range(1, 6):
@@ -3307,10 +3316,10 @@ def main():
                 f"   parking: {len(era.parking)} spots ({driveways} driveways), bay {era.bay[0]:g}x{era.bay[1]:g}, "
                 f"available by tier 1-5 {counts}, perTier {(era.dressing.get('parked') or {}).get('perTier')}"
             )
-            per_bay, fits, rows, longest = bay_packing(era)
+            cars, fits, rows, longest = bay_packing(era)
             if rows:
                 print(
-                    f"   bay packing: perBay {per_bay}, {fits}/{rows} prop rows fit "
+                    f"   bay packing: perBay {cars}, {fits}/{rows} prop rows fit "
                     f"(longest {longest:.2f}); the rest keep one car"
                 )
         for zone, usable, kept in greenery_stats:

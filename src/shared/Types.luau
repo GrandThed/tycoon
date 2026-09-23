@@ -594,6 +594,8 @@ export type CityEraVehiclesConfig = {
 	speed: number,
 	-- Wave 2d: runtime Model:ScaleTo of every moving car, deck cars included (absent = 1).
 	scale: number?,
+	-- Wave 2d: studs kept between a car and the one ahead where they enter the same lane.
+	followGap: number?,
 }
 -- Wave 2c (docs/INTERFACES.md "Wave 2c — living city"). Every `perTier` is cumulative and indexed
 -- by tier (1-5); tier 0 shows none.

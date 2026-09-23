@@ -883,17 +883,18 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 	if #models == 0 then
 		return
 	end
-	local offered = #models
-	local placed = Traffic.SpawnPlot(
+	-- Only a full map budget is worth retrying; a street too short for more cars stays as it is.
+	local _, budgetLimited = Traffic.SpawnPlot(
 		entry.index,
 		lanes,
 		models,
 		build.era.vehicles.speed,
 		config.vehicles.turnSeconds,
+		build.era.vehicles.followGap,
 		entry.folder,
 		config.budget.vehiclesMap
 	)
-	entry.vehiclesBlocked = placed < offered
+	entry.vehiclesBlocked = budgetLimited
 end
 
 -- The ring's cars ride the same Traffic loop on their own lane graph, so they never take the ramp
@@ -940,17 +941,17 @@ local function spawnHighwayVehicles(
 	if #models == 0 then
 		return
 	end
-	local offered = #models
-	local placed = Traffic.SpawnPlot(
+	local _, budgetLimited = Traffic.SpawnPlot(
 		plotId,
 		lanes,
 		models,
 		era.vehicles.speed,
 		config.vehicles.turnSeconds,
+		build.era.vehicles.followGap,
 		entry.folder,
 		config.budget.vehiclesMap
 	)
-	entry.highwayBlocked = placed < offered
+	entry.highwayBlocked = budgetLimited
 end
 
 -- Wave 2c greenery: a zone piece appears on its tier, a garnish piece with its lot's house.
@@ -1396,7 +1397,10 @@ local function sync(entry: PlotEntry): ()
 		-- Room freed elsewhere since the map budget cut this plot short.
 		spawnVehicles(entry, current, config)
 	elseif roadsChanged and target > 0 then
-		if Traffic.Count(entry.index) > 0 then
+		-- A plot whose streets were too short for all its cars (Traffic keeps them a car length
+		-- apart) respawns when they grow instead of carrying the short count forward.
+		local driving = Traffic.Count(entry.index)
+		if driving > 0 and driving >= target then
 			Traffic.SetLanes(entry.index, RoadGraph.GetLanes(current.roads))
 		else
 			spawnVehicles(entry, current, config)

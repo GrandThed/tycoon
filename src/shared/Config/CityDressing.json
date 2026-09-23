@@ -131,7 +131,8 @@
           "Cart"
         ],
         "perPlot": 3,
-        "speed": 5
+        "speed": 5,
+        "followGap": 0.6
       },
       "greenery": {
         "props": [
@@ -259,7 +260,8 @@
         ],
         "perPlot": 24,
         "scale": 0.5,
-        "speed": 10
+        "speed": 10,
+        "followGap": 0.6
       },
       "signals": {
         "prop": "TrafficLight",
@@ -295,6 +297,7 @@
         "scale": 0.5,
         "perBay": 2,
         "bayLength": 7.5,
+        "gap": 0.3,
         "perTier": [
           0,
           3,
@@ -442,7 +445,8 @@
         ],
         "perPlot": 32,
         "scale": 0.5,
-        "speed": 12
+        "speed": 12,
+        "followGap": 0.6
       },
       "greenery": {
         "props": [
@@ -472,6 +476,7 @@
         "scale": 0.5,
         "perBay": 2,
         "bayLength": 6.0,
+        "gap": 0.3,
         "perTier": [
           0,
           4,
