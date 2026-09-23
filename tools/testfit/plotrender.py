@@ -24,9 +24,11 @@ What is mirrored, and from where (never re-derived, never duplicated as a consta
   * tile cells, the connectivity mask table and the zebra rule: src/client/City/TileRenderer.luau
     (PIECE_BY_MASK, ARM_STEPS, CROSSING_MIN_RUN);
   * the ring cycle, the reveal-independent cell kinds and the ramp: src/client/City/Highway.luau
-    and the INTERFACES "Elevated highway" contract. Where the two differ the CONTRACT wins: the
-    ramp's high cell is the first cell inward of the junction (so its 3 cells are the ones
-    streetplan checks and its toe lands on the street's end cell), not half a cell further out.
+    (`placeRamp` anchors the prop at `junction + direction * tileStuds`, the centre of the first
+    whole cell inward, so its high end is flush with the junction cell's inward edge).
+
+Nothing here may quietly "follow the contract" where the client does something else: a divergence
+is a bug in one of them and belongs in a report, not in this file.
 """
 
 from __future__ import annotations
@@ -99,6 +101,8 @@ ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read on
 MIN_VEHICLE_STRETCH = 16.0
 # TileRenderer.luau ground-slab constants, mirrored (geometry, not tunables).
 BLOCK_DROP = 0.02  # a block slab's top, and a park strip's, sits this far under the kerb
+SPUR_DROP = 0.01  # RoadGraph.SPUR_DROP: a tiles-era footpath, half as far under the kerb
+KEY_SCALE = 10  # rectKey's rounding
 TOUCH_EPSILON = 1e-3  # rectangles that only touch are not an overlap
 # The corner squares of a cell's kerb, in the client's order: (x arm, z arm).
 CORNER_PAIRS = ((1, 2), (1, 4), (3, 2), (3, 4))
@@ -182,6 +186,17 @@ def cut_against(candidate, laid, into):
                 remainder.append(piece)
         pieces = remainder
     into.extend(pieces)
+
+
+def rect_key(rect):
+    """TileRenderer.rectKey: a rectangle rounded to a tenth of a stud, as a string. The strips sort
+    their cuts on it, so the tool must round and format it exactly as the client does."""
+    return "{}:{}:{}:{}".format(
+        streetplan.round_half(rect[0] * KEY_SCALE),
+        streetplan.round_half(rect[2] * KEY_SCALE),
+        streetplan.round_half(rect[1] * KEY_SCALE),
+        streetplan.round_half(rect[3] * KEY_SCALE),
+    )
 
 
 def cell_rect(cell, step, reach):
@@ -548,12 +563,16 @@ class PlotScene:
         spur_cfg = (era.tiles or {}).get("spur")
         width = float(spur_cfg["width"]) if spur_cfg else era.width
         colour = [int(v) for v in (spur_cfg["color"] if spur_cfg else era.dressing["road"]["color"])]
+        # RoadGraph.drawSpur: a footpath's centre sits at -SPUR_DROP, so its top is that far under
+        # the kerb and none of the four ground planes coincide. A non-tiles era draws baked meshes
+        # in the client, so SPUR_TOP there is this tool's stand-in and mirrors nothing.
+        top = self.thickness / 2 - SPUR_DROP if spur_cfg else SPUR_TOP
         for slot in era.slots:
             spur = era.spurs[slot["id"]]
             if slot["id"] not in self.owned or not spur["points"]:
                 continue
             for index, (a, b) in enumerate(streetplan.polyline_segments(spur["points"])):
-                self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, SPUR_TOP, colour)
+                self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, top, colour)
 
     # -- highway, subway, dressing ---------------------------------------
 
@@ -604,10 +623,9 @@ class PlotScene:
                 rot_y=quarters * 90.0,
             )
 
-        # The ramp: its highest cell is the first cell INWARD of the junction, so the prop's three
-        # cells are exactly the cells streetplan checks and its toe lands on the street's end cell
-        # (INTERFACES "Elevated highway"). Placing the origin at the junction cell's inner edge --
-        # what the client does today -- would sit the whole ramp half a cell off the lattice.
+        # Highway.placeRamp: the prop is anchored at the centre of the first whole cell inward of
+        # the junction, so its high end is flush with the junction cell's inward edge, its three
+        # cells are the ones streetplan checks and its toe lands on the street's end cell.
         origin = (junction[0] * step + direction[0] * step, junction[1] * step + direction[1] * step)
         ramp_arm = arm_for((int(direction[0]), int(direction[1]))) or 1
         self.ramp_origin = origin
@@ -739,24 +757,29 @@ class PlotScene:
         reach = step / 2 + (max(float(pavement["width"]), 0.0) if pavement is not None else 0.0)
         colour = [int(v) for v in config["color"]]
         top = self.thickness / 2 - BLOCK_DROP
-        laid = []
+        # Everything that is not a strip: the drawn tiles, the kerb around them, the paved blocks
+        # and the kiosks, sorted on their key -- two of those come out of dictionaries in the
+        # client, and the order the cuts are made in decides how many Parts a cut band takes,
+        # which is what the budget below is spent in.
+        taken = []
         drawn_count = 0
         for cell in self.planned_cells:
             if cell in self.tile_cells:
                 drawn_count += 1
-                laid.append(cell_rect(cell, step, step / 2))
-        # The client's `laid` takes the kerb and the block slabs out of two hash tables, whose order
-        # it does not control; every rectangle in both is disjoint from the others, so the ground a
-        # strip is left with is the same however they are ordered.
-        laid.extend(self.pavement_rects)
-        laid.extend(self.block_rects)
+                taken.append(cell_rect(cell, step, step / 2))
+        taken.extend(self.pavement_rects)
+        taken.extend(self.block_rects)
+        taken.extend(self.kiosk_rects())
+        taken.sort(key=rect_key)
+        laid = list(taken)
         remaining = max(int(era.city.get("budget", {}).get("tileCells", 0)) - drawn_count, 0)
         pieces = []
         for cell in self.planned_cells:
             if cell in self.tile_cells or remaining <= 0:
                 continue
+            candidate = cell_rect(cell, step, reach)
             kept = []
-            cut_against(cell_rect(cell, step, reach), laid, kept)
+            cut_against(candidate, laid, kept)
             for piece in kept:
                 if remaining <= 0:
                     break
@@ -764,6 +787,13 @@ class PlotScene:
                 laid.append(piece)
                 pieces.append(piece)
                 self.strip_cells.add(cell)
+            if not kept:
+                # Nothing of its own to lay, but a junction cell is usually swallowed whole by the
+                # strips of the cells before it: that ground is still grass, so its planter stays.
+                swallowed = []
+                cut_against(candidate, taken, swallowed)
+                if swallowed:
+                    self.strip_cells.add(cell)
         for index, rect in enumerate(pieces):
             self.box(
                 f"ParkStrip{index}",
@@ -830,7 +860,12 @@ class PlotScene:
         if config is None or not era.dressing.get("trees", {}).get("prop"):
             return []
         spacing = config.get("treeSpacing")
-        if not isinstance(spacing, (int, float)) or spacing < MIN_STEP:
+        # No lattice, no cells to plant on: a tile pitch of zero is a config that draws no streets.
+        if (
+            not isinstance(spacing, (int, float))
+            or spacing < MIN_STEP
+            or era.tile_studs < MIN_STEP
+        ):
             return []
         # A planter keeps the daylight a street tree keeps from the same solids; an era that plants
         # strips without paving blocks simply has no such distance to keep.
@@ -844,43 +879,60 @@ class PlotScene:
         def blocked(point):
             if any(self.inside_footprint(f, point, clearance) for f in footprints):
                 return True
-            # The footpath to a building crosses the corridor it serves.
+            # The footpath to a building crosses the corridor it serves. Scatter.nearLine tests
+            # strictly inside the limit, so a planter exactly on the edge of a spur stands.
             return any(
-                streetplan.point_segment_distance(point, a, b)[0] <= spur_half
+                streetplan.point_segment_distance(point, a, b)[0] < spur_half
                 for a, b in spur_segments
             )
 
         trees = []
+        cells_taken = set()
         for run in runs:
+            # The run as one curve, exactly as the row lamps walk it: the spacing carries across the
+            # pieces of a street, so a 5-cell stretch followed by a 9-cell one plants an even row
+            # instead of restarting -- and losing a mark -- at the joint. Consecutive pieces share
+            # an endpoint, and that repeat is the point the MIN_STEP test drops.
+            points, arcs, at_piece = [], [], []
+            total = 0.0
             for piece in run["pieces"]:
-                walked, step_index = 0.0, 0
-                for index in range(1, len(piece["points"])):
-                    start = piece["points"][index - 1]
-                    finish = piece["points"][index]
-                    span = (finish[0] - start[0], finish[1] - start[1])
-                    length = math.hypot(span[0], span[1])
-                    if length < MIN_STEP:
-                        continue
-                    mark = (step_index + 1) * spacing
-                    while mark <= walked + length:
-                        step_index += 1
-                        fraction = (mark - walked) / length
-                        point = (start[0] + span[0] * fraction, start[1] + span[1] * fraction)
-                        if not blocked(point):
-                            key = "{}:{}:{}".format(run["polyline"], piece["stretch"], step_index)
-                            trees.append(
-                                {
-                                    "polyline": run["polyline"],
-                                    "stretch": piece["stretch"],
-                                    "step": step_index,
-                                    "position": point,
-                                    # Hashed, not drawn: the same planter turns the same way
-                                    # on every client.
-                                    "yaw": noise_hash(key) % FULL_CIRCLE_DEGREES,
-                                }
-                            )
-                        mark = (step_index + 1) * spacing
-                    walked += length
+                for point in piece["points"]:
+                    if points:
+                        advance = math.dist(points[-1], point)
+                        if advance < MIN_STEP:
+                            continue
+                        total += advance
+                    points.append(point)
+                    arcs.append(total)
+                    at_piece.append(piece)
+            index = 1  # the client's `index = 2` on a 1-based array
+            for step_index in range(1, int(math.floor(total / spacing)) + 1):
+                target = spacing * step_index
+                while index < len(arcs) - 1 and arcs[index] < target:
+                    index += 1
+                start, finish = points[index - 1], points[index]
+                fraction = (target - arcs[index - 1]) / (arcs[index] - arcs[index - 1])
+                point = (
+                    start[0] + (finish[0] - start[0]) * fraction,
+                    start[1] + (finish[1] - start[1]) * fraction,
+                )
+                piece = at_piece[index]
+                # One planter to a cell: two polylines meeting at a junction would otherwise each
+                # plant one in it, and the strip under them is a single square of grass.
+                cell = cell_at(era.tile_studs, point)
+                if cell not in cells_taken and not blocked(point):
+                    cells_taken.add(cell)
+                    key = "{}:{}:{}".format(run["polyline"], piece["stretch"], step_index)
+                    trees.append(
+                        {
+                            "polyline": run["polyline"],
+                            "stretch": piece["stretch"],
+                            "step": step_index,
+                            "position": point,
+                            # Hashed, not drawn: the same planter turns the same way everywhere.
+                            "yaw": noise_hash(key) % FULL_CIRCLE_DEGREES,
+                        }
+                    )
         trees.sort(key=lambda tree: (tree["polyline"], tree["stretch"], tree["step"]))
         cap = max(int(math.floor(config.get("maxTrees", 0))), 0)
         count = len(trees)
@@ -986,12 +1038,47 @@ class PlotScene:
             footprints.append((lot["position"], lot["rotation"], lot_extents))
         for plaza in era.plazas:
             footprints.append((plaza["position"], plaza["rotation"], prop_extents(plaza["prop"])))
-        subway = era.dressing.get("subway")
-        if subway is not None and era.subways:
-            extents = self.model_extents(subway["prop"], prop=True) or centred_extents(placeholder[0], placeholder[2])
-            for entry in era.subways:
-                footprints.append((entry["position"], entry["rotation"], extents))
+        footprints.extend(self.subway_footprints())
         return footprints
+
+    def subway_footprints(self):
+        """Scatter.subwayFootprints: one footprint per kiosk, at its harvested extents or, until
+        the prop is uploaded, the layout's placeholder -- never the "as large as the era's largest
+        slot" fallback the other props take, which would fence off a whole corner of a block."""
+        era = self.era
+        subway = era.dressing.get("subway")
+        if subway is None or not era.subways:
+            return []
+        placeholder = era.layout["placeholderSize"]
+        extents = self.model_extents(subway["prop"], prop=True) or centred_extents(
+            placeholder[0], placeholder[2]
+        )
+        return [(entry["position"], entry["rotation"], extents) for entry in era.subways]
+
+    def kiosk_rects(self):
+        """Scatter.KioskRects: every kiosk's ground as an axis-aligned plot-local rectangle (its
+        extents' corners turned by its rotation, then bounded), which is the shape the strips are
+        cut around."""
+        rects = []
+        for origin, rotation, extents in self.subway_footprints():
+            radians = math.radians(rotation)
+            cos, sin = math.cos(radians), math.sin(radians)
+            points = []
+            for local_x in (extents[0], extents[1]):
+                for local_z in (extents[2], extents[3]):
+                    # CFrame.Angles(0, r, 0):PointToWorldSpace on the XZ plane, the inverse of the
+                    # turn inside_footprint takes out.
+                    points.append((
+                        origin[0] + cos * local_x + sin * local_z,
+                        origin[1] - sin * local_x + cos * local_z,
+                    ))
+            rects.append((
+                min(point[0] for point in points),
+                max(point[0] for point in points),
+                min(point[1] for point in points),
+                max(point[1] for point in points),
+            ))
+        return rects
 
     @staticmethod
     def inside_footprint(footprint, point, margin=0.0):
@@ -1051,7 +1138,8 @@ class PlotScene:
         def blocked(point):
             if any(self.inside_footprint(f, point, clearance) for f in footprints):
                 return True
-            return any(streetplan.point_segment_distance(point, a, b)[0] <= spur_half for a, b in spurs)
+            # Scatter.nearLine tests strictly inside the limit.
+            return any(streetplan.point_segment_distance(point, a, b)[0] < spur_half for a, b in spurs)
 
         spots = []
         for block_index, block in enumerate(blocks):
