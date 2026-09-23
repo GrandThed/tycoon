@@ -2895,8 +2895,10 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
   spurs at lateral offset `pedestrians.offset` on **both** sides of each street. At a node a
   walker takes a random outgoing walk lane; crossing a carriageway at a junction is allowed.
 - Per era `pedestrians = { firstTier, perTier: {number}, offset, speed, bobHeight, bobHz,
-  props: {string} }`. Offsets: Metropolis on the pavement (road half-width + pavement/2 ≈ 5.5),
-  Boomtown on the verge (≈ 4.8), Village at the trail edge (≈ 1.3, clear of the carts at 0).
+  props: {string}, clearance }`. Walk lanes are **clipped at every solid on their line** (lots,
+  plazas, kiosks, lamp posts, signals, slot footprints, pads) with `clearance`; a clip end is a dead
+  end, so no walker ever enters a building (review, 2026-09-23). Offsets: Metropolis on the pavement (road half-width + pavement/2 ≈ 5.5),
+  Boomtown on the asphalt edge (≈ 3.4; 4.8 was the row-lamp line), Village at the trail edge (≈ 1.3, clear of the carts at 0).
 - `budget.walkersPerPlot` = **8**, `budget.walkersMap` = **24**; walkers run on the same nearest
   `lod.vehiclePlots` plots as cars.
 - Props: generated **`people-kit`** (`tools/assets/people_kit.py`, Blender, 1 unit = 1 stud):
@@ -2910,8 +2912,8 @@ worktree `C:\Users\benja\Desktop\tycoon-wave2c`, merged after wave 2b.
   size: {number}, color: {number} }`. `props` maps `"<Era>/<Prop>"` (or a bare prop name) to a chimney offset
   `[x, y, z]` in the prop frame; a placed house of that prop gets one ParticleEmitter there
   (`smoke_main.dds`, like Dust). Village and Boomtown only.
-- `ambient.birds = { firstTier, flocksPerTier: {number}, birdsPerFlock, radius, height, speed,
-  prop }`. A flock circles over a `treeZones` centre with seeded phase; birds are a generated
+- `ambient.birds = { firstTier, eras: {string}, flocksPerTier: {number}, birdsPerFlock, radius,
+  height, speed, prop }`; a missing `eras` list means no birds. A flock circles over a `treeZones` centre with seeded phase; birds are a generated
   `Bird` prop (people-kit) in each era's `_props`. All three eras (Metropolis = pigeons, grey).
 - `budget.birdsMap` = **18**; near plots only.
 

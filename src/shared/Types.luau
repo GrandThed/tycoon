@@ -601,6 +601,7 @@ export type PedestrianConfig = {
 	firstTier: number,
 	perTier: { number },
 	offset: number, -- studs off the street centreline, both sides
+	clearance: number?, -- studs walkers keep from any solid (absent = the client's default)
 	speed: number,
 	bobHeight: number,
 	bobHz: number,
@@ -623,6 +624,7 @@ export type BirdsConfig = {
 	height: number,
 	speed: number, -- studs per second along the circle
 	prop: string,
+	eras: { string }?, -- eras that get flocks; absent = none
 }
 export type AmbientConfig = { smoke: SmokeConfig?, birds: BirdsConfig? }
 export type CityEraDressingConfig = {

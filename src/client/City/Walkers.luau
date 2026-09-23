@@ -62,6 +62,11 @@ local heartbeat: RBXScriptConnection? = nil
 -- Unseeded on purpose: routes and bob phases are cosmetic and allowed to differ per client.
 local rng = Random.new()
 
+-- A config value a stale file lacks (or a NaN) degrades to `fallback` instead of erroring mid-sync.
+local function numberOr(value: number?, fallback: number): number
+	return if type(value) == "number" and value == value then value else fallback
+end
+
 local function wrapAngle(angle: number): number
 	return (angle + HALF_TURN) % FULL_TURN - HALF_TURN
 end
@@ -256,9 +261,9 @@ function Walkers.SpawnPlot(
 	plotId: number,
 	lanes: Lanes,
 	models: { Model },
-	speed: number,
-	bobHeight: number,
-	bobHz: number,
+	speed: number?,
+	bobHeight: number?,
+	bobHz: number?,
 	parent: Instance,
 	mapWalkerBudget: number
 ): number
@@ -280,7 +285,7 @@ function Walkers.SpawnPlot(
 		return 0
 	end
 
-	local bob = if Theme.reducedMotion then 0 else math.max(bobHeight, 0)
+	local bob = if Theme.reducedMotion then 0 else math.max(numberOr(bobHeight, 0), 0)
 	for index, model in models do
 		if index > count then
 			model:Destroy()
@@ -319,9 +324,9 @@ function Walkers.SpawnPlot(
 			lanes = lanes,
 			lane = lane,
 			distance = math.clamp(distance, 0, lanes.length[lane]),
-			speed = math.max(speed, 0),
+			speed = math.max(numberOr(speed, 0), 0),
 			bobHeight = bob,
-			bobRate = math.pi * math.max(bobHz, 0),
+			bobRate = math.pi * math.max(numberOr(bobHz, 0), 0),
 			-- A random start in the stride, so a street of walkers does not hop in step.
 			elapsed = rng:NextNumber() * FULL_TURN,
 			crossing = false,

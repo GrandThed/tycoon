@@ -96,6 +96,16 @@ export type StreetLines = { runs: { SpineRun }, spurs: { { Vector3 } } }
 -- Wave 1e: the corner of a crossing a signal prop stands on.
 export type SignalSpot = { node: number, position: Vector3, yaw: number }
 
+-- Wave 2c: something a walker must not walk through -- a plot-local rectangle about `origin`,
+-- turned by `rotation` (Scatter.Footprint has this shape). `slotId` marks a slot's own building
+-- and pad, which that slot's footpath is allowed to cross.
+export type WalkSolid = {
+	origin: Vector3,
+	rotation: CFrame,
+	extents: { minX: number, maxX: number, minZ: number, maxZ: number },
+	slotId: string?,
+}
+
 -- Directed lanes, struct-of-arrays so the Heartbeat loop reads numbers without allocating.
 -- Positions are world space at the road top, already offset to the right-hand lane.
 export type Lanes = {
@@ -226,9 +236,11 @@ export type State = {
 	bendParts: { Instance },
 	pieces: { [string]: Model },
 	lanes: Lanes?,
-	-- Wave 2c: the walker lanes and the offset they were built at, dropped with `lanes`.
+	-- Wave 2c: the walker lanes and the offset and clearance they were built at, dropped with
+	-- `lanes`.
 	walkLanes: Lanes?,
 	walkOffset: number,
+	walkClearance: number,
 	pathData: PathData?, -- eras with road.paths
 	paths: PathRenderer.Handle?, -- nil: Parts from the start
 	tiles: TileRenderer.Handle?, -- eras with road.tiles
@@ -1702,6 +1714,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		lanes = nil,
 		walkLanes = nil,
 		walkOffset = 0,
+		walkClearance = 0,
 		pathData = nil,
 		paths = nil,
 		tiles = nil,
@@ -2402,7 +2415,17 @@ end
 -- walks through the house) and stop at the kerb; the join to the street is the walker crossing
 -- to its next lane, which Walkers draws as a stroll. Network nodes keep their ids so a spur's end
 -- and the street it meets are one node.
-local function buildWalkLanes(state: State, offset: number): Lanes
+--
+-- Each side of a street is its own two-way line, clipped against every solid on the plot grown by
+-- `clearance`: a clipped line ends at the clip point, which is a dead end where the walker turns
+-- back, so nobody ever walks through a house, a kiosk or a lamp post. The solids are a function of
+-- the layout and the drawn spurs alone, so every client clips the same lanes.
+local function buildWalkLanes(
+	state: State,
+	offset: number,
+	clearance: number,
+	solids: { WalkSolid }
+): Lanes
 	local lanes: Lanes = {
 		count = 0,
 		to = {},
@@ -2440,27 +2463,149 @@ local function buildWalkLanes(state: State, offset: number): Lanes
 		table.insert(lanes.outgoing[fromNode], id)
 		return id
 	end
-	local function chainBetween(
+	local function addPair(fromNode: number, toNode: number, a: Vector3, b: Vector3): ()
+		local forward = addLane(fromNode, toNode, a, b)
+		local backward = addLane(toNode, fromNode, b, a)
+		lanes.reverse[forward] = backward
+		lanes.reverse[backward] = forward
+	end
+
+	-- Each solid once: its grown rectangle and a bounding circle that rules most segments out
+	-- before the exact clip.
+	type Prepared = {
+		solid: WalkSolid,
+		centre: Vector3,
+		radius: number,
+		minX: number,
+		maxX: number,
+		minZ: number,
+		maxZ: number,
+	}
+	local prepared: { Prepared } = {}
+	for _, solid in solids do
+		local extents = solid.extents
+		local minX, maxX = extents.minX - clearance, extents.maxX + clearance
+		local minZ, maxZ = extents.minZ - clearance, extents.maxZ + clearance
+		local middle = Vector3.new((minX + maxX) / 2, 0, (minZ + maxZ) / 2)
+		table.insert(prepared, {
+			solid = solid,
+			centre = flat(solid.origin + solid.rotation:PointToWorldSpace(middle)),
+			radius = Vector3.new(maxX - minX, 0, maxZ - minZ).Magnitude / 2,
+			minX = minX,
+			maxX = maxX,
+			minZ = minZ,
+			maxZ = maxZ,
+		})
+	end
+
+	-- The parameter spans of p -> q inside any grown solid, sorted and merged (Liang-Barsky per
+	-- solid, in the solid's own frame).
+	local function blockedSpans(p: Vector3, q: Vector3, ownSlot: string?): { { number } }
+		local spans: { { number } } = {}
+		for _, item in prepared do
+			if ownSlot ~= nil and item.solid.slotId == ownSlot then
+				continue
+			end
+			local closest = RoadGraph.ClosestOnSegment(item.centre, p, q)
+			if (flat(closest) - item.centre).Magnitude > item.radius then
+				continue
+			end
+			local solid = item.solid
+			local lp = solid.rotation:PointToObjectSpace(flat(p) - flat(solid.origin))
+			local lq = solid.rotation:PointToObjectSpace(flat(q) - flat(solid.origin))
+			local dx, dz = lq.X - lp.X, lq.Z - lp.Z
+			local t0, t1 = 0, 1
+			local inside = true
+			for _, pair in
+				{
+					{ -dx, lp.X - item.minX },
+					{ dx, item.maxX - lp.X },
+					{ -dz, lp.Z - item.minZ },
+					{ dz, item.maxZ - lp.Z },
+				}
+			do
+				local pk, qk = pair[1], pair[2]
+				if pk == 0 then
+					if qk < 0 then
+						inside = false
+						break
+					end
+				else
+					local r = qk / pk
+					if pk < 0 then
+						t0 = math.max(t0, r)
+					else
+						t1 = math.min(t1, r)
+					end
+				end
+			end
+			if inside and t0 < t1 then
+				table.insert(spans, { t0, t1 })
+			end
+		end
+		table.sort(spans, function(a: { number }, b: { number }): boolean
+			return a[1] < b[1]
+		end)
+		return spans
+	end
+
+	-- One side of a chain, clipped. `current` is the node the free run in progress started from;
+	-- nil while the line is inside a solid, so the next free run starts at a fresh dead end.
+	local function sideRun(
 		points: { Vector3 },
 		firstNode: number,
 		lastNode: number,
-		side: number
+		side: number,
+		ownSlot: string?
 	): ()
-		local previous = firstNode
+		local current: number? = firstNode
 		local last = #points
 		for index = 2, last do
 			local a, b = points[index - 1], points[index]
 			if (b - a).Magnitude < MIN_LENGTH then
 				continue
 			end
-			local current = if index == last then lastNode else freshNode()
 			local right = ((b - a).Unit):Cross(UP) * side
-			local forward = addLane(previous, current, a + right, b + right)
-			local backward = addLane(current, previous, b - right, a - right)
-			lanes.reverse[forward] = backward
-			lanes.reverse[backward] = forward
-			previous = current
+			local p, q = a + right, b + right
+			local length = (q - p).Magnitude
+			local function run(t0: number, t1: number): ()
+				if (t1 - t0) * length < MIN_LENGTH then
+					current = nil
+					return
+				end
+				local startNode = if t0 > 0 then freshNode() else current or freshNode()
+				local endNode = if t1 < 1
+					then freshNode()
+					elseif index == last then lastNode
+					else freshNode()
+				addPair(startNode, endNode, p:Lerp(q, t0), p:Lerp(q, t1))
+				current = if t1 < 1 then nil else endNode
+			end
+			local cursor = 0
+			for _, span in blockedSpans(p, q, ownSlot) do
+				if span[1] > cursor then
+					run(cursor, span[1])
+				end
+				cursor = math.max(cursor, span[2])
+			end
+			if cursor < 1 then
+				run(cursor, 1)
+			else
+				current = nil
+			end
 		end
+	end
+
+	-- Both sides of a chain, each a two-way line of its own.
+	local function chainBetween(
+		points: { Vector3 },
+		firstNode: number,
+		lastNode: number,
+		side: number,
+		ownSlot: string?
+	): ()
+		sideRun(points, firstNode, lastNode, side, ownSlot)
+		sideRun(points, firstNode, lastNode, -side, ownSlot)
 	end
 
 	local data = state.pathData
@@ -2550,7 +2695,7 @@ local function buildWalkLanes(state: State, offset: number): Lanes
 		local kerb = if node ~= nil then state.width / 2 else 0
 		local walk = trimmed(points, door, kerb)
 		if walk ~= nil then
-			chainBetween(walk, freshNode(), node or freshNode(), spurSide)
+			chainBetween(walk, freshNode(), node or freshNode(), spurSide, slotId)
 		end
 	end
 	return lanes
@@ -2631,14 +2776,23 @@ function RoadGraph.GetLanes(state: State): Lanes
 	return lanes :: Lanes
 end
 
--- Wave 2c: walker lanes `offset` studs out on both sides of every drawn street, cached like
--- GetLanes (a new spur or a renderer fallback drops them; near/far never does).
-function RoadGraph.WalkLanes(state: State, offset: number): Lanes
+-- Wave 2c: walker lanes `offset` studs out on both sides of every drawn street, kept `clearance`
+-- clear of the solids `solidsOf` returns (asked only on a rebuild), cached like GetLanes (a new
+-- spur or a renderer fallback drops them; near/far never does). A nil or NaN number degrades to 0.
+function RoadGraph.WalkLanes(
+	state: State,
+	offset: number?,
+	clearance: number?,
+	solidsOf: (() -> { WalkSolid })?
+): Lanes
+	local side = math.max(budgetValue(offset, 0), 0)
+	local keep = math.max(budgetValue(clearance, 0), 0)
 	local lanes = state.walkLanes
-	if lanes == nil or state.walkOffset ~= offset then
-		lanes = buildWalkLanes(state, math.max(offset, 0))
+	if lanes == nil or state.walkOffset ~= side or state.walkClearance ~= keep then
+		lanes = buildWalkLanes(state, side, keep, if solidsOf ~= nil then solidsOf() else {})
 		state.walkLanes = lanes
-		state.walkOffset = offset
+		state.walkOffset = side
+		state.walkClearance = keep
 	end
 	return lanes :: Lanes
 end

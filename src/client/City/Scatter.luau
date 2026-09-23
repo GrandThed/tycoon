@@ -163,7 +163,8 @@ type Obstacle = { position: Vector3, radius: number }
 -- Model-space XZ rectangle around a bottom-centre anchor (front -Z), not necessarily centred.
 export type Extents = { minX: number, maxX: number, minZ: number, maxZ: number }
 -- Extents placed in the plot; `rotation` is the turn about Y only, with no translation.
-export type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents }
+-- `slotId` (wave 2c) marks a slot's own building and pad, which that slot's footpath may cross.
+export type Footprint = { origin: Vector3, rotation: CFrame, extents: Extents, slotId: string? }
 -- An axis-aligned plot-local rectangle, the shape TileRenderer cuts its slabs against.
 export type Rect = { x0: number, x1: number, z0: number, z1: number }
 
@@ -327,11 +328,12 @@ local function solidsFor(input: PlanInput): ({ Footprint }, { [number]: Footprin
 	local modelNames = slotModelNames(input.eraName)
 
 	local footprints: { Footprint } = {}
-	local function add(position: Vector3, rotationY: number, extents: Extents): ()
+	local function add(position: Vector3, rotationY: number, extents: Extents, slotId: string?): ()
 		table.insert(footprints, {
 			origin = flat(position),
 			rotation = CFrame.Angles(0, math.rad(rotationY), 0),
 			extents = extents,
+			slotId = slotId,
 		})
 	end
 
@@ -360,11 +362,11 @@ local function solidsFor(input: PlanInput): ({ Footprint }, { [number]: Footprin
 	end
 
 	for slotId, slotLayout in layout.slots do
-		add(slotLayout.position, slotLayout.rotationY, slotExtents[slotId])
+		add(slotLayout.position, slotLayout.rotationY, slotExtents[slotId], slotId)
 		local padCentre = slotLayout.padPosition
 			or slotLayout.position + facingFor(slotLayout.rotationY) * layout.padOffset
 		-- Pads are placed unrotated in the plot frame (PlotService.padWorldCFrame).
-		add(padCentre, 0, centredExtents(layout.padSize.X, layout.padSize.Z))
+		add(padCentre, 0, centredExtents(layout.padSize.X, layout.padSize.Z), slotId)
 	end
 
 	-- A lot's house is picked only after the trees (fixed draw order), so a lot reserves the
@@ -992,7 +994,10 @@ local function perTierMax(perTier: { number }?): number
 end
 
 -- The first tier at which a cumulative `perTier` list shows `rank` pieces; nil when it never does.
-local function tierForRank(perTier: { number }, rank: number): number?
+local function tierForRank(perTier: { number }?, rank: number): number?
+	if type(perTier) ~= "table" then
+		return nil
+	end
 	local running = 0
 	for tier, value in perTier do
 		running = math.max(running, math.floor(numberOr(value, 0)))
@@ -1103,8 +1108,11 @@ local function parkedSpots(
 	local lines = streetLines()
 	local planned: { ParkedSpot } = {}
 	for rank, index in order do
+		if rank > cap then
+			break
+		end
 		local rankTier = tierForRank(parked.perTier, rank)
-		if rank > cap or rankTier == nil then
+		if rankTier == nil then
 			break
 		end
 		local spot = spots[index]
@@ -1156,8 +1164,9 @@ local function greenerySpots(input: PlanInput, plan: Plan, rng: Random): { Green
 	local sign = Vector3.new(0, 0, -input.plotSize.Z / 2)
 	local solids, lotFootprints = solidsFor(input)
 	-- Parked vehicles stand on their bays whatever the tier; a hedge must not grow under one.
-	local parkedExtents = if era.parked ~= nil
-		then harvestedUnion(input.eraName, era.parked.props)
+	local parked = era.parked
+	local parkedExtents = if parked ~= nil and nonEmptyList(parked.props)
+		then harvestedUnion(input.eraName, parked.props)
 		else nil
 	for _, spot in plan.parked do
 		table.insert(solids, {
@@ -1477,6 +1486,26 @@ end
 -- Everything solid the planner already knows about a plot: every slot and its pad, every filler
 -- lot, plaza and subway kiosk. Shared so a caller placing something of its own (the highway sign)
 -- can ask the same question the trees and the row lamps do, instead of guessing.
+-- Wave 2c: what walkers must stay out of -- every solid above plus the street furniture the plot
+-- stands on its pavements (`frames` plot-local, each with the prop it holds), sized by that prop's
+-- harvested bounds or, before harvest, as a point the walker's clearance grows around.
+function Scatter.WalkSolids(
+	input: PlanInput,
+	furniture: { { frame: CFrame, prop: string? } }
+): { Footprint }
+	local solids = footprintsFor(input)
+	for _, item in furniture do
+		local prop = item.prop
+		local extents = if prop ~= nil then harvestedUnion(input.eraName, { prop }) else nil
+		table.insert(solids, {
+			origin = flat(item.frame.Position),
+			rotation = item.frame.Rotation,
+			extents = extents or centredExtents(0, 0),
+		})
+	end
+	return solids
+end
+
 function Scatter.Solids(input: PlanInput): { Footprint }
 	return footprintsFor(input)
 end

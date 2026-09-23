@@ -64,6 +64,9 @@ local PLOT_INDEX_ATTRIBUTE = "PlotIndex"
 -- Wave 1e: a crossing prop waits until this many of its node's streets are drawn, so it never
 -- stands beside a single road (docs/INTERFACES.md "Wave 1e — Lamps").
 local SIGNAL_MIN_VISIBLE = 2
+-- Wave 2c: how far walkers keep from solids when `pedestrians.clearance` is missing (lead ruling,
+-- the figure's half-width plus a hand's breadth); the config value wins whenever it is present.
+local DEFAULT_WALK_CLEARANCE = 0.6
 
 type TreeInstance = { model: Model, stage: number }
 
@@ -74,6 +77,8 @@ type Build = {
 	plotFrame: CFrame,
 	roads: RoadGraph.State,
 	plan: Scatter.Plan,
+	-- Wave 2c: kept so the walker lanes can ask the planner for the plot's solids on a rebuild.
+	planInput: Scatter.PlanInput,
 	houses: { [number]: Model },
 	plazas: { [number]: Model },
 	trees: { [number]: TreeInstance },
@@ -396,6 +401,7 @@ local function newBuild(
 		plotFrame = plotFrame,
 		roads = roads,
 		plan = plan,
+		planInput = planInput,
 		houses = {},
 		plazas = {},
 		trees = {},
@@ -902,7 +908,7 @@ local function listHas(list: { string }?, value: string): boolean
 end
 
 -- Wave 2c chimney smoke: one plume on each placed house whose prop has a chimney offset, from the
--- smoke tier, in the eras the config names, and never under reduced motion.
+-- smoke tier, in the eras the config names, and never on a low-end device (Ambient.Enabled).
 local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: number): ()
 	local ambient = config.ambient
 	local smoke = if ambient ~= nil then ambient.smoke else nil
@@ -910,7 +916,8 @@ local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: n
 		smoke == nil
 		or not Ambient.Enabled()
 		or not listHas(smoke.eras, build.eraName)
-		or tier < smoke.firstTier
+		-- A missing tier key is "never", like every other wave 2c key: the feature is simply off.
+		or tier < RoadGraph.BudgetValue(smoke.firstTier, math.huge)
 		or type(smoke.props) ~= "table"
 	then
 		clearSmoke(build)
@@ -945,6 +952,56 @@ local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: n
 	end
 end
 
+-- The street furniture walkers keep clear of: every planned row lamp and crossing signal, and the
+-- junction lamp of every drawn spur -- planned, not placed, so the lanes do not change as the
+-- props pop in.
+local function walkFurniture(build: Build): { { frame: CFrame, prop: string? } }
+	local furniture: { { frame: CFrame, prop: string? } } = {}
+	local lamps = build.era.lamps
+	if lamps.prop ~= nil then
+		if lamps.placement == Scatter.ROW_PLACEMENT then
+			for _, post in build.plan.lampPosts do
+				table.insert(furniture, {
+					frame = CFrame.new(post.position) * CFrame.Angles(0, post.yaw, 0),
+					prop = lamps.prop,
+				})
+			end
+		else
+			for slotId in build.plan.lampSlots do
+				local junction = RoadGraph.GetJunction(build.roads, slotId)
+				if junction ~= nil then
+					table.insert(furniture, {
+						frame = Scatter.LampFrame(junction, build.roads.width),
+						prop = lamps.prop,
+					})
+				end
+			end
+		end
+	end
+	local signals = build.era.signals
+	if signals ~= nil and signals.prop ~= nil then
+		for _, spot in build.signalSpots do
+			table.insert(furniture, {
+				frame = CFrame.new(spot.position) * CFrame.Angles(0, spot.yaw, 0),
+				prop = signals.prop,
+			})
+		end
+	end
+	return furniture
+end
+
+-- The plot's walker lanes, clipped clear of every solid (RoadGraph.WalkLanes caches them).
+local function walkLanesFor(build: Build, pedestrians: Types.PedestrianConfig): RoadGraph.Lanes
+	return RoadGraph.WalkLanes(
+		build.roads,
+		pedestrians.offset,
+		RoadGraph.BudgetValue(pedestrians.clearance, DEFAULT_WALK_CLEARANCE),
+		function(): { RoadGraph.WalkSolid }
+			return Scatter.WalkSolids(build.planInput, walkFurniture(build))
+		end
+	)
+end
+
 -- Walkers stroll the same nearest plots the cars drive on, from the era's first walker tier.
 local function walkerTargetFor(entry: PlotEntry, build: Build): number
 	local pedestrians = build.era.pedestrians
@@ -952,7 +1009,7 @@ local function walkerTargetFor(entry: PlotEntry, build: Build): number
 		pedestrians == nil
 		or not entry.near
 		or not entry.vehicleSelected
-		or entry.tier < pedestrians.firstTier
+		or entry.tier < RoadGraph.BudgetValue(pedestrians.firstTier, math.huge)
 	then
 		return 0
 	end
@@ -966,7 +1023,7 @@ local function spawnWalkers(entry: PlotEntry, build: Build, config: Types.CityDr
 	if pedestrians == nil or entry.walkerTarget <= 0 then
 		return
 	end
-	local lanes = RoadGraph.WalkLanes(build.roads, pedestrians.offset)
+	local lanes = walkLanesFor(build, pedestrians)
 	if lanes.count == 0 then
 		return
 	end
@@ -1000,14 +1057,21 @@ local function birdsConfig(config: Types.CityDressingConfig): Types.BirdsConfig?
 	return if ambient ~= nil then ambient.birds else nil
 end
 
--- Birds circle over the groves of near plots only, from the flock tier, never under reduced motion.
+-- Birds circle over the groves of near plots only, in the eras the config names, from the flock
+-- tier, never on a low-end device (Ambient.Enabled).
 local function flockTargetFor(
 	entry: PlotEntry,
 	build: Build,
 	config: Types.CityDressingConfig
 ): number
 	local birds = birdsConfig(config)
-	if birds == nil or not entry.near or not Ambient.Enabled() or entry.tier < birds.firstTier then
+	if
+		birds == nil
+		or not entry.near
+		or not Ambient.Enabled()
+		or not listHas(birds.eras, build.eraName)
+		or entry.tier < RoadGraph.BudgetValue(birds.firstTier, math.huge)
+	then
 		return 0
 	end
 	return math.min(Scatter.PerTier(birds.flocksPerTier, entry.tier), #build.plan.flocks)
@@ -1200,7 +1264,7 @@ local function sync(entry: PlotEntry): ()
 		spawnWalkers(entry, current, config)
 	elseif roadsChanged and walkerTarget > 0 and pedestrians ~= nil then
 		if Walkers.Count(entry.index) > 0 then
-			Walkers.SetLanes(entry.index, RoadGraph.WalkLanes(current.roads, pedestrians.offset))
+			Walkers.SetLanes(entry.index, walkLanesFor(current, pedestrians))
 		else
 			spawnWalkers(entry, current, config)
 		end

@@ -172,7 +172,7 @@ function Ambient.Enabled(): boolean
 end
 
 -- One plume at `chimney` (world space) rising from `model`, which it lives inside so it goes when
--- the house does. Nil under reduced motion or when the model has no part to hang it on.
+-- the house does. Nil on a low-end device or when the model has no part to hang it on.
 function Ambient.AddSmoke(model: Model, chimney: CFrame, smoke: Types.SmokeConfig): Attachment?
 	if not Ambient.Enabled() then
 		return nil
@@ -217,7 +217,7 @@ end
 -- Replaces the plot's birds. `models` holds one clone per bird of `flocks` in order (pivoted with
 -- their bottom-centre at CFrame.identity, as PropFactory.Spawn(…, CFrame.identity, nil) leaves
 -- them); Ambient owns them from here on and destroys any past `mapBirdBudget`, the whole-map cap
--- (CityDressing.json budget.birdsMap), or all of them under reduced motion. Returns how many birds
+-- (CityDressing.json budget.birdsMap), or all of them on a low-end device. Returns how many birds
 -- were placed.
 function Ambient.SpawnFlocks(
 	plotId: number,
