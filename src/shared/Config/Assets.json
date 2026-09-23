@@ -31,7 +31,7 @@
     },
     "garage-kit": {
       "vipSwatchAssetId": 87697179794186,
-      "vipImageId": 0
+      "vipImageId": 113232482811557
     },
     "nature-kit": {
       "vipSwatchAssetId": 70411050112785,
@@ -1904,24 +1904,24 @@
             "parts": [
               {
                 "kit": "city-kit-commercial",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [8.974, 12.316, 5.24],
-                "offset": [0.0, 6.158, 0.56]
+                "meshId": 71415360112177,
+                "imageId": 100750397531314,
+                "size": [8.9744, 12.316, 5.24],
+                "offset": [0.0, 6.158, -0.56]
               },
               {
                 "kit": "city-kit-roads",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 96406835362484,
+                "imageId": 130771765354100,
                 "size": [8.6, 5.78, 4.0],
-                "offset": [0.0, 2.89, -2.5]
+                "offset": [0.0, 2.89, 2.5]
               },
               {
                 "kit": "city-kit-suburban",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [6.56, 0.708, 1.2],
-                "offset": [0.0, 0.434, -1.682]
+                "meshId": 130369740480205,
+                "imageId": 75804611199159,
+                "size": [6.56, 0.7084, 1.2],
+                "offset": [0.0, 0.4342, 1.6823]
               }
             ]
           }
@@ -2190,8 +2190,8 @@
             "parts": [
               {
                 "kit": "garage-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 126935127249168,
+                "imageId": 125571132084766,
                 "size": [8.98, 2.35, 8.98],
                 "offset": [0.0, 1.175, 0.0]
               }
@@ -2202,8 +2202,8 @@
             "parts": [
               {
                 "kit": "garage-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 92524966251238,
+                "imageId": 125571132084766,
                 "size": [8.98, 4.77, 8.98],
                 "offset": [0.0, 2.285, 0.0]
               }
@@ -2214,8 +2214,8 @@
             "parts": [
               {
                 "kit": "garage-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 120878614180427,
+                "imageId": 125571132084766,
                 "size": [8.98, 7.52, 8.98],
                 "offset": [0.0, 3.66, 0.0]
               }
@@ -2226,8 +2226,8 @@
             "parts": [
               {
                 "kit": "garage-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 120740144778893,
+                "imageId": 125571132084766,
                 "size": [8.98, 11.0, 8.98],
                 "offset": [0.0, 5.4, 0.0]
               }
@@ -2238,8 +2238,8 @@
             "parts": [
               {
                 "kit": "garage-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 106176211511299,
+                "imageId": 125571132084766,
                 "size": [8.98, 13.9, 8.98],
                 "offset": [0.0, 6.85, 0.0]
               }

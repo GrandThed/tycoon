@@ -45,8 +45,8 @@
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
             <X>0</X>
-            <Y>6.1</Y>
-            <Z>0.7042</Z>
+            <Y>6.158</Y>
+            <Z>0.56</Z>
             <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
@@ -62,18 +62,18 @@
           <token name="CollisionFidelity">2</token>
           <Color3uint8 name="Color3uint8">16777215</Color3uint8>
           <Vector3 name="InitialSize">
-            <X>8</X>
-            <Y>6.2</Y>
-            <Z>4.5916</Z>
+            <X>8.9744</X>
+            <Y>12.316</Y>
+            <Z>5.24</Z>
           </Vector3>
           <token name="Material">256</token>
           <Content name="MeshContent">
-            <uri>rbxassetid://70859499389043</uri>
+            <uri>rbxassetid://71415360112177</uri>
           </Content>
           <Vector3 name="size">
-            <X>8</X>
-            <Y>6.2</Y>
-            <Z>4.5916</Z>
+            <X>8.9744</X>
+            <Y>12.316</Y>
+            <Z>5.24</Z>
           </Vector3>
           <Content name="TextureContent">
             <uri>rbxassetid://100750397531314</uri>
@@ -82,12 +82,12 @@
       </Item>
       <Item class="MeshPart" referent="RBX4">
         <Properties>
-          <string name="Name">city-kit-suburban</string>
+          <string name="Name">city-kit-roads</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
             <X>0</X>
-            <Y>1.3542</Y>
-            <Z>-3.4023</Z>
+            <Y>2.89</Y>
+            <Z>-2.5</Z>
             <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
@@ -103,32 +103,32 @@
           <token name="CollisionFidelity">2</token>
           <Color3uint8 name="Color3uint8">16777215</Color3uint8>
           <Vector3 name="InitialSize">
-            <X>7.36</X>
-            <Y>0.7084</Y>
-            <Z>1.2</Z>
+            <X>8.6</X>
+            <Y>5.78</Y>
+            <Z>4</Z>
           </Vector3>
           <token name="Material">256</token>
           <Content name="MeshContent">
-            <uri>rbxassetid://132568881159754</uri>
+            <uri>rbxassetid://96406835362484</uri>
           </Content>
           <Vector3 name="size">
-            <X>7.36</X>
-            <Y>0.7084</Y>
-            <Z>1.2</Z>
+            <X>8.6</X>
+            <Y>5.78</Y>
+            <Z>4</Z>
           </Vector3>
           <Content name="TextureContent">
-            <uri>rbxassetid://75804611199159</uri>
+            <uri>rbxassetid://130771765354100</uri>
           </Content>
         </Properties>
       </Item>
       <Item class="MeshPart" referent="RBX5">
         <Properties>
-          <string name="Name">cityhall-kit</string>
+          <string name="Name">city-kit-suburban</string>
           <bool name="Anchored">true</bool>
           <CoordinateFrame name="CFrame">
             <X>0</X>
-            <Y>10.34</Y>
-            <Z>0</Z>
+            <Y>0.4342</Y>
+            <Z>-1.6823</Z>
             <R00>-1</R00>
             <R01>0</R01>
             <R02>0</R02>
@@ -144,21 +144,21 @@
           <token name="CollisionFidelity">2</token>
           <Color3uint8 name="Color3uint8">16777215</Color3uint8>
           <Vector3 name="InitialSize">
-            <X>8.4</X>
-            <Y>20.68</Y>
-            <Z>8</Z>
+            <X>6.56</X>
+            <Y>0.7084</Y>
+            <Z>1.2</Z>
           </Vector3>
           <token name="Material">256</token>
           <Content name="MeshContent">
-            <uri>rbxassetid://109102227033041</uri>
+            <uri>rbxassetid://130369740480205</uri>
           </Content>
           <Vector3 name="size">
-            <X>8.4</X>
-            <Y>20.68</Y>
-            <Z>8</Z>
+            <X>6.56</X>
+            <Y>0.7084</Y>
+            <Z>1.2</Z>
           </Vector3>
           <Content name="TextureContent">
-            <uri>rbxassetid://111912843944585</uri>
+            <uri>rbxassetid://75804611199159</uri>
           </Content>
         </Properties>
       </Item>

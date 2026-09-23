@@ -989,14 +989,14 @@ Their `meshId`/`imageId` are back to `0`, so they need the same two pastes as se
 Until the two pastes below are done: a **grey placeholder highway and ramp**, a **placeholder
 parking garage** and **no City Hall mesh** on a Metropolis plot — the designed degrade, not a bug.
 
-- [ ] 36. **Paste 1 — props (4 records).** Repo root, Studio open in **Edit mode, not Play**:
+- [x] 36. **Paste 1 — props (4 records).** Repo root, Studio open in **Edit mode, not Play**:
       1. `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
       2. Studio → **Command Bar** → paste → Enter → wait for `[HARVEST-DONE]` in Output.
       3. Output panel → right-click → **Select All** → **Ctrl+C**.
       4. `py tools/assets/harvest.py --props` — expect **4** merged records (`HighwayDeck`,
          `HighwayCorner`, `HighwayJunction`, `HighwayRamp`). Anything missed is listed and left
          untouched; re-run 1-4 for the rest.
-- [ ] 37. **Paste 2 — buildings (7 records).** Same Studio, same Command Bar:
+- [x] 37. **Paste 2 — buildings (7 records).** Same Studio, same Command Bar:
       1. `py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip`
       2. Command Bar → paste → Enter → wait for `[HARVEST-DONE]`.
       3. Output → **Select All** → **Ctrl+C**.
@@ -1004,21 +1004,21 @@ parking garage** and **no City Hall mesh** on a Metropolis plot — the designed
          `ParkingGarage` stages 0-4, `CityHall` stage 0, and the `garage-kit` VIP swatch.
       (Clear the Output panel between the two pastes if you like — each merge ignores the other
       mode's lines either way.)
-- [ ] 38. **Templates:**
+- [x] 38. **Templates:**
       ```
       py tools/assets/gen_templates.py --props
       py tools/assets/gen_templates.py
       py tools/assets/gen_templates.py --check
       ```
       `--check` must exit 0.
-- [ ] 39. **Build:** `rojo build -o build/test.rbxl` (or resync `rojo serve`).
-- [ ] 40. **Manifest:**
+- [x] 39. **Build:** `rojo build -o build/test.rbxl` (or resync `rojo serve`).
+- [x] 40. **Manifest:**
       ```
       py tools/gen_asset_manifest.py
       py tools/gen_asset_manifest.py --check
       ```
       Metropolis must read **24/24 harvested, 24/24 templated** and the props table **21/21**.
-- [ ] 41. **Confirm in Studio Explorer, then commit** `src/shared/Config/Assets.json` **and** the
+- [x] 41. **Confirm in Studio Explorer, then commit** `src/shared/Config/Assets.json` **and** the
       templates **in the same commit** (never leave a harvest uncommitted — a second session can
       overwrite `Assets.json`):
       1. `ReplicatedStorage.Assets.Props.Metropolis.HighwayDeck.Stage0` previews as a box girder
@@ -1027,7 +1027,7 @@ parking garage** and **no City Hall mesh** on a Metropolis plot — the designed
       3. `ServerStorage.Assets.Metropolis.ParkingGarage.Stage4` is a four-deck garage.
       4. `ServerStorage.Assets.Metropolis.CityHall.Stage0` is the white civic block with flags.
       Then run `docs/PLAYTEST.md` "M9 — City dressing" **sections 4c, 4d and 4e (third round)**.
-- [ ] 42. **If a record is missing after a paste:** re-run that paste's emit/paste pair (step 36 or
+- [x] 42. **If a record is missing after a paste:** re-run that paste's emit/paste pair (step 36 or
       37). Do **not** run `upload_models.py` again to "fix" it — a stage with a non-zero
       `modelAssetId` is never re-uploaded, so a re-run prints "already uploaded, skipped".
 
