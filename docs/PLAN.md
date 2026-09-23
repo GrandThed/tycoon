@@ -56,7 +56,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   Metropolis) — more houses, greenery, parked cars, more traffic, walkers, chimney smoke and bird
   flocks, all keyed to `GrowthTier`; 48 props uploaded, harvested (48/48) and templated; **main fast-forwarded to the
   merged tree 2026-09-23 (`3769c2a`) and Ben signed off waves 2b and 2c the same day ("looks
-  good, lets finish this") — M9 is complete**; carried forward: the 12cx MicroProfiler number and
+  good, lets finish this") — M9 is complete**; **wave 2d (half-size cars at runtime, 4× traffic with a lane-hold rule, two parked per bay in Boomtown + Metropolis) and the mirrored-kit-node winding fix (19 stages re-uploaded) signed off 2026-09-23 ("looks good!")**; carried forward: the 12cx MicroProfiler number and
   the 12cy part counts were not reported, so the part-budget re-cut stays a lead watch item)
 
 ---
