@@ -4241,3 +4241,149 @@ store icons are the **A set** (`assets/marketing/final/store/<key>.png`). The re
 were rejected: thumbnails are **real Studio screenshots** shot from `tools/marketing/SHOTLIST.md`
 and captioned by `py tools/marketing/caption.py` (shots in `tools/marketing/shots.json`, output
 `assets/marketing/final/thumbs/`). The Blender thumbnail scripts were deleted.
+
+---
+
+# P1 contracts — Proving Grounds, movement, controls, crowd prototype (Ben, 2026-09-24)
+
+Plan of record: `docs/COMBAT_DESIGN.md` (read it in full). P1 = section 10 step 2. Everything in
+P1 runs **only in the Proving Grounds** (Workspace boolean `DebugProving` = true at boot, Studio
+only); missions keep today's code untouched until P5. Gate: movement and feedback feel good on
+PC **and phone**, and 100+ crowd enemies run smoothly.
+
+## Architecture decisions (lead)
+
+1. **Crowd enemies are not Humanoids.** The server simulates them as plain Luau records
+   (position, velocity, yaw, state, hp) and never creates an Instance for them. Hit tests use a
+   body sphere (centre `height/2`, `radius`) plus a head sphere (top, `headRadius`, the crit weak
+   point). Clients learn of an enemy on `CrowdSpawn` (reliable), receive positions on
+   `CrowdSnapshot` (an **UnreliableRemoteEvent** carrying a `buffer` from `CrowdCodec`) at
+   `crowd.snapshotHz`, interpolate ~1 snapshot behind, and draw pooled placeholder bodies.
+   `CrowdRemove` (reliable) ends one. Budget: 160 alive at 15 Hz under 1.5 ms server step.
+2. **The server resolves every attack shape itself.** Melee: the client sends only a look
+   direction; the server builds the arc/sphere/capsule from the character root. Ranged: the
+   client sends camera origin + direction (Fortnite camera-ray aim, spread already applied); the
+   server checks the origin is within `shooting.originPad` of the character's head, then tests
+   the shape against crowd spheres (and world geometry for rays). Pure geometry lives in
+   `src/shared/HitShapes.luau` (no Roblox globals except Vector3 maths) so the client can draw
+   exactly the same shapes.
+3. **Tuning.** `src/shared/Tuning.luau` returns `ProvingGroundsConfig` merged with Studio
+   overrides (`TuneOverrides`, dot paths). The server owns the overrides (`RequestTune`, Studio
+   only) and broadcasts them on `TuneState`; clients apply the same merge. **Every P1 system
+   reads its numbers through `Tuning.Get()` each time it needs them** (cheap: cached merge,
+   invalidated on change), so a slider moves the game immediately.
+4. **Movement is client-simulated, server-checked**, as Roblox character physics already is:
+   high/double jump and dash run on the client; `RequestDash` opens the server-side i-frame window
+   (rate-limited by `dashCooldown`); `RequestSlam` makes the server apply the slam sphere at the
+   character's **server-side** root position if it fell at least `slamMinHeight` since leaving the
+   ground (server tracks airborne peak height per character).
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|-------|-------|
+| lead | this section, `Types.luau` P1 types, `Config/ProvingGrounds.json` keys, `Catalog.GetProvingGroundsConfig`, `Combat.json debug.provingAttribute` (all applied) |
+| luau-engineer **Crowd** | new `src/combat/server/Services/CrowdService.luau`, new `src/shared/CrowdCodec.luau`, `src/server/Services/RemoteService.luau` (add UnreliableRemoteEvent support: `unreliableEvents: {string}` in `RemoteDefs` + `FireClientUnreliable`/`FireAllUnreliable`) |
+| luau-engineer **Range** | new `src/shared/HitShapes.luau`, new `src/shared/Tuning.luau`, new `src/combat/server/Services/RangeService.luau` (attacks, dash, slam, tuning, readouts, dummy sets), `CombatRemotes.luau`, `ArenaService.luau` + `Main.server.luau` (Proving mode boot), `DebugService.luau` |
+| ui-engineer **Render** | new `src/combat/client/Controllers/CrowdRenderer.luau` (pooled bodies, interpolation, flash/flinch/knockback/launch/death visuals driven by strikes) |
+| ui-engineer **Motion** | new `src/combat/client/Controllers/MovementController.luau`, `InputController.luau` (range input path: shooting with bloom/ADS/first-shot, melee swings, touch auto-fire / auto-swing / tap-fire, no attack button in the range), `CameraController.luau` (ADS zoom, air handling) |
+| ui-engineer **Feedback** | new `src/combat/client/Controllers/FeedbackController.luau` (the six layers + hitbox effects), new `src/combat/client/UI/Crosshair.luau`, new `src/combat/client/UI/RangePanel.luau` (tuning panel + readouts), `CombatUIController.luau` (mounting), `Main.client.luau`, combat blocks of `src/client/UI/Theme.luau` |
+| economy-designer | values in `Config/ProvingGrounds.json` (keys frozen), new `src/shared/Layouts/Arenas/ProvingGrounds.luau` |
+| roblox-reviewer → qa-runner → docs-keeper | after wave 1 |
+
+Frozen: `Types.luau`, every hub file except `RemoteService`, `EnemyService`, `WaveService`,
+`CombatService` (missions untouched), `ProfileSchema` (no persistence in the range).
+`Theme.luau` combat blocks belong to ui **Feedback**; Render and Motion report constants they need
+or keep them as named module constants **only if** purely visual (colours of placeholder
+bodies come from config).
+
+## APIs between owners
+
+```luau
+-- CrowdService (server, Crowd)
+CrowdService.Spawn(kind: string, position: Vector3, behaviour: string, anchor: Vector3?): number   -- returns id
+CrowdService.Remove(id: number): ()
+CrowdService.Clear(): ()
+CrowdService.Query(center: Vector3, radius: number): { number }             -- ids whose body sphere may overlap
+CrowdService.Get(id: number): { position: Vector3, velocity: Vector3, kind: string, hp: number, maxHp: number, state: Types.CrowdState }?
+CrowdService.Damage(id: number, amount: number, byUserId: number, push: Vector3?, launch: number?): (number, boolean)  -- (dealt, killed); armour, knockbackMult applied inside
+CrowdService.OnKilled(callback: (id: number, byUserId: number) -> ()): ()
+CrowdService.AliveCount(): number
+CrowdService.StepMs(): number                                                -- last server step cost
+-- behaviours idle/walk/strafe/jump/chase per DummyGroupDef; chase = nearest player, simple
+-- separation; no attacks in P1 (dummies never hurt players).
+
+-- CrowdCodec (shared, Crowd)
+CrowdCodec.Encode(entries: { Types.CrowdSnapshotEntry }, origin: Vector3): buffer
+CrowdCodec.Decode(data: buffer, origin: Vector3): { Types.CrowdSnapshotEntry }
+
+-- HitShapes (shared, Range): each returns true if a sphere (c, r) overlaps the shape padded by pad
+HitShapes.Arc(origin: Vector3, forward: Vector3, range: number, arcDegrees: number, pad: number, c: Vector3, r: number): boolean
+HitShapes.Sphere(center: Vector3, radius: number, pad: number, c: Vector3, r: number): boolean
+HitShapes.Capsule(a: Vector3, b: Vector3, radius: number, pad: number, c: Vector3, r: number): boolean
+HitShapes.Cone(origin: Vector3, forward: Vector3, range: number, halfAngleDegrees: number, pad: number, c: Vector3, r: number): boolean
+HitShapes.Ray(origin: Vector3, direction: Vector3, range: number, width: number, pad: number, c: Vector3, r: number): number?  -- distance along the ray, nil = miss
+
+-- Tuning (shared, Range)
+Tuning.Get(): Types.ProvingGroundsConfig      -- base merged with current overrides
+Tuning.SetOverrides(o: Types.TuneOverrides): ()
+Tuning.GetOverrides(): Types.TuneOverrides
+Tuning.Changed: RBXScriptSignal-like { Connect: (self, () -> ()) -> { Disconnect: (self) -> () } }
+Tuning.Export(): string                        -- merged config as pretty JSON (for "Save winner")
+```
+
+## Remotes (combat place; all intents rate-limited, validated, inert outside the range)
+
+| Intent | Payload | Notes |
+|---|---|---|
+| `RequestRangeAttack` | `(weapon: "sword" \| "gun", seq: int, origin: Vector3, direction: Vector3, ads: boolean)` | origin ignored for melee; server enforces `rate` per weapon |
+| `RequestDash` | `(direction: Vector3)` | opens i-frames, enforces `dashCooldown` |
+| `RequestSlam` | `()` | server-checked airborne height, `slamCooldown` |
+| `RequestTune` | `(path: string ≤ 96, value: number \| boolean \| string ≤ 32)` | Studio only; path must exist in the base config and keep its type |
+| `RequestRangeCommand` | `(cmd: string ≤ 24, arg: string? ≤ 32)` | Studio only: `set <name>` (load a dummy set), `reset`, `stress`, `weapon <sword\|gun>`, `variant <A\|B\|C>`, `export` (server prints `Tuning.Export()` to Output), `clearTune` |
+
+| Event | Payload |
+|---|---|
+| `CrowdSpawn` | `{ Types.CrowdSpawnInfo }` (batched) |
+| `CrowdSnapshot` (unreliable) | `buffer` |
+| `CrowdRemove` | `{ number }` (batched) |
+| `CombatFx` (existing) | gains `CombatFxStrike` — one per resolved attack, to everyone in the range |
+| `TuneState` | `(overrides: TuneOverrides, weapon: string, variant: string)` — on change and on join |
+| `RangeStats` | `(RangeStats)` to the attacker after each attack and at 2 Hz |
+
+## Behaviour rules
+
+- **Melee:** swings every `1/rate` s while held; combo index cycles `chain`; shape from the root at
+  chest height along the flattened look direction; cap = nearest-first. Air swing: client holds the
+  character for `movement.airAttackHangSeconds`.
+- **Ranged:** hitscan resolves at once; projectiles (`projectileSpeed > 0`) are simulated by the
+  server (step with the crowd tick, max 3 s) and explode (`splashRadius`) on contact/ground; the
+  strike fx is sent at impact (with `endPoint`). Cone guns: `pellets` rays spread inside
+  `spreadDegrees`, each pellet hits one enemy; the server uses its own pellet pattern seeded by
+  `seq`. Crit = ray/pellet passes the head sphere first → × `shooting.critMult`.
+- **Bloom (client):** grows by moving/jumping/firing, shrinks at rest, min/max from config, ×
+  `adsBloomMult` in ADS; the first shot after `firstShotSeconds` idle has zero spread.
+- **Touch:** `autoFire` = attack runs while an enemy sphere is within `autoFireAssistDegrees` of the
+  crosshair ray (ranged) or inside the melee shape + `autoSwingPad` (melee), respecting `rate`;
+  `tapFire` = tap on the right half attacks; drag still aims. No attack button in the range. Jump,
+  dash and slam are small buttons; slam = the dash button while airborne above `slamMinHeight`.
+- **Feedback layers** (strength from `feedback.*`, 0 = off): crosshair hit marker / crit / kill X
+  and kick; numbers (one combined burst per strike: total + "×N"); enemy white flash; enemy
+  reaction (flinch, knockback, launch, death burst — Render owns the body motion, Feedback asks it
+  via `CrowdRenderer.React(id, kind, direction, strength)`); hitbox effect (exact shape from the
+  strike, drawn for ~0.15 s, matching `HitShapes`); screen (hitstop scaled by hits, shake,
+  edge flash on 5+ kills, `HapticService` pulse where supported); counters (combo + kills).
+  Wireframe toggle draws the true padded shape.
+- **Readouts** (RangePanel): last hits / kills per attack, DPS (5 s window), time to clear the
+  current set, alive count, server step ms, client FPS.
+
+## Definition of done (P1)
+
+- Both builds, both sourcemaps + luau-lsp, stylua, selene, `sim_economy.py --check` and
+  `sim_combat.py --check` unchanged (missions untouched), manifest/template checks green.
+- Studio: `DebugProving = true`, Play → the Proving Grounds with the default set; RangePanel
+  switches sets, weapons, variants; sliders change values live; `export` prints JSON.
+- High jump, double jump, dash (with i-frame flag), ground slam damaging a crowd.
+- Sword A/B/C and gun A/B/C each hit crowds per their shape; hitbox effect matches the wireframe.
+- Phone emulator: no attack button; auto-fire and auto-swing work; tapFire alternative works.
+- `stress` set: 150 chasing enemies, smooth client, server step shown < 2 ms in Studio.

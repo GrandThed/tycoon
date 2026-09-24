@@ -213,6 +213,23 @@ function Catalog.GetCombatConfig(): Types.CombatConfig?
 	return cached
 end
 
+-- P1 (docs/COMBAT_DESIGN.md): the Proving Grounds config. Optional like Combat.json; read through
+-- Tuning, never directly, so Studio overrides apply.
+local cachedProvingGroundsConfig: Types.ProvingGroundsConfig? = nil
+function Catalog.GetProvingGroundsConfig(): Types.ProvingGroundsConfig?
+	local cached = cachedProvingGroundsConfig
+	if cached ~= nil then
+		return cached
+	end
+	local module = configFolder:FindFirstChild("ProvingGrounds")
+	if module == nil or not module:IsA("ModuleScript") then
+		return nil
+	end
+	cached = require(module) :: Types.ProvingGroundsConfig
+	cachedProvingGroundsConfig = cached
+	return cached
+end
+
 -- Places.json gets a neutral fallback instead (unlike Armory/Combat): the teleport paths must
 -- always have a pair of ids to check, and all-zeros is exactly the "not published yet" state.
 -- Fresh fallback table per call so a later-replicating module is picked up.

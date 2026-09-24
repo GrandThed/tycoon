@@ -92,6 +92,7 @@
 	},
 	"debug": {
 		"missionAttribute": "DebugMission",
+		"provingAttribute": "DebugProving",
 		"overdriveAttribute": "DebugOverdrive",
 		"grantMaterialsAttribute": "GrantMaterials",
 		"grantValorAttribute": "GrantValor",

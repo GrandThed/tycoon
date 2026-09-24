@@ -1,0 +1,97 @@
+{
+	"version": 1,
+	"arena": "ProvingGrounds",
+	"crowd": {
+		"kinds": {
+			"fodder": { "radius": 1.3, "headRadius": 0.7, "height": 5, "speed": 12, "hp": 40, "color": [196, 88, 72], "knockbackMult": 1.0, "armor": 0 },
+			"armoured": { "radius": 1.6, "headRadius": 0.8, "height": 6, "speed": 9, "hp": 160, "color": [120, 128, 140], "knockbackMult": 0.4, "armor": 0.5 },
+			"boss": { "radius": 3.5, "headRadius": 1.5, "height": 12, "speed": 7, "hp": 5000, "color": [110, 40, 60], "knockbackMult": 0.0, "armor": 0 }
+		},
+		"snapshotHz": 15,
+		"maxAlive": 160,
+		"stressCount": 150
+	},
+	"weapons": {
+		"sword": {
+			"default": "A",
+			"variants": {
+				"A": { "label": "Wide arc", "kind": "melee", "shape": "arc", "range": 11, "arcDegrees": 150, "pad": 1.5, "cap": 10, "damage": 22, "rate": 2.6, "knockback": 18, "launch": 4, "chain": [1.0, 1.0, 1.8] },
+				"B": { "label": "Spin finisher", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 120, "pad": 1.5, "cap": 8, "damage": 20, "rate": 3.0, "knockback": 12, "launch": 2, "chain": [1.0, 1.0, 2.2] },
+				"C": { "label": "Shockwave", "kind": "melee", "shape": "sphere", "range": 9, "pad": 1.0, "cap": 0, "damage": 16, "rate": 2.0, "knockback": 24, "launch": 8, "chain": [1.0, 1.2, 1.6] }
+			}
+		},
+		"gun": {
+			"default": "A",
+			"variants": {
+				"A": { "label": "Shotgun", "kind": "ranged", "shape": "cone", "range": 26, "arcDegrees": 24, "pad": 0.8, "cap": 0, "damage": 14, "rate": 1.4, "knockback": 22, "launch": 3, "pellets": 8, "spreadDegrees": 10, "projectileSpeed": 0 },
+				"B": { "label": "Piercing rifle", "kind": "ranged", "shape": "ray", "range": 120, "width": 0.6, "pad": 0.4, "cap": 6, "damage": 34, "rate": 2.2, "knockback": 6, "launch": 0, "pierce": 6, "projectileSpeed": 0 },
+				"C": { "label": "Launcher", "kind": "ranged", "shape": "sphere", "range": 90, "pad": 0.5, "cap": 0, "damage": 30, "rate": 0.9, "knockback": 30, "launch": 12, "projectileSpeed": 120, "splashRadius": 9 }
+			}
+		}
+	},
+	"dummySets": {
+		"rows": [
+			{ "kind": "fodder", "behaviour": "idle", "count": 5, "at": [0, -10], "spacing": 4, "respawnSeconds": 2 },
+			{ "kind": "fodder", "behaviour": "idle", "count": 5, "at": [0, -25], "spacing": 4, "respawnSeconds": 2 },
+			{ "kind": "fodder", "behaviour": "idle", "count": 5, "at": [0, -50], "spacing": 4, "respawnSeconds": 2 },
+			{ "kind": "fodder", "behaviour": "idle", "count": 5, "at": [0, -100], "spacing": 4, "respawnSeconds": 2 }
+		],
+		"crowd10": [{ "kind": "fodder", "behaviour": "idle", "count": 10, "at": [0, -20], "spacing": 3, "respawnSeconds": 3 }],
+		"crowd30": [{ "kind": "fodder", "behaviour": "idle", "count": 30, "at": [0, -22], "spacing": 3, "respawnSeconds": 3 }],
+		"crowd100": [{ "kind": "fodder", "behaviour": "idle", "count": 100, "at": [0, -30], "spacing": 3, "respawnSeconds": 4 }],
+		"movers": [
+			{ "kind": "fodder", "behaviour": "walk", "count": 6, "at": [-20, -30], "spacing": 5, "respawnSeconds": 2 },
+			{ "kind": "fodder", "behaviour": "strafe", "count": 6, "at": [0, -30], "spacing": 5, "respawnSeconds": 2 },
+			{ "kind": "fodder", "behaviour": "jump", "count": 6, "at": [20, -30], "spacing": 5, "respawnSeconds": 2 }
+		],
+		"armoured": [{ "kind": "armoured", "behaviour": "idle", "count": 8, "at": [0, -20], "spacing": 5, "respawnSeconds": 3 }],
+		"boss": [{ "kind": "boss", "behaviour": "idle", "count": 1, "at": [0, -30], "spacing": 0, "respawnSeconds": 5 }],
+		"stress": [{ "kind": "fodder", "behaviour": "chase", "count": 150, "at": [0, -60], "spacing": 3, "respawnSeconds": 3 }]
+	},
+	"defaultSet": "crowd30",
+	"movement": {
+		"jumpHeight": 16,
+		"doubleJumpHeight": 12,
+		"walkSpeed": 20,
+		"dashDistance": 18,
+		"dashSeconds": 0.18,
+		"dashCooldown": 1.0,
+		"dashIframes": 0.25,
+		"slamMinHeight": 6,
+		"slamRadius": 12,
+		"slamDamage": 30,
+		"slamCooldown": 1.5,
+		"slamFallSpeed": 120,
+		"airAttackHangSeconds": 0.25
+	},
+	"shooting": {
+		"bloomMinDegrees": 0.5,
+		"bloomMaxDegrees": 6,
+		"bloomMovePerSecond": 8,
+		"bloomPerShot": 1.2,
+		"bloomRecoverPerSecond": 10,
+		"firstShotSeconds": 0.35,
+		"adsFieldOfView": 50,
+		"adsBloomMult": 0.4,
+		"adsSpeedMult": 0.6,
+		"originPad": 6,
+		"critMult": 1.75
+	},
+	"controls": {
+		"touchMode": "autoFire",
+		"autoFireAssistDegrees": 4,
+		"autoSwingPad": 0.5
+	},
+	"feedback": {
+		"hitMarker": 1,
+		"numbers": 1,
+		"enemyFlash": 1,
+		"enemyReaction": 1,
+		"hitboxEffect": 1,
+		"hitstop": 1,
+		"shake": 1,
+		"edgeFlash": 1,
+		"haptics": 1,
+		"counters": 1
+	}
+}

@@ -977,6 +977,8 @@ export type CombatFeelConfig = {
 -- Studio-only levers, named here so no attribute name is duplicated in code.
 export type CombatDebugConfig = {
 	missionAttribute: string,
+	-- P1: Workspace boolean; true at boot = the Proving Grounds instead of a mission (Studio only).
+	provingAttribute: string,
 	overdriveAttribute: string,
 	grantMaterialsAttribute: string,
 	grantValorAttribute: string,
@@ -1295,6 +1297,7 @@ export type CombatFx =
 	| CombatFxSwing
 	| CombatFxPartyEffect
 	| CombatFxMentor
+	| CombatFxStrike
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
@@ -1359,6 +1362,163 @@ export type ReturnData = {
 	summaries: { [string]: RunSummary },
 	party: PartyHint?,
 	refused: ("full" | "over" | "locked")?,
+}
+
+-- P1 Proving Grounds + crowd enemies (docs/COMBAT_DESIGN.md, INTERFACES "P1 contracts").
+-- Config/ProvingGrounds.json. Every value here is live-tunable in Studio through Tuning.
+export type HitShape = "arc" | "sphere" | "capsule" | "cone" | "ray"
+-- One weapon variant. range = reach of arc/capsule/cone/ray, radius of sphere. pad = forgiveness
+-- in studs added to every test. cap = max enemies per attack (0 = unlimited). rate = attacks/s.
+-- projectileSpeed 0 = hitscan. pellets/spreadDegrees for cone guns; pierce for rays;
+-- splashRadius for projectiles that explode; chain = damage multipliers of a melee combo.
+export type RangeWeaponVariant = {
+	label: string,
+	kind: "melee" | "ranged",
+	shape: HitShape,
+	range: number,
+	arcDegrees: number?,
+	width: number?,
+	pad: number,
+	cap: number,
+	damage: number,
+	rate: number,
+	knockback: number,
+	launch: number,
+	pellets: number?,
+	spreadDegrees: number?,
+	pierce: number?,
+	projectileSpeed: number?,
+	splashRadius: number?,
+	chain: { number }?,
+}
+export type RangeWeaponDef = { default: string, variants: { [string]: RangeWeaponVariant } }
+-- A crowd enemy kind: body sphere (radius, centre at height/2) + head sphere (crit weak point).
+export type CrowdKindDef = {
+	radius: number,
+	headRadius: number,
+	height: number,
+	speed: number,
+	hp: number,
+	color: { number },
+	knockbackMult: number,
+	armor: number,
+}
+-- behaviour: idle = stands; walk = paces a line; strafe = side to side; jump = hops; chase = runs
+-- at the nearest player (the stress test).
+export type DummyGroupDef = {
+	kind: string,
+	behaviour: "idle" | "walk" | "strafe" | "jump" | "chase",
+	count: number,
+	-- Centre {x, z} in arena coordinates and the spacing of the packed grid / row.
+	at: { number },
+	spacing: number,
+	respawnSeconds: number,
+}
+export type RangeMovementConfig = {
+	jumpHeight: number,
+	doubleJumpHeight: number,
+	walkSpeed: number,
+	dashDistance: number,
+	dashSeconds: number,
+	dashCooldown: number,
+	dashIframes: number,
+	slamMinHeight: number,
+	slamRadius: number,
+	slamDamage: number,
+	slamCooldown: number,
+	slamFallSpeed: number,
+	airAttackHangSeconds: number,
+}
+export type RangeShootingConfig = {
+	bloomMinDegrees: number,
+	bloomMaxDegrees: number,
+	bloomMovePerSecond: number,
+	bloomPerShot: number,
+	bloomRecoverPerSecond: number,
+	firstShotSeconds: number,
+	adsFieldOfView: number,
+	adsBloomMult: number,
+	adsSpeedMult: number,
+	originPad: number,
+	critMult: number,
+}
+-- touchMode: "autoFire" = attacks fire while the target is under the crosshair / in the hitbox;
+-- "tapFire" = a tap anywhere on the right half attacks.
+export type RangeControlsConfig = {
+	touchMode: "autoFire" | "tapFire",
+	autoFireAssistDegrees: number,
+	autoSwingPad: number,
+}
+-- Each feedback layer's strength, 0 = off, 1 = default; values > 1 exaggerate.
+export type RangeFeedbackConfig = {
+	hitMarker: number,
+	numbers: number,
+	enemyFlash: number,
+	enemyReaction: number,
+	hitboxEffect: number,
+	hitstop: number,
+	shake: number,
+	edgeFlash: number,
+	haptics: number,
+	counters: number,
+}
+export type ProvingGroundsConfig = {
+	version: number,
+	arena: string,
+	crowd: {
+		kinds: { [string]: CrowdKindDef },
+		snapshotHz: number,
+		maxAlive: number,
+		stressCount: number,
+	},
+	weapons: { sword: RangeWeaponDef, gun: RangeWeaponDef },
+	dummySets: { [string]: { DummyGroupDef } },
+	defaultSet: string,
+	movement: RangeMovementConfig,
+	shooting: RangeShootingConfig,
+	controls: RangeControlsConfig,
+	feedback: RangeFeedbackConfig,
+}
+
+-- Crowd replication. CrowdSpawn (reliable) introduces an enemy once; CrowdSnapshot (unreliable,
+-- buffer via CrowdCodec) carries every live enemy at crowd.snapshotHz; CrowdRemove ends it.
+export type CrowdState = "idle" | "move" | "windup" | "stagger" | "airborne" | "dead"
+export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number }
+export type CrowdSnapshotEntry = {
+	id: number,
+	position: Vector3,
+	yaw: number,
+	state: CrowdState,
+	hpFraction: number,
+}
+-- One resolved attack, sent to every client in the range: draws the hitbox effect, the numbers
+-- burst, markers and reactions. origin/direction are the shape's frame; size = range or radius.
+export type StrikeHit = { id: number, amount: number, crit: boolean, killed: boolean }
+export type CombatFxStrike = {
+	kind: "strike",
+	userId: number,
+	weapon: string,
+	variant: string,
+	shape: HitShape,
+	origin: Vector3,
+	direction: Vector3,
+	size: number,
+	arcDegrees: number?,
+	width: number?,
+	endPoint: Vector3?,
+	hits: { StrikeHit },
+}
+-- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.gun.variants.B.damage") → value.
+export type TuneValue = number | boolean | string
+export type TuneOverrides = { [string]: TuneValue }
+-- Readouts for the range HUD, sent to the attacker after each attack and at 2 Hz.
+export type RangeStats = {
+	lastHits: number,
+	lastKills: number,
+	dps: number,
+	clearSeconds: number?,
+	alive: number,
+	serverFrameMs: number,
 }
 
 return {}
