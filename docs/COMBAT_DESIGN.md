@@ -22,6 +22,14 @@ Ben's rulings (2026-09-24):
 - **A game of numbers.** Most weapons hit several enemies at once. Big crowds, big damage numbers.
 - **A test range.** Dummies and weapon alternatives, so each system can be tried and refined.
 
+Ben's answers to the open questions (2026-09-24):
+
+- **Camera:** over-the-shoulder stays. **Ranged weapons shoot like Fortnite.**
+- **What was wrong:** enemy tracking was OK, but there was **no feedback**. Having to **press an
+  on-screen button to attack on a phone is unacceptable**.
+- **Role:** for this feature, combat is **the main draw**, and it gets the time that deserves.
+- **Phones:** everything must **work on phones from the first playable step (P1)**.
+
 ## 1. Pillars
 
 Every combat decision is checked against these five. In a conflict, the earlier one wins.
@@ -48,9 +56,66 @@ Every combat decision is checked against these five. In a conflict, the earlier 
 | **Air attacks** | Melee and ranged work in the air; melee briefly holds you in place. | Lets you fight above the crowd. |
 
 All distances, heights and cooldowns live in config. Every one of them can be changed live in
-the test range (section 6).
+the test range (section 8).
 
-## 3. How hits work
+## 3. Controls
+
+### Shooting (Fortnite style)
+
+- Over-the-shoulder camera with a **centre crosshair**. Shots go from the camera to what is under
+  the crosshair. The gun's muzzle is only where the tracer starts, so what you aim at is what you
+  hit, even around the character's shoulder.
+- **Bloom:** the crosshair widens while you move, jump or fire fast, and tightens when you stand
+  still. The **first shot** after a pause is accurate.
+- **Aim down sights** (right mouse / left trigger / a touch toggle): the camera zooms in, the
+  character slows, and spread tightens.
+- **Hitscan** for bullets and beams (instant). **Projectiles** for bows, launchers and grenades,
+  which fly visibly and can arc.
+- **Weak points:** hits on an enemy's head or glowing core deal critical damage, shown with a
+  different number colour, as in Fortnite.
+
+### Phones: no attack button
+
+Ben's rule: tapping an on-screen button to attack is not acceptable. On touch:
+
+- **Left thumb** moves (Roblox thumbstick). **Right thumb** drags to aim the camera anywhere on
+  the right half.
+- **Attacks fire on their own:**
+  - a ranged weapon fires while the crosshair (plus a small assist) is on an enemy;
+  - a melee weapon swings while an enemy is inside its hitbox.
+
+  This is the "auto-fire" mode of mobile shooters. Holding the aim is the attack.
+- **Alternative to compare in the range:** tap-to-fire anywhere on the right half, so no fixed
+  button is needed.
+- Jump, dash and abilities keep small buttons, because those are choices, not the constant
+  action. Ground slam is jump then dash-down (or a swipe down) while airborne.
+- PC and gamepad keep normal click / trigger attacks.
+
+## 4. Feedback (the top priority, with no sound)
+
+The version Ben played tracked enemies fine but gave no feedback. With sound off, every hit has
+to be **seen**, in layers that stack:
+
+1. **Crosshair:** a hit marker on every hit, a bigger one for a crit, and an X for a kill. The
+   crosshair "kicks" on hit.
+2. **Damage numbers:** Fortnite-style pop and fall, white for normal and yellow for crit,
+   combined into one burst when an attack hits a crowd.
+3. **The enemy:**
+   - a white flash on hit;
+   - a squash / flinch;
+   - knockback or a launch;
+   - a death burst or ragdoll that flies away from the hit.
+4. **The hitbox effect:** the slash arc, shockwave or beam drawn over the exact area hit.
+5. **The screen:**
+   - hit-stop, scaled by the number of enemies hit;
+   - camera shake on heavy hits;
+   - a brief edge flash on crowd kills;
+   - vibration on gamepads and phones that support it (HapticService).
+6. **Counters:** a combo counter, and a "×N" for enemies hit by one attack.
+
+Each layer has its own strength value, so the range can turn it up, down or off.
+
+## 5. How hits work
 
 - **The server still decides every hit**, as today. The client only draws effects, so cheating stays
   hard.
@@ -74,7 +139,7 @@ the test range (section 6).
   number of enemies hit, and the screen shakes on big hits. Every one of these can be tuned in the
   range.
 
-## 4. Weapons (first proposal, to refine in the range)
+## 6. Weapons (first proposal, to refine in the range)
 
 The Armory keeps its slots, bands and tiers. What changes is what each weapon **class** does.
 Each class gets alternatives (A/B/C) to compare in the range.
@@ -117,7 +182,7 @@ visuals, since there's no sound.
 Each weapon keeps one ability on a cooldown, redesigned around crowds: whirlwind, shockwave,
 arrow rain, grenade, overcharged beam. Kills shorten the cooldown, as today.
 
-## 5. Enemies: built for crowds
+## 7. Enemies: built for crowds
 
 - **Many cheap enemies, a few tough ones.** Waves become crowds of weak "fodder" plus a few
   elites and a boss. Fodder dies in one to three hits from a crowd weapon.
@@ -134,7 +199,7 @@ arrow rain, grenade, overcharged beam. Kills shorten the cooldown, as today.
   - Bosses keep telegraphed patterns.
 - Knockback and launches apply to fodder fully, to elites partly, and to bosses not at all.
 
-## 6. The test range ("Proving Grounds")
+## 8. The test range ("Proving Grounds")
 
 A Studio-first space for building and judging every system above. It's the first thing we build.
 
@@ -157,26 +222,29 @@ A Studio-first space for building and judging every system above. It's the first
 - **Saving a winner:** when a variant feels right, a button prints its values in `Combat.json`
   format so they can be committed as the new default.
 
-## 7. What changes in what exists
+## 9. What changes in what exists
 
 | System | Change |
 |---|---|
 | Expeditions place, co-op, joining runs, rewards, Mentor, Armory, Ascension, Overdrive | **Kept.** Only the damage they feed on changes. |
 | Missions and waves | Kept as structure, re-tuned for crowds (much higher counts, cheaper fodder). |
-| Enemy system | Rebuilt as lightweight crowd enemies (section 5). Humanoid rigs stay only for bosses, if needed. |
-| Weapon classes and abilities | Redesigned per section 4; config shape extended with hit shapes and caps. |
-| Camera | **Open question** (see below): over-the-shoulder was chosen before big jumps and crowds entered the picture. |
+| Enemy system | Rebuilt as lightweight crowd enemies (section 7). Humanoid rigs stay only for bosses, if needed. |
+| Weapon classes and abilities | Redesigned per section 6; config shape extended with hit shapes and caps. |
+| Camera | **Over-the-shoulder, kept.** Shooting reworked to Fortnite style (section 3). |
+| Touch controls | **Attack button removed.** Auto-fire and auto-swing (section 3). |
 | Sound | Off. |
 | C2.5 Stop 1 code | Reused where it fits (telegraphs, ragdolls, impact effects, steering ideas). The rest is replaced as each piece is rebuilt. |
 
-## 8. Build order (each step ends with Ben playing it in the range)
+## 10. Build order (each step ends with Ben playing it in the range)
 
 1. **P0: this document**, approved.
-2. **P1: Proving Grounds, movement and the crowd-enemy prototype.**
+2. **P1: Proving Grounds, movement, controls and the crowd-enemy prototype.**
    - The range, dummies, the tuning panel and the readouts.
    - High jump, double jump, dash and ground slam.
+   - Phone controls with auto-fire and auto-swing.
+   - The feedback layers on one placeholder gun and one placeholder sword.
    - A lightweight-enemy stress test up to 150.
-   - Gate: movement feels good, and 100+ enemies run smoothly.
+   - Gate: movement and feedback feel good **on PC and on a phone**, and 100+ enemies run smoothly.
 3. **P2: first two weapons**, the sword and the shotgun, each with A/B/C variants and the hit
    shapes, hitbox effects and multi-hit numbers. Gate: Ben picks winners.
 4. **P3: the remaining weapon classes and abilities**, in batches, each judged in the range.
@@ -184,14 +252,12 @@ A Studio-first space for building and judging every system above. It's the first
 6. **P5: back into the missions.** Crowd waves, rebalanced rewards, co-op checks, all four eras.
 7. **P6: looks.** Detailed enemy and weapon models and arena dressing (the old Stop 2).
 
-## 9. Open questions for Ben
+## 11. Decided
 
-1. **Camera.** With big jumps and crowds, which one?
-   - Keep **over-the-shoulder**: close, aimed, like an action game.
-   - Pull back to a **higher third-person view** that shows the whole crowd around you.
-   - Let both be **alternatives in the range** and decide there. (Recommended.)
-2. **What felt worst** in the version you played? One concrete moment helps.
-3. **What role should combat play:** the main draw, or a strong side activity next to the tycoon?
-   This sets how much time goes into it compared with the city.
-4. **Phones.** Do big jumps, dashes and aiming all need to work fully on touch from P1, or is PC
-   first acceptable while we find the feel?
+All four open questions are answered (see the top). Every remaining choice is made by
+comparing alternatives in the range:
+
+- auto-fire vs tap-to-fire on phones;
+- bloom and aim-down-sights values;
+- feedback layer strengths;
+- weapon variants A/B/C.
