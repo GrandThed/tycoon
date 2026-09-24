@@ -893,11 +893,59 @@ export type CombatRegistryConfig = {
 	listMax: number,
 	friendChecksPerCall: number,
 }
+-- Animation asset ids; 0 = the procedural fallback. C2.5 adds run/hit for enemies and the player
+-- slash/lunge overrides (Roblox-owned default tool animations are the intended first values).
 export type CombatAnimationsConfig = {
 	enemyIdle: number,
 	enemyWalk: number,
 	enemyAttack: number,
 	enemyDeath: number,
+	enemyRun: number,
+	enemyHit: number,
+	playerSlash: number,
+	playerLunge: number,
+}
+-- C2.5 over-the-shoulder camera (client only). shoulderOffset = Humanoid.CameraOffset {x, y, z};
+-- zoom values are studs; freeCursorPhases = RunPhase values in which the mouse is unlocked.
+export type CombatCameraConfig = {
+	shoulderOffset: { number },
+	fieldOfView: number,
+	defaultZoom: number,
+	minZoom: number,
+	maxZoom: number,
+	touchSensitivity: number,
+	gamepadSensitivity: number,
+	touchAimAssistDegrees: number,
+	freeCursorPhases: { string },
+}
+-- C2.5 enemy steering and reactions (server). Melee enemies take one of maxMeleeAttackers slots
+-- around their target; the rest circle at holdRadius. Chargers wind up, then dash chargeDistance.
+export type CombatAiConfig = {
+	separationRadius: number,
+	separationWeight: number,
+	maxMeleeAttackers: number,
+	holdRadius: number,
+	strafeSpeedMult: number,
+	rangedMinDistance: number,
+	rangedMaxDistance: number,
+	pathRecomputeSeconds: number,
+	staggerSeconds: number,
+	finisherStaggerSeconds: number,
+	telegraphSeconds: number,
+	chargeDistance: number,
+	chargeSpeedMult: number,
+	chargeWindupSeconds: number,
+}
+-- C2.5 client impact tunables.
+export type CombatFeelConfig = {
+	shakeLight: number,
+	shakeHeavy: number,
+	hitMarkerSeconds: number,
+	trailSeconds: number,
+	arrowSpeed: number,
+	ragdollImpulse: number,
+	ragdollSeconds: number,
+	hitSparkCount: number,
 }
 -- Studio-only levers, named here so no attribute name is duplicated in code.
 export type CombatDebugConfig = {
@@ -957,9 +1005,13 @@ export type CombatConfig = {
 	enemy: CombatEnemyConfig,
 	feedback: CombatFeedbackConfig,
 	debug: CombatDebugConfig,
+	camera: CombatCameraConfig,
+	ai: CombatAiConfig,
+	feel: CombatFeelConfig,
 }
 
 -- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
+-- kind: "melee" | "ranged" | "charger" (C2.5: chargers wind up and dash; see CombatAiConfig).
 export type EnemyDef = {
 	template: string,
 	kind: string,
@@ -983,6 +1035,17 @@ export type WaveTableDef = {
 	rewardGrowth: number,
 	composition: { CompositionDef },
 }
+-- C2.5 boss attacks, cycled on their own cooldowns. slam = telegraphed AoE at the boss (radius,
+-- damageMult); charge = the charger dash at the target; summon = `count` of mission enemy `enemy`.
+export type BossPatternDef = {
+	kind: "slam" | "charge" | "summon",
+	cooldown: number,
+	windupSeconds: number,
+	radius: number?,
+	damageMult: number?,
+	enemy: string?,
+	count: number?,
+}
 export type BossDef = {
 	template: string,
 	enemy: string,
@@ -991,6 +1054,7 @@ export type BossDef = {
 	cashMult: number,
 	materialsMult: number,
 	valor: number,
+	patterns: { BossPatternDef }?,
 }
 export type MissionConfig = {
 	version: number,
@@ -1141,6 +1205,8 @@ export type CombatFxHit = {
 	finisher: boolean,
 	position: Vector3,
 	byUserId: number,
+	-- C2.5: attacker → enemy, flattened; nil for DoT ticks. Drives sparks and the stagger lean.
+	direction: Vector3?,
 }
 export type CombatFxKill = {
 	kind: "kill",
@@ -1179,8 +1245,20 @@ export type CombatFxPartyEffect = {
 	targetIds: { number },
 }
 export type CombatFxMentor = { kind: "mentor", userId: number, valor: number, mentees: number }
+-- C2.5: a wind-up the client must draw BEFORE the blow lands (ground ring for slam, lane for
+-- charge, glow for a strike). seconds = time until the hit.
+export type CombatFxTelegraph = {
+	kind: "telegraph",
+	enemyId: number,
+	attack: "strike" | "slam" | "charge",
+	position: Vector3,
+	direction: Vector3?,
+	radius: number?,
+	seconds: number,
+}
 export type CombatFx =
-	CombatFxHit
+	CombatFxTelegraph
+	| CombatFxHit
 	| CombatFxKill
 	| CombatFxPlayerHit
 	| CombatFxAbility

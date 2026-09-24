@@ -63,7 +63,16 @@
 		"listMax": 20,
 		"friendChecksPerCall": 8
 	},
-	"animations": { "enemyIdle": 0, "enemyWalk": 0, "enemyAttack": 0, "enemyDeath": 0 },
+	"animations": {
+		"enemyIdle": 507766666,
+		"enemyWalk": 507777826,
+		"enemyAttack": 0,
+		"enemyDeath": 0,
+		"enemyRun": 507767714,
+		"enemyHit": 0,
+		"playerSlash": 522635514,
+		"playerLunge": 522638767
+	},
 	"enemy": {
 		"tickHz": 10,
 		"aggroRange": 80,
@@ -103,5 +112,42 @@
 		"botIncomeRate": 0,
 		"fakePartyAttribute": "DebugFakeParty",
 		"fakeInviteAttribute": "DebugFakeInvite"
+	},
+	"camera": {
+		"shoulderOffset": [1.75, 0.6, 0],
+		"fieldOfView": 72,
+		"defaultZoom": 11,
+		"minZoom": 7,
+		"maxZoom": 16,
+		"touchSensitivity": 1.0,
+		"gamepadSensitivity": 1.0,
+		"touchAimAssistDegrees": 12,
+		"freeCursorPhases": ["lobby", "summary", "ended"]
+	},
+	"ai": {
+		"separationRadius": 4,
+		"separationWeight": 1.2,
+		"maxMeleeAttackers": 3,
+		"holdRadius": 14,
+		"strafeSpeedMult": 0.6,
+		"rangedMinDistance": 18,
+		"rangedMaxDistance": 30,
+		"pathRecomputeSeconds": 1.0,
+		"staggerSeconds": 0.2,
+		"finisherStaggerSeconds": 0.5,
+		"telegraphSeconds": 0.45,
+		"chargeDistance": 26,
+		"chargeSpeedMult": 2.6,
+		"chargeWindupSeconds": 0.7
+	},
+	"feel": {
+		"shakeLight": 0.25,
+		"shakeHeavy": 0.8,
+		"hitMarkerSeconds": 0.12,
+		"trailSeconds": 0.15,
+		"arrowSpeed": 180,
+		"ragdollImpulse": 35,
+		"ragdollSeconds": 1.2,
+		"hitSparkCount": 6
 	}
 }

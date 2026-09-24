@@ -4057,3 +4057,180 @@ the party table (1–4 players: run time, boss time, per-player cash), Mentor Va
 - Published, two accounts: party Depart lands both in one server; account A's public run is
   joinable by non-friend account B mid-run (B enters at the next wave); a friends-only run is
   hidden from B; after the run both return together and the party re-forms.
+
+---
+
+# M10 contracts — Icons and thumbnails, testfit round (Ben, 2026-09-23)
+
+Offline marketing art rendered in Blender from the shipped blueprints and generated kits, judged by
+Ben before anything is uploaded. **No Luau, config or Assets.json change; no Open Cloud upload.**
+Requirements are `docs/DISCOVERY_CHECKLIST.md` §1–§2.
+
+## Deliverables (candidates, not finals)
+
+| Kind | Size | Count | Rules |
+|---|---|---|---|
+| Experience icon | 512×512 PNG | ≥ 6 candidates | one clear subject, saturated sky, strong silhouette, readable at 64 px on a dark tile, no text (or text ≥ ¼ icon height) |
+| Thumbnails | 1920×1080 PNG, < 3 MB | ≥ 2 per hook | bottom 15 % free of anything important; hooks Growth, Eras, Scale, Social (combat hook skipped: combat feel pass is parked) |
+| Pass icons | 512×512 PNG | ≥ 2 per pass | DoubleCash, OfflinePro, VIP; subject inside the centred circle of diameter 512 (store crops to a circle) |
+| Product icons | 512×512 PNG | ≥ 2 per product | Cash30m, Cash2h, Cash8h, DoubleOffline; same circle rule; the three cash tiers must read as small < medium < large |
+
+Only real game content: buildings, props and plots exactly as blueprints/`plotrender` build them.
+No fake mechanics, no invented UI, no Roblox logos or third-party characters. Text overlays use one
+OFL font (downloaded into `assets/marketing/fonts/`), never a system font baked into a final.
+
+## Ownership (one wave, disjoint)
+
+| Agent | Owns | Output |
+|---|---|---|
+| icon builder | `tools/marketing/icon.py`, `tools/marketing/icon_scene.py` | `assets/marketing/icon/` |
+| thumbnail builder | `tools/marketing/thumbs.py`, `tools/marketing/thumb_scene.py` | `assets/marketing/thumbs/` |
+| store-icon builder | `tools/marketing/store_icons.py`, `tools/marketing/store_scene.py`, `tools/assets/coin_kit.py` (if a generated kit is needed) | `assets/marketing/store/` |
+| lead | `tools/marketing/README.md` | — |
+
+`tools/testfit/*`, `tools/streetplan.py` and every blueprint are **read-only** (import, never edit).
+`/assets/` is gitignored, so the scripts are the committed artifact and the PNGs regenerate.
+
+## Definition of done (M10 testfit round)
+
+Each builder: its PNGs, one labelled `contact_sheet.png` in its output folder (the icon sheet also
+shows every candidate at 64 px on (24,24,28)), a one-command rerun line, and a list of what each
+candidate is meant to sell. Ben picks; finals, uploads and the Creator Hub steps are the next round.
+
+---
+
+# C2.5 + C3 contracts — Stop 1: combat feel (Ben, 2026-09-23)
+
+Ben's C2 verdict: the flow works but the fight is "pretty outdated and simply bad" — looks, hit
+feel, enemy behaviour and controls. He asked for C3 **and** a feel pass, split into three stops:
+
+- **Stop 1 (this section):** camera + controls, impact, enemy AI, animations and sounds, judged on
+  Village; in parallel the Boomtown / Metropolis / Orbital mission configs and arena blockouts are
+  drafted (placeholder rigs, draft balance).
+- **Stop 2:** detailed enemy and weapon models for all four eras + arena dressing.
+- **Stop 3:** Overdrive, the Ascension forge UI, full-lap + one-rebirth balance, the C2 reward
+  carry-overs (per-head co-op rewards, idle-alt floor).
+
+Rulings (2026-09-23):
+1. **Over-the-shoulder camera** on every device. PC: mouse-locked shoulder camera, character faces
+   the camera yaw, crosshair at screen centre, click = attack. Touch: Roblox thumbstick on the
+   left, drag on the right half to aim the camera, on-screen attack/ability buttons, aim assist
+   inside `camera.touchAimAssistDegrees`. Gamepad: left stick move, right stick aim, R2 attack,
+   L1/R1 abilities, Y stance.
+2. **One evolving horde.** Every mission has the same three roles — melee **grunt**, ranged
+   **shooter**, **charger** brute — plus two bosses at waves 5 and 10; each era upgrades their gear
+   and numbers. Village keeps its keys (`raider`, `archer`, `brute`); missions 2–4 use `grunt`,
+   `shooter`, `brute`. Templates: Village `Raider`/`Archer`/`Brute`/`RaiderChief`/`Warlord`;
+   others `<EraName>Grunt`, `<EraName>Shooter`, `<EraName>Brute`, `<EraName>Chief`,
+   `<EraName>Warlord` (models are Stop 2; placeholder rigs until then).
+3. **Detailed models** (Stop 2, not now).
+4. Server authority is unchanged: all damage still goes through `CombatService`; the camera and
+   visuals are client-only; aim is still a direction the server raycasts itself.
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|-------|-------|
+| lead | this section, `Types.luau` + `Combat.json` keys (applied), audio upload (`tools/upload_audio.py`), routing |
+| luau-engineer **A** (combat server) | `src/combat/server/**`, `src/shared/Combat.luau` |
+| ui-engineer **A** (combat client) | `src/combat/client/**` incl. new `Controllers/CameraController.luau`, and the combat blocks of `src/client/UI/Theme.luau` |
+| economy-designer | values of `Combat.json camera/ai/feel/animations` (keys frozen), `Missions/1_Village.json` (brute → `charger`, boss `patterns`), new `Missions/{2_Boomtown,3_Metropolis,4_OrbitalColony}.json`, new `Layouts/Arenas/{Boomtown,Metropolis,OrbitalColony}.luau`, `tools/sim_combat.py`, `docs/BALANCE.md` "C2.5" |
+| sound picker (general-purpose) | `tools/audio_map.json` combat entries only (no upload) |
+| roblox-reviewer → qa-runner → docs-keeper | after wave 1 |
+
+Frozen: every hub file, `Types.luau`, `Armory.json`, `Armory.luau`, `ProfileSchema` (no schema
+change), `StudioBridge`, remotes (no new remote in Stop 1).
+
+## Types and config (applied)
+
+`CombatConfig` + `camera: CombatCameraConfig`, `ai: CombatAiConfig`, `feel: CombatFeelConfig`;
+`CombatAnimationsConfig` + `enemyRun, enemyHit, playerSlash, playerLunge`; `BossDef.patterns?:
+{BossPatternDef}`; `EnemyDef.kind` documented as `"melee" | "ranged" | "charger"`;
+`CombatFxHit.direction?`; new `CombatFxTelegraph` (`attack: "strike" | "slam" | "charge"`).
+
+Animation ids in `Combat.json` are Roblox's own default R15 animations (idle 507766666, walk
+507777826, run 507767714, tool slash 522635514, tool lunge 522638767), **written from memory and
+unverified**: every load goes through `pcall` and a failed or 0 id falls back to the procedural
+pose silently (one `warn` per id per server/client).
+
+## Combat server (luau-engineer A)
+
+- **Steering** (`EnemyService`, 10 Hz tick, no yields): separation from other enemies within
+  `ai.separationRadius`; melee enemies claim one of `ai.maxMeleeAttackers` slots evenly spaced
+  around their target at reach distance, the rest circle (strafe at `strafeSpeedMult`) at
+  `ai.holdRadius`; shooters keep `[rangedMinDistance, rangedMaxDistance]`, back off or close in,
+  and strafe while reloading; when the direct line to the goal is blocked by an arena obstacle use
+  `PathfindingService` (pcall, recompute at most every `ai.pathRecomputeSeconds`, per enemy,
+  off the tick thread). `MoveTo` targets the steered point, never the player's root.
+- **Telegraphs**: every enemy attack emits `CombatFx telegraph` `ai.telegraphSeconds` before the
+  damage check (strike), boss slams/charges use their pattern `windupSeconds`. The damage check
+  re-reads positions at impact time, so a telegraph is dodgeable.
+- **Chargers** (`kind "charger"`, Village `brute`): wind up `ai.chargeWindupSeconds`, dash
+  `ai.chargeDistance` at `speed × ai.chargeSpeedMult` along the telegraphed lane; players in the
+  lane take the hit once.
+- **Bosses**: cycle `patterns` on their own cooldowns alongside the normal attack; `summon`
+  spawns through the normal spawn path (counts toward `maxAlive`, pays normal rewards).
+- **Reactions**: every hit staggers the enemy `ai.staggerSeconds` (finisher/heavy
+  `finisherStaggerSeconds`; bosses half) and sends `CombatFxHit.direction`. Death: the rig
+  ragdolls server-side (BallSocketConstraints, impulse `feel.ragdollImpulse` along the killing
+  hit), then is removed after `feel.ragdollSeconds` — the reaper rules from C1 still apply.
+- **Animations**: load `animations.*` on each enemy Animator (pcall, fallback as above); walk vs
+  run by speed; `enemyHit` on stagger.
+- Keep `Combat.luau` pure; if steering needs maths, put it in `EnemyService`.
+
+## Combat client (ui-engineer A)
+
+- **CameraController** (new): over-the-shoulder per ruling 1, reading `Combat.json camera`.
+  `Humanoid.CameraOffset = shoulderOffset`, `AutoRotate = false` with the root yawed to the camera
+  on RenderStep, zoom clamped to `[minZoom, maxZoom]`, FOV `fieldOfView`, mouse locked except in
+  `freeCursorPhases` and while any modal/debug strip is open (Alt toggles the cursor on PC).
+  Restores the default camera when the character dies or the run ends.
+- **InputController**: aim = the camera's centre ray (touch: plus the soft assist cone); gamepad
+  bindings per ruling 1; keep sending the same intents.
+- **HUD** (`CombatHud`): centre crosshair, hit marker (`feel.hitMarkerSeconds`), bow charge ring
+  around the crosshair, touch buttons re-laid for the right thumb (attack largest, abilities and
+  stance around it), ≥ 44 px.
+- **Impact** (`CombatFxController`, `WeaponController`): hit sparks along `direction`
+  (`feel.hitSparkCount`), camera shake `feel.shakeLight` / `shakeHeavy` (finisher, taking damage),
+  existing hitstop, weapon trail (`feel.trailSeconds`), a visible arrow/bolt that flies at
+  `feel.arrowSpeed` to the server-confirmed point, muzzle flash for guns, telegraph visuals
+  (red ground ring for slam, red lane for charge, glow on the attacker for strike), kill pop.
+  Heavy particles gate on `Theme.lowEndDevice`, never on `reducedMotion` (true on every phone).
+- **Animations**: `playerSlash` / `playerLunge` override the procedural swing when they load;
+  procedural pose remains the fallback. Remote players' swings (`CombatFx swing`) use the same.
+- **Sounds**: play the existing `Sounds.json` combat keys at the right moments (they become
+  audible once the lead uploads them; id 0 stays silent).
+
+## Missions 2–4 and arenas (economy-designer, draft balance)
+
+Same shape as `1_Village.json`: ids `boomtown`, `metropolis`, `orbital`; `era` 2/3/4; `arena` =
+era name; `material` Steel / Circuits / Alloy; `bossWaves [5, 10]`; enemies `grunt` (melee),
+`shooter` (ranged), `brute` (`charger`, elite); bosses with `patterns`. Numbers follow
+`docs/BALANCE.md` "What C2 should re-check" §4 (cash ×100 per era, HP on the gear ladder,
+materials flat) — marked draft; Stop 3 re-balances. Arena layouts follow the `ArenaLayout` type,
+110×110 like Village with era-appropriate floor/wall materials and colours and 6–10 obstacles
+that give cover to shooters. Village: brute becomes `charger`; Chief and Warlord get 2–3 patterns.
+`sim_combat.py`: `MELEE_CONTACT_SLOTS` reads `ai.maxMeleeAttackers`; model charger and boss
+patterns coarsely; `--check` stays green; new missions get the run-length assertion at their
+recommended power.
+
+## Sounds (sound picker + lead)
+
+Pick one Kenney file per combat key (`swing, finisher, bowDraw, bowFire, gunFire, laser,
+abilityCast, enemyHit, enemyDeath, playerHit, playerDown, waveStart, waveClear, bossStart,
+bossDown, runEnd, lowHp, partyRally, partyWarcry, mentor`) from `assets/kenney_impact-sounds.zip`,
+`kenney_interface-sounds.zip`, `kenney_music-jingles.zip`, `kenney_casino-audio.zip`, by filename,
+with two alternates each, in `tools/audio_map.json`'s existing entry shape. The lead runs the
+upload (20 of the account's 100 monthly uploads).
+
+## Definition of done (Stop 1)
+
+- Both builds, both sourcemaps + `luau-lsp analyze`, stylua, selene, `sim_economy.py --check`
+  unchanged, `sim_combat.py --check` green, manifest/template checks green.
+- Studio combat (Village): shoulder camera on PC and in the phone emulator; enemies spread
+  around you (never more than `maxMeleeAttackers` hitting at once), shooters keep distance,
+  the brute telegraphs and charges, both bosses show their patterns with a readable wind-up; hits
+  spark, stagger and shake; kills ragdoll; the bow shows its charge ring and a flying arrow; every
+  combat sound plays; animations load or fall back without errors.
+- `DebugMission boomtown / metropolis / orbital` boots each new arena with placeholder rigs and a
+  full 10-wave run.
