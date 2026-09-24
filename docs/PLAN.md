@@ -1397,7 +1397,7 @@ the hub, join-in-progress and the Mentor bonus are C2; missions 2-4, the Ascensi
 Overdrive balance are C3.
 
 - [x] C1 built and reviewed (definition of done in INTERFACES "C1 contracts")
-- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "C1") — still open; folded into the C2 playtest
+- [x] Ben's Studio playtest (`docs/PLAYTEST.md` "C1") — passed as part of the C2 pass (2026-09-23)
 
 ## C2 — Co-op: party, join-in-progress, contribution, Mentor
 
@@ -1499,4 +1499,4 @@ id 0 (silent); enemies and weapons still placeholders; missions 2–4, Ascension
 balance are C3.
 
 - [x] C2 built and reviewed (definition of done in INTERFACES "C2 contracts")
-- [ ] Ben's playtest (`docs/PLAYTEST.md` "C2", Studio + published; folds in the open C1 pass)
+- [x] Ben's playtest (`docs/PLAYTEST.md` "C2") — 2026-09-23: the flow works end to end; Ben judged the combat itself "extreme trash" (looks, hit feel, enemy behaviour, controls) → a combat feel pass comes before C3
