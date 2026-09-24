@@ -1,0 +1,28 @@
+{
+	"version": "2.0.0",
+	"options": {
+		"cwd": "${workspaceFolder}",
+		"env": { "PATH": "${env:USERPROFILE}\\.rokit\\bin;${env:PATH}" }
+	},
+	"tasks": [
+		{
+			"label": "Build hub",
+			"type": "shell",
+			"command": "rojo build -o build/test.rbxl",
+			"problemMatcher": []
+		},
+		{
+			"label": "Build combat",
+			"type": "shell",
+			"command": "rojo build combat.project.json -o build/combat.rbxl",
+			"problemMatcher": []
+		},
+		{
+			"label": "Build both",
+			"dependsOn": ["Build hub", "Build combat"],
+			"dependsOrder": "sequence",
+			"group": { "kind": "build", "isDefault": true },
+			"problemMatcher": []
+		}
+	]
+}

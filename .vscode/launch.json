@@ -1,0 +1,33 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Hub: build + rojo serve (port 34872)",
+			"type": "node-terminal",
+			"request": "launch",
+			"cwd": "${workspaceFolder}",
+			"env": { "PATH": "${env:USERPROFILE}\\.rokit\\bin;${env:PATH}" },
+			"preLaunchTask": "Build hub",
+			"command": "rojo serve --port 34872"
+		},
+		{
+			"name": "Combat: build + rojo serve (port 34873)",
+			"type": "node-terminal",
+			"request": "launch",
+			"cwd": "${workspaceFolder}",
+			"env": { "PATH": "${env:USERPROFILE}\\.rokit\\bin;${env:PATH}" },
+			"preLaunchTask": "Build combat",
+			"command": "rojo serve combat.project.json --port 34873"
+		}
+	],
+	"compounds": [
+		{
+			"name": "Hub + Combat: build + serve both",
+			"configurations": [
+				"Hub: build + rojo serve (port 34872)",
+				"Combat: build + rojo serve (port 34873)"
+			],
+			"stopAll": true
+		}
+	]
+}
