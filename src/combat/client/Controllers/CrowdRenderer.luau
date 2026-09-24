@@ -30,11 +30,11 @@ local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local CrowdCodec = require(sharedFolder:WaitForChild("CrowdCodec"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
+local CameraController = require(script.Parent:WaitForChild("CameraController"))
 
 export type Reaction = "flash" | "flinch" | "knockback" | "launch" | "death"
 export type ForEachCallback = (
@@ -144,7 +144,6 @@ local LAG_FALL = 0.05 -- ...and relaxes slowly (one early packet must not cause 
 local YAW_SMOOTH_RATE = 14
 local LEAN_SMOOTH_RATE = 12
 local SETTLE_EPSILON = 0.002
-
 -- State poses (radians of lean; tuck in leg heights).
 local STAGGER_LEAN = 0.32
 local WINDUP_LEAN = 0.22
@@ -224,6 +223,9 @@ local moveFrames: { CFrame } = {}
 local moveCount = 0
 
 local interval = 1 / 15
+-- The packet being decoded, read by onEntry (a module function, so a snapshot allocates no
+-- closure).
+local decodeStamp = 0
 local lagEstimate: number? = nil
 local newestStamp = -math.huge
 local burstsThisStep = 0
@@ -674,33 +676,57 @@ local function sampleAt(entity: Entity, renderTime: number): number
 	return entity.yawA
 end
 
-local function pushSample(entity: Entity, entry: Types.CrowdSnapshotEntry, stamp: number): ()
+local function pushSample(
+	entity: Entity,
+	position: Vector3,
+	yaw: number,
+	state: Types.CrowdState,
+	hpFraction: number,
+	stamp: number
+): ()
 	if entity.samples == 0 then
-		entity.posA, entity.posB, entity.posC = entry.position, entry.position, entry.position
-		entity.yawA, entity.yawB, entity.yawC = entry.yaw, entry.yaw, entry.yaw
+		entity.posA, entity.posB, entity.posC = position, position, position
+		entity.yawA, entity.yawB, entity.yawC = yaw, yaw, yaw
 		entity.timeA, entity.timeB, entity.timeC = stamp, stamp, stamp
 		entity.samples = 1
-		entity.position = entry.position
-		entity.shown = entry.position
-		entity.yaw = entry.yaw
+		entity.position = position
+		entity.shown = position
+		entity.yaw = yaw
 		entity.dirty = true
 		entity.model.Parent = folder
 	elseif stamp > entity.timeC then
 		entity.posA, entity.yawA, entity.timeA = entity.posB, entity.yawB, entity.timeB
 		entity.posB, entity.yawB, entity.timeB = entity.posC, entity.yawC, entity.timeC
-		entity.posC, entity.yawC, entity.timeC = entry.position, entry.yaw, stamp
+		entity.posC, entity.yawC, entity.timeC = position, yaw, stamp
 		entity.samples = math.min(entity.samples + 1, 3)
 	else
 		return
 	end
-	entity.hpFraction = entry.hpFraction
-	if entry.state ~= entity.state then
-		entity.state = entry.state
-		setVisorHot(entity, entry.state == "windup")
+	entity.hpFraction = hpFraction
+	if state ~= entity.state then
+		entity.state = state
+		setVisorHot(entity, state == "windup")
 		entity.dirty = true
-		if entry.state == "dead" and entity.deathDue == math.huge then
+		if state == "dead" and entity.deathDue == math.huge then
 			entity.deathDue = os.clock() + DEATH_WAIT_SECONDS
 		end
+	end
+end
+
+-- CrowdCodec.DecodeEach callback: world coordinates as plain numbers, no table per entry.
+-- Unknown ids (a snapshot that beat its CrowdSpawn) are ignored until announced.
+local function onEntry(
+	id: number,
+	x: number,
+	y: number,
+	z: number,
+	yaw: number,
+	state: Types.CrowdState,
+	hpFraction: number
+): ()
+	local entity = byId[id]
+	if entity ~= nil and entity.phase == "alive" then
+		pushSample(entity, Vector3.new(x, y, z), yaw, state, hpFraction, decodeStamp)
 	end
 end
 
@@ -718,9 +744,12 @@ local function onSnapshot(data: any): ()
 		stamp = serverNow
 	end
 	local crowd = Tuning.Get().crowd
-	if crowd ~= nil and crowd.snapshotHz > 0 then
-		interval = 1 / crowd.snapshotHz
+	-- Clamped exactly as CrowdService clamps its step, so a tuned 0 or 500 cannot desync the delay.
+	local hz = if crowd ~= nil then crowd.snapshotHz else CrowdCodec.MIN_HZ
+	if typeof(hz) ~= "number" or hz ~= hz or hz == math.huge or hz == -math.huge then
+		hz = CrowdCodec.MIN_HZ
 	end
+	interval = 1 / math.clamp(hz, CrowdCodec.MIN_HZ, CrowdCodec.MAX_HZ)
 	-- Every packet of one frame shares its stamp; only the first of a new frame measures lag.
 	if stamp > newestStamp then
 		newestStamp = stamp
@@ -733,12 +762,8 @@ local function onSnapshot(data: any): ()
 			lagEstimate = current + (observed - current) * rate
 		end
 	end
-	for _, entry in CrowdCodec.Decode(packet, ARENA_ORIGIN) do
-		local entity = byId[entry.id]
-		if entity ~= nil and entity.phase == "alive" then
-			pushSample(entity, entry, stamp)
-		end
-	end
+	decodeStamp = stamp
+	CrowdCodec.DecodeEach(packet, ARENA_ORIGIN, onEntry)
 end
 
 local function onSpawn(payload: any): ()
@@ -1077,15 +1102,11 @@ local CrowdRenderer = {}
 -- Main's controller contract; everything happens in Start.
 function CrowdRenderer.Init(): () end
 
--- Inert outside the Proving Grounds (the Workspace lever named by Combat.json
--- debug.provingAttribute), so a mission client never waits on crowd remotes.
+-- Inert outside the Proving Grounds. CameraController.IsRange is the client's one range gate
+-- (Studio only, then the Workspace lever), so a published place saved with the lever on never
+-- draws a crowd, and a mission client never waits on crowd remotes.
 function CrowdRenderer.Start(): ()
-	if started or destroyed then
-		return
-	end
-	local combatConfig = Catalog.GetCombatConfig()
-	local attribute = if combatConfig ~= nil then combatConfig.debug.provingAttribute else nil
-	if attribute == nil or Workspace:GetAttribute(attribute) ~= true then
+	if started or destroyed or not CameraController.IsRange() then
 		return
 	end
 	started = true

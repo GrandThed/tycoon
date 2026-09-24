@@ -38,9 +38,13 @@ local ROW_MAX_COUNT = 10
 -- Used when Combat.json is absent: the share of an interval a client may arrive early by
 -- (network jitter), same meaning as Combat.json player.comboTimingTolerance.
 local DEFAULT_TIMING_TOLERANCE = 0.8
--- A slam request may trail the landing by this much: the client sends it at impact and the
--- server's view of the character lags the client's.
-local SLAM_LANDING_GRACE_SECONDS = 0.5
+-- A slot the crowd refuses this many times in a row (crowd.maxAlive lowered mid-set) is dropped
+-- from the set instead of being retried forever.
+local MAX_SPAWN_ATTEMPTS = 3
+-- Pellet seeds: Park–Miller step over (seq xor a per-player salt), exact in doubles.
+local SEED_MODULUS = 2147483647
+local SEED_MULTIPLIER = 48271
+local UINT32 = 4294967296
 -- How far below the root the floor probe looks (air tracking and the slam's landing point).
 local GROUND_PROBE_STUDS = 250
 -- Height above standing height before a character counts as airborne (steps and slopes).
@@ -56,6 +60,8 @@ type Slot = {
 	position: Vector3,
 	respawnSeconds: number,
 	cleared: boolean,
+	-- Consecutive refusals by CrowdService.Spawn.
+	refusals: number,
 }
 type Respawn = { at: number, slot: Slot }
 type Projectile = {
@@ -68,7 +74,8 @@ type Projectile = {
 	direction: Vector3,
 	travelled: number,
 	age: number,
-	seq: number,
+	-- The pellet seed its strike carries (pelletSeed at the trigger pull).
+	seed: number,
 }
 type DamageEntry = { at: number, amount: number }
 type Shooter = {
@@ -86,6 +93,14 @@ type Shooter = {
 	-- The peak of the airborne phase that ended at landedAt (for a slam request that trails it).
 	lastPeakY: number,
 	landedAt: number,
+	-- Fastest fall the server saw in this airtime (studs/s, downward positive), and in the one
+	-- that ended at landedAt.
+	diveSpeed: number,
+	lastDiveSpeed: number,
+	-- Root Y last frame, for the fall speed measured from positions.
+	lastY: number?,
+	-- Server-only: mixed into every pellet seed so a client never picks its own pattern.
+	salt: number,
 	damageLog: { DamageEntry },
 	lastHits: number,
 	lastKills: number,
@@ -219,7 +234,7 @@ local function tuneStateFor(shooter: Shooter): ()
 	)
 end
 
-local function statsFor(shooter: Shooter, now: number): Types.RangeStats
+local function statsFor(shooter: Shooter, now: number, refused: boolean?): Types.RangeStats
 	local log = shooter.damageLog
 	local cutoff = now - DPS_WINDOW_SECONDS
 	local firstLive = 1
@@ -243,11 +258,24 @@ local function statsFor(shooter: Shooter, now: number): Types.RangeStats
 		clearSeconds = clearSeconds,
 		alive = CrowdService.AliveCount(),
 		serverFrameMs = CrowdService.StepMs(),
+		refused = refused,
 	}
 end
 
 local function sendStats(shooter: Shooter): ()
-	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock()))
+	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock(), nil))
+end
+
+-- The attacker's client has already drawn the shot; this tells it to take it back.
+local function sendRefused(shooter: Shooter): ()
+	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock(), true))
+end
+
+-- The seed of a gun strike's cosmetic pellets. Deterministic per (seq, salt), so the strike
+-- can carry it and every client draws the same pattern with HitShapes.Pellets.
+local function pelletSeed(shooter: Shooter, seq: number): number
+	local mixed = bit32.bxor(math.floor(seq % UINT32), shooter.salt)
+	return (mixed % (SEED_MODULUS - 1) + 1) * SEED_MULTIPLIER % SEED_MODULUS
 end
 
 local function broadcastStrike(strike: Types.CombatFxStrike): ()
@@ -265,12 +293,25 @@ end
 
 local function spawnSlot(slot: Slot): ()
 	local id = CrowdService.Spawn(slot.kind, slot.position, slot.behaviour, slot.position)
-	if id == 0 then
-		-- Refused (crowd.maxAlive reached): try again after the group's respawn delay.
-		table.insert(respawns, { at = os.clock() + math.max(slot.respawnSeconds, 1), slot = slot })
+	if id ~= 0 then
+		slot.refusals = 0
+		slotById[id] = slot
 		return
 	end
-	slotById[id] = slot
+	-- Refused (crowd.maxAlive reached): a few retries after the group's respawn delay, then the
+	-- slot leaves the set so the clear clock and the respawn queue never wait on it.
+	slot.refusals += 1
+	if slot.refusals >= MAX_SPAWN_ATTEMPTS then
+		local index = table.find(setSlots, slot)
+		if index ~= nil then
+			table.remove(setSlots, index)
+		end
+		warn(
+			`[RangeService] dropped a {slot.kind} dummy: the crowd refused it {slot.refusals} times`
+		)
+		return
+	end
+	table.insert(respawns, { at = os.clock() + math.max(slot.respawnSeconds, 1), slot = slot })
 end
 
 -- `at` is an absolute arena point (lead ruling). A small group is one row along x; a larger one
@@ -316,6 +357,8 @@ local function loadSet(name: string, countOverride: number?): ()
 	currentSet = name
 	clearStartedAt = 0
 	clearSeconds = nil
+	-- Never ask for more dummies than the crowd will hold; later groups get what is left.
+	local budget = math.max(0, math.floor(config.crowd.maxAlive))
 	for groupIndex, group in groups do
 		local def = kindDef(config, group.kind)
 		if def == nil then
@@ -325,7 +368,8 @@ local function loadSet(name: string, countOverride: number?): ()
 		local count = if groupIndex == 1 and countOverride ~= nil
 			then countOverride
 			else group.count
-		count = math.max(0, math.floor(count))
+		count = math.clamp(math.floor(count), 0, budget)
+		budget -= count
 		for _, position in groupPositions(group, count, def.radius) do
 			local slot: Slot = {
 				kind = group.kind,
@@ -333,6 +377,7 @@ local function loadSet(name: string, countOverride: number?): ()
 				position = position,
 				respawnSeconds = group.respawnSeconds,
 				cleared = false,
+				refusals = 0,
 			}
 			table.insert(setSlots, slot)
 			spawnSlot(slot)
@@ -561,6 +606,8 @@ local function resolveMelee(
 	local pad = variant.pad
 	local shape: Types.HitShape = variant.shape
 	local halfWidth = (variant.width or 0) / 2
+	-- Lead ruling: an airborne swing's arc reaches down to the crowd below (HitShapes.Arc band).
+	local reachDown = if shooter.airborne then math.max(config.movement.airSwingReachDown, 0) else 0
 	local tally = newTally()
 
 	if shape == "sphere" then
@@ -570,7 +617,16 @@ local function resolveMelee(
 		local test = function(body: Vector3, r: number): (number?, boolean)
 			local touched = false
 			if shape == "arc" then
-				touched = HitShapes.Arc(origin, heading, range, arcDegrees or 360, pad, body, r)
+				touched = HitShapes.Arc(
+					origin,
+					heading,
+					range,
+					arcDegrees or 360,
+					pad,
+					body,
+					r,
+					reachDown
+				)
 			elseif shape == "capsule" then
 				touched = HitShapes.Capsule(origin, tip, halfWidth, pad, body, r)
 			elseif shape == "cone" then
@@ -585,7 +641,7 @@ local function resolveMelee(
 			end
 			return nil, false
 		end
-		local candidates = gather(config, origin, range + pad + halfWidth, test)
+		local candidates = gather(config, origin, range + pad + halfWidth + reachDown, test)
 		for index = 1, capOf(variant, #candidates) do
 			local candidate = candidates[index]
 			-- Lines push along the thrust; sweeps and blasts push away from the swinger.
@@ -610,7 +666,11 @@ local function resolveMelee(
 		size = range,
 		arcDegrees = arcDegrees,
 		width = variant.width,
-		endPoint = nil,
+		-- An airborne arc carries the bottom of its band (origin - airSwingReachDown); nil on
+		-- the ground, so a client knows which band to draw.
+		endPoint = if shape == "arc" and reachDown > 0
+			then origin - Vector3.new(0, reachDown, 0)
+			else nil,
 	})
 end
 
@@ -647,7 +707,7 @@ local function launchProjectile(
 	variant: Variant,
 	origin: Vector3,
 	direction: Vector3,
-	seq: number
+	seed: number
 ): ()
 	table.insert(projectiles, {
 		player = shooter.player,
@@ -660,7 +720,7 @@ local function launchProjectile(
 		direction = direction,
 		travelled = 0,
 		age = 0,
-		seq = seq,
+		seed = seed,
 	})
 end
 
@@ -675,8 +735,10 @@ local function resolveRanged(
 	direction: Vector3
 ): ()
 	local unit = direction.Unit
+	-- Pellets are cosmetic (lead ruling): the seed only lets every client draw the same ones.
+	local seed = pelletSeed(shooter, seq)
 	if (variant.projectileSpeed or 0) > 0 then
-		launchProjectile(shooter, weapon, variantKey, variant, origin, unit, seq)
+		launchProjectile(shooter, weapon, variantKey, variant, origin, unit, seed)
 		return
 	end
 	local critMult = config.shooting.critMult
@@ -684,56 +746,45 @@ local function resolveRanged(
 	local player = shooter.player
 	local tally = newTally()
 	local pushBase = (flatten(unit) or Vector3.zero) * variant.knockback
-	local pellets = variant.pellets or 0
 
-	if pellets > 0 then
-		-- Each pellet is one hit on the first live enemy it meets; the pattern is the server's
-		-- own, seeded by seq (HitShapes.Pellets, so a client can draw the same one).
-		local struck: { [number]: boolean } = {}
-		local killed: { [number]: boolean } = {}
-		local distinct = 0
-		local cap = if variant.cap > 0 then variant.cap else math.huge
-		for _, pelletDirection in HitShapes.Pellets(unit, pellets, variant.spreadDegrees or 0, seq) do
-			local reach = worldReach(origin, pelletDirection, variant.range, params)
-			for _, candidate in rayCandidates(config, origin, pelletDirection, reach, variant) do
-				if killed[candidate.id] then
-					continue
+	if variant.shape == "cone" then
+		-- A true cone: every enemy whose body overlaps it takes `damage` once, nearest first up
+		-- to the cap; a crit when the aim ray itself passes the head sphere.
+		local halfAngle = (variant.arcDegrees or 0) / 2
+		local range = variant.range
+		local width = variant.width or 0
+		local candidates = gather(
+			config,
+			origin,
+			range + variant.pad,
+			function(
+				body: Vector3,
+				r: number,
+				head: Vector3,
+				headRadius: number
+			): (number?, boolean)
+				if not HitShapes.Cone(origin, unit, range, halfAngle, variant.pad, body, r) then
+					return nil, false
 				end
-				if not struck[candidate.id] then
-					if distinct >= cap then
-						break
-					end
-					distinct += 1
-				end
-				local amount = if candidate.crit then variant.damage * critMult else variant.damage
-				-- Knockback once per enemy, not once per pellet.
-				local push = if struck[candidate.id] then nil else pushBase
-				struck[candidate.id] = true
-				if
-					strike(
-						tally,
-						player,
-						candidate.id,
-						amount,
-						candidate.crit,
-						push,
-						variant.launch
-					)
-				then
-					killed[candidate.id] = true
-				end
-				break
+				local crit = HitShapes.Ray(origin, unit, range, width, 0, head, headRadius) ~= nil
+				return (body - origin).Magnitude, crit
 			end
+		)
+		for index = 1, capOf(variant, #candidates) do
+			local candidate = candidates[index]
+			local amount = if candidate.crit then variant.damage * critMult else variant.damage
+			local push = outward(origin, candidate.body, unit) * variant.knockback
+			strike(tally, player, candidate.id, amount, candidate.crit, push, variant.launch)
 		end
 		finish(player, weapon, variantKey, tally, {
-			shape = variant.shape,
+			shape = "cone",
 			origin = origin,
 			direction = unit,
-			size = variant.range,
+			size = range,
 			arcDegrees = variant.arcDegrees,
 			width = variant.width,
 			endPoint = nil,
-			seq = seq,
+			seq = seed,
 		})
 		return
 	end
@@ -760,7 +811,7 @@ local function resolveRanged(
 			arcDegrees = nil,
 			width = variant.width,
 			endPoint = endPoint,
-			seq = seq,
+			seq = seed,
 		})
 		return
 	end
@@ -778,12 +829,12 @@ local function resolveRanged(
 			arcDegrees = nil,
 			width = nil,
 			endPoint = impact,
-			seq = seq,
+			seq = seed,
 		})
 		return
 	end
 
-	-- Arc, cone or capsule fired from the camera ray: everything inside, nearest first.
+	-- Arc or capsule fired from the camera ray: everything inside, nearest first.
 	local shape: Types.HitShape = variant.shape
 	local halfWidth = (variant.width or 0) / 2
 	local tip = origin + unit * reach
@@ -793,17 +844,7 @@ local function resolveRanged(
 		reach + variant.pad + halfWidth,
 		function(body: Vector3, r: number): (number?, boolean)
 			local touched = false
-			if shape == "cone" then
-				touched = HitShapes.Cone(
-					origin,
-					unit,
-					reach,
-					(variant.arcDegrees or 0) / 2,
-					variant.pad,
-					body,
-					r
-				)
-			elseif shape == "arc" then
+			if shape == "arc" then
 				touched = HitShapes.Arc(
 					origin,
 					unit,
@@ -830,7 +871,7 @@ local function resolveRanged(
 		arcDegrees = variant.arcDegrees,
 		width = variant.width,
 		endPoint = nil,
-		seq = seq,
+		seq = seed,
 	})
 end
 
@@ -855,7 +896,7 @@ local function detonate(
 		arcDegrees = nil,
 		width = nil,
 		endPoint = impact,
-		seq = projectile.seq,
+		seq = projectile.seed,
 	})
 end
 
@@ -903,8 +944,10 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 	projectiles = survivors
 end
 
--- Air tracking for the slam: the server's own view of how high each character got.
-local function trackAir(now: number): ()
+-- Air tracking for the slam and air swings: the server's own view of how high each character
+-- got and how fast it fell. Fall speed is the larger of the replicated velocity and the
+-- position change, so a client that zeroes its reported velocity still shows its real dive.
+local function trackAir(now: number, deltaTime: number): ()
 	if next(shooters) == nil then
 		return
 	end
@@ -913,16 +956,31 @@ local function trackAir(now: number): ()
 		local _character, root, humanoid = rootOf(player)
 		if root == nil or humanoid == nil then
 			shooter.airborne = false
+			shooter.lastY = nil
 			continue
 		end
 		local floorY = floorBelow(root, params)
 		local height = if floorY ~= nil then root.Position.Y - floorY else math.huge
 		local airborne = height > standingOffset(root, humanoid) + AIRBORNE_MARGIN_STUDS
 		local y = root.Position.Y
+		local previousY = shooter.lastY
+		local fallSpeed = -root.AssemblyLinearVelocity.Y
+		if previousY ~= nil and deltaTime > 0 then
+			fallSpeed = math.max(fallSpeed, (previousY - y) / deltaTime)
+		end
+		shooter.lastY = y
 		if airborne then
-			shooter.peakY = if shooter.airborne then math.max(shooter.peakY, y) else y
+			if shooter.airborne then
+				shooter.peakY = math.max(shooter.peakY, y)
+				shooter.diveSpeed = math.max(shooter.diveSpeed, fallSpeed)
+			else
+				shooter.peakY = y
+				shooter.diveSpeed = math.max(fallSpeed, 0)
+			end
 		elseif shooter.airborne then
 			shooter.lastPeakY = shooter.peakY
+			-- The landing frame's own fall counts: the dive ends on it.
+			shooter.lastDiveSpeed = math.max(shooter.diveSpeed, fallSpeed)
 			shooter.landedAt = now
 		end
 		shooter.airborne = airborne
@@ -972,7 +1030,7 @@ end
 local function step(deltaTime: number): ()
 	local config = Tuning.Get()
 	local now = os.clock()
-	trackAir(now)
+	trackAir(now, deltaTime)
 	tickIframes(now)
 	stepProjectiles(config, deltaTime)
 	tickRespawns(now)
@@ -1054,6 +1112,10 @@ function RangeService.AddPlayer(player: Player): ()
 		peakY = 0,
 		lastPeakY = -math.huge,
 		landedAt = 0,
+		diveSpeed = 0,
+		lastDiveSpeed = 0,
+		lastY = nil,
+		salt = Random.new():NextInteger(1, SEED_MODULUS - 1),
 		damageLog = {},
 		lastHits = 0,
 		lastKills = 0,
@@ -1128,17 +1190,27 @@ function RangeService.OnAttack(
 	end
 	local now = os.clock()
 	local interval = 1 / variant.rate
-	if now - (shooter.lastAttackAt[weaponName] or 0) < interval * timingTolerance() then
+	local previousAttackAt = shooter.lastAttackAt[weaponName] or 0
+	if now - previousAttackAt < interval * timingTolerance() then
+		sendRefused(shooter)
 		return
 	end
 	if variant.kind == "ranged" then
 		-- Fortnite aim: the ray starts at the camera, which must sit near this character's head.
+		-- A moving character's camera leads the server's view of it by the ping plus a margin.
 		local character = player.Character
 		local head = if character ~= nil then character:FindFirstChild("Head") else nil
 		local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
-		if (origin - anchor).Magnitude > config.shooting.originPad then
+		local shooting = config.shooting
+		local lag = math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0)
+		local allowed = shooting.originPad + root.AssemblyLinearVelocity.Magnitude * lag
+		if (origin - anchor).Magnitude > allowed then
+			sendRefused(shooter)
 			return
 		end
+	elseif now - previousAttackAt > config.controls.comboResetSeconds then
+		-- A pause breaks the combo: the next swing is step 1 again.
+		shooter.combo[weaponName] = 0
 	end
 	shooter.lastSeq[weaponName] = seq
 	shooter.lastAttackAt[weaponName] = now
@@ -1175,8 +1247,9 @@ function RangeService.OnDash(player: Player, _direction: Vector3): ()
 end
 
 -- The slam lands where the SERVER sees the character come down, and only after a fall of at
--- least slamMinHeight from the server-tracked peak. The client may send it at impact, so a
--- request just after landing still counts that jump's peak.
+-- least slamMinHeight from the server-tracked peak with a dive of at least slamMinDiveSpeed in
+-- that airtime. The client may send it at impact, so a request within slamLandingGrace of the
+-- landing still counts that jump.
 function RangeService.OnSlam(player: Player): ()
 	local shooter = shooters[player]
 	if not active or shooter == nil then
@@ -1193,11 +1266,17 @@ function RangeService.OnSlam(player: Player): ()
 		return
 	end
 	local peak: number
+	local dive: number
 	if shooter.airborne then
 		peak = shooter.peakY
-	elseif now - shooter.landedAt <= SLAM_LANDING_GRACE_SECONDS then
+		dive = shooter.diveSpeed
+	elseif now - shooter.landedAt <= movement.slamLandingGrace then
 		peak = shooter.lastPeakY
+		dive = shooter.lastDiveSpeed
 	else
+		return
+	end
+	if dive < movement.slamMinDiveSpeed then
 		return
 	end
 	local standY = root.Position.Y
@@ -1214,6 +1293,8 @@ function RangeService.OnSlam(player: Player): ()
 	-- One peak buys one slam.
 	shooter.peakY = standY
 	shooter.lastPeakY = -math.huge
+	shooter.diveSpeed = 0
+	shooter.lastDiveSpeed = 0
 
 	local center = Vector3.new(root.Position.X, standY, root.Position.Z)
 	-- Unlimited targets: the slam is the crowd move a big jump buys.

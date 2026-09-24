@@ -79,10 +79,6 @@ local REMOVE_EVENT = "CrowdRemove"
 
 -- Wire ids are u16 (CrowdCodec); 0 is the "refused" return of Spawn.
 local MAX_ID = 65535
--- snapshotHz is the step rate as well: one step, one snapshot. Clamped so a bad slider value
--- can neither stall the crowd nor flood the network.
-local MIN_STEP_HZ = 2
-local MAX_STEP_HZ = 60
 -- After a long frame the loop runs at most this many steps, then drops the backlog rather than
 -- spiralling.
 local MAX_CATCHUP_STEPS = 3
@@ -97,11 +93,6 @@ local DEFAULT_HALF_SIZE = Vector3.new(1024, 200, 1024)
 local CELL_SIZE = 4
 local CELL_OFFSET = 32768
 local CELL_STRIDE = 65536
--- How a displaced dummy returns: pace as a share of its speed, and the arrival slack. The
--- tunable motion shapes are crowd.behaviour in ProvingGrounds.json.
-local HOME_SPEED_MULT = 0.5
-local HOME_TOLERANCE = 0.75
-local WALK_SPEED_MULT = 0.6
 local GOLDEN_RATIO_FRACTION = 0.6180339887
 
 local BEHAVIOURS: { [string]: Behaviour } = {
@@ -317,11 +308,12 @@ local function steer(
 		local goal = enemy.anchor + Vector3.new(0, 0, enemy.leg * shapes.walkLength / 2)
 		local dx = goal.X - position.X
 		local dz = goal.Z - position.Z
-		if dx * dx + dz * dz <= HOME_TOLERANCE * HOME_TOLERANCE then
+		local tolerance = math.max(shapes.homeTolerance, 0)
+		if dx * dx + dz * dz <= tolerance * tolerance then
 			enemy.leg = -enemy.leg
 			goal = enemy.anchor + Vector3.new(0, 0, enemy.leg * shapes.walkLength / 2)
 		end
-		return seek(position, goal, speed * WALK_SPEED_MULT, 0, dt)
+		return seek(position, goal, speed * math.max(shapes.walkPace, 0), 0, dt)
 	elseif behaviour == "strafe" then
 		local period = math.max(shapes.strafePeriod, MIN_PERIOD_SECONDS)
 		local side = if math.floor((simTime + enemy.phase * period) / period) % 2 == 0
@@ -339,7 +331,13 @@ local function steer(
 		enemy.nextHopAt = simTime + math.max(shapes.hopPeriod, MIN_PERIOD_SECONDS)
 	end
 	-- idle and jump drift home after a shove, so a knocked-over row re-forms.
-	return seek(position, enemy.anchor, speed * HOME_SPEED_MULT, HOME_TOLERANCE, dt)
+	return seek(
+		position,
+		enemy.anchor,
+		speed * math.max(shapes.homePace, 0),
+		math.max(shapes.homeTolerance, 0),
+		dt
+	)
 end
 
 local function gatherTargets(): ()
@@ -579,11 +577,13 @@ local function sendSnapshot(): ()
 end
 
 local function stepInterval(): number
+	-- snapshotHz is the step rate as well: one step, one snapshot. Clamped (to the bounds the
+	-- renderer shares) so a bad slider value can neither stall the crowd nor flood the network.
 	local hz = Tuning.Get().crowd.snapshotHz
 	if typeof(hz) ~= "number" or not isFinite(hz) then
-		hz = MIN_STEP_HZ
+		hz = CrowdCodec.MIN_HZ
 	end
-	return 1 / math.clamp(hz, MIN_STEP_HZ, MAX_STEP_HZ)
+	return 1 / math.clamp(hz, CrowdCodec.MIN_HZ, CrowdCodec.MAX_HZ)
 end
 
 local function onHeartbeat(deltaTime: number): ()

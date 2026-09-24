@@ -621,6 +621,10 @@ local Theme = {
 	COMBAT_RANGE_TRACER_WIDTH = 0.3,
 	COMBAT_RANGE_TRACER_COLOR = Color3.fromRGB(255, 236, 170),
 	COMBAT_RANGE_IMPACT_SIZE = 1.4,
+	COMBAT_RANGE_PELLET_IMPACT_SIZE = 0.6, -- where a cosmetic pellet tracer stops
+	-- A refused attack greys the crosshair once, for this long.
+	COMBAT_RANGE_REFUSED_COLOR = Color3.fromRGB(128, 128, 128),
+	COMBAT_RANGE_REFUSED_SECONDS = 0.25,
 	COMBAT_RANGE_TRAIL_MIN_STUDS = 3, -- a launcher trail is drawn only past this distance
 	COMBAT_RANGE_SHELL_SIZE = 0.9, -- the local launcher shell in flight
 	COMBAT_RANGE_SHELL_MAX_SECONDS = 3, -- the server gives up on a projectile after this long

@@ -70,6 +70,10 @@ local CrowdCodec = {}
 -- Entries per packet: 10 + 64 × 11 = 714 bytes, clear of the unreliable payload cap after
 -- Roblox's own framing.
 CrowdCodec.MAX_ENTRIES = 64
+-- Snapshot (= crowd step) rate bounds; the server clamps crowd.snapshotHz to these and the
+-- renderer clamps its interpolation delay the same way.
+CrowdCodec.MIN_HZ = 2
+CrowdCodec.MAX_HZ = 60
 
 -- Encodes at most MAX_ENTRIES entries (the rest are ignored; the caller splits). serverTime is
 -- carried in the header for ordering and interpolation; 0 when omitted.
@@ -124,6 +128,46 @@ function CrowdCodec.Decode(data: buffer, origin: Vector3): { Types.CrowdSnapshot
 		}
 	end
 	return entries
+end
+
+-- Allocation-free decode for the per-snapshot hot path: calls fn once per entry with world
+-- coordinates (origin already added) as plain numbers. Returns false, calling fn never, for a
+-- malformed or foreign packet.
+function CrowdCodec.DecodeEach(
+	data: buffer,
+	origin: Vector3,
+	fn: (
+		id: number,
+		x: number,
+		y: number,
+		z: number,
+		yaw: number,
+		state: Types.CrowdState,
+		hpFraction: number
+	) -> ()
+): boolean
+	local length = buffer.len(data)
+	if length < HEADER_BYTES or buffer.readu8(data, 0) ~= FORMAT_VERSION then
+		return false
+	end
+	local count = buffer.readu8(data, 1)
+	if length < HEADER_BYTES + count * ENTRY_BYTES then
+		return false
+	end
+	local originX, originY, originZ = origin.X, origin.Y, origin.Z
+	for index = 1, count do
+		local offset = HEADER_BYTES + (index - 1) * ENTRY_BYTES
+		fn(
+			buffer.readu16(data, offset),
+			originX + buffer.readi16(data, offset + 2) / POSITION_SCALE,
+			originY + buffer.readi16(data, offset + 4) / POSITION_SCALE,
+			originZ + buffer.readi16(data, offset + 6) / POSITION_SCALE,
+			decodeYaw(buffer.readu8(data, offset + 8)),
+			STATES[buffer.readu8(data, offset + 9) + 1] or "idle",
+			buffer.readu8(data, offset + 10) / 255
+		)
+	end
+	return true
 end
 
 -- The frame's server time (GetServerTimeNow at the step), or nil for a malformed packet. Packets

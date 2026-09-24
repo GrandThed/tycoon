@@ -10,7 +10,7 @@
 		"snapshotHz": 15,
 		"maxAlive": 160,
 		"stressCount": 150,
-		"behaviour": { "walkLength": 20, "strafeWidth": 8, "strafePeriod": 1.1, "hopHeight": 7, "hopPeriod": 1.6, "chaseStandoff": 2 },
+		"behaviour": { "walkLength": 20, "strafeWidth": 8, "strafePeriod": 1.1, "hopHeight": 7, "hopPeriod": 1.6, "chaseStandoff": 2 , "homePace": 0.5, "homeTolerance": 0.75, "walkPace": 0.6},
 		"deadSeconds": 0.6,
 		"staggerSeconds": 0.25,
 		"knockFriction": 75,
@@ -29,7 +29,7 @@
 		"gun": {
 			"default": "A",
 			"variants": {
-				"A": { "label": "Shotgun", "kind": "ranged", "shape": "cone", "range": 24, "arcDegrees": 26, "pad": 0.8, "cap": 0, "damage": 22, "rate": 1.1, "knockback": 28, "launch": 5, "pellets": 8, "spreadDegrees": 12, "projectileSpeed": 0 },
+				"A": { "label": "Shotgun", "kind": "ranged", "shape": "cone", "range": 24, "arcDegrees": 26, "pad": 0.8, "cap": 0, "damage": 55, "rate": 1.1, "knockback": 28, "launch": 5, "pellets": 8, "projectileSpeed": 0 },
 				"B": { "label": "Piercing rifle", "kind": "ranged", "shape": "ray", "range": 120, "width": 0.8, "pad": 0.4, "cap": 8, "damage": 42, "rate": 2.4, "knockback": 8, "launch": 0, "pierce": 8, "projectileSpeed": 0 },
 				"C": { "label": "Launcher", "kind": "ranged", "shape": "sphere", "range": 100, "pad": 0.5, "cap": 0, "damage": 60, "rate": 0.75, "knockback": 34, "launch": 16, "projectileSpeed": 110, "splashRadius": 10 }
 			}
@@ -71,7 +71,13 @@
 		"slamKnockback": 20,
 		"slamLaunch": 10,
 		"slamFallSpeed": 140,
-		"airAttackHangSeconds": 0.3
+		"airAttackHangSeconds": 0.3,
+		"airSwingReachDown": 6,
+		"airJumpDelay": 0.12,
+		"slamLandingGrace": 0.5,
+		"slamMinDiveSpeed": 40,
+		"cameraFollowRate": 10,
+		"cameraMaxLag": 3
 	},
 	"shooting": {
 		"bloomMinDegrees": 0.4,
@@ -84,12 +90,19 @@
 		"adsBloomMult": 0.35,
 		"adsSpeedMult": 0.55,
 		"originPad": 6,
-		"critMult": 2.0
+		"critMult": 2.0,
+		"bloomMovingSpeed": 1.5,
+		"originLagSeconds": 0.05
 	},
 	"controls": {
 		"touchMode": "autoFire",
 		"autoFireAssistDegrees": 5,
-		"autoSwingPad": 0.5
+		"autoSwingPad": 0.5,
+		"tapMaxSeconds": 0.3,
+		"tapMaxPixels": 14,
+		"tapBufferSeconds": 0.25,
+		"assistLagPad": 1.5,
+		"comboResetSeconds": 0.9
 	},
 	"feedback": {
 		"hitMarker": 1,

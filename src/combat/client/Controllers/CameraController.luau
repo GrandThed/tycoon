@@ -48,10 +48,6 @@ local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Them
 local BIND_NAME = "CombatShoulderCamera"
 -- Range-only presentation constants (purely visual, so they live here, not in config).
 local ADS_FOV_RATE = 16 -- per second, toward the ADS / hip field of view
-local VERTICAL_FOLLOW_RATE = 10 -- per second: how fast the pivot height catches the root
--- The pivot never trails the root by more than this, so a 120 stud/s slam keeps the
--- character on screen while the view still eases in behind it.
-local VERTICAL_MAX_LAG = 3
 local ENEMIES_FOLDER = "Enemies"
 -- Phases in which the run is over: the ordinary camera and cursor return for the summary.
 local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
@@ -428,7 +424,8 @@ local function shakeOffset(deltaTime: number): CFrame
 end
 
 -- The root's height, eased: horizontal follow stays rigid (aim precision), only the
--- vertical trails, and never by more than VERTICAL_MAX_LAG.
+-- vertical trails (movement.cameraFollowRate per second), and never by more than
+-- movement.cameraMaxLag, so a 120 stud/s slam keeps the character on screen.
 local function followHeight(rootY: number, deltaTime: number): number
 	if not rangeMode then
 		return rootY
@@ -438,8 +435,11 @@ local function followHeight(rootY: number, deltaTime: number): number
 		pivotHeight = rootY
 		return rootY
 	end
-	local eased = current + (rootY - current) * (1 - math.exp(-VERTICAL_FOLLOW_RATE * deltaTime))
-	eased = math.clamp(eased, rootY - VERTICAL_MAX_LAG, rootY + VERTICAL_MAX_LAG)
+	local movement = Tuning.Get().movement
+	local maxLag = math.max(movement.cameraMaxLag, 0)
+	local eased = current
+		+ (rootY - current) * (1 - math.exp(-movement.cameraFollowRate * deltaTime))
+	eased = math.clamp(eased, rootY - maxLag, rootY + maxLag)
 	pivotHeight = eased
 	return eased
 end

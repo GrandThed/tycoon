@@ -86,6 +86,7 @@ local function isRangeStats(payload: any): boolean
 		and (payload.clearSeconds == nil or typeof(payload.clearSeconds) == "number")
 		and typeof(payload.alive) == "number"
 		and typeof(payload.serverFrameMs) == "number"
+		and (payload.refused == nil or typeof(payload.refused) == "boolean")
 end
 
 local function bootRange(): ()
@@ -163,12 +164,8 @@ local function bootRange(): ()
 		panel.SetLoadout(FeedbackController.GetLoadout())
 	end)
 	-- InputController reports each local range attack so a projectile's flight can be drawn
-	-- before its impact strike arrives. Looked up dynamically: an InputController without
-	-- the hook simply draws no shell.
-	local setAttackHandler = (InputController :: any).SetRangeAttackHandler
-	if typeof(setAttackHandler) == "function" then
-		setAttackHandler(FeedbackController.OnLocalAttack)
-	end
+	-- before its impact strike arrives.
+	InputController.SetRangeAttackHandler(FeedbackController.OnLocalAttack)
 
 	local function onStateChanged(payload: any): ()
 		if typeof(payload) ~= "table" then
@@ -245,7 +242,11 @@ local function bootRange(): ()
 	if rangeStats ~= nil then
 		rangeStats.OnClientEvent:Connect(function(payload: any)
 			if isRangeStats(payload) then
-				panel.SetStats(payload :: Types.RangeStats)
+				local stats = payload :: Types.RangeStats
+				panel.SetStats(stats)
+				if stats.refused == true then
+					FeedbackController.OnRefused()
+				end
 			end
 		end)
 	end

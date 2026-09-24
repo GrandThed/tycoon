@@ -17,6 +17,8 @@ local EPSILON = 1e-6
 local PM_MODULUS = 2147483647
 local PM_MULTIPLIER = 48271
 local FULL_TURN = 2 * math.pi
+-- Pellets are cosmetic tracers; a tuned count past this is clamped, never a frame-long loop.
+local MAX_PELLETS = 64
 
 -- 2D: does the circle at (x, y) with radius `reach` overlap the sector with its apex at the
 -- origin, its axis along +x, radius `range` and half-angle `halfAngle` (radians)? Both the flat
@@ -65,8 +67,11 @@ local function unitOf(vector: Vector3): Vector3?
 	return vector.Unit
 end
 
--- A flat horizontal slice (a sword swing): `arcDegrees` is the whole sweep, centred on the
--- flattened `forward`. The slice has no thickness of its own; pad + r is the vertical reach too.
+-- A horizontal sweep (a sword swing): `arcDegrees` is the whole sweep, centred on the flattened
+-- `forward`. It is a slab, not a flat slice: the sphere counts if it overlaps the vertical band
+-- from origin.Y - reachDown - pad to origin.Y + pad (so its centre may sit pad + r above or
+-- reachDown + pad + r below the origin) and its circle, at full radius r + pad, overlaps the
+-- sector in plan. reachDown (default 0) lets an airborne swing reach the crowd below.
 function HitShapes.Arc(
 	origin: Vector3,
 	forward: Vector3,
@@ -74,22 +79,21 @@ function HitShapes.Arc(
 	arcDegrees: number,
 	pad: number,
 	c: Vector3,
-	r: number
+	r: number,
+	reachDown: number?
 ): boolean
 	local heading = flatten(forward)
 	if heading == nil then
 		return false
 	end
 	local offset = c - origin
-	local reachTotal = r + pad
-	if math.abs(offset.Y) > reachTotal then
+	local down = math.max(reachDown or 0, 0)
+	if offset.Y > pad + r or offset.Y < -(down + pad + r) then
 		return false
 	end
-	-- The sphere's cross-section in the slice's plane.
-	local reach = math.sqrt(reachTotal * reachTotal - offset.Y * offset.Y)
 	local along = offset.X * heading.X + offset.Z * heading.Z
 	local across = offset.Z * heading.X - offset.X * heading.Z
-	return sectorOverlap(along, across, reach, range, math.rad(arcDegrees / 2))
+	return sectorOverlap(along, across, r + pad, range, math.rad(arcDegrees / 2))
 end
 
 function HitShapes.Sphere(
@@ -170,9 +174,9 @@ function HitShapes.Ray(
 	return math.clamp(entry, 0, range)
 end
 
--- The pellet pattern of a cone gun: `count` unit directions spread uniformly over the disc of
--- half-angle `spreadDegrees` around `direction`, fully determined by `seed` (the attack's seq),
--- so a client can draw the exact tracers the server resolved.
+-- The cosmetic pellet pattern of a cone gun: `count` (at most MAX_PELLETS) unit directions
+-- spread uniformly over the disc of half-angle `spreadDegrees` around `direction`, fully
+-- determined by `seed` (the strike's `seq`), so every client draws the same tracers.
 function HitShapes.Pellets(
 	direction: Vector3,
 	count: number,
@@ -193,7 +197,7 @@ function HitShapes.Pellets(
 		return (state - 1) / (PM_MODULUS - 1)
 	end
 	local spread = math.rad(math.max(0, spreadDegrees))
-	for _ = 1, math.floor(count) do
+	for _ = 1, math.min(math.floor(count), MAX_PELLETS) do
 		-- sqrt keeps the density even across the disc instead of bunching at the centre.
 		local tilt = spread * math.sqrt(nextUnit())
 		local turn = FULL_TURN * nextUnit()

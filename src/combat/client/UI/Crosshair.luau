@@ -23,6 +23,8 @@ export type CrosshairHandle = {
 	Update: (gapPixels: number?, ads: boolean, visible: boolean) -> (),
 	-- Every hit gets the tick burst (yellow and bigger when any hit was a crit); a kill adds the X.
 	Mark: (crit: boolean, kill: boolean, strength: number) -> (),
+	-- The server refused the last attack: the reticle greys out once.
+	Refused: () -> (),
 	SetLayout: (scale: number) -> (),
 	Destroy: () -> (),
 }
@@ -50,6 +52,7 @@ end
 
 function Crosshair.new(parent: Instance): CrosshairHandle
 	local scale = 1
+	local refusedUntil = 0
 	-- One live tween per instance: a newer mark replaces the fade or kick still running.
 	local activeTweens: { [Instance]: Tween? } = {}
 
@@ -220,10 +223,16 @@ function Crosshair.new(parent: Instance): CrosshairHandle
 			end
 			-- ADS reads as a colour change on the ticks and ring: the gap shrinks on its own,
 			-- because InputController already multiplies the bloom by adsBloomMult.
-			local color = if ads then Theme.COLOR_ACCENT else Theme.COLOR_TEXT
+			local color = if os.clock() < refusedUntil
+				then Theme.COMBAT_RANGE_REFUSED_COLOR
+				elseif ads then Theme.COLOR_ACCENT
+				else Theme.COLOR_TEXT
 			for _, tick in ticks do
 				tick.BackgroundColor3 = color
 			end
+			dot.BackgroundColor3 = if os.clock() < refusedUntil
+				then Theme.COMBAT_RANGE_REFUSED_COLOR
+				else Theme.COLOR_TEXT
 			ringStroke.Color = color
 		end,
 		Mark = function(crit: boolean, kill: boolean, strength: number)
@@ -262,6 +271,9 @@ function Crosshair.new(parent: Instance): CrosshairHandle
 				Motion.Info(Theme.COMBAT_RANGE_KICK_SECONDS, Enum.EasingStyle.Back),
 				{ Scale = 1 }
 			)
+		end,
+		Refused = function()
+			refusedUntil = os.clock() + Theme.COMBAT_RANGE_REFUSED_SECONDS
 		end,
 		SetLayout = function(nextScale: number)
 			scale = nextScale

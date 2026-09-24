@@ -33,7 +33,9 @@
 --    `autoSwingPad` (sword); `tapFire` turns a short, still tap on the right half into one
 --    attack. A drag on the right half aims in both modes (CameraController).
 --  * ADS: right mouse or L2 held, or a touch toggle above the jump button (gun only).
---  * 1 / 2 or gamepad Y ask the server to switch weapon; TuneState answers with the truth.
+--  * 1 / 2 or gamepad Y ask the server to switch weapon; the server's TuneState answer
+--    reaches this module through SetLoadout (FeedbackController is the only TuneState
+--    listener, so no event is ever split between two connections).
 -- Every number is read through Tuning.Get() each frame, so the tuning panel acts at once.
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -88,18 +90,7 @@ local ACTION_RANGE_FIRE = "RangeFire"
 local ACTION_RANGE_ADS = "RangeAds"
 local ACTION_RANGE_SWAP = "RangeSwap"
 local RANGE_ACTIONS = { ACTION_RANGE_FIRE, ACTION_RANGE_ADS, ACTION_RANGE_SWAP }
--- A tap is short and still; anything longer or further is an aiming drag.
-local TAP_MAX_SECONDS = 0.3
-local TAP_MAX_PIXELS = 14
--- A tap during the cooldown fires as soon as the weapon is ready, if that is soon.
-local TAP_BUFFER_SECONDS = 0.25
--- Horizontal root speed (studs/s) above which bloom grows as "moving".
-local BLOOM_MOVING_SPEED = 1.5
 local MIN_RATE = 0.05
--- CrowdRenderer draws bodies ~1 snapshot behind the server (1.5-2 studs for running
--- fodder), so auto-fire and auto-swing test each sphere this much larger: the attack starts
--- when the server's enemy is in reach, not only when the drawn one is.
-local ASSIST_LAG_PAD = 1.5
 -- The sword's pose index restarts after this many swing intervals without a swing.
 local SWING_RESET_INTERVALS = 2
 local FINISHER_POSE = 3
@@ -138,7 +129,7 @@ local connections: { RBXScriptConnection } = {}
 
 local rangeMode = false
 local rangeWeapon: RangeWeapon = "sword"
-local rangeVariant = "" -- "" until TuneState names one: the weapon's config default
+local rangeVariant = "" -- "" until SetLoadout names one: the weapon's config default
 local rangeHeld = false
 local adsHeld = false
 local adsToggled = false
@@ -724,7 +715,7 @@ local function currentVariant(cfg: Types.ProvingGroundsConfig): Types.RangeWeapo
 	return def.variants[rangeVariant] or def.variants[def.default]
 end
 
--- The variant key TuneState last named, or the weapon's config default when it named none.
+-- The variant key SetLoadout last named, or the weapon's config default when it named none.
 local function currentVariantKey(cfg: Types.ProvingGroundsConfig): string
 	local def = if rangeWeapon == "gun" then cfg.weapons.gun else cfg.weapons.sword
 	return if def.variants[rangeVariant] ~= nil then rangeVariant else def.default
@@ -762,7 +753,7 @@ end
 local function updateBloom(cfg: Types.ProvingGroundsConfig, rig: LocalRig, deltaTime: number): ()
 	local shooting = cfg.shooting
 	local velocity = rig.root.AssemblyLinearVelocity
-	local moving = Vector3.new(velocity.X, 0, velocity.Z).Magnitude > BLOOM_MOVING_SPEED
+	local moving = Vector3.new(velocity.X, 0, velocity.Z).Magnitude > shooting.bloomMovingSpeed
 		or MovementController.IsAirborne()
 	if moving then
 		bloom += shooting.bloomMovePerSecond * deltaTime
@@ -826,7 +817,8 @@ local function enemyInSights(
 	origin: Vector3,
 	look: Vector3,
 	range: number,
-	degrees: number
+	degrees: number,
+	lagPad: number
 ): boolean
 	local limit = math.rad(degrees)
 	local found = false
@@ -837,8 +829,8 @@ local function enemyInSights(
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
 			local head = position + Vector3.new(0, height - headRadius, 0)
-			found = sphereInSights(origin, look, range, limit, body, radius + ASSIST_LAG_PAD)
-				or sphereInSights(origin, look, range, limit, head, headRadius + ASSIST_LAG_PAD)
+			found = sphereInSights(origin, look, range, limit, body, radius + lagPad)
+				or sphereInSights(origin, look, range, limit, head, headRadius + lagPad)
 		end
 	)
 	return found
@@ -873,9 +865,10 @@ end
 local function enemyInReach(
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
-	extraPad: number
+	forward: Vector3,
+	extraPad: number,
+	lagPad: number
 ): boolean
-	local forward = flatCameraLook()
 	local found = false
 	CrowdRenderer.ForEach(
 		function(_id: number, position: Vector3, radius: number, headRadius: number, height: number)
@@ -884,15 +877,8 @@ local function enemyInReach(
 			end
 			local body = position + Vector3.new(0, height * HALF, 0)
 			local head = position + Vector3.new(0, height - headRadius, 0)
-			found = inMeleeShape(variant, origin, forward, extraPad, body, radius + ASSIST_LAG_PAD)
-				or inMeleeShape(
-					variant,
-					origin,
-					forward,
-					extraPad,
-					head,
-					headRadius + ASSIST_LAG_PAD
-				)
+			found = inMeleeShape(variant, origin, forward, extraPad, body, radius + lagPad)
+				or inMeleeShape(variant, origin, forward, extraPad, head, headRadius + lagPad)
 		end
 	)
 	return found
@@ -908,7 +894,7 @@ local function wantsRangeAttack(
 	end
 	local queued = tapQueuedAt
 	if queued ~= nil then
-		if os.clock() - queued <= TAP_BUFFER_SECONDS then
+		if os.clock() - queued <= cfg.controls.tapBufferSeconds then
 			return true
 		end
 		tapQueuedAt = nil
@@ -917,11 +903,16 @@ local function wantsRangeAttack(
 	if device ~= "touch" or controls.touchMode ~= "autoFire" then
 		return false
 	end
+	local lagPad = controls.assistLagPad
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
-		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees)
+		-- A cone gun hits everything in its cone, so the whole cone is its "on target".
+		if variant.shape == "cone" then
+			return enemyInReach(variant, origin, look, 0, lagPad)
+		end
+		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees, lagPad)
 	end
-	return enemyInReach(variant, rig.root.Position, controls.autoSwingPad)
+	return enemyInReach(variant, rig.root.Position, flatCameraLook(), controls.autoSwingPad, lagPad)
 end
 
 local function rangeAttack(
@@ -1094,7 +1085,11 @@ local function onRangeInputEnded(input: InputObject): ()
 		if state == nil or Tuning.Get().controls.touchMode ~= "tapFire" then
 			return
 		end
-		if os.clock() - state.at <= TAP_MAX_SECONDS and state.moved <= TAP_MAX_PIXELS then
+		local controls = Tuning.Get().controls
+		if
+			os.clock() - state.at <= controls.tapMaxSeconds
+			and state.moved <= controls.tapMaxPixels
+		then
 			tapQueuedAt = os.clock()
 		end
 	end
@@ -1162,18 +1157,6 @@ local function buildRangeTouchControls(): ()
 	end
 end
 
--- Only the weapon and variant are read here; FeedbackController applies the overrides.
-local function onTuneState(_overrides: unknown, weapon: unknown, variant: unknown): ()
-	if weapon == "sword" then
-		setRangeWeapon("sword")
-	elseif weapon == "gun" then
-		setRangeWeapon("gun")
-	end
-	if typeof(variant) == "string" then
-		rangeVariant = variant
-	end
-end
-
 local function startRange(): ()
 	local cfg = Tuning.Get()
 	rangeVariant = cfg.weapons.sword.default
@@ -1189,12 +1172,8 @@ local function startRange(): ()
 		local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
 		requestRangeAttack = remotes:WaitForChild("RequestRangeAttack", timeout) :: RemoteEvent?
 		requestRangeCommand = remotes:WaitForChild("RequestRangeCommand", timeout) :: RemoteEvent?
-		local tuneState = remotes:WaitForChild("TuneState", timeout) :: RemoteEvent?
-		if requestRangeAttack == nil or tuneState == nil then
-			warn("[InputController] range remotes missing — range attacks are disabled")
-		end
-		if tuneState ~= nil then
-			table.insert(connections, tuneState.OnClientEvent:Connect(onTuneState))
+		if requestRangeAttack == nil then
+			warn("[InputController] RequestRangeAttack missing — range attacks are disabled")
 		end
 	end)
 	table.insert(connections, UserInputService.InputBegan:Connect(onRangeInputBegan))
@@ -1317,6 +1296,18 @@ end
 -- The range weapon and variant the server last confirmed ("sword" | "gun", "A" | "B" | "C").
 function InputController.GetRangeWeapon(): (string, string)
 	return rangeWeapon, currentVariantKey(Tuning.Get())
+end
+
+-- The loadout the server confirmed on TuneState, forwarded by FeedbackController (the one
+-- TuneState listener). Unknown weapons are ignored; an unknown variant falls back to the
+-- weapon's config default wherever it is read.
+function InputController.SetLoadout(weapon: string, variant: string): ()
+	if weapon == "sword" then
+		setRangeWeapon("sword")
+	elseif weapon == "gun" then
+		setRangeWeapon("gun")
+	end
+	rangeVariant = variant
 end
 
 -- One handler (nil clears it), called right after each RequestRangeAttack with the weapon,

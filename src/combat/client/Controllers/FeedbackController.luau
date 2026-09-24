@@ -97,6 +97,9 @@ type Burst = {
 
 type HapticTarget = { input: Enum.UserInputType, motor: Enum.VibrationMotor }
 
+-- A crowd sphere a pellet tracer may stop in (body or head).
+type Body = { centre: Vector3, radius: number }
+
 -- A local projectile in flight: the server sends the strike only at impact, so the shooter's
 -- own shell is drawn from the muzzle to where the aim ray meets the world (or its reach).
 type Shell = { part: BasePart, from: Vector3, to: Vector3, started: number, seconds: number }
@@ -412,9 +415,29 @@ end
 
 -- Hitbox effect (exact shape) ----------------------------------------------------------
 
+-- The arc's vertical band around its origin, for a body centre (RangeService + HitShapes):
+-- the body sphere must overlap [origin.Y - reachDown - pad, origin.Y + pad], so centres lie
+-- within +pad+r / -(reachDown+pad+r). An airborne swing's strike carries
+-- endPoint = origin - (0, reachDown, 0); a grounded one has none. r is the thinnest crowd
+-- kind's radius, the band every enemy is at least hit in.
+local function arcBand(strike: Strike, pad: number): (number, number)
+	local radius = math.huge
+	for _, kind in config().crowd.kinds do
+		radius = math.min(radius, kind.radius)
+	end
+	if radius == math.huge then
+		radius = 0
+	end
+	local bottom = strike.endPoint
+	local reachDown = if bottom ~= nil then math.max(strike.origin.Y - bottom.Y, 0) else 0
+	local up = pad + radius
+	return up, up + reachDown
+end
+
 local function drawArc(
 	list: { FxPart },
 	strike: Strike,
+	variant: Types.RangeWeaponVariant?,
 	color: Color3,
 	fill: number,
 	edge: number
@@ -439,6 +462,25 @@ local function drawArc(
 		local thin = Theme.COMBAT_RANGE_HITBOX_EDGE_WIDTH / 2
 		segment(list, strike.origin, points[1], thin, thin, Vector3.yAxis, color, edge)
 		segment(list, strike.origin, points[#points], thin, thin, Vector3.yAxis, color, edge)
+	end
+	-- The band the slice reaches above and below: thin outer arcs joined by posts at the
+	-- ends and the middle, fainter than the slice so the swing itself stays the read.
+	local pad = impactOf(variant)
+	local up, down = arcBand(strike, pad)
+	local band = (fill + edge) / 2
+	local thin = Theme.COMBAT_RANGE_HITBOX_EDGE_WIDTH / 2
+	local top = Vector3.new(0, up, 0)
+	local bottom = Vector3.new(0, -down, 0)
+	for _, lift in { top, bottom } do
+		local shifted: { Vector3 } = {}
+		for _, point in points do
+			table.insert(shifted, point + lift)
+		end
+		polyline(list, shifted, thin, Vector3.yAxis, color, band)
+	end
+	for _, index in { 1, (#points + 1) // 2, #points } do
+		local point = points[index]
+		segment(list, point + bottom, point + top, thin, thin, heading, color, band)
 	end
 end
 
@@ -568,22 +610,68 @@ local function drawRay(list: { FxPart }, strike: Strike, color: Color3): ()
 	impact(list, finish, color)
 end
 
--- Exact pellet tracers, when the strike names its seq (see SEQ_FIELD).
+-- Cosmetic pellet tracers inside the cone (the server tests the whole cone, not these rays),
+-- seeded by the strike's seq so every client draws the same pattern. Each stops at the first
+-- crowd body or wall it meets on this client: one pass over the crowd, one raycast each.
 local function drawPellets(list: { FxPart }, strike: Strike, variant: Types.RangeWeaponVariant?): ()
 	local seq = strike.seq
 	if seq == nil or variant == nil or variant.pellets == nil then
 		return
 	end
-	local from = muzzleOf(strike.userId) or strike.origin
-	local pellets =
-		HitShapes.Pellets(strike.direction, variant.pellets, variant.spreadDegrees or 0, seq)
-	for _, direction in pellets do
-		tracer(
-			list,
-			from,
-			strike.origin + direction * strike.size,
-			Theme.COMBAT_RANGE_TRACER_WIDTH / 2
-		)
+	local origin = strike.origin
+	local reach = strike.size
+	local bodies: { Body } = {}
+	CrowdRenderer.ForEach(
+		function(_id: number, feet: Vector3, radius: number, headRadius: number, height: number)
+			local centre = feet + Vector3.new(0, height / 2, 0)
+			if (centre - origin).Magnitude <= reach + height then
+				table.insert(bodies, { centre = centre, radius = radius })
+				local head = feet + Vector3.new(0, height - headRadius, 0)
+				table.insert(bodies, { centre = head, radius = headRadius })
+			end
+		end
+	)
+	local ignore: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character ~= nil then
+			table.insert(ignore, character)
+		end
+	end
+	local folder = fxFolder
+	if folder ~= nil then
+		table.insert(ignore, folder)
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+
+	local from = muzzleOf(strike.userId) or origin
+	local halfAngle = (strike.arcDegrees or 0) / 2
+	for _, direction in HitShapes.Pellets(strike.direction, variant.pellets, halfAngle, seq) do
+		local stop = reach
+		local wall = Workspace:Raycast(origin, direction * reach, params)
+		if wall ~= nil then
+			stop = wall.Distance
+		end
+		for _, body in bodies do
+			local entry = HitShapes.Ray(origin, direction, stop, 0, 0, body.centre, body.radius)
+			if entry ~= nil and entry < stop then
+				stop = entry
+			end
+		end
+		local finish = origin + direction * stop
+		tracer(list, from, finish, Theme.COMBAT_RANGE_TRACER_WIDTH / 2)
+		if stop < reach then
+			ball(
+				list,
+				finish,
+				Theme.COMBAT_RANGE_PELLET_IMPACT_SIZE,
+				Theme.COMBAT_RANGE_TRACER_COLOR,
+				Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY,
+				true
+			)
+		end
 	end
 end
 
@@ -606,7 +694,7 @@ local function drawHitbox(
 	local edge = 1 - (1 - Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY) * opacity
 	local shape = strike.shape
 	if shape == "arc" then
-		drawArc(list, strike, color, fill, edge)
+		drawArc(list, strike, variant, color, fill, edge)
 	elseif shape == "sphere" then
 		local shell = 1 - (1 - Theme.COMBAT_RANGE_HITBOX_SPHERE_TRANSPARENCY) * opacity
 		drawSphere(list, strike, color, shell, edge)
@@ -680,8 +768,8 @@ local function wireArc(list: { FxPart }, strike: Strike, pad: number): ()
 	local half = math.rad(sweep / 2)
 	local right = heading:Cross(Vector3.yAxis).Unit
 	local count = segmentCount(sweep)
-	local lifts: { number } = if pad > 0 then { -pad, 0, pad } else { 0 }
-	for _, lift in lifts do
+	local up, down = arcBand(strike, pad)
+	for _, lift in { -down, 0, up } do
 		local origin = strike.origin + Vector3.new(0, lift, 0)
 		local outer = arcPoints(origin, heading, right, strike.size + pad, -half, half, count)
 		local w = Theme.COMBAT_RANGE_WIRE_THICKNESS
@@ -701,6 +789,11 @@ local function wireArc(list: { FxPart }, strike: Strike, pad: number): ()
 					+ right * math.sin(angle + sign * math.pi / 2)
 				local edgeEnd = origin + edgeDir * strike.size + outward * pad
 				wireLine(list, origin + outward * pad, edgeEnd)
+				if lift == 0 then
+					-- Posts at the outer corners show the band's full height.
+					local corner = strike.origin + edgeDir * (strike.size + pad)
+					wireLine(list, corner - Vector3.new(0, down, 0), corner + Vector3.new(0, up, 0))
+				end
 				-- The rounded corner to the outer arc, drawn as its chord.
 				wireLine(list, edgeEnd, origin + edgeDir * (strike.size + pad))
 			end
@@ -1384,6 +1477,9 @@ local function onTuneStateEvent(overrides: any, weapon: any, variant: any): ()
 	if typeof(variant) == "string" then
 		variantName = variant
 	end
+	-- This is the only TuneState listener on the client (one event, one ordering): input
+	-- learns the confirmed loadout from here, after the overrides it reads are in place.
+	InputController.SetLoadout(weaponName, variantName or "")
 	local handler = onTuneState
 	if handler ~= nil then
 		handler()
@@ -1650,6 +1746,20 @@ end
 -- Called after every TuneState, once the overrides are applied to Tuning.
 function FeedbackController.SetTuneStateHandler(handler: () -> ()): ()
 	onTuneState = handler
+end
+
+-- The server dropped the local player's last attack (RangeStats.refused): take back the
+-- shell drawn for it (the newest) and grey the crosshair once. Strikes are drawn only when
+-- the server resolves them, so a refused attack left nothing else on screen.
+function FeedbackController.OnRefused(): ()
+	local shell = table.remove(shells)
+	if shell ~= nil then
+		release(shell.part)
+	end
+	local marker = crosshair
+	if marker ~= nil then
+		marker.Refused()
+	end
 end
 
 -- Called by InputController (through CombatUIController) right after the local player's

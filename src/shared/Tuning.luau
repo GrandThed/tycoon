@@ -22,13 +22,19 @@ local INDENT = "\t"
 -- Depth from the root at which an all-scalar object prints on one line (see isLeafTable).
 local INLINE_OBJECT_DEPTH = 3
 
--- String leaves whose value picks a code path. A free-text value there would reach a resolver
--- that only knows these, so they are the only strings accepted.
-local ENUM_VALUES: { [string]: { string } } = {
-	shape = { "arc", "sphere", "capsule", "cone", "ray" },
-	kind = { "melee", "ranged" },
-	touchMode = { "autoFire", "tapFire" },
-	behaviour = { "idle", "walk", "strafe", "jump", "chase" },
+-- String leaves whose value picks a code path, keyed by a path pattern. A free-text value there
+-- would reach a resolver that only knows these, so they are the only strings accepted. A nil
+-- set means "a key of crowd.kinds" (the kinds themselves cannot be added by tuning).
+local SHAPES = { "arc", "sphere", "capsule", "cone", "ray" }
+local ENUM_PATHS: { { pattern: string, values: { string }? } } = {
+	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", values = { "melee", "ranged" } },
+	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.shape$", values = SHAPES },
+	{ pattern = "^dummySets%.[^.]+%.%d+%.kind$", values = nil },
+	{
+		pattern = "^dummySets%.[^.]+%.%d+%.behaviour$",
+		values = { "idle", "walk", "strafe", "jump", "chase" },
+	},
+	{ pattern = "^controls%.touchMode$", values = { "autoFire", "tapFire" } },
 }
 
 local overrides: Types.TuneOverrides = {}
@@ -132,9 +138,18 @@ function Tuning.Validate(path: string, value: any): boolean
 		if #value > MAX_STRING_LENGTH then
 			return false
 		end
-		local segments = splitPath(path)
-		local allowed = ENUM_VALUES[segments[#segments]]
-		return allowed == nil or table.find(allowed, value) ~= nil
+		for _, rule in ENUM_PATHS do
+			if string.match(path, rule.pattern) == nil then
+				continue
+			end
+			local values = rule.values
+			if values ~= nil then
+				return table.find(values, value) ~= nil
+			end
+			local base = baseConfig()
+			return base ~= nil and base.crowd.kinds[value] ~= nil
+		end
+		return true
 	end
 	return true
 end

@@ -43,9 +43,6 @@ local MovementController = {}
 local ACTION_DASH = "RangeDash"
 local ACTION_SLAM = "RangeSlam"
 local MOVER_NAME = "RangeMover"
--- A jump request this soon after leaving the ground is the same press still arriving
--- (JumpRequest repeats while the key is held), never a deliberate double jump.
-local AIR_JUMP_DELAY = 0.12
 -- Two JumpRequests closer than this are one held press, not a fresh one.
 local JUMP_PRESS_GAP = 0.06
 -- A slam that has not touched down by then (fell off the map) gives up without firing.
@@ -261,7 +258,9 @@ local function onJumpRequest(): ()
 	if rig == nil or not fresh or airJumpUsed or slamming or not isAirborne(rig) then
 		return
 	end
-	if now - leftGroundAt < AIR_JUMP_DELAY then
+	-- A request this soon after leaving the ground is the same press still arriving
+	-- (JumpRequest repeats while the key is held), never a deliberate double jump.
+	if now - leftGroundAt < Tuning.Get().movement.airJumpDelay then
 		return
 	end
 	airJumpUsed = true

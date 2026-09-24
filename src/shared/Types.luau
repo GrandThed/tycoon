@@ -1369,7 +1369,9 @@ export type ReturnData = {
 export type HitShape = "arc" | "sphere" | "capsule" | "cone" | "ray"
 -- One weapon variant. range = reach of arc/capsule/cone/ray, radius of sphere. pad = forgiveness
 -- in studs added to every test. cap = max enemies per attack (0 = unlimited). rate = attacks/s.
--- projectileSpeed 0 = hitscan. pellets/spreadDegrees for cone guns; pierce for rays;
+-- projectileSpeed 0 = hitscan. Cone guns: the SERVER tests the whole cone (arcDegrees = full
+-- opening angle), every enemy inside takes `damage` once (cap applies); `pellets` are cosmetic
+-- tracers drawn inside the cone. spreadDegrees = machine-gun style random spread; pierce for rays;
 -- splashRadius for projectiles that explode; chain = damage multipliers of a melee combo.
 export type RangeWeaponVariant = {
 	label: string,
@@ -1403,7 +1405,7 @@ export type CrowdKindDef = {
 	hp: number,
 	color: { number },
 	knockbackMult: number,
-	-- Flat damage removed from every hit: dealt = max(amount - armor, amount * 0.1), so heavy hits matter.
+	-- Flat damage removed from every hit: dealt = max(amount - armor, amount * crowd.armorFloor).
 	armor: number,
 }
 -- behaviour: idle = stands; walk = paces a line; strafe = side to side; jump = hops; chase = runs
@@ -1434,6 +1436,15 @@ export type RangeMovementConfig = {
 	slamLaunch: number,
 	slamFallSpeed: number,
 	airAttackHangSeconds: number,
+	-- Review round (P1): air swings reach this far BELOW the root; second-jump delay; slam grace;
+	-- the minimum downward speed the server must see for a slam (a real dive, not any landing);
+	-- camera height follow while airborne.
+	airSwingReachDown: number,
+	airJumpDelay: number,
+	slamLandingGrace: number,
+	slamMinDiveSpeed: number,
+	cameraFollowRate: number,
+	cameraMaxLag: number,
 }
 export type RangeShootingConfig = {
 	bloomMinDegrees: number,
@@ -1447,6 +1458,10 @@ export type RangeShootingConfig = {
 	adsSpeedMult: number,
 	originPad: number,
 	critMult: number,
+	-- Speed above which a character counts as moving for bloom; server origin check adds
+	-- rootSpeed x (ping + originLagSeconds) to originPad.
+	bloomMovingSpeed: number,
+	originLagSeconds: number,
 }
 -- touchMode: "autoFire" = attacks fire while the target is under the crosshair / in the hitbox;
 -- "tapFire" = a tap anywhere on the right half attacks.
@@ -1454,6 +1469,13 @@ export type RangeControlsConfig = {
 	touchMode: "autoFire" | "tapFire",
 	autoFireAssistDegrees: number,
 	autoSwingPad: number,
+	tapMaxSeconds: number,
+	tapMaxPixels: number,
+	tapBufferSeconds: number,
+	-- Extra width on auto-fire targets to cover the renderer's interpolation lag.
+	assistLagPad: number,
+	-- Melee combo resets on the server after this long without a swing.
+	comboResetSeconds: number,
 }
 -- Each feedback layer's strength, 0 = off, 1 = default; values > 1 exaggerate.
 export type RangeFeedbackConfig = {
@@ -1486,6 +1508,10 @@ export type ProvingGroundsConfig = {
 			hopHeight: number,
 			hopPeriod: number,
 			chaseStandoff: number,
+			-- Return-home pace (share of speed), arrival slack in studs, walk pace (share of speed).
+			homePace: number,
+			homeTolerance: number,
+			walkPace: number,
 		},
 		-- Seconds a corpse stays in the dead state before CrowdRemove.
 		deadSeconds: number,
@@ -1547,6 +1573,9 @@ export type RangeStats = {
 	clearSeconds: number?,
 	alive: number,
 	serverFrameMs: number,
+	-- True on the attacker's copy when the server refused the attack (origin/rate), so the client
+	-- drops the effects it already drew for it.
+	refused: boolean?,
 }
 
 return {}

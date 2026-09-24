@@ -38,7 +38,9 @@ export type RangePanelHandle = {
 	Destroy: () -> (),
 }
 
-type NumberRow = { path: string, refresh: () -> () }
+-- `connections` are the row's own, including two on UserInputService that outlive the row's
+-- instances, so a rebuilt variant section must disconnect them itself.
+type NumberRow = { path: string, refresh: () -> (), connections: { RBXScriptConnection } }
 
 -- Weapon variant fields in reading order; any other numeric field follows alphabetically.
 local VARIANT_ORDER = {
@@ -122,6 +124,13 @@ local function displayNumber(value: number): string
 	return Format.Rate(math.max(value, 0))
 end
 
+local function disconnectAll(list: { RBXScriptConnection }): ()
+	for _, connection in list do
+		connection:Disconnect()
+	end
+	table.clear(list)
+end
+
 local function sortedKeys(map: { [string]: any }): { string }
 	local keys: { string } = {}
 	for key in map do
@@ -138,6 +147,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	local weaponRows: { NumberRow } = {}
 	local weaponButtons: { [string]: TextButton } = {}
 	local variantButtons: { [string]: TextButton } = {}
+	local variantConnections: { RBXScriptConnection } = {}
 	local open = false
 	local wireframe = false
 	local weapon = WEAPONS[1]
@@ -176,7 +186,14 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		)
 	end
 
-	local function button(text: string, parentFrame: Instance, onClick: (() -> ())?): TextButton
+	-- `sink` collects the click connection (the panel's own list unless a rebuilt part of
+	-- the panel owns it).
+	local function button(
+		text: string,
+		parentFrame: Instance,
+		onClick: (() -> ())?,
+		sink: { RBXScriptConnection }?
+	): TextButton
 		local item = Create("TextButton", {
 			Name = "Button",
 			LayoutOrder = nextOrder(),
@@ -194,7 +211,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		}) :: TextButton
 		corner(item)
 		if onClick ~= nil then
-			table.insert(connections, item.Activated:Connect(onClick))
+			table.insert(sink or connections, item.Activated:Connect(onClick))
 		end
 		return item
 	end
@@ -382,6 +399,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			return nil
 		end
 		local span, step = rangeFor(path, base)
+		local rowConnections: { RBXScriptConnection } = {}
 		local row = stack("Row", parentFrame)
 		local list = row:FindFirstChildOfClass("UIListLayout")
 		if list ~= nil then
@@ -512,19 +530,19 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		end
 
 		table.insert(
-			connections,
+			rowConnections,
 			minus.Activated:Connect(function()
 				send(current - step, true)
 			end)
 		)
 		table.insert(
-			connections,
+			rowConnections,
 			plus.Activated:Connect(function()
 				send(current + step, true)
 			end)
 		)
 		table.insert(
-			connections,
+			rowConnections,
 			box.FocusLost:Connect(function()
 				local typed = tonumber(box.Text)
 				if typed ~= nil and typed == typed then
@@ -542,7 +560,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			return math.clamp((x - left) / width, 0, 1) * span
 		end
 		table.insert(
-			connections,
+			rowConnections,
 			track.InputBegan:Connect(function(input: InputObject)
 				local kind = input.UserInputType
 				if kind == Enum.UserInputType.MouseButton1 or kind == Enum.UserInputType.Touch then
@@ -552,7 +570,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			end)
 		)
 		table.insert(
-			connections,
+			rowConnections,
 			UserInputService.InputChanged:Connect(function(input: InputObject)
 				local held = dragging
 				if held == nil then
@@ -566,7 +584,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			end)
 		)
 		table.insert(
-			connections,
+			rowConnections,
 			UserInputService.InputEnded:Connect(function(input: InputObject)
 				local held = dragging
 				if held ~= nil and (input == held or input.UserInputType == held.UserInputType) then
@@ -579,6 +597,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 
 		local record: NumberRow = {
 			path = path,
+			connections = rowConnections,
 			refresh = function()
 				local live = valueAt(path)
 				if typeof(live) == "number" then
@@ -691,6 +710,10 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			return
 		end
 		shownVariant = signature
+		disconnectAll(variantConnections)
+		for _, row in weaponRows do
+			disconnectAll(row.connections)
+		end
 		for _, item in variantButtons do
 			item:Destroy()
 		end
@@ -706,7 +729,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			local caption = variantKey .. " · " .. variantDef.label
 			local item = button(caption, variantGrid, function()
 				deps.onCommand("variant", variantKey)
-			end)
+			end, variantConnections)
 			local selected = variantKey == key
 			item.BackgroundColor3 = if selected then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT
 			item.TextColor3 = if selected then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
@@ -838,10 +861,14 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 				UDim2.fromOffset(Theme.SCREEN_MARGIN * scale, Theme.SCREEN_MARGIN * scale)
 		end,
 		Destroy = function()
-			for _, connection in connections do
-				connection:Disconnect()
+			disconnectAll(connections)
+			disconnectAll(variantConnections)
+			for _, row in rows do
+				disconnectAll(row.connections)
 			end
-			table.clear(connections)
+			for _, row in weaponRows do
+				disconnectAll(row.connections)
+			end
 			local tuned = tuneConnection
 			if tuned ~= nil then
 				tuned:Disconnect()
