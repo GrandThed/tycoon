@@ -1500,3 +1500,124 @@ balance are C3.
 
 - [x] C2 built and reviewed (definition of done in INTERFACES "C2 contracts")
 - [x] Ben's playtest (`docs/PLAYTEST.md` "C2") — 2026-09-23: the flow works end to end; Ben judged the combat itself "extreme trash" (looks, hit feel, enemy behaviour, controls) → a combat feel pass comes before C3
+
+## C2.5 + C3 — Stop 1: combat feel
+
+**Goal:** make the fight feel modern before C3. Ben judged C2's combat "outdated, like a child's
+project": looks, hit feel, enemy behaviour and controls. Stop 1 fixes camera and controls, impact,
+enemy AI, animations and sounds, and judges them on Village. Missions 2–4 and their arenas are
+drafted at the same time (placeholder rigs, draft balance). Contracts: `docs/INTERFACES.md`
+"C2.5 + C3 contracts — Stop 1"; balance: `docs/BALANCE.md` "C2.5"; memory:
+`.claude/memory/feel-pass-2026-09-23.md`.
+
+**Rulings (Ben, 2026-09-23):**
+1. **Over-the-shoulder camera on every device** (chosen over a top-down ARPG camera). PC =
+   mouse-locked shoulder cam; touch = thumbstick + right-half drag + aim assist; gamepad =
+   twin-stick, R2 attack, L1/R1 abilities, Y stance.
+2. **One evolving horde:** every mission has a melee grunt, a ranged shooter and a charger
+   brute, plus bosses on waves 5 and 10. Village keeps `raider` / `archer` / `brute`; missions 2–4
+   use `grunt` / `shooter` / `brute`.
+3. **Detailed models** (not chunky low-poly) come in Stop 2, as generated Blender geometry.
+4. Server authority unchanged. The camera and all fx are client-only. Aim is still a direction
+   the server raycasts itself. No new remote and no schema change.
+
+**Tasks (one wave, disjoint):**
+- lead: contracts, `Types.luau`, `Combat.json` keys, audio upload (pending).
+- luau-engineer A: combat server (`EnemyService`, `WaveService`, `CombatService`,
+  `ArenaService`) and `Combat.luau`.
+- ui-engineer A: `src/combat/client/**` with the new `CameraController`, and the combat blocks
+  of `Theme`.
+- economy-designer: `Combat.json` camera/ai/feel/animations values, `Missions/1_Village.json`,
+  new `Missions/{2_Boomtown,3_Metropolis,4_OrbitalColony}.json`, new
+  `Layouts/Arenas/{Boomtown,Metropolis,OrbitalColony}.luau`, `sim_combat.py`, `BALANCE.md`.
+- sound picker: combat entries in `tools/audio_map.json`.
+- Wave 2: roblox-reviewer, then qa-runner, then docs-keeper.
+
+**Shipped (2026-09-23, commits `52d8683`, `fa08dcf`, `980e7b2`):**
+- **Camera** (`CameraController`, Scriptable; the deviation is explained in its header):
+  - Shoulder offset, zoom 7–16, FOV 72.
+  - PC: mouse locked. **Alt** frees the cursor. The cursor is free in the lobby, the summary
+    and while the debug strip is open.
+  - Touch: drag on the right half to aim, the finger on the attack button also aims, pinch zooms.
+  - Gamepad: right stick aims; R2 / L1 / R1 / Y.
+- **HUD:**
+  - Centre crosshair and hit marker.
+  - 20-dot bow charge ring.
+  - Right-thumb touch cluster that stays clear of the jump button.
+- **Impact:**
+  - Sparks along the hit direction, camera shake, hitstop, weapon trails.
+  - Flying arrows and bolts.
+  - Muzzle flash. Machine-gun spread is now actually applied.
+- **Telegraphs:**
+  - Strike: "!" and a glow on the attacker.
+  - Slam: red ground ring.
+  - Charge: red lane.
+  - Summon: violet circle.
+  - A cancelled telegraph clears.
+- **Enemy steering:**
+  - Enemies keep apart (separation).
+  - At most **3 melee attackers** per player, in slots; the rest circle at 14 studs.
+  - Shooters keep 18–30 studs and strafe.
+  - Pathfinding around cover.
+- **Chargers** (brute): approach, wind up, dash, recover 4 s. They never take a melee slot and do
+  not count toward the 3-attacker cap.
+- **Bosses:**
+  - Chief and Warlord both slam and charge.
+  - The Warlord also summons raiders on wave 10.
+  - A stun (`groundSlam`) cancels a boss wind-up.
+- **Reactions:**
+  - Stagger on every hit.
+  - Server ragdolls on death. They collide only with the arena.
+- **Animations:**
+  - Roblox default R15 idle / walk / run / tool slash / tool lunge ids in `Combat.json`,
+    **unverified**.
+  - A bad id prints Roblox's load error and falls back to the procedural pose.
+  - Setting an id to `0` disables it.
+- **Missions 2–4 (draft):** `boomtown` Rail Yard Outlaws, `metropolis` Blackout Blocks, `orbital`
+  Crater Breach, each with its own 110×110 arena and cover. Placeholder rigs, draft balance.
+- **Sounds:** 20 combat picks in `tools/audio_map.json`. **Not uploaded yet.** Ben is auditioning
+  `assets/audition/<key>/`.
+
+**Review outcome:** 0 Critical, 3 Majors, 10 Minors. The Majors were the charger/slot rule, stun
+versus boss wind-up, and the sim's charger model. **All fixed** in `980e7b2`. qa-runner: ALL
+GREEN. `sim_combat.py --check` passed 14/14; `sim_economy.py --check` output is unchanged.
+
+**Carried forward to Stop 3 (owners):**
+- **economy-designer + lead:** the tempo director cannot tell strong players apart outside
+  Village; at 2× power, missions 2–4 never merge. Fix: measure tempo as kill lag, then restore
+  `MERGE_ASSERTED_MISSIONS` in `sim_combat.py` for every mission.
+- **lead (design call):** in later eras combat cash is a tiny share of the era's cost (0.17 /
+  0.03 / 0.01 %).
+- **lead:** co-op per-head rewards (C2 carry-over).
+- **lead:** idle-alt `contributionFloor` (C2 carry-over).
+- **economy-designer:** stun strength (`groundSlam` against bosses), and the land rates
+  `CHARGE_LAND_RATE` / `PATTERN_LAND_RATE`, measured from Ben's dodges.
+- **ui-engineer:** other players' ranged shots show no fx.
+- **lead, now:** the audio upload after Ben's audition (`docs/MANUAL_STEPS.md` "C2.5 Stop 1" §3).
+
+**Known limits at Stop 1:**
+- Enemies and weapons are placeholder rigs with empty hands; the arenas are blockouts.
+- Combat is still silent until the upload.
+- Animation ids are unverified.
+- Missions 2–4 have never been fought.
+- **`DebugMission boomtown / metropolis / orbital` is refused as "locked"** unless the Studio
+  profile's `combat.highestEra` has reached that era (2 / 3 / 4). No Studio lever raises it
+  (see `docs/PLAYTEST.md` "C2.5 Stop 1", Before you start).
+
+- [x] Stop 1 built and reviewed (definition of done in INTERFACES "C2.5 + C3 contracts — Stop 1")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "C2.5 Stop 1")
+
+### Next stops (outline)
+
+- **Stop 2: models.**
+  - Detailed horde models for all four eras (grunt, shooter, brute, Chief, Warlord).
+  - Detailed weapon models for all tiers.
+  - Arena dressing.
+  - All generated in Blender (no Kenney character or weapon kit exists).
+- **Stop 3 (= C3):**
+  - Overdrive.
+  - The Ascension forge UI.
+  - Full-lap and one-rebirth balance.
+  - The tempo-as-lag director fix.
+  - The C2 reward carry-overs (per-head co-op rewards, idle-alt floor).
+  - Everything listed under "Carried forward" above.

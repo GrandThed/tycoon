@@ -1417,3 +1417,56 @@ Expeditions **`74210626673425`**.
 - [ ] 16. No MemoryStore setup: the `ActiveRuns` sorted map and `ActiveRunsCodes` hash map
       already work on any published place.
 - [ ] 17. Combat sounds are still all id `0` (silent) — the upload stays as in "C1 → 5".
+
+## C2.5 Stop 1 — combat feel
+
+**No Creator Hub work and no republish needed for the Studio playtest.** No passes, products or
+meshes. Only the combat place changed in play, but rebuild both (they share `src/shared`).
+
+### 1. Rebuild both places
+
+- [ ] 1. VS Code: **Ctrl+Shift+B** runs the default task **"Build both"**
+      (`build/test.rbxl` + `build/combat.rbxl`).
+      Or **F5** → pick **"Hub + Combat: build + serve both"** to build and live-sync (ports 34872 / 34873).
+- [ ] 2. PowerShell fallback, from `C:\Users\benja\Desktop\tycoon`:
+      ```
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      ```
+- [ ] 3. Open **`build/combat.rbxl`** in Studio. The Stop 1 playtest runs there.
+
+### 2. Studio setting (already ON; confirm)
+
+- [ ] 4. **Home → Game Settings → Security → Enable Studio Access to API Services** = **ON**.
+      Handoffs and your real profile (gear, era unlocks) need it.
+
+### 3. Combat sounds: audition, then the lead uploads
+
+- [ ] 5. Picks are already extracted in `assets/audition/<key>/`. Each key folder has
+      `PICK__<file>`, `alt1__<file>` and `alt2__<file>`. To re-extract:
+      `py tools/upload_audio.py --audition`.
+- [ ] 6. Listen to all 20 keys: `swing`, `finisher`, `bowDraw`, `bowFire`, `gunFire`, `laser`,
+      `abilityCast`, `enemyHit`, `enemyDeath`, `playerHit`, `playerDown`, `waveStart`,
+      `waveClear`, `bossStart`, `bossDown`, `runEnd`, `lowHp`, `partyRally`, `partyWarcry`,
+      `mentor`.
+- [ ] 7. Tell Claude Code which picks to swap (e.g. "swing → alt2"). **The lead edits
+      `tools/audio_map.json` and runs the upload.** Do not run it yourself.
+- [ ] 8. Quota: 20 of the account's 100 audio uploads per month. Settle every swap first, then
+      do one upload run.
+- [ ] 9. After the upload, rebuild (step 1). Until then combat is silent, and that is expected.
+
+### 4. If an animation id errors
+
+- [ ] 10. In Output, Roblox's own "failed to load animation" error, or
+      `[EnemyService] animation <id> failed to load: …; procedural fallback`, or
+      `[WeaponController] animation <id> did not load; using the procedural swing`. That id is bad.
+- [ ] 11. Tell Claude Code the id, or set it to `0` yourself in `src/shared/Config/Combat.json`
+      → `"animations"` (`enemyIdle`, `enemyWalk`, `enemyRun`, `playerSlash`, `playerLunge`).
+      `0` = the procedural pose. Rebuild.
+
+### 5. Publishing (optional)
+
+- [ ] 12. Not needed for the Stop 1 playtest (Studio only).
+- [ ] 13. If you want it live, republish **both** places in one sitting, exactly as in "C2 → 4".
+      Never publish only one.

@@ -1246,13 +1246,13 @@ model, and no playtest data. Stop 3 re-balances them.
 
 | mission | rec. power (loadout) | counts w1→w10 | run | HP floor | damage taken | cash | material | Valor | 0.6x dies | party 4 run |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Raider Woods (village) | 60 (2/1, 57) | 5 → 8 | 8:29 | 18 % | 190 = 1.3 bars | 142,185 | 256 Timber | 35 | wave 6 (4:09) | 8:54 |
-| Rail Yard Outlaws (boomtown) | 220 (6/3, 212) | 6 → 9 | 8:40 | 30 % | 344 = 1.1 bars | 14,721,166 | 271 Steel | 35 | wave 6 (4:15) | 9:05 |
-| Blackout Blocks (metropolis) | 680 (8/6, 677) | 7 → 11 | 8:19 | 23 % | 578 = 1.0 bars | 1.65B | 313 Circuits | 35 | wave 7 (4:03) | 8:58 |
-| Crater Breach (orbital) | 3400 (11/10, 3400) | 7 → 11 | 8:37 | 27 % | 1,471 = 1.0 bars | 167.2B | 323 Alloy | 35 | wave 7 (2:18) | 9:19 |
+| Raider Woods (village) | 60 (2/1, 57) | 5 → 8 | 8:32 | 23 % | 173 = 1.2 bars | 142,185 | 256 Timber | 35 | wave 6 (4:11) | 8:59 |
+| Rail Yard Outlaws (boomtown) | 220 (6/3, 212) | 6 → 9 | 8:29 | 15 % | 372 = 1.2 bars | 14,721,166 | 271 Steel | 35 | wave 6 (4:16) | 9:07 |
+| Blackout Blocks (metropolis) | 680 (8/6, 677) | 7 → 11 | 8:21 | 31 % | 556 = 1.0 bars | 1.65B | 313 Circuits | 35 | wave 7 (4:03) | 9:03 |
+| Crater Breach (orbital) | 3400 (11/10, 3400) | 7 → 11 | 8:37 | 31 % | 1,514 = 1.0 bars | 167.2B | 323 Alloy | 35 | wave 7 (2:21) | 9:18 |
 
-Numbers are after the Stop 1 review rules (chargers cycle outside the ring, stun cancels, the
-cooldown restarts at windup end, `ai.telegraphSeconds` windup); see the model table below.
+Numbers are measured under the combat server's final Stop 1 rules, mirrored exactly in the model
+table below.
 
 - **Recommended power** sits just under the symmetric tier that the era's median income unlocks
   (assertion 2): Boomtown 5/5 = 230, Metropolis 8/8 = 696, Orbital 11/11 = 3834. This is the
@@ -1272,7 +1272,7 @@ cooldown restarts at windup end, `ai.telegraphSeconds` windup); see the model ta
   rules it is the recovery between charges, not a ring swing. At 2.6, the Village brutes
   charging on repeat from outside the ring killed the recommended player on wave 10 (floor 0 %).
   With it went **Village brute `damage` 5 → 6**: each charge now hits harder and comes less
-  often, and the floor is 18 %. **Boomtown brute `damage` 9 → 13 and grunt 5 → 7**: the band-2
+  often (floor 18 % at the time; 23 % under the final rules above). **Boomtown brute `damage` 9 → 13 and grunt 5 → 7**: the band-2
   axes carry `groundSlam`, whose stun now cancels boss wind-ups, so the 0.6x player (4/3,
   Hatchet) survived to wave 10 until these rose. Metropolis and Orbital needed only the
   cooldown.
@@ -1297,22 +1297,22 @@ dodges takes less than before. With patterns on top of a ×1.0 boss, Village wav
 recommended player in every combination tried (floor −4 % with only a slam; measured under the
 first C2.5 model, before the review rules).
 
-Coarse model (`tools/sim_combat.py`, constants at the top), mirroring the Stop 1 review rules
-for `EnemyService` / `WaveService`:
+Model (`tools/sim_combat.py`). It mirrors the combat server's final Stop 1 rules in
+`EnemyService` / `WaveService`; every `ai.*` key below is read from `Combat.json`.
 
 | term | model |
 |---|---|
-| melee ring | `ai.maxMeleeAttackers` (3) slots per party member, bosses first; the rest do not swing. **Chargers never take a slot.** Moving 4 → 3 changed no C1 number |
-| enemy windup | every swing lands `ai.telegraphSeconds` (0.45) after the enemy reaches reach. `enemy.attackWindupSeconds` is no longer read |
-| charger | a repeating cycle: approach until within `ai.chargeDistance`, wind up `ai.chargeWindupSeconds`, dash `chargeDistance` at speed × `ai.chargeSpeedMult`. The dash hits once as it crosses the player (1-D lane), landing `damage × CHARGE_LAND_RATE` (0.5). Then recover `attackCooldown`, one telegraphed strike if the player is within reach, and round again |
+| melee ring | `ai.maxMeleeAttackers` (3) slots per party member, bosses first; the rest do not swing. **Chargers are never slotted.** Moving 4 → 3 changed no C1 number |
+| enemy windup | every ring swing lands `ai.telegraphSeconds` (0.45) after arrival in reach. `enemy.attackWindupSeconds` is gone and is not read |
+| charger | ready when t ≥ `nextAttackAt` (spawn time at first). Charges when the target is within `[reach, chargeDistance × chargeTriggerFraction]` (6–23.4 studs; LOS assumed); walks in if further, backs out if closer. Winds up `chargeWindupSeconds`, dashes `chargeDistance` at speed × `chargeSpeedMult`, and hits the target once as the dash crosses it, for `damage × CHARGE_LAND_RATE` (0.5; the lane width `chargeLaneHalfWidth × bodyScale + memberRadius` is what the land rate stands in for). Then `nextAttackAt` = dash end + `attackCooldown`, circling toward `holdRadius`. At recovery end, if the target is in reach and the charger has not struck since its last charge, it strikes once (`telegraphSeconds`, `damage × land`), leaving `nextAttackAt = now`. Standing still, the player is never in reach at recovery end (the charger is out at `holdRadius`), so in the sim that strike never fires |
+| charger cancel | a stun in windup, dash or strike cancels the action: `nextAttackAt = max(nextAttackAt, now + attackCooldown × cancelCooldownFraction)`. Stagger also cancels a **non-elite** charger's windup, but every mission's charger is elite and stagger is not modelled |
 | boss built from the charger key | walks in like melee and takes a ring slot; it charges **only** through its `charge` pattern |
-| one action at a time | a boss winds up one pattern at a time; the pattern's cooldown restarts when its windup **ends**. After a pattern lands, the next plain swing waits `ai.postPatternAttackDelay` (0.8) |
-| slam | starts when the boss is within `radius + ai.slamTriggerMargin` (2). After `windupSeconds` it lands `damage × damageMult × PATTERN_LAND_RATE` (0.5) on **every** party member |
-| charge pattern | starts only with the target inside `ai.chargeDistance`; same land rate, one member; the boss ends up in contact |
-| summon | after `windupSeconds`, spawns `count` of `enemy` at the rim into the boss's wave, normal stats and rewards; any that do not fit under `maxAlive` are **dropped**; the wave clears only when they are dead |
-| stun | an ability with `stunSeconds` (`groundSlam`) stuns enemies **inside its radius**: no movement, windup progress or swing for the duration. It cancels a boss pattern that has not landed (half that pattern's cooldown refunded) and restarts a charger's windup or strike. Damage keeps the C1 "an AoE covers the fight" assumption, but the stun does not: freezing a rig at the rim would park it outside a standing player's melee for good |
-| first use | each pattern's first use is `cooldown` after the boss spawns; a boss that dies inside a windup cancels the pending attack |
-| not modelled | stagger (`ai.staggerSeconds`) delaying swings (pessimistic); `ai.memberRadius` and the lane width (`chargeLaneHalfWidth`), because the sim is one-dimensional and the land rates stand in for both |
+| boss patterns | first use at spawn + `cooldown`. One action at a time: round-robin from after the last pattern used, the first one ready and viable fires and sets `readyAt = now + windupSeconds + cooldown`. After it lands, the plain swing waits `max(nextAttack, now + postPatternAttackDelay)` (0.8). The boss keeps its plain swing during a windup (the rules do not suspend it); it does not swing mid-dash |
+| slam | viable when the target is within `(radius or defaultSlamRadius) + slamTriggerMargin`. On landing it hits members within `radius + memberRadius`, for `damage × damageMult × PATTERN_LAND_RATE` (0.5), on **every** party member |
+| charge pattern | viable when the target is within `[reach, chargeDistance × chargeTriggerFraction]`. After the windup the boss really dashes `chargeDistance`: it hits once as it crosses the target, ends past it, and walks back into the ring |
+| summon | viable when the key exists. Accepted = clamp(`count` or `defaultSummonCount`, 0, `maxAlive − alive − queued`); overflow is **dropped**. The bodies spawn on the next tick with the current wave's stats, count toward the boss's group, and pay normal rewards |
+| stun | an ability with `stunSeconds` (`groundSlam`) stuns enemies **inside its radius**. A boss pattern in its windup is cancelled and `readyAt −= cooldown × stunPatternRefundFraction`; a boss mid-dash stops, with no refund; a boss that dies mid-action cancels it. Damage keeps the C1 "an AoE covers the fight" assumption, but the stun does not: freezing a rig at the rim would park it outside a standing player's melee for good |
+| not modelled | stagger (`staggerSeconds`, `staggerShove`, `bossStaggerMult`) delaying or shoving enemies, which makes the numbers pessimistic; `retargetHysteresis` and `dashTimeoutPad` (single-target, open-lane sim); positions beyond one dimension |
 
 **Summons only on the last boss wave** (assertion 14). Summoned kills land in the tempo window,
 which is sized for the wave's count. On the Chief's wave, two raiders per 15 s pushed tempo to
@@ -1346,8 +1346,9 @@ mission files.
 ## Tool changes
 
 - `MELEE_CONTACT_SLOTS` is gone; the ring reads `Combat.json ai.maxMeleeAttackers`.
-- The sim reads `ai.slamTriggerMargin` and `ai.postPatternAttackDelay`, with documented
-  fallbacks (`AI_KEY_FALLBACKS`: 2 and 0) used only if a key is missing. Both are present today.
+- The sim reads every new `ai` key directly from `Combat.json` (`memberRadius`,
+  `cancelCooldownFraction`, `chargeTriggerFraction`, `slamTriggerMargin`, `defaultSlamRadius`,
+  `defaultSummonCount`, `postPatternAttackDelay`, `stunPatternRefundFraction`); no fallbacks.
 - `loadout_for_power` = `gear_for_power`, plus Ascension levels (melee first) once both slots
   are at tier 12. The Orbital 2x fixture (6800) and every band-3/4 Overdrive × 3 fixture ask for
   more than 12/12 carries (Orbital Overdrive: 30,600 → 12/12 + Ascension 3/2). Below tier 12 it
@@ -1365,16 +1366,16 @@ mission files.
 |---|---|---|
 | 1 | unlock ladder | unchanged (bands enter at 0 / 4 / 4 / 4 %) |
 | 2 | power at median ≥ recommended | 64 ≥ 60, 230 ≥ 220, 696 ≥ 680, 3834 ≥ 3400 |
-| 3 | run length at recommended, ±50 % of 8 min | 8:29, 8:40, 8:19, 8:37, all 10/10 |
+| 3 | run length at recommended, ±50 % of 8 min | 8:32, 8:29, 8:21, 8:37, all 10/10 |
 | 4 | run cash ≤ 25 % of the era still owed | 0.95 %, 0.17 %, 0.03 %, 0.01 % |
 | 5, 6 | shares, away efficiency | unchanged |
 | 7 | 2x merges (Village asserted) | Village 5; the others 0 (reported) |
 | 8 | 0.6x dies on wave 6 ± 2 | 6, 6, 7, 7 |
 | 9 | composition | 320 combinations exact |
 | 10 | Overdrive at 3x its recommended power pays ≥ 3x | ×5.07, ×5.10, ×4.92, ×4.85, all cleared |
-| 11 | party boss waves within ±35 % | ×0.77–×1.14 across all missions and parties 2–4 |
+| 11 | party boss waves within ±35 % | ×0.74–×1.14 across all missions and parties 2–4 |
 | 12 | 10:1 mentor duo | 5 / 0 in every mission |
-| 13 | mentee floor | idle 0 %; 0.6x newbie 5.4 / 5.1 / 7.8 / 10.8 % → paid 10 |
+| 13 | mentee floor | idle 0 %; 0.6x newbie 5.4 / 5.1 / 7.7 / 10.6 % → paid 10 |
 | 14 | horde shape | all four; materials 256 / 271 / 313 / 323 |
 
 `sim_economy.py --check` output is byte-identical before and after.
@@ -1386,10 +1387,11 @@ mission files.
 2. **Pattern land rates.** `CHARGE_LAND_RATE` and `PATTERN_LAND_RATE` (0.5) are guesses. Measure
    dodges per telegraph in Studio. Most of the recommended player's wave-10 damage comes from
    patterns, so these two numbers move the HP floor more than any enemy `damage`.
-3. **The charger cycle.** Recharges are now modelled, and the charger `attackCooldown` (4.0)
-   is the main brute lever. Measure how often the lane really crosses a player and how often the
-   post-recovery strike finds one in reach. The sim assumes the player stands still, so both
-   happen every cycle, which is an upper bound.
+3. **The charger cycle.** Recharges are modelled, and the charger `attackCooldown` (4.0) is
+   the main brute lever. Measure how often the lane really crosses a player. The sim lands every
+   crossing at 0.5 and never sees the post-recovery strike, because the charger is out at
+   `holdRadius`. A player who closes on a recovering brute gets struck, which the sim does not
+   see.
 4. **Stun is strong.** A `groundSlam` stun cancels a boss wind-up and refunds only half its
    cooldown. That is what kept the Boomtown 0.6x player alive until the brute and grunt damage
    rose. Watch the band-2 axes against every boss.
@@ -1397,7 +1399,7 @@ mission files.
    or scale enemy `cash` by the era's cost growth instead of ×100.
 6. **Missions 2–4 in play.** Nothing here has been fought. The mission files are drafts, and the
    per-era HP/damage factors are the first things to move.
-7. **Co-op safety** is unchanged from C2 (party 4 floors 72–96 %), and the Orbital party floors
+7. **Co-op safety** is unchanged from C2 (party 4 floors 73–97 %), and the Orbital party floors
    are the highest. Re-check together with the per-head reward carry-overs.
 
 ## Commands used

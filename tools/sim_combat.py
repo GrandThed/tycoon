@@ -123,9 +123,6 @@ DASH_TARGETS = 2
 #    rewards). A boss that dies inside a windup cancels the pending attack.
 CHARGE_LAND_RATE = 0.5
 PATTERN_LAND_RATE = 0.5
-# Documented values for `ai` keys the combat server adds in the C2.5 review;
-# used only while Combat.json does not carry them (the real key wins).
-AI_KEY_FALLBACKS = {"slamTriggerMargin": 2.0, "postPatternAttackDelay": 0.0}
 # The contract says a merge is decided "once the wave has finished spawning",
 # i.e. at that single instant, which is when `deadFraction` still carries
 # information (it is then (count - enemies still in flight) / count). The other
@@ -980,10 +977,10 @@ def simulate_run(
     player_cfg = combat_cfg["player"]
     coop = combat_cfg["coop"]
     ai = combat_cfg["ai"]
-    slam_margin = ai.get("slamTriggerMargin", AI_KEY_FALLBACKS["slamTriggerMargin"])
-    post_pattern_delay = ai.get(
-        "postPatternAttackDelay", AI_KEY_FALLBACKS["postPatternAttackDelay"]
-    )
+    # The charge window every charger and every boss `charge` pattern uses:
+    # target inside [reach, chargeDistance x chargeTriggerFraction] (LOS assumed).
+    charge_trigger = ai["chargeDistance"] * ai["chargeTriggerFraction"]
+    summon_queue = []
     if members is None:
         members = party_members(gear, ascension, party)
     party = len(members)
@@ -1097,7 +1094,7 @@ def simulate_run(
         if is_boss:
             group["boss_hp"] = stats["hp"]
             for pattern in (group["spec"]["boss"] or {}).get("patterns") or []:
-                patterns.append({"def": pattern, "next_at": t + pattern["cooldown"]})
+                patterns.append({"def": pattern, "ready_at": t + pattern["cooldown"]})
         alive.append(
             {
                 "key": key,
@@ -1115,16 +1112,22 @@ def simulate_run(
                 "next_attack": None,
                 "seq": seq,
                 "group": group,
-                # Chargers cycle approach -> windup -> dash -> recover -> (strike)
-                # -> approach for their whole life, outside the melee ring. A
-                # boss built from a charger key uses its `charge` PATTERN
-                # instead, so it walks in like a melee enemy ("done").
-                "charge": "approach" if definition["kind"] == "charger" and not is_boss else "done",
+                # Chargers ("free" / "windup" / "dash" / "strike") live outside
+                # the melee ring for their whole life. A boss built from a
+                # charger key uses its `charge` PATTERN instead, so it walks in
+                # like a melee enemy ("done").
+                "charge": "free" if definition["kind"] == "charger" and not is_boss else "done",
                 "charge_until": 0.0,
+                "next_attack_at": t,
+                "recovering": False,
+                "struck": True,
                 "dash_from": 0.0,
                 "dash_run": 0.0,
                 "patterns": patterns,
+                "cursor": -1,
                 "pending": [],
+                "boss_dash": False,
+                "post_until": 0.0,
                 "stunned_until": 0.0,
                 "land": (
                     RANGED_ENEMY_LAND_RATE
@@ -1135,21 +1138,28 @@ def simulate_run(
         )
         group["spawned"] += 1
 
+    def dash_step(enemy):
+        """Advance a dash (charger or boss `charge` pattern) one tick along the
+        1-D lane; True on the tick it crosses the target. A dash that started
+        at `dash_from` ends `chargeDistance` later, |dash_from - chargeDistance|
+        past the target."""
+        before = enemy["dash_run"]
+        enemy["dash_run"] = min(
+            ai["chargeDistance"], before + enemy["speed"] * ai["chargeSpeedMult"] * DT
+        )
+        enemy["dist"] = abs(enemy["dash_from"] - enemy["dash_run"])
+        return before < enemy["dash_from"] <= enemy["dash_run"]
+
     def charger_step(enemy):
-        """One tick of a charger's cycle (EnemyService, C2.5 review): approach to
-        within `ai.chargeDistance`, wind up `ai.chargeWindupSeconds`, dash
-        `chargeDistance` along the lane (a player in the lane is hit once),
-        recover `attackCooldown`, then one telegraphed strike if the player is
-        in reach, and round again. Chargers never take a melee-ring slot.
-        Returns the damage landed this tick."""
+        """One tick of a non-boss charger (EnemyService, C2.5 review), never in
+        the melee ring. Ready when t >= next_attack_at; charges when the target
+        is in [reach, charge_trigger]; winds up `chargeWindupSeconds`; dashes
+        `chargeDistance` (the target is hit once, `damage` x CHARGE_LAND_RATE);
+        next_attack_at = dash end + attackCooldown while it circles at
+        `holdRadius`; at recovery end, if the target is in reach and it has not
+        struck since the last charge, one telegraphed strike, which leaves the
+        charge ready at once. Returns the damage landed this tick."""
         state = enemy["charge"]
-        if state == "approach":
-            if enemy["dist"] <= ai["chargeDistance"]:
-                enemy["charge"] = "windup"
-                enemy["charge_until"] = t + ai["chargeWindupSeconds"]
-            else:
-                enemy["dist"] -= enemy["speed"] * DT
-            return 0.0
         if state == "windup":
             if t >= enemy["charge_until"]:
                 enemy["charge"] = "dash"
@@ -1157,80 +1167,117 @@ def simulate_run(
                 enemy["dash_run"] = 0.0
             return 0.0
         if state == "dash":
-            before = enemy["dash_run"]
-            enemy["dash_run"] = min(
-                ai["chargeDistance"], before + enemy["speed"] * ai["chargeSpeedMult"] * DT
-            )
-            # 1-D lane: the dash crosses the player once it has run dash_from.
-            landed = 0.0
-            if before < enemy["dash_from"] <= enemy["dash_run"]:
-                landed = enemy["damage"] * CHARGE_LAND_RATE
-            enemy["dist"] = abs(enemy["dash_from"] - enemy["dash_run"])
+            landed = enemy["damage"] * CHARGE_LAND_RATE if dash_step(enemy) else 0.0
             if enemy["dash_run"] >= ai["chargeDistance"]:
-                enemy["charge"] = "recover"
-                enemy["charge_until"] = t + enemy["cooldown"]
+                enemy["charge"] = "free"
+                enemy["next_attack_at"] = t + enemy["cooldown"]
+                enemy["recovering"] = True
+                enemy["struck"] = False
             return landed
-        if state == "recover":
-            if t >= enemy["charge_until"]:
-                if enemy["dist"] <= enemy["reach"]:
-                    enemy["charge"] = "strike"
-                    enemy["charge_until"] = t + ai["telegraphSeconds"]
-                else:
-                    enemy["charge"] = "approach"
-            return 0.0
-        # "strike": the one normal swing at recovery end, telegraphed like any.
-        if t >= enemy["charge_until"]:
-            enemy["charge"] = "approach"
+        if state == "strike":
+            if t < enemy["charge_until"]:
+                return 0.0
+            enemy["charge"] = "free"
+            enemy["next_attack_at"] = t
             return enemy["damage"] * enemy["land"]
+        # "free"
+        if t < enemy["next_attack_at"]:
+            # Recovering: circle at holdRadius.
+            step = enemy["speed"] * DT
+            gap = ai["holdRadius"] - enemy["dist"]
+            enemy["dist"] += max(-step, min(step, gap))
+            return 0.0
+        if enemy["recovering"]:
+            enemy["recovering"] = False
+            if enemy["dist"] <= enemy["reach"] and not enemy["struck"]:
+                enemy["struck"] = True
+                enemy["charge"] = "strike"
+                enemy["charge_until"] = t + ai["telegraphSeconds"]
+                return 0.0
+        if enemy["reach"] <= enemy["dist"] <= charge_trigger:
+            enemy["charge"] = "windup"
+            enemy["charge_until"] = t + ai["chargeWindupSeconds"]
+        elif enemy["dist"] > charge_trigger:
+            enemy["dist"] = max(charge_trigger, enemy["dist"] - enemy["speed"] * DT)
+        else:
+            enemy["dist"] = min(enemy["reach"], enemy["dist"] + enemy["speed"] * DT)
         return 0.0
 
     def stun(enemy, seconds):
-        """A stun freezes the enemy and cancels any action that has not landed:
-        a boss pattern in its windup gets half its cooldown back, a charger
-        windup or strike starts over (EnemyService, C2.5 review)."""
+        """A stun freezes the enemy and cancels what it is doing. A boss pattern
+        still in its windup is cancelled with `stunPatternRefundFraction` of its
+        cooldown refunded; a boss mid-dash just stops (no refund). A charger in
+        windup, dash or strike is cancelled: next_attack_at = max(next_attack_at,
+        now + attackCooldown x cancelCooldownFraction)."""
         enemy["stunned_until"] = max(enemy["stunned_until"], t + seconds)
         for event in enemy["pending"]:
-            event["pattern"]["next_at"] = t + event["pattern"]["def"]["cooldown"] / 2
+            pattern = event["pattern"]
+            pattern["ready_at"] -= pattern["def"]["cooldown"] * ai["stunPatternRefundFraction"]
         enemy["pending"].clear()
-        if enemy["charge"] in ("windup", "strike"):
-            enemy["charge"] = "approach"
+        if enemy["boss_dash"]:
+            enemy["boss_dash"] = False
+        if enemy["charge"] in ("windup", "dash", "strike"):
+            enemy["charge"] = "free"
+            enemy["next_attack_at"] = max(
+                enemy["next_attack_at"], t + enemy["cooldown"] * ai["cancelCooldownFraction"]
+            )
+            enemy["recovering"] = True
+
+    def pattern_viable(enemy, definition):
+        kind = definition["kind"]
+        if kind == "slam":
+            radius = definition.get("radius") or ai["defaultSlamRadius"]
+            return enemy["dist"] <= radius + ai["slamTriggerMargin"]
+        if kind == "charge":
+            return enemy["reach"] <= enemy["dist"] <= charge_trigger
+        return definition.get("enemy") in mission["enemies"]
 
     def boss_patterns(enemy):
-        """Land a due pattern, or start the next one; returns damage into the
-        pooled bar's `incoming` (before the / party divide). One boss action at
-        a time; a pattern's cooldown restarts when its windup ENDS. Slam starts
-        within `radius + ai.slamTriggerMargin`, charge within
-        `ai.chargeDistance`; summon anywhere."""
+        """A boss's patterns (WaveService/EnemyService, C2.5 review). One action
+        at a time; round-robin from after the last one used, the first ready and
+        viable pattern fires and sets ready_at = now + windup + cooldown. On
+        landing the plain swing waits `postPatternAttackDelay`. Slam hits members
+        within radius + memberRadius; the charge pattern is a real dash (the
+        target is hit once as it is crossed); summon queues its bodies for the
+        next tick. Returns damage into the pooled `incoming`."""
         landed = 0.0
+        if enemy["boss_dash"]:
+            if dash_step(enemy):
+                landed += enemy["dash_damage"]
+            if enemy["dash_run"] >= ai["chargeDistance"]:
+                enemy["boss_dash"] = False
+            return landed
         for event in list(enemy["pending"]):
             if t < event["at"]:
                 continue
             enemy["pending"].remove(event)
-            pattern = event["pattern"]
-            pattern["next_at"] = t + pattern["def"]["cooldown"]
+            definition = event["pattern"]["def"]
+            enemy["post_until"] = t + ai["postPatternAttackDelay"]
             if enemy["next_attack"] is not None:
-                enemy["next_attack"] = max(enemy["next_attack"], t + post_pattern_delay)
+                enemy["next_attack"] = max(enemy["next_attack"], enemy["post_until"])
             if event["kind"] == "summon":
-                room = director["maxAlive"] - len(alive)
-                for _ in range(max(0, min(event["count"], room))):
-                    spawn(enemy["group"], event["enemy"])
-                continue
-            landed += event["damage"]
-            if event["kind"] == "charge":
-                enemy["dist"] = min(enemy["dist"], enemy["reach"])
-                if enemy["next_attack"] is None:
-                    enemy["next_attack"] = t + enemy["cooldown"]
-        if enemy["pending"]:
+                queued = len(summon_queue)
+                accepted = max(0, min(event["count"], director["maxAlive"] - len(alive) - queued))
+                summon_queue.extend([(enemy["group"], definition["enemy"])] * accepted)
+            elif event["kind"] == "slam":
+                radius = definition.get("radius") or ai["defaultSlamRadius"]
+                if enemy["dist"] <= radius + ai["memberRadius"]:
+                    landed += event["damage"]
+            else:
+                enemy["boss_dash"] = True
+                enemy["dash_from"] = enemy["dist"]
+                enemy["dash_run"] = 0.0
+                enemy["dash_damage"] = event["damage"]
+        if enemy["pending"] or enemy["boss_dash"]:
             return landed
-        for pattern in enemy["patterns"]:
+        count = len(enemy["patterns"])
+        for step in range(1, count + 1):
+            index = (enemy["cursor"] + step) % count
+            pattern = enemy["patterns"][index]
             definition = pattern["def"]
-            if t < pattern["next_at"]:
+            if t < pattern["ready_at"] or not pattern_viable(enemy, definition):
                 continue
             kind = definition["kind"]
-            if kind == "slam" and enemy["dist"] > definition.get("radius", 0) + slam_margin:
-                continue  # out of range: the slam waits for the boss to close
-            if kind == "charge" and enemy["dist"] > ai["chargeDistance"]:
-                continue
             event = {"at": t + definition["windupSeconds"], "kind": kind, "pattern": pattern}
             per_hit = enemy["damage"] * definition.get("damageMult", 1) * PATTERN_LAND_RATE
             if kind == "slam":
@@ -1238,10 +1285,10 @@ def simulate_run(
             elif kind == "charge":
                 event["damage"] = per_hit
             else:
-                event["enemy"] = definition["enemy"]
-                event["count"] = definition.get("count", 1)
+                event["count"] = definition.get("count") or ai["defaultSummonCount"]
             enemy["pending"].append(event)
-            pattern["next_at"] = math.inf  # restarts when the windup ends
+            pattern["ready_at"] = t + definition["windupSeconds"] + definition["cooldown"]
+            enemy["cursor"] = index
             break
         return landed
 
@@ -1378,6 +1425,10 @@ def simulate_run(
                 breather_end = None
                 start_wave(next_wave, False)
         else:
+            # Summons accepted last tick spawn now (counted into their group).
+            for group, key in summon_queue:
+                spawn(group, key)
+            summon_queue.clear()
             for group in groups:
                 group["tempo_sum"] += tempo_value
                 group["ticks"] += 1
@@ -1469,21 +1520,25 @@ def simulate_run(
                 if enemy["hp"] <= 0:
                     continue
                 if t < enemy["stunned_until"]:
-                    # Frozen: no movement, no windup progress, swing timer held.
+                    # Frozen: no movement or windup progress; the ring swing
+                    # timer is held (a charger's next_attack_at is absolute).
                     if enemy["next_attack"] is not None:
                         enemy["next_attack"] += DT
-                    if enemy["charge"] == "recover":
-                        enemy["charge_until"] += DT
                     continue
                 incoming += boss_patterns(enemy)
+                if enemy["boss_dash"]:
+                    continue  # the dash owns the boss's position this tick
                 if enemy["charge"] != "done":
                     incoming += charger_step(enemy)
                     continue
                 if enemy["dist"] > enemy["reach"]:
                     enemy["dist"] = max(enemy["reach"], enemy["dist"] - enemy["speed"] * DT)
                     if enemy["dist"] <= enemy["reach"]:
-                        # Every swing is telegraphed ai.telegraphSeconds first.
-                        enemy["next_attack"] = t + ai["telegraphSeconds"]
+                        # Every swing is telegraphed ai.telegraphSeconds first
+                        # (and waits out postPatternAttackDelay after a pattern).
+                        enemy["next_attack"] = max(
+                            t + ai["telegraphSeconds"], enemy["post_until"]
+                        )
                 if enemy["dist"] > enemy["reach"] or enemy["next_attack"] is None:
                     continue
                 if enemy["kind"] != "ranged":

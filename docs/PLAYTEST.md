@@ -3695,3 +3695,189 @@ Needs both places republished (`docs/MANUAL_STEPS.md` "C2" §4). Real teleports,
 
 - [ ] 60. Sections 1–4 and 6 in Studio, section 5 on the published game, plus the C1 pass.
 - [ ] 61. Tell Claude Code "C2 co-op playtest passed" (and "C1 passed"), or the failing step number.
+
+## C2.5 Stop 1 — Combat feel
+
+**Goal:** judge the fight itself on Village: camera, controls, hit feel, enemy behaviour, bosses,
+ragdolls. Enemies are still placeholder rigs and combat is **silent** until the sound upload.
+Models come in Stop 2, so judge motion and feel, not looks.
+
+### Before you start
+
+- Rebuild both places (`docs/MANUAL_STEPS.md` "C2.5 Stop 1" §1). API access ON.
+- Open **`build/combat.rbxl`** and press **Play**. With no handoff pending, it boots
+  `DebugMission` (default `village`, Raider Woods).
+- Levers are Workspace attributes. Each also has a button in the **⚙ debug** strip (top-left).
+  Studio only:
+
+  | Attribute | Type | Use here | Strip button |
+  |---|---|---|---|
+  | `DebugSetGear` | string | `melee=2,ranged=1` | **Melee +1** / **Ranged +1** |
+  | `DebugSpawn` | string | `raider` / `archer` / `brute` (2–4: `grunt` / `shooter` / `brute`) | **Spawn <key>** |
+  | `DebugWave` | number | next wave = N (in the lobby, the run starts at N) | **Wave +1** |
+  | `DebugGodMode` | boolean | you take no damage (stays on) | **God: off/ON** |
+  | `DebugKillAll` | number 1 | kills every enemy | **Kill all** |
+  | `DebugBots` | number | N bots in the party (stays set) | **Bots +1 / −1** |
+  | `DebugMission` | string | `village` / `boomtown` / `metropolis` / `orbital`, read at Play | — |
+
+- **Missions 2–4 need an unlocked profile.** `DebugMission boomtown` / `metropolis` / `orbital`
+  is refused with a **"locked"** toast unless your Studio profile has reached Boomtown /
+  Metropolis / Orbital in the hub. No lever skips this yet. If you get "locked", note it and
+  skip section 8.
+
+### 1. PC camera and cursor
+
+- [ ] 1. Play, lobby. The cursor is **free** and you can click **Ready**. Set `DebugSetGear` =
+      `melee=2,ranged=1`, then **Ready**.
+- [ ] 2. Wave 1 starts. The cursor **locks to the centre** and a **crosshair** appears.
+      - Moving the mouse turns the view; your character faces where you look.
+      - The camera sits over the right shoulder.
+      - The wheel zooms, within limits.
+- [ ] 3. Press **Alt**: the cursor is free. Press **Alt** again: it locks. Open **⚙ debug**: the
+      cursor frees while the strip is open and locks again when it closes.
+- [ ] 4. Walk into a wall or cover. The camera must not clip badly inside it or jitter.
+
+### 2. Melee feel
+
+- [ ] 5. Click to swing a 3-hit combo on a raider. On each hit:
+      - sparks fly in the hit direction;
+      - a short hit marker shows on the crosshair;
+      - the enemy flinches (stagger);
+      - you see a weapon trail and a tiny freeze (hitstop).
+- [ ] 6. The 3rd hit (finisher) shakes the camera harder and staggers longer than hits 1–2.
+- [ ] 7. Press **Q** (melee ability): the ability fx plays and the camera shakes. The kill pop
+      shows on every kill.
+
+### 3. Bow and machine gun
+
+- [ ] 8. Press **2** (bow). Hold the mouse button:
+      - a **20-dot ring** fills around the crosshair;
+      - release sends a **visible arrow** flying to where it hits.
+      A quick tap gives a weak shot; a full ring gives full damage.
+- [ ] 9. Set `DebugSetGear` = `ranged=8` (Machine Gun). Hold the button:
+      - automatic fire with a muzzle flash on every shot;
+      - shots **spread a little** around the crosshair (not a laser line);
+      - bolts fly.
+- [ ] 10. Press **E** (ranged ability) once with each weapon. Press **1** to return to melee.
+
+### 4. Enemy behaviour (`DebugGodMode` ON)
+
+- [ ] 11. Tap **Spawn raider** 6 times. The raiders **spread around you**:
+      - at most **3** attack at once;
+      - the others circle ~14 studs away and step in when a slot frees.
+      A clump of 6 stacked on one spot is a bug.
+- [ ] 12. Before each raider strike, it **glows with a "!"** overhead for about half a second.
+      Step back during the "!" and the strike misses.
+- [ ] 13. Tap **Spawn archer** 3 times. The archers:
+      - keep their distance (≈ 18–30 studs);
+      - back off when you approach;
+      - strafe sideways while reloading.
+- [ ] 14. Stand behind an obstacle. Enemies **walk around** it to reach you. None stays stuck
+      on the far side for more than a few seconds.
+
+### 5. Brute charge and dodge
+
+- [ ] 15. **Kill all**, then **Spawn brute**. It approaches, then a **red lane** appears on the
+      ground toward you (wind-up ≈ 0.7 s), then it dashes along the lane.
+- [ ] 16. Sidestep out of the lane during the wind-up. You take **no** hit. Stand in the lane
+      (God off): you are hit **once**. It recovers ~4 s, then repeats. With 3 raiders already
+      attacking, the brute still charges (it is not capped).
+
+### 6. Bosses (`DebugGodMode` OFF to feel the damage, ON to watch)
+
+- [ ] 17. Stop, Play, `DebugWave` = `5`, **Ready**. The **Raider Chief** spawns.
+- [ ] 18. **Slam:** a **red ring** grows on the ground around the Chief (≈ 1 s), then it lands.
+      Outside the ring = no damage.
+- [ ] 19. **Charge:** a red lane like the brute's, dodgeable the same way. Its plain swings hit
+      **lightly**; the slam and the charge are the dangerous moves.
+- [ ] 20. **Stun cancels:** `DebugSetGear` = `melee=4` (Hatchet). Press **Q** while a red ring
+      or lane shows. The telegraph **vanishes** and no hit lands.
+- [ ] 21. Stop, Play, `DebugWave` = `10`, **Ready**. The **Warlord** spawns:
+      - it slams and charges;
+      - after ~24 s a **violet circle** fills around it and **2 raiders** appear;
+      - the wave clears only when they are dead too.
+
+### 7. Stagger and ragdoll
+
+- [ ] 22. Kill enemies from different sides. Each **ragdolls** and falls away from your hit,
+      then disappears after ~1 s.
+      - The body lies on the arena floor; it never falls through.
+      - You and other enemies pass through bodies without being pushed.
+- [ ] 23. A boss flinches visibly less than a raider when hit.
+
+### 8. Missions 2–4 (needs the unlock, see Before you start)
+
+- [ ] 24. Stop. Workspace `DebugMission` = `boomtown`. Play:
+      - the **Rail Yard Outlaws** arena loads (a different floor/walls, cover);
+      - the Spawn buttons read **Spawn brute / grunt / shooter**;
+      - **Ready**, then clear wave 1 with `DebugGodMode` ON.
+- [ ] 25. Same for `metropolis` (**Blackout Blocks**) and `orbital` (**Crater Breach**).
+- [ ] 26. On one of them, `DebugWave` = `10` from the lobby, God ON. The Warlord fights with its
+      patterns and the run can be finished to the summary (**Kill all** helps).
+      Set `DebugMission` back to `village`.
+
+### 9. Animations and Output
+
+- [ ] 27. Watch the enemies:
+      - idle, walk, and a **run** when they move fast;
+      - a slash/lunge on your own swings.
+      If one looks broken (T-pose, sliding), note which.
+- [ ] 28. In Output, look for `animation <id> did not load` or `failed to load`. Note each id;
+      fix per `docs/MANUAL_STEPS.md` "C2.5 Stop 1" §4. The fight must still work (procedural pose).
+      Any **other** red error is a bug.
+
+### 10. Phone (Device Emulator 375×667, then 667×375)
+
+- [ ] 29. Test tab → **Device** → a phone at **375×667**. Play → Ready.
+      - Right-thumb cluster: **Attack** (largest) with abilities and stance around it.
+      - Nothing covers the **jump** button.
+      - Every button ≥ 44 px, i.e. easy to hit with a thumb.
+- [ ] 30. Left thumbstick moves. Dragging on the **right half** turns the camera. Holding
+      **Attack** and sliding that finger also aims.
+- [ ] 31. Aim near an enemy with the bow: shots bend onto it slightly (aim assist). The charge
+      ring is readable around the crosshair.
+- [ ] 32. Repeat 29–30 at **667×375** landscape: nothing clipped, HP bar and wave line visible.
+      Pinch zoom needs a real phone (the emulator is single-touch). Try it there if handy.
+
+### 11. Gamepad (only if you have one)
+
+- [ ] 33. Left stick moves, right stick aims, **R2** attack (hold for bow charge), **L1** melee
+      ability, **R1** ranged ability, **Y** switches weapon. The stock camera does not fight
+      the right stick.
+
+### 12. Two players (Local Server)
+
+- [ ] 34. `build/combat.rbxl` → Test → Clients and Servers → **2** players → Start, both Ready,
+      God ON for both.
+      - Spawn 6 raiders: they split between the two players (up to 3 on each).
+      - Each window sees the other's telegraphs, ragdolls and melee swings.
+
+### 13. Performance
+
+- [ ] 35. `DebugWave` = `10`, **Ready**, then tap **Spawn** buttons until ~20 enemies are alive,
+      God ON. Movement and camera stay smooth. Enemies keep steering (no freezing in place).
+      No new warnings flood Output.
+
+### Not a bug (don't report these)
+
+- Silence (sounds not uploaded yet).
+- Placeholder rigs, empty hands, blockout arenas.
+- Another player's arrows or bullets show no flying fx (carried to Stop 3).
+- Missions 2–4 balance feels off (draft; Stop 3 re-balances).
+- "locked" on `DebugMission boomtown/metropolis/orbital` with a profile below that era.
+- One `animation … did not load` warning per bad id.
+
+### What a bug looks like
+
+- Cursor locked in the lobby or summary, or free mid-wave without pressing Alt.
+- More than 3 melee enemies hitting you at once. Enemies stacked on one spot.
+- A telegraph that stays after the enemy dies or is stunned.
+- A hit you dodged cleanly still landing.
+- A ragdoll that falls through the floor, pushes you, or never disappears.
+- A touch button under the jump button or clipped off-screen.
+- Any red error other than an animation load.
+
+### Sign-off
+
+- [ ] 36. Tell Claude Code "Stop 1 passed", or the step numbers that failed. Include your sound
+      swaps and any bad animation ids.
