@@ -1410,3 +1410,81 @@ py tools/sim_combat.py                      # all four missions: 1x / 2x / 0.6x,
 py tools/sim_combat.py --era 4 --overdrive  # one mission under Overdrive
 py tools/sim_economy.py --check             # unchanged, byte for byte
 ```
+
+# P1 — Proving Grounds starting values
+
+Starting points for the test range (`Config/ProvingGrounds.json`, arena
+`Layouts/Arenas/ProvingGrounds.luau`). Every number is live-tunable from the RangePanel; these
+are the values Ben meets on the first Play, chosen against `docs/COMBAT_DESIGN.md` pillars 1
+(crowds and numbers), 3 (movement is combat) and 4 (every weapon feels different). Hit counts
+assume the crowd kinds below and no crits. Armour is a **flat per-hit cut** (lead ruling):
+`dealt = max(amount − armor, amount × 0.1)`, so small hits are worth little against it and heavy
+hits break through.
+
+## The range
+
+- 220 × 220, light grey SmoothPlastic floor (160, 161, 166), 4-stud concrete fence. The lobby pad
+  is at **(0, 90)**, near the +Z edge; the spawn faces −Z down the dummy lane.
+- `dummySets[*].at` are **arena coordinates**: a row d studs in front of the spawn sits at
+  z = 90 − d. Rows are at z 80 / 65 / 40 / −10 (10 / 25 / 50 / 100 studs).
+- Distance lines: 0.2-stud Neon strips across the lane (|x| ≤ 20) with tally posts outside it
+  (1 post = 10, 2 = 25, 3 = 50, 4 = 100). Colours white, yellow, cyan, violet.
+- Jump staircase left of the spawn (8 / 16 / 24 tall, adjacent, 8×8 tops), stand-alone 16 and 24
+  pillars right of it, six concrete cover pieces on the right flank (x 28–53, z 31–79), and a 10-tall
+  backstop at 120 studs (rifle range). The lane itself stays flat.
+- Armoured recoloured steel blue (70, 100, 150): the lead's grey (120, 128, 140) vanished on a grey
+  floor. Fodder is a warmer red (205, 86, 64).
+
+## Crowd kinds
+
+| Kind | HP | Armour | Knockback × | Speed | Why |
+|---|---|---|---|---|---|
+| fodder | 40 | 0 | 1.0 | 12 | Dies in 1–3 hits from every crowd weapon; slower than the player (20) so kiting works. |
+| armoured | 160 | 18 (flat) | 0.35 | 9 | Light hits shrink to 1.6–6 damage, and heavy hits keep most of their damage (Shockwave 26–52, Launcher 42, rifle 24, or 66 on a head). Heavy weapons kill it in 4–7 hits (2.5–4 s). Light ones need 14–18 hits and live on their finisher. Barely moved by light hits. |
+| boss | 10 000 | 0 | 0 | 6 | A DPS sponge: 1–2 minutes of sustained fire at 75–100 DPS, so the 5 s DPS window settles. |
+
+## Weapons
+
+| Variant | Shape | Rate/s | Cap | Damage | Fodder hits | Armoured hits (flat 18) | Boss DPS | Feel |
+|---|---|---|---|---|---|---|---|---|
+| Sword A Wide arc | arc 160°, 10 | 2.5 | 10 | 24, chain 1/1/1.8 | 2 / 2 / 1 | 14 (6, 6, 25) | 76 | The all-rounder: wide sweep, finisher one-shots. |
+| Sword B Spin finisher | arc 110°, 9; finisher 360° | 3.4 | 8 | 16, chain 1/1/2.6 | 3 / 3 / 1 | 18 (1.6, 1.6, 24) | 83 | Fast light flurry that pays off on a full spin. Lowest knockback (8) keeps the crowd in reach. Cap raised 6 → 8 for the spin (below). |
+| Sword C Shockwave | sphere 10 | 1.3 | ∞ | 44, chain 1/1.25/1.6 | 1 | 5 (26, 37, 52) | 73 | Slow crushing ring: every hit clears fodder, launch 10 throws them. |
+| Gun A Shotgun | cone 26°, 24, 8 pellets | 1.1 | ∞ | 22/pellet | 2 pellets | 5 shots (32 each) | 194 point-blank | Close burst, knockback 28. The single-target outlier, paid for by a 24-stud range. |
+| Gun B Piercing rifle | ray 120, width 0.8 | 2.4 | 8 | 42 | 1 | 7 (3 on heads) | 101 (202 on heads) | Lines of enemies: one shot kills everything on the line, up to 8. |
+| Gun C Launcher | sphere splash 10, speed 110 | 0.75 | ∞ | 60 | 1 | 4 | 45 | Visible slow shell, launch 16: the "crowds fly" weapon. Weak on a single target by design. |
+
+Every variant differs on at least three of shape, rhythm (0.75–3.4 attacks/s), cap and knockback
+(8–34). Fodder at 40 HP sits just under the 42/44 one-shot values, so the rifle, Shockwave and
+Launcher one-shot and the others need 2–3 hits. Keep that margin: a one-shot tuned to exactly the HP
+fails on any rounding.
+
+Sword B's finisher is a full 360° spin (`finisherArcDegrees`, lead). Its single-target DPS does not
+change. Surrounded, though, the spin now reaches enemies behind you. Cap 6 would leave a visibly
+struck ring half untouched (pillar 2), so the cap is 8. Chain 2.6 stays: the spin's 41.6 is just
+over fodder's 40.
+
+Slam against armoured deals 27, so 6 slams. It stays a crowd tool, not an armour breaker.
+
+## Movement
+
+| Key | Value | Why |
+|---|---|---|
+| jumpHeight | 18 | 2.5× Roblox's 7.2. Airtime 0.86 s, 17 studs of horizontal travel at walk speed. A 16 platform clears by 2 studs. |
+| doubleJumpHeight | 12 | Total reach 30, so the 24 tower needs the double jump and the 16 tower doesn't. That's the range's height ladder. |
+| walkSpeed | 20 | Faster than fodder (12) and armoured (9), so moving works as a dodge. |
+| dash | 20 studs in 0.15 s, 0.8 s cooldown, 0.25 s i-frames | 133 studs/s reads as a snap, not a slide. The i-frames outlast the dash so its end is safe. |
+| slam | min 5, radius 12, 45 damage, 1.8 s cooldown, fall 140 | A slam from any real jump one-shots fodder in a 24-stud circle. The cooldown stops slam-spamming from outclassing Shockwave. |
+| airAttackHangSeconds | 0.3 | Long enough to string an air combo above a crowd. |
+
+## Shooting and controls
+
+- Bloom goes from 0.4° to 7°: +1.5° per shot, +10°/s while moving, recovering at 9°/s. The first
+  shot after 0.3 s idle is exact. This is Fortnite's shape: tap-fire is accurate, spraying on the
+  move is not.
+- ADS: FOV 50, bloom ×0.35, speed ×0.55.
+- `critMult` 2.0 (was 1.75): a yellow number that is exactly double reads at a glance.
+- `autoFireAssistDegrees` 5 (was 4): on a phone thumb, a 1.3-stud fodder at 50 studs subtends
+  about 3°, so 4° left almost no assist at range.
+- Feedback layers all start at 1.
+- `snapshotHz`, `maxAlive` and `stressCount` are unchanged (the contract budget).

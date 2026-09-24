@@ -7,6 +7,9 @@
 -- The teleport data is a HINT, never an entitlement: every arrival goes through
 -- ArenaService.CheckAdmission (C2: the host gate comes from the server-written RunTicket, never
 -- from teleport data), and a refusal sends the player straight home with the reason.
+--
+-- P1: with the DebugProving Workspace attribute true at boot (Studio only), the place boots the
+-- Proving Grounds instead: no run, no admission, no waves; RangeService owns every player.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,6 +35,7 @@ local CombatService = require(combatFolder:WaitForChild("CombatService"))
 local WaveService = require(combatFolder:WaitForChild("WaveService"))
 local DebugService = require(combatFolder:WaitForChild("DebugService"))
 local ReturnService = require(combatFolder:WaitForChild("ReturnService"))
+local RangeService = require(combatFolder:WaitForChild("RangeService"))
 
 type Service = {
 	Init: () -> (),
@@ -51,6 +55,15 @@ local DEFAULT_DEBUG_MISSION_ID = "village"
 local TICK_INTERVAL_SECONDS = 1
 
 local tickAccumulator = 0
+
+-- Decided once at boot: flipping the attribute mid-session must not turn a live mission into a
+-- range. RangeService.Configure re-checks Studio and the config and may still refuse.
+local function wantsProving(): boolean
+	local combatConfig = Catalog.GetCombatConfig()
+	return RunService:IsStudio()
+		and combatConfig ~= nil
+		and workspace:GetAttribute(combatConfig.debug.provingAttribute) == true
+end
 
 -- The combat place sends the same Snapshot shape as the hub so the client model is identical,
 -- with the city fields zeroed: there is no plot and no income here. persistedIncomePerSecond is
@@ -178,6 +191,13 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		DataService.Release(player)
 		return
 	end
+	if RangeService.IsActive() then
+		-- The range writes nothing to the profile; it is loaded only so the client's boot
+		-- sequence (the Snapshot) runs exactly as in a mission.
+		RangeService.AddPlayer(player)
+		sendSnapshot(player)
+		return
+	end
 	Combat.TouchHighestEra(state)
 
 	local mission, overdrive, hostUserId, debugMission = resolveRun(player)
@@ -211,6 +231,7 @@ end
 
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
 RemoteService.Configure(CombatRemotes)
+RangeService.Configure(wantsProving())
 
 -- There is no Delta pipeline in this place (EconomyService is hub-only), so a fresh Snapshot is
 -- how a reward flush or a debug grant reaches the client. Main owns the Snapshot shape;
@@ -251,6 +272,8 @@ local orderedServices: { Service } = {
 	CombatService,
 	waveBoot,
 	DebugService,
+	-- Last before the return path: it builds the range arena over ArenaService's fallback pad.
+	RangeService,
 	returnBoot,
 }
 
@@ -284,8 +307,8 @@ end)
 -- may not require it.
 RemoteService.SetHandler("RequestReady", function(player: Player)
 	-- Both halves are guarded on the lobby: ArenaService ignores the toggle once the run is
-	-- under way, and nothing here may restart a run that is already going.
-	if WaveService.GetPhase() ~= "lobby" then
+	-- under way, and nothing here may restart a run that is already going. The range has no run.
+	if RangeService.IsActive() or WaveService.GetPhase() ~= "lobby" then
 		return
 	end
 	ArenaService.SetReady(player)
@@ -323,6 +346,44 @@ end)
 RemoteService.SetHandler("RequestAbility", function(player: Player, slot: string)
 	CombatService.OnAbility(player, slot)
 end)
+
+-- P1 Proving Grounds intents. RangeService drops every one of them outside the range, and tune
+-- and command also outside Studio.
+RemoteService.SetHandler(
+	"RequestRangeAttack",
+	function(
+		player: Player,
+		weapon: string,
+		seq: number,
+		origin: Vector3,
+		direction: Vector3,
+		ads: boolean
+	)
+		RangeService.OnAttack(player, weapon, seq, origin, direction, ads)
+	end
+)
+
+RemoteService.SetHandler("RequestDash", function(player: Player, direction: Vector3)
+	RangeService.OnDash(player, direction)
+end)
+
+RemoteService.SetHandler("RequestSlam", function(player: Player)
+	RangeService.OnSlam(player)
+end)
+
+RemoteService.SetHandler(
+	"RequestTune",
+	function(player: Player, path: string, value: Types.TuneValue)
+		RangeService.OnTune(player, path, value)
+	end
+)
+
+RemoteService.SetHandler(
+	"RequestRangeCommand",
+	function(player: Player, command: string, argument: string?)
+		RangeService.OnCommand(player, command, argument)
+	end
+)
 
 -- Studio levers, the remote half (the attribute half is DebugService's own 1 Hz poll). The
 -- handler itself refuses everything outside Studio.
@@ -367,6 +428,7 @@ end
 -- Teardown: leave the party (which clears the registry entry with the last member), then the
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
+	RangeService.RemovePlayer(player)
 	ArenaService.Remove(player)
 	-- A refused first arrival opened a run but was never a member, so Remove did nothing. Either
 	-- reset also puts the wave machine back in the lobby (ArenaService's reset hook).
@@ -402,4 +464,8 @@ game:BindToClose(function()
 	end
 end)
 
-print("[Combat] booted — mission attribute lever ready")
+if RangeService.IsActive() then
+	print("[Combat] booted — Proving Grounds (DebugProving)")
+else
+	print("[Combat] booted — mission attribute lever ready")
+end

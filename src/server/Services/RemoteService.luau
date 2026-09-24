@@ -16,9 +16,12 @@ export type Validator = (args: PackedArgs) -> boolean
 -- bucket names a shared refill rate in `rates`; the token bucket itself stays per remote, so
 -- two remotes on the same bucket each get that many calls per second (unchanged from M1).
 export type IntentDef = { validate: Validator, bucket: string }
+-- unreliableEvents (P1): server → client UnreliableRemoteEvents for high-rate state that the
+-- next send supersedes (crowd snapshots). Optional so a place without any keeps its defs as-is.
 export type RemoteDefs = {
 	intents: { [string]: IntentDef },
 	events: { string },
+	unreliableEvents: { string }?,
 	rates: { [string]: number },
 }
 
@@ -26,6 +29,7 @@ type Handler = (player: Player, ...any) -> ()
 type Bucket = { tokens: number, last: number }
 
 local remotes: { [string]: RemoteEvent } = {}
+local unreliableRemotes: { [string]: UnreliableRemoteEvent } = {}
 local handlers: { [string]: Handler } = {}
 local buckets: { [Player]: { [string]: Bucket } } = {}
 local defs: RemoteDefs? = nil
@@ -137,6 +141,24 @@ function RemoteService.FireClient(player: Player, remoteName: string, payload: a
 	remote:FireClient(player, payload)
 end
 
+-- Unreliable sends may be dropped or reordered by the engine and are capped near 900 bytes per
+-- payload; callers send state the next send supersedes, never an event that must arrive.
+function RemoteService.FireClientUnreliable(player: Player, remoteName: string, payload: any): ()
+	local remote: UnreliableRemoteEvent? = unreliableRemotes[remoteName]
+	if remote == nil or player.Parent == nil then
+		return
+	end
+	remote:FireClient(player, payload)
+end
+
+function RemoteService.FireAllUnreliable(remoteName: string, payload: any): ()
+	local remote: UnreliableRemoteEvent? = unreliableRemotes[remoteName]
+	if remote == nil then
+		return
+	end
+	remote:FireAllClients(payload)
+end
+
 function RemoteService.Init(): ()
 	local remoteDefs = defs
 	if remoteDefs == nil then
@@ -166,6 +188,18 @@ function RemoteService.Init(): ()
 	-- server → client only: no validator, no bucket, no OnServerEvent connection.
 	for _, remoteName in remoteDefs.events do
 		createRemote(remoteName)
+	end
+	local unreliableNames: { string } = remoteDefs.unreliableEvents or {}
+	for _, remoteName in unreliableNames do
+		-- One name, one instance: a duplicate would make the client's WaitForChild pick either.
+		if folder:FindFirstChild(remoteName) ~= nil then
+			warn(`[RemoteService] {remoteName} is declared twice; the unreliable copy is skipped`)
+			continue
+		end
+		local remote = Instance.new("UnreliableRemoteEvent")
+		remote.Name = remoteName
+		remote.Parent = folder
+		unreliableRemotes[remoteName] = remote
 	end
 	for remoteName, intent in remoteDefs.intents do
 		if remoteDefs.rates[intent.bucket] == nil then

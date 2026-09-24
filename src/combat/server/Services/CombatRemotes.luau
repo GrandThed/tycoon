@@ -24,6 +24,11 @@ local DEFAULT_MAX_TARGETS = 24
 -- Caps on the debug intent, per contract: a lever name and a short scalar, nothing else.
 local MAX_LEVER_LENGTH = 32
 local MAX_LEVER_VALUE_LENGTH = 64
+-- P1 range intents (docs/INTERFACES.md "P1 contracts" → "Remotes"): the contract's size caps.
+local MAX_TUNE_PATH_LENGTH = 96
+local MAX_TUNE_STRING_LENGTH = 32
+local MAX_COMMAND_LENGTH = 24
+local MAX_COMMAND_ARG_LENGTH = 32
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil
@@ -63,6 +68,21 @@ local function isFiniteVector(value: any): boolean
 	end
 	local vector = value :: Vector3
 	return isFiniteNumber(vector.X) and isFiniteNumber(vector.Y) and isFiniteNumber(vector.Z)
+end
+
+local function isDirection(value: any): boolean
+	return isFiniteVector(value) and (value :: Vector3).Magnitude > 0
+end
+
+local function isSeq(value: any): boolean
+	return typeof(value) == "number"
+		and value == math.floor(value)
+		and value >= 0
+		and value < math.huge
+end
+
+local function isShortString(value: any, maxLength: number): boolean
+	return typeof(value) == "string" and #(value :: string) > 0 and #(value :: string) <= maxLength
 end
 
 local CombatRemotes: RemoteService.RemoteDefs = {
@@ -139,6 +159,60 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 				return args.n == 1 and (args[1] == "melee" or args[1] == "ranged")
 			end,
 		},
+		-- P1 Proving Grounds. Every range handler is inert outside the range (RangeService), and
+		-- tune/command also outside Studio; these validators only keep malformed payloads out.
+		RequestRangeAttack = {
+			bucket = "attack",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 5
+					and (args[1] == "sword" or args[1] == "gun")
+					and isSeq(args[2])
+					and isFiniteVector(args[3])
+					and isDirection(args[4])
+					and typeof(args[5]) == "boolean"
+			end,
+		},
+		RequestDash = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isDirection(args[1])
+			end,
+		},
+		RequestSlam = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 0
+			end,
+		},
+		RequestTune = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				if args.n ~= 2 or not isShortString(args[1], MAX_TUNE_PATH_LENGTH) then
+					return false
+				end
+				local value = args[2]
+				local valueType = typeof(value)
+				if valueType == "boolean" then
+					return true
+				end
+				if valueType == "number" then
+					return isFiniteNumber(value)
+				end
+				return valueType == "string" and #(value :: string) <= MAX_TUNE_STRING_LENGTH
+			end,
+		},
+		-- A trailing nil argument may or may not survive the wire, so both lengths are legal.
+		RequestRangeCommand = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				if
+					(args.n ~= 1 and args.n ~= 2) or not isShortString(args[1], MAX_COMMAND_LENGTH)
+				then
+					return false
+				end
+				return args[2] == nil or isShortString(args[2], MAX_COMMAND_ARG_LENGTH)
+			end,
+		},
 		-- Studio levers. The handler refuses everything outside Studio; this validator only
 		-- keeps a malformed payload out of it.
 		RequestDebug = {
@@ -164,7 +238,19 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 	},
 	-- CombatFx exists from C0 so the client can WaitForChild it; C1 fills it with hit, death and
 	-- ability presentation.
-	events = { "StateChanged", "ActionResult", "RunState", "CombatFx" },
+	-- P1 adds the crowd stream (CrowdSnapshot is unreliable: a lost snapshot is replaced by the
+	-- next) and the range's TuneState / RangeStats.
+	events = {
+		"StateChanged",
+		"ActionResult",
+		"RunState",
+		"CombatFx",
+		"CrowdSpawn",
+		"CrowdRemove",
+		"TuneState",
+		"RangeStats",
+	},
+	unreliableEvents = { "CrowdSnapshot" },
 	rates = {
 		calls = Catalog.GetGameConfig().remotes.callsPerSecond,
 		snapshot = Catalog.GetGameConfig().remotes.snapshotCallsPerSecond,

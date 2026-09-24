@@ -16,10 +16,30 @@
 --
 -- Degradation: a missing Armory config, a missing class, a missing RequestFire remote (an
 -- older server build) or a dead character all make the input a silent no-op, never an error.
+--
+-- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts", docs/COMBAT_DESIGN.md section 3):
+-- when CameraController.IsRange() is true at boot, none of the mission bindings above are
+-- made and a separate range path runs instead, so missions keep exactly today's input.
+--  * Gun: Fortnite camera-ray aim. The shot starts on the crosshair line at the head's depth
+--    (inside `shooting.originPad` of the head) and leaves along it, so what the crosshair
+--    covers is what is hit, around the shoulder too. Bloom grows with moving, being airborne
+--    and firing, recovers at rest, is clamped to min/max and multiplied in ADS; the first
+--    shot after `firstShotSeconds` without firing has no spread. Spread is drawn here and
+--    sent already applied, as the contract asks.
+--  * Sword: swings along the flattened camera look; an airborne swing hangs the character.
+--  * Both repeat at the variant's `rate` while held: left mouse, gamepad R2.
+--  * Touch has no attack button: `autoFire` attacks while an enemy sphere is within
+--    `autoFireAssistDegrees` of the crosshair ray (gun) or inside the melee shape padded by
+--    `autoSwingPad` (sword); `tapFire` turns a short, still tap on the right half into one
+--    attack. A drag on the right half aims in both modes (CameraController).
+--  * ADS: right mouse or L2 held, or a touch toggle above the jump button (gun only).
+--  * 1 / 2 or gamepad Y ask the server to switch weapon; TuneState answers with the truth.
+-- Every number is read through Tuning.Get() each frame, so the tuning panel acts at once.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -27,11 +47,15 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
+local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
+local MovementController = require(script.Parent:WaitForChild("MovementController"))
+local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
@@ -55,6 +79,34 @@ local ACTION_ABILITY_MELEE = "CombatAbilityMelee"
 local ACTION_ABILITY_RANGED = "CombatAbilityRanged"
 local ACTION_STANCE = "CombatStance"
 local ACTIONS = { ACTION_ATTACK, ACTION_ABILITY_MELEE, ACTION_ABILITY_RANGED, ACTION_STANCE }
+
+-- P1 range path.
+type RangeWeapon = "sword" | "gun"
+type Device = "pc" | "touch" | "pad"
+local RANGE_BIND = "RangeInput"
+local ACTION_RANGE_FIRE = "RangeFire"
+local ACTION_RANGE_ADS = "RangeAds"
+local ACTION_RANGE_SWAP = "RangeSwap"
+local RANGE_ACTIONS = { ACTION_RANGE_FIRE, ACTION_RANGE_ADS, ACTION_RANGE_SWAP }
+-- A tap is short and still; anything longer or further is an aiming drag.
+local TAP_MAX_SECONDS = 0.3
+local TAP_MAX_PIXELS = 14
+-- A tap during the cooldown fires as soon as the weapon is ready, if that is soon.
+local TAP_BUFFER_SECONDS = 0.25
+-- Horizontal root speed (studs/s) above which bloom grows as "moving".
+local BLOOM_MOVING_SPEED = 1.5
+local MIN_RATE = 0.05
+-- CrowdRenderer draws bodies ~1 snapshot behind the server (1.5-2 studs for running
+-- fodder), so auto-fire and auto-swing test each sphere this much larger: the attack starts
+-- when the server's enemy is in reach, not only when the drawn one is.
+local ASSIST_LAG_PAD = 1.5
+-- The sword's pose index restarts after this many swing intervals without a swing.
+local SWING_RESET_INTERVALS = 2
+local FINISHER_POSE = 3
+-- ADS touch toggle, above Roblox's jump button (same rule as MovementController's dash).
+local ADS_BUTTON_FRACTION = 0.7
+local COLOR_ADS_OFF = Color3.fromRGB(70, 74, 84)
+local COLOR_ADS_ON = Color3.fromRGB(255, 200, 87)
 
 local InputController = {}
 
@@ -83,6 +135,36 @@ local chargeStartedAt: number? = nil
 local holdToken = 0
 local attackHeld = false
 local connections: { RBXScriptConnection } = {}
+
+local rangeMode = false
+local rangeWeapon: RangeWeapon = "sword"
+local rangeVariant = "" -- "" until TuneState names one: the weapon's config default
+local rangeHeld = false
+local adsHeld = false
+local adsToggled = false
+local adsActive = false
+local tapQueuedAt: number? = nil
+local lastRangeAttackAt = -math.huge
+local lastShotAt = -math.huge
+local bloom = 0
+local rangeSeq = 0
+local swingStep = 0
+local device: Device = "pc"
+type TapState = { start: Vector2, at: number, moved: number }
+local rangeTouches: { [InputObject]: TapState } = {}
+local requestRangeAttack: RemoteEvent? = nil
+local requestRangeCommand: RemoteEvent? = nil
+local rangeGui: ScreenGui? = nil
+local adsButton: TextButton? = nil
+export type RangeAttackHandler = (
+	weapon: string,
+	variant: string,
+	origin: Vector3,
+	direction: Vector3
+) -> ()
+-- Told about every range attack the instant it is sent (CombatUIController draws the
+-- launcher shell from it), so the local visual starts on the exact ray the server got.
+local rangeAttackHandler: RangeAttackHandler? = nil
 
 local function slotTier(tiers: SlotTiers, slot: string): number
 	return if slot == MELEE_SLOT then tiers.melee else tiers.ranged
@@ -635,12 +717,525 @@ local function bindGamepad(): ()
 	end
 end
 
+-- P1 range path ---------------------------------------------------------------------------
+
+local function currentVariant(cfg: Types.ProvingGroundsConfig): Types.RangeWeaponVariant?
+	local def = if rangeWeapon == "gun" then cfg.weapons.gun else cfg.weapons.sword
+	return def.variants[rangeVariant] or def.variants[def.default]
+end
+
+-- The variant key TuneState last named, or the weapon's config default when it named none.
+local function currentVariantKey(cfg: Types.ProvingGroundsConfig): string
+	local def = if rangeWeapon == "gun" then cfg.weapons.gun else cfg.weapons.sword
+	return if def.variants[rangeVariant] ~= nil then rangeVariant else def.default
+end
+
+local function notifyRangeAttack(
+	cfg: Types.ProvingGroundsConfig,
+	origin: Vector3,
+	direction: Vector3
+): ()
+	local handler = rangeAttackHandler
+	if handler ~= nil then
+		handler(rangeWeapon, currentVariantKey(cfg), origin, direction)
+	end
+end
+
+local function isRanged(variant: Types.RangeWeaponVariant): boolean
+	return variant.kind == "ranged"
+end
+
+local function firstShotReady(cfg: Types.ProvingGroundsConfig): boolean
+	return os.clock() - lastShotAt >= cfg.shooting.firstShotSeconds
+end
+
+-- Half-angle (degrees) of the cone the next shot is drawn from: 0 for a first shot and for
+-- melee, otherwise the bloom with the ADS multiplier.
+local function nextSpreadDegrees(cfg: Types.ProvingGroundsConfig): number
+	local variant = currentVariant(cfg)
+	if variant == nil or not isRanged(variant) or firstShotReady(cfg) then
+		return 0
+	end
+	return bloom * (if adsActive then cfg.shooting.adsBloomMult else 1)
+end
+
+local function updateBloom(cfg: Types.ProvingGroundsConfig, rig: LocalRig, deltaTime: number): ()
+	local shooting = cfg.shooting
+	local velocity = rig.root.AssemblyLinearVelocity
+	local moving = Vector3.new(velocity.X, 0, velocity.Z).Magnitude > BLOOM_MOVING_SPEED
+		or MovementController.IsAirborne()
+	if moving then
+		bloom += shooting.bloomMovePerSecond * deltaTime
+	else
+		bloom -= shooting.bloomRecoverPerSecond * deltaTime
+	end
+	local low = shooting.bloomMinDegrees
+	bloom = math.clamp(bloom, low, math.max(shooting.bloomMaxDegrees, low))
+end
+
+-- Uniform over the disc of a cone with this half-angle.
+local function spreadDirection(direction: Vector3, halfAngleDegrees: number): Vector3
+	if halfAngleDegrees <= 0 then
+		return direction
+	end
+	local tilt = math.rad(halfAngleDegrees) * math.sqrt(math.random())
+	local frame = CFrame.lookAt(Vector3.zero, direction)
+		* CFrame.Angles(0, 0, math.random() * 2 * math.pi)
+		* CFrame.Angles(tilt, 0, 0)
+	return frame.LookVector
+end
+
+-- The crosshair line, started at the head's depth along it: within a shoulder offset of the
+-- head (the server's originPad check) and still exactly the line the crosshair draws.
+local function shotRay(rig: LocalRig): (Vector3, Vector3)
+	local rayOrigin, look = CameraController.GetAimRay()
+	local along = math.max((rig.head.Position - rayOrigin):Dot(look), 0)
+	return rayOrigin + look * along, look
+end
+
+local function flatCameraLook(): Vector3
+	local _, look = CameraController.GetAimRay()
+	local flat = Vector3.new(look.X, 0, look.Z)
+	return if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, -1)
+end
+
+-- True when a sphere's edge (not its centre) lies within `limit` radians of the ray, in range.
+local function sphereInSights(
+	origin: Vector3,
+	look: Vector3,
+	range: number,
+	limit: number,
+	centre: Vector3,
+	radius: number
+): boolean
+	local offset = centre - origin
+	local distance = offset.Magnitude
+	if distance <= radius then
+		return true
+	end
+	if distance - radius > range then
+		return false
+	end
+	local toCentre = math.acos(math.clamp(offset.Unit:Dot(look), -1, 1))
+	return toCentre - math.asin(math.clamp(radius / distance, 0, 1)) <= limit
+end
+
+-- CrowdRenderer reports the ground point; the body sphere is centred at height/2 and the
+-- head sphere sits at the top (INTERFACES P1 decision 1).
+local function enemyInSights(
+	origin: Vector3,
+	look: Vector3,
+	range: number,
+	degrees: number
+): boolean
+	local limit = math.rad(degrees)
+	local found = false
+	CrowdRenderer.ForEach(
+		function(_id: number, position: Vector3, radius: number, headRadius: number, height: number)
+			if found then
+				return
+			end
+			local body = position + Vector3.new(0, height * HALF, 0)
+			local head = position + Vector3.new(0, height - headRadius, 0)
+			found = sphereInSights(origin, look, range, limit, body, radius + ASSIST_LAG_PAD)
+				or sphereInSights(origin, look, range, limit, head, headRadius + ASSIST_LAG_PAD)
+		end
+	)
+	return found
+end
+
+-- The same shape the server builds for this variant, via the shared HitShapes geometry.
+local function inMeleeShape(
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	forward: Vector3,
+	extraPad: number,
+	centre: Vector3,
+	radius: number
+): boolean
+	local pad = variant.pad + extraPad
+	local shape = variant.shape
+	local range = variant.range
+	if shape == "arc" then
+		return HitShapes.Arc(origin, forward, range, variant.arcDegrees or 360, pad, centre, radius)
+	elseif shape == "sphere" then
+		return HitShapes.Sphere(origin, range, pad, centre, radius)
+	elseif shape == "capsule" then
+		local tip = origin + forward * range
+		return HitShapes.Capsule(origin, tip, (variant.width or 0) * HALF, pad, centre, radius)
+	elseif shape == "cone" then
+		local halfAngle = (variant.arcDegrees or 0) * HALF
+		return HitShapes.Cone(origin, forward, range, halfAngle, pad, centre, radius)
+	end
+	return HitShapes.Ray(origin, forward, range, variant.width or 0, pad, centre, radius) ~= nil
+end
+
+local function enemyInReach(
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	extraPad: number
+): boolean
+	local forward = flatCameraLook()
+	local found = false
+	CrowdRenderer.ForEach(
+		function(_id: number, position: Vector3, radius: number, headRadius: number, height: number)
+			if found then
+				return
+			end
+			local body = position + Vector3.new(0, height * HALF, 0)
+			local head = position + Vector3.new(0, height - headRadius, 0)
+			found = inMeleeShape(variant, origin, forward, extraPad, body, radius + ASSIST_LAG_PAD)
+				or inMeleeShape(
+					variant,
+					origin,
+					forward,
+					extraPad,
+					head,
+					headRadius + ASSIST_LAG_PAD
+				)
+		end
+	)
+	return found
+end
+
+local function wantsRangeAttack(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	rig: LocalRig
+): boolean
+	if rangeHeld then
+		return true
+	end
+	local queued = tapQueuedAt
+	if queued ~= nil then
+		if os.clock() - queued <= TAP_BUFFER_SECONDS then
+			return true
+		end
+		tapQueuedAt = nil
+	end
+	local controls = cfg.controls
+	if device ~= "touch" or controls.touchMode ~= "autoFire" then
+		return false
+	end
+	if isRanged(variant) then
+		local origin, look = shotRay(rig)
+		return enemyInSights(origin, look, variant.range, controls.autoFireAssistDegrees)
+	end
+	return enemyInReach(variant, rig.root.Position, controls.autoSwingPad)
+end
+
+local function rangeAttack(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	rig: LocalRig
+): ()
+	local remote = requestRangeAttack
+	if remote == nil then
+		return
+	end
+	local now = os.clock()
+	local interval = 1 / math.max(variant.rate, MIN_RATE)
+	local idle = now - lastRangeAttackAt > interval * SWING_RESET_INTERVALS
+	lastRangeAttackAt = now
+	tapQueuedAt = nil
+	rangeSeq += 1
+	if isRanged(variant) then
+		local origin, look = shotRay(rig)
+		local direction = spreadDirection(look, nextSpreadDegrees(cfg))
+		remote:FireServer(rangeWeapon, rangeSeq, origin, direction, adsActive)
+		notifyRangeAttack(cfg, origin, direction)
+		lastShotAt = now
+		local shooting = cfg.shooting
+		bloom = math.min(bloom + shooting.bloomPerShot, math.max(shooting.bloomMaxDegrees, bloom))
+		-- A local muzzle flash and tracer the instant the trigger is pulled; a projectile's
+		-- flight belongs to the server's strike, so it gets no instant tracer.
+		if (variant.projectileSpeed or 0) <= 0 then
+			WeaponController.Shoot(origin, direction, variant.range, "semi")
+		end
+		return
+	end
+	local forward = flatCameraLook()
+	remote:FireServer(rangeWeapon, rangeSeq, rig.root.Position, forward, false)
+	notifyRangeAttack(cfg, rig.root.Position, forward)
+	local chain = variant.chain
+	local length = if chain ~= nil and #chain > 0 then #chain else 1
+	swingStep = if idle then 1 else swingStep % length + 1
+	local pose = if length > 1 and swingStep >= length
+		then FINISHER_POSE
+		else math.min(swingStep, 2)
+	WeaponController.Swing(pose, interval)
+	if MovementController.IsAirborne() then
+		MovementController.AirHang(cfg.movement.airAttackHangSeconds)
+	end
+end
+
+local function refreshAdsButton(variant: Types.RangeWeaponVariant?): ()
+	local button = adsButton
+	if button == nil then
+		return
+	end
+	local visible = variant ~= nil and isRanged(variant)
+	if button.Visible ~= visible then
+		button.Visible = visible
+	end
+	local color = if adsActive then COLOR_ADS_ON else COLOR_ADS_OFF
+	if button.BackgroundColor3 ~= color then
+		button.BackgroundColor3 = color
+	end
+end
+
+local function rangeStep(deltaTime: number): ()
+	local cfg = Tuning.Get()
+	local rig = localRig()
+	local variant = currentVariant(cfg)
+	local wantAds = rig ~= nil and variant ~= nil and isRanged(variant) and (adsHeld or adsToggled)
+	if wantAds ~= adsActive then
+		adsActive = wantAds
+		CameraController.SetAds(wantAds)
+	end
+	MovementController.SetSpeedMult(if adsActive then cfg.shooting.adsSpeedMult else 1)
+	refreshAdsButton(variant)
+	if rig == nil or variant == nil then
+		return
+	end
+	updateBloom(cfg, rig, deltaTime)
+	if os.clock() - lastRangeAttackAt < 1 / math.max(variant.rate, MIN_RATE) then
+		return
+	end
+	if wantsRangeAttack(cfg, variant, rig) then
+		rangeAttack(cfg, variant, rig)
+	end
+end
+
+local function requestWeapon(weapon: RangeWeapon): ()
+	local remote = requestRangeCommand
+	if remote ~= nil and weapon ~= rangeWeapon then
+		remote:FireServer("weapon", weapon)
+	end
+end
+
+local function setRangeWeapon(weapon: RangeWeapon): ()
+	if weapon == rangeWeapon then
+		return
+	end
+	rangeWeapon = weapon
+	adsToggled = false
+	swingStep = 0
+	-- The stance drives WeaponController's held model and the HUD's stance glyph.
+	setStance(if weapon == "gun" then RANGED_SLOT else MELEE_SLOT)
+end
+
+local function deviceOf(inputType: Enum.UserInputType): Device?
+	if inputType == Enum.UserInputType.Touch then
+		return "touch"
+	elseif inputType.Name:sub(1, 7) == "Gamepad" then
+		return "pad"
+	elseif
+		inputType == Enum.UserInputType.Keyboard
+		or inputType == Enum.UserInputType.MouseButton1
+		or inputType == Enum.UserInputType.MouseMovement
+	then
+		return "pc"
+	end
+	return nil
+end
+
+local function onDeviceChanged(inputType: Enum.UserInputType): ()
+	local nextDevice: Device? = deviceOf(inputType)
+	if nextDevice ~= nil then
+		device = nextDevice
+	end
+end
+
+local function onRangeInputBegan(input: InputObject, processed: boolean): ()
+	if processed then
+		return -- a GUI button (dash, ADS, the tuning panel) owns this press
+	end
+	local inputType = input.UserInputType
+	if inputType == Enum.UserInputType.MouseButton1 then
+		rangeHeld = true
+	elseif inputType == Enum.UserInputType.MouseButton2 then
+		adsHeld = true
+	elseif inputType == Enum.UserInputType.Touch then
+		local camera = Workspace.CurrentCamera
+		local split = if camera ~= nil
+			then camera.ViewportSize.X * Theme.COMBAT_CAMERA_TOUCH_SPLIT
+			else math.huge
+		if input.Position.X >= split then
+			local start = Vector2.new(input.Position.X, input.Position.Y)
+			rangeTouches[input] = { start = start, at = os.clock(), moved = 0 }
+		end
+	elseif inputType == Enum.UserInputType.Keyboard then
+		if input.KeyCode == Enum.KeyCode.One then
+			requestWeapon("sword")
+		elseif input.KeyCode == Enum.KeyCode.Two then
+			requestWeapon("gun")
+		end
+	end
+end
+
+local function onRangeInputChanged(input: InputObject): ()
+	local state = rangeTouches[input]
+	if state ~= nil then
+		local position = Vector2.new(input.Position.X, input.Position.Y)
+		state.moved = math.max(state.moved, (position - state.start).Magnitude)
+	end
+end
+
+local function onRangeInputEnded(input: InputObject): ()
+	local inputType = input.UserInputType
+	if inputType == Enum.UserInputType.MouseButton1 then
+		rangeHeld = false
+	elseif inputType == Enum.UserInputType.MouseButton2 then
+		adsHeld = false
+	elseif inputType == Enum.UserInputType.Touch then
+		local state = rangeTouches[input]
+		rangeTouches[input] = nil
+		if state == nil or Tuning.Get().controls.touchMode ~= "tapFire" then
+			return
+		end
+		if os.clock() - state.at <= TAP_MAX_SECONDS and state.moved <= TAP_MAX_PIXELS then
+			tapQueuedAt = os.clock()
+		end
+	end
+end
+
+local function onRangeAction(
+	action: string,
+	state: Enum.UserInputState,
+	_input: InputObject
+): Enum.ContextActionResult
+	local began = state == Enum.UserInputState.Begin
+	local held = began or state == Enum.UserInputState.Change
+	if action == ACTION_RANGE_FIRE then
+		rangeHeld = held
+	elseif action == ACTION_RANGE_ADS then
+		adsHeld = held
+	elseif began and action == ACTION_RANGE_SWAP then
+		requestWeapon(if rangeWeapon == "gun" then "sword" else "gun")
+	end
+	return Enum.ContextActionResult.Sink
+end
+
+local function layoutRangeControls(): ()
+	local button = adsButton
+	local camera = Workspace.CurrentCamera
+	if button == nil or camera == nil then
+		return
+	end
+	local centre, size =
+		MovementController.SatelliteRect(camera.ViewportSize, ADS_BUTTON_FRACTION, "above")
+	button.Position = UDim2.fromOffset(centre.X, centre.Y)
+	button.Size = UDim2.fromOffset(size, size)
+	button.TextSize = MovementController.TextSize(size)
+end
+
+local function buildRangeTouchControls(): ()
+	if not UserInputService.TouchEnabled then
+		return
+	end
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	-- Physical-pixel offsets mirrored off Roblox's jump button; no UIScale, by design.
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "RangeInput"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = playerGui
+	rangeGui = gui
+	local button = MovementController.MakeTouchButton("Aim", "Aim", gui)
+	button.Visible = false
+	adsButton = button
+	table.insert(
+		connections,
+		button.MouseButton1Down:Connect(function()
+			adsToggled = not adsToggled
+		end)
+	)
+	layoutRangeControls()
+	local camera = Workspace.CurrentCamera
+	if camera ~= nil then
+		table.insert(
+			connections,
+			camera:GetPropertyChangedSignal("ViewportSize"):Connect(layoutRangeControls)
+		)
+	end
+end
+
+-- Only the weapon and variant are read here; FeedbackController applies the overrides.
+local function onTuneState(_overrides: unknown, weapon: unknown, variant: unknown): ()
+	if weapon == "sword" then
+		setRangeWeapon("sword")
+	elseif weapon == "gun" then
+		setRangeWeapon("gun")
+	end
+	if typeof(variant) == "string" then
+		rangeVariant = variant
+	end
+end
+
+local function startRange(): ()
+	local cfg = Tuning.Get()
+	rangeVariant = cfg.weapons.sword.default
+	bloom = cfg.shooting.bloomMinDegrees
+	local initial: Device? = deviceOf(UserInputService:GetLastInputType())
+	if initial ~= nil then
+		device = initial
+	elseif UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+		device = "touch"
+	end
+	task.spawn(function()
+		local remotes = ReplicatedStorage:WaitForChild("Remotes")
+		local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
+		requestRangeAttack = remotes:WaitForChild("RequestRangeAttack", timeout) :: RemoteEvent?
+		requestRangeCommand = remotes:WaitForChild("RequestRangeCommand", timeout) :: RemoteEvent?
+		local tuneState = remotes:WaitForChild("TuneState", timeout) :: RemoteEvent?
+		if requestRangeAttack == nil or tuneState == nil then
+			warn("[InputController] range remotes missing — range attacks are disabled")
+		end
+		if tuneState ~= nil then
+			table.insert(connections, tuneState.OnClientEvent:Connect(onTuneState))
+		end
+	end)
+	table.insert(connections, UserInputService.InputBegan:Connect(onRangeInputBegan))
+	table.insert(connections, UserInputService.InputChanged:Connect(onRangeInputChanged))
+	table.insert(connections, UserInputService.InputEnded:Connect(onRangeInputEnded))
+	table.insert(connections, UserInputService.LastInputTypeChanged:Connect(onDeviceChanged))
+	local priority = Enum.ContextActionPriority.High.Value
+	local bindings: { { action: string, key: Enum.KeyCode } } = {
+		{ action = ACTION_RANGE_FIRE, key = Enum.KeyCode.ButtonR2 },
+		{ action = ACTION_RANGE_ADS, key = Enum.KeyCode.ButtonL2 },
+		{ action = ACTION_RANGE_SWAP, key = Enum.KeyCode.ButtonY },
+	}
+	for _, binding in bindings do
+		ContextActionService:BindActionAtPriority(
+			binding.action,
+			onRangeAction,
+			false,
+			priority,
+			binding.key
+		)
+	end
+	-- After the camera, so the aim ray and the auto-fire test use this frame's view.
+	RunService:BindToRenderStep(RANGE_BIND, Enum.RenderPriority.Camera.Value + 1, rangeStep)
+	buildRangeTouchControls()
+end
+
 function InputController.Init(): ()
 	armoryConfig = Catalog.GetArmoryConfig()
 	combatConfig = Catalog.GetCombatConfig()
+	rangeMode = CameraController.IsRange()
+	MovementController.Init()
 end
 
 function InputController.Start(): ()
+	if rangeMode then
+		-- MovementController is a range-only sub-controller of input, started from here so
+		-- the client boot list stays the mission list.
+		startRange()
+		MovementController.Start()
+		return
+	end
 	task.spawn(function()
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
 		requestAttack =
@@ -670,10 +1265,18 @@ end
 -- The HUD's attack button is a press-and-hold control, so it drives the same two entry
 -- points the mouse does; touch never reaches InputBegan because the button consumes it.
 function InputController.AttackDown(): ()
+	if rangeMode then
+		rangeHeld = true -- the range should not show this button; a stray press still attacks
+		return
+	end
 	attackBegan()
 end
 
 function InputController.AttackUp(): ()
+	if rangeMode then
+		rangeHeld = false
+		return
+	end
 	attackEnded()
 end
 
@@ -682,7 +1285,44 @@ function InputController.UseAbility(slot: string): ()
 end
 
 function InputController.ToggleStance(): ()
+	if rangeMode then
+		requestWeapon(if rangeWeapon == "gun" then "sword" else "gun")
+		return
+	end
 	setStance(if stance == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
+end
+
+-- P1 range API, read every frame by Feedback's Crosshair.
+-- Half-angle in degrees of the cone the next shot is drawn from, ADS already applied; 0 for
+-- a ready first shot and for melee. Crosshair radius in px = tan(rad(b)) / tan(rad(fov) / 2)
+-- × viewport height / 2, using the live Camera.FieldOfView (ADS changes it).
+function InputController.GetBloomDegrees(): number
+	if not rangeMode then
+		return 0
+	end
+	return nextSpreadDegrees(Tuning.Get())
+end
+
+-- True while aiming down sights (range gun only).
+function InputController.IsAiming(): boolean
+	return adsActive
+end
+
+-- The crosshair ray: unshaken camera position and unit look direction.
+function InputController.GetAimRay(): Ray
+	local origin, look = CameraController.GetAimRay()
+	return Ray.new(origin, look)
+end
+
+-- The range weapon and variant the server last confirmed ("sword" | "gun", "A" | "B" | "C").
+function InputController.GetRangeWeapon(): (string, string)
+	return rangeWeapon, currentVariantKey(Tuning.Get())
+end
+
+-- One handler (nil clears it), called right after each RequestRangeAttack with the weapon,
+-- the variant key, the sent origin and the sent direction (spread already applied).
+function InputController.SetRangeAttackHandler(handler: RangeAttackHandler?): ()
+	rangeAttackHandler = handler
 end
 
 -- The bow's draw progress 0-1 for the HUD ring, or nil while nothing is drawn. Display
@@ -737,6 +1377,26 @@ function InputController.Destroy(): ()
 	for _, action in ACTIONS do
 		ContextActionService:UnbindAction(action)
 	end
+	for _, action in RANGE_ACTIONS do
+		ContextActionService:UnbindAction(action)
+	end
+	if rangeMode then
+		RunService:UnbindFromRenderStep(RANGE_BIND)
+		CameraController.SetAds(false)
+		MovementController.Destroy()
+	end
+	local gui = rangeGui
+	rangeGui = nil
+	adsButton = nil
+	if gui ~= nil then
+		gui:Destroy()
+	end
+	table.clear(rangeTouches)
+	rangeAttackHandler = nil
+	rangeHeld = false
+	adsHeld = false
+	adsToggled = false
+	adsActive = false
 	for _, connection in characterConnections do
 		connection:Disconnect()
 	end

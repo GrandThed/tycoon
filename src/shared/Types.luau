@@ -1390,6 +1390,8 @@ export type RangeWeaponVariant = {
 	projectileSpeed: number?,
 	splashRadius: number?,
 	chain: { number }?,
+	-- Melee only: the LAST chain hit uses this arc instead (360 = a full spin).
+	finisherArcDegrees: number?,
 }
 export type RangeWeaponDef = { default: string, variants: { [string]: RangeWeaponVariant } }
 -- A crowd enemy kind: body sphere (radius, centre at height/2) + head sphere (crit weak point).
@@ -1401,6 +1403,7 @@ export type CrowdKindDef = {
 	hp: number,
 	color: { number },
 	knockbackMult: number,
+	-- Flat damage removed from every hit: dealt = max(amount - armor, amount * 0.1), so heavy hits matter.
 	armor: number,
 }
 -- behaviour: idle = stands; walk = paces a line; strafe = side to side; jump = hops; chase = runs
@@ -1426,6 +1429,9 @@ export type RangeMovementConfig = {
 	slamRadius: number,
 	slamDamage: number,
 	slamCooldown: number,
+	slamPad: number,
+	slamKnockback: number,
+	slamLaunch: number,
 	slamFallSpeed: number,
 	airAttackHangSeconds: number,
 }
@@ -1470,6 +1476,26 @@ export type ProvingGroundsConfig = {
 		snapshotHz: number,
 		maxAlive: number,
 		stressCount: number,
+		-- Dummy motion. walkLength = the whole pace line along Z; strafeWidth = the whole side-to-
+		-- side span along X; hopHeight in studs; periods in seconds; chaseStandoff = studs beyond
+		-- the enemy's own radius where a chaser stops short of the player's root.
+		behaviour: {
+			walkLength: number,
+			strafeWidth: number,
+			strafePeriod: number,
+			hopHeight: number,
+			hopPeriod: number,
+			chaseStandoff: number,
+		},
+		-- Seconds a corpse stays in the dead state before CrowdRemove.
+		deadSeconds: number,
+		-- Stagger seconds at knockbackMult 1 (scaled by the kind's knockbackMult).
+		staggerSeconds: number,
+		-- Ground friction on knockback (studs/s²) and the cap on stacked knockback speed (studs/s).
+		knockFriction: number,
+		knockMax: number,
+		-- Share of every hit that always gets through armour: max(amount - armor, amount * armorFloor).
+		armorFloor: number,
 	},
 	weapons: { sword: RangeWeaponDef, gun: RangeWeaponDef },
 	dummySets: { [string]: { DummyGroupDef } },
@@ -1507,6 +1533,8 @@ export type CombatFxStrike = {
 	width: number?,
 	endPoint: Vector3?,
 	hits: { StrikeHit },
+	-- Gun attacks: the attack seq, so clients can redraw the exact pellets with HitShapes.Pellets.
+	seq: number?,
 }
 -- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.gun.variants.B.damage") → value.
 export type TuneValue = number | boolean | string

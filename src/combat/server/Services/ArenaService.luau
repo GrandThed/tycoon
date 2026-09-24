@@ -38,6 +38,9 @@ local SPAWN_SIZE = Vector3.new(6, 1, 6)
 local SPAWN_CLEARANCE = 4
 local WALL_THICKNESS = 1
 local BOT_USER_ID_BASE = -1000
+-- P1: halfSize.Y handed to CrowdService.SetBounds = the highest a launch may carry a dummy above
+-- the floor. Layouts have no height, so it is generous rather than tuned.
+local BOUNDS_HALF_HEIGHT = 200
 local DEFAULT_BOT_HP = 150
 local NEUTRAL_EMPOWER = 1
 
@@ -81,6 +84,8 @@ local lobbySpawn: SpawnLocation? = nil
 local lobbyPosition = Vector3.zero
 local playerSpawns: { Vector3 } = {}
 local spawnCursor = 0
+-- Half the floor's footprint of the arena last built (X and Z), for the Proving Grounds bounds.
+local floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZE / 2)
 local runStartedAt = 0
 local combatConfig: Types.CombatConfig? = nil
 local sendSnapshot: ((player: Player) -> ())? = nil
@@ -201,6 +206,7 @@ local function buildFallbackArena(folder: Folder): ()
 	)
 	floor.Color = FALLBACK_FLOOR_COLOR
 	floor.Material = Enum.Material.Grass
+	floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZE / 2)
 	buildLobbyPad(folder, Vector3.new(0, 0.5, 0), Color3.fromRGB(96, 104, 120))
 	playerSpawns = { lobbyPosition }
 	EnemyService.SetSpawnPoints({})
@@ -213,6 +219,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 	local floor = newPart("Floor", Vector3.new(sizeX, 1, sizeZ), Vector3.new(0, -0.5, 0), folder)
 	floor.Color = colorOf(layout.floor.color)
 	floor.Material = materialOf(layout.floor.material)
+	floorHalfSize = Vector3.new(sizeX / 2, 0, sizeZ / 2)
 
 	local fence: { BasePart } = {}
 	local wall = layout.wall
@@ -321,8 +328,17 @@ local function midWave(): boolean
 	return runFields.phase == "wave" or runFields.phase == "boss"
 end
 
--- The profile is authoritative for max HP. Without Armory.json the Humanoid keeps its default
--- 100, which is the degrade path, not an error.
+-- The profile is authoritative for max HP. nil without a loaded profile or Armory.json: the
+-- Humanoid then keeps its default 100, which is the degrade path, not an error.
+local function profileMaxHp(player: Player): number?
+	local state = DataService.GetState(player)
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if state == nil or armoryConfig == nil then
+		return nil
+	end
+	return Armory.MaxHp(armoryConfig, state.combat.gear, state.combat.ascension)
+end
+
 local function applyMaxHp(member: Types.RunMember): ()
 	local humanoid = member.humanoid
 	if humanoid == nil then
@@ -336,12 +352,10 @@ local function applyMaxHp(member: Types.RunMember): ()
 		return
 	end
 	local player = member.player
-	local state = if player ~= nil then DataService.GetState(player) else nil
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if state == nil or armoryConfig == nil then
+	local maxHp = if player ~= nil then profileMaxHp(player) else nil
+	if maxHp == nil then
 		return
 	end
-	local maxHp = Armory.MaxHp(armoryConfig, state.combat.gear, state.combat.ascension)
 	humanoid.MaxHealth = maxHp
 	humanoid.Health = maxHp
 end
@@ -1246,6 +1260,24 @@ function ArenaService.ResetIfEmpty(): ()
 		return
 	end
 	resetRun()
+end
+
+-- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"). The range opens no run and admits
+-- nobody: it only borrows the arena builder and the spawn points, so missions are untouched.
+-- Returns the floor's bounds (centre, half-size) for CrowdService.SetBounds.
+function ArenaService.BuildProvingArena(arenaName: string): (Vector3, Vector3)
+	ensureArena(arenaName)
+	return Vector3.zero, Vector3.new(floorHalfSize.X, BOUNDS_HALF_HEIGHT, floorHalfSize.Z)
+end
+
+-- Where a range player (re)spawns: the lobby SpawnLocation for Roblox's own respawn, and the
+-- round-robin player spawn the body is moved to.
+function ArenaService.ProvingSpawn(): (SpawnLocation?, CFrame)
+	return lobbySpawn, nextPlayerSpawn()
+end
+
+function ArenaService.ProfileMaxHp(player: Player): number?
+	return profileMaxHp(player)
 end
 
 function ArenaService.Init(): ()

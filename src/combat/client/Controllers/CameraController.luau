@@ -23,6 +23,14 @@
 -- The default camera comes back whenever the character is dead or missing and in the
 -- summary / ended phases, so a down player watches their own ragdoll and the summary card
 -- has the ordinary cursor.
+--
+-- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place that
+-- decides whether the client is in the range (`IsRange`), because it is the lowest-level
+-- controller and both InputController and MovementController already require it. In the
+-- range there is no run phase, so the phase rules are skipped; aim-down-sights narrows the
+-- field of view to `shooting.adsFieldOfView` and scales look sensitivity with it; and the
+-- pivot's height follows the character through a clamped lag, so a 16-stud jump or a slam
+-- glides instead of yanking the view. Missions never see any of it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -33,10 +41,17 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 
 local BIND_NAME = "CombatShoulderCamera"
+-- Range-only presentation constants (purely visual, so they live here, not in config).
+local ADS_FOV_RATE = 16 -- per second, toward the ADS / hip field of view
+local VERTICAL_FOLLOW_RATE = 10 -- per second: how fast the pivot height catches the root
+-- The pivot never trails the root by more than this, so a 120 stud/s slam keeps the
+-- character on screen while the view still eases in behind it.
+local VERTICAL_MAX_LAG = 3
 local ENEMIES_FOLDER = "Enemies"
 -- Phases in which the run is over: the ordinary camera and cursor return for the summary.
 local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
@@ -63,6 +78,10 @@ local shoulderOffset = Vector3.zero
 
 local phase = "lobby"
 local active = false
+local rangeMode = false
+local adsOn = false
+local fieldOfView = FALLBACK_CAMERA.fieldOfView
+local pivotHeight: number? = nil
 local boundHumanoid: Humanoid? = nil
 local savedFieldOfView: number? = nil
 local yaw = 0
@@ -123,8 +142,50 @@ local function yawOf(look: Vector3): number
 	return math.atan2(-look.X, -look.Z)
 end
 
+-- The range has no run phase (no RunState is pushed there), so phase rules never apply.
+local function phaseFreesCursor(): boolean
+	return not rangeMode and freePhases[phase] == true
+end
+
 local function cursorFree(): boolean
-	return freePhases[phase] == true or next(cursorHolds) ~= nil or altFree
+	return phaseFreesCursor() or next(cursorHolds) ~= nil or altFree
+end
+
+-- Studio-only by contract: the server boots the Proving Grounds from the same Workspace
+-- attribute, so a live game can never enter the range whatever the attribute says.
+local function detectRange(): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	local cfg = Catalog.GetCombatConfig()
+	if cfg == nil then
+		return false
+	end
+	-- Workspace attributes arrive with the first replication; wait for it only in Studio.
+	if not game:IsLoaded() then
+		game.Loaded:Wait()
+	end
+	-- Same gate as the server's boot: no ProvingGrounds config means no range.
+	return Workspace:GetAttribute(cfg.debug.provingAttribute) == true and Tuning.IsAvailable()
+end
+
+local function targetFieldOfView(): number
+	if rangeMode and adsOn then
+		return Tuning.Get().shooting.adsFieldOfView
+	end
+	return cameraConfig.fieldOfView
+end
+
+-- Look sensitivity follows the zoom, so a scoped view does not swing further per pixel.
+local function lookScale(): number
+	if not rangeMode then
+		return 1
+	end
+	local hip = math.tan(math.rad(cameraConfig.fieldOfView) * 0.5)
+	if hip <= 0 then
+		return 1
+	end
+	return math.tan(math.rad(fieldOfView) * 0.5) / hip
 end
 
 local function clearTouches(): ()
@@ -194,6 +255,8 @@ local function activate(camera: Camera, rig: Rig): ()
 	pitch = math.rad(Theme.COMBAT_CAMERA_START_PITCH_DEGREES)
 	targetZoom = math.clamp(cameraConfig.defaultZoom, cameraConfig.minZoom, cameraConfig.maxZoom)
 	zoom = targetZoom
+	fieldOfView = targetFieldOfView()
+	pivotHeight = nil
 end
 
 local function invalidateCollision(): ()
@@ -311,6 +374,7 @@ local function consumeLookInput(deltaTime: number): ()
 		turn += Vector2.new(gamepadLook.X, -gamepadLook.Y * Theme.COMBAT_CAMERA_PITCH_RATIO) * rate
 	end
 
+	turn *= lookScale()
 	yaw -= turn.X
 	pitch = math.clamp(
 		pitch - turn.Y,
@@ -363,10 +427,28 @@ local function shakeOffset(deltaTime: number): CFrame
 		)
 end
 
+-- The root's height, eased: horizontal follow stays rigid (aim precision), only the
+-- vertical trails, and never by more than VERTICAL_MAX_LAG.
+local function followHeight(rootY: number, deltaTime: number): number
+	if not rangeMode then
+		return rootY
+	end
+	local current = pivotHeight
+	if current == nil then
+		pivotHeight = rootY
+		return rootY
+	end
+	local eased = current + (rootY - current) * (1 - math.exp(-VERTICAL_FOLLOW_RATE * deltaTime))
+	eased = math.clamp(eased, rootY - VERTICAL_MAX_LAG, rootY + VERTICAL_MAX_LAG)
+	pivotHeight = eased
+	return eased
+end
+
 local function update(deltaTime: number): ()
 	local camera = currentCamera()
 	local rig = localRig()
-	if camera == nil or rig == nil or DEFAULT_CAMERA_PHASES[phase] then
+	local phaseEndsCamera = not rangeMode and DEFAULT_CAMERA_PHASES[phase] == true
+	if camera == nil or rig == nil or phaseEndsCamera then
 		deactivate()
 		return
 	end
@@ -388,7 +470,12 @@ local function update(deltaTime: number): ()
 
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
-	local pivot = rig.root.Position + Vector3.new(0, Theme.COMBAT_CAMERA_PIVOT_HEIGHT, 0)
+	local rootPosition = rig.root.Position
+	local pivot = Vector3.new(
+		rootPosition.X,
+		followHeight(rootPosition.Y, deltaTime) + Theme.COMBAT_CAMERA_PIVOT_HEIGHT,
+		rootPosition.Z
+	)
 	-- The shoulder offset is pulled in against a wall first, so the camera never starts
 	-- its boom from inside the wall the player is hugging.
 	local shoulder = yawFrame:VectorToWorldSpace(shoulderOffset)
@@ -402,7 +489,9 @@ local function update(deltaTime: number): ()
 
 	local frame = CFrame.new(position) * rotation
 	aimFrame = frame
-	camera.FieldOfView = cameraConfig.fieldOfView
+	local fovTarget = targetFieldOfView()
+	fieldOfView += (fovTarget - fieldOfView) * (1 - math.exp(-ADS_FOV_RATE * deltaTime))
+	camera.FieldOfView = fieldOfView
 	camera.Focus = CFrame.new(shoulderPoint)
 	camera.CFrame = frame * shakeOffset(deltaTime)
 end
@@ -480,6 +569,8 @@ function CameraController.Init(): ()
 	shoulderOffset = Vector3.new(offset[1] or 0, offset[2] or 0, offset[3] or 0)
 	targetZoom = cameraConfig.defaultZoom
 	zoom = targetZoom
+	fieldOfView = cameraConfig.fieldOfView
+	rangeMode = detectRange()
 end
 
 function CameraController.Start(): ()
@@ -529,6 +620,16 @@ end
 
 function CameraController.IsActive(): boolean
 	return active
+end
+
+-- True when this client booted into the Proving Grounds (Studio + the provingAttribute).
+function CameraController.IsRange(): boolean
+	return rangeMode
+end
+
+-- Aim down sights (range only): the view eases to `shooting.adsFieldOfView`, read live.
+function CameraController.SetAds(on: boolean): ()
+	adsOn = rangeMode and on
 end
 
 -- True while the shoulder camera has the mouse locked to the crosshair.

@@ -12,6 +12,10 @@
 --
 -- C2 adds `admitCheck` (remote only): the caller is judged by the SAME CheckAdmission a real
 -- arrival runs, as a stranger arriving now, and gets the verdict as a toast; nobody is sent home.
+--
+-- P1: in the Proving Grounds every mission lever is inert. They would start Humanoid waves or
+-- bots inside the range, or write the profile, which the range never does; the range has its
+-- own Studio commands (RequestRangeCommand, RangeService).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,6 +33,7 @@ local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
 local CombatService = require(script.Parent:WaitForChild("CombatService"))
 local WaveService = require(script.Parent:WaitForChild("WaveService"))
+local RangeService = require(script.Parent:WaitForChild("RangeService"))
 
 local TICK_INTERVAL_SECONDS = 1
 local MAX_BOTS = 8
@@ -39,6 +44,7 @@ local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
 local botAccumulator = 0
 local levelConnection: RBXScriptConnection? = nil
+local warnedRange = false
 
 local DebugService = {}
 
@@ -182,6 +188,13 @@ end
 -- The lever table itself. `player` is nil for the attribute path (everyone) and the caller for
 -- the remote path.
 local function applyLever(player: Player?, lever: string, value: any): ()
+	if RangeService.IsActive() then
+		if not warnedRange then
+			warnedRange = true
+			warn(`[DebugService] mission levers are off in the Proving Grounds (ignored "{lever}")`)
+		end
+		return
+	end
 	if lever == "wave" and typeof(value) == "number" then
 		WaveService.ForceWave(value)
 	elseif lever == "spawn" and typeof(value) == "string" and value ~= "" then
@@ -330,6 +343,10 @@ function DebugService.Start(): ()
 	end
 	local debugConfig = combatConfig.debug
 	levelConnection = RunService.Heartbeat:Connect(function(delta: number)
+		-- The range has no run, no bots and no waves; its attributes stay untouched too.
+		if RangeService.IsActive() then
+			return
+		end
 		tickBots(debugConfig, delta)
 		tickAccumulator += delta
 		if tickAccumulator < TICK_INTERVAL_SECONDS then

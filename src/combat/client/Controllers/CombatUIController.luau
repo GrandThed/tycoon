@@ -13,6 +13,13 @@
 -- Degrades like the hub: a profile that will not load shows the same safe-mode card instead
 -- of a kick, a RunState that never arrives leaves the HUD in its lobby state, and the
 -- summary card renders dashes rather than inventing numbers.
+--
+-- P1 Proving Grounds (CameraController.IsRange, Studio only): a different, smaller HUD. No
+-- CombatHud at all, because Ben's rule is no attack button in the range (touch attacks are
+-- auto-fire / tap-fire in InputController) and the range has no run, wallet or HP to show.
+-- It mounts the centre Crosshair and FeedbackController's overlay in an inset-free ScreenGui
+-- (so the dot is the camera's true centre line), plus the Studio RangePanel, the toast and the
+-- load card. Missions are unchanged.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -31,17 +38,21 @@ local SummaryCard = require(uiFolder:WaitForChild("SummaryCard"))
 local Toast = require(uiFolder:WaitForChild("Toast"))
 local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
+local Crosshair = require(uiFolder:WaitForChild("Crosshair"))
+local RangePanel = require(uiFolder:WaitForChild("RangePanel"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local CombatFxController = require(script.Parent:WaitForChild("CombatFxController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
+local FeedbackController = require(script.Parent:WaitForChild("FeedbackController"))
 
 local HUMANOID_WAIT_SECONDS = 5
 local DEFAULT_HIT_MARKER_SECONDS = 0.12
 -- Cursor-hold reasons (CameraController.SetCursorHold): each modal frees the mouse by name.
 local HOLD_LOAD = "load"
 local HOLD_DEBUG = "debug"
+local HOLD_RANGE_PANEL = "rangePanel"
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
@@ -64,6 +75,180 @@ end
 local function prettify(key: string): string
 	local spaced = key:gsub("(%l)(%u)", "%1 %2")
 	return spaced:sub(1, 1):upper() .. spaced:sub(2)
+end
+
+-- RangeStats arrives from the network: only a table with every readout field is shown.
+local function isRangeStats(payload: any): boolean
+	return typeof(payload) == "table"
+		and typeof(payload.lastHits) == "number"
+		and typeof(payload.lastKills) == "number"
+		and typeof(payload.dps) == "number"
+		and (payload.clearSeconds == nil or typeof(payload.clearSeconds) == "number")
+		and typeof(payload.alive) == "number"
+		and typeof(payload.serverFrameMs) == "number"
+end
+
+local function bootRange(): ()
+	local player = Players.LocalPlayer
+	local playerGui = player:WaitForChild("PlayerGui")
+	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
+	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
+	local requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent
+	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
+	-- Filled in once they replicate (see the end of this function), so a slow remote never
+	-- holds the HUD back.
+	local requestTune: RemoteEvent? = nil
+	local requestCommand: RemoteEvent? = nil
+
+	-- Above the range layer, so the panel and toasts always draw over the crosshair.
+	local screenGui = Create("ScreenGui", {
+		Name = "ExpeditionHUD",
+		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 1,
+		Parent = playerGui,
+	}) :: ScreenGui
+	local rangeGui = Create("ScreenGui", {
+		Name = "RangeHUD",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Parent = playerGui,
+	}) :: ScreenGui
+
+	local toast = Toast.new(screenGui)
+	local loaded = false
+	local loadScreen = LoadScreen.new(screenGui, {
+		onRetry = function()
+			requestRetryLoad:FireServer()
+		end,
+		onLeave = function()
+			player:Kick("Rejoin to load your save.")
+		end,
+	})
+	local crosshair = Crosshair.new(rangeGui)
+	FeedbackController.Mount(rangeGui, crosshair)
+
+	-- One debounce window for the command buttons (not the sliders, which throttle
+	-- themselves), so a double tap on Stress never becomes two spawns.
+	local lastCommandAt = 0
+	local panel = RangePanel.new(screenGui, {
+		onTune = function(path: string, value: Types.TuneValue)
+			local remote = requestTune
+			if remote ~= nil then
+				remote:FireServer(path, value)
+			end
+		end,
+		onCommand = function(cmd: string, arg: string?)
+			local remote = requestCommand
+			local now = os.clock()
+			if remote == nil or now - lastCommandAt < Theme.ACTION_DEBOUNCE_SECONDS then
+				return
+			end
+			lastCommandAt = now
+			remote:FireServer(cmd, arg)
+			if cmd == "export" then
+				toast.Show("Tuned values printed to Output", Theme.TOAST_ERROR_SECONDS, false)
+			end
+		end,
+		onWireframe = function(on: boolean)
+			FeedbackController.SetWireframe(on)
+		end,
+		onToggle = function(open: boolean)
+			-- The sheet needs the pointer; closing it hands the mouse back to the crosshair.
+			CameraController.SetCursorHold(HOLD_RANGE_PANEL, open)
+		end,
+	})
+	FeedbackController.SetTuneStateHandler(function()
+		panel.SetLoadout(FeedbackController.GetLoadout())
+	end)
+	-- InputController reports each local range attack so a projectile's flight can be drawn
+	-- before its impact strike arrives. Looked up dynamically: an InputController without
+	-- the hook simply draws no shell.
+	local setAttackHandler = (InputController :: any).SetRangeAttackHandler
+	if typeof(setAttackHandler) == "function" then
+		setAttackHandler(FeedbackController.OnLocalAttack)
+	end
+
+	local function onStateChanged(payload: any): ()
+		if typeof(payload) ~= "table" then
+			return
+		end
+		if payload.kind == "snapshot" then
+			if typeof(payload.state) ~= "table" then
+				return
+			end
+			if not loaded then
+				loaded = true
+				loadScreen.Hide()
+				-- There is no RunState in the range, so the first Snapshot is the only thing
+				-- that ever frees a load hold.
+				CameraController.SetCursorHold(HOLD_LOAD, false)
+			end
+			local settings = payload.state.settings
+			if
+				typeof(settings) == "table"
+				and typeof(settings.music) == "boolean"
+				and typeof(settings.sfx) == "boolean"
+			then
+				SoundController.ApplySettings({ music = settings.music, sfx = settings.sfx })
+			end
+		elseif payload.kind == "loadStatus" and not loaded then
+			local phase = payload.phase
+			if phase ~= "loading" and phase ~= "failed" then
+				return
+			end
+			-- The range takes the pointer only when the card has buttons to press; a normal
+			-- load never unlocks the crosshair.
+			CameraController.SetCursorHold(HOLD_LOAD, phase == "failed")
+			local attempt = payload.attempt
+			local retryAvailableIn = payload.retryAvailableIn
+			loadScreen.Apply({
+				phase = phase,
+				attempt = if typeof(attempt) == "number" then attempt else 1,
+				retryAvailableIn = if typeof(retryAvailableIn) == "number"
+					then retryAvailableIn
+					else 0,
+			})
+		end
+	end
+
+	local function applyLayout(): ()
+		local size = screenGui.AbsoluteSize
+		if size.X <= 0 or size.Y <= 0 then
+			return
+		end
+		local scale = math.clamp(
+			math.min(size.X / Theme.DESIGN_WIDTH, size.Y / Theme.DESIGN_HEIGHT),
+			Theme.MIN_SCALE,
+			Theme.MAX_SCALE
+		)
+		crosshair.SetLayout(scale)
+		FeedbackController.SetLayout(scale)
+		panel.SetLayout(scale, size)
+		loadScreen.SetScale(scale)
+		toast.SetLayout(scale, size.X > size.Y, 0)
+	end
+
+	stateChanged.OnClientEvent:Connect(onStateChanged)
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
+	applyLayout()
+	requestSnapshot:FireServer()
+
+	local waitSeconds = Theme.COMBAT_REMOTE_WAIT_SECONDS
+	requestTune = remotesFolder:WaitForChild("RequestTune", waitSeconds) :: RemoteEvent?
+	requestCommand = remotesFolder:WaitForChild("RequestRangeCommand", waitSeconds) :: RemoteEvent?
+	local rangeStats = remotesFolder:WaitForChild("RangeStats", waitSeconds) :: RemoteEvent?
+	if requestTune == nil or requestCommand == nil or rangeStats == nil then
+		warn("[CombatUIController] a range remote is missing — the panel cannot tune")
+	end
+	if rangeStats ~= nil then
+		rangeStats.OnClientEvent:Connect(function(payload: any)
+			if isRangeStats(payload) then
+				panel.SetStats(payload :: Types.RangeStats)
+			end
+		end)
+	end
 end
 
 local function boot(): ()
@@ -446,7 +631,7 @@ function CombatUIController.Init(): ()
 end
 
 function CombatUIController.Start(): ()
-	task.spawn(boot)
+	task.spawn(if CameraController.IsRange() then bootRange else boot)
 end
 
 return CombatUIController

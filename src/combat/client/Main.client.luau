@@ -8,6 +8,10 @@
 -- Order matters only for Init: SoundController builds its SoundGroups before anything can
 -- Play, and CombatUIController comes last because its Start wires the other controllers
 -- together (stance, gear, health, banners) once the HUD exists.
+--
+-- P1: CrowdRenderer and FeedbackController boot in every build but their Start is inert
+-- outside the Proving Grounds (CameraController.IsRange, decided in CameraController.Init).
+-- MovementController is started by InputController in the range, so it is not listed here.
 
 type Controller = {
 	Init: () -> (),
@@ -23,6 +27,8 @@ local controllers: { Controller } = {
 	require(controllersFolder:WaitForChild("WeaponController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("InputController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatFxController") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("CrowdRenderer") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("FeedbackController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatUIController") :: ModuleScript) :: Controller,
 }
 

@@ -554,6 +554,138 @@ local Theme = {
 	COMBAT_TELEGRAPH_MARK_SIZE = 44,
 	COMBAT_TELEGRAPH_MARK_RISE = 2.2,
 
+	-- P1 Proving Grounds feedback (FeedbackController, Crosshair, RangePanel). There is no
+	-- sound, so every hit must be seen. How strong each layer is comes from
+	-- ProvingGrounds.json `feedback.*` through Tuning (0 = off); these are only the shape of
+	-- each layer at strength 1.
+	-- Crosshair: a centre dot, four ticks pushed out by the live bloom, the bloom ring for
+	-- ranged weapons, and the hit / crit / kill markers.
+	COMBAT_RANGE_CROSSHAIR_SIZE = 120,
+	COMBAT_RANGE_CROSSHAIR_DOT = 4,
+	COMBAT_RANGE_CROSSHAIR_TICK_LENGTH = 9,
+	COMBAT_RANGE_CROSSHAIR_TICK_THICKNESS = 2,
+	COMBAT_RANGE_CROSSHAIR_MIN_GAP = 5, -- design px; bloom never pulls the ticks closer
+	COMBAT_RANGE_CROSSHAIR_MAX_GAP = 56, -- half the crosshair box
+	COMBAT_RANGE_CROSSHAIR_MELEE_GAP = 10, -- fixed tick gap for a melee weapon (no bloom)
+	COMBAT_RANGE_BLOOM_RING_TRANSPARENCY = 0.55,
+	COMBAT_RANGE_MARKER_OFFSET = 9,
+	COMBAT_RANGE_MARKER_LENGTH = 10,
+	COMBAT_RANGE_MARKER_THICKNESS = 3,
+	COMBAT_RANGE_MARKER_SECONDS = 0.2,
+	COMBAT_RANGE_CRIT_MARKER_SCALE = 1.5,
+	COMBAT_RANGE_KILL_X_LENGTH = 30,
+	COMBAT_RANGE_KILL_X_THICKNESS = 4,
+	COMBAT_RANGE_KILL_X_SECONDS = 0.4,
+	COMBAT_RANGE_KICK_SCALE = 1.35, -- the reticle's pop on a hit, at hitMarker strength 1
+	COMBAT_RANGE_KICK_SECONDS = 0.12,
+	COMBAT_RANGE_MARKER_MIN_SCALE = 0.5,
+	COMBAT_RANGE_MARKER_MAX_SCALE = 2,
+	COMBAT_RANGE_CRIT_COLOR = Color3.fromRGB(255, 214, 64), -- Fortnite-style crit yellow
+	COMBAT_RANGE_KILL_COLOR = Color3.fromRGB(240, 70, 70),
+	-- Damage numbers: ONE burst per strike (total + "×N") that pops, arcs up and falls.
+	COMBAT_RANGE_NUMBER_WIDTH = 190,
+	COMBAT_RANGE_NUMBER_HEIGHT = 64,
+	COMBAT_RANGE_NUMBER_TEXT = 26,
+	COMBAT_RANGE_NUMBER_CRIT_TEXT = 32,
+	COMBAT_RANGE_NUMBER_GROWTH_PER_DOUBLING = 3, -- text px added each time the hit count doubles
+	COMBAT_RANGE_NUMBER_MAX_TEXT = 44,
+	COMBAT_RANGE_NUMBER_COUNT_TEXT = 16,
+	COMBAT_RANGE_NUMBER_POP_SCALE = 1.8,
+	COMBAT_RANGE_NUMBER_REDUCED_POP_SCALE = 1.3,
+	COMBAT_RANGE_NUMBER_POP_SECONDS = 0.1,
+	COMBAT_RANGE_NUMBER_SECONDS = 0.8,
+	COMBAT_RANGE_NUMBER_RISE = 3, -- studs; the arc peaks at ~0.6 of this and ends below the start
+	COMBAT_RANGE_NUMBER_DRIFT = 1.5, -- studs sideways over the life of the burst
+	COMBAT_RANGE_NUMBER_FADE_FROM = 0.6, -- share of the life spent fully opaque
+	COMBAT_RANGE_NUMBER_HEAD_CLEARANCE = 1, -- studs above the tallest hit body
+	COMBAT_RANGE_NUMBER_FALLBACK_HEIGHT = 5, -- when the renderer has no body to measure
+	COMBAT_RANGE_NUMBER_MAX_ACTIVE = 12,
+	COMBAT_RANGE_NUMBER_MIN_STRENGTH = 0.5,
+	COMBAT_RANGE_NUMBER_MAX_STRENGTH = 2,
+	-- Hitbox effect: the strike's exact shape, drawn as neon parts for ~0.15 s.
+	COMBAT_RANGE_HITBOX_SECONDS = 0.15,
+	COMBAT_RANGE_HITBOX_MAX_SECONDS = 0.6,
+	COMBAT_RANGE_HITBOX_HOLD_FRACTION = 0.35, -- fully shown before the fade starts
+	COMBAT_RANGE_HITBOX_COLOR = Color3.fromRGB(255, 244, 214),
+	COMBAT_RANGE_HITBOX_CRIT_COLOR = Color3.fromRGB(255, 214, 64),
+	COMBAT_RANGE_HITBOX_EDGE_WIDTH = 0.45,
+	COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY = 0.05,
+	COMBAT_RANGE_HITBOX_FILL_TRANSPARENCY = 0.72,
+	COMBAT_RANGE_HITBOX_SPHERE_TRANSPARENCY = 0.85,
+	COMBAT_RANGE_HITBOX_THICKNESS = 0.08,
+	COMBAT_RANGE_HITBOX_SEGMENT_DEGREES = 10,
+	COMBAT_RANGE_HITBOX_LOW_END_SEGMENT_DEGREES = 20,
+	COMBAT_RANGE_HITBOX_GROW_FROM = 0.7, -- a sphere shockwave grows from this share of its size
+	COMBAT_RANGE_HITBOX_DEFAULT_WIDTH = 1, -- capsule / ray with no width in the strike
+	COMBAT_RANGE_CONE_SPOKES = 8,
+	COMBAT_RANGE_TRACER_WIDTH = 0.3,
+	COMBAT_RANGE_TRACER_COLOR = Color3.fromRGB(255, 236, 170),
+	COMBAT_RANGE_IMPACT_SIZE = 1.4,
+	COMBAT_RANGE_TRAIL_MIN_STUDS = 3, -- a launcher trail is drawn only past this distance
+	COMBAT_RANGE_SHELL_SIZE = 0.9, -- the local launcher shell in flight
+	COMBAT_RANGE_SHELL_MAX_SECONDS = 3, -- the server gives up on a projectile after this long
+	COMBAT_RANGE_FX_POOL_MAX = 600,
+	COMBAT_RANGE_FX_FOLDER = "RangeFx",
+	-- Wireframe (RangePanel toggle): the true padded shape the server tests, held longer.
+	COMBAT_RANGE_WIRE_COLOR = Color3.fromRGB(80, 230, 255),
+	COMBAT_RANGE_WIRE_THICKNESS = 0.12,
+	COMBAT_RANGE_WIRE_SECONDS = 0.8,
+	COMBAT_RANGE_WIRE_TRANSPARENCY = 0.1,
+	COMBAT_RANGE_WIRE_CIRCLE_SEGMENTS = 28,
+	-- Screen layer: hitstop grows with the number of enemies hit, shake and haptics are
+	-- heavier on kills and heavy weapons, the edge flash marks a crowd kill.
+	COMBAT_RANGE_HITSTOP_BASE = 0.035,
+	COMBAT_RANGE_HITSTOP_PER_HIT = 0.007,
+	COMBAT_RANGE_HITSTOP_MAX = 0.12,
+	COMBAT_RANGE_SHAKE_LIGHT = 0.12,
+	COMBAT_RANGE_SHAKE_PER_KILL = 0.05,
+	COMBAT_RANGE_SHAKE_HEAVY = 0.45,
+	COMBAT_RANGE_HEAVY_KNOCKBACK = 20, -- a weapon knocking back at least this is "heavy"
+	COMBAT_RANGE_EDGE_FLASH_KILLS = 5,
+	COMBAT_RANGE_EDGE_FLASH_TRANSPARENCY = 0.35,
+	COMBAT_RANGE_EDGE_FLASH_SECONDS = 0.35,
+	COMBAT_RANGE_EDGE_FLASH_THICKNESS = 140,
+	COMBAT_RANGE_HAPTIC_LIGHT = 0.25,
+	COMBAT_RANGE_HAPTIC_HEAVY = 0.7,
+	COMBAT_RANGE_HAPTIC_SECONDS = 0.07,
+	COMBAT_RANGE_HAPTIC_HEAVY_SECONDS = 0.14,
+	-- Counters: hits in the running combo and kills of the last attack, right of the crosshair.
+	COMBAT_RANGE_COMBO_WINDOW_SECONDS = 2.5,
+	COMBAT_RANGE_COUNTER_OFFSET_X = 60,
+	COMBAT_RANGE_COUNTER_OFFSET_Y = 40,
+	COMBAT_RANGE_COUNTER_WIDTH = 116,
+	COMBAT_RANGE_COMBO_TEXT = 30,
+	COMBAT_RANGE_COMBO_LABEL_TEXT = 11,
+	COMBAT_RANGE_KILLS_TEXT = 16,
+	COMBAT_RANGE_COUNTER_POP_SCALE = 1.3,
+	COMBAT_RANGE_COUNTER_POP_SECONDS = 0.12,
+	COMBAT_RANGE_KILLS_SECONDS = 1.2,
+	COMBAT_RANGE_COUNTER_FADE_SECONDS = 0.3,
+	-- RangePanel (Studio only). Rows are 48 design px (44 physical px at MIN_SCALE); the body
+	-- scrolls instead of shrinking on a short phone viewport.
+	COMBAT_RANGE_PANEL_WIDTH = 300,
+	COMBAT_RANGE_PANEL_ROW_HEIGHT = 48,
+	COMBAT_RANGE_PANEL_LABEL_HEIGHT = 16,
+	COMBAT_RANGE_PANEL_GAP = 6,
+	COMBAT_RANGE_PANEL_TEXT = 12,
+	COMBAT_RANGE_PANEL_VALUE_WIDTH = 64,
+	COMBAT_RANGE_PANEL_STEP_WIDTH = 48,
+	COMBAT_RANGE_PANEL_KNOB = 16,
+	COMBAT_RANGE_PANEL_TRACK = 6,
+	COMBAT_RANGE_PANEL_TOGGLE_WIDTH = 120,
+	COMBAT_RANGE_PANEL_READOUT_LINE = 15,
+	COMBAT_RANGE_PANEL_READOUT_LINES = 3,
+	COMBAT_RANGE_PANEL_COMMAND_COLUMNS = 3,
+	COMBAT_RANGE_PANEL_SEND_SECONDS = 0.1, -- slider drags send at most this often
+	-- Slider span: feedback strengths run 0..FEEDBACK_MAX; everything else 0..max(base x
+	-- RANGE_FACTOR, MIN_SPAN) so a zero default (cap, launch) can still be dragged up.
+	COMBAT_RANGE_PANEL_FEEDBACK_MAX = 3,
+	COMBAT_RANGE_PANEL_FEEDBACK_STEP = 0.05,
+	COMBAT_RANGE_PANEL_RANGE_FACTOR = 3,
+	COMBAT_RANGE_PANEL_MIN_SPAN = 10,
+	COMBAT_RANGE_PANEL_FINE_STEPS = 100,
+	COMBAT_RANGE_FPS_SAMPLE_SECONDS = 0.5,
+
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.
 	-- Rows are 48 design px like the hub's DebugPanel, because 48 x MIN_SCALE is exactly
