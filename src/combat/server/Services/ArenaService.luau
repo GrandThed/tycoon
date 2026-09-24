@@ -13,6 +13,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -60,6 +61,9 @@ local hostUserId = 0
 local hostName = ""
 -- The verified hub ticket; nil = a private run (no code, no expected list, nothing published).
 local runTicket: Types.RunTicket? = nil
+-- Studio only: this run's mission came from the DebugMission attribute (not a handoff record or
+-- teleport data), so arrivals skip the era lock and Ben can test eras he has not reached.
+local runDebugMission = false
 -- True while the first arrival's ResolveTicket is in flight. Later arrivals park on
 -- ticketWaiters until it lands, because admission reads the ticket (host gate, expected list).
 local ticketPending = false
@@ -765,7 +769,8 @@ function ArenaService.EnsureRun(
 	mission: Types.MissionConfig,
 	overdrive: boolean,
 	runHostUserId: number,
-	arrivalName: string
+	arrivalName: string,
+	debugMission: boolean
 ): ()
 	if runMission ~= nil then
 		if ticketPending then
@@ -776,6 +781,11 @@ function ArenaService.EnsureRun(
 	end
 	runMission = mission
 	runOverdrive = overdrive
+	-- Re-checked here so a caller mistake can never open the bypass on a live server.
+	runDebugMission = debugMission and RunService:IsStudio()
+	if runDebugMission then
+		print("[Debug] DebugMission bypasses the era lock (Studio only)")
+	end
 	hostUserId = runHostUserId
 	-- Replaced by the host's own name when the host arrives; until then (or if the host never
 	-- does) the run is listed under whoever opened it.
@@ -829,7 +839,8 @@ function ArenaService.CheckAdmission(player: Player, hint: AdmissionHint): Admis
 	-- Host-gated (Ben's ruling): with a ticket the hub already checked the leader's unlock at
 	-- departure and joiners fight on the host's entitlement, so only the host is re-checked.
 	-- Without one nothing vouches for anybody and every arrival is checked as at C1.
-	local mustCheck = runTicket == nil or (not probe and player.UserId == hostUserId)
+	local mustCheck = not runDebugMission
+		and (runTicket == nil or (not probe and player.UserId == hostUserId))
 	if mustCheck then
 		local state = DataService.GetState(player)
 		if state == nil or not Combat.MissionUnlocked(state, mission, runOverdrive, config) then

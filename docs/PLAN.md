@@ -1600,9 +1600,8 @@ GREEN. `sim_combat.py --check` passed 14/14; `sim_economy.py --check` output is 
 - Combat is still silent until the upload.
 - Animation ids are unverified.
 - Missions 2–4 have never been fought.
-- **`DebugMission boomtown / metropolis / orbital` is refused as "locked"** unless the Studio
-  profile's `combat.highestEra` has reached that era (2 / 3 / 4). No Studio lever raises it
-  (see `docs/PLAYTEST.md` "C2.5 Stop 1", Before you start).
+- In Studio, `DebugMission` skips the era lock (Studio-only bypass in `ArenaService.CheckAdmission`);
+  live, missions 2–4 still need the era (or a host who has it).
 
 - [x] Stop 1 built and reviewed (definition of done in INTERFACES "C2.5 + C3 contracts — Stop 1")
 - [ ] Ben's playtest (`docs/PLAYTEST.md` "C2.5 Stop 1")

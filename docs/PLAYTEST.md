@@ -3720,10 +3720,8 @@ Models come in Stop 2, so judge motion and feel, not looks.
   | `DebugBots` | number | N bots in the party (stays set) | **Bots +1 / −1** |
   | `DebugMission` | string | `village` / `boomtown` / `metropolis` / `orbital`, read at Play | — |
 
-- **Missions 2–4 need an unlocked profile.** `DebugMission boomtown` / `metropolis` / `orbital`
-  is refused with a **"locked"** toast unless your Studio profile has reached Boomtown /
-  Metropolis / Orbital in the hub. No lever skips this yet. If you get "locked", note it and
-  skip section 8.
+- **Missions 2–4 in Studio:** setting `DebugMission` to `boomtown` / `metropolis` / `orbital`
+  skips the era lock (Studio only); Output prints `[Debug] DebugMission bypasses the era lock`.
 
 ### 1. PC camera and cursor
 
@@ -3864,7 +3862,6 @@ Models come in Stop 2, so judge motion and feel, not looks.
 - Placeholder rigs, empty hands, blockout arenas.
 - Another player's arrows or bullets show no flying fx (carried to Stop 3).
 - Missions 2–4 balance feels off (draft; Stop 3 re-balances).
-- "locked" on `DebugMission boomtown/metropolis/orbital` with a profile below that era.
 - One `animation … did not load` warning per bad id.
 
 ### What a bug looks like

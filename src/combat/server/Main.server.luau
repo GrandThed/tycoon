@@ -128,12 +128,13 @@ end
 
 -- Resolution order: live teleport data, then the Studio handoff record, then the Workspace
 -- attributes, then the default mission — so build/combat.rbxl still plays on its own with no
--- hub, no teleport and no record.
-local function resolveRun(player: Player): (Types.MissionConfig?, boolean, number)
+-- hub, no teleport and no record. The fourth result is true only when the mission was named by
+-- the DebugMission attribute in Studio: that run may skip the era lock (ArenaService).
+local function resolveRun(player: Player): (Types.MissionConfig?, boolean, number, boolean)
 	local combatConfig = Catalog.GetCombatConfig()
 	local missionId, overdrive, hintHostUserId = readTeleportHint(player)
 	if combatConfig == nil then
-		return nil, false, player.UserId
+		return nil, false, player.UserId, false
 	end
 	if missionId == nil then
 		local bridgeId, bridgeOverdrive, bridgeHost = readArrival(player)
@@ -144,16 +145,23 @@ local function resolveRun(player: Player): (Types.MissionConfig?, boolean, numbe
 		end
 	end
 	local resolvedId = missionId or ""
+	local fromDebugAttribute = false
 	if missionId == nil then
 		local debugConfig = combatConfig.debug
 		local missionAttribute = workspace:GetAttribute(debugConfig.missionAttribute)
+		fromDebugAttribute = RunService:IsStudio()
+			and typeof(missionAttribute) == "string"
+			and missionAttribute ~= ""
 		resolvedId = if typeof(missionAttribute) == "string" and missionAttribute ~= ""
 			then missionAttribute
 			else DEFAULT_DEBUG_MISSION_ID
 		overdrive = workspace:GetAttribute(debugConfig.overdriveAttribute) == true
 	end
 	-- No hint (Studio or a standalone boot): this player is the host of whatever starts here.
-	return Catalog.GetMissionById(resolvedId), overdrive, hintHostUserId or player.UserId
+	return Catalog.GetMissionById(resolvedId),
+		overdrive,
+		hintHostUserId or player.UserId,
+		fromDebugAttribute
 end
 
 -- Shared by the first join (LoadAsync), a safe-mode retry (RetryLoadAsync) and a rejoin after a
@@ -172,7 +180,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	Combat.TouchHighestEra(state)
 
-	local mission, overdrive, hostUserId = resolveRun(player)
+	local mission, overdrive, hostUserId, debugMission = resolveRun(player)
 	if mission == nil or Catalog.GetCombatConfig() == nil then
 		-- The hint named no mission this build knows (or the configs are missing).
 		ReturnService.Refuse(player, "locked")
@@ -180,7 +188,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	-- The first arrival opens the run it asked for and reads the hub's ticket; everyone else
 	-- joins the run already here. Yields on that MemoryStore read.
-	ArenaService.EnsureRun(mission, overdrive, hostUserId, player.Name)
+	ArenaService.EnsureRun(mission, overdrive, hostUserId, player.Name, debugMission)
 	if not player:IsDescendantOf(Players) then
 		-- Left during the ticket read: PlayerRemoving has already run, so undo what it could not.
 		ArenaService.ResetIfEmpty()
