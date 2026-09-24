@@ -19,6 +19,7 @@
 -- or Combat.json enemy.defaultColor / bossColor.
 
 local PathfindingService = game:GetService("PathfindingService")
+local PhysicsService = game:GetService("PhysicsService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -45,12 +46,22 @@ local CHARGE_LEAN_DEGREES = -22
 local STAGGER_LEAN_DEGREES = 16
 local WALK_BOB_DEGREES = 6
 local WALK_BOB_HZ = 2.2
+-- The bob is written to the joint at this rate, not every AI tick: each C0 write replicates.
+local BOB_WRITE_HZ = 5
 -- Spawn clearance above the arena floor, so a rig never starts inside it.
 local SPAWN_LIFT = 3
 -- The ArenaLayout contract puts the floor's top face at y = 0, so anything this far below it
 -- has fallen off the map and is on its way to FallenPartsDestroyHeight. Reaped so it stops
 -- counting as alive.
 local VOID_Y = -20
+-- Corpses collide with the arena only, so a ragdoll never trips a player or blocks an enemy.
+-- ArenaService puts every arena part in ARENA_GROUP (which still collides with everything).
+local ARENA_GROUP = "CombatArena"
+local RAGDOLL_GROUP = "EnemyRagdoll"
+-- A summon needs this much room from cover and fence, and floor under it; otherwise it takes
+-- the nearest free rim spawn.
+local SUMMON_CLEARANCE_STUDS = 2.5
+local FLOOR_PROBE_STUDS = 10
 
 -- Steering geometry. These shape how the crowd moves, not how hard it hits; the tunables Ben
 -- balances (radii, slot count, speeds, windups) are in Combat.json `ai`.
@@ -64,9 +75,6 @@ local CIRCLE_STEP_RADIANS = 0.6
 local APPROACH_MARGIN = 8
 -- A slot holder that ends up this far outside the hold ring (knocked back) loses the slot.
 local SLOT_KEEP_MARGIN = 8
--- Retarget only when another member is this much closer, so enemies do not flip between two
--- players standing side by side (which would also churn the attack slots).
-local RETARGET_HYSTERESIS = 4
 -- Every enemy flips its strafe direction on its own period, so a ring never rotates in lockstep.
 local STRAFE_FLIP_SECONDS = 2.5
 local STRAFE_FLIP_SPREAD = 0.7
@@ -74,17 +82,6 @@ local STRAFE_FLIP_SPREAD = 0.7
 local RUN_SPEED_FRACTION = 0.85
 -- Closer than this to the steered point counts as standing (idle animation, no bob).
 local ARRIVE_STUDS = 0.6
--- A charger starts its windup only inside this fraction of chargeDistance, so the dash reaches.
-local CHARGE_TRIGGER_FRACTION = 0.9
-local MEMBER_RADIUS = 1.2
--- Grace on top of the ideal dash time before a dash blocked by an obstacle is ended.
-local DASH_TIMEOUT_PAD = 0.35
--- A boss slam starts when a member is within its radius plus this.
-local SLAM_TRIGGER_MARGIN = 2
-local DEFAULT_SLAM_RADIUS = 10
-local DEFAULT_SUMMON_COUNT = 2
--- A cancelled windup (staggered) pushes the next attack back by this fraction of the cooldown.
-local CANCEL_COOLDOWN_FRACTION = 0.5
 -- The first swing of a fresh spawn is offset by id so a wave's attacks do not land in unison.
 local SPAWN_ATTACK_OFFSET = 0.15
 local SPAWN_ATTACK_OFFSET_STEPS = 5
@@ -101,7 +98,6 @@ local PATH_AGENT_HEIGHT = 5
 local ENGAGE_FACE_MARGIN = 8
 local FACE_RESPONSIVENESS = 25
 -- Hit reaction and death.
-local STAGGER_SHOVE = 6
 local RAGDOLL_LIFT_FRACTION = 0.4
 local RAGDOLL_UPPER_ANGLE = 70
 
@@ -116,8 +112,12 @@ type Action = {
 	targetUserId: number,
 	damage: number,
 	radius: number,
-	-- Boss patterns do not reset the ordinary attack cooldown.
+	-- Boss patterns do not reset the ordinary attack cooldown; patternIndex (0 = none) lets a
+	-- stun refund part of that pattern's own cooldown.
 	pattern: boolean,
+	patternIndex: number,
+	-- A charger's one strike at the end of its recovery leaves the next charge ready at once.
+	freeRecovery: boolean,
 	summonKey: string?,
 	summonCount: number,
 	windupSeconds: number,
@@ -174,6 +174,9 @@ export type Enemy = {
 	patterns: { Types.BossPatternDef },
 	patternReadyAt: { number },
 	patternCursor: number,
+	-- Charger: the one recovery-end strike has been used since the last charge.
+	chargerStruck: boolean,
+	bobWriteAt: number,
 	walkSpeedNow: number,
 	motion: Motion,
 	lastHitDirection: Vector3?,
@@ -222,6 +225,11 @@ local enemiesFolder: Folder? = nil
 local placeholderTemplate: Model? = nil
 local spawnPoints: { Vector3 } = {}
 local obstacleParams: RaycastParams? = nil
+-- Cover + fence for the summon clearance check, and the floor a summon must stand on.
+local clearanceParams: OverlapParams? = nil
+local floorParams: RaycastParams? = nil
+-- nil = not tried yet; false = the collision group API failed (corpses stay Default).
+local groupsReady: boolean? = nil
 -- Shared by every line-of-sight ray; the enemy folder is excluded once it exists (Init).
 local sightParams = RaycastParams.new()
 sightParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -552,12 +560,53 @@ local function face(enemy: Enemy, direction: Vector3): ()
 	align.CFrame = CFrame.lookAt(Vector3.zero, planar.Unit)
 end
 
+-- Room to stand: no cover or fence within SUMMON_CLEARANCE_STUDS, and floor underneath.
+local function spotClear(point: Vector3): boolean
+	local overlap = clearanceParams
+	if overlap ~= nil then
+		local centre = Vector3.new(point.X, PROBE_HEIGHT, point.Z)
+		if #workspace:GetPartBoundsInRadius(centre, SUMMON_CLEARANCE_STUDS, overlap) > 0 then
+			return false
+		end
+	end
+	local params = floorParams
+	if params ~= nil then
+		local origin = Vector3.new(point.X, FLOOR_PROBE_STUDS / 2, point.Z)
+		if workspace:Raycast(origin, Vector3.new(0, -FLOOR_PROBE_STUDS, 0), params) == nil then
+			return false
+		end
+	end
+	return true
+end
+
 local function spawnPosition(spawnIndex: number, enemyId: number, at: Vector3?): Vector3
 	local angle = enemyId * GOLDEN_ANGLE
 	local offset = ringDirection(angle) * SPAWN_RING_RADIUS
 	local lift = Vector3.new(0, SPAWN_LIFT, 0)
 	if at ~= nil then
-		return Vector3.new(at.X, 0, at.Z) + offset + lift
+		local beside = Vector3.new(at.X, 0, at.Z) + offset
+		if #spawnPoints == 0 or spotClear(beside) then
+			return beside + lift
+		end
+		-- Blocked by cover, the fence or the floor edge: the rim spawn nearest the boss that has
+		-- room, else simply the nearest rim spawn (rim spawns are authored clear).
+		local nearest = beside
+		local nearestFree: Vector3? = nil
+		local nearestDistance = math.huge
+		local nearestFreeDistance = math.huge
+		for _, point in spawnPoints do
+			local candidate = point + offset
+			local distance = flat(candidate - at).Magnitude
+			if distance < nearestDistance then
+				nearestDistance = distance
+				nearest = candidate
+			end
+			if distance < nearestFreeDistance and spotClear(candidate) then
+				nearestFreeDistance = distance
+				nearestFree = candidate
+			end
+		end
+		return (nearestFree or nearest) + lift
 	end
 	if #spawnPoints == 0 then
 		return lift
@@ -580,21 +629,78 @@ function EnemyService.SetSpawnPoints(points: { Vector3 }): ()
 	spawnPoints = points
 end
 
--- The arena's cover. Only these block the steering probe, so the floor, the fence and the lobby
--- pad never send an enemy to the pathfinder.
-function EnemyService.SetObstacles(parts: { BasePart }): ()
-	if #parts == 0 then
-		obstacleParams = nil
-		return
-	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
+local function asInstances(parts: { BasePart }): { Instance }
 	local instances: { Instance } = {}
 	for _, part in parts do
 		table.insert(instances, part)
 	end
-	params.FilterDescendantsInstances = instances
-	obstacleParams = params
+	return instances
+end
+
+-- The arena's geometry. Only the cover blocks the steering probe, so the floor, the fence and
+-- the lobby pad never send an enemy to the pathfinder; cover + fence gate where a summon may
+-- appear, and the floor must be under it.
+function EnemyService.SetArenaGeometry(
+	cover: { BasePart },
+	walls: { BasePart },
+	floor: BasePart?
+): ()
+	obstacleParams = nil
+	if #cover > 0 then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = asInstances(cover)
+		obstacleParams = params
+	end
+	local solid = asInstances(cover)
+	for _, wall in walls do
+		table.insert(solid, wall)
+	end
+	clearanceParams = nil
+	if #solid > 0 then
+		local overlap = OverlapParams.new()
+		overlap.FilterType = Enum.RaycastFilterType.Include
+		overlap.FilterDescendantsInstances = solid
+		clearanceParams = overlap
+	end
+	floorParams = nil
+	if floor ~= nil then
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { floor }
+		floorParams = params
+	end
+end
+
+-- Registered once; pcall because the group API throws past the engine's group cap.
+local function ensureCollisionGroups(): boolean
+	local known = groupsReady
+	if known ~= nil then
+		return known
+	end
+	local ok, err = pcall(function()
+		for _, name in { ARENA_GROUP, RAGDOLL_GROUP } do
+			if not PhysicsService:IsCollisionGroupRegistered(name) then
+				PhysicsService:RegisterCollisionGroup(name)
+			end
+		end
+		PhysicsService:CollisionGroupSetCollidable(RAGDOLL_GROUP, "Default", false)
+		PhysicsService:CollisionGroupSetCollidable(RAGDOLL_GROUP, RAGDOLL_GROUP, false)
+		PhysicsService:CollisionGroupSetCollidable(RAGDOLL_GROUP, ARENA_GROUP, true)
+	end)
+	if not ok then
+		warn(`[EnemyService] collision groups unavailable: {err}; corpses collide as Default`)
+	end
+	groupsReady = ok
+	return ok
+end
+
+-- ArenaService stamps this on every arena part; nil = groups unavailable, keep Default.
+function EnemyService.ArenaCollisionGroup(): string?
+	if ensureCollisionGroups() then
+		return ARENA_GROUP
+	end
+	return nil
 end
 
 function EnemyService.SetMission(missionConfig: Types.MissionConfig?): ()
@@ -791,6 +897,8 @@ function EnemyService.Spawn(
 		patterns = patterns,
 		patternReadyAt = patternReadyAt,
 		patternCursor = 1,
+		chargerStruck = false,
+		bobWriteAt = 0,
 		walkSpeedNow = def.speed,
 		motion = "idle",
 		lastHitDirection = nil,
@@ -878,6 +986,7 @@ local function pose(enemy: Enemy, now: number, delta: number): ()
 	local rightArm: CFrame? = nil
 	local leftArm: CFrame? = nil
 	local waist: CFrame? = nil
+	local bobbing = false
 	local action = enemy.action
 	if now < enemy.staggerUntil then
 		waist = CFrame.Angles(math.rad(STAGGER_LEAN_DEGREES), 0, 0)
@@ -899,11 +1008,17 @@ local function pose(enemy: Enemy, now: number, delta: number): ()
 		if not animated then
 			enemy.walkPhase += delta * WALK_BOB_HZ * math.pi * 2
 			waist = CFrame.Angles(0, 0, math.rad(WALK_BOB_DEGREES) * math.sin(enemy.walkPhase))
+			bobbing = true
 		end
 	end
 	setJoint(enemy.attackJoint, enemy.attackJointRest, rightArm)
 	setJoint(enemy.leftArmJoint, enemy.leftArmRest, leftArm)
-	setJoint(enemy.waistJoint, enemy.waistRest, waist)
+	if not bobbing then
+		setJoint(enemy.waistJoint, enemy.waistRest, waist)
+	elseif now >= enemy.bobWriteAt then
+		enemy.bobWriteAt = now + 1 / BOB_WRITE_HZ
+		setJoint(enemy.waistJoint, enemy.waistRest, waist)
+	end
 end
 
 local function pushFx(fx: Types.CombatFx): ()
@@ -913,11 +1028,37 @@ local function pushFx(fx: Types.CombatFx): ()
 	end
 end
 
+local function telegraphKindOf(kind: ActionKind): "strike" | "slam" | "charge" | "summon"
+	if kind == "slam" then
+		return "slam"
+	elseif kind == "charge" then
+		return "charge"
+	elseif kind == "summon" then
+		return "summon"
+	end
+	-- A shot is drawn like a strike: the glow on the attacker.
+	return "strike"
+end
+
+-- seconds = 0 tells the client to clear this enemy's telegraphs: the blow will not land.
+local function clearTelegraph(enemy: Enemy, action: Action): ()
+	pushFx({
+		kind = "telegraph",
+		enemyId = enemy.id,
+		attack = telegraphKindOf(action.kind),
+		position = enemy.root.Position,
+		direction = action.facing,
+		radius = nil,
+		seconds = 0,
+	})
+end
+
 local function endAction(enemy: Enemy, now: number, cancelled: boolean): ()
 	local action = enemy.action
 	if action == nil then
 		return
 	end
+	local config = combatConfig
 	enemy.action = nil
 	enemy.model:SetAttribute("Attacking", false)
 	setWalkSpeed(enemy, enemy.speed)
@@ -926,11 +1067,13 @@ local function endAction(enemy: Enemy, now: number, cancelled: boolean): ()
 		attackTrack:Stop(0.1)
 	end
 	if cancelled then
-		enemy.nextAttackAt =
-			math.max(enemy.nextAttackAt, now + enemy.attackCooldown * CANCEL_COOLDOWN_FRACTION)
+		clearTelegraph(enemy, action)
+		local fraction = if config ~= nil then config.ai.cancelCooldownFraction else 0
+		enemy.nextAttackAt = math.max(enemy.nextAttackAt, now + enemy.attackCooldown * fraction)
+	elseif action.freeRecovery then
+		enemy.nextAttackAt = now
 	elseif action.pattern then
 		-- ai.postPatternAttackDelay keeps a pattern's tell and the ordinary attack's apart.
-		local config = combatConfig
 		local delay = if config ~= nil then config.ai.postPatternAttackDelay else 0
 		enemy.nextAttackAt = math.max(enemy.nextAttackAt, now + delay)
 	else
@@ -985,6 +1128,9 @@ local function ragdoll(enemy: Enemy, direction: Vector3?, impulse: number): ()
 		if descendant:IsA("BasePart") then
 			descendant.CanQuery = false
 			descendant.CanTouch = false
+			if groupsReady == true then
+				descendant.CollisionGroup = RAGDOLL_GROUP
+			end
 			if descendant ~= root then
 				descendant.CanCollide = true
 			end
@@ -1027,7 +1173,11 @@ function killEnemy(enemy: Enemy, byUserId: number): ()
 		connection:Disconnect()
 	end
 	table.clear(enemy.watchers)
+	local pending = enemy.action
 	enemy.action = nil
+	if pending ~= nil then
+		clearTelegraph(enemy, pending)
+	end
 	enemy.waypoints = nil
 	local config = combatConfig
 	local corpseSeconds = if config ~= nil
@@ -1064,7 +1214,7 @@ local function stagger(enemy: Enemy, heavy: boolean, direction: Vector3): ()
 	end
 	local seconds = if heavy then config.ai.finisherStaggerSeconds else config.ai.staggerSeconds
 	if enemy.isBoss then
-		seconds *= 0.5
+		seconds *= config.ai.bossStaggerMult
 	end
 	if seconds <= 0 then
 		return
@@ -1080,7 +1230,7 @@ local function stagger(enemy: Enemy, heavy: boolean, direction: Vector3): ()
 	end
 	if enemy.action == nil then
 		hold(enemy)
-		enemy.root.AssemblyLinearVelocity += direction * STAGGER_SHOVE
+		enemy.root.AssemblyLinearVelocity += direction * config.ai.staggerShove
 	end
 	local hitTrack = enemy.tracks.hit
 	if hitTrack ~= nil then
@@ -1122,7 +1272,18 @@ function EnemyService.Stun(enemy: Enemy, seconds: number): ()
 	end
 	local now = os.clock()
 	enemy.stunUntil = math.max(enemy.stunUntil, now + seconds)
-	if not enemy.isBoss then
+	-- A stun ends whatever attack is in flight, bosses included, so nothing frozen by the stun
+	-- can land after it. A boss pattern caught in its windup gets part of its cooldown back
+	-- (ai.stunPatternRefundFraction); a dash already under way is simply over.
+	local action = enemy.action
+	if action ~= nil then
+		local config = combatConfig
+		if action.patternIndex > 0 and not action.dashing and config ~= nil then
+			local pattern = enemy.patterns[action.patternIndex]
+			if pattern ~= nil then
+				enemy.patternReadyAt[action.patternIndex] -= math.max(0, pattern.cooldown) * config.ai.stunPatternRefundFraction
+			end
+		end
 		endAction(enemy, now, true)
 	end
 	enemy.humanoid:MoveTo(enemy.root.Position)
@@ -1243,7 +1404,7 @@ local function retarget(
 	end
 	if current ~= nil and best ~= nil and best ~= current then
 		local currentDistance = (current.position - position).Magnitude
-		if currentDistance <= bestDistance + RETARGET_HYSTERESIS then
+		if currentDistance <= bestDistance + config.ai.retargetHysteresis then
 			best = current
 		end
 	end
@@ -1251,10 +1412,11 @@ local function retarget(
 	return best
 end
 
--- Only non-boss melee and charger enemies compete for slots; a charger without one charges from
--- the hold ring instead (sim_combat.py models the same: it needs a slot to swing).
+-- Only non-boss "melee" enemies compete for slots. Chargers never take one, so their dashes
+-- (and the one strike at the end of a recovery) are EXEMPT from ai.maxMeleeAttackers; bosses
+-- walk straight in and are exempt too.
 local function usesSlots(enemy: Enemy): boolean
-	return not enemy.isBoss and enemy.kind ~= "ranged"
+	return not enemy.isBoss and enemy.kind == "melee"
 end
 
 local function slotCount(config: Types.CombatConfig): number
@@ -1570,6 +1732,8 @@ local function beginAction(
 		damage = damage,
 		radius = radius,
 		pattern = pattern,
+		patternIndex = 0,
+		freeRecovery = false,
 		summonKey = nil,
 		summonCount = 0,
 		windupSeconds = seconds,
@@ -1587,17 +1751,11 @@ local function beginAction(
 	if attackTrack ~= nil and (kind == "strike" or kind == "shoot") then
 		attackTrack:Play(0.05)
 	end
-	-- A shot is drawn like a strike (glow on the attacker); a summon has its own tell and never
-	-- lands on a player, so it carries no radius.
-	local telegraphKind: "strike" | "slam" | "charge" | "summon" = if kind == "slam"
-		then "slam"
-		elseif kind == "charge" then "charge"
-		elseif kind == "summon" then "summon"
-		else "strike"
+	-- A summon never lands on a player, so its telegraph carries no radius.
 	pushFx({
 		kind = "telegraph",
 		enemyId = enemy.id,
-		attack = telegraphKind,
+		attack = telegraphKindOf(kind),
 		position = enemy.root.Position,
 		direction = locked,
 		radius = if kind == "summon" then nil else radius,
@@ -1619,7 +1777,7 @@ local function startDash(enemy: Enemy, action: Action, now: number, config: Type
 	action.dashing = true
 	action.dashFrom = enemy.root.Position
 	action.dashLast = enemy.root.Position
-	action.dashEndAt = now + distance / speed + DASH_TIMEOUT_PAD
+	action.dashEndAt = now + distance / speed + config.ai.dashTimeoutPad
 	setWalkSpeed(enemy, speed)
 	enemy.humanoid:MoveTo(action.dashFrom + action.facing * distance)
 	setMotion(enemy, "run")
@@ -1634,7 +1792,7 @@ local function updateDash(
 	config: Types.CombatConfig
 ): ()
 	local position = enemy.root.Position
-	local reachWidth = action.radius + MEMBER_RADIUS
+	local reachWidth = action.radius + config.ai.memberRadius
 	for _, info in targets do
 		local userId = info.member.userId
 		if action.dashHit[userId] then
@@ -1678,7 +1836,7 @@ local function resolveAction(
 				continue
 			end
 			if
-				offset.Magnitude > MEMBER_RADIUS
+				offset.Magnitude > ai.memberRadius
 				and angleBetween(action.facing, offset) > ai.strikeHalfArcDegrees
 			then
 				continue
@@ -1699,7 +1857,7 @@ local function resolveAction(
 		end
 	elseif action.kind == "slam" then
 		for _, info in targets do
-			if flat(info.position - position).Magnitude <= action.radius + MEMBER_RADIUS then
+			if flat(info.position - position).Magnitude <= action.radius + ai.memberRadius then
 				damageMember(info.member, action.damage)
 			end
 		end
@@ -1722,9 +1880,12 @@ local function patternViable(
 ): boolean
 	local position = enemy.root.Position
 	if pattern.kind == "slam" then
-		local radius = pattern.radius or DEFAULT_SLAM_RADIUS
+		local radius = pattern.radius or config.ai.defaultSlamRadius
 		for _, other in targets do
-			if flat(other.position - position).Magnitude <= radius + SLAM_TRIGGER_MARGIN then
+			if
+				flat(other.position - position).Magnitude
+				<= radius + config.ai.slamTriggerMargin
+			then
 				return true
 			end
 		end
@@ -1732,7 +1893,7 @@ local function patternViable(
 	elseif pattern.kind == "charge" then
 		local distance = flat(info.position - position).Magnitude
 		return distance >= enemy.reach
-			and distance <= config.ai.chargeDistance * CHARGE_TRIGGER_FRACTION
+			and distance <= config.ai.chargeDistance * config.ai.chargeTriggerFraction
 			and lineOfSight(enemy, info.root)
 	elseif pattern.kind == "summon" then
 		local missionConfig = mission
@@ -1770,20 +1931,21 @@ local function tryPattern(
 		enemy.patternReadyAt[index] = now + windup + math.max(0, pattern.cooldown)
 		local damage = enemy.damage * (pattern.damageMult or 1)
 		local toTarget = info.position - enemy.root.Position
+		local action: Action
 		if pattern.kind == "slam" then
-			beginAction(
+			action = beginAction(
 				enemy,
 				"slam",
 				windup,
 				toTarget,
 				info.member.userId,
 				damage,
-				pattern.radius or DEFAULT_SLAM_RADIUS,
+				pattern.radius or config.ai.defaultSlamRadius,
 				true,
 				now
 			)
 		elseif pattern.kind == "charge" then
-			beginAction(
+			action = beginAction(
 				enemy,
 				"charge",
 				windup,
@@ -1795,11 +1957,13 @@ local function tryPattern(
 				now
 			)
 		else
-			local action =
+			action =
 				beginAction(enemy, "summon", windup, toTarget, info.member.userId, 0, 0, true, now)
 			action.summonKey = pattern.enemy
-			action.summonCount = math.max(0, math.floor(pattern.count or DEFAULT_SUMMON_COUNT))
+			action.summonCount =
+				math.max(0, math.floor(pattern.count or config.ai.defaultSummonCount))
 		end
+		action.patternIndex = index
 		return true
 	end
 	return false
@@ -1856,8 +2020,16 @@ local function behaveMelee(
 	)
 end
 
--- Charger: in a slot it fights like a melee enemy; out of one it circles the hold ring and,
--- whenever its attack is ready and the lane is clear, winds up and dashes through the target.
+-- Charger (C2.5 review ruling). Never takes a melee slot: charges are exempt from
+-- ai.maxMeleeAttackers. The cycle, which sim_combat.py mirrors:
+--   1. approach until the target is inside the charge band [reach, chargeDistance x
+--      chargeTriggerFraction] with line of sight (too close: back out to the hold ring; no
+--      sight line: sidestep round the target at full speed);
+--   2. wind up chargeWindupSeconds (telegraph "charge"), then dash chargeDistance at
+--      speed x chargeSpeedMult; each member on the lane takes `damage` once;
+--   3. recover attackCooldown after the dash ends, circling at holdRadius;
+--   4. when recovery ends with the target within reach, ONE normal telegraphed strike
+--      (telegraphSeconds) that leaves the charge ready at once; then back to 1.
 local function behaveCharger(
 	enemy: Enemy,
 	info: TargetInfo,
@@ -1867,12 +2039,33 @@ local function behaveCharger(
 ): ()
 	local toTarget = flat(info.position - enemy.root.Position)
 	local distance = toTarget.Magnitude
-	if enemy.slotIndex == 0 and now >= enemy.nextAttackAt then
-		if
-			distance >= enemy.reach
-			and distance <= config.ai.chargeDistance * CHARGE_TRIGGER_FRACTION
+	local bandMax = config.ai.chargeDistance * config.ai.chargeTriggerFraction
+	local goal: Vector3
+	local speed = enemy.speed
+	if now < enemy.nextAttackAt then
+		goal, speed = circlePoint(enemy, info.position, config.ai.holdRadius, config)
+	else
+		if distance <= enemy.reach and not enemy.chargerStruck then
+			enemy.chargerStruck = true
+			local action = beginAction(
+				enemy,
+				"strike",
+				config.ai.telegraphSeconds,
+				toTarget,
+				info.member.userId,
+				enemy.damage,
+				enemy.reach,
+				false,
+				now
+			)
+			action.freeRecovery = true
+			return
+		end
+		local inBand = distance >= enemy.reach
+			and distance <= bandMax
 			and lineOfSight(enemy, info.root)
-		then
+		if inBand then
+			enemy.chargerStruck = false
 			beginAction(
 				enemy,
 				"charge",
@@ -1886,8 +2079,20 @@ local function behaveCharger(
 			)
 			return
 		end
+		local away = unitOr(-toTarget, ringDirection(enemy.id * GOLDEN_ANGLE))
+		if distance < enemy.reach or distance > bandMax then
+			goal = info.position + away * math.min(config.ai.holdRadius, bandMax)
+		else
+			goal = circlePoint(enemy, info.position, distance, config)
+		end
 	end
-	behaveMelee(enemy, info, neighbours, now, config)
+	steer(enemy, goal, speed, neighbours, now, config)
+	face(
+		enemy,
+		if distance <= config.ai.holdRadius + ENGAGE_FACE_MARGIN
+			then toTarget
+			else enemy.humanoid.MoveDirection
+	)
 end
 
 -- Shooter: holds the [rangedMinDistance, rangedMaxDistance] band, backs off when rushed, closes
@@ -2018,6 +2223,7 @@ end
 
 function EnemyService.Init(): ()
 	combatConfig = Catalog.GetCombatConfig()
+	ensureCollisionGroups()
 	local existing = workspace:FindFirstChild(ENEMY_FOLDER_NAME)
 	if existing ~= nil and existing:IsA("Folder") then
 		enemiesFolder = existing

@@ -235,16 +235,59 @@ local function nearestInCone(
 	return best
 end
 
+-- The crosshair ray ignores every player character, as the server's shot ray does. The
+-- list changes only when a character spawns or a player joins or leaves, so it is cached.
+local crosshairParams: RaycastParams? = nil
+local characterConnections: { [Player]: RBXScriptConnection } = {}
+
+local function invalidateCrosshair(): ()
+	crosshairParams = nil
+end
+
+local function crosshairParamsFor(): RaycastParams
+	local cached = crosshairParams
+	if cached ~= nil then
+		return cached
+	end
+	local list: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character ~= nil then
+			table.insert(list, character)
+		end
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = list
+	crosshairParams = params
+	return params
+end
+
+local function watchPlayer(player: Player): ()
+	local existing: RBXScriptConnection? = characterConnections[player]
+	if existing ~= nil then
+		existing:Disconnect()
+	end
+	characterConnections[player] = player.CharacterAdded:Connect(invalidateCrosshair)
+	invalidateCrosshair()
+end
+
+local function forgetPlayer(player: Player): ()
+	local existing: RBXScriptConnection? = characterConnections[player]
+	characterConnections[player] = nil
+	if existing ~= nil then
+		existing:Disconnect()
+	end
+	invalidateCrosshair()
+end
+
 -- The world point under the crosshair. The camera ray starts level with the muzzle, so a
 -- wall or a teammate between the camera and the player can never catch the shot.
 local function crosshairPoint(origin: Vector3, range: number): Vector3
 	local rayOrigin, look = CameraController.GetAimRay()
 	local along = math.max((origin - rayOrigin):Dot(look), 0)
 	local start = rayOrigin + look * along
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	local character = Players.LocalPlayer.Character
-	params.FilterDescendantsInstances = if character ~= nil then { character } else {}
+	local params = crosshairParamsFor()
 	local result = Workspace:Raycast(start, look * range, params)
 	return if result ~= nil then result.Position else start + look * range
 end
@@ -616,6 +659,11 @@ function InputController.Start(): ()
 	end)
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
 	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	table.insert(connections, Players.PlayerAdded:Connect(watchPlayer))
+	table.insert(connections, Players.PlayerRemoving:Connect(forgetPlayer))
 	bindGamepad()
 end
 
@@ -689,6 +737,11 @@ function InputController.Destroy(): ()
 	for _, action in ACTIONS do
 		ContextActionService:UnbindAction(action)
 	end
+	for _, connection in characterConnections do
+		connection:Disconnect()
+	end
+	table.clear(characterConnections)
+	crosshairParams = nil
 	holdToken += 1
 	attackHeld = false
 end

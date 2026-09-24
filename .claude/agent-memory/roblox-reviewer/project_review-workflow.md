@@ -591,3 +591,18 @@ lever IsStudio-gated, waiting members untargetable (memberRoot nil) and undamage
   stops a publish of an ended run (Remove during `summary`). Keep clear/publish separate + phase-gate.
 - Invite remotes need a per-target cooldown: resend restarts the timer, fires the toast + a sound at
   the calls bucket rate (10/s).
+
+**C2.5 Stop 1 combat feel (2026-09-23, main fa08dcf, SHIP AFTER FIXES: 0 Critical, 3 Majors).** Script-driven
+Scriptable shoulder camera (accepted deviation), EnemyService steering/slots/telegraph state machine
+(no yields: pathfinding on task.spawn + token + job cap; summons only queue into WaveService), ragdoll
+on kill, missions 2-4 + arenas (all obstacles >= 2 tall, none on spawn lines — checked by a scratch
+parser over Layouts/Arenas). Server authority held: telegraphs resolve from positions at impact time.
+- **Recurring pattern (new): a slot/ring cap that a special attack sidesteps.** Chargers charge only
+  with `slotIndex == 0`, and slots go to the N nearest regardless of distance, so an under-subscribed
+  ring gives the brute a slot from the rim and it never charges; over-subscribed, unslotted chargers
+  hit from the hold ring every cooldown, bypassing maxMeleeAttackers. The sim modelled neither.
+- **Recurring pattern (new): a freeze (stun) that pauses an action without moving its impact time.**
+  Boss actions survive Stun; impactAt passes during the stun, the client telegraph (timed by the
+  original `seconds`) retires, then the blow lands untelegraphed. Check every "armoured" exemption.
+- Config key left dead by a rename (enemy.attackWindupSeconds -> ai.telegraphSeconds) is still read
+  by sim_combat.py: grep the sim for every key the server stopped reading.

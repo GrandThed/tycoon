@@ -14,7 +14,7 @@
 	"enemies": {
 		"grunt": { "template": "OrbitalColonyGrunt", "kind": "melee", "hp": 4992, "damage": 19, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300000000, "materials": 1, "elite": false, "color": [96, 150, 170] },
 		"shooter": { "template": "OrbitalColonyShooter", "kind": "ranged", "hp": 3264, "damage": 12, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400000000, "materials": 1, "elite": false, "color": [150, 160, 90] },
-		"brute": { "template": "OrbitalColonyBrute", "kind": "charger", "hp": 16895, "damage": 31, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600000000, "materials": 4, "elite": true, "color": [170, 70, 150] }
+		"brute": { "template": "OrbitalColonyBrute", "kind": "charger", "hp": 16895, "damage": 31, "speed": 8, "reach": 6, "attackCooldown": 4.0, "cash": 1600000000, "materials": 4, "elite": true, "color": [170, 70, 150] }
 	},
 	"waveTable": {
 		"baseCount": 7,

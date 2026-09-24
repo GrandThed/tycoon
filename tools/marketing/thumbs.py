@@ -204,7 +204,7 @@ def eras_plots():
         "groups": groups,
         "ground": {"color": list(ERA_GROUND["Boomtown"]), "haze": list(DAY_SKY[1]), "y": -1.0, "hazeStart": 1.3, "hazeEnd": 5.0},
         "light": DAY_LIGHT,
-        "camera": {"dir": [0.08, 0.5, -1.0], "pitch": 14, "lens": 32, "window": [-1.0, 1.0, SAFE_BOTTOM, 0.55]},
+        "camera": {"dir": [0.06, 0.95, -1.0], "pitch": 26, "lens": 32, "window": [-1.03, 1.03, SAFE_BOTTOM, 0.55]},
         "anchors": anchors,
         "post": {"sky": "day_to_space", "era_labels": True},
     }
@@ -257,7 +257,7 @@ def scale_plot(name, era_name, dir_, pitch, lens, window, caption, sky, light):
     }
 
 
-def social(name, era_name, slot_id, stage, tier, walkers, caption, sky, light, view, lens=35):
+def social(name, era_name, slot_id, stage, tier, walkers, caption, sky, light, view, pitch=6, lens=35):
     """Two people-kit walkers, scaled to a 5-stud avatar, on a buy pad in front of a building that
     is still growing. The walkers are the game's own ambient figures standing in for players,
     since a Roblox avatar cannot be rendered offline. `view` is (along the pad->building axis, to
@@ -291,7 +291,7 @@ def social(name, era_name, slot_id, stage, tier, walkers, caption, sky, light, v
         "light": light,
         "camera": {
             "dir": list(look_from),
-            "pitch": 6,
+            "pitch": pitch,
             "lens": lens,
             "groups": ["hero"],
             "window": [-0.5, 0.5, SAFE_BOTTOM + 0.04, 0.5],
@@ -315,7 +315,7 @@ def eras_slices():
                 "groups": [plot_group(era_name, era_name)],
                 "ground": ground(era_name, sky[1], 1.3, 5.0),
                 "light": SPACE_LIGHT if space else DAY_LIGHT,
-                "camera": {"dir": [0.6, 0.55, -1.0], "pitch": 12, "lens": 30, "window": [-0.36, 0.36, -0.95, 0.5]},
+                "camera": {"dir": [0.6, 0.55, -1.0], "pitch": 12, "lens": 30, "window": [-0.9, 0.9, -1.1, 0.4]},
                 "anchors": {},
                 "post": {"sky": sky},
             }
@@ -338,15 +338,15 @@ def candidates():
         scale_plot("scale_boomtown", "Boomtown", (0.75, 0.55, -1.0), 18, 28, wide, "GROW YOUR TOWN", DAY_SKY, DAY_LIGHT),
         social(
             "social_village", "Village", "tavern", 2, 3, ("WalkerA", "WalkerC"),
-            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, -0.55, 0.42),
+            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, 0.55, 0.42),
         ),
         social(
-            "social_boomtown", "Boomtown", "diner", 2, 3, ("WalkerA", "WalkerB"),
-            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, 0.6, 0.42),
+            "social_boomtown", "Boomtown", "fireStation", 3, 4, ("WalkerA", "WalkerB"),
+            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, 0.5, 0.4),
         ),
         social(
-            "social_metropolis", "Metropolis", "coffeeShop", 2, 3, ("WalkerB", "WalkerD"),
-            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, 0.6, 0.42),
+            "social_metropolis", "Metropolis", "supermarket", 2, 3, ("WalkerB", "WalkerD"),
+            "BUILD WITH FRIENDS", DAY_SKY, DAY_LIGHT, view=(-1.0, 0.35, 0.75), pitch=18,
         ),
     ]
 
@@ -393,11 +393,14 @@ def render(spec, blender):
 # --------------------------------------------------------------------------
 
 
-def vertical_gradient(size, top, bottom):
+def vertical_gradient(size, top, bottom, horizon=1.0):
+    """Top colour at the top edge, `bottom` from the horizon row (a 0..1 fraction of the height)
+    down, so the sky meets the render's hazed ground on the same colour."""
     w, h = size
+    end = max(horizon * h, 1.0)
     column = Image.new("RGB", (1, h))
     for y in range(h):
-        t = (y / (h - 1)) ** 1.3
+        t = min(y / end, 1.0) ** 1.6
         column.putpixel((0, y), tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3)))
     return column.resize(size)
 
@@ -414,32 +417,32 @@ def stars(size, seed, count=900):
     return layer
 
 
-def space_sky(size):
-    sky = vertical_gradient(size, *SPACE_SKY).convert("RGBA")
+def space_sky(size, horizon=1.0):
+    sky = vertical_gradient(size, *SPACE_SKY, horizon).convert("RGBA")
     glow = Image.new("RGBA", size, (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse((size[0] * 0.45, size[1] * 0.05, size[0] * 1.15, size[1] * 0.75), fill=(120, 70, 190, 90))
     sky = Image.alpha_composite(sky, glow.filter(ImageFilter.GaussianBlur(160)))
     return Image.alpha_composite(sky, stars(size, "thumbs"))
 
 
-def day_sky(size):
-    sky = vertical_gradient(size, *DAY_SKY).convert("RGBA")
+def day_sky(size, horizon=1.0):
+    sky = vertical_gradient(size, *DAY_SKY, horizon).convert("RGBA")
     # A warm glow where the sun sits, top right, so the sky is not a flat card.
     glow = Image.new("RGBA", size, (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse((size[0] * 0.7, -size[1] * 0.4, size[0] * 1.3, size[1] * 0.3), fill=(255, 240, 200, 150))
     return Image.alpha_composite(sky, glow.filter(ImageFilter.GaussianBlur(140)))
 
 
-def paint_sky(kind, size):
+def paint_sky(kind, size, horizon=1.0):
     if kind == "day_to_space":
         # Left to right the sky goes from the Village day to the Orbital night, like the eras do.
-        day, space = day_sky(size), space_sky(size)
+        day, space = day_sky(size, horizon), space_sky(size, horizon)
         mask = Image.linear_gradient("L").rotate(90, expand=True).transpose(Image.FLIP_LEFT_RIGHT).resize(size)
         mask = mask.point(lambda v: max(0, min(255, int((v / 255 - 0.5) * 3.2 * 255 + 128))))
         return Image.composite(space, day, mask)
     if tuple(kind[0]) == SPACE_SKY[0]:
-        return space_sky(size)
-    return day_sky(size)
+        return space_sky(size, horizon)
+    return day_sky(size, horizon)
 
 
 def font(px):
@@ -505,7 +508,8 @@ def arrow(canvas, a, b, width=70, fill=(255, 205, 40), outline=(30, 26, 60)):
 def layer(spec):
     """Sky, render and the colour push, before any text: one finished picture per scene."""
     raw = Image.open(raw_path(spec["name"])).convert("RGBA")
-    canvas = paint_sky(spec["post"]["sky"], SIZE)
+    anchors = json.loads(anchors_path(spec["name"]).read_text())
+    canvas = paint_sky(spec["post"]["sky"], SIZE, min(max(anchors["_horizon"][1], 0.05), 1.0))
     canvas.alpha_composite(raw)
     rgb = ImageEnhance.Color(canvas.convert("RGB")).enhance(1.22)
     rgb = ImageEnhance.Contrast(rgb).enhance(1.06)

@@ -50,8 +50,9 @@ local clearedThrough = 0
 local merged = false
 local forcedNextWave: number? = nil
 local pending: { PendingSpawn } = {}
--- Boss summons (C2.5): same spawn path and maxAlive cap as the wave, but not paced by the spawn
--- interval, because a summon is a telegraphed event the party just watched wind up.
+-- Boss summons (C2.5): same spawn path as the wave, not paced by the spawn interval (a summon
+-- is a telegraphed event the party just watched wind up). Only what fits under maxAlive at the
+-- moment the summon lands is queued; the overflow is dropped, as sim_combat.py does.
 local summons: { PendingSpawn } = {}
 local spec: Combat.WaveSpec? = nil
 local spawnedThisGroup = 0
@@ -439,14 +440,17 @@ local function onSummon(key: string, count: number, near: Vector3): ()
 	if mission == nil or current == nil then
 		return
 	end
+	local combatConfig = config()
 	local stats = Combat.EnemyStats(mission, key, current, false)
-	if stats == nil then
+	if stats == nil or combatConfig == nil then
 		return
 	end
-	for _ = 1, count do
+	local room = combatConfig.director.maxAlive - aliveEnemies() - #summons
+	local accepted = math.clamp(math.floor(count), 0, math.max(0, room))
+	for _ = 1, accepted do
 		table.insert(summons, { key = key, isBoss = false, stats = stats, boss = nil, at = near })
 	end
-	spawnedThisGroup += count
+	spawnedThisGroup += accepted
 end
 
 local function spawnNext(mission: Types.MissionConfig, combatConfig: Types.CombatConfig): ()

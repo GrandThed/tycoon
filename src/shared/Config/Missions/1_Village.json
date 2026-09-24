@@ -14,7 +14,7 @@
 	"enemies": {
 		"raider": { "template": "Raider", "kind": "melee", "hp": 52, "damage": 3, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300, "materials": 1, "elite": false, "color": [150, 84, 54] },
 		"archer": { "template": "Archer", "kind": "ranged", "hp": 34, "damage": 2, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400, "materials": 1, "elite": false, "color": [110, 122, 70] },
-		"brute": { "template": "Brute", "kind": "charger", "hp": 176, "damage": 5, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600, "materials": 4, "elite": true, "color": [120, 44, 44] }
+		"brute": { "template": "Brute", "kind": "charger", "hp": 176, "damage": 6, "speed": 8, "reach": 6, "attackCooldown": 4.0, "cash": 1600, "materials": 4, "elite": true, "color": [120, 44, 44] }
 	},
 	"waveTable": {
 		"baseCount": 5,

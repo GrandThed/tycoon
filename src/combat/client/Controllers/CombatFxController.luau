@@ -92,6 +92,8 @@ type EnemyFx = {
 	-- C2.5: true from a strike telegraph until its blow lands; outranks the plain tell.
 	telegraph: boolean,
 	telegraphToken: number,
+	-- The ring / lane / "!" of the live telegraphs, so a cancel or a death can clear them.
+	visuals: { Instance },
 	flash: Tween?,
 }
 
@@ -475,12 +477,27 @@ local function glowFor(entry: EnemyFx, seconds: number): ()
 	end)
 end
 
+-- A cancelled windup (seconds = 0: stagger, stun) or a death drops the glow and every
+-- ring, lane and "!" at once, so no telegraph promises a blow that will not come.
+local function clearTelegraph(entry: EnemyFx): ()
+	entry.telegraphToken += 1
+	entry.telegraph = false
+	if entry.flash == nil then
+		restHighlight(entry)
+	end
+	for _, visual in entry.visuals do
+		visual:Destroy()
+	end
+	table.clear(entry.visuals)
+end
+
 local function forgetEnemy(model: Instance): ()
 	local entry: EnemyFx? = enemyFx[model]
 	enemyFx[model] = nil
 	if entry == nil then
 		return
 	end
+	clearTelegraph(entry)
 	for _, connection in entry.connections do
 		connection:Disconnect()
 	end
@@ -517,6 +534,7 @@ local function watchEnemy(child: Instance): ()
 		tell = false,
 		telegraph = false,
 		telegraphToken = 0,
+		visuals = {},
 		flash = nil,
 	}
 	local function indexById(): ()
@@ -531,8 +549,7 @@ local function watchEnemy(child: Instance): ()
 		end),
 		model:GetAttributeChangedSignal(DEAD_ATTRIBUTE):Connect(function()
 			if model:GetAttribute(DEAD_ATTRIBUTE) == true then
-				entry.telegraphToken += 1
-				entry.telegraph = false
+				clearTelegraph(entry)
 				setTell(entry, false)
 				dissolve(model)
 			end
@@ -540,6 +557,16 @@ local function watchEnemy(child: Instance): ()
 		-- EnemyService may parent the rig a frame before it stamps the id.
 		model:GetAttributeChangedSignal(ENEMY_ID_ATTRIBUTE):Connect(indexById),
 	}
+	-- `Dead` is stamped only near the end of the ragdoll, so the death itself clears first.
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid ~= nil then
+		table.insert(
+			entry.connections,
+			humanoid.Died:Connect(function()
+				clearTelegraph(entry)
+			end)
+		)
+	end
 	enemyFx[model] = entry
 	indexById()
 	if model:GetAttribute(ATTACKING_ATTRIBUTE) == true then
@@ -735,7 +762,7 @@ end
 
 -- Slam: a faint disc at full radius (where it will hit) and a bright disc growing to meet
 -- its edge (when it will hit).
-local function slamRing(position: Vector3, radius: number, seconds: number, color: Color3): ()
+local function slamRing(position: Vector3, radius: number, seconds: number, color: Color3): Instance
 	local ground = groundUnder(position)
 	local flat = CFrame.new(ground) * CFrame.Angles(0, 0, math.rad(90))
 	local height = Theme.COMBAT_TELEGRAPH_THICKNESS
@@ -754,6 +781,7 @@ local function slamRing(position: Vector3, radius: number, seconds: number, colo
 	fill.Parent = folder
 	fillOver(fill, seconds, { Size = Vector3.new(height, diameter, diameter) })
 	retire(folder, seconds)
+	return folder
 end
 
 -- Charge: the lane the charger will run, drawn on the floor; a bright bar fills it from the
@@ -763,10 +791,10 @@ local function chargeLane(
 	direction: Vector3,
 	halfWidth: number,
 	seconds: number
-): ()
+): Instance?
 	local flatDirection = Vector3.new(direction.X, 0, direction.Z)
 	if flatDirection.Magnitude <= 0 then
-		return
+		return nil
 	end
 	local unit = flatDirection.Unit
 	local length = chargeDistance()
@@ -789,16 +817,17 @@ local function chargeLane(
 		CFrame = CFrame.lookAlong(start + unit * (length * 0.5), unit),
 	})
 	retire(folder, seconds)
+	return folder
 end
 
 -- Strike: the striker glows and a "!" hangs over its head until the blow.
-local function strikeMark(model: Model, seconds: number): ()
+local function strikeMark(model: Model, seconds: number): Instance?
 	local head = model:FindFirstChild("Head")
 	local adornee: Instance? = if head ~= nil and head:IsA("BasePart")
 		then head
 		else model.PrimaryPart
 	if adornee == nil then
-		return
+		return nil
 	end
 	local gui = Create("BillboardGui", {
 		Name = TELEGRAPH_NAME,
@@ -825,11 +854,12 @@ local function strikeMark(model: Model, seconds: number): ()
 	task.delay(seconds, function()
 		gui:Destroy()
 	end)
+	return gui
 end
 
 -- Summon (boss): a violet circle that fills around the boss while the adds are called.
-local function summonCircle(position: Vector3, seconds: number): ()
-	slamRing(
+local function summonCircle(position: Vector3, seconds: number): Instance
+	return slamRing(
 		position,
 		Theme.COMBAT_TELEGRAPH_SUMMON_RADIUS,
 		seconds,
@@ -838,25 +868,31 @@ local function summonCircle(position: Vector3, seconds: number): ()
 end
 
 local function onTelegraph(fx: { [string]: any }): ()
-	local position = fx.position
 	local seconds = fx.seconds
-	local attack = fx.attack
-	if
-		typeof(position) ~= "Vector3"
-		or typeof(seconds) ~= "number"
-		or typeof(attack) ~= "string"
-	then
+	if typeof(seconds) ~= "number" then
 		return
 	end
-	seconds = math.max(seconds, 0)
 	local model = if typeof(fx.enemyId) == "number" then enemyModel(fx.enemyId) else nil
 	local entry: EnemyFx? = if model ~= nil then enemyFx[model] else nil
+	if seconds <= 0 then
+		-- The server's cancel: the windup was interrupted, so nothing is coming.
+		if entry ~= nil then
+			clearTelegraph(entry)
+		end
+		return
+	end
+	local position = fx.position
+	local attack = fx.attack
+	if typeof(position) ~= "Vector3" or typeof(attack) ~= "string" then
+		return
+	end
 	if entry ~= nil then
 		glowFor(entry, seconds)
 	end
 	local radius = if typeof(fx.radius) == "number" then fx.radius else nil
+	local visual: Instance? = nil
 	if attack == "slam" then
-		slamRing(
+		visual = slamRing(
 			position,
 			radius or Theme.COMBAT_TELEGRAPH_DEFAULT_RADIUS,
 			seconds,
@@ -865,7 +901,7 @@ local function onTelegraph(fx: { [string]: any }): ()
 	elseif attack == "charge" then
 		local direction = fx.direction
 		if typeof(direction) == "Vector3" then
-			chargeLane(
+			visual = chargeLane(
 				position,
 				direction,
 				radius or Theme.COMBAT_TELEGRAPH_DEFAULT_HALF_WIDTH,
@@ -873,9 +909,18 @@ local function onTelegraph(fx: { [string]: any }): ()
 			)
 		end
 	elseif attack == "summon" then
-		summonCircle(position, seconds)
+		visual = summonCircle(position, seconds)
 	elseif model ~= nil then
-		strikeMark(model, seconds)
+		visual = strikeMark(model, seconds)
+	end
+	if entry ~= nil and visual ~= nil then
+		-- Drop the ones that already retired on their own before remembering the new one.
+		for index = #entry.visuals, 1, -1 do
+			if entry.visuals[index].Parent == nil then
+				table.remove(entry.visuals, index)
+			end
+		end
+		table.insert(entry.visuals, visual)
 	end
 end
 

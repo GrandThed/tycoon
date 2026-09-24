@@ -136,6 +136,11 @@ local function newPart(name: string, size: Vector3, position: Vector3, parent: I
 	part.Anchored = true
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
+	-- Enemy ragdolls collide with this group only (EnemyService), never with players.
+	local group = EnemyService.ArenaCollisionGroup()
+	if group ~= nil then
+		part.CollisionGroup = group
+	end
 	part.Parent = parent
 	return part
 end
@@ -195,7 +200,7 @@ local function buildFallbackArena(folder: Folder): ()
 	buildLobbyPad(folder, Vector3.new(0, 0.5, 0), Color3.fromRGB(96, 104, 120))
 	playerSpawns = { lobbyPosition }
 	EnemyService.SetSpawnPoints({})
-	EnemyService.SetObstacles({})
+	EnemyService.SetArenaGeometry({}, {}, floor)
 end
 
 local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
@@ -205,6 +210,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 	floor.Color = colorOf(layout.floor.color)
 	floor.Material = materialOf(layout.floor.material)
 
+	local fence: { BasePart } = {}
 	local wall = layout.wall
 	if wall ~= nil then
 		local height = wall.height
@@ -234,6 +240,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 			local part = newPart(`Fence{index}`, side.size, side.position, folder)
 			part.Color = color
 			part.Material = material
+			table.insert(fence, part)
 		end
 	end
 
@@ -250,7 +257,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		part.Material = materialOf(obstacle.material)
 		table.insert(cover, part)
 	end
-	EnemyService.SetObstacles(cover)
+	EnemyService.SetArenaGeometry(cover, fence, floor)
 
 	buildLobbyPad(
 		folder,

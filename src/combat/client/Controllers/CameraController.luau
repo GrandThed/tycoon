@@ -74,10 +74,14 @@ local aimFrame: CFrame? = nil
 
 local cursorHolds: { [string]: true } = {}
 local altFree = false
+-- Alt is ignored while the window is unfocused, and focus changes reset it, so Alt-Tab
+-- never leaves the lock flipped.
+local windowFocused = true
 local rightMouseHeld = false
 local gamepadLook = Vector2.zero
 -- Touches that steer the camera: the last seen position and the delta not yet applied.
-type TouchState = { last: Vector2, pending: Vector2 }
+-- `adopted` = the finger holding the attack button; it always turns and never pinches.
+type TouchState = { last: Vector2, pending: Vector2, adopted: boolean }
 local cameraTouches: { [InputObject]: TouchState } = {}
 local pinchDistance: number? = nil
 
@@ -89,6 +93,11 @@ local kickPitch = 0
 local shakeClock = 0
 
 local connections: { RBXScriptConnection } = {}
+-- Camera collision ignores every character and the enemies folder. The list only changes
+-- when a character spawns or a player joins or leaves, so it is rebuilt then, not per frame.
+local collisionParams: RaycastParams? = nil
+local collisionEnemies: Instance? = nil
+local characterConnections: { [Player]: RBXScriptConnection } = {}
 
 local function currentCamera(): Camera?
 	return Workspace.CurrentCamera
@@ -187,19 +196,51 @@ local function activate(camera: Camera, rig: Rig): ()
 	zoom = targetZoom
 end
 
-local function excludeList(rig: Rig): { Instance }
-	local list: { Instance } = { rig.character }
+local function invalidateCollision(): ()
+	collisionParams = nil
+end
+
+local function collisionParamsFor(): RaycastParams
+	-- The enemies folder can replicate after the first frame; its arrival forces one rebuild.
+	local enemies = Workspace:FindFirstChild(ENEMIES_FOLDER)
+	local cached = collisionParams
+	if cached ~= nil and enemies == collisionEnemies then
+		return cached
+	end
+	local list: { Instance } = {}
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
-		if character ~= nil and character ~= rig.character then
+		if character ~= nil then
 			table.insert(list, character)
 		end
 	end
-	local enemies = Workspace:FindFirstChild(ENEMIES_FOLDER)
 	if enemies ~= nil then
 		table.insert(list, enemies)
 	end
-	return list
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = list
+	collisionParams = params
+	collisionEnemies = enemies
+	return params
+end
+
+local function watchPlayer(player: Player): ()
+	local existing: RBXScriptConnection? = characterConnections[player]
+	if existing ~= nil then
+		existing:Disconnect()
+	end
+	characterConnections[player] = player.CharacterAdded:Connect(invalidateCollision)
+	invalidateCollision()
+end
+
+local function forgetPlayer(player: Player): ()
+	local existing: RBXScriptConnection? = characterConnections[player]
+	characterConnections[player] = nil
+	if existing ~= nil then
+		existing:Disconnect()
+	end
+	invalidateCollision()
 end
 
 -- How far a sphere can travel from `from` along `offset` before touching the arena; the
@@ -225,28 +266,25 @@ local function consumeLookInput(deltaTime: number): ()
 		)
 	end
 
-	local touchCount = 0
 	for input in cameraTouches do
 		if
 			input.UserInputState == Enum.UserInputState.End
 			or input.UserInputState == Enum.UserInputState.Cancel
 		then
 			cameraTouches[input] = nil
-		else
-			touchCount += 1
 		end
 	end
-	if touchCount >= 2 then
-		-- Two camera fingers pinch: the first two found set the distance, nothing turns.
-		local points: { Vector2 } = {}
-		for _, state in cameraTouches do
-			state.pending = Vector2.zero
-			table.insert(points, state.last)
-			if #points >= 2 then
-				break
-			end
+	-- Only free camera fingers pinch. The attack finger (claw grip) always turns, even while
+	-- another finger is down, so firing and tracking never zooms by accident.
+	local free: { TouchState } = {}
+	for _, state in cameraTouches do
+		if not state.adopted then
+			table.insert(free, state)
 		end
-		local distance = (points[1] - points[2]).Magnitude
+	end
+	local pinching = #free >= 2
+	if pinching then
+		local distance = (free[1].last - free[2].last).Magnitude
 		local previous = pinchDistance
 		if previous ~= nil and distance > 0 then
 			targetZoom *= previous / distance
@@ -254,13 +292,15 @@ local function consumeLookInput(deltaTime: number): ()
 		pinchDistance = distance
 	else
 		pinchDistance = nil
-		local sensitivity = cameraConfig.touchSensitivity
-		for _, state in cameraTouches do
+	end
+	local sensitivity = cameraConfig.touchSensitivity
+	for _, state in cameraTouches do
+		if not pinching or state.adopted then
 			turn += Vector2.new(state.pending.X, state.pending.Y * Theme.COMBAT_CAMERA_PITCH_RATIO) * math.rad(
 				Theme.COMBAT_CAMERA_TOUCH_DEGREES_PER_PIXEL
 			) * sensitivity
-			state.pending = Vector2.zero
 		end
+		state.pending = Vector2.zero
 	end
 
 	if gamepadLook.Magnitude > 0 then
@@ -344,9 +384,7 @@ local function update(deltaTime: number): ()
 	consumeLookInput(deltaTime)
 	faceCharacter(rig)
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = excludeList(rig)
+	local params = collisionParamsFor()
 
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
@@ -382,7 +420,7 @@ local function onInputBegan(input: InputObject, processed: boolean): ()
 	if inputType == Enum.UserInputType.Touch then
 		if not processed and active and isCameraTouch(input) then
 			local position = Vector2.new(input.Position.X, input.Position.Y)
-			cameraTouches[input] = { last = position, pending = Vector2.zero }
+			cameraTouches[input] = { last = position, pending = Vector2.zero, adopted = false }
 		end
 	elseif inputType == Enum.UserInputType.MouseButton2 then
 		if not processed then
@@ -390,7 +428,7 @@ local function onInputBegan(input: InputObject, processed: boolean): ()
 		end
 	elseif inputType == Enum.UserInputType.Keyboard then
 		local key = input.KeyCode
-		if key == Enum.KeyCode.LeftAlt or key == Enum.KeyCode.RightAlt then
+		if windowFocused and (key == Enum.KeyCode.LeftAlt or key == Enum.KeyCode.RightAlt) then
 			altFree = not altFree
 		end
 	end
@@ -448,6 +486,25 @@ function CameraController.Start(): ()
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
 	table.insert(connections, UserInputService.InputChanged:Connect(onInputChanged))
 	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))
+	table.insert(
+		connections,
+		UserInputService.WindowFocused:Connect(function()
+			windowFocused = true
+			altFree = false
+		end)
+	)
+	table.insert(
+		connections,
+		UserInputService.WindowFocusReleased:Connect(function()
+			windowFocused = false
+			altFree = false
+		end)
+	)
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	table.insert(connections, Players.PlayerAdded:Connect(watchPlayer))
+	table.insert(connections, Players.PlayerRemoving:Connect(forgetPlayer))
 	RunService:BindToRenderStep(BIND_NAME, Enum.RenderPriority.Camera.Value, update)
 end
 
@@ -509,7 +566,7 @@ function CameraController.AdoptTouch(input: InputObject): ()
 		return
 	end
 	local position = Vector2.new(input.Position.X, input.Position.Y)
-	cameraTouches[input] = { last = position, pending = Vector2.zero }
+	cameraTouches[input] = { last = position, pending = Vector2.zero, adopted = true }
 end
 
 -- Trauma-style shake: `amount` (feel.shakeLight / shakeHeavy) adds to a 0-1 trauma that
@@ -534,6 +591,11 @@ function CameraController.Destroy(): ()
 		connection:Disconnect()
 	end
 	table.clear(connections)
+	for _, connection in characterConnections do
+		connection:Disconnect()
+	end
+	table.clear(characterConnections)
+	collisionParams = nil
 	deactivate()
 end
 

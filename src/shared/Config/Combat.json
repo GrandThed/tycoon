@@ -77,7 +77,6 @@
 		"tickHz": 10,
 		"aggroRange": 80,
 		"retargetSeconds": 0.5,
-		"attackWindupSeconds": 0.3,
 		"eliteScale": 1.25,
 		"bossScale": 1.6,
 		"defaultColor": [128, 96, 96],
@@ -143,7 +142,18 @@
 		"shotHalfConeDegrees": 45,
 		"strikeReachPad": 1.5,
 		"chargeLaneHalfWidth": 2.5,
-		"postPatternAttackDelay": 0.8
+		"postPatternAttackDelay": 0.8,
+		"memberRadius": 1.2,
+		"retargetHysteresis": 4,
+		"cancelCooldownFraction": 0.5,
+		"chargeTriggerFraction": 0.9,
+		"slamTriggerMargin": 2,
+		"dashTimeoutPad": 0.35,
+		"defaultSlamRadius": 10,
+		"defaultSummonCount": 2,
+		"staggerShove": 6,
+		"bossStaggerMult": 0.5,
+		"stunPatternRefundFraction": 0.5
 	},
 	"feel": {
 		"shakeLight": 0.25,

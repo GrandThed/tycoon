@@ -941,6 +941,27 @@ export type CombatAiConfig = {
 	strikeReachPad: number,
 	chargeLaneHalfWidth: number,
 	postPatternAttackDelay: number,
+	-- C2.5 review: the steering/reaction numbers that were code constants.
+	-- memberRadius = a party member's body radius added to every hit shape; retargetHysteresis =
+	-- studs closer another member must be before an enemy switches; cancelCooldownFraction = the
+	-- share of attackCooldown a cancelled windup costs; chargeTriggerFraction = the share of
+	-- chargeDistance a charger winds up inside; slamTriggerMargin = studs beyond a slam radius
+	-- that still starts a slam; dashTimeoutPad = seconds after the ideal dash time a blocked dash
+	-- ends; defaultSlamRadius / defaultSummonCount = pattern fallbacks; staggerShove = studs/s
+	-- push on a stagger; bossStaggerMult scales both stagger durations for bosses;
+	-- stunPatternRefundFraction = share of a boss pattern's cooldown returned when a stun cancels
+	-- it during its windup.
+	memberRadius: number,
+	retargetHysteresis: number,
+	cancelCooldownFraction: number,
+	chargeTriggerFraction: number,
+	slamTriggerMargin: number,
+	dashTimeoutPad: number,
+	defaultSlamRadius: number,
+	defaultSummonCount: number,
+	staggerShove: number,
+	bossStaggerMult: number,
+	stunPatternRefundFraction: number,
 }
 -- C2.5 client impact tunables.
 export type CombatFeelConfig = {
@@ -983,7 +1004,6 @@ export type CombatEnemyConfig = {
 	tickHz: number,
 	aggroRange: number,
 	retargetSeconds: number,
-	attackWindupSeconds: number,
 	eliteScale: number,
 	bossScale: number,
 	-- C2: colours moved out of EnemyService. RGB 0-255; EnemyDef.color overrides defaultColor.

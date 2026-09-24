@@ -17,6 +17,7 @@ import os
 import sys
 
 import bpy
+import numpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
@@ -26,7 +27,6 @@ sys.path.insert(0, os.path.join(HERE, "..", "testfit"))
 import plotscene  # noqa: E402
 import testfit  # noqa: E402
 
-FIT_PASSES = 30
 
 
 def log(msg):
@@ -179,8 +179,13 @@ def setup_camera(scene, spec, size):
 
 def fit(camera, data, cam_spec, size):
     """Frame the content from `dir` so its projection fills `window` (u0, u1, v0, v1 in -1..1 frame
-    coordinates, v up). The window is how the bottom 15 % is kept for Roblox's tile overlay and the
-    top band for a caption, without cropping the render afterwards."""
+    coordinates, v up; a window wider than the frame overscans). The window is how the bottom 15 %
+    is kept for Roblox's tile overlay and the top band for a caption, without cropping afterwards.
+
+    The eye slides along `dir`; at each distance it is recentred in the image plane (which barely
+    changes the depth), and the distance is bisected until the content's projected span matches
+    the window -- span falls monotonically with distance, so this converges where a combined
+    step-and-zoom loop oscillated once the look was pitched away from `dir`."""
     direction = plotscene.to_blender(cam_spec["dir"]).normalized()
     look = -direction
     if "pitch" in cam_spec:
@@ -199,36 +204,53 @@ def fit(camera, data, cam_spec, size):
     points = content_points(set(cam_spec.get("groups", [])))
     if not points:
         raise SystemExit("camera fit: nothing to frame")
-    centre = sum(points, Vector()) / len(points)
-    radius = max((p - centre).length for p in points)
-    eye = centre + direction * radius * 3
-    for _ in range(FIT_PASSES):
-        us, vs = [], []
-        for p in points:
-            rel = p - eye
-            ahead = max(rel.dot(look), 0.1)
-            us.append(rel.dot(right) / (ahead * tan_x))
-            vs.append(rel.dot(up) / (ahead * tan_y))
-        span = max((max(us) - min(us)) / (u1 - u0), (max(vs) - min(vs)) / (v1 - v0))
-        du = (min(us) + max(us)) / 2 - (u0 + u1) / 2
-        dv = (min(vs) + max(vs)) / 2 - (v0 + v1) / 2
-        depth = (centre - eye).dot(look)
-        eye = eye + right * du * tan_x * depth + up * dv * tan_y * depth
-        # Move along the view axis so the widest projected span matches the window.
-        eye = eye + direction * depth * (span - 1.0) * 0.8
+    pts = numpy.array([tuple(p) for p in points])
+    centre = Vector(pts.mean(axis=0))
+    basis = numpy.array([tuple(right), tuple(up), tuple(look)])
+
+    def project(eye):
+        rel = (pts - numpy.array(tuple(eye))) @ basis.T
+        ahead = numpy.maximum(rel[:, 2], 0.05)
+        return rel[:, 0] / (ahead * tan_x), rel[:, 1] / (ahead * tan_y)
+
+    def place(distance):
+        eye = centre + direction * distance
+        for _ in range(12):
+            us, vs = project(eye)
+            du = (us.min() + us.max()) / 2 - (u0 + u1) / 2
+            dv = (vs.min() + vs.max()) / 2 - (v0 + v1) / 2
+            depth = (centre - eye).dot(look)
+            eye = eye + right * (du * tan_x * depth) + up * (dv * tan_y * depth)
+        us, vs = project(eye)
+        span = max((us.max() - us.min()) / (u1 - u0), (vs.max() - vs.min()) / (v1 - v0))
+        return eye, span, us, vs
+
+    radius = float(numpy.linalg.norm(pts - pts.mean(axis=0), axis=1).max())
+    near, far = radius * 0.3, radius * 30.0
+    for _ in range(40):
+        middle = (near + far) / 2
+        _, span, _, _ = place(middle)
+        if span > 1.0:
+            near = middle
+        else:
+            far = middle
+    eye, span, us, vs = place(far)
     camera.location = eye
-    log(f"fit: u {min(us):.2f}..{max(us):.2f} v {min(vs):.2f}..{max(vs):.2f} span {span:.3f}, {len(points)} points")
+    log(f"fit: u {us.min():.2f}..{us.max():.2f} v {vs.min():.2f}..{vs.max():.2f} span {span:.3f}")
     return centre
 
 
 def write_anchors(scene, spec):
     """Where named scene points land in the frame (0..1, y down), so thumbs.py can place era
-    labels and arrows over the right building whatever the fitted camera did."""
-    if not spec.get("anchors"):
-        return
-    out = {}
-    for name, point in spec["anchors"].items():
-        ndc = world_to_camera_view(scene, scene.camera, plotscene.to_blender(point))
+    labels and arrows over the right building whatever the fitted camera did. `_horizon` is always
+    written: the painted sky has to reach its horizon colour exactly where the hazed ground ends."""
+    camera = scene.camera
+    forward = camera.matrix_world.to_quaternion() @ Vector((0.0, 0.0, -1.0))
+    flat = Vector((forward.x, forward.y, 0.0)).normalized()
+    far = camera.location + flat * 1.0e5
+    out = {"_horizon": [0.5, 1.0 - world_to_camera_view(scene, camera, far).y]}
+    for name, point in spec.get("anchors", {}).items():
+        ndc = world_to_camera_view(scene, camera, plotscene.to_blender(point))
         out[name] = [ndc.x, 1.0 - ndc.y]
     with open(spec["anchorsOut"], "w", encoding="utf-8") as handle:
         json.dump(out, handle)

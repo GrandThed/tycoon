@@ -14,7 +14,7 @@
 	"enemies": {
 		"grunt": { "template": "MetropolisGrunt", "kind": "melee", "hp": 854, "damage": 10, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 3000000, "materials": 1, "elite": false, "color": [70, 78, 96] },
 		"shooter": { "template": "MetropolisShooter", "kind": "ranged", "hp": 559, "damage": 7, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 4000000, "materials": 1, "elite": false, "color": [60, 110, 130] },
-		"brute": { "template": "MetropolisBrute", "kind": "charger", "hp": 2892, "damage": 16, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 16000000, "materials": 4, "elite": true, "color": [150, 40, 50] }
+		"brute": { "template": "MetropolisBrute", "kind": "charger", "hp": 2892, "damage": 16, "speed": 8, "reach": 6, "attackCooldown": 4.0, "cash": 16000000, "materials": 4, "elite": true, "color": [150, 40, 50] }
 	},
 	"waveTable": {
 		"baseCount": 7,

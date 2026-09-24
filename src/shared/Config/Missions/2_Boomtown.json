@@ -12,9 +12,9 @@
 	"targetMinutes": 8,
 	"targetWaveSeconds": 30,
 	"enemies": {
-		"grunt": { "template": "BoomtownGrunt", "kind": "melee", "hp": 194, "damage": 5, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 30000, "materials": 1, "elite": false, "color": [176, 120, 72] },
+		"grunt": { "template": "BoomtownGrunt", "kind": "melee", "hp": 194, "damage": 7, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 30000, "materials": 1, "elite": false, "color": [176, 120, 72] },
 		"shooter": { "template": "BoomtownShooter", "kind": "ranged", "hp": 127, "damage": 4, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 40000, "materials": 1, "elite": false, "color": [92, 104, 118] },
-		"brute": { "template": "BoomtownBrute", "kind": "charger", "hp": 658, "damage": 9, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 160000, "materials": 4, "elite": true, "color": [140, 64, 40] }
+		"brute": { "template": "BoomtownBrute", "kind": "charger", "hp": 658, "damage": 13, "speed": 8, "reach": 6, "attackCooldown": 4.0, "cash": 160000, "materials": 4, "elite": true, "color": [140, 64, 40] }
 	},
 	"waveTable": {
 		"baseCount": 6,
