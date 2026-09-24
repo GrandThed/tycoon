@@ -3878,3 +3878,57 @@ Models come in Stop 2, so judge motion and feel, not looks.
 
 - [ ] 36. Tell Claude Code "Stop 1 passed", or the step numbers that failed. Include your sound
       swaps and any bad animation ids.
+
+## P1 — Proving Grounds
+
+**Goal:** judge movement, controls and hit feel on PC and phone, and check 150 enemies run
+smoothly. Silent by design; bodies are placeholders. Judge feel, not looks.
+Setup: `docs/MANUAL_STEPS.md` "P1" §1–2. Keys: **1** sword, **2** gun (gamepad: R2 attack,
+L2 aim, Y swap, B/X dash). Dash keys high in the air slam instead, same as **C**.
+
+### Setup
+
+- [ ] 1. Play → you face 30 red dummies down a grey lane, crosshair in the centre. Bug: mission lobby.
+- [ ] 2. Click **⚙ Range** (top-left) → **Wire: off** → it reads **Wire: ON**. Keep it on.
+
+### Movement
+
+- [ ] 3. **Space** → big jump onto the 16 pillar (right of spawn); **Space** again in the air → double jump reaches 24.
+- [ ] 4. **Left Shift** on the ground → a snap dash (~20 studs); mashing it waits ~0.8 s between dashes.
+- [ ] 5. Jump off the 24 step over the crowd, press **C** → you dive, the landing ring flings fodder. C on the ground → nothing.
+
+### Sword (press 1)
+
+- [ ] 6. Hold **left mouse** in the crowd → steady swings, 3rd hits hardest; one number with "×N"; flash matches the wireframe.
+- [ ] 7. Weapon → **B · Spin finisher** → the 3rd swing hits all around you, behind too.
+- [ ] 8. **C · Shockwave** → slow ring around you; fodder die in one hit and fly up.
+- [ ] 9. Jump over the crowd and swing → you hang briefly and the swing hits dummies below you.
+
+### Gun (press 2)
+
+- [ ] 10. **A · Shotgun** → close burst; only dummies inside the drawn cone get hit.
+- [ ] 11. Run while firing → crosshair spreads but shots still land; stand still → first shot goes dead centre.
+- [ ] 12. Hold **right mouse** → zoom, tighter crosshair, slower walk. Head hit → yellow number, double damage.
+- [ ] 13. **B · Piercing rifle**, set **rows**, aim down the middle column → one shot drops a dummy in every row.
+- [ ] 14. **C · Launcher** → visible shell, explosion, the crowd flies.
+
+### Crowds and stress
+
+- [ ] 15. Set **armoured** → light hits show tiny numbers, heavy ones big. Set **boss** → DPS readout settles after ~5 s.
+- [ ] 16. **Stress** → 150 dummies chase you; FPS stays smooth, readout "Server … ms" under 2.
+- [ ] 17. Feedback section: drag **shake** to 0 → shake stops at once. **Clear tune** → back to normal.
+
+### Phone (Device 375×667, then 667×375)
+
+- [ ] 18. Play → no attack button. **Dash** left of Jump reads **Slam** in the air; **Aim** above Jump only with the gun.
+- [ ] 19. Drag the right half onto the crowd → gun fires by itself on a dummy; sword swings by itself in reach.
+- [ ] 20. Panel **Touch: autoFire** → tap → **Touch: tapFire** → short taps on the right half attack; dragging only aims.
+
+Optional (untested, not required for P1): Test → **Local Server**, 2 players → each sees the other's hits on the same dummies.
+
+### What to tell Claude
+
+- Which sword (A/B/C) and gun (A/B/C) felt best, and why.
+- Which feedback layers to turn up, down or off (hitMarker, numbers, enemyFlash, enemyReaction, hitboxEffect, hitstop, shake, edgeFlash, haptics, counters).
+- Anything that felt wrong: step numbers, PC or phone, autoFire vs tapFire.
+- If you tuned something: the **Export** output (MANUAL_STEPS "P1" §4).

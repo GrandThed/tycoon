@@ -1443,6 +1443,8 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
 
 ### 3. Combat sounds: audition, then the lead uploads
 
+> **Cancelled 2026-09-24:** Ben rejected the picks; combat has no sound (see "P1" below). Skip 5–9.
+
 - [ ] 5. Picks are already extracted in `assets/audition/<key>/`. Each key folder has
       `PICK__<file>`, `alt1__<file>` and `alt2__<file>`. To re-extract:
       `py tools/upload_audio.py --audition`.
@@ -1470,6 +1472,52 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
 - [ ] 12. Not needed for the Stop 1 playtest (Studio only).
 - [ ] 13. If you want it live, republish **both** places in one sitting, exactly as in "C2 → 4".
       Never publish only one.
+
+## P1 — Proving Grounds
+
+**Studio only. No Creator Hub work, no uploads, no republish.** Combat is silent by ruling
+(no audio step). The C2.5 Stop 1 audio upload (§3 above) is cancelled.
+
+### 1. Rebuild both places
+
+- [ ] 1. VS Code: **Ctrl+Shift+B** → **"Build both"** (`build/test.rbxl` + `build/combat.rbxl`).
+      Or **F5** → **"Hub + Combat: build + serve both"** (ports 34872 / 34873).
+- [ ] 2. PowerShell fallback, from `C:\Users\benja\Desktop\tycoon`:
+      ```
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      rojo build combat.project.json -o build/combat.rbxl
+      ```
+
+### 2. Turn the range on
+
+- [ ] 3. Open **`build/combat.rbxl`** in Studio.
+- [ ] 4. Explorer → **Workspace** → Properties → **Attributes** → **+** → Name **`DebugProving`**,
+      Type **boolean**, tick it (= true).
+- [ ] 5. Do this **before** pressing Play. It is read once at boot; adding it mid-play does
+      nothing. Stop and Play again.
+- [ ] 6. Check Output after Play: `[Combat] booted — Proving Grounds (DebugProving)` and
+      `[RangeService] Proving Grounds ready`. If you see the mission lobby instead, the
+      attribute is missing or unticked.
+- [ ] 7. Optional: **File → Save** the place so the attribute survives. A rebuild overwrites
+      `build/combat.rbxl`, so re-add it after every rebuild.
+
+### 3. Phone pass
+
+- [ ] 8. Test tab → **Device** → a phone at **375×667** (portrait) → Play.
+- [ ] 9. Repeat at **667×375** landscape.
+
+### 4. Save a winner (Export)
+
+- [ ] 10. Tune with the sliders in **⚙ Range** until a variant feels right.
+- [ ] 11. Press **Export** (Dummies & commands section).
+- [ ] 12. Output prints `[RangeService] ProvingGrounds.json with the current tuning:` and the
+      full JSON under it.
+- [ ] 13. Copy that whole block and paste it to Claude Code with the variant name
+      (e.g. "sword B winner"). **The lead commits it** to `src/shared/Config/ProvingGrounds.json`.
+      Do not edit the file yourself.
+- [ ] 14. Slider changes are lost when Play stops. Export before stopping.
+      **Clear tune** puts every value back to the file defaults.
 
 ## M10 — Icon, store icons, thumbnails
 

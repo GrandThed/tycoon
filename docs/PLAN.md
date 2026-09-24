@@ -1608,6 +1608,9 @@ GREEN. `sim_combat.py --check` passed 14/14; `sim_economy.py --check` output is 
 
 ### Next stops (outline)
 
+> **Superseded 2026-09-24:** Ben's reset replaced Stops 2–3 with the P0–P6 build order in
+> `docs/COMBAT_DESIGN.md` §10 (no combat sound; the range first). See "P1 — Proving Grounds" below.
+
 - **Stop 2: models.**
   - Detailed horde models for all four eras (grunt, shooter, brute, Chief, Warlord).
   - Detailed weapon models for all tiers.
@@ -1620,3 +1623,76 @@ GREEN. `sim_combat.py --check` passed 14/14; `sim_economy.py --check` output is 
   - The tempo-as-lag director fix.
   - The C2 reward carry-overs (per-head co-op rewards, idle-alt floor).
   - Everything listed under "Carried forward" above.
+
+## P1 — Proving Grounds
+
+**Goal:** a Studio test range where movement, controls, hit feel and crowd enemies are built and
+tuned before any mission uses them. Gate (COMBAT_DESIGN §10): movement and feedback feel good on
+PC **and on a phone**, and 100+ enemies run smoothly. Plan of record: `docs/COMBAT_DESIGN.md`;
+contracts: `docs/INTERFACES.md` "P1 contracts"; values: `docs/BALANCE.md` "P1 — Proving Grounds
+starting values"; memory: `.claude/memory/feel-pass-2026-09-23.md` (reset + new direction).
+
+**Rulings (Ben, 2026-09-24):**
+1. Combat starts over: design first (`COMBAT_DESIGN.md`), then the range, then missions (P5).
+2. **No sound** in combat. All combat sound ids stay 0.
+3. Over-the-shoulder camera stays. **Ranged shooting like Fortnite** (camera-ray aim, bloom, ADS,
+   crits).
+4. **No attack button on phones.** Auto-fire and auto-swing, with tap-to-fire as the alternative.
+   Phones must work from P1.
+5. Most weapons hit many enemies: the game is a game of numbers.
+6. The range is **Studio only**: Workspace boolean `DebugProving` = true at boot in
+   `build/combat.rbxl`. Missions keep today's code until P5.
+
+**Shipped (2026-09-24, commits `07f8908`, `69eab8f`, `de404ad`, `34d632a`):**
+- **Crowd enemies** (`CrowdService`, `CrowdCodec`, `CrowdRenderer`):
+  - no Humanoids; the server keeps plain records and sends compact buffer snapshots (15 Hz,
+    unreliable);
+  - the client draws pooled bodies; the head is the crit point;
+  - kinds: fodder, armoured (flat armour 18), boss (10 000 HP).
+- **Hit shapes** (`HitShapes`, server-resolved, forgiving pad): arc, sphere, capsule, cone, ray.
+- **Sword A/B/C:** Wide arc; Spin finisher (360° third hit); Shockwave (sphere).
+- **Gun A/B/C:** Shotgun (true cone, 8 pellets); Piercing rifle (up to 8 per shot); Launcher
+  (visible shell, splash 10).
+- **Movement** (`MovementController`, server-checked in `RangeService`):
+  - big jump (18) and double jump (12);
+  - dash 20 studs with i-frames;
+  - ground slam that needs a real dive;
+  - air sword swings hang briefly and reach 6 studs down.
+- **Shooting:** camera-ray aim, bloom, exact first shot, ADS (FOV 50), head crits ×2.
+- **Phone:** no attack button; `autoFire` (default) or `tapFire`; Dash button turns into Slam in
+  the air; Aim button with the gun.
+- **Feedback** (`FeedbackController`, `Crosshair`): hit marker, damage numbers, enemy flash,
+  enemy reaction, hitbox effect, hitstop, shake, edge flash, haptics, counters. Each has a
+  strength slider (0 = off).
+- **RangePanel** (Studio, "⚙ Range", top-left):
+  - dummy sets, Reset, Stress, Export, Clear tune, Wire, Touch mode;
+  - weapon + variant switch;
+  - live sliders for every number;
+  - readouts: hits, kills, DPS, clear time, alive, server ms, FPS.
+- **Live tuning:** `Tuning.luau` overrides through `RequestTune`; Export prints the merged
+  `ProvingGrounds.json` to Output.
+
+**Review outcome:** 0 Critical, 2 Majors, 11 Minors. **All fixed** in `34d632a`.
+- Major 1: shots were refused while moving fast (origin check is now speed-aware; a refused
+  shot drops its client fx).
+- Major 2: the shotgun did not test the cone it drew (now a true cone).
+- Minors included: air swings reaching down, salted pellets, dive-gated slam, combo reset,
+  tunables moved to config, one `TuneState` listener, a panel leak, allocation-free decode.
+- qa-runner: ALL GREEN. Missions untouched (`sim_combat.py --check`, `sim_economy.py --check`
+  unchanged).
+
+**Known limits at P1:**
+- Silent by ruling.
+- Placeholder bodies and empty hands; no models.
+- Dummies never attack.
+- Missions do not use the new combat yet (P5).
+- Co-op in the range is untested (hits are broadcast to everyone in the range, but nobody has
+  tried two players).
+
+**Next (COMBAT_DESIGN §10):**
+- **P2 (Ben + lead):** pick the winning sword and gun variants in the range, commit the exported
+  values as the new defaults.
+- **P3:** the remaining weapon classes and abilities, in batches.
+
+- [x] P1 built, reviewed and QA green (definition of done in INTERFACES "P1 contracts")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "P1 — Proving Grounds")

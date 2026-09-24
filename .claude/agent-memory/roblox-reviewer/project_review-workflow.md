@@ -606,3 +606,39 @@ parser over Layouts/Arenas). Server authority held: telegraphs resolve from posi
   original `seconds`) retires, then the blow lands untelegraphed. Check every "armoured" exemption.
 - Config key left dead by a rename (enemy.attackWindupSeconds -> ai.telegraphSeconds) is still read
   by sim_combat.py: grep the sim for every key the server stopped reading.
+
+**M11 (2026-09-24, feature unlocks + 6-plot hub, worktree `tycoon-m11` branch `m11-unlocks`, SHIP w/ 1 Major).**
+Server surface is tiny and clean: `UnlockService` (1 Hz Heartbeat, joinComplete-gated, never yields;
+Evaluate also runs in `runJoinSequence` right before `SendSnapshot`), `RequestFeatureSeen` (calls
+bucket, string <= 32, must be configured + unlocked), PartyService `onInviteAccepted` hook fires only
+after the live-invite + expiry checks. ProfileSchema v7 migration `[6]` requires `Catalog` + `Unlocks`
+from `src/shared` (resolves in both places). Both builds, both luau-lsp trees, stylua, selene (the
+pre-existing LegacyPanel:200 shadowing warning only), `sim_economy.py --check` (now also a neighbours
+gate) all green. Client: `UnlockCard` owns a polled-blocker queue with a 2.5 s join delay + step-aside.
+- **Recurring pattern (new): shrinking the plot ring moves plots INTO the dressing LOD radius as seen
+  from the hub spawn.** plotCount 10→6 drops ringRadius 277→184 (`PlotService.buildWorld` formula;
+  min plot gap stays exactly plotMargin 20), but `CityDressing.lod.nearRadius` 250 is camera→base
+  distance, so every spawn/respawn now draws all six plots near (trees, lamps, greenery, parked, smoke,
+  birds) where it drew none. Whenever plotCount/plotMargin/plotSize changes, compare ringRadius with
+  `nearRadius + hysteresis` + camera offset. A 20-line py snippet of the ring formula settles it.
+- **Recurring pattern (new): a sticky flag evaluated from a counter that a rollback later decrements.**
+  `stats.expeditions` is stamped before release and undone after a failed teleport, but the rejoin
+  runs the join sequence (Evaluate) first, so Armory unlocks permanently on a failed departure.
+
+**P1 Proving Grounds (2026-09-24, main 07f8908..69eab8f, SHIP AFTER FIXES: 0 Critical, 2 Majors).** Studio-only
+range behind Workspace `DebugProving` (server `wantsProving` + `RangeService.Configure`; client
+`CameraController.detectRange`, both IsStudio + Tuning.IsAvailable). Crowd = Luau records in `CrowdService`
+(no yields, buffers only allocation, u16 ids wrap skipping live, removes flushed before spawns), `CrowdCodec`
+64 entries/714 B per unreliable packet, `HitShapes` pure (sectorOverlap covers arc+cone incl. 360 and >90°).
+selene/stylua green; findings came from reading. Exploit surface that held: all range handlers early-return
+unless active, tune/command also IsStudio, validators finite/seq/short strings, per-weapon rate × tolerance.
+- **Recurring pattern (new): an origin/position check against the SERVER's copy of a client-owned root
+  without a velocity allowance.** `originPad` 6 vs lagged Head, plus a camera pivot that may trail 3 studs:
+  dash (133 st/s) / slam (140) / jump shots get silently refused while the client already drew the tracer.
+  Any "within N studs of the character" check needs `+ speed × latency` and a refusal the client can see.
+- **Recurring pattern (new): WYSIWYG = compare the drawn shape to the server's ACTUAL test, not to the
+  wireframe.** Pellet gun: fx/wire draw the `arcDegrees` cone; the server tests `pellets` rays in
+  `spreadDegrees`. Both client drawings agreed with each other, so the DoD check passed.
+- Two client listeners on one RemoteEvent (TuneState: Input + Feedback): the pre-connect queue drains into
+  whichever connects first. Rows rebuilt on selection change that connect UserInputService globally leak.
+- Client-chosen `seq` seeding the server's pellet RNG lets a client grind tight patterns (note for P5).
