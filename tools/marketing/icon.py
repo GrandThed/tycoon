@@ -8,6 +8,7 @@ contact_sheet.png, which also shows every candidate at 64 px on the (24, 24, 28)
     py tools/marketing/icon.py                        # render every candidate, then the sheet
     py tools/marketing/icon.py --only skyline,launch  # re-render some, re-compose the rest
     py tools/marketing/icon.py --compose-only         # repaint skies/sheet from the last renders
+    py tools/marketing/icon.py --final erastack_v2b   # also write assets/marketing/final/icon_512.png
 
 BLENDER=<path> overrides the Blender executable.
 """
@@ -52,6 +53,22 @@ def model(era, name, pos, rot_y=0.0, stage=FINAL_STAGE, scale=1.0):
 DAY_LIGHTS = [
     {"from": [0.8, 1.1, -0.5], "energy": 3.2, "color": [255, 244, 226]},
     {"from": [-0.6, 0.5, 1.0], "energy": 2.2, "color": [200, 225, 255]},  # rim from behind
+]
+
+# Left to right rather than diagonal: once the buildings fill the frame the island covers the
+# bottom-left corner, and the diagonal's sunrise vanished behind it.
+ERA_STACK_SKY = {
+    "horizontal": [(0.0, (255, 176, 104)), (0.16, (240, 150, 160)), (0.4, (100, 165, 240)), (0.7, (38, 66, 176)), (1.0, (24, 12, 62))],
+    "sun": (0.02, 0.55, (255, 214, 140), False),
+    "stars": 80, "starsFrom": 0.6,
+}
+# Screen right is scene -X (see below); a small step back in +Z per building lets neighbours
+# overlap in depth without any one hiding another's silhouette.
+ERA_STACK_TIGHT = [
+    model("Village", "Windmill", (19, 0, -4)),
+    model("Boomtown", "ClockTower", (6.5, 0, -1)),
+    model("Metropolis", "SkyscraperA", (-6.5, 0, 2)),
+    model("OrbitalColony", "LaunchTower", (-19, 0, 5)),
 ]
 
 # The fixed (+X, -Z) camera quadrant looks up +Z, so screen right is scene -X: a row that must
@@ -123,6 +140,46 @@ CANDIDATES = [
         "sky": {"diagonal": [(0.0, (255, 190, 110)), (0.35, (90, 175, 245)), (0.7, (40, 70, 170)), (1.0, (26, 12, 60))],
                 "stars": 70, "starsFrom": 0.62},
         "glow": ((255, 255, 255), 0.6),
+    },
+    # Final pass on Ben's pick: the four landmarks packed closer and filling the frame, so each one
+    # is a separate silhouette at 64 px; the island is allowed to crop at the bottom.
+    {
+        "name": "erastack_v2a",
+        "label": "Era stack v2a: packed, low camera, glow only",
+        "models": ERA_STACK_TIGHT,
+        "islands": [{"pos": [0, 0, 0], "radius": 10, "depth": 9, "stretch": [2.7, 1.3], "top": [104, 186, 72], "side": [132, 92, 60], "seed": 2}],
+        "camera": {"dir": [0.18, 0.1, -1.0], "lens": 50, "margin": 1.0, "offset": [0.0, 0.02]},
+        "world": {"ambient": [190, 200, 235], "ambientStrength": 0.65},
+        "lights": DAY_LIGHTS,
+        "sky": ERA_STACK_SKY,
+        "glow": ((255, 255, 255), 0.7),
+        "glowSpread": 15,
+    },
+    {
+        "name": "erastack_v2b",
+        "label": "Era stack v2b: packed + dark sticker stroke",
+        "models": ERA_STACK_TIGHT,
+        "islands": [{"pos": [0, 0, 0], "radius": 10, "depth": 9, "stretch": [2.7, 1.3], "top": [104, 186, 72], "side": [132, 92, 60], "seed": 2}],
+        "camera": {"dir": [0.18, 0.1, -1.0], "lens": 50, "margin": 1.0, "offset": [0.0, 0.02]},
+        "world": {"ambient": [190, 200, 235], "ambientStrength": 0.65},
+        "lights": DAY_LIGHTS,
+        "sky": ERA_STACK_SKY,
+        "glow": ((255, 255, 255), 0.65),
+        "glowSpread": 21,
+        "outline": ((22, 18, 48), 7),
+    },
+    {
+        "name": "erastack_v2c",
+        "label": "Era stack v2c: slight low angle + dark stroke",
+        "models": ERA_STACK_TIGHT,
+        "islands": [{"pos": [0, 0, 0], "radius": 10, "depth": 9, "stretch": [2.7, 1.3], "top": [104, 186, 72], "side": [132, 92, 60], "seed": 2}],
+        "camera": {"dir": [0.2, 0.03, -1.0], "lens": 50, "margin": 1.0, "offset": [0.0, 0.03]},
+        "world": {"ambient": [190, 200, 235], "ambientStrength": 0.65},
+        "lights": DAY_LIGHTS,
+        "sky": ERA_STACK_SKY,
+        "glow": ((255, 255, 255), 0.7),
+        "glowSpread": 21,
+        "outline": ((22, 18, 48), 7),
     },
     {
         "name": "growth",
@@ -248,7 +305,9 @@ def radial_glow(size, cx, cy, radius, colour, strength):
 
 def paint_sky(spec, size, seed):
     rng = random.Random(seed)
-    if "diagonal" in spec:
+    if "horizontal" in spec:
+        sky = gradient(spec["horizontal"], size, diagonal=False).rotate(90)
+    elif "diagonal" in spec:
         sky = gradient(spec["diagonal"], size, diagonal=True)
     else:
         sky = gradient(spec["stops"], size, diagonal=False)
@@ -310,11 +369,11 @@ def paint_sky(spec, size, seed):
     return sky
 
 
-def glow_behind(layer, colour, strength, size):
+def glow_behind(layer, colour, strength, size, spread=9):
     """A soft halo in the sky's light colour around the subject: separates a dark silhouette from
     a dark sky, which is what keeps it legible at 64 px."""
     alpha = layer.getchannel("A")
-    wide = alpha.filter(ImageFilter.MaxFilter(9)).filter(ImageFilter.GaussianBlur(size * 0.02))
+    wide = alpha.filter(ImageFilter.MaxFilter(spread)).filter(ImageFilter.GaussianBlur(size * 0.02))
     wide = wide.point(lambda v: round(v * strength))
     return Image.new("RGB", (size, size), colour), wide
 
@@ -333,8 +392,14 @@ def compose(candidate):
     size = layer.size[0]
     image = paint_sky(candidate["sky"], size, seed=len(candidate["name"]) * 31)
     colour, strength = candidate["glow"]
-    halo, mask = glow_behind(layer, colour, strength, size)
+    halo, mask = glow_behind(layer, colour, strength, size, candidate.get("glowSpread", 9))
     image.paste(halo, (0, 0), mask)
+    if "outline" in candidate:
+        # A solid sticker stroke: at 64 px a thin spire or lattice survives only if its outline
+        # is thicker than the part itself.
+        stroke_colour, width = candidate["outline"]
+        stroke = layer.getchannel("A").point(lambda v: 255 if v > 40 else 0).filter(ImageFilter.MaxFilter(width))
+        image.paste(Image.new("RGB", (size, size), stroke_colour), (0, 0), stroke.filter(ImageFilter.GaussianBlur(1)))
     image.paste(layer.convert("RGB"), (0, 0), layer.getchannel("A"))
     image = ImageEnhance.Color(image).enhance(1.18)
     image = ImageEnhance.Contrast(image).enhance(1.06)
@@ -387,9 +452,12 @@ def main():
     parser = argparse.ArgumentParser(prog="icon.py")
     parser.add_argument("--only", help="comma list of candidate names to re-render in Blender")
     parser.add_argument("--compose-only", action="store_true", help="reuse the last Blender renders")
+    parser.add_argument("--final", metavar="NAME", help="also write that candidate to assets/marketing/final/icon_512.png")
     args = parser.parse_args()
     names = [c["name"] for c in CANDIDATES]
     only = set(args.only.split(",")) if args.only else None
+    if args.final and args.final not in names:
+        sys.exit(f"unknown candidate for --final: {args.final}; known: {', '.join(names)}")
     if only and not only <= set(names):
         sys.exit(f"unknown candidate(s): {', '.join(sorted(only - set(names)))}; known: {', '.join(names)}")
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -399,6 +467,12 @@ def main():
             render_raw(candidate)
     paths = [compose(candidate) for candidate in CANDIDATES]
     contact_sheet(CANDIDATES, paths)
+    if args.final:
+        final_dir = os.path.join(REPO_ROOT, "assets", "marketing", "final")
+        os.makedirs(final_dir, exist_ok=True)
+        final = os.path.join(final_dir, "icon_512.png")
+        Image.open(os.path.join(OUT_DIR, f"icon_{args.final}.png")).convert("RGB").save(final, optimize=True)
+        log(f"wrote {os.path.relpath(final, REPO_ROOT)} from icon_{args.final}")
 
 
 if __name__ == "__main__":

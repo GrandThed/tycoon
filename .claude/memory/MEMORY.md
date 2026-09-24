@@ -17,3 +17,4 @@
 - [Co-op 2026-09-23](coop-2026-09-23.md) — C2 rulings: boss HP scales with party, public+friends+server run list, invite/accept party, host-gated missions via RunTicket privateServerId; Rojo $path child duplication
 - [Small cars 2026-09-23](small-cars-2026-09-23.md) — wave 2d: runtime ScaleTo for dressing props (no re-upload), lane-hold stops fused traffic, merge_stages flips winding for mirrored kit nodes
 - [Feel pass 2026-09-23](feel-pass-2026-09-23.md) — C2.5+C3 rulings: over-the-shoulder camera, one evolving horde, detailed models, three stops; animation ids unverified
+- [Marketing 2026-09-24](marketing-2026-09-24.md) — M10: icon = era stack (outline, judge at 64 px), store = A set, thumbnails = captioned real Studio screenshots (renders rejected)

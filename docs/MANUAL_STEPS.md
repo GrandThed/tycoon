@@ -1470,3 +1470,22 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
 - [ ] 12. Not needed for the Stop 1 playtest (Studio only).
 - [ ] 13. If you want it live, republish **both** places in one sitting, exactly as in "C2 → 4".
       Never publish only one.
+
+## M10 — Icon, store icons, thumbnails
+
+Everything here is Creator Hub or Studio work; the art is generated offline and lives under the
+gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M10 contracts").
+
+1. **Experience icon** — Creator Hub → the experience → Places/Experience settings → Icon: upload
+   `assets/marketing/final/icon_512.png`. Do it at least a day before going public (moderation).
+   Leave the localized icons empty (the icon has no text).
+2. **Pass icons** — Creator Hub → Monetization → Passes → each pass → edit image:
+   `DoubleCash.png`, `OfflinePro.png`, `VIP.png` from `assets/marketing/final/store/`.
+3. **Product icons** — Monetization → Developer Products → each product → image:
+   `Cash30m.png`, `Cash2h.png`, `Cash8h.png`, `DoubleOffline.png` (same folder). The in-game shop
+   does not show these images, so no config change follows.
+4. **Thumbnails** — follow `tools/marketing/SHOTLIST.md` in Studio, save each screenshot under
+   `assets/marketing/screenshots/` with the file name the list gives, then run
+   `py tools/marketing/caption.py --check` and look at the `_check.png` files (bottom 15 % shaded).
+   Upload the non-`_check` PNGs from `assets/marketing/final/thumbs/` in Creator Hub → Thumbnails,
+   keep 2–5 active and turn on thumbnail personalization (`docs/DISCOVERY_CHECKLIST.md` §2).

@@ -1,0 +1,36 @@
+{
+  "note": "One entry per thumbnail. sources are file names in assets/marketing/screenshots/ (one = full frame, two = 2-up with arrow, 3+ = slanted slices); focus is one [x, y] per source, 0..1 of that screenshot, the point the crop keeps central; labels name the 2-up halves or the slices. How to take each screenshot: tools/marketing/SHOTLIST.md. Regenerate: py tools/marketing/caption.py --check",
+  "shots": [
+    {
+      "id": "growth",
+      "sources": ["growth_low.png", "growth_high.png"],
+      "focus": [[0.5, 0.55], [0.5, 0.5]],
+      "labels": ["LEVEL 1", "LEVEL 100"],
+      "caption": "LEVEL IT UP!"
+    },
+    {
+      "id": "eras",
+      "sources": ["eras_village.png", "eras_boomtown.png", "eras_metropolis.png", "eras_orbital.png"],
+      "focus": [[0.5, 0.55], [0.5, 0.55], [0.5, 0.55], [0.5, 0.55]],
+      "labels": ["VILLAGE", "BOOMTOWN", "METROPOLIS", "ORBITAL"]
+    },
+    {
+      "id": "scale_metropolis",
+      "sources": ["scale_metropolis.png"],
+      "focus": [[0.5, 0.5]],
+      "caption": "BUILD A METROPOLIS"
+    },
+    {
+      "id": "scale_orbital",
+      "sources": ["scale_orbital.png"],
+      "focus": [[0.5, 0.5]],
+      "caption": "BUILD A SPACE COLONY"
+    },
+    {
+      "id": "social",
+      "sources": ["social.png"],
+      "focus": [[0.5, 0.55]],
+      "caption": "PLAY WITH FRIENDS"
+    }
+  ]
+}

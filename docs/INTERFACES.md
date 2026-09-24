@@ -4234,3 +4234,10 @@ upload (20 of the account's 100 monthly uploads).
   combat sound plays; animations load or fall back without errors.
 - `DebugMission boomtown / metropolis / orbital` boots each new arena with placeholder rigs and a
   full 10-wave run.
+
+**Rulings after Ben's look (2026-09-24):** the experience icon is the **era stack**
+(`py tools/marketing/icon.py --final erastack_v2b` → `assets/marketing/final/icon_512.png`); the
+store icons are the **A set** (`assets/marketing/final/store/<key>.png`). The rendered thumbnails
+were rejected: thumbnails are **real Studio screenshots** shot from `tools/marketing/SHOTLIST.md`
+and captioned by `py tools/marketing/caption.py` (shots in `tools/marketing/shots.json`, output
+`assets/marketing/final/thumbs/`). The Blender thumbnail scripts were deleted.
