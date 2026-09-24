@@ -39,6 +39,8 @@ type PendingSpawn = {
 	isBoss: boolean,
 	stats: Types.EnemyStats,
 	boss: Types.BossDef?,
+	-- Summons appear beside their boss instead of on the rim.
+	at: Vector3?,
 }
 
 local phase: Types.RunPhase = "lobby"
@@ -48,6 +50,9 @@ local clearedThrough = 0
 local merged = false
 local forcedNextWave: number? = nil
 local pending: { PendingSpawn } = {}
+-- Boss summons (C2.5): same spawn path and maxAlive cap as the wave, but not paced by the spawn
+-- interval, because a summon is a telegraphed event the party just watched wind up.
+local summons: { PendingSpawn } = {}
 local spec: Combat.WaveSpec? = nil
 local spawnedThisGroup = 0
 local spawnCursor = 0
@@ -95,7 +100,7 @@ local function pushRunFields(): ()
 		phase = phase,
 		wave = wave,
 		alive = aliveEnemies(),
-		remaining = #pending,
+		remaining = #pending + #summons,
 		tempo = tempo,
 		merged = merged,
 		breatherEndsIn = if phase == "breather" then math.max(0, breatherUntil - now) else nil,
@@ -367,6 +372,7 @@ function WaveService.EndRun(reason: string): ()
 		flushPool(clearedThrough, 0, false)
 	end
 	pending = {}
+	summons = {}
 	spec = nil
 	bossEnemy = nil
 	EnemyService.ClearAll()
@@ -408,6 +414,39 @@ local function onEnemyKilled(enemy: EnemyService.Enemy, byUserId: number): ()
 		materials = enemy.materials,
 		byUserId = byUserId,
 	})
+end
+
+local function spawnSummons(combatConfig: Types.CombatConfig): ()
+	while #summons > 0 and aliveEnemies() < combatConfig.director.maxAlive do
+		local entry = table.remove(summons, 1)
+		if entry == nil then
+			return
+		end
+		spawnCursor += 1
+		EnemyService.Spawn(entry.key, entry.stats, false, spawnCursor, nil, entry.at)
+	end
+end
+
+-- EnemyService calls this from inside its AI tick when a boss's summon lands, so it only queues.
+-- Summoned enemies use the current wave's stats, count toward the group (merge maths, clear) and
+-- pay normal rewards through the normal kill path.
+local function onSummon(key: string, count: number, near: Vector3): ()
+	if phase ~= "wave" and phase ~= "boss" then
+		return
+	end
+	local mission = ArenaService.GetMission()
+	local current = spec
+	if mission == nil or current == nil then
+		return
+	end
+	local stats = Combat.EnemyStats(mission, key, current, false)
+	if stats == nil then
+		return
+	end
+	for _ = 1, count do
+		table.insert(summons, { key = key, isBoss = false, stats = stats, boss = nil, at = near })
+	end
+	spawnedThisGroup += count
 end
 
 local function spawnNext(mission: Types.MissionConfig, combatConfig: Types.CombatConfig): ()
@@ -586,6 +625,7 @@ local function tick(delta: number): ()
 		return
 	end
 
+	spawnSummons(combatConfig)
 	spawnNext(mission, combatConfig)
 
 	local boss = bossEnemy
@@ -595,7 +635,7 @@ local function tick(delta: number): ()
 		setPhase("wave")
 	end
 
-	if #pending > 0 then
+	if #pending > 0 or #summons > 0 then
 		return
 	end
 
@@ -679,6 +719,7 @@ function WaveService.ForceWave(waveNumber: number): ()
 		return
 	end
 	pending = {}
+	summons = {}
 	EnemyService.ClearAll()
 	breatherUntil = 0
 	-- Skipping forward is not clearing: without this, jumping from wave 2 to wave 9 would credit
@@ -728,6 +769,7 @@ function WaveService.Reset(): ()
 	merged = false
 	forcedNextWave = nil
 	pending = {}
+	summons = {}
 	spec = nil
 	spawnedThisGroup = 0
 	spawnCursor = 0
@@ -747,6 +789,7 @@ end
 
 function WaveService.Init(): ()
 	CombatService.SetKillHandler(onEnemyKilled)
+	EnemyService.SetSummonHandler(onSummon)
 	ArenaService.SetResetHook(WaveService.Reset)
 end
 

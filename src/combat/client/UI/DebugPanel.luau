@@ -22,7 +22,11 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 
-export type Deps = { onLever: (lever: string, value: any) -> () }
+-- C2.5: onToggle tells the shoulder camera the strip is open, so the mouse unlocks for it.
+export type Deps = {
+	onLever: (lever: string, value: any) -> (),
+	onToggle: ((open: boolean) -> ())?,
+}
 
 export type DebugPanelHandle = {
 	SetMission: (mission: Types.MissionConfig?) -> (),
@@ -165,6 +169,10 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		connections,
 		toggle.Activated:Connect(function()
 			body.Visible = not body.Visible
+			local onToggle = deps.onToggle
+			if onToggle ~= nil then
+				onToggle(body.Visible)
+			end
 		end)
 	)
 

@@ -48,6 +48,15 @@ type WaveTableDef = {
 	rewardGrowth: number,
 	composition: { CompositionDef },
 }
+type BossPatternDef = {
+	kind: "slam" | "charge" | "summon",
+	cooldown: number,
+	windupSeconds: number,
+	radius: number?,
+	damageMult: number?,
+	enemy: string?,
+	count: number?,
+}
 type BossDef = {
 	template: string,
 	enemy: string,
@@ -56,6 +65,7 @@ type BossDef = {
 	cashMult: number,
 	materialsMult: number,
 	valor: number,
+	patterns: { BossPatternDef }?,
 }
 type MissionConfig = {
 	version: number,

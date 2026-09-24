@@ -1,0 +1,60 @@
+{
+	"version": 1,
+	"id": "orbital",
+	"era": 4,
+	"eraName": "OrbitalColony",
+	"name": "Crater Breach",
+	"arena": "OrbitalColony",
+	"material": "Alloy",
+	"waves": 10,
+	"bossWaves": [5, 10],
+	"recommendedPower": 3400,
+	"targetMinutes": 8,
+	"targetWaveSeconds": 30,
+	"enemies": {
+		"grunt": { "template": "OrbitalColonyGrunt", "kind": "melee", "hp": 4992, "damage": 19, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300000000, "materials": 1, "elite": false, "color": [96, 150, 170] },
+		"shooter": { "template": "OrbitalColonyShooter", "kind": "ranged", "hp": 3264, "damage": 12, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400000000, "materials": 1, "elite": false, "color": [150, 160, 90] },
+		"brute": { "template": "OrbitalColonyBrute", "kind": "charger", "hp": 16895, "damage": 31, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600000000, "materials": 4, "elite": true, "color": [170, 70, 150] }
+	},
+	"waveTable": {
+		"baseCount": 7,
+		"countPerWave": 0.4,
+		"hpGrowth": 0.03,
+		"damageGrowth": 0.03,
+		"rewardGrowth": 0.1,
+		"composition": [
+			{ "fromWave": 1, "weights": { "grunt": 1.0 } },
+			{ "fromWave": 3, "weights": { "grunt": 0.7, "shooter": 0.3 } },
+			{ "fromWave": 7, "weights": { "grunt": 0.55, "shooter": 0.3, "brute": 0.15 } }
+		]
+	},
+	"bosses": {
+		"5": {
+			"template": "OrbitalColonyChief",
+			"enemy": "brute",
+			"hpMult": 5.0,
+			"damageMult": 0.5,
+			"cashMult": 8.0,
+			"materialsMult": 5.0,
+			"valor": 10,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 9, "windupSeconds": 1.0, "radius": 12, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 13, "windupSeconds": 0.9, "damageMult": 2.5 }
+			]
+		},
+		"10": {
+			"template": "OrbitalColonyWarlord",
+			"enemy": "brute",
+			"hpMult": 8.0,
+			"damageMult": 0.5,
+			"cashMult": 20.0,
+			"materialsMult": 10.0,
+			"valor": 25,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 8, "windupSeconds": 1.0, "radius": 14, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 12, "windupSeconds": 0.8, "damageMult": 2.5 },
+				{ "kind": "summon", "cooldown": 22, "windupSeconds": 1.5, "enemy": "grunt", "count": 3 }
+			]
+		}
+	}
+}

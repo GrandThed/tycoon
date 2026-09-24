@@ -7,9 +7,10 @@
 -- * origin = arena centre, floor TOP face at y = 0; obstacles sit on that face.
 -- * the lobby pad is the centre, because this is a defence: the party holds the middle and the
 --   eight rim spawns feed inward from every side, so no seat is safe and no side is ignored.
--- * enemies walk with Humanoid:MoveTo and have no pathfinding, so obstacles are small, low and
---   sit BETWEEN the eight radial spawn lines (22.5 degrees off each) — a blocker parked on a
---   spawn line would jam a whole wave against it.
+-- * obstacles sit BETWEEN the eight radial spawn lines (22.5 degrees off each): enemies only
+--   path around a blocker once it cuts their line (C2.5), so one parked on a spawn line would
+--   still make a whole wave detour. Keep every obstacle at least 1.5 studs tall, or the
+--   steering probe misses it.
 
 local RIM = 46
 local DIAGONAL = 32.5

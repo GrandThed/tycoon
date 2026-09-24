@@ -1233,3 +1233,154 @@ py tools/sim_combat.py --era 1              # adds the Co-op section: party tabl
 py tools/sim_combat.py --era 1 --overdrive  # the same tables under Overdrive
 py tools/sim_economy.py --check             # unchanged, byte for byte, before and after
 ```
+
+# C2.5 — One evolving horde: missions 2–4 (draft), chargers, boss patterns
+
+Every mission now has the same three roles, a melee **grunt**, a ranged **shooter** and a
+**charger** brute (the elite), plus two bosses on waves 5 and 10 built from the charger key. Each
+era upgrades their gear (HP and damage) and their numbers (count per wave). Village keeps its keys
+(`raider`, `archer`, `brute`). Missions 2–4 are **draft balance**: placeholder rigs, the C1 run
+model, and no playtest data. Stop 3 re-balances them.
+
+## The four missions at recommended power (`py tools/sim_combat.py`)
+
+| mission | rec. power (loadout) | counts w1→w10 | run | HP floor | damage taken | cash | material | Valor | 0.6x dies | party 4 run |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Raider Woods (village) | 60 (2/1, 57) | 5 → 8 | 8:28 | 23 % | 196 = 1.4 bars | 142,185 | 256 Timber | 35 | wave 6 (4:04) | 8:54 |
+| Rail Yard Outlaws (boomtown) | 220 (6/3, 212) | 6 → 9 | 8:43 | 19 % | 400 = 1.3 bars | 14,721,166 | 271 Steel | 35 | wave 6 (4:20) | 9:05 |
+| Blackout Blocks (metropolis) | 680 (8/6, 677) | 7 → 11 | 8:22 | 12 % | 664 = 1.2 bars | 1.65B | 313 Circuits | 35 | wave 6 (3:53) | 8:58 |
+| Crater Breach (orbital) | 3400 (11/10, 3400) | 7 → 11 | 8:31 | 17 % | 1,716 = 1.1 bars | 167.2B | 323 Alloy | 35 | wave 7 (2:14) | 9:15 |
+
+- **Recommended power** sits just under the symmetric tier that the era's median income unlocks
+  (assertion 2): Boomtown 5/5 = 230, Metropolis 8/8 = 696, Orbital 11/11 = 3834. This is the
+  Village rule (60 under 64). Orbital is set lower, at 3400, so the melee-first fixture resolves
+  to a sensible Ion Blade + Laser Pistol. At 3600–3800 the same rule picks Nova Blade + a band-2
+  rifle.
+- **Enemy HP** = the Village row × (era recommended DPS ÷ Village recommended DPS) × a per-era
+  factor (Boomtown 0.8, Metropolis 0.6, Orbital 0.7). **Enemy damage** = the Village row × (era
+  max HP ÷ Village max HP) × (0.85 / 0.85 / 0.6). The factors are below 1 because each era fields
+  more bodies. The run model's rule still holds: the trickle, not HP, sets wave length (C1), so
+  HP and damage only buy pressure.
+- **Cash** is the Village row × 100 per era (contract). **Materials** stay flat: 1 / 1 / 4 per
+  enemy, 256–323 per run, so a band always costs about 2 runs. `speed`, `reach`,
+  `attackCooldown`, the wave `composition` breakpoints (3 / 7), growth rates and every boss
+  `hpMult` / `cashMult` / `materialsMult` / `valor` are the Village values.
+- Run cash as a share of the era's remaining slot cost falls from **0.95 %** (Village) to **0.17 % /
+  0.03 % / 0.01 %**. The tycoon's era cost grows about ×600, ×700 and ×370 per era, and combat cash
+  grows ×100. The 25 % cap is nowhere near binding. Whether combat cash should stay a garnish in
+  late eras is a Stop 3 decision.
+
+## Chargers and boss patterns, and how the sim models them
+
+| mission | Chief (wave 5) | Warlord (wave 10) |
+|---|---|---|
+| village | slam 10 s / 1.0 s windup / r10 / ×2.0; charge 14 s / 0.9 s / ×2.5 | slam 9 s / r12 / ×2.0; charge 14 s / ×2.5; summon 2 raiders / 24 s / 1.5 s |
+| boomtown | as Village | slam 9 s / r12; charge 13 s; summon 2 grunts / 24 s |
+| metropolis | charge 12 s / ×2.5; slam 10 s / r11 / ×2.0 | slam 9 s / r12; charge 12 s; summon 2 shooters / 24 s |
+| orbital | slam 9 s / r12 / ×2.0; charge 13 s / ×2.5 | slam 8 s / r14; charge 12 s / 0.8 s; summon 3 grunts / 22 s |
+
+Every boss `damageMult` went from **1.0 to 0.5**. The boss's plain swing is now weak, and the
+telegraphed slam and charge (×2.0 / ×2.5 of the halved number, i.e. ×1.0 / ×1.25 of the old swing)
+carry the danger. Danger now sits in the readable wind-ups that Stop 1 is about, and a player who
+dodges takes less than before. With patterns on top of a ×1.0 boss, Village wave 10 killed the
+recommended player in every combination tried (floor −4 % with only a slam).
+
+Coarse model (`tools/sim_combat.py`, constants at the top):
+
+| term | model |
+|---|---|
+| melee ring | `ai.maxMeleeAttackers` (3) slots per party member, bosses first; the rest do not swing. Moving 4 → 3 changed no C1 number: at recommended power the ring rarely held a fourth rig |
+| charger | walks until within `ai.chargeDistance` of reach, stands for `ai.chargeWindupSeconds`, dashes at speed × `ai.chargeSpeedMult`, lands `damage × CHARGE_LAND_RATE` (0.5) **once**, then fights as melee (needs a ring slot). Recharges from the hold ring are not modelled |
+| boss built from the charger key | walks in like melee; it charges **only** through its `charge` pattern |
+| slam | fires once off cooldown if the boss is within `radius`; after `windupSeconds` it lands `damage × damageMult × PATTERN_LAND_RATE` (0.5) on **every** party member |
+| charge pattern | the same land rate, on one member; the boss ends up in contact |
+| summon | after `windupSeconds`, spawns `count` of `enemy` at the rim into the boss's wave (capped by `maxAlive`, normal stats and rewards); the wave clears only when they are dead |
+| timing | each pattern's first use is `cooldown` after the boss spawns; a boss that dies inside a windup cancels the pending attack |
+| not modelled | stagger (`ai.staggerSeconds`) delaying enemy swings, and `ai.telegraphSeconds` (0.45) vs `enemy.attackWindupSeconds` (0.3) on ordinary strikes; the sim uses the latter. Both make the numbers pessimistic |
+
+**Summons only on the last boss wave** (assertion 14). Summoned kills land in the tempo window,
+which is sized for the wave's count. On the Chief's wave, two raiders per 15 s pushed tempo to
+1.46 and merged waves 6 and 7 into a live boss fight: the recommended player died on wave 7 at
+4:16. On Orbital, a wave-5 summon pushed the party-2 boss wave to ×1.41 of solo (assertion 11's
+band is ±35 %). After wave 10 nothing can merge, so a summon there only lengthens the fight.
+
+## The director and missions 2–4 (`windowSeconds 10`)
+
+The expected kills per 10 s window are count ÷ 3: Village 1.7–2.7, Boomtown 2.0–3.0, Metropolis
+and Orbital 2.3–3.7. More kills per window means finer tempo steps (0.27–0.5 instead of 0.37–0.59),
+and the recommended player reads 0.72–1.01 in every mission, with **no merges**, as in C1.
+
+**At 2x power, missions 2–4 never merge**, so assertion 7 is now asserted for Village only. The
+others are printed with "(draft, reported)". The cause is the formula, not these configs.
+`SpawnInterval` divides by the same tempo it is measured by, so a player who kills everything on
+arrival keeps tempo wherever it already is, and at `tempoMin` that is a fixed point. The only
+escape is a kill **burst**: an AoE that clears a backlog built up behind a boss. Village's 2x
+loadout carries `groundSlam` (hits the whole field) and merges five times. Boomtown's and
+Metropolis's 2x loadouts carry `dashStrike` (2 targets) and never burst. Across about 250 settings per era of
+HP, damage, count, `targetWaveSeconds` and boss HP, Boomtown and Metropolis merged at 2x only where the
+recommended player died. Orbital's 2x (12/12, `bladeStorm`) merged only at count 5, which undoes
+the "more numbers" of the horde. The reverse also happens: the **under-geared** Orbital player
+(10/9, `bladeStorm`) merges six times and dies sooner because of it.
+
+This is the C1 note "tempo as lag rather than rate" becoming load-bearing. It is a change in
+`Combat.Tempo` / `WaveService`, reported to the lead, and not something to tune around in
+mission files.
+
+## Tool changes
+
+- `MELEE_CONTACT_SLOTS` is gone; the ring reads `Combat.json ai.maxMeleeAttackers`.
+- `loadout_for_power` = `gear_for_power`, plus Ascension levels (melee first) once both slots
+  are at tier 12. The Orbital 2x fixture (6800) and every band-3/4 Overdrive × 3 fixture ask for
+  more than 12/12 carries (Orbital Overdrive: 30,600 → 12/12 + Ascension 3/2). Below tier 12 it
+  is exactly `gear_for_power`, so no Village number moved.
+- Assertion 13's newbie is the **0.6x fixture's loadout**: Stick + Sling in Village (unchanged), the
+  previous band's gear elsewhere. A Stick in an Orbital run deals 0.1 % of the damage, which C2
+  already ruled is spectating.
+- **Assertion 14 (new), horde shape:** exactly one melee, one ranged and one elite charger key;
+  bosses on [5, 10], built from the charger; 2–3 patterns each; summons name a mission key and
+  sit on the last boss wave; a full run at recommended power yields 250–350 of the era material.
+
+## The fourteen assertions, as measured
+
+| # | assertion | measured |
+|---|---|---|
+| 1 | unlock ladder | unchanged (bands enter at 0 / 4 / 4 / 4 %) |
+| 2 | power at median ≥ recommended | 64 ≥ 60, 230 ≥ 220, 696 ≥ 680, 3834 ≥ 3400 |
+| 3 | run length at recommended, ±50 % of 8 min | 8:28, 8:43, 8:22, 8:31, all 10/10 |
+| 4 | run cash ≤ 25 % of the era still owed | 0.95 %, 0.17 %, 0.03 %, 0.01 % |
+| 5, 6 | shares, away efficiency | unchanged |
+| 7 | 2x merges (Village asserted) | Village 5; the others 0 (reported) |
+| 8 | 0.6x dies on wave 6 ± 2 | 6, 6, 6, 7 |
+| 9 | composition | 320 combinations exact |
+| 10 | Overdrive at 3x its recommended power pays ≥ 3x | ×5.07, ×5.10, ×4.88, ×4.80, all cleared |
+| 11 | party boss waves within ±35 % | ×0.80–×1.14 across all missions and parties 2–4 |
+| 12 | 10:1 mentor duo | 5 / 0 in every mission |
+| 13 | mentee floor | idle 0 %; 0.6x newbie 5.4 / 5.2 / 7.8 / 11.0 % → paid 10 |
+| 14 | horde shape | all four; materials 256 / 271 / 313 / 323 |
+
+`sim_economy.py --check` output is byte-identical before and after.
+
+## What Stop 3 must re-check
+
+1. **The director at 2x.** Once tempo measures lag, restore assertion 7 for every mission
+   (`MERGE_ASSERTED_MISSIONS`) and re-read the Orbital under-geared merges.
+2. **Pattern land rates.** `CHARGE_LAND_RATE` and `PATTERN_LAND_RATE` (0.5) are guesses. Measure
+   dodges per telegraph in Studio. Most of the recommended player's wave-10 damage comes from
+   patterns, so these two numbers move the HP floor more than any enemy `damage`.
+3. **Charger recharges.** If `EnemyService` lets a charger holding at `holdRadius` recharge,
+   brute damage goes up, and the brute `damage` or `chargeWindupSeconds` has to come back down.
+4. **Late-era cash** (0.17 / 0.03 / 0.01 % of the era). This is a design call: keep it a garnish,
+   or scale enemy `cash` by the era's cost growth instead of ×100.
+5. **Missions 2–4 in play.** Nothing here has been fought. The mission files are drafts, and the
+   per-era HP/damage factors are the first things to move.
+6. **Co-op safety** is unchanged from C2 (party 4 floors 72–95 %), and the Orbital party floors
+   are the highest. Re-check together with the per-head reward carry-overs.
+
+## Commands used
+
+```
+py tools/sim_combat.py --check              # fourteen assertions, exits 0
+py tools/sim_combat.py                      # all four missions: 1x / 2x / 0.6x, cash, co-op
+py tools/sim_combat.py --era 4 --overdrive  # one mission under Overdrive
+py tools/sim_economy.py --check             # unchanged, byte for byte
+```

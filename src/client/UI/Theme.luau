@@ -348,11 +348,26 @@ local Theme = {
 	-- the two ability buttons stack immediately left of it and the stance pill sits above
 	-- them. Every one of these is at or above TAP_TARGET_MIN / MIN_SCALE (44 / 0.9167 = 48
 	-- design px), so nothing shrinks below a 44 physical px target on the smallest viewport.
-	COMBAT_ATTACK_BUTTON_SIZE = 80,
+	-- C2.5: one right-thumb cluster; the attack button grew (the thumb's resting target) and
+	-- the stance pill became a round button on the arc between the two abilities.
+	COMBAT_ATTACK_BUTTON_SIZE = 88,
 	COMBAT_ABILITY_BUTTON_SIZE = 56,
 	COMBAT_CONTROL_GAP = 8,
-	COMBAT_STANCE_WIDTH = 116,
-	COMBAT_STANCE_HEIGHT = 48,
+	COMBAT_STANCE_SIZE = 52,
+	COMBAT_STANCE_GLYPH_TEXT = 20,
+	COMBAT_CLUSTER_GAP = 10, -- ring gap between the attack button and its satellites
+	COMBAT_CLUSTER_STROKE_TRANSPARENCY = 0.6,
+	-- Roblox's touch jump button, mirrored from the PlayerModule's TouchJump sizing so the
+	-- cluster never covers it: small screens (shorter side <= 500 px) get a 70 px button
+	-- 95 px from the right and 90 px from the bottom, larger ones 120 px, 170 / 210 px in.
+	COMBAT_JUMP_SMALL_AXIS = 500,
+	COMBAT_JUMP_SMALL_SIZE = 70,
+	COMBAT_JUMP_LARGE_SIZE = 120,
+	COMBAT_JUMP_RIGHT_FACTOR = 1.5,
+	COMBAT_JUMP_RIGHT_TRIM = 10,
+	COMBAT_JUMP_SMALL_BOTTOM_PAD = 20,
+	COMBAT_JUMP_LARGE_BOTTOM_FACTOR = 1.75,
+	COMBAT_ALT_HINT_HEIGHT = 16,
 	COMBAT_ABILITY_KEY_HEIGHT = 12,
 	COMBAT_ABILITY_NAME_HEIGHT = 12,
 	COMBAT_ABILITY_MIN_TEXT = 8,
@@ -392,6 +407,7 @@ local Theme = {
 	COMBAT_CAMERA_KICK_DECAY = 9, -- per second; the kick is gone inside ~0.2 s
 	COMBAT_ABILITY_RING_SECONDS = 0.35,
 	COMBAT_ABILITY_RING_HEIGHT = 0.4,
+	COMBAT_ABILITY_RING_TRANSPARENCY = 0.4,
 	COMBAT_BANNER_WIDTH = 340,
 	COMBAT_BANNER_HEIGHT = 58,
 	COMBAT_BANNER_TEXT = 28,
@@ -414,10 +430,9 @@ local Theme = {
 	COMBAT_DRAW_DEGREES = 80,
 	COMBAT_SHOOT_KICK_DEGREES = 25,
 	COMBAT_SHOOT_KICK_SECONDS = 0.1,
-	COMBAT_TRACER_SECONDS = 0.06,
 	COMBAT_BEAM_SECONDS = 0.16,
-	COMBAT_TRACER_WIDTH = 0.12,
 	COMBAT_BEAM_WIDTH = 0.35,
+	COMBAT_FINISHER_STRIKE_MULT = 1.25, -- the finisher's pose travels further than a slash
 	COMBAT_WEAPON_WAIT_SECONDS = 3, -- WaitForChild budget for the hand and the prop folder
 	-- Grip placement of a weapon prop in the right hand. No weapon prop has been authored
 	-- yet (empty hands are the shipped C1 default), so these are the neutral "held blade"
@@ -429,11 +444,115 @@ local Theme = {
 	-- C1 input. The dash a burst ability performs locally; the server already resolved the
 	-- damage along the same segment, so this is presentation that never changes a hit.
 	COMBAT_DASH_SECONDS = 0.18,
+	COMBAT_AIM_MIN_STUDS = 1, -- a crosshair point closer than this to the head aims along the view
 	COMBAT_DASH_MAX_FORCE = 100000,
 	COMBAT_REMOTE_WAIT_SECONDS = 10, -- a remote C1 adds may be missing in an older build
 	-- Workspace/Enemies is built by ArenaService at server boot, so it is normally already
 	-- replicated; the budget only covers a slow join. Missing means "safe mode, no arena".
 	COMBAT_ARENA_WAIT_SECONDS = 20,
+
+	-- C2.5 shoulder camera (CameraController). Config owns offset, FOV, zoom range and the
+	-- per-device sensitivities; these are the feel of the rig itself. Rotation rates follow the
+	-- stock PlayerModule (0.5 deg per mouse px, 240 deg/s on a full stick) so the camera feels
+	-- familiar; pitch runs a bit slower than yaw, as there.
+	COMBAT_CAMERA_PIVOT_HEIGHT = 1.5, -- studs above the root: head height on an R15 rig
+	COMBAT_CAMERA_START_PITCH_DEGREES = -12,
+	COMBAT_CAMERA_MIN_PITCH_DEGREES = -70,
+	COMBAT_CAMERA_MAX_PITCH_DEGREES = 55,
+	COMBAT_CAMERA_MOUSE_DEGREES_PER_PIXEL = 0.5,
+	COMBAT_CAMERA_TOUCH_DEGREES_PER_PIXEL = 0.4,
+	COMBAT_CAMERA_GAMEPAD_DEGREES_PER_SECOND = 240,
+	COMBAT_CAMERA_GAMEPAD_DEADZONE = 0.2,
+	COMBAT_CAMERA_PITCH_RATIO = 0.77,
+	COMBAT_CAMERA_ZOOM_RATE = 12, -- per second, towards the target zoom
+	COMBAT_CAMERA_WHEEL_STEP = 1.5, -- studs per wheel notch
+	COMBAT_CAMERA_TOUCH_SPLIT = 0.5, -- touches starting right of this viewport fraction aim
+	COMBAT_CAMERA_COLLISION_RADIUS = 0.5,
+	COMBAT_CAMERA_COLLISION_PAD = 0.2,
+	-- Trauma shake: feel.shakeLight / shakeHeavy add trauma (0-1); the view moves by trauma
+	-- squared times these maxima and trauma drains at the decay rate.
+	COMBAT_SHAKE_MAX_DEGREES = 3,
+	COMBAT_SHAKE_MAX_STUDS = 0.35,
+	COMBAT_SHAKE_ROLL_RATIO = 0.5,
+	COMBAT_SHAKE_FREQUENCY = 18,
+	COMBAT_SHAKE_DECAY_PER_SECOND = 2.2,
+	COMBAT_FINISHER_KICK_MULT = 1.6,
+
+	-- C2.5 reticle (CombatHud): centre crosshair, hit marker and the bow's draw ring, in
+	-- design px scaled with the HUD.
+	COMBAT_RETICLE_SIZE = 72,
+	COMBAT_CROSSHAIR_LENGTH = 8,
+	COMBAT_CROSSHAIR_THICKNESS = 2,
+	COMBAT_CROSSHAIR_GAP = 5,
+	COMBAT_RETICLE_STROKE_TRANSPARENCY = 0.5,
+	COMBAT_HIT_MARKER_OFFSET = 12,
+	COMBAT_HIT_MARKER_LENGTH = 8,
+	COMBAT_CHARGE_RING_DOTS = 20,
+	COMBAT_CHARGE_RING_RADIUS = 26,
+	COMBAT_CHARGE_DOT_SIZE = 5,
+	COMBAT_CHARGE_DOT_IDLE_TRANSPARENCY = 0.7,
+
+	-- C2.5 weapon feel (WeaponController): swing trail, animation fit, shots in flight.
+	COMBAT_TRAIL_NEAR = 0.3, -- studs down the hand's -Y (toward the fingers)
+	COMBAT_TRAIL_FAR = 2.8, -- an empty hand still draws a blade-length arc
+	COMBAT_TRAIL_LIGHT_EMISSION = 0.6,
+	COMBAT_TRAIL_TRANSPARENCY = 0.25,
+	COMBAT_ANIMATION_FADE_SECONDS = 0.05,
+	COMBAT_ANIMATION_MIN_SPEED = 0.6,
+	COMBAT_ANIMATION_MAX_SPEED = 3,
+	COMBAT_ARROW_COLOR = Color3.fromRGB(150, 110, 70),
+	COMBAT_ARROW_LENGTH = 2.4,
+	COMBAT_ARROW_THICKNESS = 0.12,
+	COMBAT_ARROW_TRAIL_WIDTH = 0.06,
+	COMBAT_ARROW_TRAIL_SECONDS = 0.12,
+	COMBAT_ARROW_STICK_SECONDS = 1,
+	COMBAT_BOLT_LENGTH = 3,
+	COMBAT_BOLT_THICKNESS = 0.1,
+	-- Gun bolts fly this many times feel.arrowSpeed: a bullet slower than an arrow reads wrong.
+	COMBAT_BOLT_SPEED_FACTOR = 3,
+	COMBAT_PROJECTILE_FADE_SECONDS = 0.3,
+	COMBAT_PROJECTILE_CLAIM_RADIUS = 5, -- studs off a shot's line a hit may be and still be its
+	COMBAT_HIT_DELAY_MAX_SECONDS = 0.4, -- a hit is never shown later than this after the server
+	COMBAT_MUZZLE_FLASH_SIZE = 0.6,
+	COMBAT_MUZZLE_FLASH_GROWTH = 2,
+	COMBAT_MUZZLE_FLASH_TRANSPARENCY = 0.15,
+	COMBAT_MUZZLE_FLASH_SECONDS = 0.07,
+	COMBAT_MUZZLE_LIGHT_BRIGHTNESS = 3,
+	COMBAT_MUZZLE_LIGHT_RANGE = 10,
+
+	-- C2.5 impact and telegraphs (CombatFxController). Counts come from feel.hitSparkCount;
+	-- these shape the spray.
+	COMBAT_SPARK_SURFACE_OFFSET = 0.8, -- studs back toward the attacker from the enemy root
+	COMBAT_SPARK_LIFETIME_MIN = 0.12,
+	COMBAT_SPARK_LIFETIME_MAX = 0.3,
+	COMBAT_SPARK_SPEED_MIN = 14,
+	COMBAT_SPARK_SPEED_MAX = 28,
+	COMBAT_SPARK_SPREAD = 35,
+	COMBAT_SPARK_GRAVITY = 40,
+	COMBAT_SPARK_DRAG = 4,
+	COMBAT_SPARK_SIZE = 0.25,
+	COMBAT_KILL_POP_START = 0.6,
+	COMBAT_KILL_POP_END = 4,
+	COMBAT_KILL_POP_SECONDS = 0.18,
+	COMBAT_KILL_POP_TRANSPARENCY = 0.3,
+	-- Warmer and brighter than the red attack tell, so "about to hit" reads apart from it.
+	COMBAT_TELEGRAPH_COLOR = Color3.fromRGB(255, 120, 60),
+	COMBAT_TELEGRAPH_SUMMON_COLOR = Color3.fromRGB(170, 100, 235),
+	COMBAT_TELEGRAPH_HIGHLIGHT_FILL = 0.35,
+	COMBAT_TELEGRAPH_AREA_TRANSPARENCY = 0.75,
+	COMBAT_TELEGRAPH_FILL_TRANSPARENCY = 0.4,
+	COMBAT_TELEGRAPH_THICKNESS = 0.1,
+	COMBAT_TELEGRAPH_LIFT = 0.05, -- studs above the floor, doubled for the fill on top
+	COMBAT_TELEGRAPH_MIN_SIZE = 0.2,
+	COMBAT_TELEGRAPH_LINGER_SECONDS = 0.12,
+	COMBAT_TELEGRAPH_GROUND_PROBE = 12,
+	COMBAT_TELEGRAPH_FLOOR_Y = 0, -- arena floor top face, when the probe finds nothing
+	-- Used only when the server omits a radius; the server's number is the real one.
+	COMBAT_TELEGRAPH_DEFAULT_RADIUS = 10,
+	COMBAT_TELEGRAPH_DEFAULT_HALF_WIDTH = 2.5,
+	COMBAT_TELEGRAPH_SUMMON_RADIUS = 6,
+	COMBAT_TELEGRAPH_MARK_SIZE = 44,
+	COMBAT_TELEGRAPH_MARK_RISE = 2.2,
 
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.

@@ -14,7 +14,7 @@
 	"enemies": {
 		"raider": { "template": "Raider", "kind": "melee", "hp": 52, "damage": 3, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300, "materials": 1, "elite": false, "color": [150, 84, 54] },
 		"archer": { "template": "Archer", "kind": "ranged", "hp": 34, "damage": 2, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400, "materials": 1, "elite": false, "color": [110, 122, 70] },
-		"brute": { "template": "Brute", "kind": "melee", "hp": 176, "damage": 5, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600, "materials": 4, "elite": true, "color": [120, 44, 44] }
+		"brute": { "template": "Brute", "kind": "charger", "hp": 176, "damage": 5, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 1600, "materials": 4, "elite": true, "color": [120, 44, 44] }
 	},
 	"waveTable": {
 		"baseCount": 5,
@@ -29,7 +29,32 @@
 		]
 	},
 	"bosses": {
-		"5": { "template": "RaiderChief", "enemy": "brute", "hpMult": 5.0, "damageMult": 1.0, "cashMult": 8.0, "materialsMult": 5.0, "valor": 10 },
-		"10": { "template": "Warlord", "enemy": "brute", "hpMult": 8.0, "damageMult": 1.0, "cashMult": 20.0, "materialsMult": 10.0, "valor": 25 }
+		"5": {
+			"template": "RaiderChief",
+			"enemy": "brute",
+			"hpMult": 5.0,
+			"damageMult": 0.5,
+			"cashMult": 8.0,
+			"materialsMult": 5.0,
+			"valor": 10,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 10, "windupSeconds": 1.0, "radius": 10, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 14, "windupSeconds": 0.9, "damageMult": 2.5 }
+			]
+		},
+		"10": {
+			"template": "Warlord",
+			"enemy": "brute",
+			"hpMult": 8.0,
+			"damageMult": 0.5,
+			"cashMult": 20.0,
+			"materialsMult": 10.0,
+			"valor": 25,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 9, "windupSeconds": 1.0, "radius": 12, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 14, "windupSeconds": 0.9, "damageMult": 2.5 },
+				{ "kind": "summon", "cooldown": 24, "windupSeconds": 1.5, "enemy": "raider", "count": 2 }
+			]
+		}
 	}
 }

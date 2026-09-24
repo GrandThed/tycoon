@@ -4,13 +4,20 @@
 -- sends that intent. It never sends damage, never names a hit, and never trusts the enemy
 -- ids it collects — they are a hint the server re-resolves against the live wave.
 --
--- Stance is the one piece of client state here: melee (keys 1 / Q) or ranged (keys 2 / E),
--- toggled from the HUD on touch. Everything else (gear, phase, ability cooldowns) is pushed
--- in from CombatUIController, which owns the Snapshot and the RunState.
+-- Stance is the one piece of client state here: melee (key 1) or ranged (key 2), toggled
+-- from the HUD on touch and Y on a gamepad. Everything else (gear, phase, ability cooldowns)
+-- is pushed in from CombatUIController, which owns the Snapshot and the RunState.
+--
+-- C2.5 aim: the crosshair is the shoulder camera's centre ray (CameraController.GetAimRay),
+-- projected to the point it meets the arena, and the shot leaves the head toward that point.
+-- Touch and gamepad add a soft lock inside `camera.touchAimAssistDegrees`; the mouse gets
+-- none, because a locked pointer already aims precisely. Gamepad (ruling 1): R2 attack,
+-- L1 / R1 abilities, Y stance, through ContextActionService so the stock bindings yield.
 --
 -- Degradation: a missing Armory config, a missing class, a missing RequestFire remote (an
 -- older server build) or a dead character all make the input a silent no-op, never an error.
 
+local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -24,6 +31,7 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
+local CameraController = require(script.Parent:WaitForChild("CameraController"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
@@ -38,9 +46,15 @@ local RANGED_SLOT: Stance = "ranged"
 -- Fallbacks used only when Combat.json is missing; the config is the real home of both.
 local DEFAULT_HIT_PAD = 3
 local DEFAULT_AIM_ASSIST_DEGREES = 20
+local DEFAULT_TOUCH_ASSIST_DEGREES = 12
 local DEFAULT_MAX_TARGETS = 24
 local DEFAULT_COMBO_TOLERANCE = 0.8
 local HALF = 0.5
+local ACTION_ATTACK = "CombatAttack"
+local ACTION_ABILITY_MELEE = "CombatAbilityMelee"
+local ACTION_ABILITY_RANGED = "CombatAbilityRanged"
+local ACTION_STANCE = "CombatStance"
+local ACTIONS = { ACTION_ATTACK, ACTION_ABILITY_MELEE, ACTION_ABILITY_RANGED, ACTION_STANCE }
 
 local InputController = {}
 
@@ -97,6 +111,17 @@ end
 local function aimAssistDegrees(): number
 	local cfg = combatConfig
 	return if cfg ~= nil then cfg.player.aimAssistDegrees else DEFAULT_AIM_ASSIST_DEGREES
+end
+
+local function touchAssistDegrees(): number
+	local cfg = combatConfig
+	return if cfg ~= nil then cfg.camera.touchAimAssistDegrees else DEFAULT_TOUCH_ASSIST_DEGREES
+end
+
+-- Touch and gamepad get the soft lock; a locked mouse aims exactly where the crosshair is.
+local function assistedInput(): boolean
+	local last = UserInputService:GetLastInputType()
+	return last == Enum.UserInputType.Touch or last.Name:sub(1, 7) == "Gamepad"
 end
 
 local function maxTargets(): number
@@ -158,6 +183,12 @@ local function visibleEnemies(): { EnemyHit }
 		if typeof(id) ~= "number" or child:GetAttribute(DEAD_ATTRIBUTE) == true then
 			continue
 		end
+		-- C2.5: `Dead` is stamped only near the end of the ragdoll, so a falling body is
+		-- recognised by its Humanoid instead; aim must never lock onto a corpse.
+		local humanoid = child:FindFirstChildOfClass("Humanoid")
+		if humanoid ~= nil and humanoid.Health <= 0 then
+			continue
+		end
 		local pivot = child.PrimaryPart
 		if pivot == nil then
 			pivot = child:FindFirstChildWhichIsA("BasePart")
@@ -204,30 +235,38 @@ local function nearestInCone(
 	return best
 end
 
--- Where the player is pointing before the assist. Touch aims with the camera; a mouse aims
--- with the pointer, projected out to the weapon's range so the two agree at any distance.
-local function rawAimDirection(origin: Vector3, range: number): Vector3
-	local camera = Workspace.CurrentCamera
-	if camera == nil then
-		return Vector3.new(0, 0, -1)
-	end
-	if UserInputService.MouseEnabled then
-		local location = UserInputService:GetMouseLocation()
-		local ray = camera:ViewportPointToRay(location.X, location.Y)
-		local target = ray.Origin + ray.Direction.Unit * range
-		local offset = target - origin
-		if offset.Magnitude > 0 then
-			return offset.Unit
-		end
-	end
-	return camera.CFrame.LookVector
+-- The world point under the crosshair. The camera ray starts level with the muzzle, so a
+-- wall or a teammate between the camera and the player can never catch the shot.
+local function crosshairPoint(origin: Vector3, range: number): Vector3
+	local rayOrigin, look = CameraController.GetAimRay()
+	local along = math.max((origin - rayOrigin):Dot(look), 0)
+	local start = rayOrigin + look * along
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local character = Players.LocalPlayer.Character
+	params.FilterDescendantsInstances = if character ~= nil then { character } else {}
+	local result = Workspace:Raycast(start, look * range, params)
+	return if result ~= nil then result.Position else start + look * range
 end
 
--- (direction, lockedEnemy). The lock is what makes a phone playable: the shot leaves the
--- head toward the enemy the player is already looking at, inside aimAssistDegrees.
+local function rawAimDirection(origin: Vector3, range: number): Vector3
+	local point = crosshairPoint(origin, range)
+	local offset = point - origin
+	if offset.Magnitude > Theme.COMBAT_AIM_MIN_STUDS then
+		return offset.Unit
+	end
+	local _, look = CameraController.GetAimRay()
+	return look
+end
+
+-- (direction, lockedEnemy). The lock is what makes a phone or a pad playable: the shot
+-- leaves the head toward the enemy nearest the crosshair inside the assist cone.
 local function aim(origin: Vector3, range: number): (Vector3, EnemyHit?)
 	local direction = rawAimDirection(origin, range)
-	local locked = nearestInCone(origin, direction, aimAssistDegrees(), range)
+	if not assistedInput() then
+		return direction, nil
+	end
+	local locked = nearestInCone(origin, direction, touchAssistDegrees(), range)
 	if locked ~= nil then
 		local offset = locked.position - origin
 		if offset.Magnitude > 0 then
@@ -237,15 +276,17 @@ local function aim(origin: Vector3, range: number): (Vector3, EnemyHit?)
 	return direction, nil
 end
 
--- Melee needs the rig facing its target: the server measures the arc from the root's look
--- vector, so a tap that does not turn the character would simply miss. The client owns its
--- own character, so this is a legal local move, and it is yaw only (never a pitch).
-local function faceTowards(root: BasePart, position: Vector3): ()
-	local flat = Vector3.new(position.X, root.Position.Y, position.Z)
-	if (flat - root.Position).Magnitude <= 0 then
-		return
+-- A random direction inside the class's spread cone (spreadDegrees is the full width).
+-- Spread is client-side by contract; the server casts whatever ray arrives.
+local function withSpread(direction: Vector3, degrees: number): Vector3
+	if degrees <= 0 then
+		return direction
 	end
-	root.CFrame = CFrame.lookAt(root.Position, flat)
+	local tilt = math.rad(degrees * HALF) * math.sqrt(math.random())
+	local frame = CFrame.lookAt(Vector3.zero, direction)
+		* CFrame.Angles(0, 0, math.random() * 2 * math.pi)
+		* CFrame.Angles(tilt, 0, 0)
+	return frame.LookVector
 end
 
 local function sendMelee(): ()
@@ -272,10 +313,16 @@ local function sendMelee(): ()
 	comboStep = step
 	lastSwingAt = now
 
+	-- Melee keeps its wider C1 assist on every device: the cone sits on the camera's look,
+	-- and the rig turns to the enemy for the swing (the server measures the arc from it).
 	local range = class.range + hitPad()
-	local _, locked = aim(rig.head.Position, range)
-	if locked ~= nil and (locked.position - rig.root.Position).Magnitude <= range then
-		faceTowards(rig.root, locked.position)
+	local _, viewLook = CameraController.GetAimRay()
+	local flatLook = Vector3.new(viewLook.X, 0, viewLook.Z)
+	local locked = if flatLook.Magnitude > 0
+		then nearestInCone(rig.root.Position, flatLook.Unit, aimAssistDegrees(), range)
+		else nil
+	if locked ~= nil then
+		CameraController.FaceToward(locked.position, window + Theme.COMBAT_SWING_SETTLE_SECONDS)
 	end
 
 	local arc = math.rad((class.arcDegrees or 360) * HALF)
@@ -327,7 +374,7 @@ local function sendFire(charge: number): ()
 	lastFireAt = now
 
 	local origin = rig.head.Position
-	local direction = aim(origin, class.range)
+	local direction = withSpread((aim(origin, class.range)), class.spreadDegrees or 0)
 	fireSeq += 1
 	remote:FireServer(fireSeq, origin, direction, math.clamp(charge, 0, 1))
 	WeaponController.Shoot(origin, direction, class.range, class.fire or "semi")
@@ -502,6 +549,49 @@ local function onInputEnded(input: InputObject): ()
 	end
 end
 
+-- One handler for every gamepad action. Sinking stops the stock bindings (a Tool's R2, the
+-- default camera's shoulder buttons) from also reacting to the press.
+local function onGamepadAction(
+	action: string,
+	state: Enum.UserInputState,
+	_input: InputObject
+): Enum.ContextActionResult
+	local began = state == Enum.UserInputState.Begin
+	if action == ACTION_ATTACK then
+		if began then
+			attackBegan()
+		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			attackEnded()
+		end
+	elseif began and action == ACTION_ABILITY_MELEE then
+		sendAbility(MELEE_SLOT)
+	elseif began and action == ACTION_ABILITY_RANGED then
+		sendAbility(RANGED_SLOT)
+	elseif began and action == ACTION_STANCE then
+		setStance(if stance == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
+	end
+	return Enum.ContextActionResult.Sink
+end
+
+local function bindGamepad(): ()
+	local priority = Enum.ContextActionPriority.High.Value
+	local bindings: { { action: string, key: Enum.KeyCode } } = {
+		{ action = ACTION_ATTACK, key = Enum.KeyCode.ButtonR2 },
+		{ action = ACTION_ABILITY_MELEE, key = Enum.KeyCode.ButtonL1 },
+		{ action = ACTION_ABILITY_RANGED, key = Enum.KeyCode.ButtonR1 },
+		{ action = ACTION_STANCE, key = Enum.KeyCode.ButtonY },
+	}
+	for _, binding in bindings do
+		ContextActionService:BindActionAtPriority(
+			binding.action,
+			onGamepadAction,
+			false,
+			priority,
+			binding.key
+		)
+	end
+end
+
 function InputController.Init(): ()
 	armoryConfig = Catalog.GetArmoryConfig()
 	combatConfig = Catalog.GetCombatConfig()
@@ -526,6 +616,7 @@ function InputController.Start(): ()
 	end)
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
 	table.insert(connections, UserInputService.InputEnded:Connect(onInputEnded))
+	bindGamepad()
 end
 
 -- The HUD's attack button is a press-and-hold control, so it drives the same two entry
@@ -544,6 +635,21 @@ end
 
 function InputController.ToggleStance(): ()
 	setStance(if stance == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
+end
+
+-- The bow's draw progress 0-1 for the HUD ring, or nil while nothing is drawn. Display
+-- only: the server caps the real charge from its own RequestDraw stamp.
+function InputController.GetCharge(): number?
+	local startedAt = chargeStartedAt
+	if startedAt == nil then
+		return nil
+	end
+	local _, class = weaponFor(RANGED_SLOT)
+	local chargeSeconds = if class ~= nil then class.chargeSeconds or 1 else 1
+	if chargeSeconds <= 0 then
+		return 1
+	end
+	return math.clamp((os.clock() - startedAt) / chargeSeconds, 0, 1)
 end
 
 function InputController.GetStance(): Stance
@@ -580,6 +686,9 @@ function InputController.Destroy(): ()
 		connection:Disconnect()
 	end
 	table.clear(connections)
+	for _, action in ACTIONS do
+		ContextActionService:UnbindAction(action)
+	end
 	holdToken += 1
 	attackHeld = false
 end

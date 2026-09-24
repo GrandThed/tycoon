@@ -138,7 +138,12 @@
 		"telegraphSeconds": 0.45,
 		"chargeDistance": 26,
 		"chargeSpeedMult": 2.6,
-		"chargeWindupSeconds": 0.7
+		"chargeWindupSeconds": 0.7,
+		"strikeHalfArcDegrees": 60,
+		"shotHalfConeDegrees": 45,
+		"strikeReachPad": 1.5,
+		"chargeLaneHalfWidth": 2.5,
+		"postPatternAttackDelay": 0.8
 	},
 	"feel": {
 		"shakeLight": 0.25,

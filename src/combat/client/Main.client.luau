@@ -19,6 +19,7 @@ local controllersFolder = (script.Parent :: Instance):WaitForChild("Controllers"
 
 local controllers: { Controller } = {
 	require(controllersFolder:WaitForChild("SoundController") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("CameraController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("WeaponController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("InputController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatFxController") :: ModuleScript) :: Controller,

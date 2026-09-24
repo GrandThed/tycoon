@@ -1,0 +1,60 @@
+{
+	"version": 1,
+	"id": "metropolis",
+	"era": 3,
+	"eraName": "Metropolis",
+	"name": "Blackout Blocks",
+	"arena": "Metropolis",
+	"material": "Circuits",
+	"waves": 10,
+	"bossWaves": [5, 10],
+	"recommendedPower": 680,
+	"targetMinutes": 8,
+	"targetWaveSeconds": 30,
+	"enemies": {
+		"grunt": { "template": "MetropolisGrunt", "kind": "melee", "hp": 854, "damage": 10, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 3000000, "materials": 1, "elite": false, "color": [70, 78, 96] },
+		"shooter": { "template": "MetropolisShooter", "kind": "ranged", "hp": 559, "damage": 7, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 4000000, "materials": 1, "elite": false, "color": [60, 110, 130] },
+		"brute": { "template": "MetropolisBrute", "kind": "charger", "hp": 2892, "damage": 16, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 16000000, "materials": 4, "elite": true, "color": [150, 40, 50] }
+	},
+	"waveTable": {
+		"baseCount": 7,
+		"countPerWave": 0.4,
+		"hpGrowth": 0.03,
+		"damageGrowth": 0.03,
+		"rewardGrowth": 0.1,
+		"composition": [
+			{ "fromWave": 1, "weights": { "grunt": 1.0 } },
+			{ "fromWave": 3, "weights": { "grunt": 0.7, "shooter": 0.3 } },
+			{ "fromWave": 7, "weights": { "grunt": 0.55, "shooter": 0.3, "brute": 0.15 } }
+		]
+	},
+	"bosses": {
+		"5": {
+			"template": "MetropolisChief",
+			"enemy": "brute",
+			"hpMult": 5.0,
+			"damageMult": 0.5,
+			"cashMult": 8.0,
+			"materialsMult": 5.0,
+			"valor": 10,
+			"patterns": [
+				{ "kind": "charge", "cooldown": 12, "windupSeconds": 0.9, "damageMult": 2.5 },
+				{ "kind": "slam", "cooldown": 10, "windupSeconds": 1.0, "radius": 11, "damageMult": 2.0 }
+			]
+		},
+		"10": {
+			"template": "MetropolisWarlord",
+			"enemy": "brute",
+			"hpMult": 8.0,
+			"damageMult": 0.5,
+			"cashMult": 20.0,
+			"materialsMult": 10.0,
+			"valor": 25,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 9, "windupSeconds": 1.0, "radius": 12, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 12, "windupSeconds": 0.9, "damageMult": 2.5 },
+				{ "kind": "summon", "cooldown": 24, "windupSeconds": 1.5, "enemy": "shooter", "count": 2 }
+			]
+		}
+	}
+}

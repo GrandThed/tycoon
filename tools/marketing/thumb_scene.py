@@ -17,6 +17,7 @@ import os
 import sys
 
 import bpy
+from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,9 +34,9 @@ def log(msg):
 
 
 def linear(color):
-    """0..255 sRGB -> linear, for lights and the ground: the Standard view transform re-encodes,
-    so a colour written this way renders as the number in the scene file."""
-    return tuple(plotscene.srgb_to_linear(c / 255.0) for c in color)
+    """0..255 as plotscene writes its slabs (plotscene.rgb), so the ground sits in the same colour
+    space as the plot base beside it."""
+    return plotscene.rgb(color)
 
 
 def build_groups(spec, plot, materials, cache):
@@ -58,11 +59,11 @@ def build_groups(spec, plot, materials, cache):
         log("WARNING unusable blueprints: " + ", ".join(f"{k} x{v}" for k, v in sorted(missing.items())))
 
 
-def build_ground(spec, plot):
+def build_ground(spec, plot, distance):
     ground = spec.get("ground")
     if not ground:
         return
-    size = ground.get("size", 4000.0)
+    size = ground.get("size", 40000.0)
     mesh = bpy.data.meshes.new("Ground")
     h = size / 2
     mesh.from_pydata([(-h, -h, 0), (h, -h, 0), (h, h, 0), (-h, h, 0)], [], [(0, 1, 2, 3)])
@@ -70,28 +71,26 @@ def build_ground(spec, plot):
     obj.location = (0.0, 0.0, ground.get("y", -1.0))
     plot.objects.link(obj)
 
-    # Ground colour fades to the sky's horizon colour with distance from the lens, so the far edge
-    # melts into the painted sky instead of cutting a hard line across the frame.
+    # The ground fades into an emitted horizon colour with distance from the lens, so its far edge
+    # melts into the sky thumbs.py paints instead of cutting a hard line across the frame. The
+    # emission is decoded from sRGB so it lands on exactly the painted colour.
     mat = bpy.data.materials.new("GroundMat")
     mat.use_nodes = True
     nodes, links = mat.node_tree.nodes, mat.node_tree.links
     bsdf = nodes.get("Principled BSDF")
     bsdf.inputs["Roughness"].default_value = 1.0
+    bsdf.inputs["Base Color"].default_value = (*linear(ground["color"]), 1.0)
     cam = nodes.new("ShaderNodeCameraData")
     ramp = nodes.new("ShaderNodeMapRange")
-    ramp.inputs["From Min"].default_value = ground.get("hazeStart", 150.0)
-    ramp.inputs["From Max"].default_value = ground.get("hazeEnd", 900.0)
-    mix = nodes.new("ShaderNodeMix")
-    mix.data_type = "RGBA"
-    mix.inputs[6].default_value = (*linear(ground["color"]), 1.0)
-    mix.inputs[7].default_value = (*linear(ground.get("haze", ground["color"])), 1.0)
-    links.new(cam.outputs["View Distance"], ramp.inputs["Value"])
-    links.new(ramp.outputs["Result"], mix.inputs["Factor"])
-    # The haze is emitted rather than lit, so the far ground matches the sky whatever the sun does.
-    emit_mix = nodes.new("ShaderNodeMixShader")
+    # Haze distances are multiples of the lens-to-subject distance, so a close-up and a whole-plot
+    # shot both keep their subject's ground clear and lose only the far field.
+    ramp.inputs["From Min"].default_value = distance * ground.get("hazeStart", 1.6)
+    ramp.inputs["From Max"].default_value = distance * ground.get("hazeEnd", 8.0)
     emission = nodes.new("ShaderNodeEmission")
-    emission.inputs["Color"].default_value = (*linear(ground.get("haze", ground["color"])), 1.0)
-    links.new(mix.outputs[2], bsdf.inputs["Base Color"])
+    haze = ground.get("haze", ground["color"])
+    emission.inputs["Color"].default_value = (*(plotscene.srgb_to_linear(c / 255.0) for c in haze), 1.0)
+    emit_mix = nodes.new("ShaderNodeMixShader")
+    links.new(cam.outputs["View Distance"], ramp.inputs["Value"])
     links.new(ramp.outputs["Result"], emit_mix.inputs["Fac"])
     links.new(bsdf.outputs["BSDF"], emit_mix.inputs[1])
     links.new(emission.outputs["Emission"], emit_mix.inputs[2])
@@ -166,8 +165,10 @@ def setup_camera(scene, spec, size):
         target = plotscene.to_blender(cam_spec["target"])
         camera.location = eye
         camera.rotation_euler = (target - eye).to_track_quat("-Z", "Y").to_euler()
+        data.shift_y = cam_spec.get("shiftY", 0.0)
     else:
-        fit(camera, data, cam_spec, size)
+        target = fit(camera, data, cam_spec, size)
+    return (target - camera.location).length
     if cam_spec.get("dof"):
         dof = cam_spec["dof"]
         data.dof.use_dof = True
@@ -181,7 +182,14 @@ def fit(camera, data, cam_spec, size):
     coordinates, v up). The window is how the bottom 15 % is kept for Roblox's tile overlay and the
     top band for a caption, without cropping the render afterwards."""
     direction = plotscene.to_blender(cam_spec["dir"]).normalized()
-    rotation = (-direction).to_track_quat("-Z", "Y")
+    look = -direction
+    if "pitch" in cam_spec:
+        # Look flatter than the eye's own elevation: the horizon then drops into the frame and the
+        # painted sky shows above the city, while the eye still sees the plot from above.
+        flat = Vector((look.x, look.y, 0.0)).normalized()
+        pitch = math.radians(cam_spec["pitch"])
+        look = flat * math.cos(pitch) - Vector((0.0, 0.0, math.sin(pitch)))
+    rotation = look.to_track_quat("-Z", "Y")
     right = rotation @ Vector((1, 0, 0))
     up = rotation @ Vector((0, 1, 0))
     camera.rotation_euler = rotation.to_euler()
@@ -198,18 +206,32 @@ def fit(camera, data, cam_spec, size):
         us, vs = [], []
         for p in points:
             rel = p - eye
-            ahead = -rel.dot(direction)
-            ahead = max(ahead, 0.1)
+            ahead = max(rel.dot(look), 0.1)
             us.append(rel.dot(right) / (ahead * tan_x))
             vs.append(rel.dot(up) / (ahead * tan_y))
         span = max((max(us) - min(us)) / (u1 - u0), (max(vs) - min(vs)) / (v1 - v0))
         du = (min(us) + max(us)) / 2 - (u0 + u1) / 2
         dv = (min(vs) + max(vs)) / 2 - (v0 + v1) / 2
-        depth = (centre - eye).dot(-direction)
+        depth = (centre - eye).dot(look)
         eye = eye + right * du * tan_x * depth + up * dv * tan_y * depth
         # Move along the view axis so the widest projected span matches the window.
         eye = eye + direction * depth * (span - 1.0) * 0.8
     camera.location = eye
+    log(f"fit: u {min(us):.2f}..{max(us):.2f} v {min(vs):.2f}..{max(vs):.2f} span {span:.3f}, {len(points)} points")
+    return centre
+
+
+def write_anchors(scene, spec):
+    """Where named scene points land in the frame (0..1, y down), so thumbs.py can place era
+    labels and arrows over the right building whatever the fitted camera did."""
+    if not spec.get("anchors"):
+        return
+    out = {}
+    for name, point in spec["anchors"].items():
+        ndc = world_to_camera_view(scene, scene.camera, plotscene.to_blender(point))
+        out[name] = [ndc.x, 1.0 - ndc.y]
+    with open(spec["anchorsOut"], "w", encoding="utf-8") as handle:
+        json.dump(out, handle)
 
 
 def render(scene, spec):
@@ -257,10 +279,11 @@ def main():
 
     build_groups(spec, plot, plotscene.Materials(), plotscene.PlotPieceCache(library))
     bpy.context.view_layer.update()
-    build_ground(spec, plot)
     setup_lights(scene, spec.get("light", {}))
-    setup_camera(scene, spec, spec["size"])
+    distance = setup_camera(scene, spec, spec["size"])
+    build_ground(spec, plot, distance)
     bpy.context.view_layer.update()
+    write_anchors(scene, spec)
     render(scene, spec)
     log(f"wrote {spec['out']}")
 

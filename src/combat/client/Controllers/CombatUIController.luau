@@ -35,8 +35,13 @@ local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local CombatFxController = require(script.Parent:WaitForChild("CombatFxController"))
+local CameraController = require(script.Parent:WaitForChild("CameraController"))
 
 local HUMANOID_WAIT_SECONDS = 5
+local DEFAULT_HIT_MARKER_SECONDS = 0.12
+-- Cursor-hold reasons (CameraController.SetCursorHold): each modal frees the mouse by name.
+local HOLD_LOAD = "load"
+local HOLD_DEBUG = "debug"
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
@@ -65,6 +70,12 @@ local function boot(): ()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 	local armoryConfig = Catalog.GetArmoryConfig()
+	local combatConfig = Catalog.GetCombatConfig()
+	local hitMarkerSeconds = if combatConfig ~= nil
+		then combatConfig.feel.hitMarkerSeconds
+		else DEFAULT_HIT_MARKER_SECONDS
+	-- The load card needs the pointer until the profile arrives.
+	CameraController.SetCursorHold(HOLD_LOAD, true)
 
 	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
 	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
@@ -137,6 +148,9 @@ local function boot(): ()
 		onAbility = function(slot: string)
 			InputController.UseAbility(slot)
 		end,
+		onAttackInput = function(input: InputObject)
+			CameraController.AdoptTouch(input)
+		end,
 	})
 	local summaryCard = SummaryCard.new(screenGui, {
 		onReturn = function()
@@ -151,6 +165,9 @@ local function boot(): ()
 				if requestDebug ~= nil then
 					requestDebug:FireServer(lever, value)
 				end
+			end,
+			onToggle = function(open: boolean)
+				CameraController.SetCursorHold(HOLD_DEBUG, open)
 			end,
 		})
 		else nil
@@ -181,6 +198,7 @@ local function boot(): ()
 		if not loaded then
 			loaded = true
 			loadScreen.Hide() -- permanent: the profile is here
+			CameraController.SetCursorHold(HOLD_LOAD, false)
 		end
 		-- The audio settings belong to the profile, not to the place (review of 2026-09-17):
 		-- a player who muted music in the hub must arrive muted. Applied before the ambient
@@ -275,6 +293,7 @@ local function boot(): ()
 			requestSnapshot:FireServer()
 		end
 		hud.SetMission(if missionConfig ~= nil then missionConfig.name else run.missionId)
+		CameraController.SetPhase(run.phase)
 		hud.SetRunState(run)
 		InputController.SetPhase(run.phase)
 		if missionConfig ~= nil then
@@ -394,6 +413,14 @@ local function boot(): ()
 	end)
 	CombatFxController.SetToastHandler(function(text: string)
 		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
+	end)
+	CombatFxController.SetHitMarkerHandler(function(heavy: boolean)
+		hud.ShowHitMarker(heavy, hitMarkerSeconds)
+	end)
+	-- The reticle follows the camera and the bow every frame; the HUD writes only changes.
+	RunService.RenderStepped:Connect(function()
+		hud.SetAiming(CameraController.IsActive(), CameraController.IsAiming())
+		hud.SetCharge(InputController.GetCharge())
 	end)
 	hud.SetStance(InputController.GetStance())
 

@@ -17,9 +17,19 @@
 --  * The knockback nudge is a decaying *offset* re-applied on top of whatever pivot the
 --    server last replicated, so a correction mid-nudge blends instead of fighting.
 --
--- Reduce motion (Theme.reducedMotion: touch or low graphics, spec section 10) drops
--- particles, the camera kick, the knockback nudge and the ability ring; the text, the
--- banners and the sounds always play, because they carry information.
+-- C2.5 impact: sparks fly along `CombatFxHit.direction`, the shoulder camera shakes
+-- (`feel.shakeLight` per hit, `shakeHeavy` for a finisher or a hit taken), the HUD flashes a
+-- hit marker, and a hit from a shot still in the air is presented when the shot arrives
+-- (WeaponController.ArrivalDelay). Telegraphs draw BEFORE the blow: a glow and a "!" on the
+-- striker, a filling red ring for a slam, a filling red lane for a charge. Their fill is timed
+-- by `seconds` with a fixed TweenInfo, never Motion, because reduce motion halving the fill
+-- would lie about when the hit lands. A kill ragdolls server-side for `feel.ragdollSeconds`;
+-- the corpse fades during its last `player.corpseSeconds`.
+--
+-- Device gating (spec section 10, living-city ruling): Theme.reducedMotion is true on every
+-- touch device, so it only shrinks things (fewer sparks, a smaller shake, no nudge, rings
+-- that fade without growing). Particles and lights drop on Theme.lowEndDevice. Text,
+-- banners, telegraphs and sounds always play, because they carry information.
 --
 -- C2 co-op fx follow a finer split, because reducedMotion is true on EVERY touch device and
 -- a party buff is information, not decoration: the rally / war cry ring still shows on a
@@ -44,12 +54,13 @@ local Motion = require(uiFolder:WaitForChild("Motion"))
 local CombatHud = require(uiFolder:WaitForChild("CombatHud"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
+local CameraController = require(script.Parent:WaitForChild("CameraController"))
 
 local ENEMIES_FOLDER = "Enemies"
 local ENEMY_ID_ATTRIBUTE = "EnemyId"
 local ATTACKING_ATTRIBUTE = "Attacking"
 local DEAD_ATTRIBUTE = "Dead"
-local CAMERA_BIND_NAME = "CombatCameraKick"
+local TELEGRAPH_NAME = "FxTelegraph"
 -- Fallbacks for a build with no Combat.json: the feature still renders, just untuned.
 local DEFAULT_HITSTOP = 0.05
 local DEFAULT_CAMERA_KICK = 0.6
@@ -57,6 +68,17 @@ local DEFAULT_DAMAGE_SECONDS = 0.8
 local DEFAULT_BANNER_SECONDS = 2
 local DEFAULT_LOW_HP_FRACTION = 0.3
 local DEFAULT_CORPSE_SECONDS = 0.6
+local DEFAULT_FEEL: Types.CombatFeelConfig = {
+	shakeLight = 0.25,
+	shakeHeavy = 0.8,
+	hitMarkerSeconds = 0.12,
+	trailSeconds = 0.15,
+	arrowSpeed = 180,
+	ragdollImpulse = 35,
+	ragdollSeconds = 1.2,
+	hitSparkCount = 6,
+}
+local DEFAULT_CHARGE_DISTANCE = 26
 -- The HUD's waiting banner words, so a refused tap and the banner agree.
 local WAITING_TEXT = CombatHud.WAITING_TEXT
 
@@ -67,6 +89,9 @@ type EnemyFx = {
 	-- Sticky while the Attacking attribute is true; a hit flash rides over it and restores
 	-- it on the way out, so a hit during a windup never clears the tell.
 	tell: boolean,
+	-- C2.5: true from a strike telegraph until its blow lands; outranks the plain tell.
+	telegraph: boolean,
+	telegraphToken: number,
 	flash: Tween?,
 }
 
@@ -76,8 +101,6 @@ local combatConfig: Types.CombatConfig? = nil
 local armoryConfig: Types.ArmoryConfig? = nil
 local materialName = ""
 local activeNumbers = 0
-local cameraKickPitch = 0
-local cameraKickYaw = 0
 local lowHpActive = false
 local vignetteRoot: Frame? = nil
 local vignetteBars: { Frame } = {}
@@ -97,6 +120,7 @@ local enemiesById: { [number]: Model } = {}
 local connections: { RBXScriptConnection } = {}
 local onBanner: ((string) -> ())? = nil
 local onToast: ((string) -> ())? = nil
+local onHitMarker: ((boolean) -> ())? = nil
 -- userId -> display name from the last RunState party, so a buff can say who cast it
 -- (bots have negative ids and no Player to ask).
 local partyNames: { [number]: string } = {}
@@ -137,6 +161,26 @@ local function corpseSeconds(): number
 	return if cfg ~= nil then cfg.player.corpseSeconds else DEFAULT_CORPSE_SECONDS
 end
 
+local function feel(): Types.CombatFeelConfig
+	local cfg = combatConfig
+	return if cfg ~= nil then cfg.feel else DEFAULT_FEEL
+end
+
+local function chargeDistance(): number
+	local cfg = combatConfig
+	return if cfg ~= nil then cfg.ai.chargeDistance else DEFAULT_CHARGE_DISTANCE
+end
+
+-- Particle counts shrink on touch (reduce motion) and vanish on low-end devices.
+local function particleCount(count: number): number
+	if Theme.lowEndDevice then
+		return 0
+	end
+	return if Theme.reducedMotion
+		then math.max(math.floor(count * Theme.REDUCED_MOTION_FACTOR), 1)
+		else count
+end
+
 local function enemyModel(enemyId: number): Model?
 	local model: Model? = enemiesById[enemyId]
 	-- The map is fed by watchEnemy / forgetEnemy; a model destroyed between the server's
@@ -149,8 +193,10 @@ local function enemyModel(enemyId: number): Model?
 end
 
 -- COPY of PlotVisualsController.burst (:357): a one-shot emitter that destroys itself.
+-- C2.5 gates it on lowEndDevice (via particleCount) instead of reducedMotion.
 local function burst(origin: Instance, count: number, color: Color3): ()
-	if Theme.reducedMotion then
+	local emitted = particleCount(count)
+	if emitted <= 0 then
 		return
 	end
 	local emitter = Create("ParticleEmitter", {
@@ -163,7 +209,7 @@ local function burst(origin: Instance, count: number, color: Color3): ()
 		Color = ColorSequence.new(color),
 		Parent = origin,
 	}) :: ParticleEmitter
-	emitter:Emit(count)
+	emitter:Emit(emitted)
 	task.delay(Theme.PARTICLE_LIFETIME_MAX, function()
 		emitter:Destroy()
 	end)
@@ -240,7 +286,15 @@ end
 -- disabled otherwise. Never called while a hit flash owns the instance.
 local function restHighlight(entry: EnemyFx): ()
 	local highlight = entry.highlight
-	if entry.tell then
+	if entry.telegraph then
+		-- The strike glow: brighter and warmer than the plain tell, so "about to hit you"
+		-- reads apart from "busy attacking someone".
+		highlight.FillColor = Theme.COMBAT_TELEGRAPH_COLOR
+		highlight.OutlineColor = Theme.COMBAT_TELEGRAPH_COLOR
+		highlight.FillTransparency = Theme.COMBAT_TELEGRAPH_HIGHLIGHT_FILL
+		highlight.OutlineTransparency = 0
+		highlight.Enabled = true
+	elseif entry.tell then
 		highlight.FillColor = Theme.COLOR_ERROR
 		highlight.OutlineColor = Theme.COLOR_ERROR
 		highlight.FillTransparency = Theme.COMBAT_TELL_HIGHLIGHT_FILL
@@ -280,36 +334,80 @@ local function flashEnemy(entry: EnemyFx, color: Color3, seconds: number): ()
 	tween:Play()
 end
 
-local function kickCamera(strength: number): ()
-	if Theme.reducedMotion then
-		return
-	end
-	local degrees = cameraKickDegrees() * strength
-	cameraKickPitch += degrees
-	cameraKickYaw += degrees * (if math.random() < 0.5 then -0.5 else 0.5)
+-- The kick and the shake live in CameraController, which rebuilds the view every frame, so
+-- neither can drift the camera the way a kick written over the default camera did.
+local function impactCamera(strength: number, shake: number): ()
+	CameraController.Kick(cameraKickDegrees() * strength)
+	CameraController.Shake(shake)
 end
 
--- A decaying offset applied after the default camera update, so the player keeps full
--- control of the camera while the kick rides on top of it.
-local function updateCameraKick(deltaTime: number): ()
-	if cameraKickPitch == 0 and cameraKickYaw == 0 then
+-- Sparks spraying out of the enemy along the blow. The emitter's Top points along the hit
+-- direction, so the spray reads as coming off the far side of the target.
+local function sparks(position: Vector3, direction: Vector3, heavy: boolean): ()
+	local count = particleCount(feel().hitSparkCount * (if heavy then 2 else 1))
+	if count <= 0 or direction.Magnitude <= 0 then
 		return
 	end
-	local camera = Workspace.CurrentCamera
-	if camera == nil then
-		cameraKickPitch = 0
-		cameraKickYaw = 0
+	local unit = direction.Unit
+	local anchor = Create("Attachment", {
+		Name = "FxSparks",
+		WorldCFrame = CFrame.lookAlong(position - unit * Theme.COMBAT_SPARK_SURFACE_OFFSET, unit)
+			* CFrame.Angles(-math.pi / 2, 0, 0),
+		Parent = Workspace.Terrain,
+	}) :: Attachment
+	local emitter = Create("ParticleEmitter", {
+		Name = "Sparks",
+		Rate = 0,
+		EmissionDirection = Enum.NormalId.Top,
+		Lifetime = NumberRange.new(
+			Theme.COMBAT_SPARK_LIFETIME_MIN,
+			Theme.COMBAT_SPARK_LIFETIME_MAX
+		),
+		Speed = NumberRange.new(Theme.COMBAT_SPARK_SPEED_MIN, Theme.COMBAT_SPARK_SPEED_MAX),
+		SpreadAngle = Vector2.new(Theme.COMBAT_SPARK_SPREAD, Theme.COMBAT_SPARK_SPREAD),
+		Acceleration = Vector3.new(0, -Theme.COMBAT_SPARK_GRAVITY, 0),
+		Drag = Theme.COMBAT_SPARK_DRAG,
+		LightEmission = 1,
+		Size = NumberSequence.new(Theme.COMBAT_SPARK_SIZE, 0),
+		Color = ColorSequence.new(Theme.COLOR_TEXT, Theme.COLOR_HIGHLIGHT),
+		Parent = anchor,
+	}) :: ParticleEmitter
+	emitter:Emit(count)
+	task.delay(Theme.COMBAT_SPARK_LIFETIME_MAX, function()
+		anchor:Destroy()
+	end)
+end
+
+-- A quick bright pop where a kill landed: a neon ball that swells and fades.
+local function killPop(position: Vector3): ()
+	if Theme.lowEndDevice then
 		return
 	end
-	camera.CFrame = camera.CFrame
-		* CFrame.Angles(math.rad(cameraKickPitch), math.rad(cameraKickYaw), 0)
-	local decay = math.exp(-Theme.COMBAT_CAMERA_KICK_DECAY * deltaTime)
-	cameraKickPitch *= decay
-	cameraKickYaw *= decay
-	if math.abs(cameraKickPitch) < 0.01 and math.abs(cameraKickYaw) < 0.01 then
-		cameraKickPitch = 0
-		cameraKickYaw = 0
-	end
+	local startSize = Theme.COMBAT_KILL_POP_START
+	local ball = Create("Part", {
+		Name = "FxKillPop",
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Shape = Enum.PartType.Ball,
+		Material = Enum.Material.Neon,
+		Color = Theme.COLOR_HIGHLIGHT,
+		Transparency = Theme.COMBAT_KILL_POP_TRANSPARENCY,
+		Size = Vector3.one * startSize,
+		CFrame = CFrame.new(position),
+		Parent = Workspace,
+	}) :: Part
+	local tween = TweenService:Create(
+		ball,
+		Motion.Info(Theme.COMBAT_KILL_POP_SECONDS),
+		{ Size = Vector3.one * Theme.COMBAT_KILL_POP_END, Transparency = 1 }
+	)
+	tween.Completed:Once(function()
+		ball:Destroy()
+	end)
+	tween:Play()
 end
 
 -- Client-only shove. The offset is re-applied every frame on top of the pivot the server
@@ -335,9 +433,10 @@ local function nudge(model: Model, direction: Vector3): ()
 	end)
 end
 
+-- The server ragdolls a kill for feel.ragdollSeconds and stamps `Dead` corpseSeconds before
+-- it removes the body, so fading from the stamp shows the whole fall at full opacity.
 local function dissolve(model: Model): ()
-	local seconds = corpseSeconds()
-	local info = Motion.Info(seconds)
+	local info = Motion.Info(corpseSeconds())
 	for _, descendant in model:GetDescendants() do
 		-- Parts and decals share the property name, so one tween goal covers both.
 		if descendant:IsA("BasePart") or descendant:IsA("Decal") then
@@ -354,6 +453,26 @@ local function setTell(entry: EnemyFx, attacking: boolean): ()
 	if entry.flash == nil then
 		restHighlight(entry) -- a live flash restores the new resting state when it ends
 	end
+end
+
+-- Glow the striker until its blow lands. The token drops a stale reset when a second
+-- telegraph arrives before the first one's blow.
+local function glowFor(entry: EnemyFx, seconds: number): ()
+	entry.telegraphToken += 1
+	local token = entry.telegraphToken
+	entry.telegraph = true
+	if entry.flash == nil then
+		restHighlight(entry)
+	end
+	task.delay(seconds, function()
+		if token ~= entry.telegraphToken then
+			return
+		end
+		entry.telegraph = false
+		if entry.flash == nil then
+			restHighlight(entry)
+		end
+	end)
 end
 
 local function forgetEnemy(model: Instance): ()
@@ -396,6 +515,8 @@ local function watchEnemy(child: Instance): ()
 		}) :: Highlight,
 		connections = {},
 		tell = false,
+		telegraph = false,
+		telegraphToken = 0,
 		flash = nil,
 	}
 	local function indexById(): ()
@@ -410,6 +531,8 @@ local function watchEnemy(child: Instance): ()
 		end),
 		model:GetAttributeChangedSignal(DEAD_ATTRIBUTE):Connect(function()
 			if model:GetAttribute(DEAD_ATTRIBUTE) == true then
+				entry.telegraphToken += 1
+				entry.telegraph = false
 				setTell(entry, false)
 				dissolve(model)
 			end
@@ -507,10 +630,14 @@ local function flashHurt(): ()
 		:Play()
 end
 
+-- The ring an ability leaves at its centre. C2.5: shown on phones too (at full size, only
+-- fading, like the party ring), and dropped on low-end devices only.
 local function abilityRing(position: Vector3, radius: number): ()
-	if Theme.reducedMotion then
+	if Theme.lowEndDevice or radius <= 0 then
 		return
 	end
+	local diameter = radius * 2
+	local startDiameter = if Theme.reducedMotion then diameter else 1
 	local part = Create("Part", {
 		Name = "FxAbilityRing",
 		Anchored = true,
@@ -521,14 +648,14 @@ local function abilityRing(position: Vector3, radius: number): ()
 		Shape = Enum.PartType.Cylinder,
 		Material = Enum.Material.Neon,
 		Color = Theme.COLOR_ACCENT_ALT,
-		Transparency = 0.4,
+		Transparency = Theme.COMBAT_ABILITY_RING_TRANSPARENCY,
 		-- A Cylinder's length runs along X, so it is laid flat by a quarter turn on Z.
-		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, 1, 1),
+		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, startDiameter, startDiameter),
 		CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90)),
 		Parent = Workspace,
 	}) :: Part
 	local tween = TweenService:Create(part, Motion.Info(Theme.COMBAT_ABILITY_RING_SECONDS), {
-		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, radius * 2, radius * 2),
+		Size = Vector3.new(Theme.COMBAT_ABILITY_RING_HEIGHT, diameter, diameter),
 		Transparency = 1,
 	})
 	tween.Completed:Once(function()
@@ -547,12 +674,214 @@ local function camera(): Camera
 	return Workspace.CurrentCamera or Workspace:WaitForChild("Camera") :: Camera
 end
 
-local function onHit(fx: { [string]: any }): ()
-	local position = fx.position
-	local amount = fx.amount
-	if typeof(position) ~= "Vector3" or typeof(amount) ~= "number" then
+-- Telegraphs -----------------------------------------------------------------------------
+
+-- The arena floor under a point. Slam positions are the boss's root, so the ring is dropped
+-- to whatever the ray meets first below it, ignoring every rig and every fx part.
+local function groundUnder(position: Vector3): Vector3
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local ignored: { Instance } = {}
+	local enemies = Workspace:FindFirstChild(ENEMIES_FOLDER)
+	if enemies ~= nil then
+		table.insert(ignored, enemies)
+	end
+	for _, player in Players:GetPlayers() do
+		local rig = player.Character
+		if rig ~= nil then
+			table.insert(ignored, rig)
+		end
+	end
+	params.FilterDescendantsInstances = ignored
+	local probe = Theme.COMBAT_TELEGRAPH_GROUND_PROBE
+	local result = Workspace:Raycast(
+		position + Vector3.new(0, probe * 0.5, 0),
+		Vector3.new(0, -probe * 2, 0),
+		params
+	)
+	if result ~= nil then
+		return result.Position
+	end
+	return Vector3.new(position.X, Theme.COMBAT_TELEGRAPH_FLOOR_Y, position.Z)
+end
+
+local function telegraphPart(name: string, color: Color3, transparency: number): Part
+	return Create("Part", {
+		Name = name,
+		Anchored = true,
+		CanCollide = false,
+		CanQuery = false,
+		CanTouch = false,
+		CastShadow = false,
+		Material = Enum.Material.Neon,
+		Color = color,
+		Transparency = transparency,
+		Size = Vector3.one,
+	}) :: Part
+end
+
+-- The fill runs on a fixed TweenInfo over exactly `seconds`, never Motion: the moment it is
+-- full IS the moment the blow lands, on every device.
+local function fillOver(part: Part, seconds: number, goal: { [string]: any }): ()
+	TweenService:Create(part, TweenInfo.new(seconds, Enum.EasingStyle.Linear), goal):Play()
+end
+
+-- Both parts vanish together shortly after the blow; the brief linger shows where it hit.
+local function retire(folder: Instance, seconds: number): ()
+	task.delay(seconds + Theme.COMBAT_TELEGRAPH_LINGER_SECONDS, function()
+		folder:Destroy()
+	end)
+end
+
+-- Slam: a faint disc at full radius (where it will hit) and a bright disc growing to meet
+-- its edge (when it will hit).
+local function slamRing(position: Vector3, radius: number, seconds: number, color: Color3): ()
+	local ground = groundUnder(position)
+	local flat = CFrame.new(ground) * CFrame.Angles(0, 0, math.rad(90))
+	local height = Theme.COMBAT_TELEGRAPH_THICKNESS
+	local diameter = radius * 2
+	local folder = Create("Folder", { Name = TELEGRAPH_NAME, Parent = Workspace })
+	local area = telegraphPart("Area", color, Theme.COMBAT_TELEGRAPH_AREA_TRANSPARENCY)
+	area.Shape = Enum.PartType.Cylinder
+	area.Size = Vector3.new(height, diameter, diameter)
+	area.CFrame = flat + Vector3.new(0, Theme.COMBAT_TELEGRAPH_LIFT, 0)
+	area.Parent = folder
+	local fill = telegraphPart("Fill", color, Theme.COMBAT_TELEGRAPH_FILL_TRANSPARENCY)
+	fill.Shape = Enum.PartType.Cylinder
+	fill.Size =
+		Vector3.new(height, Theme.COMBAT_TELEGRAPH_MIN_SIZE, Theme.COMBAT_TELEGRAPH_MIN_SIZE)
+	fill.CFrame = flat + Vector3.new(0, Theme.COMBAT_TELEGRAPH_LIFT * 2, 0)
+	fill.Parent = folder
+	fillOver(fill, seconds, { Size = Vector3.new(height, diameter, diameter) })
+	retire(folder, seconds)
+end
+
+-- Charge: the lane the charger will run, drawn on the floor; a bright bar fills it from the
+-- charger's end to the far end over `seconds`.
+local function chargeLane(
+	position: Vector3,
+	direction: Vector3,
+	halfWidth: number,
+	seconds: number
+): ()
+	local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+	if flatDirection.Magnitude <= 0 then
 		return
 	end
+	local unit = flatDirection.Unit
+	local length = chargeDistance()
+	local width = halfWidth * 2
+	local ground = groundUnder(position)
+	local height = Theme.COMBAT_TELEGRAPH_THICKNESS
+	local folder = Create("Folder", { Name = TELEGRAPH_NAME, Parent = Workspace })
+	local lane = telegraphPart("Area", Theme.COLOR_ERROR, Theme.COMBAT_TELEGRAPH_AREA_TRANSPARENCY)
+	lane.Size = Vector3.new(width, height, length)
+	lane.CFrame = CFrame.lookAlong(ground + unit * (length * 0.5), unit)
+		+ Vector3.new(0, Theme.COMBAT_TELEGRAPH_LIFT, 0)
+	lane.Parent = folder
+	local start = ground + Vector3.new(0, Theme.COMBAT_TELEGRAPH_LIFT * 2, 0)
+	local fill = telegraphPart("Fill", Theme.COLOR_ERROR, Theme.COMBAT_TELEGRAPH_FILL_TRANSPARENCY)
+	fill.Size = Vector3.new(width, height, Theme.COMBAT_TELEGRAPH_MIN_SIZE)
+	fill.CFrame = CFrame.lookAlong(start, unit)
+	fill.Parent = folder
+	fillOver(fill, seconds, {
+		Size = Vector3.new(width, height, length),
+		CFrame = CFrame.lookAlong(start + unit * (length * 0.5), unit),
+	})
+	retire(folder, seconds)
+end
+
+-- Strike: the striker glows and a "!" hangs over its head until the blow.
+local function strikeMark(model: Model, seconds: number): ()
+	local head = model:FindFirstChild("Head")
+	local adornee: Instance? = if head ~= nil and head:IsA("BasePart")
+		then head
+		else model.PrimaryPart
+	if adornee == nil then
+		return
+	end
+	local gui = Create("BillboardGui", {
+		Name = TELEGRAPH_NAME,
+		Adornee = adornee,
+		AlwaysOnTop = true,
+		Size = UDim2.fromOffset(Theme.COMBAT_TELEGRAPH_MARK_SIZE, Theme.COMBAT_TELEGRAPH_MARK_SIZE),
+		StudsOffsetWorldSpace = Vector3.new(0, Theme.COMBAT_TELEGRAPH_MARK_RISE, 0),
+		Parent = adornee,
+	}) :: BillboardGui
+	local label = Create("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		Font = Theme.FONT_BOLD,
+		TextScaled = true,
+		TextColor3 = Theme.COMBAT_TELEGRAPH_COLOR,
+		Text = "!",
+		Parent = gui,
+	}) :: TextLabel
+	Create("UIStroke", {
+		Color = Theme.COLOR_TEXT_DARK,
+		Thickness = Theme.STROKE_THICKNESS,
+		Parent = label,
+	})
+	task.delay(seconds, function()
+		gui:Destroy()
+	end)
+end
+
+-- Summon (boss): a violet circle that fills around the boss while the adds are called.
+local function summonCircle(position: Vector3, seconds: number): ()
+	slamRing(
+		position,
+		Theme.COMBAT_TELEGRAPH_SUMMON_RADIUS,
+		seconds,
+		Theme.COMBAT_TELEGRAPH_SUMMON_COLOR
+	)
+end
+
+local function onTelegraph(fx: { [string]: any }): ()
+	local position = fx.position
+	local seconds = fx.seconds
+	local attack = fx.attack
+	if
+		typeof(position) ~= "Vector3"
+		or typeof(seconds) ~= "number"
+		or typeof(attack) ~= "string"
+	then
+		return
+	end
+	seconds = math.max(seconds, 0)
+	local model = if typeof(fx.enemyId) == "number" then enemyModel(fx.enemyId) else nil
+	local entry: EnemyFx? = if model ~= nil then enemyFx[model] else nil
+	if entry ~= nil then
+		glowFor(entry, seconds)
+	end
+	local radius = if typeof(fx.radius) == "number" then fx.radius else nil
+	if attack == "slam" then
+		slamRing(
+			position,
+			radius or Theme.COMBAT_TELEGRAPH_DEFAULT_RADIUS,
+			seconds,
+			Theme.COLOR_ERROR
+		)
+	elseif attack == "charge" then
+		local direction = fx.direction
+		if typeof(direction) == "Vector3" then
+			chargeLane(
+				position,
+				direction,
+				radius or Theme.COMBAT_TELEGRAPH_DEFAULT_HALF_WIDTH,
+				seconds
+			)
+		end
+	elseif attack == "summon" then
+		summonCircle(position, seconds)
+	elseif model ~= nil then
+		strikeMark(model, seconds)
+	end
+end
+
+-- Hits and kills -------------------------------------------------------------------------
+
+local function presentHit(fx: { [string]: any }, position: Vector3, amount: number): ()
 	local mine = fx.byUserId == localUserId()
 	local finisher = fx.finisher == true
 	floatText(
@@ -566,23 +895,56 @@ local function onHit(fx: { [string]: any }): ()
 	if entry ~= nil then
 		flashEnemy(entry, Theme.COLOR_ERROR, Theme.COMBAT_HIT_HIGHLIGHT_SECONDS)
 	end
+	-- nil for damage-over-time ticks: a burn does not spark or shove.
+	local direction: Vector3? = if typeof(fx.direction) == "Vector3" then fx.direction else nil
+	if direction ~= nil then
+		sparks(position, direction, finisher)
+	end
 	if model ~= nil and finisher and mine then
 		-- Away from the player who landed it, which is what a finisher looks like.
-		nudge(model, position - camera().CFrame.Position)
+		nudge(model, direction or (position - camera().CFrame.Position))
 	end
 	if not mine then
-		return -- another player's hit is worth a number and a flash, nothing more
+		return -- another player's hit is worth a number, a flash and sparks, nothing more
 	end
 	SoundController.Play("enemyHit")
 	WeaponController.Hitstop(hitstopSeconds())
-	kickCamera(if finisher then 1.6 else 1)
+	local f = feel()
+	if finisher then
+		impactCamera(Theme.COMBAT_FINISHER_KICK_MULT, f.shakeHeavy)
+	else
+		impactCamera(1, f.shakeLight)
+	end
+	local marker = onHitMarker
+	if marker ~= nil then
+		marker(finisher)
+	end
 end
 
-local function onKill(fx: { [string]: any }): ()
+-- Presented at once, or when the local shot that caused it reaches the enemy.
+local function afterArrival(fx: { [string]: any }, position: Vector3, present: () -> ()): ()
+	local delaySeconds = if fx.byUserId == localUserId()
+		then WeaponController.ArrivalDelay(position)
+		else 0
+	if delaySeconds > 0 then
+		task.delay(delaySeconds, present)
+	else
+		present()
+	end
+end
+
+local function onHit(fx: { [string]: any }): ()
 	local position = fx.position
-	if typeof(position) ~= "Vector3" then
+	local amount = fx.amount
+	if typeof(position) ~= "Vector3" or typeof(amount) ~= "number" then
 		return
 	end
+	afterArrival(fx, position, function()
+		presentHit(fx, position, amount)
+	end)
+end
+
+local function presentKill(fx: { [string]: any }, position: Vector3): ()
 	SoundController.Play("enemyDeath")
 	if fx.byUserId ~= localUserId() then
 		return
@@ -594,10 +956,25 @@ local function onKill(fx: { [string]: any }): ()
 		text ..= " · +" .. Format.Cash(materials) .. " " .. materialName
 	end
 	floatText(position, text, Theme.COLOR_ACCENT, false)
+	killPop(position)
 	local anchor = worldAnchor(position)
 	burst(anchor, Theme.COMBAT_KILL_PARTICLES, Theme.COLOR_ACCENT)
 	task.delay(Theme.PARTICLE_LIFETIME_MAX, function()
 		anchor:Destroy()
+	end)
+	local marker = onHitMarker
+	if marker ~= nil then
+		marker(true)
+	end
+end
+
+local function onKill(fx: { [string]: any }): ()
+	local position = fx.position
+	if typeof(position) ~= "Vector3" then
+		return
+	end
+	afterArrival(fx, position, function()
+		presentKill(fx, position)
 	end)
 end
 
@@ -607,7 +984,7 @@ local function onPlayerHit(fx: { [string]: any }): ()
 	end
 	SoundController.Play("playerHit")
 	flashHurt()
-	kickCamera(1)
+	impactCamera(1, feel().shakeHeavy)
 end
 
 local function onAbility(fx: { [string]: any }): ()
@@ -615,7 +992,10 @@ local function onAbility(fx: { [string]: any }): ()
 	if typeof(position) ~= "Vector3" then
 		return
 	end
-	SoundController.Play("abilityCast")
+	-- The caster already heard it on the key press (InputController), so only others play it.
+	if fx.userId ~= localUserId() then
+		SoundController.Play("abilityCast")
+	end
 	local radius = fx.radius
 	if typeof(radius) == "number" and radius > 0 then
 		abilityRing(position, radius)
@@ -820,6 +1200,8 @@ local function applyFx(fx: any): ()
 	local kind = payload.kind
 	if kind == "hit" then
 		onHit(payload)
+	elseif kind == "telegraph" then
+		onTelegraph(payload)
 	elseif kind == "kill" then
 		onKill(payload)
 	elseif kind == "playerHit" then
@@ -1016,11 +1398,6 @@ function CombatFxController.Start(): ()
 		end
 		table.insert(connections, combatFx.OnClientEvent:Connect(onCombatFx))
 	end)
-	RunService:BindToRenderStep(
-		CAMERA_BIND_NAME,
-		Enum.RenderPriority.Camera.Value + 1,
-		updateCameraKick
-	)
 end
 
 -- The mission's material name, so a kill can read "+2 Timber" instead of "+2".
@@ -1078,8 +1455,12 @@ function CombatFxController.SetParty(party: { Types.PartyMember }): ()
 	end
 end
 
+-- C2.5: the HUD's hit marker. `heavy` is a finisher or a kill.
+function CombatFxController.SetHitMarkerHandler(handler: (heavy: boolean) -> ()): ()
+	onHitMarker = handler
+end
+
 function CombatFxController.Destroy(): ()
-	RunService:UnbindFromRenderStep(CAMERA_BIND_NAME)
 	for _, connection in connections do
 		connection:Disconnect()
 	end

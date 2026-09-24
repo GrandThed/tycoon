@@ -6,10 +6,17 @@
 -- The client never computes a reward, a cooldown or a max HP; it only counts down between
 -- the server's broadcasts so the numbers do not visibly step at combatStateHz.
 --
--- Touch-first layout (checked at 375x667 portrait and 812x375 landscape): the attack button
--- owns the bottom-right thumb arc, the two ability buttons stack immediately left of it and
--- the stance pill sits above them, while HP and the Ready / Return pair stay bottom-left.
--- Every control is at least 44 physical px at MIN_SCALE.
+-- Touch-first layout (checked at 375x667 portrait, 812x375 landscape and 1920x1080): the
+-- controls are one right-thumb cluster — the attack button largest, the two abilities on an
+-- arc left of and above it, the stance button between them — while HP and the Ready / Return
+-- pair stay bottom-left. On touch the cluster keeps clear of Roblox's own jump button: it
+-- sits left of it when that leaves the HP block alone (landscape, tablets) and above it
+-- otherwise (portrait phones). Every control is at least 44 physical px at MIN_SCALE.
+--
+-- C2.5 reticle: a centre crosshair (its own ScreenGui that ignores the top-bar inset, so it
+-- sits exactly on the camera's centre ray), a hit marker, and a ring of dots that fills with
+-- the bow's draw. The attack button is hidden when the device has no touch screen: a click
+-- anywhere attacks there, and a locked mouse could not press it anyway.
 --
 -- No radial cooldown image exists in this project, so a "ring" is a dark wipe that falls
 -- across the round button plus the remaining whole seconds (reported as a deviation).
@@ -17,6 +24,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -34,6 +43,8 @@ export type Deps = {
 	onAttackDown: () -> (),
 	onAttackUp: () -> (),
 	onAbility: (slot: string) -> (),
+	-- C2.5: the touch that pressed the attack button, so it can also steer the camera.
+	onAttackInput: ((input: InputObject) -> ())?,
 }
 
 export type AbilityInfo = { name: string, cooldown: number }
@@ -47,6 +58,10 @@ export type CombatHudHandle = {
 	SetStance: (stance: string) -> (),
 	SetAbilities: (abilities: AbilitySet) -> (),
 	SetLayout: (scale: number, viewportSize: Vector2) -> (),
+	-- C2.5 reticle: camera state, bow draw (nil = not drawing) and the hit marker.
+	SetAiming: (shoulderCamera: boolean, cursorLocked: boolean) -> (),
+	SetCharge: (fraction: number?) -> (),
+	ShowHitMarker: (heavy: boolean, seconds: number) -> (),
 	Destroy: () -> (),
 }
 
@@ -75,6 +90,9 @@ local HOST_MARK = "★ "
 local PERCENT = 100
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
+local DIAGONAL = math.sqrt(0.5)
+local ALT_HINT_LOCKED = "Alt · free cursor"
+local ALT_HINT_FREE = "Alt · aim"
 
 local CombatHud = {}
 
@@ -360,11 +378,40 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local returnButton = actionButton("Return", 2, false)
 	readyButton.Visible = false
 
+	-- Right-thumb cluster (C2.5). One frame with one UIScale holds every combat control, so
+	-- the arc keeps its shape at any scale. Offsets are design px from the attack centre.
+	local attackSize = Theme.COMBAT_ATTACK_BUTTON_SIZE
+	local abilitySize = Theme.COMBAT_ABILITY_BUTTON_SIZE
+	local stanceSize = Theme.COMBAT_STANCE_SIZE
+	local abilityRadius = attackSize * 0.5 + Theme.COMBAT_CLUSTER_GAP + abilitySize * 0.5
+	local stanceRadius = attackSize * 0.5 + Theme.COMBAT_CLUSTER_GAP + stanceSize * 0.5
+	local reach =
+		math.max(abilityRadius + abilitySize * 0.5, stanceRadius * DIAGONAL + stanceSize * 0.5)
+	local clusterSize = reach + attackSize * 0.5
+	local centre = Vector2.new(reach, reach)
+	local touchDevice = UserInputService.TouchEnabled
+	local keyHints = UserInputService.KeyboardEnabled
+
+	local controls = Create("Frame", {
+		Name = "Controls",
+		AnchorPoint = Vector2.new(1, 1),
+		Size = UDim2.fromOffset(clusterSize, clusterSize),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = parent,
+	}) :: Frame
+	local controlsScale = Create("UIScale", { Parent = controls }) :: UIScale
+
+	local function place(offset: Vector2): UDim2
+		return UDim2.fromOffset(centre.X + offset.X, centre.Y + offset.Y)
+	end
+
 	-- Attack: press and hold, because charge bows and the machine gun both need the hold.
 	local attackButton = Create("TextButton", {
 		Name = "Attack",
-		AnchorPoint = Vector2.new(1, 1),
-		Size = UDim2.fromOffset(Theme.COMBAT_ATTACK_BUTTON_SIZE, Theme.COMBAT_ATTACK_BUTTON_SIZE),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = place(Vector2.zero),
+		Size = UDim2.fromOffset(attackSize, attackSize),
 		BackgroundColor3 = Theme.COLOR_ACCENT,
 		BorderSizePixel = 0,
 		AutoButtonColor = true,
@@ -372,45 +419,31 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		TextSize = Theme.TEXT_HEADER,
 		TextColor3 = Theme.COLOR_TEXT_DARK,
 		Text = "Attack",
-		Visible = false,
-		Parent = parent,
+		Visible = touchDevice,
+		Parent = controls,
 	}) :: TextButton
 	Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = attackButton })
-	local attackScale = Create("UIScale", { Parent = attackButton }) :: UIScale
-
-	local abilityFrame = Create("Frame", {
-		Name = "Abilities",
-		AnchorPoint = Vector2.new(1, 1),
-		Size = UDim2.fromOffset(
-			Theme.COMBAT_ABILITY_BUTTON_SIZE,
-			Theme.COMBAT_ABILITY_BUTTON_SIZE * 2 + Theme.COMBAT_CONTROL_GAP
-		),
-		BackgroundTransparency = 1,
-		Visible = false,
-		Parent = parent,
-	}) :: Frame
-	local abilityScale = Create("UIScale", { Parent = abilityFrame }) :: UIScale
-	Create("UIListLayout", {
-		Padding = UDim.new(0, Theme.COMBAT_CONTROL_GAP),
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Parent = abilityFrame,
+	Create("UIStroke", {
+		Color = Theme.COLOR_TEXT,
+		Thickness = Theme.STROKE_THICKNESS,
+		Transparency = Theme.COMBAT_CLUSTER_STROKE_TRANSPARENCY,
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Parent = attackButton,
 	})
 
-	local function makeAbilityButton(slot: string, order: number, key: string): AbilityButton
+	local function makeAbilityButton(slot: string, key: string, offset: Vector2): AbilityButton
 		local button = Create("TextButton", {
 			Name = slot,
-			LayoutOrder = order,
-			Size = UDim2.fromOffset(
-				Theme.COMBAT_ABILITY_BUTTON_SIZE,
-				Theme.COMBAT_ABILITY_BUTTON_SIZE
-			),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = place(offset),
+			Size = UDim2.fromOffset(abilitySize, abilitySize),
 			BackgroundColor3 = Theme.COLOR_BG_LIGHT,
 			BorderSizePixel = 0,
 			ClipsDescendants = true,
 			Font = Theme.FONT_BOLD,
 			Text = "",
 			Visible = false,
-			Parent = abilityFrame,
+			Parent = controls,
 		}) :: TextButton
 		Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = button })
 		Create("TextLabel", {
@@ -422,6 +455,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			TextSize = Theme.COMBAT_ABILITY_MIN_TEXT,
 			TextColor3 = Theme.COLOR_TEXT_DIM,
 			Text = key,
+			Visible = keyHints,
 			Parent = button,
 		})
 		local nameLabel = Create("TextLabel", {
@@ -471,24 +505,166 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		}
 	end
 
-	abilityButtons[MELEE_SLOT] = makeAbilityButton(MELEE_SLOT, 1, "Q")
-	abilityButtons[RANGED_SLOT] = makeAbilityButton(RANGED_SLOT, 2, "E")
+	-- Melee ability on the left of the thumb, ranged above it, as L1 / R1 sit on a pad.
+	abilityButtons[MELEE_SLOT] = makeAbilityButton(MELEE_SLOT, "Q", Vector2.new(-abilityRadius, 0))
+	abilityButtons[RANGED_SLOT] =
+		makeAbilityButton(RANGED_SLOT, "E", Vector2.new(0, -abilityRadius))
 
 	local stanceButton = Create("TextButton", {
 		Name = "Stance",
-		AnchorPoint = Vector2.new(1, 1),
-		Size = UDim2.fromOffset(Theme.COMBAT_STANCE_WIDTH, Theme.COMBAT_STANCE_HEIGHT),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = place(Vector2.new(-stanceRadius * DIAGONAL, -stanceRadius * DIAGONAL)),
+		Size = UDim2.fromOffset(stanceSize, stanceSize),
 		BackgroundColor3 = Theme.COLOR_BG_LIGHT,
 		BorderSizePixel = 0,
 		Font = Theme.FONT_BOLD,
-		TextSize = Theme.TEXT_MEDIUM,
+		TextSize = Theme.COMBAT_STANCE_GLYPH_TEXT,
 		TextColor3 = Theme.COLOR_TEXT,
-		Text = "Melee ⚔",
+		Text = "⚔",
+		Parent = controls,
+	}) :: TextButton
+	Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = stanceButton })
+	local stanceCaption = Create("TextLabel", {
+		Name = "Caption",
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -3),
+		Size = UDim2.new(1, 0, 0, Theme.COMBAT_ABILITY_KEY_HEIGHT),
+		Font = Theme.FONT,
+		TextSize = Theme.COMBAT_ABILITY_MIN_TEXT,
+		TextColor3 = Theme.COLOR_TEXT_DIM,
+		Text = "Melee",
+		Parent = stanceButton,
+	}) :: TextLabel
+
+	-- PC only: the one key that frees the pointer mid-fight, next to the buttons it unlocks.
+	local altHint = Create("TextLabel", {
+		Name = "CursorHint",
+		Active = false,
+		AnchorPoint = Vector2.new(0, 1),
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Theme.COMBAT_HP_BAR_WIDTH, Theme.COMBAT_ALT_HINT_HEIGHT),
+		Font = Theme.FONT,
+		TextSize = Theme.TEXT_SMALL,
+		TextColor3 = Theme.COLOR_TEXT_DIM,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = ALT_HINT_LOCKED,
 		Visible = false,
 		Parent = parent,
-	}) :: TextButton
-	Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = stanceButton })
-	local stanceScale = Create("UIScale", { Parent = stanceButton }) :: UIScale
+	}) :: TextLabel
+	local altHintScale = Create("UIScale", { Parent = altHint }) :: UIScale
+
+	-- Reticle: a separate ScreenGui with no top-bar inset, so (0.5, 0.5) is the exact
+	-- viewport centre the camera's aim ray passes through. Nothing in it takes input.
+	local reticleGui = Create("ScreenGui", {
+		Name = "CombatReticle",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		Parent = parent.Parent,
+	}) :: ScreenGui
+	local reticle = Create("Frame", {
+		Name = "Reticle",
+		Active = false,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(Theme.COMBAT_RETICLE_SIZE, Theme.COMBAT_RETICLE_SIZE),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = reticleGui,
+	}) :: Frame
+	local reticleScale = Create("UIScale", { Parent = reticle }) :: UIScale
+
+	local function reticleBar(
+		name: string,
+		size: Vector2,
+		offset: Vector2,
+		rotation: number,
+		color: Color3
+	): Frame
+		local piece = Create("Frame", {
+			Name = name,
+			Active = false,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, offset.X, 0.5, offset.Y),
+			Size = UDim2.fromOffset(size.X, size.Y),
+			Rotation = rotation,
+			BackgroundColor3 = color,
+			BorderSizePixel = 0,
+			Parent = reticle,
+		}) :: Frame
+		Create("UIStroke", {
+			Color = Theme.COLOR_TEXT_DARK,
+			Thickness = 1,
+			Transparency = Theme.COMBAT_RETICLE_STROKE_TRANSPARENCY,
+			Parent = piece,
+		})
+		return piece
+	end
+
+	local armLength = Theme.COMBAT_CROSSHAIR_LENGTH
+	local armThickness = Theme.COMBAT_CROSSHAIR_THICKNESS
+	local armOffset = Theme.COMBAT_CROSSHAIR_GAP + armLength * 0.5
+	local horizontal = Vector2.new(armLength, armThickness)
+	local vertical = Vector2.new(armThickness, armLength)
+	reticleBar("Left", horizontal, Vector2.new(-armOffset, 0), 0, Theme.COLOR_TEXT)
+	reticleBar("Right", horizontal, Vector2.new(armOffset, 0), 0, Theme.COLOR_TEXT)
+	reticleBar("Top", vertical, Vector2.new(0, -armOffset), 0, Theme.COLOR_TEXT)
+	reticleBar("Bottom", vertical, Vector2.new(0, armOffset), 0, Theme.COLOR_TEXT)
+	reticleBar("Dot", Vector2.new(armThickness, armThickness), Vector2.zero, 0, Theme.COLOR_TEXT)
+
+	-- Hit marker: four short diagonal ticks around the crosshair.
+	local markerBars: { Frame } = {}
+	local markerOffset = Theme.COMBAT_HIT_MARKER_OFFSET * DIAGONAL
+	for index, corner in
+		{ Vector2.new(-1, -1), Vector2.new(1, -1), Vector2.new(1, 1), Vector2.new(-1, 1) }
+	do
+		local tick = reticleBar(
+			"Marker" .. tostring(index),
+			Vector2.new(Theme.COMBAT_HIT_MARKER_LENGTH, armThickness),
+			corner * markerOffset,
+			if corner.X * corner.Y > 0 then 45 else -45,
+			Theme.COLOR_TEXT
+		)
+		tick.BackgroundTransparency = 1
+		local stroke = tick:FindFirstChildOfClass("UIStroke")
+		if stroke ~= nil then
+			stroke.Transparency = 1
+		end
+		table.insert(markerBars, tick)
+	end
+
+	-- Bow draw: a ring of dots that light up in order and turn gold when the draw is full.
+	local chargeDots: { Frame } = {}
+	local dotCount = Theme.COMBAT_CHARGE_RING_DOTS
+	for index = 1, dotCount do
+		local angle = (index - 1) / dotCount * 2 * math.pi
+		local dot = Create("Frame", {
+			Name = "Charge" .. tostring(index),
+			Active = false,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			-- Clockwise from 12 o'clock, like every draw meter.
+			Position = UDim2.new(
+				0.5,
+				math.sin(angle) * Theme.COMBAT_CHARGE_RING_RADIUS,
+				0.5,
+				-math.cos(angle) * Theme.COMBAT_CHARGE_RING_RADIUS
+			),
+			Size = UDim2.fromOffset(Theme.COMBAT_CHARGE_DOT_SIZE, Theme.COMBAT_CHARGE_DOT_SIZE),
+			BackgroundColor3 = Theme.COLOR_TEXT,
+			BackgroundTransparency = Theme.COMBAT_CHARGE_DOT_IDLE_TRANSPARENCY,
+			BorderSizePixel = 0,
+			Visible = false,
+			Parent = reticle,
+		}) :: Frame
+		Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = dot })
+		table.insert(chargeDots, dot)
+	end
+	local litDots = -1
+	local fighting = false
+	local shoulderCamera = false
+	local cursorWasLocked = false
+	local markerTweens: { Tween } = {}
 
 	-- C2: shown while the local player is `waiting` (arrived or went down mid-wave). Mid
 	-- screen, below the tallest party list, because both thumb corners are taken; inactive,
@@ -641,10 +817,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		local phase = run.phase
 		waveLabel.Text = waveText(run)
 		readyButton.Visible = phase == "lobby"
-		local fighting = phase == "wave" or phase == "breather" or phase == "boss"
-		attackButton.Visible = fighting
-		abilityFrame.Visible = fighting
-		stanceButton.Visible = fighting
+		fighting = phase == "wave" or phase == "breather" or phase == "boss"
+		controls.Visible = fighting
+		reticle.Visible = fighting and shoulderCamera
+		altHint.Visible = fighting and shoulderCamera and keyHints
 		tempoDot.BackgroundColor3 = if run.tempo >= Theme.COMBAT_TEMPO_HOT
 			then Theme.COLOR_ERROR
 			elseif run.tempo <= Theme.COMBAT_TEMPO_CALM then Theme.COLOR_ACCENT_ALT
@@ -785,6 +961,17 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	-- MouseButton1Down/Up also fire for a touch on a GuiButton, so one pair covers both
 	-- devices; MouseLeave releases a finger that slid off the button mid-hold.
 	table.insert(connections, attackButton.MouseButton1Down:Connect(deps.onAttackDown))
+	local onAttackInput = deps.onAttackInput
+	if onAttackInput ~= nil then
+		table.insert(
+			connections,
+			attackButton.InputBegan:Connect(function(input: InputObject)
+				if input.UserInputType == Enum.UserInputType.Touch then
+					onAttackInput(input)
+				end
+			end)
+		)
+	end
 	table.insert(connections, attackButton.MouseButton1Up:Connect(deps.onAttackUp))
 	table.insert(connections, attackButton.MouseLeave:Connect(deps.onAttackUp))
 	for slot, entry in abilityButtons do
@@ -810,7 +997,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end,
 		SetStance = function(nextStance: string)
 			stance = nextStance
-			stanceButton.Text = if stance == MELEE_SLOT then "Melee ⚔" else "Ranged ➹"
+			stanceButton.Text = if stance == MELEE_SLOT then "⚔" else "➹"
+			stanceCaption.Text = if stance == MELEE_SLOT then "Melee" else "Ranged"
 			attackButton.Text = if stance == MELEE_SLOT then "Attack" else "Fire"
 			attackButton.BackgroundColor3 = if stance == MELEE_SLOT
 				then Theme.COLOR_ACCENT
@@ -837,9 +1025,6 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			partyScale.Scale = scale
 			hpScale.Scale = scale
 			buttonScale.Scale = scale
-			attackScale.Scale = scale
-			abilityScale.Scale = scale
-			stanceScale.Scale = scale
 			waitingScale.Scale = scale
 			-- UIScale multiplies size, not position offsets, so margins scale by hand.
 			local margin = Theme.SCREEN_MARGIN * scale
@@ -885,21 +1070,45 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			local partyTop = if landscape then margin else margin + headerBlock * scale
 			partyFrame.Position = UDim2.new(1, -margin, 0, partyTop)
 
-			attackButton.Position = UDim2.new(1, -margin, 1, -bottom)
-			abilityFrame.Position = UDim2.new(
-				1,
-				-(margin + (Theme.COMBAT_ATTACK_BUTTON_SIZE * scale) + gap),
-				1,
-				-bottom
-			)
-			local abilityHeight = (Theme.COMBAT_ABILITY_BUTTON_SIZE * 2 + Theme.COMBAT_CONTROL_GAP)
-				* scale
-			stanceButton.Position = UDim2.new(1, -margin, 1, -(bottom + abilityHeight + gap))
+			controlsScale.Scale = scale
+			reticleScale.Scale = scale
+			altHintScale.Scale = scale
+			-- Roblox's touch jump button, mirrored from the PlayerModule's own sizing rule
+			-- (small screens: 70 px, 95 px from the right, 90 px from the bottom).
+			local clusterPx = clusterSize * scale
+			local right = margin
+			local lift = bottom
+			if touchDevice then
+				local small = math.min(viewportSize.X, viewportSize.Y)
+					<= Theme.COMBAT_JUMP_SMALL_AXIS
+				local jumpSize = if small
+					then Theme.COMBAT_JUMP_SMALL_SIZE
+					else Theme.COMBAT_JUMP_LARGE_SIZE
+				local jumpRight = jumpSize * Theme.COMBAT_JUMP_RIGHT_FACTOR
+					- Theme.COMBAT_JUMP_RIGHT_TRIM
+				local jumpBottom = if small
+					then jumpSize + Theme.COMBAT_JUMP_SMALL_BOTTOM_PAD
+					else jumpSize * Theme.COMBAT_JUMP_LARGE_BOTTOM_FACTOR
+				local hpRight = margin + Theme.COMBAT_HP_BAR_WIDTH * scale
+				local besideRight = jumpRight + gap
+				if viewportSize.X - besideRight - clusterPx >= hpRight + gap then
+					right = besideRight
+				else
+					lift = jumpBottom + gap
+				end
+			end
+			controls.Position = UDim2.new(1, -right, 1, -lift)
 
 			hpFrame.Position = UDim2.new(0, margin, 1, -bottom)
 			local hpHeight = (Theme.COMBAT_HP_LABEL_HEIGHT + Theme.COMBAT_HP_BAR_HEIGHT) * scale
 			buttonRow.Position =
 				UDim2.new(0, margin, 1, -(bottom + hpHeight + Theme.ROW_SPACING * scale))
+			altHint.Position = UDim2.new(
+				0,
+				margin,
+				1,
+				-(bottom + hpHeight + (Theme.ROW_SPACING * 2 + Theme.ROW_BUTTON_HEIGHT) * scale)
+			)
 		end,
 		Destroy = function()
 			for _, connection in connections do
@@ -912,10 +1121,62 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			partyFrame:Destroy()
 			hpFrame:Destroy()
 			buttonRow:Destroy()
-			attackButton:Destroy()
-			abilityFrame:Destroy()
-			stanceButton:Destroy()
+			controls:Destroy()
+			altHint:Destroy()
+			reticleGui:Destroy()
 			waitingFrame:Destroy()
+		end,
+		SetAiming = function(nextShoulder: boolean, cursorLocked: boolean)
+			if nextShoulder == shoulderCamera and cursorLocked == cursorWasLocked then
+				return -- polled every frame; only a change touches the instances
+			end
+			shoulderCamera = nextShoulder
+			cursorWasLocked = cursorLocked
+			reticle.Visible = fighting and shoulderCamera
+			altHint.Visible = fighting and shoulderCamera and keyHints
+			altHint.Text = if cursorLocked then ALT_HINT_LOCKED else ALT_HINT_FREE
+		end,
+		SetCharge = function(fraction: number?)
+			local lit = if fraction == nil
+				then -1
+				else math.floor(math.clamp(fraction, 0, 1) * dotCount)
+			if lit == litDots then
+				return -- written only when a dot changes, although it is polled every frame
+			end
+			litDots = lit
+			local full = lit >= dotCount
+			for index, dot in chargeDots do
+				dot.Visible = lit >= 0
+				local on = index <= lit
+				dot.BackgroundColor3 = if full then Theme.COLOR_HIGHLIGHT else Theme.COLOR_TEXT
+				dot.BackgroundTransparency = if on
+					then 0
+					else Theme.COMBAT_CHARGE_DOT_IDLE_TRANSPARENCY
+			end
+		end,
+		ShowHitMarker = function(heavy: boolean, seconds: number)
+			for _, tween in markerTweens do
+				tween:Cancel()
+			end
+			table.clear(markerTweens)
+			-- Fixed timing, not Motion: the marker is already a flicker.
+			local info =
+				TweenInfo.new(math.max(seconds, 0), Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			local color = if heavy then Theme.COLOR_HIGHLIGHT else Theme.COLOR_TEXT
+			for _, tick in markerBars do
+				tick.BackgroundColor3 = color
+				tick.BackgroundTransparency = 0
+				local tween = TweenService:Create(tick, info, { BackgroundTransparency = 1 })
+				table.insert(markerTweens, tween)
+				tween:Play()
+				local stroke = tick:FindFirstChildOfClass("UIStroke")
+				if stroke ~= nil then
+					stroke.Transparency = Theme.COMBAT_RETICLE_STROKE_TRANSPARENCY
+					local strokeTween = TweenService:Create(stroke, info, { Transparency = 1 })
+					table.insert(markerTweens, strokeTween)
+					strokeTween:Play()
+				end
+			end
 		end,
 	}
 	handle.SetStance(MELEE_SLOT)

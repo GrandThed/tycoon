@@ -935,6 +935,12 @@ export type CombatAiConfig = {
 	chargeDistance: number,
 	chargeSpeedMult: number,
 	chargeWindupSeconds: number,
+	-- Hit shapes checked at impact time (degrees are half-angles; lane half-width scales with body).
+	strikeHalfArcDegrees: number,
+	shotHalfConeDegrees: number,
+	strikeReachPad: number,
+	chargeLaneHalfWidth: number,
+	postPatternAttackDelay: number,
 }
 -- C2.5 client impact tunables.
 export type CombatFeelConfig = {
@@ -1250,7 +1256,7 @@ export type CombatFxMentor = { kind: "mentor", userId: number, valor: number, me
 export type CombatFxTelegraph = {
 	kind: "telegraph",
 	enemyId: number,
-	attack: "strike" | "slam" | "charge",
+	attack: "strike" | "slam" | "charge" | "summon",
 	position: Vector3,
 	direction: Vector3?,
 	radius: number?,

@@ -141,12 +141,15 @@ local function equipped(
 end
 
 -- The single place enemy HP goes down. Bots and enemies-hitting-back excepted, every path into
--- here started as a validated client intent.
+-- here started as a validated client intent. `from` is where the blow came from (the attacker's
+-- root, the shot's origin); with it the enemy staggers and the hit effect carries a direction.
+-- DoT ticks and debug bots pass nil: neither should stun-lock a crowd.
 function CombatService.DealDamage(
 	enemy: EnemyService.Enemy,
 	amount: number,
 	byUserId: number,
-	finisher: boolean
+	finisher: boolean,
+	from: Vector3?
 ): boolean
 	if amount <= 0 or enemy.dead then
 		return false
@@ -161,7 +164,14 @@ function CombatService.DealDamage(
 	runDamage[byUserId] = (runDamage[byUserId] or 0) + rounded
 	runDamageTotal += rounded
 	local position = enemy.root.Position
-	local killed = EnemyService.Damage(enemy, rounded, byUserId)
+	local direction: Vector3? = nil
+	if from ~= nil then
+		local planar = Vector3.new(position.X - from.X, 0, position.Z - from.Z)
+		if planar.Magnitude > 1e-3 then
+			direction = planar.Unit
+		end
+	end
+	local killed = EnemyService.Damage(enemy, rounded, byUserId, direction, finisher)
 	CombatService.PushFx({
 		kind = "hit",
 		enemyId = enemy.id,
@@ -169,6 +179,7 @@ function CombatService.DealDamage(
 		finisher = finisher,
 		position = position,
 		byUserId = byUserId,
+		direction = direction,
 	})
 	return killed
 end
@@ -357,7 +368,7 @@ function CombatService.OnAttack(player: Player, swingSeq: number, targetIds: { n
 		if angle > halfArc then
 			continue
 		end
-		CombatService.DealDamage(enemy, damage, member.userId, finisher)
+		CombatService.DealDamage(enemy, damage, member.userId, finisher, root.Position)
 		if finisher and class.finisherKnockback ~= nil then
 			EnemyService.Knockback(enemy, flat, class.finisherKnockback)
 		end
@@ -459,7 +470,7 @@ function CombatService.OnFire(
 			-- World geometry: the shot stops at the boulder, which is the point of cover.
 			break
 		end
-		CombatService.DealDamage(enemy, damage, member.userId, false)
+		CombatService.DealDamage(enemy, damage, member.userId, false, origin)
 		table.insert(ignored, enemy.model)
 		params.FilterDescendantsInstances = ignored
 		budget -= (result.Position - from).Magnitude
@@ -531,7 +542,7 @@ local function applyAbilityHit(
 			end)
 		end
 	else
-		CombatService.DealDamage(enemy, damage, member.userId, false)
+		CombatService.DealDamage(enemy, damage, member.userId, false, from)
 	end
 	local knockback = ability.knockback
 	if knockback ~= nil and knockback > 0 then
@@ -715,6 +726,7 @@ function CombatService.Init(): ()
 		targets = ArenaService.GetMembers,
 		damagePlayer = CombatService.DamagePlayer,
 		onKilled = onEnemyKilled,
+		pushFx = CombatService.PushFx,
 	})
 	ArenaService.SetShareSource(CombatService.DamageShare)
 	Players.PlayerRemoving:Connect(function(player: Player)

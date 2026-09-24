@@ -195,6 +195,7 @@ local function buildFallbackArena(folder: Folder): ()
 	buildLobbyPad(folder, Vector3.new(0, 0.5, 0), Color3.fromRGB(96, 104, 120))
 	playerSpawns = { lobbyPosition }
 	EnemyService.SetSpawnPoints({})
+	EnemyService.SetObstacles({})
 end
 
 local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
@@ -236,6 +237,8 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		end
 	end
 
+	-- Handed to EnemyService: only real cover sends an enemy to the pathfinder.
+	local cover: { BasePart } = {}
 	for index, obstacle in layout.obstacles do
 		local part = newPart(
 			`Obstacle{index}`,
@@ -245,7 +248,9 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		)
 		part.Color = colorOf(obstacle.color)
 		part.Material = materialOf(obstacle.material)
+		table.insert(cover, part)
 	end
+	EnemyService.SetObstacles(cover)
 
 	buildLobbyPad(
 		folder,

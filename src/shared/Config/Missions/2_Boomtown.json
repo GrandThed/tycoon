@@ -1,0 +1,60 @@
+{
+	"version": 1,
+	"id": "boomtown",
+	"era": 2,
+	"eraName": "Boomtown",
+	"name": "Rail Yard Outlaws",
+	"arena": "Boomtown",
+	"material": "Steel",
+	"waves": 10,
+	"bossWaves": [5, 10],
+	"recommendedPower": 220,
+	"targetMinutes": 8,
+	"targetWaveSeconds": 30,
+	"enemies": {
+		"grunt": { "template": "BoomtownGrunt", "kind": "melee", "hp": 194, "damage": 5, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 30000, "materials": 1, "elite": false, "color": [176, 120, 72] },
+		"shooter": { "template": "BoomtownShooter", "kind": "ranged", "hp": 127, "damage": 4, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 40000, "materials": 1, "elite": false, "color": [92, 104, 118] },
+		"brute": { "template": "BoomtownBrute", "kind": "charger", "hp": 658, "damage": 9, "speed": 8, "reach": 6, "attackCooldown": 2.6, "cash": 160000, "materials": 4, "elite": true, "color": [140, 64, 40] }
+	},
+	"waveTable": {
+		"baseCount": 6,
+		"countPerWave": 0.3,
+		"hpGrowth": 0.03,
+		"damageGrowth": 0.03,
+		"rewardGrowth": 0.1,
+		"composition": [
+			{ "fromWave": 1, "weights": { "grunt": 1.0 } },
+			{ "fromWave": 3, "weights": { "grunt": 0.7, "shooter": 0.3 } },
+			{ "fromWave": 7, "weights": { "grunt": 0.55, "shooter": 0.3, "brute": 0.15 } }
+		]
+	},
+	"bosses": {
+		"5": {
+			"template": "BoomtownChief",
+			"enemy": "brute",
+			"hpMult": 5.0,
+			"damageMult": 0.5,
+			"cashMult": 8.0,
+			"materialsMult": 5.0,
+			"valor": 10,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 10, "windupSeconds": 1.0, "radius": 10, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 14, "windupSeconds": 0.9, "damageMult": 2.5 }
+			]
+		},
+		"10": {
+			"template": "BoomtownWarlord",
+			"enemy": "brute",
+			"hpMult": 8.0,
+			"damageMult": 0.5,
+			"cashMult": 20.0,
+			"materialsMult": 10.0,
+			"valor": 25,
+			"patterns": [
+				{ "kind": "slam", "cooldown": 9, "windupSeconds": 1.0, "radius": 12, "damageMult": 2.0 },
+				{ "kind": "charge", "cooldown": 13, "windupSeconds": 0.9, "damageMult": 2.5 },
+				{ "kind": "summon", "cooldown": 24, "windupSeconds": 1.5, "enemy": "grunt", "count": 2 }
+			]
+		}
+	}
+}

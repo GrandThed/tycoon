@@ -5,7 +5,9 @@
 		"with `py tools/upload_audio.py --audition` and swap any `pick` you dislike for one of",
 		"its `alternates` before uploading. Open Cloud audio uploads are capped per month",
 		"(10 unverified / 100 ID-verified), so a bad pick costs a slot that cannot be reclaimed.",
-		"`ambient` entries in Sounds.json stay 0: these four packs contain no loopable music beds."
+		"`ambient` entries in Sounds.json stay 0: these four packs contain no loopable music beds.",
+		"Combat keys (swing..mentor) were picked by filename and ogg duration only. The packs have no",
+		"whoosh, bow, gun, laser or voice sounds, so those keys use the nearest stand-in (see `wants`)."
 	],
 	"ambient": {
 		"Village": { "file": "ambient/Loop_The_Bards_Tale.wav", "source": "OpenGameArt, RandomMind, 'Medieval: The Bard's Tale' loop version" },
@@ -67,6 +69,126 @@
 			"pick": "Audio/Pizzicato jingles/jingles_PIZZI02.ogg",
 			"alternates": ["Audio/8-Bit jingles/jingles_NES02.ogg", "Audio/Steel jingles/jingles_STEEL02.ogg", "Audio/Sax jingles/jingles_SAX02.ogg"],
 			"wants": "short friendly greeting on the welcome-back card - non-blocking, low volume"
+		},
+		"swing": {
+			"zip": "kenney_casino-audio.zip",
+			"pick": "Audio/card-slide-4.ogg",
+			"alternates": ["Audio/card-slide-2.ogg", "Audio/card-shove-3.ogg"],
+			"wants": "quick airy swish for each melee combo hit (0.46 s); no whoosh pack, a card slide is the closest swipe"
+		},
+		"finisher": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactPunch_heavy_002.ogg",
+			"alternates": ["Audio/impactPunch_heavy_003.ogg", "Audio/impactPlate_heavy_001.ogg"],
+			"wants": "heavy meaty thump on the third-hit 1.6x cleave - clearly weightier than enemyHit"
+		},
+		"bowDraw": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/scratch_004.ogg",
+			"alternates": ["Audio/scratch_005.ogg", "Audio/switch_003.ogg"],
+			"wants": "short quiet creak/stretch as the bow is drawn; no bow pack, a scratch is the nearest string-tension sound"
+		},
+		"bowFire": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/pluck_002.ogg",
+			"alternates": ["Audio/pluck_001.ogg", "Audio/drop_002.ogg"],
+			"wants": "dry string twang/thwip on release (0.16 s) - fires often, keep it light"
+		},
+		"gunFire": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactMetal_heavy_002.ogg",
+			"alternates": ["Audio/impactMetal_heavy_004.ogg", "Audio/impactGeneric_light_001.ogg"],
+			"wants": "punchy short crack for Boomtown/Metropolis ranged shots; no gun pack, a tight metal impact stands in"
+		},
+		"laser": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/minimize_008.ogg",
+			"alternates": ["Audio/maximize_008.ogg", "Audio/glass_003.ogg"],
+			"wants": "short falling synthetic 'pew' for Orbital ranged weapons; no laser pack, a UI sweep is the closest"
+		},
+		"abilityCast": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/maximize_004.ogg",
+			"alternates": ["Audio/maximize_006.ogg", "Audio/glass_004.ogg"],
+			"wants": "rising charged whoosh/chime when a weapon ability fires (AoE or burst) - distinct from every hit"
+		},
+		"enemyHit": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactPunch_medium_001.ogg",
+			"alternates": ["Audio/impactPunch_medium_003.ogg", "Audio/impactGeneric_light_002.ogg"],
+			"wants": "light confirming smack on every hit that lands; plays constantly, so short and quiet"
+		},
+		"enemyDeath": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactSoft_heavy_001.ogg",
+			"alternates": ["Audio/impactSoft_heavy_003.ogg", "Audio/impactWood_heavy_001.ogg"],
+			"wants": "soft body-drop thud when an enemy falls - satisfying but not louder than finisher"
+		},
+		"playerHit": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactPunch_heavy_004.ogg",
+			"alternates": ["Audio/impactMetal_light_001.ogg", "Audio/impactSoft_medium_002.ogg"],
+			"wants": "dull hurt thump when the local player takes damage - must read as 'you got hit', not 'you hit'"
+		},
+		"playerDown": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactBell_heavy_002.ogg",
+			"alternates": ["Audio/impactBell_heavy_003.ogg", "Audio/impactBell_heavy_004.ogg"],
+			"wants": "single low bell toll when the player is downed - heavy, final, under 1 s"
+		},
+		"waveStart": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Hit jingles/jingles_HIT01.ogg",
+			"alternates": ["Audio/Hit jingles/jingles_HIT04.ogg", "Audio/8-Bit jingles/jingles_NES03.ogg"],
+			"wants": "short punchy sting announcing a new wave (~0.5 s)"
+		},
+		"waveClear": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Pizzicato jingles/jingles_PIZZI04.ogg",
+			"alternates": ["Audio/Pizzicato jingles/jingles_PIZZI08.ogg", "Audio/8-Bit jingles/jingles_NES08.ogg"],
+			"wants": "bright light resolve when a wave is cleared - a breather cue"
+		},
+		"bossStart": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Hit jingles/jingles_HIT15.ogg",
+			"alternates": ["Audio/Hit jingles/jingles_HIT11.ogg", "Audio/Sax jingles/jingles_SAX03.ogg"],
+			"wants": "longer ominous hit-sting as the boss spawns - the loudest combat cue"
+		},
+		"bossDown": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Steel jingles/jingles_STEEL14.ogg",
+			"alternates": ["Audio/Steel jingles/jingles_STEEL12.ogg", "Audio/Sax jingles/jingles_SAX12.ogg"],
+			"wants": "triumphant flourish when the boss dies - bigger than waveClear"
+		},
+		"runEnd": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Sax jingles/jingles_SAX01.ogg",
+			"alternates": ["Audio/Pizzicato jingles/jingles_PIZZI07.ogg", "Audio/8-Bit jingles/jingles_NES13.ogg"],
+			"wants": "closing jingle under the run summary card - neutral enough for win or wipe"
+		},
+		"lowHp": {
+			"zip": "kenney_impact-sounds.zip",
+			"pick": "Audio/impactSoft_medium_004.ogg",
+			"alternates": ["Audio/impactSoft_medium_001.ogg", "Audio/footstep_carpet_000.ogg"],
+			"wants": "soft muffled heartbeat thump repeated while HP is low - very quiet, must not nag"
+		},
+		"partyRally": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Hit jingles/jingles_HIT05.ogg",
+			"alternates": ["Audio/Hit jingles/jingles_HIT09.ogg", "Audio/8-Bit jingles/jingles_NES11.ogg"],
+			"wants": "upbeat call-to-arms sting when a teammate rallies the party"
+		},
+		"partyWarcry": {
+			"zip": "kenney_music-jingles.zip",
+			"pick": "Audio/Sax jingles/jingles_SAX05.ogg",
+			"alternates": ["Audio/Sax jingles/jingles_SAX14.ogg", "Audio/8-Bit jingles/jingles_NES16.ogg"],
+			"wants": "brassy horn blast for the party warcry; no voice pack, a sax stab is the nearest horn"
+		},
+		"mentor": {
+			"zip": "kenney_interface-sounds.zip",
+			"pick": "Audio/confirmation_002.ogg",
+			"alternates": ["Audio/confirmation_004.ogg", "Audio/glass_001.ogg"],
+			"wants": "warm soft chime when the Mentor bonus is awarded for carrying a newer player"
 		}
 	}
 }

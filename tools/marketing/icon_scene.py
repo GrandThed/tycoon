@@ -38,6 +38,12 @@ def to_blender(v):
     return Vector((v[0], -v[2], v[1]))
 
 
+def authored(colour):
+    """Ground colours are written as the sRGB value wanted on screen; plotscene's materials take
+    linear values (its slabs are judged against the kit), so decode once or the grass renders pastel."""
+    return [round(plotscene.srgb_to_linear(c / 255.0) * 255.0, 3) for c in colour]
+
+
 def build_island(spec, collection, materials):
     """A low-poly floating rock with a grass cap: the cap is a flat prism so buildings sit on a
     level top, the rock is a jittered cone so the silhouette reads as hand-made rather than CAD."""
@@ -50,7 +56,7 @@ def build_island(spec, collection, materials):
 
     bpy.ops.mesh.primitive_cylinder_add(vertices=sides, radius=radius, depth=cap, location=top - Vector((0, 0, cap / 2)))
     grass = bpy.context.active_object
-    grass.data.materials.append(materials.get(spec["top"], 0.85))
+    grass.data.materials.append(materials.get(authored(spec["top"]), 0.85))
 
     bpy.ops.mesh.primitive_cone_add(
         vertices=sides, radius1=radius * 0.97, radius2=radius * 0.18, depth=depth,
@@ -62,10 +68,13 @@ def build_island(spec, collection, materials):
             v.co.x += rng.uniform(-0.12, 0.12) * radius
             v.co.y += rng.uniform(-0.12, 0.12) * radius
             v.co.z += rng.uniform(-0.1, 0.1) * depth
-    rock.data.materials.append(materials.get(spec["side"], 0.95))
+    rock.data.materials.append(materials.get(authored(spec["side"]), 0.95))
 
     for obj in (grass, rock):
         obj.rotation_euler = (0.0, 0.0, math.radians(spec.get("rotY", 0.0)))
+        # [x, z] stretch, so one island can carry a row of buildings.
+        stretch = spec.get("stretch", [1.0, 1.0])
+        obj.scale = (stretch[0], stretch[1], 1.0)
         for polygon in obj.data.polygons:
             polygon.use_smooth = False
         for c in list(obj.users_collection):
@@ -104,6 +113,16 @@ def fit_camera(scene, spec, bounds, size):
     camera = bpy.data.objects.new("Camera", data)
     scene.collection.objects.link(camera)
     scene.camera = camera
+    data.clip_start = 0.1
+
+    if "eye" in spec:
+        # A hero shot from street level is composed by eye, not by fit: the fit keeps every
+        # corner in frame, and a low-angle hero wants the base cropped and the tower overhead.
+        eye, target = to_blender(spec["eye"]), to_blender(spec["target"])
+        camera.location = eye
+        camera.rotation_euler = (target - eye).to_track_quat("-Z", "Y").to_euler()
+        data.clip_end = 2000.0
+        return
 
     lo, hi = bounds
     direction = to_blender(spec["dir"]).normalized()
@@ -136,7 +155,6 @@ def fit_camera(scene, spec, bounds, size):
     eye = center + direction * distance
     camera.location = eye - right * offset[0] * tan_x * distance - up * offset[1] * tan_y * distance
     camera.rotation_euler = rotation.to_euler()
-    data.clip_start = 0.1
     data.clip_end = distance * 8
 
 
@@ -188,7 +206,7 @@ def main():
     for island in spec.get("islands", []):
         build_island(island, ground, materials)
     for box in spec.get("boxes", []):
-        plotscene.build_box(box, ground, materials)
+        plotscene.build_box(dict(box, color=authored(box["color"])), ground, materials)
     if missing:
         log(f"WARNING: unusable blueprints: {', '.join(sorted(missing))}")
 
