@@ -19,6 +19,11 @@ local PM_MULTIPLIER = 48271
 local FULL_TURN = 2 * math.pi
 -- Pellets are cosmetic tracers; a tuned count past this is clamped, never a frame-long loop.
 local MAX_PELLETS = 64
+-- Split arrows are real server projectiles; a tuned splitCount past this is clamped.
+local MAX_FAN = 16
+-- A fanned arrow wanders by up to this share of the gap between neighbours, so a volley never
+-- looks machine-stamped yet never crosses its neighbour.
+local FAN_JITTER_SHARE = 0.25
 
 -- 2D: does the circle at (x, y) with radius `reach` overlap the sector with its apex at the
 -- origin, its axis along +x, radius `range` and half-angle `halfAngle` (radians)? Both the flat
@@ -205,6 +210,36 @@ function HitShapes.Pellets(
 		table.insert(pellets, (axis * math.cos(tilt) + sideways * math.sin(tilt)).Unit)
 	end
 	return pellets
+end
+
+-- A split arrow's children: `count` (at most MAX_FAN) directions fanned evenly across
+-- `arcDegrees` around `direction`, in the plane of `direction` and its horizontal
+-- perpendicular, each nudged by HitShapes.Pellets(seed + index) jitter. Deterministic, so the
+-- server and every client fan the same volley from the shot's seq.
+function HitShapes.Fan(
+	direction: Vector3,
+	count: number,
+	arcDegrees: number,
+	seed: number
+): { Vector3 }
+	local axis = unitOf(direction)
+	local arrows: { Vector3 } = {}
+	local total = math.min(math.floor(count), MAX_FAN)
+	if axis == nil or total <= 0 then
+		return arrows
+	end
+	local reference = if math.abs(axis.Y) < 0.99 then Vector3.yAxis else Vector3.xAxis
+	local right = axis:Cross(reference).Unit
+	local arc = math.rad(math.max(arcDegrees, 0))
+	local gap = if total > 1 then arc / (total - 1) else 0
+	local jitterDegrees = math.deg(gap) * FAN_JITTER_SHARE
+	for index = 1, total do
+		local angle = if total > 1 then -arc / 2 + gap * (index - 1) else 0
+		local base = (axis * math.cos(angle) + right * math.sin(angle)).Unit
+		local nudged = HitShapes.Pellets(base, 1, jitterDegrees, seed + index)[1]
+		table.insert(arrows, nudged or base)
+	end
+	return arrows
 end
 
 return HitShapes

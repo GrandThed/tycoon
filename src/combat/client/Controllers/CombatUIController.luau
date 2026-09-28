@@ -158,6 +158,7 @@ local function bootRange(): ()
 		onWireframe = function(on: boolean)
 			FeedbackController.SetWireframe(on)
 		end,
+		getActiveSlot = InputController.GetActiveSlot,
 		onToggle = function(open: boolean)
 			-- The sheet needs the pointer; closing it hands the mouse back to the crosshair.
 			CameraController.SetCursorHold(HOLD_RANGE_PANEL, open)
@@ -166,9 +167,6 @@ local function bootRange(): ()
 	FeedbackController.SetTuneStateHandler(function()
 		panel.SetLoadout(FeedbackController.GetLoadout())
 	end)
-	-- InputController reports each local range attack so a projectile's flight can be drawn
-	-- before its impact strike arrives.
-	InputController.SetRangeAttackHandler(FeedbackController.OnLocalAttack)
 
 	local function onStateChanged(payload: any): ()
 		if typeof(payload) ~= "table" then

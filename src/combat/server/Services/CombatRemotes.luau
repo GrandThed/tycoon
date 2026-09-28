@@ -29,6 +29,9 @@ local MAX_TUNE_PATH_LENGTH = 96
 local MAX_TUNE_STRING_LENGTH = 32
 local MAX_COMMAND_LENGTH = 24
 local MAX_COMMAND_ARG_LENGTH = 32
+-- P2: a weapon family id (broadsword, longbow, ...); RangeService checks it names a real family
+-- that the player holds in that slot.
+local MAX_FAMILY_LENGTH = 24
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil
@@ -164,12 +167,23 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		RequestRangeAttack = {
 			bucket = "attack",
 			validate = function(args: RemoteService.PackedArgs): boolean
-				return args.n == 5
-					and (args[1] == "sword" or args[1] == "gun")
+				return args.n == 6
+					and isShortString(args[1], MAX_FAMILY_LENGTH)
 					and isSeq(args[2])
 					and isFiniteVector(args[3])
 					and isDirection(args[4])
 					and typeof(args[5]) == "boolean"
+					and isFiniteNumber(args[6])
+					and args[6] >= 0
+					and args[6] <= 1
+			end,
+		},
+		-- P2: the bow's draw start. The server stamps its own clock; the charge the next attack
+		-- claims is capped by the time since this stamp.
+		RequestRangeDraw = {
+			bucket = "attack",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 1 and isShortString(args[1], MAX_FAMILY_LENGTH)
 			end,
 		},
 		RequestDash = {

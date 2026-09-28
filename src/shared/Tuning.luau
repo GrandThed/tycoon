@@ -23,26 +23,63 @@ local INDENT = "\t"
 local INLINE_OBJECT_DEPTH = 3
 
 -- String leaves whose value picks a code path, keyed by a path pattern. A free-text value there
--- would reach a resolver that only knows these, so they are the only strings accepted. A nil
--- set means "a key of crowd.kinds" (the kinds themselves cannot be added by tuning).
-local SHAPES = { "arc", "sphere", "capsule", "cone", "ray" }
-local ENUM_PATHS: { { pattern: string, values: { string }? } } = {
-	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", values = { "melee", "ranged" } },
-	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.shape$", values = SHAPES },
-	{ pattern = "^dummySets%.[^.]+%.%d+%.kind$", values = nil },
+-- would reach a resolver that only knows a fixed set, so each rule names what is legal. Keys that
+-- name other config entries are checked against the BASE config: tuning cannot add keys.
+type EnumCheck = (value: string, path: string, base: Types.ProvingGroundsConfig) -> boolean
+local function oneOf(values: { string }): EnumCheck
+	return function(value: string): boolean
+		return table.find(values, value) ~= nil
+	end
+end
+-- loadout.<slot> must name a family whose base slot is that slot.
+local function familyForSlot(value: string, path: string, base: Types.ProvingGroundsConfig): boolean
+	local slot = string.match(path, "^loadout%.(%a+)$")
+	local def = base.weapons[value]
+	return def ~= nil and def.slot == slot
+end
+local SLOTS = { "melee", "ranged" }
+local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
+	{ pattern = "^weapons%.[^.]+%.slot$", check = oneOf(SLOTS) },
+	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", check = oneOf(SLOTS) },
+	{
+		pattern = "^weapons%.[^.]+%.variants%.[^.]+%.shape$",
+		check = oneOf({ "arc", "sphere", "capsule", "cone", "ray" }),
+	},
+	{
+		pattern = "^weapons%.[^.]+%.default$",
+		check = function(value: string, path: string, base: Types.ProvingGroundsConfig): boolean
+			local family = string.match(path, "^weapons%.([^.]+)%.default$")
+			local def = if family ~= nil then base.weapons[family] else nil
+			return def ~= nil and def.variants[value] ~= nil
+		end,
+	},
+	{ pattern = "^loadout%.melee$", check = familyForSlot },
+	{ pattern = "^loadout%.ranged$", check = familyForSlot },
+	{
+		pattern = "^dummySets%.[^.]+%.%d+%.kind$",
+		check = function(value: string, _path: string, base: Types.ProvingGroundsConfig): boolean
+			return base.crowd.kinds[value] ~= nil
+		end,
+	},
 	{
 		pattern = "^dummySets%.[^.]+%.%d+%.behaviour$",
-		values = { "idle", "walk", "strafe", "jump", "chase" },
+		check = oneOf({ "idle", "walk", "strafe", "jump", "chase" }),
 	},
-	{ pattern = "^controls%.touchMode$", values = { "autoFire", "tapFire" } },
+	{
+		pattern = "^defaultSet$",
+		check = function(value: string, _path: string, base: Types.ProvingGroundsConfig): boolean
+			return base.dummySets[value] ~= nil
+		end,
+	},
+	{ pattern = "^controls%.touchMode$", check = oneOf({ "autoFire", "tapFire" }) },
 }
+
+local Tuning = {}
 
 local overrides: Types.TuneOverrides = {}
 local merged: Types.ProvingGroundsConfig? = nil
 local warnedMissing = false
 local listeners: { () -> () } = {}
-
-local Tuning = {}
 
 local function baseConfig(): Types.ProvingGroundsConfig?
 	return Catalog.GetProvingGroundsConfig()
@@ -138,16 +175,11 @@ function Tuning.Validate(path: string, value: any): boolean
 		if #value > MAX_STRING_LENGTH then
 			return false
 		end
+		local base = baseConfig()
 		for _, rule in ENUM_PATHS do
-			if string.match(path, rule.pattern) == nil then
-				continue
+			if string.match(path, rule.pattern) ~= nil then
+				return base ~= nil and rule.check(value, path, base)
 			end
-			local values = rule.values
-			if values ~= nil then
-				return table.find(values, value) ~= nil
-			end
-			local base = baseConfig()
-			return base ~= nil and base.crowd.kinds[value] ~= nil
 		end
 		return true
 	end

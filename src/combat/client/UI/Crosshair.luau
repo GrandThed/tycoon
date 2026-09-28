@@ -3,7 +3,8 @@
 -- docs/COMBAT_DESIGN.md §3 and §4 layer 1). A centre dot, four ticks pushed out by the live
 -- bloom, a bloom ring for ranged weapons, an ADS tint, and the three hit markers: a tick
 -- burst on every hit, a bigger yellow one on a crit, a red X on a kill. The whole reticle
--- "kicks" (a short scale pop) on every hit.
+-- "kicks" (a short scale pop) on every hit. P2: a draw-charge ring of dots fills clockwise
+-- while a bow is drawn and turns gold (and swells) at a full charge.
 --
 -- Pure display: FeedbackController converts the bloom angle into screen pixels and decides
 -- which marker a strike earns. The parent ScreenGui must ignore the GUI inset so the dot
@@ -20,7 +21,8 @@ local Motion = require(script.Parent:WaitForChild("Motion"))
 
 export type CrosshairHandle = {
 	-- gapPixels = bloom radius in physical screen px (nil = melee: fixed gap, no ring).
-	Update: (gapPixels: number?, ads: boolean, visible: boolean) -> (),
+	-- charge = the bow's draw 0-1 (0 hides the charge ring).
+	Update: (gapPixels: number?, ads: boolean, visible: boolean, charge: number) -> (),
 	-- Every hit gets the tick burst (yellow and bigger when any hit was a crit); a kill adds the X.
 	Mark: (crit: boolean, kill: boolean, strength: number) -> (),
 	-- The server refused the last attack: the reticle greys out once.
@@ -123,6 +125,45 @@ function Crosshair.new(parent: Instance): CrosshairHandle
 		table.insert(ticks, tick)
 	end
 
+	-- Draw-charge ring: dots on a circle, lit up to the charge, clockwise from the top.
+	local chargeRing = Create("Frame", {
+		Name = "ChargeRing",
+		Active = false,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = reticle,
+	}) :: Frame
+	local chargeScale = Create("UIScale", { Parent = chargeRing }) :: UIScale
+	local chargeDots: { Frame } = {}
+	local dotCount = Theme.COMBAT_RANGE_CHARGE_DOTS
+	for index = 1, dotCount do
+		local angle = 2 * math.pi * (index - 1) / dotCount
+		local chargeDot = Create("Frame", {
+			Name = "ChargeDot",
+			Active = false,
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(
+				0.5,
+				math.sin(angle) * Theme.COMBAT_RANGE_CHARGE_RADIUS,
+				0.5,
+				-math.cos(angle) * Theme.COMBAT_RANGE_CHARGE_RADIUS
+			),
+			Size = UDim2.fromOffset(
+				Theme.COMBAT_RANGE_CHARGE_DOT_SIZE,
+				Theme.COMBAT_RANGE_CHARGE_DOT_SIZE
+			),
+			BackgroundColor3 = Theme.COLOR_TEXT,
+			BackgroundTransparency = Theme.COMBAT_RANGE_CHARGE_IDLE_TRANSPARENCY,
+			BorderSizePixel = 0,
+			Parent = chargeRing,
+		}) :: Frame
+		Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = chargeDot })
+		table.insert(chargeDots, chargeDot)
+	end
+
 	-- Hit marker: four short diagonal bars around the centre (the classic shooter tick
 	-- burst). Its own UIScale grows it for a crit and with the hitMarker strength.
 	-- CanvasGroups, so one GroupTransparency fades each bar together with its outline.
@@ -198,10 +239,25 @@ function Crosshair.new(parent: Instance): CrosshairHandle
 	end
 
 	local handle: CrosshairHandle = {
-		Update = function(gapPixels: number?, ads: boolean, visible: boolean)
+		Update = function(gapPixels: number?, ads: boolean, visible: boolean, charge: number)
 			root.Visible = visible
 			if not visible then
 				return
+			end
+			chargeRing.Visible = charge > 0
+			if charge > 0 then
+				local full = charge >= 1
+				local lit = math.floor(math.clamp(charge, 0, 1) * dotCount + 0.5)
+				for index, item in chargeDots do
+					local on = index <= lit
+					item.BackgroundColor3 = if full
+						then Theme.COMBAT_RANGE_CHARGE_COLOR
+						else Theme.COLOR_TEXT
+					item.BackgroundTransparency = if on
+						then 0
+						else Theme.COMBAT_RANGE_CHARGE_IDLE_TRANSPARENCY
+				end
+				chargeScale.Scale = if full then Theme.COMBAT_RANGE_CHARGE_FULL_SCALE else 1
 			end
 			local gap: number
 			if gapPixels == nil then

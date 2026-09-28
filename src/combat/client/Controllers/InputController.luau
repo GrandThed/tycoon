@@ -20,6 +20,13 @@
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts", docs/COMBAT_DESIGN.md section 3):
 -- when CameraController.IsRange() is true at boot, none of the mission bindings above are
 -- made and a separate range path runs instead, so missions keep exactly today's input.
+--  * P2: the range holds one melee FAMILY and one ranged family (RangeLoadout, pushed by
+--    FeedbackController through SetLoadout). 1 / 2 pick the active slot locally, gamepad Y
+--    toggles; every attack names the active family and sends a `charge` (1 when the weapon
+--    has no draw).
+--  * Bows (variants with chargeSeconds): hold to draw (RequestRangeDraw starts the server's
+--    draw clock), release to fire with charge = min(1, held / chargeSeconds). Releases are
+--    still 1/rate apart. Touch rules are with stepCharge below.
 --  * Gun: Fortnite camera-ray aim. The shot starts on the crosshair line at the head's depth
 --    (inside `shooting.originPad` of the head) and leaves along it, so what the crosshair
 --    covers is what is hit, around the shoulder too. Bloom grows with moving, being airborne
@@ -33,9 +40,8 @@
 --    `autoSwingPad` (sword); `tapFire` turns a short, still tap on the right half into one
 --    attack. A drag on the right half aims in both modes (CameraController).
 --  * ADS: right mouse or L2 held, or a touch toggle above the jump button (gun only).
---  * 1 / 2 or gamepad Y ask the server to switch weapon; the server's TuneState answer
---    reaches this module through SetLoadout (FeedbackController is the only TuneState
---    listener, so no event is ever split between two connections).
+--  * FeedbackController is the only TuneState listener, so no event is ever split between
+--    two connections; the loadout reaches this module through SetLoadout.
 -- Every number is read through Tuning.Get() each frame, so the tuning panel acts at once.
 
 local ContextActionService = game:GetService("ContextActionService")
@@ -83,7 +89,6 @@ local ACTION_STANCE = "CombatStance"
 local ACTIONS = { ACTION_ATTACK, ACTION_ABILITY_MELEE, ACTION_ABILITY_RANGED, ACTION_STANCE }
 
 -- P1 range path.
-type RangeWeapon = "sword" | "gun"
 type Device = "pc" | "touch" | "pad"
 local RANGE_BIND = "RangeInput"
 local ACTION_RANGE_FIRE = "RangeFire"
@@ -128,8 +133,11 @@ local attackHeld = false
 local connections: { RBXScriptConnection } = {}
 
 local rangeMode = false
-local rangeWeapon: RangeWeapon = "sword"
-local rangeVariant = "" -- "" until SetLoadout names one: the weapon's config default
+local activeSlot: Stance = MELEE_SLOT
+-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
+local loadout: Types.RangeLoadout? = nil
+local drawStartedAt: number? = nil
+local drawFamily = ""
 local rangeHeld = false
 local adsHeld = false
 local adsToggled = false
@@ -141,10 +149,11 @@ local bloom = 0
 local rangeSeq = 0
 local swingStep = 0
 local device: Device = "pc"
-type TapState = { start: Vector2, at: number, moved: number }
+-- drawing = a still hold that became a bow draw (tapFire).
+type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
 local rangeTouches: { [InputObject]: TapState } = {}
 local requestRangeAttack: RemoteEvent? = nil
-local requestRangeCommand: RemoteEvent? = nil
+local requestRangeDraw: RemoteEvent? = nil
 local rangeGui: ScreenGui? = nil
 local adsButton: TextButton? = nil
 export type RangeAttackHandler = (
@@ -155,6 +164,7 @@ export type RangeAttackHandler = (
 ) -> ()
 -- Told about every range attack the instant it is sent (CombatUIController draws the
 -- launcher shell from it), so the local visual starts on the exact ray the server got.
+-- `weapon` is the family id.
 local rangeAttackHandler: RangeAttackHandler? = nil
 
 local function slotTier(tiers: SlotTiers, slot: string): number
@@ -708,32 +718,74 @@ local function bindGamepad(): ()
 	end
 end
 
--- P1 range path ---------------------------------------------------------------------------
+-- Range path (P1, P2 families + bows) ------------------------------------------------------
 
-local function currentVariant(cfg: Types.ProvingGroundsConfig): Types.RangeWeaponVariant?
-	local def = if rangeWeapon == "gun" then cfg.weapons.gun else cfg.weapons.sword
-	return def.variants[rangeVariant] or def.variants[def.default]
+-- The family in the active slot, and its def when it exists and really fills that slot.
+-- Before the server's first loadout arrives, the config's starting loadout.
+local function activeFamily(cfg: Types.ProvingGroundsConfig): (string, Types.RangeWeaponDef?)
+	local held = loadout
+	local melee = if held ~= nil then held.melee else cfg.loadout.melee
+	local ranged = if held ~= nil then held.ranged else cfg.loadout.ranged
+	local family = if activeSlot == MELEE_SLOT then melee else ranged
+	local def = cfg.weapons[family]
+	if def == nil or def.slot ~= activeSlot then
+		return family, nil
+	end
+	return family, def
 end
 
--- The variant key SetLoadout last named, or the weapon's config default when it named none.
-local function currentVariantKey(cfg: Types.ProvingGroundsConfig): string
-	local def = if rangeWeapon == "gun" then cfg.weapons.gun else cfg.weapons.sword
-	return if def.variants[rangeVariant] ~= nil then rangeVariant else def.default
+-- (variant, family id, variant key) for the active slot. The loadout's variant choice wins
+-- when it names a real variant; otherwise the family's config default.
+local function currentVariant(
+	cfg: Types.ProvingGroundsConfig
+): (Types.RangeWeaponVariant?, string, string)
+	local family, def = activeFamily(cfg)
+	if def == nil then
+		return nil, family, ""
+	end
+	local held = loadout
+	local chosen = if held ~= nil then held.variants[family] else nil
+	local key = if chosen ~= nil and def.variants[chosen] ~= nil then chosen else def.default
+	return def.variants[key], family, key
 end
 
+local function isRanged(variant: Types.RangeWeaponVariant): boolean
+	return variant.kind == "ranged"
+end
+
+-- Tells CombatUIController about an attack the instant it is sent, on the exact ray sent.
 local function notifyRangeAttack(
-	cfg: Types.ProvingGroundsConfig,
+	family: string,
+	variantKey: string,
 	origin: Vector3,
 	direction: Vector3
 ): ()
 	local handler = rangeAttackHandler
 	if handler ~= nil then
-		handler(rangeWeapon, currentVariantKey(cfg), origin, direction)
+		handler(family, variantKey, origin, direction)
 	end
 end
 
-local function isRanged(variant: Types.RangeWeaponVariant): boolean
-	return variant.kind == "ranged"
+-- Bows: a ranged variant with a draw time is held to draw and released to fire.
+local function isCharge(variant: Types.RangeWeaponVariant): boolean
+	return isRanged(variant) and (variant.chargeSeconds or 0) > 0
+end
+
+local function intervalOf(variant: Types.RangeWeaponVariant): number
+	return 1 / math.max(variant.rate, MIN_RATE)
+end
+
+-- Draw progress 0-1 of the current draw against the variant's live chargeSeconds.
+local function chargeOf(variant: Types.RangeWeaponVariant): number
+	local startedAt = drawStartedAt
+	if startedAt == nil then
+		return 0
+	end
+	local seconds = variant.chargeSeconds or 0
+	if seconds <= 0 then
+		return 1
+	end
+	return math.clamp((os.clock() - startedAt) / seconds, 0, 1)
 end
 
 local function firstShotReady(cfg: Types.ProvingGroundsConfig): boolean
@@ -836,7 +888,8 @@ local function enemyInSights(
 	return found
 end
 
--- The same shape the server builds for this variant, via the shared HitShapes geometry.
+-- The same shape the server builds for this variant, via the shared HitShapes geometry. A
+-- capsule (spear) runs from the root along the flat look for `range`, `width` across.
 local function inMeleeShape(
 	variant: Types.RangeWeaponVariant,
 	origin: Vector3,
@@ -884,29 +937,25 @@ local function enemyInReach(
 	return found
 end
 
-local function wantsRangeAttack(
+local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean
+	return device == "touch" and cfg.controls.touchMode == "autoFire"
+end
+
+local function tapFireOn(cfg: Types.ProvingGroundsConfig): boolean
+	return device == "touch" and cfg.controls.touchMode == "tapFire"
+end
+
+-- Touch auto-fire's "on target": the assist cone for guns and bows, the whole cone for a cone
+-- gun (it hits everything inside), the padded melee shape for melee.
+local function targetOnAuto(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
 	rig: LocalRig
 ): boolean
-	if rangeHeld then
-		return true
-	end
-	local queued = tapQueuedAt
-	if queued ~= nil then
-		if os.clock() - queued <= cfg.controls.tapBufferSeconds then
-			return true
-		end
-		tapQueuedAt = nil
-	end
 	local controls = cfg.controls
-	if device ~= "touch" or controls.touchMode ~= "autoFire" then
-		return false
-	end
 	local lagPad = controls.assistLagPad
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
-		-- A cone gun hits everything in its cone, so the whole cone is its "on target".
 		if variant.shape == "cone" then
 			return enemyInReach(variant, origin, look, 0, lagPad)
 		end
@@ -915,17 +964,63 @@ local function wantsRangeAttack(
 	return enemyInReach(variant, rig.root.Position, flatCameraLook(), controls.autoSwingPad, lagPad)
 end
 
-local function rangeAttack(
+-- A queued tap still inside its buffer; an expired one is dropped.
+local function tapPending(cfg: Types.ProvingGroundsConfig): boolean
+	local queued = tapQueuedAt
+	if queued == nil then
+		return false
+	end
+	if os.clock() - queued <= cfg.controls.tapBufferSeconds then
+		return true
+	end
+	tapQueuedAt = nil
+	return false
+end
+
+-- tapFire: a right-half press held still past tapMaxSeconds becomes a draw; the finger may
+-- then drag to aim while the bow stays drawn, and lifting it releases.
+local function touchDrawHeld(cfg: Types.ProvingGroundsConfig): boolean
+	local controls = cfg.controls
+	local now = os.clock()
+	local held = false
+	for _, state in rangeTouches do
+		if
+			not state.drawing
+			and now - state.at > controls.tapMaxSeconds
+			and state.moved <= controls.tapMaxPixels
+		then
+			state.drawing = true
+		end
+		held = held or state.drawing
+	end
+	return held
+end
+
+local function wantsRangeAttack(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
 	rig: LocalRig
+): boolean
+	if rangeHeld or tapPending(cfg) then
+		return true
+	end
+	return autoFireOn(cfg) and targetOnAuto(cfg, variant, rig)
+end
+
+local function rangeAttack(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	family: string,
+	variantKey: string,
+	rig: LocalRig,
+	charge: number
 ): ()
 	local remote = requestRangeAttack
 	if remote == nil then
 		return
 	end
 	local now = os.clock()
-	local interval = 1 / math.max(variant.rate, MIN_RATE)
+	local interval = intervalOf(variant)
 	local idle = now - lastRangeAttackAt > interval * SWING_RESET_INTERVALS
 	lastRangeAttackAt = now
 	tapQueuedAt = nil
@@ -933,21 +1028,21 @@ local function rangeAttack(
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
 		local direction = spreadDirection(look, nextSpreadDegrees(cfg))
-		remote:FireServer(rangeWeapon, rangeSeq, origin, direction, adsActive)
-		notifyRangeAttack(cfg, origin, direction)
+		remote:FireServer(family, rangeSeq, origin, direction, adsActive, charge)
+		notifyRangeAttack(family, variantKey, origin, direction)
 		lastShotAt = now
 		local shooting = cfg.shooting
 		bloom = math.min(bloom + shooting.bloomPerShot, math.max(shooting.bloomMaxDegrees, bloom))
 		-- A local muzzle flash and tracer the instant the trigger is pulled; a projectile's
-		-- flight belongs to the server's strike, so it gets no instant tracer.
+		-- flight is drawn from the server's CombatFxShot, so it gets no instant tracer.
 		if (variant.projectileSpeed or 0) <= 0 then
 			WeaponController.Shoot(origin, direction, variant.range, "semi")
 		end
 		return
 	end
 	local forward = flatCameraLook()
-	remote:FireServer(rangeWeapon, rangeSeq, rig.root.Position, forward, false)
-	notifyRangeAttack(cfg, rig.root.Position, forward)
+	remote:FireServer(family, rangeSeq, rig.root.Position, forward, false, charge)
+	notifyRangeAttack(family, variantKey, rig.root.Position, forward)
 	local chain = variant.chain
 	local length = if chain ~= nil and #chain > 0 then #chain else 1
 	swingStep = if idle then 1 else swingStep % length + 1
@@ -957,6 +1052,85 @@ local function rangeAttack(
 	WeaponController.Swing(pose, interval)
 	if MovementController.IsAirborne() then
 		MovementController.AirHang(cfg.movement.airAttackHangSeconds)
+	end
+end
+
+local function startDraw(variant: Types.RangeWeaponVariant, family: string): ()
+	drawStartedAt = os.clock()
+	drawFamily = family
+	-- The server's own draw clock starts here and caps whatever charge the release claims.
+	local remote = requestRangeDraw
+	if remote ~= nil then
+		remote:FireServer(family)
+	end
+	WeaponController.Draw(variant.chargeSeconds or 0)
+end
+
+local function cancelDraw(): ()
+	if drawStartedAt == nil then
+		return
+	end
+	drawStartedAt = nil
+	drawFamily = ""
+	WeaponController.Release()
+end
+
+local function releaseDraw(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	family: string,
+	variantKey: string,
+	rig: LocalRig
+): ()
+	local charge = chargeOf(variant)
+	drawStartedAt = nil
+	drawFamily = ""
+	WeaponController.Release()
+	rangeAttack(cfg, variant, family, variantKey, rig, charge)
+end
+
+-- Bows. The draw may start at any time; a release waits until 1/rate has passed since the
+-- previous one (it keeps drawing meanwhile), which is the server's rate rule.
+--  * Mouse / R2 / a stray HUD press: hold draws, letting go releases.
+--  * Touch autoFire: draws while a target is in the assist cone, releases at a full charge;
+--    if the target leaves, releases at >= minChargeFraction or drops the draw below it.
+--  * Touch tapFire: a short tap is a minimum-charge arrow; a still hold draws until lifted.
+local function stepCharge(
+	cfg: Types.ProvingGroundsConfig,
+	variant: Types.RangeWeaponVariant,
+	family: string,
+	variantKey: string,
+	rig: LocalRig
+): ()
+	local ready = os.clock() - lastRangeAttackAt >= intervalOf(variant)
+	local auto = autoFireOn(cfg) and not rangeHeld
+	local heldDraw = rangeHeld or (tapFireOn(cfg) and touchDrawHeld(cfg))
+	if drawStartedAt == nil then
+		if tapPending(cfg) then
+			if ready then
+				startDraw(variant, family)
+				releaseDraw(cfg, variant, family, variantKey, rig)
+			end
+		elseif heldDraw or (auto and targetOnAuto(cfg, variant, rig)) then
+			startDraw(variant, family)
+		end
+		return
+	end
+	local release = false
+	if auto then
+		if targetOnAuto(cfg, variant, rig) then
+			release = chargeOf(variant) >= 1
+		elseif chargeOf(variant) >= (variant.minChargeFraction or 0) then
+			release = true
+		else
+			cancelDraw()
+			return
+		end
+	else
+		release = not heldDraw
+	end
+	if release and ready then
+		releaseDraw(cfg, variant, family, variantKey, rig)
 	end
 end
 
@@ -978,7 +1152,14 @@ end
 local function rangeStep(deltaTime: number): ()
 	local cfg = Tuning.Get()
 	local rig = localRig()
-	local variant = currentVariant(cfg)
+	local variant, family, variantKey = currentVariant(cfg)
+	-- A draw never survives its weapon: a slot switch, a loadout change or death drops it.
+	if
+		drawStartedAt ~= nil
+		and (rig == nil or variant == nil or family ~= drawFamily or not isCharge(variant))
+	then
+		cancelDraw()
+	end
 	local wantAds = rig ~= nil and variant ~= nil and isRanged(variant) and (adsHeld or adsToggled)
 	if wantAds ~= adsActive then
 		adsActive = wantAds
@@ -990,30 +1171,30 @@ local function rangeStep(deltaTime: number): ()
 		return
 	end
 	updateBloom(cfg, rig, deltaTime)
-	if os.clock() - lastRangeAttackAt < 1 / math.max(variant.rate, MIN_RATE) then
+	if isCharge(variant) then
+		stepCharge(cfg, variant, family, variantKey, rig)
+		return
+	end
+	if os.clock() - lastRangeAttackAt < intervalOf(variant) then
 		return
 	end
 	if wantsRangeAttack(cfg, variant, rig) then
-		rangeAttack(cfg, variant, rig)
+		rangeAttack(cfg, variant, family, variantKey, rig, 1)
 	end
 end
 
-local function requestWeapon(weapon: RangeWeapon): ()
-	local remote = requestRangeCommand
-	if remote ~= nil and weapon ~= rangeWeapon then
-		remote:FireServer("weapon", weapon)
-	end
-end
-
-local function setRangeWeapon(weapon: RangeWeapon): ()
-	if weapon == rangeWeapon then
+-- 1 / 2 / gamepad Y: the slot is a local choice; the server accepts either slot's family.
+local function setActiveSlot(slot: Stance): ()
+	if slot == activeSlot then
 		return
 	end
-	rangeWeapon = weapon
+	activeSlot = slot
+	cancelDraw()
 	adsToggled = false
 	swingStep = 0
+	tapQueuedAt = nil
 	-- The stance drives WeaponController's held model and the HUD's stance glyph.
-	setStance(if weapon == "gun" then RANGED_SLOT else MELEE_SLOT)
+	setStance(slot)
 end
 
 local function deviceOf(inputType: Enum.UserInputType): Device?
@@ -1054,13 +1235,13 @@ local function onRangeInputBegan(input: InputObject, processed: boolean): ()
 			else math.huge
 		if input.Position.X >= split then
 			local start = Vector2.new(input.Position.X, input.Position.Y)
-			rangeTouches[input] = { start = start, at = os.clock(), moved = 0 }
+			rangeTouches[input] = { start = start, at = os.clock(), moved = 0, drawing = false }
 		end
 	elseif inputType == Enum.UserInputType.Keyboard then
 		if input.KeyCode == Enum.KeyCode.One then
-			requestWeapon("sword")
+			setActiveSlot(MELEE_SLOT)
 		elseif input.KeyCode == Enum.KeyCode.Two then
-			requestWeapon("gun")
+			setActiveSlot(RANGED_SLOT)
 		end
 	end
 end
@@ -1082,10 +1263,10 @@ local function onRangeInputEnded(input: InputObject): ()
 	elseif inputType == Enum.UserInputType.Touch then
 		local state = rangeTouches[input]
 		rangeTouches[input] = nil
-		if state == nil or Tuning.Get().controls.touchMode ~= "tapFire" then
+		local controls = Tuning.Get().controls
+		if state == nil or state.drawing or controls.touchMode ~= "tapFire" then
 			return
 		end
-		local controls = Tuning.Get().controls
 		if
 			os.clock() - state.at <= controls.tapMaxSeconds
 			and state.moved <= controls.tapMaxPixels
@@ -1107,7 +1288,7 @@ local function onRangeAction(
 	elseif action == ACTION_RANGE_ADS then
 		adsHeld = held
 	elseif began and action == ACTION_RANGE_SWAP then
-		requestWeapon(if rangeWeapon == "gun" then "sword" else "gun")
+		setActiveSlot(if activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
 	end
 	return Enum.ContextActionResult.Sink
 end
@@ -1158,9 +1339,7 @@ local function buildRangeTouchControls(): ()
 end
 
 local function startRange(): ()
-	local cfg = Tuning.Get()
-	rangeVariant = cfg.weapons.sword.default
-	bloom = cfg.shooting.bloomMinDegrees
+	bloom = Tuning.Get().shooting.bloomMinDegrees
 	local initial: Device? = deviceOf(UserInputService:GetLastInputType())
 	if initial ~= nil then
 		device = initial
@@ -1171,7 +1350,7 @@ local function startRange(): ()
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
 		local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
 		requestRangeAttack = remotes:WaitForChild("RequestRangeAttack", timeout) :: RemoteEvent?
-		requestRangeCommand = remotes:WaitForChild("RequestRangeCommand", timeout) :: RemoteEvent?
+		requestRangeDraw = remotes:WaitForChild("RequestRangeDraw", timeout) :: RemoteEvent?
 		if requestRangeAttack == nil then
 			warn("[InputController] RequestRangeAttack missing — range attacks are disabled")
 		end
@@ -1265,7 +1444,7 @@ end
 
 function InputController.ToggleStance(): ()
 	if rangeMode then
-		requestWeapon(if rangeWeapon == "gun" then "sword" else "gun")
+		setActiveSlot(if activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
 		return
 	end
 	setStance(if stance == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
@@ -1293,21 +1472,17 @@ function InputController.GetAimRay(): Ray
 	return Ray.new(origin, look)
 end
 
--- The range weapon and variant the server last confirmed ("sword" | "gun", "A" | "B" | "C").
-function InputController.GetRangeWeapon(): (string, string)
-	return rangeWeapon, currentVariantKey(Tuning.Get())
+-- The loadout the server confirmed on TuneState, forwarded by FeedbackController (the one
+-- TuneState listener). A family that is unknown or in the wrong slot makes that slot inert;
+-- an unknown variant falls back to the family's config default wherever it is read. A draw
+-- on a family that left the loadout is dropped on the next frame.
+function InputController.SetLoadout(nextLoadout: Types.RangeLoadout): ()
+	loadout = nextLoadout
 end
 
--- The loadout the server confirmed on TuneState, forwarded by FeedbackController (the one
--- TuneState listener). Unknown weapons are ignored; an unknown variant falls back to the
--- weapon's config default wherever it is read.
-function InputController.SetLoadout(weapon: string, variant: string): ()
-	if weapon == "sword" then
-		setRangeWeapon("sword")
-	elseif weapon == "gun" then
-		setRangeWeapon("gun")
-	end
-	rangeVariant = variant
+-- The slot 1 / 2 / gamepad Y last picked (range only; missions keep GetStance).
+function InputController.GetActiveSlot(): Stance
+	return activeSlot
 end
 
 -- One handler (nil clears it), called right after each RequestRangeAttack with the weapon,
@@ -1316,9 +1491,14 @@ function InputController.SetRangeAttackHandler(handler: RangeAttackHandler?): ()
 	rangeAttackHandler = handler
 end
 
--- The bow's draw progress 0-1 for the HUD ring, or nil while nothing is drawn. Display
--- only: the server caps the real charge from its own RequestDraw stamp.
+-- The bow's draw progress 0-1 for the HUD ring. In the range it is never nil (0 while
+-- nothing is drawn); in missions nil means nothing is drawn, which the mission HUD needs to
+-- hide its dots. Display only: the server caps the real charge from its own draw stamp.
 function InputController.GetCharge(): number?
+	if rangeMode then
+		local variant = currentVariant(Tuning.Get())
+		return if variant ~= nil then chargeOf(variant) else 0
+	end
 	local startedAt = chargeStartedAt
 	if startedAt == nil then
 		return nil
@@ -1383,6 +1563,8 @@ function InputController.Destroy(): ()
 		gui:Destroy()
 	end
 	table.clear(rangeTouches)
+	drawStartedAt = nil
+	drawFamily = ""
 	rangeAttackHandler = nil
 	rangeHeld = false
 	adsHeld = false

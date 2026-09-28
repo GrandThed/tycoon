@@ -39,29 +39,29 @@
 		"greataxe": {
 			"name": "Greataxe", "slot": "melee", "era": 2, "default": "A",
 			"variants": {
-				"A": {"label": "Wide cleave", "kind": "melee", "shape": "arc", "range": 11, "arcDegrees": 200, "pad": 1.5, "cap": 0, "damage": 40, "rate": 1.4, "knockback": 40, "launch": 6, "chain": [1.0, 1.1, 1.8]},
-				"B": {"label": "Fast chop", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 140, "pad": 1.5, "cap": 0, "damage": 34, "rate": 1.8, "knockback": 28, "launch": 4, "chain": [1.0, 1.0, 2.0]}
+				"A": {"label": "Wide cleave", "kind": "melee", "shape": "arc", "range": 11, "arcDegrees": 200, "pad": 1.5, "cap": 0, "damage": 42, "rate": 1.3, "knockback": 40, "launch": 6, "chain": [1.0, 1.1, 1.8]},
+				"B": {"label": "Fast chop", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 110, "pad": 1.5, "cap": 0, "damage": 34, "rate": 1.9, "knockback": 10, "launch": 14, "chain": [1.0, 1.0, 2.0]}
 			}
 		},
 		"spear": {
 			"name": "Spear", "slot": "melee", "era": 3, "default": "A",
 			"variants": {
-				"A": {"label": "Pike thrust", "kind": "melee", "shape": "capsule", "range": 14, "width": 3, "pad": 1.0, "cap": 0, "damage": 30, "rate": 2.0, "knockback": 14, "launch": 0, "chain": [1.0, 1.0, 1.6]},
-				"B": {"label": "Long lunge", "kind": "melee", "shape": "capsule", "range": 18, "width": 2.4, "pad": 1.0, "cap": 0, "damage": 26, "rate": 2.2, "knockback": 18, "launch": 0, "chain": [1.0, 1.0, 2.0]}
+				"A": {"label": "Pike thrust", "kind": "melee", "shape": "capsule", "range": 14, "width": 4.4, "pad": 1.0, "cap": 0, "damage": 42, "rate": 1.7, "knockback": 14, "launch": 0, "chain": [1.0, 1.0, 1.6]},
+				"B": {"label": "Long lunge", "kind": "melee", "shape": "capsule", "range": 18, "width": 2.0, "pad": 1.0, "cap": 0, "damage": 30, "rate": 2.4, "knockback": 22, "launch": 0, "chain": [1.0, 1.0, 2.0]}
 			}
 		},
 		"longbow": {
 			"name": "Longbow", "slot": "ranged", "era": 1, "default": "A",
 			"variants": {
-				"A": {"label": "Pierce + blast", "kind": "ranged", "shape": "ray", "range": 110, "width": 0.8, "pad": 0.6, "cap": 6, "damage": 50, "rate": 1.25, "knockback": 10, "launch": 0, "pierce": 5, "projectileSpeed": 170, "gravity": 18, "chargeSeconds": 0.8, "minChargeFraction": 0.4, "blastRadius": 6, "blastDamageMult": 0.6},
-				"B": {"label": "Quick shot", "kind": "ranged", "shape": "ray", "range": 100, "width": 0.8, "pad": 0.6, "cap": 3, "damage": 38, "rate": 2.0, "knockback": 8, "launch": 0, "pierce": 2, "projectileSpeed": 190, "gravity": 14, "chargeSeconds": 0.45, "minChargeFraction": 0.5}
+				"A": {"label": "Pierce + blast", "kind": "ranged", "shape": "ray", "range": 110, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 50, "rate": 1.6, "knockback": 10, "launch": 0, "pierce": 5, "projectileSpeed": 170, "gravity": 18, "chargeSeconds": 1.0, "minChargeFraction": 0.5, "blastRadius": 5, "blastDamageMult": 0.5},
+				"B": {"label": "Quick shot", "kind": "ranged", "shape": "ray", "range": 100, "width": 0.8, "pad": 0.6, "cap": 3, "damage": 44, "rate": 2.0, "knockback": 8, "launch": 0, "pierce": 3, "projectileSpeed": 200, "gravity": 12, "chargeSeconds": 0.4, "minChargeFraction": 0.5}
 			}
 		},
 		"splitbow": {
 			"name": "Splitbow", "slot": "ranged", "era": 1, "default": "A",
 			"variants": {
-				"A": {"label": "Fan of 7", "kind": "ranged", "shape": "ray", "range": 70, "width": 0.7, "pad": 0.6, "cap": 7, "damage": 26, "rate": 1.6, "knockback": 8, "launch": 0, "pierce": 0, "projectileSpeed": 150, "gravity": 10, "splitCount": 7, "splitDistance": 10, "splitArcDegrees": 40},
-				"B": {"label": "Wide fan of 5", "kind": "ranged", "shape": "ray", "range": 60, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 32, "rate": 1.6, "knockback": 10, "launch": 0, "pierce": 1, "projectileSpeed": 150, "gravity": 10, "splitCount": 5, "splitDistance": 8, "splitArcDegrees": 60}
+				"A": {"label": "Fan of 7", "kind": "ranged", "shape": "ray", "range": 70, "width": 0.7, "pad": 0.6, "cap": 7, "damage": 26, "rate": 1.2, "knockback": 8, "launch": 0, "pierce": 0, "projectileSpeed": 150, "gravity": 10, "splitCount": 7, "splitDistance": 10, "splitArcDegrees": 40},
+				"B": {"label": "Wide fan of 5", "kind": "ranged", "shape": "ray", "range": 55, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 42, "rate": 1.0, "knockback": 10, "launch": 0, "pierce": 0, "projectileSpeed": 150, "gravity": 10, "splitCount": 5, "splitDistance": 6, "splitArcDegrees": 70}
 			}
 		},
 		"shotgun": {

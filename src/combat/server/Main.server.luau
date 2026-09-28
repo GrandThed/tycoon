@@ -357,11 +357,16 @@ RemoteService.SetHandler(
 		seq: number,
 		origin: Vector3,
 		direction: Vector3,
-		ads: boolean
+		ads: boolean,
+		charge: number
 	)
-		RangeService.OnAttack(player, weapon, seq, origin, direction, ads)
+		RangeService.OnAttack(player, weapon, seq, origin, direction, ads, charge)
 	end
 )
+
+RemoteService.SetHandler("RequestRangeDraw", function(player: Player, weapon: string)
+	RangeService.OnDraw(player, weapon)
+end)
 
 RemoteService.SetHandler("RequestDash", function(player: Player, direction: Vector3)
 	RangeService.OnDash(player, direction)

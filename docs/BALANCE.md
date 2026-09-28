@@ -1488,3 +1488,94 @@ Slam against armoured deals 27, so 6 slams. It stays a crowd tool, not an armour
   about 3°, so 4° left almost no assist at range.
 - Feedback layers all start at 1.
 - `snapshotHz`, `maxAlive` and `stressCount` are unchanged (the contract budget).
+
+# P2 — new families
+
+Tier-1 starting values for the four new families in `Config/ProvingGrounds.json`: greataxe, spear,
+longbow and splitbow. The six P1 families (broadsword, warhammer, spinblade, shotgun, rifle,
+launcher) are unchanged, because Ben approved them; they appear below as the reference.
+Targets are from `docs/WEAPONS.md`: melee crowd DPS ~420–590, ranged crowd ~200–320, splitbow ~210.
+
+## How the numbers were measured
+
+A scratch simulator mirrors `HitShapes` (padded sector, capsule, ray and sphere tests, fodder body
+radius 1.3) and `RangeService` (cap, pierce, chain, the finisher arc, flat armour 18 with the 0.1
+floor). It places a crowd in a square grid:
+
+- **Melee:** you stand at the crowd's front edge.
+- **Ranged:** the crowd's front is 20 studs away (8 for the shotgun).
+- **Aim:** lateral offset and aim are randomised.
+
+At **6-stud spacing** (a loose, chasing crowd), the six approved families land within about ±20% of
+their WEAPONS.md "typical hits" figures. The rifle is the exception: pierce 8 fills up on any line.
+So 6 studs is the crowd DPS in the table. The range's own dummy crowds (`crowd30`, `crowd100`)
+are packed at **3 studs**, where uncapped shapes roughly triple: Warhammer 1 606, Greataxe A 2 031,
+Spear ~1 350, Longbow A full 738. Expect Ben to see those bigger bursts on the dummies.
+
+Bow cadence:
+- **Full charge:** one shot per `max(chargeSeconds, 1/rate) + 0.05` s of release/redraw slack.
+- **Tap:** one shot per `1/rate` at `minChargeFraction`.
+
+## Tier 1, all ten families
+
+"Surr." = standing inside the crowd. Fodder 40 HP, armoured 160 HP with flat armour 18.
+
+| Family | Var | Era | Single DPS | Crowd DPS (edge / surr.) | Fodder hits | Armoured hits | Feel |
+|---|---|---|---|---|---|---|---|
+| Broadsword | A | 1 | 76 | 543 / 622 | 2 (finisher 1) | 14 | approved |
+| Warhammer | A | 1 | 73 | 495 / 990 | 1 | 5 | approved |
+| Spinblade | A | 2 | 83 | 499 / 562 | 3 (finisher 1) | 18 | approved |
+| **Greataxe** | A Wide cleave | 2 | 71 | 563 / 722 | 1 | 5 | 200°, slow (1.3/s), knockback 40: shoves the crowd away |
+| **Greataxe** | B Fast chop | 2 | 86 | 525 / 545 | 2 (finisher 1) | 6 | 110°, 1.9/s, knockback 10 + launch 14: pops them up in reach |
+| **Spear** | A Pike thrust | 3 | 86 | 378 / 532 | 1 | 6 | 14 × 4.4 line, heavy (42), 1.7/s |
+| **Spear** | B Long lunge | 3 | 96 | 348 / 532 | 2 (finisher 1) | 9 | 18 × 2.0 needle, 2.4/s, pushes the line back (22) |
+| **Longbow** | A Pierce + blast | 1 | 48 full / 40 tap | 275 full / 150 tap | 1 full / 2 tap | 5 full / 23 tap | 1.0 s draw, pierce 5, full charge bursts r5 for 25 |
+| **Longbow** | B Quick shot | 1 | 80 full / 44 tap | 185 / 102 | 1 / 2 | 7 / 40 | 0.4 s draw, 2/s, pierce 3, flat and fast (200, g 12): the single-target bow |
+| **Splitbow** | A Fan of 7 | 1 | 31 | 210 | 2 volleys | 20 volleys | 7 × 26 over 40°, 1.2/s: a dense fan that spreads damage |
+| **Splitbow** | B Wide fan of 5 | 1 | 42 | 200 | 1 volley | 7 volleys | 5 × 42 over 70°, splits at 6, 1.0/s: every arrow a kill |
+| Shotgun | A | 2 | 61 | 346 | 1 | 5 | approved |
+| Piercing Rifle | A | 2 | 101 | 556 | 1 | 7 | approved |
+| Launcher | A | 3 | 45 | 312 | 1 | 4 | approved |
+
+## Why these values
+
+- **Greataxe A:** damage 40 → 42. At 40, a fodder died only if the kill check used `<= 0`; 42 is a
+  safe one-shot. Rate 1.4 → 1.3 keeps crowd DPS inside the band at 563.
+- **Greataxe B:** the lead's B was a narrower, faster copy of A with the same shove. It is now the
+  **launcher axe**: 110°, knockback 10, launch 14. The pair then plays differently (A clears space,
+  B juggles) at about the same crowd DPS. B's single DPS is higher (86) to pay for the smaller arc.
+- **Spear:** it sits at the bottom of the melee band (348–378 edge) on purpose. Its 14–18 stud
+  reach hits the crowd from outside it, which WEAPONS.md already priced lower (~290).
+  - A is the heavy pike: width 4.4, 42 damage, one-shots fodder.
+  - B is the long needle: width 2.0, 30 damage, faster, pushes the whole line back.
+  - Raising both damages ~15% would put them in the band, if Ben finds the spear weak.
+- **Longbow A:**
+  - **Charge:** `minChargeFraction` 0.4 → 0.5 and `chargeSeconds` 0.8 → 1.0. A full shot now deals
+    2× a tap's arrow damage (50 vs 25) plus the burst, 3.1× a tap's damage per shot on a crowd.
+  - **Burst:** r6 × 0.6 → r5 × 0.5, which keeps full-charge crowd DPS at 275 (it was 360+).
+  - **Fodder:** a full shot one-shoots it, a tap needs 2.
+  - **Armour:** it shows the point of charging. A tap is cut to 7, so 23 hits; a full shot takes 5.
+- **Longbow B:**
+  - Damage 38 → 44: at 38 a full-charge B could not one-shot fodder.
+  - Pierce 2 → 3, so its crowd DPS (185) isn't negligible.
+  - The flatter, faster arrow and 0.4 s draw make it the precision alternative (single DPS 80).
+- **Splitbow A:** 26 per arrow as WEAPONS.md proposed. On any crowd wider than the fan, all 7
+  children land, so rate 1.6 → 1.2 brings it to 210. A volley never hits one enemy twice
+  (RangeService's shared `Volley`), so single DPS is one arrow's worth, 31. That makes splitbow the
+  purest crowd weapon in the roster.
+- **Splitbow B:** 5 arrows × 42, no pierce, 70° fan, splitting at 6 studs, 1.0/s: 200 crowd DPS.
+  Every arrow kills a fodder, so a volley reads "×5 kills". A's 26-damage arrows need two volleys.
+  Against armour, B needs 7 volleys (24 each) and A needs 20 (8 each). Neither is for elites.
+
+## Flags for the lead
+
+- **Rifle (approved, unchanged):** 556 crowd DPS at 6-stud spacing, above the ranged band.
+  WEAPONS.md assumed 3 hits a shot; pierce 8 through any real line gives ~5.5. It's not mine to
+  retune (Ben approved it). If it outclasses the bows in the range, `pierce` 8 → 5 is the knob.
+- **Arrow semantics, as RangeService implements them:**
+  - an arrow hits `1 + pierce` enemies, and the volley `cap` limits that;
+  - split children share one cap and skip enemies the volley already hit.
+
+  Longbow A's pierce 5 / cap 5 therefore hits 5, and B's pierce 3 / cap 3 hits 3; the cap is the
+  real limit in both. The hitscan rifle instead hits `max(1, pierce)`, so `pierce` means one fewer
+  enemy on a hitscan ray than on an arrow. Worth unifying before P3 adds more piercers.

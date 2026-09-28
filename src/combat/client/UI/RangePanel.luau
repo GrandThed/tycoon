@@ -17,6 +17,11 @@
 -- top-left sits under Roblox's chat window. The panel's top is fixed from its OPEN height, so
 -- the tab never jumps when it opens. P (gamepad DPadUp) toggles it with the mouse locked; a
 -- hint beside the tab says so on keyboard devices (touch taps the tab directly).
+--
+-- P2: weapons are families (INTERFACES "P2 contracts"). The Weapons section has one picker per
+-- slot (Melee, Ranged): the families grouped by era with their names, then the chosen family's
+-- variant buttons. The number rows below follow the ACTIVE slot (deps.getActiveSlot, which 1/2
+-- switch locally), polled each frame and rebuilt only when that family or variant changes.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -24,6 +29,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
@@ -35,10 +41,11 @@ export type Deps = {
 	onCommand: (cmd: string, arg: string?) -> (),
 	onWireframe: (on: boolean) -> (),
 	onToggle: (open: boolean) -> (),
+	getActiveSlot: () -> "melee" | "ranged",
 }
 
 export type RangePanelHandle = {
-	SetLoadout: (weapon: string, variant: string?) -> (),
+	SetLoadout: (loadout: Types.RangeLoadout?) -> (),
 	SetStats: (stats: Types.RangeStats) -> (),
 	-- bottomReserve: physical px kept free at the bottom (the touch thumb cluster), 0 if none.
 	SetLayout: (scale: number, viewportSize: Vector2, bottomReserve: number) -> (),
@@ -66,8 +73,18 @@ local VARIANT_ORDER = {
 	"pierce",
 	"projectileSpeed",
 	"splashRadius",
+	"gravity",
+	"chargeSeconds",
+	"minChargeFraction",
+	"blastRadius",
+	"blastDamageMult",
+	"splitCount",
+	"splitDistance",
+	"splitArcDegrees",
 }
-local WEAPONS = { "sword", "gun" }
+local SLOTS = { "melee", "ranged" }
+local SLOT_TITLES: { [string]: string } = { melee = "Melee", ranged = "Ranged" }
+local FAMILY_COLUMNS = 2
 local FEEDBACK_PREFIX = "feedback."
 local TOUCH_MODES = { "autoFire", "tapFire" }
 -- Integer-valued bases at or above this magnitude step by whole units (heights, speeds,
@@ -157,13 +174,18 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	local tuneConnection: Tuning.Connection? = nil
 	local rows: { NumberRow } = {}
 	local weaponRows: { NumberRow } = {}
-	local weaponButtons: { [string]: TextButton } = {}
-	local variantButtons: { [string]: TextButton } = {}
-	local variantConnections: { RBXScriptConnection } = {}
+	local familyButtons: { [string]: TextButton } = {}
+	-- Per slot: the variant buttons of the family in that slot, and the family they were built
+	-- for (rebuilt when the slot's family changes).
+	local variantGrids: { [string]: Frame } = {}
+	local variantConnections: { [string]: { RBXScriptConnection } } = { melee = {}, ranged = {} }
+	local variantButtons: { [string]: { [string]: TextButton } } = { melee = {}, ranged = {} }
+	local shownFamily: { [string]: string } = { melee = "", ranged = "" }
 	local open = false
 	local wireframe = false
-	local weapon = WEAPONS[1]
-	local variant: string? = nil
+	local startLoadout = Tuning.Get().loadout
+	local loadout: Types.RangeLoadout =
+		{ melee = startLoadout.melee, ranged = startLoadout.ranged, variants = {} }
 	local shownVariant = ""
 	local order = 0
 
@@ -738,80 +760,151 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			.. (if typeof(currentMode) == "string" then currentMode else "?")
 	end
 
-	-- Section: weapon, variant and the variant's numbers. ----------------------------------
-	local weaponSection = section("Weapon", true)
-	local weaponGrid = grid("Weapons", #WEAPONS, weaponSection)
-	for _, name in WEAPONS do
-		weaponButtons[name] = button(name, weaponGrid, function()
-			deps.onCommand("weapon", name)
-		end)
-	end
-	local variantGrid = grid("Variants", Theme.COMBAT_RANGE_PANEL_COMMAND_COLUMNS, weaponSection)
-	local variantRows = stack("VariantRows", weaponSection)
+	-- Section: weapons per slot, then the active slot's numbers. ----------------------------
+	local weaponSection = section("Weapons", true)
 
-	local function currentDef(): Types.RangeWeaponDef?
-		local weapons = (Tuning.Get() :: any).weapons
-		local def = if typeof(weapons) == "table" then weapons[weapon] else nil
-		return if typeof(def) == "table" then def :: Types.RangeWeaponDef else nil
+	local function familyDef(family: string): Types.RangeWeaponDef?
+		local def = Tuning.Get().weapons[family]
+		return if typeof(def) == "table" then def else nil
 	end
 
-	local function resolvedVariant(): string
-		local def = currentDef()
+	local function familyIn(slot: string): string
+		return if slot == "melee" then loadout.melee else loadout.ranged
+	end
+
+	-- The variant key the loadout picked for a family, else the family's default.
+	local function variantKeyOf(family: string): string
+		local def = familyDef(family)
 		if def == nil then
 			return ""
 		end
-		if variant ~= nil and def.variants[variant] ~= nil then
-			return variant
+		local chosen = loadout.variants[family]
+		if chosen ~= nil and def.variants[chosen] ~= nil then
+			return chosen
 		end
 		return def.default
 	end
 
-	-- Rebuilt only when the weapon or variant changes; values refresh in place otherwise.
-	local function buildVariant(): ()
-		local def = currentDef()
-		local key = resolvedVariant()
-		local signature = weapon .. "/" .. key
-		for name, item in weaponButtons do
-			item.BackgroundColor3 = if name == weapon
-				then Theme.COLOR_ACCENT
-				else Theme.COLOR_BG_LIGHT
-			item.TextColor3 = if name == weapon then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
+	local function eraName(era: number): string
+		local eraConfig = Catalog.GetEraConfig(era)
+		return if eraConfig ~= nil then eraConfig.displayName else "Era " .. tostring(era)
+	end
+
+	local function paintButton(item: TextButton, selected: boolean): ()
+		item.BackgroundColor3 = if selected then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT
+		item.TextColor3 = if selected then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
+	end
+
+	-- Families are fixed by the config, so their buttons are built once: per slot, one era
+	-- label and grid per era, in era order, names sorted inside an era.
+	for _, slot in SLOTS do
+		local title = label(SLOT_TITLES[slot], Theme.COMBAT_RANGE_PANEL_LABEL_HEIGHT, weaponSection)
+		title.Font = Theme.FONT_BOLD
+		local byEra: { [number]: { string } } = {}
+		local eras: { number } = {}
+		for family, def in Tuning.Get().weapons do
+			if def.slot == slot then
+				if byEra[def.era] == nil then
+					byEra[def.era] = {}
+					table.insert(eras, def.era)
+				end
+				table.insert(byEra[def.era], family)
+			end
 		end
+		table.sort(eras)
+		for _, era in eras do
+			local eraLabel =
+				label(eraName(era), Theme.COMBAT_RANGE_PANEL_LABEL_HEIGHT, weaponSection)
+			eraLabel.TextColor3 = Theme.COLOR_TEXT_DIM
+			local families = byEra[era]
+			table.sort(families, function(a: string, b: string): boolean
+				local defA = familyDef(a)
+				local defB = familyDef(b)
+				return (if defA ~= nil then defA.name else a)
+					< (if defB ~= nil then defB.name else b)
+			end)
+			local familyGrid = grid("Families", FAMILY_COLUMNS, weaponSection)
+			for _, family in families do
+				local def = familyDef(family)
+				familyButtons[family] = button(
+					if def ~= nil then def.name else family,
+					familyGrid,
+					function()
+						deps.onCommand("weapon", family)
+					end
+				)
+			end
+		end
+		variantGrids[slot] =
+			grid("Variants", Theme.COMBAT_RANGE_PANEL_COMMAND_COLUMNS, weaponSection)
+	end
+	local tuningTitle = label("", Theme.COMBAT_RANGE_PANEL_LABEL_HEIGHT, weaponSection)
+	tuningTitle.Font = Theme.FONT_BOLD
+	local variantRows = stack("VariantRows", weaponSection)
+
+	-- A slot's variant buttons, rebuilt when the family in that slot changes.
+	local function buildSlotVariants(slot: string): ()
+		local family = familyIn(slot)
+		local key = variantKeyOf(family)
+		if shownFamily[slot] ~= family then
+			shownFamily[slot] = family
+			disconnectAll(variantConnections[slot])
+			for _, item in variantButtons[slot] do
+				item:Destroy()
+			end
+			table.clear(variantButtons[slot])
+			local def = familyDef(family)
+			if def ~= nil then
+				for _, variantKey in sortedKeys(def.variants) do
+					local caption = variantKey .. " · " .. def.variants[variantKey].label
+					variantButtons[slot][variantKey] = button(
+						caption,
+						variantGrids[slot],
+						function()
+							deps.onCommand("variant", family .. " " .. variantKey)
+						end,
+						variantConnections[slot]
+					)
+				end
+			end
+		end
+		for variantKey, item in variantButtons[slot] do
+			paintButton(item, variantKey == key)
+		end
+	end
+
+	-- The number rows of the active slot's family and variant; rebuilt only on a change.
+	local function buildVariant(): ()
+		for family, item in familyButtons do
+			paintButton(item, family == loadout.melee or family == loadout.ranged)
+		end
+		for _, slot in SLOTS do
+			buildSlotVariants(slot)
+		end
+		local family = familyIn(deps.getActiveSlot())
+		local def = familyDef(family)
+		local key = variantKeyOf(family)
+		local signature = family .. "/" .. key
 		if signature == shownVariant or def == nil then
 			return
 		end
 		shownVariant = signature
-		disconnectAll(variantConnections)
+		tuningTitle.Text = "Tuning: " .. def.name .. " " .. key
 		for _, row in weaponRows do
 			disconnectAll(row.connections)
 		end
-		for _, item in variantButtons do
-			item:Destroy()
-		end
-		table.clear(variantButtons)
 		for _, child in variantRows:GetChildren() do
 			if not child:IsA("UIListLayout") then
 				child:Destroy()
 			end
 		end
 		table.clear(weaponRows)
-		for _, variantKey in sortedKeys(def.variants) do
-			local variantDef = def.variants[variantKey]
-			local caption = variantKey .. " · " .. variantDef.label
-			local item = button(caption, variantGrid, function()
-				deps.onCommand("variant", variantKey)
-			end, variantConnections)
-			local selected = variantKey == key
-			item.BackgroundColor3 = if selected then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT
-			item.TextColor3 = if selected then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
-			variantButtons[variantKey] = item
-		end
 		local chosen = def.variants[key]
 		if chosen == nil then
 			return
 		end
 		local fields = chosen :: any
-		local prefix = "weapons." .. weapon .. ".variants." .. key .. "."
+		local prefix = "weapons." .. family .. ".variants." .. key .. "."
 		local listed: { [string]: boolean } = {}
 		for _, field in VARIANT_ORDER do
 			listed[field] = true
@@ -897,6 +990,11 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	table.insert(
 		connections,
 		RunService.RenderStepped:Connect(function(deltaTime: number)
+			-- 1/2 switch the active slot locally, with no TuneState; follow it here.
+			local family = familyIn(deps.getActiveSlot())
+			if family .. "/" .. variantKeyOf(family) ~= shownVariant then
+				buildVariant()
+			end
 			frames += 1
 			frameTime += deltaTime
 			if frameTime >= Theme.COMBAT_RANGE_FPS_SAMPLE_SECONDS then
@@ -910,9 +1008,10 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	refreshAll()
 
 	local handle: RangePanelHandle = {
-		SetLoadout = function(nextWeapon: string, nextVariant: string?)
-			weapon = nextWeapon
-			variant = nextVariant
+		SetLoadout = function(nextLoadout: Types.RangeLoadout?)
+			if nextLoadout ~= nil then
+				loadout = nextLoadout
+			end
 			refreshAll()
 		end,
 		SetStats = function(stats: Types.RangeStats)
@@ -960,7 +1059,9 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		end,
 		Destroy = function()
 			disconnectAll(connections)
-			disconnectAll(variantConnections)
+			for _, slot in SLOTS do
+				disconnectAll(variantConnections[slot])
+			end
 			for _, row in rows do
 				disconnectAll(row.connections)
 			end

@@ -3,6 +3,11 @@
 -- dummy sets and respawns, the per-player weapon and variant, attack resolution against the
 -- crowd, dash i-frames, the ground slam, live tuning and the readouts.
 --
+-- P2 (INTERFACES "P2 contracts"): weapons are families; each player holds one melee and one
+-- ranged family (RangeLoadout). Bows draw (RequestRangeDraw starts the server's clock) and fire
+-- real server-stepped arrows with gravity; split arrows fan after splitDistance. Every projectile
+-- is announced at fire time (CombatFxShot); its damage arrives as CombatFxStrike.
+--
 -- Studio only and opt-in: Main calls Configure(true) when the DebugProving attribute is set at
 -- boot. Otherwise every entry point here returns at once, so missions never touch this file.
 --
@@ -26,7 +31,7 @@ local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
 
-type WeaponName = "sword" | "gun"
+type SlotName = "melee" | "ranged"
 type Variant = Types.RangeWeaponVariant
 
 -- Contract: projectiles live at most 3 s; DPS is a 5 s window; readouts go out at 2 Hz.
@@ -45,6 +50,11 @@ local MAX_SPAWN_ATTEMPTS = 3
 local SEED_MODULUS = 2147483647
 local SEED_MULTIPLIER = 48271
 local UINT32 = 4294967296
+-- Live projectiles (arrows, split children, shells) across every player; a shot past this is
+-- refused rather than let the step grow without bound.
+local MAX_PROJECTILES = 256
+-- A split arrow fans into at most this many (HitShapes.Fan clamps to the same).
+local MAX_SPLIT = 16
 -- How far below the root the floor probe looks (air tracking and the slam's landing point).
 local GROUND_PROBE_STUDS = 250
 -- Height above standing height before a character counts as airborne (steps and slopes).
@@ -64,27 +74,50 @@ type Slot = {
 	refusals: number,
 }
 type Respawn = { at: number, slot: Slot }
+-- One shot's shared record: every arrow of a split volley draws on the same cap, never hits an
+-- enemy another arrow of the volley already hit, and adds to the same readout totals.
+type Volley = { hit: { [number]: boolean }, distinct: number, cap: number, kills: number }
 type Projectile = {
 	player: Player,
-	weapon: WeaponName,
+	weapon: string,
 	variantKey: string,
+	-- Frozen at the trigger pull: a slider moved mid-flight applies to the next shot.
 	variant: Variant,
+	shotOrigin: Vector3,
+	-- This flight's start (a child's split point) and its velocity there. Positions follow the
+	-- exact parabola origin + velocity t + gravity t^2 / 2, which every client can reproduce.
 	origin: Vector3,
+	velocity: Vector3,
+	gravity: number,
 	position: Vector3,
-	direction: Vector3,
-	travelled: number,
+	-- Seconds since this flight began, and since the shot.
 	age: number,
-	-- The pellet seed its strike carries (pelletSeed at the trigger pull).
+	lifetime: number,
+	-- Path length since the shot (range and splitDistance are measured on it).
+	travelled: number,
+	-- Per hit, charge already applied.
+	damage: number,
+	fullCharge: boolean,
+	-- 1 + pierce: the enemies this arrow may still pass through.
+	hitsLeft: number,
+	-- A split parent that has not split yet.
+	splitting: boolean,
+	volley: Volley,
+	-- The pellet/fan seed every strike of this shot carries.
 	seed: number,
 }
 type DamageEntry = { at: number, amount: number }
 type Shooter = {
 	player: Player,
-	weapon: WeaponName,
-	variants: { [string]: string },
+	loadout: Types.RangeLoadout,
+	-- Keyed by slot: switching family never resets the rate clock or the replay guard.
 	lastSeq: { [string]: number },
 	lastAttackAt: { [string]: number },
+	-- Keyed by family.
 	combo: { [string]: number },
+	-- The bow draw clock (RequestRangeDraw); 0 = not drawing.
+	drawStartedAt: number,
+	drawWeapon: string,
 	lastDashAt: number,
 	iframesUntil: number,
 	lastSlamAt: number,
@@ -134,23 +167,69 @@ local function timingTolerance(): number
 		else DEFAULT_TIMING_TOLERANCE
 end
 
-local function isWeapon(value: string): boolean
-	return value == "sword" or value == "gun"
+local function familyDef(config: Types.ProvingGroundsConfig, family: string): Types.RangeWeaponDef?
+	return config.weapons[family]
 end
 
-local function weaponDef(
+-- The variant a player holds for a family: their pick while the family still has it, else the
+-- family's default, else any variant, so a tuned default can never strand a player.
+local function variantFor(
 	config: Types.ProvingGroundsConfig,
-	weapon: WeaponName
-): Types.RangeWeaponDef
-	return if weapon == "sword" then config.weapons.sword else config.weapons.gun
+	shooter: Shooter,
+	family: string
+): (string, Variant?)
+	local def = familyDef(config, family)
+	if def == nil then
+		return "", nil
+	end
+	local chosen = shooter.loadout.variants[family]
+	if chosen ~= nil and def.variants[chosen] ~= nil then
+		return chosen, def.variants[chosen]
+	end
+	if def.variants[def.default] ~= nil then
+		return def.default, def.variants[def.default]
+	end
+	local key, variant = next(def.variants)
+	if key == nil then
+		return "", nil
+	end
+	return key, variant
 end
 
-local function variantOf(
+local function slotFamily(shooter: Shooter, slot: SlotName): string
+	return if slot == "melee" then shooter.loadout.melee else shooter.loadout.ranged
+end
+
+-- config.loadout's family for a slot, or the first family (by id) that fills it if the named one
+-- is missing or sits in the other slot.
+local function startingFamily(config: Types.ProvingGroundsConfig, slot: SlotName): string
+	local named = if slot == "melee" then config.loadout.melee else config.loadout.ranged
+	local def = familyDef(config, named)
+	if def ~= nil and def.slot == slot then
+		return named
+	end
+	local ids: { string } = {}
+	for family, other in config.weapons do
+		if other.slot == slot then
+			table.insert(ids, family)
+		end
+	end
+	table.sort(ids)
+	return ids[1] or ""
+end
+
+-- TuneState's loadout: both slots plus the variant held for EVERY family, so the panel never
+-- guesses a default.
+local function loadoutPayload(
 	config: Types.ProvingGroundsConfig,
-	weapon: WeaponName,
-	key: string
-): Variant?
-	return weaponDef(config, weapon).variants[key]
+	shooter: Shooter
+): Types.RangeLoadout
+	local variants: { [string]: string } = {}
+	for family in config.weapons do
+		local key = variantFor(config, shooter, family)
+		variants[family] = key
+	end
+	return { melee = shooter.loadout.melee, ranged = shooter.loadout.ranged, variants = variants }
 end
 
 local function rootOf(player: Player): (Model?, BasePart?, Humanoid?)
@@ -215,7 +294,7 @@ local function floorBelow(root: BasePart, params: RaycastParams): number?
 end
 
 local function sendTo(player: Player, remoteName: string, ...: any): ()
-	-- TuneState carries three arguments, which RemoteService.FireClient (one payload) cannot.
+	-- TuneState carries two arguments, which RemoteService.FireClient (one payload) cannot.
 	local folder = ReplicatedStorage:FindFirstChild("Remotes")
 	local remote = if folder ~= nil then folder:FindFirstChild(remoteName) else nil
 	if remote == nil or not remote:IsA("RemoteEvent") or player.Parent == nil then
@@ -229,8 +308,7 @@ local function tuneStateFor(shooter: Shooter): ()
 		shooter.player,
 		"TuneState",
 		Tuning.GetOverrides(),
-		shooter.weapon,
-		shooter.variants[shooter.weapon] or ""
+		loadoutPayload(Tuning.Get(), shooter)
 	)
 end
 
@@ -278,8 +356,8 @@ local function pelletSeed(shooter: Shooter, seq: number): number
 	return (mixed % (SEED_MODULUS - 1) + 1) * SEED_MULTIPLIER % SEED_MODULUS
 end
 
-local function broadcastStrike(strike: Types.CombatFxStrike): ()
-	local batch: { Types.CombatFx } = { strike }
+local function broadcastFx(fx: Types.CombatFx): ()
+	local batch: { Types.CombatFx } = { fx }
 	for _, player in Players:GetPlayers() do
 		RemoteService.FireClient(player, "CombatFx", batch)
 	end
@@ -509,13 +587,15 @@ local function finish(
 		endPoint: Vector3?,
 		-- Gun strikes only: the attack's seq, which seeded HitShapes.Pellets.
 		seq: number?,
-	}
+	},
+	-- A projectile's readout counts its whole volley, not just this strike.
+	totals: { hits: number, kills: number }?
 ): ()
 	local now = os.clock()
 	if tally.dealt > 0 and clearStartedAt == 0 then
 		clearStartedAt = now
 	end
-	broadcastStrike({
+	broadcastFx({
 		kind = "strike",
 		userId = player.UserId,
 		weapon = weapon,
@@ -534,8 +614,8 @@ local function finish(
 	if shooter == nil then
 		return
 	end
-	shooter.lastHits = #tally.hits
-	shooter.lastKills = tally.kills
+	shooter.lastHits = if totals ~= nil then totals.hits else #tally.hits
+	shooter.lastKills = if totals ~= nil then totals.kills else tally.kills
 	if tally.dealt > 0 then
 		table.insert(shooter.damageLog, { at = now, amount = tally.dealt })
 	end
@@ -583,7 +663,7 @@ end
 local function resolveMelee(
 	config: Types.ProvingGroundsConfig,
 	shooter: Shooter,
-	weapon: WeaponName,
+	weapon: string,
 	variantKey: string,
 	variant: Variant,
 	root: BasePart,
@@ -700,45 +780,103 @@ local function rayCandidates(
 	)
 end
 
-local function launchProjectile(
+-- Ruling 4: the client's claimed charge is capped by the server's own draw clock (with the same
+-- timing tolerance as every other interval here); damage runs from minChargeFraction to 1 of
+-- `damage`. A draw only counts if it started after the previous shot of that slot. Returns
+-- (charge used, damage scale, full charge). Weapons without chargeSeconds fire at 1.
+local function resolveCharge(
 	shooter: Shooter,
-	weapon: WeaponName,
+	weapon: string,
+	variant: Variant,
+	claimed: number,
+	previousShotAt: number,
+	now: number
+): (number, number, boolean)
+	local chargeSeconds = variant.chargeSeconds or 0
+	if chargeSeconds <= 0 then
+		return 1, 1, false
+	end
+	local drawAt = shooter.drawStartedAt
+	local earned = if shooter.drawWeapon == weapon and drawAt > previousShotAt
+		then (now - drawAt) / (chargeSeconds * timingTolerance())
+		else 0
+	shooter.drawStartedAt = 0
+	local charge = math.clamp(math.min(claimed, earned), 0, 1)
+	local minFraction = math.clamp(variant.minChargeFraction or 0, 0, 1)
+	return charge, minFraction + (1 - minFraction) * charge, charge >= 1
+end
+
+-- A projectile weapon's trigger pull: one record (a split parent fans later) and ONE CombatFxShot
+-- to everyone, which is all a client needs to fly it: origin, direction, speed, gravity, and the
+-- seq that seeds the split fan.
+local function spawnShot(
+	shooter: Shooter,
+	weapon: string,
 	variantKey: string,
 	variant: Variant,
 	origin: Vector3,
 	direction: Vector3,
-	seed: number
+	seed: number,
+	charge: number,
+	scale: number,
+	full: boolean
 ): ()
+	local frozen = table.clone(variant)
+	local speed = frozen.projectileSpeed or 0
+	local gravity = math.max(frozen.gravity or 0, 0)
+	local splitCount = math.clamp(math.floor(frozen.splitCount or 0), 0, MAX_SPLIT)
 	table.insert(projectiles, {
 		player = shooter.player,
 		weapon = weapon,
 		variantKey = variantKey,
-		-- Frozen at the trigger pull: a slider moved mid-flight applies to the next shot.
-		variant = table.clone(variant),
+		variant = frozen,
+		shotOrigin = origin,
 		origin = origin,
+		velocity = direction * speed,
+		gravity = gravity,
 		position = origin,
-		direction = direction,
-		travelled = 0,
 		age = 0,
+		lifetime = 0,
+		travelled = 0,
+		damage = frozen.damage * scale,
+		fullCharge = full,
+		hitsLeft = 1 + math.max(0, math.floor(frozen.pierce or 0)),
+		splitting = frozen.shape == "ray" and splitCount > 1,
+		volley = { hit = {}, distinct = 0, cap = frozen.cap, kills = 0 },
 		seed = seed,
+	})
+	broadcastFx({
+		kind = "shot",
+		userId = shooter.player.UserId,
+		weapon = weapon,
+		variant = variantKey,
+		origin = origin,
+		direction = direction,
+		speed = speed,
+		gravity = gravity,
+		charge = charge,
+		seq = seed,
 	})
 end
 
 local function resolveRanged(
 	config: Types.ProvingGroundsConfig,
 	shooter: Shooter,
-	weapon: WeaponName,
+	weapon: string,
 	variantKey: string,
 	variant: Variant,
 	seq: number,
 	origin: Vector3,
-	direction: Vector3
+	direction: Vector3,
+	charge: number,
+	scale: number,
+	full: boolean
 ): ()
 	local unit = direction.Unit
-	-- Pellets are cosmetic (lead ruling): the seed only lets every client draw the same ones.
+	-- Pellets and fans are cosmetic seeds (lead ruling): every client draws the same ones.
 	local seed = pelletSeed(shooter, seq)
 	if (variant.projectileSpeed or 0) > 0 then
-		launchProjectile(shooter, weapon, variantKey, variant, origin, unit, seed)
+		spawnShot(shooter, weapon, variantKey, variant, origin, unit, seed, charge, scale, full)
 		return
 	end
 	local critMult = config.shooting.critMult
@@ -875,23 +1013,72 @@ local function resolveRanged(
 	})
 end
 
+-- Where a flight is `t` seconds after it began, and how fast it is moving there.
+local function flightPoint(projectile: Projectile, t: number): Vector3
+	return projectile.origin
+		+ projectile.velocity * t
+		+ Vector3.new(0, -0.5 * projectile.gravity * t * t, 0)
+end
+
+local function flightVelocity(projectile: Projectile, t: number): Vector3
+	return projectile.velocity + Vector3.new(0, -projectile.gravity * t, 0)
+end
+
+local function markVolley(volley: Volley, id: number): ()
+	if not volley.hit[id] then
+		volley.hit[id] = true
+		volley.distinct += 1
+	end
+end
+
+-- Every projectile strike reports the whole volley's totals to the shooter's readout.
+local function reportShot(
+	projectile: Projectile,
+	tally: Tally,
+	fx: {
+		shape: Types.HitShape,
+		origin: Vector3,
+		direction: Vector3,
+		size: number,
+		arcDegrees: number?,
+		width: number?,
+		endPoint: Vector3?,
+		seq: number?,
+	}
+): ()
+	local volley = projectile.volley
+	for _, hit in tally.hits do
+		markVolley(volley, hit.id)
+	end
+	volley.kills += tally.kills
+	finish(
+		projectile.player,
+		projectile.weapon,
+		projectile.variantKey,
+		tally,
+		fx,
+		{ hits = volley.distinct, kills = volley.kills }
+	)
+end
+
+-- A shell bursts at `impact` (splashRadius, capped nearest-first like any blast).
 local function detonate(
 	config: Types.ProvingGroundsConfig,
 	projectile: Projectile,
+	direction: Vector3,
 	impact: Vector3
 ): ()
-	local player = projectile.player
-	if player.Parent == nil then
+	if projectile.player.Parent == nil then
 		return
 	end
 	local variant = projectile.variant
 	local radius = variant.splashRadius or 0
 	local tally = newTally()
-	explode(config, player, impact, radius, variant, variant.damage, projectile.direction, tally)
-	finish(player, projectile.weapon, projectile.variantKey, tally, {
+	explode(config, projectile.player, impact, radius, variant, projectile.damage, direction, tally)
+	reportShot(projectile, tally, {
 		shape = "sphere",
-		origin = projectile.origin,
-		direction = projectile.direction,
+		origin = projectile.shotOrigin,
+		direction = direction,
 		size = radius,
 		arcDegrees = nil,
 		width = nil,
@@ -900,47 +1087,249 @@ local function detonate(
 	})
 end
 
--- Straight-line flight, tested segment by segment against the world and the crowd. A shell
--- that reaches its range or lifetime without touching anything bursts where it is.
+-- An arrow is done at `stop`. A full charge bursts there (blastRadius, damage x blastDamageMult,
+-- no cap); either way the strike carries endPoint = stop, which tells every client where the
+-- arrow ends. A strike without endPoint is an arrow still in flight.
+local function endArrow(
+	config: Types.ProvingGroundsConfig,
+	projectile: Projectile,
+	from: Vector3,
+	direction: Vector3,
+	stop: Vector3,
+	tally: Tally
+): ()
+	if projectile.player.Parent == nil then
+		return
+	end
+	local variant = projectile.variant
+	local blastRadius = variant.blastRadius or 0
+	if projectile.fullCharge and blastRadius > 0 then
+		local blast: Blast = {
+			pad = variant.pad,
+			cap = 0,
+			knockback = variant.knockback,
+			launch = variant.launch,
+		}
+		local damage = projectile.damage * math.max(variant.blastDamageMult or 0, 0)
+		explode(config, projectile.player, stop, blastRadius, blast, damage, direction, tally)
+		reportShot(projectile, tally, {
+			shape = "sphere",
+			origin = projectile.shotOrigin,
+			direction = direction,
+			size = blastRadius,
+			arcDegrees = nil,
+			width = nil,
+			endPoint = stop,
+			seq = projectile.seed,
+		})
+		return
+	end
+	reportShot(projectile, tally, {
+		shape = "ray",
+		origin = from,
+		direction = direction,
+		size = (stop - from).Magnitude,
+		arcDegrees = nil,
+		width = variant.width,
+		endPoint = stop,
+		seq = projectile.seed,
+	})
+end
+
+-- A split parent becomes its fan at `point`: children start there with the parent's speed along
+-- HitShapes.Fan(the parent's velocity there, splitCount, splitArcDegrees, seed), keep its gravity,
+-- lifetime, path length and volley, and restart their own flight clock.
+local function splitArrow(
+	projectile: Projectile,
+	point: Vector3,
+	heading: Vector3,
+	spawned: { Projectile }
+): ()
+	local variant = projectile.variant
+	local count = math.clamp(math.floor(variant.splitCount or 0), 0, MAX_SPLIT)
+	local speed = variant.projectileSpeed or 0
+	local hits = 1 + math.max(0, math.floor(variant.pierce or 0))
+	for _, arrow in HitShapes.Fan(heading, count, variant.splitArcDegrees or 0, projectile.seed) do
+		if #projectiles + #spawned >= MAX_PROJECTILES then
+			break
+		end
+		table.insert(spawned, {
+			player = projectile.player,
+			weapon = projectile.weapon,
+			variantKey = projectile.variantKey,
+			variant = variant,
+			shotOrigin = projectile.shotOrigin,
+			origin = point,
+			velocity = arrow * speed,
+			gravity = projectile.gravity,
+			position = point,
+			age = 0,
+			lifetime = projectile.lifetime,
+			travelled = projectile.travelled,
+			damage = projectile.damage,
+			fullCharge = projectile.fullCharge,
+			hitsLeft = hits,
+			splitting = false,
+			volley = projectile.volley,
+			seed = projectile.seed,
+		})
+	end
+end
+
+-- One step of one projectile along its parabola. Returns true while it is still flying. Arrows
+-- hit every enemy they pass (entry order, one hit per enemy per volley) until hitsLeft or the
+-- volley cap is spent, and stop at walls and the ground; shells burst on the first contact.
+local function stepProjectile(
+	config: Types.ProvingGroundsConfig,
+	projectile: Projectile,
+	deltaTime: number,
+	params: RaycastParams,
+	spawned: { Projectile }
+): boolean
+	local variant = projectile.variant
+	local from = projectile.position
+	local startAge = projectile.age
+	projectile.age += deltaTime
+	projectile.lifetime += deltaTime
+	local offset = flightPoint(projectile, projectile.age) - from
+	local length = offset.Magnitude
+	local expired = projectile.lifetime >= PROJECTILE_MAX_SECONDS
+	if length < 1e-6 then
+		if expired then
+			endArrow(config, projectile, from, DOWN, from, newTally())
+		end
+		return not expired
+	end
+	local direction = offset / length
+	local budget = math.max(0, variant.range - projectile.travelled)
+	local splitAt = if projectile.splitting
+		then math.max(0, (variant.splitDistance or 0) - projectile.travelled)
+		else math.huge
+	local reach = math.min(length, budget, splitAt)
+	local wall = if reach > 0 then worldReach(from, direction, reach, params) else 0
+	local candidates: { Candidate } = if wall > 0
+		then rayCandidates(config, from, direction, wall, variant)
+		else {}
+	local volley = projectile.volley
+	-- Out of range or time at the end of this step: whatever did not stop it earlier ends here.
+	local spent = reach < length or expired or projectile.travelled + reach >= variant.range
+
+	if variant.shape == "sphere" then
+		local first = candidates[1]
+		local impact: Vector3? = nil
+		if first ~= nil then
+			impact = from + direction * first.order
+		elseif wall < reach or spent then
+			impact = from + direction * wall
+		end
+		if impact ~= nil then
+			detonate(config, projectile, direction, impact)
+			return false
+		end
+		projectile.position = from + direction * reach
+		projectile.travelled += reach
+		return true
+	end
+
+	if projectile.splitting then
+		-- The first enemy it meets splits it early, at the contact point; a wall ends it whole.
+		local contact: number? = nil
+		for _, candidate in candidates do
+			if not volley.hit[candidate.id] then
+				contact = candidate.order
+				break
+			end
+		end
+		if contact == nil and wall < reach then
+			endArrow(config, projectile, from, direction, from + direction * wall, newTally())
+			return false
+		end
+		if contact == nil and reach >= splitAt then
+			contact = splitAt
+		end
+		if contact ~= nil then
+			local splitTime = startAge + deltaTime * (contact / length)
+			projectile.travelled += contact
+			splitArrow(
+				projectile,
+				from + direction * contact,
+				flightVelocity(projectile, splitTime),
+				spawned
+			)
+			return false
+		end
+		projectile.position = from + direction * reach
+		projectile.travelled += reach
+		if spent then
+			endArrow(config, projectile, from, direction, projectile.position, newTally())
+			return false
+		end
+		return true
+	end
+
+	local tally = newTally()
+	local critMult = config.shooting.critMult
+	local push = (flatten(direction) or Vector3.zero) * variant.knockback
+	local stopAt: number? = nil
+	for _, candidate in candidates do
+		if volley.hit[candidate.id] then
+			continue
+		end
+		if volley.cap > 0 and volley.distinct >= volley.cap then
+			stopAt = candidate.order
+			break
+		end
+		local amount = if candidate.crit then projectile.damage * critMult else projectile.damage
+		strike(tally, projectile.player, candidate.id, amount, candidate.crit, push, variant.launch)
+		markVolley(volley, candidate.id)
+		projectile.hitsLeft -= 1
+		if projectile.hitsLeft <= 0 then
+			stopAt = candidate.order
+			break
+		end
+	end
+	if stopAt == nil and wall < reach then
+		stopAt = wall
+	end
+	if stopAt ~= nil then
+		endArrow(config, projectile, from, direction, from + direction * stopAt, tally)
+		return false
+	end
+	projectile.position = from + direction * reach
+	projectile.travelled += reach
+	if spent then
+		endArrow(config, projectile, from, direction, projectile.position, tally)
+		return false
+	end
+	if #tally.hits > 0 then
+		reportShot(projectile, tally, {
+			shape = "ray",
+			origin = from,
+			direction = direction,
+			size = reach,
+			arcDegrees = nil,
+			width = variant.width,
+			endPoint = nil,
+			seq = projectile.seed,
+		})
+	end
+	return true
+end
+
 local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: number): ()
 	if #projectiles == 0 then
 		return
 	end
 	local params = worldParams()
 	local survivors: { Projectile } = {}
+	local spawned: { Projectile } = {}
 	for _, projectile in projectiles do
-		local variant = projectile.variant
-		local speed = variant.projectileSpeed or 0
-		local length =
-			math.min(speed * deltaTime, math.max(0, variant.range - projectile.travelled))
-		local impact: Vector3? = nil
-		if length > 0 then
-			local from = projectile.position
-			local direction = projectile.direction
-			local stop = worldReach(from, direction, length, params)
-			local candidates = rayCandidates(config, from, direction, stop, variant)
-			local first = candidates[1]
-			if first ~= nil then
-				impact = from + direction * first.order
-			elseif stop < length then
-				impact = from + direction * stop
-			end
-			projectile.position = from + direction * length
-			projectile.travelled += length
-		end
-		projectile.age += deltaTime
-		if
-			impact == nil
-			and (projectile.age >= PROJECTILE_MAX_SECONDS or projectile.travelled >= variant.range)
-		then
-			impact = projectile.position
-		end
-		if impact ~= nil then
-			detonate(config, projectile, impact)
-		else
+		if stepProjectile(config, projectile, deltaTime, params, spawned) then
 			table.insert(survivors, projectile)
 		end
 	end
+	-- Split children start flying on the next step.
+	table.move(spawned, 1, #spawned, #survivors + 1, survivors)
 	projectiles = survivors
 end
 
@@ -1100,11 +1489,16 @@ function RangeService.AddPlayer(player: Player): ()
 	local config = Tuning.Get()
 	local shooter: Shooter = {
 		player = player,
-		weapon = "sword",
-		variants = { sword = config.weapons.sword.default, gun = config.weapons.gun.default },
-		lastSeq = { sword = -1, gun = -1 },
-		lastAttackAt = { sword = 0, gun = 0 },
-		combo = { sword = 0, gun = 0 },
+		loadout = {
+			melee = startingFamily(config, "melee"),
+			ranged = startingFamily(config, "ranged"),
+			variants = {},
+		},
+		lastSeq = { melee = -1, ranged = -1 },
+		lastAttackAt = { melee = 0, ranged = 0 },
+		combo = {},
+		drawStartedAt = 0,
+		drawWeapon = "",
 		lastDashAt = 0,
 		iframesUntil = 0,
 		lastSlamAt = 0,
@@ -1162,35 +1556,46 @@ end
 
 -- Intents (payload shapes already checked by CombatRemotes) -----------------------------------
 
+-- `weapon` is a family id and must be the family the player holds in that family's slot.
+-- `charge` (0-1) matters only for charge weapons and is capped by the server's draw clock.
 function RangeService.OnAttack(
 	player: Player,
 	weapon: string,
 	seq: number,
 	origin: Vector3,
 	direction: Vector3,
-	_ads: boolean
+	_ads: boolean,
+	charge: number?
 ): ()
 	local shooter = shooters[player]
-	if not active or shooter == nil or not isWeapon(weapon) then
+	if not active or shooter == nil then
 		return
 	end
-	local weaponName: WeaponName = if weapon == "sword" then "sword" else "gun"
-	if seq <= (shooter.lastSeq[weaponName] or -1) then
+	local config = Tuning.Get()
+	local def = familyDef(config, weapon)
+	if def == nil then
+		return
+	end
+	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
+	if slotFamily(shooter, slot) ~= weapon then
+		-- The client fired a family it does not hold (a stale switch): take its effects back.
+		sendRefused(shooter)
+		return
+	end
+	if seq <= (shooter.lastSeq[slot] or -1) then
 		return
 	end
 	local _character, root = rootOf(player)
 	if root == nil then
 		return
 	end
-	local config = Tuning.Get()
-	local variantKey = shooter.variants[weaponName] or ""
-	local variant = variantOf(config, weaponName, variantKey)
+	local variantKey, variant = variantFor(config, shooter, weapon)
 	if variant == nil or variant.rate <= 0 then
 		return
 	end
 	local now = os.clock()
 	local interval = 1 / variant.rate
-	local previousAttackAt = shooter.lastAttackAt[weaponName] or 0
+	local previousAttackAt = shooter.lastAttackAt[slot] or 0
 	if now - previousAttackAt < interval * timingTolerance() then
 		sendRefused(shooter)
 		return
@@ -1208,22 +1613,54 @@ function RangeService.OnAttack(
 			sendRefused(shooter)
 			return
 		end
+		if (variant.projectileSpeed or 0) > 0 and #projectiles >= MAX_PROJECTILES then
+			sendRefused(shooter)
+			return
+		end
 	elseif now - previousAttackAt > config.controls.comboResetSeconds then
 		-- A pause breaks the combo: the next swing is step 1 again.
-		shooter.combo[weaponName] = 0
+		shooter.combo[weapon] = 0
 	end
-	shooter.lastSeq[weaponName] = seq
-	shooter.lastAttackAt[weaponName] = now
-	if shooter.weapon ~= weaponName then
-		-- The client switched weapons locally; keep the TuneState it reads in step.
-		shooter.weapon = weaponName
-		tuneStateFor(shooter)
-	end
+	shooter.lastSeq[slot] = seq
+	shooter.lastAttackAt[slot] = now
 	if variant.kind == "melee" then
-		resolveMelee(config, shooter, weaponName, variantKey, variant, root, direction)
+		resolveMelee(config, shooter, weapon, variantKey, variant, root, direction)
 	else
-		resolveRanged(config, shooter, weaponName, variantKey, variant, seq, origin, direction)
+		local used, scale, full =
+			resolveCharge(shooter, weapon, variant, charge or 0, previousAttackAt, now)
+		resolveRanged(
+			config,
+			shooter,
+			weapon,
+			variantKey,
+			variant,
+			seq,
+			origin,
+			direction,
+			used,
+			scale,
+			full
+		)
 	end
+end
+
+-- The bow's draw start. It carries nothing the server trusts: it stamps its own clock, and
+-- OnAttack caps the charge by the time since this stamp.
+function RangeService.OnDraw(player: Player, weapon: string): ()
+	local shooter = shooters[player]
+	if not active or shooter == nil then
+		return
+	end
+	local def = familyDef(Tuning.Get(), weapon)
+	if def == nil then
+		return
+	end
+	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
+	if slotFamily(shooter, slot) ~= weapon then
+		return
+	end
+	shooter.drawStartedAt = os.clock()
+	shooter.drawWeapon = weapon
 end
 
 -- Opens the i-frame window; the dash itself moves the client-owned character.
@@ -1360,16 +1797,31 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 	elseif command == "stress" then
 		-- The stress set at crowd.stressCount (its first group's count is replaced).
 		loadSet("stress", config.crowd.stressCount)
-	elseif command == "weapon" and argument ~= nil and isWeapon(argument) then
-		shooter.weapon = if argument == "sword" then "sword" else "gun"
-		tuneStateFor(shooter)
-	elseif command == "variant" and argument ~= nil then
-		if variantOf(config, shooter.weapon, argument) == nil then
-			warn(`[RangeService] {shooter.weapon} has no variant "{argument}"`)
+	elseif command == "weapon" and argument ~= nil then
+		-- `weapon <familyId>`: the family goes into its own slot.
+		local def = familyDef(config, argument)
+		if def == nil then
+			warn(`[RangeService] no weapon family "{argument}"`)
 			return
 		end
-		shooter.variants[shooter.weapon] = argument
-		shooter.combo[shooter.weapon] = 0
+		if def.slot == "melee" then
+			shooter.loadout.melee = argument
+		else
+			shooter.loadout.ranged = argument
+		end
+		shooter.combo[argument] = 0
+		shooter.drawStartedAt = 0
+		tuneStateFor(shooter)
+	elseif command == "variant" and argument ~= nil then
+		-- `variant <familyId> <key>` arrives as one argument string.
+		local family, key = string.match(argument, "^(%S+)%s+(%S+)$")
+		local def = if family ~= nil then familyDef(config, family) else nil
+		if family == nil or key == nil or def == nil or def.variants[key] == nil then
+			warn(`[RangeService] bad variant command "{argument}" (want: <family> <key>)`)
+			return
+		end
+		shooter.loadout.variants[family] = key
+		shooter.combo[family] = 0
 		tuneStateFor(shooter)
 	elseif command == "export" then
 		print(`[RangeService] ProvingGrounds.json with the current tuning:\n{Tuning.Export()}`)
