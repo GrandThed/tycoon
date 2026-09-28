@@ -18,23 +18,72 @@
 		"armorFloor": 0.1
 	},
 	"weapons": {
-		"sword": {
-			"default": "A",
+		"broadsword": {
+			"name": "Broadsword", "slot": "melee", "era": 1, "default": "A",
 			"variants": {
-				"A": { "label": "Wide arc", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 160, "pad": 1.5, "cap": 10, "damage": 24, "rate": 2.5, "knockback": 16, "launch": 4, "chain": [1.0, 1.0, 1.8] },
-				"B": { "label": "Spin finisher", "kind": "melee", "shape": "arc", "range": 9, "arcDegrees": 110, "pad": 1.5, "cap": 8, "damage": 16, "rate": 3.4, "knockback": 8, "launch": 2, "chain": [1.0, 1.0, 2.6], "finisherArcDegrees": 360 },
-				"C": { "label": "Shockwave", "kind": "melee", "shape": "sphere", "range": 10, "pad": 1.0, "cap": 0, "damage": 44, "rate": 1.3, "knockback": 30, "launch": 10, "chain": [1.0, 1.25, 1.6] }
+				"A": {"label": "Wide arc", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 160, "pad": 1.5, "cap": 10, "damage": 24, "rate": 2.5, "knockback": 16, "launch": 4, "chain": [1.0, 1.0, 1.8]}
 			}
 		},
-		"gun": {
-			"default": "A",
+		"warhammer": {
+			"name": "Warhammer", "slot": "melee", "era": 1, "default": "A",
 			"variants": {
-				"A": { "label": "Shotgun", "kind": "ranged", "shape": "cone", "range": 24, "arcDegrees": 26, "pad": 0.8, "cap": 0, "damage": 55, "rate": 1.1, "knockback": 28, "launch": 5, "pellets": 8, "projectileSpeed": 0 },
-				"B": { "label": "Piercing rifle", "kind": "ranged", "shape": "ray", "range": 120, "width": 0.8, "pad": 0.4, "cap": 8, "damage": 42, "rate": 2.4, "knockback": 8, "launch": 0, "pierce": 8, "projectileSpeed": 0 },
-				"C": { "label": "Launcher", "kind": "ranged", "shape": "sphere", "range": 100, "pad": 0.5, "cap": 0, "damage": 60, "rate": 0.75, "knockback": 34, "launch": 16, "projectileSpeed": 110, "splashRadius": 10 }
+				"A": {"label": "Shockwave", "kind": "melee", "shape": "sphere", "range": 10, "pad": 1.0, "cap": 0, "damage": 44, "rate": 1.3, "knockback": 30, "launch": 10, "chain": [1.0, 1.25, 1.6]}
+			}
+		},
+		"spinblade": {
+			"name": "Spinblade", "slot": "melee", "era": 2, "default": "A",
+			"variants": {
+				"A": {"label": "Spin finisher", "kind": "melee", "shape": "arc", "range": 9, "arcDegrees": 110, "pad": 1.5, "cap": 8, "damage": 16, "rate": 3.4, "knockback": 8, "launch": 2, "chain": [1.0, 1.0, 2.6], "finisherArcDegrees": 360}
+			}
+		},
+		"greataxe": {
+			"name": "Greataxe", "slot": "melee", "era": 2, "default": "A",
+			"variants": {
+				"A": {"label": "Wide cleave", "kind": "melee", "shape": "arc", "range": 11, "arcDegrees": 200, "pad": 1.5, "cap": 0, "damage": 40, "rate": 1.4, "knockback": 40, "launch": 6, "chain": [1.0, 1.1, 1.8]},
+				"B": {"label": "Fast chop", "kind": "melee", "shape": "arc", "range": 10, "arcDegrees": 140, "pad": 1.5, "cap": 0, "damage": 34, "rate": 1.8, "knockback": 28, "launch": 4, "chain": [1.0, 1.0, 2.0]}
+			}
+		},
+		"spear": {
+			"name": "Spear", "slot": "melee", "era": 3, "default": "A",
+			"variants": {
+				"A": {"label": "Pike thrust", "kind": "melee", "shape": "capsule", "range": 14, "width": 3, "pad": 1.0, "cap": 0, "damage": 30, "rate": 2.0, "knockback": 14, "launch": 0, "chain": [1.0, 1.0, 1.6]},
+				"B": {"label": "Long lunge", "kind": "melee", "shape": "capsule", "range": 18, "width": 2.4, "pad": 1.0, "cap": 0, "damage": 26, "rate": 2.2, "knockback": 18, "launch": 0, "chain": [1.0, 1.0, 2.0]}
+			}
+		},
+		"longbow": {
+			"name": "Longbow", "slot": "ranged", "era": 1, "default": "A",
+			"variants": {
+				"A": {"label": "Pierce + blast", "kind": "ranged", "shape": "ray", "range": 110, "width": 0.8, "pad": 0.6, "cap": 6, "damage": 50, "rate": 1.25, "knockback": 10, "launch": 0, "pierce": 5, "projectileSpeed": 170, "gravity": 18, "chargeSeconds": 0.8, "minChargeFraction": 0.4, "blastRadius": 6, "blastDamageMult": 0.6},
+				"B": {"label": "Quick shot", "kind": "ranged", "shape": "ray", "range": 100, "width": 0.8, "pad": 0.6, "cap": 3, "damage": 38, "rate": 2.0, "knockback": 8, "launch": 0, "pierce": 2, "projectileSpeed": 190, "gravity": 14, "chargeSeconds": 0.45, "minChargeFraction": 0.5}
+			}
+		},
+		"splitbow": {
+			"name": "Splitbow", "slot": "ranged", "era": 1, "default": "A",
+			"variants": {
+				"A": {"label": "Fan of 7", "kind": "ranged", "shape": "ray", "range": 70, "width": 0.7, "pad": 0.6, "cap": 7, "damage": 26, "rate": 1.6, "knockback": 8, "launch": 0, "pierce": 0, "projectileSpeed": 150, "gravity": 10, "splitCount": 7, "splitDistance": 10, "splitArcDegrees": 40},
+				"B": {"label": "Wide fan of 5", "kind": "ranged", "shape": "ray", "range": 60, "width": 0.8, "pad": 0.6, "cap": 5, "damage": 32, "rate": 1.6, "knockback": 10, "launch": 0, "pierce": 1, "projectileSpeed": 150, "gravity": 10, "splitCount": 5, "splitDistance": 8, "splitArcDegrees": 60}
+			}
+		},
+		"shotgun": {
+			"name": "Shotgun", "slot": "ranged", "era": 2, "default": "A",
+			"variants": {
+				"A": {"label": "Shotgun", "kind": "ranged", "shape": "cone", "range": 24, "arcDegrees": 26, "pad": 0.8, "cap": 0, "damage": 55, "rate": 1.1, "knockback": 28, "launch": 5, "pellets": 8, "projectileSpeed": 0}
+			}
+		},
+		"rifle": {
+			"name": "Piercing Rifle", "slot": "ranged", "era": 2, "default": "A",
+			"variants": {
+				"A": {"label": "Piercing rifle", "kind": "ranged", "shape": "ray", "range": 120, "width": 0.8, "pad": 0.4, "cap": 8, "damage": 42, "rate": 2.4, "knockback": 8, "launch": 0, "pierce": 8, "projectileSpeed": 0}
+			}
+		},
+		"launcher": {
+			"name": "Launcher", "slot": "ranged", "era": 3, "default": "A",
+			"variants": {
+				"A": {"label": "Launcher", "kind": "ranged", "shape": "sphere", "range": 100, "pad": 0.5, "cap": 0, "damage": 60, "rate": 0.75, "knockback": 34, "launch": 16, "projectileSpeed": 110, "splashRadius": 10}
 			}
 		}
 	},
+	"loadout": { "melee": "broadsword", "ranged": "longbow" },
 	"dummySets": {
 		"rows": [
 			{ "kind": "fodder", "behaviour": "idle", "count": 5, "at": [0, 80], "spacing": 4, "respawnSeconds": 2 },

@@ -1284,8 +1284,24 @@ export type CombatFxTelegraph = {
 	radius: number?,
 	seconds: number,
 }
+-- P2: a projectile left a player's weapon (range). Sent to everyone at fire time so every
+-- client draws the same arrow/shell flying; the damage arrives later as CombatFxStrike.
+-- direction is unit and already includes spread; seq seeds the split fan like pellets.
+export type CombatFxShot = {
+	kind: "shot",
+	userId: number,
+	weapon: string,
+	variant: string,
+	origin: Vector3,
+	direction: Vector3,
+	speed: number,
+	gravity: number,
+	charge: number,
+	seq: number,
+}
 export type CombatFx =
-	CombatFxTelegraph
+	CombatFxShot
+	| CombatFxTelegraph
 	| CombatFxHit
 	| CombatFxKill
 	| CombatFxPlayerHit
@@ -1394,8 +1410,33 @@ export type RangeWeaponVariant = {
 	chain: { number }?,
 	-- Melee only: the LAST chain hit uses this arc instead (360 = a full spin).
 	finisherArcDegrees: number?,
+	-- P2 bows. A ranged "ray" with projectileSpeed > 0 is a flying arrow that hits along its path
+	-- (pierce = extra enemies it passes through); a "sphere" projectile explodes on contact
+	-- (launcher). gravity = studs/s² of arrow drop. Charge weapons: hold to draw for up to
+	-- chargeSeconds; damage scales from minChargeFraction to 1; a FULL charge also bursts
+	-- blastRadius at the arrow's end for damage x blastDamageMult. Split arrows: after
+	-- splitDistance studs the arrow becomes splitCount arrows fanned across splitArcDegrees, each
+	-- hitting one enemy (plus pierce).
+	gravity: number?,
+	chargeSeconds: number?,
+	minChargeFraction: number?,
+	blastRadius: number?,
+	blastDamageMult: number?,
+	splitCount: number?,
+	splitDistance: number?,
+	splitArcDegrees: number?,
 }
-export type RangeWeaponDef = { default: string, variants: { [string]: RangeWeaponVariant } }
+-- P2: one weapon FAMILY (docs/WEAPONS.md). slot decides which Armory slot it fills; era is the
+-- era that unlocks it (range ignores it); variants are range alternatives, default = shipped one.
+export type RangeWeaponDef = {
+	name: string,
+	slot: "melee" | "ranged",
+	era: number,
+	default: string,
+	variants: { [string]: RangeWeaponVariant },
+}
+-- The family chosen for each slot plus the variant chosen per family.
+export type RangeLoadout = { melee: string, ranged: string, variants: { [string]: string } }
 -- A crowd enemy kind: body sphere (radius, centre at height/2) + head sphere (crit weak point).
 export type CrowdKindDef = {
 	radius: number,
@@ -1523,7 +1564,10 @@ export type ProvingGroundsConfig = {
 		-- Share of every hit that always gets through armour: max(amount - armor, amount * armorFloor).
 		armorFloor: number,
 	},
-	weapons: { sword: RangeWeaponDef, gun: RangeWeaponDef },
+	-- Keyed by family id (broadsword, warhammer, spinblade, greataxe, spear, longbow, splitbow,
+	-- shotgun, rifle, launcher); loadout = the families a player starts the range with.
+	weapons: { [string]: RangeWeaponDef },
+	loadout: { melee: string, ranged: string },
 	dummySets: { [string]: { DummyGroupDef } },
 	defaultSet: string,
 	movement: RangeMovementConfig,
@@ -1562,7 +1606,7 @@ export type CombatFxStrike = {
 	-- Gun attacks: the attack seq, so clients can redraw the exact pellets with HitShapes.Pellets.
 	seq: number?,
 }
--- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.gun.variants.B.damage") → value.
+-- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.rifle.variants.A.damage") → value.
 export type TuneValue = number | boolean | string
 export type TuneOverrides = { [string]: TuneValue }
 -- Readouts for the range HUD, sent to the attacker after each attack and at 2 Hz.

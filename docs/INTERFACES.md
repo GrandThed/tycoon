@@ -4387,3 +4387,95 @@ Tuning.Export(): string                        -- merged config as pretty JSON (
 - Sword A/B/C and gun A/B/C each hit crowds per their shape; hitbox effect matches the wireframe.
 - Phone emulator: no attack button; auto-fire and auto-swing work; tapFire alternative works.
 - `stress` set: 150 chasing enemies, smooth client, server step shown < 2 ms in Studio.
+
+---
+
+# P2 contracts — weapon families + bows in the range (Ben, 2026-09-28)
+
+Plan of record: `docs/WEAPONS.md` (approved 2026-09-28) and `docs/COMBAT_DESIGN.md`. Ben's P1
+verdict: "I really love all the alternatives, the combo melee is great, it lacks the bow."
+Still range-only (`build/proving.rbxl`); missions untouched until P5. **Abilities are P3**, not P2.
+
+## Rulings
+
+1. **Families replace sword/gun.** `ProvingGrounds.json weapons` is now keyed by family id, and
+   each family has `name`, `slot` (melee|ranged), `era`, `default` and `variants`. The six P1
+   variants became six families with identical numbers: broadsword = old sword A, spinblade = B,
+   warhammer = C, shotgun = gun A, rifle = B, launcher = C. New families: **greataxe** (A/B),
+   **spear** (A/B, capsule thrust), **longbow** (A/B, charged piercing arrow; A bursts on a full
+   charge) and **splitbow** (A/B, the arrow splits into a fan).
+2. **Loadout:** each player holds one melee family and one ranged family (`RangeLoadout`),
+   starting from `ProvingGrounds.json loadout`. **1 = melee slot, 2 = ranged slot** (gamepad Y
+   toggles). The panel picks the family per slot and the variant per family.
+3. **Arrows are real projectiles.** A ranged `ray` with `projectileSpeed > 0` flies with
+   `gravity`, and the server steps it, hitting along its path up to `pierce`. A `sphere`
+   projectile explodes on contact, as the launcher does. Every projectile is announced to all
+   clients at fire time (`CombatFxShot`), so everyone sees it fly; damage still arrives as
+   `CombatFxStrike`. This also closes the P1 carry-over "other players' shots have no fx".
+4. **Charge (bows):** hold to draw, release to fire. The client sends `charge` 0–1. The server
+   caps it with its own clock: `(now − drawStart) / chargeSeconds`, with
+   `controls.comboResetSeconds` style tolerance. `RequestRangeDraw` starts that clock. Damage
+   scales from `minChargeFraction` to 1 of `damage`. A **full** charge also bursts `blastRadius`
+   at the arrow's end point for `damage × blastDamageMult`.
+5. **Split arrows:** after `splitDistance` studs the arrow becomes `splitCount` arrows, fanned
+   evenly across `splitArcDegrees` around its direction. The pattern is deterministic
+   (`seq`-seeded jitter via `HitShapes.Pellets`). Each child hits one enemy plus `pierce`.
+6. **Phones, still no attack button.** With `autoFire`, a charge weapon draws automatically while
+   an enemy is in the assist cone and releases at a full charge, or at ≥ `minChargeFraction`
+   when the target leaves. With `tapFire`, a short tap fires a minimum-charge arrow and a held
+   press draws until release.
+
+## Types (applied)
+
+- `RangeWeaponVariant` gains `gravity`, `chargeSeconds`, `minChargeFraction`, `blastRadius`,
+  `blastDamageMult`, `splitCount`, `splitDistance` and `splitArcDegrees` (all optional).
+- `RangeWeaponDef` gains `name`, `slot` and `era`.
+- New `RangeLoadout`.
+- `ProvingGroundsConfig.weapons` is `{ [string]: RangeWeaponDef }`, plus `loadout`.
+- New `CombatFxShot` in the `CombatFx` union.
+
+## Remotes (changed or new; all range-only, validated, rate-limited)
+
+| Intent | Payload |
+|---|---|
+| `RequestRangeAttack` | `(weapon: string ≤ 24 (family id; must be the player's family for that slot), seq: int, origin: Vector3, direction: Vector3, ads: boolean, charge: number [0,1])` |
+| `RequestRangeDraw` | `(weapon: string ≤ 24)`: starts the server draw clock (bucket `attack`) |
+| `RequestRangeCommand` | `weapon <familyId>` puts that family into its slot; `variant <familyId> <key>` (one arg string, space-separated); the others are unchanged |
+
+| Event | Payload |
+|---|---|
+| `TuneState` | `(overrides: TuneOverrides, loadout: RangeLoadout)` (**changed**) |
+| `CombatFx` | + `CombatFxShot` at fire time for every projectile (arrows, split children announced as ONE shot, the launcher shell) |
+
+`Tuning.Validate`: `weapons.*.slot` must be melee|ranged. The enum and path rules follow the new
+layout (`weapons.<family>.variants.<key>.<field>`).
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section, `Types.luau`, the `ProvingGrounds.json` restructure (applied) |
+| luau-engineer **Range** | `RangeService.luau`, `HitShapes.luau`, `Tuning.luau`, `CombatRemotes.luau` |
+| ui-engineer **Motion** | `InputController.luau`, `MovementController.luau`, `CameraController.luau` |
+| ui-engineer **Feedback** | `FeedbackController.luau`, `Crosshair.luau` (draw-charge ring), `RangePanel.luau`, `CombatUIController.luau`, combat blocks of `Theme.luau` |
+| economy-designer | values in `ProvingGrounds.json weapons` (keys frozen), `docs/BALANCE.md` "P2" |
+| roblox-reviewer → qa-runner → docs-keeper | after wave 1 |
+
+Cross-owner API:
+- `InputController.SetLoadout(loadout: Types.RangeLoadout)` replaces `SetLoadout(weapon, variant)`.
+  FeedbackController is still the only TuneState listener and calls it.
+- `InputController.GetCharge(): number` (0–1, 0 when not drawing) feeds the crosshair draw ring.
+- `InputController.GetActiveSlot(): "melee" | "ranged"`.
+
+## Definition of done (P2)
+
+- Both builds + `build/proving.rbxl`, both sourcemaps + luau-lsp, stylua, selene,
+  `sim_economy.py --check` and `sim_combat.py --check` unchanged, manifest/template checks green.
+- In `proving.rbxl`:
+  - 1/2 switch slots, and the panel lists all 10 families by slot and their variants.
+  - Longbow draw ring fills, the arrow visibly flies and drops, pierces a row, and a full
+    charge bursts.
+  - Splitbow fans after ~10 studs and hits up to 7.
+  - Greataxe cleaves 200°; the spear thrust hits a line.
+  - Other players see arrows fly (Local Server, 2 players).
+  - Phone: bows auto-draw and release on a target; tapFire tap/hold works.
