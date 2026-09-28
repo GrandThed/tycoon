@@ -39,6 +39,23 @@
 -- world, or on a timeout. Damage still arrives only as strikes, which add the bow effects:
 -- pierce sparks on every enemy an arrow passed through, a burst for a full-charge blast or a
 -- shell, and a forward streak for the spear's thrust.
+--
+-- P3 (INTERFACES "P3 contracts", rulings 6 and 8):
+--  * One-off ability strikes (earthquake rings, landings, the dash, slug cones, the
+--    overcharged ray, cluster blasts) draw their exact shape like any strike, in the ability
+--    colour, with pad / knockback / launch read from the family's `ability` block. An ability
+--    ray draws its full width, since that is the area it hit.
+--  * Tick strikes (`tick`: zones, channels, sweeps) skip the generic flash, because AbilityFx
+--    draws the lasting area at its exact size. They keep markers, reactions and counters, get
+--    no hitstop and a softer shake, and their numbers run into ONE burst per shooter + ability.
+--  * A `continuous` weapon (the Beam family) is ONE lasting beam per shooter from the hand to
+--    the latest strike's end, with merged numbers and throttled markers instead of a tracer per
+--    shot. The local beam follows the live crosshair at the server's last length (display
+--    prediction; the next strike lands along the same camera ray).
+--  * `links` (Chain Gun, Storm Coil) draw one jagged bolt per pair; id 0 is the strike origin
+--    of an ability, or the shooter's hand for a weapon shot.
+--  * Ability projectiles (Volley, Cluster Shell) fly as their family's arrow or shell, with the
+--    ability's own count, spread and split distance.
 
 local HapticService = game:GetService("HapticService")
 local Players = game:GetService("Players")
@@ -69,6 +86,8 @@ local EPSILON = 1e-6
 local BURST_SAMPLE = 16
 -- A charge at or above this reads as full (the server clamps charge to [0, 1]).
 local FULL_CHARGE = 0.999
+-- The ability whose chain links leave a coil top rather than its ground-point origin.
+local COIL_ABILITY = "stormCoil"
 -- Hit parts for a haptic pulse: gamepads have two motors, phones (where supported) one.
 local HAPTIC_INPUTS = { Enum.UserInputType.Gamepad1, Enum.UserInputType.Touch }
 local HAPTIC_MOTORS = { Enum.VibrationMotor.Large, Enum.VibrationMotor.Small }
@@ -86,7 +105,14 @@ type Strike = {
 	endPoint: Vector3?,
 	seq: number?,
 	hits: { Types.StrikeHit },
+	ability: string?,
+	tick: boolean,
+	links: { number }?,
 }
+
+-- Pad, knockback, launch (and an ability's pull) the server resolved a strike with: the weapon
+-- variant's, the family ability's for an ability strike, movement.slam* for the ground slam.
+type Impact = { pad: number, knockback: number, launch: number, pull: number }
 
 -- fromSize/toSize and fromCFrame/toCFrame animate a part during the effect's hold phase
 -- (a shockwave growing, a thrust streak shooting forward).
@@ -100,6 +126,10 @@ type FxPart = {
 }
 type Effect = { parts: { FxPart }, started: number, seconds: number }
 
+-- `started` is when the pop-arc-fall starts (in the future while a merged burst is held open);
+-- `popAt` when its last pop began; `token` changes every time the pool hands the burst out, so
+-- a merge that still points at a recycled burst knows it lost it; `target` is where an open
+-- merged burst drifts (its latest hits).
 type Burst = {
 	gui: BillboardGui,
 	anchor: Attachment,
@@ -108,10 +138,50 @@ type Burst = {
 	count: TextLabel,
 	strokes: { UIStroke },
 	started: number,
+	popAt: number,
 	side: number,
 	pop: number,
 	active: boolean,
+	token: number,
+	target: Vector3?,
 }
+
+-- One running burst for a shooter + ability (or a held beam): the totals it shows so far.
+type Merge = {
+	burst: Burst,
+	token: number,
+	total: number,
+	crit: boolean,
+	ids: { [number]: boolean },
+	count: number,
+	kills: number,
+	openedAt: number,
+	lastAt: number,
+}
+
+-- One shooter's held beam. origin / length / wallStop describe the latest strike (its camera
+-- ray and where the server stopped it); target is that stop. width = the ray's true width.
+type BeamFx = {
+	start: Attachment,
+	finish: Attachment,
+	core: Beam,
+	glow: Beam?,
+	tip: BasePart,
+	muzzle: BasePart?,
+	width: number,
+	lastAt: number,
+	linger: number,
+	range: number,
+	origin: Vector3,
+	length: number,
+	wallStop: boolean,
+	target: Vector3,
+	shown: Vector3?,
+	phase: number,
+	wiredAt: number,
+}
+
+type Spark = { anchor: Attachment, emitter: ParticleEmitter, freeAt: number }
 
 type HapticTarget = { input: Enum.UserInputType, motor: Enum.VibrationMotor }
 
@@ -168,6 +238,14 @@ local frozenTracks: { [AnimationTrack]: number } = {}
 local hapticTargets: { HapticTarget } = {}
 local hapticToken = 0
 local flights: { Flight } = {}
+local merges: { [string]: Merge } = {}
+local beams: { [number]: BeamFx } = {}
+local sparks: { Spark } = {}
+-- The local held beam's last crosshair mark and pulse (os.clock), for the throttle.
+local beamMarkedAt = 0
+-- When the local player's previous strike with hits landed: hitstop never outlasts a share of
+-- the gap between two strikes (SMG, Mag Dump), whatever the weapon's configured rate.
+local lastLocalHitAt = 0
 
 -- Live numbers ------------------------------------------------------------------------
 
@@ -195,19 +273,103 @@ local function variantOf(weapon: string, variant: string?): Types.RangeWeaponVar
 	return if typeof(found) == "table" then found :: Types.RangeWeaponVariant else nil
 end
 
--- Pad, knockback and launch of a strike: its weapon variant's, or for the ground slam (a
--- strike with no weapon variant) the movement.slam* values the server resolved it with.
-local function impactOf(variant: Types.RangeWeaponVariant?): (number, number, number)
-	if variant ~= nil then
-		return variant.pad, variant.knockback, variant.launch
+-- A family's ability block, found by its id: the family's own first (the usual case), else
+-- any family that carries that id (a strike racing a family switch).
+local function abilityDefOf(family: string, id: string): Types.RangeAbilityDef?
+	local weapons = (config() :: any).weapons
+	if typeof(weapons) ~= "table" then
+		return nil
 	end
+	local own = weapons[family]
+	if typeof(own) == "table" and typeof(own.ability) == "table" and own.ability.id == id then
+		return own.ability :: Types.RangeAbilityDef
+	end
+	for _, def in weapons do
+		if typeof(def) == "table" and typeof(def.ability) == "table" and def.ability.id == id then
+			return def.ability :: Types.RangeAbilityDef
+		end
+	end
+	return nil
+end
+
+local function impactOf(strike: Strike, variant: Types.RangeWeaponVariant?): Impact
+	local id = strike.ability
+	if id ~= nil then
+		local ability = abilityDefOf(strike.weapon, id)
+		return {
+			pad = if ability ~= nil then ability.pad or 0 else 0,
+			knockback = if ability ~= nil then ability.knockback or 0 else 0,
+			launch = if ability ~= nil then ability.launch or 0 else 0,
+			pull = if ability ~= nil then ability.pull or 0 else 0,
+		}
+	end
+	if variant ~= nil then
+		return {
+			pad = variant.pad,
+			knockback = variant.knockback,
+			launch = variant.launch,
+			pull = 0,
+		}
+	end
+	-- The ground slam: a strike with no weapon variant.
 	local movement = config().movement
-	return movement.slamPad, movement.slamKnockback, movement.slamLaunch
+	return {
+		pad = movement.slamPad,
+		knockback = movement.slamKnockback,
+		launch = movement.slamLaunch,
+		pull = 0,
+	}
 end
 
 -- Arrows and shells: their flight is drawn from CombatFxShot, so their strike needs no trail.
 local function isProjectile(variant: Types.RangeWeaponVariant?): boolean
 	return variant ~= nil and variant.kind == "ranged" and (variant.projectileSpeed or 0) > 0
+end
+
+-- The projectile an ability fires (Volley, Cluster Shell) flies as its family's arrow or shell,
+-- with the ability's own numbers, as the server builds it for RangeService.FireProjectile: an
+-- arrow ability splits after `spacing` studs into `count` arrows over `arcDegrees`; a shell
+-- ability explodes with `radius`. nil when the family has no such ability or no projectile.
+local function abilityShotVariant(family: string, id: string): Types.RangeWeaponVariant?
+	local ability = abilityDefOf(family, id)
+	local base = variantOf(family, nil)
+	if ability == nil or base == nil then
+		return nil
+	end
+	local arrow = base.shape ~= "sphere"
+	return {
+		label = ability.name,
+		kind = "ranged",
+		shape = base.shape,
+		range = ability.range or base.range,
+		width = ability.width,
+		pad = ability.pad or 0,
+		cap = ability.cap or 0,
+		damage = ability.damage or 0,
+		rate = base.rate,
+		knockback = ability.knockback or 0,
+		launch = ability.launch or 0,
+		pierce = ability.pierce,
+		projectileSpeed = ability.speed,
+		gravity = ability.gravity,
+		splashRadius = if arrow then nil else ability.radius,
+		-- Clamped exactly as AbilityService builds it, so both sides fan the same arrows.
+		splitCount = if arrow and ability.count ~= nil
+			then math.clamp(math.floor(ability.count), 1, HitShapes.MAX_FAN)
+			else nil,
+		splitDistance = if arrow then ability.spacing else nil,
+		splitArcDegrees = if arrow then ability.arcDegrees else nil,
+	}
+end
+
+-- Ability strikes that end a flight: the ones of an ability that fires a projectile.
+local function abilityFlies(strike: Strike): boolean
+	local id = strike.ability
+	if id == nil or strike.tick then
+		return false
+	end
+	local ability = abilityDefOf(strike.weapon, id)
+	return ability ~= nil and (ability.speed or 0) > 0
 end
 
 local function localUserId(): number
@@ -465,10 +627,48 @@ local function streak(
 	})
 end
 
+-- A pooled emitter whose last spray has died out (its colour may change without recolouring
+-- live particles), or a new one while the pool has room; nil when every one is still busy.
+local function takeSpark(now: number): Spark?
+	for _, spark in sparks do
+		if now >= spark.freeAt then
+			return spark
+		end
+	end
+	if #sparks >= Theme.COMBAT_RANGE_SPARK_POOL then
+		return nil
+	end
+	local anchor =
+		Create("Attachment", { Name = "RangeSparks", Parent = Workspace.Terrain }) :: Attachment
+	local emitter = Create("ParticleEmitter", {
+		Enabled = false,
+		LightEmission = 1,
+		LightInfluence = 0,
+		Size = NumberSequence.new(Theme.COMBAT_SPARK_SIZE, 0),
+		Lifetime = NumberRange.new(
+			Theme.COMBAT_SPARK_LIFETIME_MIN,
+			Theme.COMBAT_SPARK_LIFETIME_MAX
+		),
+		Speed = NumberRange.new(Theme.COMBAT_SPARK_SPEED_MIN, Theme.COMBAT_SPARK_SPEED_MAX),
+		Acceleration = Vector3.new(0, -Theme.COMBAT_SPARK_GRAVITY, 0),
+		Drag = Theme.COMBAT_SPARK_DRAG,
+		EmissionDirection = Enum.NormalId.Top,
+		Parent = anchor,
+	}) :: ParticleEmitter
+	local spark: Spark = { anchor = anchor, emitter = emitter, freeAt = 0 }
+	table.insert(sparks, spark)
+	return spark
+end
+
 -- A one-shot particle spray (dropped on low-end devices; the parts carry the information).
 -- With a direction the sparks leave along it; without one they fly out all round.
 local function sparkBurst(position: Vector3, direction: Vector3?, count: number, color: Color3): ()
 	if Theme.lowEndDevice or count <= 0 then
+		return
+	end
+	local now = os.clock()
+	local spark = takeSpark(now)
+	if spark == nil then
 		return
 	end
 	local axis = if direction ~= nil then unitOf(direction) else nil
@@ -478,31 +678,12 @@ local function sparkBurst(position: Vector3, direction: Vector3?, count: number,
 		-- The emitter sprays along the attachment's +Y (EmissionDirection Top).
 		frame = CFrame.fromMatrix(position, right, axis)
 	end
-	local anchor =
-		Create("Attachment", { Name = "RangeSparks", Parent = Workspace.Terrain }) :: Attachment
-	anchor.WorldCFrame = frame
 	local spread = if axis ~= nil then Theme.COMBAT_SPARK_SPREAD else 180
-	local emitter = Create("ParticleEmitter", {
-		Enabled = false,
-		Color = ColorSequence.new(color),
-		LightEmission = 1,
-		LightInfluence = 0,
-		Size = NumberSequence.new(Theme.COMBAT_SPARK_SIZE, 0),
-		Lifetime = NumberRange.new(
-			Theme.COMBAT_SPARK_LIFETIME_MIN,
-			Theme.COMBAT_SPARK_LIFETIME_MAX
-		),
-		Speed = NumberRange.new(Theme.COMBAT_SPARK_SPEED_MIN, Theme.COMBAT_SPARK_SPEED_MAX),
-		SpreadAngle = Vector2.new(spread, spread),
-		Acceleration = Vector3.new(0, -Theme.COMBAT_SPARK_GRAVITY, 0),
-		Drag = Theme.COMBAT_SPARK_DRAG,
-		EmissionDirection = Enum.NormalId.Top,
-		Parent = anchor,
-	}) :: ParticleEmitter
-	emitter:Emit(count)
-	task.delay(Theme.COMBAT_SPARK_LIFETIME_MAX, function()
-		anchor:Destroy()
-	end)
+	spark.anchor.WorldCFrame = frame
+	spark.emitter.Color = ColorSequence.new(color)
+	spark.emitter.SpreadAngle = Vector2.new(spread, spread)
+	spark.emitter:Emit(count)
+	spark.freeAt = now + Theme.COMBAT_SPARK_LIFETIME_MAX
 end
 
 -- A brief point light at a blast (low-end devices skip it).
@@ -562,9 +743,10 @@ end
 
 -- The arc's vertical band around its origin, for a body centre (RangeService + HitShapes):
 -- the body sphere must overlap [origin.Y - reachDown - pad, origin.Y + pad], so centres lie
--- within +pad+r / -(reachDown+pad+r). An airborne swing's strike carries
--- endPoint = origin - (0, reachDown, 0); a grounded one has none. r is the thinnest crowd
--- kind's radius, the band every enemy is at least hit in.
+-- within +pad+r / -(reachDown+pad+r). An airborne swing's strike (and, from the P3 review, an
+-- airborne Whirlwind or Overload Sweep arc) carries endPoint = origin - (0, reachDown, 0); a
+-- grounded one has none. r is the thinnest crowd kind's radius, the band every enemy is at
+-- least hit in.
 local function arcBand(strike: Strike, pad: number): (number, number)
 	local radius = math.huge
 	for _, kind in config().crowd.kinds do
@@ -582,7 +764,7 @@ end
 local function drawArc(
 	list: { FxPart },
 	strike: Strike,
-	variant: Types.RangeWeaponVariant?,
+	pad: number,
 	color: Color3,
 	fill: number,
 	edge: number
@@ -610,7 +792,6 @@ local function drawArc(
 	end
 	-- The band the slice reaches above and below: thin outer arcs joined by posts at the
 	-- ends and the middle, fainter than the slice so the swing itself stays the read.
-	local pad = impactOf(variant)
 	local up, down = arcBand(strike, pad)
 	local band = (fill + edge) / 2
 	local thin = Theme.COMBAT_RANGE_HITBOX_EDGE_WIDTH / 2
@@ -659,9 +840,15 @@ local function drawSphere(
 	)
 end
 
+-- An ability capsule (the impale dash, a zone) carries its real segment origin → endPoint; a
+-- weapon thrust has no end point and runs `size` along its direction.
 local function capsuleEnds(strike: Strike): (Vector3, Vector3, number)
 	local axis = unitOf(strike.direction) or Vector3.zAxis
 	local diameter = strike.width or Theme.COMBAT_RANGE_HITBOX_DEFAULT_WIDTH
+	local finish = strike.endPoint
+	if finish ~= nil then
+		return strike.origin, finish, diameter / 2
+	end
 	return strike.origin, strike.origin + axis * strike.size, diameter / 2
 end
 
@@ -760,6 +947,133 @@ local function drawRay(list: { FxPart }, strike: Strike, color: Color3): ()
 	local width = math.max(strike.width or 0, Theme.COMBAT_RANGE_TRACER_WIDTH)
 	tracer(list, from, finish, math.min(width, Theme.COMBAT_RANGE_TRACER_WIDTH * 2))
 	impact(list, finish, color)
+end
+
+-- An ability ray (the overcharged shot) hit everything inside its FULL width, so that whole
+-- tube is drawn (a weapon tracer is capped thinner), with a bright core shooting down it.
+local function drawAbilityRay(
+	list: { FxPart },
+	strike: Strike,
+	color: Color3,
+	fill: number,
+	edge: number
+): ()
+	local finish = rayEnd(strike)
+	local from = muzzleOf(strike.userId) or strike.origin
+	local diameter = strike.width or Theme.COMBAT_RANGE_HITBOX_DEFAULT_WIDTH
+	cylinder(list, from, finish, diameter, color, fill)
+	streak(
+		list,
+		from,
+		finish,
+		Theme.COMBAT_RANGE_ABILITY_RAY_CORE_WIDTH,
+		Theme.COMBAT_RANGE_TRACER_COLOR,
+		edge
+	)
+	ball(list, finish, diameter, color, edge, true)
+end
+
+-- Chain lightning ----------------------------------------------------------------------
+
+-- A crowd body's centre as drawn (reaction offsets included), nil once it is gone.
+local function centreOf(id: number): Vector3?
+	local feet = CrowdRenderer.GetPosition(id)
+	if feet == nil then
+		return nil
+	end
+	local height = CrowdRenderer.GetHeight(id) or Theme.COMBAT_RANGE_NUMBER_FALLBACK_HEIGHT
+	return feet + Vector3.new(0, height / 2, 0)
+end
+
+-- One jagged bolt from a to b: a bright core over a wider faint glow (the glow drops on low-end
+-- devices, and so do half the kinks). The kinks are random per client; both ends are exact.
+local function bolt(list: { FxPart }, a: Vector3, b: Vector3, opacity: number): ()
+	local along = b - a
+	local length = along.Magnitude
+	if length < EPSILON then
+		return
+	end
+	local u, v = basis(along / length)
+	local pieces = math.clamp(
+		math.ceil(length / Theme.COMBAT_RANGE_LIGHTNING_KINK_STUDS),
+		2,
+		Theme.COMBAT_RANGE_LIGHTNING_MAX_KINKS + 1
+	)
+	if Theme.lowEndDevice then
+		pieces = math.max(pieces // 2, 2)
+	end
+	local jitter = math.min(
+		Theme.COMBAT_RANGE_LIGHTNING_JITTER,
+		length * Theme.COMBAT_RANGE_LIGHTNING_JITTER_SHARE
+	)
+	local points: { Vector3 } = { a }
+	for index = 1, pieces - 1 do
+		local t = index / pieces
+		local turn = math.random() * 2 * math.pi
+		-- Widest in the middle, pinned at both ends.
+		local swing = jitter * math.sin(math.pi * t) * (0.4 + 0.6 * math.random())
+		table.insert(points, a + along * t + (u * math.cos(turn) + v * math.sin(turn)) * swing)
+	end
+	table.insert(points, b)
+	local core = 1 - (1 - Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY) * opacity
+	polyline(
+		list,
+		points,
+		Theme.COMBAT_RANGE_LIGHTNING_WIDTH,
+		u,
+		Theme.COMBAT_RANGE_LIGHTNING_CORE_COLOR,
+		core
+	)
+	if not Theme.lowEndDevice then
+		local glow = 1 - (1 - Theme.COMBAT_RANGE_LIGHTNING_GLOW_TRANSPARENCY) * opacity
+		polyline(
+			list,
+			points,
+			Theme.COMBAT_RANGE_LIGHTNING_GLOW_WIDTH,
+			u,
+			Theme.COMBAT_RANGE_LIGHTNING_COLOR,
+			glow
+		)
+	end
+end
+
+-- One bolt per id pair of strike.links (id 0 = `start`), with a spark where each lands. A pair
+-- whose body is already gone is skipped. True when a drawn link left the start.
+local function drawLinks(list: { FxPart }, strike: Strike, start: Vector3, opacity: number): boolean
+	local links = strike.links
+	if links == nil then
+		return false
+	end
+	local fromStart = false
+	local count = math.min(#links // 2, Theme.COMBAT_RANGE_LIGHTNING_MAX_LINKS)
+	for index = 1, count do
+		local fromId = links[index * 2 - 1]
+		local toId = links[index * 2]
+		local a = if fromId == 0 then start else centreOf(fromId)
+		local b = if toId == 0 then start else centreOf(toId)
+		if a ~= nil and b ~= nil then
+			bolt(list, a, b, opacity)
+			sparkBurst(
+				b,
+				b - a,
+				Theme.COMBAT_RANGE_LIGHTNING_SPARKS,
+				Theme.COMBAT_RANGE_LIGHTNING_COLOR
+			)
+			fromStart = fromStart or fromId == 0
+		end
+	end
+	return fromStart
+end
+
+-- A Chain Gun shot is lightning from the hand: its links, or on a miss one bolt to where the
+-- ray stopped.
+local function drawChainShot(list: { FxPart }, strike: Strike, color: Color3, opacity: number): ()
+	local from = muzzleOf(strike.userId) or strike.origin
+	if not drawLinks(list, strike, from, opacity) then
+		local finish = rayEnd(strike)
+		bolt(list, from, finish, opacity)
+		impact(list, finish, color)
+	end
 end
 
 -- An arrow strike: its flight was already drawn, so the strike marks where it went: shards and
@@ -909,11 +1223,25 @@ local function drawPellets(list: { FxPart }, strike: Strike, variant: Types.Rang
 	end
 end
 
+-- How long a hitbox effect of this strength holds (strength above 1 lets it linger).
+local function hitboxSeconds(strength: number): number
+	return math.clamp(
+		Theme.COMBAT_RANGE_HITBOX_SECONDS * math.max(strength, 1),
+		Theme.COMBAT_RANGE_HITBOX_SECONDS,
+		Theme.COMBAT_RANGE_HITBOX_MAX_SECONDS
+	)
+end
+
+-- `flight`: the strike resolves a projectile (its flight was drawn from the shot). `chain`: a
+-- Chain Gun shot, drawn as lightning instead of a tracer.
 local function drawHitbox(
 	strike: Strike,
 	variant: Types.RangeWeaponVariant?,
+	impactValues: Impact,
 	strength: number,
-	crit: boolean
+	crit: boolean,
+	flight: boolean,
+	chain: boolean
 ): ()
 	if strength <= 0 then
 		return
@@ -921,6 +1249,7 @@ local function drawHitbox(
 	local list: { FxPart } = {}
 	local color = if crit
 		then Theme.COMBAT_RANGE_HITBOX_CRIT_COLOR
+		elseif strike.ability ~= nil then Theme.COMBAT_RANGE_ABILITY_COLOR
 		else Theme.COMBAT_RANGE_HITBOX_COLOR
 	-- Strength fades the effect in (below 1) and lets it linger (above 1).
 	local opacity = math.min(strength, 1)
@@ -928,12 +1257,12 @@ local function drawHitbox(
 	local edge = 1 - (1 - Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY) * opacity
 	local shape = strike.shape
 	if shape == "arc" then
-		drawArc(list, strike, variant, color, fill, edge)
+		drawArc(list, strike, impactValues.pad, color, fill, edge)
 	elseif shape == "sphere" then
 		local shell = 1 - (1 - Theme.COMBAT_RANGE_HITBOX_SPHERE_TRANSPARENCY) * opacity
 		drawSphere(list, strike, color, shell, edge)
 		if variant ~= nil and variant.kind == "ranged" then
-			if isProjectile(variant) or variant.shape ~= "sphere" then
+			if flight or variant.shape ~= "sphere" then
 				if variant.shape == "ray" then
 					-- A bow's full-charge end strike also carries the arrow's final-frame hits.
 					local tube = (variant.width or 0) / 2
@@ -960,18 +1289,38 @@ local function drawHitbox(
 		drawCone(list, strike, color, fill, edge)
 		drawPellets(list, strike, variant)
 	elseif shape == "ray" then
-		if isProjectile(variant) then
+		if flight then
 			drawArrowHits(list, strike, color, nil)
+		elseif chain then
+			drawChainShot(list, strike, color, opacity)
+		elseif strike.ability ~= nil then
+			drawAbilityRay(list, strike, color, fill, edge)
 		else
 			drawRay(list, strike, color)
 		end
 	end
-	local seconds = math.clamp(
-		Theme.COMBAT_RANGE_HITBOX_SECONDS * math.max(strength, 1),
-		Theme.COMBAT_RANGE_HITBOX_SECONDS,
-		Theme.COMBAT_RANGE_HITBOX_MAX_SECONDS
+	play(list, hitboxSeconds(strength))
+end
+
+-- The lightning of an ability strike (Storm Coil ticks included): its links from the strike
+-- origin, drawn even when the tick itself skips the generic flash.
+local function drawAbilityLinks(strike: Strike, strength: number): ()
+	if strength <= 0 or strike.links == nil then
+		return
+	end
+	local list: { FxPart } = {}
+	-- Storm Coil's origin is its ground point; its bolts leave the glowing top AbilityFx draws.
+	local start = if strike.ability == COIL_ABILITY
+		then strike.origin + Vector3.new(0, Theme.COMBAT_RANGE_COIL_TOP_HEIGHT, 0)
+		else strike.origin
+	drawLinks(list, strike, start, math.min(strength, 1))
+	play(
+		list,
+		math.min(
+			Theme.COMBAT_RANGE_LIGHTNING_SECONDS * math.max(strength, 1),
+			Theme.COMBAT_RANGE_HITBOX_MAX_SECONDS
+		)
 	)
-	play(list, seconds)
 end
 
 -- Wireframe (true padded shape) ---------------------------------------------------------
@@ -1067,9 +1416,9 @@ local function wireArc(list: { FxPart }, strike: Strike, pad: number): ()
 	end
 end
 
-local function drawWireframe(strike: Strike, variant: Types.RangeWeaponVariant?): ()
+local function drawWireframe(strike: Strike, impactValues: Impact): ()
 	local list: { FxPart } = {}
-	local pad = impactOf(variant)
+	local pad = impactValues.pad
 	local shape = strike.shape
 	if shape == "arc" then
 		wireArc(list, strike, pad)
@@ -1173,34 +1522,45 @@ local function newBurst(playerGui: Instance): Burst
 		count = count,
 		strokes = strokes,
 		started = 0,
+		popAt = 0,
 		side = 1,
 		pop = 1,
 		active = false,
+		token = 0,
+		target = nil,
 	}
 end
 
 -- A free burst, or the oldest one recycled: a fast gun into a crowd must never pile up more
--- than MAX_ACTIVE billboards.
+-- than MAX_ACTIVE billboards. A merged burst held open has a future `started`, so it is the
+-- last to be taken.
 local function takeBurst(): Burst?
 	local oldest: Burst? = nil
+	local chosen: Burst? = nil
 	for _, burst in bursts do
 		if not burst.active then
-			return burst
+			chosen = burst
+			break
 		end
 		if oldest == nil or burst.started < oldest.started then
 			oldest = burst
 		end
 	end
-	if #bursts < Theme.COMBAT_RANGE_NUMBER_MAX_ACTIVE then
+	if chosen == nil and #bursts < Theme.COMBAT_RANGE_NUMBER_MAX_ACTIVE then
 		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		if playerGui == nil then
 			return nil
 		end
 		local burst = newBurst(playerGui)
 		table.insert(bursts, burst)
-		return burst
+		chosen = burst
 	end
-	return oldest
+	local taken = chosen or oldest
+	if taken ~= nil then
+		taken.token += 1
+		taken.target = nil
+	end
+	return taken
 end
 
 -- Top of a crowd body as drawn: CrowdRenderer.GetPosition is the feet (reaction offsets
@@ -1243,6 +1603,57 @@ local function burstPosition(strike: Strike): Vector3
 	return strike.origin + axis * strike.size * 0.5
 end
 
+-- A total and its "×N" (enemies hit) written into a burst, sized by the crowd and the strength.
+local function paintBurst(
+	burst: Burst,
+	total: number,
+	count: number,
+	crit: boolean,
+	strength: number
+): ()
+	local size = math.clamp(
+		strength,
+		Theme.COMBAT_RANGE_NUMBER_MIN_STRENGTH,
+		Theme.COMBAT_RANGE_NUMBER_MAX_STRENGTH
+	)
+	local color = if crit then Theme.COMBAT_RANGE_CRIT_COLOR else Theme.COLOR_TEXT
+	-- Bigger crowds make bigger numbers: a few px per doubling of the hit count.
+	local text = (
+		if crit then Theme.COMBAT_RANGE_NUMBER_CRIT_TEXT else Theme.COMBAT_RANGE_NUMBER_TEXT
+	) + Theme.COMBAT_RANGE_NUMBER_GROWTH_PER_DOUBLING * math.log(math.max(count, 1), 2)
+	burst.main.TextSize = math.floor(math.min(text, Theme.COMBAT_RANGE_NUMBER_MAX_TEXT))
+	burst.main.Text = Format.Cash(total)
+	burst.main.TextColor3 = color
+	burst.count.TextSize = Theme.COMBAT_RANGE_NUMBER_COUNT_TEXT
+	burst.count.Text = if count > 1 then "×" .. Format.Cash(count) else ""
+	burst.count.TextColor3 = color
+	burst.gui.Size = UDim2.fromOffset(
+		Theme.COMBAT_RANGE_NUMBER_WIDTH * layoutScale * size,
+		Theme.COMBAT_RANGE_NUMBER_HEIGHT * layoutScale * size
+	)
+end
+
+-- Shows a painted burst at `position`: popped now, fully opaque, and still until `started`.
+local function launchBurst(burst: Burst, position: Vector3): ()
+	burst.main.TextTransparency = 0
+	burst.count.TextTransparency = 0
+	for _, stroke in burst.strokes do
+		stroke.Transparency = 0
+	end
+	burst.anchor.WorldPosition = position
+	burst.gui.StudsOffset = Vector3.zero
+	burst.side = if math.random() < 0.5 then -1 else 1
+	burst.pop = if Theme.reducedMotion
+		then Theme.COMBAT_RANGE_NUMBER_REDUCED_POP_SCALE
+		else Theme.COMBAT_RANGE_NUMBER_POP_SCALE
+	burst.scale.Scale = burst.pop
+	local now = os.clock()
+	burst.popAt = now
+	burst.started = now
+	burst.active = true
+	burst.gui.Enabled = true
+end
+
 local function showNumbers(strike: Strike, total: number, crit: boolean, strength: number): ()
 	if strength <= 0 or total <= 0 then
 		return
@@ -1251,56 +1662,113 @@ local function showNumbers(strike: Strike, total: number, crit: boolean, strengt
 	if burst == nil then
 		return
 	end
-	local size = math.clamp(
-		strength,
-		Theme.COMBAT_RANGE_NUMBER_MIN_STRENGTH,
-		Theme.COMBAT_RANGE_NUMBER_MAX_STRENGTH
-	)
-	local hitCount = #strike.hits
-	local color = if crit then Theme.COMBAT_RANGE_CRIT_COLOR else Theme.COLOR_TEXT
-	-- Bigger crowds make bigger numbers: a few px per doubling of the hit count.
-	local text = (
-		if crit then Theme.COMBAT_RANGE_NUMBER_CRIT_TEXT else Theme.COMBAT_RANGE_NUMBER_TEXT
-	) + Theme.COMBAT_RANGE_NUMBER_GROWTH_PER_DOUBLING * math.log(math.max(hitCount, 1), 2)
-	burst.main.TextSize = math.floor(math.min(text, Theme.COMBAT_RANGE_NUMBER_MAX_TEXT))
-	burst.main.Text = Format.Cash(total)
-	burst.main.TextColor3 = color
-	burst.count.TextSize = Theme.COMBAT_RANGE_NUMBER_COUNT_TEXT
-	burst.count.Text = if hitCount > 1 then "×" .. Format.Cash(hitCount) else ""
-	burst.count.TextColor3 = color
-	burst.main.TextTransparency = 0
-	burst.count.TextTransparency = 0
-	for _, stroke in burst.strokes do
-		stroke.Transparency = 0
+	paintBurst(burst, total, #strike.hits, crit, strength)
+	launchBurst(burst, burstPosition(strike))
+end
+
+-- Lasting hits (ticks, a held beam) of one shooter + ability run into ONE burst: the first
+-- opens it, each later one arriving within `gap` of the previous adds to it, re-pops it a
+-- little and holds it open over the latest hits; it falls once the hits stop or it has been
+-- open TICK_MERGE_MAX_SECONDS (the next hit then opens a fresh one). "×N" counts the distinct
+-- enemies. Returns the kills the open burst has counted so far (this strike's alone when
+-- numbers are off).
+local function mergeNumbers(
+	key: string,
+	strike: Strike,
+	total: number,
+	crit: boolean,
+	kills: number,
+	gap: number,
+	strength: number
+): number
+	local now = os.clock()
+	local maxOpen = Theme.COMBAT_RANGE_TICK_MERGE_MAX_SECONDS
+	local merge: Merge? = merges[key]
+	if
+		merge ~= nil
+		and (
+			merge.burst.token ~= merge.token
+			or not merge.burst.active
+			or now - merge.lastAt > gap
+			or now - merge.openedAt >= maxOpen
+		)
+	then
+		merges[key] = nil
+		merge = nil
 	end
-	burst.gui.Size = UDim2.fromOffset(
-		Theme.COMBAT_RANGE_NUMBER_WIDTH * layoutScale * size,
-		Theme.COMBAT_RANGE_NUMBER_HEIGHT * layoutScale * size
-	)
-	burst.anchor.WorldPosition = burstPosition(strike)
-	burst.gui.StudsOffset = Vector3.zero
-	burst.side = if math.random() < 0.5 then -1 else 1
-	burst.pop = if Theme.reducedMotion
-		then Theme.COMBAT_RANGE_NUMBER_REDUCED_POP_SCALE
-		else Theme.COMBAT_RANGE_NUMBER_POP_SCALE
-	burst.scale.Scale = burst.pop
-	burst.started = os.clock()
-	burst.active = true
-	burst.gui.Enabled = true
+	if strength <= 0 or total <= 0 then
+		return if merge ~= nil then merge.kills + kills else kills
+	end
+	local opened = merge == nil
+	local running: Merge
+	if merge ~= nil then
+		running = merge
+	else
+		local burst = takeBurst()
+		if burst == nil then
+			return kills
+		end
+		running = {
+			burst = burst,
+			token = burst.token,
+			total = 0,
+			crit = false,
+			ids = {},
+			count = 0,
+			kills = 0,
+			openedAt = now,
+			lastAt = now,
+		}
+		merges[key] = running
+	end
+	running.total += total
+	running.crit = running.crit or crit
+	running.kills += kills
+	running.lastAt = now
+	for _, hit in strike.hits do
+		if not running.ids[hit.id] then
+			running.ids[hit.id] = true
+			running.count += 1
+		end
+	end
+	local burst = running.burst
+	paintBurst(burst, running.total, running.count, running.crit, strength)
+	local position = burstPosition(strike)
+	if opened then
+		launchBurst(burst, position)
+	else
+		burst.pop = if Theme.reducedMotion
+			then Theme.COMBAT_RANGE_TICK_REDUCED_POP_SCALE
+			else Theme.COMBAT_RANGE_TICK_POP_SCALE
+		burst.popAt = now
+		burst.target = position
+	end
+	-- Held until the next hit is overdue, never past the merge's own cap.
+	burst.started = math.min(now + gap, running.openedAt + maxOpen)
+	return running.kills
 end
 
 -- Pop, then an arc that peaks and falls below its start (Fortnite-style), fading at the end.
-local function stepBurst(burst: Burst, now: number): ()
+-- A merged burst held open (now < started) stays put at full size between its re-pops and
+-- drifts to its latest hits.
+local function stepBurst(burst: Burst, now: number, deltaTime: number): ()
 	local seconds = Theme.COMBAT_RANGE_NUMBER_SECONDS
-	local elapsed = now - burst.started
-	local u = elapsed / seconds
+	local u = math.max(now - burst.started, 0) / seconds
 	if u >= 1 then
 		burst.active = false
 		burst.gui.Enabled = false
+		burst.target = nil
 		return
 	end
-	local popLeft = math.max(0, 1 - elapsed / Theme.COMBAT_RANGE_NUMBER_POP_SECONDS)
+	local popLeft = math.max(0, 1 - (now - burst.popAt) / Theme.COMBAT_RANGE_NUMBER_POP_SECONDS)
 	burst.scale.Scale = 1 + (burst.pop - 1) * popLeft
+	local target = burst.target
+	if target ~= nil then
+		local alpha = if Theme.reducedMotion
+			then 1
+			else 1 - math.exp(-Theme.COMBAT_RANGE_NUMBER_FOLLOW_RATE * deltaTime)
+		burst.anchor.WorldPosition = burst.anchor.WorldPosition:Lerp(target, alpha)
+	end
 	local drift = if Theme.reducedMotion then 0 else Theme.COMBAT_RANGE_NUMBER_DRIFT
 	burst.gui.StudsOffset = Vector3.new(
 		burst.side * drift * u,
@@ -1338,21 +1806,25 @@ end
 -- and the server has already applied the real push, so a heavier weapon reads heavier on its
 -- own through the snapshot positions. Without "death" within its grace window the renderer
 -- kills the body itself, so every killed hit names it here.
-local function react(strike: Strike, variant: Types.RangeWeaponVariant?): ()
+local function react(strike: Strike, impactValues: Impact): ()
 	local flash = feedbackStrength("enemyFlash")
 	local reaction = feedbackStrength("enemyReaction")
 	if flash <= 0 and reaction <= 0 then
 		return
 	end
-	local _, knockback, launch = impactOf(variant)
-	local knocks = knockback > 0
-	local launches = launch > 0
+	-- A pulling ability (Blade Storm) drags bodies toward its centre, so they react inward.
+	local pulls = impactValues.pull > 0
+	local knocks = impactValues.knockback > 0 or pulls
+	local launches = impactValues.launch > 0
 	for _, hit in strike.hits do
 		if flash > 0 then
 			CrowdRenderer.React(hit.id, "flash", nil, flash)
 		end
 		if reaction > 0 then
 			local away = awayFrom(strike, hit.id)
+			if pulls then
+				away = -away
+			end
 			CrowdRenderer.React(hit.id, "flinch", away, reaction)
 			if knocks then
 				CrowdRenderer.React(hit.id, "knockback", away, reaction)
@@ -1710,7 +2182,9 @@ local function spawnFlight(
 	table.insert(flights, flight)
 end
 
--- What a volley's children inherit from their parent arrow.
+-- What a volley's children inherit from their parent arrow. `offset` is the part of the
+-- parent's hand-to-aim gap not yet blended out: a split right at the bow (Volley splits after
+-- one stud) must fan out of the hand, not out of the camera.
 type Fan = {
 	key: string,
 	speed: number,
@@ -1719,7 +2193,13 @@ type Fan = {
 	arc: number,
 	seq: number,
 	glow: boolean,
+	offset: Vector3,
 }
+
+-- The share of a flight's hand offset still shown t seconds after launch.
+local function blendLeft(t: number): number
+	return math.max(1 - t / Theme.COMBAT_RANGE_FLIGHT_BLEND_SECONDS, 0)
+end
 
 -- The children of a split at `position`, fanned by the server's own pattern (HitShapes.Fan
 -- around `heading`, seeded by seq, jittered by shooting.fanJitterShare); each keeps the
@@ -1733,7 +2213,7 @@ local function fanOut(fan: Fan, position: Vector3, heading: Vector3, remaining: 
 			position,
 			direction * fan.speed,
 			fan.gravity,
-			Vector3.zero,
+			fan.offset,
 			remaining,
 			fan.seq,
 			fan.glow,
@@ -1742,7 +2222,7 @@ local function fanOut(fan: Fan, position: Vector3, heading: Vector3, remaining: 
 	end
 end
 
-local function fanOf(flight: Flight): Fan
+local function fanOf(flight: Flight, t: number): Fan
 	return {
 		key = flight.key,
 		speed = flight.velocity.Magnitude,
@@ -1751,6 +2231,7 @@ local function fanOf(flight: Flight): Fan
 		arc = flight.splitArc,
 		seq = flight.seq,
 		glow = flight.glow,
+		offset = flight.offset * blendLeft(t),
 	}
 end
 
@@ -1759,7 +2240,7 @@ local function splitFlight(index: number, t: number): ()
 	local flight = flights[index]
 	local position, heading = ballistic(flight, t)
 	endFlight(index, nil)
-	fanOut(fanOf(flight), position, heading, flight.lifetime - t)
+	fanOut(fanOf(flight, t), position, heading, flight.lifetime - t)
 end
 
 -- Every parent of a shot that is still waiting to split, split where it is now.
@@ -1795,8 +2276,7 @@ local function stepFlights(now: number): ()
 			splitFlight(index, t)
 			continue
 		end
-		local blend = math.max(1 - t / Theme.COMBAT_RANGE_FLIGHT_BLEND_SECONDS, 0)
-		local shown = position + flight.offset * blend
+		local shown = position + flight.offset * blendLeft(t)
 		if velocity.Magnitude > EPSILON then
 			flight.part.CFrame = CFrame.lookAt(shown, shown + velocity)
 		else
@@ -1822,7 +2302,10 @@ local function onShot(fx: { [string]: any }): ()
 	if direction == nil or fxFolder == nil then
 		return
 	end
-	local variant = variantOf(fx.weapon, if typeof(fx.variant) == "string" then fx.variant else nil)
+	-- An ability's projectile (Volley, Cluster Shell) splits and flies by the ability's numbers.
+	local variant = if typeof(fx.ability) == "string"
+		then abilityShotVariant(fx.weapon, fx.ability)
+		else variantOf(fx.weapon, if typeof(fx.variant) == "string" then fx.variant else nil)
 	local gravity = if typeof(fx.gravity) == "number" then math.max(fx.gravity, 0) else 0
 	local charge = if typeof(fx.charge) == "number" then fx.charge else 0
 	local shell = variant ~= nil and variant.shape == "sphere"
@@ -1836,10 +2319,15 @@ local function onShot(fx: { [string]: any }): ()
 		-- The server split this shot here: whatever this client drew for it (the parent, or
 		-- children its fallback timer made) gives way to a fan from the true point.
 		local now = os.clock()
+		local carried = Vector3.zero
 		for index = #flights, 1, -1 do
 			local flight = flights[index]
 			if flight.key == key then
-				lifetime = math.min(lifetime, flight.lifetime - (now - flight.started))
+				local age = now - flight.started
+				lifetime = math.min(lifetime, flight.lifetime - age)
+				if flight.splitAt ~= nil then
+					carried = flight.offset * blendLeft(age)
+				end
 				endFlight(index, nil)
 			end
 		end
@@ -1851,6 +2339,7 @@ local function onShot(fx: { [string]: any }): ()
 			arc = if variant ~= nil then variant.splitArcDegrees or 0 else 0,
 			seq = fx.seq,
 			glow = glow,
+			offset = carried,
 		}, fx.origin, direction, math.max(lifetime, 0))
 		return
 	end
@@ -1901,6 +2390,197 @@ local function landFlight(strike: Strike): ()
 	end
 end
 
+-- Held beams ---------------------------------------------------------------------------
+
+local function beamLayer(
+	name: string,
+	start: Attachment,
+	finish: Attachment,
+	color: Color3,
+	transparency: number
+): Beam
+	return Create("Beam", {
+		Name = name,
+		Attachment0 = start,
+		Attachment1 = finish,
+		FaceCamera = true,
+		LightEmission = 1,
+		LightInfluence = 0,
+		Segments = 1,
+		Color = ColorSequence.new(color),
+		Transparency = NumberSequence.new(transparency),
+		Width0 = 0,
+		Width1 = 0,
+		Parent = start,
+	}) :: Beam
+end
+
+local function destroyBeam(userId: number): ()
+	local beam = beams[userId]
+	if beam == nil then
+		return
+	end
+	beams[userId] = nil
+	release(beam.tip)
+	local muzzle = beam.muzzle
+	if muzzle ~= nil then
+		release(muzzle)
+	end
+	beam.start:Destroy()
+	beam.finish:Destroy()
+end
+
+-- A Beam-family strike keeps its shooter's one beam alive and moves its end: the beam runs from
+-- the hand to where the server stopped the ray, as wide as the ray really is. It is the
+-- weapon's own visual, not a hitbox overlay, so feedback.hitboxEffect never hides it (review
+-- round); only its wireframe follows the panel toggle like every strike's.
+local function feedBeam(strike: Strike, variant: Types.RangeWeaponVariant): ()
+	if fxFolder == nil then
+		return
+	end
+	local direction = unitOf(strike.direction)
+	if direction == nil then
+		return
+	end
+	local finish = rayEnd(strike)
+	local length = (finish - strike.origin).Magnitude
+	local beam = beams[strike.userId]
+	if beam == nil then
+		local start =
+			Create("Attachment", { Name = "RangeBeamStart", Parent = Workspace.Terrain }) :: Attachment
+		local stop =
+			Create("Attachment", { Name = "RangeBeamEnd", Parent = Workspace.Terrain }) :: Attachment
+		local created: BeamFx = {
+			start = start,
+			finish = stop,
+			core = beamLayer(
+				"Core",
+				start,
+				stop,
+				Theme.COMBAT_RANGE_BEAM_CORE_COLOR,
+				Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY
+			),
+			-- Low-end devices draw the core alone.
+			glow = if Theme.lowEndDevice
+				then nil
+				else beamLayer(
+					"Glow",
+					start,
+					stop,
+					Theme.COMBAT_RANGE_BEAM_COLOR,
+					Theme.COMBAT_RANGE_BEAM_GLOW_TRANSPARENCY
+				),
+			tip = shapedPart(
+				Enum.PartType.Ball,
+				Theme.COMBAT_RANGE_BEAM_COLOR,
+				Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY
+			),
+			muzzle = if Theme.lowEndDevice
+				then nil
+				else shapedPart(
+					Enum.PartType.Ball,
+					Theme.COMBAT_RANGE_BEAM_CORE_COLOR,
+					Theme.COMBAT_RANGE_HITBOX_EDGE_TRANSPARENCY
+				),
+			width = 0,
+			lastAt = 0,
+			linger = 0,
+			range = 0,
+			origin = strike.origin,
+			length = length,
+			wallStop = true,
+			target = finish,
+			shown = nil,
+			-- Two players' beams never flicker in step.
+			phase = math.random(),
+			wiredAt = 0,
+		}
+		beams[strike.userId] = created
+		beam = created
+	end
+	local live = beam :: BeamFx
+	live.width = math.max(strike.width or variant.width or 0, Theme.COMBAT_RANGE_BEAM_MIN_WIDTH)
+	live.lastAt = os.clock()
+	-- Never under the floor: at rate 10, 2 / rate alone blinks the beam off on network jitter.
+	live.linger = math.max(
+		Theme.COMBAT_RANGE_BEAM_LINGER_INTERVALS / math.max(variant.rate, EPSILON),
+		Theme.COMBAT_RANGE_BEAM_MIN_LINGER_SECONDS
+	)
+	live.range = math.max(variant.range, length)
+	live.origin = strike.origin
+	live.length = length
+	live.target = finish
+	if strike.userId == localUserId() then
+		-- The local beam follows the live crosshair, so it must know what stopped this ray:
+		-- open air or a wall (it may reach past as the aim sweeps) or a spent pierce (it
+		-- stays this short until the next strike says otherwise).
+		local tolerance = Theme.COMBAT_RANGE_BEAM_STOP_TOLERANCE
+		if length >= variant.range - tolerance then
+			live.wallStop = true
+		else
+			local wall = Workspace:Raycast(strike.origin, direction * variant.range, flightParams())
+			live.wallStop = wall ~= nil and wall.Distance <= length + tolerance
+		end
+	end
+end
+
+local function stepBeams(now: number, deltaTime: number): ()
+	if next(beams) == nil then
+		return
+	end
+	local me = localUserId()
+	for userId, beam in beams do
+		if now - beam.lastAt > beam.linger then
+			destroyBeam(userId)
+			continue
+		end
+		local from = muzzleOf(userId) or beam.origin
+		local goal = beam.target
+		if userId == me then
+			-- Display prediction: the next strike leaves along the live camera ray, so the
+			-- local beam points there now at the length the server last allowed.
+			local aimOrigin, look = CameraController.GetAimRay()
+			local wall = Workspace:Raycast(aimOrigin, look * beam.range, flightParams())
+			local reach = if wall ~= nil then wall.Distance else beam.range
+			goal = aimOrigin
+				+ look * (if beam.wallStop then reach else math.min(beam.length, reach))
+		end
+		local previous = beam.shown
+		local shown = if previous == nil
+				or userId == me
+				or Theme.reducedMotion
+			then goal
+			else previous:Lerp(
+				goal,
+				1 - math.exp(-Theme.COMBAT_RANGE_BEAM_FOLLOW_RATE * deltaTime)
+			)
+		beam.shown = shown
+		beam.start.WorldPosition = from
+		beam.finish.WorldPosition = shown
+		local wobble = if Theme.reducedMotion
+			then 1
+			else 1 + Theme.COMBAT_RANGE_BEAM_FLICKER * math.sin(
+				(now + beam.phase) * 2 * math.pi * Theme.COMBAT_RANGE_BEAM_FLICKER_HZ
+			)
+		local width = beam.width * wobble
+		local core = width * Theme.COMBAT_RANGE_BEAM_CORE_SHARE
+		beam.core.Width0 = core
+		beam.core.Width1 = core
+		local glow = beam.glow
+		if glow ~= nil then
+			glow.Width0 = width
+			glow.Width1 = width
+		end
+		beam.tip.Size = Vector3.one * (Theme.COMBAT_RANGE_BEAM_TIP_SIZE * wobble)
+		beam.tip.Position = shown
+		local muzzle = beam.muzzle
+		if muzzle ~= nil then
+			muzzle.Size = Vector3.one * (Theme.COMBAT_RANGE_BEAM_MUZZLE_SIZE * wobble)
+			muzzle.Position = from
+		end
+	end
+end
+
 -- Strike intake ------------------------------------------------------------------------
 
 local function parseHits(raw: any): { Types.StrikeHit }?
@@ -1923,6 +2603,24 @@ local function parseHits(raw: any): { Types.StrikeHit }?
 		end
 	end
 	return hits
+end
+
+-- Chain links are flat id pairs; anything that is not a whole number pair is dropped.
+local function parseLinks(raw: any): { number }?
+	if typeof(raw) ~= "table" then
+		return nil
+	end
+	local links: { number } = {}
+	local list = raw :: { any }
+	for index = 1, #list - 1, 2 do
+		local fromId = list[index]
+		local toId = list[index + 1]
+		if typeof(fromId) == "number" and typeof(toId) == "number" then
+			table.insert(links, fromId)
+			table.insert(links, toId)
+		end
+	end
+	return if #links > 0 then links else nil
 end
 
 -- Only a strike with every field the drawing needs is trusted; it arrives from the network.
@@ -1951,12 +2649,44 @@ local function parseStrike(fx: { [string]: any }): Strike?
 		endPoint = if typeof(fx.endPoint) == "Vector3" then fx.endPoint else nil,
 		seq = if typeof(fx.seq) == "number" then fx.seq else nil,
 		hits = hits :: { Types.StrikeHit },
+		ability = if typeof(fx.ability) == "string" and fx.ability ~= "" then fx.ability else nil,
+		tick = fx.tick == true,
+		links = parseLinks(fx.links),
 	}
+end
+
+-- How long after one lasting hit the next still joins its burst: the ability's tick interval
+-- (an Overload Sweep's slice interval), or a held beam's fire interval, plus the merge grace.
+local function mergeGap(strike: Strike, variant: Types.RangeWeaponVariant?): number
+	local interval = 0
+	local id = strike.ability
+	if id ~= nil then
+		local ability = abilityDefOf(strike.weapon, id)
+		if ability ~= nil then
+			local tickSeconds = ability.tickSeconds
+			local duration = ability.durationSeconds
+			local count = ability.count
+			if tickSeconds ~= nil then
+				interval = tickSeconds
+			elseif duration ~= nil and count ~= nil and count > 0 then
+				interval = duration / count
+			end
+		end
+	elseif variant ~= nil and variant.rate > 0 then
+		interval = 1 / variant.rate
+	end
+	return math.max(interval, 0) + Theme.COMBAT_RANGE_TICK_MERGE_SECONDS
 end
 
 local function onStrike(strike: Strike): ()
 	local variant = variantOf(strike.weapon, strike.variant)
-	if isProjectile(variant) then
+	local ability = strike.ability
+	-- Only a weapon shot is its family's held beam; a Beam-family ability (Overload Sweep) is
+	-- not. Held-beam strikes also arrive as ticks: the beam path owns them.
+	local beamWeapon = ability == nil and variant ~= nil and variant.continuous == true
+	local lasting = strike.tick or beamWeapon
+	local flight = if ability ~= nil then abilityFlies(strike) else isProjectile(variant)
+	if flight then
 		landFlight(strike)
 		-- An empty end strike (a set/reset/stress clearing the air, or a split child whose
 		-- siblings filled the cap) only stops its flight: no flash, no sparks.
@@ -1964,6 +2694,11 @@ local function onStrike(strike: Strike): ()
 			return
 		end
 	end
+	local chain = ability == nil
+		and strike.shape == "ray"
+		and variant ~= nil
+		and (variant.chainCount or 0) > 0
+	local impactValues = impactOf(strike, variant)
 	local total = 0
 	local kills = 0
 	local crit = false
@@ -1975,49 +2710,103 @@ local function onStrike(strike: Strike): ()
 		crit = crit or hit.crit
 	end
 	local hitCount = #strike.hits
+	local now = os.clock()
 
-	drawHitbox(strike, variant, feedbackStrength("hitboxEffect"), crit)
-	if wireframe then
-		drawWireframe(strike, variant)
+	-- Every drawing reads the bodies before react() starts any death flight.
+	local hitboxStrength = feedbackStrength("hitboxEffect")
+	local wire = wireframe
+	if beamWeapon then
+		feedBeam(strike, variant :: Types.RangeWeaponVariant)
+		-- One wireframe per marker interval: ten a second would bury the beam.
+		local beam = beams[strike.userId]
+		if beam ~= nil then
+			wire = wire and now - beam.wiredAt >= Theme.COMBAT_RANGE_BEAM_MARKER_SECONDS
+			if wire then
+				beam.wiredAt = now
+			end
+		end
+	elseif not strike.tick then
+		drawHitbox(strike, variant, impactValues, hitboxStrength, crit, flight, chain)
+	end
+	if ability ~= nil then
+		drawAbilityLinks(strike, hitboxStrength)
+	end
+	if wire then
+		drawWireframe(strike, impactValues)
 	end
 	if hitCount > 0 then
-		react(strike, variant)
+		react(strike, impactValues)
 	end
 	if strike.userId ~= localUserId() or hitCount == 0 then
 		return
 	end
 
+	-- A held beam marks and pulses at most once per BEAM_MARKER_SECONDS; a kill always does.
+	local quiet = beamWeapon
+		and kills == 0
+		and now - beamMarkedAt < Theme.COMBAT_RANGE_BEAM_MARKER_SECONDS
+	if beamWeapon and not quiet then
+		beamMarkedAt = now
+	end
 	local marker = crosshair
-	if marker ~= nil then
+	if marker ~= nil and not quiet then
 		marker.Mark(crit, kills > 0, feedbackStrength("hitMarker"))
 	end
-	showNumbers(strike, total, crit, feedbackStrength("numbers"))
 
-	local hitstopSeconds = math.min(
-		Theme.COMBAT_RANGE_HITSTOP_BASE + Theme.COMBAT_RANGE_HITSTOP_PER_HIT * (hitCount - 1),
-		Theme.COMBAT_RANGE_HITSTOP_MAX
-	)
-	hitstop(hitstopSeconds * feedbackStrength("hitstop"))
+	local shownKills = kills
+	if lasting then
+		local key = tostring(strike.userId) .. ":" .. (ability or ("beam:" .. strike.weapon))
+		shownKills = mergeNumbers(
+			key,
+			strike,
+			total,
+			crit,
+			kills,
+			mergeGap(strike, variant),
+			feedbackStrength("numbers")
+		)
+	else
+		showNumbers(strike, total, crit, feedbackStrength("numbers"))
+		local hitstopSeconds = math.min(
+			Theme.COMBAT_RANGE_HITSTOP_BASE + Theme.COMBAT_RANGE_HITSTOP_PER_HIT * (hitCount - 1),
+			Theme.COMBAT_RANGE_HITSTOP_MAX,
+			(now - lastLocalHitAt) * Theme.COMBAT_RANGE_HITSTOP_INTERVAL_SHARE
+		)
+		hitstop(hitstopSeconds * feedbackStrength("hitstop"))
+	end
+	lastLocalHitAt = now
 
-	local _, knockback = impactOf(variant)
-	local heavy = knockback >= Theme.COMBAT_RANGE_HEAVY_KNOCKBACK
-		or kills >= Theme.COMBAT_RANGE_EDGE_FLASH_KILLS
+	-- Lasting hits never count as heavy: their shake and pulse are a soft running rumble.
+	local heavy = not lasting
+		and (
+			impactValues.knockback >= Theme.COMBAT_RANGE_HEAVY_KNOCKBACK
+			or kills >= Theme.COMBAT_RANGE_EDGE_FLASH_KILLS
+		)
 	local shake = if heavy
 		then Theme.COMBAT_RANGE_SHAKE_HEAVY
-		else Theme.COMBAT_RANGE_SHAKE_LIGHT + Theme.COMBAT_RANGE_SHAKE_PER_KILL * kills
-	CameraController.Shake(
-		math.min(shake, Theme.COMBAT_RANGE_SHAKE_HEAVY) * feedbackStrength("shake")
-	)
+		else math.min(
+			Theme.COMBAT_RANGE_SHAKE_LIGHT + Theme.COMBAT_RANGE_SHAKE_PER_KILL * kills,
+			Theme.COMBAT_RANGE_SHAKE_HEAVY
+		)
+	local soften = if lasting then Theme.COMBAT_RANGE_TICK_SHAKE_SCALE else 1
+	CameraController.Shake(shake * soften * feedbackStrength("shake"))
 	if kills >= Theme.COMBAT_RANGE_EDGE_FLASH_KILLS then
 		edgeFlash(feedbackStrength("edgeFlash"))
 	end
-	local haptics = feedbackStrength("haptics")
-	if heavy then
-		pulse(Theme.COMBAT_RANGE_HAPTIC_HEAVY * haptics, Theme.COMBAT_RANGE_HAPTIC_HEAVY_SECONDS)
-	else
-		pulse(Theme.COMBAT_RANGE_HAPTIC_LIGHT * haptics, Theme.COMBAT_RANGE_HAPTIC_SECONDS)
+	if not quiet then
+		local haptics = feedbackStrength("haptics")
+			* (if lasting then Theme.COMBAT_RANGE_TICK_HAPTIC_SCALE else 1)
+		if heavy then
+			pulse(
+				Theme.COMBAT_RANGE_HAPTIC_HEAVY * haptics,
+				Theme.COMBAT_RANGE_HAPTIC_HEAVY_SECONDS
+			)
+		else
+			pulse(Theme.COMBAT_RANGE_HAPTIC_LIGHT * haptics, Theme.COMBAT_RANGE_HAPTIC_SECONDS)
+		end
 	end
-	updateCounters(hitCount, kills, feedbackStrength("counters"))
+	-- A lasting hit's kill line shows the running total of its burst.
+	updateCounters(hitCount, if kills > 0 then shownKills else 0, feedbackStrength("counters"))
 end
 
 local function applyFx(fx: any): ()
@@ -2133,6 +2922,8 @@ local function updateCrosshair(): ()
 		else (if slot == "melee" then startLoadout.melee else startLoadout.ranged)
 	local variant = variantOf(family, if loadout ~= nil then loadout.variants[family] else nil)
 	local ranged = variant ~= nil and variant.kind == "ranged"
+	-- Only a bow has a draw: a held beam or a Mag Dump reuses input's hold, never the ring.
+	local charges = ranged and variant ~= nil and (variant.chargeSeconds or 0) > 0
 	local gapPixels: number? = nil
 	local camera = Workspace.CurrentCamera
 	if ranged and camera ~= nil then
@@ -2146,17 +2937,18 @@ local function updateCrosshair(): ()
 		gapPixels,
 		InputController.IsAiming(),
 		CameraController.IsActive(),
-		if ranged then InputController.GetCharge() or 0 else 0
+		if charges then InputController.GetCharge() or 0 else 0
 	)
 end
 
-local function onRenderStep(): ()
+local function onRenderStep(deltaTime: number): ()
 	local now = os.clock()
 	stepEffects(now)
 	stepFlights(now)
+	stepBeams(now, deltaTime)
 	for _, burst in bursts do
 		if burst.active then
-			stepBurst(burst, now)
+			stepBurst(burst, now, deltaTime)
 		end
 	end
 	if next(frozenTracks) ~= nil and now >= hitstopUntil then
@@ -2304,6 +3096,13 @@ function FeedbackController.Start(): ()
 		Create("Folder", { Name = Theme.COMBAT_RANGE_FX_FOLDER, Parent = Workspace }) :: Folder
 	detectHaptics()
 	table.insert(connections, RunService.RenderStepped:Connect(onRenderStep))
+	-- A player who leaves mid-beam takes the beam along (no more strikes would end it on time).
+	table.insert(
+		connections,
+		Players.PlayerRemoving:Connect(function(player: Player)
+			destroyBeam(player.UserId)
+		end)
+	)
 	task.spawn(function()
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
 		local combatFx =
@@ -2400,6 +3199,14 @@ function FeedbackController.Destroy(): ()
 		flight.part:Destroy()
 	end
 	table.clear(flights)
+	for userId in beams do
+		destroyBeam(userId)
+	end
+	table.clear(merges)
+	for _, spark in sparks do
+		spark.anchor:Destroy()
+	end
+	table.clear(sparks)
 	for _, burst in bursts do
 		burst.gui:Destroy()
 		burst.anchor:Destroy()

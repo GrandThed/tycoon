@@ -8,7 +8,7 @@
 -- value) intent, and the display refreshes when the server's TuneState lands in Tuning. The
 -- slider span and step are derived from the base value so a new config key needs no code.
 --
--- Layout: a tab and three readout lines stay on screen; the body opens under them and SCROLLS
+-- Layout: a tab and the readout lines stay on screen; the body opens under them and SCROLLS
 -- rather than shrinking on a short phone viewport, because every row is a 48 design px target
 -- (44 physical px at MIN_SCALE). Sections collapse so the long lists stay out of the way.
 --
@@ -22,6 +22,11 @@
 -- slot (Melee, Ranged): the families grouped by era with their names, then the chosen family's
 -- variant buttons. The number rows below follow the ACTIVE slot (deps.getActiveSlot, which 1/2
 -- switch locally), polled each frame and rebuilt only when that family or variant changes.
+--
+-- P3 (INTERFACES "P3 contracts"): the Weapons section opens with ONE big "Cooldowns" button
+-- (RequestTune abilities.cooldownScale 0 / 1: Ben's Studio is in Spanish, so no menu digging),
+-- and the active family's "Ability: <name>" rows follow its variant rows. A fourth readout
+-- line totals the latest cast from RangeStats.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -81,7 +86,15 @@ local VARIANT_ORDER = {
 	"splitCount",
 	"splitDistance",
 	"splitArcDegrees",
+	"bloomMult",
+	"chainCount",
+	"chainRadius",
+	"chainFalloff",
 }
+-- Ability fields that lead the ability block; the other numeric fields follow alphabetically
+-- (id and name are strings, never rows).
+local ABILITY_ORDER = { "cooldownSeconds", "minCooldownSeconds", "killRefundSeconds", "damage" }
+local COOLDOWN_SCALE_PATH = "abilities.cooldownScale"
 local SLOTS = { "melee", "ranged" }
 local SLOT_TITLES: { [string]: string } = { melee = "Melee", ranged = "Ranged" }
 local FAMILY_COLUMNS = 2
@@ -94,7 +107,7 @@ local TOGGLE_KEYS: { [Enum.KeyCode]: boolean } = {
 	[Enum.KeyCode.P] = true,
 	[Enum.KeyCode.DPadUp] = true,
 }
-local HINT_TEXT = "P: panel · Alt: cursor · 1/2: weapon"
+local HINT_TEXT = "P: panel · Alt: cursor · 1/2: weapon · Q/E: ability"
 
 local RangePanel = {}
 
@@ -122,9 +135,12 @@ local function rangeFor(path: string, base: number): (number, number)
 	if string.sub(path, 1, #FEEDBACK_PREFIX) == FEEDBACK_PREFIX then
 		return Theme.COMBAT_RANGE_PANEL_FEEDBACK_MAX, Theme.COMBAT_RANGE_PANEL_FEEDBACK_STEP
 	end
+	-- A fraction or a sub-second time (0.25 s ticks, 0.3 s refunds, 0.8 falloff) needs
+	-- hundredths; the wide span floor is for zero defaults (cap, launch) and whole numbers.
+	local small = base ~= 0 and math.abs(base) < 1
 	local span = math.max(
 		math.abs(base) * Theme.COMBAT_RANGE_PANEL_RANGE_FACTOR,
-		Theme.COMBAT_RANGE_PANEL_MIN_SPAN
+		if small then Theme.COMBAT_RANGE_PANEL_SMALL_SPAN else Theme.COMBAT_RANGE_PANEL_MIN_SPAN
 	)
 	if isInteger(base) and (base == 0 or math.abs(base) >= WHOLE_STEP_FROM) then
 		return span, 1
@@ -167,6 +183,24 @@ local function sortedKeys(map: { [string]: any }): { string }
 	end
 	table.sort(keys)
 	return keys
+end
+
+-- An ability's display name from its id (any family that carries it), else the id itself.
+local function abilityName(id: string): string
+	local weapons = (Tuning.Get() :: any).weapons
+	if typeof(weapons) == "table" then
+		for _, def in weapons do
+			local ability = if typeof(def) == "table" then def.ability else nil
+			if
+				typeof(ability) == "table"
+				and ability.id == id
+				and typeof(ability.name) == "string"
+			then
+				return ability.name
+			end
+		end
+	end
+	return id
 end
 
 function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
@@ -413,6 +447,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	local crowdLine =
 		label("Clear — · Alive —", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
 	local frameLine = label("", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
+	local abilityLine = label("Ability: —", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
 	local serverMs: number? = nil
 	local clientFps: number? = nil
 	local function paintFrameLine(): ()
@@ -527,6 +562,12 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			return math.max(math.floor(value / step + 0.5) * step, 0)
 		end
 
+		-- A typed number is meant exactly (0.25 s ticks on a 0.1 step would become 0.3).
+		local typedScale = 10 ^ Theme.COMBAT_RANGE_PANEL_TYPED_DECIMALS
+		local function keep(value: number): number
+			return math.max(math.floor(value * typedScale + 0.5) / typedScale, 0)
+		end
+
 		local minus = button("−", controls, nil)
 		minus.Size = UDim2.fromOffset(stepWidth, Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT)
 		minus.TextSize = Theme.TEXT_LARGE
@@ -611,8 +652,8 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 				else caption
 		end
 
-		local function send(value: number, force: boolean): ()
-			local snapped = snap(value)
+		local function send(value: number, force: boolean, typed: boolean?): ()
+			local snapped = if typed then keep(value) else snap(value)
 			show(snapped)
 			local now = os.clock()
 			if not force and now - lastSent < Theme.COMBAT_RANGE_PANEL_SEND_SECONDS then
@@ -639,7 +680,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			box.FocusLost:Connect(function()
 				local typed = tonumber(box.Text)
 				if typed ~= nil and typed == typed then
-					send(typed, true)
+					send(typed, true, true)
 				else
 					box.Text = displayNumber(current)
 				end
@@ -763,6 +804,32 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	-- Section: weapons per slot, then the active slot's numbers. ----------------------------
 	local weaponSection = section("Weapons", true)
 
+	-- One obvious switch before anything else (Ben's Studio is in Spanish; no menu digging):
+	-- off = abilities.cooldownScale 0, every ability castable at once; normal = 1.
+	local cooldownButton = button("", weaponSection, function()
+		local scale = valueAt(COOLDOWN_SCALE_PATH)
+		local off = typeof(scale) == "number" and scale <= 0
+		deps.onTune(COOLDOWN_SCALE_PATH, if off then 1 else 0)
+	end)
+	cooldownButton.Size = UDim2.new(1, 0, 0, Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT)
+	cooldownButton.Font = Theme.FONT_BOLD
+	local function paintCooldowns(): ()
+		local scale = valueAt(COOLDOWN_SCALE_PATH)
+		local value = if typeof(scale) == "number" then scale else 1
+		if value <= 0 then
+			cooldownButton.Text = "Cooldowns: OFF  ·  click for normal"
+			cooldownButton.BackgroundColor3 = Theme.COLOR_HIGHLIGHT
+			cooldownButton.TextColor3 = Theme.COLOR_TEXT_DARK
+		else
+			local state = if value == 1
+				then "Cooldowns: normal"
+				else "Cooldowns: ×" .. Format.Rate(value)
+			cooldownButton.Text = state .. "  ·  click for off"
+			cooldownButton.BackgroundColor3 = Theme.COLOR_BG_LIGHT
+			cooldownButton.TextColor3 = Theme.COLOR_TEXT
+		end
+	end
+
 	local function familyDef(family: string): Types.RangeWeaponDef?
 		local def = Tuning.Get().weapons[family]
 		return if typeof(def) == "table" then def else nil
@@ -841,6 +908,9 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	local tuningTitle = label("", Theme.COMBAT_RANGE_PANEL_LABEL_HEIGHT, weaponSection)
 	tuningTitle.Font = Theme.FONT_BOLD
 	local variantRows = stack("VariantRows", weaponSection)
+	local abilityTitle = label("", Theme.COMBAT_RANGE_PANEL_LABEL_HEIGHT, weaponSection)
+	abilityTitle.Font = Theme.FONT_BOLD
+	local abilityRows = stack("AbilityRows", weaponSection)
 
 	-- A slot's variant buttons, rebuilt when the family in that slot changes.
 	local function buildSlotVariants(slot: string): ()
@@ -873,6 +943,40 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		end
 	end
 
+	-- `prefix`'s numeric fields of `fields` as rows: `leading` first, the rest alphabetically.
+	local function orderedRows(
+		parentFrame: Instance,
+		prefix: string,
+		fields: { [string]: any },
+		leading: { string }
+	): ()
+		local listed: { [string]: boolean } = {}
+		for _, field in leading do
+			listed[field] = true
+			if typeof(fields[field]) == "number" then
+				local row = numberRow(parentFrame, prefix .. field, field)
+				if row ~= nil then
+					table.insert(weaponRows, row)
+				end
+			end
+		end
+		local rest: { [string]: any } = {}
+		for field, value in fields do
+			if not listed[field] then
+				rest[field] = value
+			end
+		end
+		rowsFor(parentFrame, prefix, rest, weaponRows)
+	end
+
+	local function clearRows(container: Instance): ()
+		for _, child in container:GetChildren() do
+			if not child:IsA("UIListLayout") then
+				child:Destroy()
+			end
+		end
+	end
+
 	-- The number rows of the active slot's family and variant; rebuilt only on a change.
 	local function buildVariant(): ()
 		for family, item in familyButtons do
@@ -893,55 +997,43 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		for _, row in weaponRows do
 			disconnectAll(row.connections)
 		end
-		for _, child in variantRows:GetChildren() do
-			if not child:IsA("UIListLayout") then
-				child:Destroy()
-			end
-		end
+		clearRows(variantRows)
+		clearRows(abilityRows)
 		table.clear(weaponRows)
 		local chosen = def.variants[key]
-		if chosen == nil then
-			return
-		end
-		local fields = chosen :: any
-		local prefix = "weapons." .. family .. ".variants." .. key .. "."
-		local listed: { [string]: boolean } = {}
-		for _, field in VARIANT_ORDER do
-			listed[field] = true
-			if typeof(fields[field]) == "number" then
-				local row = numberRow(variantRows, prefix .. field, field)
-				if row ~= nil then
-					table.insert(weaponRows, row)
-				end
-			end
-		end
-		local rest: { [string]: any } = {}
-		for field, value in fields do
-			if not listed[field] then
-				rest[field] = value
-			end
-		end
-		rowsFor(variantRows, prefix, rest, weaponRows)
-		-- The melee combo multipliers are an array; Tuning addresses them as chain.<n>.
-		local chain = fields.chain
-		if typeof(chain) == "table" then
-			for index, value in chain do
-				if typeof(value) == "number" then
-					local row = numberRow(
-						variantRows,
-						prefix .. "chain." .. tostring(index),
-						"chain " .. tostring(index)
-					)
-					if row ~= nil then
-						table.insert(weaponRows, row)
+		if chosen ~= nil then
+			local fields = chosen :: any
+			local prefix = "weapons." .. family .. ".variants." .. key .. "."
+			orderedRows(variantRows, prefix, fields, VARIANT_ORDER)
+			-- The melee combo multipliers are an array; Tuning addresses them as chain.<n>.
+			local chain = fields.chain
+			if typeof(chain) == "table" then
+				for index, value in chain do
+					if typeof(value) == "number" then
+						local row = numberRow(
+							variantRows,
+							prefix .. "chain." .. tostring(index),
+							"chain " .. tostring(index)
+						)
+						if row ~= nil then
+							table.insert(weaponRows, row)
+						end
 					end
 				end
 			end
 		end
+		-- The family's ability is shared by every variant, so its rows follow the family.
+		local ability = def.ability
+		if ability == nil then
+			abilityTitle.Text = "Ability: none"
+			return
+		end
+		abilityTitle.Text = "Ability: " .. ability.name
+		orderedRows(abilityRows, "weapons." .. family .. ".ability.", ability :: any, ABILITY_ORDER)
 	end
 
 	-- Sections: movement, shooting, controls, feedback. ------------------------------------
-	local groups = { "movement", "shooting", "controls", "feedback" }
+	local groups = { "movement", "shooting", "controls", "feedback", "abilities" }
 	for _, group in groups do
 		local map = (config :: any)[group]
 		if typeof(map) == "table" then
@@ -959,6 +1051,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			row.refresh()
 		end
 		paintTouchMode()
+		paintCooldowns()
 	end
 
 	table.insert(
@@ -1028,6 +1121,17 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 				.. Format.Cash(stats.alive)
 			serverMs = stats.serverFrameMs
 			paintFrameLine()
+			-- Ability totals are nil until the first cast (CombatUIController checked the types).
+			local ability = stats.ability
+			if ability ~= nil and ability ~= "" then
+				abilityLine.Text = "Ability: "
+					.. abilityName(ability)
+					.. " — "
+					.. Format.Cash(stats.abilityHits or 0)
+					.. " hits, "
+					.. Format.Cash(stats.abilityKills or 0)
+					.. " kills"
+			end
 		end,
 		SetLayout = function(scale: number, viewportSize: Vector2, bottomReserve: number)
 			uiScale.Scale = scale

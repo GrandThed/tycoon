@@ -36,6 +36,7 @@ local WaveService = require(combatFolder:WaitForChild("WaveService"))
 local DebugService = require(combatFolder:WaitForChild("DebugService"))
 local ReturnService = require(combatFolder:WaitForChild("ReturnService"))
 local RangeService = require(combatFolder:WaitForChild("RangeService"))
+local AbilityService = require(combatFolder:WaitForChild("AbilityService"))
 
 type Service = {
 	Init: () -> (),
@@ -195,6 +196,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		-- The range writes nothing to the profile; it is loaded only so the client's boot
 		-- sequence (the Snapshot) runs exactly as in a mission.
 		RangeService.AddPlayer(player)
+		AbilityService.AddPlayer(player)
 		sendSnapshot(player)
 		return
 	end
@@ -274,6 +276,8 @@ local orderedServices: { Service } = {
 	DebugService,
 	-- Last before the return path: it builds the range arena over ArenaService's fallback pad.
 	RangeService,
+	-- P3: needs RangeService started (its hooks and the kill listener); inert off the range.
+	AbilityService,
 	returnBoot,
 }
 
@@ -368,6 +372,13 @@ RemoteService.SetHandler("RequestRangeDraw", function(player: Player, weapon: st
 	RangeService.OnDraw(player, weapon)
 end)
 
+RemoteService.SetHandler(
+	"RequestRangeAbility",
+	function(player: Player, slot: string, seq: number, origin: Vector3, direction: Vector3)
+		AbilityService.OnCast(player, slot, seq, origin, direction)
+	end
+)
+
 RemoteService.SetHandler("RequestDash", function(player: Player, direction: Vector3)
 	RangeService.OnDash(player, direction)
 end)
@@ -433,6 +444,7 @@ end
 -- Teardown: leave the party (which clears the registry entry with the last member), then the
 -- final save. Both steps are idempotent, so PlayerRemoving and the shutdown flush may both run.
 local function releasePlayer(player: Player): ()
+	AbilityService.RemovePlayer(player)
 	RangeService.RemovePlayer(player)
 	ArenaService.Remove(player)
 	-- A refused first arrival opened a run but was never a member, so Remove did nothing. Either

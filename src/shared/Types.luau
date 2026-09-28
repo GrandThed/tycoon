@@ -1500,6 +1500,10 @@ export type RangeAbilitiesConfig = {
 	cooldownScale: number,
 	-- A cast may arrive this many seconds before the server's ready time and still count.
 	earlySeconds: number,
+	-- Review round (P3): a cast may arrive this early before the caster's busy window ends
+	-- (client clock slack), and Impale Dash stops this many studs short of a wall.
+	busyEarlySeconds: number,
+	dashWallClearance: number,
 }
 -- The family chosen for each slot plus the variant chosen per family.
 export type RangeLoadout = { melee: string, ranged: string, variants: { [string]: string } }
@@ -1573,6 +1577,9 @@ export type RangeShootingConfig = {
 	-- share of the gap between children.
 	projectileMaxSeconds: number,
 	fanJitterShare: number,
+	-- Review round (P3): shots of banked credit a slot may fire back to back after a pause
+	-- (network jitter), on top of the one its rate allows.
+	rateBurstShots: number,
 }
 -- touchMode: "autoFire" = attacks fire while the target is under the crosshair / in the hitbox;
 -- "tapFire" = a tap anywhere on the right half attacks.
@@ -1688,7 +1695,7 @@ export type CombatFxStrike = {
 -- P3: an ability was cast (range). Sent to everyone so every client draws its lasting visual;
 -- damage still arrives as CombatFxStrike. origin = the caster's root at the cast; direction =
 -- the unit aim (flattened for melee abilities); target = the resolved ground point of an aimed
--- ability (zones, leap) or the end of a dash. startsAt = workspace:GetServerTimeNow() of the
+-- ability (zones, leap), the end of a dash, or the floor centre of the Earthquake rings. startsAt = workspace:GetServerTimeNow() of the
 -- cast; seq = the salted seed of any scatter (cluster bomblets). cancel = it ended early
 -- (family switched, player left): stop its visuals.
 export type CombatFxCast = {
@@ -1707,10 +1714,13 @@ export type CombatFxCast = {
 -- floorAt = the earliest readyAt kill refunds can reach; busyUntil = the caster is locked in an
 -- ability (channel, leap, dash, windup) until then. ability = "" when the family has none.
 export type RangeAbilitySlotState = { ability: string, readyAt: number, floorAt: number }
+-- refusedSeq (review round): set only on the answer to a refused cast, so the client cancels
+-- that cast's local effects at once instead of waiting for a timeout.
 export type RangeAbilityState = {
 	melee: RangeAbilitySlotState,
 	ranged: RangeAbilitySlotState,
 	busyUntil: number,
+	refusedSeq: number?,
 }
 -- P3, server only: one ability hit handed to RangeService.Strike. size = radius (sphere) or reach
 -- (arc, cone, ray, capsule); capsule/ray width is the FULL width; a capsule runs origin →
@@ -1718,6 +1728,8 @@ export type RangeAbilityState = {
 -- direction for capsule and ray); pull > 0 pushes TOWARD the origin instead. crit: rays test the
 -- head sphere. exclude: ids skipped, and every id hit is added (one sweep hits each enemy once).
 -- chain: every enemy hit starts a chain (as the Chain Gun). cast = the cast id the readout sums.
+-- airReach (review round): an arc around the caster's own root reaches down
+-- movement.airSwingReachDown while the caster is airborne, exactly like a melee swing.
 export type AbilityStrikeSpec = {
 	shape: HitShape,
 	origin: Vector3,
@@ -1736,6 +1748,7 @@ export type AbilityStrikeSpec = {
 	exclude: { [number]: boolean }?,
 	chain: { count: number, radius: number, falloff: number }?,
 	tick: boolean?,
+	airReach: boolean?,
 	cast: number,
 }
 -- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.rifle.variants.A.damage") → value.

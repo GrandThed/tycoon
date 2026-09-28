@@ -1579,3 +1579,190 @@ Bow cadence:
   Longbow A's pierce 5 / cap 5 therefore hits 5, and B's pierce 3 / cap 3 hits 3; the cap is the
   real limit in both. The hitscan rifle instead hits `max(1, pierce)`, so `pierce` means one fewer
   enemy on a hitscan ray than on an arrow. Worth unifying before P3 adds more piercers.
+
+# P3 — abilities and the SMG / Beam / Chain Gun families
+
+Tier-1 values for the 13 `ability` blocks and the new families `smg`, `beam` and `chaingun` in
+`Config/ProvingGrounds.json`. The ten P1/P2 families are unchanged; no P3 rule touches their
+numbers. Targets come from `docs/WEAPONS.md` §2 and the P3 brief:
+- SMG ~108 single and ~108 crowd;
+- Beam ~250 crowd;
+- Chain Gun ~240 crowd;
+- one cast = 3–5 s of the family's own crowd DPS;
+- kill refunds bring a busy crowd's cooldown to 40–60% of base, never below the floor.
+
+## How the numbers were measured
+
+`py tools/sim_range.py` is the P2 scratch simulator made permanent. `--check` exits 1 when a
+shipped value leaves a band, and the bands are constants at the top of the script. It reads
+`ProvingGrounds.json` and mirrors the server as built:
+
+- **HitShapes, in 3D:** the arc slab, sphere, capsule, cone, ray entry, Fan and Scatter.
+- **RangeService:** gather, then nearest-first, then cap. Pierce is the TOTAL number of enemies.
+  Split volleys share one hit set. Chains jump body centre to body centre, to the nearest live
+  enemy not yet hit, for base damage × falloff^jump. Armour is flat.
+- **AbilityService:** `ceil(duration / tick − 1e-6)` ticks (Whirlwind 8, Blade Storm 12, Arrow
+  Rain 12, Storm Coil 8). Overload slices fire at `(i−1)·duration/count` with one exclude.
+  Overcharged cap is 0 and Storm Coil cap is `targets`. The Mag Dump pierce ignores the SMG's cap
+  of 1. Refunds apply only while cooling down, and the floor is `min(minCooldown, cooldown)`.
+
+Method:
+- **Crowd:** a square grid of `crowd.stressCount` fodder (12 × 12) at 6-stud and 3-stud spacing.
+  The P2 placement and aim are kept: melee stands 2.6–3.6 studs from the front, ranged 20 studs
+  away (cone guns 8), and the lateral phase and ±1.5 aim are random. Rays fly level at chest
+  height, so only a ray wide enough to reach the heads crits. Knockback and Blade Storm's pull
+  are ignored.
+- **Crowd DPS:** damage per attack on immortal fodder × rate, the WEAPONS.md basis.
+- **Damage / cast:** the whole timeline on immortal fodder, the same basis. Kills are counted on
+  real 40-HP fodder.
+- **Ability geometry:**
+  - Zones and Leap Smash aim at the crowd's centre, clamped to `castRange`.
+  - Whirlwind walks straight in at walkSpeed × moveSpeedMult.
+  - Earthquake and Impale Dash start at the melee front.
+- **Burst:** damage / cast ÷ the default variant's 6-stud crowd DPS, floored at single DPS.
+  WEAPONS.md defines crowd DPS as single DPS × enemies hit, so it can't be lower.
+- **Effective cooldown:** a 90 s fight on the 6-stud grid. Dummies respawn after the stress set's
+  3 s. The family attacks whenever the busy lock allows and casts the moment the server would
+  accept it. Every kill refunds the ability. The `rng3` column repeats the fight on the range's
+  own `crowd100` (3-stud, 4 s respawn).
+- **Ground fallback:** a shell that touches no body before the crowd's first row bursts on the
+  floor there, as P2 did. The real aim ray falls into the crowd, while the sim's level ray can
+  slip between aligned columns.
+
+The approved families reproduce the P2 table within 4% at the edge or front: broadsword 545,
+warhammer 493, spinblade 503, greataxe 556 / 530, spear 384 / 338, longbow 279 / 182,
+splitbow 211 / 200, shotgun 351, rifle 538, launcher 321. Only the "surrounded" melee column
+moved (spear 406 / 361, where P2 had 532). P2's surround placement kept the rows half a cell off the aim line, which put
+two lines in every thrust. The placement is now uniform.
+
+## New families (tier 1)
+
+| Family | Var | Era | Single | Crowd 6 | Crowd 3 | Feel |
+|---|---|---|---|---|---|---|
+| SMG | A Spray | 3 | 108 | 108 (grid 75) | 108 | 9 × 12/s, bloom ×0.35: a steady, accurate hose |
+| SMG | B Heavy | 3 | 112 | 112 (grid 74) | 112 | 16 × 7/s, bloom ×0.6, knockback 6: punchier, kicks, rewards short bursts |
+| Beam | A Sweep | 4 | 50 | 257 | 1 038 | 1.4 wide, reach 55, pierce 30, 5/tick: paint the crowd; best in a packed crowd |
+| Beam | B Lance | 4 | 120 | 225 | 360 | 0.5 wide, reach 100, pierce 3, 12/tick: a long line, melts a boss |
+| Chain Gun | A Chain lightning | 4 | 72 | 232 | 242 | 60 × 1.2/s, 4 jumps (r12, ×0.8): slow heavy bolts that reach a loose crowd |
+| Chain Gun | B Arc storm | 4 | 72 | 246 | 248 | 30 × 2.4/s, 3 jumps (r9, ×0.9): rapid, even arcs that need a tight pack |
+
+The SMG's "grid" figure is lower because a 0.5-wide level bullet slips between aligned 6-stud
+columns 35% of the time. That comes from the grid, not the gun. On the packed grid, and in any real
+crowd, every bullet finds one body, so its crowd DPS equals its single DPS, as WEAPONS.md intends.
+
+## Abilities (tier 1, final)
+
+"Hits" counts every hit, one per tick per enemy. "Kills" is on 40-HP fodder. "Eff" is the mean
+time between casts in the busy crowd, and "rng3" is the same on `crowd100`.
+
+| Ability | Basis | Dmg / cast | Burst | Busy | Hits | Kills | Dmg (3-stud) | Base | Floor | Refund | Eff | Eff % | rng3 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Whirlwind | 545 | 2 293 | 4.2 s | 2.4 | 104 | 28 | 8 088 | 10 | 4 | 0.15 | 5.0 | 50% | 3.9 |
+| Earthquake | 493 | 2 029 | 4.1 s | 0.2 | 42 | 24 | 6 595 | 12 | 5 | 0.25 | 5.7 | 47% | 4.9 |
+| Blade Storm | 503 | 1 952 | 3.9 s | — | 122 | 10 | 7 104 | 11 | 4.5 | 0.3 | 5.4 | 49% | 4.4 |
+| Leap Smash | 556 | 2 150 | 3.9 s | 0.55 | 24 | 24 | 8 679 | 10 | 4 | 0.15 | 4.8 | 48% | 4.4 |
+| Impale Dash | 338 | 1 370 | 4.1 s | 0.25 | 11 | 11 | 5 266 | 8 | 3 | 0.35 | 3.8 | 47% | 3.2 |
+| Arrow Rain | 279 | 1 166 | 4.2 s | — | 146 | 12 | 4 660 | 12 | 5 | 0.2 | 6.2 | 52% | 4.9 |
+| Volley | 211 | 838 | 4.0 s | — | 20 | 20 | 781 | 9 | 3.5 | 0.125 | 4.5 | 50% | 4.5 |
+| Slug Burst | 351 | 1 282 | 3.7 s | 0.45 | 29 | 10 | 4 974 | 9 | 3.5 | 0.4 | 4.7 | 52% | 3.5 |
+| Overcharged Shot | 538 | 3 876 | 7.2 s (boss 3.4 s) | 0.35 | 11 | 11 | 7 888 | 10 | 4 | 0.3 | 4.7 | 47% | 4.0 |
+| Cluster Shell | 321 | 1 233 | 3.8 s | — | 25 | 10 | 4 082 | 11 | 4.5 | 0.45 | 5.3 | 48% | 4.4 |
+| Mag Dump | 108 | +721 | 6.7 s (boss 4.0 s) | lock, fire allowed | 96 | 9 | +1 296 | 10 | 4 | 0.5 | 5.0 | 50% | 3.9 |
+| Overload Sweep | 257 | 993 | 3.9 s | 1.0 | 22 | 22 | 2 667 | 12 | 5 | 0.2 | 6.0 | 50% | 4.9 |
+| Storm Coil | 232 | 1 039 | 4.5 s | — | 64 | 16 | 1 039 | 12 | 5 | 0.15 | 5.8 | 48% | 5.6 |
+
+Mag Dump's damage is its gain over the same 2 s of normal fire. On the boss: Overcharged deals
+340 on the body and 680 on the head, 3.4 s of the rifle's 101 single DPS. Mag Dump adds 432, 4.0 s
+of the SMG's 108.
+
+## Where the starting values missed
+
+With the lead's values, `--check` failed 22 times:
+
+- **Too weak:**
+  - Blade Storm 2.4 s, Leap Smash 2.7 s, Impale Dash 1.6 s.
+  - Whirlwind 3.1 s beat its own 2.4 s channel by only 0.7 s, so swinging would nearly match it.
+  - Overcharged dealt 150 to a boss, 1.5 s of rifle DPS.
+- **Too strong:**
+  - Arrow Rain 7.3 s, Volley 6.3 s.
+  - Overload Sweep 15.2 s, hitting 79 enemies at 55 each.
+  - Storm Coil 15.0 s: 3 zaps × 4 jumps × 10 ticks.
+  - Mag Dump 8.6 s on a crowd.
+- **Refunds:** 0.3 s per kill put Whirlwind, Leap Smash, Volley, Overload and Storm Coil on their
+  floors (32–39%). The slow killers sat above 60% (Impale Dash 65%, Mag Dump 62%). Busy-crowd kill
+  rates run from about 2 to 8 per second, so one refund size can't fit every family.
+- **Families:**
+  - Beam B crowd was 150. With pierce 2 its thin ray averages 1.2 enemies a tick.
+  - Chain Gun A was 196 and B 161. A's 0.8-wide bolt missed a column about 19% of the time, and
+    B's 2 jumps gave only 81 damage a shot.
+- **Volley:** 15 arrows × 30 never killed a fresh fodder. One hit per enemy per volley at 30 is
+  under 40 HP.
+
+## Why these values
+
+- **Floors = 40% of base, rounded to 0.5 s** (Earthquake, Arrow Rain, Overload and Storm Coil
+  4 → 5; Blade Storm and Cluster 4 → 4.5; Volley and Slug 3 → 3.5). The floor is now the bottom of
+  the 40–60% band. The lead's floors (33–37% on the 9–12 s abilities) let a 12 s ability come back
+  every 4 s. On the packed `crowd100`, where kills pour in, the final values settle at 39–50%.
+- **Refunds per ability** land each at about 50% in the busy crowd: 0.125–0.5 s per kill. The
+  size follows each family's kill rate, which also includes the ability's own kills. Fast killers
+  (Whirlwind, Leap Smash, Volley, Storm Coil) get 0.125–0.15. Slow single-hit families (Slug 0.4,
+  Cluster 0.45, Mag Dump 0.5) get more.
+- **Whirlwind** damage 16 → 22: 4.2 s, beating the 2.4 s channel by 1.8 s. That assumes you walk
+  it into the crowd. Standing still at the crowd's edge it deals 55% of that (1 258, 2.3 s),
+  which is less than swinging for the same 2.4 s. It pays when walked in or cast surrounded.
+- **Earthquake** damage 50 → 60 and falloff 0.8 → 0.85. At 0.8 the third ring dealt 39.7 against
+  40 HP, leaving the outer fodder alive on 0.3 HP. Now the rings deal 60 / 51 / 43, all one-shots
+  (P2's ≥ 42 margin).
+- **Blade Storm** damage 10 → 16: 3 ticks kill a fodder, 3.9 s.
+- **Leap Smash** radius 12 → 14 and damage 80 → 90. It's a crowd move, so the landing grows rather
+  than the per-hit overkill: 24 kills.
+- **Impale Dash** range 24 → 30, width 5 → 7, damage 70 → 125: 11 in a line, 4.1 s. The dash is
+  now 30 studs in 0.25 s (120 studs/s, against the dash's 133).
+- **Arrow Rain** damage 14 → 8: 12 ticks at r10, where 5 ticks kill a fodder.
+- **Volley** 15 × 30 (pierce 3) → 10 × 42 (pierce 2): every arrow one-shots, so a cast reads
+  "×20 kills" at 4.0 s.
+- **Overcharged Shot** width 3.5 → 2.0 and damage 150 → 340. At 3.5 a chest-height shot also
+  crossed every fodder's head sphere (crit reach 1.75 + 0.7 ≥ the 1.8 gap), so every hit was a
+  crit. Below width 2.2 a crit needs head aim. It's judged on the boss (3.4 s). Its crowd figure
+  (7.2 s) is mostly overkill in one line: 11 kills, half of Whirlwind's or Leap Smash's.
+- **Mag Dump** rateMult 2.5 → 3.0 and pierce 3 → 2. The boss gains 4.0 s of single DPS. The crowd
+  gain drops from 8.6 s to 6.7 s, under the 8 s ceiling for the two single-target abilities.
+- **Overload Sweep** range 60 → 34 and damage 55 → 45: 22 one-shot kills across 120°, 3.9 s.
+- **Storm Coil** targets 3 → 2, count 4 → 3, damage 30 → 22, duration 5 → 4: 8 ticks of 2 zaps +
+  3 jumps, 4.5 s.
+- **Beam A** range 60 → 55: 257. **Beam B** pierce 2 → 3: 225.
+- **Chain Gun** width 0.8 → 2.0 on both: a hit never misses the column it's aimed at, so the sim
+  matches play. **B** chainCount 2 → 3: 246.
+
+## Flags for the lead
+
+- **Refunds cross slots.** The fight counts only the family's own kills, but ruling 2 refunds
+  both slots on every kill. A melee weapon killing 6–7 per second therefore keeps the big-refund
+  ranged abilities (Mag Dump 0.5, Cluster 0.45, Slug 0.4) on their 40% floors while you melee. The
+  floor is the backstop. If it feels spammy, "a slot is refunded only by kills from its own family
+  and ability" would decouple them. That's a contract change, not a value.
+- **Busy crowd model.** The fight's crowd is a static grid that respawns in place, as the range's
+  sets do. Chasing mission crowds (P5) will feed melee faster, which pushes cooldowns toward the
+  floor. Re-measure in P5.
+- **Armour (flat 18).** Ticking abilities barely scratch armoured enemies: Arrow Rain 8 → 0.8,
+  Blade Storm 16 → 1.6, Whirlwind 22 → 4, Storm Coil 22 → 4. Single hits break it: Impale 125 →
+  107, Leap 90 → 72, Overcharged 340 → 322, Slug 45 → 27. That matches P1's "crowd tools, not
+  armour breakers".
+- **The SMG isn't an elite shredder against armour.** Both bullets (9 and 16) fall under armour 18
+  and are cut to the 10% floor: about 11 DPS against an armoured dummy, against the rifle's 58. It
+  does shred bosses (108 single, and Mag Dump 4.0 s). The Beam's ticks (5 and 12) are the same
+  story. If "elite" means armoured, the Heavy SMG needs bullets well above 18: for example 26 ×
+  4.3/s keeps 112 single and gives 34 DPS against armour. That's a design call, so I left it.
+- **Visual changes for AbilityFx and Feedback:**
+  - Overcharged beam is 2.0 wide (was 3.5).
+  - Chain Gun bolts are 2.0 wide.
+  - Leap Smash ring is r14.
+  - Impale Dash capsule is 30 × 7.
+  - Overload Sweep reach is 34.
+  - Beam A reach is 55.
+- **Storm Coil doesn't scale with density.** It deals the same damage on the 3-stud grid as on the
+  6-stud one (1 039). Its hits are capped by count (2 zaps + 3 jumps each = 8 enemies a tick), not
+  by area. It's the one crowd ability that doesn't explode on packed dummies.
+- **Whirlwind needs movement.** Cast standing at a crowd's edge, it loses to plain swings over the
+  same 2.4 s (see above). If Ben casts it standing still in the range, it'll feel weak.

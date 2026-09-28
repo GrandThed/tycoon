@@ -1,5 +1,6 @@
 --!strict
--- Pure hit geometry for the Proving Grounds (docs/INTERFACES.md "P1 contracts" → decision 2).
+-- Pure hit geometry for the Proving Grounds (docs/INTERFACES.md "P1 contracts" → decision 2;
+-- P3 adds Scatter for cluster bomblets).
 -- The server resolves every attack with these tests and the client draws the same shapes from
 -- the same numbers, so what you see is what you hit. No Roblox globals beyond Vector3 maths.
 --
@@ -22,6 +23,11 @@ local MAX_PELLETS = 64
 -- Split arrows are real server projectiles; a tuned splitCount past this is clamped (exported
 -- as HitShapes.MAX_FAN so the server budgets volleys with the same number).
 local MAX_FAN = 16
+-- The floor probe (P3 ruling 4 step 4, also the server's air tracking): a down-ray from this far
+-- above a point, this far down. Exported so the server's GroundPoint and the client's mirror of
+-- it probe the same floor.
+local GROUND_PROBE_LIFT = 3
+local GROUND_PROBE_DEPTH = 250
 
 -- 2D: does the circle at (x, y) with radius `reach` overlap the sector with its apex at the
 -- origin, its axis along +x, radius `range` and half-angle `halfAngle` (radians)? Both the flat
@@ -68,6 +74,17 @@ local function unitOf(vector: Vector3): Vector3?
 		return nil
 	end
 	return vector.Unit
+end
+
+-- A seed as a Park–Miller state in [1, PM_MODULUS - 1]; any finite number is accepted.
+local function seedState(seed: number): number
+	return math.floor(math.abs(seed)) % (PM_MODULUS - 1) + 1
+end
+
+-- One Park–Miller step: the next state and a uniform draw in [0, 1].
+local function advance(state: number): (number, number)
+	local nextState = (state * PM_MULTIPLIER) % PM_MODULUS
+	return nextState, (nextState - 1) / (PM_MODULUS - 1)
 end
 
 -- A horizontal sweep (a sword swing): `arcDegrees` is the whole sweep, centred on the flattened
@@ -194,10 +211,11 @@ function HitShapes.Pellets(
 	local reference = if math.abs(axis.Y) < 0.99 then Vector3.yAxis else Vector3.xAxis
 	local right = axis:Cross(reference).Unit
 	local up = right:Cross(axis)
-	local state = math.floor(math.abs(seed)) % (PM_MODULUS - 1) + 1
+	local state = seedState(seed)
 	local function nextUnit(): number
-		state = (state * PM_MULTIPLIER) % PM_MODULUS
-		return (state - 1) / (PM_MODULUS - 1)
+		local nextState, draw = advance(state)
+		state = nextState
+		return draw
 	end
 	local spread = math.rad(math.max(0, spreadDegrees))
 	for _ = 1, math.min(math.floor(count), MAX_PELLETS) do
@@ -242,6 +260,35 @@ function HitShapes.Fan(
 	return arrows
 end
 
+-- Cluster bomblets (P3 clusterShell): `count` (at most MAX_FAN) points evenly spaced on a flat
+-- circle of radius `spacing` around `center`, the whole ring turned by ONE Park–Miller angle from
+-- `seed` and nothing else, so the server and every client scatter the same bomblets.
+function HitShapes.Scatter(
+	center: Vector3,
+	count: number,
+	spacing: number,
+	seed: number
+): { Vector3 }
+	local points: { Vector3 } = {}
+	local total = math.min(math.floor(count), MAX_FAN)
+	if not (total > 0) then
+		return points
+	end
+	local _, draw = advance(seedState(seed))
+	local turn = FULL_TURN * draw
+	local gap = FULL_TURN / total
+	for index = 0, total - 1 do
+		local angle = turn + gap * index
+		table.insert(
+			points,
+			center + Vector3.new(math.cos(angle) * spacing, 0, math.sin(angle) * spacing)
+		)
+	end
+	return points
+end
+
 HitShapes.MAX_FAN = MAX_FAN
+HitShapes.GROUND_PROBE_LIFT = GROUND_PROBE_LIFT
+HitShapes.GROUND_PROBE_DEPTH = GROUND_PROBE_DEPTH
 
 return HitShapes

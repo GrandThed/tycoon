@@ -19,9 +19,19 @@
 --    slam (the button relabels itself), as the contract asks. C is a dedicated slam key.
 --  * InputController calls AirHang for an airborne sword swing and SetSpeedMult for ADS.
 --
--- Movers are one LinearVelocity on the RootAttachment at a time (dash, slam or hang); a new
--- one replaces the old, and a character respawn simply drops it with the old rig. Movement
--- is gameplay, so reduce motion (every touch device) never shortens or skips it.
+-- P3 abilities (docs/INTERFACES.md "P3 contracts", rulings 3 and 5): Leap Smash and Impale
+-- Dash move the character here, as the dash does; the server resolves their damage from its
+-- own numbers, so the path is presentation plus the player's real position. Both own the
+-- character's motion while they run: jump, double jump, dash, slam and the air hang all wait,
+-- and the stock jump is disabled on the Humanoid. Whirlwind only scales the walk (Channel).
+-- A respawn or death drops every one of them.
+--
+-- Movers are one LinearVelocity on the RootAttachment at a time (dash, slam, hang, leap or
+-- lunge); a new one replaces the old, and a character respawn simply drops it with the old
+-- rig. Movement is gameplay, so reduce motion (every touch device) never shortens or skips it.
+--
+-- The touch cluster (jump, dash, aim, two abilities, slot) is laid out here in one place
+-- (ClusterRect) so the six buttons can never be placed against each other by two owners.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -40,6 +50,8 @@ local CameraController = require(script.Parent:WaitForChild("CameraController"))
 
 local MovementController = {}
 
+export type ClusterKey = "dash" | "aim" | "abilityMelee" | "abilityRanged" | "slot"
+
 local ACTION_DASH = "RangeDash"
 local ACTION_SLAM = "RangeSlam"
 local MOVER_NAME = "RangeMover"
@@ -53,12 +65,26 @@ local GROUND_PROBE = 256
 local SLAM_LAND_DISTANCE = 0.75
 local MOVE_INPUT_MIN = 0.1
 local MOVER_MAX_FORCE = 1e6
+-- Ability motion follows a planned path: the mover gets the path's own velocity plus this much
+-- per second of the gap to the planned point, capped so a wall in the way is pushed against
+-- gently rather than at full mover force.
+local MOTION_CORRECTION_GAIN = 12
+local MOTION_CORRECTION_MAX = 60
+-- A landing leap arrives falling fast; beyond this it would punch through a thin floor.
+local MOTION_LAND_SPEED_MAX = 60
+-- The lunge's wall probe: about the character's half-width, so it stops where the body would.
+local LUNGE_PROBE_RADIUS = 1
+local LEAP_FOV_KICK_DEGREES = 8
+local LUNGE_FOV_KICK_DEGREES = 4
 
 -- Touch buttons, mirrored off Roblox's own jump button (PlayerModule TouchJump rule, the
 -- same Theme constants CombatHud uses), so they scale exactly as the stock button does.
--- The smallest phone gives a 70 px jump button, so dash = 56 px and ADS = 49 px, both
+-- On the smallest phone (70 px jump): dash 56 px, aim 49, abilities 60, slot 49, every one
 -- above the 44 px minimum. Purely visual, so named here.
 local DASH_BUTTON_FRACTION = 0.8
+local AIM_BUTTON_FRACTION = 0.7
+local ABILITY_BUTTON_FRACTION = 0.85
+local SLOT_BUTTON_FRACTION = 0.7
 local BUTTON_GAP_FRACTION = 0.12
 local BUTTON_TEXT_FRACTION = 0.3
 local BUTTON_TRANSPARENCY = 0.35
@@ -70,12 +96,28 @@ local COLOR_COOLING = Color3.fromRGB(70, 74, 84)
 
 type Rig = { character: Model, humanoid: Humanoid, root: BasePart, attachment: Attachment }
 
+-- A leap or a lunge in flight. The root runs from `from` to `to` in `seconds`: straight and
+-- level for a lunge, along a vertical parabola (launch speed `rise`, gravity `gravity`) for a
+-- leap. `plane` = a grounded lunge, which drives only X/Z so slopes and steps still work.
+type Motion = {
+	humanoid: Humanoid,
+	startedAt: number,
+	seconds: number,
+	from: Vector3,
+	to: Vector3,
+	rise: number,
+	gravity: number,
+	plane: boolean,
+}
+
 local started = false
 local connections: { RBXScriptConnection } = {}
 local requestDash: RemoteEvent? = nil
 local requestSlam: RemoteEvent? = nil
 
 local speedMult = 1
+local channelMult = 1
+local channelUntil = 0
 local airJumpUsed = false
 local leftGroundAt = 0
 local lastJumpRequestAt = 0
@@ -86,6 +128,7 @@ local slamming = false
 local slamStartedAt = 0
 local mover: LinearVelocity? = nil
 local moverToken = 0
+local motion: Motion? = nil
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -112,12 +155,17 @@ local function isAirborne(rig: Rig): boolean
 	return rig.humanoid.FloorMaterial == Enum.Material.Air
 end
 
+-- Root height above the floor when standing, the same measure RangeService uses: R15's
+-- HipHeight runs from the floor to the bottom of the root.
+local function standingOffset(rig: Rig): number
+	return rig.humanoid.HipHeight + rig.root.Size.Y * 0.5
+end
+
 local groundParams = RaycastParams.new()
 groundParams.FilterType = Enum.RaycastFilterType.Exclude
 
--- Studs between the feet and the floor straight below; GROUND_PROBE when nothing is there.
-local function heightAboveGround(rig: Rig): number
-	local feet = rig.root.Position.Y - rig.root.Size.Y * 0.5 - rig.humanoid.HipHeight
+-- World queries skip every player character; crowd enemies have no Instances at all.
+local function refreshGroundParams(): RaycastParams
 	local list: { Instance } = {}
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
@@ -126,10 +174,16 @@ local function heightAboveGround(rig: Rig): number
 		end
 	end
 	groundParams.FilterDescendantsInstances = list
+	return groundParams
+end
+
+-- Studs between the feet and the floor straight below; GROUND_PROBE when nothing is there.
+local function heightAboveGround(rig: Rig): number
+	local feet = rig.root.Position.Y - rig.root.Size.Y * 0.5 - rig.humanoid.HipHeight
 	local result = Workspace:Raycast(
 		rig.root.Position,
 		Vector3.new(0, -(GROUND_PROBE + rig.root.Position.Y - feet), 0),
-		groundParams
+		refreshGroundParams()
 	)
 	if result == nil then
 		return GROUND_PROBE
@@ -187,10 +241,103 @@ local function flatLook(): Vector3
 	return if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, -1)
 end
 
+-- Ability motion ---------------------------------------------------------------------------
+
+-- The planned root position and velocity `t` seconds into a motion.
+local function motionAt(current: Motion, t: number): (Vector3, Vector3)
+	local seconds = current.seconds
+	local share = math.clamp(t / seconds, 0, 1)
+	local span = current.to - current.from
+	local flatVelocity = Vector3.new(span.X, 0, span.Z) / seconds
+	local y = current.from.Y + current.rise * t - current.gravity * t * t * 0.5
+	local position =
+		Vector3.new(current.from.X + span.X * share, y, current.from.Z + span.Z * share)
+	return position, flatVelocity + Vector3.new(0, current.rise - current.gravity * t, 0)
+end
+
+-- Ends the running leap or lunge. `arrived` = it ran its full time, so the character keeps
+-- only its fall (never the path's horizontal speed, which would slide it past the target).
+-- An interrupted motion (death, respawn, a cancel) just lets go.
+local function endMotion(arrived: boolean): ()
+	local current = motion
+	if current == nil then
+		return
+	end
+	motion = nil
+	clearMover()
+	CameraController.EndMotion()
+	local humanoid = current.humanoid
+	if humanoid.Parent == nil then
+		return
+	end
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+	if not arrived then
+		return
+	end
+	local rig = localRig()
+	if rig ~= nil and rig.humanoid == humanoid then
+		local velocity = rig.root.AssemblyLinearVelocity
+		rig.root.AssemblyLinearVelocity =
+			Vector3.new(0, math.max(math.min(velocity.Y, 0), -MOTION_LAND_SPEED_MAX), 0)
+	end
+end
+
+local function beginMotion(rig: Rig, current: Motion, fovKick: number): ()
+	-- A leap or lunge takes the character from any dash, hang or slam in progress; the slam
+	-- simply never fires (no RequestSlam), so the server sees nothing to resolve.
+	endMotion(false)
+	slamming = false
+	motion = current
+	rig.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+	local _, velocity = motionAt(current, 0)
+	setMover(rig, velocity, current.plane, nil)
+	CameraController.BeginMotion(current.seconds)
+	CameraController.FovKick(fovKick)
+end
+
+-- Drives the mover along the planned path: the path's own velocity plus a capped pull back
+-- onto it, so a bump or a frame hitch never leaves the character off course.
+local function stepMotion(rig: Rig?): ()
+	local current = motion
+	if current == nil then
+		return
+	end
+	if rig == nil or rig.humanoid ~= current.humanoid then
+		endMotion(false)
+		return
+	end
+	local t = os.clock() - current.startedAt
+	if t >= current.seconds then
+		endMotion(true)
+		return
+	end
+	local wanted, velocity = motionAt(current, t)
+	local gap = wanted - rig.root.Position
+	if current.plane then
+		gap = Vector3.new(gap.X, 0, gap.Z)
+	end
+	local correction = gap * MOTION_CORRECTION_GAIN
+	if correction.Magnitude > MOTION_CORRECTION_MAX then
+		correction = correction.Unit * MOTION_CORRECTION_MAX
+	end
+	local drive = velocity + correction
+	local constraint = mover
+	if constraint == nil then
+		setMover(rig, drive, current.plane, nil)
+	elseif current.plane then
+		constraint.PlaneVelocity = Vector2.new(drive.X, drive.Z)
+	else
+		constraint.VectorVelocity = drive
+	end
+end
+
+-- Movement ---------------------------------------------------------------------------------
+
 local function canSlam(rig: Rig): boolean
 	local cfg = Tuning.Get().movement
 	return isAirborne(rig)
 		and not slamming
+		and motion == nil
 		and os.clock() >= slamReadyAt
 		and heightAboveGround(rig) >= cfg.slamMinHeight
 end
@@ -217,7 +364,8 @@ end
 
 local function dashOrSlam(): ()
 	local rig = localRig()
-	if rig == nil or slamming then
+	-- A leap or lunge owns the character's motion (P3 ruling 3).
+	if rig == nil or slamming or motion ~= nil then
 		return
 	end
 	if canSlam(rig) then
@@ -255,7 +403,14 @@ local function onJumpRequest(): ()
 	local fresh = now - lastJumpRequestAt >= JUMP_PRESS_GAP
 	lastJumpRequestAt = now
 	local rig = localRig()
-	if rig == nil or not fresh or airJumpUsed or slamming or not isAirborne(rig) then
+	if
+		rig == nil
+		or not fresh
+		or airJumpUsed
+		or slamming
+		or motion ~= nil
+		or not isAirborne(rig)
+	then
 		return
 	end
 	-- A request this soon after leaving the ground is the same press still arriving
@@ -283,7 +438,7 @@ local function refreshDashButton(rig: Rig?): ()
 	if slamming or (rig ~= nil and canSlam(rig)) then
 		label = "Slam"
 		color = COLOR_SLAM
-	elseif os.clock() < dashReadyAt then
+	elseif motion ~= nil or os.clock() < dashReadyAt then
 		color = COLOR_COOLING
 	end
 	-- Polled every frame, so only a change touches the instance.
@@ -296,10 +451,18 @@ local function refreshDashButton(rig: Rig?): ()
 	end
 end
 
+local function resetAbilityState(): ()
+	endMotion(false)
+	channelUntil = 0
+	channelMult = 1
+end
+
 local function step(): ()
 	local rig = localRig()
+	stepMotion(rig)
 	if rig == nil then
 		slamming = false
+		channelUntil = 0
 		refreshDashButton(nil)
 		return
 	end
@@ -315,7 +478,8 @@ local function step(): ()
 		airJumpUsed = false
 		humanoid.JumpHeight = cfg.jumpHeight
 	end
-	humanoid.WalkSpeed = cfg.walkSpeed * speedMult
+	local channel = if os.clock() < channelUntil then channelMult else 1
+	humanoid.WalkSpeed = cfg.walkSpeed * speedMult * channel
 
 	if slamming then
 		if not airborne or heightAboveGround(rig) <= SLAM_LAND_DISTANCE then
@@ -400,6 +564,39 @@ function MovementController.SatelliteRect(
 	return Vector2.new(jumpCentre.X, jumpTopLeft.Y - gap - size * 0.5), size
 end
 
+-- The right-thumb cluster around Roblox's jump button, two rows:
+--   top:     [melee ability] [ranged ability] [aim]
+--   bottom:  [slot]          [dash]           [jump]
+-- Q sits left of E as on a keyboard. Every neighbour is at least one gap (12% of the jump
+-- size) apart, and the top row stays below one jump size above the jump button, the band the
+-- range panel already reserves. (centre, size) in pixels.
+function MovementController.ClusterRect(viewport: Vector2, key: ClusterKey): (Vector2, number)
+	local _, jumpSize = MovementController.JumpButtonRect(viewport)
+	local gap = jumpSize * BUTTON_GAP_FRACTION
+	local dashCentre, dashSize =
+		MovementController.SatelliteRect(viewport, DASH_BUTTON_FRACTION, "left")
+	if key == "dash" then
+		return dashCentre, dashSize
+	end
+	local aimCentre, aimSize =
+		MovementController.SatelliteRect(viewport, AIM_BUTTON_FRACTION, "above")
+	if key == "aim" then
+		return aimCentre, aimSize
+	end
+	if key == "slot" then
+		local size =
+			math.max(math.floor(jumpSize * SLOT_BUTTON_FRACTION + 0.5), Theme.TAP_TARGET_MIN)
+		return Vector2.new(dashCentre.X - dashSize * 0.5 - gap - size * 0.5, dashCentre.Y), size
+	end
+	local size =
+		math.max(math.floor(jumpSize * ABILITY_BUTTON_FRACTION + 0.5), Theme.TAP_TARGET_MIN)
+	local rangedX = aimCentre.X - aimSize * 0.5 - gap - size * 0.5
+	if key == "abilityRanged" then
+		return Vector2.new(rangedX, aimCentre.Y), size
+	end
+	return Vector2.new(rangedX - size - gap, aimCentre.Y), size
+end
+
 function MovementController.TextSize(size: number): number
 	return math.floor(size * BUTTON_TEXT_FRACTION)
 end
@@ -410,8 +607,7 @@ local function layoutButtons(): ()
 	if button == nil or camera == nil then
 		return
 	end
-	local centre, size =
-		MovementController.SatelliteRect(camera.ViewportSize, DASH_BUTTON_FRACTION, "left")
+	local centre, size = MovementController.ClusterRect(camera.ViewportSize, "dash")
 	button.Position = UDim2.fromOffset(centre.X, centre.Y)
 	button.Size = UDim2.fromOffset(size, size)
 	button.TextSize = MovementController.TextSize(size)
@@ -469,6 +665,7 @@ function MovementController.Start(): ()
 	table.insert(
 		connections,
 		Players.LocalPlayer.CharacterAdded:Connect(function()
+			resetAbilityState()
 			clearMover()
 			slamming = false
 			airJumpUsed = false
@@ -502,16 +699,93 @@ function MovementController.SetSpeedMult(mult: number): ()
 end
 
 -- An airborne sword swing holds the character in place for `seconds` (the "air attack"
--- hang). A dash or slam in progress wins: the hang never cancels a committed move.
+-- hang). A dash, slam, leap or lunge in progress wins: the hang never cancels a committed move.
 function MovementController.AirHang(seconds: number): ()
 	local rig = localRig()
-	if rig == nil or slamming or seconds <= 0 or not isAirborne(rig) then
+	if rig == nil or slamming or motion ~= nil or seconds <= 0 or not isAirborne(rig) then
 		return
 	end
 	if mover ~= nil then
 		return
 	end
 	setMover(rig, Vector3.zero, false, seconds)
+end
+
+-- Leap Smash: an arc from the root to stand on `ground` (a floor point, InputController's
+-- ruling-4 mirror) in `seconds`, the apex `height` above the higher end. Returns false when
+-- there is no character or no time to leap in.
+function MovementController.Leap(ground: Vector3, seconds: number, height: number): boolean
+	local rig = localRig()
+	if not started or rig == nil or seconds <= 0 then
+		return false
+	end
+	local from = rig.root.Position
+	local to = ground + Vector3.new(0, standingOffset(rig), 0)
+	local apex = math.max(from.Y, to.Y) + math.max(height, 0)
+	-- Rise to the apex and fall from it in `seconds` total under one constant gravity:
+	-- T = sqrt(2/g) (sqrt(up) + sqrt(down)), so g = 2 (sqrt(up) + sqrt(down))^2 / T^2.
+	local up = math.sqrt(math.max(apex - from.Y, 0))
+	local down = math.sqrt(math.max(apex - to.Y, 0))
+	local gravity = 2 * (up + down) ^ 2 / (seconds * seconds)
+	beginMotion(rig, {
+		humanoid = rig.humanoid,
+		startedAt = os.clock(),
+		seconds = seconds,
+		from = from,
+		to = to,
+		rise = math.sqrt(2 * gravity * math.max(apex - from.Y, 0)),
+		gravity = gravity,
+		plane = false,
+	}, LEAP_FOV_KICK_DEGREES)
+	return true
+end
+
+-- Impale Dash: `distance` studs along the flattened `direction` in `seconds`, stopped short
+-- of the first wall. On the ground only X/Z are driven (slopes and steps still act); in the
+-- air it holds its altitude, as the air dash does.
+function MovementController.Lunge(direction: Vector3, distance: number, seconds: number): boolean
+	local rig = localRig()
+	if not started or rig == nil or seconds <= 0 then
+		return false
+	end
+	local flat = Vector3.new(direction.X, 0, direction.Z)
+	local unit = if flat.Magnitude > MOVE_INPUT_MIN then flat.Unit else flatLook()
+	local from = rig.root.Position
+	local reach = math.max(distance, 0)
+	if reach > 0 then
+		local hit =
+			Workspace:Spherecast(from, LUNGE_PROBE_RADIUS, unit * reach, refreshGroundParams())
+		if hit ~= nil then
+			reach = math.max(hit.Distance, 0)
+		end
+	end
+	beginMotion(rig, {
+		humanoid = rig.humanoid,
+		startedAt = os.clock(),
+		seconds = seconds,
+		from = from,
+		to = from + unit * reach,
+		rise = 0,
+		gravity = 0,
+		plane = not isAirborne(rig),
+	}, LUNGE_FOV_KICK_DEGREES)
+	return true
+end
+
+-- Whirlwind: the walk runs at `mult` for `seconds`, on top of any ADS slow-down.
+function MovementController.Channel(seconds: number, mult: number): ()
+	channelUntil = os.clock() + math.max(seconds, 0)
+	channelMult = math.max(mult, 0)
+end
+
+-- Drops a running leap, lunge or channel (the server refused the cast or the family changed).
+function MovementController.CancelAbility(): ()
+	resetAbilityState()
+end
+
+-- True while a leap or lunge owns the character's motion.
+function MovementController.IsAbilityMoving(): boolean
+	return motion ~= nil
 end
 
 function MovementController.IsAirborne(): boolean
@@ -530,6 +804,7 @@ function MovementController.Destroy(): ()
 	table.clear(connections)
 	ContextActionService:UnbindAction(ACTION_DASH)
 	ContextActionService:UnbindAction(ACTION_SLAM)
+	resetAbilityState()
 	clearMover()
 	local gui = screenGui
 	screenGui = nil

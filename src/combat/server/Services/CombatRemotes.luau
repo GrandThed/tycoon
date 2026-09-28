@@ -18,6 +18,11 @@ local RemoteService =
 -- the buckets still exist.
 local DEFAULT_ATTACK_CALLS_PER_SECOND = 8
 local DEFAULT_ABILITY_CALLS_PER_SECOND = 2
+-- P3 range buckets: room for a Mag Dump SMG's buffed rate plus the other slot, and for two
+-- slots' ability presses; RangeService and AbilityService enforce the real per-weapon rate and
+-- cooldowns.
+local DEFAULT_RANGE_ATTACK_CALLS_PER_SECOND = 40
+local DEFAULT_RANGE_ABILITY_CALLS_PER_SECOND = 4
 -- A swing can never legitimately name more targets than the director allows alive at once; the
 -- ceiling stops a forged payload from making the server walk a huge list.
 local DEFAULT_MAX_TARGETS = 24
@@ -164,8 +169,10 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		},
 		-- P1 Proving Grounds. Every range handler is inert outside the range (RangeService), and
 		-- tune/command also outside Studio; these validators only keep malformed payloads out.
+		-- P3: range attacks and draws have their own bucket, so a held beam or SMG never starves
+		-- the missions' attack bucket or is starved by it.
 		RequestRangeAttack = {
-			bucket = "attack",
+			bucket = "rangeAttack",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 6
 					and isShortString(args[1], MAX_FAMILY_LENGTH)
@@ -181,9 +188,21 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		-- P2: the bow's draw start. The server stamps its own clock; the charge the next attack
 		-- claims is capped by the time since this stamp.
 		RequestRangeDraw = {
-			bucket = "attack",
+			bucket = "rangeAttack",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 1 and isShortString(args[1], MAX_FAMILY_LENGTH)
+			end,
+		},
+		-- P3: cast the ability of a slot along the camera ray. Which ability the slot holds, the
+		-- aim origin and the cooldown are all the server's checks (AbilityService).
+		RequestRangeAbility = {
+			bucket = "rangeAbility",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 4
+					and (args[1] == "melee" or args[1] == "ranged")
+					and isSeq(args[2])
+					and isFiniteVector(args[3])
+					and isDirection(args[4])
 			end,
 		},
 		RequestDash = {
@@ -253,7 +272,7 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 	-- CombatFx exists from C0 so the client can WaitForChild it; C1 fills it with hit, death and
 	-- ability presentation.
 	-- P1 adds the crowd stream (CrowdSnapshot is unreliable: a lost snapshot is replaced by the
-	-- next) and the range's TuneState / RangeStats.
+	-- next) and the range's TuneState / RangeStats; P3 the caster's cooldowns (RangeAbility).
 	events = {
 		"StateChanged",
 		"ActionResult",
@@ -263,6 +282,7 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		"CrowdRemove",
 		"TuneState",
 		"RangeStats",
+		"RangeAbility",
 	},
 	unreliableEvents = { "CrowdSnapshot" },
 	rates = {
@@ -274,6 +294,12 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		ability = if combatConfig ~= nil
 			then combatConfig.remotes.abilityCallsPerSecond
 			else DEFAULT_ABILITY_CALLS_PER_SECOND,
+		rangeAttack = if combatConfig ~= nil
+			then combatConfig.remotes.rangeAttackCallsPerSecond
+			else DEFAULT_RANGE_ATTACK_CALLS_PER_SECOND,
+		rangeAbility = if combatConfig ~= nil
+			then combatConfig.remotes.rangeAbilityCallsPerSecond
+			else DEFAULT_RANGE_ABILITY_CALLS_PER_SECOND,
 	},
 }
 

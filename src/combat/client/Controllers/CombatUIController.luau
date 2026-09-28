@@ -20,6 +20,10 @@
 -- It mounts the centre Crosshair and FeedbackController's overlay in an inset-free ScreenGui
 -- (so the dot is the camera's true centre line), plus the Studio RangePanel, the toast and the
 -- load card. Missions are unchanged.
+--
+-- P3: the range also mounts the AbilityBar (PC / gamepad cooldown tiles; hidden on touch, where
+-- InputController's ability buttons show the same). It reads InputController's ability getters
+-- and the loadout FeedbackController confirmed, and keeps clear of the RangePanel's column.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,6 +46,7 @@ local LoadScreen = require(uiFolder:WaitForChild("LoadScreen"))
 local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local Crosshair = require(uiFolder:WaitForChild("Crosshair"))
 local RangePanel = require(uiFolder:WaitForChild("RangePanel"))
+local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -90,6 +95,9 @@ local function isRangeStats(payload: any): boolean
 		and typeof(payload.alive) == "number"
 		and typeof(payload.serverFrameMs) == "number"
 		and (payload.refused == nil or typeof(payload.refused) == "boolean")
+		and (payload.ability == nil or typeof(payload.ability) == "string")
+		and (payload.abilityHits == nil or typeof(payload.abilityHits) == "number")
+		and (payload.abilityKills == nil or typeof(payload.abilityKills) == "number")
 end
 
 local function bootRange(): ()
@@ -171,6 +179,12 @@ local function bootRange(): ()
 	FeedbackController.SetTuneStateHandler(function()
 		panel.SetLoadout(FeedbackController.GetLoadout())
 	end)
+	local abilityBar = AbilityBar.new(screenGui, {
+		getState = InputController.GetAbilityState,
+		isBusy = InputController.IsBusy,
+		getActiveSlot = InputController.GetActiveSlot,
+		getLoadout = FeedbackController.GetLoadout,
+	})
 
 	local function onStateChanged(payload: any): ()
 		if typeof(payload) ~= "table" then
@@ -237,6 +251,8 @@ local function bootRange(): ()
 			reserve = viewport.Y - jumpTopLeft.Y + jumpSize
 		end
 		panel.SetLayout(scale, size, reserve)
+		-- The panel docks right at the screen margin; the bar keeps out of that column.
+		abilityBar.SetLayout(scale, size, Theme.COMBAT_RANGE_PANEL_WIDTH + Theme.SCREEN_MARGIN)
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
 	end

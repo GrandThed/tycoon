@@ -8,6 +8,11 @@
 -- real server-stepped arrows with gravity; split arrows fan after splitDistance. Every projectile
 -- is announced at fire time (CombatFxShot); its damage arrives as CombatFxStrike.
 --
+-- P3 (INTERFACES "P3 contracts"): SMG, Beam and Chain Gun ride the hitscan ray path; a Chain Gun
+-- hit starts chain lightning (links on the strike). AbilityService drives abilities through the
+-- hook API at the bottom (Strike, FireProjectile, buffs, locks, i-frames); this file never
+-- requires it, so the dependency runs one way only.
+--
 -- Studio only and opt-in: Main calls Configure(true) when the DebugProving attribute is set at
 -- boot. Otherwise every entry point here returns at once, so missions never touch this file.
 --
@@ -50,11 +55,12 @@ local MAX_SPAWN_ATTEMPTS = 3
 local SEED_MODULUS = 2147483647
 local SEED_MULTIPLIER = 48271
 local UINT32 = 4294967296
+-- Ability seeds flip this bit of the per-player salt. Attack and ability seqs stay far below it,
+-- so an ability's mix always differs from every attack's mix in this bit.
+local ABILITY_SEED_BIT = 0x40000000
 -- Live projectiles (arrows, split children, shells) across every player; a shot past this is
 -- refused rather than let the step grow without bound.
 local MAX_PROJECTILES = 256
--- How far below the root the floor probe looks (air tracking and the slam's landing point).
-local GROUND_PROBE_STUDS = 250
 -- Height above standing height before a character counts as airborne (steps and slopes).
 local AIRBORNE_MARGIN_STUDS = 0.75
 -- Server-set character attribute while dash i-frames are open, so the flag is visible in
@@ -75,6 +81,9 @@ type Respawn = { at: number, slot: Slot }
 -- One shot's shared record: every arrow of a split volley draws on the same cap, never hits an
 -- enemy another arrow of the volley already hit, and adds to the same readout totals.
 type Volley = { hit: { [number]: boolean }, distinct: number, cap: number, kills: number }
+-- An ability's strikes carry its id and add to the readout of cast `cast` instead of the normal
+-- attack readout (lastHits / lastKills).
+type AbilityTag = { id: string, cast: number }
 type Projectile = {
 	player: Player,
 	weapon: string,
@@ -107,14 +116,25 @@ type Projectile = {
 	volley: Volley,
 	-- The pellet/fan seed every strike of this shot carries.
 	seed: number,
+	-- Set when an ability fired it (FireProjectile): its tag, and the hook that runs where it
+	-- detonates or its flight ends.
+	ability: AbilityTag?,
+	onImpact: ((point: Vector3) -> ())?,
 }
 type DamageEntry = { at: number, amount: number }
+-- SetAttackBuff: until `untilClock`, the slot fires at rate x rateMult and its hitscan rays hit
+-- `pierce` enemies.
+type AttackBuff = { rateMult: number, pierce: number, untilClock: number }
 type Shooter = {
 	player: Player,
 	loadout: Types.RangeLoadout,
-	-- Keyed by slot: switching family never resets the rate clock or the replay guard.
+	-- Keyed by slot: switching family never resets the rate credit or the replay guard.
+	-- lastAttackAt drives the melee combo reset and the bow's draw clock; the rate check reads
+	-- only the credit (shots left after the last attack, nil = full) and when it was taken.
 	lastSeq: { [string]: number },
 	lastAttackAt: { [string]: number },
+	credit: { [string]: number },
+	creditAt: { [string]: number },
 	-- Keyed by family.
 	combo: { [string]: number },
 	-- The bow draw clock (RequestRangeDraw); 0 = not drawing.
@@ -139,16 +159,49 @@ type Shooter = {
 	damageLog: { DamageEntry },
 	lastHits: number,
 	lastKills: number,
+	-- Keyed by slot. Set only by AbilityService (Mag Dump).
+	buffs: { [string]: AttackBuff },
+	-- SetAbilityLock: normal attacks are refused until lockUntil, except on slot lockAllow.
+	lockUntil: number,
+	lockAllow: SlotName?,
+	-- The ability readout: the latest cast id (0 = none yet) and its running totals.
+	abilityId: string?,
+	abilityCast: number,
+	abilityHits: number,
+	abilityKills: number,
 	connections: { RBXScriptConnection },
 }
 -- One enemy the shape touched. `order` sorts nearest-first (distance, or entry along a ray).
 type Candidate = { id: number, order: number, body: Vector3, crit: boolean }
+-- What one CombatFxStrike draws. tick = a repeat of a lasting effect (held beam, ability tick);
+-- links = chain lightning pairs.
+type StrikeFx = {
+	shape: Types.HitShape,
+	origin: Vector3,
+	direction: Vector3,
+	size: number,
+	arcDegrees: number?,
+	width: number?,
+	endPoint: Vector3?,
+	-- Gun strikes only: the attack's seq, which seeded HitShapes.Pellets.
+	seq: number?,
+	tick: boolean?,
+	links: { number }?,
+}
+-- Chain lightning: jumps per hit enemy, the jump radius (body centre to body centre) and the
+-- damage multiplier each jump applies to the one before.
+type ChainSpec = { count: number, radius: number, falloff: number }
 
 local isStudio = RunService:IsStudio()
 local active = false
 local started = false
 local shooters: { [Player]: Shooter } = {}
 local projectiles: { Projectile } = {}
+-- An ability's onImpact hook may fire a new projectile while stepProjectiles walks the list; it
+-- waits here and joins the list when the step ends.
+local stepping = false
+local pending: { Projectile } = {}
+local loadoutListeners: { (player: Player, slot: SlotName) -> () } = {}
 local slotById: { [number]: Slot } = {}
 local setSlots: { Slot } = {}
 local respawns: { Respawn } = {}
@@ -200,6 +253,44 @@ end
 
 local function slotFamily(shooter: Shooter, slot: SlotName): string
 	return if slot == "melee" then shooter.loadout.melee else shooter.loadout.ranged
+end
+
+local function slotLocked(shooter: Shooter, slot: SlotName, now: number): boolean
+	return now < shooter.lockUntil and shooter.lockAllow ~= slot
+end
+
+-- Attack pacing is a per-slot credit in shots: it earns `rate` per second and every attack
+-- spends one. The slot's credit at `now` is what its last attack left plus what `rate` has
+-- earned since, capped at one shot plus shooting.rateBurstShots however long it idled, so a pair
+-- of shots network jitter bunched into adjacent frames still passes while the long-run rate
+-- never exceeds `rate`. Earning at the CURRENT rate lets a Mag Dump start or end mid-stream
+-- without a stale interval refusing the next shot.
+local function shotCredit(
+	shooter: Shooter,
+	slot: SlotName,
+	rate: number,
+	now: number,
+	shooting: Types.RangeShootingConfig
+): number
+	local cap = 1 + math.max(shooting.rateBurstShots, 0)
+	local held = shooter.credit[slot]
+	if held == nil then
+		return cap
+	end
+	return math.min(cap, held + (now - (shooter.creditAt[slot] or now)) * rate)
+end
+
+-- The slot's attack buff while it lasts; an expired one is dropped here.
+local function activeBuff(shooter: Shooter, slot: SlotName, now: number): AttackBuff?
+	local buff = shooter.buffs[slot]
+	if buff == nil then
+		return nil
+	end
+	if now >= buff.untilClock then
+		shooter.buffs[slot] = nil
+		return nil
+	end
+	return buff
 end
 
 -- config.loadout's family for a slot, or the first family (by id) that fills it if the named one
@@ -291,8 +382,35 @@ local function standingOffset(root: BasePart, humanoid: Humanoid): number
 end
 
 local function floorBelow(root: BasePart, params: RaycastParams): number?
-	local result = workspace:Raycast(root.Position, DOWN * GROUND_PROBE_STUDS, params)
+	local result = workspace:Raycast(root.Position, DOWN * HitShapes.GROUND_PROBE_DEPTH, params)
 	return if result ~= nil then result.Position.Y else nil
+end
+
+-- Ruling 4 step 4: the floor under a point, probed from a little above it so a point resting on
+-- the floor (or just inside it) still finds that floor.
+local function floorUnder(position: Vector3, params: RaycastParams): number?
+	local result = workspace:Raycast(
+		position + Vector3.new(0, HitShapes.GROUND_PROBE_LIFT, 0),
+		DOWN * HitShapes.GROUND_PROBE_DEPTH,
+		params
+	)
+	return if result ~= nil then result.Position.Y else nil
+end
+
+-- Fortnite aim: the ray starts at the camera, which must sit near this character's head. A
+-- moving character's camera leads the server's view of it by the ping plus a margin.
+local function aimAllowed(
+	player: Player,
+	root: BasePart,
+	origin: Vector3,
+	shooting: Types.RangeShootingConfig
+): boolean
+	local character = player.Character
+	local head = if character ~= nil then character:FindFirstChild("Head") else nil
+	local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
+	local lag = math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0)
+	local allowed = shooting.originPad + root.AssemblyLinearVelocity.Magnitude * lag
+	return (origin - anchor).Magnitude <= allowed
 end
 
 local function sendTo(player: Player, remoteName: string, ...: any): ()
@@ -331,6 +449,7 @@ local function statsFor(shooter: Shooter, now: number, refused: boolean?): Types
 	for _, entry in log do
 		total += entry.amount
 	end
+	local hasAbility = shooter.abilityId ~= nil
 	return {
 		lastHits = shooter.lastHits,
 		lastKills = shooter.lastKills,
@@ -339,6 +458,9 @@ local function statsFor(shooter: Shooter, now: number, refused: boolean?): Types
 		alive = CrowdService.AliveCount(),
 		serverFrameMs = CrowdService.StepMs(),
 		refused = refused,
+		ability = shooter.abilityId,
+		abilityHits = if hasAbility then shooter.abilityHits else nil,
+		abilityKills = if hasAbility then shooter.abilityKills else nil,
 	}
 end
 
@@ -353,9 +475,29 @@ end
 
 -- The seed of a gun strike's cosmetic pellets. Deterministic per (seq, salt), so the strike
 -- can carry it and every client draws the same pattern with HitShapes.Pellets.
-local function pelletSeed(shooter: Shooter, seq: number): number
-	local mixed = bit32.bxor(math.floor(seq % UINT32), shooter.salt)
+local function saltedSeed(salt: number, seq: number): number
+	local mixed = bit32.bxor(math.floor(seq % UINT32), salt)
 	return (mixed % (SEED_MODULUS - 1) + 1) * SEED_MULTIPLIER % SEED_MODULUS
+end
+
+local function pelletSeed(shooter: Shooter, seq: number): number
+	return saltedSeed(shooter.salt, seq)
+end
+
+-- Cast ids only grow, so a lingering tick of an older cast (a zone still running when the next
+-- cast lands) never drags the readout back to it.
+local function addAbilityReadout(shooter: Shooter, tag: AbilityTag, hits: number, kills: number): ()
+	if tag.cast < shooter.abilityCast then
+		return
+	end
+	if tag.cast > shooter.abilityCast or shooter.abilityId == nil then
+		shooter.abilityCast = tag.cast
+		shooter.abilityHits = 0
+		shooter.abilityKills = 0
+	end
+	shooter.abilityId = tag.id
+	shooter.abilityHits += hits
+	shooter.abilityKills += kills
 end
 
 local function broadcastFx(fx: Types.CombatFx): ()
@@ -534,19 +676,11 @@ local function finish(
 	weapon: string,
 	variantKey: string,
 	tally: Tally,
-	fx: {
-		shape: Types.HitShape,
-		origin: Vector3,
-		direction: Vector3,
-		size: number,
-		arcDegrees: number?,
-		width: number?,
-		endPoint: Vector3?,
-		-- Gun strikes only: the attack's seq, which seeded HitShapes.Pellets.
-		seq: number?,
-	},
+	fx: StrikeFx,
 	-- A projectile's readout counts its whole volley, not just this strike.
-	totals: { hits: number, kills: number }?
+	totals: { hits: number, kills: number }?,
+	-- An ability strike: tagged, and summed into its cast's readout, never the attack readout.
+	ability: AbilityTag?
 ): ()
 	local now = os.clock()
 	if tally.dealt > 0 and clearStartedAt == 0 then
@@ -566,13 +700,20 @@ local function finish(
 		endPoint = fx.endPoint,
 		seq = fx.seq,
 		hits = tally.hits,
+		ability = if ability ~= nil then ability.id else nil,
+		tick = fx.tick,
+		links = fx.links,
 	})
 	local shooter = shooters[player]
 	if shooter == nil then
 		return
 	end
-	shooter.lastHits = if totals ~= nil then totals.hits else #tally.hits
-	shooter.lastKills = if totals ~= nil then totals.kills else tally.kills
+	if ability ~= nil then
+		addAbilityReadout(shooter, ability, #tally.hits, tally.kills)
+	else
+		shooter.lastHits = if totals ~= nil then totals.hits else #tally.hits
+		shooter.lastKills = if totals ~= nil then totals.kills else tally.kills
+	end
 	if tally.dealt > 0 then
 		table.insert(shooter.damageLog, { at = now, amount = tally.dealt })
 	end
@@ -586,16 +727,24 @@ local function abandonProjectiles(): ()
 		if projectile.player.Parent == nil then
 			continue
 		end
-		finish(projectile.player, projectile.weapon, projectile.variantKey, newTally(), {
-			shape = "ray",
-			origin = projectile.position,
-			direction = DOWN,
-			size = 0,
-			arcDegrees = nil,
-			width = nil,
-			endPoint = projectile.position,
-			seq = projectile.seed,
-		}, { hits = projectile.volley.distinct, kills = projectile.volley.kills })
+		finish(
+			projectile.player,
+			projectile.weapon,
+			projectile.variantKey,
+			newTally(),
+			{
+				shape = "ray",
+				origin = projectile.position,
+				direction = DOWN,
+				size = 0,
+				arcDegrees = nil,
+				width = nil,
+				endPoint = projectile.position,
+				seq = projectile.seed,
+			},
+			{ hits = projectile.volley.distinct, kills = projectile.volley.kills },
+			projectile.ability
+		)
 	end
 	projectiles = {}
 end
@@ -654,6 +803,25 @@ end
 -- slam builds its own from movement.*.
 type Blast = { pad: number, cap: number, knockback: number, launch: number }
 
+local function sphereCandidates(
+	config: Types.ProvingGroundsConfig,
+	center: Vector3,
+	radius: number,
+	pad: number
+): { Candidate }
+	return gather(
+		config,
+		center,
+		radius + pad,
+		function(body: Vector3, r: number): (number?, boolean)
+			if HitShapes.Sphere(center, radius, pad, body, r) then
+				return (body - center).Magnitude, false
+			end
+			return nil, false
+		end
+	)
+end
+
 local function explode(
 	config: Types.ProvingGroundsConfig,
 	player: Player,
@@ -664,23 +832,132 @@ local function explode(
 	heading: Vector3,
 	tally: Tally
 ): ()
-	local candidates = gather(
-		config,
-		center,
-		radius + variant.pad,
-		function(body: Vector3, r: number): (number?, boolean)
-			if HitShapes.Sphere(center, radius, variant.pad, body, r) then
-				return (body - center).Magnitude, false
-			end
-			return nil, false
-		end
-	)
+	local candidates = sphereCandidates(config, center, radius, variant.pad)
 	local limit = if variant.cap > 0 then math.min(variant.cap, #candidates) else #candidates
 	for index = 1, limit do
 		local candidate = candidates[index]
 		local push = outward(center, candidate.body, heading) * variant.knockback
 		strike(tally, player, candidate.id, damage, false, push, variant.launch)
 	end
+end
+
+-- An arc, capsule, cone or thick line from `origin`. Arcs sweep `arcDegrees` (nil = a full
+-- circle) in a band reaching `reachDown` below the origin; cones open `arcDegrees` in all (nil =
+-- none); a capsule runs origin → tip with radius width / 2.
+type Area = {
+	shape: Types.HitShape,
+	origin: Vector3,
+	heading: Vector3,
+	range: number,
+	tip: Vector3,
+	arcDegrees: number?,
+	width: number,
+	pad: number,
+	reachDown: number,
+}
+
+-- The enemies an area touches, nearest the origin first.
+local function areaCandidates(config: Types.ProvingGroundsConfig, area: Area): { Candidate }
+	local shape = area.shape
+	local origin = area.origin
+	local pad = area.pad
+	local halfWidth = area.width / 2
+	local test = function(body: Vector3, r: number): (number?, boolean)
+		local touched = false
+		if shape == "arc" then
+			touched = HitShapes.Arc(
+				origin,
+				area.heading,
+				area.range,
+				area.arcDegrees or 360,
+				pad,
+				body,
+				r,
+				area.reachDown
+			)
+		elseif shape == "capsule" then
+			touched = HitShapes.Capsule(origin, area.tip, halfWidth, pad, body, r)
+		elseif shape == "cone" then
+			touched = HitShapes.Cone(
+				origin,
+				area.heading,
+				area.range,
+				(area.arcDegrees or 0) / 2,
+				pad,
+				body,
+				r
+			)
+		elseif shape == "ray" then
+			touched = HitShapes.Ray(origin, area.heading, area.range, area.width, pad, body, r)
+				~= nil
+		end
+		if touched then
+			return (body - origin).Magnitude, false
+		end
+		return nil, false
+	end
+	local reach = math.max(area.range, (area.tip - origin).Magnitude)
+	return gather(config, origin, reach + pad + halfWidth + area.reachDown, test)
+end
+
+-- Chain lightning (P3 ruling 8). Each seed enemy, in order, starts `count` jumps; each jump goes
+-- to the nearest living enemy within `radius` of the last one (body centre to body centre) that
+-- `hit` does not hold yet, for damage x falloff^jump, pushed along the jump. Jumps never crit and
+-- sit outside any cap or pierce. Every seed and jump is added to `hit`, so the shared set also
+-- keeps a later chain off an enemy an earlier one already struck. Returns the links: flat
+-- {from, to} id pairs, 0 = the strike origin.
+local function chainFrom(
+	config: Types.ProvingGroundsConfig,
+	player: Player,
+	tally: Tally,
+	seeds: { Candidate },
+	hit: { [number]: boolean },
+	chain: ChainSpec,
+	damage: number,
+	knockback: number,
+	launch: number
+): { number }
+	local links: { number } = {}
+	for _, seed in seeds do
+		hit[seed.id] = true
+	end
+	local jumps = math.max(0, math.floor(chain.count))
+	local radius = math.max(chain.radius, 0)
+	for _, seed in seeds do
+		table.insert(links, 0)
+		table.insert(links, seed.id)
+		local fromId = seed.id
+		local fromBody = seed.body
+		for jump = 1, jumps do
+			local nearby = gather(
+				config,
+				fromBody,
+				radius,
+				function(body: Vector3): (number?, boolean)
+					local distance = (body - fromBody).Magnitude
+					return (if distance <= radius then distance else nil), false
+				end
+			)
+			local target: Candidate? = nil
+			for _, candidate in nearby do
+				if not hit[candidate.id] then
+					target = candidate
+					break
+				end
+			end
+			if target == nil then
+				break
+			end
+			hit[target.id] = true
+			local push = outward(fromBody, target.body, target.body - fromBody) * knockback
+			strike(tally, player, target.id, damage * chain.falloff ^ jump, false, push, launch)
+			table.insert(links, fromId)
+			table.insert(links, target.id)
+			fromId = target.id
+			fromBody = target.body
+		end
+	end
+	return links
 end
 
 local function resolveMelee(
@@ -706,9 +983,7 @@ local function resolveMelee(
 	end
 	local damage = variant.damage * multiplier
 	local range = variant.range
-	local pad = variant.pad
 	local shape: Types.HitShape = variant.shape
-	local halfWidth = (variant.width or 0) / 2
 	-- Lead ruling: an airborne swing's arc reaches down to the crowd below (HitShapes.Arc band).
 	local reachDown = if shooter.airborne then math.max(config.movement.airSwingReachDown, 0) else 0
 	local tally = newTally()
@@ -716,35 +991,17 @@ local function resolveMelee(
 	if shape == "sphere" then
 		explode(config, shooter.player, origin, range, variant, damage, heading, tally)
 	else
-		local tip = origin + heading * range
-		local test = function(body: Vector3, r: number): (number?, boolean)
-			local touched = false
-			if shape == "arc" then
-				touched = HitShapes.Arc(
-					origin,
-					heading,
-					range,
-					arcDegrees or 360,
-					pad,
-					body,
-					r,
-					reachDown
-				)
-			elseif shape == "capsule" then
-				touched = HitShapes.Capsule(origin, tip, halfWidth, pad, body, r)
-			elseif shape == "cone" then
-				touched =
-					HitShapes.Cone(origin, heading, range, (arcDegrees or 0) / 2, pad, body, r)
-			elseif shape == "ray" then
-				touched = HitShapes.Ray(origin, heading, range, variant.width or 0, pad, body, r)
-					~= nil
-			end
-			if touched then
-				return (body - origin).Magnitude, false
-			end
-			return nil, false
-		end
-		local candidates = gather(config, origin, range + pad + halfWidth + reachDown, test)
+		local candidates = areaCandidates(config, {
+			shape = shape,
+			origin = origin,
+			heading = heading,
+			range = range,
+			tip = origin + heading * range,
+			arcDegrees = arcDegrees,
+			width = variant.width or 0,
+			pad = variant.pad,
+			reachDown = reachDown,
+		})
 		for index = 1, capOf(variant, #candidates) do
 			local candidate = candidates[index]
 			-- Lines push along the thrust; sweeps and blasts push away from the swinger.
@@ -784,10 +1041,9 @@ local function rayCandidates(
 	origin: Vector3,
 	direction: Vector3,
 	reach: number,
-	variant: Variant
+	width: number,
+	pad: number
 ): { Candidate }
-	local width = variant.width or 0
-	local pad = variant.pad
 	local center = origin + direction * (reach / 2)
 	return gather(
 		config,
@@ -843,9 +1099,14 @@ local function resolveCharge(
 	return charge, minFraction + (1 - minFraction) * charge, charge >= 1
 end
 
+-- Live projectiles, counting any an impact hook fired during the current step.
+local function projectileCount(): number
+	return #projectiles + #pending
+end
+
 -- A projectile weapon's trigger pull: one record (a split parent fans later) and ONE CombatFxShot
 -- to everyone, which is all a client needs to fly it: origin, direction, speed, gravity, and the
--- seq that seeds the split fan.
+-- seq that seeds the split fan. An ability's shot carries its tag and impact hook.
 local function spawnShot(
 	shooter: Shooter,
 	weapon: string,
@@ -856,13 +1117,15 @@ local function spawnShot(
 	seed: number,
 	charge: number,
 	scale: number,
-	full: boolean
+	full: boolean,
+	ability: AbilityTag?,
+	onImpact: ((point: Vector3) -> ())?
 ): ()
 	local frozen = table.clone(variant)
 	local speed = frozen.projectileSpeed or 0
 	local gravity = math.max(frozen.gravity or 0, 0)
 	local splitCount = volleySize(frozen)
-	table.insert(projectiles, {
+	table.insert(if stepping then pending else projectiles, {
 		player = shooter.player,
 		weapon = weapon,
 		variantKey = variantKey,
@@ -883,6 +1146,8 @@ local function spawnShot(
 		splitting = splitCount > 1,
 		volley = { hit = {}, distinct = 0, cap = frozen.cap, kills = 0 },
 		seed = seed,
+		ability = ability,
+		onImpact = onImpact,
 	})
 	broadcastFx({
 		kind = "shot",
@@ -895,6 +1160,7 @@ local function spawnShot(
 		gravity = gravity,
 		charge = charge,
 		seq = seed,
+		ability = if ability ~= nil then ability.id else nil,
 	})
 end
 
@@ -909,7 +1175,9 @@ local function resolveRanged(
 	direction: Vector3,
 	charge: number,
 	scale: number,
-	full: boolean
+	full: boolean,
+	-- An active attack buff's pierce (Mag Dump): hitscan rays then hit this many enemies each.
+	buffPierce: number?
 ): ()
 	local unit = direction.Unit
 	-- Pellets and fans are cosmetic seeds (lead ruling): every client draws the same ones.
@@ -968,17 +1236,34 @@ local function resolveRanged(
 
 	local reach = worldReach(origin, unit, variant.range, params)
 	if variant.shape == "ray" then
-		local candidates = rayCandidates(config, origin, unit, reach, variant)
-		local limit = capOf(variant, math.min(#candidates, pierceOf(variant)))
+		local candidates =
+			rayCandidates(config, origin, unit, reach, variant.width or 0, variant.pad)
+		-- A buffed bullet hits its buff's pierce whatever the variant's cap: Mag Dump turns the
+		-- one-enemy SMG into a piercing one.
+		local limit = if buffPierce ~= nil
+			then math.min(#candidates, math.max(1, math.floor(buffPierce)))
+			else capOf(variant, math.min(#candidates, pierceOf(variant)))
 		local endPoint = origin + unit * reach
+		local seeds: { Candidate } = {}
 		for index = 1, limit do
 			local candidate = candidates[index]
 			local amount = if candidate.crit then variant.damage * critMult else variant.damage
 			strike(tally, player, candidate.id, amount, candidate.crit, pushBase, variant.launch)
+			table.insert(seeds, candidate)
 			if index == limit and limit < #candidates then
 				-- Pierce spent: the beam visibly stops in the last enemy it went through.
 				endPoint = origin + unit * candidate.order
 			end
+		end
+		-- Chain Gun: every enemy the ray hit starts a chain from the base damage.
+		local links: { number }? = nil
+		local chainCount = variant.chainCount or 0
+		if chainCount > 0 then
+			links = chainFrom(config, player, tally, seeds, {}, {
+				count = chainCount,
+				radius = variant.chainRadius or 0,
+				falloff = variant.chainFalloff or 1,
+			}, variant.damage, variant.knockback, variant.launch)
 		end
 		finish(player, weapon, variantKey, tally, {
 			shape = "ray",
@@ -989,6 +1274,9 @@ local function resolveRanged(
 			width = variant.width,
 			endPoint = endPoint,
 			seq = seed,
+			-- Ruling 6: a held beam's shots are ticks of one lasting beam.
+			tick = if variant.continuous == true then true else nil,
+			links = links,
 		})
 		return
 	end
@@ -1013,30 +1301,17 @@ local function resolveRanged(
 
 	-- Arc or capsule fired from the camera ray: everything inside, nearest first.
 	local shape: Types.HitShape = variant.shape
-	local halfWidth = (variant.width or 0) / 2
-	local tip = origin + unit * reach
-	local candidates = gather(
-		config,
-		origin,
-		reach + variant.pad + halfWidth,
-		function(body: Vector3, r: number): (number?, boolean)
-			local touched = false
-			if shape == "arc" then
-				touched = HitShapes.Arc(
-					origin,
-					unit,
-					reach,
-					variant.arcDegrees or 360,
-					variant.pad,
-					body,
-					r
-				)
-			elseif shape == "capsule" then
-				touched = HitShapes.Capsule(origin, tip, halfWidth, variant.pad, body, r)
-			end
-			return (if touched then (body - origin).Magnitude else nil), false
-		end
-	)
+	local candidates = areaCandidates(config, {
+		shape = shape,
+		origin = origin,
+		heading = unit,
+		range = reach,
+		tip = origin + unit * reach,
+		arcDegrees = variant.arcDegrees,
+		width = variant.width or 0,
+		pad = variant.pad,
+		reachDown = 0,
+	})
 	for index = 1, capOf(variant, #candidates) do
 		strike(tally, player, candidates[index].id, variant.damage, false, pushBase, variant.launch)
 	end
@@ -1070,21 +1345,9 @@ local function markVolley(volley: Volley, id: number): ()
 	end
 end
 
--- Every projectile strike reports the whole volley's totals to the shooter's readout.
-local function reportShot(
-	projectile: Projectile,
-	tally: Tally,
-	fx: {
-		shape: Types.HitShape,
-		origin: Vector3,
-		direction: Vector3,
-		size: number,
-		arcDegrees: number?,
-		width: number?,
-		endPoint: Vector3?,
-		seq: number?,
-	}
-): ()
+-- Every projectile strike reports the whole volley's totals to the shooter's readout (an
+-- ability's strikes add to their cast's readout instead).
+local function reportShot(projectile: Projectile, tally: Tally, fx: StrikeFx): ()
 	local volley = projectile.volley
 	for _, hit in tally.hits do
 		markVolley(volley, hit.id)
@@ -1096,8 +1359,26 @@ local function reportShot(
 		projectile.variantKey,
 		tally,
 		fx,
-		{ hits = volley.distinct, kills = volley.kills }
+		{ hits = volley.distinct, kills = volley.kills },
+		projectile.ability
 	)
+end
+
+-- An ability projectile's hook, run inside the step. A failing hook is logged and swallowed so
+-- one ability bug can never stop every other projectile in flight.
+local function runImpact(projectile: Projectile, point: Vector3): ()
+	local hook = projectile.onImpact
+	if hook == nil then
+		return
+	end
+	local ok, message = pcall(function(): any?
+		hook(point)
+		return nil
+	end)
+	if not ok then
+		local id = if projectile.ability ~= nil then projectile.ability.id else projectile.weapon
+		warn(`[RangeService] {id} impact hook failed: {message}`)
+	end
 end
 
 -- A shell bursts at `impact` (splashRadius, capped nearest-first like any blast).
@@ -1124,6 +1405,7 @@ local function detonate(
 		endPoint = impact,
 		seq = projectile.seed,
 	})
+	runImpact(projectile, impact)
 end
 
 -- An arrow is done at `stop`. A full charge bursts there (blastRadius, damage x blastDamageMult,
@@ -1161,18 +1443,19 @@ local function endArrow(
 			endPoint = stop,
 			seq = projectile.seed,
 		})
-		return
+	else
+		reportShot(projectile, tally, {
+			shape = "ray",
+			origin = from,
+			direction = direction,
+			size = (stop - from).Magnitude,
+			arcDegrees = nil,
+			width = variant.width,
+			endPoint = stop,
+			seq = projectile.seed,
+		})
 	end
-	reportShot(projectile, tally, {
-		shape = "ray",
-		origin = from,
-		direction = direction,
-		size = (stop - from).Magnitude,
-		arcDegrees = nil,
-		width = variant.width,
-		endPoint = stop,
-		seq = projectile.seed,
-	})
+	runImpact(projectile, stop)
 end
 
 -- A split parent becomes its fan at `point`. First a CombatFxShot with split = true tells every
@@ -1203,6 +1486,7 @@ local function splitArrow(
 		charge = projectile.charge,
 		seq = projectile.seed,
 		split = true,
+		ability = if projectile.ability ~= nil then projectile.ability.id else nil,
 	})
 	local arrows = HitShapes.Fan(
 		direction,
@@ -1213,7 +1497,7 @@ local function splitArrow(
 	)
 	for _, arrow in arrows do
 		-- OnAttack reserved the whole volley up front; this only guards a tuned-up splitCount.
-		if #projectiles + #spawned >= MAX_PROJECTILES then
+		if projectileCount() + #spawned >= MAX_PROJECTILES then
 			break
 		end
 		table.insert(spawned, {
@@ -1238,6 +1522,8 @@ local function splitArrow(
 			splitting = false,
 			volley = projectile.volley,
 			seed = projectile.seed,
+			ability = projectile.ability,
+			onImpact = projectile.onImpact,
 		})
 	end
 end
@@ -1274,7 +1560,7 @@ local function stepProjectile(
 	local reach = math.min(length, budget, splitAt)
 	local wall = if reach > 0 then worldReach(from, direction, reach, params) else 0
 	local candidates: { Candidate } = if wall > 0
-		then rayCandidates(config, from, direction, wall, variant)
+		then rayCandidates(config, from, direction, wall, variant.width or 0, variant.pad)
 		else {}
 	local volley = projectile.volley
 	-- Out of range or time at the end of this step: whatever did not stop it earlier ends here.
@@ -1394,6 +1680,7 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 	local params = worldParams()
 	local survivors: { Projectile } = {}
 	local spawned: { Projectile } = {}
+	stepping = true
 	for _, projectile in projectiles do
 		if stepProjectile(config, projectile, deltaTime, params, spawned) then
 			table.insert(survivors, projectile)
@@ -1409,6 +1696,12 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 			table.insert(survivors, child)
 		end
 	end
+	stepping = false
+	-- Shots an impact hook fired this step start flying next frame.
+	for _, fired in pending do
+		table.insert(survivors, fired)
+	end
+	pending = {}
 	projectiles = survivors
 end
 
@@ -1575,6 +1868,8 @@ function RangeService.AddPlayer(player: Player): ()
 		},
 		lastSeq = { melee = -1, ranged = -1 },
 		lastAttackAt = { melee = 0, ranged = 0 },
+		credit = {},
+		creditAt = {},
 		combo = {},
 		drawStartedAt = 0,
 		drawWeapon = "",
@@ -1592,6 +1887,13 @@ function RangeService.AddPlayer(player: Player): ()
 		damageLog = {},
 		lastHits = 0,
 		lastKills = 0,
+		buffs = {},
+		lockUntil = 0,
+		lockAllow = nil,
+		abilityId = nil,
+		abilityCast = 0,
+		abilityHits = 0,
+		abilityKills = 0,
 		connections = {},
 	}
 	shooters[player] = shooter
@@ -1664,6 +1966,12 @@ function RangeService.OnAttack(
 	if seq <= (shooter.lastSeq[slot] or -1) then
 		return
 	end
+	local now = os.clock()
+	if slotLocked(shooter, slot, now) then
+		-- A busy ability owns the caster (ruling 3): the client's early effects are taken back.
+		sendRefused(shooter)
+		return
+	end
 	local _character, root = rootOf(player)
 	if root == nil then
 		return
@@ -1672,30 +1980,29 @@ function RangeService.OnAttack(
 	if variant == nil or variant.rate <= 0 then
 		return
 	end
-	local now = os.clock()
-	local interval = 1 / variant.rate
+	local buff = activeBuff(shooter, slot, now)
+	local rate = variant.rate * (if buff ~= nil then buff.rateMult else 1)
+	if rate <= 0 then
+		return
+	end
 	local previousAttackAt = shooter.lastAttackAt[slot] or 0
-	if now - previousAttackAt < interval * timingTolerance() then
+	-- A shot may come timingTolerance of a credit early (the jitter window); it spends a whole
+	-- one, so the average stays at `rate`. The same test as nextAllowedAt - interval x (1 -
+	-- tolerance), kept in shots so a rate change applies from now on.
+	local credit = shotCredit(shooter, slot, rate, now, config.shooting)
+	if credit < timingTolerance() then
 		sendRefused(shooter)
 		return
 	end
 	if variant.kind == "ranged" then
-		-- Fortnite aim: the ray starts at the camera, which must sit near this character's head.
-		-- A moving character's camera leads the server's view of it by the ping plus a margin.
-		local character = player.Character
-		local head = if character ~= nil then character:FindFirstChild("Head") else nil
-		local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
-		local shooting = config.shooting
-		local lag = math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0)
-		local allowed = shooting.originPad + root.AssemblyLinearVelocity.Magnitude * lag
-		if (origin - anchor).Magnitude > allowed then
+		if not aimAllowed(player, root, origin, config.shooting) then
 			sendRefused(shooter)
 			return
 		end
 		-- A split shot becomes splitCount arrows: the whole volley must fit, or the shot is refused.
 		if
 			(variant.projectileSpeed or 0) > 0
-			and #projectiles + volleySize(variant) > MAX_PROJECTILES
+			and projectileCount() + volleySize(variant) > MAX_PROJECTILES
 		then
 			sendRefused(shooter)
 			return
@@ -1706,6 +2013,8 @@ function RangeService.OnAttack(
 	end
 	shooter.lastSeq[slot] = seq
 	shooter.lastAttackAt[slot] = now
+	shooter.credit[slot] = credit - 1
+	shooter.creditAt[slot] = now
 	if variant.kind == "melee" then
 		resolveMelee(config, shooter, weapon, variantKey, variant, root, direction)
 	else
@@ -1722,13 +2031,15 @@ function RangeService.OnAttack(
 			direction,
 			used,
 			scale,
-			full
+			full,
+			if buff ~= nil then buff.pierce else nil
 		)
 	end
 end
 
 -- The bow's draw start. It carries nothing the server trusts: it stamps its own clock, and
--- OnAttack caps the charge by the time since this stamp.
+-- OnAttack caps the charge by the time since this stamp. A draw begun while a busy ability locks
+-- the slot starts counting only when the lock ends, so no charge is banked during the ability.
 function RangeService.OnDraw(player: Player, weapon: string): ()
 	local shooter = shooters[player]
 	if not active or shooter == nil then
@@ -1742,7 +2053,8 @@ function RangeService.OnDraw(player: Player, weapon: string): ()
 	if slotFamily(shooter, slot) ~= weapon then
 		return
 	end
-	shooter.drawStartedAt = os.clock()
+	local now = os.clock()
+	shooter.drawStartedAt = if slotLocked(shooter, slot, now) then shooter.lockUntil else now
 	shooter.drawWeapon = weapon
 end
 
@@ -1762,7 +2074,8 @@ function RangeService.OnDash(player: Player, _direction: Vector3): ()
 		return
 	end
 	shooter.lastDashAt = now
-	shooter.iframesUntil = now + movement.dashIframes
+	-- Never shortens a longer window an ability granted (GrantIframes).
+	shooter.iframesUntil = math.max(shooter.iframesUntil, now + movement.dashIframes)
 	character:SetAttribute(IFRAMES_ATTRIBUTE, true)
 end
 
@@ -1887,7 +2200,9 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 			warn(`[RangeService] no weapon family "{argument}"`)
 			return
 		end
-		if def.slot == "melee" then
+		local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
+		local previous = slotFamily(shooter, slot)
+		if slot == "melee" then
 			shooter.loadout.melee = argument
 		else
 			shooter.loadout.ranged = argument
@@ -1895,6 +2210,13 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 		shooter.combo[argument] = 0
 		shooter.drawStartedAt = 0
 		tuneStateFor(shooter)
+		if previous ~= argument then
+			-- A buff belongs to the family whose ability granted it.
+			shooter.buffs[slot] = nil
+			for _, listener in table.clone(loadoutListeners) do
+				task.spawn(listener, player, slot)
+			end
+		end
 	elseif command == "variant" and argument ~= nil then
 		-- `variant <familyId> <key>` arrives as one argument string.
 		local family, key = string.match(argument, "^(%S+)%s+(%S+)$")
@@ -1915,6 +2237,307 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 		return
 	end
 	sendStats(shooter)
+end
+
+-- Hooks for AbilityService (INTERFACES "P3 contracts" → "Server APIs"). Every one is range-only
+-- and none of them yields, so AbilityService may call them from its own Heartbeat timelines.
+
+-- A fresh copy with the variant held for every family; nil = not a range player.
+function RangeService.LoadoutOf(player: Player): Types.RangeLoadout?
+	local shooter = shooters[player]
+	if not active or shooter == nil then
+		return nil
+	end
+	return loadoutPayload(Tuning.Get(), shooter)
+end
+
+-- The live root of a range player's living character.
+function RangeService.RootOf(player: Player): BasePart?
+	if not active or shooters[player] == nil then
+		return nil
+	end
+	local _character, root = rootOf(player)
+	return root
+end
+
+-- The ranged attack's origin test: a cast's camera ray must start near the caster's head.
+function RangeService.CheckAim(player: Player, origin: Vector3): boolean
+	if not active or shooters[player] == nil then
+		return false
+	end
+	local _character, root = rootOf(player)
+	return root ~= nil and aimAllowed(player, root, origin, Tuning.Get().shooting)
+end
+
+-- Ruling 4, which InputController mirrors on the client: where an aimed ability lands.
+function RangeService.GroundPoint(
+	player: Player,
+	origin: Vector3,
+	direction: Vector3,
+	castRange: number
+): Vector3?
+	if not active or shooters[player] == nil or direction.Magnitude < 1e-6 then
+		return nil
+	end
+	local _character, root, humanoid = rootOf(player)
+	if root == nil or humanoid == nil then
+		return nil
+	end
+	local params = worldParams()
+	local rootPosition = root.Position
+	local range = math.max(castRange, 0)
+	-- 1-2: the camera ray, long enough to cover castRange from the root wherever the camera is.
+	local length = range + (origin - rootPosition).Magnitude
+	local unit = direction.Unit
+	local result = if length > 0 then workspace:Raycast(origin, unit * length, params) else nil
+	local point = if result ~= nil then result.Position else origin + unit * length
+	-- 3: pulled back to castRange on the flat, keeping its height.
+	local flat = Vector3.new(point.X - rootPosition.X, 0, point.Z - rootPosition.Z)
+	if flat.Magnitude > range then
+		local pulled = flat.Unit * range
+		point = Vector3.new(rootPosition.X + pulled.X, point.Y, rootPosition.Z + pulled.Z)
+	end
+	-- 4: dropped onto the floor there, else level with the floor under the caster.
+	local floorY = floorUnder(point, params)
+		or floorBelow(root, params)
+		or rootPosition.Y - standingOffset(root, humanoid)
+	return Vector3.new(point.X, floorY, point.Z)
+end
+
+-- Ruling 4 step 4 alone: the floor point under `position`, or `position` itself over a void.
+function RangeService.FloorBelow(position: Vector3): Vector3
+	local floorY = floorUnder(position, worldParams())
+	return if floorY ~= nil then Vector3.new(position.X, floorY, position.Z) else position
+end
+
+-- The salted seed an ability's shots, strikes and scatters carry. The client's ability and
+-- attack counters both start at 0, so this salt differs from the attack salt in one bit: a
+-- Volley or Cluster Shell then never shares a userId:seed flight key with an arrow in flight.
+function RangeService.SeedFor(player: Player, seq: number): number
+	local shooter = shooters[player]
+	local salt = if shooter ~= nil then shooter.salt else 0
+	return saltedSeed(bit32.bxor(salt, ABILITY_SEED_BIT), seq)
+end
+
+-- One ability hit (AbilityStrikeSpec in Types.luau): gather → skip `exclude` → cap nearest-first
+-- → damage, push, launch → chains → ONE CombatFxStrike → the cast's readout and the DPS log.
+-- Returns (distinct enemies hit, chains included; kills).
+function RangeService.Strike(
+	player: Player,
+	family: string,
+	ability: string,
+	spec: Types.AbilityStrikeSpec
+): (number, number)
+	local shooter = shooters[player]
+	if not active or shooter == nil then
+		return 0, 0
+	end
+	local config = Tuning.Get()
+	local variantKey = variantFor(config, shooter, family)
+	local shape: Types.HitShape = spec.shape
+	local origin = spec.origin
+	local unit = if spec.direction.Magnitude > 1e-6 then spec.direction.Unit else DOWN
+	local fx: StrikeFx = {
+		shape = shape,
+		origin = origin,
+		direction = unit,
+		size = spec.size,
+		arcDegrees = spec.arcDegrees,
+		width = spec.width,
+		tick = spec.tick,
+	}
+
+	local candidates: { Candidate }
+	if shape == "sphere" then
+		candidates = sphereCandidates(config, origin, spec.size, spec.pad)
+	elseif shape == "ray" then
+		local reach = worldReach(origin, unit, math.max(spec.size, 0), worldParams())
+		candidates = rayCandidates(config, origin, unit, reach, spec.width or 0, spec.pad)
+		fx.endPoint = origin + unit * reach
+	else
+		-- Arcs sweep flat; a full circle needs no aim, so a vertical direction still spins.
+		local heading = if shape == "arc" then flatten(unit) or Vector3.new(0, 0, -1) else unit
+		local tip = origin + heading * spec.size
+		-- Review round: an arc round the caster's own root (Whirlwind, Overload Sweep) reaches the
+		-- crowd below an airborne caster exactly as a melee swing does.
+		local reachDown = if shape == "arc"
+				and spec.airReach == true
+				and shooter.airborne
+			then math.max(config.movement.airSwingReachDown, 0)
+			else 0
+		if shape == "capsule" then
+			tip = spec.endPoint or tip
+			-- Clients draw a capsule from origin along direction for size: name the real segment.
+			local segment = tip - origin
+			fx.direction = if segment.Magnitude > 1e-6 then segment.Unit else unit
+			fx.size = segment.Magnitude
+			fx.endPoint = tip
+		else
+			fx.direction = heading
+			-- As melee arcs: an airborne band carries its bottom, a grounded one has none.
+			if reachDown > 0 then
+				fx.endPoint = origin - Vector3.new(0, reachDown, 0)
+			end
+		end
+		candidates = areaCandidates(config, {
+			shape = shape,
+			origin = origin,
+			heading = heading,
+			range = spec.size,
+			tip = tip,
+			arcDegrees = spec.arcDegrees,
+			width = spec.width or 0,
+			pad = spec.pad,
+			reachDown = reachDown,
+		})
+	end
+
+	local exclude = spec.exclude
+	local eligible: { Candidate } = {}
+	for _, candidate in candidates do
+		if exclude == nil or not exclude[candidate.id] then
+			table.insert(eligible, candidate)
+		end
+	end
+	local limit = if spec.cap > 0 then math.min(spec.cap, #eligible) else #eligible
+	local critMult = config.shooting.critMult
+	local pull = spec.pull or 0
+	local tally = newTally()
+	local seeds: { Candidate } = {}
+	for index = 1, limit do
+		local candidate = eligible[index]
+		local crit = shape == "ray" and spec.crit == true and candidate.crit
+		local push: Vector3
+		if pull > 0 then
+			push = -outward(origin, candidate.body, unit) * pull
+		elseif shape == "capsule" or shape == "ray" then
+			push = (flatten(unit) or outward(origin, candidate.body, unit)) * spec.knockback
+		else
+			push = outward(origin, candidate.body, unit) * spec.knockback
+		end
+		local amount = if crit then spec.damage * critMult else spec.damage
+		strike(tally, player, candidate.id, amount, crit, push, spec.launch)
+		table.insert(seeds, candidate)
+		if shape == "ray" and index == limit and limit < #eligible then
+			-- Cap spent: the ray visibly stops in the last enemy it went through.
+			fx.endPoint = origin + unit * candidate.order
+		end
+	end
+	local chain = spec.chain
+	if chain ~= nil then
+		fx.links = chainFrom(
+			config,
+			player,
+			tally,
+			seeds,
+			exclude or {},
+			chain,
+			spec.damage,
+			spec.knockback,
+			spec.launch
+		)
+	end
+	if exclude ~= nil then
+		for _, hit in tally.hits do
+			exclude[hit.id] = true
+		end
+	end
+	finish(player, family, variantKey, tally, fx, nil, { id = ability, cast = spec.cast })
+	return #tally.hits, tally.kills
+end
+
+-- An ability projectile on the normal projectile path (frozen, announced, stepped). Refused when
+-- the projectile budget cannot hold its whole volley, or when it could never move (it would
+-- hang until it expired, never detonating).
+function RangeService.FireProjectile(
+	player: Player,
+	family: string,
+	ability: string,
+	cast: number,
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	direction: Vector3,
+	seed: number,
+	onImpact: ((point: Vector3) -> ())?
+): boolean
+	local shooter = shooters[player]
+	if not active or shooter == nil or direction.Magnitude < 1e-6 then
+		return false
+	end
+	if (variant.projectileSpeed or 0) <= 0 then
+		return false
+	end
+	if projectileCount() + volleySize(variant) > MAX_PROJECTILES then
+		return false
+	end
+	local variantKey = variantFor(Tuning.Get(), shooter, family)
+	spawnShot(
+		shooter,
+		family,
+		variantKey,
+		variant,
+		origin,
+		direction.Unit,
+		seed,
+		1,
+		1,
+		false,
+		{ id = ability, cast = cast },
+		onImpact
+	)
+	return true
+end
+
+-- nil clears the slot's buff; an expired one lapses on its own.
+function RangeService.SetAttackBuff(
+	player: Player,
+	slot: "melee" | "ranged",
+	buff: { rateMult: number, pierce: number, untilClock: number }?
+): ()
+	local shooter = shooters[player]
+	if not active or shooter == nil then
+		return
+	end
+	if buff == nil then
+		shooter.buffs[slot] = nil
+		return
+	end
+	-- A copy: the caller's table can never change a buff behind the server's back.
+	shooter.buffs[slot] =
+		{ rateMult = buff.rateMult, pierce = buff.pierce, untilClock = buff.untilClock }
+end
+
+-- Replaces any lock; an untilClock already past clears it.
+function RangeService.SetAbilityLock(
+	player: Player,
+	untilClock: number,
+	allow: ("melee" | "ranged")?
+): ()
+	local shooter = shooters[player]
+	if not active or shooter == nil then
+		return
+	end
+	shooter.lockUntil = untilClock
+	shooter.lockAllow = allow
+end
+
+function RangeService.GrantIframes(player: Player, seconds: number): ()
+	local shooter = shooters[player]
+	if not active or shooter == nil or not (seconds > 0 and seconds < math.huge) then
+		return
+	end
+	shooter.iframesUntil = math.max(shooter.iframesUntil, os.clock() + seconds)
+	local character = player.Character
+	if character ~= nil then
+		character:SetAttribute(IFRAMES_ATTRIBUTE, true)
+	end
+end
+
+-- Fires (on its own thread) when the `weapon` range command puts a different family in a slot.
+function RangeService.OnLoadoutChanged(
+	callback: (player: Player, slot: "melee" | "ranged") -> ()
+): ()
+	table.insert(loadoutListeners, callback)
 end
 
 function RangeService.Init(): () end

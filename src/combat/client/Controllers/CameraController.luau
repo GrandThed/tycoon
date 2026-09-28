@@ -31,6 +31,12 @@
 -- field of view to `shooting.adsFieldOfView` and scales look sensitivity with it; and the
 -- pivot's height follows the character through a clamped lag, so a 16-stud jump or a slam
 -- glides instead of yanking the view. Missions never see any of it.
+--
+-- P3 (docs/INTERFACES.md "P3 contracts"): during a Leap Smash or an Impale Dash
+-- (MovementController.BeginMotion) the pivot's horizontal position trails the character by
+-- the same clamped lag the height uses, so a 60-100 stud/s burst reads as speed instead of
+-- the world snapping past a locked camera; afterwards the gap closes on its own in a fraction
+-- of a second. A leap adds a short field-of-view kick. Neither is shake: shake is Feedback's.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -48,6 +54,14 @@ local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Them
 local BIND_NAME = "CombatShoulderCamera"
 -- Range-only presentation constants (purely visual, so they live here, not in config).
 local ADS_FOV_RATE = 16 -- per second, toward the ADS / hip field of view
+-- After a leap or lunge the horizontal trail closes at this rate per second (~0.3 s).
+local MOTION_CATCH_UP_RATE = 8
+-- Field-of-view kick: rises toward the kick at RISE per second while the kick itself drains
+-- at DECAY per second, so it swells over ~0.1 s and settles within ~0.6 s. Degrees, capped.
+local FOV_KICK_RISE = 25
+local FOV_KICK_DECAY = 5
+local FOV_KICK_MAX = 15
+local LAG_EPSILON = 0.01
 local ENEMIES_FOLDER = "Enemies"
 -- Phases in which the run is over: the ordinary camera and cursor return for the summary.
 local DEFAULT_CAMERA_PHASES: { [string]: boolean } = { summary = true, ended = true }
@@ -78,6 +92,13 @@ local rangeMode = false
 local adsOn = false
 local fieldOfView = FALLBACK_CAMERA.fieldOfView
 local pivotHeight: number? = nil
+-- P3 ability motion: until when the pivot may trail horizontally, the current trail (pivot
+-- minus root, X/Z only), the root's last flat position, and the field-of-view kick.
+local motionUntil = 0
+local flatLag = Vector3.zero
+local lastRootFlat: Vector3? = nil
+local fovKick = 0
+local fovKickShown = 0
 local boundHumanoid: Humanoid? = nil
 local savedFieldOfView: number? = nil
 local yaw = 0
@@ -230,12 +251,21 @@ local function deactivate(): ()
 		end
 	end
 	savedFieldOfView = nil
+	motionUntil = 0
+	flatLag = Vector3.zero
+	lastRootFlat = nil
+	fovKick = 0
+	fovKickShown = 0
 end
 
 local function bindHumanoid(rig: Rig): ()
 	boundHumanoid = rig.humanoid
 	rig.humanoid.AutoRotate = false
 	yaw = yawOf(rig.root.CFrame.LookVector)
+	-- A new body starts under the camera, never trailing the old one.
+	motionUntil = 0
+	flatLag = Vector3.zero
+	lastRootFlat = nil
 end
 
 local function activate(camera: Camera, rig: Rig): ()
@@ -444,6 +474,51 @@ local function followHeight(rootY: number, deltaTime: number): number
 	return eased
 end
 
+-- The root's flat position plus the ability-motion trail. While a leap or lunge runs the pivot
+-- eases toward the root (movement.cameraFollowRate, never more than movement.cameraMaxLag
+-- behind); otherwise the trail only shrinks, so ordinary aiming stays rigid.
+local function followFlat(rootPosition: Vector3, deltaTime: number): Vector3
+	if not rangeMode then
+		return rootPosition
+	end
+	local flatRoot = Vector3.new(rootPosition.X, 0, rootPosition.Z)
+	local previous = lastRootFlat
+	lastRootFlat = flatRoot
+	if previous == nil then
+		flatLag = Vector3.zero
+		return rootPosition
+	end
+	if os.clock() < motionUntil then
+		local movement = Tuning.Get().movement
+		local keep = math.exp(-math.max(movement.cameraFollowRate, 0) * deltaTime)
+		local lag = (flatLag - (flatRoot - previous)) * keep
+		local maxLag = math.max(movement.cameraMaxLag, 0)
+		if lag.Magnitude > maxLag then
+			lag = if maxLag > 0 then lag.Unit * maxLag else Vector3.zero
+		end
+		flatLag = lag
+	else
+		flatLag *= math.exp(-MOTION_CATCH_UP_RATE * deltaTime)
+		if flatLag.Magnitude < LAG_EPSILON then
+			flatLag = Vector3.zero
+		end
+	end
+	return rootPosition + flatLag
+end
+
+-- Degrees added to the field of view this frame by a kick (FovKick).
+local function kickedFieldOfView(deltaTime: number): number
+	fovKick *= math.exp(-FOV_KICK_DECAY * deltaTime)
+	if fovKick < LAG_EPSILON then
+		fovKick = 0
+	end
+	fovKickShown += (fovKick - fovKickShown) * (1 - math.exp(-FOV_KICK_RISE * deltaTime))
+	if fovKick == 0 and fovKickShown < LAG_EPSILON then
+		fovKickShown = 0
+	end
+	return fovKickShown
+end
+
 local function update(deltaTime: number): ()
 	local camera = currentCamera()
 	local rig = localRig()
@@ -471,10 +546,11 @@ local function update(deltaTime: number): ()
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
 	local rootPosition = rig.root.Position
+	local flatPivot = followFlat(rootPosition, deltaTime)
 	local pivot = Vector3.new(
-		rootPosition.X,
+		flatPivot.X,
 		followHeight(rootPosition.Y, deltaTime) + Theme.COMBAT_CAMERA_PIVOT_HEIGHT,
-		rootPosition.Z
+		flatPivot.Z
 	)
 	-- The shoulder offset is pulled in against a wall first, so the camera never starts
 	-- its boom from inside the wall the player is hugging.
@@ -491,7 +567,7 @@ local function update(deltaTime: number): ()
 	aimFrame = frame
 	local fovTarget = targetFieldOfView()
 	fieldOfView += (fovTarget - fieldOfView) * (1 - math.exp(-ADS_FOV_RATE * deltaTime))
-	camera.FieldOfView = fieldOfView
+	camera.FieldOfView = fieldOfView + kickedFieldOfView(deltaTime)
 	camera.Focus = CFrame.new(shoulderPoint)
 	camera.CFrame = frame * shakeOffset(deltaTime)
 end
@@ -668,6 +744,29 @@ function CameraController.AdoptTouch(input: InputObject): ()
 	end
 	local position = Vector2.new(input.Position.X, input.Position.Y)
 	cameraTouches[input] = { last = position, pending = Vector2.zero, adopted = true }
+end
+
+-- P3: a leap or lunge runs for `seconds`; the pivot may trail the character horizontally
+-- meanwhile (range only). EndMotion cuts it short when the move ends early.
+function CameraController.BeginMotion(seconds: number): ()
+	if not rangeMode then
+		return
+	end
+	motionUntil = math.max(motionUntil, os.clock() + math.max(seconds, 0))
+end
+
+function CameraController.EndMotion(): ()
+	motionUntil = 0
+end
+
+-- A short widening of the view in degrees (range only), e.g. on a leap. Reduce motion keeps
+-- it, at a smaller size, as Shake and Kick do.
+function CameraController.FovKick(degrees: number): ()
+	if not rangeMode or degrees <= 0 then
+		return
+	end
+	local scaled = if Theme.reducedMotion then degrees * Theme.REDUCED_MOTION_FACTOR else degrees
+	fovKick = math.min(fovKick + scaled, FOV_KICK_MAX)
 end
 
 -- Trauma-style shake: `amount` (feel.shakeLight / shakeHeavy) adds to a 0-1 trauma that

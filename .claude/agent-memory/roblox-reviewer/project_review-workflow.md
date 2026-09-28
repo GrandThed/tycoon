@@ -659,3 +659,26 @@ tunnelling), never yield.
   but keeps flying and its full-charge burst lands on the ground behind the crowd. Check every "stop"
   rule is re-evaluated right after the hit that spends it.
 - Dead cross-owner API after a removal: InputController.SetRangeAttackHandler lost its only caller.
+
+**P3 abilities (2026-09-28, working tree vs be7dba2, SHIP WITH FIXES: 0 Critical, 2 Majors).** New
+`AbilityService` (cast pipeline, os.clock cooldowns + kill refunds, busy lock, per-cast timelines on its
+own Heartbeat, cluster bomblets via a RangeService onImpact hook run in pcall), RangeService hook API
+(Strike/FireProjectile/buff/lock/iframes, `stepping`+`pending` so a hook may fire mid-step), per-slot
+rate CREDIT replacing the interval check (cap 1 + RATE_BURST_SHOTS; sustained = rate exactly, the old
+check allowed rate/tolerance), client AbilityFx (pooled, one BulkMoveTo), AbilityBar (hidden on
+TouchEnabled, same test InputController uses to build touch buttons). Both builds, stylua, selene
+(pre-existing LegacyPanel:200 only), luau-lsp combat tree 0 errors; `py tools/sim_range.py --trials 10`
+runs (~1 min). Exploit surface that held: validator + OnCast NaN/inf/seq, cooldown + earlySeconds,
+busy (0.05 s early), CheckAim, GroundPoint clamps castRange on the flat from the SERVER root, 8
+timelines/player, 120 strikes/cast, 0.05 s min tick, projectile budget 256, range+Studio gates.
+- **Recurring pattern (new): a new client seq counter feeding the SAME salted seed function as an old
+  one.** `SeedFor(player, abilitySeq)` == `pelletSeed(shooter, attackSeq)` for equal numbers, and clients
+  key flights `userId:seed`, so an ability projectile and an attack projectile with equal counters share
+  a flight key (split/land mix-ups). Namespace every new seq stream.
+- **Recurring pattern (new): client cadence = one send per render frame with a capped carry.** Any tuned
+  rate whose interval < 2 frames delivers fps/2 (Mag Dump 12 x 3 = 36/s -> 30/s at 60 fps) while the sim
+  assumes the tuned rate. Check rate x mult against 30/s whenever a rate multiplier is tuned.
+- Ability arcs go through `RangeService.Strike` with reachDown 0 (melee swings use airSwingReachDown when
+  airborne); jump is allowed during the Whirlwind channel, so an 18-stud jump drops ~2-3 of 8 ticks.
+- Dead tunables: fields a mechanic overwrites (overchargedShot cap, stormCoil cap, bladeStorm knockback)
+  still get panel rows. Grep each ability's `spec.X =` assignments against its INTERFACES field list.

@@ -688,6 +688,67 @@ local Theme = {
 	COMBAT_RANGE_HAPTIC_HEAVY = 0.7,
 	COMBAT_RANGE_HAPTIC_SECONDS = 0.07,
 	COMBAT_RANGE_HAPTIC_HEAVY_SECONDS = 0.14,
+	-- P3: hitstop never exceeds this share of a weapon's attack interval, so a 12/s SMG does
+	-- not freeze the rig for 40% of every second.
+	COMBAT_RANGE_HITSTOP_INTERVAL_SHARE = 0.3,
+	-- P3 lasting hits (tick strikes of zones, channels, sweeps, and every held-beam strike): no
+	-- hitstop, a softer shake and pulse, and ONE running damage burst per shooter + ability
+	-- instead of one per tick. The next tick joins the open burst while it arrives within the
+	-- tick interval plus MERGE_SECONDS; a burst that has been open MERGE_MAX_SECONDS closes and
+	-- falls, so a long channel still pops a new number every so often.
+	COMBAT_RANGE_TICK_MERGE_SECONDS = 0.25,
+	COMBAT_RANGE_TICK_MERGE_MAX_SECONDS = 1.2,
+	COMBAT_RANGE_TICK_POP_SCALE = 1.25,
+	COMBAT_RANGE_TICK_REDUCED_POP_SCALE = 1.1,
+	COMBAT_RANGE_TICK_SHAKE_SCALE = 0.25,
+	COMBAT_RANGE_TICK_HAPTIC_SCALE = 0.5,
+	COMBAT_RANGE_NUMBER_FOLLOW_RATE = 10, -- per second: an open burst drifts to its latest hits
+	-- A held beam marks the crosshair (and pulses) at most this often; a kill always marks.
+	COMBAT_RANGE_BEAM_MARKER_SECONDS = 0.2,
+	-- P3 ability colour block, shared with AbilityFx so a lasting area and the hits it lands
+	-- read as one thing. ABILITY = the hitbox effect of one-off ability strikes (earthquake rings,
+	-- landings, dash, slug cones, the overcharged ray, cluster blasts); crits stay crit yellow.
+	COMBAT_RANGE_ABILITY_COLOR = Color3.fromRGB(130, 205, 255),
+	COMBAT_RANGE_ABILITY_RAY_CORE_WIDTH = 0.5, -- bright core inside an ability ray's full-width tube
+	COMBAT_RANGE_LIGHTNING_COLOR = Color3.fromRGB(140, 200, 255),
+	COMBAT_RANGE_LIGHTNING_CORE_COLOR = Color3.fromRGB(240, 248, 255),
+	COMBAT_RANGE_BEAM_COLOR = Color3.fromRGB(90, 220, 255),
+	COMBAT_RANGE_BEAM_CORE_COLOR = Color3.fromRGB(235, 252, 255),
+	-- Chain lightning (Chain Gun, Storm Coil): one jagged bolt per link, held ~0.15 s. A bolt
+	-- kinks every KINK_STUDS (at most MAX_KINKS), sideways by up to JITTER studs, or JITTER_SHARE
+	-- of a short bolt's length.
+	COMBAT_RANGE_LIGHTNING_SECONDS = 0.15,
+	COMBAT_RANGE_LIGHTNING_WIDTH = 0.18,
+	COMBAT_RANGE_LIGHTNING_GLOW_WIDTH = 0.55,
+	COMBAT_RANGE_LIGHTNING_GLOW_TRANSPARENCY = 0.6,
+	COMBAT_RANGE_LIGHTNING_KINK_STUDS = 2.5,
+	COMBAT_RANGE_LIGHTNING_MAX_KINKS = 7,
+	COMBAT_RANGE_LIGHTNING_JITTER = 0.9,
+	COMBAT_RANGE_LIGHTNING_JITTER_SHARE = 0.15,
+	COMBAT_RANGE_LIGHTNING_MAX_LINKS = 48, -- pairs drawn per strike; the rest are skipped
+	COMBAT_RANGE_LIGHTNING_SPARKS = 6,
+	-- Storm Coil: its bolts leave the coil's glowing top, this high above the ground point
+	-- (AbilityFx draws the coil to the same height).
+	COMBAT_RANGE_COIL_TOP_HEIGHT = 4.4,
+	-- Held beam (Beam family, `continuous`): ONE lasting beam per shooter from the hand to the
+	-- latest strike's end, alive while strikes keep coming within LINGER_INTERVALS / rate (never
+	-- under MIN_LINGER_SECONDS). The glow is the ray's true width (the hitbox without its pad);
+	-- the core a share of it. It is the weapon's visual, so feedback.hitboxEffect never hides it.
+	COMBAT_RANGE_BEAM_GLOW_TRANSPARENCY = 0.45,
+	COMBAT_RANGE_BEAM_CORE_SHARE = 0.35,
+	COMBAT_RANGE_BEAM_MIN_WIDTH = 0.3,
+	COMBAT_RANGE_BEAM_TIP_SIZE = 1.6,
+	COMBAT_RANGE_BEAM_MUZZLE_SIZE = 0.7,
+	COMBAT_RANGE_BEAM_LINGER_INTERVALS = 2,
+	COMBAT_RANGE_BEAM_MIN_LINGER_SECONDS = 0.3, -- floor under that, so jitter never blinks it off
+	COMBAT_RANGE_BEAM_FOLLOW_RATE = 25, -- per second: another player's beam end eases to the latest
+	COMBAT_RANGE_BEAM_FLICKER = 0.18, -- width wobble share (off under reduced motion)
+	COMBAT_RANGE_BEAM_FLICKER_HZ = 9,
+	-- A server stop within this many studs of the world hit along the same ray was the wall,
+	-- not a spent pierce, so the local beam may reach past it as the aim sweeps.
+	COMBAT_RANGE_BEAM_STOP_TOLERANCE = 1,
+	-- Pooled spark emitters: a spray is skipped (the parts still carry the hit) when all are busy.
+	COMBAT_RANGE_SPARK_POOL = 24,
 	-- Counters: hits in the running combo and kills of the last attack, right of the crosshair.
 	COMBAT_RANGE_COMBO_WINDOW_SECONDS = 2.5,
 	COMBAT_RANGE_COUNTER_OFFSET_X = 60,
@@ -719,7 +780,7 @@ local Theme = {
 	COMBAT_RANGE_PANEL_MAX_BODY_HEIGHT = 380,
 	COMBAT_RANGE_PANEL_HINT_TEXT = 11,
 	COMBAT_RANGE_PANEL_READOUT_LINE = 15,
-	COMBAT_RANGE_PANEL_READOUT_LINES = 3,
+	COMBAT_RANGE_PANEL_READOUT_LINES = 4,
 	COMBAT_RANGE_PANEL_COMMAND_COLUMNS = 3,
 	COMBAT_RANGE_PANEL_SEND_SECONDS = 0.1, -- slider drags send at most this often
 	-- Slider span: feedback strengths run 0..FEEDBACK_MAX; everything else 0..max(base x
@@ -728,8 +789,44 @@ local Theme = {
 	COMBAT_RANGE_PANEL_FEEDBACK_STEP = 0.05,
 	COMBAT_RANGE_PANEL_RANGE_FACTOR = 3,
 	COMBAT_RANGE_PANEL_MIN_SPAN = 10,
+	-- P3: a base under 1 (tick seconds, refunds, falloffs, fractions) gets this span floor
+	-- instead, so its steps are hundredths rather than tenths.
+	COMBAT_RANGE_PANEL_SMALL_SPAN = 1,
 	COMBAT_RANGE_PANEL_FINE_STEPS = 100,
+	-- A typed value is kept to this many decimals (a slider drag and +/- still use the step).
+	COMBAT_RANGE_PANEL_TYPED_DECIMALS = 4,
 	COMBAT_RANGE_FPS_SAMPLE_SECONDS = 0.5,
+
+	-- P3 AbilityBar (PC and gamepad; touch shows Motion's ability buttons instead): two tiles at
+	-- the bottom centre, melee (Q / LB) then ranged (E / RB). 64 design px tall so the name and
+	-- the seconds read at a glance; the bar slides left of the RangePanel column when a narrow
+	-- window would put them together. The cooldown sweep is two clipped halves whose UIGradient
+	-- edge turns (no image asset exists for a radial wipe).
+	COMBAT_ABILITY_BAR_TILE_WIDTH = 128,
+	COMBAT_ABILITY_BAR_TILE_HEIGHT = 64,
+	COMBAT_ABILITY_BAR_GAP = 8,
+	COMBAT_ABILITY_BAR_BOTTOM = 20,
+	COMBAT_ABILITY_BAR_INSET = 6,
+	COMBAT_ABILITY_BAR_BG_TRANSPARENCY = 0.3,
+	COMBAT_ABILITY_BAR_SWEEP_TRANSPARENCY = 0.25,
+	COMBAT_ABILITY_BAR_BUSY_TRANSPARENCY = 0.45,
+	COMBAT_ABILITY_BAR_KEY_WIDTH = 28,
+	COMBAT_ABILITY_BAR_KEY_HEIGHT = 18,
+	COMBAT_ABILITY_BAR_KEY_TEXT = 12,
+	COMBAT_ABILITY_BAR_SECONDS_TEXT = 24,
+	COMBAT_ABILITY_BAR_NAME_HEIGHT = 16,
+	COMBAT_ABILITY_BAR_NAME_TEXT = 12,
+	COMBAT_ABILITY_BAR_NAME_MIN_TEXT = 9,
+	COMBAT_ABILITY_BAR_ACTIVE_STROKE = 3,
+	COMBAT_ABILITY_BAR_IDLE_STROKE = 1,
+	COMBAT_ABILITY_BAR_IDLE_STROKE_TRANSPARENCY = 0.5,
+	COMBAT_ABILITY_BAR_PULSE_SCALE = 1.12,
+	COMBAT_ABILITY_BAR_PULSE_SECONDS = 0.3,
+	-- A kill refund floats "−N.Ns" over the tile; drops under REFUND_MIN seconds are clock noise.
+	COMBAT_ABILITY_BAR_REFUND_SECONDS = 0.8,
+	COMBAT_ABILITY_BAR_REFUND_TEXT = 13,
+	COMBAT_ABILITY_BAR_REFUND_RISE = 14,
+	COMBAT_ABILITY_BAR_REFUND_MIN = 0.05,
 
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.

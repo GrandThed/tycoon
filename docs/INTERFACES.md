@@ -4516,7 +4516,9 @@ Splitbow A, Greataxe A and B, and Spear B, so the **Spear default is now B**. St
    4. Drop P onto the floor: a down-ray from P + 3 studs for 250 studs. With no floor, use the
       root's floor Y.
 
-   Melee abilities use the flattened `direction`.
+   The ground point always uses the **raw** camera ray, melee abilities included: a flattened
+   ray would always land at full `castRange`. Melee abilities use the flattened `direction` for
+   their shapes and for `CombatFxCast.direction`.
 5. **Server-owned motion damage.** Leap Smash and Impale Dash move the character on the client
    (MovementController), as the dash does. The server grants i-frames for `delaySeconds` and
    resolves the damage from **its own** numbers: the landing sphere at the server's ground point
@@ -4552,7 +4554,7 @@ carries `ability = id`. Fields not named for an ability are absent.
 | id (family) | mechanic | fields | busy |
 |---|---|---|---|
 | `whirlwind` (broadsword) | Channel. Every `tickSeconds` for `durationSeconds`, a 360° **arc** of reach `range` around the **current** server root (tick). Movement is ×`moveSpeedMult`. | damage, range, pad, cap, knockback, launch, durationSeconds, tickSeconds, moveSpeedMult | durationSeconds |
-| `earthquake` (warhammer) | `count` **spheres** centred on the floor below the cast root. Ring k (from 1) lands at `delaySeconds + (k−1)·tickSeconds` with radius `radius + (k−1)·spacing` and damage `damage·falloff^(k−1)`. Inner enemies are hit by every ring. Not ticks. | damage, delaySeconds, count, radius, spacing, tickSeconds, falloff, pad, cap, knockback, launch | delaySeconds |
+| `earthquake` (warhammer) | `count` **spheres** centred on the floor below the cast root (sent as the cast fx `target`). Ring k (from 1) lands at `delaySeconds + (k−1)·tickSeconds` with radius `radius + (k−1)·spacing` and damage `damage·falloff^(k−1)`. Inner enemies are hit by every ring. Not ticks. | damage, delaySeconds, count, radius, spacing, tickSeconds, falloff, pad, cap, knockback, launch | delaySeconds |
 | `bladeStorm` (spinblade) | Zone at ground (castRange). From `delaySeconds`, every `tickSeconds` until `delaySeconds + durationSeconds`, a vertical capsule of `radius` (tick) **pulls** toward the centre (`pull`). | damage, castRange, delaySeconds, radius, durationSeconds, tickSeconds, pull, pad, cap, knockback, launch | — |
 | `leapSmash` (greataxe) | Leap to ground (castRange, apex `height` above the higher end). At `delaySeconds`, a **sphere** of `radius` at the server's ground point. I-frames for delaySeconds. | damage, castRange, height, delaySeconds, radius, pad, cap, knockback, launch | delaySeconds |
 | `impaleDash` (spear) | Dash along the flat aim for `range` studs (stopped by world geometry at chest height) over `delaySeconds`. At the cast, a **capsule** of full `width` from cast to the dash end, pushing along the dash. I-frames. The cast fx `target` = the dash end. | damage, range, width, delaySeconds, pad, cap, knockback, launch | delaySeconds |
@@ -4629,9 +4631,9 @@ RangeService.SetAbilityLock(player: Player, untilClock: number, allow: ("melee" 
 RangeService.GrantIframes(player: Player, seconds: number): ()             -- extends, never shortens
 RangeService.OnLoadoutChanged(callback: (player: Player, slot: "melee" | "ranged") -> ()): ()
 
--- HitShapes (Range): the cluster bomblet pattern. count points on a flat circle of radius
--- spacing around center (evenly spaced, rotated and jittered by Park–Miller from seed), so the
--- server and every client scatter the same bomblets.
+-- HitShapes (Range): the cluster bomblet pattern. count points evenly spaced on a flat circle
+-- of radius spacing around center, the whole ring turned by a Park–Miller angle from seed (no
+-- other jitter), so the server and every client scatter the same bomblets.
 HitShapes.Scatter(center: Vector3, count: number, spacing: number, seed: number): { Vector3 }
 
 -- AbilityService (Abilities, new): the cast pipeline, cooldowns, refunds, busy lock, timelines.
@@ -4675,6 +4677,23 @@ Nobody else listens to `RangeAbility` (Motion owns it).
 Frozen: every file not listed above. That includes CrowdService, CrowdRenderer, CrowdCodec,
 missions, the hub and `ProfileSchema`. Theme constants that AbilityFx needs are reported to Feedback,
 or kept as named module constants when they are purely visual.
+
+## Review round (lead, after roblox-reviewer)
+
+- **Air reach:** an ability arc around the caster's own root (Whirlwind, Overload Sweep) sets
+  `AbilityStrikeSpec.airReach`. While the caster is airborne, `Strike` reaches down
+  `movement.airSwingReachDown` like a melee swing, and the strike's `endPoint` carries the band
+  bottom as melee arcs do. AbilityFx draws the Whirlwind ring on the real floor.
+- **Refused casts:** the state sent in answer to a refused cast carries `refusedSeq` = that
+  cast's seq. The client cancels that cast's local effects at once.
+- **Tolerances move to config:** `shooting.rateBurstShots` (was `RATE_BURST_SHOTS`),
+  `abilities.busyEarlySeconds` and `abilities.dashWallClearance`.
+- **Separate seeds:** ability seeds are salted apart from attack seeds (`SeedFor`), so a Volley
+  or Cluster Shell never shares a flight key with an arrow or shell in flight.
+- **Deferred to P5 (live only):** the caster's own ability visuals and held beam wait one round
+  trip. This is the same carry-over as local prediction of your own shots.
+- **Note for P5:** a family switch resetting the slot's cooldown is a range convenience. Missions
+  must carry the remaining cooldown across a switch.
 
 ## Definition of done (P3)
 

@@ -12,6 +12,7 @@
 -- P1: CrowdRenderer and FeedbackController boot in every build but their Start is inert
 -- outside the Proving Grounds (CameraController.IsRange, decided in CameraController.Init).
 -- MovementController is started by InputController in the range, so it is not listed here.
+-- P3: AbilityFx (every player's lasting ability visuals) is range-only in the same way.
 
 type Controller = {
 	Init: () -> (),
@@ -29,6 +30,7 @@ local controllers: { Controller } = {
 	require(controllersFolder:WaitForChild("CombatFxController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CrowdRenderer") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("FeedbackController") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("AbilityFx") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatUIController") :: ModuleScript) :: Controller,
 }
 

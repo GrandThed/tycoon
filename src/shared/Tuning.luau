@@ -39,12 +39,23 @@ local function familyForSlot(value: string, path: string, base: Types.ProvingGro
 end
 local SLOTS = { "melee", "ranged" }
 -- A family's name, slot and era describe the roster, not a feel to try: tuning them would move a
--- family between slots under a live loadout, so they are not tunable at all.
+-- family between slots under a live loadout, so they are not tunable at all. P3: an ability's id
+-- picks its mechanic in AbilityService and its name labels it, and a held beam's `continuous`
+-- decides how every client draws it, so those are roster too.
 local STRUCTURAL_PATHS = {
 	"^weapons%.[^.]+%.name$",
 	"^weapons%.[^.]+%.slot$",
 	"^weapons%.[^.]+%.era$",
+	"^weapons%.[^.]+%.ability%.id$",
+	"^weapons%.[^.]+%.ability%.name$",
+	"^weapons%.[^.]+%.variants%.[^.]+%.continuous$",
 }
+-- Ability fields that must stay positive: a repeat interval of 0 would fire a timeline's ticks
+-- without end, and an ability shot at speed 0 could never leave the caster.
+local POSITIVE_ABILITY_FIELDS = { "tickSeconds", "speed" }
+-- Numbers that may reach 0 but never go below it: a negative burst would shrink the attack
+-- credit under one shot and refuse every attack at its own rate.
+local NON_NEGATIVE_PATHS = { "^shooting%.rateBurstShots$" }
 local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", check = oneOf(SLOTS) },
 	{
@@ -168,7 +179,8 @@ end
 
 -- True when `value` may replace the base leaf at `path`: the path exists in the base config,
 -- ends at a scalar, and the value keeps its type (finite numbers; enum strings stay in their
--- set; free strings stay short).
+-- set; free strings stay short). That covers P3's nested ability blocks as they stand: every
+-- numeric weapons.<family>.ability.<field> and every abilities.* leaf is tunable.
 function Tuning.Validate(path: string, value: any): boolean
 	local current = baseLeaf(path)
 	if current == nil or typeof(value) ~= typeof(current) then
@@ -191,6 +203,15 @@ function Tuning.Validate(path: string, value: any): boolean
 			local def = if base ~= nil then base.weapons[family] else nil
 			local variant = if def ~= nil then def.variants[key] else nil
 			return variant == nil or variant.chargeSeconds == nil
+		end
+		local abilityField = string.match(path, "^weapons%.[^.]+%.ability%.([^.]+)$")
+		if abilityField ~= nil and table.find(POSITIVE_ABILITY_FIELDS, abilityField) ~= nil then
+			return value > 0
+		end
+		for _, pattern in NON_NEGATIVE_PATHS do
+			if string.match(path, pattern) ~= nil then
+				return value >= 0
+			end
 		end
 		return true
 	end
