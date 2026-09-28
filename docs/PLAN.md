@@ -1695,4 +1695,4 @@ starting values"; memory: `.claude/memory/feel-pass-2026-09-23.md` (reset + new 
 - **P3:** the remaining weapon classes and abilities, in batches.
 
 - [x] P1 built, reviewed and QA green (definition of done in INTERFACES "P1 contracts")
-- [ ] Ben's playtest (`docs/PLAYTEST.md` "P1 — Proving Grounds")
+- [x] Ben's playtest (2026-09-28): "I really love all the alternatives, the combo melee is great, it lacks the bow, but everything works great." Panel UX fixed after the first look (right edge, P key). Next: weapon roster in `docs/WEAPONS.md` (approved), P2 = bows + Greataxe + Spear in the range.

@@ -1,6 +1,6 @@
 # Weapons: roster, scaling and DPS (draft for Ben)
 
-Status: **proposal, 2026-09-28.** It builds on `docs/COMBAT_DESIGN.md` and Ben's first range
+Status: **approved by Ben 2026-09-28** (all three decisions: families are a free choice per slot with the tier on the slot; era unlocks as listed; P2 adds Longbow, Splitbow, Greataxe, Spear to the range). It builds on `docs/COMBAT_DESIGN.md` and Ben's first range
 playtest: "I really love all the alternatives, the combo melee is great, it lacks the bow."
 Nothing here is built beyond the six range variants. The numbers are starting points for the range,
 not final balance.
