@@ -1517,6 +1517,15 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
 - [ ] 14. Slider changes are lost when Play stops. Export before stopping.
       **Clear tune** puts every value back to the file defaults.
 
+## P2 — Weapon families + bows
+
+**Studio only. No Creator Hub work, no uploads, no republish.** Still silent (no audio step).
+
+- [ ] 1. VS Code: **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If `build/proving.rbxl` is open in Studio, close it (don't save), then reopen it.
+- [ ] 3. Press **Play**. Output shows `[RangeService] Proving Grounds ready`.
+- [ ] 4. Run `docs/PLAYTEST.md` "P2 — Weapon families + bows".
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the

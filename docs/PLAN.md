@@ -1696,3 +1696,61 @@ starting values"; memory: `.claude/memory/feel-pass-2026-09-23.md` (reset + new 
 
 - [x] P1 built, reviewed and QA green (definition of done in INTERFACES "P1 contracts")
 - [x] Ben's playtest (2026-09-28): "I really love all the alternatives, the combo melee is great, it lacks the bow, but everything works great." Panel UX fixed after the first look (right edge, P key). Next: weapon roster in `docs/WEAPONS.md` (approved), P2 = bows + Greataxe + Spear in the range.
+
+## P2 — Weapon families + bows
+
+**Goal:** turn the P1 sword/gun variants into weapon families, add the bow and the first new
+melee families, and give each player a melee slot and a ranged slot. Still range-only
+(`build/proving.rbxl`); missions untouched until P5; abilities are P3. Plan of record:
+`docs/WEAPONS.md` (approved 2026-09-28); contracts: `docs/INTERFACES.md` "P2 contracts"; values:
+`docs/BALANCE.md` "P2 — new families".
+
+**Shipped (2026-09-28, commits `9921c00`, `416dfb9`, `370c74d`):**
+- **10 families** in `ProvingGrounds.json weapons`, each with `name`, `slot`, `era`, variants:
+  - the six P1 variants, numbers unchanged: Broadsword, Spinblade, Warhammer, Shotgun,
+    Piercing Rifle, Launcher;
+  - new, each with A/B: **Greataxe** (Wide cleave / Fast chop), **Spear** (Pike thrust / Long
+    lunge), **Longbow** (Pierce + blast / Quick shot), **Splitbow** (Fan of 7 / Wide fan of 5).
+- **Loadout slots:** one melee family, one ranged family (`RangeLoadout`, default Broadsword +
+  Longbow). **1** = melee, **2** = ranged, gamepad **Y** toggles.
+- **Real arrows, stepped on the server:**
+  - gravity drop over distance;
+  - `pierce` = total enemies hit (same meaning on the hitscan rifle); the arrow stops at the cap;
+  - a full charge bursts in the last enemy hit;
+  - split fans are announced by the server (also at point blank, where the fan starts at the
+    first enemy).
+- **Hold to draw:** the crosshair's ring of dots fills and turns gold at full charge; a quick
+  tap fires a weak arrow. The server caps the charge with its own draw clock.
+- **Phone:** autoFire draws and releases by itself on a target; tapFire = tap for a weak arrow,
+  hold still to draw.
+- **Every player sees every shot fly** (`CombatFxShot`): arrows, split fans, launcher shells.
+  Closes the P1 "other players' shots have no fx" carry-over.
+- **Spear thrust streak** (bright core + speed lines out to the tip).
+- **RangePanel Weapons section:** Melee and Ranged pickers grouped by era, then variant
+  buttons; the "Tuning:" rows follow the active slot.
+
+**Review outcome:** 0 Critical, 2 Majors, 11 Minors. **All fixed** in `370c74d`.
+- Major 1: a point-blank split fan was never drawn (the server now announces the split).
+- Major 2: `pierce` meant different things on arrows and the rifle, which left a ghost arrow
+  and a misplaced burst (now pierce = total everywhere, and the arrow stops at the cap).
+- qa-runner: ALL GREEN. Missions untouched (`sim_combat.py --check`, `sim_economy.py --check`
+  unchanged).
+
+**Balance notes (`docs/BALANCE.md` "P2"):**
+- The Spear sits a little under the melee band on purpose (it hits from outside the crowd).
+  Knob if Ben finds it weak: both damages +15%.
+- The approved Piercing Rifle measures above the ranged band (556 crowd DPS). Knob if it
+  outshines the bows: `pierce` 8 → 5.
+
+**Known limits at P2:**
+- Still silent, placeholder bodies, empty hands, dummies never attack.
+- On a real phone the range has no slot-switch button (the Studio emulator takes the 1/2 keys).
+  Owner: lead, decide in P3 with the ability buttons.
+
+**Next:**
+- **P3 (lead):** an ability for every family, then the remaining families (Beam, Chain Gun, SMG).
+- **Carry to P5 (lead):** local prediction of your own shots. Today your arrow appears one
+  round trip after you fire.
+
+- [x] P2 built, reviewed and QA green (definition of done in INTERFACES "P2 contracts")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "P2 — Weapon families + bows")

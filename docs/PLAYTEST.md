@@ -3932,3 +3932,45 @@ Optional (untested, not required for P1): Test → **Local Server**, 2 players �
 - Which feedback layers to turn up, down or off (hitMarker, numbers, enemyFlash, enemyReaction, hitboxEffect, hitstop, shake, edgeFlash, haptics, counters).
 - Anything that felt wrong: step numbers, PC or phone, autoFire vs tapFire.
 - If you tuned something: the **Export** output (MANUAL_STEPS "P1" §4).
+
+## P2 — Weapon families + bows
+
+**Goal:** judge the bows and the new melee families. Silent, placeholder bodies. Judge feel.
+Setup: `docs/MANUAL_STEPS.md` "P2". Keys: **1** melee, **2** ranged (gamepad **Y**), **P** panel,
+**Alt** frees the cursor. You start with Broadsword + Longbow.
+
+### Setup
+
+- [ ] 1. Open `build/proving.rbxl` → **Play** → 30 red dummies, crosshair in the centre. Bug: Raider Woods lobby.
+- [ ] 2. **P** → panel on the right edge; **Weapons** lists **Melee** and **Ranged** by era (Village, Boomtown, Metropolis), 10 families. Bug: "Sword"/"Gun" buttons.
+
+### Bows (press 2)
+
+- [ ] 3. Hold **left mouse** → a ring of dots fills around the crosshair (~1 s), turns gold and swells; release → the arrow flies and drops with distance. Bug: no arrow, or a straight instant line.
+- [ ] 4. Full-charge shot into the crowd → passes through up to 5 dummies, stops there, gold burst on the last one hit. Bug: stops at the first, or burst floats past it.
+- [ ] 5. Quick click → weak arrow; a fodder takes 2 of them. Press **1** mid-draw → the draw cancels, no arrow.
+- [ ] 6. Panel **Ranged → Longbow → B · Quick shot** → the ring fills in ~0.4 s; flatter, faster arrow; hits up to 3.
+- [ ] 7. **Splitbow → A · Fan of 7** → the arrow splits into 7 after ~10 studs. Walk into the crowd and shoot point-blank → the fan still shows. Bug: one arrow, no fan.
+- [ ] 8. **B · Wide fan of 5** → wider fan of 5, splits sooner; each arrow kills a fodder.
+
+### New melee (press 1)
+
+- [ ] 9. **Melee → Greataxe → A · Wide cleave** → slow swings hit a wide arc (~200°), the crowd is shoved away.
+- [ ] 10. **B · Fast chop** → faster, narrower; dummies pop up into the air.
+- [ ] 11. **Spear → A · Pike thrust** → a bright streak shoots forward and hits a straight line, not the sides. **B · Long lunge** → thinner, longer line, pushed back.
+
+### Switching and panel
+
+- [ ] 12. **1 / 2** swap slots; the panel's "Tuning: …" title follows (e.g. "Tuning: Spear A"). The six P1 families still work as in P1 (Launcher shell visible).
+- [ ] 13. Test → **Local Server**, 2 players → player 2 sees player 1's arrows, fans and shells fly. Bug: only numbers, no arrow.
+
+### Phone (Device 375×667)
+
+- [ ] 14. Play → press **2** on the keyboard → drag the right half onto the crowd → the bow draws by itself and fires at full charge; no attack button.
+- [ ] 15. Panel **Touch: autoFire** → **Touch: tapFire** → short tap = weak arrow; hold still = draw, lift = fire.
+
+### What to tell Claude
+
+- Which bow (Longbow A/B, Splitbow A/B) and which new melee (Greataxe A/B, Spear A/B) felt best, and why.
+- Does the Spear feel weak, or the Piercing Rifle too strong next to the bows?
+- Anything wrong: step numbers, PC or phone, autoFire vs tapFire. If you tuned: the **Export** output.
