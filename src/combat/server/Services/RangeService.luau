@@ -34,8 +34,8 @@ local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
 type SlotName = "melee" | "ranged"
 type Variant = Types.RangeWeaponVariant
 
--- Contract: projectiles live at most 3 s; DPS is a 5 s window; readouts go out at 2 Hz.
-local PROJECTILE_MAX_SECONDS = 3
+-- Contract: DPS is a 5 s window; readouts go out at 2 Hz. (Projectile lifetime is
+-- shooting.projectileMaxSeconds.)
 local DPS_WINDOW_SECONDS = 5
 local STATS_INTERVAL_SECONDS = 0.5
 -- Lead ruling: a group of up to this many is one row along x; larger groups are a square grid.
@@ -53,8 +53,6 @@ local UINT32 = 4294967296
 -- Live projectiles (arrows, split children, shells) across every player; a shot past this is
 -- refused rather than let the step grow without bound.
 local MAX_PROJECTILES = 256
--- A split arrow fans into at most this many (HitShapes.Fan clamps to the same).
-local MAX_SPLIT = 16
 -- How far below the root the floor probe looks (air tracking and the slam's landing point).
 local GROUND_PROBE_STUDS = 250
 -- Height above standing height before a character counts as airborne (steps and slopes).
@@ -98,8 +96,12 @@ type Projectile = {
 	-- Per hit, charge already applied.
 	damage: number,
 	fullCharge: boolean,
-	-- 1 + pierce: the enemies this arrow may still pass through.
+	-- pierce = TOTAL enemies one projectile can hit (review ruling): what this one may still hit.
 	hitsLeft: number,
+	-- The charge its shot fired at (announced again when a split parent fans).
+	charge: number,
+	-- A newborn split child's share of the frame its parent split in, flown at once.
+	carry: number,
 	-- A split parent that has not split yet.
 	splitting: boolean,
 	volley: Volley,
@@ -419,51 +421,6 @@ local function groupPositions(
 	return positions
 end
 
--- `countOverride` replaces the first group's count (the stress command's crowd.stressCount).
-local function loadSet(name: string, countOverride: number?): ()
-	local config = Tuning.Get()
-	local groups = config.dummySets[name]
-	if groups == nil then
-		warn(`[RangeService] no dummy set "{name}"`)
-		return
-	end
-	CrowdService.Clear()
-	slotById = {}
-	setSlots = {}
-	respawns = {}
-	projectiles = {}
-	currentSet = name
-	clearStartedAt = 0
-	clearSeconds = nil
-	-- Never ask for more dummies than the crowd will hold; later groups get what is left.
-	local budget = math.max(0, math.floor(config.crowd.maxAlive))
-	for groupIndex, group in groups do
-		local def = kindDef(config, group.kind)
-		if def == nil then
-			warn(`[RangeService] set {name}: unknown crowd kind "{group.kind}"`)
-			continue
-		end
-		local count = if groupIndex == 1 and countOverride ~= nil
-			then countOverride
-			else group.count
-		count = math.clamp(math.floor(count), 0, budget)
-		budget -= count
-		for _, position in groupPositions(group, count, def.radius) do
-			local slot: Slot = {
-				kind = group.kind,
-				behaviour = group.behaviour,
-				position = position,
-				respawnSeconds = group.respawnSeconds,
-				cleared = false,
-				refusals = 0,
-			}
-			table.insert(setSlots, slot)
-			spawnSlot(slot)
-		end
-	end
-	print(`[RangeService] loaded set "{name}" ({#setSlots} dummies)`)
-end
-
 -- The first death of every slot since the set loaded ends the clear clock.
 local function markCleared(slot: Slot): ()
 	if slot.cleared then
@@ -620,6 +577,72 @@ local function finish(
 		table.insert(shooter.damageLog, { at = now, amount = tally.dealt })
 	end
 	sendStats(shooter)
+end
+
+-- Ends every live projectile with an empty end strike (endPoint = where it is now), so clients
+-- stop their flights instead of letting arrows fly on through a cleared set.
+local function abandonProjectiles(): ()
+	for _, projectile in projectiles do
+		if projectile.player.Parent == nil then
+			continue
+		end
+		finish(projectile.player, projectile.weapon, projectile.variantKey, newTally(), {
+			shape = "ray",
+			origin = projectile.position,
+			direction = DOWN,
+			size = 0,
+			arcDegrees = nil,
+			width = nil,
+			endPoint = projectile.position,
+			seq = projectile.seed,
+		}, { hits = projectile.volley.distinct, kills = projectile.volley.kills })
+	end
+	projectiles = {}
+end
+
+-- `countOverride` replaces the first group's count (the stress command's crowd.stressCount).
+local function loadSet(name: string, countOverride: number?): ()
+	local config = Tuning.Get()
+	local groups = config.dummySets[name]
+	if groups == nil then
+		warn(`[RangeService] no dummy set "{name}"`)
+		return
+	end
+	CrowdService.Clear()
+	slotById = {}
+	setSlots = {}
+	respawns = {}
+	abandonProjectiles()
+	currentSet = name
+	clearStartedAt = 0
+	clearSeconds = nil
+	-- Never ask for more dummies than the crowd will hold; later groups get what is left.
+	local budget = math.max(0, math.floor(config.crowd.maxAlive))
+	for groupIndex, group in groups do
+		local def = kindDef(config, group.kind)
+		if def == nil then
+			warn(`[RangeService] set {name}: unknown crowd kind "{group.kind}"`)
+			continue
+		end
+		local count = if groupIndex == 1 and countOverride ~= nil
+			then countOverride
+			else group.count
+		count = math.clamp(math.floor(count), 0, budget)
+		budget -= count
+		for _, position in groupPositions(group, count, def.radius) do
+			local slot: Slot = {
+				kind = group.kind,
+				behaviour = group.behaviour,
+				position = position,
+				respawnSeconds = group.respawnSeconds,
+				cleared = false,
+				refusals = 0,
+			}
+			table.insert(setSlots, slot)
+			spawnSlot(slot)
+		end
+	end
+	print(`[RangeService] loaded set "{name}" ({#setSlots} dummies)`)
 end
 
 local function outward(from: Vector3, to: Vector3, fallback: Vector3): Vector3
@@ -780,6 +803,20 @@ local function rayCandidates(
 	)
 end
 
+-- Review ruling: pierce is the TOTAL number of enemies one projectile or ray may hit (0 or
+-- missing = 1), for arrows and the rifle alike.
+local function pierceOf(variant: Variant): number
+	return math.max(1, math.floor(variant.pierce or 0))
+end
+
+-- How many projectiles one shot becomes: its split fan (floored, at most HitShapes.MAX_FAN), or 1.
+local function volleySize(variant: Variant): number
+	if variant.shape ~= "ray" then
+		return 1
+	end
+	return math.max(1, math.clamp(math.floor(variant.splitCount or 0), 0, HitShapes.MAX_FAN))
+end
+
 -- Ruling 4: the client's claimed charge is capped by the server's own draw clock (with the same
 -- timing tolerance as every other interval here); damage runs from minChargeFraction to 1 of
 -- `damage`. A draw only counts if it started after the previous shot of that slot. Returns
@@ -824,7 +861,7 @@ local function spawnShot(
 	local frozen = table.clone(variant)
 	local speed = frozen.projectileSpeed or 0
 	local gravity = math.max(frozen.gravity or 0, 0)
-	local splitCount = math.clamp(math.floor(frozen.splitCount or 0), 0, MAX_SPLIT)
+	local splitCount = volleySize(frozen)
 	table.insert(projectiles, {
 		player = shooter.player,
 		weapon = weapon,
@@ -840,8 +877,10 @@ local function spawnShot(
 		travelled = 0,
 		damage = frozen.damage * scale,
 		fullCharge = full,
-		hitsLeft = 1 + math.max(0, math.floor(frozen.pierce or 0)),
-		splitting = frozen.shape == "ray" and splitCount > 1,
+		hitsLeft = pierceOf(frozen),
+		charge = charge,
+		carry = 0,
+		splitting = splitCount > 1,
 		volley = { hit = {}, distinct = 0, cap = frozen.cap, kills = 0 },
 		seed = seed,
 	})
@@ -930,7 +969,7 @@ local function resolveRanged(
 	local reach = worldReach(origin, unit, variant.range, params)
 	if variant.shape == "ray" then
 		local candidates = rayCandidates(config, origin, unit, reach, variant)
-		local limit = capOf(variant, math.min(#candidates, math.max(1, variant.pierce or 1)))
+		local limit = capOf(variant, math.min(#candidates, pierceOf(variant)))
 		local endPoint = origin + unit * reach
 		for index = 1, limit do
 			local candidate = candidates[index]
@@ -1136,20 +1175,44 @@ local function endArrow(
 	})
 end
 
--- A split parent becomes its fan at `point`: children start there with the parent's speed along
--- HitShapes.Fan(the parent's velocity there, splitCount, splitArcDegrees, seed), keep its gravity,
--- lifetime, path length and volley, and restart their own flight clock.
+-- A split parent becomes its fan at `point`. First a CombatFxShot with split = true tells every
+-- client to split its own flight there; then the children start at `point` with the parent's
+-- speed along HitShapes.Fan(the parent's velocity there, splitCount, splitArcDegrees, seed,
+-- fanJitterShare). They keep its gravity, path length and volley, and `carry` = the rest of this
+-- frame, which stepProjectiles flies at once so a child never lags its parent's clock.
 local function splitArrow(
+	config: Types.ProvingGroundsConfig,
 	projectile: Projectile,
 	point: Vector3,
 	heading: Vector3,
+	carry: number,
 	spawned: { Projectile }
 ): ()
 	local variant = projectile.variant
-	local count = math.clamp(math.floor(variant.splitCount or 0), 0, MAX_SPLIT)
 	local speed = variant.projectileSpeed or 0
-	local hits = 1 + math.max(0, math.floor(variant.pierce or 0))
-	for _, arrow in HitShapes.Fan(heading, count, variant.splitArcDegrees or 0, projectile.seed) do
+	local direction = if heading.Magnitude > 1e-6 then heading.Unit else DOWN
+	broadcastFx({
+		kind = "shot",
+		userId = projectile.player.UserId,
+		weapon = projectile.weapon,
+		variant = projectile.variantKey,
+		origin = point,
+		direction = direction,
+		speed = speed,
+		gravity = projectile.gravity,
+		charge = projectile.charge,
+		seq = projectile.seed,
+		split = true,
+	})
+	local arrows = HitShapes.Fan(
+		direction,
+		volleySize(variant),
+		variant.splitArcDegrees or 0,
+		projectile.seed,
+		config.shooting.fanJitterShare
+	)
+	for _, arrow in arrows do
+		-- OnAttack reserved the whole volley up front; this only guards a tuned-up splitCount.
 		if #projectiles + #spawned >= MAX_PROJECTILES then
 			break
 		end
@@ -1164,11 +1227,14 @@ local function splitArrow(
 			gravity = projectile.gravity,
 			position = point,
 			age = 0,
-			lifetime = projectile.lifetime,
+			-- The carried time is added back when the child flies it.
+			lifetime = projectile.lifetime - carry,
 			travelled = projectile.travelled,
 			damage = projectile.damage,
 			fullCharge = projectile.fullCharge,
-			hitsLeft = hits,
+			hitsLeft = pierceOf(variant),
+			charge = projectile.charge,
+			carry = carry,
 			splitting = false,
 			volley = projectile.volley,
 			seed = projectile.seed,
@@ -1193,7 +1259,7 @@ local function stepProjectile(
 	projectile.lifetime += deltaTime
 	local offset = flightPoint(projectile, projectile.age) - from
 	local length = offset.Magnitude
-	local expired = projectile.lifetime >= PROJECTILE_MAX_SECONDS
+	local expired = projectile.lifetime >= config.shooting.projectileMaxSeconds
 	if length < 1e-6 then
 		if expired then
 			endArrow(config, projectile, from, DOWN, from, newTally())
@@ -1248,12 +1314,14 @@ local function stepProjectile(
 			contact = splitAt
 		end
 		if contact ~= nil then
-			local splitTime = startAge + deltaTime * (contact / length)
+			local used = deltaTime * (contact / length)
 			projectile.travelled += contact
 			splitArrow(
+				config,
 				projectile,
 				from + direction * contact,
-				flightVelocity(projectile, splitTime),
+				flightVelocity(projectile, startAge + used),
+				deltaTime - used,
 				spawned
 			)
 			return false
@@ -1267,6 +1335,11 @@ local function stepProjectile(
 		return true
 	end
 
+	-- Its siblings already filled the volley's cap: this arrow ends where it is, no ghost flight.
+	if volley.cap > 0 and volley.distinct >= volley.cap then
+		endArrow(config, projectile, from, direction, from, newTally())
+		return false
+	end
 	local tally = newTally()
 	local critMult = config.shooting.critMult
 	local push = (flatten(direction) or Vector3.zero) * variant.knockback
@@ -1275,15 +1348,13 @@ local function stepProjectile(
 		if volley.hit[candidate.id] then
 			continue
 		end
-		if volley.cap > 0 and volley.distinct >= volley.cap then
-			stopAt = candidate.order
-			break
-		end
 		local amount = if candidate.crit then projectile.damage * critMult else projectile.damage
 		strike(tally, projectile.player, candidate.id, amount, candidate.crit, push, variant.launch)
 		markVolley(volley, candidate.id)
 		projectile.hitsLeft -= 1
-		if projectile.hitsLeft <= 0 then
+		-- The hit that spends its pierce or the volley's cap stops the arrow IN that enemy, so the
+		-- end strike (and a full-charge burst) lands there.
+		if projectile.hitsLeft <= 0 or (volley.cap > 0 and volley.distinct >= volley.cap) then
 			stopAt = candidate.order
 			break
 		end
@@ -1328,8 +1399,16 @@ local function stepProjectiles(config: Types.ProvingGroundsConfig, deltaTime: nu
 			table.insert(survivors, projectile)
 		end
 	end
-	-- Split children start flying on the next step.
-	table.move(spawned, 1, #spawned, #survivors + 1, survivors)
+	-- Newborn split children fly the rest of the frame their parent split in (children never
+	-- split again, so nothing new is spawned here).
+	local none: { Projectile } = {}
+	for _, child in spawned do
+		local carry = child.carry
+		child.carry = 0
+		if carry <= 0 or stepProjectile(config, child, carry, params, none) then
+			table.insert(survivors, child)
+		end
+	end
 	projectiles = survivors
 end
 
@@ -1613,7 +1692,11 @@ function RangeService.OnAttack(
 			sendRefused(shooter)
 			return
 		end
-		if (variant.projectileSpeed or 0) > 0 and #projectiles >= MAX_PROJECTILES then
+		-- A split shot becomes splitCount arrows: the whole volley must fit, or the shot is refused.
+		if
+			(variant.projectileSpeed or 0) > 0
+			and #projectiles + volleySize(variant) > MAX_PROJECTILES
+		then
 			sendRefused(shooter)
 			return
 		end

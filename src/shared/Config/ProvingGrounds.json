@@ -141,7 +141,9 @@
 		"originPad": 6,
 		"critMult": 2.0,
 		"bloomMovingSpeed": 1.5,
-		"originLagSeconds": 0.05
+		"originLagSeconds": 0.05,
+		"projectileMaxSeconds": 3,
+		"fanJitterShare": 0.25
 	},
 	"controls": {
 		"touchMode": "autoFire",

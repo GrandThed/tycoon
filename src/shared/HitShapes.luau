@@ -19,11 +19,9 @@ local PM_MULTIPLIER = 48271
 local FULL_TURN = 2 * math.pi
 -- Pellets are cosmetic tracers; a tuned count past this is clamped, never a frame-long loop.
 local MAX_PELLETS = 64
--- Split arrows are real server projectiles; a tuned splitCount past this is clamped.
+-- Split arrows are real server projectiles; a tuned splitCount past this is clamped (exported
+-- as HitShapes.MAX_FAN so the server budgets volleys with the same number).
 local MAX_FAN = 16
--- A fanned arrow wanders by up to this share of the gap between neighbours, so a volley never
--- looks machine-stamped yet never crosses its neighbour.
-local FAN_JITTER_SHARE = 0.25
 
 -- 2D: does the circle at (x, y) with radius `reach` overlap the sector with its apex at the
 -- origin, its axis along +x, radius `range` and half-angle `halfAngle` (radians)? Both the flat
@@ -214,13 +212,15 @@ end
 
 -- A split arrow's children: `count` (at most MAX_FAN) directions fanned evenly across
 -- `arcDegrees` around `direction`, in the plane of `direction` and its horizontal
--- perpendicular, each nudged by HitShapes.Pellets(seed + index) jitter. Deterministic, so the
--- server and every client fan the same volley from the shot's seq.
+-- perpendicular, each nudged by HitShapes.Pellets(seed + index) jitter of up to `jitterShare`
+-- (shooting.fanJitterShare; nil = none) of the gap between neighbours. Deterministic, so the
+-- server and every client fan the same volley from the shot's seq and the same share.
 function HitShapes.Fan(
 	direction: Vector3,
 	count: number,
 	arcDegrees: number,
-	seed: number
+	seed: number,
+	jitterShare: number?
 ): { Vector3 }
 	local axis = unitOf(direction)
 	local arrows: { Vector3 } = {}
@@ -232,7 +232,7 @@ function HitShapes.Fan(
 	local right = axis:Cross(reference).Unit
 	local arc = math.rad(math.max(arcDegrees, 0))
 	local gap = if total > 1 then arc / (total - 1) else 0
-	local jitterDegrees = math.deg(gap) * FAN_JITTER_SHARE
+	local jitterDegrees = math.deg(gap) * math.max(jitterShare or 0, 0)
 	for index = 1, total do
 		local angle = if total > 1 then -arc / 2 + gap * (index - 1) else 0
 		local base = (axis * math.cos(angle) + right * math.sin(angle)).Unit
@@ -241,5 +241,7 @@ function HitShapes.Fan(
 	end
 	return arrows
 end
+
+HitShapes.MAX_FAN = MAX_FAN
 
 return HitShapes

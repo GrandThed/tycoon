@@ -38,8 +38,14 @@ local function familyForSlot(value: string, path: string, base: Types.ProvingGro
 	return def ~= nil and def.slot == slot
 end
 local SLOTS = { "melee", "ranged" }
+-- A family's name, slot and era describe the roster, not a feel to try: tuning them would move a
+-- family between slots under a live loadout, so they are not tunable at all.
+local STRUCTURAL_PATHS = {
+	"^weapons%.[^.]+%.name$",
+	"^weapons%.[^.]+%.slot$",
+	"^weapons%.[^.]+%.era$",
+}
 local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
-	{ pattern = "^weapons%.[^.]+%.slot$", check = oneOf(SLOTS) },
 	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", check = oneOf(SLOTS) },
 	{
 		pattern = "^weapons%.[^.]+%.variants%.[^.]+%.shape$",
@@ -168,8 +174,25 @@ function Tuning.Validate(path: string, value: any): boolean
 	if current == nil or typeof(value) ~= typeof(current) then
 		return false
 	end
+	for _, pattern in STRUCTURAL_PATHS do
+		if string.match(path, pattern) ~= nil then
+			return false
+		end
+	end
 	if typeof(value) == "number" then
-		return isFinite(value)
+		if not isFinite(value) then
+			return false
+		end
+		-- A charge weapon fires a real arrow; at speed 0 it would silently become hitscan.
+		local family, key =
+			string.match(path, "^weapons%.([^.]+)%.variants%.([^.]+)%.projectileSpeed$")
+		if family ~= nil and key ~= nil and value <= 0 then
+			local base = baseConfig()
+			local def = if base ~= nil then base.weapons[family] else nil
+			local variant = if def ~= nil then def.variants[key] else nil
+			return variant == nil or variant.chargeSeconds == nil
+		end
+		return true
 	end
 	if typeof(value) == "string" then
 		if #value > MAX_STRING_LENGTH then

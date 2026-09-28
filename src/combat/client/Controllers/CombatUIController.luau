@@ -151,6 +151,10 @@ local function bootRange(): ()
 			end
 			lastCommandAt = now
 			remote:FireServer(cmd, arg)
+			if cmd == "set" or cmd == "reset" or cmd == "stress" then
+				-- The server drops every projectile with the crowd it replaces.
+				FeedbackController.ClearFlights()
+			end
 			if cmd == "export" then
 				toast.Show("Tuned values printed to Output", Theme.TOAST_ERROR_SECONDS, false)
 			end

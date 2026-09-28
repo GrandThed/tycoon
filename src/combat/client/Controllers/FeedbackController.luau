@@ -32,8 +32,9 @@
 -- P2 (INTERFACES "P2 contracts"): every projectile is announced at fire time as a
 -- `CombatFxShot`, and every client flies it here: an arrow is a thin shaft with a bright trail
 -- (gold and lit at a full charge), a launcher shell a ball with a smoke trail, a split arrow
--- fans into its children after `splitDistance` using the server's own HitShapes.Fan
--- pattern. The visual follows origin + v·t + ½g·t² (blended out of the shooter's hand for the
+-- fans into its children where the server says it split (a CombatFxShot with split = true,
+-- at splitDistance or early at the first enemy) using the server's own HitShapes.Fan pattern;
+-- a local timer splits it only if that message is late. The visual follows origin + v·t + ½g·t² (blended out of the shooter's hand for the
 -- first instant) and ends when its strike lands (matched by userId + seq), when it meets the
 -- world, or on a timeout. Damage still arrives only as strikes, which add the bow effects:
 -- pierce sparks on every enemy an arrow passed through, a burst for a full-charge blast or a
@@ -130,6 +131,8 @@ type Flight = {
 	started: number,
 	lifetime: number,
 	last: Vector3,
+	-- Seconds after launch when the client splits the arrow itself if the server's split shot
+	-- has not arrived (nil = not a split parent, or already split).
 	splitAt: number?,
 	splitCount: number,
 	splitArc: number,
@@ -761,8 +764,9 @@ end
 
 -- An arrow strike: its flight was already drawn, so the strike marks where it went: shards and
 -- sparks bursting forward out of every enemy it pierced, and a small flash where it stopped.
-local function drawArrowHits(list: { FxPart }, strike: Strike, color: Color3): ()
+local function drawArrowHits(list: { FxPart }, strike: Strike, color: Color3, tube: number?): ()
 	local axis = unitOf(strike.direction) or Vector3.zAxis
+	local finish = strike.endPoint
 	local u, v = basis(axis)
 	local shards = Theme.COMBAT_RANGE_PIERCE_SHARDS
 	local spread = math.rad(Theme.COMBAT_RANGE_PIERCE_SPREAD_DEGREES)
@@ -773,6 +777,17 @@ local function drawArrowHits(list: { FxPart }, strike: Strike, color: Color3): (
 			local height = CrowdRenderer.GetHeight(hit.id)
 				or Theme.COMBAT_RANGE_NUMBER_FALLBACK_HEIGHT
 			local centre = feet + Vector3.new(0, height / 2, 0)
+			-- A full-charge blast strike mixes the arrow's last hits with the blast's victims;
+			-- only bodies on the arrow's line, behind its end point, were pierced.
+			local pierced = true
+			if tube ~= nil and finish ~= nil then
+				local offset = centre - finish
+				local along = offset:Dot(axis)
+				pierced = along <= tube and (offset - axis * along).Magnitude <= tube
+			end
+			if not pierced then
+				continue
+			end
 			for index = 1, shards do
 				local turn = 2 * math.pi * index / shards
 				local dir = (
@@ -796,9 +811,8 @@ local function drawArrowHits(list: { FxPart }, strike: Strike, color: Color3): (
 			)
 		end
 	end
-	-- Only the strike that ends the arrow names where it stopped.
-	local finish = strike.endPoint
-	if finish ~= nil then
+	-- Only the strike that ends the arrow names where it stopped (a blast draws its own core).
+	if finish ~= nil and tube == nil then
 		ball(
 			list,
 			finish,
@@ -920,6 +934,13 @@ local function drawHitbox(
 		drawSphere(list, strike, color, shell, edge)
 		if variant ~= nil and variant.kind == "ranged" then
 			if isProjectile(variant) or variant.shape ~= "sphere" then
+				if variant.shape == "ray" then
+					-- A bow's full-charge end strike also carries the arrow's final-frame hits.
+					local tube = (variant.width or 0) / 2
+						+ variant.pad
+						+ Theme.COMBAT_RANGE_PIERCE_TUBE_PAD
+					drawArrowHits(list, strike, color, tube)
+				end
 				drawBlast(list, strike, variant)
 			else
 				-- A hitscan blast never flew, so a trail from the hand shows where it went.
@@ -940,7 +961,7 @@ local function drawHitbox(
 		drawPellets(list, strike, variant)
 	elseif shape == "ray" then
 		if isProjectile(variant) then
-			drawArrowHits(list, strike, color)
+			drawArrowHits(list, strike, color, nil)
 		else
 			drawRay(list, strike, color)
 		end
@@ -1549,7 +1570,13 @@ local function flightParams(): RaycastParams
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = ignore
+	-- The server's projectile ray ignores non-colliding parts; a flight must pass them too.
+	params.RespectCanCollide = true
 	return params
+end
+
+local function maxFlightSeconds(): number
+	return config().shooting.projectileMaxSeconds
 end
 
 -- The flying body: a shaft (or ball) with a camera-facing trail from its tail.
@@ -1622,6 +1649,9 @@ end
 
 -- The body stops where it is and its trail is left to fade before it goes.
 local function endFlight(index: number, at: Vector3?): ()
+	if index < 1 or index > #flights then
+		return
+	end
 	local flight = table.remove(flights, index)
 	if flight == nil then
 		return
@@ -1654,7 +1684,7 @@ local function spawnFlight(
 	variant: Types.RangeWeaponVariant?
 ): ()
 	local speed = velocity.Magnitude
-	local splitCount = if variant ~= nil then variant.splitCount or 0 else 0
+	local splitCount = if variant ~= nil then math.floor(variant.splitCount or 0) else 0
 	local splitDistance = if variant ~= nil then variant.splitDistance else nil
 	local flight: Flight = {
 		key = key,
@@ -1669,7 +1699,7 @@ local function spawnFlight(
 		splitAt = if splitCount > 1
 				and splitDistance ~= nil
 				and speed > 0
-			then splitDistance / speed
+			then splitDistance / speed + Theme.COMBAT_RANGE_SPLIT_GRACE_SECONDS
 			else nil,
 		splitCount = splitCount,
 		splitArc = if variant ~= nil then variant.splitArcDegrees or 0 else 0,
@@ -1680,31 +1710,66 @@ local function spawnFlight(
 	table.insert(flights, flight)
 end
 
--- A split arrow becomes its children where it is, fanned by the server's own pattern
--- (HitShapes.Fan around the velocity there, seeded by seq); each keeps the parent's speed,
--- drop and remaining time. The server also splits early on the first enemy an arrow meets;
--- the client splits at splitDistance, so a point-blank fan can open a little late here.
-local function splitFlight(index: number, t: number): ()
-	local flight = flights[index]
-	local position, heading = ballistic(flight, t)
-	local speed = flight.velocity.Magnitude
-	local remaining = flight.lifetime - t
-	local directions = HitShapes.Fan(heading, flight.splitCount, flight.splitArc, flight.seq)
-	for _, direction in directions do
+-- What a volley's children inherit from their parent arrow.
+type Fan = {
+	key: string,
+	speed: number,
+	gravity: number,
+	count: number,
+	arc: number,
+	seq: number,
+	glow: boolean,
+}
+
+-- The children of a split at `position`, fanned by the server's own pattern (HitShapes.Fan
+-- around `heading`, seeded by seq, jittered by shooting.fanJitterShare); each keeps the
+-- parent's speed, drop and remaining time.
+local function fanOut(fan: Fan, position: Vector3, heading: Vector3, remaining: number): ()
+	local jitter = config().shooting.fanJitterShare
+	for _, direction in HitShapes.Fan(heading, fan.count, fan.arc, fan.seq, jitter) do
 		spawnFlight(
-			flight.key,
-			buildProjectile(false, flight.glow),
+			fan.key,
+			buildProjectile(false, fan.glow),
 			position,
-			direction * speed,
-			flight.gravity,
+			direction * fan.speed,
+			fan.gravity,
 			Vector3.zero,
 			remaining,
-			flight.seq,
-			flight.glow,
+			fan.seq,
+			fan.glow,
 			nil
 		)
 	end
-	endFlight(table.find(flights, flight) or index, nil)
+end
+
+local function fanOf(flight: Flight): Fan
+	return {
+		key = flight.key,
+		speed = flight.velocity.Magnitude,
+		gravity = flight.gravity,
+		count = flight.splitCount,
+		arc = flight.splitArc,
+		seq = flight.seq,
+		glow = flight.glow,
+	}
+end
+
+-- The fallback split: where the parent is now (the server's split shot did not come in time).
+local function splitFlight(index: number, t: number): ()
+	local flight = flights[index]
+	local position, heading = ballistic(flight, t)
+	endFlight(index, nil)
+	fanOut(fanOf(flight), position, heading, flight.lifetime - t)
+end
+
+-- Every parent of a shot that is still waiting to split, split where it is now.
+local function splitPending(key: string, now: number): ()
+	for index = #flights, 1, -1 do
+		local flight = flights[index]
+		if flight.key == key and flight.splitAt ~= nil then
+			splitFlight(index, now - flight.started)
+		end
+	end
 end
 
 local function stepFlights(now: number): ()
@@ -1762,17 +1827,37 @@ local function onShot(fx: { [string]: any }): ()
 	local charge = if typeof(fx.charge) == "number" then fx.charge else 0
 	local shell = variant ~= nil and variant.shape == "sphere"
 	local glow = variant ~= nil and variant.chargeSeconds ~= nil and charge >= FULL_CHARGE
-	local range = if variant ~= nil
-		then variant.range
-		else fx.speed * Theme.COMBAT_RANGE_FLIGHT_MAX_SECONDS
-	local lifetime = math.min(
-		range / fx.speed + Theme.COMBAT_RANGE_FLIGHT_SLACK_SECONDS,
-		Theme.COMBAT_RANGE_FLIGHT_MAX_SECONDS
-	)
+	local key = tostring(fx.userId) .. ":" .. tostring(fx.seq)
+	local maxSeconds = maxFlightSeconds()
+	local range = if variant ~= nil then variant.range else fx.speed * maxSeconds
+	local lifetime =
+		math.min(range / fx.speed + Theme.COMBAT_RANGE_FLIGHT_SLACK_SECONDS, maxSeconds)
+	if fx.split == true then
+		-- The server split this shot here: whatever this client drew for it (the parent, or
+		-- children its fallback timer made) gives way to a fan from the true point.
+		local now = os.clock()
+		for index = #flights, 1, -1 do
+			local flight = flights[index]
+			if flight.key == key then
+				lifetime = math.min(lifetime, flight.lifetime - (now - flight.started))
+				endFlight(index, nil)
+			end
+		end
+		fanOut({
+			key = key,
+			speed = fx.speed,
+			gravity = gravity,
+			count = if variant ~= nil then math.floor(variant.splitCount or 0) else 0,
+			arc = if variant ~= nil then variant.splitArcDegrees or 0 else 0,
+			seq = fx.seq,
+			glow = glow,
+		}, fx.origin, direction, math.max(lifetime, 0))
+		return
+	end
 	local muzzle = muzzleOf(fx.userId)
 	local offset = if muzzle ~= nil then muzzle - fx.origin else Vector3.zero
 	spawnFlight(
-		tostring(fx.userId) .. ":" .. tostring(fx.seq),
+		key,
 		buildProjectile(shell, glow),
 		fx.origin,
 		direction * fx.speed,
@@ -1796,6 +1881,9 @@ local function landFlight(strike: Strike): ()
 	end
 	local key = tostring(strike.userId) .. ":" .. tostring(seq)
 	local now = os.clock()
+	-- A parent still waiting for its split is never ended whole: its children are what the
+	-- server is resolving, so it splits first and the nearest child takes the strike.
+	splitPending(key, now)
 	local best: number? = nil
 	local bestDistance = math.huge
 	for index, flight in flights do
@@ -1870,6 +1958,11 @@ local function onStrike(strike: Strike): ()
 	local variant = variantOf(strike.weapon, strike.variant)
 	if isProjectile(variant) then
 		landFlight(strike)
+		-- An empty end strike (a set/reset/stress clearing the air, or a split child whose
+		-- siblings filled the cap) only stops its flight: no flash, no sparks.
+		if #strike.hits == 0 and strike.size <= 0 then
+			return
+		end
 	end
 	local total = 0
 	local kills = 0
@@ -2265,6 +2358,14 @@ end
 -- The loadout the server last confirmed on TuneState (nil until the first one arrives).
 function FeedbackController.GetLoadout(): Types.RangeLoadout?
 	return currentLoadout
+end
+
+-- Every projectile in flight goes (a dummy set was loaded or reset: the server dropped its
+-- projectiles with the crowd).
+function FeedbackController.ClearFlights(): ()
+	for index = #flights, 1, -1 do
+		endFlight(index, nil)
+	end
 end
 
 -- Called after every TuneState, once the overrides are applied to Tuning.

@@ -642,3 +642,20 @@ unless active, tune/command also IsStudio, validators finite/seq/short strings, 
 - Two client listeners on one RemoteEvent (TuneState: Input + Feedback): the pre-connect queue drains into
   whichever connects first. Rows rebuilt on selection change that connect UserInputService globally leak.
 - Client-chosen `seq` seeding the server's pellet RNG lets a client grind tight patterns (note for P5).
+
+**P2 weapon families + bows (2026-09-28, main 42429be..416dfb9, SHIP AFTER FIXES: 0 Critical, 2 Majors).**
+Server authority held: family must equal the loadout slot's family, charge = min(claimed, (now-drawStamp)
+/(chargeSeconds x tolerance)) and the stamp only counts if newer than the slot's last shot (Draw-then-Attack
+instantly = min charge), Draw has its own per-remote bucket, projectile cap 256, split clamp 16, volley.hit
+map stops double hits, blast only on charge >= 1. Arrows step on Heartbeat with a swept chord test (no
+tunnelling), never yield.
+- **Recurring pattern (new): a server event the client cannot see changes where the visual should go.**
+  The server splits a Splitbow arrow EARLY on first enemy contact but only announces the shot; the client
+  splits by time at splitDistance. At point-blank the first child's end strike (matched by nearest flight
+  of the same userId:seq) lands on the still-unsplit parent and ends it, so no fan is ever drawn. Any
+  server-side branch in a projectile's life (split, bounce, stop) needs its own fx message.
+- **Recurring pattern (new): two stop conditions (pierce count vs volley cap) with off-by-one meanings.**
+  Arrows use hitsLeft = 1 + pierce, the rifle max(1, pierce); with cap == pierce the arrow spends the cap
+  but keeps flying and its full-charge burst lands on the ground behind the crowd. Check every "stop"
+  rule is re-evaluated right after the hit that spends it.
+- Dead cross-owner API after a removal: InputController.SetRangeAttackHandler lost its only caller.

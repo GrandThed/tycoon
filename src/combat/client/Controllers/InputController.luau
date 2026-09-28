@@ -138,6 +138,9 @@ local activeSlot: Stance = MELEE_SLOT
 local loadout: Types.RangeLoadout? = nil
 local drawStartedAt: number? = nil
 local drawFamily = ""
+-- autoFire: when the target left the assist cone during an under-charged draw. The draw
+-- survives controls.tapBufferSeconds so a flickering target does not cancel and restart it.
+local targetLostAt: number? = nil
 local rangeHeld = false
 local adsHeld = false
 local adsToggled = false
@@ -156,16 +159,6 @@ local requestRangeAttack: RemoteEvent? = nil
 local requestRangeDraw: RemoteEvent? = nil
 local rangeGui: ScreenGui? = nil
 local adsButton: TextButton? = nil
-export type RangeAttackHandler = (
-	weapon: string,
-	variant: string,
-	origin: Vector3,
-	direction: Vector3
-) -> ()
--- Told about every range attack the instant it is sent (CombatUIController draws the
--- launcher shell from it), so the local visual starts on the exact ray the server got.
--- `weapon` is the family id.
-local rangeAttackHandler: RangeAttackHandler? = nil
 
 local function slotTier(tiers: SlotTiers, slot: string): number
 	return if slot == MELEE_SLOT then tiers.melee else tiers.ranged
@@ -734,36 +727,21 @@ local function activeFamily(cfg: Types.ProvingGroundsConfig): (string, Types.Ran
 	return family, def
 end
 
--- (variant, family id, variant key) for the active slot. The loadout's variant choice wins
+-- (variant, family id) for the active slot. The loadout's variant choice wins
 -- when it names a real variant; otherwise the family's config default.
-local function currentVariant(
-	cfg: Types.ProvingGroundsConfig
-): (Types.RangeWeaponVariant?, string, string)
+local function currentVariant(cfg: Types.ProvingGroundsConfig): (Types.RangeWeaponVariant?, string)
 	local family, def = activeFamily(cfg)
 	if def == nil then
-		return nil, family, ""
+		return nil, family
 	end
 	local held = loadout
 	local chosen = if held ~= nil then held.variants[family] else nil
 	local key = if chosen ~= nil and def.variants[chosen] ~= nil then chosen else def.default
-	return def.variants[key], family, key
+	return def.variants[key], family
 end
 
 local function isRanged(variant: Types.RangeWeaponVariant): boolean
 	return variant.kind == "ranged"
-end
-
--- Tells CombatUIController about an attack the instant it is sent, on the exact ray sent.
-local function notifyRangeAttack(
-	family: string,
-	variantKey: string,
-	origin: Vector3,
-	direction: Vector3
-): ()
-	local handler = rangeAttackHandler
-	if handler ~= nil then
-		handler(family, variantKey, origin, direction)
-	end
 end
 
 -- Bows: a ranged variant with a draw time is held to draw and released to fire.
@@ -1011,7 +989,6 @@ local function rangeAttack(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
 	family: string,
-	variantKey: string,
 	rig: LocalRig,
 	charge: number
 ): ()
@@ -1029,7 +1006,6 @@ local function rangeAttack(
 		local origin, look = shotRay(rig)
 		local direction = spreadDirection(look, nextSpreadDegrees(cfg))
 		remote:FireServer(family, rangeSeq, origin, direction, adsActive, charge)
-		notifyRangeAttack(family, variantKey, origin, direction)
 		lastShotAt = now
 		local shooting = cfg.shooting
 		bloom = math.min(bloom + shooting.bloomPerShot, math.max(shooting.bloomMaxDegrees, bloom))
@@ -1042,7 +1018,6 @@ local function rangeAttack(
 	end
 	local forward = flatCameraLook()
 	remote:FireServer(family, rangeSeq, rig.root.Position, forward, false, charge)
-	notifyRangeAttack(family, variantKey, rig.root.Position, forward)
 	local chain = variant.chain
 	local length = if chain ~= nil and #chain > 0 then #chain else 1
 	swingStep = if idle then 1 else swingStep % length + 1
@@ -1058,6 +1033,7 @@ end
 local function startDraw(variant: Types.RangeWeaponVariant, family: string): ()
 	drawStartedAt = os.clock()
 	drawFamily = family
+	targetLostAt = nil
 	-- The server's own draw clock starts here and caps whatever charge the release claims.
 	local remote = requestRangeDraw
 	if remote ~= nil then
@@ -1072,6 +1048,7 @@ local function cancelDraw(): ()
 	end
 	drawStartedAt = nil
 	drawFamily = ""
+	targetLostAt = nil
 	WeaponController.Release()
 end
 
@@ -1079,27 +1056,27 @@ local function releaseDraw(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
 	family: string,
-	variantKey: string,
 	rig: LocalRig
 ): ()
 	local charge = chargeOf(variant)
 	drawStartedAt = nil
 	drawFamily = ""
+	targetLostAt = nil
 	WeaponController.Release()
-	rangeAttack(cfg, variant, family, variantKey, rig, charge)
+	rangeAttack(cfg, variant, family, rig, charge)
 end
 
 -- Bows. The draw may start at any time; a release waits until 1/rate has passed since the
 -- previous one (it keeps drawing meanwhile), which is the server's rate rule.
 --  * Mouse / R2 / a stray HUD press: hold draws, letting go releases.
 --  * Touch autoFire: draws while a target is in the assist cone, releases at a full charge;
---    if the target leaves, releases at >= minChargeFraction or drops the draw below it.
+--    if the target leaves, releases at >= minChargeFraction; below it the draw waits
+--    controls.tapBufferSeconds for the target to come back before it is dropped.
 --  * Touch tapFire: a short tap is a minimum-charge arrow; a still hold draws until lifted.
 local function stepCharge(
 	cfg: Types.ProvingGroundsConfig,
 	variant: Types.RangeWeaponVariant,
 	family: string,
-	variantKey: string,
 	rig: LocalRig
 ): ()
 	local ready = os.clock() - lastRangeAttackAt >= intervalOf(variant)
@@ -1109,7 +1086,7 @@ local function stepCharge(
 		if tapPending(cfg) then
 			if ready then
 				startDraw(variant, family)
-				releaseDraw(cfg, variant, family, variantKey, rig)
+				releaseDraw(cfg, variant, family, rig)
 			end
 		elseif heldDraw or (auto and targetOnAuto(cfg, variant, rig)) then
 			startDraw(variant, family)
@@ -1119,18 +1096,24 @@ local function stepCharge(
 	local release = false
 	if auto then
 		if targetOnAuto(cfg, variant, rig) then
+			targetLostAt = nil
 			release = chargeOf(variant) >= 1
 		elseif chargeOf(variant) >= (variant.minChargeFraction or 0) then
 			release = true
 		else
-			cancelDraw()
+			local now = os.clock()
+			local lostAt = targetLostAt or now
+			targetLostAt = lostAt
+			if now - lostAt > cfg.controls.tapBufferSeconds then
+				cancelDraw()
+			end
 			return
 		end
 	else
 		release = not heldDraw
 	end
 	if release and ready then
-		releaseDraw(cfg, variant, family, variantKey, rig)
+		releaseDraw(cfg, variant, family, rig)
 	end
 end
 
@@ -1152,7 +1135,7 @@ end
 local function rangeStep(deltaTime: number): ()
 	local cfg = Tuning.Get()
 	local rig = localRig()
-	local variant, family, variantKey = currentVariant(cfg)
+	local variant, family = currentVariant(cfg)
 	-- A draw never survives its weapon: a slot switch, a loadout change or death drops it.
 	if
 		drawStartedAt ~= nil
@@ -1172,14 +1155,14 @@ local function rangeStep(deltaTime: number): ()
 	end
 	updateBloom(cfg, rig, deltaTime)
 	if isCharge(variant) then
-		stepCharge(cfg, variant, family, variantKey, rig)
+		stepCharge(cfg, variant, family, rig)
 		return
 	end
 	if os.clock() - lastRangeAttackAt < intervalOf(variant) then
 		return
 	end
 	if wantsRangeAttack(cfg, variant, rig) then
-		rangeAttack(cfg, variant, family, variantKey, rig, 1)
+		rangeAttack(cfg, variant, family, rig, 1)
 	end
 end
 
@@ -1485,12 +1468,6 @@ function InputController.GetActiveSlot(): Stance
 	return activeSlot
 end
 
--- One handler (nil clears it), called right after each RequestRangeAttack with the weapon,
--- the variant key, the sent origin and the sent direction (spread already applied).
-function InputController.SetRangeAttackHandler(handler: RangeAttackHandler?): ()
-	rangeAttackHandler = handler
-end
-
 -- The bow's draw progress 0-1 for the HUD ring. In the range it is never nil (0 while
 -- nothing is drawn); in missions nil means nothing is drawn, which the mission HUD needs to
 -- hide its dots. Display only: the server caps the real charge from its own draw stamp.
@@ -1565,7 +1542,6 @@ function InputController.Destroy(): ()
 	table.clear(rangeTouches)
 	drawStartedAt = nil
 	drawFamily = ""
-	rangeAttackHandler = nil
 	rangeHeld = false
 	adsHeld = false
 	adsToggled = false

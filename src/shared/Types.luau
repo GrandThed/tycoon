@@ -1298,6 +1298,9 @@ export type CombatFxShot = {
 	gravity: number,
 	charge: number,
 	seq: number,
+	-- True when this shot marks where an in-flight arrow SPLIT (origin = split point, direction =
+	-- heading there): the client splits its matching userId+seq flight here instead of guessing.
+	split: boolean?,
 }
 export type CombatFx =
 	CombatFxShot
@@ -1410,8 +1413,8 @@ export type RangeWeaponVariant = {
 	chain: { number }?,
 	-- Melee only: the LAST chain hit uses this arc instead (360 = a full spin).
 	finisherArcDegrees: number?,
-	-- P2 bows. A ranged "ray" with projectileSpeed > 0 is a flying arrow that hits along its path
-	-- (pierce = extra enemies it passes through); a "sphere" projectile explodes on contact
+	-- P2 bows. A ranged "ray" with projectileSpeed > 0 is a flying arrow that hits along its path.
+	-- pierce = TOTAL enemies one projectile (or ray) can hit, everywhere (review ruling; 0 = 1); a "sphere" projectile explodes on contact
 	-- (launcher). gravity = studs/s² of arrow drop. Charge weapons: hold to draw for up to
 	-- chargeSeconds; damage scales from minChargeFraction to 1; a FULL charge also bursts
 	-- blastRadius at the arrow's end for damage x blastDamageMult. Split arrows: after
@@ -1503,6 +1506,10 @@ export type RangeShootingConfig = {
 	-- rootSpeed x (ping + originLagSeconds) to originPad.
 	bloomMovingSpeed: number,
 	originLagSeconds: number,
+	-- Projectile lifetime (server and client) and how far each split child is jittered, as a
+	-- share of the gap between children.
+	projectileMaxSeconds: number,
+	fanJitterShare: number,
 }
 -- touchMode: "autoFire" = attacks fire while the target is under the crosshair / in the hitbox;
 -- "tapFire" = a tap anywhere on the right half attacks.

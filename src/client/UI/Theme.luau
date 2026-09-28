@@ -642,7 +642,10 @@ local Theme = {
 	COMBAT_RANGE_CHARGE_COLOR = Color3.fromRGB(255, 196, 56), -- full draw: arrow, ring, blast
 	COMBAT_RANGE_FLIGHT_BLEND_SECONDS = 0.12, -- the shaft eases from the hand onto the aim path
 	COMBAT_RANGE_FLIGHT_SLACK_SECONDS = 0.5, -- past range / speed before a flight times out
-	COMBAT_RANGE_FLIGHT_MAX_SECONDS = 3, -- the server gives up on a projectile after this long
+	-- The fallback split waits this long past splitDistance / speed for the server's split shot.
+	COMBAT_RANGE_SPLIT_GRACE_SECONDS = 0.25,
+	-- Studs beyond the arrow's width + pad in which a blast strike's hit counts as pierced.
+	COMBAT_RANGE_PIERCE_TUBE_PAD = 1.5,
 	COMBAT_RANGE_PIERCE_SHARDS = 4,
 	COMBAT_RANGE_PIERCE_SPREAD_DEGREES = 30,
 	COMBAT_RANGE_PIERCE_SHARD_LENGTH = 1.8,
