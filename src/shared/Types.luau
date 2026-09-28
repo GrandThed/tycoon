@@ -834,6 +834,9 @@ export type CombatPlayerConfig = {
 export type CombatRemotesConfig = {
 	attackCallsPerSecond: number,
 	abilityCallsPerSecond: number,
+	-- P3 range buckets: held beams, SMGs and Mag Dump send far more than a mission weapon.
+	rangeAttackCallsPerSecond: number,
+	rangeAbilityCallsPerSecond: number,
 	runListCallsPerSecond: number,
 	combatStateHz: number,
 }
@@ -1301,9 +1304,12 @@ export type CombatFxShot = {
 	-- True when this shot marks where an in-flight arrow SPLIT (origin = split point, direction =
 	-- heading there): the client splits its matching userId+seq flight here instead of guessing.
 	split: boolean?,
+	-- P3: the ability id when an ability fired this projectile (Volley, Cluster Shell).
+	ability: string?,
 }
 export type CombatFx =
 	CombatFxShot
+	| CombatFxCast
 	| CombatFxTelegraph
 	| CombatFxHit
 	| CombatFxKill
@@ -1428,15 +1434,72 @@ export type RangeWeaponVariant = {
 	splitCount: number?,
 	splitDistance: number?,
 	splitArcDegrees: number?,
+	-- P3 (INTERFACES "P3 contracts"). Chain Gun: every enemy the shot hits starts a chain that
+	-- jumps chainCount times to the nearest enemy within chainRadius this shot has not hit yet,
+	-- each jump dealing chainFalloff times the one before. bloomMult scales the bloom one shot
+	-- adds (client only; nil = 1, 0 = none). continuous = a held beam: clients draw one lasting
+	-- beam per shooter instead of a tracer per shot and merge its numbers.
+	chainCount: number?,
+	chainRadius: number?,
+	chainFalloff: number?,
+	bloomMult: number?,
+	continuous: boolean?,
+}
+-- P3: a family's ability (docs/WEAPONS.md §2), cast with Q (melee slot) / E (ranged slot). id
+-- picks the mechanic in AbilityService and name is the label; both are structural (untunable).
+-- Every cooldown is scaled by abilities.cooldownScale; each kill by the caster takes
+-- killRefundSeconds off BOTH slots' remaining cooldowns, never below cast + minCooldownSeconds.
+-- What each optional field means for each id is the table in INTERFACES "P3 contracts".
+export type RangeAbilityDef = {
+	id: string,
+	name: string,
+	cooldownSeconds: number,
+	minCooldownSeconds: number,
+	killRefundSeconds: number,
+	damage: number?,
+	pad: number?,
+	cap: number?,
+	knockback: number?,
+	launch: number?,
+	radius: number?,
+	range: number?,
+	castRange: number?,
+	arcDegrees: number?,
+	width: number?,
+	height: number?,
+	delaySeconds: number?,
+	durationSeconds: number?,
+	tickSeconds: number?,
+	count: number?,
+	spacing: number?,
+	falloff: number?,
+	pull: number?,
+	pierce: number?,
+	targets: number?,
+	speed: number?,
+	gravity: number?,
+	blastRadius: number?,
+	blastDamageMult: number?,
+	rateMult: number?,
+	moveSpeedMult: number?,
 }
 -- P2: one weapon FAMILY (docs/WEAPONS.md). slot decides which Armory slot it fills; era is the
 -- era that unlocks it (range ignores it); variants are range alternatives, default = shipped one.
+-- P3: ability is family-level (every variant shares it).
 export type RangeWeaponDef = {
 	name: string,
 	slot: "melee" | "ranged",
 	era: number,
 	default: string,
 	variants: { [string]: RangeWeaponVariant },
+	ability: RangeAbilityDef?,
+}
+-- P3: the range-wide ability switches.
+export type RangeAbilitiesConfig = {
+	-- Multiplies every cooldown and its floor: 1 = as tuned, 0 = no cooldowns (range testing).
+	cooldownScale: number,
+	-- A cast may arrive this many seconds before the server's ready time and still count.
+	earlySeconds: number,
 }
 -- The family chosen for each slot plus the variant chosen per family.
 export type RangeLoadout = { melee: string, ranged: string, variants: { [string]: string } }
@@ -1572,7 +1635,8 @@ export type ProvingGroundsConfig = {
 		armorFloor: number,
 	},
 	-- Keyed by family id (broadsword, warhammer, spinblade, greataxe, spear, longbow, splitbow,
-	-- shotgun, rifle, launcher); loadout = the families a player starts the range with.
+	-- shotgun, rifle, launcher, P3: smg, beam, chaingun); loadout = the families a player starts
+	-- the range with.
 	weapons: { [string]: RangeWeaponDef },
 	loadout: { melee: string, ranged: string },
 	dummySets: { [string]: { DummyGroupDef } },
@@ -1581,6 +1645,7 @@ export type ProvingGroundsConfig = {
 	shooting: RangeShootingConfig,
 	controls: RangeControlsConfig,
 	feedback: RangeFeedbackConfig,
+	abilities: RangeAbilitiesConfig,
 }
 
 -- Crowd replication. CrowdSpawn (reliable) introduces an enemy once; CrowdSnapshot (unreliable,
@@ -1612,6 +1677,66 @@ export type CombatFxStrike = {
 	hits: { StrikeHit },
 	-- Gun attacks: the attack seq, so clients can redraw the exact pellets with HitShapes.Pellets.
 	seq: number?,
+	-- P3: the ability id when an ability dealt this strike (weapon = its family). tick = one
+	-- repeat of a lasting ability or a held beam: clients skip the generic hitbox flash (the
+	-- lasting visual already shows the area) and soften hitstop and shake. links = chain
+	-- lightning as flat pairs of enemy ids {from1, to1, from2, to2, ...}; 0 = the strike origin.
+	ability: string?,
+	tick: boolean?,
+	links: { number }?,
+}
+-- P3: an ability was cast (range). Sent to everyone so every client draws its lasting visual;
+-- damage still arrives as CombatFxStrike. origin = the caster's root at the cast; direction =
+-- the unit aim (flattened for melee abilities); target = the resolved ground point of an aimed
+-- ability (zones, leap) or the end of a dash. startsAt = workspace:GetServerTimeNow() of the
+-- cast; seq = the salted seed of any scatter (cluster bomblets). cancel = it ended early
+-- (family switched, player left): stop its visuals.
+export type CombatFxCast = {
+	kind: "cast",
+	userId: number,
+	weapon: string,
+	ability: string,
+	origin: Vector3,
+	direction: Vector3,
+	target: Vector3?,
+	startsAt: number,
+	seq: number,
+	cancel: boolean?,
+}
+-- P3: the caster's cooldowns, in workspace:GetServerTimeNow() seconds. readyAt = castable again;
+-- floorAt = the earliest readyAt kill refunds can reach; busyUntil = the caster is locked in an
+-- ability (channel, leap, dash, windup) until then. ability = "" when the family has none.
+export type RangeAbilitySlotState = { ability: string, readyAt: number, floorAt: number }
+export type RangeAbilityState = {
+	melee: RangeAbilitySlotState,
+	ranged: RangeAbilitySlotState,
+	busyUntil: number,
+}
+-- P3, server only: one ability hit handed to RangeService.Strike. size = radius (sphere) or reach
+-- (arc, cone, ray, capsule); capsule/ray width is the FULL width; a capsule runs origin →
+-- endPoint (else origin + direction * size). knockback pushes away from the origin (along
+-- direction for capsule and ray); pull > 0 pushes TOWARD the origin instead. crit: rays test the
+-- head sphere. exclude: ids skipped, and every id hit is added (one sweep hits each enemy once).
+-- chain: every enemy hit starts a chain (as the Chain Gun). cast = the cast id the readout sums.
+export type AbilityStrikeSpec = {
+	shape: HitShape,
+	origin: Vector3,
+	direction: Vector3,
+	size: number,
+	arcDegrees: number?,
+	width: number?,
+	endPoint: Vector3?,
+	pad: number,
+	cap: number,
+	damage: number,
+	knockback: number,
+	launch: number,
+	pull: number?,
+	crit: boolean?,
+	exclude: { [number]: boolean }?,
+	chain: { count: number, radius: number, falloff: number }?,
+	tick: boolean?,
+	cast: number,
 }
 -- Studio tuning: a dot path into ProvingGroundsConfig ("weapons.rifle.variants.A.damage") → value.
 export type TuneValue = number | boolean | string
@@ -1627,6 +1752,11 @@ export type RangeStats = {
 	-- True on the attacker's copy when the server refused the attack (origin/rate), so the client
 	-- drops the effects it already drew for it.
 	refused: boolean?,
+	-- P3: the latest ability cast's id and its running totals (every tick of a lasting ability
+	-- adds to them); nil until the first cast. Normal attacks never touch these.
+	ability: string?,
+	abilityHits: number?,
+	abilityKills: number?,
 }
 
 return {}

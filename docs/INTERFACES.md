@@ -4479,3 +4479,217 @@ Cross-owner API:
   - Greataxe cleaves 200°; the spear thrust hits a line.
   - Other players see arrows fly (Local Server, 2 players).
   - Phone: bows auto-draw and release on a target; tapFire tap/hold works.
+
+---
+
+# P3 contracts — abilities, phone slot button, SMG / Beam / Chain Gun (Ben, 2026-09-28)
+
+Plan of record: `docs/WEAPONS.md` §2 (the ability list) and `docs/COMBAT_DESIGN.md` §10 step 4.
+Ben's P2 verdict: everything works and the strengths are fine. His favourites were Longbow A and B,
+Splitbow A, Greataxe A and B, and Spear B, so the **Spear default is now B**. Still range-only
+(`build/proving.rbxl`). Missions stay untouched until P5. **No sound. No attack button on phones.**
+
+## Rulings (lead)
+
+1. **One ability per family**, defined at family level in `weapons.<family>.ability`
+   (`Types.RangeAbilityDef`). **Q** casts the melee slot's ability and **E** the ranged slot's.
+   On a gamepad, **L1** and **R1**. On touch, two buttons. Casting also makes that slot the active
+   one, so the weapon you see matches the ability.
+2. **Cooldowns are the server's.** The effective cooldown is `cooldownSeconds × abilities.cooldownScale`,
+   and the floor is `minCooldownSeconds × cooldownScale`. **Every kill by the caster, from any source
+   including abilities, takes `killRefundSeconds` off BOTH slots' remaining cooldowns.** A refund
+   never goes below that slot's floor (`floorAt = castAt + floor`). A cast is accepted when
+   `now ≥ readyAt − abilities.earlySeconds`. Changing a slot's family (range command) cancels that
+   slot's running ability and makes its new ability ready at once.
+3. **Busy lock.** Some abilities occupy the caster (column "busy" below). While busy, the server
+   refuses normal attacks on both slots and the other ability. The one exception is Mag Dump,
+   whose ranged attacks are the ability. Jump and dash are always allowed, except that the client
+   does not start them during Leap Smash or Impale Dash, because those own the character's motion.
+4. **Aim.** Every cast sends the camera ray (`origin`, `direction`), the same as a ranged attack,
+   and the server checks the origin exactly as it does for attacks (`RangeService.CheckAim`).
+   Aimed abilities resolve a **ground point**. Server `RangeService.GroundPoint` and the client
+   mirror in InputController follow the same four steps:
+   1. Raycast the world from `origin` along `direction` for `castRange + |origin − root|`.
+   2. P = the hit, or the ray's end.
+   3. If P is more than `castRange` from the root horizontally, pull it back along the flat line
+      to `castRange`, keeping its Y.
+   4. Drop P onto the floor: a down-ray from P + 3 studs for 250 studs. With no floor, use the
+      root's floor Y.
+
+   Melee abilities use the flattened `direction`.
+5. **Server-owned motion damage.** Leap Smash and Impale Dash move the character on the client
+   (MovementController), as the dash does. The server grants i-frames for `delaySeconds` and
+   resolves the damage from **its own** numbers: the landing sphere at the server's ground point
+   after `delaySeconds`, and the dash capsule from the server root at cast. If the client ends up
+   somewhere else, the hit still lands where the server said.
+6. **What you see is what you hit.**
+   - One-off ability hits (Earthquake rings, landings, dash, slug blasts, the overcharged ray,
+     cluster blasts) are ordinary strikes, so FeedbackController draws their exact shape.
+   - Lasting abilities (Whirlwind, zones, Overload Sweep, held beams) send `tick = true` strikes.
+     AbilityFx draws the area for the whole duration at its exact size (`radius` / `range`, no pad).
+     Feedback skips the generic flash on ticks and softens hitstop and shake on them.
+7. **Zones are vertical capsules**: from the ground point up `radius` studs, with radius `radius`.
+8. **Three new families**, each with A/B variants: **SMG** (era 3), **Beam** (era 4) and
+   **Chain Gun** (era 4). They reuse the hitscan ray path:
+   - SMG adds a per-variant `bloomMult`.
+   - Beam is a held `continuous` ray at rate 10 that pierces 30.
+   - Chain Gun adds `chainCount`, `chainRadius` and `chainFalloff`. Every enemy the ray hits
+     starts a chain, and the chain's hits do **not** count against `cap` or `pierce`. The strike
+     carries `links` so clients draw the lightning.
+9. **Phone slot button.** A touch button toggles melee and ranged, labelled with the other slot's
+   family name. This closes the P2 known limit.
+10. **Range rate buckets.** `RequestRangeAttack` and `RequestRangeDraw` move to bucket
+    `rangeAttack` (`Combat.json remotes.rangeAttackCallsPerSecond` 40). `RequestRangeAbility` is on
+    `rangeAbility` (4). The per-weapon `rate` is still enforced by RangeService.
+11. **Numbers are tier 1.** An ability's `damage` is per hit or per tick and is tier-1 absolute,
+    so it scales by the slot tier like weapon damage (P5). Mag Dump deals the SMG variant's damage.
+
+## Ability table (tier-1 starting values in `ProvingGrounds.json`; economy-designer tunes them)
+
+"cast" = the server root at the cast. "ground" = the ground point (ruling 4). Every strike
+carries `ability = id`. Fields not named for an ability are absent.
+
+| id (family) | mechanic | fields | busy |
+|---|---|---|---|
+| `whirlwind` (broadsword) | Channel. Every `tickSeconds` for `durationSeconds`, a 360° **arc** of reach `range` around the **current** server root (tick). Movement is ×`moveSpeedMult`. | damage, range, pad, cap, knockback, launch, durationSeconds, tickSeconds, moveSpeedMult | durationSeconds |
+| `earthquake` (warhammer) | `count` **spheres** centred on the floor below the cast root. Ring k (from 1) lands at `delaySeconds + (k−1)·tickSeconds` with radius `radius + (k−1)·spacing` and damage `damage·falloff^(k−1)`. Inner enemies are hit by every ring. Not ticks. | damage, delaySeconds, count, radius, spacing, tickSeconds, falloff, pad, cap, knockback, launch | delaySeconds |
+| `bladeStorm` (spinblade) | Zone at ground (castRange). From `delaySeconds`, every `tickSeconds` until `delaySeconds + durationSeconds`, a vertical capsule of `radius` (tick) **pulls** toward the centre (`pull`). | damage, castRange, delaySeconds, radius, durationSeconds, tickSeconds, pull, pad, cap, knockback, launch | — |
+| `leapSmash` (greataxe) | Leap to ground (castRange, apex `height` above the higher end). At `delaySeconds`, a **sphere** of `radius` at the server's ground point. I-frames for delaySeconds. | damage, castRange, height, delaySeconds, radius, pad, cap, knockback, launch | delaySeconds |
+| `impaleDash` (spear) | Dash along the flat aim for `range` studs (stopped by world geometry at chest height) over `delaySeconds`. At the cast, a **capsule** of full `width` from cast to the dash end, pushing along the dash. I-frames. The cast fx `target` = the dash end. | damage, range, width, delaySeconds, pad, cap, knockback, launch | delaySeconds |
+| `arrowRain` (longbow) | Zone at ground (castRange). Same timing as bladeStorm, no pull (tick). | damage, castRange, radius, delaySeconds, durationSeconds, tickSeconds, pad, cap, knockback, launch | — |
+| `volley` (splitbow) | One projectile through `RangeService.FireProjectile` that splits after `spacing` studs into `count` (≤ `HitShapes.MAX_FAN`) arrows over `arcDegrees`. Each arrow hits `pierce` enemies. Shares the P2 volley rules (one cap, no double hits; cap 0 = count × pierce). | damage, count, arcDegrees, spacing, pierce, range, width, pad, cap, speed, gravity, knockback, launch | — |
+| `slugBurst` (shotgun) | `count` true **cones** (`range`, full angle `arcDegrees`), `tickSeconds` apart, starting at the cast. Each fires from the character's Head (root if none) at that moment, along the cast aim. Not ticks. | damage, count, tickSeconds, range, arcDegrees, pad, cap, knockback, launch | count × tickSeconds |
+| `overchargedShot` (rifle) | After `delaySeconds`, one **ray** from the cast origin along the cast aim. Full `width`, reach `range`, stopped by world geometry, **unlimited pierce** (cap 0 = all), crits ×`shooting.critMult` on heads. | damage, delaySeconds, range, width, pad, cap, knockback, launch | delaySeconds |
+| `magDump` (smg) | Buff (`RangeService.SetAttackBuff`). For `durationSeconds` the SMG's rate is ×`rateMult` and each bullet hits `pierce` enemies. The client fires on its own for the whole duration (no hold, no bloom), aiming at the crosshair. | durationSeconds, rateMult, pierce | durationSeconds (ranged attacks allowed) |
+| `clusterShell` (launcher) | A shell through `FireProjectile` (`speed`, `gravity`, `range`), exploding on contact: a **sphere** of `radius` for `damage`. In `onImpact`, `count` bomblets land at `HitShapes.Scatter(impact, count, spacing, seq)`, and each explodes `delaySeconds` later: a sphere of `blastRadius` for `damage·blastDamageMult`. Not ticks. | damage, range, speed, gravity, radius, count, spacing, delaySeconds, blastRadius, blastDamageMult, pad, cap, knockback, launch | — |
+| `overloadSweep` (beam) | Over `durationSeconds`, `count` slices, left to right across `arcDegrees` centred on the flat aim. Slice i is an **arc** from the current server root, reach `range`, opening `arcDegrees/count`, forward rotated to the slice centre. One shared `exclude` hits each enemy once per sweep (tick). | damage, durationSeconds, count, arcDegrees, range, pad, cap, knockback, launch | durationSeconds |
+| `stormCoil` (chaingun) | Zone at ground (castRange). Every `tickSeconds` from `delaySeconds` for `durationSeconds`, it zaps the `targets` nearest enemies within `radius` (a sphere with cap = targets). Each zapped enemy starts a chain of `count` jumps (`spacing` jump radius, `falloff`). The strikes carry `links` (tick). | damage, castRange, delaySeconds, durationSeconds, tickSeconds, radius, targets, count, spacing, falloff, pad, cap, knockback, launch | — |
+
+## Types (applied)
+
+- `RangeWeaponVariant` gains `chainCount`, `chainRadius`, `chainFalloff`, `bloomMult` and
+  `continuous` (all optional).
+- `RangeAbilityDef` is new. `RangeWeaponDef.ability` is new (optional).
+- `RangeAbilitiesConfig` is new, and `ProvingGroundsConfig.abilities` is new.
+- `CombatFxStrike` gains `ability`, `tick` and `links`.
+- `CombatFxShot` gains `ability`.
+- `CombatFxCast` is new and is in the `CombatFx` union.
+- `RangeAbilitySlotState` and `RangeAbilityState` are new.
+- `AbilityStrikeSpec` is new (server only).
+- `RangeStats` gains `ability`, `abilityHits` and `abilityKills`.
+- `CombatRemotesConfig` gains `rangeAttackCallsPerSecond` and `rangeAbilityCallsPerSecond`.
+
+Config (applied):
+- In `ProvingGrounds.json`: an `ability` block on all 13 families; families `smg`, `beam` and
+  `chaingun` with A/B; `abilities { cooldownScale 1, earlySeconds 0.15 }`; spear `default` "B".
+- In `Combat.json`: `remotes.rangeAttackCallsPerSecond` 40 and `remotes.rangeAbilityCallsPerSecond` 4.
+
+## Remotes (range-only, validated, rate-limited)
+
+| Intent | Payload | Bucket |
+|---|---|---|
+| `RequestRangeAbility` | `(slot: "melee" \| "ranged", seq: int, origin: Vector3, direction: Vector3 (non-zero))` | `rangeAbility` |
+| `RequestRangeAttack`, `RequestRangeDraw` | unchanged payloads | **`rangeAttack`** (was `attack`) |
+
+| Event | Payload |
+|---|---|
+| `RangeAbility` (new, reliable, to the caster) | `(state: RangeAbilityState)`. Sent on join, on every cast, on a family change, and after kill refunds (coalesced, ≤ 4 Hz). |
+| `CombatFx` | adds `CombatFxCast` (to everyone, at the cast and on a cancel). Strikes and shots from abilities carry `ability`. |
+| `RangeStats` | adds the ability totals. |
+
+`Tuning.Validate`: `weapons.*.ability.id` and `weapons.*.ability.name` are structural (untunable),
+like `name`, `slot` and `era`. Every numeric ability field is tunable at
+`weapons.<family>.ability.<field>`. `abilities.*` is tunable.
+
+## Server APIs
+
+```luau
+-- RangeService (Range): hooks for AbilityService. All are range-only; none of them yields.
+RangeService.LoadoutOf(player: Player): Types.RangeLoadout?                  -- nil = not a range player
+RangeService.RootOf(player: Player): BasePart?
+RangeService.CheckAim(player: Player, origin: Vector3): boolean              -- same test as ranged attacks
+RangeService.GroundPoint(player: Player, origin: Vector3, direction: Vector3, castRange: number): Vector3?  -- ruling 4
+RangeService.FloorBelow(position: Vector3): Vector3                          -- step 4 of ruling 4 alone
+RangeService.SeedFor(player: Player, seq: number): number                    -- the salted seed (pelletSeed)
+-- One ability hit: gather → cap nearest-first → damage/push/launch → optional chains → ONE
+-- CombatFxStrike (weapon = family, variant = the player's key for it, ability = id, tick, links)
+-- → ability readout totals for spec.cast + the DPS log. Returns (distinct enemies hit, kills).
+RangeService.Strike(player: Player, family: string, ability: string, spec: Types.AbilityStrikeSpec): (number, number)
+-- An ability projectile on the normal projectile path, announced with CombatFxShot{ability}. Its
+-- strikes carry `ability` and add to cast `cast`. onImpact runs inside the server step (it must
+-- not yield) at the detonation point of a sphere projectile, or where an arrow flight ends.
+RangeService.FireProjectile(player: Player, family: string, ability: string, cast: number,
+	variant: Types.RangeWeaponVariant, origin: Vector3, direction: Vector3, seed: number,
+	onImpact: ((point: Vector3) -> ())?): boolean                                  -- false = refused (budget)
+-- Normal-attack modifiers. A buff (nil clears it) changes the slot's rate and hitscan pierce until
+-- `untilClock` (os.clock). A lock refuses attacks on both slots until `untilClock`, except slot
+-- `allow`. A cleared or expired buff/lock is a no-op.
+RangeService.SetAttackBuff(player: Player, slot: "melee" | "ranged", buff: { rateMult: number, pierce: number, untilClock: number }?): ()
+RangeService.SetAbilityLock(player: Player, untilClock: number, allow: ("melee" | "ranged")?): ()
+RangeService.GrantIframes(player: Player, seconds: number): ()             -- extends, never shortens
+RangeService.OnLoadoutChanged(callback: (player: Player, slot: "melee" | "ranged") -> ()): ()
+
+-- HitShapes (Range): the cluster bomblet pattern. count points on a flat circle of radius
+-- spacing around center (evenly spaced, rotated and jittered by Park–Miller from seed), so the
+-- server and every client scatter the same bomblets.
+HitShapes.Scatter(center: Vector3, count: number, spacing: number, seed: number): { Vector3 }
+
+-- AbilityService (Abilities, new): the cast pipeline, cooldowns, refunds, busy lock, timelines.
+AbilityService.Init(): ()
+AbilityService.Start(): ()                                  -- after RangeService.Start; inert off the range
+AbilityService.AddPlayer(player: Player): ()                -- sends the first RangeAbility state
+AbilityService.RemovePlayer(player: Player): ()             -- drops the timelines, no fx
+AbilityService.OnCast(player: Player, slot: string, seq: number, origin: Vector3, direction: Vector3): ()
+```
+
+AbilityService runs every timeline on its own Heartbeat connection. Nothing in it yields, and a
+timeline of a player who left is dropped. Each cast gets a server cast id (an increasing
+integer), which is the `cast` in every spec. `seq` has the same replay guard as attacks.
+
+## Client APIs
+
+```luau
+-- InputController (Motion)
+InputController.CastAbility(slot: "melee" | "ranged"): ()      -- = pressing Q / E
+InputController.ToggleSlot(): ()                                -- = 1/2 toggle, gamepad Y, touch slot button
+InputController.GetAbilityState(): Types.RangeAbilityState?     -- latest RangeAbility event
+InputController.IsBusy(): boolean                               -- local mirror of busyUntil
+```
+
+AbilityBar (Feedback) reads those getters. AbilityFx reads the tuning, CombatFx and the characters.
+Nobody else listens to `RangeAbility` (Motion owns it).
+
+## Ownership (one wave, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section, `Types.luau`, the `ProvingGrounds.json` keys and `Combat.json` remotes (applied), and `src/combat/server/Main.server.luau` wiring after the wave: the `RequestRangeAbility` handler, AbilityService Init, Start, AddPlayer and RemovePlayer |
+| luau-engineer **Range** | `RangeService.luau` (new families, chains, buff/lock, the hook API above), `HitShapes.luau` (`Scatter`), `Tuning.luau` (ability paths), `CombatRemotes.luau` (new intent and event, the two buckets) |
+| luau-engineer **Abilities** | new `src/combat/server/Services/AbilityService.luau` |
+| ui-engineer **Motion** | `InputController.luau` (Q/E, L1/R1, touch ability and slot buttons with cooldown sweeps, cast pipeline, busy mirror, Mag Dump auto-fire, beam hold, SMG `bloomMult`, the ground-point mirror), `MovementController.luau` (leap, lunge, the Whirlwind speed multiplier, new satellite buttons), `CameraController.luau` |
+| ui-engineer **Feedback** | `FeedbackController.luau` (tick strikes, chain `links`, continuous beam, ability numbers), new `src/combat/client/UI/AbilityBar.luau` (PC/gamepad cooldown HUD, hidden on touch), `Crosshair.luau`, `RangePanel.luau` (ability rows, the cooldowns on/off button, ability readout), `CombatUIController.luau`, the combat blocks of `Theme.luau` |
+| ui-engineer **AbilityFx** | new `src/combat/client/Controllers/AbilityFx.luau` (lasting visuals for all 13 abilities from `CombatFxCast`, plus ability strikes and shots), `src/combat/client/Main.client.luau` (start it) |
+| economy-designer | values in `ProvingGrounds.json` (keys frozen), `docs/BALANCE.md` "P3", new `tools/sim_range.py` (the scratch range simulator, made permanent) |
+| roblox-reviewer → qa-runner → docs-keeper | after the wave |
+
+Frozen: every file not listed above. That includes CrowdService, CrowdRenderer, CrowdCodec,
+missions, the hub and `ProfileSchema`. Theme constants that AbilityFx needs are reported to Feedback,
+or kept as named module constants when they are purely visual.
+
+## Definition of done (P3)
+
+- Both builds and `build/proving.rbxl`, both sourcemaps + luau-lsp, stylua, selene;
+  `sim_economy.py --check` and `sim_combat.py --check` unchanged; manifest and template checks
+  green; `py tools/sim_range.py` runs.
+- In `proving.rbxl`:
+  - Q/E cast every family's ability as its table row says.
+  - The AbilityBar shows both cooldowns, and kills visibly shorten them.
+  - The panel's "Cooldowns off" makes every ability castable at once.
+  - The ability rows tune live.
+- The pickers list SMG under Metropolis and Beam and Chain Gun under Orbital, each with A/B.
+- Chain lightning draws between enemies, and the beam is one continuous line while held.
+- Phone emulator:
+  - there is still no attack button;
+  - two ability buttons with cooldown sweeps and a slot button work;
+  - Mag Dump fires by itself.
+- Local Server with 2 players: each sees the other's casts, zones, leaps and beams.
