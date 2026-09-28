@@ -2,7 +2,9 @@
 	"version": "2.0.0",
 	"options": {
 		"cwd": "${workspaceFolder}",
-		"env": { "PATH": "${env:USERPROFILE}\\.rokit\\bin;${env:PATH}" }
+		"env": {
+			"PATH": "${env:USERPROFILE}\\.rokit\\bin;${env:PATH}"
+		}
 	},
 	"tasks": [
 		{
@@ -18,10 +20,23 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Build both",
-			"dependsOn": ["Build hub", "Build combat"],
+			"label": "Build proving",
+			"type": "shell",
+			"command": "py tools/proving_project.py; rojo build .proving.project.json -o build/proving.rbxl",
+			"problemMatcher": []
+		},
+		{
+			"label": "Build all",
+			"dependsOn": [
+				"Build hub",
+				"Build combat",
+				"Build proving"
+			],
 			"dependsOrder": "sequence",
-			"group": { "kind": "build", "isDefault": true },
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
 			"problemMatcher": []
 		}
 	]

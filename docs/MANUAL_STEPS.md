@@ -1489,20 +1489,18 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
       rojo build combat.project.json -o build/combat.rbxl
       ```
 
-### 2. Turn the range on
+### 2. Open the range
 
-- [ ] 3. Open **`build/combat.rbxl`** in Studio.
-- [ ] 4. Explorer → **Workspace** → Properties → **Attributes** → **+** → Name **`DebugProving`**,
-      Type **boolean**, tick it (= true).
-- [ ] 5. Do this **before** pressing Play. It is read once at boot; adding it mid-play does
-      nothing. Stop and Play again.
-- [ ] 6. Check Output after Play: `[Combat] booted — Proving Grounds (DebugProving)` and
-      `[RangeService] Proving Grounds ready`. If you see the mission lobby instead, the
-      attribute is missing or unticked.
-- [ ] 7. Optional: **File → Save** the place so the attribute survives. A rebuild overwrites
-      `build/combat.rbxl`, so re-add it after every rebuild.
+- [ ] 3. Build it: **Ctrl+Shift+B** → **"Build all"** (also builds `build/proving.rbxl`), or
+      Ctrl+Shift+P → "Run Task" → **"Build proving"**.
+- [ ] 4. Open **`build/proving.rbxl`** in Studio and press **Play**. The range switch
+      (`DebugProving`) is already on inside that file, so there is nothing to add in Studio's
+      menus. `build/combat.rbxl` stays the normal mission place.
+- [ ] 5. Check Output after Play: `[Combat] booted — Proving Grounds (DebugProving)` and
+      `[RangeService] Proving Grounds ready`. If you see the Raider Woods lobby instead, you
+      opened `combat.rbxl`, not `proving.rbxl`.
 
-### 3. Phone pass
+### 3. Phone emulator
 
 - [ ] 8. Test tab → **Device** → a phone at **375×667** (portrait) → Play.
 - [ ] 9. Repeat at **667×375** landscape.
