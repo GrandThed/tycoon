@@ -677,6 +677,12 @@ local Theme = {
 	COMBAT_RANGE_PANEL_KNOB = 16,
 	COMBAT_RANGE_PANEL_TRACK = 6,
 	COMBAT_RANGE_PANEL_TOGGLE_WIDTH = 120,
+	-- The panel docks right, centred between this top clearance (the player list drops down
+	-- top-right) and the bottom reserve; the open sheet is capped so it stays centred on a
+	-- tall monitor instead of running the full height.
+	COMBAT_RANGE_PANEL_TOP_CLEARANCE = 64,
+	COMBAT_RANGE_PANEL_MAX_BODY_HEIGHT = 380,
+	COMBAT_RANGE_PANEL_HINT_TEXT = 11,
 	COMBAT_RANGE_PANEL_READOUT_LINE = 15,
 	COMBAT_RANGE_PANEL_READOUT_LINES = 3,
 	COMBAT_RANGE_PANEL_COMMAND_COLUMNS = 3,

@@ -11,6 +11,12 @@
 -- Layout: a tab and three readout lines stay on screen; the body opens under them and SCROLLS
 -- rather than shrinking on a short phone viewport, because every row is a 48 design px target
 -- (44 physical px at MIN_SCALE). Sections collapse so the long lists stay out of the way.
+--
+-- Placement (Ben's first range playtest): the right edge, centred in the band between the
+-- top clearance (player list) and the thumb cluster the caller reserves at the bottom, because
+-- top-left sits under Roblox's chat window. The panel's top is fixed from its OPEN height, so
+-- the tab never jumps when it opens. P (gamepad DPadUp) toggles it with the mouse locked; a
+-- hint beside the tab says so on keyboard devices (touch taps the tab directly).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -34,7 +40,8 @@ export type Deps = {
 export type RangePanelHandle = {
 	SetLoadout: (weapon: string, variant: string?) -> (),
 	SetStats: (stats: Types.RangeStats) -> (),
-	SetLayout: (scale: number, viewportSize: Vector2) -> (),
+	-- bottomReserve: physical px kept free at the bottom (the touch thumb cluster), 0 if none.
+	SetLayout: (scale: number, viewportSize: Vector2, bottomReserve: number) -> (),
 	Destroy: () -> (),
 }
 
@@ -66,6 +73,11 @@ local TOUCH_MODES = { "autoFire", "tapFire" }
 -- Integer-valued bases at or above this magnitude step by whole units (heights, speeds,
 -- counts); smaller ones (critMult 2, chain 1.0) get fine steps.
 local WHOLE_STEP_FROM = 3
+local TOGGLE_KEYS: { [Enum.KeyCode]: boolean } = {
+	[Enum.KeyCode.P] = true,
+	[Enum.KeyCode.DPadUp] = true,
+}
+local HINT_TEXT = "P: panel · Alt: cursor · 1/2: weapon"
 
 local RangePanel = {}
 
@@ -165,7 +177,8 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		-- Inactive container: only the tab, the sheet and its controls take input, so the
 		-- empty area beside a closed tab never swallows a camera drag.
 		Active = false,
-		Position = UDim2.fromOffset(Theme.SCREEN_MARGIN, Theme.SCREEN_MARGIN),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -Theme.SCREEN_MARGIN, 0, Theme.SCREEN_MARGIN),
 		Size = UDim2.fromOffset(Theme.COMBAT_RANGE_PANEL_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
@@ -279,10 +292,60 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		return frame
 	end
 
+	-- The header: the key hint, then the tab, right-aligned against the screen edge. ------
+	local headerRow = Create("Frame", {
+		Name = "Header",
+		LayoutOrder = nextOrder(),
+		Active = false,
+		Size = UDim2.new(1, 0, 0, Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT),
+		BackgroundTransparency = 1,
+		ZIndex = Theme.ZINDEX_CARD,
+		Parent = root,
+	}) :: Frame
+	Create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Right,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, Theme.COMBAT_RANGE_PANEL_GAP),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = headerRow,
+	})
+	-- Keyboard players need the key, since the mouse is locked to the crosshair; a touch
+	-- player taps the tab, so the hint would only cost screen.
+	local hint = Create("TextLabel", {
+		Name = "Hint",
+		LayoutOrder = 1,
+		Active = false,
+		Size = UDim2.new(
+			1,
+			-(Theme.COMBAT_RANGE_PANEL_TOGGLE_WIDTH + Theme.COMBAT_RANGE_PANEL_GAP),
+			0,
+			Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT
+		),
+		BackgroundColor3 = Theme.COLOR_BG,
+		BackgroundTransparency = Theme.SCRIM_TRANSPARENCY,
+		BorderSizePixel = 0,
+		Font = Theme.FONT,
+		TextSize = Theme.COMBAT_RANGE_PANEL_HINT_TEXT,
+		TextColor3 = Theme.COLOR_TEXT_DIM,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Text = HINT_TEXT,
+		Visible = not UserInputService.TouchEnabled or UserInputService.KeyboardEnabled,
+		ZIndex = Theme.ZINDEX_CARD,
+		Parent = headerRow,
+	}) :: TextLabel
+	corner(hint)
+	Create("UIPadding", {
+		PaddingLeft = UDim.new(0, Theme.COMBAT_RANGE_PANEL_GAP),
+		PaddingRight = UDim.new(0, Theme.COMBAT_RANGE_PANEL_GAP),
+		Parent = hint,
+	})
+
 	-- The tab: a full tap target so the phone emulator can open it. -------------------
 	local toggle = Create("TextButton", {
 		Name = "Toggle",
-		LayoutOrder = nextOrder(),
+		LayoutOrder = 2,
 		Size = UDim2.fromOffset(
 			Theme.COMBAT_RANGE_PANEL_TOGGLE_WIDTH,
 			Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT
@@ -294,7 +357,7 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		TextColor3 = Theme.COLOR_TEXT_DARK,
 		Text = "⚙ Range",
 		ZIndex = Theme.ZINDEX_CARD,
-		Parent = root,
+		Parent = headerRow,
 	}) :: TextButton
 	corner(toggle)
 
@@ -358,6 +421,14 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		Parent = root,
 	}) :: ScrollingFrame
 	corner(body)
+
+	-- Opening frees the cursor (the caller's SetCursorHold), closing re-locks it.
+	local function setOpen(nextOpen: boolean): ()
+		open = nextOpen
+		body.Visible = nextOpen
+		deps.onToggle(nextOpen)
+	end
+
 	Create("UIPadding", {
 		PaddingTop = UDim.new(0, Theme.COMBAT_RANGE_PANEL_GAP),
 		PaddingBottom = UDim.new(0, Theme.COMBAT_RANGE_PANEL_GAP),
@@ -800,9 +871,22 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 	table.insert(
 		connections,
 		toggle.Activated:Connect(function()
-			open = not open
-			body.Visible = open
-			deps.onToggle(open)
+			setOpen(not open)
+		end)
+	)
+	table.insert(
+		connections,
+		UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+			if not TOGGLE_KEYS[input.KeyCode] then
+				return
+			end
+			-- A processed P is typing (chat, the panel's own number boxes); the D-pad is
+			-- never text, and gamepad UI navigation may mark it processed anyway.
+			local typing = input.KeyCode ~= Enum.KeyCode.DPadUp and processed
+			if typing or UserInputService:GetFocusedTextBox() ~= nil then
+				return
+			end
+			setOpen(not open)
 		end)
 	)
 	tuneConnection = Tuning.Changed:Connect(refreshAll)
@@ -846,19 +930,33 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			serverMs = stats.serverFrameMs
 			paintFrameLine()
 		end,
-		SetLayout = function(scale: number, viewportSize: Vector2)
+		SetLayout = function(scale: number, viewportSize: Vector2, bottomReserve: number)
 			uiScale.Scale = scale
-			-- Whatever height is left under the tab and the readouts, down to one row: the
-			-- sheet scrolls past that rather than shrinking its 48 px controls.
+			-- The band the panel may use, in design px: below the top clearance, above the
+			-- reserved thumb cluster.
 			local designHeight = viewportSize.Y / scale
-			local used = Theme.SCREEN_MARGIN * 2
-				+ Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT
+			-- A touch layout (bottomReserve > 0) has no pinned player list top-right, and a
+			-- landscape phone needs every row of its short screen.
+			local bandTop = if bottomReserve > 0
+				then Theme.SCREEN_MARGIN
+				else Theme.COMBAT_RANGE_PANEL_TOP_CLEARANCE
+			local bandBottom = designHeight - math.max(bottomReserve / scale, Theme.SCREEN_MARGIN)
+			local band = math.max(bandBottom - bandTop, 0)
+			local fixed = Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT
 				+ readouts.Size.Y.Offset
 				+ Theme.COMBAT_RANGE_PANEL_GAP * 2
-			local height = math.max(designHeight - used, Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT)
+			-- The sheet takes what the band leaves, never less than one row (it scrolls past
+			-- that rather than shrinking its 48 px controls), never more than the cap.
+			local height = math.clamp(
+				band - fixed,
+				Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT,
+				Theme.COMBAT_RANGE_PANEL_MAX_BODY_HEIGHT
+			)
 			body.Size = UDim2.new(1, 0, 0, height)
-			root.Position =
-				UDim2.fromOffset(Theme.SCREEN_MARGIN * scale, Theme.SCREEN_MARGIN * scale)
+			-- Centred on the OPEN height, so opening grows the sheet downward under a tab
+			-- that stays put.
+			local top = bandTop + math.max((band - fixed - height) / 2, 0)
+			root.Position = UDim2.new(1, -Theme.SCREEN_MARGIN * scale, 0, top * scale)
 		end,
 		Destroy = function()
 			disconnectAll(connections)

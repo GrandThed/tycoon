@@ -24,6 +24,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -46,6 +48,7 @@ local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local CombatFxController = require(script.Parent:WaitForChild("CombatFxController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local FeedbackController = require(script.Parent:WaitForChild("FeedbackController"))
+local MovementController = require(script.Parent:WaitForChild("MovementController"))
 
 local HUMANOID_WAIT_SECONDS = 5
 local DEFAULT_HIT_MARKER_SECONDS = 0.12
@@ -222,7 +225,16 @@ local function bootRange(): ()
 		)
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)
-		panel.SetLayout(scale, size)
+		-- On touch the jump / dash / ADS cluster owns the bottom-right; the panel stays above
+		-- it. ADS sits above jump and is smaller than it, so one more jump size covers it.
+		local reserve = 0
+		local camera = Workspace.CurrentCamera
+		if UserInputService.TouchEnabled and camera ~= nil then
+			local viewport = camera.ViewportSize
+			local jumpTopLeft, jumpSize = MovementController.JumpButtonRect(viewport)
+			reserve = viewport.Y - jumpTopLeft.Y + jumpSize
+		end
+		panel.SetLayout(scale, size, reserve)
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
 	end
