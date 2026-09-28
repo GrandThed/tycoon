@@ -3974,3 +3974,54 @@ Setup: `docs/MANUAL_STEPS.md` "P2". Keys: **1** melee, **2** ranged (gamepad **Y
 - Which bow (Longbow A/B, Splitbow A/B) and which new melee (Greataxe A/B, Spear A/B) felt best, and why.
 - Does the Spear feel weak, or the Piercing Rifle too strong next to the bows?
 - Anything wrong: step numbers, PC or phone, autoFire vs tapFire. If you tuned: the **Export** output.
+
+## P3 — Abilities + SMG / Beam / Chain Gun
+
+**Goal:** judge the 13 abilities and the SMG, Beam and Chain Gun. Silent, placeholder bodies,
+dummies never attack. Judge feel.
+Setup: `docs/MANUAL_STEPS.md` "P3". Keys: **Q** melee ability, **E** ranged ability, **1** melee,
+**2** ranged, **P** panel, **Alt** frees the cursor. You start with Broadsword + Longbow.
+
+### Setup
+
+- [ ] 1. **Ctrl+Shift+B** → **Build all** → open `build/proving.rbxl` → **Play** → bottom centre shows two tiles, **Q Whirlwind** and **E Arrow Rain**. Bug: no tiles, or the Raider Woods lobby.
+- [ ] 2. **P** → **Weapons** starts with **Cooldowns: normal · click for off**. **Ranged** lists **SMG** under Metropolis, **Beam** and **Chain Gun** under Orbital Colony (13 families). Bug: 10 families.
+
+### First two abilities
+
+- [ ] 3. **1**, walk up to the crowd, **Q** → **Whirlwind**: a ring spins around you ~2.4 s; walk it into the crowd (a bit slower). One number grows with "×N", not a cloud of numbers. Press **Space** mid-spin → the ring stays on the floor and dummies below keep getting hit. Bug: ring rises with you, or hits stop in the air.
+- [ ] 4. Aim at the crowd, **E** → **Arrow Rain**: a circle appears where the crosshair points; arrows fall ~2.4 s; only dummies inside the circle are hit. The slot switches to the bow by itself.
+- [ ] 5. Tiles: after a cast, a sweep runs with the seconds left. With **both** cooling, kills pop small "−0.2s" numbers out of **both** tiles and the sweeps jump ahead. Never back sooner than Whirlwind 4 s / Arrow Rain 5 s after the cast. A ready tile pulses.
+- [ ] 6. Panel readout line **Ability: Whirlwind — N hits, N kills** updates after each cast.
+- [ ] 7. Click **Cooldowns: normal · click for off** → gold **Cooldowns: OFF · click for normal**; Q and E cast again at once. Keep it OFF until step 14.
+
+### Every other ability (panel Weapons → Melee / Ranged pickers)
+
+- [ ] 8. Melee, **Q** each. **Warhammer → Earthquake**: 3 rings roll out from you, fodder fly up. **Spinblade → Blade Storm**: zone at the crosshair pulls fodder to its middle ~3 s. **Greataxe → Leap Smash**: you leap to the crosshair (max ~32 studs), big ring on landing. **Spear → Impale Dash**: ~30-stud dash along your aim; the whole wide line is hit and shoved. Bug: damage lands away from where you land.
+- [ ] 9. Ranged, **E** each. **Splitbow → Volley**: a fan of 10 arrows. **Shotgun → Slug Burst**: 3 quick cone blasts, dummies fly back. **Launcher → Cluster Shell**: shell blast, then 6 bomblets blink in a ring and pop.
+- [ ] 10. Set **boss**. **Piercing Rifle**, crosshair on the boss's **head** → **E** **Overcharged Shot**: short charge, one thick beam, **yellow ~680**. On the body → ~340, not yellow. Bug: yellow on body shots, or the beam drawn twice.
+- [ ] 11. Set **crowd30**. **SMG**: **A · Spray** = steady, accurate hose; **B · Heavy SMG** = slower, punchier, kicks dummies back. **E** **Mag Dump** → the SMG fires by itself for 2 s, much faster, no click. Set **armoured** → SMG numbers are tiny (expected today, see question 4).
+- [ ] 12. **Beam**, hold **left mouse** → ONE continuous line while held; it fades just after release. **A · Sweep beam**: wide, burns through the whole crowd. **B · Lance**: thin, long, hits up to 3. **E** **Overload Sweep** → a beam sweeps left→right in front of you in 1 s. Bug: dashes instead of a line, or the beam blinks out.
+- [ ] 13. **Chain Gun**: **A · Chain lightning** = slow bolts, lightning jumps from each hit dummy to 4 more. **B · Arc storm** = faster, 3 short jumps. **E** **Storm Coil** → a pylon at the crosshair zaps dummies for 4 s; bolts start at the pylon top. Bug: no lightning, or bolts from the ground.
+
+### Tuning
+
+- [ ] 14. **Broadsword**, press **1** → panel title **Ability: Whirlwind** → **+** on **range** 3 times → the next Whirlwind ring is visibly bigger. **Clear tune** → back to normal; the button reads **Cooldowns: normal**.
+
+### Phone (Test (Prueba) → Device (Dispositivo) → 375×667)
+
+- [ ] 15. Play → no attack button. Top row: **Whirlwind**, **Arrow Rain**. Bottom row: slot button (**Longbow**), **Dash**, **Jump**. Tap **Whirlwind** → it casts; a dark disc shrinks with seconds on it. Bug: an attack button, or buttons overlapping.
+- [ ] 16. Tap the slot button → you switch to the bow; the button now reads **Broadsword** and **Aim** joins the top row (six buttons). Tap **⚙ Range** → Ranged → **SMG** → face the crowd, tap **Mag Dump** and let go → the SMG fires by itself 2 s.
+
+### Two players and gamepad
+
+- [ ] 17. Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). Player 1 casts Whirlwind, Arrow Rain, Leap Smash and holds the Beam → player 2 sees each ring, zone, leap and beam. Bug: player 2 sees only numbers.
+- [ ] 18. Optional, gamepad: **L1** = melee ability, **R1** = ranged, **Y** swaps; the tiles show **LB / RB**.
+
+### What to tell Claude
+
+- Favourite and weakest ability, and why.
+- SMG, Beam, Chain Gun: A or B for each?
+- Cross-slot refunds (melee kills also shorten your ranged ability): fun or spammy?
+- Should the SMG hurt armoured enemies (step 11)?
+- Anything wrong: step numbers, PC or phone. If you tuned: the **Export** output.

@@ -1745,7 +1745,7 @@ melee families, and give each player a melee slot and a ranged slot. Still range
 **Known limits at P2:**
 - Still silent, placeholder bodies, empty hands, dummies never attack.
 - On a real phone the range has no slot-switch button (the Studio emulator takes the 1/2 keys).
-  Owner: lead, decide in P3 with the ability buttons.
+  Owner: lead, decide in P3 with the ability buttons. **Closed in P3** (touch slot button).
 
 **Next:**
 - **P3 (lead):** an ability for every family, then the remaining families (Beam, Chain Gun, SMG).
@@ -1753,4 +1753,94 @@ melee families, and give each player a melee slot and a ranged slot. Still range
   round trip after you fire.
 
 - [x] P2 built, reviewed and QA green (definition of done in INTERFACES "P2 contracts")
-- [ ] Ben's playtest (`docs/PLAYTEST.md` "P2 — Weapon families + bows")
+- [x] Ben's playtest (2026-09-28): everything works, strengths fine. Favourites: Longbow A and B,
+  Splitbow A, Greataxe A and B, Spear B, so the **Spear default is now B** (applied in P3).
+
+## P3 — Abilities + SMG / Beam / Chain Gun
+
+**Goal:** one ability per weapon family on Q (melee slot) and E (ranged slot), cooldowns that
+kills shorten, the last three families (SMG, Beam, Chain Gun), and a phone slot button. Still
+range-only (`build/proving.rbxl`); missions untouched until P5. **No sound. No attack button on
+phones.** Plan of record: `docs/WEAPONS.md` §2; contracts: `docs/INTERFACES.md` "P3 contracts"
+(with "Review round"); values: `docs/BALANCE.md` "P3".
+
+**Shipped (2026-09-28, commits `be7dba2`, `93efcbb`):**
+- **Abilities for all 13 families**, server-owned and tunable in the range:
+  - Whirlwind, Earthquake, Blade Storm, Leap Smash, Impale Dash, Arrow Rain, Volley, Slug Burst,
+    Overcharged Shot, Mag Dump, Cluster Shell, Overload Sweep, Storm Coil.
+  - **Q** = melee slot's ability, **E** = ranged. Gamepad **L1 / R1**.
+  - Cooldowns live on the server. Every kill takes a per-ability refund off **both** slots,
+    never below a 40% floor.
+  - Some abilities lock the caster while they run (busy).
+  - Leap Smash and Impale Dash move the character on the client; the damage lands where the
+    server resolved it.
+- **New families, each with A/B:**
+  - **SMG** (Metropolis): A Spray, B Heavy SMG.
+  - **Beam** (Orbital Colony, a held continuous beam): A Sweep beam, B Lance.
+  - **Chain Gun** (Orbital Colony, chain lightning): A Chain lightning, B Arc storm.
+- **Phone:** two ability buttons with cooldown discs and a **slot button** (names the other
+  slot's family). Closes the P2 known limit. Still no attack button.
+- **PC / gamepad:** AbilityBar HUD (bottom centre) with cooldown sweeps, key hints and "−N.Ns"
+  refund pop-ups.
+- **RangePanel:**
+  - "Cooldowns: normal · click for off" button at the top of Weapons;
+  - "Ability: <name>" tuning rows under the variant rows;
+  - an "Abilities" section (`abilities.*`);
+  - an ability readout line (hits and kills of the last cast).
+- **AbilityFx:** a lasting visual for every ability. Every player sees them; exact areas are
+  drawn unpadded.
+- **FeedbackController:** tick strikes merge into one growing number and skip hitstop; chain
+  bolts; one held beam per shooter.
+- **Server remote buckets:** `rangeAttack` 40/s, `rangeAbility` 4/s. A per-slot rate credit (one
+  banked shot, `shooting.rateBurstShots`) replaced the frame-gap check and removed ~4% refused
+  shots at high fire rates.
+- **`tools/sim_range.py --check`:** permanent range simulator with design bands.
+- **Spear default is now B** (Ben's P2 verdict).
+
+**Review outcome:** 0 Critical, 2 Majors, 9 Minors. 8 Minors fixed, 1 deferred.
+- Major 1: ability arcs ignored airborne reach, so a jumping Whirlwind lost ticks. Fixed with
+  `AbilityStrikeSpec.airReach`; the Whirlwind ring is now drawn on the real floor.
+- Major 2: Mag Dump fired 30/s instead of 36/s (client frame rounding). Fixed with a true
+  accumulator.
+- Minors fixed:
+  - separate ability seeds;
+  - dead tunables honoured;
+  - `refusedSeq` cancels a refused cast's local effects at once;
+  - `pcall` around timelines;
+  - three tolerances moved to config (`shooting.rateBurstShots`, `abilities.busyEarlySeconds`,
+    `abilities.dashWallClearance`);
+  - Overcharged Shot no longer drawn twice;
+  - Storm Coil bolts start at the pylon top;
+  - the beam is always visible and lingers at least 0.3 s.
+- Minor deferred to P5 (owner: lead): the caster's own ability visuals and held beam wait one
+  round trip on live servers (Studio round trip ≈ 0). Joins "local prediction of your own
+  shots".
+- qa-runner: ALL GREEN. `sim_economy.py --check`, `sim_combat.py --check` and
+  `sim_range.py --check` pass; missions untouched.
+
+**Balance notes (`docs/BALANCE.md` "P3"):**
+- One cast ≈ 4 s of the family's crowd DPS. In a busy crowd the effective cooldown is ≈ 50% of
+  base.
+- **Flag 1 for Ben — cross-slot refunds.** Heavy melee killing keeps the ranged abilities near
+  their floor. Knob (contract change, not a value): refund a slot only from its own kills.
+- **Flag 2 for Ben — SMG vs armour.** SMG and Beam ticks are below armour 18, so they barely hurt
+  armoured dummies (they do shred bosses). WEAPONS.md calls the SMG an "elite shredder". Decide
+  at P4 (enemy roles). Example knob: Heavy SMG 26 × 4.3/s.
+- Whirlwind pays only when walked into the crowd; cast standing at the edge it loses to plain
+  swings.
+
+**Known limits at P3:**
+- Silent, placeholder bodies, empty hands, dummies never attack.
+- Ability visuals and the held beam wait one round trip on live servers.
+- A family switch resets that slot's cooldown (range convenience). P5 must carry the cooldown
+  across a switch.
+
+**Next:**
+- **P4 (lead):** enemy roles and bosses, in the range. Settle the SMG-vs-armour flag there.
+- **Carry to P5 (lead):**
+  - local prediction of your own shots and ability visuals;
+  - cooldown carried across a family switch;
+  - re-measure refunds against chasing crowds.
+
+- [x] P3 built, reviewed and QA green (definition of done in INTERFACES "P3 contracts")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "P3 — Abilities + SMG / Beam / Chain Gun")
