@@ -135,7 +135,11 @@ type Build = {
 	-- the clump centres the plot's birds were last spawned over.
 	fabricFlocks: { Scatter.Flock },
 	flockKey: string,
-	createdAt: number, -- os.clock when the build started
+	-- M12 review: every slot seen owned in this build, so a sync can tell one purchase from a bulk
+	-- restore. Only grows, like the roads: a building missing for a moment is not a new one later.
+	seen: { [string]: boolean },
+	-- os.clock when the build started, or when a restore last made it settle again.
+	createdAt: number,
 }
 
 type PlotEntry = {
@@ -508,12 +512,14 @@ local function newBuild(
 			end,
 			-- Bases rest on the ground plane (PlotService.buildWorld), a base's height below the top.
 			groundDrop = base.Size.Y,
+			padGraceSeconds = config.lod.refreshSeconds,
 		})
 		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
 		local ambient = config.ambient
 		local birds = if ambient ~= nil then ambient.birds else nil
 		local zones: { Types.TreeZoneLayout } = layout.treeZones or {}
-		if birds ~= nil and #zones == 0 and #fabricData.wild > 0 then
+		local wild = if type(fabricData) == "table" then fabricData.wild else nil
+		if birds ~= nil and #zones == 0 and type(wild) == "table" and #wild > 0 then
 			fabricFlocks = Ambient.PlanFlocks(
 				Scatter.Seed(entry.index, eraName),
 				birds,
@@ -546,6 +552,7 @@ local function newBuild(
 		fabric = fabric,
 		fabricFlocks = fabricFlocks,
 		flockKey = "",
+		seen = {},
 		createdAt = os.clock(),
 	}
 end
@@ -1510,10 +1517,26 @@ local function sync(entry: PlotEntry): ()
 	end
 	local roadsChanged = entry.lanesStale
 	entry.lanesStale = false
+	readOwned(current.layout)
+	-- M12 review: a sync that brings more than one building is a bulk restore rather than a
+	-- purchase -- a claim bringing a returning player's town back to an unclaimed plot (published
+	-- as a bare first era), or data arriving late. It settles like a fresh build, so no path dust,
+	-- reveal, ripple or woods dust plays, for the buildings still trickling in over the next LOD
+	-- interval as well.
+	local added = 0
+	for _, slotId in ownedList do
+		if not current.seen[slotId] then
+			current.seen[slotId] = true
+			added += 1
+		end
+	end
+	-- A tier jump alone is not a restore: Buy Max can cross two tiers and must still animate.
+	if added > 1 then
+		current.createdAt = os.clock()
+	end
 	-- Buildings replicate over several frames after a join or rebuild; only a building that
 	-- appears once the build has settled for one LOD interval is a purchase worth animating.
 	local animate = entry.near and os.clock() - current.createdAt >= config.lod.refreshSeconds
-	readOwned(current.layout)
 	for _, slotId in ownedList do
 		if RoadGraph.AddSpur(current.roads, slotId, animate) then
 			roadsChanged = true

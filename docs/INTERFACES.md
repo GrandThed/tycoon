@@ -4816,7 +4816,7 @@ Each era gains an optional `fabric` block:
   "wild": { "clumps": ["WoodsClumpA", "…"], "quarters": ["WoodsQuarterA", "…"], "quarterRadius": 3.0, "singleRadius": 1.0 },
   "clear": { "slot": 6, "pad": 1.5, "street": 4.5, "parcel": 2 },
   "construction": { "minSeconds": 10, "maxSeconds": 30, "stagger": 0.4, "stageSeconds": 1.2, "riseSeconds": 0.6, "revealSeconds": 1.5 },
-  "marker": { "prop": "NoticeBoard", "offset": [4.5, 0, 0], "stakeColor": [120, 84, 52], "stringColor": [235, 225, 200] },
+  "marker": { "prop": "NoticeBoard", "offset": [5, 0, -0.5], "stakeColor": [120, 84, 52], "stringColor": [235, 225, 200] },
   "padLook": { "material": "Ground", "color": [150, 118, 82] },
   "reveal": "RevealScaffold"
 }
@@ -5007,6 +5007,34 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
   purchase seen, or else from the plot entrance.
 - **Owned or padded `streetOnly` slots clear land** at their layout rect, exactly as the
   contract's mask says. The reveal scaffold and the stakes skip them.
+
+### Review amendments (2026-09-29; client and mirror both follow them)
+
+- **A bulk change is a restore.** A sync that adds more than one owned slot animates nothing: no
+  reveal, ripple or dust. This covers a plot claim restoring a returning player's town, and data
+  arriving late on your own plot. A tier jump alone is not a restore, because Buy Max can cross
+  two tiers and must still animate.
+- **Birds** circle the surviving clumps on the plot itself, and only fall back to skirt clumps once
+  every on-plot clump is felled (the skirt is never cleared, so a flock over it would never move).
+- **Config is validated once, in `Fabric.new`.** `pull` is used only if all six fields are finite
+  numbers and `thresholds` is an array of numbers; otherwise every parcel stays at level 0. A
+  missing `clumps` or `quarters` list counts as empty. A bad key never raises an error.
+- **The mask's pad part follows ownership, not the live Pads folder.** Every *buyable* slot
+  contributes its footprint rect and its pad rect, grown by `clear.pad`. A slot is buyable when it
+  is unowned and its effective `requires` is owned (the config's `requires`, else the previous
+  slot in purchase order; the first slot is always buyable), exactly `PlotService.refreshPads`'
+  rule. So the mask depends only on the owned set and never shrinks. The next-pad *dressing*
+  (marker, stakes, `padLook`) still follows the live `Pads` folder, and a pad's dressing is kept
+  for one `lod.refreshSeconds` after the pad disappears, to ride out a cosmetics refresh.
+- **`marker.offset` is in the slot's frame.** The offset is turned by the slot's `rotationY` and
+  added to the pad centre, and the marker faces the slot's front. `fabric.py check` fails if any
+  marker's 2×2 footprint overlaps a slot footprint (+0.5), a pad, or a street or spur strip.
+- **Wild order.** `fabric.py` writes the skirt clumps first, then the on-plot clumps, then the
+  singles. `check` fails unless the whole list fits `budget.wild`, and the first `budget.wildFar`
+  clumps include every skirt clump.
+- **At most `construction.maxPuffs` dust puffs play at once per plot.** A new puff reuses the
+  oldest.
+- **A ripple's origin** is only updated by animated syncs.
 
 ## Tools
 

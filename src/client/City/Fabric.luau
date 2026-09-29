@@ -6,12 +6,14 @@
 -- server replicates -- the owned set, each building's visible stage, GrowthTier and the drawn
 -- streets -- through CityFabric, so every client and tools/cityfabric.py agree on it. Only the pace
 -- is local: on a near plot a purchase ripples outward as staggered building sites that become
--- buildings seconds later, while a join, a rebuild or a far plot shows the finished state at once.
+-- buildings seconds later, while a join, a restore, a rebuild or a far plot shows the finished
+-- state at once.
 --
 -- The controller makes a Handle only for an era with both fabric data and a `fabric` config block,
 -- syncs it right after the roads in every pass, and destroys it with the build, which cancels every
--- pending timer, animation and puff. A missing template, prop list or config key is an absent item
--- or feature and never an Output line, and every sync retries the spawns a late template skipped.
+-- pending timer, animation and puff. Config and data are validated once, in Fabric.new: a missing
+-- or malformed block, prop list, entry or template is an absent item or feature and never an
+-- Output line, and every sync retries the spawns a late template skipped.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -30,7 +32,11 @@ local Dust = require(script.Parent:WaitForChild("Dust"))
 
 -- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data").
 local SMALL = "small"
+local MEDIUM = "medium"
 local CLUMP = "clump"
+local SINGLE = "single"
+-- The numeric fields `pull` must carry, finite, before the pure CityFabric may read it.
+local PULL_NUMBERS = { "radius", "tierTerm", "reach", "levelsOverTier", "smallMaxLevel" }
 -- What a parcel shows at level 1, and at level 2 and up.
 local SITE = "site"
 local BUILDING = "building"
@@ -61,8 +67,8 @@ local STAKE_WIDTH = 0.3
 local STAKE_HEIGHT = 1.4
 local STRING_THICKNESS = 0.08
 local STRING_HEIGHT = 1.1
--- A puff gets a Dust handle of its own, so the puffs of one purchase run side by side; it is
--- destroyed once its burst and the particles it left are gone (Dust's longest particle lives 0.7 s).
+-- A puff's Dust handle is destroyed once its burst and the particles it left are gone (Dust's
+-- longest particle lives 0.7 s).
 local DUST_LINGER_SECONDS = 1
 -- Enum.EasingStyle.Back's standard overshoot, for a new building growing out of its site.
 local BACK_OVERSHOOT = 1.70158
@@ -84,7 +90,7 @@ type ParcelView = {
 	parcel: Types.FabricParcel,
 	rect: Rect, -- the footprint about its centre, margin 0
 	frame: CFrame, -- plot-local pivot: bottom-centre on (x, 0, z), facing rotationY
-	eligible: boolean, -- inside budget.parcels; a parcel past it never draws
+	eligible: boolean, -- well formed and inside budget.parcels; any other parcel never draws
 	goal: Look?, -- what its level says it shows now
 	shown: Look?, -- what stands (or would, were its template there)
 	model: Model?,
@@ -100,9 +106,16 @@ type PadView = {
 	color: Color3,
 	marker: Model?,
 	stakes: { BasePart }, -- stakes and strings
+	-- Running while the pad is gone: the dressing waits one lod.refreshSeconds for a cosmetics
+	-- refresh to lay a new pad down before it goes too.
+	expiry: thread?,
 }
 
 type Reveal = { model: Model, rect: Rect, timer: thread? }
+
+-- One dust puff: a Dust handle of its own (a handle plays one burst at a time) and the timer that
+-- destroys it once the burst and its particles are gone.
+type Puff = { dust: Dust.Handle, cleanup: thread? }
 
 type Animation = {
 	owner: Handle,
@@ -137,6 +150,8 @@ export type Context = {
 	-- How far below the plot top the ground outside the base lies (the base rests on it), which is
 	-- where a skirt entry stands.
 	groundDrop: number,
+	-- lod.refreshSeconds: how long a pad's dressing outlives the pad.
+	padGraceSeconds: number,
 }
 
 export type SyncInput = {
@@ -147,20 +162,28 @@ export type SyncInput = {
 	stretches: { [string]: CityFabric.FabricStretch },
 	joins: { [string]: number },
 	segments: { Segment },
-	pads: { [string]: BasePart }, -- slot -> its buy pad, for every pad the plot shows now
+	pads: { [string]: BasePart }, -- slot -> its buy pad in the live Pads folder (dressing only)
 	plazas: { number }, -- layout indices of the plazas showing now
 	near: boolean,
-	animate: boolean, -- the controller's purchase flag: near, and the build has settled
+	-- The controller's purchase flag: near, settled, and not a restore (a bulk change).
+	animate: boolean,
 	wildShare: number, -- detailPolicy: the share of the wild layer kept, thinned by index
 }
 
 export type Handle = {
 	context: Context,
-	-- Config blocks as found; nil where one is missing, which turns that feature off.
+	-- Config as validated in Fabric.new; nil where a block is missing or malformed, which turns
+	-- that feature off.
 	pull: Types.FabricPullConfig?,
 	clear: Types.FabricClearConfig?,
 	wildConfig: Types.FabricWildConfig?,
 	timing: Types.FabricConstructionConfig?,
+	maxPuffs: number?, -- concurrent puffs; nil means no cap
+	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
+	-- a malformed wild entry is skipped where it stands.
+	parcelData: { Types.FabricParcel },
+	wildData: { Types.FabricWild },
+	wildValid: { [number]: boolean },
 	parcels: { ParcelView }, -- parcel i at index i; empty without `sizes`
 	durations: { number }, -- parcel -> seeded construction seconds
 	slotRects: { [string]: Rect },
@@ -169,9 +192,12 @@ export type Handle = {
 	slotFrames: { [string]: CFrame }, -- plot-local anchor frames
 	streetOnly: { [string]: boolean },
 	modelNames: { [string]: string },
+	slotOrder: { string }, -- the era's slots in purchase order
+	requires: { [string]: string }, -- effective `requires` (PlotService's rule)
 	heights: { [string]: { number } }, -- memoised stage heights, "p:<prop>" and "b:<modelName>"
 	wildNear: { [number]: boolean }, -- entries inside budget.wild
 	wildFar: { [number]: boolean }, -- clumps inside budget.wildFar
+	dustGap: number, -- a puff's gap limit: the longest rect side it can run round, plus a stud
 	-- Live.
 	states: { CityFabric.FabricParcelState },
 	stretches: { [string]: CityFabric.FabricStretch },
@@ -187,8 +213,8 @@ export type Handle = {
 	wild: { [number]: WildView },
 	pads: { [string]: PadView },
 	reveals: { Reveal },
-	puffs: { [Dust.Handle]: thread }, -- live puffs -> their cleanup
-	lastTrigger: Vector3, -- plot-local; the last purchase or stage swap seen
+	puffs: { Puff }, -- live puffs, oldest first
+	lastTrigger: Vector3, -- plot-local; the last purchase or stage swap an animated sync saw
 	destroyed: boolean,
 }
 
@@ -201,8 +227,12 @@ local scratchSeen: { [number]: number } = {}
 local scratchStamp = 0
 local materialsByName: { [string]: Enum.Material }? = nil
 
+local function finite(value: any): boolean
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
 local function numberOr(value: any, fallback: number): number
-	return if type(value) == "number" and value == value then value else fallback
+	return if finite(value) then value else fallback
 end
 
 local function bySize<T>(size: string, small: T, medium: T): T
@@ -240,6 +270,108 @@ local function isTriple(value: any): boolean
 		and type(value[1]) == "number"
 		and type(value[2]) == "number"
 		and type(value[3]) == "number"
+end
+
+-- ------------------------------------------------------------------ validation
+
+-- `pull` as CityFabric may use it -- five finite numbers and an array of finite thresholds, copied
+-- so no stray key reaches the trusting pure module -- or nil, which keeps every parcel at level 0.
+local function validPull(pull: any): Types.FabricPullConfig?
+	if type(pull) ~= "table" then
+		return nil
+	end
+	for _, key in PULL_NUMBERS do
+		if not finite(pull[key]) then
+			return nil
+		end
+	end
+	local thresholds = pull.thresholds
+	if type(thresholds) ~= "table" then
+		return nil
+	end
+	local count = 0
+	for key, value in thresholds do
+		if type(key) ~= "number" or not finite(value) then
+			return nil
+		end
+		count += 1
+	end
+	-- Holes or fractional keys leave the count and the length apart.
+	if count ~= #thresholds then
+		return nil
+	end
+	return {
+		radius = pull.radius,
+		tierTerm = pull.tierTerm,
+		thresholds = table.clone(thresholds),
+		reach = pull.reach,
+		levelsOverTier = pull.levelsOverTier,
+		smallMaxLevel = pull.smallMaxLevel,
+	}
+end
+
+-- A list of prop names kept by position, since a clump's variant is an index into it. Anything that
+-- is not a name reads as a missing prop, and a missing list as an empty one.
+local function propList(value: any): { string }
+	local list: { string } = {}
+	if type(value) == "table" then
+		for index, name in value do
+			if type(index) == "number" and type(name) == "string" then
+				list[index] = name
+			end
+		end
+	end
+	return list
+end
+
+local function validWildConfig(wild: any): Types.FabricWildConfig?
+	if type(wild) ~= "table" then
+		return nil
+	end
+	return {
+		clumps = propList(wild.clumps),
+		quarters = propList(wild.quarters),
+		quarterRadius = numberOr(wild.quarterRadius, 0),
+		singleRadius = numberOr(wild.singleRadius, 0),
+	}
+end
+
+-- Every field CityFabric reads and Fabric.new places by.
+local function validParcel(parcel: any): boolean
+	return type(parcel) == "table"
+		and finite(parcel.x)
+		and finite(parcel.z)
+		and finite(parcel.rotationY)
+		and finite(parcel.along)
+		and finite(parcel.row)
+		and finite(parcel.front)
+		and type(parcel.stretch) == "string"
+		and (parcel.size == SMALL or parcel.size == MEDIUM)
+end
+
+-- Stands in for a malformed parcel: on no street, so it never develops, and later parcels keep
+-- their indices (a row-2 parcel names its front parcel by index).
+local function blankParcel(): Types.FabricParcel
+	return {
+		x = 0,
+		z = 0,
+		rotationY = 0,
+		size = "small",
+		stretch = "",
+		along = 0,
+		row = 1,
+		front = 0,
+	}
+end
+
+local function validWildEntry(entry: any): boolean
+	if
+		type(entry) ~= "table"
+		or not (finite(entry.x) and finite(entry.z) and finite(entry.rotationY))
+	then
+		return false
+	end
+	return entry.kind == CLUMP or (entry.kind == SINGLE and type(entry.prop) == "string")
 end
 
 -- ------------------------------------------------------------------ heights
@@ -336,7 +468,7 @@ local function grown(rect: Rect, margin: number): Rect
 	}
 end
 
--- The rect's corners, plot-local at Y 0, in order around it.
+-- The rect's corners, plot-local at Y 0, in order round it.
 local function rectCorners(rect: Rect): { Vector3 }
 	local rotation = CFrame.Angles(0, math.rad(rect.rotationY), 0)
 	local centre = Vector3.new(rect.x, 0, rect.z)
@@ -432,10 +564,15 @@ end
 -- ------------------------------------------------------------------ effects
 
 -- One dust burst along `points` (plot-local, in order). Low-end devices get none (spec section
--- 10: particles go with the low-end signal, not with touch alone).
-local function puff(handle: Handle, points: { Vector3 }, gapLimit: number): ()
+-- 10: particles go with the low-end signal, not with touch alone), and a plot plays at most
+-- `maxPuffs` at once: past that, a new puff takes over the oldest one's handle.
+local function puff(handle: Handle, points: { Vector3 }): ()
 	local timing = handle.timing
+	local cap = handle.maxPuffs
 	if Theme.lowEndDevice or handle.destroyed or timing == nil or #points == 0 then
+		return
+	end
+	if cap ~= nil and cap <= 0 then
 		return
 	end
 	local context = handle.context
@@ -444,11 +581,35 @@ local function puff(handle: Handle, points: { Vector3 }, gapLimit: number): ()
 	for _, point in points do
 		table.insert(world, context.plotFrame:PointToWorldSpace(point))
 	end
-	local dust = Dust.Create(context.folder, context.plotFrame, context.dustWidth, gapLimit)
-	Dust.Burst(dust, world, context.dustColor(), seconds)
-	handle.puffs[dust] = task.delay(seconds + DUST_LINGER_SECONDS, function()
-		handle.puffs[dust] = nil
-		Dust.Destroy(dust)
+	local record: Puff
+	if cap ~= nil and #handle.puffs >= cap then
+		record = table.remove(handle.puffs, 1) :: Puff
+		local cleanup = record.cleanup
+		if cleanup ~= nil then
+			record.cleanup = nil
+			task.cancel(cleanup)
+		end
+	else
+		record = {
+			dust = Dust.Create(
+				context.folder,
+				context.plotFrame,
+				context.dustWidth,
+				handle.dustGap
+			),
+			cleanup = nil,
+		}
+	end
+	-- A handle plays one burst at a time, so on a taken-over handle this cuts the old puff short.
+	Dust.Burst(record.dust, world, context.dustColor(), seconds)
+	table.insert(handle.puffs, record)
+	record.cleanup = task.delay(seconds + DUST_LINGER_SECONDS, function()
+		record.cleanup = nil
+		local index = table.find(handle.puffs, record)
+		if index ~= nil then
+			table.remove(handle.puffs, index)
+		end
+		Dust.Destroy(record.dust)
 	end)
 end
 
@@ -456,11 +617,18 @@ end
 local function puffAround(handle: Handle, rect: Rect): ()
 	local corners = rectCorners(rect)
 	table.insert(corners, corners[1])
-	puff(handle, corners, 2 * math.max(math.abs(rect.hx), math.abs(rect.hz)) + 1)
+	puff(handle, corners)
 end
 
 local function puffAt(handle: Handle, x: number, y: number, z: number): ()
-	puff(handle, { Vector3.new(x, y, z) }, 1)
+	puff(handle, { Vector3.new(x, y, z) })
+end
+
+-- A far plot or a restore plays nothing, so puffs still running stop where they are.
+local function stopPuffs(handle: Handle): ()
+	for _, record in handle.puffs do
+		Dust.Stop(record.dust)
+	end
 end
 
 local function backOut(t: number): number
@@ -628,6 +796,9 @@ local function goalFor(
 		return nil
 	end
 	local prop = list[(view.index - 1) % #list + 1]
+	if type(prop) ~= "string" then
+		return nil
+	end
 	local heights = propHeights(handle, prop)
 	local stage = math.max(math.min(state.level - 2, #heights - 1), 0)
 	local cap = math.max(numberOr(config.heightFloor, 0), landmarkHeight(handle, state.governor))
@@ -712,7 +883,8 @@ fire = function(handle: Handle, view: ParcelView, kind: string): ()
 	end
 end
 
--- Without animation -- a join, a rebuild, a far plot -- every parcel shows its goal at once.
+-- Without animation -- a join, a restore, a rebuild, a far plot -- every parcel shows its goal at
+-- once.
 local function settleParcels(handle: Handle): ()
 	for _, view in handle.parcels do
 		if not view.eligible then
@@ -782,11 +954,10 @@ local function rippleParcels(
 end
 
 local function develop(handle: Handle, input: SyncInput): { CityFabric.FabricParcelState }
-	local data = handle.context.data
 	local pull = handle.pull
 	if pull == nil then
 		local states: { CityFabric.FabricParcelState } = {}
-		for index = 1, #data.parcels do
+		for index = 1, #handle.parcelData do
 			states[index] = { level = 0, district = nil, governor = nil }
 		end
 		return states
@@ -805,7 +976,7 @@ local function develop(handle: Handle, input: SyncInput): { CityFabric.FabricPar
 		tier = input.tier,
 		stretches = input.stretches,
 		landmarks = landmarks,
-		parcels = data.parcels,
+		parcels = handle.parcelData,
 	}, pull)
 end
 
@@ -826,18 +997,23 @@ end
 
 -- ------------------------------------------------------------------ the clearing mask
 
-local function sortedPadIds(input: SyncInput): { string }
-	local ids: { string } = {}
-	for slotId in input.pads do
-		table.insert(ids, slotId)
+-- The slots whose pads the owned set implies: unowned, with the effective `requires` owned
+-- (PlotService.refreshPads' rule). The mask takes its pad part from these rather than from the
+-- live Pads folder, so a cosmetics refresh that re-lays every pad never un-clears the woods.
+local function buyableSlots(handle: Handle): { string }
+	local buyable: { string } = {}
+	for _, slotId in handle.slotOrder do
+		local requires = handle.requires[slotId]
+		if not handle.owned[slotId] and (requires == nil or handle.owned[requires]) then
+			table.insert(buyable, slotId)
+		end
 	end
-	table.sort(ids)
-	return ids
+	return buyable
 end
 
--- Everything the mask is built from. Owned slots, drawn streets and developed parcels only grow
--- within a build, so listing them names the mask exactly.
-local function maskKeyOf(handle: Handle, input: SyncInput, padIds: { string }): string
+-- Everything the mask is built from. The buyable slots follow from the owned set, and owned slots,
+-- drawn streets and developed parcels only grow within a build, so listing them names the mask.
+local function maskKeyOf(handle: Handle, input: SyncInput): string
 	local developed: { string } = {}
 	for index, state in handle.states do
 		if state.level >= 1 then
@@ -850,21 +1026,16 @@ local function maskKeyOf(handle: Handle, input: SyncInput, padIds: { string }): 
 	end
 	return table.concat({
 		table.concat(handle.ownedList, ","),
-		table.concat(padIds, ","),
 		table.concat(developed, ","),
 		table.concat(plazas, ","),
 		tostring(#input.segments),
 	}, "|")
 end
 
--- The clearing mask ("Clearing"): owned slot footprints, the footprint and pad of every slot with
--- a pad, developed parcels, visible plazas, and the visible stretches and drawn spurs.
-local function buildMask(
-	handle: Handle,
-	clear: Types.FabricClearConfig,
-	input: SyncInput,
-	padIds: { string }
-): Mask
+-- The clearing mask ("Clearing", with the review amendment's pads): owned slot footprints, the
+-- footprint and pad of every buyable slot, developed parcels, visible plazas, and the visible
+-- stretches and drawn spurs.
+local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: SyncInput): Mask
 	local rects: { Rect } = {}
 	local slotMargin = numberOr(clear.slot, 0)
 	local padMargin = numberOr(clear.pad, 0)
@@ -875,7 +1046,7 @@ local function buildMask(
 			table.insert(rects, grown(rect, slotMargin))
 		end
 	end
-	for _, slotId in padIds do
+	for _, slotId in buyableSlots(handle) do
 		local footprint = handle.slotRects[slotId]
 		if footprint ~= nil then
 			table.insert(rects, grown(footprint, padMargin))
@@ -911,8 +1082,12 @@ local function clearedFlags(
 	local quarterRadius = numberOr(wildConfig.quarterRadius, 0)
 	local singleRadius = numberOr(wildConfig.singleRadius, 0)
 	local flags: { [number]: number } = {}
-	for index, entry in handle.context.data.wild do
+	for index, entry in handle.wildData do
 		local bits = 0
+		if not handle.wildValid[index] then
+			flags[index] = bits
+			continue
+		end
 		if entry.kind == CLUMP then
 			local quads = entry.quads
 			for quarter = 1, QUARTERS do
@@ -968,7 +1143,7 @@ end
 -- Near plots draw every uncleared clump, quarter and single among the first budget.wild entries;
 -- far plots only the whole clumps among the first budget.wildFar clumps. Detail off keeps an even
 -- share by index. A near purchase puffs dust where the woods just gave way; any other change
--- (detail, near/far, a late template) swaps silently.
+-- (detail, near/far, a restore, a late template) swaps silently.
 local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: number }): ()
 	local wildConfig = handle.wildConfig
 	if wildConfig == nil then
@@ -977,7 +1152,10 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 	local cleared = handle.cleared
 	local share = math.clamp(numberOr(input.wildShare, 1), 0, 1)
 	local puffs = input.animate and input.near
-	for index, entry in handle.context.data.wild do
+	for index, entry in handle.wildData do
+		if not handle.wildValid[index] then
+			continue
+		end
 		local bits = cleared[index] or 0
 		local kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
 		local inBudget = if input.near
@@ -1018,6 +1196,7 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 			end
 		end
 
+		-- Validated lists: a variant with no name in them is a missing prop, never an error.
 		local variant = entry.variant
 		if wantWhole and current.whole == nil then
 			local prop = if variant ~= nil then wildConfig.clumps[variant] else nil
@@ -1069,6 +1248,23 @@ local function applyPadLook(handle: Handle, part: BasePart): ()
 	part.Color = colorFrom(look.color, part.Color)
 end
 
+-- Local only: the server's Part, its touch-to-buy and its label are left as they are, and the
+-- look it had is kept to be put back.
+local function bindPad(handle: Handle, view: PadView, part: BasePart): ()
+	view.part = part
+	view.material = part.Material
+	view.color = part.Color
+	applyPadLook(handle, part)
+end
+
+local function restorePad(view: PadView): ()
+	local part = view.part
+	if part.Parent ~= nil then
+		part.Material = view.material
+		part.Color = view.color
+	end
+end
+
 local function clearPadDetails(view: PadView): ()
 	local marker = view.marker
 	if marker ~= nil then
@@ -1110,17 +1306,25 @@ local function placePadDetails(handle: Handle, slotId: string, view: PadView): (
 		return
 	end
 	local padRect = handle.padRects[slotId]
-	if view.marker == nil and padRect ~= nil then
+	local slotFrame: CFrame? = handle.slotFrames[slotId]
+	if
+		view.marker == nil
+		and padRect ~= nil
+		and slotFrame ~= nil
+		and type(marker.prop) == "string"
+	then
+		-- The offset is in the slot's frame and the board faces the slot's front, so it stands
+		-- beside the pad, clear of the staked ground, whichever way the slot is turned.
 		local offset = if type(marker.offset) == "table" then marker.offset else {}
+		local turn = slotFrame.Rotation
+		local shift = turn:VectorToWorldSpace(
+			Vector3.new(numberOr(offset[1], 0), numberOr(offset[2], 0), numberOr(offset[3], 0))
+		)
 		view.marker = spawnAt(
 			handle,
 			marker.prop,
 			0,
-			CFrame.new(
-				padRect.x + numberOr(offset[1], 0),
-				numberOr(offset[2], 0),
-				padRect.z + numberOr(offset[3], 0)
-			),
+			CFrame.new(padRect.x + shift.X, shift.Y, padRect.z + shift.Z) * turn,
 			nil
 		)
 	end
@@ -1166,19 +1370,19 @@ end
 
 local function dropPad(handle: Handle, slotId: string, view: PadView): ()
 	handle.pads[slotId] = nil
-	clearPadDetails(view)
-	if view.part.Parent ~= nil then
-		view.part.Material = view.material
-		view.part.Color = view.color
+	local expiry = view.expiry
+	if expiry ~= nil then
+		view.expiry = nil
+		task.cancel(expiry)
 	end
+	clearPadDetails(view)
+	restorePad(view)
 end
 
+-- The dressing follows the live Pads folder. A pad that goes keeps its dressing for one
+-- lod.refreshSeconds, and a new Part laid down for the same slot meanwhile (a cosmetics refresh
+-- re-lays every pad) takes the dressing over instead of rebuilding it.
 local function syncPads(handle: Handle, input: SyncInput): ()
-	for slotId, view in handle.pads do
-		if input.pads[slotId] ~= view.part then
-			dropPad(handle, slotId, view)
-		end
-	end
 	for slotId, part in input.pads do
 		local view = handle.pads[slotId]
 		if view == nil then
@@ -1188,16 +1392,37 @@ local function syncPads(handle: Handle, input: SyncInput): ()
 				color = part.Color,
 				marker = nil,
 				stakes = {},
+				expiry = nil,
 			}
 			handle.pads[slotId] = fresh
-			-- Local only: the server's Part, its touch-to-buy and its label are left as they are.
-			applyPadLook(handle, part)
-			view = fresh
+			bindPad(handle, fresh, part)
+			continue
+		end
+		local expiry = view.expiry
+		if expiry ~= nil then
+			view.expiry = nil
+			task.cancel(expiry)
+		end
+		if view.part ~= part then
+			restorePad(view)
+			bindPad(handle, view, part)
+		end
+	end
+	local grace = math.max(numberOr(handle.context.padGraceSeconds, 0), 0)
+	for slotId, view in handle.pads do
+		local present: BasePart? = input.pads[slotId]
+		if present == nil and view.expiry == nil then
+			view.expiry = task.delay(grace, function()
+				view.expiry = nil
+				if not handle.destroyed and handle.pads[slotId] == view then
+					dropPad(handle, slotId, view)
+				end
+			end)
 		end
 		if input.near then
-			placePadDetails(handle, slotId, view :: PadView)
+			placePadDetails(handle, slotId, view)
 		else
-			clearPadDetails(view :: PadView)
+			clearPadDetails(view)
 		end
 	end
 end
@@ -1259,12 +1484,18 @@ function Fabric.new(context: Context): Handle
 	local data = context.data
 	local layout = context.layout
 	local budget = context.budget
+	local timing = if type(config.construction) == "table" then config.construction else nil
+	local maxPuffs = if timing ~= nil then timing.maxPuffs else nil
 	local handle: Handle = {
 		context = context,
-		pull = if type(config.pull) == "table" then config.pull else nil,
+		pull = validPull(config.pull),
 		clear = if type(config.clear) == "table" then config.clear else nil,
-		wildConfig = if type(config.wild) == "table" then config.wild else nil,
-		timing = if type(config.construction) == "table" then config.construction else nil,
+		wildConfig = validWildConfig(config.wild),
+		timing = timing,
+		maxPuffs = if finite(maxPuffs) then math.floor(maxPuffs :: number) else nil,
+		parcelData = {},
+		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
+		wildValid = {},
 		parcels = {},
 		durations = {},
 		slotRects = {},
@@ -1273,9 +1504,12 @@ function Fabric.new(context: Context): Handle
 		slotFrames = {},
 		streetOnly = {},
 		modelNames = {},
+		slotOrder = {},
+		requires = {},
 		heights = {},
 		wildNear = {},
 		wildFar = {},
+		dustGap = 1,
 		states = {},
 		stretches = {},
 		owned = {},
@@ -1292,12 +1526,21 @@ function Fabric.new(context: Context): Handle
 		destroyed = false,
 	}
 
+	-- The effective `requires` exactly as PlotService.getEraMaps resolves it: the slot's own, else
+	-- the previous slot in purchase order; the first slot needs nothing.
 	for eraIndex = 1, Catalog.GetEraCount() do
 		local eraConfig = Catalog.GetEraConfig(eraIndex)
 		if eraConfig ~= nil and eraConfig.name == context.eraName then
+			local previous: string? = nil
 			for _, slot in eraConfig.slots do
 				handle.modelNames[slot.id] = slot.modelName
 				handle.streetOnly[slot.id] = slot.streetOnly == true
+				table.insert(handle.slotOrder, slot.id)
+				local requires = slot.requires or previous
+				if requires ~= nil then
+					handle.requires[slot.id] = requires
+				end
+				previous = slot.id
 			end
 			break
 		end
@@ -1338,50 +1581,70 @@ function Fabric.new(context: Context): Handle
 
 	-- A key a stale config lacks turns its feature off: no ceiling means nothing drawn.
 	local parcelBudget = math.max(math.floor(numberOr(budget.parcels, 0)), 0)
+	local rawParcels: { Types.FabricParcel } = if type(data) == "table"
+			and type(data.parcels) == "table"
+		then data.parcels
+		else {}
 	local sizes = config.sizes
-	if type(sizes) == "table" then
-		for index, parcel in data.parcels do
-			local size = bySize(parcel.size, sizes.small, sizes.medium)
-			local width = if type(size) == "table" then numberOr(size[1], 0) else 0
-			local depth = if type(size) == "table" then numberOr(size[2], 0) else 0
-			table.insert(handle.parcels, {
-				index = index,
-				parcel = parcel,
-				rect = {
-					x = parcel.x,
-					z = parcel.z,
-					hx = width / 2,
-					hz = depth / 2,
-					rotationY = parcel.rotationY,
-					margin = 0,
-				},
-				frame = Scatter.PropFrame(Vector3.new(parcel.x, 0, parcel.z), parcel.rotationY),
-				eligible = index <= parcelBudget,
-				goal = nil,
-				shown = nil,
-				model = nil,
-				timer = nil,
-			})
+	for index = 1, #rawParcels do
+		local raw = rawParcels[index]
+		local wellFormed = validParcel(raw)
+		local parcel = if wellFormed then raw else blankParcel()
+		handle.parcelData[index] = parcel
+		if type(sizes) ~= "table" then
+			continue
 		end
+		local size = bySize(parcel.size, sizes.small, sizes.medium)
+		local width = if type(size) == "table" then numberOr(size[1], 0) else 0
+		local depth = if type(size) == "table" then numberOr(size[2], 0) else 0
+		table.insert(handle.parcels, {
+			index = index,
+			parcel = parcel,
+			rect = {
+				x = parcel.x,
+				z = parcel.z,
+				hx = width / 2,
+				hz = depth / 2,
+				rotationY = parcel.rotationY,
+				margin = 0,
+			},
+			frame = Scatter.PropFrame(Vector3.new(parcel.x, 0, parcel.z), parcel.rotationY),
+			eligible = wellFormed and index <= parcelBudget,
+			goal = nil,
+			shown = nil,
+			model = nil,
+			timer = nil,
+		})
 	end
-	local timing = handle.timing
 	local shortest = if timing ~= nil then math.max(numberOr(timing.minSeconds, 0), 0) else 0
 	local longest = if timing ~= nil
 		then math.max(numberOr(timing.maxSeconds, shortest), shortest)
 		else shortest
 	local rng = Random.new(context.seed + CONSTRUCTION_SALT)
-	for index = 1, #data.parcels do
+	for index = 1, #handle.parcelData do
 		handle.durations[index] = shortest + (longest - shortest) * rng:NextNumber()
 	end
+	-- Every fabric puff runs round one slot or parcel rect at most, so one gap limit fits them all.
+	local widest = 0
+	for _, rect in handle.slotRects do
+		widest = math.max(widest, math.abs(rect.hx), math.abs(rect.hz))
+	end
+	for _, view in handle.parcels do
+		widest = math.max(widest, math.abs(view.rect.hx), math.abs(view.rect.hz))
+	end
+	handle.dustGap = 2 * widest + 1
 
 	-- The wild budgets are spent in data order and never re-spent, so clearing one item can never
 	-- make another appear.
 	local nearBudget = math.max(math.floor(numberOr(budget.wild, 0)), 0)
 	local farBudget = math.max(math.floor(numberOr(budget.wildFar, 0)), 0)
 	local clumps = 0
-	for index, entry in data.wild do
+	for index = 1, #handle.wildData do
+		local entry = handle.wildData[index]
+		local wellFormed = validWildEntry(entry)
+		handle.wildValid[index] = wellFormed
 		handle.wildNear[index] = index <= nearBudget
-		if entry.kind == CLUMP then
+		if wellFormed and entry.kind == CLUMP then
 			clumps += 1
 			handle.wildFar[index] = clumps <= farBudget
 		end
@@ -1436,33 +1699,36 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	local wildConfig = handle.wildConfig
 	local clear = handle.clear
 	if wildConfig ~= nil then
-		local padIds = sortedPadIds(input)
-		local maskKey = if clear ~= nil then maskKeyOf(handle, input, padIds) else ""
+		local maskKey = if clear ~= nil then maskKeyOf(handle, input) else ""
 		if maskKey ~= handle.maskKey then
 			handle.maskKey = maskKey
 			local mask: Mask = if clear ~= nil
-				then buildMask(handle, clear, input, padIds)
+				then buildMask(handle, clear, input)
 				else { rects = {}, segments = {}, streetClear = 0 }
 			handle.cleared = clearedFlags(handle, wildConfig, mask)
 		end
 	end
 
 	syncPads(handle, input)
-	if not input.near then
+	local rippling = input.animate and input.near
+	if rippling then
+		startReveals(handle, fresh)
+	else
+		-- Far, or a restore: nothing plays, and a scaffold or puff still running goes quietly.
 		for index = #handle.reveals, 1, -1 do
 			removeReveal(handle, handle.reveals[index], false)
 		end
-	elseif input.animate then
-		startReveals(handle, fresh)
+		stopPuffs(handle)
 	end
 	local timing = handle.timing
-	if timing ~= nil and input.animate and input.near then
+	if timing ~= nil and rippling then
 		rippleParcels(handle, timing, triggers)
 	else
 		settleParcels(handle)
 	end
 	syncWild(handle, input, previous)
-	if #triggers > 0 then
+	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
+	if rippling and #triggers > 0 then
 		handle.lastTrigger = triggers[1]
 	end
 end
@@ -1489,19 +1755,23 @@ end
 -- birds circle when the layout has no tree zones.
 function Fabric.SurvivingClumps(handle: Handle): { Vector3 }
 	local centres: { Vector3 } = {}
+	-- The skirt past the plot edge is never cleared, so a flock over it would never move; birds
+	-- circle the town's own woods and fall back to the skirt only once every plot clump is felled.
+	local skirt: { Vector3 } = {}
 	if handle.wildConfig == nil then
 		return centres
 	end
-	for index, entry in handle.context.data.wild do
+	for index, entry in handle.wildData do
 		if
-			entry.kind == CLUMP
+			handle.wildValid[index]
+			and entry.kind == CLUMP
 			and handle.wildNear[index]
 			and (handle.cleared[index] or 0) ~= ALL_QUARTERS
 		then
-			table.insert(centres, Vector3.new(entry.x, 0, entry.z))
+			table.insert(if entry.skirt then skirt else centres, Vector3.new(entry.x, 0, entry.z))
 		end
 	end
-	return centres
+	return if #centres > 0 then centres else skirt
 end
 
 -- Cancels every timer, animation and puff and removes everything the fabric placed, giving any
@@ -1541,9 +1811,13 @@ function Fabric.Destroy(handle: Handle): ()
 	for index = #handle.reveals, 1, -1 do
 		removeReveal(handle, handle.reveals[index], false)
 	end
-	for dust, cleanup in handle.puffs do
-		task.cancel(cleanup)
-		Dust.Destroy(dust)
+	for _, record in handle.puffs do
+		local cleanup = record.cleanup
+		if cleanup ~= nil then
+			record.cleanup = nil
+			task.cancel(cleanup)
+		end
+		Dust.Destroy(record.dust)
 	end
 	table.clear(handle.puffs)
 end

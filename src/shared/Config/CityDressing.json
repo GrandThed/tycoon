@@ -296,14 +296,15 @@
           "stagger": 0.4,
           "stageSeconds": 1.2,
           "riseSeconds": 0.6,
-          "revealSeconds": 1.5
+          "revealSeconds": 1.5,
+          "maxPuffs": 4
         },
         "marker": {
           "prop": "NoticeBoard",
           "offset": [
-            4.5,
+            5,
             0,
-            0
+            -0.5
           ],
           "stakeColor": [
             120,

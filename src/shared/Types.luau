@@ -736,8 +736,11 @@ export type FabricConstructionConfig = {
 	stageSeconds: number,
 	riseSeconds: number,
 	revealSeconds: number,
+	-- Review amendment: concurrent dust puffs per plot; absent means no cap.
+	maxPuffs: number?,
 }
--- `offset` is [x, y, z] from the pad centre in the plot frame; colours are RGB 0-255.
+-- `offset` is [x, y, z] from the pad centre in the slot's frame (turned by the slot's rotationY);
+-- colours are RGB 0-255.
 export type FabricMarkerConfig = {
 	prop: string,
 	offset: { number },
