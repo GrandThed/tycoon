@@ -5182,3 +5182,113 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
 - `plotrender.py Village --tier N` matches the approved gate renders.
 - Checks: stylua, selene, luau-lsp and `rojo build` are clean; `fabric.py check`, `streetplan.py`,
   `bake.py --list` and `gen_templates.py --check` are green.
+
+## Wave 1c — Ben's first look (2026-09-29)
+
+Ben on the gate renders: "looks really good! but i would love to see waaay more houses filling the
+terrain and the trees placement seems to be lacking and the tree building seems silly right now,
+maybe make it so it fills the city". He also pointed to the street-upgrade idea: some slots are not
+buildings but change the city (`dirtRoad` = Pave the Road).
+
+Rulings:
+- **Way more houses.** Village gets **≥ 100 parcels** (was ≥ 40), filling the terrain between the
+  streets: row 1 frontage, row 2 behind it, row 3 behind row 2. A finished Village keeps woods only
+  as a thin border and the skirt.
+- **The tree slot changes the city.** `treeOak` becomes `streetOnly`, like `dirtRoad`: there is no oak
+  model. It is renamed "Plant Trees". Buying it plants town trees across the developed village.
+- **A more natural forest.** No visible rows: variable spacing, clump scales, singles and round trees
+  mixed in at the woods edge, and small glades.
+- **More home variants,** so 100+ lots don't repeat.
+
+Nothing is uploaded yet, so this round costs no extra harvest paste.
+
+### Rows (CityFabric, normative; the mirror follows)
+
+- `row` may be 1, 2 or 3.
+  - A row-k parcel (k ≥ 2) sets `front` to the index of the parcel directly in front of it (row
+    k − 1).
+  - The data lists every parcel after its front, so one pass in index order works.
+- Step 8 becomes: for every parcel with row ≥ 2, in index order,
+  `level = max(0, min(level, levels[front] − rowLag))`. `district` and `governor` are copied from the
+  front.
+  - `rowLag` is `pull.rowLag`, optional; when absent it is 1.
+  - Validation accepts a missing `rowLag`, and rejects a present one that isn't a finite number.
+- Contiguity (step 7) still applies to row 1 only.
+
+### Order and budgets
+
+- `fabric.py` writes all row-1 parcels first, ordered by straight-line distance from the entrance
+  point (the first point of polyline 1). Then come row 2, then row 3, each in the order of their
+  fronts.
+- `budget.parcels` rises from 70 to **140** and applies to near plots.
+- New `budget.parcelsFar` (**60**): far plots draw parcels with index ≤ `parcelsFar`, which is the
+  row-1 frontage nearest the heart. A near plot draws index ≤ `parcels`.
+
+### Town trees (new)
+
+Fabric data gains an optional `trees` list:
+
+```json
+"trees": [
+  { "x": 3.2, "z": -20.5, "rotationY": 40, "scale": 1.05, "variant": 1, "anchor": "stretch", "stretch": "L1_4" },
+  { "x": 14.8, "z": 9.1, "rotationY": 200, "scale": 0.95, "variant": 2, "anchor": "parcel", "parcel": 57 }
+]
+```
+
+- **Config:** `fabric.townTrees = { "requiresSlot": "treeOak", "props": ["TownTreeA", "TownTreeB",
+  "TownTreeC"], "tierOffset": 3 }`. `budget.townTrees` is 70, near plots only, a prefix in index
+  order.
+- **Planted:** a tree is planted when `requiresSlot` is owned and its anchor is developed.
+  - A `stretch` tree needs that stretch drawn.
+  - A `parcel` tree needs that parcel at level ≥ 2, meaning the house is built.
+- **Look:**
+  - Its stage is `clamp(tier − tierOffset, 0, #stages − 1)`.
+  - Its prop is `props[variant]` (1-based).
+  - It stands at (x, 0, z), turned `rotationY` and scaled by `scale` (`Model:ScaleTo` about its base).
+- **Placement, by `fabric.py`:**
+  - street trees along the lanes, in gaps of the frontage;
+  - yard trees in the gaps behind houses, anchored to the nearest parcel;
+  - orchard trees near farm-district landmarks;
+  - green trees near civic landmarks.
+  - Every tree stays off the car and walker lanes and at least 1 stud from any parcel, slot
+    footprint, pad and marker.
+  - At full build, Village has **at least 50** planted trees.
+- Trees don't clear woods and aren't walk solids.
+- **Animation (client):** on the animated sync that buys `requiresSlot`, the planted trees appear as
+  saplings in a stagger that spreads out from its pad, each with a dust puff (`maxPuffs` applies).
+  Later growth steps swap stages with a pop. Unanimated syncs place the final state.
+- A missing `trees` list, `townTrees` block or prop means that feature is off, silently.
+
+### Props (builders)
+
+- **Town trees:** `TownTreeA` (round broadleaf), `TownTreeB` (orchard tree with fruit) and
+  `TownTreeC` (tall narrow street tree).
+  - Each has 3 stages: a staked sapling ≤ 2.5 studs, a young tree ≤ 5, and a full tree ≤ 8.
+  - Planted trees are a green distinct from the forest conifers, never the teal nature-kit
+    broadleaves.
+  - Origin at the trunk base; blueprint scale is the builder's call.
+- **Homes:** `FabricHomeSmallC`, `FabricHomeSmallD`, `FabricHomeMediumC` and `FabricHomeMediumD`,
+  under the same rules as the other homes. The `home` district lists grow to four variants per size.
+
+### Slot change (lead)
+
+`Config/Eras/1_Village.json`, `treeOak`:
+- `streetOnly: true`;
+- name "Plant Trees";
+- description "plants trees along the lanes, in the yards and on the green".
+
+Cost, income, multiplier, `requires` and type are unchanged, so the economy is untouched. The layout
+drops `treeOak`'s district: a `streetOnly` slot has no building to pull with.
+
+### Ownership (wave 1c; resumed agents keep their files)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `CityDressing.json` (`rowLag`, budgets, `townTrees`, home lists); `Config/Eras/1_Village.json` (`treeOak` only) |
+| economy-designer | `Village.luau`, `tools/fabric.py`, `tools/fabric/Village.plan.json`, `Config/Fabric/Village.json`, `tools/streetplan.py`; gate renders `m12c_*` |
+| luau-engineer | `Types.luau` (the types for rows, trees and budgets), `CityFabric.luau` (rows) |
+| ui-engineer | `Fabric.luau`, `CityDressingController.luau` (town trees, `parcelsFar`, validation) |
+| prop-builder "sites" | `TownTreeA/B/C` (may extend `village_extras_kit.py`) |
+| prop-builder "homes" | `FabricHomeSmallC/D`, `FabricHomeMediumC/D` |
+| mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `tools/testfit/plotrender.py` |
+

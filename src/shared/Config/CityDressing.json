@@ -37,9 +37,11 @@
     "walkersPerPlot": 8,
     "walkersMap": 24,
     "birdsMap": 18,
-    "parcels": 70,
+    "parcels": 140,
     "wild": 110,
-    "wildFar": 45
+    "wildFar": 45,
+    "parcelsFar": 60,
+    "townTrees": 70
   },
   "trees": {
     "stages": 4,
@@ -211,18 +213,23 @@
           ],
           "reach": 13,
           "levelsOverTier": 1,
-          "smallMaxLevel": 3
+          "smallMaxLevel": 3,
+          "rowLag": 1
         },
         "heightFloor": 4.2,
         "districts": {
           "home": {
             "small": [
               "FabricHomeSmallA",
-              "FabricHomeSmallB"
+              "FabricHomeSmallB",
+              "FabricHomeSmallC",
+              "FabricHomeSmallD"
             ],
             "medium": [
               "FabricHomeMediumA",
-              "FabricHomeMediumB"
+              "FabricHomeMediumB",
+              "FabricHomeMediumC",
+              "FabricHomeMediumD"
             ]
           },
           "camp": {
@@ -325,7 +332,16 @@
             82
           ]
         },
-        "reveal": "RevealScaffold"
+        "reveal": "RevealScaffold",
+        "townTrees": {
+          "requiresSlot": "treeOak",
+          "props": [
+            "TownTreeA",
+            "TownTreeB",
+            "TownTreeC"
+          ],
+          "tierOffset": 3
+        }
       }
     },
     "Boomtown": {

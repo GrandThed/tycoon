@@ -142,9 +142,10 @@
 		{
 			"id": "treeOak",
 			"type": "decor",
-			"name": "Oak Tree",
+			"name": "Plant Trees",
 			"modelName": "TreeOak",
-			"description": "large leafy oak tree",
+			"streetOnly": true,
+			"description": "plants trees along the lanes, in the yards and on the green",
 			"kit": "Nature Kit",
 			"baseCost": 100000,
 			"baseIncome": 0,
