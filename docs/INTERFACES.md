@@ -5275,6 +5275,25 @@ Fabric data gains an optional `trees` list:
 - **Far plots may show bare cleared patches** where developed parcels past `parcelsFar` are not
   drawn. `parcelsFar` is tuned after the Studio measurement.
 
+### Review rulings (2026-09-29, wave 1c review; client and mirror follow)
+
+- **Growth steps are staggered.** A stage change caused by a tier-up (trees and parcels) waits
+  `stageSeconds + rank × stagger`, ranked by distance from the plot's last trigger, or else its
+  entrance. `stagger` is `townTrees.stagger` for trees and `construction.stagger` for parcels, so a
+  tier-up never pops 70 trees in one frame.
+- **Stricter validation (final states, mirrored):**
+  - `townTrees.tierOffset` must be a whole number; otherwise the town-tree block is off. The stage
+    is `clamp(tier − tierOffset, 0, #stages − 1)` with no floor needed.
+  - A row-k parcel (k ≥ 2) whose `front` is not an earlier index of a row-(k − 1) parcel is
+    malformed: a blank that keeps its index.
+- **Street-only slots are not walk solids.** Their layout rect still clears woods in the fabric
+  mask; the client's walk clip matches streetplan's, which already skips them.
+- **Back rows and walkers.** Back rows are not walk solids, so `fabric.py check` keeps every row-2
+  and row-3 parcel at least walker offset + meander amplitude + clearance from any street (2.9)
+  or spur (2.8).
+- **A yard tree waits for its house only while a rise can still come.** That means the parcel's
+  goal is a building that is not yet shown.
+
 ### Props (builders)
 
 - **Town trees:** `TownTreeA` (round broadleaf), `TownTreeB` (orchard tree with fruit) and

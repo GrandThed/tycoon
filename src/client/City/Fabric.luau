@@ -422,11 +422,16 @@ local function validTownTrees(value: any): Types.FabricTownTreesConfig?
 	if type(value) ~= "table" or type(value.requiresSlot) ~= "string" then
 		return nil
 	end
+	-- A whole number of tiers, so a stage is always whole; anything else turns the block off.
+	local tierOffset = value.tierOffset
+	if not finite(tierOffset) or tierOffset ~= math.floor(tierOffset) then
+		return nil
+	end
 	local stagger = value.stagger
 	return {
 		requiresSlot = value.requiresSlot,
 		props = propList(value.props),
-		tierOffset = numberOr(value.tierOffset, 0),
+		tierOffset = tierOffset,
 		-- The planting wave's seconds per tree; without it (or with a bad one) the wave keeps
 		-- construction.stagger's pace.
 		stagger = if finite(stagger) and stagger >= 0 then stagger else nil,
@@ -964,6 +969,44 @@ fire = function(handle: Handle, view: ParcelView, kind: string): ()
 	end
 end
 
+-- Sorts `items` nearest-first by straight-line distance from the nearest origin, ties by index, so
+-- every staggered start -- sites, the planting wave, growth steps -- spreads outward from where the
+-- change began. `locate` gives an item's x, z and index.
+local function sortOutward<T>(
+	items: { T },
+	origins: { Vector3 },
+	locate: (item: T) -> (number, number, number)
+): ()
+	local distances: { [T]: number } = {}
+	local indices: { [T]: number } = {}
+	for _, item in items do
+		local x, z, index = locate(item)
+		local best = math.huge
+		for _, origin in origins do
+			local dx, dz = x - origin.X, z - origin.Z
+			best = math.min(best, dx * dx + dz * dz)
+		end
+		distances[item] = best
+		indices[item] = index
+	end
+	table.sort(items, function(a: T, b: T): boolean
+		if distances[a] == distances[b] then
+			return indices[a] < indices[b]
+		end
+		return distances[a] < distances[b]
+	end)
+end
+
+-- Where a ripple spreads from: this sync's purchases and stage swaps, else the last one seen (the
+-- entrance until there is one).
+local function rippleOrigins(handle: Handle, triggers: { Vector3 }): { Vector3 }
+	return if #triggers > 0 then triggers else { handle.lastTrigger }
+end
+
+local function parcelSpot(view: ParcelView): (number, number, number)
+	return view.rect.x, view.rect.z, view.index
+end
+
 -- Without animation -- a join, a restore, a rebuild, a far plot -- every parcel shows its goal at
 -- once, or nothing where the plot's budget leaves it out (wave 1c: a far plot keeps only the
 -- frontage nearest the heart).
@@ -983,13 +1026,15 @@ end
 
 -- A purchase, a stage swap or a new tier on a near plot: new sites go up one by one outward from
 -- the building that set them off, a site turns into its building after the parcel's seeded
--- construction time, and a building takes its next stage after `stageSeconds`.
+-- construction time, and a building takes its next stage after `stageSeconds`, one by one outward
+-- too, so a tier-up never swaps every house in one frame.
 local function rippleParcels(
 	handle: Handle,
 	timing: Types.FabricConstructionConfig,
 	triggers: { Vector3 }
 ): ()
 	local starting: { ParcelView } = {}
+	local swapping: { ParcelView } = {}
 	for _, view in handle.parcels do
 		local changed = view.changed
 		view.changed = false
@@ -1013,29 +1058,17 @@ local function rippleParcels(
 		elseif shown.kind == SITE then
 			startTimer(handle, view, TIMER_BUILD, handle.durations[view.index] or 0)
 		else
-			startTimer(handle, view, TIMER_SWAP, numberOr(timing.stageSeconds, 0))
+			table.insert(swapping, view)
 		end
 	end
-	if #starting == 0 then
-		return
-	end
-	local origins: { Vector3 } = if #triggers > 0 then triggers else { handle.lastTrigger }
-	local distances: { [ParcelView]: number } = {}
-	for _, view in starting do
-		local best = math.huge
-		for _, origin in origins do
-			local dx, dz = view.rect.x - origin.X, view.rect.z - origin.Z
-			best = math.min(best, dx * dx + dz * dz)
-		end
-		distances[view] = best
-	end
-	table.sort(starting, function(a: ParcelView, b: ParcelView): boolean
-		if distances[a] == distances[b] then
-			return a.index < b.index
-		end
-		return distances[a] < distances[b]
-	end)
+	local origins = rippleOrigins(handle, triggers)
 	local stagger = math.max(numberOr(timing.stagger, 0), 0)
+	local stageSeconds = numberOr(timing.stageSeconds, 0)
+	sortOutward(swapping, origins, parcelSpot)
+	for rank, view in swapping do
+		startTimer(handle, view, TIMER_SWAP, stageSeconds + (rank - 1) * stagger)
+	end
+	sortOutward(starting, origins, parcelSpot)
 	for rank, view in starting do
 		startTimer(handle, view, TIMER_SITE, (rank - 1) * stagger)
 	end
@@ -1335,7 +1368,7 @@ end
 local function treeStage(handle: Handle, view: TreeView, tierOffset: number, tier: number): number
 	local prop = view.prop
 	local count = if prop ~= nil then #propHeights(handle, prop) else 0
-	return math.max(math.min(math.floor(tier - tierOffset), count - 1), 0)
+	return math.max(math.min(tier - tierOffset, count - 1), 0)
 end
 
 -- Whether the anchor has developed: a street tree's stretch is drawn, a yard tree's house is built.
@@ -1397,9 +1430,11 @@ local function cancelTreeTimer(view: TreeView): ()
 	end
 end
 
--- Whether a planted yard tree must wait for its house in animation: its parcel draws here and
--- does not show a building yet (a site stands, or its rise is still to come). The final state is
--- the contract's, planted at level 2, so an unanimated sync places it at once.
+-- Whether a planted yard tree must wait for its house in animation: only while a rise can still
+-- come, meaning its parcel draws here and its goal is a building not yet shown. A parcel at level 2
+-- with no building to show (a district without props) never rises, so its tree plants as any
+-- other. The final state is the contract's, planted at level 2, so an unanimated sync places it at
+-- once.
 local function waitsForHouse(handle: Handle, view: TreeView): boolean
 	local parcel = view.tree.parcel
 	if view.tree.anchor ~= ANCHOR_PARCEL or parcel == nil then
@@ -1409,8 +1444,13 @@ local function waitsForHouse(handle: Handle, view: TreeView): boolean
 	if house == nil or not house.nearOk then
 		return false
 	end
+	local goal = house.goal
 	local shown = house.shown
-	return shown == nil or shown.kind ~= BUILDING
+	return goal ~= nil and goal.kind == BUILDING and (shown == nil or shown.kind ~= BUILDING)
+end
+
+local function treeSpot(view: TreeView): (number, number, number)
+	return view.tree.x, view.tree.z, view.index
 end
 
 -- Forward-declared: a sapling that went in starts its growth step.
@@ -1473,10 +1513,18 @@ end
 -- is tracked on every plot, so the animation knows what is new. On the animated sync that buys the
 -- tree slot, the trees it plants go in as saplings in a wave spreading from its pad. A street tree
 -- planted later, as its stretch is drawn, pops in with a puff; a yard tree goes in with its house,
--- when the building rises out of its site. A growth step pops after stageSeconds. Anything else --
+-- when the building rises out of its site. Growth steps pop after stageSeconds, one by one outward
+-- from the last trigger at the wave's pace, so a tier-up never pops every tree in one frame.
+-- Anything else --
 -- an unanimated sync, a restore, a plot coming near, detail turned back on -- shows the final
 -- state at once.
-local function syncTrees(handle: Handle, input: SyncInput, rippling: boolean, fresh: { string }): ()
+local function syncTrees(
+	handle: Handle,
+	input: SyncInput,
+	rippling: boolean,
+	fresh: { string },
+	triggers: { Vector3 }
+): ()
 	local townTrees = handle.townTrees
 	local timing = handle.timing
 	if townTrees == nil then
@@ -1488,7 +1536,10 @@ local function syncTrees(handle: Handle, input: SyncInput, rippling: boolean, fr
 	local bought = animated and table.find(fresh, slotId) ~= nil
 	local stageSeconds = if timing ~= nil then numberOr(timing.stageSeconds, 0) else 0
 	local share = math.clamp(numberOr(input.townTreeShare, 1), 0, 1)
+	local fallback = if timing ~= nil then numberOr(timing.stagger, 0) else 0
+	local stagger = math.max(townTrees.stagger or fallback, 0)
 	local wave: { TreeView } = {}
+	local growing: { TreeView } = {}
 	for _, view in handle.trees do
 		local wasPlanted = view.planted
 		view.planted = slotOwned and anchorDeveloped(handle, view)
@@ -1528,8 +1579,12 @@ local function syncTrees(handle: Handle, input: SyncInput, rippling: boolean, fr
 			-- Planted while the plot was far, or its template came late: nothing to play.
 			placeTree(handle, view, goal, EFFECT_NONE, false)
 		else
-			startTreeTimer(handle, view, TREE_GROW, stageSeconds)
+			table.insert(growing, view)
 		end
+	end
+	sortOutward(growing, rippleOrigins(handle, triggers), treeSpot)
+	for rank, view in growing do
+		startTreeTimer(handle, view, TREE_GROW, stageSeconds + (rank - 1) * stagger)
 	end
 	if #wave == 0 then
 		return
@@ -1543,19 +1598,7 @@ local function syncTrees(handle: Handle, input: SyncInput, rippling: boolean, fr
 	elseif frame ~= nil then
 		originX, originZ = frame.Position.X, frame.Position.Z
 	end
-	local distances: { [TreeView]: number } = {}
-	for _, view in wave do
-		local dx, dz = view.tree.x - originX, view.tree.z - originZ
-		distances[view] = dx * dx + dz * dz
-	end
-	table.sort(wave, function(a: TreeView, b: TreeView): boolean
-		if distances[a] == distances[b] then
-			return a.index < b.index
-		end
-		return distances[a] < distances[b]
-	end)
-	local fallback = if timing ~= nil then numberOr(timing.stagger, 0) else 0
-	local stagger = math.max(townTrees.stagger or fallback, 0)
+	sortOutward(wave, { Vector3.new(originX, 0, originZ) }, treeSpot)
 	for rank, view in wave do
 		startTreeTimer(handle, view, TREE_APPEAR, (rank - 1) * stagger)
 	end
@@ -1922,6 +1965,17 @@ function Fabric.new(context: Context): Handle
 	for index = 1, #rawParcels do
 		local raw = rawParcels[index]
 		local wellFormed = validParcel(raw)
+		-- A row-k parcel (k 2 or 3) stands behind an earlier parcel of row k - 1, which the data
+		-- lists first; one that does not is malformed and becomes a blank that keeps its index.
+		if wellFormed and raw.row ~= 1 then
+			local front = raw.front
+			local ahead = if front == math.floor(front)
+					and front >= 1
+					and front < index
+				then handle.parcelData[front]
+				else nil
+			wellFormed = ahead ~= nil and ahead.row == raw.row - 1
+		end
 		local parcel = if wellFormed then raw else blankParcel()
 		handle.parcelData[index] = parcel
 		if type(sizes) ~= "table" then
@@ -2103,7 +2157,7 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 		settleParcels(handle, input.near)
 	end
 	syncWild(handle, input, previous)
-	syncTrees(handle, input, rippling, fresh)
+	syncTrees(handle, input, rippling, fresh, triggers)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
 	if rippling and #triggers > 0 then
 		handle.lastTrigger = triggers[1]

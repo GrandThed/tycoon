@@ -1638,11 +1638,25 @@ function Scatter.WalkSolids(
 	furniture: { { frame: CFrame, prop: string? } },
 	extra: { Footprint }?
 ): { Footprint }
+	-- M12 review: a street-only slot raises no building (the server leaves an empty marker), so
+	-- its footprint -- sized from its modelName's old harvested extents -- would be an invisible
+	-- wall. streetplan's walk clip skips these slots too; the fabric mask still clears their rect.
+	local streetOnly: { [string]: boolean } = {}
+	for eraIndex = 1, Catalog.GetEraCount() do
+		local eraConfig = Catalog.GetEraConfig(eraIndex)
+		if eraConfig ~= nil and eraConfig.name == input.eraName then
+			for _, slot in eraConfig.slots do
+				streetOnly[slot.id] = slot.streetOnly == true
+			end
+			break
+		end
+	end
 	-- Pads are flat ground a walker crosses (a Metropolis block pad covers the pavement); every
 	-- other solid stays.
 	local solids: { Footprint } = {}
 	for _, footprint in footprintsFor(input) do
-		if not footprint.pad then
+		local slotId = footprint.slotId
+		if not footprint.pad and not (slotId ~= nil and streetOnly[slotId]) then
 			table.insert(solids, footprint)
 		end
 	end
