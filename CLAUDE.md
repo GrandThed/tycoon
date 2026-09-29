@@ -57,3 +57,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/small-cars-2026-09-23.md
 @.claude/memory/feel-pass-2026-09-23.md
 @.claude/memory/marketing-2026-09-24.md
+@.claude/memory/growing-city-2026-09-28.md

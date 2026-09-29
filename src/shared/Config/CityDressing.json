@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "tier": {
     "ownedWeight": 50,
     "thresholds": [
@@ -36,7 +36,10 @@
     "parked": 32,
     "walkersPerPlot": 8,
     "walkersMap": 24,
-    "birdsMap": 18
+    "birdsMap": 18,
+    "parcels": 70,
+    "wild": 110,
+    "wildFar": 45
   },
   "trees": {
     "stages": 4,
@@ -185,6 +188,143 @@
           "WalkerC",
           "WalkerD"
         ]
+      },
+      "fabric": {
+        "sizes": {
+          "small": [
+            6,
+            6
+          ],
+          "medium": [
+            8,
+            8
+          ]
+        },
+        "pull": {
+          "radius": 24,
+          "tierTerm": 0.14,
+          "thresholds": [
+            0.9,
+            1.4,
+            1.7,
+            2.1
+          ],
+          "reach": 13,
+          "levelsOverTier": 1,
+          "smallMaxLevel": 3
+        },
+        "heightFloor": 4.2,
+        "districts": {
+          "home": {
+            "small": [
+              "FabricHomeSmallA",
+              "FabricHomeSmallB"
+            ],
+            "medium": [
+              "FabricHomeMediumA",
+              "FabricHomeMediumB"
+            ]
+          },
+          "camp": {
+            "small": [
+              "FabricCampSmall"
+            ],
+            "medium": [
+              "FabricCampMedium"
+            ]
+          },
+          "craft": {
+            "small": [
+              "FabricCraftSmall"
+            ],
+            "medium": [
+              "FabricCraftMedium"
+            ]
+          },
+          "farm": {
+            "small": [
+              "FabricFarmSmall"
+            ],
+            "medium": [
+              "FabricFarmMedium"
+            ]
+          },
+          "market": {
+            "small": [
+              "FabricMarketSmall"
+            ],
+            "medium": [
+              "FabricMarketMedium"
+            ]
+          },
+          "civic": {
+            "small": [
+              "FabricCivicSmall"
+            ],
+            "medium": [
+              "FabricCivicMedium"
+            ]
+          }
+        },
+        "sites": {
+          "small": "SiteSmall",
+          "medium": "SiteMedium"
+        },
+        "wild": {
+          "clumps": [
+            "WoodsClumpA",
+            "WoodsClumpB",
+            "WoodsClumpC"
+          ],
+          "quarters": [
+            "WoodsQuarterA",
+            "WoodsQuarterB",
+            "WoodsQuarterC"
+          ],
+          "quarterRadius": 3.0,
+          "singleRadius": 1.0
+        },
+        "clear": {
+          "slot": 6,
+          "pad": 1.5,
+          "street": 4.5,
+          "parcel": 2
+        },
+        "construction": {
+          "minSeconds": 10,
+          "maxSeconds": 30,
+          "stagger": 0.4,
+          "stageSeconds": 1.2,
+          "riseSeconds": 0.6,
+          "revealSeconds": 1.5
+        },
+        "marker": {
+          "prop": "NoticeBoard",
+          "offset": [
+            4.5,
+            0,
+            0
+          ],
+          "stakeColor": [
+            120,
+            84,
+            52
+          ],
+          "stringColor": [
+            235,
+            225,
+            200
+          ]
+        },
+        "padLook": {
+          "material": "Ground",
+          "color": [
+            150,
+            118,
+            82
+          ]
+        },
+        "reveal": "RevealScaffold"
       }
     },
     "Boomtown": {

@@ -86,8 +86,7 @@ FIT_MARGIN = 1.04
 FIT_PASSES = 8
 
 # Scene-only drawing numbers (nothing here is a game tunable).
-PAD_TINT = 1.55  # pads are the plot base this much lighter, as the in-game pad reads
-PAD_ON_PAVING_TINT = 1.12  # ... or this much lighter than the pavement, when there is paving
+DEFAULT_PART_RGB = [163, 162, 165]  # Medium stone grey: a new Part's colour, which pads keep
 GROUND_TINT = 0.55  # the apron outside the plot, so the plot edge is legible
 PLAYER_SIZE = (2.0, 5.0, 1.0)
 PLAYER_COLOR = [48, 110, 210]
@@ -360,27 +359,27 @@ class PlotScene:
         self.box("PlotBase", (plot[0], plot[1], plot[2]), (0.0, -plot[1] / 2, 0.0), base_rgb)
 
     def build_pads(self):
+        # PlotService.refreshPads: a pad exists only while its slot is unowned and its effective
+        # requires (the config's `requires`, else the previous slot in purchase order) is owned; a
+        # bought slot's pad is destroyed. createPad leaves the Part's default colour and places it
+        # unrotated in the plot frame (padWorldCFrame).
         era = self.era
         pad = era.layout["padSize"]
-        # Brighter than whatever the pad stands on. Against bare plot base that is the base itself;
-        # on an era with pavement and paved blocks a tint of the base would be *darker* than the
-        # paving around it and the pads would read as potholes.
-        tiles = era.tiles or {}
-        surround = (tiles.get("pavement") or tiles.get("blocks") or {}).get("color")
-        colour = tint(self.base_rgb, PAD_TINT)
-        if surround is not None:
-            bright = tint([int(v) for v in surround], PAD_ON_PAVING_TINT)
-            if sum(bright) > sum(colour):
-                colour = bright
+        buyable = set()
+        previous = None
+        for config in era.config["slots"]:
+            requires = config.get("requires") or previous
+            if config["id"] not in self.owned and (requires is None or requires in self.owned):
+                buyable.add(config["id"])
+            previous = config["id"]
         for slot in era.slots:
-            if slot["id"] not in self.owned:
+            if slot["id"] not in buyable:
                 continue
             self.box(
                 f"Pad_{slot['id']}",
                 (era.pad_size[0], pad[1], era.pad_size[1]),
                 (slot["pad"][0], pad[1] / 2, slot["pad"][1]),
-                colour,
-                rot_y=slot["rotation"],
+                DEFAULT_PART_RGB,
             )
 
     def build_buildings(self):
@@ -390,7 +389,7 @@ class PlotScene:
                 continue
             config = self.era_config_slots.get(slot["id"], {})
             if config.get("streetOnly"):
-                continue  # the server spawns an empty marker: no model, only the pad is real
+                continue  # the server spawns an empty marker: no model
             path = blueprint_path(era.name, config.get("modelName", ""))
             self.model(
                 slot["id"],
