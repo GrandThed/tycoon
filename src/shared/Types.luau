@@ -482,11 +482,14 @@ export type CityBudgetConfig = {
 	walkersPerPlot: number?,
 	walkersMap: number?,
 	birdsMap: number?,
-	-- M12; optional likewise. Fabric parcels per plot (near and far), wild items per near plot
-	-- and per far plot.
+	-- M12; optional likewise. Fabric parcels per near plot, and per far plot as an index prefix
+	-- (wave 1c `parcelsFar`: the row-1 frontage nearest the heart); wild items per near plot and
+	-- per far plot; town trees per near plot (wave 1c, an index prefix).
 	parcels: number?,
+	parcelsFar: number?,
 	wild: number?,
 	wildFar: number?,
+	townTrees: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -677,8 +680,9 @@ export type AmbientConfig = { smoke: SmokeConfig?, birds: BirdsConfig? }
 export type FabricParcelSize = "small" | "medium"
 -- Parcel i is its 1-based index in the list. `stretch` is the RoadGraph piece id of the stretch it
 -- fronts and `along` the studs from that stretch's `a` end to the foot of the perpendicular from
--- its front-centre. Row 2 stands behind parcel `front` and repeats its stretch and along; row 1
--- has front 0.
+-- its front-centre. Row 1 has front 0. A row-k parcel (k = 2 or 3, wave 1c) stands behind parcel
+-- `front`, the row k − 1 parcel, which the list always names first. Row 2 repeats its front's
+-- stretch and along.
 export type FabricParcel = {
 	x: number,
 	z: number,
@@ -704,10 +708,30 @@ export type FabricWild = {
 	quads: { { number } }?,
 	prop: string?,
 }
-export type FabricData = { version: number, parcels: { FabricParcel }, wild: { FabricWild } }
+-- Wave 1c town trees, planted once `fabric.townTrees.requiresSlot` is owned and the anchor is
+-- developed: a "stretch" tree needs `stretch` drawn, a "parcel" tree needs parcel `parcel` at
+-- level 2 or more (its house built). `variant` is 1-based into `townTrees.props`.
+export type FabricTreeAnchor = "stretch" | "parcel"
+export type FabricTree = {
+	x: number,
+	z: number,
+	rotationY: number,
+	scale: number,
+	variant: number,
+	anchor: FabricTreeAnchor,
+	stretch: string?,
+	parcel: number?,
+}
+export type FabricData = {
+	version: number,
+	parcels: { FabricParcel },
+	wild: { FabricWild },
+	trees: { FabricTree }?, -- wave 1c; absent = no town trees
+}
 -- CityFabric.Develop's tunables: pull fades to 0 at `radius` studs along the drawn streets, a
--- parcel needs a landmark or a developed parcel within `reach` studs to develop, and it never runs
--- more than `levelsOverTier` levels ahead of the tier.
+-- parcel needs a landmark or a developed parcel within `reach` studs to develop, it never runs
+-- more than `levelsOverTier` levels ahead of the tier, and a back-row parcel stays `rowLag` levels
+-- behind the parcel in front of it (wave 1c; absent = 1).
 export type FabricPullConfig = {
 	radius: number,
 	tierTerm: number,
@@ -715,6 +739,7 @@ export type FabricPullConfig = {
 	reach: number,
 	levelsOverTier: number,
 	smallMaxLevel: number,
+	rowLag: number?,
 }
 -- Every district lists props for both sizes; a small prop in a medium list is centred.
 export type FabricDistrictProps = { small: { string }, medium: { string } }
@@ -749,8 +774,11 @@ export type FabricMarkerConfig = {
 }
 -- `material` is an Enum.Material name; `color` is RGB 0-255.
 export type FabricPadLookConfig = { material: string, color: { number } }
--- `sizes` are footprints [x, z] in studs. `marker`, `padLook` and `reveal` are optional: absent
--- means that feature is off.
+-- Wave 1c: a planted tree shows stage clamp(tier − tierOffset, 0, #stages − 1), so trees bought
+-- early still grow up with the town.
+export type FabricTownTreesConfig = { requiresSlot: string, props: { string }, tierOffset: number }
+-- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `townTrees` are
+-- optional: absent means that feature is off.
 export type FabricConfig = {
 	sizes: { small: { number }, medium: { number } },
 	pull: FabricPullConfig,
@@ -763,6 +791,7 @@ export type FabricConfig = {
 	marker: FabricMarkerConfig?,
 	padLook: FabricPadLookConfig?,
 	reveal: string?,
+	townTrees: FabricTownTreesConfig?,
 }
 
 export type CityEraDressingConfig = {

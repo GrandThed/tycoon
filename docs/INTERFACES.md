@@ -5204,15 +5204,17 @@ Nothing is uploaded yet, so this round costs no extra harvest paste.
 
 ### Rows (CityFabric, normative; the mirror follows)
 
-- `row` may be 1, 2 or 3.
+- `row` may be 1, 2 or 3; client validation treats any other value as a malformed parcel.
   - A row-k parcel (k ≥ 2) sets `front` to the index of the parcel directly in front of it (row
-    k − 1).
+    k − 1), and repeats that parcel's `stretch` and `along`.
   - The data lists every parcel after its front, so one pass in index order works.
 - Step 8 becomes: for every parcel with row ≥ 2, in index order,
   `level = max(0, min(level, levels[front] − rowLag))`. `district` and `governor` are copied from the
   front.
   - `rowLag` is `pull.rowLag`, optional; when absent it is 1.
-  - Validation accepts a missing `rowLag`, and rejects a present one that isn't a finite number.
+  - Validation accepts a missing `rowLag`. A present one that isn't a non-negative whole number makes
+    the pull block invalid, like any other bad pull field.
+  - The mirror defaults it with an explicit None check, because Python's `or` treats 0 as missing.
 - Contiguity (step 7) still applies to row 1 only.
 
 ### Order and budgets

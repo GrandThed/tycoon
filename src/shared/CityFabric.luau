@@ -27,6 +27,7 @@ type FabricPullConfig = {
 	reach: number,
 	levelsOverTier: number,
 	smallMaxLevel: number,
+	rowLag: number?,
 }
 
 export type FabricStretch = { from: number, to: number, length: number } -- visible stretches only
@@ -64,6 +65,9 @@ type Distances = { [number]: number } -- node -> network distance; absent = unre
 -- the rotation for most rects. The slack keeps that skip strictly inside the exact test whatever
 -- the float rounding, so the answer never changes and the mirror need not copy the skip.
 local SKIP_SLACK = 0.01
+-- The contract's value for an absent `pull.rowLag`, which is the wave 1 behaviour (a back row one
+-- level behind its front).
+local DEFAULT_ROW_LAG = 1
 
 local CityFabric = {}
 
@@ -252,14 +256,17 @@ function CityFabric.Develop(input: FabricInput, pull: FabricPullConfig): { Fabri
 		end
 	end
 
-	-- Step 8: a second-row parcel stays a level behind the parcel in front of it and takes its
-	-- kind. A missing front parcel reads as level 0.
+	-- Step 8: a back-row parcel (row 2 behind row 1, row 3 behind row 2) stays `rowLag` levels
+	-- behind the parcel in front of it and takes its kind. The data lists every parcel after its
+	-- front, so one pass in index order reads each front's final level. A missing front reads as
+	-- level 0.
+	local rowLag = pull.rowLag or DEFAULT_ROW_LAG
 	for index, parcel in parcels do
-		if parcel.row == 2 then
+		if parcel.row >= 2 then
 			local state = states[index]
 			local front = states[parcel.front]
 			local frontLevel = if front ~= nil then front.level else 0
-			state.level = math.max(0, math.min(state.level, frontLevel - 1))
+			state.level = math.max(0, math.min(state.level, frontLevel - rowLag))
 			state.district = if front ~= nil then front.district else nil
 			state.governor = if front ~= nil then front.governor else nil
 		end
