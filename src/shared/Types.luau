@@ -776,7 +776,13 @@ export type FabricMarkerConfig = {
 export type FabricPadLookConfig = { material: string, color: { number } }
 -- Wave 1c: a planted tree shows stage clamp(tier − tierOffset, 0, #stages − 1), so trees bought
 -- early still grow up with the town.
-export type FabricTownTreesConfig = { requiresSlot: string, props: { string }, tierOffset: number }
+-- `stagger` (optional) is the planting wave's seconds per tree; absent means construction.stagger.
+export type FabricTownTreesConfig = {
+	requiresSlot: string,
+	props: { string },
+	tierOffset: number,
+	stagger: number?,
+}
 -- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `townTrees` are
 -- optional: absent means that feature is off.
 export type FabricConfig = {

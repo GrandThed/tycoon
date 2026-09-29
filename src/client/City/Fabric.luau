@@ -1,10 +1,11 @@
 --!strict
 -- M12 growing city: one plot's city fabric (docs/INTERFACES.md "M12 contracts — Client";
 -- docs/CITY_GROWTH.md section 2). Around the landmarks the player buys, parcels of ordinary houses,
--- workshops and fields develop on their own, the wild land recedes from the town, and the next pad
--- is staked out as a building site. How far the town has grown is a pure function of what the
--- server replicates -- the owned set, each building's visible stage, GrowthTier and the drawn
--- streets -- through CityFabric, so every client and tools/cityfabric.py agree on it. Only the pace
+-- workshops and fields develop on their own, the wild land recedes from the town, the next pad is
+-- staked out as a building site, and (wave 1c) the tree slot plants town trees across whatever has
+-- developed. How far the town has grown is a pure function of what the server replicates -- the
+-- owned set, each building's visible stage, GrowthTier and the drawn streets -- through
+-- CityFabric, so every client and tools/cityfabric.py agree on it. Only the pace
 -- is local: on a near plot a purchase ripples outward as staggered building sites that become
 -- buildings seconds later, while a join, a restore, a rebuild or a far plot shows the finished
 -- state at once.
@@ -44,6 +45,13 @@ local BUILDING = "building"
 local TIMER_SITE = "site"
 local TIMER_BUILD = "build"
 local TIMER_SWAP = "swap"
+-- Wave 1c town trees: what a tree is anchored to, the level at which a parcel's house stands (a
+-- yard tree waits for it), and the waits a tree on a near plot can be in (see `fireTree`).
+local ANCHOR_STRETCH = "stretch"
+local ANCHOR_PARCEL = "parcel"
+local BUILT_LEVEL = 2
+local TREE_APPEAR = "appear"
+local TREE_GROW = "grow"
 -- How a placement shows itself.
 local EFFECT_NONE = "none"
 local EFFECT_DUST = "dust"
@@ -90,14 +98,35 @@ type ParcelView = {
 	parcel: Types.FabricParcel,
 	rect: Rect, -- the footprint about its centre, margin 0
 	frame: CFrame, -- plot-local pivot: bottom-centre on (x, 0, z), facing rotationY
-	eligible: boolean, -- well formed and inside budget.parcels; any other parcel never draws
+	-- Well formed and inside the budget of a near plot (budget.parcels) or of a far one
+	-- (budget.parcelsFar); any other parcel never draws there.
+	nearOk: boolean,
+	farOk: boolean,
 	goal: Look?, -- what its level says it shows now
+	-- The last develop moved the goal, so a ripple plays it. A goal that stood still but only now
+	-- draws (the plot came near, past the far budget) is placed at once.
+	changed: boolean,
 	shown: Look?, -- what stands (or would, were its template there)
 	model: Model?,
 	timer: thread?, -- a pending transition; it shows the newest goal when it fires
 }
 
 type WildView = { whole: Model?, quarters: { [number]: Model }, single: Model? }
+
+-- Wave 1c: one town tree. `planted` follows ownership and the anchor on near and far plots alike,
+-- so a tree planted while nobody watched appears at once when its plot comes near.
+type TreeView = {
+	index: number,
+	tree: Types.FabricTree,
+	frame: CFrame, -- plot-local: the trunk base on (x, 0, z), turned rotationY
+	prop: string?, -- townTrees.props[variant]; nil draws nothing
+	planted: boolean,
+	kept: boolean, -- not thinned out by City detail off
+	goal: number?, -- the stage the tier gives it; nil while unplanted
+	shown: number?,
+	model: Model?,
+	timer: thread?, -- a pending wave or growth step; it shows the newest goal when it fires
+}
 
 type PadView = {
 	part: BasePart,
@@ -168,6 +197,7 @@ export type SyncInput = {
 	-- The controller's purchase flag: near, settled, and not a restore (a bulk change).
 	animate: boolean,
 	wildShare: number, -- detailPolicy: the share of the wild layer kept, thinned by index
+	townTreeShare: number, -- detailPolicy: the share of the town trees kept, thinned by index
 }
 
 export type Handle = {
@@ -178,6 +208,7 @@ export type Handle = {
 	clear: Types.FabricClearConfig?,
 	wildConfig: Types.FabricWildConfig?,
 	timing: Types.FabricConstructionConfig?,
+	townTrees: Types.FabricTownTreesConfig?,
 	maxPuffs: number?, -- concurrent puffs; nil means no cap
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
@@ -186,6 +217,10 @@ export type Handle = {
 	wildValid: { [number]: boolean },
 	parcels: { ParcelView }, -- parcel i at index i; empty without `sizes`
 	durations: { number }, -- parcel -> seeded construction seconds
+	-- Wave 1c: the well-formed town trees inside budget.townTrees, in data order; empty without
+	-- `trees` data or a `townTrees` block.
+	trees: { TreeView },
+	parcelTrees: { [number]: { TreeView } }, -- parcel index -> the yard trees anchored to it
 	slotRects: { [string]: Rect },
 	padRects: { [string]: Rect },
 	plazaRects: { [number]: Rect },
@@ -300,6 +335,12 @@ local function validPull(pull: any): Types.FabricPullConfig?
 	if count ~= #thresholds then
 		return nil
 	end
+	-- Wave 1c: `rowLag` may be left out (CityFabric then holds a back row 1 level behind the one in
+	-- front), but one that is there must be a whole number of levels, 0 or more.
+	local rowLag = pull.rowLag
+	if rowLag ~= nil and not (finite(rowLag) and rowLag >= 0 and rowLag == math.floor(rowLag)) then
+		return nil
+	end
 	return {
 		radius = pull.radius,
 		tierTerm = pull.tierTerm,
@@ -307,6 +348,7 @@ local function validPull(pull: any): Types.FabricPullConfig?
 		reach = pull.reach,
 		levelsOverTier = pull.levelsOverTier,
 		smallMaxLevel = pull.smallMaxLevel,
+		rowLag = rowLag,
 	}
 end
 
@@ -336,14 +378,15 @@ local function validWildConfig(wild: any): Types.FabricWildConfig?
 	}
 end
 
--- Every field CityFabric reads and Fabric.new places by.
+-- Every field CityFabric reads and Fabric.new places by. Wave 1c: rows 1 to 3 only (a back row
+-- repeats its front parcel's stretch and along).
 local function validParcel(parcel: any): boolean
 	return type(parcel) == "table"
 		and finite(parcel.x)
 		and finite(parcel.z)
 		and finite(parcel.rotationY)
 		and finite(parcel.along)
-		and finite(parcel.row)
+		and (parcel.row == 1 or parcel.row == 2 or parcel.row == 3)
 		and finite(parcel.front)
 		and type(parcel.stretch) == "string"
 		and (parcel.size == SMALL or parcel.size == MEDIUM)
@@ -372,6 +415,38 @@ local function validWildEntry(entry: any): boolean
 		return false
 	end
 	return entry.kind == CLUMP or (entry.kind == SINGLE and type(entry.prop) == "string")
+end
+
+-- Wave 1c: the town-tree block, or nil (the feature off) without a slot to plant them.
+local function validTownTrees(value: any): Types.FabricTownTreesConfig?
+	if type(value) ~= "table" or type(value.requiresSlot) ~= "string" then
+		return nil
+	end
+	local stagger = value.stagger
+	return {
+		requiresSlot = value.requiresSlot,
+		props = propList(value.props),
+		tierOffset = numberOr(value.tierOffset, 0),
+		-- The planting wave's seconds per tree; without it (or with a bad one) the wave keeps
+		-- construction.stagger's pace.
+		stagger = if finite(stagger) and stagger >= 0 then stagger else nil,
+	}
+end
+
+-- A town tree the renderer can place: a position, turn, variant and a positive scale, anchored to
+-- a stretch by piece id or to a parcel by index. Any other entry is skipped where it stands.
+local function validTree(entry: any): boolean
+	if
+		type(entry) ~= "table"
+		or not (finite(entry.x) and finite(entry.z) and finite(entry.rotationY))
+		or not (finite(entry.variant) and finite(entry.scale) and entry.scale > 0)
+	then
+		return false
+	end
+	if entry.anchor == ANCHOR_STRETCH then
+		return type(entry.stretch) == "string"
+	end
+	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
 end
 
 -- ------------------------------------------------------------------ heights
@@ -848,6 +923,9 @@ end
 
 -- Forward-declared: a site that went up starts its building's timer.
 local fire: (handle: Handle, view: ParcelView, kind: string) -> ()
+-- Forward-declared (the town trees come later in the file): a house that rose out of its site
+-- brings the yard trees that were waiting for it.
+local releaseYardTrees: (handle: Handle, parcel: number) -> ()
 
 local function startTimer(handle: Handle, view: ParcelView, kind: string, seconds: number): ()
 	cancelTimer(view)
@@ -881,20 +959,24 @@ fire = function(handle: Handle, view: ParcelView, kind: string): ()
 	if not sameLook(view.shown, goal) then
 		place(handle, view, goal, if kind == TIMER_BUILD then EFFECT_RISE else EFFECT_POP)
 	end
+	if kind == TIMER_BUILD then
+		releaseYardTrees(handle, view.index)
+	end
 end
 
 -- Without animation -- a join, a restore, a rebuild, a far plot -- every parcel shows its goal at
--- once.
-local function settleParcels(handle: Handle): ()
+-- once, or nothing where the plot's budget leaves it out (wave 1c: a far plot keeps only the
+-- frontage nearest the heart).
+local function settleParcels(handle: Handle, near: boolean): ()
 	for _, view in handle.parcels do
-		if not view.eligible then
-			continue
-		end
+		view.changed = false
 		cancelTimer(view)
-		if sameLook(view.shown, view.goal) then
+		local drawn = if near then view.nearOk else view.farOk
+		local target = if drawn then view.goal else nil
+		if sameLook(view.shown, target) then
 			ensureModel(handle, view)
 		else
-			place(handle, view, view.goal, EFFECT_NONE)
+			place(handle, view, target, EFFECT_NONE)
 		end
 	end
 end
@@ -909,13 +991,19 @@ local function rippleParcels(
 ): ()
 	local starting: { ParcelView } = {}
 	for _, view in handle.parcels do
-		if not view.eligible or view.timer ~= nil then
+		local changed = view.changed
+		view.changed = false
+		if not view.nearOk or view.timer ~= nil then
 			continue
 		end
 		local goal = view.goal
 		local shown = view.shown
 		if sameLook(shown, goal) then
 			ensureModel(handle, view)
+		elseif not changed then
+			-- Its goal stood still and it only now draws: the plot came near, and a far plot leaves
+			-- the back rows out. Placed as it is, since nothing happened to it.
+			place(handle, view, goal, EFFECT_NONE)
 		elseif goal == nil then
 			place(handle, view, nil, EFFECT_DUST)
 		elseif shown == nil then
@@ -1240,6 +1328,239 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 	end
 end
 
+-- ------------------------------------------------------------------ town trees (wave 1c)
+
+-- The stage a planted tree shows: clamp(tier - tierOffset, 0, #stages - 1), its stages counted in
+-- Assets.json as a parcel's are. A prop with none there shows its first.
+local function treeStage(handle: Handle, view: TreeView, tierOffset: number, tier: number): number
+	local prop = view.prop
+	local count = if prop ~= nil then #propHeights(handle, prop) else 0
+	return math.max(math.min(math.floor(tier - tierOffset), count - 1), 0)
+end
+
+-- Whether the anchor has developed: a street tree's stretch is drawn, a yard tree's house is built.
+local function anchorDeveloped(handle: Handle, view: TreeView): boolean
+	local tree = view.tree
+	if tree.anchor == ANCHOR_STRETCH then
+		local stretch = tree.stretch
+		return stretch ~= nil and handle.stretches[stretch] ~= nil
+	end
+	local parcel = tree.parcel
+	local state = if parcel ~= nil then handle.states[parcel] else nil
+	return state ~= nil and state.level >= BUILT_LEVEL
+end
+
+-- Puts the tree at `stage` (nil takes it away). EFFECT_POP scales it in; a puff at the trunk marks
+-- only a tree that actually appeared, so a missing template stays silent.
+local function placeTree(
+	handle: Handle,
+	view: TreeView,
+	stage: number?,
+	effect: string,
+	dust: boolean
+): ()
+	local old = view.model
+	view.model = nil
+	view.shown = stage
+	if old ~= nil then
+		stopAnimations(old, nil)
+		old:Destroy()
+	end
+	if stage == nil then
+		return
+	end
+	local model = spawnAt(handle, view.prop, stage, view.frame, view.tree.scale)
+	view.model = model
+	if model == nil then
+		return
+	end
+	if effect == EFFECT_POP then
+		startAnimation(handle, model, handle.context.plotFrame * view.frame, EFFECT_POP)
+	end
+	if dust then
+		puffAt(handle, view.tree.x, 0, view.tree.z)
+	end
+end
+
+local function ensureTree(handle: Handle, view: TreeView): ()
+	local shown = view.shown
+	if view.model == nil and shown ~= nil then
+		view.model = spawnAt(handle, view.prop, shown, view.frame, view.tree.scale)
+	end
+end
+
+local function cancelTreeTimer(view: TreeView): ()
+	local timer = view.timer
+	if timer ~= nil then
+		view.timer = nil
+		task.cancel(timer)
+	end
+end
+
+-- Whether a planted yard tree must wait for its house in animation: its parcel draws here and
+-- does not show a building yet (a site stands, or its rise is still to come). The final state is
+-- the contract's, planted at level 2, so an unanimated sync places it at once.
+local function waitsForHouse(handle: Handle, view: TreeView): boolean
+	local parcel = view.tree.parcel
+	if view.tree.anchor ~= ANCHOR_PARCEL or parcel == nil then
+		return false
+	end
+	local house = handle.parcels[parcel]
+	if house == nil or not house.nearOk then
+		return false
+	end
+	local shown = house.shown
+	return shown == nil or shown.kind ~= BUILDING
+end
+
+-- Forward-declared: a sapling that went in starts its growth step.
+local fireTree: (handle: Handle, view: TreeView, kind: string) -> ()
+
+local function startTreeTimer(handle: Handle, view: TreeView, kind: string, seconds: number): ()
+	cancelTreeTimer(view)
+	view.timer = task.delay(math.max(seconds, 0), function()
+		view.timer = nil
+		if not handle.destroyed then
+			fireTree(handle, view, kind)
+		end
+	end)
+end
+
+-- The planting wave reaches a tree: it goes in as a sapling with a puff of earth, then grows to the
+-- stage the tier gives it after stageSeconds, with a pop. Both read the newest goal.
+fireTree = function(handle: Handle, view: TreeView, kind: string): ()
+	local goal = view.goal
+	if goal == nil then
+		placeTree(handle, view, nil, EFFECT_NONE, false)
+		return
+	end
+	if kind == TREE_APPEAR then
+		placeTree(handle, view, 0, EFFECT_NONE, true)
+		local timing = handle.timing
+		if goal > 0 then
+			local seconds = if timing ~= nil then numberOr(timing.stageSeconds, 0) else 0
+			startTreeTimer(handle, view, TREE_GROW, seconds)
+		end
+		return
+	end
+	if view.shown ~= goal then
+		placeTree(handle, view, goal, EFFECT_POP, false)
+	end
+end
+
+-- The house rose on a near plot (a parcel's rise timer only runs there): its planted yard trees go
+-- in with it, with a pop. The rise already puffs dust round the parcel.
+releaseYardTrees = function(handle: Handle, parcel: number): ()
+	local waiting = handle.parcelTrees[parcel]
+	if waiting == nil then
+		return
+	end
+	for _, view in waiting do
+		local goal = view.goal
+		if
+			view.planted
+			and view.kept
+			and goal ~= nil
+			and view.shown == nil
+			and view.timer == nil
+		then
+			placeTree(handle, view, goal, EFFECT_POP, false)
+		end
+	end
+end
+
+-- Town trees stand on near plots only, thinned evenly by index when City detail is off. Planting
+-- is tracked on every plot, so the animation knows what is new. On the animated sync that buys the
+-- tree slot, the trees it plants go in as saplings in a wave spreading from its pad. A street tree
+-- planted later, as its stretch is drawn, pops in with a puff; a yard tree goes in with its house,
+-- when the building rises out of its site. A growth step pops after stageSeconds. Anything else --
+-- an unanimated sync, a restore, a plot coming near, detail turned back on -- shows the final
+-- state at once.
+local function syncTrees(handle: Handle, input: SyncInput, rippling: boolean, fresh: { string }): ()
+	local townTrees = handle.townTrees
+	local timing = handle.timing
+	if townTrees == nil then
+		return
+	end
+	local slotId = townTrees.requiresSlot
+	local slotOwned = handle.owned[slotId] == true
+	local animated = rippling and timing ~= nil
+	local bought = animated and table.find(fresh, slotId) ~= nil
+	local stageSeconds = if timing ~= nil then numberOr(timing.stageSeconds, 0) else 0
+	local share = math.clamp(numberOr(input.townTreeShare, 1), 0, 1)
+	local wave: { TreeView } = {}
+	for _, view in handle.trees do
+		local wasPlanted = view.planted
+		view.planted = slotOwned and anchorDeveloped(handle, view)
+		local goal = if view.planted
+			then treeStage(handle, view, townTrees.tierOffset, input.tier)
+			else nil
+		view.goal = goal
+		local index = view.index
+		view.kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
+		if not input.near or not animated or not view.kept then
+			cancelTreeTimer(view)
+			local target = if input.near and view.kept then goal else nil
+			if view.shown == target then
+				ensureTree(handle, view)
+			else
+				placeTree(handle, view, target, EFFECT_NONE, false)
+			end
+			continue
+		end
+		if view.timer ~= nil then
+			continue -- it shows the newest goal when it fires
+		end
+		local shown = view.shown
+		if shown == goal then
+			ensureTree(handle, view)
+		elseif goal == nil then
+			placeTree(handle, view, nil, EFFECT_NONE, false)
+		elseif shown == nil and waitsForHouse(handle, view) then
+			continue -- releaseYardTrees brings it with its house
+		elseif not wasPlanted then
+			if bought then
+				table.insert(wave, view)
+			else
+				placeTree(handle, view, goal, EFFECT_POP, true)
+			end
+		elseif shown == nil then
+			-- Planted while the plot was far, or its template came late: nothing to play.
+			placeTree(handle, view, goal, EFFECT_NONE, false)
+		else
+			startTreeTimer(handle, view, TREE_GROW, stageSeconds)
+		end
+	end
+	if #wave == 0 then
+		return
+	end
+	-- The wave spreads from the pad the slot was bought on, else from its anchor.
+	local pad = handle.padRects[slotId]
+	local frame: CFrame? = handle.slotFrames[slotId]
+	local originX, originZ = 0, 0
+	if pad ~= nil then
+		originX, originZ = pad.x, pad.z
+	elseif frame ~= nil then
+		originX, originZ = frame.Position.X, frame.Position.Z
+	end
+	local distances: { [TreeView]: number } = {}
+	for _, view in wave do
+		local dx, dz = view.tree.x - originX, view.tree.z - originZ
+		distances[view] = dx * dx + dz * dz
+	end
+	table.sort(wave, function(a: TreeView, b: TreeView): boolean
+		if distances[a] == distances[b] then
+			return a.index < b.index
+		end
+		return distances[a] < distances[b]
+	end)
+	local fallback = if timing ~= nil then numberOr(timing.stagger, 0) else 0
+	local stagger = math.max(townTrees.stagger or fallback, 0)
+	for rank, view in wave do
+		startTreeTimer(handle, view, TREE_APPEAR, (rank - 1) * stagger)
+	end
+end
+
 -- ------------------------------------------------------------------ the next pad
 
 local function applyPadLook(handle: Handle, part: BasePart): ()
@@ -1498,12 +1819,15 @@ function Fabric.new(context: Context): Handle
 		clear = if type(config.clear) == "table" then config.clear else nil,
 		wildConfig = validWildConfig(config.wild),
 		timing = timing,
+		townTrees = validTownTrees(config.townTrees),
 		maxPuffs = if finite(maxPuffs) then math.floor(maxPuffs :: number) else nil,
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
 		parcels = {},
 		durations = {},
+		trees = {},
+		parcelTrees = {},
 		slotRects = {},
 		padRects = {},
 		plazaRects = {},
@@ -1585,8 +1909,11 @@ function Fabric.new(context: Context): Handle
 		end
 	end
 
-	-- A key a stale config lacks turns its feature off: no ceiling means nothing drawn.
+	-- A key a stale config lacks turns its feature off: no ceiling means nothing drawn. Wave 1c: a
+	-- far plot draws only the first budget.parcelsFar (the frontage nearest the heart), or without
+	-- that key what a near plot draws.
 	local parcelBudget = math.max(math.floor(numberOr(budget.parcels, 0)), 0)
+	local farParcelBudget = math.max(math.floor(numberOr(budget.parcelsFar, parcelBudget)), 0)
 	local rawParcels: { Types.FabricParcel } = if type(data) == "table"
 			and type(data.parcels) == "table"
 		then data.parcels
@@ -1615,8 +1942,10 @@ function Fabric.new(context: Context): Handle
 				margin = 0,
 			},
 			frame = Scatter.PropFrame(Vector3.new(parcel.x, 0, parcel.z), parcel.rotationY),
-			eligible = wellFormed and index <= parcelBudget,
+			nearOk = wellFormed and index <= parcelBudget,
+			farOk = wellFormed and index <= farParcelBudget,
 			goal = nil,
+			changed = false,
 			shown = nil,
 			model = nil,
 			timer = nil,
@@ -1653,6 +1982,43 @@ function Fabric.new(context: Context): Handle
 		if wellFormed and entry.kind == CLUMP then
 			clumps += 1
 			handle.wildFar[index] = clumps <= farBudget
+		end
+	end
+
+	-- Wave 1c town trees: the well-formed entries inside budget.townTrees, an index prefix of the
+	-- data. A missing list or block leaves none; a missing prop leaves that tree bare.
+	local townTrees = handle.townTrees
+	local rawTrees = if type(data) == "table" then data.trees else nil
+	if townTrees ~= nil and type(rawTrees) == "table" then
+		local treeBudget = math.max(math.floor(numberOr(budget.townTrees, 0)), 0)
+		for index = 1, math.min(#rawTrees, treeBudget) do
+			local tree = rawTrees[index]
+			if not validTree(tree) then
+				continue
+			end
+			local view: TreeView = {
+				index = index,
+				tree = tree,
+				frame = CFrame.new(tree.x, 0, tree.z)
+					* CFrame.Angles(0, math.rad(tree.rotationY), 0),
+				prop = townTrees.props[tree.variant],
+				planted = false,
+				kept = true,
+				goal = nil,
+				shown = nil,
+				model = nil,
+				timer = nil,
+			}
+			table.insert(handle.trees, view)
+			local parcel = tree.parcel
+			if tree.anchor == ANCHOR_PARCEL and parcel ~= nil then
+				local yard = handle.parcelTrees[parcel]
+				if yard == nil then
+					yard = {}
+					handle.parcelTrees[parcel] = yard
+				end
+				table.insert(yard :: { TreeView }, view)
+			end
 		end
 	end
 	return handle
@@ -1697,7 +2063,11 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 		handle.developKey = key
 		handle.states = develop(handle, input)
 		for _, view in handle.parcels do
-			view.goal = goalFor(handle, view, handle.states[view.index])
+			local goal = goalFor(handle, view, handle.states[view.index])
+			if not sameLook(goal, view.goal) then
+				view.changed = true
+			end
+			view.goal = goal
 		end
 	end
 
@@ -1730,22 +2100,25 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	if timing ~= nil and rippling then
 		rippleParcels(handle, timing, triggers)
 	else
-		settleParcels(handle)
+		settleParcels(handle, input.near)
 	end
 	syncWild(handle, input, previous)
+	syncTrees(handle, input, rippling, fresh)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
 	if rippling and #triggers > 0 then
 		handle.lastTrigger = triggers[1]
 	end
 end
 
--- M12 walk solids: every parcel on a drawn street, developed or not. The lanes are rebuilt only
--- when a street is drawn, which is exactly when this set changes, so walkers never re-seat as sites
--- go up; a parcel that develops later is already clear of every lane.
+-- M12 walk solids: every row-1 parcel on a drawn street, developed or not. The lanes are rebuilt
+-- only when a street is drawn, which is exactly when this set changes, so walkers never re-seat as
+-- sites go up; a parcel that develops later is already clear of every lane. Back rows stand behind
+-- row 1 and can never reach a lane, so leaving them out only saves the clipping work.
 function Fabric.WalkSolids(handle: Handle): { Scatter.Footprint }
 	local solids: { Scatter.Footprint } = {}
 	for _, view in handle.parcels do
-		if view.eligible and handle.stretches[view.parcel.stretch] ~= nil then
+		local street = handle.stretches[view.parcel.stretch]
+		if view.nearOk and view.parcel.row == 1 and street ~= nil then
 			local rect = view.rect
 			table.insert(solids, {
 				origin = Vector3.new(rect.x, 0, rect.z),
@@ -1811,6 +2184,15 @@ function Fabric.Destroy(handle: Handle): ()
 		end
 	end
 	table.clear(handle.wild)
+	for _, view in handle.trees do
+		cancelTreeTimer(view)
+		local model = view.model
+		if model ~= nil then
+			model:Destroy()
+			view.model = nil
+		end
+		view.shown = nil
+	end
 	for slotId, view in handle.pads do
 		dropPad(handle, slotId, view)
 	end

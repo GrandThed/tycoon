@@ -340,7 +340,8 @@
             "TownTreeB",
             "TownTreeC"
           ],
-          "tierOffset": 3
+          "tierOffset": 3,
+          "stagger": 0.12
         }
       }
     },

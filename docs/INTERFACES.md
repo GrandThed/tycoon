@@ -5261,6 +5261,20 @@ Fabric data gains an optional `trees` list:
   Later growth steps swap stages with a pop. Unanimated syncs place the final state.
 - A missing `trees` list, `townTrees` block or prop means that feature is off, silently.
 
+### Client rulings (2026-09-29, after the wave 1c client report)
+
+- **Planting-wave pace.** `townTrees.stagger` (optional; absent means `construction.stagger`)
+  sets the planting wave's seconds per tree. Village uses 0.12, so about 70 trees plant in about
+  8 seconds instead of 28.
+- **Yard trees wait for their house.** A `parcel` tree's *final state* is unchanged (planted at
+  level ≥ 2, so the mirror is unaffected). In animation it appears together with its house: when
+  the building rises out of its site, not when the goal level changes.
+- **City detail off** thins the town trees evenly by index to `detail.treeShare`, like the woods.
+- **Walk solids** are the in-budget **row-1** parcels whose street is drawn. Back rows can never
+  touch a walker lane, so this only removes work.
+- **Far plots may show bare cleared patches** where developed parcels past `parcelsFar` are not
+  drawn. `parcelsFar` is tuned after the Studio measurement.
+
 ### Props (builders)
 
 - **Town trees:** `TownTreeA` (round broadleaf), `TownTreeB` (orchard tree with fruit) and
