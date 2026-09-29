@@ -1,12 +1,24 @@
 --!strict
--- Era 1 (Village) plot layout. Positions are studs relative to plot center, Y at
--- ground level. rotationY is Roblox-native CFrame.Angles(0, rad(r), 0): 0 faces -Z
--- (the plot's front/hub edge, so the monument greets arriving players), positive
--- turns counterclockwise seen from above (90 faces -X, 270 faces +X).
--- Pads spawn padOffset studs along that facing; every building keeps clear ground
--- there. Clusters, not a grid, so the village reads organically: campsite at the
--- front-west, industry lane along the west edge, well and square in the middle,
--- homes across the back, farmland east, and the keep front-and-center.
+-- Era 1 (Village) plot layout: the M12 growth layout (docs/CITY_GROWTH.md section 2.5,
+-- INTERFACES "M12 contracts" -> "Village layout"). Positions are studs relative to the plot
+-- centre, Y at ground level. rotationY is Roblox-native CFrame.Angles(0, rad(r), 0): 0 faces -Z
+-- (the plot's front/hub edge), positive turns counterclockwise seen from above. Pads spawn
+-- padOffset studs along that facing, placed unrotated.
+--
+-- One village grown along one winding high street. The camp just inside the entrance is the
+-- heart; the farm lane crosses the high street at its edge (fields and the mill east, a craft
+-- lane west); the square halfway up has the well and the fountain facing each other across the
+-- street, with the tavern and the market on its cross lane; the upper lane runs out past the
+-- chapel and the manor and rises to the back corners, where the watchtower and the stables
+-- stand; the castle keep closes the high street and looks down it. Slot k stands roughly k-th
+-- along the streets from the entrance, so each purchase extends the town rather than filling a
+-- grid, and landmarks alternate with parcel frontage (tools/fabric.py lays the parcels and the
+-- woods; tools/streetplan.py checks every rule).
+--
+-- Every slot faces its street square on, set back so its unrotated pad clears the trail. The plan
+-- is a tree: every street end is a landmark's path, so no stretch is drawn without a building.
+-- `district` is the fabric district a landmark pulls its neighbours toward; the street upgrade
+-- (dirtRoad) has none.
 return {
 	plotSize = Vector3.new(120, 1, 120),
 	baseColor = Color3.fromRGB(106, 127, 63),
@@ -14,260 +26,160 @@ return {
 	padOffset = 8,
 	placeholderSize = Vector3.new(8, 8, 8),
 	slots = {
-		-- starter campsite, front-west corner where the player first walks in
-		campfire = { position = Vector3.new(-28, 0, -28), rotationY = 225 },
-		-- spur: the campfire's pad sits across the door, so the path angles past it
-		tentSmall = {
-			position = Vector3.new(-40, 0, -20),
-			rotationY = 270,
-			spur = { Vector3.new(-40, 0, -20), Vector3.new(-25, 0, -10.5) },
-		},
-		-- spur: one straight path to the entrance lane; the square-on route would clip the campfire
-		watchtower = {
-			position = Vector3.new(-42, 0, -44),
-			rotationY = 225,
-			spur = { Vector3.new(-42, 0, -44), Vector3.new(-24, 0, -42) },
-		},
-
-		-- industry lane along the west edge, doors opening east onto the village
-		-- spur: the bakery stands across the door; the path angles past its corner
+		-- the heart: the camp fire just inside the entrance, across the high street from the tent
+		campfire = { position = Vector3.new(-16.24, 0, -46.87), rotationY = 262, district = "camp" },
+		-- the other half of the camp
+		tentSmall = { position = Vector3.new(12.95, 0, -42.76), rotationY = 82, district = "camp" },
+		-- next up the high street, backing onto the west woods
 		woodcutterHut = {
-			position = Vector3.new(-44, 0, 6),
-			rotationY = 270,
-			spur = { Vector3.new(-44, 0, 6), Vector3.new(-29.5, 0, -1.5) },
+			position = Vector3.new(-18.7, 0, -29.34),
+			rotationY = 262,
+			district = "craft",
 		},
-		blacksmith = { position = Vector3.new(-44, 0, -8), rotationY = 270 },
-		-- spur: its door faces the well's back wall with no room for a lane, so the path leaves by the
-		-- side
-		bakery = {
-			position = Vector3.new(-28, 0, 10),
-			rotationY = 270,
-			spur = { Vector3.new(-28, 0, 10), Vector3.new(-29.5, 0, -1.5) },
-		},
-
-		-- village square: well and fountain face each other across the plaza
-		-- spur: straight out from the door onto the lane instead of an L
-		well = {
-			position = Vector3.new(-10, 0, 0),
-			rotationY = 270,
-			spur = { Vector3.new(-10, 0, 0), Vector3.new(0, 0, -8) },
-		},
-		-- spur: the fountain faces the well across its pad; the path angles to a crossing with the
-		-- banner's path
-		villageSquare = {
-			position = Vector3.new(12, 0, 8),
-			rotationY = 90,
-			spur = { Vector3.new(12, 0, 8), Vector3.new(7, 0, -8) },
-		},
-		-- spur: the fountain blocks the front, so the path angles to the east lane
-		marketStall = {
-			position = Vector3.new(2, 0, 26),
-			rotationY = 0,
-			spur = { Vector3.new(2, 0, 26), Vector3.new(10, 0, 18) },
-		},
-		tavern = { position = Vector3.new(26, 0, 24), rotationY = 90 },
-		-- spur: the market stall hems the bed in; a short angled hop onto the cottage lane
-		flowerBed = {
-			position = Vector3.new(-16, 0, 20),
-			rotationY = 270,
-			spur = { Vector3.new(-16, 0, 20), Vector3.new(-9, 0, 27.8) },
-		},
-
-		-- homes clustered across the back, looking south over the square
-		-- spur: the cottage's pad blocks the square-on route
+		-- the farm at the edge of the heart, just above the farm lane; its fields grow along it
+		farmPlot = { position = Vector3.new(10.07, 0, -22.26), rotationY = 82, district = "farm" },
+		-- the first house, on the corner below the square
 		houseSmallA = {
-			position = Vector3.new(-34, 0, 30),
-			rotationY = 270,
-			spur = { Vector3.new(-34, 0, 30), Vector3.new(-19.8, 0, 27.8) },
+			position = Vector3.new(-19.07, 0, -15.32),
+			rotationY = 280,
+			district = "home",
 		},
-		-- spur: the flower bed blocks the front; the path angles onto the cottage lane
-		houseSmallB = {
-			position = Vector3.new(-18, 0, 42),
-			rotationY = 0,
-			spur = { Vector3.new(-18, 0, 42), Vector3.new(-12, 0, 27.8) },
-		},
-		-- spur: the market stall blocks the front; the path angles onto the east lane
-		houseLargeA = {
-			position = Vector3.new(0, 0, 44),
-			rotationY = 0,
-			spur = { Vector3.new(0, 0, 44), Vector3.new(10, 0, 33) },
-		},
-		-- spur: the tavern blocks the front; the path angles onto the east lane
-		chapel = {
-			position = Vector3.new(22, 0, 44),
-			rotationY = 0,
-			spur = { Vector3.new(22, 0, 44), Vector3.new(10, 0, 35) },
-		},
-		-- spur: the oak faces the cottage's back wall, so its path leaves behind it
-		treeOak = {
-			position = Vector3.new(-44, 0, 44),
-			rotationY = 315,
-			spur = { Vector3.new(-44, 0, 44), Vector3.new(-38, 0, 52) },
-		},
-
-		-- farmland and traffic along the east edge
-		farmPlot = { position = Vector3.new(40, 0, -16), rotationY = 90 },
-		windmill = { position = Vector3.new(44, 0, -34), rotationY = 90 },
-		stables = { position = Vector3.new(42, 0, 10), rotationY = 90 },
-		-- spur: one straight path between the gate and the windmill to the farm track
-		tradeRoute = {
-			position = Vector3.new(36, 0, -44),
-			rotationY = 90,
-			spur = { Vector3.new(36, 0, -44), Vector3.new(25.5, 0, -37) },
-		},
-
-		-- monument approach: road leads in past the banner to the keep, wall gate
-		-- rising beside it at the front edge
-		-- spur: its pad faces the plot edge; the path angles onto the entrance lane
+		-- streetOnly: no model and no path (one-point spur). Its pad stands on the craft lane's
+		-- north side just west of the heart, on a spot no street or parcel uses
 		dirtRoad = {
-			position = Vector3.new(-14, 0, -46),
-			rotationY = 0,
-			spur = { Vector3.new(-14, 0, -46), Vector3.new(-25.92, 0, -55) },
+			position = Vector3.new(-31.77, 0, -23.58),
+			rotationY = 3.9,
+			spur = { Vector3.new(-31.77, 0, -23.58) },
 		},
-		-- spur: straight onto the lane, crossing it to meet the fountain's path
+		-- the square: the well on the west side, facing the fountain across the high street
+		well = { position = Vector3.new(-17.62, 0, 2.62), rotationY = 259.8, district = "home" },
+		-- on the craft lane's south side, first thing west of the heart
+		flowerBed = {
+			position = Vector3.new(-32.75, 0, -52.68),
+			rotationY = 183.9,
+			district = "home",
+		},
+		-- the farmhouse at the end of the farm lane
+		houseSmallB = {
+			position = Vector3.new(48.53, 0, -23.11),
+			rotationY = 7.9,
+			district = "farm",
+		},
+		-- by the fields, on the way to the mill
+		bakery = { position = Vector3.new(23.2, 0, -49.33), rotationY = 187.9, district = "craft" },
+		-- the mill at the end of the farm lane, out in the fields
+		windmill = {
+			position = Vector3.new(44.47, 0, -52.29),
+			rotationY = 187.9,
+			district = "farm",
+		},
+		-- the fountain, facing the well across the square
+		villageSquare = {
+			position = Vector3.new(11.58, 0, 7.87),
+			rotationY = 79.8,
+			district = "market",
+		},
+		-- the market on the square's east lane
+		marketStall = {
+			position = Vector3.new(24.22, 0, 2.24),
+			rotationY = 358,
+			district = "market",
+		},
+		-- the old oak at the far end of the square's west lane
+		treeOak = { position = Vector3.new(-54.7, 0, 8.1), rotationY = 0, district = "home" },
+		-- the smithy at the end of the craft lane, by the woodcutter's woods
+		blacksmith = {
+			position = Vector3.new(-55.69, 0, -51.11),
+			rotationY = 183.9,
+			district = "craft",
+		},
+		-- the tavern on the square's west lane
+		tavern = { position = Vector3.new(-29.73, 0, 8.1), rotationY = 0, district = "market" },
+		-- the trade cart at the east end of the square's lane: the road out
+		tradeRoute = {
+			position = Vector3.new(46.19, 0, 2.99),
+			rotationY = 358,
+			district = "market",
+		},
+		-- flanks the keep's approach; its path joins the high street's end with the keep's
+		chapel = { position = Vector3.new(-17.66, 0, 31.31), rotationY = 275.9, district = "civic" },
+		-- the manor, across the approach from the chapel
+		houseLargeA = {
+			position = Vector3.new(11.46, 0, 28.29),
+			rotationY = 95.9,
+			district = "home",
+		},
+		-- on the upper lane's east arm, beside the manor it requires
 		bannerPole = {
-			position = Vector3.new(12, 0, -18),
-			rotationY = 90,
-			spur = { Vector3.new(12, 0, -18), Vector3.new(7, 0, -8) },
+			position = Vector3.new(21.94, 0, 35.97),
+			rotationY = 345.9,
+			district = "civic",
 		},
-		-- spur: one straight path to the farm track instead of an L
+		-- the back-east corner, at the top of the upper lane
+		stables = { position = Vector3.new(41.35, 0, 40.84), rotationY = 345.9, district = "farm" },
+		-- the back-west corner, at the top of the upper lane, over the woods
+		watchtower = {
+			position = Vector3.new(-46.01, 0, 48.55),
+			rotationY = 21.9,
+			district = "camp",
+		},
+		-- the wall gate on the upper lane's west arm, behind the chapel
 		townWall = {
-			position = Vector3.new(16, 0, -48),
-			rotationY = 180,
-			spur = { Vector3.new(16, 0, -48), Vector3.new(25.5, 0, -37) },
+			position = Vector3.new(-27.48, 0, 41.08),
+			rotationY = 21.9,
+			district = "civic",
 		},
-		-- spur: the road slot and the wall gate close the keep's front, so the path leaves the door
-		-- and turns west to the lane
+		-- crowns the high street and faces the entrance down its last leg
 		castleKeep = {
-			position = Vector3.new(0, 0, -30),
-			rotationY = 0,
-			spur = { Vector3.new(0, 0, -39), Vector3.new(-12, 0, -38) },
+			position = Vector3.new(-1.57, 0, 44.56),
+			rotationY = 5.9,
+			district = "civic",
 		},
 	},
-	-- Street plan (M9 city dressing, wave 1b natural paths). The roads grow with the buildings:
-	-- only the stretches from the entrance (the first point below) to each owned building's path
-	-- are drawn, meandered on near plots. Lanes pass just in front of each cluster, so most paths
-	-- are a short walk from the door; overrides above mark where a neighbour blocks the straight
-	-- line. tools/streetplan.py checks every rule and draws
-	-- assets/testfit/out/Village/streetplan.png.
 	streets = {
-		-- 1: the main lane. In from the hub edge through the gap beside the road slot (the keep's
-		-- own front is walled in by that slot and the town wall), past the keep's door, north
-		-- between the campsite and the keep, east along the square, up past the farms, round the
-		-- tavern and north between the market and the homes to the oak.
+		-- 1: the high street, in from the hub edge through the camp to the farm lane. Then it winds
+		-- west of north past the heart, east through the square, west beyond it, east to the keep
 		{
 			points = {
-				Vector3.new(-26, 0, -56),
-				Vector3.new(-25, 0, -43),
-				Vector3.new(-20, 0, -38),
-				Vector3.new(-12, 0, -38),
-				Vector3.new(-12, 0, -16),
-				Vector3.new(-4, 0, -8),
-				Vector3.new(25.5, 0, -8),
-				Vector3.new(25.5, 0, 12),
-				Vector3.new(20, 0, 15),
-				Vector3.new(10, 0, 17.5),
-				Vector3.new(10, 0, 48),
-				Vector3.new(6, 0, 52),
-				Vector3.new(-38, 0, 52),
+				Vector3.new(0, 0, -56.5),
+				Vector3.new(-3, 0, -35.2),
+				Vector3.new(-5, 0, -20.9),
+				Vector3.new(-3, 0, -9.5),
+				Vector3.new(-1.7, 0, -2.1),
+				Vector3.new(-4.7, 0, 14.6),
+				Vector3.new(-4, 0, 21.1),
+				Vector3.new(-3.1, 0, 29.8),
 			},
 		},
-		-- 2: the campsite lane, square in front of the campfire, on to the smithy's door and up
-		-- to the woodcutter.
+		-- 2: the farm lane, crossing the high street at the heart: craft lane west, fields east
 		{
 			points = {
-				Vector3.new(-12, 0, -23.5),
-				Vector3.new(-27.5, 0, -8),
-				Vector3.new(-29.5, 0, -8),
-				Vector3.new(-29.5, 0, -1.5),
+				Vector3.new(-54.7, 0, -36.6),
+				Vector3.new(-26.8, 0, -38.5),
+				Vector3.new(-3, 0, -35.2),
+				Vector3.new(12.8, 0, -33),
+				Vector3.new(46.5, 0, -37.7),
 			},
 		},
-		-- 3: the farm track in front of the windmill, trade route and wall gate.
-		{ points = { Vector3.new(25.5, 0, -8), Vector3.new(25.5, 0, -37) } },
-		-- 4: the cottage lane between the cottages and the manor.
+		-- 3: the square's lane, crossing halfway up: the tavern and the oak west, the market east
 		{
 			points = {
-				Vector3.new(-9, 0, 52),
-				Vector3.new(-9, 0, 27.8),
-				Vector3.new(-19.8, 0, 27.8),
+				Vector3.new(-54.7, 0, -6.4),
+				Vector3.new(-20.7, 0, -6.4),
+				Vector3.new(-3, 0, -9.5),
+				Vector3.new(14.7, 0, -12.6),
+				Vector3.new(46.7, 0, -11.5),
 			},
 		},
-	},
-	-- Filler cottages, each facing a drawn lane or a building's path. The early tiers sit by the
-	-- entrance, the campsite and the farm track near the hub; the last take the keep's forecourt
-	-- and the two back corners, the only other spots a 9x9 house clears every road.
-	--
-	-- Wave 2c: the rest are "small" lots (6x6 cap), because no other 9x9 clears every road. They
-	-- follow the village outward tier by tier: huts by the campsite and the keep lane first, then
-	-- the keep's side and the smithy, cottages round the square, then the farms and the stables,
-	-- and last the lanes behind the market and the homes.
-	lots = {
-		{ position = Vector3.new(-34, 0, -53.5), rotationY = 270, tier = 2 },
-		{ position = Vector3.new(-20.5, 0, -1), rotationY = 0, tier = 2 },
-		{ position = Vector3.new(33.5, 0, -1), rotationY = 90, tier = 2 },
-		{ position = Vector3.new(15.5, 0, -31), rotationY = 270, tier = 3 },
-		{ position = Vector3.new(27.5, 0, -53.5), rotationY = 180, tier = 3 },
-		{ position = Vector3.new(18.5, 0, 54.5), rotationY = 0, tier = 4 },
-		{ position = Vector3.new(-50.5, 0, 53), rotationY = 270, tier = 5 },
-		{ position = Vector3.new(1, 0, -50.5), rotationY = 180, tier = 5 },
-		-- 9-10: behind the campfire and beside the keep lane
-		{ position = Vector3.new(-39, 0, -28), rotationY = 180, tier = 1, kind = "small" },
-		{ position = Vector3.new(-18, 0, -31), rotationY = 270, tier = 1, kind = "small" },
-		-- 11-12: the keep's east flank and the smithy's back
-		{ position = Vector3.new(7, 0, -42), rotationY = 90, tier = 2, kind = "small" },
-		{ position = Vector3.new(-48, 0, -18), rotationY = 270, tier = 2, kind = "small" },
-		-- 13-15: round the square and at the head of the farm track
-		{ position = Vector3.new(17, 0, -1), rotationY = 0, tier = 3, kind = "small" },
-		{ position = Vector3.new(-6, 0, 8), rotationY = 0, tier = 3, kind = "small" },
-		{ position = Vector3.new(36, 0, -25), rotationY = 90, tier = 3, kind = "small" },
-		-- 16-18: by the farm, the stables and the woodcutter
-		{ position = Vector3.new(43, 0, 1), rotationY = 90, tier = 4, kind = "small" },
-		{ position = Vector3.new(39, 0, 20), rotationY = 0, tier = 4, kind = "small" },
-		{ position = Vector3.new(-40, 0, 15), rotationY = 0, tier = 4, kind = "small" },
-		-- 19-21: behind the homes, and a pair behind the tavern
-		{ position = Vector3.new(-30, 0, 20), rotationY = 270, tier = 5, kind = "small" },
-		{ position = Vector3.new(29, 0, 32), rotationY = 90, tier = 5, kind = "small" },
-		{ position = Vector3.new(30, 0, 40), rotationY = 90, tier = 5, kind = "small" },
-	},
-	-- Parked carts (wave 2c): mostly beside the cottages that own them (`lot` = index above), plus
-	-- one on the keep lane and one on the market square. Each stands off the trail and off the
-	-- walkers' line along its edge.
-	parking = {
-		{ position = Vector3.new(-3, 0, -18), rotationY = 0, tier = 2 },
-		{ position = Vector3.new(-42, 0, -34), rotationY = 0, tier = 2, lot = 9 },
-		{ position = Vector3.new(31, 0, -25), rotationY = 0, tier = 3, lot = 15 },
-		{ position = Vector3.new(4, 0, 1), rotationY = 0, tier = 3 },
-		{ position = Vector3.new(32, 0, 17), rotationY = 90, tier = 4, lot = 17 },
-		{ position = Vector3.new(-24, 0, 20), rotationY = 0, tier = 5, lot = 19 },
-	},
-	-- Trade yard in the open front corner beside the trade route's cart, seen from the hub.
-	plazas = {
-		{ position = Vector3.new(50, 0, -50.5), rotationY = 0, tier = 4, prop = "PlazaA" },
-	},
-	-- Groves on the ground no slot uses: the west meadow, the open quarter east of the tavern, the
-	-- west strip, the farm edge, behind the watchtower and beside the oak. Counts favour the zones
-	-- where most of the circle is plantable, because rejected candidates are not redrawn.
-	treeZones = {
-		{ center = Vector3.new(-48, 0, 20), radius = 8, count = 10 },
-		{ center = Vector3.new(42, 0, 36), radius = 10, count = 12 },
-		{ center = Vector3.new(-52, 0, -32), radius = 5, count = 5 },
-		{ center = Vector3.new(50, 0, -24), radius = 5, count = 5 },
-		{ center = Vector3.new(-51, 0, -46), radius = 5, count = 4 },
-		{ center = Vector3.new(-33, 0, 44), radius = 4, count = 4 },
-	},
-	-- Bushes, flower beds and hedges (wave 2c): cottage gardens by the square and the campsite
-	-- lane, the hedgerows along the farms on the east edge, and the smithy's back fence. None
-	-- overlaps a grove, whose trees would crowd the pieces out.
-	-- `count` is the candidates the client draws, not what grows: it never redraws a rejected one and
-	-- keeps greenery.clearance between pieces, so counts are sized from tools/streetplan.py's
-	-- simulated yield (10th percentile at or above perTier's tier-5 count).
-	greeneryZones = {
-		{ center = Vector3.new(-15, 0, -9), radius = 5, count = 8 },
-		{ center = Vector3.new(-11, 0, 11), radius = 5, count = 8 },
-		{ center = Vector3.new(-53, 0, -9), radius = 5, count = 8 },
-		{ center = Vector3.new(51, 0, -7), radius = 5, count = 7 },
-		{ center = Vector3.new(53, 0, 7), radius = 5, count = 7 },
-		{ center = Vector3.new(49, 0, 21), radius = 5, count = 8 },
-		{ center = Vector3.new(33, 0, 51), radius = 5, count = 8 },
+		-- 4: the upper lane, crossing below the keep and rising to the back corners
+		{
+			points = {
+				Vector3.new(-51.7, 0, 34.4),
+				Vector3.new(-23.9, 0, 23.2),
+				Vector3.new(-4, 0, 21.1),
+				Vector3.new(15.9, 0, 19),
+				Vector3.new(45, 0, 26.3),
+			},
+		},
 	},
 }

@@ -4989,8 +4989,8 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
 - **Budgets are a fixed prefix of the data list.** Near plots draw wild entries with index
   ≤ `budget.wild`; far plots draw whole clumps whose clump number is ≤ `budget.wildFar`; every plot
   draws parcels with index ≤ `budget.parcels`. Clearing one item never makes another appear.
-  `fabric.py` writes the plot's own wild entries before the skirt's. A partly cleared clump
-  counts as one entry but can draw up to three quarters.
+  The data order is set by the "Wild order" amendment below. A partly cleared clump counts as one
+  entry but can draw up to three quarters.
 - **Skirt entries stand on the world ground**, at Y = −(plot base height), because the plot base
   rests on the Ground part and the ground past the edge is lower.
 - **The clearing mask's street segments are the straight polyline geometry**: each visible
@@ -5015,7 +5015,8 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
   arriving late on your own plot. A tier jump alone is not a restore, because Buy Max can cross
   two tiers and must still animate.
 - **Birds** circle the surviving clumps on the plot itself, and only fall back to skirt clumps once
-  every on-plot clump is felled (the skirt is never cleared, so a flock over it would never move).
+  every on-plot clump is felled. The skirt is almost never cleared, so a flock over it would never
+  move.
 - **Config is validated once, in `Fabric.new`.** `pull` is used only if all six fields are finite
   numbers and `thresholds` is an array of numbers; otherwise every parcel stays at level 0. A
   missing `clumps` or `quarters` list counts as empty. A bad key never raises an error.
@@ -5031,8 +5032,9 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
 - **`marker.offset` is in the slot's frame.** The offset is turned by the slot's `rotationY` and
   added to the pad centre, and the marker faces the slot's front. `fabric.py check` fails if any
   marker's 2×2 footprint overlaps a slot footprint (+0.5), a pad, or a street or spur strip.
-- **Wild order.** `fabric.py` writes the skirt clumps first, then the on-plot clumps, then the
-  singles. `check` fails unless the whole list fits `budget.wild`, and the first `budget.wildFar`
+- **Wild order.** `fabric.py` writes the skirt clumps first (by z, then x), then the on-plot clumps
+  farthest-first by straight-line distance from the entrance (the first point of polyline 1), then
+  the singles. The woods that survive longest therefore fill the far-plot prefix. `check` fails unless the whole list fits `budget.wild`, and the first `budget.wildFar`
   clumps include every skirt clump.
 - **At most `construction.maxPuffs` dust puffs play at once per plot.** A new puff reuses the
   oldest.

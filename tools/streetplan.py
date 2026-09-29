@@ -20,6 +20,11 @@ Wave 2c ("living city") adds lots by kind (house 9x9 / small 6x6, small under th
 parked bays (off every lane strip and walk lane, kerbside, on a street that is drawn) and the
 greenery zones (Scatter.greenerySpots' road keep and blockers), all drawn in the PNG.
 
+M12 ("growing city"): an era with src/shared/Config/Fabric/<Era>.json grows a city fabric instead
+of lots, greenery zones, tree zones and parked bays, so their minimums are dropped for it, a plaza
+becomes optional, tools/fabric.py's checks run as part of this one, and the PNG draws the parcels
+and the wild land. Every other rule, and every other era, is unchanged.
+
 Numbers come from their owners, never from this file: road width, meander, tree rules and budgets
 from Config/CityDressing.json, slot and prop footprints from the testfit blueprints (contract
 defaults 9x9 / monument 14x14 when a blueprint has none), pad and plot sizes from the layout, and
@@ -29,11 +34,13 @@ numbers are the contract's own rule values and the preview's drawing constants, 
 Usage:
   py tools/streetplan.py                # every era with a street plan (DEFAULT_ERAS)
   py tools/streetplan.py Metropolis     # any era(s) by name
+  py tools/streetplan.py --out-dir DIR  # write the PNGs under DIR/<Era>/ instead
 Exit code 1 when any violation is found.
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import itertools
 import json
@@ -54,6 +61,7 @@ BLUEPRINTS_DIR = REPO_ROOT / "tools" / "testfit" / "blueprints"
 OUT_DIR = REPO_ROOT / "assets" / "testfit" / "out"
 SIM_PATH = REPO_ROOT / "tools" / "sim_economy.py"
 ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
+FABRIC_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Fabric"  # M12: <Era>.json, written by tools/fabric.py
 
 DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis", "OrbitalColony")  # every era with a street plan (wave 2b)
 
@@ -199,6 +207,9 @@ TIER_COLOURS = {
     5: (60, 110, 200),
 }
 NEVER_COLOUR = (150, 150, 150)
+PARCEL_ROW_COLOURS = {1: (250, 214, 120), 2: (236, 196, 160)}
+WILD_COLOURS = {"clump": (40, 110, 55, 70), "single": (60, 120, 60, 110)}
+WILD_RADIUS = {"clump": 2.6, "single": 1.0}  # studs, preview only
 
 # --------------------------------------------------------------------------
 # Luau subset parser (tables, numbers, strings, booleans, Vector3/Color3 constructors)
@@ -677,6 +688,9 @@ class Era:
     def __init__(self, name, city):
         self.name = name
         self.furniture = set(STREET_FURNITURE.get(name, ()))
+        # M12: the fabric replaces lots, greenery zones, tree zones and parked bays.
+        self.fabric_path = FABRIC_DIR / f"{name}.json"
+        self.has_fabric = self.fabric_path.exists()
         self.layout = parse_layout(LAYOUTS_DIR / f"{name}.luau")
         self.config = load_era_config(name)
         self.dressing = city["eras"][name]
@@ -726,7 +740,8 @@ class Era:
                     "facing": face,
                     "footprint": square(position, fx, fz, rotation),
                     "pad": pad,
-                    "pad_poly": square(pad, self.pad_size[0], self.pad_size[1], rotation),
+                    # PlotService.padWorldCFrame places every pad unrotated in the plot frame.
+                    "pad_poly": square(pad, self.pad_size[0], self.pad_size[1], 0),
                     "spur_override": [xz(p) for p in entry["spur"]] if "spur" in entry else None,
                 }
             )
@@ -2108,7 +2123,7 @@ def lot_count_violations(era):
                 messages.append(f"houses: {name} harvests {extents[0]:.2f} x {extents[2]:.2f}, over the {kind} cap {cap}")
             if kind == "small" and extents[1] > SMALL_LOT_MAX_HEIGHT + 0.05:
                 messages.append(f"houses: {name} harvests {extents[1]:.2f} tall, over the small cap {SMALL_LOT_MAX_HEIGHT}")
-    if not any(era.lot_props.values()):
+    if not any(era.lot_props.values()) or era.has_fabric:
         return messages
     if era.name not in LOT_MINIMUM:
         low, high = LOT_COUNT_BY_ERA.get(era.name, LEGACY_LOT_COUNT)
@@ -2235,7 +2250,7 @@ def parking_violations(era, network, visible):
             messages.append(
                 f"{label_cfg}.perTier reaches {per_tier[-1]} bays x perBay {cars} > budget.parked {cap:g} cars"
             )
-    if per_tier:
+    if per_tier and not era.has_fabric:
         for tier in range(1, 6):
             available = sum(1 for spot in era.parking if effective_spot_tier(era, spot) <= tier)
             if available < per_tier[tier - 1]:
@@ -2362,13 +2377,13 @@ def greenery_violations(era):
     per_tier, problem = per_tier_list(config, "perTier", label_cfg)
     if problem:
         messages.append(problem)
-    if not GREENERY_ZONE_COUNT[0] <= len(zones) <= GREENERY_ZONE_COUNT[1]:
+    if not GREENERY_ZONE_COUNT[0] <= len(zones) <= GREENERY_ZONE_COUNT[1] and not era.has_fabric:
         messages.append(f"greeneryZones: {len(zones)}, need {GREENERY_ZONE_COUNT[0]}-{GREENERY_ZONE_COUNT[1]}")
     total = sum(zone["count"] for zone in zones)
     garnish = float(config.get("lotGarnish", 0)) * len(era.lots)
     cap = budget_value(era.city.get("budget", {}).get("greenery"), math.inf)
     if per_tier:
-        if total < per_tier[-1]:
+        if total < per_tier[-1] and not era.has_fabric:
             messages.append(f"greeneryZones hold {total} pieces, fewer than perTier's {per_tier[-1]}")
         if per_tier[-1] + garnish > cap:
             messages.append(
@@ -2673,8 +2688,9 @@ def check(era, network, visible, unreachable):
         add(message)
     notes += greenery_notes
 
-    if not PLAZA_COUNT[0] <= len(era.plazas) <= PLAZA_COUNT[1]:
-        add(f"plazas: {len(era.plazas)}, need {PLAZA_COUNT[0]}-{PLAZA_COUNT[1]}")
+    plaza_count = (0, PLAZA_COUNT[1]) if era.has_fabric else PLAZA_COUNT
+    if not plaza_count[0] <= len(era.plazas) <= plaza_count[1]:
+        add(f"plazas: {len(era.plazas)}, need {plaza_count[0]}-{plaza_count[1]}")
     for i, plaza in enumerate(era.plazas):
         label = f"plaza {i + 1} {fmt(plaza['position'])}"
         if plaza["prop"] not in era.dressing["plazas"]["props"]:
@@ -2732,7 +2748,7 @@ def check(era, network, visible, unreachable):
     # shared. budget.trees caps it too -- the client takes the lower of the two.
     street_trees = len(street_tree_spots(era))
     tree_cap = min(max(era.dressing["trees"]["maxCount"], 0), budget_value(era.city.get("budget", {}).get("trees"), math.inf))
-    if not ZONE_COUNT[0] <= len(era.zones) <= ZONE_COUNT[1]:
+    if not ZONE_COUNT[0] <= len(era.zones) <= ZONE_COUNT[1] and not era.has_fabric:
         add(f"treeZones: {len(era.zones)}, need {ZONE_COUNT[0]}-{ZONE_COUNT[1]}")
     if street_trees + total > tree_cap:
         add(
@@ -2832,7 +2848,23 @@ def check(era, network, visible, unreachable):
     if era.dressing.get("pedestrians"):
         detail["walkClips"] = clips
         detail["walkClipKinds"] = clip_kinds
+    if era.has_fabric:
+        for message in fabric_module().check_document(era.name, load_fabric(era), city=era.city, era=era, network=network):
+            add(f"fabric: {message}")
     return violations, notes, near, far, detail
+
+
+def fabric_module():
+    """tools/fabric.py, imported on first use: it imports this file, so a top-level import would be
+    circular, and eras without fabric data never need it."""
+    sys.path.insert(0, str(REPO_ROOT / "tools"))
+    import fabric
+
+    return fabric
+
+
+def load_fabric(era):
+    return json.loads(era.fabric_path.read_text(encoding="utf-8")) if era.has_fabric else None
 
 
 def nearest_outside(point, a, b, own):
@@ -3069,6 +3101,10 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     for a, b in walk_lines(era, network, visible):
         canvas.line([px(a), px(b)], fill=(220, 60, 150, 110), width=1)
 
+    fabric_doc = load_fabric(era)
+    if fabric_doc is not None:
+        draw_fabric(era, fabric_doc, canvas, px, poly, small)
+
     for index, spot in enumerate(era.parking):
         poly(spot["poly"], fill=(60, 60, 70, 200), outline=(250, 250, 250), width=1)
         c = px(spot["position"])
@@ -3164,6 +3200,10 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         entries.append(((210, 120, 50), "subway entrance (M = index)"))
     if era.blocks:
         entries.append(((214, 212, 220), "paved block (B = index)"))
+    if fabric_doc is not None:
+        entries.append((PARCEL_ROW_COLOURS[1], "fabric parcel, row 1 (index; tick = front)"))
+        entries.append((PARCEL_ROW_COLOURS[2], "fabric parcel, row 2"))
+        entries.append((WILD_COLOURS["clump"], "wild: woods clump quarter / single"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -3192,6 +3232,17 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     y += 18
     canvas.text((lx, y), f"plazas {len(era.plazas)}, trees {sum(z['count'] for z in era.zones)}", font=font, fill=(0, 0, 0))
     y += 18
+    if fabric_doc is not None:
+        parcels = fabric_doc.get("parcels", [])
+        wild = fabric_doc.get("wild", [])
+        canvas.text(
+            (lx, y),
+            f"parcels {len(parcels)} ({sum(1 for p in parcels if p['row'] == 1)} row 1, "
+            f"{sum(1 for p in parcels if p['size'] == 'medium')} medium), wild {len(wild)}",
+            font=font,
+            fill=(0, 0, 0),
+        )
+        y += 18
     canvas.text((lx, y), f"road pieces reserved: near {near}, far {far}", font=font, fill=(0, 0, 0))
     y += 18
     if era.tiles is not None:
@@ -3225,8 +3276,33 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     image.save(path)
 
 
+def draw_fabric(era, doc, canvas, px, poly, font):
+    """The M12 city fabric: wild land faint under everything, then each parcel's footprint by row,
+    with a tick toward the street it fronts and its 1-based index (what CityFabric calls it)."""
+    sizes = era.dressing.get("fabric", {}).get("sizes", {})
+    for item in doc.get("wild", []):
+        points = item.get("quads") if item["kind"] == "clump" else [(item["x"], item["z"])]
+        radius = WILD_RADIUS[item["kind"]] * PX_PER_STUD
+        for point in points or []:
+            c = px(point)
+            canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=WILD_COLOURS[item["kind"]])
+    for index, parcel in enumerate(doc.get("parcels", []), start=1):
+        size = sizes.get(parcel["size"], (6, 6))
+        centre = (parcel["x"], parcel["z"])
+        poly(square(centre, size[0], size[1], parcel["rotationY"]), fill=PARCEL_ROW_COLOURS.get(parcel["row"], NEVER_COLOUR) + (230,), outline=(120, 80, 30), width=1)
+        face = facing(parcel["rotationY"])
+        tip = (centre[0] + face[0] * size[1] / 2, centre[1] + face[1] * size[1] / 2)
+        canvas.line([px(centre), px(tip)], fill=(120, 80, 30), width=2)
+        c = px(centre)
+        canvas.text((c[0] - 6, c[1] - 6), str(index), font=font, fill=(60, 30, 0))
+
+
 def main():
-    names = sys.argv[1:] or list(DEFAULT_ERAS)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("eras", nargs="*", help="era names (default: every era with a street plan)")
+    parser.add_argument("--out-dir", type=Path, default=OUT_DIR, help="PNG root (default assets/testfit/out)")
+    args = parser.parse_args()
+    names = args.eras or list(DEFAULT_ERAS)
     city = json.loads(CITY_CONFIG_PATH.read_text(encoding="utf-8"))
     total = 0
     for name in names:
@@ -3236,7 +3312,7 @@ def main():
         violations, notes, near, far, detail = check(era, network, visible, unreachable)
         trees, stats = scatter_trees(era)
         greenery, greenery_stats = scatter_greenery(era)
-        path = OUT_DIR / name / "streetplan.png"
+        path = args.out_dir / name / "streetplan.png"
         draw(era, network, visible, violations, trees, greenery, near, far, path)
         overrides = [s["id"] for s in era.slots if era.spurs[s["id"]]["override"]]
         budget = city.get("budget", {})
@@ -3334,7 +3410,7 @@ def main():
             print(f"   note: {note}")
         for violation in violations:
             print(f"   VIOLATION: {violation}")
-        print(f"   {len(violations)} violations -> {path.relative_to(REPO_ROOT)}")
+        print(f"   {len(violations)} violations -> {path}")
         total += len(violations)
     print(f"TOTAL: {total} violations")
     sys.exit(1 if total else 0)

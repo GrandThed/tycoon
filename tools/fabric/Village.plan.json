@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "seed": "Village:fabric:a",
+  "parcels": {
+    "frontSetback": 3.5,
+    "gap": 0.6,
+    "rowGap": 1.0,
+    "mediumShare": 0.8,
+    "walkStep": 0.5,
+    "endMargin": 0.2,
+    "secondRowPerFirst": 0.33,
+    "setbackJitter": 0.4,
+    "turnJitter": 2.0,
+    "edge": 1.0,
+    "slot": 1.0,
+    "pad": 0.5,
+    "plaza": 1.0,
+    "sign": 1.0,
+    "street": 2.8,
+    "spur": 2.5
+  },
+  "require": {
+    "parcels": 40,
+    "rowOneShare": 0.75,
+    "medium": 12
+  },
+  "wild": {
+    "woods": 0.95,
+    "noise": { "waves": 5, "base": 0.09 },
+    "front": { "low": 0.12, "start": 10, "wobble": 3, "ramp": 8 },
+    "heart": { "centre": [0, -46], "clear": 14, "fade": 6, "wobble": 3 },
+    "skirt": { "depth": 16, "wobble": 3, "sideWobble": 2, "cornerShare": 0.5, "fade": 3 },
+    "clumps": {
+      "spacing": 15.5,
+      "jitter": 1.8,
+      "minDensity": 0.6,
+      "turnJitter": 12,
+      "scale": [0.92, 1.12],
+      "quarterOffset": 3.9
+    },
+    "singles": {
+      "spacing": 7.0,
+      "jitter": 1.5,
+      "minDensity": 0.05,
+      "treeDensity": 0.3,
+      "clumpKeep": 0.62,
+      "meadowShare": 0.45,
+      "trees": ["WoodsPine", "WoodsPine", "WoodsRound"],
+      "treeScale": [0.85, 1.1],
+      "meadow": ["MeadowRock", "MeadowRock", "WoodsRound", "WoodsRound", "MeadowRock", "MeadowRock"],
+      "meadowScale": [0.75, 1.0]
+    }
+  }
+}
