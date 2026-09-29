@@ -110,9 +110,10 @@ which only gives each plot more room.)
   | 3 | Medium building |
   | 4 | Large building (the dense heart only) |
 
-- The level comes from how much **pull** the nearby landmarks have: owned landmarks close to the
-  parcel pull hardest, a landmark's pull grows with its milestone stage, and the plot's growth tier
-  adds a little everywhere. So levelling up the tavern thickens the lanes around the tavern.
+- The level comes from how much **pull** the nearby landmarks have, measured along the streets:
+  owned landmarks close to the parcel pull hardest, and the plot's growth tier adds a little
+  everywhere. A lot's building may never be taller than the landmark that pulls it hardest, at that
+  landmark's current stage, so levelling up the tavern lets the houses around it grow taller.
 - **Districts.** Each landmark has a district tag (home, shop, craft, farm, civic and so on). A
   parcel grows the kind of building its strongest neighbour calls for: houses around the
   cottages, workshops by the smithy, fields around the farm, booths by the market. Neighbourhoods
@@ -339,7 +340,10 @@ monetization, the rule that streets grow with your buildings, the approved baked
 Metropolis tiles, highway and subway, the Orbital tubes and monorail, cars, walkers and birds.
 The street plans themselves are redrawn with each growth layout.
 
-## 7. Decisions for Ben
+## 7. Decisions for Ben (answered 2026-09-29)
+
+Ben chose growth layouts (decision 1) and the organic plan for Village (decision 2). The
+defaults below stand.
 
 1. **Go with growth layouts (mock B)?** Recommended. Each era is relaid so the town grows from its
    heart, with the same slots, order and models. The cheaper alternative, dressing today's

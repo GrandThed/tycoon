@@ -38,6 +38,7 @@ local cachedMonetizationConfig: Types.MonetizationConfig? = nil
 local cachedLegacyShopConfig: Types.LegacyShopConfig? = nil
 local cachedAssetsConfig: Types.AssetsConfig? = nil
 local cachedCityDressingConfig: Types.CityDressingConfig? = nil
+local cachedFabrics: { [string]: Types.FabricData } = {}
 local cachedArmoryConfig: Types.ArmoryConfig? = nil
 local cachedCombatConfig: Types.CombatConfig? = nil
 local cachedPlacesConfig: Types.PlacesConfig? = nil
@@ -179,6 +180,28 @@ function Catalog.GetCityDressingConfig(): Types.CityDressingConfig?
 	cached = require(dressingModule) :: Types.CityDressingConfig
 	cachedCityDressingConfig = cached
 	return cached
+end
+
+-- Fabric data (M12) is generated per era by tools/fabric.py into Config/Fabric/<eraName>.json, and
+-- only some eras have it. nil is the signal, as with Assets.json: that era keeps its M9 dressing.
+-- Re-checked per call until the module shows up (client replication order), cached per era from
+-- then on.
+function Catalog.GetFabric(eraName: string): Types.FabricData?
+	local cached = cachedFabrics[eraName]
+	if cached ~= nil then
+		return cached
+	end
+	local fabricFolder = configFolder:FindFirstChild("Fabric")
+	if fabricFolder == nil then
+		return nil
+	end
+	local fabricModule = fabricFolder:FindFirstChild(eraName)
+	if fabricModule == nil or not fabricModule:IsA("ModuleScript") then
+		return nil
+	end
+	local fabric = require(fabricModule) :: Types.FabricData
+	cachedFabrics[eraName] = fabric
+	return fabric
 end
 
 -- Armory.json and Combat.json (C0) use the nil-is-the-signal pattern like Assets.json: nil hides

@@ -1631,9 +1631,12 @@ end
 -- Wave 2c: what walkers must stay out of -- every solid above plus the street furniture the plot
 -- stands on its pavements (`frames` plot-local, each with the prop it holds), sized by that prop's
 -- harvested bounds or, before harvest, as a point the walker's clearance grows around.
+-- M12: `extra` (the city fabric's parcels, plot-local) joins them as given, so a walker keeps out
+-- of a parcel's house exactly as out of a lot's.
 function Scatter.WalkSolids(
 	input: PlanInput,
-	furniture: { { frame: CFrame, prop: string? } }
+	furniture: { { frame: CFrame, prop: string? } },
+	extra: { Footprint }?
 ): { Footprint }
 	-- Pads are flat ground a walker crosses (a Metropolis block pad covers the pavement); every
 	-- other solid stays.
@@ -1651,6 +1654,11 @@ function Scatter.WalkSolids(
 			rotation = item.frame.Rotation,
 			extents = extents or centredExtents(0, 0),
 		})
+	end
+	if extra ~= nil then
+		for _, footprint in extra do
+			table.insert(solids, footprint)
+		end
 	end
 	return solids
 end

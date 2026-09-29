@@ -1,0 +1,9 @@
+{
+  "id": "NoticeBoard",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [2, 2],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "notice-board", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

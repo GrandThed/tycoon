@@ -1,0 +1,23 @@
+{
+  "id": "FabricCraftSmall",
+  "era": "Village",
+  "scale": 3.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "log_stackLarge", "pos": [-0.595, 0.05, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.61, 0.34, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0.45, 0, -0.55], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0.45, 0.276, -0.545], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "stump_squareDetailed", "pos": [0.25, 0.05, 0.3], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "planks-half", "pos": [0.47, 0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "planks-half", "pos": [0.97, 0.06, 0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "planks-half", "pos": [0.47, 0.12, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.49, 0.05, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [-0.5, 0, 0.5], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-detail-cross", "pos": [-0.5, 0, 0.5], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-glass", "pos": [-0.5, 0, 0.5], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [-0.5, 0, 0.5], "rotY": 270, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-window", "pos": [-0.5, 0.99, 0.5], "rotY": 270, "stage": 1}
+  ]
+}

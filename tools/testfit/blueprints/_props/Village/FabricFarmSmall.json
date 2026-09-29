@@ -1,0 +1,33 @@
+{
+  "id": "FabricFarmSmall",
+  "era": "Village",
+  "scale": 3.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "nature-kit", "model": "crops_dirtDoubleRow", "pos": [0.5, 0.02, -0.53], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtDoubleRow", "pos": [-0.5, 0.02, -0.53], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtDoubleRow", "pos": [0.5, 0.02, 0.47], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtDoubleRow", "pos": [-0.5, 0.02, 0.47], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.28, 0.02, -0.72], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.72, 0.02, -0.72], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.28, 0.02, -0.28], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.72, 0.02, -0.28], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [0.28, 0.02, 0.28], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [0.72, 0.02, 0.28], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [0.28, 0.02, 0.72], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [0.72, 0.02, 0.72], "rotY": 180, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [-0.72, 0.02, 0.28], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [-0.28, 0.02, 0.28], "rotY": 180, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [-0.72, 0.02, 0.72], "rotY": 180, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_cornStageB", "pos": [-0.28, 0.02, 0.72], "rotY": 270, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_leafsStageB", "pos": [0.5, 0.02, -0.72], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crops_leafsStageB", "pos": [0.5, 0.02, -0.28], "rotY": 180, "stage": 1},
+    {"kit": "village-extras-kit", "model": "hay-bale", "pos": [-0.62, 0, -0.52], "rotY": 90, "stage": 1},
+    {"kit": "village-extras-kit", "model": "hay-bale", "pos": [-0.3, 0, -0.62], "rotY": 10, "stage": 1},
+    {"kit": "village-extras-kit", "model": "hay-bale", "pos": [-0.3, 0.231, -0.6], "rotY": -5, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, 0.5], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.5, 0, 0.5], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, 0.47], "rotY": 270, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.5, 0, 0.47], "rotY": 270, "stage": 1}
+  ]
+}

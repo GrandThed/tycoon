@@ -7,6 +7,9 @@
 -- the house goes and costs no Part and no Heartbeat. Birds are anchored, sealed prop clones moved
 -- by one Heartbeat for the whole map, alive only while a bird exists; like Traffic it writes every
 -- CFrame into pre-allocated arrays and makes a single BulkMoveTo.
+--
+-- M12: a plot whose layout has no groves but whose city fabric has woods plans its flocks here
+-- (PlanFlocks) and flies them over the clumps still standing (OverCentres).
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -39,6 +42,10 @@ local BIRD_BOB_RATE = 2.5 -- radians per second
 local FULL_TURN = 2 * math.pi
 -- A flock circle smaller than this has no speed to speak of; it hovers instead of spinning.
 local MIN_RADIUS = 0.5
+-- M12: the city fabric's flocks draw from a stream of their own. Wave 2c froze its salts in
+-- Scatter (greenery 7001, parked 7002, walkers 7003, zone flocks 7004); this is the next free one,
+-- so fabric birds move nothing another stream planned.
+local FABRIC_FLOCK_SALT = 7005
 
 type Bird = {
 	plotId: number,
@@ -290,6 +297,66 @@ function Ambient.SpawnFlocks(
 	end
 	rebuildArrays()
 	updateConnection()
+	return placed
+end
+
+-- M12 (docs/INTERFACES.md "M12 contracts — Client", Ambient birds): the flocks of a plot whose
+-- layout has no tree zones but whose city fabric has wild land. Drawn the way Scatter draws zone
+-- flocks -- two draws per flock and three per bird, for every flock the tiers can ever show -- but
+-- with no centre yet: which clumps still stand changes as the town grows, and a flock keeps its
+-- shape when the clump it circles changes.
+function Ambient.PlanFlocks(
+	seed: number,
+	config: Types.BirdsConfig,
+	mapBirdBudget: number
+): { Scatter.Flock }
+	local rng = Random.new(seed + FABRIC_FLOCK_SALT)
+	-- One plot can never show more birds than the whole map may.
+	local perFlock = math.min(
+		math.max(math.floor(numberOr(config.birdsPerFlock, 0)), 0),
+		math.max(math.floor(numberOr(mapBirdBudget, 0)), 0)
+	)
+	local count = 0
+	if type(config.flocksPerTier) == "table" then
+		for _, value in config.flocksPerTier do
+			count = math.max(count, math.floor(numberOr(value, 0)))
+		end
+	end
+	local planned: { Scatter.Flock } = {}
+	for _ = 1, count do
+		local flock: Scatter.Flock = {
+			center = Vector3.zero,
+			phase = FULL_TURN * rng:NextNumber(),
+			clockwise = rng:NextNumber() < 0.5,
+			birds = {},
+		}
+		for _ = 1, perFlock do
+			table.insert(flock.birds, {
+				lead = rng:NextNumber(),
+				radial = rng:NextNumber(),
+				lift = rng:NextNumber(),
+			})
+		end
+		table.insert(planned, flock)
+	end
+	return planned
+end
+
+-- Planned flocks over `centres` (plot-local, in order): flock i circles centre
+-- ((i - 1) % #centres + 1), the rule zone flocks follow; none while nothing is left to circle.
+function Ambient.OverCentres(flocks: { Scatter.Flock }, centres: { Vector3 }): { Scatter.Flock }
+	local placed: { Scatter.Flock } = {}
+	if #centres == 0 then
+		return placed
+	end
+	for index, flock in flocks do
+		table.insert(placed, {
+			center = centres[(index - 1) % #centres + 1],
+			phase = flock.phase,
+			clockwise = flock.clockwise,
+			birds = flock.birds,
+		})
+	end
 	return placed
 end
 

@@ -1,0 +1,12 @@
+{
+  "id": "WoodsQuarterC",
+  "era": "Village",
+  "scale": 2.7,
+  "footprint": [16, 16],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "tree-high-crooked", "pos": [1.732, 0, 1.998], "rotY": 170, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [1.009, 0, 1.632], "rotY": 80, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [1.153, 0, 0.88], "rotY": 320, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [1.885, 0, 1.267], "rotY": 230, "stage": 0}
+  ]
+}

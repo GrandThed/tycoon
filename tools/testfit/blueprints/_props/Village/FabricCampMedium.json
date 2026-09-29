@@ -1,0 +1,32 @@
+{
+  "id": "FabricCampMedium",
+  "era": "Village",
+  "scale": 2.5,
+  "footprint": [8, 8],
+  "pieces": [
+    {"kit": "nature-kit", "model": "tent_smallOpen", "pos": [-1.05, 0.05, -0.95], "rotY": 20, "stage": 0},
+    {"kit": "nature-kit", "model": "tent_detailedClosed", "pos": [-1, 0.05, -0.1], "rotY": 80, "stage": 0},
+    {"kit": "nature-kit", "model": "campfire_stones", "pos": [0.1, 0.05, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "campfire_logs", "pos": [0.1, 0.05, -0.7], "rotY": 15, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0.65, 0.05, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "log", "pos": [0.1, 0.05, -1.25], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [1, 0, 1], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [1, 0, 1], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [1, 0, 1], "rotY": 270, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [1, 0.5, 1], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [1, 0, 0.45], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [1, 0, 0.45], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [1, 0, 0.45], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [1, 1, 0.45], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "log_stackLarge", "pos": [1.25, 0.05, -0.45], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "stump_round", "pos": [0.3, 0.05, -0.15], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [-1, 0, 1], "rotY": 180, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [-1, 0, 1], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [-1, 0, 1], "rotY": 270, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [0, 0, 1], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [0, 0, 1], "rotY": 270, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [0, 0.5, 1], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [-1, 0.5, 1], "rotY": 0, "stage": 2},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.3, 0.05, 0.28], "rotY": 90, "stage": 2}
+  ]
+}

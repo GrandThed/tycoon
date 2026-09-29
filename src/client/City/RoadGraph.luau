@@ -30,6 +30,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CityFabric = require(sharedFolder:WaitForChild("CityFabric"))
 
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Noise = require(script.Parent:WaitForChild("Noise"))
@@ -2816,6 +2817,50 @@ function RoadGraph.LoopLanes(
 		lanes.reverse[backward] = forward
 	end
 	return lanes
+end
+
+-- M12 (docs/INTERFACES.md "M12 contracts — Client"): the logical street network the city fabric
+-- develops along, whichever renderer draws it. Returns every visible stretch keyed by its piece id
+-- (`state.visible`, which only the straight budget gates, never the near or the baked one, so a
+-- near and a far client of one plot develop the same parcels), every routable slot's join node,
+-- and the clearing mask's street segments: each visible stretch as its straight chord and each
+-- leg of every drawn spur, plot-local.
+function RoadGraph.FabricNetwork(state: State): (
+	{ [string]: CityFabric.FabricStretch },
+	{ [string]: number },
+	{ CityFabric.FabricSegment }
+)
+	local stretches: { [string]: CityFabric.FabricStretch } = {}
+	local segments: { CityFabric.FabricSegment } = {}
+	for id, stretch in state.stretches do
+		if state.visible[id] then
+			stretches[stretch.pieceId] = {
+				from = stretch.fromNode,
+				to = stretch.toNode,
+				length = stretch.length,
+			}
+			table.insert(
+				segments,
+				{ ax = stretch.a.X, az = stretch.a.Z, bx = stretch.b.X, bz = stretch.b.Z }
+			)
+		end
+	end
+	local joins: { [string]: number } = {}
+	for _, slotId in state.spurSlotIds do
+		local route = state.routes[slotId]
+		local node = route.junction.node
+		if node ~= nil then
+			joins[slotId] = node
+		end
+		if state.spurs[slotId] ~= nil then
+			local points = route.points
+			for index = 2, #points do
+				local a, b = points[index - 1], points[index]
+				table.insert(segments, { ax = a.X, az = a.Z, bx = b.X, bz = b.Z })
+			end
+		end
+	end
+	return stretches, joins, segments
 end
 
 -- The plot entrance (polyline 1, point 1), which dressing tied to "nearest the way in" measures

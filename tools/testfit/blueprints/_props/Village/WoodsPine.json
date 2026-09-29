@@ -1,0 +1,9 @@
+{
+  "id": "WoodsPine",
+  "era": "Village",
+  "scale": 2.7,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

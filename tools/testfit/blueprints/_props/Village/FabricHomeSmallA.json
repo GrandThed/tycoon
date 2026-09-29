@@ -1,0 +1,33 @@
+{
+  "id": "FabricHomeSmallA",
+  "era": "Village",
+  "scale": 2.5,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-glass", "pos": [0.6, 0, 0.6], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.6, 0, 0.6], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0.6, 0, 0.6], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood", "pos": [0.6, 0, 0.6], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-point", "pos": [0.6, 1, 0.6], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtDoubleRow", "pos": [0.68, 0.05, -0.77], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.43, 0.05, -0.98], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_carrot", "pos": [0.43, 0.05, -0.55], "rotY": 30, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.68, 0.05, -0.98], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_carrot", "pos": [0.68, 0.05, -0.55], "rotY": 30, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_leafsStageA", "pos": [0.93, 0.05, -0.98], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_carrot", "pos": [0.93, 0.05, -0.55], "rotY": 30, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.675, 0, -0.69], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.69, 0, -0.675], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "stump_round", "pos": [0.35, 0.05, -0.085], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [-0.6, 0, -0.45], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [-0.6, 0, -0.45], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-door", "pos": [-0.6, 0, -0.45], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [-0.6, 0, 0.55], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [-0.6, 0, 0.55], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [-0.6, 0, 0.55], "rotY": 270, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [-0.6, 1, -0.45], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [-0.6, 1, 0.55], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [-0.94, 1.55, 0.8], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0.02, 0, -0.62], "rotY": 0, "stage": 1}
+  ]
+}

@@ -37,6 +37,13 @@
 -- flocks, and the vehicle plots get walkers on their own loop (Walkers) with their own map budget.
 -- All of it is planned by Scatter from salted streams, grows with the tier, and goes on far plots;
 -- lots and their houses stay, since they are the city's silhouette.
+--
+-- M12 ("growing city"): an era with fabric data and a `fabric` config block also grows a city
+-- fabric (Fabric) around its landmarks: parcels that develop by pull along the drawn streets, wild
+-- land that recedes, the next pad staked out, and a scaffold round each landmark bought. It reads
+-- two more things the server already replicates -- each building's Stage<n> child and the plot's
+-- Pads -- so the controller also watches those, but only a fabric plot re-syncs on them; every
+-- other era behaves exactly as before.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -56,6 +63,7 @@ local Scatter = require(cityFolder:WaitForChild("Scatter"))
 local Traffic = require(cityFolder:WaitForChild("Traffic"))
 local Walkers = require(cityFolder:WaitForChild("Walkers"))
 local Ambient = require(cityFolder:WaitForChild("Ambient"))
+local Fabric = require(cityFolder:WaitForChild("Fabric"))
 
 -- World naming frozen since M1/M9 (docs/INTERFACES.md), shared with PlotVisualsController.
 local PLOTS_FOLDER = "Plots"
@@ -63,6 +71,10 @@ local PLOT_NAME_PATTERN = "^Plot_(%d+)$"
 local BUILDINGS_FOLDER = "Buildings"
 local BUILDING_NAME_PATTERN = "^Building_(.+)$"
 local BASE_NAME = "Base"
+-- M12: the server's buy pads and a building's visible stage (PlotService, frozen since M1/M7).
+local PADS_FOLDER = "Pads"
+local PAD_NAME_PATTERN = "^Pad_(.+)$"
+local STAGE_NAME_PATTERN = "^Stage(%d+)$"
 local ERA_NAME_ATTRIBUTE = "EraName"
 local GROWTH_TIER_ATTRIBUTE = "GrowthTier"
 local PLOT_INDEX_ATTRIBUTE = "PlotIndex"
@@ -87,6 +99,8 @@ type DetailPolicy = {
 	-- birds show at all. Houses are never thinned: they are the city's silhouette.
 	greeneryShare: number,
 	living: boolean,
+	-- M12: the share of the city fabric's wild layer kept (parcels are never thinned, like houses).
+	wildShare: number,
 }
 
 type Build = {
@@ -115,6 +129,12 @@ type Build = {
 	greenery: { [number]: Model },
 	parked: { [number]: Model },
 	smoke: { [number]: Attachment },
+	-- M12: nil in an era without fabric data or a `fabric` config block.
+	fabric: Fabric.Handle?,
+	-- The flocks a layout with no tree zones plans over the fabric's clumps (empty otherwise), and
+	-- the clump centres the plot's birds were last spawned over.
+	fabricFlocks: { Scatter.Flock },
+	flockKey: string,
 	createdAt: number, -- os.clock when the build started
 }
 
@@ -123,6 +143,8 @@ type PlotEntry = {
 	plot: Instance,
 	folder: Folder,
 	connections: { RBXScriptConnection },
+	-- M12: each building's own stage-swap listeners, dropped with the building.
+	stageWatch: { [Instance]: { RBXScriptConnection } },
 	tier: number,
 	near: boolean,
 	vehicleSelected: boolean,
@@ -183,6 +205,7 @@ local function detailPolicy(
 			vehiclesLocalOnly = false,
 			greeneryShare = 1,
 			living = true,
+			wildShare = 1,
 		}
 	end
 	local detail = config.detail
@@ -204,6 +227,8 @@ local function detailPolicy(
 		vehiclesLocalOnly = true,
 		greeneryShare = share,
 		living = false,
+		-- M12: the woods are the wild era's trees, so they thin exactly as the trees do.
+		wildShare = share,
 	}
 end
 
@@ -330,6 +355,10 @@ local function clearBuild(entry: PlotEntry): ()
 	if highway ~= nil then
 		Highway.Destroy(highway)
 	end
+	local fabric = build.fabric
+	if fabric ~= nil then
+		Fabric.Destroy(fabric)
+	end
 	clearTrees(build)
 	clearParkTrees(build)
 	clearLamps(build)
@@ -455,6 +484,43 @@ local function newBuild(
 			end,
 		})
 	end
+	-- M12: the city fabric, only where the era has both its data and its config block.
+	local fabricConfig = era.fabric
+	local fabricData = Catalog.GetFabric(eraName)
+	local fabric: Fabric.Handle? = nil
+	local fabricFlocks: { Scatter.Flock } = {}
+	if fabricConfig ~= nil and fabricData ~= nil then
+		fabric = Fabric.new({
+			folder = entry.folder,
+			plotFrame = plotFrame,
+			eraName = eraName,
+			seed = Scatter.Seed(entry.index, eraName),
+			layout = layout,
+			config = fabricConfig,
+			data = fabricData,
+			budget = config.budget,
+			solids = Scatter.Solids(planInput),
+			entrance = planInput.entrance,
+			dustWidth = roads.width,
+			-- Read per puff: a street upgrade repaints the road, and the dust follows it.
+			dustColor = function(): Color3
+				return roads.color
+			end,
+			-- Bases rest on the ground plane (PlotService.buildWorld), a base's height below the top.
+			groundDrop = base.Size.Y,
+		})
+		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
+		local ambient = config.ambient
+		local birds = if ambient ~= nil then ambient.birds else nil
+		local zones: { Types.TreeZoneLayout } = layout.treeZones or {}
+		if birds ~= nil and #zones == 0 and #fabricData.wild > 0 then
+			fabricFlocks = Ambient.PlanFlocks(
+				Scatter.Seed(entry.index, eraName),
+				birds,
+				RoadGraph.BudgetValue(config.budget.birdsMap, 0)
+			)
+		end
+	end
 	return {
 		eraName = eraName,
 		era = era,
@@ -477,6 +543,9 @@ local function newBuild(
 		greenery = {},
 		parked = {},
 		smoke = {},
+		fabric = fabric,
+		fabricFlocks = fabricFlocks,
+		flockKey = "",
 		createdAt = os.clock(),
 	}
 end
@@ -1120,14 +1189,21 @@ local function walkFurniture(build: Build): { { frame: CFrame, prop: string? } }
 	return furniture
 end
 
--- The plot's walker lanes, clipped clear of every solid (RoadGraph.WalkLanes caches them).
+-- The plot's walker lanes, clipped clear of every solid (RoadGraph.WalkLanes caches them). M12:
+-- a fabric plot's parcels are solids too; the set changes only with the drawn streets, which is
+-- exactly when RoadGraph drops its cached lanes.
 local function walkLanesFor(build: Build, pedestrians: Types.PedestrianConfig): RoadGraph.Lanes
 	return RoadGraph.WalkLanes(
 		build.roads,
 		pedestrians.offset,
 		RoadGraph.BudgetValue(pedestrians.clearance, DEFAULT_WALK_CLEARANCE),
 		function(): { RoadGraph.WalkSolid }
-			return Scatter.WalkSolids(build.planInput, walkFurniture(build))
+			local fabric = build.fabric
+			return Scatter.WalkSolids(
+				build.planInput,
+				walkFurniture(build),
+				if fabric ~= nil then Fabric.WalkSolids(fabric) else nil
+			)
 		end
 	)
 end
@@ -1195,13 +1271,34 @@ local function birdsConfig(config: Types.CityDressingConfig): Types.BirdsConfig?
 	return if ambient ~= nil then ambient.birds else nil
 end
 
+-- The flocks a plot can show: its tree-zone flocks, or (M12) where the layout has no tree zones
+-- but the fabric has wild land, the fabric's flocks over its first surviving clumps.
+local function flocksFor(build: Build): { Scatter.Flock }
+	local fabric = build.fabric
+	if fabric == nil or #build.fabricFlocks == 0 then
+		return build.plan.flocks
+	end
+	return Ambient.OverCentres(build.fabricFlocks, Fabric.SurvivingClumps(fabric))
+end
+
+-- The centres the first `count` flocks circle: a fabric flock moves on when its clump is cleared.
+local function flockKeyOf(flocks: { Scatter.Flock }, count: number): string
+	local centres: { string } = {}
+	for index = 1, math.min(count, #flocks) do
+		local center = flocks[index].center
+		table.insert(centres, string.format("%.2f,%.2f", center.X, center.Z))
+	end
+	return table.concat(centres, ";")
+end
+
 -- Birds circle over the groves of near plots only, in the eras the config names, from the flock
 -- tier, never on a low-end device (Ambient.Enabled).
 local function flockTargetFor(
 	entry: PlotEntry,
 	build: Build,
 	config: Types.CityDressingConfig,
-	policy: DetailPolicy
+	policy: DetailPolicy,
+	flocks: { Scatter.Flock }
 ): number
 	local birds = birdsConfig(config)
 	if
@@ -1214,17 +1311,22 @@ local function flockTargetFor(
 	then
 		return 0
 	end
-	return math.min(Scatter.PerTier(birds.flocksPerTier, entry.tier), #build.plan.flocks)
+	return math.min(Scatter.PerTier(birds.flocksPerTier, entry.tier), #flocks)
 end
 
-local function spawnFlocks(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
+local function spawnFlocks(
+	entry: PlotEntry,
+	build: Build,
+	config: Types.CityDressingConfig,
+	planned: { Scatter.Flock }
+): ()
 	Ambient.ClearPlot(entry.index)
 	entry.birdsBlocked = false
 	local birds = birdsConfig(config)
 	if birds == nil or entry.flockTarget <= 0 then
 		return
 	end
-	local flocks = table.move(build.plan.flocks, 1, entry.flockTarget, 1, {})
+	local flocks = table.move(planned, 1, entry.flockTarget, 1, {})
 	local models: { Model } = {}
 	for _, flock in flocks do
 		for _ = 1, #flock.birds do
@@ -1252,6 +1354,87 @@ local function spawnFlocks(entry: PlotEntry, build: Build, config: Types.CityDre
 		RoadGraph.BudgetValue(config.budget.birdsMap, 0)
 	)
 	entry.birdsBlocked = placed < #models
+end
+
+-- A building's visible stage: the Stage<n> child the server keeps under it (the higher one while a
+-- swap briefly holds both). A placeholder or a street marker has none, which is stage 0.
+local function stageOf(building: Instance): number
+	local stage = 0
+	for _, child in building:GetChildren() do
+		local digits = string.match(child.Name, STAGE_NAME_PATTERN)
+		local index = if digits ~= nil and child:IsA("Model") then tonumber(digits) else nil
+		if index ~= nil and index > stage then
+			stage = index
+		end
+	end
+	return stage
+end
+
+local function stagesOf(plot: Instance, owned: { [string]: boolean }): { [string]: number }
+	local stages: { [string]: number } = {}
+	local buildings = plot:FindFirstChild(BUILDINGS_FOLDER)
+	if buildings == nil then
+		return stages
+	end
+	for _, child in buildings:GetChildren() do
+		local slotId = string.match(child.Name, BUILDING_NAME_PATTERN)
+		if slotId ~= nil and owned[slotId] then
+			stages[slotId] = stageOf(child)
+		end
+	end
+	return stages
+end
+
+-- The buy pads the plot shows right now, by slot, for slots of the current layout.
+local function padsOf(plot: Instance, layout: Types.EraLayout): { [string]: BasePart }
+	local pads: { [string]: BasePart } = {}
+	local folder = plot:FindFirstChild(PADS_FOLDER)
+	if folder == nil then
+		return pads
+	end
+	for _, child in folder:GetChildren() do
+		local slotId = string.match(child.Name, PAD_NAME_PATTERN)
+		if slotId ~= nil and layout.slots[slotId] ~= nil and child:IsA("BasePart") then
+			pads[slotId] = child
+		end
+	end
+	return pads
+end
+
+-- M12: the city fabric grows along the roads drawn earlier in this same pass.
+local function syncFabric(
+	entry: PlotEntry,
+	build: Build,
+	fabric: Fabric.Handle,
+	tier: number,
+	ownedList: { string },
+	owned: { [string]: boolean },
+	animate: boolean,
+	policy: DetailPolicy
+): ()
+	local stretches, joins, segments = RoadGraph.FabricNetwork(build.roads)
+	-- Plazas by the rule syncFiller places them by, not by what has spawned, so the woods clear the
+	-- same ground whether or not a plaza's template has arrived.
+	local plazas: { number } = {}
+	local layoutPlazas: { Types.PlazaLayout } = build.layout.plazas or {}
+	for index, plaza in layoutPlazas do
+		if build.plan.plazaAllowed[index] and plaza.tier <= tier then
+			table.insert(plazas, index)
+		end
+	end
+	Fabric.Sync(fabric, {
+		tier = tier,
+		owned = ownedList,
+		stages = stagesOf(entry.plot, owned),
+		stretches = stretches,
+		joins = joins,
+		segments = segments,
+		pads = padsOf(entry.plot, build.layout),
+		plazas = plazas,
+		near = entry.near,
+		animate = animate,
+		wildShare = policy.wildShare,
+	})
 end
 
 local function sync(entry: PlotEntry): ()
@@ -1348,6 +1531,10 @@ local function sync(entry: PlotEntry): ()
 	syncHighway(current, owned, animate)
 
 	local policy = detailPolicy(current.era, config)
+	local fabric = current.fabric
+	if fabric ~= nil then
+		syncFabric(entry, current, fabric, tier, ownedList, owned, animate, policy)
+	end
 	if entry.near then
 		syncTrees(current, config, tier, folder, owned, policy)
 		syncParkTrees(current, folder, policy)
@@ -1423,13 +1610,18 @@ local function sync(entry: PlotEntry): ()
 		end
 	end
 
-	local flockTarget = flockTargetFor(entry, current, config, policy)
+	local flocks = flocksFor(current)
+	local flockTarget = flockTargetFor(entry, current, config, policy, flocks)
+	-- M12: a fabric flock re-seats when the clump under it is cleared; zone flocks never move, so
+	-- their key stays empty and only the target decides, as before.
+	local flockKey = if flocks ~= current.plan.flocks then flockKeyOf(flocks, flockTarget) else ""
 	local birdsMap = RoadGraph.BudgetValue(config.budget.birdsMap, 0)
-	if flockTarget ~= entry.flockTarget then
+	if flockTarget ~= entry.flockTarget or flockKey ~= current.flockKey then
 		entry.flockTarget = flockTarget
-		spawnFlocks(entry, current, config)
+		current.flockKey = flockKey
+		spawnFlocks(entry, current, config, flocks)
 	elseif flockTarget > 0 and entry.birdsBlocked and Ambient.Room(birdsMap) > 0 then
-		spawnFlocks(entry, current, config)
+		spawnFlocks(entry, current, config, flocks)
 	end
 end
 
@@ -1453,18 +1645,86 @@ local function removePlot(plot: Instance): ()
 	for _, connection in entry.connections do
 		connection:Disconnect()
 	end
+	for _, connections in entry.stageWatch do
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(entry.stageWatch)
 	clearBuild(entry)
 	entry.folder:Destroy()
 end
 
-local function watchBuildings(entry: PlotEntry, buildings: Instance): ()
+-- M12: stage swaps and pads only change what a city fabric shows, so any other plot ignores them
+-- and keeps exactly the syncs it had before.
+local function scheduleFabric(entry: PlotEntry): ()
+	local build = entry.build
+	if build ~= nil and build.fabric ~= nil then
+		schedule(entry)
+	end
+end
+
+-- A stage swap adds the new Stage<n> under the building and then removes the old one.
+local function watchStages(entry: PlotEntry, building: Instance): ()
+	if entry.stageWatch[building] ~= nil then
+		return
+	end
 	local function onChanged(child: Instance): ()
-		if string.match(child.Name, BUILDING_NAME_PATTERN) ~= nil then
-			schedule(entry)
+		if string.match(child.Name, STAGE_NAME_PATTERN) ~= nil then
+			scheduleFabric(entry)
 		end
 	end
-	table.insert(entry.connections, buildings.ChildAdded:Connect(onChanged))
-	table.insert(entry.connections, buildings.ChildRemoved:Connect(onChanged))
+	entry.stageWatch[building] = {
+		building.ChildAdded:Connect(onChanged),
+		building.ChildRemoved:Connect(onChanged),
+	}
+end
+
+local function unwatchStages(entry: PlotEntry, building: Instance): ()
+	local connections = entry.stageWatch[building]
+	if connections == nil then
+		return
+	end
+	entry.stageWatch[building] = nil
+	for _, connection in connections do
+		connection:Disconnect()
+	end
+end
+
+local function watchBuildings(entry: PlotEntry, buildings: Instance): ()
+	for _, child in buildings:GetChildren() do
+		if string.match(child.Name, BUILDING_NAME_PATTERN) ~= nil then
+			watchStages(entry, child)
+		end
+	end
+	table.insert(
+		entry.connections,
+		buildings.ChildAdded:Connect(function(child: Instance)
+			if string.match(child.Name, BUILDING_NAME_PATTERN) ~= nil then
+				watchStages(entry, child)
+				schedule(entry)
+			end
+		end)
+	)
+	table.insert(
+		entry.connections,
+		buildings.ChildRemoved:Connect(function(child: Instance)
+			if string.match(child.Name, BUILDING_NAME_PATTERN) ~= nil then
+				unwatchStages(entry, child)
+				schedule(entry)
+			end
+		end)
+	)
+end
+
+local function watchPads(entry: PlotEntry, pads: Instance): ()
+	local function onChanged(child: Instance): ()
+		if string.match(child.Name, PAD_NAME_PATTERN) ~= nil then
+			scheduleFabric(entry)
+		end
+	end
+	table.insert(entry.connections, pads.ChildAdded:Connect(onChanged))
+	table.insert(entry.connections, pads.ChildRemoved:Connect(onChanged))
 end
 
 local function addPlot(plot: Instance): ()
@@ -1482,6 +1742,7 @@ local function addPlot(plot: Instance): ()
 		plot = plot,
 		folder = folder,
 		connections = {},
+		stageWatch = {},
 		tier = 0,
 		near = false,
 		vehicleSelected = false,
@@ -1516,6 +1777,10 @@ local function addPlot(plot: Instance): ()
 	if buildings ~= nil then
 		watchBuildings(entry, buildings)
 	end
+	local pads = plot:FindFirstChild(PADS_FOLDER)
+	if pads ~= nil then
+		watchPads(entry, pads)
+	end
 	-- Base or Buildings replicating after the folder (streaming) dress the plot when they land.
 	table.insert(
 		entry.connections,
@@ -1523,6 +1788,11 @@ local function addPlot(plot: Instance): ()
 			if child.Name == BUILDINGS_FOLDER and buildings == nil then
 				buildings = child
 				watchBuildings(entry, child)
+			end
+			if child.Name == PADS_FOLDER and pads == nil then
+				pads = child
+				watchPads(entry, child)
+				scheduleFabric(entry)
 			end
 			if child.Name == BUILDINGS_FOLDER or child.Name == BASE_NAME then
 				schedule(entry)

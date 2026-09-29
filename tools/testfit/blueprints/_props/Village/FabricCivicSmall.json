@@ -1,0 +1,28 @@
+{
+  "id": "FabricCivicSmall",
+  "era": "Village",
+  "scale": 3.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "hedge-large", "pos": [-0.5, 0, 0.5], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "hedge-large", "pos": [0.5, 0, 0.5], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "hedge", "pos": [-0.5, 0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "hedge", "pos": [-0.495, -0.005, 0.1], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "hedge", "pos": [0.5, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "hedge", "pos": [0.495, -0.005, 0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.575, 0.05, 0.45], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowB", "pos": [-0.283, 0.05, 0.432], "rotY": 47, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleC", "pos": [-0.001, 0.05, 0.44], "rotY": 94, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redC", "pos": [0.292, 0.05, 0.444], "rotY": 141, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.575, 0.05, 0.453], "rotY": 188, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [-0.464, 0.05, 0.27], "rotY": 235, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redB", "pos": [-0.145, 0.05, 0.274], "rotY": 282, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowC", "pos": [0.159, 0.05, 0.255], "rotY": 329, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleA", "pos": [0.474, 0.05, 0.243], "rotY": 16, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bush", "pos": [-0.62, 0.05, 0.05], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bush", "pos": [0.62, 0.05, 0.05], "rotY": 45, "stage": 0},
+    {"kit": "nature-kit", "model": "tree_oak", "pos": [-0.55, 0.05, 0.32], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "road", "pos": [0.05, 0, -0.42], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0.05, 0.025, -0.3], "rotY": 90, "stage": 1}
+  ]
+}

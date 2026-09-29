@@ -1,0 +1,24 @@
+{
+  "id": "WoodsClumpA",
+  "era": "Village",
+  "scale": 2.7,
+  "footprint": [16, 16],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [1.852, 0, 1.794], "rotY": 30, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [1.032, 0, 1.916], "rotY": 200, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-crooked", "pos": [1.077, 0, 1.087], "rotY": 110, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [1.816, 0, 0.981], "rotY": 290, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [1.794, 0, -1.852], "rotY": 120, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [1.916, 0, -1.032], "rotY": 290, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-crooked", "pos": [1.087, 0, -1.077], "rotY": 200, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [0.981, 0, -1.816], "rotY": 20, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [-1.852, 0, -1.794], "rotY": 210, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [-1.032, 0, -1.916], "rotY": 20, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-crooked", "pos": [-1.077, 0, -1.087], "rotY": 290, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [-1.816, 0, -0.981], "rotY": 110, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [-1.794, 0, 1.852], "rotY": 300, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree", "pos": [-1.916, 0, 1.032], "rotY": 110, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-crooked", "pos": [-1.087, 0, 1.077], "rotY": 20, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "tree-high", "pos": [-0.981, 0, 1.816], "rotY": 200, "stage": 0}
+  ]
+}

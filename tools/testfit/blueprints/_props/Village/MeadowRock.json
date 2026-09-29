@@ -1,0 +1,15 @@
+{
+  "id": "MeadowRock",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "note": "the boulders are generated (village-extras-kit, fantasy-town stone colours): fantasy-town's rocks are 4-6 studs at scale 4 and nature-kit grass vanishes below scale 3, so the two cannot share one blueprint scale",
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "boulder-large", "pos": [-0.05, 0, 0.07], "rotY": 20, "stage": 0},
+    {"kit": "village-extras-kit", "model": "boulder-small", "pos": [0.18, 0, -0.18], "rotY": -30, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bushSmall", "pos": [0.17, 0.03, 0.18], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "grass_leafs", "pos": [-0.22, 0.03, -0.2], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "grass_leafs", "pos": [0.23, 0.03, 0], "rotY": 70, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [-0.25, 0.03, 0.26], "rotY": 0, "stage": 0}
+  ]
+}

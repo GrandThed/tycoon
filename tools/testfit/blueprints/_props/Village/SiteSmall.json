@@ -1,0 +1,33 @@
+{
+  "id": "SiteSmall",
+  "era": "Village",
+  "scale": 3.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "site-ground", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "planks", "pos": [-0.28, 0, 0.28], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [-0.7, 0.06, -0.14], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [-0.7, 0.06, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.14, 0.06, -0.14], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "pillar-wood", "pos": [0.14, 0.06, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "timber", "pos": [-0.7, 1.06, 0.28], "rotY": 90, "stage": 0},
+    {"kit": "village-extras-kit", "model": "timber", "pos": [0.14, 1.06, 0.28], "rotY": 90, "stage": 0},
+    {"kit": "village-extras-kit", "model": "truss", "pos": [-0.28, 1.125, -0.14], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "truss", "pos": [-0.28, 1.125, 0.7], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "timber", "pos": [-0.28, 1.53, 0.28], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-half", "pos": [-0.28, 0.06, 0.28], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-broken", "pos": [-0.28, 0.06, 0.28], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, 0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.5, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.5, 0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [-0.5, 0, 0.47], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "fence", "pos": [0.5, 0, 0.47], "rotY": 270, "stage": 0},
+    {"kit": "village-extras-kit", "model": "ladder", "pos": [0, 0, -0.47], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "plank-stack", "pos": [0.38, 0, -0.74], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "crate-pair", "pos": [0.7, 0, 0.18], "rotY": 12, "stage": 0},
+    {"kit": "village-extras-kit", "model": "stone-pile", "pos": [0.63, 0, 0.58], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "log_stack", "pos": [-0.6, 0.03, -0.66], "rotY": 90, "stage": 0},
+    {"kit": "village-extras-kit", "model": "sawhorse", "pos": [0.6, 0, -0.3], "rotY": 90, "stage": 0}
+  ]
+}

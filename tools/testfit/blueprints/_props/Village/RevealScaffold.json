@@ -1,0 +1,10 @@
+{
+  "id": "RevealScaffold",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [9, 9],
+  "note": "one generated piece: a hollow timber ring inside +-4.46 studs, so the client's uniform footprint / 9 scale wraps any slot and the landmark rising inside stays in view",
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "scaffold-ring", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

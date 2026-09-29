@@ -1,0 +1,30 @@
+{
+  "id": "FabricMarketSmall",
+  "era": "Village",
+  "scale": 3.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "poles", "pos": [-0.5, 0, -0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "poles", "pos": [-0.5, 0, -0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-high-flat", "pos": [-0.5, 1, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall", "pos": [-0.5, 0, -0.62], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.72, 0.416, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.28, 0.416, -0.7], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [-0.75, 0, 0.25], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [-0.75, 0.226, 0.25], "rotY": 25, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [-0.45, 0, 0.3], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.55, 0.05, 0.65], "rotY": 30, "stage": 0},
+    {"kit": "nature-kit", "model": "crop_pumpkin", "pos": [-0.25, 0.05, 0.72], "rotY": 80, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "poles", "pos": [0.5, 0, -0.5], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "poles", "pos": [0.5, 0, -0.5], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-flat", "pos": [0.5, 1, -0.5], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "stall", "pos": [0.5, 0, -0.62], "rotY": 90, "stage": 1},
+    {"kit": "nature-kit", "model": "crop_melon", "pos": [0.28, 0.416, -0.7], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "crop_melon", "pos": [0.72, 0.416, -0.7], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [0.35, 0, 0.35], "rotY": 40, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "stall-stool", "pos": [0.35, 0.226, 0.35], "rotY": 65, "stage": 1},
+    {"kit": "nature-kit", "model": "pot_large", "pos": [0.72, 0.05, 0.62], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "crop_carrot", "pos": [0.66, 0.15, 0.62], "rotY": 0, "stage": 1},
+    {"kit": "nature-kit", "model": "crop_carrot", "pos": [0.77, 0.15, 0.58], "rotY": 20, "stage": 1}
+  ]
+}

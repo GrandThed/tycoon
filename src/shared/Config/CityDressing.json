@@ -281,7 +281,7 @@
             "WoodsQuarterB",
             "WoodsQuarterC"
           ],
-          "quarterRadius": 3.0,
+          "quarterRadius": 3.1,
           "singleRadius": 1.0
         },
         "clear": {
