@@ -1,0 +1,13 @@
+{
+  "id": "TownTreeC",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "tree-pit", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "tree-stakes", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "town-c-sapling", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "town-c-young", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "village-extras-kit", "model": "town-c-full", "pos": [0, 0, 0], "rotY": 0, "stage": 2}
+  ]
+}

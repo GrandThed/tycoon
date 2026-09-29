@@ -1,0 +1,13 @@
+{
+  "id": "TownTreeB",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [4, 4],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "tree-pit", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "tree-stakes", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "town-b-sapling", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "town-b-young", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "village-extras-kit", "model": "town-b-full", "pos": [0, 0, 0], "rotY": 0, "stage": 2}
+  ]
+}

@@ -86,6 +86,13 @@ CORN = (251, 223, 168)
 # tools/paths/texture.py planar_fill: the Village dirt's two tones.
 EARTH = (176, 137, 91)
 EARTH_LIGHT = (194, 155, 106)
+# Town-tree leaves. No kit colormap has them: every kit on disk shares one mint-to-emerald ramp
+# (hue 144-162), the woods already wear it (fantasy-town tree, tree-high) and the civic greens use
+# nature-kit's teal broadleaves. Planted trees must read as cultivated, so these are fresh leaf
+# greens in the hue of the Village plot base (106, 127, 63), lifted to leaf values.
+LEAF_LIGHT = (168, 214, 98)
+LEAF = (134, 190, 74)
+LEAF_DEEP = (102, 160, 60)
 
 Rgb = tuple[int, int, int]
 Vec = tuple[float, float, float]
@@ -559,6 +566,184 @@ def make_scaffold_ring() -> Part:
     return p
 
 
+# --- town trees (M12 wave 1c) ------------------------------------------------------------------
+#
+# Three growing trees, each with a piece per stage: sapling (<= 2.5 studs), young (<= 5), full
+# (<= 8). Blueprint stages are additive, so every stage is built to swallow the ones before it:
+# each crown is flat-bottomed at a low base (the sapling's crown sits just above it), each crown
+# and trunk encloses the previous one, and the sapling's stakes stand 0.11 from the axis, inside
+# every full trunk. A younger crown that peeks out of an older one is the same green, so it reads
+# as one more lump of foliage, never as a seam.
+
+
+def trunk(p: Part, r_foot: float, r_top: float, height: float, colour: Rgb = WOOD_DEEP) -> None:
+    """Hexagonal trunk with a flared foot."""
+    knee = min(0.3, height * 0.12)
+    lathe(p, [(r_foot * 1.35, 0.0), (r_foot, knee), (r_top, height)], [colour, colour], seg=6)
+
+
+def crown(p: Part, bottom: float, height: float, rx: float, rz: float, seed: int, at=(0.0, 0.0),
+          colour: Rgb = LEAF, cut: float = -0.35, seg: int = 8, rings: int = 3, jitter: float = 0.07) -> None:
+    """Faceted crown whose flat underside sits at `bottom` and whose top is `bottom + height`."""
+    ry = height / (1.0 - cut)
+    p.blob((at[0], bottom - ry * cut, at[1]), (rx, ry, rz), colour, seg=seg, rings=rings, cut=cut,
+           jitter=jitter, seed=seed)
+
+
+def lit(p: Part, side: Rgb, up: Rgb) -> None:
+    """Leaf facets turned to the sky take the lighter green: the kits' painted-light look."""
+    shade_by_normal(p, {side}, up, side, threshold=0.5)
+
+
+def make_tree_pit() -> Part:
+    """The planting ring every town tree stands in, 1.3 studs across and 0.06 tall."""
+    p = Part("tree-pit")
+    rng = random.Random(91)
+    prism(p, blotch(rng, 0.0, 0.0, 0.65, 0.65, points=10), 0.0, 0.06, EARTH)
+    return p
+
+
+def make_tree_stakes() -> Part:
+    """Two stakes and a tie, 1.2 studs tall. They stand 0.11 from the axis, so a young trunk shows
+    them either side and a full trunk (radius 0.2 or more) swallows them whole."""
+    p = Part("tree-stakes")
+    for sx in (-1, 1):
+        x = sx * 0.11
+        p.box(x - 0.035, x + 0.035, 0.0, 1.2, -0.035, 0.035, SAND, top=CREAM)
+    p.box(-0.14, 0.14, 0.86, 0.92, -0.025, 0.025, WOOD_DARK)
+    return p
+
+
+def sapling(name: str, crown_bottom: float, crown_height: float, crown_r: float, seed: int, leaf: Rgb,
+            light: Rgb) -> Part:
+    p = Part(name)
+    trunk(p, 0.06, 0.04, crown_bottom + crown_height * 0.4)
+    crown(p, crown_bottom + 0.05, crown_height, crown_r, crown_r, seed, colour=leaf, seg=7, rings=2, jitter=0.06)
+    lit(p, leaf, light)
+    return p
+
+
+def make_town_a_sapling() -> Part:
+    """Round broadleaf, stage 0: a whip with a small crown, 2.45 studs."""
+    return sapling("town-a-sapling", 1.7, 0.7, 0.42, 101, LEAF, LEAF_LIGHT)
+
+
+def make_town_a_young() -> Part:
+    """Round broadleaf, stage 1: 4.6 studs, crown 3.0 across."""
+    p = Part("town-a-young")
+    trunk(p, 0.13, 0.09, 3.0)
+    crown(p, 1.7, 2.4, 1.5, 1.45, 102)
+    crown(p, 3.2, 1.4, 0.95, 0.9, 103, at=(0.15, -0.1))
+    lit(p, LEAF, LEAF_LIGHT)
+    return p
+
+
+def make_town_a_full() -> Part:
+    """Round broadleaf, stage 2: 6.2 studs, crown 3.9 across: a wide low mass under a domed top, with
+    four lumps round the shoulders. At the 4-stud width limit a single taller blob read as an egg
+    (a first cut, 7.0 studs), so the crown stays about as tall as it is wide."""
+    p = Part("town-a-full")
+    trunk(p, 0.26, 0.17, 3.8)
+    crown(p, 1.62, 2.5, 1.95, 1.9, 104)
+    crown(p, 3.1, 3.1, 1.62, 1.58, 105, cut=-0.5)
+    for (x, z), bottom, height, r, seed in (
+        ((0.85, -0.55), 2.6, 2.1, 1.05, 106),
+        ((-0.85, 0.6), 2.9, 2.0, 1.0, 107),
+        ((0.5, 0.85), 3.4, 1.8, 0.9, 108),
+        ((-0.65, -0.8), 3.3, 1.9, 0.95, 109),
+    ):
+        crown(p, bottom, height, r, r * 0.96, seed, at=(x, z), seg=7, rings=2)
+    lit(p, LEAF, LEAF_LIGHT)
+    return p
+
+
+def apples(p: Part, centre: Vec, radii: Vec, count: int, seed: int, size: float = 0.36,
+           lat=(8.0, 62.0)) -> None:
+    """Fruit set half into a crown's surface, spread round it and biased to the upper half so the
+    camera sees it."""
+    rng = random.Random(seed)
+    cx, cy, cz = centre
+    rx, ry, rz = radii
+    for i in range(count):
+        a = 2 * math.pi * i / count + rng.uniform(-0.25, 0.25)
+        b = math.radians(rng.uniform(*lat))
+        apple(p, (cx + rx * 1.04 * math.cos(b) * math.cos(a), cy + ry * 1.04 * math.sin(b),
+                  cz + rz * 1.04 * math.cos(b) * math.sin(a)), size, rng.uniform(0.0, math.pi))
+
+
+def apple(p: Part, at: Vec, size: float, turn: float) -> None:
+    """An octahedron: 8 faces, and round enough at this size where a cube read as a die."""
+    h = size / 2
+    lathe(p, [(0.0, 0.0), (h, h), (0.0, size)], [RED, RED], seg=4, at=(at[0], at[1] - h, at[2]), phase=turn)
+
+
+def make_town_b_sapling() -> Part:
+    """Orchard tree, stage 0: a whip with a small crown, 2.2 studs."""
+    return sapling("town-b-sapling", 1.5, 0.65, 0.44, 111, LEAF, LEAF_LIGHT)
+
+
+def make_town_b_young() -> Part:
+    """Orchard tree, stage 1: 3.3 studs, crown 2.8 across, the first few apples."""
+    p = Part("town-b-young")
+    trunk(p, 0.12, 0.08, 2.3)
+    crown(p, 1.5, 1.8, 1.4, 1.35, 112, jitter=0.05)
+    lit(p, LEAF, LEAF_LIGHT)
+    ry = 1.8 / 1.35
+    apples(p, (0.0, 1.5 + 0.35 * ry, 0.0), (1.4, ry, 1.35), 6, 113, size=0.3)
+    return p
+
+
+def make_town_b_full() -> Part:
+    """Orchard tree, stage 2: 4.3 studs, crown 3.8 across: one low spreading dome with small knobs on
+    top (a centred second tier read as a snowman), hung with red apples, a few fallen in the ring."""
+    p = Part("town-b-full")
+    trunk(p, 0.22, 0.14, 2.6)
+    for sx, sz in ((1, -1), (-1, 0.6)):
+        beam(p, (0.0, 1.1, 0.0), (0.55 * sx, 2.1, 0.4 * sz), 0.16, 0.16, WOOD_DEEP)
+    bottom, height, rx, rz = 1.45, 2.6, 1.82, 1.78
+    crown(p, bottom, height, rx, rz, 114, seg=9, jitter=0.05)
+    knobs = (((0.7, -0.4), 3.2, 1.1, 0.8, 115), ((-0.6, 0.5), 3.3, 1.0, 0.75, 118), ((-0.35, -0.75), 3.0, 1.0, 0.7, 119))
+    for (x, z), kb, kh, kr, seed in knobs:
+        crown(p, kb, kh, kr, kr, seed, at=(x, z), seg=7, rings=2, jitter=0.05)
+    lit(p, LEAF, LEAF_LIGHT)
+    ry = height / 1.35
+    # above the dome's widest band, so no apple pushes the tree past its 4-stud footprint
+    apples(p, (0.0, bottom + 0.35 * ry, 0.0), (rx, ry, rz), 15, 116, size=0.34, lat=(20.0, 58.0))
+    for (x, z), kb, kh, kr, seed in knobs:
+        kry = kh / 1.35
+        apples(p, (x, kb + 0.35 * kry, z), (kr, kry, kr), 1, seed + 10, size=0.32, lat=(30.0, 50.0))
+    for x, z in ((0.45, -0.3), (-0.35, -0.42)):
+        apple(p, (x, 0.12, z), 0.3, x)
+    return p
+
+
+def make_town_c_sapling() -> Part:
+    """Street poplar, stage 0: a whip with a narrow crown, 2.45 studs."""
+    return sapling("town-c-sapling", 1.25, 1.15, 0.3, 121, LEAF_DEEP, LEAF)
+
+
+def make_town_c_young() -> Part:
+    """Street poplar, stage 1: 4.9 studs, crown 1.6 across."""
+    p = Part("town-c-young")
+    trunk(p, 0.11, 0.07, 3.6)
+    crown(p, 1.2, 2.5, 0.8, 0.78, 122, colour=LEAF_DEEP, seg=7)
+    crown(p, 2.6, 2.3, 0.62, 0.6, 123, colour=LEAF_DEEP, seg=7, cut=-0.5)
+    lit(p, LEAF_DEEP, LEAF)
+    return p
+
+
+def make_town_c_full() -> Part:
+    """Street poplar, stage 2: 7.8 studs, crown 2.2 across: three stacked flames, the Lombardy
+    poplar's column, lining a lane without shading it."""
+    p = Part("town-c-full")
+    trunk(p, 0.2, 0.12, 5.5)
+    crown(p, 1.15, 3.2, 1.1, 1.05, 124, colour=LEAF_DEEP, seg=8)
+    crown(p, 3.0, 3.3, 0.95, 0.92, 125, colour=LEAF_DEEP, seg=8, cut=-0.5)
+    crown(p, 5.0, 2.8, 0.62, 0.6, 126, colour=LEAF_DEEP, seg=7, cut=-0.55)
+    lit(p, LEAF_DEEP, LEAF)
+    return p
+
+
 PIECES = {
     "crate": make_crate,
     "crate-pair": make_crate_pair,
@@ -577,6 +762,17 @@ PIECES = {
     "boulder-small": make_boulder_small,
     "site-ground": make_site_ground,
     "scaffold-ring": make_scaffold_ring,
+    "tree-pit": make_tree_pit,
+    "tree-stakes": make_tree_stakes,
+    "town-a-sapling": make_town_a_sapling,
+    "town-a-young": make_town_a_young,
+    "town-a-full": make_town_a_full,
+    "town-b-sapling": make_town_b_sapling,
+    "town-b-young": make_town_b_young,
+    "town-b-full": make_town_b_full,
+    "town-c-sapling": make_town_c_sapling,
+    "town-c-young": make_town_c_young,
+    "town-c-full": make_town_c_full,
 }
 
 
