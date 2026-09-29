@@ -5023,7 +5023,9 @@ CityFabric.Develop(input: FabricInput, pull: Types.FabricPullConfig): { FabricPa
   contributes its footprint rect and its pad rect, grown by `clear.pad`. A slot is buyable when it
   is unowned and its effective `requires` is owned (the config's `requires`, else the previous
   slot in purchase order; the first slot is always buyable), exactly `PlotService.refreshPads`'
-  rule. So the mask depends only on the owned set and never shrinks. The next-pad *dressing*
+  rule. An owned slot also keeps its pad rect (+`clear.pad`), because its footprint and path do not
+  always cover that ground (`dirtRoad` has no spur). So the mask depends only on the owned set and
+  never shrinks. The next-pad *dressing*
   (marker, stakes, `padLook`) still follows the live `Pads` folder, and a pad's dressing is kept
   for one `lod.refreshSeconds` after the pad disappears, to ride out a cosmetics refresh.
 - **`marker.offset` is in the slot's frame.** The offset is turned by the slot's `rotationY` and

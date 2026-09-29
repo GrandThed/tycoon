@@ -11,6 +11,7 @@ coloured rectangles.
     py tools/testfit/plotrender.py Metropolis --camera entrance --out plot_entrance
     py tools/testfit/plotrender.py Metropolis --tier 3
     py tools/testfit/plotrender.py Boomtown --camera overview
+    py tools/testfit/plotrender.py Village --tier 2 --far
 
 Outputs land in assets/testfit/out/<Era>/plot_<camera>.png.
 
@@ -21,6 +22,9 @@ import allowed). They talk through a scene JSON in a temp file -- see plotscene.
 What is mirrored, and from where (never re-derived, never duplicated as a constant):
   * layout, era config, dressing config, spurs, the road network and the shortest-path visibility:
     streetplan.Era / streetplan.Network / streetplan.visible_network;
+  * M12's city fabric -- parcels at their level, the wild land left after clearing, the dressed
+    next pads -- and every owned landmark's stage at `--tier N` (the sim's greedy player at the last
+    moment of tier N): tools/cityfabric.py, the mirror of CityFabric.luau and Fabric.luau;
   * tile cells, the connectivity mask table and the zebra rule: src/client/City/TileRenderer.luau
     (PIECE_BY_MASK, ARM_STEPS, CROSSING_MIN_RUN);
   * the ring cycle, the reveal-independent cell kinds and the ramp: src/client/City/Highway.luau
@@ -48,6 +52,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 sys.path.insert(0, str(REPO_ROOT / "tools" / "testfit"))
 
+import cityfabric  # noqa: E402
 import streetplan  # noqa: E402
 from blueprint import load_blueprint  # noqa: E402
 
@@ -242,12 +247,37 @@ def cell_rect(cell, step, reach):
 
 
 class PlotScene:
-    def __init__(self, era, network, owned, tier, staged=False):
+    def __init__(
+        self,
+        era,
+        network,
+        owned,
+        tier,
+        staged=False,
+        stages=None,
+        fabric=None,
+        fabric_stages=None,
+        fabric_tier=None,
+        near=True,
+    ):
         self.era = era
         self.network = network
         self.owned = owned
         self.tier = tier
         self.staged = staged  # --tier given: trees show their stage at that tier, not the last
+        # slot id -> the Stage<n> each owned landmark shows; empty draws every blueprint at its last
+        # stage (the finished plot).
+        self.stages = stages or {}
+        # M12: a cityfabric.FabricPlot, or None in an era the client grows no fabric in. It develops
+        # from GrowthTier and the landmarks' visible stages, which also bound its heights: the drawn
+        # stages, or on the finished plot the stage each template shows at the last level.
+        self.fabric = fabric
+        if fabric_stages is None:
+            fabric_stages = self.stages if self.stages or fabric is None else fabric.final_stages(owned)
+        self.fabric_stages = fabric_stages
+        self.fabric_tier = tier if fabric_tier is None else fabric_tier
+        self.near = near
+        self.fabric_view = None  # the settled Fabric.Sync, taken once in build()
         self.boxes = []
         self.models = []
         self.rng = random.Random(f"{era.name}:plotrender")
@@ -355,7 +385,10 @@ class PlotScene:
         plot = era.layout["plotSize"]
         self.base_rgb = base_rgb
         # An apron of the same colour, darkened: the plot edge stays legible without a white card.
-        self.box("Apron", (plot[0] * 4, 2.0, plot[2] * 4), (0.0, -1.2, 0.0), tint(base_rgb, GROUND_TINT))
+        # A fabric plot's skirt stands on the world ground past the edge, a base's height below the
+        # plot top (Fabric.wildGround), so there the apron's top is that ground.
+        apron_top = -self.fabric.ground_drop if self.fabric is not None else -0.2
+        self.box("Apron", (plot[0] * 4, 2.0, plot[2] * 4), (0.0, apron_top - 1.0, 0.0), tint(base_rgb, GROUND_TINT))
         self.box("PlotBase", (plot[0], plot[1], plot[2]), (0.0, -plot[1] / 2, 0.0), base_rgb)
 
     def build_pads(self):
@@ -372,6 +405,10 @@ class PlotScene:
             if config["id"] not in self.owned and (requires is None or requires in self.owned):
                 buyable.add(config["id"])
             previous = config["id"]
+        # M12: a fabric plot recolours every pad it shows with `padLook` (client-side only).
+        looks = {}
+        if self.fabric_view is not None:
+            looks = {pad["slotId"]: pad["color"] for pad in self.fabric_view["pads"] if pad["color"] is not None}
         for slot in era.slots:
             if slot["id"] not in buyable:
                 continue
@@ -379,7 +416,7 @@ class PlotScene:
                 f"Pad_{slot['id']}",
                 (era.pad_size[0], pad[1], era.pad_size[1]),
                 (slot["pad"][0], pad[1] / 2, slot["pad"][1]),
-                DEFAULT_PART_RGB,
+                list(looks.get(slot["id"], DEFAULT_PART_RGB)),
             )
 
     def build_buildings(self):
@@ -396,6 +433,7 @@ class PlotScene:
                 path,
                 (slot["position"][0], self.lift, slot["position"][1]),
                 rot_y=slot["rotation"],
+                stage=self.stages.get(slot["id"]),
             )
 
     def build_lots(self):
@@ -808,6 +846,94 @@ class PlotScene:
                 placeholder=placeholder_for("plaza"),
                 wanted=plaza["prop"],
             )
+
+    # -- the M12 city fabric -----------------------------------------------
+
+    def build_fabric(self):
+        """Fabric.Sync settled, as a player who joins now sees it (construction timing is local
+        animation and never mirrored): each parcel in budget at its level -- the site at 1, from 2
+        the district's prop at the stage its height cap allows -- the wild land the clearing mask
+        leaves (whole clumps, the uncleared quarters of a partly cleared clump, singles; far plots
+        whole clumps only; a skirt entry on the world ground), and on a near plot each pad's notice
+        board in the slot's frame with stakes and strings round the footprint. A name with no
+        blueprint draws nothing, as a missing template does in game."""
+        view = self.fabric_view
+        if view is None:
+            return
+        era = self.era
+        for parcel_view in view["parcels"]:
+            look = parcel_view["look"]
+            if look is None:
+                continue
+            parcel = parcel_view["parcel"]
+            self.model(
+                f"Parcel{parcel_view['index']}",
+                blueprint_path(era.name, look["prop"], prop=True),
+                (parcel["x"], 0.0, parcel["z"]),
+                rot_y=parcel["rotationY"],
+                stage=look["stage"],
+                wanted=look["prop"],
+            )
+        for item in view["wild"]:
+            if item["prop"] is None:
+                continue  # a variant with no name in the config's lists: nothing spawns
+            suffix = f"_{item['quarter']}" if item["kind"] == "quarter" else ""
+            self.model(
+                f"Wild{item['index']}{suffix}",
+                blueprint_path(era.name, item["prop"], prop=True),
+                (item["x"], item["y"], item["z"]),
+                rot_y=item["rotationY"],
+                stage=0,
+                wanted=item["prop"],
+                scale=item["scale"],
+            )
+        for pad in view["pads"]:
+            marker = pad["marker"]
+            if marker is not None:
+                self.model(
+                    f"Marker_{pad['slotId']}",
+                    blueprint_path(era.name, marker["prop"], prop=True),
+                    (marker["x"], marker["y"], marker["z"]),
+                    rot_y=marker["rotationY"],
+                    stage=0,
+                    wanted=marker["prop"],
+                )
+            for stake in pad["stakes"]:
+                self.box("SiteStake", stake["size"], stake["pos"], list(pad["stakeColor"]), rot_y=stake["rotationY"])
+            for string in pad["strings"]:
+                self.box("SiteString", string["size"], string["pos"], list(pad["stringColor"]), rot_y=string["rotationY"])
+        self.fabric_notes(view)
+
+    def fabric_notes(self, view):
+        fabric = self.fabric
+        counts = cityfabric.level_counts(view)
+        whole, partial, quarters, singles = cityfabric.wild_counts(view)
+        eligible = sum(1 for parcel_view in view["parcels"] if parcel_view["eligible"])
+        self.notes.append(
+            f"fabric at GrowthTier {view['tier']} ({'near' if view['near'] else 'far'}): {eligible} parcels "
+            f"in budget -- level 0 {counts[0]}, 1 {counts[1]}, 2 {counts[2]}, 3 {counts[3]}, 4 {counts[4]}"
+        )
+        self.notes.append(
+            f"fabric wild: {whole} whole clumps, {partial} partly cleared ({quarters} quarters), "
+            f"{singles} singles of {len(fabric.wild_data)} entries"
+        )
+        dressed = [pad for pad in view["pads"] if pad["marker"] is not None or pad["stakes"]]
+        self.notes.append(f"fabric pads: {len(view['pads'])} shown, {len(dressed)} dressed")
+        if view["visible"] != self.visible:
+            self.notes.append(
+                "the straight budget gates RoadGraph.visible: the fabric develops along "
+                f"{len(view['visible'])} stretches, the roads here draw {len(self.visible)}"
+            )
+        if fabric.heights.fallbacks:
+            self.notes.append(
+                "fabric heights from blueprints (not harvested yet): " + ", ".join(sorted(fabric.heights.fallbacks))
+            )
+        if fabric.heights.missing:
+            self.notes.append("fabric props with no height at all: " + ", ".join(sorted(fabric.heights.missing)))
+        for note in fabric.fragile(view):
+            self.notes.append("FRAGILE (float32 lengths in game could tip it): " + note)
+        for note in fabric.stale():
+            self.notes.append("STALE fabric data (run fabric.py build): " + note)
 
     # -- paved blocks and street trees ------------------------------------
 
@@ -1408,6 +1534,10 @@ class PlotScene:
         )
 
     def build(self):
+        if self.fabric is not None:
+            self.fabric_view = self.fabric.snapshot(
+                self.owned, self.fabric_stages, self.fabric_tier, near=self.near
+            )
         self.build_ground()
         if self.era.tiles is not None:
             self.build_tile_streets()
@@ -1421,6 +1551,7 @@ class PlotScene:
         self.build_buildings()
         self.build_lots()
         self.build_plazas()
+        self.build_fabric()
         self.build_highway()
         self.build_subway()
         self.build_trees()
@@ -1715,8 +1846,10 @@ def main():
     parser.add_argument(
         "--tier",
         type=int,
-        help="growth tier 1-5: gates plazas and filler lots, and (unless --owned says otherwise) "
-        "owns exactly what the sim's greedy player has bought by then. Default: the finished plot",
+        help="growth tier 1-5: gates plazas and filler lots, owns (unless --owned says otherwise) "
+        "exactly what the sim's greedy player has bought by the end of that tier, and draws every "
+        "owned landmark at the stage its level shows then (a city fabric develops from the same "
+        "moment). Default: the finished plot, every landmark at its last stage",
     )
     parser.add_argument("--owned", default="all", help="'all' (default) or a comma list of slot ids")
     parser.add_argument(
@@ -1725,6 +1858,12 @@ def main():
         help="overview | entrance | ramp | plaza | cityhall | x,z",
     )
     parser.add_argument("--out", help="output file stem (default plot_<camera>)")
+    parser.add_argument(
+        "--far",
+        action="store_true",
+        help="draw a far plot (past the near radius): the city fabric keeps its parcels and whole "
+        "clumps only, and the pads their padLook without a marker or stakes. Default: a near plot",
+    )
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args()
 
@@ -1734,6 +1873,16 @@ def main():
     network = streetplan.Network(era)
     tier = args.tier
     owned = resolve_owned(era, args.owned, tier)
+    scene_tier = 5 if tier is None else tier
+    # Landmark stages: the finished plot draws every blueprint at its last stage. At --tier N the sim's
+    # greedy player is caught at the last moment of tier N -- the owned set above is exactly what it
+    # has bought by then -- and every landmark shows the Stage<n> its level then earns.
+    stages, fabric_tier, moment = {}, scene_tier, None
+    if tier is not None:
+        history = cityfabric.greedy_history(era.name, city)
+        levels, fabric_tier, moment = cityfabric.tier_snapshot(history, tier)
+        stages = cityfabric.landmark_stages(era.config, owned, levels)
+    fabric = cityfabric.FabricPlot.load(era.name, city=city, era=era, network=network)
 
     camera_name = args.camera
     if camera_name not in CAMERAS and camera_name != "entrance":
@@ -1744,7 +1893,17 @@ def main():
         CAMERAS["point"]["at"] = (x, z)
         camera_name = "point"
 
-    scene = PlotScene(era, network, owned, 5 if tier is None else tier, staged=tier is not None).build()
+    scene = PlotScene(
+        era,
+        network,
+        owned,
+        scene_tier,
+        staged=tier is not None,
+        stages=stages,
+        fabric=fabric,
+        fabric_tier=fabric_tier,
+        near=not args.far,
+    ).build()
     stem = args.out or f"plot_{args.camera.replace(',', '_')}"
     out_path = OUT_ROOT / era.name / f"{stem}.png"
     scene_spec = {
@@ -1762,6 +1921,9 @@ def main():
         f"tier {'full' if tier is None else tier}"
     )
     print(f"   {len(scene.visible)} of {len(network.stretches)} spine stretches visible")
+    if moment is not None:
+        grown = ", ".join(f"{slot_id} {stage}" for slot_id, stage in sorted(stages.items()) if stage)
+        print(f"   landmark stages at t={moment}s, GrowthTier {fabric_tier}: {grown or 'all at stage 0'}")
     for note in scene.notes:
         print(f"   note: {note}")
     if scene.missing:

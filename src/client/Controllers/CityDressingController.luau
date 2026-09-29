@@ -493,7 +493,8 @@ local function newBuild(
 	local fabricData = Catalog.GetFabric(eraName)
 	local fabric: Fabric.Handle? = nil
 	local fabricFlocks: { Scatter.Flock } = {}
-	if fabricConfig ~= nil and fabricData ~= nil then
+	-- A hand-edited config can hold a non-table here; that must turn the feature off, not error.
+	if type(fabricConfig) == "table" and type(fabricData) == "table" then
 		fabric = Fabric.new({
 			folder = entry.folder,
 			plotFrame = plotFrame,

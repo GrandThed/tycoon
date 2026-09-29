@@ -1045,6 +1045,12 @@ local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: 
 		if rect ~= nil then
 			table.insert(rects, grown(rect, slotMargin))
 		end
+		-- A bought slot keeps the pad clearing it had while buyable: its footprint and path do not
+		-- always cover that ground (dirtRoad has no spur), and woods must never grow back on a buy.
+		local pad = handle.padRects[slotId]
+		if pad ~= nil then
+			table.insert(rects, grown(pad, padMargin))
+		end
 	end
 	for _, slotId in buyableSlots(handle) do
 		local footprint = handle.slotRects[slotId]
