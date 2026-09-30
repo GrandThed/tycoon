@@ -17,13 +17,14 @@ Inputs, each from its owner:
     constants below are the contract's own check values.
 
 Parcels. Row 1 lines every street leg on both sides, front on the setback line, facing the street
-square on, sizes drawn medium-or-small per position, with a gap left every few parcels for a street
-tree. Rows 2 and 3 stand directly behind the row in front and inherit its address; CityFabric keeps
-each a `rowLag` behind its front, so a back row is only laid where it still becomes a house once the
-era is finished. Row 1 comes first, nearest the entrance first; then row 2 and row 3, each in the
-order of its fronts.
+square on: terraces of narrow lots on the terrace streets (the high street and the square's lane),
+cottages mostly medium elsewhere, then a fill of every hole a lot still fits. Rows 2 and 3 are
+infill anywhere in the block interior behind the frontage; each takes as its front the nearest
+earlier lot of the row in front on the same side of the same street and repeats its address.
+CityFabric keeps each back row a `rowLag` behind its front, so a lot that would never become a house
+is not laid. Lots keep clear of each landmark's harvested extents (INTERFACES "Wave 1c, round 2").
 
-Town trees. Street trees in the frontage gaps (anchored to their stretch), green and orchard trees
+Town trees. Street trees in frontage no lot took (anchored to their stretch), green and orchard trees
 round the civic and farm landmarks and the tree slot's green (anchored to the landmark's approach
 stretch), yard trees behind the last row of houses (anchored to the nearest parcel). Every one keeps
 off the walker and car lanes and clear of parcels, slots, pads, markers and lamps.
@@ -58,6 +59,7 @@ import streetplan  # noqa: E402
 PLAN_DIR = REPO_ROOT / "tools" / "fabric"
 OUT_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Fabric"
 CITY_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json"
+ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only
 
 FORMAT_VERSION = 1
 DECIMALS = 2
@@ -65,7 +67,9 @@ DECIMALS = 2
 # Contract check values (INTERFACES "M12 contracts" -> "Tools", "Review amendments", "Wave 1c"),
 # not tunables: a parcel keeps this much daylight from each kind of solid, a row-1 parcel's front
 # stays this close to its setback line, and a town tree keeps a stud from everything built.
-CHECK_SLOT = 1.0
+CHECK_SLOT = 1.0  # a declared footprint (a landmark without harvested extents)
+CHECK_LANDMARK = 0.5  # a landmark's harvested extents, the union of its stages (wave 1c round 2)
+CHECK_SIZE_GAP = 0.6  # between lots of different sizes; terraced narrow lots may touch
 CHECK_PAD = 0.5
 CHECK_PLAZA = 1.0
 CHECK_EDGE = 1.0
@@ -84,7 +88,7 @@ COLLINEAR = 1e-6  # |sin| between two legs that count as one straight run
 QUARTER_TURN = 90.0
 TOP_TIER = 5  # GrowthTier at the end of an era (CityGrowth thresholds has five entries)
 QUARTERS = 4
-SIZES = ("small", "medium")
+SIZES = ("small", "medium", "narrow")
 KINDS = ("clump", "single")
 ANCHORS = ("stretch", "parcel")
 
@@ -188,6 +192,38 @@ def fabric_config(city, era_name):
     return config
 
 
+def load_assets():
+    try:
+        return json.loads(ASSETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def model_extents(model):
+    """Scatter.modelExtents (tools/cityfabric.py mirrors it): XZ bounds of every harvested part of
+    every stage in the model frame, offsets negated (the glTF import's turn); None without a harvest."""
+    if not isinstance(model, dict) or not isinstance(model.get("stages"), list):
+        return None
+    extents = None
+    for stage in model["stages"]:
+        for part in (stage or {}).get("parts") or []:
+            size, offset, mesh = part.get("size"), part.get("offset"), part.get("meshId")
+            if not (isinstance(size, list) and isinstance(offset, list) and len(size) == 3 and len(offset) == 3):
+                continue
+            if not isinstance(mesh, (int, float)) or mesh <= 0:
+                continue
+            cx, cz = -offset[0], -offset[2]
+            box = (cx - size[0] / 2, cx + size[0] / 2, cz - size[2] / 2, cz + size[2] / 2)
+            extents = box if extents is None else (min(extents[0], box[0]), max(extents[1], box[1]), min(extents[2], box[2]), max(extents[3], box[3]))
+    return extents
+
+
+def extents_poly(origin, rotation, extents):
+    """Fabric.footprintRect as a polygon: the extents' middle carried into the plot, the slot's turn."""
+    mid = rotate((extents[0] + extents[1]) / 2, (extents[2] + extents[3]) / 2, rotation)
+    return streetplan.square((origin[0] + mid[0], origin[1] + mid[1]), extents[1] - extents[0], extents[3] - extents[2], rotation)
+
+
 def piece_ids(network):
     """tools/paths/network.py's Bake.piece_id for every stretch: `L<polyline>_<rank>`, the rank of
     the stretch among its polyline's stretches in network creation order."""
@@ -206,7 +242,7 @@ class Site:
         self.network = network or streetplan.Network(self.era)
         self.name = era_name
         self.config = fabric_config(self.city, era_name)
-        self.sizes = {name: tuple(float(v) for v in self.config["sizes"][name]) for name in SIZES}
+        self.sizes = {name: tuple(float(v) for v in self.config["sizes"][name]) for name in SIZES if name in self.config["sizes"]}
         self.width = float(self.era.width)
         self.ids = piece_ids(self.network)
         self.stretch_by_id = {pid: index for index, pid in enumerate(self.ids)}
@@ -228,6 +264,21 @@ class Site:
             self.slot_polys[slot["id"]] = slot["footprint"]
             self.pad_polys[slot["id"]] = unrotated_pad(slot, self.pad_size)
         self.plaza_polys = [plaza["poly"] for plaza in self.era.plazas]
+        # What a lot keeps clear of (INTERFACES "Wave 1c, round 2"): each landmark's harvested
+        # extents, the union over its stages, as Scatter measures them; its declared footprint only
+        # when it has no harvest. A streetOnly slot spawns nothing, so it reserves no land.
+        self.street_only = {slot["id"] for slot in self.era.config["slots"] if slot.get("streetOnly")}
+        self.landmark_polys = {}
+        models = {slot["id"]: slot.get("modelName") for slot in self.era.config["slots"]}
+        harvested = ((load_assets().get("eras") or {}).get(era_name) or {})
+        for slot in self.era.slots:
+            if slot["id"] in self.street_only:
+                continue
+            extents = model_extents(harvested.get(models.get(slot["id"])))
+            if extents is None:
+                self.landmark_polys[slot["id"]] = (slot["footprint"], False)
+            else:
+                self.landmark_polys[slot["id"]] = (extents_poly(slot["position"], slot["rotation"], extents), True)
         # The next-pad marker (NoticeBoard) is at most 2 x 2 studs (INTERFACES "Village props").
         self.marker_size = (MARKER_SIZE, MARKER_SIZE)
         marker = self.config.get("marker") or {}
@@ -263,14 +314,12 @@ class Site:
         meander = float((self.era.meander or {}).get("amplitude", 0.0))
         self.walker_street = offset + meander + clearance
         self.walker_spur = min(offset, streetplan.spur_path_width(self.era) / 2) + meander + clearance
-        # A streetOnly slot spawns no model: its rect only clears woods, so parcels may use it.
-        self.street_only = {slot["id"] for slot in self.era.config["slots"] if slot.get("streetOnly")}
 
     def solid_boxes(self, rules):
         """(polygon, its bounding box, the daylight a parcel keeps from it) for every solid."""
-        key = (rules["slot"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"])
+        key = (rules["slot"], rules["landmark"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"])
         if getattr(self, "_solids_key", None) != key:
-            solids = [(poly, rules["slot"]) for slot_id, poly in self.slot_polys.items() if slot_id not in self.street_only]
+            solids = [(poly, rules["landmark"] if measured else rules["slot"]) for poly, measured in self.landmark_polys.values()]
             solids += [(poly, rules["pad"]) for poly in self.pad_polys.values()]
             solids += [(poly, rules["plaza"]) for poly in self.plaza_polys]
             solids += [(poly, rules["marker"]) for poly in self.marker_polys.values()]
@@ -307,7 +356,13 @@ class Site:
 # --------------------------------------------------------------------------------------------
 
 
-def parcel_clear(site, poly, rules, own_segments, placed):
+def lot_gap(rules, size, other):
+    """Terraced narrow lots stand almost touching; any other pair keeps the ordinary gap (and lots of
+    different sizes at least the contract's 0.6)."""
+    return rules["terraceGap"] if size == other == "narrow" else rules["gap"]
+
+
+def parcel_clear(site, poly, rules, own_segments, placed, size=None):
     """Every clearance the generator keeps (the plan's numbers, at least the contract's). A
     bounding-box test skips every obstacle too far away to matter before the exact one runs."""
     era = site.era
@@ -328,12 +383,13 @@ def parcel_clear(site, poly, rules, own_segments, placed):
     for other in placed:
         # Coordinates are rounded to 0.01, so a neighbour laid exactly `gap` away can measure a
         # hair under it.
-        if not boxes_apart(box, other["box"], rules["gap"]) and gap(poly, other["poly"]) < rules["gap"] - EPS:
+        need = lot_gap(rules, size, other["size"])
+        if not boxes_apart(box, other["box"], need) and gap(poly, other["poly"]) < need - EPS:
             return False
     return True
 
 
-def make_parcel(site, size, centre, rotation, stretch, along, row, front):
+def make_parcel(site, size, centre, rotation, stretch, along, row, front, run=None, side=None):
     x, z = rounded(centre[0]), rounded(centre[1])
     rotation = rounded(norm_degrees(rotation))
     poly = rect((x, z), site.sizes[size], rotation)
@@ -342,12 +398,15 @@ def make_parcel(site, size, centre, rotation, stretch, along, row, front):
         "z": z,
         "rotationY": rotation,
         "size": size,
-        "stretch": site.ids[stretch],
+        "stretch": site.ids[stretch] if stretch is not None else None,
         "along": rounded(along),
         "row": row,
         "front": front,
         "poly": poly,
         "box": box_of(poly),
+        # generator bookkeeping (never written): the street side a lot belongs to
+        "polyline": run["polyline"] if run is not None else None,
+        "side": street_side(site, run["polyline"], (x, z)) if run is not None else side,
     }
 
 
@@ -389,11 +448,29 @@ def locate(site, run, s):
     return None
 
 
-def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, rhythm=None, gaps=None):
+def street_side(site, polyline, point):
+    """Which side of its street a lot stands on: the sign of the turn from the nearest leg of the
+    polyline to the point (+1 left of the street's travel, -1 right)."""
+    best, best_d = None, math.inf
+    for a, b in streetplan.polyline_segments(site.era.streets[polyline]):
+        d, _ = streetplan.point_segment_distance(point, a, b)
+        if d < best_d:
+            best, best_d = (a, b), d
+    a, b = best
+    cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])
+    return 1 if cross >= 0 else -1
+
+
+def parcel_polyline(parcel):
+    """The street a parcel's address stretch belongs to (`L<polyline>_<rank>`, 1-based)."""
+    return int(parcel["stretch"][1:].split("_")[0]) - 1
+
+
+def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed):
     """Lay parcels along one side of a straight run, fronts near the setback line, from its start.
-    Each candidate stands a little back from the line and a few degrees off square (the plan's
-    jitter, its own random stream), so a row of cottages reads as grown rather than surveyed. With
-    `gaps`, every few parcels in an unbroken row leave a gap a street tree stands in."""
+    A small or medium lot stands a little back from the line and a few degrees off square (the
+    plan's jitter, its own random stream), so a row of cottages reads as grown; narrow lots stand
+    square on the line, a terrace almost touching its neighbours."""
     a, b, d = run["a"], run["b"], run["d"]
     length = math.dist(a, b)
     own = {(run["polyline"], segment) for segment, _, _ in run["segments"]}
@@ -401,16 +478,17 @@ def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, rhythm=None
     n = (-d[1] * side, d[0] * side)
     square_on = facing_rot((-n[0], -n[1]))
     s = rules["endMargin"]
-    streak = 0
-    every = rhythm.choice(rules["treeGapEvery"]) if rhythm is not None else 0
-    last_end = None
     while s < length - rules["endMargin"]:
         accepted = None
-        for size in sizes_for(rng):
+        for size in sizes_for(rng, run):
+            if size not in site.sizes:
+                continue
             w, depth = site.sizes[size]
             mid = s + w / 2
             back = jitter.uniform(0.0, rules["setbackJitter"])
             turn = jitter.uniform(-rules["turnJitter"], rules["turnJitter"])
+            if size == "narrow":
+                back, turn = 0.0, 0.0
             if mid > length:
                 continue  # the front centre must project onto its own stretch
             where = locate(site, run, mid)
@@ -419,35 +497,20 @@ def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, rhythm=None
             stretch, along = where
             reach = front + back + depth / 2
             centre = (a[0] + d[0] * mid + n[0] * reach, a[1] + d[1] * mid + n[1] * reach)
-            candidate = make_parcel(site, size, centre, square_on + turn, stretch, along, 1, 0)
+            candidate = make_parcel(site, size, centre, square_on + turn, stretch, along, 1, 0, run, side)
             # `along` is the foot of the perpendicular from the (turned) front centre, per contract.
             fc = front_centre(candidate["x"], candidate["z"], candidate["rotationY"], depth)
             st = site.network.stretches[stretch]
             _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
             candidate["along"] = rounded(math.dist(st["a"], foot))
-            if parcel_clear(site, candidate["poly"], rules, own, placed):
+            if parcel_clear(site, candidate["poly"], rules, own, placed, size):
                 accepted = candidate
                 break
         if accepted is None:
             s += rules["walkStep"]
             continue
-        # A free stretch at least a tree gap wide (a pad, a junction, a jitter clash) already broke
-        # the row: a street tree may stand in it, and the rhythm restarts after it.
-        start = rules["endMargin"] if last_end is None else last_end
-        if s - start >= rules["treeGap"]:
-            if gaps is not None:
-                gaps.append({"run": run, "side": side, "s": (start + s) / 2})
-            streak = 0
         placed.append(accepted)
-        s += site.sizes[accepted["size"]][0]
-        streak += 1
-        if gaps is not None and streak >= every and s + rules["treeGap"] < length - rules["endMargin"]:
-            gaps.append({"run": run, "side": side, "s": s + rules["treeGap"] / 2})
-            s += rules["treeGap"]
-            streak, every = 0, rhythm.choice(rules["treeGapEvery"])
-        else:
-            s += rules["gap"]
-        last_end = s
+        s += site.sizes[accepted["size"]][0] + (rules["terraceGap"] if accepted["size"] == "narrow" else rules["gap"])
 
 
 def entrance_order(site, parcel):
@@ -466,60 +529,99 @@ def settle_first_row(site, row1, min_level):
         row1 = keep
 
 
-def behind(site, rules, front, front_index, row, placed):
-    """A parcel standing directly behind `front`, facing the same street: the front's size when it
-    fits, else a small one, centred on the front's axis. It repeats the front's address."""
-    face = streetplan.facing(front["rotationY"])
-    depth = site.sizes[front["size"]][1]
-    stretch = site.stretch_by_id[front["stretch"]]
-    for size in dict.fromkeys((front["size"], "small")):
-        offset = depth / 2 + rules["rowGap"] + site.sizes[size][1] / 2
-        centre = (front["x"] - face[0] * offset, front["z"] - face[1] * offset)
-        candidate = make_parcel(site, size, centre, front["rotationY"], stretch, front["along"], row, front_index)
-        candidate["along"] = front["along"]
-        if parcel_clear(site, candidate["poly"], rules, set(), placed):
-            return candidate
-    return None
+def nearest_front(parcels, candidate, row):
+    """INTERFACES "Wave 1c, round 2": the nearest earlier parcel of row - 1 on the same side of the
+    same street (1-based index), or None. Ties go to the lower index."""
+    best, best_d = None, math.inf
+    for index, other in enumerate(parcels, start=1):
+        if other["row"] != row - 1 or other["polyline"] != candidate["polyline"] or other["side"] != candidate["side"]:
+            continue
+        d = math.dist((other["x"], other["z"]), (candidate["x"], candidate["z"]))
+        if d < best_d - 1e-9:
+            best, best_d = index, d
+    return best
+
+
+def infill(site, rules, parcels, row):
+    """Back-row lots anywhere in the block interior behind a street's frontage (INTERFACES "Wave 1c,
+    round 2"): a raster over each run side, front edges within the row's band of studs off the
+    chord, facing the street square on, each laid where it keeps every clearance (back rows keep a
+    walker's reach off every street and spur). Fronts and addresses are set afterwards."""
+    band = rules["infill"]["rows"][str(row)]
+    step = rules["infill"]["step"]
+    sizes = [size for size in rules["infill"]["sizes"] if size in site.sizes]
+    added = []
+    for run in street_runs(site):
+        a, d = run["a"], run["d"]
+        length = math.dist(a, run["b"])
+        for side in (1, -1):
+            n = (-d[1] * side, d[0] * side)
+            square_on = facing_rot((-n[0], -n[1]))
+            depth_edge = band[0]
+            while depth_edge <= band[1] + 1e-9:
+                s = rules["endMargin"]
+                while s < length - rules["endMargin"]:
+                    for size in sizes:
+                        w, depth = site.sizes[size]
+                        mid = s + w / 2
+                        if mid > length:
+                            continue
+                        where = locate(site, run, mid)
+                        if where is None or where[0] not in site.drawn:
+                            continue
+                        reach = depth_edge + depth / 2
+                        centre = (a[0] + d[0] * mid + n[0] * reach, a[1] + d[1] * mid + n[1] * reach)
+                        candidate = make_parcel(site, size, centre, square_on, where[0], where[1], row, 0, run, side)
+                        if parcel_clear(site, candidate["poly"], rules, set(), parcels + added, size):
+                            added.append(candidate)
+                            s += w - step
+                            break
+                    s += step
+                depth_edge += step
+    return added
 
 
 def generate_parcels(site, plan):
-    """Returns (parcels, street-tree gaps). Parcels are in data order: row 1 by distance from the
-    entrance, then each back row in the order of its fronts (INTERFACES "Wave 1c": Order)."""
+    """Parcels in data order: row 1 by distance from the entrance, then row 2 and row 3, each in the
+    order of its fronts (INTERFACES "Wave 1c": Order)."""
     rules = plan["parcels"]
     rng = random.Random(f"{plan['seed']}:parcels")
     jitter = random.Random(f"{plan['seed']}:jitter")
-    rhythm = random.Random(f"{plan['seed']}:rhythm")
-    placed, gaps = [], []
+    terrace = set(rules["terraceStreets"])
 
-    def first_pass(stream):
+    def first_pass(stream, run):
+        if run["polyline"] + 1 in terrace:
+            return ("narrow",)
         return ("medium", "small") if stream.random() < rules["mediumShare"] else ("small", "medium")
 
-    def fill_pass(_stream):
-        return ("small",)
+    def fill_pass(_stream, run):
+        return ("narrow",) if run["polyline"] + 1 in terrace else ("small", "narrow")
 
-    # Frontage first, mostly medium where it fits and a street-tree gap every few parcels; then a
-    # second walk fills the holes the first left with small parcels, so no street-side spot a
-    # cottage fits is wasted.
-    for first, sizes_for in ((True, first_pass), (False, fill_pass)):
+    # Frontage first: terraces of narrow lots on the terrace streets, cottages mostly medium
+    # elsewhere; then a second walk fills every hole a lot still fits.
+    placed = []
+    for sizes_for in (first_pass, fill_pass):
         for run in street_runs(site):
             for side in (1, -1):
-                walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, rhythm if first else None, gaps if first else None)
+                walk_run(site, rules, run, side, sizes_for, rng, jitter, placed)
     min_level = rules["minLevel"]
     parcels = settle_first_row(site, placed, min_level)
     parcels.sort(key=lambda parcel: entrance_order(site, parcel))
     for row in range(2, min(rules["rows"], MAX_ROW) + 1):
-        added = []
-        for index, front in enumerate(parcels):
-            if front["row"] != row - 1:
+        kept = []
+        for candidate in infill(site, rules, parcels, row):
+            front = nearest_front(parcels, candidate, row)
+            if front is None:
                 continue
-            candidate = behind(site, rules, front, index + 1, row, parcels + added)
-            if candidate is not None:
-                added.append(candidate)
+            ahead = parcels[front - 1]
+            candidate["front"], candidate["stretch"], candidate["along"] = front, ahead["stretch"], ahead["along"]
+            kept.append(candidate)
         # A back row keeps `rowLag` levels behind its front; one that would stay a building site or
         # wild land once the era is finished is not laid at all.
-        levels = full_build_levels(site, parcels + added)[len(parcels) :]
-        parcels += [parcel for parcel, level in zip(added, levels) if level >= min_level]
-    return parcels, gaps
+        kept.sort(key=lambda parcel: (parcel["front"],) + entrance_order(site, parcel))
+        levels = full_build_levels(site, parcels + kept)[len(parcels) :]
+        parcels += [parcel for parcel, level in zip(kept, levels) if level >= min_level]
+    return parcels
 
 
 def full_build_levels(site, parcels):
@@ -672,7 +774,7 @@ def ring_candidates(rng, poly, near, far, attempts):
     return out
 
 
-def generate_trees(site, plan, parcels, levels, gaps):
+def generate_trees(site, plan, parcels, levels):
     """The town trees (INTERFACES "Wave 1c": Town trees), in data order: nearest the entrance first."""
     cfg = plan["trees"]
     props = (site.config.get("townTrees") or {}).get("props") or []
@@ -681,9 +783,9 @@ def generate_trees(site, plan, parcels, levels, gaps):
     variants = cfg["variants"]
     rng = random.Random(f"{plan['seed']}:trees")
     spots = TreeSpots(site, parcels, cfg)
-    # Street trees: first one in each gap the frontage walk left, then a sweep along both sides of
-    # every drawn stretch for any other free spot, `street.spacing` apart along a lane, so every
-    # lane gets its rhythm of trees between the houses and the landmarks.
+    # Street trees: the lots are laid first, so a sweep along both sides of every drawn stretch only
+    # finds frontage no lot took (short gaps, corners, beside pads), `street.spacing` apart along a
+    # lane (INTERFACES "Wave 1c, round 2": houses get the frontage first).
     street = cfg["street"]
 
     def plant_street(run, side, s):
@@ -695,6 +797,9 @@ def generate_trees(site, plan, parcels, levels, gaps):
         base = (run["a"][0] + d[0] * s, run["a"][1] + d[1] * s)
         for setback in street["setbacks"]:
             point = (base[0] + n[0] * setback, base[1] + n[1] * setback)
+            # the approach from the hub stays open, so the view up the high street is clear
+            if math.dist(point, site.entrance) < street["entranceClear"]:
+                continue
             near = [t for t in spots.trees if t["kind"] == "street" and math.dist(point, (t["x"], t["z"])) < street["spacing"]]
             if near:
                 continue
@@ -702,8 +807,6 @@ def generate_trees(site, plan, parcels, levels, gaps):
                 return True
         return False
 
-    for item in gaps:
-        plant_street(item["run"], item["side"], item["s"])
     for run in street_runs(site):
         length = math.dist(run["a"], run["b"])
         for side in (1, -1):
@@ -1007,9 +1110,9 @@ def build(era_name, city=None, era=None, network=None):
     """The document and the generator's bookkeeping (tree kinds) for the summary."""
     site = Site(era_name, city, era, network)
     plan = load_plan(era_name)
-    parcels, gaps = generate_parcels(site, plan)
+    parcels = generate_parcels(site, plan)
     levels = full_build_levels(site, parcels)
-    trees = generate_trees(site, plan, parcels, levels, gaps)
+    trees = generate_trees(site, plan, parcels, levels)
     wild = generate_wild(site, plan)
     doc = {
         "version": FORMAT_VERSION,
@@ -1122,12 +1225,12 @@ def parcel_messages(site, plan, parcels):
             if abs(corner[0]) > site.era.half_x - CHECK_EDGE + EPS or abs(corner[1]) > site.era.half_z - CHECK_EDGE + EPS:
                 messages.append(f"{label}: within {CHECK_EDGE} of the plot edge")
                 break
-        for slot_id, footprint in site.slot_polys.items():
-            if slot_id in site.street_only:
-                continue  # no model stands there (INTERFACES "Review rulings", wave 1c)
+        for slot_id, (footprint, measured) in site.landmark_polys.items():
+            need = CHECK_LANDMARK if measured else CHECK_SLOT
             d = gap(poly, footprint)
-            if d < CHECK_SLOT - EPS:
-                messages.append(f"{label}: {d:.2f} from the {slot_id} footprint (need {CHECK_SLOT})")
+            if d < need - EPS:
+                what = "harvested extents" if measured else "footprint"
+                messages.append(f"{label}: {d:.2f} from the {slot_id} {what} (need {need})")
         for slot_id, pad in site.pad_polys.items():
             d = gap(poly, pad)
             if d < CHECK_PAD - EPS:
@@ -1184,14 +1287,21 @@ def parcel_messages(site, plan, parcels):
             ahead = parcels[front - 1]
             if ahead["stretch"] != parcel["stretch"] or abs(ahead["along"] - parcel["along"]) > EPS:
                 messages.append(f"{label}: must repeat parcel {front}'s stretch and along")
-            # Directly behind: the same facing, the centre behind the front's, within its width.
-            face = streetplan.facing(ahead["rotationY"])
-            dx, dz = parcel["x"] - ahead["x"], parcel["z"] - ahead["z"]
-            lateral = abs(-face[1] * dx + face[0] * dz)
-            if face[0] * dx + face[1] * dz >= 0 or lateral > site.sizes[ahead["size"]][0] / 2 + EPS:
-                messages.append(f"{label}: is not directly behind parcel {front}")
-            if abs((parcel["rotationY"] - ahead["rotationY"] + 180.0) % 360.0 - 180.0) > EPS:
-                messages.append(f"{label}: does not face the same street as parcel {front}")
+            # INTERFACES "Wave 1c, round 2": the front is the nearest earlier parcel of the row in
+            # front on the same side of the same street.
+            polyline = parcel_polyline(parcel)
+            side = street_side(site, polyline, (parcel["x"], parcel["z"]))
+            if street_side(site, polyline, (ahead["x"], ahead["z"])) != side:
+                messages.append(f"{label}: stands on the other side of the street from parcel {front}")
+            reach = math.dist((ahead["x"], ahead["z"]), (parcel["x"], parcel["z"]))
+            for j, other in enumerate(parcels[: index - 1], start=1):
+                if j == front or other["row"] != row - 1 or other["stretch"] not in site.stretch_by_id:
+                    continue
+                if parcel_polyline(other) != polyline or street_side(site, polyline, (other["x"], other["z"])) != side:
+                    continue
+                if math.dist((other["x"], other["z"]), (parcel["x"], parcel["z"])) < reach - EPS:
+                    messages.append(f"{label}: parcel {j} is a nearer row-{row - 1} front than parcel {front}")
+                    break
         else:
             messages.append(f"{label}: row {row!r} is not 1 to {MAX_ROW}")
     for i, p in enumerate(polys):
@@ -1200,8 +1310,13 @@ def parcel_messages(site, plan, parcels):
         box = box_of(p)
         for j in range(i + 1, len(polys)):
             q = polys[j]
-            if q is not None and not boxes_apart(box, box_of(q), 0.0) and gap(p, q) <= 0:
+            if q is None or boxes_apart(box, box_of(q), CHECK_SIZE_GAP):
+                continue
+            d = gap(p, q)
+            if d <= 0:
                 messages.append(f"parcel {i + 1} overlaps parcel {j + 1}")
+            elif parcels[i]["size"] != parcels[j]["size"] and d < CHECK_SIZE_GAP - EPS:
+                messages.append(f"parcels {i + 1} and {j + 1}: {d:.2f} apart, lots of different sizes need {CHECK_SIZE_GAP}")
     # Order (INTERFACES "Wave 1c"): row 1, nearest the entrance first; then row 2 and row 3, each
     # in the order of its fronts.
     rows = [p["row"] for p in parcels]
@@ -1215,9 +1330,12 @@ def parcel_messages(site, plan, parcels):
         fronts = [p["front"] for p in parcels if p["row"] == row]
         if fronts != sorted(fronts):
             messages.append(f"parcels: row {row} is not in the order of its fronts")
+    houses = 0
     if all(poly is not None for poly in polys) and all(p["stretch"] in site.stretch_by_id for p in parcels):
         need_level = plan["parcels"].get("minLevel", 1)
-        for index, level in enumerate(full_build_levels(site, parcels), start=1):
+        levels = full_build_levels(site, parcels)
+        houses = sum(1 for level in levels if level >= BUILT_LEVEL)
+        for index, level in enumerate(levels, start=1):
             if level < need_level:
                 what = "stays wild" if level == 0 else f"only reaches level {level}"
                 messages.append(f"parcel {index}: {what} even with the whole era owned (need {need_level})")
@@ -1227,6 +1345,8 @@ def parcel_messages(site, plan, parcels):
         messages.append(f"parcels: {len(parcels)}, need at least {need['parcels']}")
     if medium < need.get("medium", 0):
         messages.append(f"parcels: {medium} medium, need at least {need['medium']}")
+    if houses < need.get("houses", 0):
+        messages.append(f"parcels: {houses} houses (level {BUILT_LEVEL}+) at full build, need at least {need['houses']}")
     cap = site.city.get("budget", {}).get("parcels")
     if isinstance(cap, (int, float)) and len(parcels) > cap:
         messages.append(f"parcels: {len(parcels)}, more than budget.parcels {cap:g} -- near plots never draw the tail")
@@ -1384,7 +1504,7 @@ def tree_kind(tree):
 def summary(era_name, doc):
     parcels, trees, wild = doc["parcels"], doc.get("trees", []), doc["wild"]
     by_row = {row: sum(1 for p in parcels if p["row"] == row) for row in range(1, MAX_ROW + 1)}
-    medium = sum(1 for p in parcels if p["size"] == "medium")
+    by_size = {size: sum(1 for p in parcels if p["size"] == size) for size in SIZES}
     clumps = [w for w in wild if w["kind"] == "clump"]
     singles = [w for w in wild if w["kind"] == "single"]
     kinds = {}
@@ -1392,7 +1512,7 @@ def summary(era_name, doc):
         kinds[tree_kind(tree)] = kinds.get(tree_kind(tree), 0) + 1
     return (
         f"{era_name}: {len(parcels)} parcels (rows {by_row[1]}/{by_row[2]}/{by_row[3]}; "
-        f"{medium} medium, {len(parcels) - medium} small); {len(trees)} town trees "
+        f"{by_size['narrow']} narrow, {by_size['small']} small, {by_size['medium']} medium); {len(trees)} town trees "
         f"({', '.join(f'{k} {v}' for k, v in sorted(kinds.items()))}); wild {len(wild)}: "
         f"{len(clumps)} clumps ({sum(1 for c in clumps if not c['skirt'])} on the plot, "
         f"{sum(1 for c in clumps if c['skirt'])} skirt), {len(singles)} singles "
