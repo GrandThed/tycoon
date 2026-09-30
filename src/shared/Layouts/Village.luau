@@ -53,11 +53,11 @@ return {
 		},
 		-- the square: the well on the west side, facing the fountain across the high street
 		well = { position = Vector3.new(-17.62, 0, 2.62), rotationY = 259.8, district = "home" },
-		-- on the craft lane's south side, first thing west of the heart
+		-- streetOnly Plant Flowers: no model, no path, no district; its pad is by the craft lane
 		flowerBed = {
 			position = Vector3.new(-32.75, 0, -52.68),
 			rotationY = 183.9,
-			district = "home",
+			spur = { Vector3.new(-32.75, 0, -52.68) },
 		},
 		-- the farmhouse at the end of the farm lane
 		houseSmallB = {
@@ -114,11 +114,11 @@ return {
 			rotationY = 95.9,
 			district = "home",
 		},
-		-- on the upper lane's east arm, beside the manor it requires
+		-- streetOnly Hang Banners: no model, no path; its pad is on the high street above the square
 		bannerPole = {
-			position = Vector3.new(21.94, 0, 35.97),
-			rotationY = 345.9,
-			district = "civic",
+			position = Vector3.new(-12, 0, 6),
+			rotationY = 180,
+			spur = { Vector3.new(-12, 0, 6) },
 		},
 		-- the back-east corner, at the top of the upper lane
 		stables = { position = Vector3.new(41.35, 0, 40.84), rotationY = 345.9, district = "farm" },

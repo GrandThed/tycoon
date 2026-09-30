@@ -79,6 +79,9 @@ CHECK_MARKER_SLOT = 0.5  # the next-pad marker's daylight to any slot footprint 
 CHECK_TREE = 1.0  # a town tree's daylight to a parcel, slot footprint, pad, marker or lamp
 CHECK_TREE_EDGE = 1.0
 CHECK_TREE_SPACING = 2.0  # two trunks closer than this read as one tree
+CHECK_OWN_LOT = 0.6  # a planter may lean this far into its own house's front garden
+CHECK_ITEM_SPACING = 0.8  # two flower or banner entries closer than this stand in each other
+CHECK_BUNTING_TREE = 1.0  # no tree trunk this close under a bunting string
 MARKER_SIZE = 2.0  # the marker prop's ground square, the contract's cap
 BUILT_LEVEL = 2  # a parcel's house stands from level 2 (a parcel-anchored tree needs it)
 MAX_ROW = 3
@@ -714,8 +717,18 @@ def full_build_levels(site, parcels):
 
 
 # --------------------------------------------------------------------------------------------
-# Town trees
+# City upgrade layers (INTERFACES "Wave 1c, round 3"): trees, flowers, banners
 # --------------------------------------------------------------------------------------------
+
+LAYERS = ("trees", "flowers", "banners")
+
+
+def upgrade_config(site, layer):
+    return ((site.config.get("upgrades") or {}).get(layer)) or {}
+
+
+def entry_order(site, entry):
+    return (round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"])
 
 
 class TreeSpots:
@@ -777,8 +790,8 @@ def ring_candidates(rng, poly, near, far, attempts):
 def generate_trees(site, plan, parcels, levels):
     """The town trees (INTERFACES "Wave 1c": Town trees), in data order: nearest the entrance first."""
     cfg = plan["trees"]
-    props = (site.config.get("townTrees") or {}).get("props") or []
-    if not props:
+    layer = upgrade_config(site, "trees")
+    if not layer.get("props"):
         return []
     variants = cfg["variants"]
     rng = random.Random(f"{plan['seed']}:trees")
@@ -815,17 +828,7 @@ def generate_trees(site, plan, parcels, levels):
                 s += street["spacing"] if plant_street(run, side, s) else street["step"]
     # Green and orchard trees round landmarks, planted once the landmark's street is drawn; the
     # tree slot's own green (its rect) is ringed by green trees on the stretch nearest it.
-    town = site.config.get("townTrees") or {}
-    groups = []
-    for slot in sorted(site.era.slots, key=lambda s: s["id"]):
-        district = site.era.layout["slots"][slot["id"]].get("district")
-        if slot["id"] == town.get("requiresSlot"):
-            groups.append(("green", slot, site.nearest_drawn(slot["position"])))
-        elif district in cfg["orchard"]["districts"] and slot["id"] in site.approach:
-            groups.append(("orchard", slot, site.approach[slot["id"]]))
-        elif district in cfg["green"]["districts"] and slot["id"] in site.approach:
-            groups.append(("green", slot, site.approach[slot["id"]]))
-    for kind, slot, stretch in groups:
+    for kind, slot, stretch in landmark_groups(site, cfg["orchard"]["districts"], cfg["green"]["districts"], [layer.get("requiresSlot")]):
         if stretch is None:
             continue
         rule = cfg[kind]
@@ -852,8 +855,23 @@ def generate_trees(site, plan, parcels, levels):
             continue
         spots.add(point, rng, variants["yard"], {"anchor": "parcel", "parcel": nearest}, "yard")
     trees = spots.trees
-    trees.sort(key=lambda t: (round(math.dist(site.entrance, (t["x"], t["z"])), DECIMALS), t["z"], t["x"]))
+    trees.sort(key=lambda t: entry_order(site, t))
     return trees
+
+
+def landmark_groups(site, orchard_districts, green_districts, green_slots):
+    """(kind, slot, anchor stretch) for every landmark a layer rings: orchard districts, green
+    districts, and the named street-only greens (anchored to the stretch nearest them)."""
+    groups = []
+    for slot in sorted(site.era.slots, key=lambda s: s["id"]):
+        district = site.era.layout["slots"][slot["id"]].get("district")
+        if slot["id"] in green_slots:
+            groups.append(("green", slot, site.nearest_drawn(slot["position"])))
+        elif district in orchard_districts and slot["id"] in site.approach:
+            groups.append(("orchard", slot, site.approach[slot["id"]]))
+        elif district in green_districts and slot["id"] in site.approach:
+            groups.append(("green", slot, site.approach[slot["id"]]))
+    return groups
 
 
 def nearest_parcel(point, parcels):
@@ -866,15 +884,310 @@ def nearest_parcel(point, parcels):
     return best
 
 
-def planted_at_full(site, tree, levels):
-    """INTERFACES "Wave 1c": a tree stands once the tree slot is owned and its anchor developed."""
-    if tree.get("anchor") == "stretch":
-        index = site.stretch_by_id.get(tree.get("stretch"))
+class ItemSpots:
+    """Flowers and banners: each entry is a footprint (the plan's measured prop size x scale, turned
+    rotationY) that keeps a walker's whole reach off every street and spur, stays off every lot
+    (a planter may lean into its own house's front by `ownLot`), every built landmark's harvested
+    extents, pad, marker, lamp and the Sign, and apart from every entry already placed in any layer."""
+
+    def __init__(self, site, parcels, rule, taken):
+        self.site, self.rule = site, rule
+        self.lots = [(parcel["poly"], parcel["box"]) for parcel in parcels]
+        solids = [(poly, rule["solid"]) for poly, _ in site.landmark_polys.values()]
+        solids += [(poly, rule["solid"]) for poly in site.pad_polys.values()]
+        solids += [(poly, rule["solid"]) for poly in site.marker_polys.values()]
+        solids += [(poly, rule["solid"]) for poly in site.plaza_polys]
+        solids += [(poly, rule["lamp"]) for poly in site.lamps]
+        solids.append((site.era.sign_poly, rule["solid"]))
+        self.solids = [(poly, box_of(poly), margin) for poly, margin in solids]
+        self.streets = [(a, b, box) for _, _, a, b, box in site.street_boxes]
+        self.spurs = list(site.spur_boxes)
+        self.taken = taken  # (x, z) of every entry placed so far, every layer
+        self.entries = []
+
+    def fits(self, poly, point, own=None, lane_exempt=False):
+        site, rule = self.site, self.rule
+        edge = rule["edge"]
+        if any(abs(v[0]) > site.era.half_x - edge or abs(v[1]) > site.era.half_z - edge for v in poly):
+            return False
+        box = box_of(poly)
+        for index, (lot, lot_box) in enumerate(self.lots, start=1):
+            margin = rule["lot"]
+            if not boxes_apart(box, lot_box, margin):
+                d = gap(poly, lot)
+                if index == own:
+                    if not polygon_within(poly, lot, rule["ownLot"]):
+                        return False
+                elif d < margin:
+                    return False
+        for solid, solid_box, margin in self.solids:
+            if not boxes_apart(box, solid_box, margin) and gap(poly, solid) < margin:
+                return False
+        if not lane_exempt:
+            for a, b, segment_box in self.streets:
+                if not boxes_apart(box, segment_box, site.walker_street) and segment_gap(a, b, poly) < site.walker_street:
+                    return False
+            for a, b, segment_box in self.spurs:
+                if not boxes_apart(box, segment_box, site.walker_spur) and segment_gap(a, b, poly) < site.walker_spur:
+                    return False
+        return all(math.dist(point, other) >= rule["cross"] for other in self.taken)
+
+    def add(self, entry, poly, own=None):
+        if not self.fits(poly, (entry["x"], entry["z"]), own):
+            return False
+        self.entries.append(entry)
+        self.taken.append((entry["x"], entry["z"]))
+        return True
+
+
+def polygon_within(poly, lot, depth):
+    """True when `poly` overlaps `lot` by at most `depth` studs (every vertex inside the lot lies
+    within `depth` of its boundary)."""
+    for vertex in poly:
+        if streetplan.point_in_polygon(vertex, lot) and streetplan.point_polygon_distance(vertex, lot) > depth + EPS:
+            return False
+    return True
+
+
+def item_poly(plan, layer, prop, x, z, rotation, scale):
+    size = plan[layer]["footprints"][prop]
+    return streetplan.square((x, z), size[0] * scale, size[1] * scale, rotation)
+
+
+def make_entry(x, z, rotation, scale, variant, anchor):
+    entry = {"x": rounded(x), "z": rounded(z), "rotationY": rounded(norm_degrees(rotation)), "scale": rounded(scale), "variant": variant}
+    entry.update(anchor)
+    return entry
+
+
+def corner_candidates(site):
+    """(point on the corner's bisector at distance 1, bisector unit, node) for every corner between
+    two street arms at a crossing or a bend, nodes in creation order."""
+    out = []
+    for node, stretch_ids in enumerate(site.network.node_stretches):
+        if len(stretch_ids) < 2:
+            continue
+        point = site.network.nodes[node]
+        arms = []
+        for sid in stretch_ids:
+            st = site.network.stretches[sid]
+            far = st["b"] if st["from"] == node else st["a"]
+            d = streetplan.unit((far[0] - point[0], far[1] - point[1]))
+            if d is not None:
+                arms.append(d)
+        arms.sort(key=lambda v: math.atan2(v[1], v[0]))
+        for i, arm in enumerate(arms):
+            following = arms[(i + 1) % len(arms)]
+            angle = math.atan2(following[1], following[0]) - math.atan2(arm[1], arm[0])
+            if angle <= 0:
+                angle += math.tau
+            if angle > math.pi * 0.95 and len(arms) > 2:
+                continue  # a straight-through side of a crossing is frontage, not a corner
+            if angle >= math.pi * 1.05:
+                continue
+            bisector = streetplan.unit((arm[0] + following[0], arm[1] + following[1]))
+            if bisector is not None:
+                out.append((point, bisector, node))
+    return out
+
+
+def generate_flowers(site, plan, parcels, levels, taken):
+    """Plant Flowers (INTERFACES "Wave 1c, round 3"): a planter in front of each frontage house,
+    borders in the lane corners, beds round the greens, the square and the civic landmarks."""
+    cfg = plan["flowers"]
+    layer = upgrade_config(site, "flowers")
+    props = layer.get("props") or []
+    if not props:
+        return []
+    rng = random.Random(f"{plan['seed']}:flowers")
+    spots = ItemSpots(site, parcels, cfg, taken)
+    variants = cfg["variants"]
+    low, high = cfg["scale"]
+    # Planters: in each row-1 house's front setback, square to the street, leaning into the lot's
+    # own front garden rather than onto the walker lane.
+    planter = props[variants["planter"] - 1]
+    for index, parcel in enumerate(parcels, start=1):
+        if parcel["row"] != 1 or levels[index - 1] < BUILT_LEVEL:
+            continue
+        st = site.network.stretches[site.stretch_by_id[parcel["stretch"]]]
+        depth = site.sizes[parcel["size"]][1]
+        fc = front_centre(parcel["x"], parcel["z"], parcel["rotationY"], depth)
+        _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
+        normal = streetplan.unit((fc[0] - foot[0], fc[1] - foot[1]))
+        if normal is None:
+            continue
+        scale = rng.uniform(low, high)
+        half = plan["flowers"]["footprints"][planter][1] * scale / 2
+        reach = site.walker_street + half + cfg["planter"]["slack"]
+        x, z = foot[0] + normal[0] * reach, foot[1] + normal[1] * reach
+        entry = make_entry(x, z, parcel["rotationY"], scale, variants["planter"], {"anchor": "parcel", "parcel": index})
+        spots.add(entry, item_poly(plan, "flowers", planter, entry["x"], entry["z"], entry["rotationY"], entry["scale"]), own=index)
+    # Borders in the corners between lane arms; a planter where a border does not fit.
+    border = props[variants["border"] - 1]
+    for point, bisector, node in corner_candidates(site):
+        stretch = site.nearest_drawn(point)
+        if stretch is None or node not in (site.network.stretches[stretch]["from"], site.network.stretches[stretch]["to"]):
+            continue
+        placed = False
+        for reach in cfg["border"]["reach"]:
+            if placed:
+                break
+            x, z = point[0] + bisector[0] * reach, point[1] + bisector[1] * reach
+            rotation = facing_rot((-bisector[0], -bisector[1]))
+            for variant, prop in ((variants["border"], border), (variants["planter"], planter)):
+                entry = make_entry(x, z, rotation, rng.uniform(low, high), variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+                if spots.add(entry, item_poly(plan, "flowers", prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"])):
+                    placed = True
+                    break
+    # Beds round the greens, the square and the civic landmarks.
+    beds = cfg["beds"]
+    ring_slots = set(beds["slots"])
+    for slot in sorted(site.era.slots, key=lambda s: s["id"]):
+        district = site.era.layout["slots"][slot["id"]].get("district")
+        if slot["id"] not in ring_slots and district not in beds["districts"]:
+            continue
+        stretch = site.approach.get(slot["id"]) if slot["id"] in site.approach else site.nearest_drawn(slot["position"])
+        if stretch is None:
+            continue
+        poly = site.landmark_polys[slot["id"]][0] if slot["id"] in site.landmark_polys else slot["footprint"]
+        placed = 0
+        for point in ring_candidates(rng, poly, beds["ring"][0], beds["ring"][1], beds["attempts"]):
+            if placed >= beds["count"]:
+                break
+            variant = beds["variants"][placed % len(beds["variants"])]
+            prop = props[variant - 1]
+            entry = make_entry(point[0], point[1], rng.uniform(0.0, 360.0), rng.uniform(low, high), variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+            if spots.add(entry, item_poly(plan, "flowers", prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"])):
+                placed += 1
+    flowers = spots.entries
+    flowers.sort(key=lambda e: entry_order(site, e))
+    return flowers
+
+
+def bunting_posts(plan, entry):
+    """The two posts of a bunting entry: `bunting.half` x scale either side along its local X."""
+    half = plan["banners"]["bunting"]["half"] * entry["scale"]
+    dx, dz = rotate(half, 0.0, entry["rotationY"])
+    return [(entry["x"] + dx, entry["z"] + dz), (entry["x"] - dx, entry["z"] - dz)]
+
+
+def generate_banners(site, plan, parcels, taken):
+    """Hang Banners (INTERFACES "Wave 1c, round 3"): street banners along the banner streets,
+    alternating sides every 10-14 studs, and a few buntings spanning them, posts in the front
+    setbacks clear of the walker reach."""
+    cfg = plan["banners"]
+    layer = upgrade_config(site, "banners")
+    props = layer.get("props") or []
+    if not props:
+        return []
+    rng = random.Random(f"{plan['seed']}:banners")
+    spots = ItemSpots(site, parcels, cfg, taken)
+    variants = cfg["variants"]
+    streets = set(cfg["streets"])
+    runs = [run for run in street_runs(site) if run["polyline"] + 1 in streets]
+    # Buntings first: the few spots where both posts fit, spread along the banner streets.
+    bunting = cfg["bunting"]
+    candidates = []
+    for run in runs:
+        length = math.dist(run["a"], run["b"])
+        d = run["d"]
+        n = (-d[1], d[0])
+        s = bunting["endMargin"]
+        while s < length - bunting["endMargin"]:
+            where = locate(site, run, s)
+            if where is not None and where[0] in site.drawn:
+                candidates.append((run, s, where[0], n))
+            s += bunting["step"]
+    chosen = []
+    for run, s, stretch, n in candidates:
+        if len(chosen) >= bunting["count"]:
+            break
+        x, z = run["a"][0] + run["d"][0] * s, run["a"][1] + run["d"][1] * s
+        if any(math.dist((x, z), (c["x"], c["z"])) < bunting["spacing"] for c in chosen):
+            continue
+        rotation = math.degrees(math.atan2(-n[1], n[0]))
+        entry = make_entry(x, z, rotation, bunting["scale"], variants["bunting"], {"anchor": "stretch", "stretch": site.ids[stretch]})
+        posts = bunting_posts(plan, entry)
+        post = bunting["post"]
+        if all(spots.fits(streetplan.square(p, post, post, entry["rotationY"]), p) for p in posts):
+            if not bunting_clear_of_trees(entry, posts, taken, bunting):
+                continue
+            spots.entries.append(entry)
+            spots.taken.extend(posts)
+            chosen.append(entry)
+    # Street banners: alternating sides, the next one 10-14 studs further on.
+    banner = cfg["banner"]
+    for run in runs:
+        length = math.dist(run["a"], run["b"])
+        d = run["d"]
+        side = 1
+        s = banner["start"]
+        while s < length - banner["endMargin"]:
+            placed = False
+            for shift in banner["shifts"]:
+                t = s + shift
+                if not banner["endMargin"] <= t <= length - banner["endMargin"]:
+                    continue
+                where = locate(site, run, t)
+                if where is None or where[0] not in site.drawn:
+                    continue
+                n = (-d[1] * side, d[0] * side)
+                variant = variants["banner"][len(spots.entries) % len(variants["banner"])]
+                prop = props[variant - 1]
+                scale = rng.uniform(*banner["scale"])
+                half = cfg["footprints"][prop][1] * scale / 2
+                reach = site.walker_street + half + banner["slack"]
+                x, z = run["a"][0] + d[0] * t + n[0] * reach, run["a"][1] + d[1] * t + n[1] * reach
+                rotation = facing_rot((-n[0], -n[1]))  # cloth toward the street
+                entry = make_entry(x, z, rotation, scale, variant, {"anchor": "stretch", "stretch": site.ids[where[0]]})
+                if spots.add(entry, item_poly(plan, "banners", prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"])):
+                    placed = True
+                    s = t
+                    break
+            if placed:
+                side = -side
+                s += rng.uniform(*banner["spacing"])
+            else:
+                s += banner["step"]
+    banners = spots.entries
+    banners.sort(key=lambda e: entry_order(site, e))
+    return banners
+
+
+def bunting_clear_of_trees(entry, posts, taken, rule):
+    """No tree trunk within `treeClear` of the string's line between the posts, so no canopy hangs
+    into the pennants."""
+    a, b = posts
+    for point in taken:
+        if streetplan.point_segment_distance(point, a, b)[0] < rule["treeClear"]:
+            return False
+    return True
+
+
+def placed_at_full(site, entry, levels):
+    """INTERFACES "Wave 1c, round 3": an entry is placed once its layer's slot is owned and its
+    anchor developed (a stretch drawn, or a parcel at level 2 or more)."""
+    if entry.get("anchor") == "stretch":
+        index = site.stretch_by_id.get(entry.get("stretch"))
         return index is not None and index in site.drawn
-    if tree.get("anchor") == "parcel":
-        parcel = tree.get("parcel")
+    if entry.get("anchor") == "parcel":
+        parcel = entry.get("parcel")
         return isinstance(parcel, int) and 1 <= parcel <= len(levels) and levels[parcel - 1] >= BUILT_LEVEL
     return False
+
+
+def generate_upgrades(site, plan, parcels, levels):
+    """Every configured layer in a fixed order (trees, banners, flowers); each later layer keeps
+    clear of every entry an earlier one placed."""
+    out = {}
+    trees = generate_trees(site, plan, parcels, levels) if upgrade_config(site, "trees") else []
+    taken = [(t["x"], t["z"]) for t in trees]
+    banners = generate_banners(site, plan, parcels, taken) if upgrade_config(site, "banners") else []
+    flowers = generate_flowers(site, plan, parcels, levels, taken) if upgrade_config(site, "flowers") else []
+    for name, entries in (("trees", trees), ("flowers", flowers), ("banners", banners)):
+        if upgrade_config(site, name):
+            out[name] = entries
+    return out
 
 
 # --------------------------------------------------------------------------------------------
@@ -1103,7 +1416,7 @@ def generate_wild(site, plan):
 # --------------------------------------------------------------------------------------------
 
 PARCEL_KEYS = ("x", "z", "rotationY", "size", "stretch", "along", "row", "front")
-TREE_KEYS = ("x", "z", "rotationY", "scale", "variant", "anchor", "stretch", "parcel")
+ENTRY_KEYS = ("x", "z", "rotationY", "scale", "variant", "anchor", "stretch", "parcel")
 
 
 def build(era_name, city=None, era=None, network=None):
@@ -1112,15 +1425,15 @@ def build(era_name, city=None, era=None, network=None):
     plan = load_plan(era_name)
     parcels = generate_parcels(site, plan)
     levels = full_build_levels(site, parcels)
-    trees = generate_trees(site, plan, parcels, levels)
+    upgrades = generate_upgrades(site, plan, parcels, levels)
     wild = generate_wild(site, plan)
     doc = {
         "version": FORMAT_VERSION,
         "parcels": [{key: p[key] for key in PARCEL_KEYS} for p in parcels],
-        "trees": [{key: t[key] for key in TREE_KEYS if key in t} for t in trees],
+        "upgrades": {name: [{key: e[key] for key in ENTRY_KEYS if key in e} for e in entries] for name, entries in upgrades.items()},
         "wild": wild,
     }
-    return doc, [t["kind"] for t in trees]
+    return doc, [t["kind"] for t in upgrades.get("trees", [])]
 
 
 def build_document(era_name, city=None, era=None, network=None):
@@ -1151,13 +1464,20 @@ def entry_text(entry):
 
 def render(doc):
     """Fixed formatting, one entry per line, so a rebuild is byte-identical and a diff reads."""
-    lines = ["{", f'  "version": {doc["version"]},']
-    for key in ("parcels", "trees", "wild"):
-        items = doc.get(key, [])
-        lines.append(f'  "{key}": [')
-        lines += [f"    {entry_text(item)}{',' if i < len(items) - 1 else ''}" for i, item in enumerate(items)]
-        lines.append("  ]" + ("," if key != "wild" else ""))
-    lines.append("}")
+    def entries(items, indent):
+        return [f"{indent}{entry_text(item)}{',' if i < len(items) - 1 else ''}" for i, item in enumerate(items)]
+
+    lines = ["{", f'  "version": {doc["version"]},', '  "parcels": [']
+    lines += entries(doc.get("parcels", []), "    ")
+    lines += ["  ],", '  "upgrades": {']
+    layers = [name for name in LAYERS if name in doc.get("upgrades", {})]
+    for n, name in enumerate(layers):
+        lines.append(f'    "{name}": [')
+        lines += entries(doc["upgrades"][name], "      ")
+        lines.append("    ]" + ("," if n < len(layers) - 1 else ""))
+    lines += ["  },", '  "wild": [']
+    lines += entries(doc.get("wild", []), "    ")
+    lines += ["  ]", "}"]
     return "\n".join(lines) + "\n"
 
 
@@ -1353,77 +1673,165 @@ def parcel_messages(site, plan, parcels):
     return messages
 
 
-def tree_messages(site, plan, doc):
-    """INTERFACES "Wave 1c": Town trees."""
+def upgrade_messages(site, plan, doc):
+    """INTERFACES "Wave 1c, round 3": every layer's schema, anchors, clearances, budget and floor."""
     messages = []
-    trees = doc.get("trees", [])
+    upgrades = doc.get("upgrades", {})
+    if not isinstance(upgrades, dict):
+        return ["upgrades: must map a layer name to a list of entries"]
     parcels = doc.get("parcels", [])
-    config = site.config.get("townTrees") or {}
-    props = config.get("props") or []
     polys = [rect((p["x"], p["z"]), site.sizes.get(p["size"], (0, 0)), p["rotationY"]) for p in parcels]
     levels = full_build_levels(site, parcels) if parcels else []
+    streets = [(f"street {pl + 1}", a, b) for pl, _seg, a, b in site.street_segments]
+    spurs = [(f"the {slot_id} path", a, b) for slot_id, a, b in site.spur_segments]
+    need = plan.get("require") or {}
+    everything = [(name, e) for name in LAYERS for e in upgrades.get(name, [])]
+    for name in upgrades:
+        if name not in LAYERS:
+            messages.append(f"upgrades: layer {name!r} is not one of {LAYERS}")
+    for name in LAYERS:
+        config = upgrade_config(site, name)
+        entries = upgrades.get(name, [])
+        if not config:
+            if entries:
+                messages.append(f"{name}: {len(entries)} entries but CityDressing has no fabric.upgrades.{name}")
+            continue
+        props = config.get("props") or []
+        placed = 0
+        for index, entry in enumerate(entries, start=1):
+            label = f"{name} {index} ({number(entry['x'])}, {number(entry['z'])})"
+            messages += anchor_messages(site, label, entry, props, parcels, levels, polys)
+            if placed_at_full(site, entry, levels):
+                placed += 1
+            point = (entry["x"], entry["z"])
+            if abs(point[0]) > site.era.half_x - CHECK_TREE_EDGE + EPS or abs(point[1]) > site.era.half_z - CHECK_TREE_EDGE + EPS:
+                messages.append(f"{label}: within {CHECK_TREE_EDGE} of the plot edge")
+            if name == "trees":
+                messages += tree_clearance(site, label, entry, polys, streets + spurs)
+            else:
+                messages += item_clearance(site, plan, name, label, entry, props, polys, streets, spurs, everything)
+        budget = config.get("budget")
+        if isinstance(budget, (int, float)) and len(entries) > budget:
+            messages.append(f"{name}: {len(entries)} entries, more than upgrades.{name}.budget {budget:g} -- near plots never draw the tail")
+        if placed < need.get(name, 0):
+            messages.append(f"{name}: {placed} placed with the whole era owned, need at least {need[name]}")
+    trees = upgrades.get("trees", [])
+    for i, tree in enumerate(trees):
+        for j in range(i + 1, len(trees)):
+            if math.dist((tree["x"], tree["z"]), (trees[j]["x"], trees[j]["z"])) < CHECK_TREE_SPACING - EPS:
+                messages.append(f"trees {i + 1} and {j + 1}: within {CHECK_TREE_SPACING} of each other")
+    return messages
+
+
+def anchor_messages(site, label, entry, props, parcels, levels, polys):
+    messages = []
+    variant = entry.get("variant")
+    if not (isinstance(variant, int) and 1 <= variant <= len(props)):
+        messages.append(f"{label}: variant {variant!r} is not 1 to {len(props)}")
+    if not entry.get("scale", 0) > 0:
+        messages.append(f"{label}: scale must be positive")
+    anchor = entry.get("anchor")
+    if anchor not in ANCHORS:
+        messages.append(f"{label}: anchor {anchor!r} is not one of {ANCHORS}")
+    elif anchor == "stretch":
+        if "parcel" in entry:
+            messages.append(f"{label}: a stretch entry names a parcel")
+        stretch = site.stretch_by_id.get(entry.get("stretch"))
+        if stretch is None:
+            messages.append(f"{label}: stretch {entry.get('stretch')!r} is not a piece of this network")
+        elif stretch not in site.drawn:
+            messages.append(f"{label}: stretch {entry['stretch']} is never drawn, so it is never placed")
+    else:
+        if "stretch" in entry:
+            messages.append(f"{label}: a parcel entry names a stretch")
+        parcel = entry.get("parcel")
+        if not (isinstance(parcel, int) and 1 <= parcel <= len(parcels)):
+            messages.append(f"{label}: parcel {parcel!r} is not a parcel index")
+        elif levels[parcel - 1] < BUILT_LEVEL:
+            messages.append(f"{label}: parcel {parcel} never becomes a house, so it is never placed")
+    return messages
+
+
+def tree_clearance(site, label, tree, polys, lanes):
+    """A town tree: at least a stud from every parcel, slot footprint, pad, marker and lamp, off the
+    walker and cart lanes, and anchored to the nearest parcel when it names one (wave 1c)."""
+    messages = []
+    point = (tree["x"], tree["z"])
     solids = [(f"parcel {i}", poly) for i, poly in enumerate(polys, start=1)]
     solids += [(f"the {slot_id} footprint", poly) for slot_id, poly in site.slot_polys.items()]
     solids += [(f"the {slot_id} pad", poly) for slot_id, poly in site.pad_polys.items()]
     solids += [(f"the {slot_id} marker", poly) for slot_id, poly in site.marker_polys.items()]
     solids += [(f"lamp {i}", poly) for i, poly in enumerate(site.lamps, start=1)]
-    boxes = [(label, poly, box_of(poly)) for label, poly in solids]
-    lanes = [(f"street {pl + 1}", a, b) for pl, _seg, a, b in site.street_segments]
-    lanes += [(f"the {slot_id} path", a, b) for slot_id, a, b in site.spur_segments]
-    planted = 0
-    for index, tree in enumerate(trees, start=1):
-        label = f"tree {index} ({number(tree['x'])}, {number(tree['z'])})"
-        point = (tree["x"], tree["z"])
-        variant = tree.get("variant")
-        if not (isinstance(variant, int) and 1 <= variant <= len(props)):
-            messages.append(f"{label}: variant {variant!r} is not 1 to {len(props)} (townTrees.props)")
-        if not tree.get("scale", 0) > 0:
-            messages.append(f"{label}: scale must be positive")
-        anchor = tree.get("anchor")
-        if anchor not in ANCHORS:
-            messages.append(f"{label}: anchor {anchor!r} is not one of {ANCHORS}")
-        elif anchor == "stretch":
-            if "parcel" in tree:
-                messages.append(f"{label}: a stretch tree names a parcel")
-            stretch = site.stretch_by_id.get(tree.get("stretch"))
-            if stretch is None:
-                messages.append(f"{label}: stretch {tree.get('stretch')!r} is not a piece of this network")
-            elif stretch not in site.drawn:
-                messages.append(f"{label}: stretch {tree['stretch']} is never drawn, so the tree is never planted")
-        else:
-            if "stretch" in tree:
-                messages.append(f"{label}: a parcel tree names a stretch")
-            parcel = tree.get("parcel")
-            if not (isinstance(parcel, int) and 1 <= parcel <= len(parcels)):
-                messages.append(f"{label}: parcel {parcel!r} is not a parcel index")
-            else:
-                if levels[parcel - 1] < BUILT_LEVEL:
-                    messages.append(f"{label}: parcel {parcel} never becomes a house, so the tree is never planted")
-                nearest = nearest_parcel(point, [{"poly": poly} for poly in polys])
-                if nearest != parcel and point_gap(point, polys[nearest - 1]) < point_gap(point, polys[parcel - 1]) - EPS:
-                    messages.append(f"{label}: anchored to parcel {parcel}, but parcel {nearest} is nearer")
-        if planted_at_full(site, tree, levels):
-            planted += 1
-        edge = CHECK_TREE_EDGE
-        if abs(point[0]) > site.era.half_x - edge + EPS or abs(point[1]) > site.era.half_z - edge + EPS:
-            messages.append(f"{label}: within {edge} of the plot edge")
-        for what, poly, box in boxes:
-            if not point_box_apart(point, box, CHECK_TREE) and point_gap(point, poly) < CHECK_TREE - EPS:
-                messages.append(f"{label}: {point_gap(point, poly):.2f} from {what} (need {CHECK_TREE})")
-        for what, a, b in lanes:
-            d, _ = streetplan.point_segment_distance(point, a, b)
-            if d < site.lane_clear - EPS:
-                messages.append(f"{label}: {d:.2f} from {what}, on its walker or cart lane (need {site.lane_clear:g})")
-        for j in range(index, len(trees)):
-            other = trees[j]
-            if math.dist(point, (other["x"], other["z"])) < CHECK_TREE_SPACING - EPS:
-                messages.append(f"{label}: within {CHECK_TREE_SPACING} of tree {j + 1}")
-    cap = site.city.get("budget", {}).get("townTrees")
-    if isinstance(cap, (int, float)) and len(trees) > cap:
-        messages.append(f"trees: {len(trees)}, more than budget.townTrees {cap:g} -- near plots never draw the tail")
-    need = (plan.get("require") or {}).get("trees", 0)
-    if planted < need:
-        messages.append(f"trees: {planted} planted with the whole era owned, need at least {need}")
+    for what, poly in solids:
+        if not point_box_apart(point, box_of(poly), CHECK_TREE) and point_gap(point, poly) < CHECK_TREE - EPS:
+            messages.append(f"{label}: {point_gap(point, poly):.2f} from {what} (need {CHECK_TREE})")
+    for what, a, b in lanes:
+        d, _ = streetplan.point_segment_distance(point, a, b)
+        if d < site.lane_clear - EPS:
+            messages.append(f"{label}: {d:.2f} from {what}, on its walker or cart lane (need {site.lane_clear:g})")
+    if tree.get("anchor") == "parcel" and isinstance(tree.get("parcel"), int) and 1 <= tree["parcel"] <= len(polys):
+        parcel = tree["parcel"]
+        nearest = nearest_parcel(point, [{"poly": poly} for poly in polys])
+        if nearest != parcel and point_gap(point, polys[nearest - 1]) < point_gap(point, polys[parcel - 1]) - EPS:
+            messages.append(f"{label}: anchored to parcel {parcel}, but parcel {nearest} is nearer")
+    return messages
+
+
+def item_clearance(site, plan, layer, label, entry, props, polys, streets, spurs, everything):
+    """A flower or banner: its footprint (a bunting: each post) keeps a walker's reach off every
+    street and spur, stays off every lot (a parcel-anchored planter may lean into its own house's
+    front by CHECK_OWN_LOT), every built landmark, pad, marker and lamp, and apart from other entries.
+    A bunting's string is overhead and exempt; its posts are not, and no tree stands under it."""
+    messages = []
+    variant = entry.get("variant")
+    if not (isinstance(variant, int) and 1 <= variant <= len(props)):
+        return messages
+    prop = props[variant - 1]
+    bunting = layer == "banners" and prop == plan["banners"]["bunting"]["prop"]
+    if bunting:
+        post = plan["banners"]["bunting"]["post"]
+        shapes = [streetplan.square(p, post, post, entry["rotationY"]) for p in bunting_posts(plan, entry)]
+    else:
+        footprints = plan[layer]["footprints"]
+        if prop not in footprints:
+            return [f"{label}: the plan has no footprint for {prop}"]
+        shapes = [item_poly(plan, layer, prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"])]
+    own = entry.get("parcel") if entry.get("anchor") == "parcel" else None
+    solids = [(f"the {slot_id} extents", poly) for slot_id, (poly, _) in site.landmark_polys.items()]
+    solids += [(f"the {slot_id} pad", poly) for slot_id, poly in site.pad_polys.items()]
+    solids += [(f"the {slot_id} marker", poly) for slot_id, poly in site.marker_polys.items()]
+    solids += [(f"lamp {i}", poly) for i, poly in enumerate(site.lamps, start=1)]
+    for shape in shapes:
+        box = box_of(shape)
+        for what, a, b in streets:
+            d = segment_gap(a, b, shape)
+            if d < site.walker_street - EPS:
+                messages.append(f"{label}: {d:.2f} from {what}, inside the walker reach (need {site.walker_street:g})")
+        for what, a, b in spurs:
+            d = segment_gap(a, b, shape)
+            if d < site.walker_spur - EPS:
+                messages.append(f"{label}: {d:.2f} from {what}, inside the walker reach (need {site.walker_spur:g})")
+        for index, lot in enumerate(polys, start=1):
+            if boxes_apart(box, box_of(lot), 0.0):
+                continue
+            if index == own:
+                if not polygon_within(shape, lot, CHECK_OWN_LOT):
+                    messages.append(f"{label}: leans more than {CHECK_OWN_LOT} into its own parcel {index}")
+            elif gap(shape, lot) <= 0:
+                messages.append(f"{label}: stands on parcel {index}")
+        for what, poly in solids:
+            if not boxes_apart(box, box_of(poly), 0.0) and gap(shape, poly) <= 0:
+                messages.append(f"{label}: stands on {what}")
+    if bunting:
+        a, b = bunting_posts(plan, entry)
+        for other_layer, other in everything:
+            if other_layer == "trees" and streetplan.point_segment_distance((other["x"], other["z"]), a, b)[0] < CHECK_BUNTING_TREE - EPS:
+                messages.append(f"{label}: a tree at ({number(other['x'])}, {number(other['z'])}) stands under the string")
+    for other_layer, other in everything:
+        if other is entry:
+            continue
+        if math.dist((entry["x"], entry["z"]), (other["x"], other["z"])) < CHECK_ITEM_SPACING - EPS:
+            messages.append(f"{label}: within {CHECK_ITEM_SPACING} of {other_layer} entry at ({number(other['x'])}, {number(other['z'])})")
     return messages
 
 
@@ -1483,7 +1891,7 @@ def check_document(era_name, doc, compare_committed=True, city=None, era=None, n
     messages += parcel_messages(site, plan, doc.get("parcels", []))
     if site.marker_offset is not None:
         messages += marker_messages(site)
-    messages += tree_messages(site, plan, doc)
+    messages += upgrade_messages(site, plan, doc)
     messages += wild_messages(site, plan, doc)
     return messages
 
@@ -1501,8 +1909,17 @@ def tree_kind(tree):
     return {3: "street", 2: "orchard"}.get(tree.get("variant"), "green")
 
 
+def flower_mix(entries):
+    counts = {}
+    for entry in entries:
+        counts[entry["variant"]] = counts.get(entry["variant"], 0) + 1
+    return ", ".join(f"variant {k}: {v}" for k, v in sorted(counts.items()))
+
+
 def summary(era_name, doc):
-    parcels, trees, wild = doc["parcels"], doc.get("trees", []), doc["wild"]
+    parcels, wild = doc["parcels"], doc["wild"]
+    upgrades = doc.get("upgrades", {})
+    trees = upgrades.get("trees", [])
     by_row = {row: sum(1 for p in parcels if p["row"] == row) for row in range(1, MAX_ROW + 1)}
     by_size = {size: sum(1 for p in parcels if p["size"] == size) for size in SIZES}
     clumps = [w for w in wild if w["kind"] == "clump"]
@@ -1513,7 +1930,9 @@ def summary(era_name, doc):
     return (
         f"{era_name}: {len(parcels)} parcels (rows {by_row[1]}/{by_row[2]}/{by_row[3]}; "
         f"{by_size['narrow']} narrow, {by_size['small']} small, {by_size['medium']} medium); {len(trees)} town trees "
-        f"({', '.join(f'{k} {v}' for k, v in sorted(kinds.items()))}); wild {len(wild)}: "
+        f"({', '.join(f'{k} {v}' for k, v in sorted(kinds.items()))}); {len(upgrades.get('flowers', []))} flowers "
+        f"({flower_mix(upgrades.get('flowers', []))}); {len(upgrades.get('banners', []))} banners "
+        f"({flower_mix(upgrades.get('banners', []))}); wild {len(wild)}: "
         f"{len(clumps)} clumps ({sum(1 for c in clumps if not c['skirt'])} on the plot, "
         f"{sum(1 for c in clumps if c['skirt'])} skirt), {len(singles)} singles "
         f"({sum(1 for s in singles if not s['skirt'])} on the plot, {sum(1 for s in singles if s['skirt'])} skirt)"
@@ -1535,7 +1954,7 @@ def main(argv):
         print(summary(args.era, doc))
         return 0
     path = out_path(args.era)
-    doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"parcels": [], "trees": [], "wild": []}
+    doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"parcels": [], "upgrades": {}, "wild": []}
     messages = check_document(args.era, doc)
     print(summary(args.era, doc))
     for message in messages:

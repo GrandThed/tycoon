@@ -212,6 +212,8 @@ WILD_COLOURS = {"clump": (40, 110, 55, 70), "single": (60, 120, 60, 110)}
 WILD_RADIUS = {"clump": 2.6, "single": 1.0}  # studs, preview only
 TOWN_TREE_COLOURS = {1: (60, 170, 70), 2: (230, 140, 50), 3: (40, 110, 210)}  # by variant
 TOWN_TREE_RADIUS = 1.2  # studs, preview only
+UPGRADE_COLOURS = {"flowers": (230, 80, 170), "banners": (200, 40, 40)}  # wave 1c round 3 layers
+UPGRADE_DOT = 0.7  # studs, preview only
 
 # --------------------------------------------------------------------------
 # Luau subset parser (tables, numbers, strings, booleans, Vector3/Color3 constructors)
@@ -3213,6 +3215,8 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         entries.append((PARCEL_ROW_COLOURS[2], "fabric parcel, row 2"))
         entries.append((WILD_COLOURS["clump"], "wild: woods clump quarter / single"))
         entries.append((TOWN_TREE_COLOURS[3], "town tree (blue street, orange orchard, green)"))
+        entries.append((UPGRADE_COLOURS["flowers"], "flowers (planter, border, bed)"))
+        entries.append((UPGRADE_COLOURS["banners"], "banners (street banner, bunting)"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -3247,7 +3251,9 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         canvas.text(
             (lx, y),
             f"parcels {len(parcels)} ({sum(1 for p in parcels if p['row'] == 1)} row 1, "
-            f"{sum(1 for p in parcels if p['size'] == 'medium')} medium), trees {len(fabric_doc.get('trees', []))}, wild {len(wild)}",
+            f"{sum(1 for p in parcels if p['size'] == 'medium')} medium), "
+            + ", ".join(f"{name} {len(items)}" for name, items in (fabric_doc.get("upgrades") or {}).items())
+            + f", wild {len(wild)}",
             font=font,
             fill=(0, 0, 0),
         )
@@ -3295,10 +3301,12 @@ def draw_fabric(era, doc, canvas, px, poly, font):
         for point in points or []:
             c = px(point)
             canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=WILD_COLOURS[item["kind"]])
-    for tree in doc.get("trees", []):
-        c = px((tree["x"], tree["z"]))
-        radius = TOWN_TREE_RADIUS * PX_PER_STUD
-        canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=TOWN_TREE_COLOURS.get(tree.get("variant"), (0, 0, 0)))
+    for layer, items in (doc.get("upgrades") or {}).items():
+        for item in items:
+            c = px((item["x"], item["z"]))
+            radius = (TOWN_TREE_RADIUS if layer == "trees" else UPGRADE_DOT) * PX_PER_STUD
+            colour = TOWN_TREE_COLOURS.get(item.get("variant"), (0, 0, 0)) if layer == "trees" else UPGRADE_COLOURS.get(layer, (0, 0, 0))
+            canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=colour)
     for index, parcel in enumerate(doc.get("parcels", []), start=1):
         size = sizes.get(parcel["size"], (6, 6))
         centre = (parcel["x"], parcel["z"])
