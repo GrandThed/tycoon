@@ -208,7 +208,7 @@
         },
         "pull": {
           "radius": 24,
-          "tierTerm": 0.14,
+          "tierTerm": 0.16,
           "thresholds": [
             0.9,
             1.4,
@@ -218,7 +218,7 @@
           "reach": 13,
           "levelsOverTier": 1,
           "smallMaxLevel": 3,
-          "rowLag": 1
+          "rowLag": 0
         },
         "heightFloor": 4.2,
         "districts": {
