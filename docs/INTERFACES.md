@@ -5477,6 +5477,7 @@ shape: `{ x, z, rotationY, scale, variant, anchor: "stretch" | "parcel", stretch
 
 - **Unanimated spawns are spread over frames.** A far-to-near switch or a join places up to about
   290 fabric clones at once on a full Village. Unanimated spawns (parcels, layer entries, wild
-  items) go through a per-plot queue that places at most `construction.spawnsPerFrame` (Village:
-  40) per frame, nearest the camera first. Destroys stay immediate. Final states are unchanged,
+  items) go through per-plot queues that together place at most `construction.spawnsPerFrame`
+  (Village: 40) per frame across all plots: nearest plot first, and nearest to the camera first
+  within a plot. Destroys stay immediate. Final states are unchanged,
   so the mirror needs no change.

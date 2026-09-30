@@ -911,23 +911,51 @@ local function sortQueue(handle: Handle): ()
 	end)
 end
 
--- Every plot places up to its spawnsPerFrame queued spawns each frame. A job never yields (a clone
--- and a pivot), so the frame's work is bounded by the cap.
+-- At most spawnsPerFrame queued spawns per frame across all plots (a join queues every plot at
+-- once, the unclaimed ones included): the smallest cap among the queued plots is the frame's budget,
+-- spent on the plot nearest the camera first, nearest spawn first, and what is left on the next.
+-- A queue is sorted only in the frame it is first drained, and only again once new jobs arrive. A
+-- job never yields (a clone and a pivot), so the frame's work is bounded by the budget.
 local function drainQueues(): ()
+	local plots: { Handle } = {}
+	local budget = math.huge
 	for handle in queuedHandles do
-		local queue = handle.spawnQueue
-		if not handle.destroyed and #queue > 0 then
-			if not handle.queueSorted then
-				sortQueue(handle)
-				handle.queueSorted = true
-			end
-			for _ = 1, math.min(handle.spawnsPerFrame or #queue, #queue) do
-				local job = table.remove(queue) :: SpawnJob
-				handle.queued[job.key] = nil
-				job.run()
-			end
+		local cap = handle.spawnsPerFrame
+		if handle.destroyed or #handle.spawnQueue == 0 or cap == nil then
+			queuedHandles[handle] = nil
+			continue
 		end
-		if handle.destroyed or #queue == 0 then
+		budget = math.min(budget, cap)
+		table.insert(plots, handle)
+	end
+	local camera = Workspace.CurrentCamera
+	if camera ~= nil and #plots > 1 then
+		local eye = camera.CFrame.Position
+		local distances: { [Handle]: number } = {}
+		for _, handle in plots do
+			distances[handle] = (handle.context.plotFrame.Position - eye).Magnitude
+		end
+		table.sort(plots, function(a: Handle, b: Handle): boolean
+			return distances[a] < distances[b]
+		end)
+	end
+	for _, handle in plots do
+		if budget <= 0 then
+			break
+		end
+		local queue = handle.spawnQueue
+		if not handle.queueSorted then
+			sortQueue(handle)
+			handle.queueSorted = true
+		end
+		local count = math.min(budget, #queue)
+		budget -= count
+		for _ = 1, count do
+			local job = table.remove(queue) :: SpawnJob
+			handle.queued[job.key] = nil
+			job.run()
+		end
+		if #queue == 0 then
 			queuedHandles[handle] = nil
 		end
 	end
