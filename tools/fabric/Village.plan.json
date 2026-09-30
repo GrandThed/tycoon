@@ -42,10 +42,10 @@
     "edge": 1.5,
     "spacing": 3.6,
     "scale": [0.88, 1.12],
-    "street": { "setbacks": [4.2, 3.7, 4.8], "spacing": 10.0, "step": 1.0, "entranceClear": 12.0 },
+    "street": { "setbacks": [4.2, 3.7, 4.8], "spacing": 9.0, "step": 1.0, "entranceClear": 12.0 },
     "orchard": { "districts": ["farm"], "count": 4, "ring": [1.5, 7.0], "attempts": 120 },
     "green": { "districts": ["civic"], "count": 3, "ring": [1.5, 6.0], "attempts": 120 },
-    "yard": { "share": 0.6, "offset": 2.3, "lateral": 0.7 }
+    "yard": { "share": 1.0, "offset": 2.3, "lateral": 0.7 }
   },
   "wild": {
     "woods": 0.95,
