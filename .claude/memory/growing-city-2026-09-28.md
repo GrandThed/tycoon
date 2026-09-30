@@ -51,3 +51,23 @@ pads in old renders.
 - Each era gets its own growth-layout mock before contracts.
 
 See [[living-city-2026-09-23]], [[city-dressing-2026-09-16]], [[metropolis-streets-2026-09-22]].
+
+**Ben's rulings after the first gate (2026-09-29):**
+- **Density.** He wanted "waaay more houses filling the terrain". Round 2 reached 109 houses (was
+  32), and Ben called it "perfecto".
+- **Narrow lots.** Terraced narrow lots (4×6) with narrow alleys between the houses are fine.
+- **City-changer slots.** Decor slots that change the city instead of standing as one model: treeOak →
+  "Plant Trees", flowerBed → "Plant Flowers", bannerPole → "Hang Banners". Each is streetOnly (the
+  `dirtRoad` pattern) and drives a generic *upgrade layer* (`fabric.upgrades.<name>`, data
+  `upgrades.<name>`). Costs and order are unchanged.
+
+**Lessons:**
+- **Frontage is the bottleneck, not land area.** Lots tied to street frontage, plus declared 9×9
+  landmark reservations, capped Village at about 40 lots. Narrow terraced lots, block infill (back
+  rows anywhere in the block) and measured (harvested-extent) landmark clearance reached 109.
+- **`tools/fabric.py` reads the pull config.** Any change to `fabric.pull` makes the committed data
+  stale (`check` fails "differs from a fresh build"), so rebuild the data after a pacing change.
+- **Pacing lever.** `rowLag` 0 with `tierTerm` 0.16 gives houses 0/15/29/50/109 with building sites at
+  every tier. The last jump comes from streets that only draw with the tier-5 landmarks, which is a
+  layout matter, not a config one.
+- **Street trees must not take house frontage.** They did in the first wave 1c pass.

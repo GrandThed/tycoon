@@ -100,9 +100,9 @@ type DetailPolicy = {
 	greeneryShare: number,
 	living: boolean,
 	-- M12: the share of the city fabric's wild layer kept (parcels are never thinned, like houses),
-	-- and of its town trees (wave 1c).
+	-- and of every upgrade layer (wave 1c: town trees, flowers, banners).
 	wildShare: number,
-	townTreeShare: number,
+	upgradeShare: number,
 }
 
 type Build = {
@@ -212,7 +212,7 @@ local function detailPolicy(
 			greeneryShare = 1,
 			living = true,
 			wildShare = 1,
-			townTreeShare = 1,
+			upgradeShare = 1,
 		}
 	end
 	local detail = config.detail
@@ -234,10 +234,10 @@ local function detailPolicy(
 		vehiclesLocalOnly = true,
 		greeneryShare = share,
 		living = false,
-		-- M12: the woods are the wild era's trees, so they thin exactly as the trees do, and so do
-		-- the trees planted in the town.
+		-- M12: the woods are the wild era's trees, so they thin exactly as the trees do, and so does
+		-- every upgrade layer planted or hung in the town.
 		wildShare = share,
-		townTreeShare = share,
+		upgradeShare = share,
 	}
 end
 
@@ -1447,7 +1447,7 @@ local function syncFabric(
 		near = entry.near,
 		animate = animate,
 		wildShare = policy.wildShare,
-		townTreeShare = policy.townTreeShare,
+		upgradeShare = policy.upgradeShare,
 	})
 end
 
