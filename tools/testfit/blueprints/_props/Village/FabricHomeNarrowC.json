@@ -1,0 +1,28 @@
+{
+  "id": "FabricHomeNarrowC",
+  "era": "Village",
+  "scale": 2.5,
+  "footprint": [4, 6],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "wall-wood-detail-diagonal", "pos": [0, 0, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-detail-diagonal", "pos": [0, 0, 0.5], "rotY": 180, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0, 0, 0.5], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-window-glass", "pos": [0, 0, 0.5], "rotY": 270, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "roof-point", "pos": [0, 1, 0.5], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "path_stone", "pos": [0, 0.05, -0.5], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.45, 0.05, -1.08], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [-0.22, 0.05, -1.08], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [0.22, 0.05, -1.08], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redC", "pos": [0.45, 0.05, -1.08], "rotY": 0, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-detail-diagonal", "pos": [0, 0, -0.5], "rotY": 0, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-detail-diagonal", "pos": [0, 0, -0.5], "rotY": 180, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0, 0, -0.5], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "roof-high-gable", "pos": [0, 1, -0.5], "rotY": 90, "stage": 1},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 1, 0.5], "rotY": 0, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 1, 0.5], "rotY": 180, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [0, 1, 0.5], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "wall-window-small", "pos": [0, 1, 0.5], "rotY": 270, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0, 2, 0.5], "rotY": 90, "stage": 2},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [-0.34, 2.3, 0.72], "rotY": 0, "stage": 2}
+  ]
+}
