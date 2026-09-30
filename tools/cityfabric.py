@@ -14,7 +14,9 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     Dijkstra that settles the lowest node id first among equals;
   * goal_for (the district prop by index, the height cap, the stage lowering, the site at level 1),
     the budgets (fixed prefixes of the data lists), the clearing mask and the wild draw:
-    src/client/City/Fabric.luau;
+    src/client/City/Fabric.luau; since wave 1c also rows 1 to 3 (`pull.rowLag`), the narrow size
+    and sizes by key, `fallbackDistrict`, `budget.parcelsFar`, the town trees and the row-1 walk
+    solids;
   * the street network the fabric develops along: RoadGraph.FabricNetwork over tools/streetplan.py's
     Network -- visible stretches keyed by baked piece id, every routable slot's join node, and the
     mask's street segments as straight chords plus spur legs -- with the straight budget's spur and
@@ -61,8 +63,15 @@ KIT_MODEL_DIRS = ("GLB format", "GLTF format")  # testfit.find_glb's search orde
 # Contract vocabulary (INTERFACES "M12 contracts -- Data").
 SMALL = "small"
 MEDIUM = "medium"
+NARROW = "narrow"  # round 2: 4-stud terraced frontage
 CLUMP = "clump"
 SINGLE = "single"
+# Wave 1c town trees: what a tree is anchored to, and the level at which a parcel's house stands.
+ANCHOR_STRETCH = "stretch"
+ANCHOR_PARCEL = "parcel"
+BUILT_LEVEL = 2
+# CityFabric.DEFAULT_ROW_LAG: an absent `pull.rowLag` holds a back row one level behind its front.
+DEFAULT_ROW_LAG = 1
 SITE = "site"
 BUILDING = "building"
 QUARTERS = 4
@@ -245,17 +254,22 @@ def develop(input, pull, trace=None):
         if parcel["row"] == 1 and index not in accepted:
             states[index - 1]["level"] = 0
 
-    # Step 8: a second-row parcel stays a level behind its front parcel and takes its kind. The Luau
-    # indexes `states[parcel.front]`, so anything but an index 1..n reads as a missing front.
+    # Step 8: a back-row parcel (row 2 behind row 1, row 3 behind row 2) stays `rowLag` levels behind
+    # its front parcel and takes its kind, in index order, so each front's level is already final.
+    # The Luau indexes `states[parcel.front]`, so anything but an index 1..n reads as a missing
+    # front. `pull.rowLag or 1` there keeps a 0, which Python's `or` would not.
+    row_lag = pull.get("rowLag")
+    if row_lag is None:
+        row_lag = DEFAULT_ROW_LAG
     for parcel, state in zip(parcels, states):
-        if parcel["row"] == 2:
+        if parcel["row"] >= 2:
             front_index = parcel["front"]
             front = None
             if isinstance(front_index, (int, float)) and not isinstance(front_index, bool):
                 if float(front_index).is_integer() and 1 <= front_index <= len(states):
                     front = states[int(front_index) - 1]
             front_level = front["level"] if front is not None else 0
-            state["level"] = max(0, min(state["level"], front_level - 1))
+            state["level"] = max(0, min(state["level"], front_level - row_lag))
             state["district"] = front["district"] if front is not None else None
             state["governor"] = front["governor"] if front is not None else None
     for state in states:
@@ -330,8 +344,15 @@ def is_xz_triple(value):
     return isinstance(value, list) and len(value) >= 3 and is_number(value[0]) and is_number(value[2])
 
 
-def by_size(size, small, medium):
-    return small if size == SMALL else medium
+def for_size(size, small, medium, narrow=None):
+    """Fabric.forSize: a config entry by parcel size key; None for a size the entry leaves out."""
+    if size == SMALL:
+        return small
+    if size == MEDIUM:
+        return medium
+    if size == NARROW:
+        return narrow
+    return None
 
 
 def luau_index(items, index):
@@ -353,7 +374,11 @@ def valid_pull(pull):
     # A JSON object arrives in Luau with string keys, which the client rejects like any hole.
     if not isinstance(thresholds, list) or not all(finite(t) for t in thresholds):
         return None
-    return {key: pull[key] for key in PULL_NUMBERS} | {"thresholds": list(thresholds)}
+    # Wave 1c: `rowLag` may be absent, but one that is there must be a whole number, 0 or more.
+    row_lag = pull.get("rowLag")
+    if row_lag is not None and not (finite(row_lag) and row_lag >= 0 and row_lag == math.floor(row_lag)):
+        return None
+    return {key: pull[key] for key in PULL_NUMBERS} | {"thresholds": list(thresholds), "rowLag": row_lag}
 
 
 def prop_list(value):
@@ -377,13 +402,32 @@ def valid_wild_config(wild):
 
 
 def valid_parcel(parcel):
-    """Fabric.validParcel: every field CityFabric reads and Fabric.new places by."""
+    """Fabric.validParcel: every field CityFabric reads and Fabric.new places by; rows 1 to 3 and the
+    three size keys only. (Luau `true == 1` is false, so a boolean row is no row.)"""
     return (
         isinstance(parcel, dict)
-        and all(finite(parcel.get(key)) for key in ("x", "z", "rotationY", "along", "row", "front"))
+        and all(finite(parcel.get(key)) for key in ("x", "z", "rotationY", "along", "front"))
+        and is_number(parcel.get("row"))
+        and parcel["row"] in (1, 2, 3)
         and isinstance(parcel.get("stretch"), str)
-        and parcel.get("size") in (SMALL, MEDIUM)
+        and parcel.get("size") in (SMALL, MEDIUM, NARROW)
     )
+
+
+def validated_parcels(raw_parcels):
+    """Fabric.new's parcel validation: (parcel data, well-formed flags). A malformed parcel, or a
+    row-k parcel (k 2 or 3) whose `front` is not an earlier index of a row-(k - 1) parcel in the data
+    as validated so far (a blank counts as row 1), becomes a blank that keeps its index."""
+    data, flags = [], []
+    for index, raw in enumerate(raw_parcels, start=1):
+        well_formed = valid_parcel(raw)
+        if well_formed and raw["row"] != 1:
+            front = raw["front"]
+            ahead = data[int(front) - 1] if front == math.floor(front) and 1 <= front < index else None
+            well_formed = ahead is not None and ahead["row"] == raw["row"] - 1
+        data.append(raw if well_formed else blank_parcel())
+        flags.append(well_formed)
+    return data, flags
 
 
 def blank_parcel():
@@ -397,6 +441,29 @@ def valid_wild_entry(entry):
     if not isinstance(entry, dict) or not all(finite(entry.get(key)) for key in ("x", "z", "rotationY")):
         return False
     return entry.get("kind") == CLUMP or (entry.get("kind") == SINGLE and isinstance(entry.get("prop"), str))
+
+
+def valid_town_trees(value):
+    """Fabric.validTownTrees: the block, or None (the feature off) without a slot to plant them or
+    with a `tierOffset` that is not a whole number."""
+    if not isinstance(value, dict) or not isinstance(value.get("requiresSlot"), str):
+        return None
+    tier_offset = value.get("tierOffset")
+    if not finite(tier_offset) or tier_offset != math.floor(tier_offset):
+        return None
+    return {"requiresSlot": value["requiresSlot"], "props": prop_list(value.get("props")), "tierOffset": tier_offset}
+
+
+def valid_tree(entry):
+    """Fabric.validTree: a position, turn, variant and positive scale, anchored to a stretch by piece
+    id or to a parcel by index; anything else is skipped where it stands."""
+    if not isinstance(entry, dict) or not all(finite(entry.get(key)) for key in ("x", "z", "rotationY")):
+        return False
+    if not (finite(entry.get("variant")) and finite(entry.get("scale")) and entry["scale"] > 0):
+        return False
+    if entry.get("anchor") == ANCHOR_STRETCH:
+        return isinstance(entry.get("stretch"), str)
+    return entry.get("anchor") == ANCHOR_PARCEL and finite(entry.get("parcel"))
 
 
 def scale_of(value):
@@ -428,24 +495,38 @@ def site_look(config, size):
     sites = config.get("sites")
     if not isinstance(sites, dict):
         return None
-    prop = by_size(size, sites.get("small"), sites.get("medium"))
+    prop = for_size(size, sites.get("small"), sites.get("medium"), sites.get("narrow"))
     return {"kind": SITE, "prop": prop, "stage": 0} if isinstance(prop, str) else None
 
 
+def district_list(config, district, size):
+    """Fabric.districtList: a district's non-empty prop list for a parcel size, or None."""
+    districts = config.get("districts")
+    if district is None or not isinstance(districts, dict):
+        return None
+    props = districts.get(district)
+    if not isinstance(props, dict):
+        return None
+    chosen = for_size(size, props.get("small"), props.get("medium"), props.get("narrow"))
+    return chosen if isinstance(chosen, list) and len(chosen) > 0 else None
+
+
 def goal_for(config, index, parcel, state, prop_heights, landmark_height):
-    """Fabric.goalFor ("What a parcel shows"): nothing at level 0, the site at 1, and from 2 the
-    district's prop for parcel `index` at the highest stage its level allows that stays under the
-    governor's height, never under heightFloor. `prop_heights(prop)` and `landmark_height(slotId)`
+    """Fabric.goalFor ("What a parcel shows"): nothing at level 0, the site at 1 (`sites[size]`), and
+    from 2 the district's prop for parcel `index` (or `fallbackDistrict`'s for a size the district
+    lacks) at the highest stage its level allows that stays under the governor's height, never
+    under heightFloor. `prop_heights(prop)` and `landmark_height(slotId)`
     answer as the client's propHeights and landmarkHeight."""
     if state is None or state["level"] <= 0:
         return None
     if state["level"] == 1:
         return site_look(config, parcel["size"])
-    district = state["district"]
-    districts = config.get("districts")
-    props = districts.get(district) if district is not None and isinstance(districts, dict) else None
-    chosen = by_size(parcel["size"], props.get("small"), props.get("medium")) if isinstance(props, dict) else None
-    if not isinstance(chosen, list) or len(chosen) == 0:
+    # Round 2: a district without props for this size lends `fallbackDistrict`'s.
+    fallback = config.get("fallbackDistrict")
+    chosen = district_list(config, state["district"], parcel["size"]) or district_list(
+        config, fallback if isinstance(fallback, str) else None, parcel["size"]
+    )
+    if chosen is None:
         return None
     prop = chosen[(index - 1) % len(chosen)]
     if not isinstance(prop, str):
@@ -794,20 +875,24 @@ class FabricPlot:
         self.pull = valid_pull(config.get("pull"))
         self.clear = config.get("clear") if isinstance(config.get("clear"), dict) else None
         self.wild_config = valid_wild_config(config.get("wild"))
+        # Wave 1c: a far plot draws only the first budget.parcelsFar parcels (the frontage nearest
+        # the heart), or without that key what a near plot draws.
         parcel_budget = max(math.floor(number_or(self.budget.get("parcels"), 0)), 0)
+        far_parcel_budget = max(math.floor(number_or(self.budget.get("parcelsFar"), parcel_budget)), 0)
         raw_parcels = data.get("parcels") if isinstance(data.get("parcels"), list) else []
-        self.parcel_data = []
         self.parcel_views = []
         sizes = config.get("sizes")
-        for index, raw in enumerate(raw_parcels, start=1):
-            well_formed = valid_parcel(raw)
-            parcel = raw if well_formed else blank_parcel()
-            self.parcel_data.append(parcel)
+        self.parcel_data, flags = validated_parcels(raw_parcels)
+        for index, (parcel, well_formed) in enumerate(zip(self.parcel_data, flags), start=1):
             if not isinstance(sizes, dict):
                 continue
-            size = by_size(parcel["size"], sizes.get("small"), sizes.get("medium"))
-            width = number_or(luau_index(size, 1), 0)
-            depth = number_or(luau_index(size, 2), 0)
+            # A size without a footprint in config (an optional `narrow` left out) never draws and
+            # clears no woods.
+            footprint = for_size(parcel["size"], sizes.get("small"), sizes.get("medium"), sizes.get("narrow"))
+            width, depth = luau_index(footprint, 1), luau_index(footprint, 2)
+            sized = isinstance(footprint, list) and finite(width) and finite(depth)
+            if not sized:
+                width, depth = 0, 0
             self.parcel_views.append(
                 {
                     "index": index,
@@ -820,7 +905,9 @@ class FabricPlot:
                         "rotationY": parcel["rotationY"],
                         "margin": 0,
                     },
-                    "eligible": well_formed and index <= parcel_budget,
+                    "sized": sized,
+                    "nearOk": well_formed and sized and index <= parcel_budget,
+                    "farOk": well_formed and sized and index <= far_parcel_budget,
                 }
             )
         self.wild_data = data.get("wild") if isinstance(data.get("wild"), list) else []
@@ -838,6 +925,18 @@ class FabricPlot:
                 clumps += 1
                 if clumps <= far_budget:
                     self.wild_far.add(index)
+        # Wave 1c town trees: the well-formed entries inside budget.townTrees, an index prefix of the
+        # data; none without a `trees` list or a valid `townTrees` block.
+        self.town_trees = valid_town_trees(config.get("townTrees"))
+        self.tree_views = []
+        raw_trees = data.get("trees")
+        if self.town_trees is not None and isinstance(raw_trees, list):
+            tree_budget = max(math.floor(number_or(self.budget.get("townTrees"), 0)), 0)
+            for index, tree in enumerate(raw_trees[:tree_budget], start=1):
+                if not valid_tree(tree):
+                    continue
+                prop = luau_index(self.town_trees["props"], tree["variant"])
+                self.tree_views.append({"index": index, "tree": tree, "prop": prop})
 
     # -- inputs the controller gathers ------------------------------------------------------
 
@@ -981,7 +1080,7 @@ class FabricPlot:
             if pad is not None:
                 rects.append(grown(pad, pad_margin))
         for view, state in zip(self.parcel_views, states):
-            if state["level"] >= 1:
+            if state["level"] >= 1 and view["sized"]:
                 rects.append(grown(view["rect"], parcel_margin))
         for index in plazas:
             rect = self.plaza_rects.get(index)
@@ -1129,10 +1228,61 @@ class FabricPlot:
                     )
         return pads
 
-    def snapshot(self, owned, stages, tier, near=True, share=1.0):
+    def town_tree_placements(self, owned, states, stretches, tier, near, share=1.0):
+        """Fabric.syncTrees, settled: a tree is planted when `requiresSlot` is owned and its anchor is
+        developed (a stretch tree: the stretch is drawn; a parcel tree: the parcel is at level 2 or
+        more, drawn or not); it stands at clamp(tier - tierOffset, 0, #stages - 1), on near plots
+        only, thinned by index to `share`. Returns (placements, planted count)."""
+        town_trees = self.town_trees
+        if town_trees is None:
+            return [], 0
+        slot_owned = town_trees["requiresSlot"] in owned
+        share = min(max(number_or(share, 1), 0), 1)
+        placements, planted = [], 0
+        for view in self.tree_views:
+            tree = view["tree"]
+            if tree.get("anchor") == ANCHOR_STRETCH:
+                developed = tree["stretch"] in stretches
+            else:
+                state = luau_index(states, tree["parcel"])
+                developed = state is not None and state["level"] >= BUILT_LEVEL
+            if not (slot_owned and developed):
+                continue
+            planted += 1
+            index = view["index"]
+            kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
+            if not near or not kept or view["prop"] is None:
+                continue
+            count = len(self.heights.prop(view["prop"]))
+            stage = max(min(tier - town_trees["tierOffset"], count - 1), 0)
+            placements.append(
+                {
+                    "index": index,
+                    "prop": view["prop"],
+                    "stage": _integral(stage),
+                    "x": tree["x"],
+                    "z": tree["z"],
+                    "rotationY": tree["rotationY"],
+                    "scale": scale_of(tree["scale"]),
+                    "anchor": tree.get("anchor"),
+                }
+            )
+        return placements, planted
+
+    def walk_solids(self, stretches):
+        """Fabric.WalkSolids: the near-drawable row-1 parcels whose street is drawn, as (x, z, hx, hz,
+        rotationY). Back rows never reach a lane; street-only slots are left out by Scatter.WalkSolids."""
+        return [
+            (view["rect"]["x"], view["rect"]["z"], view["rect"]["hx"], view["rect"]["hz"], view["rect"]["rotationY"])
+            for view in self.parcel_views
+            if view["nearOk"] and view["parcel"]["row"] == 1 and view["parcel"]["stretch"] in stretches
+        ]
+
+    def snapshot(self, owned, stages, tier, near=True, share=1.0, tree_share=1.0):
         """One settled Fabric.Sync: what a player who joins now sees on this plot.
 
-        `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier."""
+        `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier;
+        `share` and `tree_share` are City detail's wildShare and townTreeShare."""
         owned = set(owned)
         stretches, joins, segments, visible, drawn = self.network_view(owned)
         trace = []
@@ -1148,8 +1298,10 @@ class FabricPlot:
                 self.heights.prop,
                 lambda slot_id: self.landmark_height(slot_id, stages),
             )
-            parcels.append({**view, "state": state, "look": look if view["eligible"] else None})
+            drawn = view["nearOk"] if near else view["farOk"]
+            parcels.append({**view, "state": state, "look": look if drawn else None})
         plazas = self.visible_plazas(tier)
+        trees, planted = self.town_tree_placements(owned, states, stretches, tier, near, tree_share)
         mask = self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
         cleared = self.cleared_flags(mask) if mask is not None else {}
         return {
@@ -1169,6 +1321,8 @@ class FabricPlot:
             "cleared": cleared,
             "wild": self.wild_placements(cleared, near, share),
             "pads": self.pad_dressing(owned, near),
+            "trees": trees,
+            "treesPlanted": planted,
             "near": near,
         }
 
@@ -1204,7 +1358,7 @@ class FabricPlot:
         notes = []
         for index, parcel in enumerate(self.parcel_data, start=1):
             if parcel["stretch"] == "":
-                notes.append(f"parcel {index} is malformed (a blank that never develops)")
+                notes.append(f"parcel {index} is malformed or stands behind no row-(k-1) parcel (a blank)")
             elif parcel["stretch"] not in lengths:
                 notes.append(f"parcel {index} fronts {parcel['stretch']}, which the network does not have")
             elif not -0.05 <= parcel["along"] <= lengths[parcel["stretch"]] + 0.05:
@@ -1246,7 +1400,12 @@ class FabricPlot:
                 if node is not None:
                     self._reveal(node, visible)
                 segments += [chord(self.network.stretches[i]["a"], self.network.stretches[i]["b"]) for i in visible]
-            owned = {"rects": [grown(footprint, slot_margin)], "segments": segments, "streetClear": street}
+            # Fabric.buildMask keeps a bought slot's pad clearing too.
+            owned = {
+                "rects": [grown(footprint, slot_margin), grown(pad, pad_margin)],
+                "segments": segments,
+                "streetClear": street,
+            }
             for index, quarter, x, z, radius in points:
                 if is_cleared(x, z, radius, buyable) and not is_cleared(x, z, radius, owned):
                     where = f" quarter {quarter}" if quarter else ""
@@ -1412,7 +1571,7 @@ SELFTEST_PARCELS = [
 def selftest():
     failures = []
 
-    def run(label, tier, parcels, stretches=None, landmarks=None):
+    def run(label, tier, parcels, stretches=None, landmarks=None, pull=None):
         return label, develop(
             {
                 "tier": tier,
@@ -1420,7 +1579,7 @@ def selftest():
                 "landmarks": SELFTEST_LANDMARKS if landmarks is None else landmarks,
                 "parcels": parcels,
             },
-            SELFTEST_PULL,
+            SELFTEST_PULL if pull is None else pull,
         )
 
     def expect(case, wanted):
@@ -1442,6 +1601,42 @@ def selftest():
         run("tier 4, landmarks listed backwards", 4, SELFTEST_PARCELS, landmarks=list(reversed(SELFTEST_LANDMARKS))),
         [(2, "market", "tavern"), (1, "market", "tavern"), (1, "market", "tavern")],
     )
+
+    # Wave 1c rows (the luau-engineer's cases): P4 is row 3 behind the row-2 P3. Without rowLag the
+    # default 1 applies; rowLag 0 must stay 0, not fall back to 1.
+    rows = SELFTEST_PARCELS + [_parcel("medium", "L1_2", 6, 3, front=3)]
+    market = ("market", "tavern")
+    expect(run("row 3, tier 4, rowLag absent (1)", 4, rows), [(2, *market), (1, *market), (1, *market), (0, *market)])
+    expect(run("row 3, tier 5, rowLag absent (1)", 5, rows), [(3, *market), (1, *market), (2, *market), (1, *market)])
+    lag0 = dict(SELFTEST_PULL, rowLag=0)
+    expect(run("row 3, tier 4, rowLag 0", 4, rows, pull=lag0), [(2, *market), (1, *market), (2, *market), (2, *market)])
+    # Round 2: smallMaxLevel caps "small" only, so a narrow lot in the 19/24 tie reaches level 4.
+    expect(run("narrow on L1_1 at 5 (not capped)", 4, [_parcel("narrow", "L1_1", 5, 1)]), [(4, "civic", "well")])
+
+    # Validation (Fabric.validPull, validParcel and the back-row front rule).
+    blanks = validated_parcels(
+        [
+            _parcel("medium", "L1_2", 6, 1),
+            _parcel("medium", "L1_2", 6, 2, front=1),
+            _parcel("medium", "L1_2", 6, 3, front=1),  # row 3 behind a row-1 parcel
+            _parcel("medium", "L1_2", 6, 2, front=5),  # a front that is not earlier
+            _parcel("medium", "L1_2", 6, 4, front=3),  # no row 4
+            _parcel("wide", "L1_2", 6, 1),  # no such size
+            {**_parcel("medium", "L1_2", 6, 1), "row": True},  # a boolean is no row in Luau
+        ]
+    )[1]
+    validation = [
+        ("rowLag -1 rejected", valid_pull(dict(SELFTEST_PULL, rowLag=-1)) is None),
+        ("rowLag 0.5 rejected", valid_pull(dict(SELFTEST_PULL, rowLag=0.5)) is None),
+        ("rowLag 0 kept", (valid_pull(dict(SELFTEST_PULL, rowLag=0)) or {}).get("rowLag") == 0),
+        ("rowLag absent accepted", valid_pull(SELFTEST_PULL) is not None),
+        ("back-row fronts", blanks == [True, True, False, False, False, False, False]),
+        ("tierOffset 1.5 turns town trees off", valid_town_trees({"requiresSlot": "treeOak", "tierOffset": 1.5}) is None),
+    ]
+    for label, good in validation:
+        print(f"  {'ok' if good else 'FAIL':4s} {label}")
+        if not good:
+            failures.append(label)
 
     # The geometry helpers.
     rect = {"x": 10, "z": 0, "hx": 2, "hz": 1, "rotationY": 90, "margin": 1}
@@ -1483,13 +1678,25 @@ def selftest():
     return 0
 
 
+def drawable(snap, view):
+    """Whether the snapshot's plot draws this parcel at all: inside its near or far budget, sized."""
+    return view["nearOk"] if snap["near"] else view["farOk"]
+
+
 def level_counts(snap):
-    """Parcels in budget by level, and how many are drawn as sites or buildings."""
+    """The parcels the plot can draw, by level."""
     counts = [0] * 5
     for view in snap["parcels"]:
-        if view["eligible"]:
+        if drawable(snap, view):
             counts[min(max(int(view["state"]["level"]), 0), 4)] += 1
     return counts
+
+
+def look_counts(snap):
+    """(houses, sites): the parcels drawn as a building and as a building site."""
+    houses = sum(1 for view in snap["parcels"] if view["look"] and view["look"]["kind"] == BUILDING)
+    sites = sum(1 for view in snap["parcels"] if view["look"] and view["look"]["kind"] == SITE)
+    return houses, sites
 
 
 def wild_counts(snap):
@@ -1516,7 +1723,12 @@ def timeline(era_name):
         f"(budget {plot.budget.get('parcels')}), {total_wild} wild entries (near budget "
         f"{plot.budget.get('wild')}, far {plot.budget.get('wildFar')} clumps)"
     )
-    print("  levels are counted over the parcels in budget; wild counts are what a near (far) plot draws")
+    trees = data.get("trees") or []
+    print(
+        f"  {len(trees)} town trees (budget {plot.budget.get('townTrees')}, block "
+        f"{'on' if plot.town_trees else 'off'}); levels count the parcels a near plot draws, houses and "
+        "sites what it shows; wild counts are what a near (far) plot draws"
+    )
     rows = []
     for tier in range(1, len(city["tier"]["thresholds"]) + 1):
         levels, actual, tick = tier_snapshot(history, tier)
@@ -1530,14 +1742,25 @@ def timeline(era_name):
         near = plot.snapshot(owned, stages, tier, near=True)
         far = plot.snapshot(owned, stages, tier, near=False)
         counts = level_counts(near)
+        houses, sites = look_counts(near)
+        far_houses, far_sites = look_counts(far)
         whole, partial, quarters, singles = wild_counts(near)
         far_whole = wild_counts(far)[0]
+        tree_stages = {}
+        for tree in near["trees"]:
+            tree_stages[tree["stage"]] = tree_stages.get(tree["stage"], 0) + 1
+        tree_text = ", ".join(f"stage {stage} x{n}" for stage, n in sorted(tree_stages.items())) or "none"
         stage_text = " ".join(f"{sid}:{stages[sid]}" for sid in sorted(stages) if stages[sid])
         print(
             f"  {label:6s} ({moment:>12s}, GrowthTier {tier}): {len(owned):2d} owned, "
             f"{len(near['stretches']):2d} stretches | parcels L0 {counts[0]:2d}  L1 {counts[1]:2d}  "
-            f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | wild near {whole} whole, "
-            f"{partial} partial ({quarters} quarters), {singles} singles; far {far_whole} whole"
+            f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | houses {houses:2d}, sites {sites:2d} "
+            f"(far {far_houses}, {far_sites})"
+        )
+        print(
+            f"         town trees planted {near['treesPlanted']}, drawn {len(near['trees'])} ({tree_text}) | "
+            f"wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "
+            f"far {far_whole} whole"
         )
         if stage_text:
             print(f"         stages above 0: {stage_text}")

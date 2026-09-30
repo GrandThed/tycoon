@@ -855,8 +855,10 @@ class PlotScene:
         the district's prop at the stage its height cap allows -- the wild land the clearing mask
         leaves (whole clumps, the uncleared quarters of a partly cleared clump, singles; far plots
         whole clumps only; a skirt entry on the world ground), and on a near plot each pad's notice
-        board in the slot's frame with stakes and strings round the footprint. A name with no
-        blueprint draws nothing, as a missing template does in game."""
+        board in the slot's frame with stakes and strings round the footprint; and (wave 1c) the town
+        trees the tree slot has planted, at the stage the tier gives them. A far plot draws only the
+        parcels inside budget.parcelsFar. A name with no blueprint draws nothing, as a missing
+        template does in game."""
         view = self.fabric_view
         if view is None:
             return
@@ -902,16 +904,36 @@ class PlotScene:
                 self.box("SiteStake", stake["size"], stake["pos"], list(pad["stakeColor"]), rot_y=stake["rotationY"])
             for string in pad["strings"]:
                 self.box("SiteString", string["size"], string["pos"], list(pad["stringColor"]), rot_y=string["rotationY"])
+        # Wave 1c town trees (near plots only; the snapshot has already left them out on a far one).
+        for tree in view["trees"]:
+            self.model(
+                f"TownTree{tree['index']}",
+                blueprint_path(era.name, tree["prop"], prop=True),
+                (tree["x"], 0.0, tree["z"]),
+                rot_y=tree["rotationY"],
+                stage=tree["stage"],
+                wanted=tree["prop"],
+                scale=tree["scale"],
+            )
         self.fabric_notes(view)
 
     def fabric_notes(self, view):
         fabric = self.fabric
         counts = cityfabric.level_counts(view)
+        houses, sites = cityfabric.look_counts(view)
         whole, partial, quarters, singles = cityfabric.wild_counts(view)
-        eligible = sum(1 for parcel_view in view["parcels"] if parcel_view["eligible"])
+        drawable = sum(1 for parcel_view in view["parcels"] if cityfabric.drawable(view, parcel_view))
         self.notes.append(
-            f"fabric at GrowthTier {view['tier']} ({'near' if view['near'] else 'far'}): {eligible} parcels "
-            f"in budget -- level 0 {counts[0]}, 1 {counts[1]}, 2 {counts[2]}, 3 {counts[3]}, 4 {counts[4]}"
+            f"fabric at GrowthTier {view['tier']} ({'near' if view['near'] else 'far'}): {drawable} of "
+            f"{len(view['parcels'])} parcels drawable -- level 0 {counts[0]}, 1 {counts[1]}, 2 {counts[2]}, "
+            f"3 {counts[3]}, 4 {counts[4]}; {houses} houses, {sites} building sites"
+        )
+        stages = {}
+        for tree in view["trees"]:
+            stages[tree["stage"]] = stages.get(tree["stage"], 0) + 1
+        self.notes.append(
+            f"fabric town trees: {view['treesPlanted']} planted, {len(view['trees'])} drawn"
+            + (" (" + ", ".join(f"stage {s} x{n}" for s, n in sorted(stages.items())) + ")" if stages else "")
         )
         self.notes.append(
             f"fabric wild: {whole} whole clumps, {partial} partly cleared ({quarters} quarters), "
