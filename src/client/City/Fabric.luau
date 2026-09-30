@@ -15,9 +15,16 @@
 -- pending timer, animation and puff. Config and data are validated once, in Fabric.new: a missing
 -- or malformed block, prop list, entry or template is an absent item or feature and never an
 -- Output line, and every sync retries the spawns a late template skipped.
+--
+-- Review ruling (2026-09-30): a join or a far-to-near switch places a few hundred clones, so every
+-- unanimated spawn goes through the plot's spawn queue, at most construction.spawnsPerFrame per
+-- frame, nearest the camera first. A view keeps what it should show apart from what stands, and a
+-- queued job places whatever the view should show when its turn comes, so a goal that moved or went
+-- meanwhile is never placed stale. Removals and animated placements stay immediate.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -111,12 +118,22 @@ type ParcelView = {
 	-- The last develop moved the goal, so a ripple plays it. A goal that stood still but only now
 	-- draws (the plot came near, past the far budget) is placed at once.
 	changed: boolean,
-	shown: Look?, -- what stands (or would, were its template there)
-	model: Model?,
+	shown: Look?, -- what it shows: stands, or waits in the spawn queue, or lacks a template
+	model: Model?, -- what physically stands; a queued replacement leaves the old one up meanwhile
+	modelLook: Look?, -- the look `model` has
 	timer: thread?, -- a pending transition; it shows the newest goal when it fires
 }
 
-type WildView = { whole: Model?, quarters: { [number]: Model }, single: Model? }
+-- One wild entry: the pieces that stand, and (review ruling) the ones the last sync wants, which
+-- the spawn queue brings up. A whole clump that splits stands until its quarters are placed.
+type WildView = {
+	whole: Model?,
+	quarters: { [number]: Model },
+	single: Model?,
+	wantWhole: boolean,
+	wantSingle: boolean,
+	wantQuarters: number, -- bit q - 1 per wanted quarter
+}
 
 -- Wave 1c: one entry of an upgrade layer (a town tree, a flower bed, a banner). `planted` follows
 -- ownership and the anchor on near and far plots alike, so an entry placed while nobody watched
@@ -129,8 +146,9 @@ type UpgradeView = {
 	planted: boolean,
 	kept: boolean, -- not thinned out by City detail off
 	goal: number?, -- the stage the tier gives it; nil while unplanted
-	shown: number?,
-	model: Model?,
+	shown: number?, -- the stage it shows: stands, or waits in the spawn queue
+	model: Model?, -- what physically stands; a queued replacement leaves the old one up meanwhile
+	modelStage: number?, -- the stage `model` has
 	timer: thread?, -- a pending wave or growth step; it shows the newest goal when it fires
 }
 
@@ -158,6 +176,10 @@ type Reveal = { model: Model, rect: Rect, timer: thread? }
 -- One dust puff: a Dust handle of its own (a handle plays one burst at a time) and the timer that
 -- destroys it once the burst and its particles are gone.
 type Puff = { dust: Dust.Handle, cleanup: thread? }
+
+-- One unanimated spawn waiting its turn, keyed by the view it serves (one job per view) and placed
+-- by plot-local (x, z) for the nearest-first order. `run` reads the view's current target.
+type SpawnJob = { key: any, x: number, z: number, run: () -> () }
 
 type Animation = {
 	owner: Handle,
@@ -222,6 +244,7 @@ export type Handle = {
 	wildConfig: Types.FabricWildConfig?,
 	timing: Types.FabricConstructionConfig?,
 	maxPuffs: number?, -- concurrent puffs; nil means no cap
+	spawnsPerFrame: number?, -- unanimated spawns placed per frame; nil means no queue
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -260,12 +283,20 @@ export type Handle = {
 	pads: { [string]: PadView },
 	reveals: { Reveal },
 	puffs: { Puff }, -- live puffs, oldest first
+	-- The spawn queue, farthest first once sorted (the next job pops off the end), the views that
+	-- have a job in it, and whether jobs came in since the last sort.
+	spawnQueue: { SpawnJob },
+	queued: { [any]: boolean },
+	queueSorted: boolean,
 	lastTrigger: Vector3, -- plot-local; the last purchase or stage swap an animated sync saw
 	destroyed: boolean,
 }
 
 local animations: { Animation } = {}
 local heartbeat: RBXScriptConnection? = nil
+-- The plots whose spawn queue is not empty, and the one Heartbeat draining them, alive only then.
+local queuedHandles: { [Handle]: boolean } = {}
+local queueHeartbeat: RBXScriptConnection? = nil
 -- Reused by every clearing lookup (none of them yields): the candidates near one wild item.
 local scratchRects: { Rect } = {}
 local scratchSegments: { Segment } = {}
@@ -861,6 +892,80 @@ local function spawnAt(
 	)
 end
 
+-- ------------------------------------------------------------------ the spawn queue
+
+-- Farthest from the camera first, so the nearest job pops off the end.
+local function sortQueue(handle: Handle): ()
+	local camera = Workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local eye = handle.context.plotFrame:PointToObjectSpace(camera.CFrame.Position)
+	local distances: { [SpawnJob]: number } = {}
+	for _, job in handle.spawnQueue do
+		local dx, dz = job.x - eye.X, job.z - eye.Z
+		distances[job] = dx * dx + dz * dz
+	end
+	table.sort(handle.spawnQueue, function(a: SpawnJob, b: SpawnJob): boolean
+		return distances[a] > distances[b]
+	end)
+end
+
+-- Every plot places up to its spawnsPerFrame queued spawns each frame. A job never yields (a clone
+-- and a pivot), so the frame's work is bounded by the cap.
+local function drainQueues(): ()
+	for handle in queuedHandles do
+		local queue = handle.spawnQueue
+		if not handle.destroyed and #queue > 0 then
+			if not handle.queueSorted then
+				sortQueue(handle)
+				handle.queueSorted = true
+			end
+			for _ = 1, math.min(handle.spawnsPerFrame or #queue, #queue) do
+				local job = table.remove(queue) :: SpawnJob
+				handle.queued[job.key] = nil
+				job.run()
+			end
+		end
+		if handle.destroyed or #queue == 0 then
+			queuedHandles[handle] = nil
+		end
+	end
+	local connection = queueHeartbeat
+	if next(queuedHandles) == nil and connection ~= nil then
+		connection:Disconnect()
+		queueHeartbeat = nil
+	end
+end
+
+-- Queues `run` for the view `key` (one job per view: a second call keeps the first, which reads the
+-- view's newest target anyway). Without a spawnsPerFrame cap it runs at once, as it always did.
+local function enqueue(handle: Handle, key: any, x: number, z: number, run: () -> ()): ()
+	if handle.spawnsPerFrame == nil then
+		run()
+		return
+	end
+	if handle.queued[key] then
+		return
+	end
+	handle.queued[key] = true
+	table.insert(handle.spawnQueue, { key = key, x = x, z = z, run = run })
+	handle.queueSorted = false
+	queuedHandles[handle] = true
+	if queueHeartbeat == nil then
+		queueHeartbeat = RunService.Heartbeat:Connect(drainQueues)
+	end
+end
+
+-- Drops every job: each sync starts from a clean queue and queues what it still needs, so a far
+-- plot, a detail change or a rebuild never places anything stale.
+local function clearQueue(handle: Handle): ()
+	table.clear(handle.spawnQueue)
+	table.clear(handle.queued)
+	handle.queueSorted = true
+	queuedHandles[handle] = nil
+end
+
 -- ------------------------------------------------------------------ parcels
 
 local function sameLook(a: Look?, b: Look?): boolean
@@ -930,19 +1035,48 @@ local function goalFor(
 	return { kind = BUILDING, prop = prop, stage = stage }
 end
 
-local function ensureModel(handle: Handle, view: ParcelView): ()
-	local shown = view.shown
-	if view.model == nil and shown ~= nil then
-		view.model = spawnAt(handle, shown.prop, shown.stage, view.frame, nil)
+-- A queued parcel spawn: the model for what the parcel shows now, replacing what stood. Without a
+-- template for it, what stood goes too, exactly as an immediate placement would leave it.
+local function applyParcelModel(handle: Handle, view: ParcelView): ()
+	local look = view.shown
+	if look == nil or (view.model ~= nil and sameLook(view.modelLook, look)) then
+		return
+	end
+	local model = spawnAt(handle, look.prop, look.stage, view.frame, nil)
+	local old = view.model
+	view.model = model
+	view.modelLook = if model ~= nil then look else nil
+	if old ~= nil then
+		stopAnimations(old, nil)
+		old:Destroy()
 	end
 end
 
--- Puts `look` on the parcel in place of whatever stood there. A puff marks only something that
--- actually appeared or went, so a missing template stays silent in every sense.
+-- Queues the model the parcel should show when what stands differs (also the retry for a template
+-- that came late).
+local function ensureModel(handle: Handle, view: ParcelView): ()
+	local look = view.shown
+	if look == nil or (view.model ~= nil and sameLook(view.modelLook, look)) then
+		return
+	end
+	enqueue(handle, view, view.rect.x, view.rect.z, function()
+		applyParcelModel(handle, view)
+	end)
+end
+
+-- Puts `look` on the parcel in place of whatever stood there. Without an effect the spawn waits in
+-- the queue and what stood stays up until then; a removal and an animated placement are immediate.
+-- A puff marks only something that actually appeared or went, so a missing template stays silent in
+-- every sense.
 local function place(handle: Handle, view: ParcelView, look: Look?, effect: string): ()
+	view.shown = look
+	if effect == EFFECT_NONE and look ~= nil then
+		ensureModel(handle, view)
+		return
+	end
 	local old = view.model
 	view.model = nil
-	view.shown = look
+	view.modelLook = nil
 	if old ~= nil then
 		stopAnimations(old, nil)
 		old:Destroy()
@@ -951,6 +1085,7 @@ local function place(handle: Handle, view: ParcelView, look: Look?, effect: stri
 		then spawnAt(handle, look.prop, look.stage, view.frame, nil)
 		else nil
 	view.model = model
+	view.modelLook = if model ~= nil then look else nil
 	if effect == EFFECT_NONE or (model == nil and old == nil) then
 		return
 	end
@@ -1080,13 +1215,23 @@ local function rippleParcels(
 	for _, view in handle.parcels do
 		local changed = view.changed
 		view.changed = false
-		if not view.nearOk or view.timer ~= nil then
+		if not view.nearOk then
+			-- Past the near budget: nothing draws here, even if a far budget let it stand.
+			if view.shown ~= nil then
+				cancelTimer(view)
+				place(handle, view, nil, EFFECT_NONE)
+			end
+			continue
+		end
+		-- Whatever it shows while a transition waits (the sync began with a clean queue).
+		ensureModel(handle, view)
+		if view.timer ~= nil then
 			continue
 		end
 		local goal = view.goal
 		local shown = view.shown
 		if sameLook(shown, goal) then
-			ensureModel(handle, view)
+			continue
 		elseif not changed then
 			-- Its goal stood still and it only now draws: the plot came near, and a far plot leaves
 			-- the back rows out. Placed as it is, since nothing happened to it.
@@ -1309,6 +1454,74 @@ local function clearedCentre(entry: Types.FabricWild, newly: number): (number, n
 	return sumX / count, sumZ / count
 end
 
+-- A queued wild spawn: the pieces entry `index` wants now, then the whole clump it split from.
+local function applyWild(handle: Handle, index: number): ()
+	local view = handle.wild[index]
+	local entry = handle.wildData[index]
+	local wildConfig = handle.wildConfig
+	if view == nil or entry == nil or wildConfig == nil then
+		return
+	end
+	-- Validated lists: a variant with no name in them is a missing prop, never an error.
+	local variant = entry.variant
+	if view.wantWhole and view.whole == nil then
+		local prop = if variant ~= nil then wildConfig.clumps[variant] else nil
+		view.whole = spawnAt(handle, prop, 0, wildFrame(handle, entry, 0), entry.scale)
+	end
+	if view.wantSingle and view.single == nil then
+		view.single = spawnAt(handle, entry.prop, 0, wildFrame(handle, entry, 0), entry.scale)
+	end
+	if view.wantQuarters ~= 0 then
+		local prop = if variant ~= nil then wildConfig.quarters[variant] else nil
+		for quarter = 1, QUARTERS do
+			local existing: Model? = view.quarters[quarter]
+			if
+				existing ~= nil or not bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1))
+			then
+				continue
+			end
+			local model = spawnAt(
+				handle,
+				prop,
+				0,
+				wildFrame(handle, entry, QUARTER_TURN_DEGREES * (quarter - 1)),
+				entry.scale
+			)
+			if model ~= nil then
+				view.quarters[quarter] = model
+			end
+		end
+	end
+	local whole = view.whole
+	if whole ~= nil and not view.wantWhole then
+		whole:Destroy()
+		view.whole = nil
+	end
+end
+
+-- Whether entry `view` still has a wanted piece to place, or a split whole to take down.
+local function wildPending(view: WildView): boolean
+	local whole: Model? = view.whole
+	local single: Model? = view.single
+	if whole == nil then
+		if view.wantWhole then
+			return true
+		end
+	elseif not view.wantWhole then
+		return true
+	end
+	if view.wantSingle and single == nil then
+		return true
+	end
+	for quarter = 1, QUARTERS do
+		local placed: Model? = view.quarters[quarter]
+		if placed == nil and bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1)) then
+			return true
+		end
+	end
+	return false
+end
+
 -- Near plots draw every uncleared clump, quarter and single among the first budget.wild entries;
 -- far plots only the whole clumps among the first budget.wildFar clumps. Detail off keeps an even
 -- share by index. A near purchase puffs dust where the woods just gave way; any other change
@@ -1335,19 +1548,32 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 		local wantWhole = clump and show and bits == 0
 		local wantQuarters = clump and show and input.near and bits ~= 0 and bits ~= ALL_QUARTERS
 		local wantSingle = not clump and show and input.near and bits == 0
+		local quarterBits = if wantQuarters then bit32.band(bit32.bnot(bits), ALL_QUARTERS) else 0
 		local view = handle.wild[index]
 		if view == nil then
-			if not (wantWhole or wantQuarters or wantSingle) then
+			if not (wantWhole or quarterBits ~= 0 or wantSingle) then
 				continue
 			end
-			view = { whole = nil, quarters = {}, single = nil }
+			view = {
+				whole = nil,
+				quarters = {},
+				single = nil,
+				wantWhole = false,
+				wantSingle = false,
+				wantQuarters = 0,
+			}
 			handle.wild[index] = view
 		end
 		local current = view :: WildView
 		local drawn = current.whole ~= nil or current.single ~= nil or next(current.quarters) ~= nil
+		current.wantWhole = wantWhole
+		current.wantSingle = wantSingle
+		current.wantQuarters = quarterBits
 
+		-- Removals are immediate. A whole clump that splits into quarters stands until they are
+		-- placed, so the woods never blink out round a clearing.
 		local whole = current.whole
-		if whole ~= nil and not wantWhole then
+		if whole ~= nil and not wantWhole and quarterBits == 0 then
 			whole:Destroy()
 			current.whole = nil
 		end
@@ -1358,41 +1584,15 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 		end
 		for quarter = 1, QUARTERS do
 			local placed: Model? = current.quarters[quarter]
-			local wanted = wantQuarters and not bit32.btest(bits, bit32.lshift(1, quarter - 1))
-			if placed ~= nil and not wanted then
+			if placed ~= nil and not bit32.btest(quarterBits, bit32.lshift(1, quarter - 1)) then
 				placed:Destroy()
 				current.quarters[quarter] = nil
 			end
 		end
-
-		-- Validated lists: a variant with no name in them is a missing prop, never an error.
-		local variant = entry.variant
-		if wantWhole and current.whole == nil then
-			local prop = if variant ~= nil then wildConfig.clumps[variant] else nil
-			current.whole = spawnAt(handle, prop, 0, wildFrame(handle, entry, 0), entry.scale)
-		end
-		if wantSingle and current.single == nil then
-			current.single =
-				spawnAt(handle, entry.prop, 0, wildFrame(handle, entry, 0), entry.scale)
-		end
-		if wantQuarters then
-			local prop = if variant ~= nil then wildConfig.quarters[variant] else nil
-			for quarter = 1, QUARTERS do
-				local existing: Model? = current.quarters[quarter]
-				if existing ~= nil or bit32.btest(bits, bit32.lshift(1, quarter - 1)) then
-					continue
-				end
-				local model = spawnAt(
-					handle,
-					prop,
-					0,
-					wildFrame(handle, entry, QUARTER_TURN_DEGREES * (quarter - 1)),
-					entry.scale
-				)
-				if model ~= nil then
-					current.quarters[quarter] = model
-				end
-			end
+		if wildPending(current) then
+			enqueue(handle, current, entry.x, entry.z, function()
+				applyWild(handle, index)
+			end)
 		end
 
 		local newly = bit32.band(bits, bit32.bnot(previous[index] or 0))
@@ -1431,8 +1631,37 @@ local function anchorDeveloped(handle: Handle, view: UpgradeView): boolean
 	return state ~= nil and state.level >= BUILT_LEVEL
 end
 
--- Puts the entry at `stage` (nil takes it away). EFFECT_POP scales it in; a puff at its base marks
--- only an entry that actually appeared, so a missing template stays silent.
+-- A queued entry spawn: the model for the stage the entry shows now, replacing what stood.
+local function applyUpgradeModel(handle: Handle, view: UpgradeView): ()
+	local stage = view.shown
+	if stage == nil or (view.model ~= nil and view.modelStage == stage) then
+		return
+	end
+	local model = spawnAt(handle, view.prop, stage, view.frame, view.item.scale)
+	local old = view.model
+	view.model = model
+	view.modelStage = if model ~= nil then stage else nil
+	if old ~= nil then
+		stopAnimations(old, nil)
+		old:Destroy()
+	end
+end
+
+-- Queues the model the entry should show when what stands differs (also the late-template retry).
+local function ensureUpgrade(handle: Handle, view: UpgradeView): ()
+	local stage = view.shown
+	if stage == nil or (view.model ~= nil and view.modelStage == stage) then
+		return
+	end
+	enqueue(handle, view, view.item.x, view.item.z, function()
+		applyUpgradeModel(handle, view)
+	end)
+end
+
+-- Puts the entry at `stage` (nil takes it away). Without an effect or a puff the spawn waits in the
+-- queue and what stood stays up until then; a removal and an animated placement are immediate.
+-- EFFECT_POP scales it in; a puff at its base marks only an entry that actually appeared, so a
+-- missing template stays silent.
 local function placeUpgrade(
 	handle: Handle,
 	view: UpgradeView,
@@ -1440,9 +1669,14 @@ local function placeUpgrade(
 	effect: string,
 	dust: boolean
 ): ()
+	view.shown = stage
+	if stage ~= nil and effect == EFFECT_NONE and not dust then
+		ensureUpgrade(handle, view)
+		return
+	end
 	local old = view.model
 	view.model = nil
-	view.shown = stage
+	view.modelStage = nil
 	if old ~= nil then
 		stopAnimations(old, nil)
 		old:Destroy()
@@ -1452,6 +1686,7 @@ local function placeUpgrade(
 	end
 	local model = spawnAt(handle, view.prop, stage, view.frame, view.item.scale)
 	view.model = model
+	view.modelStage = if model ~= nil then stage else nil
 	if model == nil then
 		return
 	end
@@ -1460,13 +1695,6 @@ local function placeUpgrade(
 	end
 	if dust then
 		puffAt(handle, view.item.x, 0, view.item.z)
-	end
-end
-
-local function ensureUpgrade(handle: Handle, view: UpgradeView): ()
-	local shown = view.shown
-	if view.model == nil and shown ~= nil then
-		view.model = spawnAt(handle, view.prop, shown, view.frame, view.item.scale)
 	end
 end
 
@@ -1611,12 +1839,14 @@ local function syncLayer(
 			end
 			continue
 		end
+		-- Whatever it shows while a step waits (the sync began with a clean queue).
+		ensureUpgrade(handle, view)
 		if view.timer ~= nil then
 			continue -- it shows the newest goal when it fires
 		end
 		local shown = view.shown
 		if shown == goal then
-			ensureUpgrade(handle, view)
+			continue
 		elseif goal == nil then
 			placeUpgrade(handle, view, nil, EFFECT_NONE, false)
 		elseif shown == nil and waitsForHouse(handle, view) then
@@ -1922,6 +2152,7 @@ function Fabric.new(context: Context): Handle
 	local budget = context.budget
 	local timing = if type(config.construction) == "table" then config.construction else nil
 	local maxPuffs = if timing ~= nil then timing.maxPuffs else nil
+	local spawnsPerFrame = if timing ~= nil then timing.spawnsPerFrame else nil
 	local handle: Handle = {
 		context = context,
 		pull = validPull(config.pull),
@@ -1929,6 +2160,10 @@ function Fabric.new(context: Context): Handle
 		wildConfig = validWildConfig(config.wild),
 		timing = timing,
 		maxPuffs = if finite(maxPuffs) then math.floor(maxPuffs :: number) else nil,
+		-- Fewer than one per frame would never place anything, so it counts as no cap.
+		spawnsPerFrame = if finite(spawnsPerFrame) and (spawnsPerFrame :: number) >= 1
+			then math.floor(spawnsPerFrame :: number)
+			else nil,
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
@@ -1960,6 +2195,9 @@ function Fabric.new(context: Context): Handle
 		pads = {},
 		reveals = {},
 		puffs = {},
+		spawnQueue = {},
+		queued = {},
+		queueSorted = true,
 		lastTrigger = context.entrance or Vector3.zero,
 		destroyed = false,
 	}
@@ -2069,6 +2307,7 @@ function Fabric.new(context: Context): Handle
 			changed = false,
 			shown = nil,
 			model = nil,
+			modelLook = nil,
 			timer = nil,
 		})
 	end
@@ -2142,6 +2381,7 @@ function Fabric.new(context: Context): Handle
 					goal = nil,
 					shown = nil,
 					model = nil,
+					modelStage = nil,
 					timer = nil,
 				}
 				table.insert(layer.views, view)
@@ -2168,6 +2408,9 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	if handle.destroyed then
 		return
 	end
+	-- Every pass queues what it still needs from scratch, so near/far, detail and goal changes
+	-- since the last one never leave a stale spawn behind.
+	clearQueue(handle)
 	-- A purchase or a stage swap is where a ripple starts; the first sync of a build sees every
 	-- slot as new, but it is never animated.
 	local triggers: { Vector3 } = {}
@@ -2297,6 +2540,7 @@ function Fabric.Destroy(handle: Handle): ()
 		return
 	end
 	handle.destroyed = true
+	clearQueue(handle)
 	stopAnimations(nil, handle)
 	for _, view in handle.parcels do
 		cancelTimer(view)
@@ -2305,6 +2549,7 @@ function Fabric.Destroy(handle: Handle): ()
 			model:Destroy()
 			view.model = nil
 		end
+		view.modelLook = nil
 		view.shown = nil
 	end
 	for _, view in handle.wild do
@@ -2329,6 +2574,7 @@ function Fabric.Destroy(handle: Handle): ()
 				model:Destroy()
 				view.model = nil
 			end
+			view.modelStage = nil
 			view.shown = nil
 		end
 	end
