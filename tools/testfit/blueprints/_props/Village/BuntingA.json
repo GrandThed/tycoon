@@ -1,0 +1,9 @@
+{
+  "id": "BuntingA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [8.4, 1],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "bunting", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

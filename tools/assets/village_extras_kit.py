@@ -93,6 +93,11 @@ EARTH_LIGHT = (194, 155, 106)
 LEAF_LIGHT = (168, 214, 98)
 LEAF = (134, 190, 74)
 LEAF_DEEP = (102, 160, 60)
+# Heraldry and bunting: fantasy-town's red, gold, sky blue and green swatches, and castle-kit's
+# flag blue (castle-kit is a Village kit; its flags carry this royal blue).
+ROYAL_BLUE = (88, 90, 191)
+SKY_BLUE = (103, 148, 217)
+GREEN = (81, 185, 133)
 
 Rgb = tuple[int, int, int]
 Vec = tuple[float, float, float]
@@ -205,6 +210,21 @@ def extrude_x(p: Part, outline, x0: float, x1: float, colour: Rgb, ends: Rgb | N
         mz = (outline[i][0] + outline[j][0]) / 2
         my = (outline[i][1] + outline[j][1]) / 2
         face_out(p, [a[i], a[j], b[j], b[i]], colour, (0.0, my - cy, mz - cz))
+
+
+def extrude_z(p: Part, outline, z0: float, z1: float, colour: Rgb) -> None:
+    """Slab along Z over a star-shaped outline [(x, y)]: banner cloths, pennants, emblems."""
+    cx = sum(x for x, _ in outline) / len(outline)
+    cy = sum(y for _, y in outline) / len(outline)
+    a = [(x, y, z0) for x, y in outline]
+    b = [(x, y, z1) for x, y in outline]
+    face_out(p, a, colour, (0.0, 0.0, -1.0))
+    face_out(p, b, colour, (0.0, 0.0, 1.0))
+    for i in range(len(outline)):
+        j = (i + 1) % len(outline)
+        mx = (outline[i][0] + outline[j][0]) / 2
+        my = (outline[i][1] + outline[j][1]) / 2
+        face_out(p, [a[i], a[j], b[j], b[i]], colour, (mx - cx, my - cy, 0.0))
 
 
 def place(dst: Part, src: Part, rot_y: float = 0.0, at: Vec = (0.0, 0.0, 0.0)) -> None:
@@ -764,6 +784,94 @@ def make_town_c_full() -> Part:
     return p
 
 
+# --- street banners and bunting (M12 wave 1c, round 3: "Hang Banners") -------------------------
+#
+# The Banner slot's own effect along the high street. A banner post carries its cloth on a cross rod
+# in front of the pole (toward -Z, the street), so the whole prop stays inside 1 x 1; the cloths are
+# double-sided because banners alternate sides of the lane and half of them show their backs to the
+# camera. Cloth and pennants are oversized for the kit on purpose: they have to register at 60-80.
+
+BANNER_TOP = 5.05  # the rod's centre line; the cloth hangs from it
+CLOTH_Z = (-0.2, -0.14)
+CLOTH_HALF = 0.46
+
+
+def make_banner_post() -> Part:
+    """Stone plinth, 5.55-stud pole, gold finial and a cross rod with gold knobs: 1.0 x 5.95 x 0.6."""
+    p = Part("banner-post")
+    p.box(-0.28, 0.28, 0.0, 0.3, -0.28, 0.28, STONE, top=STONE_LIGHT)
+    p.box(-0.1, 0.1, 0.3, 5.55, -0.1, 0.1, WOOD_DEEP)
+    lathe(p, [(0.0, 5.5), (0.17, 5.72), (0.0, 5.95)], [YELLOW, YELLOW], seg=4, phase=math.pi / 4)
+    beam(p, (-0.5, BANNER_TOP, -0.13), (0.5, BANNER_TOP, -0.13), 0.09, 0.09, WOOD_DARK)
+    for sx in (-1, 1):
+        x = sx * 0.43
+        p.box(x - 0.07, x + 0.07, BANNER_TOP - 0.07, BANNER_TOP + 0.07, -0.2, -0.06, YELLOW)
+    return p
+
+
+def cloth(p: Part, colour: Rgb) -> None:
+    """A 0.92 x 2.6 cloth with a swallowtail hem, hung from the rod."""
+    h = CLOTH_HALF
+    extrude_z(p, [(-h, BANNER_TOP), (h, BANNER_TOP), (h, 2.45), (0.0, 2.9), (-h, 2.45)], *CLOTH_Z, colour)
+
+
+def charge(p: Part, outline, colour: Rgb) -> None:
+    """An emblem on both faces of the cloth, 0.025 proud of each."""
+    z0, z1 = CLOTH_Z
+    extrude_z(p, outline, z0 - 0.025, z0 + 0.005, colour)
+    extrude_z(p, outline, z1 - 0.005, z1 + 0.025, colour)
+
+
+def make_banner_red() -> Part:
+    """Red cloth, gold band and gold lozenge."""
+    p = Part("banner-red")
+    cloth(p, RED)
+    band = [(-CLOTH_HALF + 0.06, 4.72), (CLOTH_HALF - 0.06, 4.72), (CLOTH_HALF - 0.06, 4.86), (-CLOTH_HALF + 0.06, 4.86)]
+    charge(p, band, YELLOW)
+    charge(p, [(0.0, 3.35), (0.3, 3.95), (0.0, 4.55), (-0.3, 3.95)], YELLOW)
+    return p
+
+
+def make_banner_blue() -> Part:
+    """Royal-blue cloth, white band and a white cross."""
+    p = Part("banner-blue")
+    cloth(p, ROYAL_BLUE)
+    band = [(-CLOTH_HALF + 0.06, 4.72), (CLOTH_HALF - 0.06, 4.72), (CLOTH_HALF - 0.06, 4.86), (-CLOTH_HALF + 0.06, 4.86)]
+    charge(p, band, WHITE)
+    charge(p, [(-0.08, 3.4), (0.08, 3.4), (0.08, 4.5), (-0.08, 4.5)], WHITE)
+    charge(p, [(-0.3, 3.98), (0.3, 3.98), (0.3, 4.14), (-0.3, 4.14)], WHITE)
+    return p
+
+
+def make_bunting() -> Part:
+    """Two 4.5-stud posts at x = -+4 and a sagging string of nine pennants between them: red, yellow,
+    blue, green. The string sags from 4.35 at the posts to 3.75 at the middle, so it crosses a lane
+    overhead; the pennants hang 0.95 below it, as big as nine fit, because ten 0.66-stud pennants
+    read only as a line with specks at 75 studs. Origin at the midpoint on the ground."""
+    p = Part("bunting")
+    for sx in (-1, 1):
+        x = sx * 4.0
+        p.box(x - 0.1, x + 0.1, 0.0, 4.5, -0.1, 0.1, WOOD_DEEP)
+        p.box(x - 0.14, x + 0.14, 4.5, 4.6, -0.14, 0.14, WOOD_DARK)
+    end, low, high = 3.9, 3.75, 4.35
+
+    def sag(x: float) -> float:
+        return low + (high - low) * (x / end) ** 2
+
+    steps = 12
+    pts = [(-end + 2 * end * k / steps, sag(-end + 2 * end * k / steps)) for k in range(steps + 1)]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        beam(p, (x0, y0, 0.0), (x1, y1, 0.0), 0.06, 0.06, CREAM)
+    colours = (RED, YELLOW, SKY_BLUE, GREEN)
+    count, w, h = 9, 0.74, 0.95
+    for i in range(count):
+        x = -3.5 + 7.0 * i / (count - 1)
+        left, right = x - w / 2, x + w / 2
+        tri = [(left, sag(left) - 0.02), (right, sag(right) - 0.02), (x, sag(x) - h)]
+        extrude_z(p, tri, -0.03, 0.03, colours[i % len(colours)])
+    return p
+
+
 PIECES = {
     "crate": make_crate,
     "crate-pair": make_crate_pair,
@@ -794,6 +902,10 @@ PIECES = {
     "town-c-sapling": make_town_c_sapling,
     "town-c-young": make_town_c_young,
     "town-c-full": make_town_c_full,
+    "banner-post": make_banner_post,
+    "banner-red": make_banner_red,
+    "banner-blue": make_banner_blue,
+    "bunting": make_bunting,
 }
 
 

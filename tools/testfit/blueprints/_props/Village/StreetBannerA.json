@@ -1,0 +1,10 @@
+{
+  "id": "StreetBannerA",
+  "era": "Village",
+  "scale": 4.0,
+  "footprint": [1, 1],
+  "pieces": [
+    {"kit": "village-extras-kit", "model": "banner-post", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "village-extras-kit", "model": "banner-red", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
