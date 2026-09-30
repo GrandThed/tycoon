@@ -5385,3 +5385,90 @@ Ben asked for the terrain to be filled with houses, so the lot model changes. Th
 | prop-builder "homes" | `FabricHomeNarrowA/B/C` |
 | prop-builder "sites" | `SiteNarrow` |
 | mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `plotrender.py` |
+
+## Wave 1c, round 3 — city upgrade layers (2026-09-29)
+
+Ben on round 2: "looks really good". The density is "perfecto", the alleys between narrow homes
+are fine, and **yes**: Flower Bed and Banner Pole also become city-changers, like Plant Trees.
+
+### Slots (lead, `Config/Eras/1_Village.json`)
+
+Both slots become `streetOnly`, with a new name and description. Type, cost, income, multiplier
+and `requires` are unchanged, so the economy is untouched. Both lose their `district`, because a
+street-only slot has no building to pull with.
+- `flowerBed` → "Plant Flowers": flower beds and planters across the village.
+- `bannerPole` → "Hang Banners": banners along the streets and bunting across them.
+
+### Generic upgrade layers (replaces `townTrees` and `trees`; nothing is released, so no migration)
+
+**Config:** `fabric.upgrades` maps a layer name to
+`{ requiresSlot, props, tierOffset, stagger?, budget }`:
+
+```json
+"upgrades": {
+  "trees":   { "requiresSlot": "treeOak",    "props": ["TownTreeA", "TownTreeB", "TownTreeC"], "tierOffset": 3, "stagger": 0.12, "budget": 70 },
+  "flowers": { "requiresSlot": "flowerBed",  "props": ["FlowerPlanterA", "FlowerBorderA", "FlowerBedA", "FlowerBedB"], "tierOffset": 0, "stagger": 0.08, "budget": 60 },
+  "banners": { "requiresSlot": "bannerPole", "props": ["StreetBannerA", "StreetBannerB", "BuntingA"], "tierOffset": 0, "stagger": 0.15, "budget": 30 }
+}
+```
+
+- `budget` is the near-plot cap for that layer, as an index prefix. `budget.townTrees` is removed.
+- Layers draw on near plots only.
+- A layer with a bad or missing field is off, silently. That includes a `tierOffset` that is not a
+  whole number, or a `budget` that is not a non-negative whole number.
+
+**Data:** `upgrades` maps a layer name to a list of entries. Each entry has exactly the old tree
+shape: `{ x, z, rotationY, scale, variant, anchor: "stretch" | "parcel", stretch?, parcel? }`.
+
+**Rules (normative, identical for every layer; the mirror copies them):**
+- **Placed** when `requiresSlot` is owned and the anchor is developed: a stretch entry needs that
+  stretch drawn; a parcel entry needs that parcel at level ≥ 2.
+- **Stage** = `clamp(tier − tierOffset, 0, #stages − 1)`. Single-stage props always show stage 0.
+- **Prop** = `props[variant]` (1-based). It is placed at (x, 0, z), turned `rotationY`, and scaled by
+  `scale` with `Model:ScaleTo` about its base.
+- Entries don't clear woods and aren't walk solids.
+- City detail off thins every layer evenly by index to `detail.treeShare`.
+- **Animation:** buying a layer's slot runs that layer's planting wave: stagger by that layer's
+  `stagger`, spreading out from the slot's pad, with puffs (`maxPuffs` applies). Parcel-anchored
+  entries appear with their house when a rise can still come. Later stage changes are staggered
+  with a pop. Unanimated syncs and bulk restores place the final state.
+
+**Placement (`fabric.py`):**
+- **Flowers:**
+  - planters in front of houses in the front setback, clear of the walker reach (at least 2.9 from
+    a street centreline, 2.8 from a spur);
+  - borders at lane corners and junctions;
+  - beds around the greens, the square and civic landmarks.
+  - At least 40 placed at full. Colourful but low: at most 1.5 studs tall.
+- **Banners:**
+  - `StreetBannerA/B` (a pole with a hanging banner, red or blue) along the high street and the
+    square's lane, alternating sides, every 10–14 studs, clear of lanes and lots;
+  - `BuntingA`, a string of pennants between two posts spanning the lane, at 3–5 spots on the high
+    street and the square. Its posts stand outside the walker reach; the string crosses over the lane
+    at 3 to 4 studs up. It is exempt from lane clearance, because it is overhead and nothing collides.
+  - At least 15 placed at full.
+- The existing tree rules move to `upgrades.trees`, unchanged.
+
+### Props
+
+| Prop | Builder | Rules |
+|---|---|---|
+| `FlowerPlanterA` | trades | a wooden planter box of flowers, ≤ 1 deep × ≤ 3 long, ≤ 1.2 tall |
+| `FlowerBorderA` | trades | a long low flower border, ≤ 1.5 × 4, ≤ 1 tall |
+| `FlowerBedA`, `FlowerBedB` | (existing) | the wave 2c greenery props, reused |
+| `StreetBannerA`, `StreetBannerB` | sites | a wooden pole with a heraldic banner (red or blue with an emblem), ≤ 1 × 1 footprint, 5–6 tall |
+| `BuntingA` | sites | two posts 8 studs apart along local X with a sagging string of 8–12 coloured pennants between them, the string's lowest point at 3.2+; origin at the midpoint |
+
+- The castle-kit banner pieces may be used: this is the Banner slot's own effect.
+- Keep everything single-stage and low-poly.
+
+### Ownership (round 3)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `Types.luau`; `CityDressing.json`; `Config/Eras/1_Village.json` |
+| economy-designer | `Village.luau` (districts), `fabric.py`, the plan, the generated data; renders `m12e_*` (flowers and banners before and after) |
+| ui-engineer | `Fabric.luau` (generic layers), `CityDressingController.luau` (detail share for all layers) |
+| prop-builder "trades" | `FlowerPlanterA`, `FlowerBorderA` |
+| prop-builder "sites" | `StreetBannerA`, `StreetBannerB`, `BuntingA` |
+| mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `plotrender.py` |

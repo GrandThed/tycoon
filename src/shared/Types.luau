@@ -489,7 +489,6 @@ export type CityBudgetConfig = {
 	parcelsFar: number?,
 	wild: number?,
 	wildFar: number?,
-	townTrees: number?,
 }
 export type CityLampsConfig = { firstTier: number, everyNthJunction: number, maxPerPlot: number }
 export type CityVehiclesConfig = { firstTier: number, turnSeconds: number }
@@ -708,17 +707,18 @@ export type FabricWild = {
 	quads: { { number } }?,
 	prop: string?,
 }
--- Wave 1c town trees, planted once `fabric.townTrees.requiresSlot` is owned and the anchor is
--- developed: a "stretch" tree needs `stretch` drawn, a "parcel" tree needs parcel `parcel` at
--- level 2 or more (its house built). `variant` is 1-based into `townTrees.props`.
-export type FabricTreeAnchor = "stretch" | "parcel"
-export type FabricTree = {
+-- Wave 1c round 3: an entry of a city upgrade layer (trees, flowers, banners), placed once the
+-- layer's `requiresSlot` is owned and the anchor is developed: a "stretch" entry needs `stretch`
+-- drawn, a "parcel" entry needs parcel `parcel` at level 2 or more (its house built). `variant`
+-- is 1-based into the layer's `props`.
+export type FabricUpgradeAnchor = "stretch" | "parcel"
+export type FabricUpgradeItem = {
 	x: number,
 	z: number,
 	rotationY: number,
 	scale: number,
 	variant: number,
-	anchor: FabricTreeAnchor,
+	anchor: FabricUpgradeAnchor,
 	stretch: string?,
 	parcel: number?,
 }
@@ -726,7 +726,7 @@ export type FabricData = {
 	version: number,
 	parcels: { FabricParcel },
 	wild: { FabricWild },
-	trees: { FabricTree }?, -- wave 1c; absent = no town trees
+	upgrades: { [string]: { FabricUpgradeItem } }?, -- wave 1c round 3; keyed by layer name
 }
 -- CityFabric.Develop's tunables: pull fades to 0 at `radius` studs along the drawn streets, a
 -- parcel needs a landmark or a developed parcel within `reach` studs to develop, it never runs
@@ -775,16 +775,18 @@ export type FabricMarkerConfig = {
 }
 -- `material` is an Enum.Material name; `color` is RGB 0-255.
 export type FabricPadLookConfig = { material: string, color: { number } }
--- Wave 1c: a planted tree shows stage clamp(tier − tierOffset, 0, #stages − 1), so trees bought
--- early still grow up with the town.
--- `stagger` (optional) is the planting wave's seconds per tree; absent means construction.stagger.
-export type FabricTownTreesConfig = {
+-- Wave 1c round 3: one city upgrade layer. A placed entry shows stage
+-- clamp(tier − tierOffset, 0, #stages − 1), so things bought early still grow up with the town.
+-- `stagger` (optional) is the planting wave's seconds per entry; absent means construction.stagger.
+-- `budget` caps the layer on a near plot as an index prefix.
+export type FabricUpgradeLayerConfig = {
 	requiresSlot: string,
 	props: { string },
 	tierOffset: number,
 	stagger: number?,
+	budget: number,
 }
--- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `townTrees` are
+-- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `upgrades` are
 -- optional: absent means that feature is off.
 export type FabricConfig = {
 	sizes: { small: { number }, medium: { number }, narrow: { number }? },
@@ -800,7 +802,7 @@ export type FabricConfig = {
 	marker: FabricMarkerConfig?,
 	padLook: FabricPadLookConfig?,
 	reveal: string?,
-	townTrees: FabricTownTreesConfig?,
+	upgrades: { [string]: FabricUpgradeLayerConfig }?,
 }
 
 export type CityEraDressingConfig = {

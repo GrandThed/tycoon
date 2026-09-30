@@ -40,8 +40,7 @@
     "parcels": 140,
     "wild": 110,
     "wildFar": 45,
-    "parcelsFar": 60,
-    "townTrees": 70
+    "parcelsFar": 60
   },
   "trees": {
     "stages": 4,
@@ -343,17 +342,43 @@
           ]
         },
         "reveal": "RevealScaffold",
-        "townTrees": {
-          "requiresSlot": "treeOak",
-          "props": [
-            "TownTreeA",
-            "TownTreeB",
-            "TownTreeC"
-          ],
-          "tierOffset": 3,
-          "stagger": 0.12
-        },
-        "fallbackDistrict": "home"
+        "fallbackDistrict": "home",
+        "upgrades": {
+          "trees": {
+            "requiresSlot": "treeOak",
+            "props": [
+              "TownTreeA",
+              "TownTreeB",
+              "TownTreeC"
+            ],
+            "tierOffset": 3,
+            "stagger": 0.12,
+            "budget": 70
+          },
+          "flowers": {
+            "requiresSlot": "flowerBed",
+            "props": [
+              "FlowerPlanterA",
+              "FlowerBorderA",
+              "FlowerBedA",
+              "FlowerBedB"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.08,
+            "budget": 60
+          },
+          "banners": {
+            "requiresSlot": "bannerPole",
+            "props": [
+              "StreetBannerA",
+              "StreetBannerB",
+              "BuntingA"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.15,
+            "budget": 30
+          }
+        }
       }
     },
     "Boomtown": {
