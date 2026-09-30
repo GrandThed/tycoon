@@ -677,7 +677,7 @@ export type AmbientConfig = { smoke: SmokeConfig?, birds: BirdsConfig? }
 -- tools/fabric.py, and the era's CityDressing.json v4 `fabric` block. Field names follow the JSON
 -- keys exactly. Coordinates are plot-local studs (origin at the plot centre, Y 0); rotationY
 -- follows the slot convention (front −Z, facing the parcel's street).
-export type FabricParcelSize = "small" | "medium"
+export type FabricParcelSize = "small" | "medium" | "narrow"
 -- Parcel i is its 1-based index in the list. `stretch` is the RoadGraph piece id of the stretch it
 -- fronts and `along` the studs from that stretch's `a` end to the foot of the perpendicular from
 -- its front-centre. Row 1 has front 0. A row-k parcel (k = 2 or 3, wave 1c) stands behind parcel
@@ -742,7 +742,8 @@ export type FabricPullConfig = {
 	rowLag: number?,
 }
 -- Every district lists props for both sizes; a small prop in a medium list is centred.
-export type FabricDistrictProps = { small: { string }, medium: { string } }
+-- Wave 1c round 2: `narrow` is optional; a missing size list falls back to `fabric.fallbackDistrict`.
+export type FabricDistrictProps = { small: { string }, medium: { string }, narrow: { string }? }
 -- `quarters[v]` shares `clumps[v]`'s origin with its trees in the local (+X, +Z) quadrant, so four
 -- turned copies rebuild the clump and the woods can recede a quarter at a time.
 export type FabricWildConfig = {
@@ -786,11 +787,13 @@ export type FabricTownTreesConfig = {
 -- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `townTrees` are
 -- optional: absent means that feature is off.
 export type FabricConfig = {
-	sizes: { small: { number }, medium: { number } },
+	sizes: { small: { number }, medium: { number }, narrow: { number }? },
 	pull: FabricPullConfig,
 	heightFloor: number,
 	districts: { [string]: FabricDistrictProps },
-	sites: { small: string, medium: string },
+	sites: { small: string, medium: string, narrow: string? },
+	-- Wave 1c round 2: the district whose list a parcel uses when its own district has none for its size.
+	fallbackDistrict: string?,
 	wild: FabricWildConfig,
 	clear: FabricClearConfig,
 	construction: FabricConstructionConfig,

@@ -5327,3 +5327,61 @@ drops `treeOak`'s district: a `streetOnly` slot has no building to pull with.
 | prop-builder "homes" | `FabricHomeSmallC/D`, `FabricHomeMediumC/D` |
 | mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `tools/testfit/plotrender.py` |
 
+## Wave 1c, round 2 — denser lots (2026-09-29)
+
+The first wave 1c pass placed 70 town trees but only **32 houses**, fewer than the 39 before.
+Frontage is the bottleneck:
+- lots must front a street, and back rows sit only directly behind a front lot;
+- every landmark reserves its declared 9×9 (the keep 14×14) plus margins;
+- the new street trees took frontage gaps.
+
+Ben asked for the terrain to be filled with houses, so the lot model changes. The goal is **at least
+70 houses at full build**, with no large empty lawn inside the town.
+
+### Narrow terraced lots (contract change)
+
+- **Size.** A third parcel size, `"narrow"`, with `fabric.sizes.narrow = [4, 6]`: 4 studs of
+  frontage, 6 deep.
+  - Narrow lots stand shoulder to shoulder along a street, like a terrace, with a gap of 0 to 0.2
+    studs.
+  - `smallMaxLevel` caps `"small"` only. A narrow lot may reach level 4: a tall, thin townhouse.
+- **Props.** A district's props for a size may be missing. The parcel then uses the list for that
+  size from `fabric.fallbackDistrict` (Village: `"home"`). A narrow lot's site is `sites.narrow`.
+  `FabricDistrictProps.narrow`, `sizes.narrow` and `sites.narrow` are all optional; without them no
+  narrow lot draws.
+- **Validation.** `size` must be `"small"`, `"medium"` or `"narrow"`; anything else is a blank.
+
+### Where lots go (`fabric.py`)
+
+- **Infill.** A row-2 or row-3 parcel may stand anywhere in the block interior behind the frontage,
+  not only directly behind its front. `front` is the nearest earlier parcel of row k − 1 on the same
+  side of the same street, and the parcel repeats its `stretch` and `along`.
+- **Measured landmark clearance.** Lots keep clear of each landmark's harvested extents: the union of
+  all its stages, the same rects Scatter uses, plus 0.5, instead of the declared 9×9. Streets keep
+  every existing rule. Pads, markers and spur strips keep their margins.
+- **Houses get the frontage first.** Street trees take only leftover frontage gaps too short for any
+  lot, and junction corners. The greens, orchards and yards carry the rest of the tree count (at least
+  50 still apply).
+- **Gaps.** At least 0.6 studs between lots of different sizes. Terraced narrow lots use 0 to 0.2.
+
+### Props
+
+| Prop | Size | Stages |
+|---|---|---|
+| `FabricHomeNarrowA`, `FabricHomeNarrowB`, `FabricHomeNarrowC` | 4×6 | 3: stage 0 ≤ 4.2, stage 1 ≤ 6.5, stage 2 ≤ 10.5 |
+| `SiteNarrow` | 4×6 | 1, ≤ 6.5 |
+
+- Narrow homes are 1 kit cell wide at the homes' scale (2.5). Their front faces the street. They read
+  as a terrace when placed side by side: side walls may touch, and all garnish stays front and back.
+- Three variants with different roofs and colours, so a row of five doesn't repeat.
+
+### Ownership (round 2)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `Types.luau` (size, district and site types); `CityDressing.json` (`sizes.narrow`, `fallbackDistrict`, home narrow list, `sites.narrow`) |
+| economy-designer | `fabric.py`, the plan, the generated data, `streetplan.py`; renders `m12d_*` |
+| ui-engineer | `Fabric.luau`: size by key, narrow validation, district fallback, narrow site |
+| prop-builder "homes" | `FabricHomeNarrowA/B/C` |
+| prop-builder "sites" | `SiteNarrow` |
+| mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `plotrender.py` |

@@ -200,6 +200,10 @@
           "medium": [
             8,
             8
+          ],
+          "narrow": [
+            4,
+            6
           ]
         },
         "pull": {
@@ -230,6 +234,11 @@
               "FabricHomeMediumB",
               "FabricHomeMediumC",
               "FabricHomeMediumD"
+            ],
+            "narrow": [
+              "FabricHomeNarrowA",
+              "FabricHomeNarrowB",
+              "FabricHomeNarrowC"
             ]
           },
           "camp": {
@@ -275,7 +284,8 @@
         },
         "sites": {
           "small": "SiteSmall",
-          "medium": "SiteMedium"
+          "medium": "SiteMedium",
+          "narrow": "SiteNarrow"
         },
         "wild": {
           "clumps": [
@@ -342,7 +352,8 @@
           ],
           "tierOffset": 3,
           "stagger": 0.12
-        }
+        },
+        "fallbackDistrict": "home"
       }
     },
     "Boomtown": {
