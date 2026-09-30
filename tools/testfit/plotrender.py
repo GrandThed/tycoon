@@ -855,8 +855,8 @@ class PlotScene:
         the district's prop at the stage its height cap allows -- the wild land the clearing mask
         leaves (whole clumps, the uncleared quarters of a partly cleared clump, singles; far plots
         whole clumps only; a skirt entry on the world ground), and on a near plot each pad's notice
-        board in the slot's frame with stakes and strings round the footprint; and (wave 1c) the town
-        trees the tree slot has planted, at the stage the tier gives them. A far plot draws only the
+        board in the slot's frame with stakes and strings round the footprint; and (round 3) every
+        upgrade layer's placed entries (town trees, flowers, banners) at the stage the tier gives them. A far plot draws only the
         parcels inside budget.parcelsFar. A name with no blueprint draws nothing, as a missing
         template does in game."""
         view = self.fabric_view
@@ -904,17 +904,19 @@ class PlotScene:
                 self.box("SiteStake", stake["size"], stake["pos"], list(pad["stakeColor"]), rot_y=stake["rotationY"])
             for string in pad["strings"]:
                 self.box("SiteString", string["size"], string["pos"], list(pad["stringColor"]), rot_y=string["rotationY"])
-        # Wave 1c town trees (near plots only; the snapshot has already left them out on a far one).
-        for tree in view["trees"]:
-            self.model(
-                f"TownTree{tree['index']}",
-                blueprint_path(era.name, tree["prop"], prop=True),
-                (tree["x"], 0.0, tree["z"]),
-                rot_y=tree["rotationY"],
-                stage=tree["stage"],
-                wanted=tree["prop"],
-                scale=tree["scale"],
-            )
+        # Round 3 upgrade layers -- town trees, flowers, banners -- in name order (near plots only; the
+        # snapshot has already left them out on a far one).
+        for layer in view["upgrades"].values():
+            for item in layer["drawn"]:
+                self.model(
+                    f"Upgrade_{item['layer']}{item['index']}",
+                    blueprint_path(era.name, item["prop"], prop=True),
+                    (item["x"], 0.0, item["z"]),
+                    rot_y=item["rotationY"],
+                    stage=item["stage"],
+                    wanted=item["prop"],
+                    scale=item["scale"],
+                )
         self.fabric_notes(view)
 
     def fabric_notes(self, view):
@@ -928,13 +930,14 @@ class PlotScene:
             f"{len(view['parcels'])} parcels drawable -- level 0 {counts[0]}, 1 {counts[1]}, 2 {counts[2]}, "
             f"3 {counts[3]}, 4 {counts[4]}; {houses} houses, {sites} building sites"
         )
-        stages = {}
-        for tree in view["trees"]:
-            stages[tree["stage"]] = stages.get(tree["stage"], 0) + 1
-        self.notes.append(
-            f"fabric town trees: {view['treesPlanted']} planted, {len(view['trees'])} drawn"
-            + (" (" + ", ".join(f"stage {s} x{n}" for s, n in sorted(stages.items())) + ")" if stages else "")
-        )
+        for name, layer in view["upgrades"].items():
+            stages = {}
+            for item in layer["drawn"]:
+                stages[item["stage"]] = stages.get(item["stage"], 0) + 1
+            self.notes.append(
+                f"fabric {name}: {layer['placed']} placed, {len(layer['drawn'])} drawn"
+                + (" (" + ", ".join(f"stage {s} x{n}" for s, n in sorted(stages.items())) + ")" if stages else "")
+            )
         self.notes.append(
             f"fabric wild: {whole} whole clumps, {partial} partly cleared ({quarters} quarters), "
             f"{singles} singles of {len(fabric.wild_data)} entries"

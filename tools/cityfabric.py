@@ -443,20 +443,34 @@ def valid_wild_entry(entry):
     return entry.get("kind") == CLUMP or (entry.get("kind") == SINGLE and isinstance(entry.get("prop"), str))
 
 
-def valid_town_trees(value):
-    """Fabric.validTownTrees: the block, or None (the feature off) without a slot to plant them or
-    with a `tierOffset` that is not a whole number."""
+def valid_upgrade_layer(value):
+    """Fabric.validUpgradeLayer (round 3): one layer's config, or None (that layer off) without a slot
+    to buy or a prop list, or with a `tierOffset` that is not whole, a `budget` that is not a whole
+    number of 0 or more, or a present `stagger` that is not a finite number of 0 or more. (A JSON
+    object for `props` is a Luau table too, and reads as an empty list.)"""
     if not isinstance(value, dict) or not isinstance(value.get("requiresSlot"), str):
         return None
-    tier_offset = value.get("tierOffset")
+    if not isinstance(value.get("props"), (list, dict)):
+        return None
+    tier_offset, budget, stagger = value.get("tierOffset"), value.get("budget"), value.get("stagger")
     if not finite(tier_offset) or tier_offset != math.floor(tier_offset):
         return None
-    return {"requiresSlot": value["requiresSlot"], "props": prop_list(value.get("props")), "tierOffset": tier_offset}
+    if not finite(budget) or budget < 0 or budget != math.floor(budget):
+        return None
+    if stagger is not None and not (finite(stagger) and stagger >= 0):
+        return None
+    return {
+        "requiresSlot": value["requiresSlot"],
+        "props": prop_list(value["props"]),
+        "tierOffset": tier_offset,
+        "stagger": stagger,
+        "budget": budget,
+    }
 
 
-def valid_tree(entry):
-    """Fabric.validTree: a position, turn, variant and positive scale, anchored to a stretch by piece
-    id or to a parcel by index; anything else is skipped where it stands."""
+def valid_upgrade_item(entry):
+    """Fabric.validUpgradeItem: a position, turn, variant and positive scale, anchored to a stretch by
+    piece id or to a parcel by index; anything else is skipped where it stands."""
     if not isinstance(entry, dict) or not all(finite(entry.get(key)) for key in ("x", "z", "rotationY")):
         return False
     if not (finite(entry.get("variant")) and finite(entry.get("scale")) and entry["scale"] > 0):
@@ -925,18 +939,25 @@ class FabricPlot:
                 clumps += 1
                 if clumps <= far_budget:
                     self.wild_far.add(index)
-        # Wave 1c town trees: the well-formed entries inside budget.townTrees, an index prefix of the
-        # data; none without a `trees` list or a valid `townTrees` block.
-        self.town_trees = valid_town_trees(config.get("townTrees"))
-        self.tree_views = []
-        raw_trees = data.get("trees")
-        if self.town_trees is not None and isinstance(raw_trees, list):
-            tree_budget = max(math.floor(number_or(self.budget.get("townTrees"), 0)), 0)
-            for index, tree in enumerate(raw_trees[:tree_budget], start=1):
-                if not valid_tree(tree):
+        # Round 3 upgrade layers (town trees, flowers, banners): in name order, each keeping its
+        # well-formed entries inside its own budget, an index prefix of its data. A layer needs both
+        # a valid config and a data table; a missing prop leaves that entry bare.
+        self.layers = []
+        layer_configs = config.get("upgrades")
+        layer_data = data.get("upgrades")
+        if isinstance(layer_configs, dict) and isinstance(layer_data, dict):
+            for name in sorted(key for key in layer_configs if isinstance(key, str)):
+                layer = valid_upgrade_layer(layer_configs[name])
+                items = layer_data.get(name)
+                if layer is None or not isinstance(items, (list, dict)):
                     continue
-                prop = luau_index(self.town_trees["props"], tree["variant"])
-                self.tree_views.append({"index": index, "tree": tree, "prop": prop})
+                # A JSON object is a Luau table with no array part: `#items` is 0.
+                items = items if isinstance(items, list) else []
+                views = []
+                for index, item in enumerate(items[: int(layer["budget"])], start=1):
+                    if valid_upgrade_item(item):
+                        views.append({"index": index, "item": item, "prop": luau_index(layer["props"], item["variant"])})
+                self.layers.append({"name": name, "config": layer, "views": views})
 
     # -- inputs the controller gathers ------------------------------------------------------
 
@@ -1228,46 +1249,49 @@ class FabricPlot:
                     )
         return pads
 
-    def town_tree_placements(self, owned, states, stretches, tier, near, share=1.0):
-        """Fabric.syncTrees, settled: a tree is planted when `requiresSlot` is owned and its anchor is
-        developed (a stretch tree: the stretch is drawn; a parcel tree: the parcel is at level 2 or
-        more, drawn or not); it stands at clamp(tier - tierOffset, 0, #stages - 1), on near plots
-        only, thinned by index to `share`. Returns (placements, planted count)."""
-        town_trees = self.town_trees
-        if town_trees is None:
-            return [], 0
-        slot_owned = town_trees["requiresSlot"] in owned
+    def upgrade_placements(self, owned, states, stretches, tier, near, share=1.0):
+        """Fabric.syncLayer for every layer, settled, in name order. An entry is placed when the
+        layer's `requiresSlot` is owned and its anchor is developed (a stretch entry: the stretch is
+        drawn; a parcel entry: the parcel is at level 2 or more, drawn or not); it stands at
+        clamp(tier - tierOffset, 0, #stages - 1), on near plots only, thinned by index to `share`.
+        Returns {layer name: {"placed": count, "drawn": [placements]}}."""
         share = min(max(number_or(share, 1), 0), 1)
-        placements, planted = [], 0
-        for view in self.tree_views:
-            tree = view["tree"]
-            if tree.get("anchor") == ANCHOR_STRETCH:
-                developed = tree["stretch"] in stretches
-            else:
-                state = luau_index(states, tree["parcel"])
-                developed = state is not None and state["level"] >= BUILT_LEVEL
-            if not (slot_owned and developed):
-                continue
-            planted += 1
-            index = view["index"]
-            kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
-            if not near or not kept or view["prop"] is None:
-                continue
-            count = len(self.heights.prop(view["prop"]))
-            stage = max(min(tier - town_trees["tierOffset"], count - 1), 0)
-            placements.append(
-                {
-                    "index": index,
-                    "prop": view["prop"],
-                    "stage": _integral(stage),
-                    "x": tree["x"],
-                    "z": tree["z"],
-                    "rotationY": tree["rotationY"],
-                    "scale": scale_of(tree["scale"]),
-                    "anchor": tree.get("anchor"),
-                }
-            )
-        return placements, planted
+        result = {}
+        for layer in self.layers:
+            config = layer["config"]
+            slot_owned = config["requiresSlot"] in owned
+            drawn, placed = [], 0
+            for view in layer["views"]:
+                item = view["item"]
+                if item.get("anchor") == ANCHOR_STRETCH:
+                    developed = item["stretch"] in stretches
+                else:
+                    state = luau_index(states, item["parcel"])
+                    developed = state is not None and state["level"] >= BUILT_LEVEL
+                if not (slot_owned and developed):
+                    continue
+                placed += 1
+                index = view["index"]
+                kept = share >= 1 or math.floor(index * share) > math.floor((index - 1) * share)
+                if not near or not kept or view["prop"] is None:
+                    continue
+                count = len(self.heights.prop(view["prop"]))
+                stage = max(min(tier - config["tierOffset"], count - 1), 0)
+                drawn.append(
+                    {
+                        "layer": layer["name"],
+                        "index": index,
+                        "prop": view["prop"],
+                        "stage": _integral(stage),
+                        "x": item["x"],
+                        "z": item["z"],
+                        "rotationY": item["rotationY"],
+                        "scale": scale_of(item["scale"]),
+                        "anchor": item.get("anchor"),
+                    }
+                )
+            result[layer["name"]] = {"placed": placed, "drawn": drawn}
+        return result
 
     def walk_solids(self, stretches):
         """Fabric.WalkSolids: the near-drawable row-1 parcels whose street is drawn, as (x, z, hx, hz,
@@ -1278,11 +1302,11 @@ class FabricPlot:
             if view["nearOk"] and view["parcel"]["row"] == 1 and view["parcel"]["stretch"] in stretches
         ]
 
-    def snapshot(self, owned, stages, tier, near=True, share=1.0, tree_share=1.0):
+    def snapshot(self, owned, stages, tier, near=True, share=1.0, upgrade_share=1.0):
         """One settled Fabric.Sync: what a player who joins now sees on this plot.
 
         `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier;
-        `share` and `tree_share` are City detail's wildShare and townTreeShare."""
+        `share` and `upgrade_share` are City detail's wildShare and upgradeShare."""
         owned = set(owned)
         stretches, joins, segments, visible, drawn = self.network_view(owned)
         trace = []
@@ -1301,7 +1325,7 @@ class FabricPlot:
             drawn = view["nearOk"] if near else view["farOk"]
             parcels.append({**view, "state": state, "look": look if drawn else None})
         plazas = self.visible_plazas(tier)
-        trees, planted = self.town_tree_placements(owned, states, stretches, tier, near, tree_share)
+        upgrades = self.upgrade_placements(owned, states, stretches, tier, near, upgrade_share)
         mask = self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
         cleared = self.cleared_flags(mask) if mask is not None else {}
         return {
@@ -1321,8 +1345,7 @@ class FabricPlot:
             "cleared": cleared,
             "wild": self.wild_placements(cleared, near, share),
             "pads": self.pad_dressing(owned, near),
-            "trees": trees,
-            "treesPlanted": planted,
+            "upgrades": upgrades,
             "near": near,
         }
 
@@ -1568,6 +1591,9 @@ SELFTEST_PARCELS = [
 ]
 
 
+LAYER = {"requiresSlot": "flowerBed", "props": ["FlowerPlanterA"], "tierOffset": 0, "stagger": 0.08, "budget": 60}
+
+
 def selftest():
     failures = []
 
@@ -1631,7 +1657,15 @@ def selftest():
         ("rowLag 0 kept", (valid_pull(dict(SELFTEST_PULL, rowLag=0)) or {}).get("rowLag") == 0),
         ("rowLag absent accepted", valid_pull(SELFTEST_PULL) is not None),
         ("back-row fronts", blanks == [True, True, False, False, False, False, False]),
-        ("tierOffset 1.5 turns town trees off", valid_town_trees({"requiresSlot": "treeOak", "tierOffset": 1.5}) is None),
+        ("layer: valid", valid_upgrade_layer(LAYER) is not None),
+        ("layer: tierOffset 1.5 turns it off", valid_upgrade_layer(dict(LAYER, tierOffset=1.5)) is None),
+        ("layer: budget -1 turns it off", valid_upgrade_layer(dict(LAYER, budget=-1)) is None),
+        ("layer: budget 2.5 turns it off", valid_upgrade_layer(dict(LAYER, budget=2.5)) is None),
+        ("layer: budget missing turns it off", valid_upgrade_layer({k: v for k, v in LAYER.items() if k != "budget"}) is None),
+        ("layer: stagger -0.1 turns it off", valid_upgrade_layer(dict(LAYER, stagger=-0.1)) is None),
+        ("layer: stagger absent is fine", valid_upgrade_layer({k: v for k, v in LAYER.items() if k != "stagger"}) is not None),
+        ("layer: props missing turns it off", valid_upgrade_layer({k: v for k, v in LAYER.items() if k != "props"}) is None),
+        ("layer: a non-name prop is a hole", (valid_upgrade_layer(dict(LAYER, props=["A", 3])) or {}).get("props") == ["A", None]),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
@@ -1723,11 +1757,15 @@ def timeline(era_name):
         f"(budget {plot.budget.get('parcels')}), {total_wild} wild entries (near budget "
         f"{plot.budget.get('wild')}, far {plot.budget.get('wildFar')} clumps)"
     )
-    trees = data.get("trees") or []
+    layers = ", ".join(
+        f"{layer['name']} {len((data.get('upgrades') or {}).get(layer['name']) or [])} "
+        f"(budget {layer['config']['budget']}, needs {layer['config']['requiresSlot']})"
+        for layer in plot.layers
+    )
     print(
-        f"  {len(trees)} town trees (budget {plot.budget.get('townTrees')}, block "
-        f"{'on' if plot.town_trees else 'off'}); levels count the parcels a near plot draws, houses and "
-        "sites what it shows; wild counts are what a near (far) plot draws"
+        f"  upgrade layers: {layers or 'none'}; levels count the parcels a near plot draws, houses and "
+        "sites what it shows, layers what is placed (and drawn on a near plot); wild counts are what a "
+        "near (far) plot draws"
     )
     rows = []
     for tier in range(1, len(city["tier"]["thresholds"]) + 1):
@@ -1746,10 +1784,13 @@ def timeline(era_name):
         far_houses, far_sites = look_counts(far)
         whole, partial, quarters, singles = wild_counts(near)
         far_whole = wild_counts(far)[0]
-        tree_stages = {}
-        for tree in near["trees"]:
-            tree_stages[tree["stage"]] = tree_stages.get(tree["stage"], 0) + 1
-        tree_text = ", ".join(f"stage {stage} x{n}" for stage, n in sorted(tree_stages.items())) or "none"
+        layer_texts = []
+        for name, layer in near["upgrades"].items():
+            by_stage = {}
+            for item in layer["drawn"]:
+                by_stage[item["stage"]] = by_stage.get(item["stage"], 0) + 1
+            stage_note = ", ".join(f"s{stage} x{n}" for stage, n in sorted(by_stage.items()))
+            layer_texts.append(f"{name} {layer['placed']}" + (f" ({stage_note})" if stage_note else ""))
         stage_text = " ".join(f"{sid}:{stages[sid]}" for sid in sorted(stages) if stages[sid])
         print(
             f"  {label:6s} ({moment:>12s}, GrowthTier {tier}): {len(owned):2d} owned, "
@@ -1757,9 +1798,9 @@ def timeline(era_name):
             f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | houses {houses:2d}, sites {sites:2d} "
             f"(far {far_houses}, {far_sites})"
         )
+        print(f"         placed: {'; '.join(layer_texts) or 'no layers'}")
         print(
-            f"         town trees planted {near['treesPlanted']}, drawn {len(near['trees'])} ({tree_text}) | "
-            f"wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "
+            f"         wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "
             f"far {far_whole} whole"
         )
         if stage_text:
