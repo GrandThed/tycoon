@@ -5472,3 +5472,11 @@ shape: `{ x, z, rotationY, scale, variant, anchor: "stretch" | "parcel", stretch
 | prop-builder "trades" | `FlowerPlanterA`, `FlowerBorderA` |
 | prop-builder "sites" | `StreetBannerA`, `StreetBannerB`, `BuntingA` |
 | mirror-engineer (after the code and data land) | `tools/cityfabric.py`, `plotrender.py` |
+
+### Review ruling (2026-09-30, rounds 2–3 review)
+
+- **Unanimated spawns are spread over frames.** A far-to-near switch or a join places up to about
+  290 fabric clones at once on a full Village. Unanimated spawns (parcels, layer entries, wild
+  items) go through a per-plot queue that places at most `construction.spawnsPerFrame` (Village:
+  40) per frame, nearest the camera first. Destroys stay immediate. Final states are unchanged,
+  so the mirror needs no change.

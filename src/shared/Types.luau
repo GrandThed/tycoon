@@ -764,6 +764,8 @@ export type FabricConstructionConfig = {
 	revealSeconds: number,
 	-- Review amendment: concurrent dust puffs per plot; absent means no cap.
 	maxPuffs: number?,
+	-- Rounds 2-3 review: unanimated spawns placed per frame per plot; absent means no cap.
+	spawnsPerFrame: number?,
 }
 -- `offset` is [x, y, z] from the pad centre in the slot's frame (turned by the slot's rotationY);
 -- colours are RGB 0-255.

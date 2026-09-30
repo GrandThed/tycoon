@@ -313,7 +313,8 @@
           "stageSeconds": 1.2,
           "riseSeconds": 0.6,
           "revealSeconds": 1.5,
-          "maxPuffs": 4
+          "maxPuffs": 4,
+          "spawnsPerFrame": 40
         },
         "marker": {
           "prop": "NoticeBoard",
