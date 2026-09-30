@@ -1,0 +1,28 @@
+{
+  "id": "FlowerBorderA",
+  "era": "Village",
+  "scale": 2.4,
+  "footprint": [4, 1.5],
+  "pieces": [
+    {"kit": "nature-kit", "model": "crops_dirtRow", "pos": [0, 0.05, -0.03], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtRowEnd", "pos": [0.333, 0.054, -0.03], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "crops_dirtRowEnd", "pos": [-0.333, 0.054, 0.03], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.655, 0.05, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redB", "pos": [-0.522, 0.05, -0.155], "rotY": 95, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redC", "pos": [-0.37, 0.05, -0.1], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redB", "pos": [-0.602, 0.05, 0.125], "rotY": 265, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.415, 0.05, 0.116], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [-0.135, 0.05, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowC", "pos": [-0.001, 0.05, -0.14], "rotY": 95, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.135, 0.05, -0.1], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowC", "pos": [-0.081, 0.05, 0.11], "rotY": 265, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.105, 0.05, 0.116], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleA", "pos": [0.385, 0.05, -0.1], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [0.518, 0.05, -0.155], "rotY": 95, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleC", "pos": [0.67, 0.05, -0.1], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [0.438, 0.05, 0.125], "rotY": 265, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleA", "pos": [0.625, 0.05, 0.116], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bushSmall", "pos": [-0.26, 0.05, 0.02], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "plant_bushSmall", "pos": [0.26, 0.05, -0.02], "rotY": 0, "stage": 0}
+  ]
+}

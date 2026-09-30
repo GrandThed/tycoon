@@ -1,0 +1,25 @@
+{
+  "id": "FlowerPlanterA",
+  "era": "Village",
+  "scale": 2.5,
+  "footprint": [3, 1],
+  "pieces": [
+    {"kit": "fantasy-town-kit", "model": "stall-bench", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "fence_simpleLow", "pos": [0, 0.11, 0.325], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "fence_simpleLow", "pos": [0, 0.11, -0.325], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redC", "pos": [-0.38, 0.226, -0.06], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [-0.236, 0.226, -0.085], "rotY": 95, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleB", "pos": [-0.103, 0.226, -0.06], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redB", "pos": [0.076, 0.226, -0.035], "rotY": 265, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowC", "pos": [0.244, 0.226, -0.062], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleC", "pos": [0.38, 0.226, -0.062], "rotY": 170, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleA", "pos": [-0.352, 0.226, 0.085], "rotY": 265, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.169, 0.226, 0.056], "rotY": 10, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [-0.063, 0.226, 0.056], "rotY": 170, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_purpleA", "pos": [0.143, 0.226, 0.06], "rotY": 0, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_redA", "pos": [0.272, 0.226, 0.035], "rotY": 95, "stage": 0},
+    {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.405, 0.226, 0.06], "rotY": 180, "stage": 0},
+    {"kit": "nature-kit", "model": "grass_leafs", "pos": [-0.295, 0.226, -0.005], "rotY": 90, "stage": 0},
+    {"kit": "nature-kit", "model": "grass_leafs", "pos": [0.125, 0.226, -0.005], "rotY": 90, "stage": 0}
+  ]
+}
