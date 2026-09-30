@@ -14,7 +14,7 @@ type FabricParcel = {
 	x: number,
 	z: number,
 	rotationY: number,
-	size: "small" | "medium",
+	size: "small" | "medium" | "narrow",
 	stretch: string,
 	along: number,
 	row: number,

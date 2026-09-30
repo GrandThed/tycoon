@@ -34,6 +34,7 @@ local Dust = require(script.Parent:WaitForChild("Dust"))
 -- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data").
 local SMALL = "small"
 local MEDIUM = "medium"
+local NARROW = "narrow" -- round 2: 4-stud terraced frontage
 local CLUMP = "clump"
 local SINGLE = "single"
 -- The numeric fields `pull` must carry, finite, before the pure CityFabric may read it.
@@ -97,6 +98,9 @@ type ParcelView = {
 	index: number,
 	parcel: Types.FabricParcel,
 	rect: Rect, -- the footprint about its centre, margin 0
+	-- `fabric.sizes` has a footprint for its size. Without one (an optional size such as `narrow`
+	-- left out of config) the parcel never draws and clears nothing.
+	sized: boolean,
 	frame: CFrame, -- plot-local pivot: bottom-centre on (x, 0, z), facing rotationY
 	-- Well formed and inside the budget of a near plot (budget.parcels) or of a far one
 	-- (budget.parcelsFar); any other parcel never draws there.
@@ -270,8 +274,17 @@ local function numberOr(value: any, fallback: number): number
 	return if finite(value) then value else fallback
 end
 
-local function bySize<T>(size: string, small: T, medium: T): T
-	return if size == SMALL then small else medium
+-- A config entry by parcel size: sizes, sites and district prop lists all key small, medium and
+-- (round 2, optional) narrow. Nil for a size the entry leaves out.
+local function forSize<T>(size: string, small: T, medium: T, narrow: T?): T?
+	if size == SMALL then
+		return small
+	elseif size == MEDIUM then
+		return medium
+	elseif size == NARROW then
+		return narrow
+	end
+	return nil
 end
 
 local function materialNamed(name: any): Enum.Material?
@@ -389,7 +402,7 @@ local function validParcel(parcel: any): boolean
 		and (parcel.row == 1 or parcel.row == 2 or parcel.row == 3)
 		and finite(parcel.front)
 		and type(parcel.stretch) == "string"
-		and (parcel.size == SMALL or parcel.size == MEDIUM)
+		and (parcel.size == SMALL or parcel.size == MEDIUM or parcel.size == NARROW)
 end
 
 -- Stands in for a malformed parcel: on no street, so it never develops, and later parcels keep
@@ -845,13 +858,29 @@ local function siteLook(handle: Handle, view: ParcelView): Look?
 	if type(sites) ~= "table" then
 		return nil
 	end
-	local prop = bySize(view.parcel.size, sites.small, sites.medium)
+	local prop = forSize(view.parcel.size, sites.small, sites.medium, sites.narrow)
 	return if type(prop) == "string" then { kind = SITE, prop = prop, stage = 0 } else nil
+end
+
+-- A district's non-empty prop list for a parcel size, or nil when it has none.
+local function districtList(handle: Handle, district: string?, size: string): { string }?
+	local districts = handle.context.config.districts
+	if district == nil or type(districts) ~= "table" then
+		return nil
+	end
+	local props = districts[district]
+	if type(props) ~= "table" then
+		return nil
+	end
+	local list = forSize(size, props.small, props.medium, props.narrow)
+	return if type(list) == "table" and #list > 0 then list else nil
 end
 
 -- "What a parcel shows": nothing at level 0, the site at 1, and from 2 the district's prop for
 -- this parcel at the highest stage its level allows that stays under the governor's height (and
--- never under the floor every stage 0 is built to).
+-- never under the floor every stage 0 is built to). Round 2: a district without props for the
+-- parcel's size lends `fallbackDistrict`'s; without those either the parcel shows nothing, so no
+-- rise ever comes and its yard trees plant without waiting.
 local function goalFor(
 	handle: Handle,
 	view: ParcelView,
@@ -864,15 +893,11 @@ local function goalFor(
 		return siteLook(handle, view)
 	end
 	local config = handle.context.config
-	local district = state.district
-	local districts = config.districts
-	local props = if district ~= nil and type(districts) == "table"
-		then districts[district]
-		else nil
-	local list = if type(props) == "table"
-		then bySize(view.parcel.size, props.small, props.medium)
-		else nil
-	if type(list) ~= "table" or #list == 0 then
+	local size = view.parcel.size
+	local fallback = config.fallbackDistrict
+	local list = districtList(handle, state.district, size)
+		or districtList(handle, if type(fallback) == "string" then fallback else nil, size)
+	if list == nil then
 		return nil
 	end
 	local prop = list[(view.index - 1) % #list + 1]
@@ -1185,7 +1210,7 @@ local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: 
 	end
 	for index, state in handle.states do
 		local view = handle.parcels[index]
-		if state.level >= 1 and view ~= nil then
+		if state.level >= 1 and view ~= nil and view.sized then
 			table.insert(rects, grown(view.rect, parcelMargin))
 		end
 	end
@@ -1981,9 +2006,10 @@ function Fabric.new(context: Context): Handle
 		if type(sizes) ~= "table" then
 			continue
 		end
-		local size = bySize(parcel.size, sizes.small, sizes.medium)
-		local width = if type(size) == "table" then numberOr(size[1], 0) else 0
-		local depth = if type(size) == "table" then numberOr(size[2], 0) else 0
+		local footprint = forSize(parcel.size, sizes.small, sizes.medium, sizes.narrow)
+		local sized = type(footprint) == "table" and finite(footprint[1]) and finite(footprint[2])
+		local width = if sized then (footprint :: { number })[1] else 0
+		local depth = if sized then (footprint :: { number })[2] else 0
 		table.insert(handle.parcels, {
 			index = index,
 			parcel = parcel,
@@ -1995,9 +2021,10 @@ function Fabric.new(context: Context): Handle
 				rotationY = parcel.rotationY,
 				margin = 0,
 			},
+			sized = sized,
 			frame = Scatter.PropFrame(Vector3.new(parcel.x, 0, parcel.z), parcel.rotationY),
-			nearOk = wellFormed and index <= parcelBudget,
-			farOk = wellFormed and index <= farParcelBudget,
+			nearOk = wellFormed and sized and index <= parcelBudget,
+			farOk = wellFormed and sized and index <= farParcelBudget,
 			goal = nil,
 			changed = false,
 			shown = nil,
