@@ -540,6 +540,26 @@ def make_site_ground() -> Part:
     return p
 
 
+def make_site_ground_narrow() -> Part:
+    """Bare earth under a narrow terraced site, 3.8 x 5.8 studs with ragged front and back edges (the
+    4 x 6 lot at scale 4). Same slab and trodden patches as site-ground; its sides stay nearly
+    straight, because terraced lots stand shoulder to shoulder."""
+    p = Part("site-ground-narrow")
+    rng = random.Random(73)
+    hx, hz, points, power = 1.88, 2.86, 28, 6.0
+    outline = []
+    for k in range(points):
+        a = 2 * math.pi * (k + 0.5) / points
+        c, s = math.cos(a), math.sin(a)
+        r = (abs(c) ** power + abs(s) ** power) ** (-1.0 / power)
+        j = 1.0 + rng.uniform(-0.03, 0.03)
+        outline.append((hx * r * c * min(j, 1.0), hz * r * s * j))
+    prism(p, outline, 0.0, 0.06, EARTH)
+    for cx, cz, rx, rz in ((-0.6, 1.3, 0.8, 0.7), (0.7, -1.4, 0.7, 0.55), (0.4, 0.3, 0.55, 0.45)):
+        prism(p, blotch(rng, cx, cz, rx, rz), 0.0, 0.11, EARTH_LIGHT)
+    return p
+
+
 def make_scaffold_ring() -> Part:
     """Open timber scaffold round a 9 x 9-stud slot, 7.6 studs tall, hollow in the middle so the
     landmark rising inside stays in view: eight standards, two lifts of ledgers, a board walk on the
@@ -761,6 +781,7 @@ PIECES = {
     "boulder-large": make_boulder_large,
     "boulder-small": make_boulder_small,
     "site-ground": make_site_ground,
+    "site-ground-narrow": make_site_ground_narrow,
     "scaffold-ring": make_scaffold_ring,
     "tree-pit": make_tree_pit,
     "tree-stakes": make_tree_stakes,
