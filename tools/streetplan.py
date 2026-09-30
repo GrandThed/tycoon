@@ -207,9 +207,11 @@ TIER_COLOURS = {
     5: (60, 110, 200),
 }
 NEVER_COLOUR = (150, 150, 150)
-PARCEL_ROW_COLOURS = {1: (250, 214, 120), 2: (236, 196, 160)}
+PARCEL_ROW_COLOURS = {1: (250, 214, 120), 2: (236, 196, 160), 3: (214, 170, 140)}
 WILD_COLOURS = {"clump": (40, 110, 55, 70), "single": (60, 120, 60, 110)}
 WILD_RADIUS = {"clump": 2.6, "single": 1.0}  # studs, preview only
+TOWN_TREE_COLOURS = {1: (60, 170, 70), 2: (230, 140, 50), 3: (40, 110, 210)}  # by variant
+TOWN_TREE_RADIUS = 1.2  # studs, preview only
 
 # --------------------------------------------------------------------------
 # Luau subset parser (tables, numbers, strings, booleans, Vector3/Color3 constructors)
@@ -693,6 +695,9 @@ class Era:
         self.has_fabric = self.fabric_path.exists()
         self.layout = parse_layout(LAYOUTS_DIR / f"{name}.luau")
         self.config = load_era_config(name)
+        # M12 wave 1c: in a fabric era a streetOnly slot's footprint is nominal (no model spawns and
+        # it only clears woods), but its pad is real and keeps every pad rule.
+        self.nominal = {slot["id"] for slot in self.config["slots"] if slot.get("streetOnly")} - self.furniture if self.has_fabric else set()
         self.dressing = city["eras"][name]
         self.city = city
         road = self.dressing["road"]
@@ -2592,6 +2597,8 @@ def check(era, network, visible, unreachable):
                 ("footprint", slot["footprint"], spine_clear),
                 ("pad", slot["pad_poly"], pad_clear),
             ):
+                if what == "footprint" and slot["id"] in era.nominal:
+                    continue
                 d = segment_polygon_distance(a, b, poly)
                 if d < need - 1e-6:
                     add(f"street {index + 1} {fmt(a)}->{fmt(b)}: {d:.2f} from {slot['id']} {what} (need {need:g})")
@@ -2620,7 +2627,8 @@ def check(era, network, visible, unreachable):
     for slot in era.slots:
         if slot["id"] in era.furniture:
             continue
-        obstacles.append((f"{slot['id']} footprint", slot["footprint"], slot["id"]))
+        if slot["id"] not in era.nominal:
+            obstacles.append((f"{slot['id']} footprint", slot["footprint"], slot["id"]))
         obstacles.append((f"{slot['id']} pad", slot["pad_poly"], slot["id"]))
     for i, lot in enumerate(era.lots):
         obstacles.append((f"lot {i + 1}", lot["poly"], None))
@@ -3204,6 +3212,7 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         entries.append((PARCEL_ROW_COLOURS[1], "fabric parcel, row 1 (index; tick = front)"))
         entries.append((PARCEL_ROW_COLOURS[2], "fabric parcel, row 2"))
         entries.append((WILD_COLOURS["clump"], "wild: woods clump quarter / single"))
+        entries.append((TOWN_TREE_COLOURS[3], "town tree (blue street, orange orchard, green)"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -3238,7 +3247,7 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         canvas.text(
             (lx, y),
             f"parcels {len(parcels)} ({sum(1 for p in parcels if p['row'] == 1)} row 1, "
-            f"{sum(1 for p in parcels if p['size'] == 'medium')} medium), wild {len(wild)}",
+            f"{sum(1 for p in parcels if p['size'] == 'medium')} medium), trees {len(fabric_doc.get('trees', []))}, wild {len(wild)}",
             font=font,
             fill=(0, 0, 0),
         )
@@ -3277,8 +3286,8 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
 
 
 def draw_fabric(era, doc, canvas, px, poly, font):
-    """The M12 city fabric: wild land faint under everything, then each parcel's footprint by row,
-    with a tick toward the street it fronts and its 1-based index (what CityFabric calls it)."""
+    """The M12 city fabric: wild land faint under everything, the town trees, then each parcel's
+    footprint by row, with a tick toward the street it fronts and its 1-based index."""
     sizes = era.dressing.get("fabric", {}).get("sizes", {})
     for item in doc.get("wild", []):
         points = item.get("quads") if item["kind"] == "clump" else [(item["x"], item["z"])]
@@ -3286,6 +3295,10 @@ def draw_fabric(era, doc, canvas, px, poly, font):
         for point in points or []:
             c = px(point)
             canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=WILD_COLOURS[item["kind"]])
+    for tree in doc.get("trees", []):
+        c = px((tree["x"], tree["z"]))
+        radius = TOWN_TREE_RADIUS * PX_PER_STUD
+        canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=TOWN_TREE_COLOURS.get(tree.get("variant"), (0, 0, 0)))
     for index, parcel in enumerate(doc.get("parcels", []), start=1):
         size = sizes.get(parcel["size"], (6, 6))
         centre = (parcel["x"], parcel["z"])

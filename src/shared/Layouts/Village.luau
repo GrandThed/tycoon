@@ -85,16 +85,21 @@ return {
 			rotationY = 358,
 			district = "market",
 		},
-		-- the old oak at the far end of the square's west lane
-		treeOak = { position = Vector3.new(-54.7, 0, 8.1), rotationY = 0, district = "home" },
+		-- streetOnly Plant Trees: no model, no path, no district. Its pad stands on the square's
+		-- south-east corner by the high street; its rect only clears the woods
+		treeOak = {
+			position = Vector3.new(6, 0, 4),
+			rotationY = 0,
+			spur = { Vector3.new(6, 0, 4) },
+		},
 		-- the smithy at the end of the craft lane, by the woodcutter's woods
 		blacksmith = {
 			position = Vector3.new(-55.69, 0, -51.11),
 			rotationY = 183.9,
 			district = "craft",
 		},
-		-- the tavern on the square's west lane
-		tavern = { position = Vector3.new(-29.73, 0, 8.1), rotationY = 0, district = "market" },
+		-- the tavern closing the square's west lane
+		tavern = { position = Vector3.new(-35.7, 0, 8.1), rotationY = 0, district = "market" },
 		-- the trade cart at the east end of the square's lane: the road out
 		tradeRoute = {
 			position = Vector3.new(46.19, 0, 2.99),
@@ -161,10 +166,10 @@ return {
 				Vector3.new(46.5, 0, -37.7),
 			},
 		},
-		-- 3: the square's lane, crossing halfway up: the tavern and the oak west, the market east
+		-- 3: the square's lane, crossing halfway up: the tavern closes it west, the market east
 		{
 			points = {
-				Vector3.new(-54.7, 0, -6.4),
+				Vector3.new(-35.7, 0, -6.4),
 				Vector3.new(-20.7, 0, -6.4),
 				Vector3.new(-3, 0, -9.5),
 				Vector3.new(14.7, 0, -12.6),

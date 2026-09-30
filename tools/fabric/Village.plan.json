@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "seed": "Village:fabric:a",
+  "version": 2,
+  "seed": "Village:fabric:c1",
   "parcels": {
     "frontSetback": 3.5,
     "gap": 0.6,
@@ -8,21 +8,38 @@
     "mediumShare": 0.8,
     "walkStep": 0.5,
     "endMargin": 0.2,
-    "secondRowPerFirst": 0.33,
     "setbackJitter": 0.4,
     "turnJitter": 2.0,
+    "rows": 3,
+    "minLevel": 2,
+    "treeGapEvery": [3, 4],
+    "treeGap": 4.2,
     "edge": 1.0,
     "slot": 1.0,
     "pad": 0.5,
     "plaza": 1.0,
     "sign": 1.0,
-    "street": 2.8,
-    "spur": 2.5
+    "marker": 0.5,
+    "street": 2.9,
+    "spur": 2.8
   },
   "require": {
-    "parcels": 40,
-    "rowOneShare": 0.75,
-    "medium": 12
+    "parcels": 30,
+    "medium": 12,
+    "trees": 50
+  },
+  "trees": {
+    "variants": { "street": 3, "orchard": 2, "green": 1, "yard": 1 },
+    "clear": 1.3,
+    "lamp": 1.2,
+    "laneClear": 2.8,
+    "edge": 1.5,
+    "spacing": 3.6,
+    "scale": [0.88, 1.12],
+    "street": { "setbacks": [4.2, 3.7, 4.8], "spacing": 10.0, "step": 1.0 },
+    "orchard": { "districts": ["farm"], "count": 4, "ring": [1.5, 7.0], "attempts": 120 },
+    "green": { "districts": ["civic"], "count": 3, "ring": [1.5, 6.0], "attempts": 120 },
+    "yard": { "share": 0.6, "offset": 2.3, "lateral": 0.7 }
   },
   "wild": {
     "woods": 0.95,
@@ -30,25 +47,26 @@
     "front": { "low": 0.12, "start": 10, "wobble": 3, "ramp": 8 },
     "heart": { "centre": [0, -46], "clear": 14, "fade": 6, "wobble": 3 },
     "skirt": { "depth": 16, "wobble": 3, "sideWobble": 2, "cornerShare": 0.5, "fade": 3 },
+    "glades": { "count": 3, "radius": [4.5, 7.0], "fade": 4.0, "inset": 14, "apart": 14, "minDensity": 0.9, "attempts": 400 },
     "clumps": {
-      "spacing": 15.5,
-      "jitter": 1.8,
+      "spacing": 13.2,
+      "spacingVar": 0.22,
+      "attempts": 5000,
       "minDensity": 0.6,
-      "turnJitter": 12,
-      "scale": [0.92, 1.12],
+      "scale": [0.84, 1.24],
       "quarterOffset": 3.9
     },
     "singles": {
-      "spacing": 7.0,
-      "jitter": 1.5,
+      "spacing": 7.5,
+      "spacingVar": 0.3,
+      "attempts": 5000,
       "minDensity": 0.05,
       "treeDensity": 0.3,
-      "clumpKeep": 0.62,
-      "meadowShare": 0.45,
-      "trees": ["WoodsPine", "WoodsPine", "WoodsRound"],
-      "treeScale": [0.85, 1.1],
-      "meadow": ["MeadowRock", "MeadowRock", "WoodsRound", "WoodsRound", "MeadowRock", "MeadowRock"],
-      "meadowScale": [0.75, 1.0]
+      "clumpKeep": 0.6,
+      "trees": ["WoodsRound", "WoodsPine", "WoodsRound", "WoodsPine", "WoodsRound"],
+      "treeScale": [0.8, 1.15],
+      "meadow": ["MeadowRock", "WoodsRound", "MeadowRock", "WoodsRound", "MeadowRock"],
+      "meadowScale": [0.7, 1.0]
     }
   }
 }
