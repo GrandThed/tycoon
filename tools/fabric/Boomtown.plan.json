@@ -1,22 +1,22 @@
 {
   "version": 1,
-  "seed": "Boomtown:fabric:b1",
+  "seed": "Boomtown:fabric:o1",
   "parcels": {
     "frontSetback": 4.5,
     "gap": 0.6,
     "terraceGap": 0.1,
     "terraceStreets": [1],
-    "mediumShare": 0.2,
+    "mediumShare": 0.5,
     "walkStep": 0.5,
     "endMargin": 0.2,
-    "setbackJitter": 0.3,
+    "setbackJitter": 0.0,
     "turnJitter": 0.0,
     "rows": 3,
     "minLevel": 2,
     "infill": {
-      "step": 0.5,
+      "step": 0.3,
       "sizes": ["small"],
-      "rows": { "2": [11.1, 26.0], "3": [26.0, 42.0] }
+      "rows": { "2": [11.1, 24.5], "3": [30.9, 44.2] }
     },
     "edge": 1.0,
     "landmark": 0.5,
@@ -45,7 +45,7 @@
         { "variant": 3, "share": 0.25 }
       ]
     },
-    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.3 },
+    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.2 },
     "skirt": {
       "depth": 14,
       "sideFrom": 20,
