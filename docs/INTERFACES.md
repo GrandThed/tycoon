@@ -5738,3 +5738,147 @@ Boomtown and both candidates at tier 1, tier 3 and full.
 Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts
 and config blocks, and the client (the code is generic; a candidate that needs a client change
 reports it instead).
+
+## Wave 2.2 — Boomtown: the organic layout, city-changers, narrow driveways (Ben, 2026-10-01)
+
+Ben's answers at the mock gate:
+1. **Organic** ("organic looks better"), with the bolder pass the lead proposed.
+2. **All four candidates stop being a sole building:** `fireHydrant`, `billboardSign`,
+   `neonDistrict` and `busLine` become city-changers.
+3. **Roads stay 6 studs wide.**
+4. **Yes** to chimneys from the first stage on the three narrow Village homes.
+5. His PLAYTEST step-37 numbers are still owed; budgets stay as they are until they arrive.
+
+The organic candidate is merged into `m12-boomtown` (20df3ed) and is the starting point.
+
+### Slots (lead, `Config/Eras/2_Boomtown.json`, applied)
+
+The four slots are `streetOnly`. Type, cost, income, multiplier, `requires` and `modelName` are
+unchanged, so the economy is untouched (`sim_economy.py`: 16:20:04, legacy 887, as before).
+
+| Slot | Name | What buying it does |
+|---|---|---|
+| `fireHydrant` | Install Fire Hydrants | red hydrants along every drawn street |
+| `billboardSign` | Put Up Billboards | billboards by the roads and behind the shop rows |
+| `neonDistrict` | Light the Neon District | a neon sign in front of every Main Street shop, neon arches over Main Street |
+| `busLine` | Open the Bus Line | bus shelters along the streets, and buses among the traffic |
+
+In the layout each of the four gets a pad beside a street on ground nothing else uses, a
+one-point spur and no `district` (the `dirtRoad` pattern).
+
+### Upgrade layers (`eras.Boomtown.fabric.upgrades`, config applied; generic rules unchanged)
+
+| Layer | `requiresSlot` | Props | Entries | At full build |
+|---|---|---|---|---|
+| `parked` | `gasStation` | `ParkedA`, `ParkedB`, `ParkedC` (entry `scale` 0.5) | kerb bays beside streets (stretch) and driveways beside homes (parcel) | 10 to 16 |
+| `hydrants` | `fireHydrant` | `Hydrant` | stretch-anchored, on the lamp line between the walkers and the lots, every 14 to 18 studs, alternating sides | at least 20 |
+| `busStops` | `busLine` | `BusStopA` | stretch-anchored kerbside shelters facing the street, on at least three streets | 4 to 8 |
+| `billboards` | `billboardSign` | `BillboardA`, `BillboardB` (roadside), `BillboardC` (large) | stretch-anchored: street ends, the plot edges facing a street, gaps behind the shop rows | at least 8 |
+| `neon` | `neonDistrict` | `NeonSignA`, `NeonSignB`, `NeonSignC`, `NeonArch` | a sign at the front edge of every terrace-street shop lot (parcel-anchored); 2 or 3 arches over Main Street (stretch-anchored; posts outside the walker reach, the span at least 4 studs up, exempt from lane clearance like the Village bunting) | at least 15 |
+
+- `parked` is the wave 2c parked cars, back as a layer (the layout dropped `parking`). The
+  gas station is the 4th purchase, so cars arrive early.
+- Clearances are the cart rules, with each prop's footprint from the plan (`footprints`) until
+  it is harvested: the walker reach from centrelines and spurs; 0.5 from parcels (a neon sign and
+  a driveway car may stand inside their own lot's front or side margin, as planters do), from
+  landmark extents, pads, markers, lamps, signals and every other layer's entries; 1 from the plot
+  edge.
+- `fabric.py` lays every layer from a plan block of the same name, and `check` enforces the
+  minimums through `require.<layer>`. Each layer has its own random stream, in the order of the
+  table, after the parcels and the wild.
+
+### Buses in the traffic (`vehicles.unlocks`, new; ui-engineer)
+
+```json
+"vehicles": { "unlocks": [ { "slot": "busLine", "props": ["VehicleBus"], "share": 0.15 } ] }
+```
+
+- While `slot` is owned, each of the plot's vehicles takes a prop from `props` with probability
+  `share`, decided by a seeded draw per vehicle index from a stream of its own, so the other
+  vehicles keep the props they had. At least one vehicle is a bus once the plot has any vehicle.
+- `scale`, speed, lanes and budgets are the plot's ordinary vehicle values. A missing prop or a
+  malformed entry means that unlock is off, silently. `VehiclesConfig.unlocks` is optional.
+- The mirror draws the same picks in `plotrender.py`.
+
+### Narrow driveways (`road.paths.spurWidth`, new)
+
+- `eras.<Era>.road.paths.spurWidth: number?`, in studs. Absent means `road.width`, so Village is
+  unchanged and `py tools/paths/bake.py --era Village --list` stays green. Boomtown: **3**.
+- It is the width of every drawn spur (a landmark's path from its join to its slot): the baked
+  `SP_<slotId>` pieces (fill and rim) and the parts fallback. The clearing mask's spur segments
+  keep `clear.street`, as today.
+- Walk lanes on a spur keep the same distance from the edge as on a street:
+  `offset − (road.width − spurWidth) / 2`. Vehicles keep to the streets wherever a spur is narrower
+  than the road.
+- `streetplan.py` and `fabric.py` take a spur strip's half-width from `spurWidth`; the plan's
+  `spur` clearance follows.
+- The spur's mouth still runs to the street's centreline, hidden by the planar UVs as today.
+- Mirrored by `tools/paths` (network, bake), `plotrender.py` and `streetplan.py`. `bake.py --list`
+  must agree with the client for both eras.
+
+### Layout, bolder pass (layout-designer, in `tycoon-m12-organic`, then merged)
+
+- `fabric.marker.offset` is now `[5.3, 0, -0.5]` (config applied), which clears a pad at any
+  slot rotation: **landmarks turn to face their streets**, and streets may leave the crossroads
+  at natural angles.
+- Keep: Main Street in from (0, −54.5), the Clock Tower closing it, a tree, slot k roughly k-th
+  from the entrance, the lot arithmetic that made 101.
+- Change:
+  - **Industry out of the foreground.** The service road goes to the east or back side; the front
+    of the plot, nearest the hub, is Main Street's mouth and houses.
+  - **A civic green:** `PlazaA` beside or in front of the Clock Tower.
+  - **More Main Street:** at least 20 terraced shop lots; a second terrace street is fine.
+  - **Fewer backs to the camera:** landmarks face −Z or sideways where their street allows.
+  - The four city-changer slots lose their building sites; 17 landmarks remain to pull.
+- Targets: **at least 95 lots** (floor 90), sites at every tier, and a tier 4 → full jump no
+  larger than today's.
+
+### Village chimneys (prop-builder; config by the lead after measuring)
+
+`FabricHomeNarrowA/B/C` (Village) gain a chimney from stage 0, raised with each storey.
+`ambient.smoke.fabricProps` gets the new per-stage tops and `ambient.smoke.every` becomes 7 in the
+same commit (`budget.plumes` 20 gates it). The three props' stages are re-uploaded with the
+Boomtown batch: clear their `modelAssetId` and `parts` through `assets_config.save_assets` first,
+because `upload_models.py` skips a non-zero id.
+
+### Boomtown props, final (wave 2.3; strips to Ben before any upload)
+
+Heights are measured against the landmarks (a City Kit storey is 1.6 studs at scale 4).
+
+| Props | Lot | Stages |
+|---|---|---|
+| `FabricShopNarrowA/B/C/D` | 5 × 8 | 3: 2.3 / 3.4 / 4.5; roof detail and finished side walls |
+| `FabricHomeSmallA–F` | 6 × 6 | 2: ≤ 3.4 |
+| `FabricHomeMediumA/B` | 8 × 8 | 3: ≤ 2.2 / 2.4 / 3.7 |
+| `FabricWorksSmallA/B` | 6 × 6 | 2: shed and yard → workshop, ≤ 3.4 (replace the `ShedA/B` stand-ins) |
+| `FabricWorksMediumA` | 8 × 8 | 3: ≤ 5.8 |
+| `FabricCivicSmall`, `FabricCivicMedium` | 6 × 6, 8 × 8 | 2 and 3: a green → a small park with a feature |
+| `SiteSmall/Medium/Narrow`, `RevealScaffold`, `LotSign` | | 1 |
+| `FieldClumpA/B/C`, `FieldQuarterA/B/C`, `PastureClump`, `PastureQuarter` | clump, quarter | 1 |
+| `HayBale`, `PrairieTree`, `TelegraphPole`, `Windbreak`, `Farmstead`, `Windpump` | single | 1 |
+| `Hydrant`, `BusStopA`, `BillboardA/B/C`, `NeonSignA/B/C`, `NeonArch`, `VehicleBus` | layer props | 1 |
+
+- `PastureClump` is a fenced grass paddock with the same quarter geometry as a field, so a
+  fallow cell reads as pasture, not bare dirt.
+- `VehicleBus` is built like `VehicleA–C` (same scale convention, front −Z).
+- Filler never copies a landmark's silhouette and stays plainer and lower than the landmarks.
+
+### Ownership (wave 2.2, disjoint)
+
+| Owner | Where | Files |
+|---|---|---|
+| lead | base | this section; `Config/Eras/2_Boomtown.json`; `CityDressing.json` schema and first values; merges; pipeline runs |
+| economy-designer "generator" | base (`tycoon-m12`) | `tools/fabric.py`, `tools/streetplan.py`, `tools/fabric/Boomtown.plan.json` (layer and field blocks only, until the layout merges), `CityDressing.json` `eras.Boomtown.fabric` values |
+| layout-designer | `tycoon-m12-organic` | `src/shared/Layouts/Boomtown.luau`, `tools/fabric/Boomtown.plan.json` (`parcels`, `require`, `seed`, `wild.grid`), `Config/Fabric/Boomtown.json`, `eras.Boomtown.fabric.pull` |
+| ui-engineer | base | `src/client/City/RoadGraph.luau`, `PathRibbon.luau`, `Traffic.luau`, `Walkers.luau`, `src/client/Controllers/CityDressingController.luau`, `AssetPreloader.luau`, `src/shared/Types.luau` |
+| mirror-engineer | base | `tools/paths/**`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py` |
+| prop-builders | base | new and changed blueprints under `tools/testfit/blueprints/_props/{Boomtown,Village}/`, `tools/assets/{farmland,boomtown_extras}_kit.py`, a new `tools/assets/boomtown_street_kit.py` |
+
+### Done when (wave 2.2 gate, renders for Ben)
+
+- `assets/testfit/out/Boomtown/m12c_{tier1,tier3,full,full_entrance}.png` from the merged
+  branch, a before/after pair for each city-changer layer, and a strip for every final prop.
+- `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` are green for
+  Village and Boomtown; `bake.py --list` agrees with the client for both eras (Boomtown stays
+  "stale mesh" until the re-bake that follows Ben's approval); stylua, selene, luau-lsp and
+  `rojo build` are clean.
