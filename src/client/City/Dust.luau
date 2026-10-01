@@ -34,12 +34,13 @@ local MIN_TRACK_STEP = 0.05
 export type Handle = {
 	folder: Instance,
 	plotFrame: CFrame,
-	width: number, -- the era's road width, which sizes the puff
+	width: number, -- the era's road width, which sizes the puff unless a burst brings its own
 	-- The furthest two consecutive samples of a track can be and still be the same street: a road
 	-- width for a drawn centreline, a cell pitch for tiles.
 	gapLimit: number,
 	part: Part?,
 	emitter: ParticleEmitter?,
+	puffWidth: number?, -- the width the emitter is sized for right now
 	destroyed: boolean,
 }
 
@@ -47,6 +48,9 @@ type Burst = {
 	handle: Handle,
 	points: { Vector3 }, -- world space
 	arcs: { number }, -- cumulative length per point
+	-- The width of the street at each point (M12 wave 2.2: a driveway is narrower than the street
+	-- it leaves); nil sizes the whole burst by the handle's width.
+	widths: { number }?,
 	total: number,
 	seconds: number,
 	elapsed: number,
@@ -83,6 +87,19 @@ local function drop(handle: Handle): ()
 	stopConnectionWhenIdle()
 end
 
+-- Sizes the puff for a street `width` wide; written only when that changes.
+local function setPuffWidth(handle: Handle, emitter: ParticleEmitter, width: number): ()
+	if handle.puffWidth == width then
+		return
+	end
+	handle.puffWidth = width
+	local size = math.max(width, DUST_PART_SIZE) * DUST_SIZE_WIDTHS
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, size),
+		NumberSequenceKeypoint.new(1, size * DUST_SIZE_GROWTH),
+	})
+end
+
 local function ensureEmitter(handle: Handle): ParticleEmitter
 	local existing = handle.emitter
 	if existing ~= nil then
@@ -96,7 +113,6 @@ local function ensureEmitter(handle: Handle): ParticleEmitter
 	part.CFrame = handle.plotFrame
 	PropFactory.Seal(part)
 	part.Parent = handle.folder
-	local size = math.max(handle.width, DUST_PART_SIZE) * DUST_SIZE_WIDTHS
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Texture = DUST_TEXTURE
 	emitter.Enabled = false
@@ -105,10 +121,6 @@ local function ensureEmitter(handle: Handle): ParticleEmitter
 	emitter.Speed = NumberRange.new(DUST_SPEED_MIN, DUST_SPEED_MAX)
 	emitter.SpreadAngle = Vector2.new(DUST_SPREAD, DUST_SPREAD)
 	emitter.Acceleration = Vector3.new(0, DUST_RISE, 0)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, size),
-		NumberSequenceKeypoint.new(1, size * DUST_SIZE_GROWTH),
-	})
 	emitter.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, DUST_START_TRANSPARENCY),
 		NumberSequenceKeypoint.new(1, 1),
@@ -123,7 +135,8 @@ local function ensureEmitter(handle: Handle): ParticleEmitter
 	return emitter
 end
 
-local function pointAt(burst: Burst, distance: number): Vector3
+-- Where the burst is `distance` along its track, and the sample it is heading for.
+local function pointAt(burst: Burst, distance: number): (Vector3, number)
 	local arcs = burst.arcs
 	local points = burst.points
 	local target = math.clamp(distance, 0, burst.total)
@@ -138,7 +151,7 @@ local function pointAt(burst: Burst, distance: number): Vector3
 	end
 	local span = arcs[hi] - arcs[lo]
 	local t = if span < MIN_TRACK_STEP then 0 else (target - arcs[lo]) / span
-	return points[lo]:Lerp(points[hi], t)
+	return points[lo]:Lerp(points[hi], t), hi
 end
 
 local function step(dt: number): ()
@@ -153,7 +166,15 @@ local function step(dt: number): ()
 		end
 		burst.elapsed += dt
 		local t = if burst.seconds > 0 then math.min(burst.elapsed / burst.seconds, 1) else 1
-		part.CFrame = CFrame.new(pointAt(burst, burst.total * t))
+		local point, heading = pointAt(burst, burst.total * t)
+		part.CFrame = CFrame.new(point)
+		local widths = burst.widths
+		local emitter = handle.emitter
+		if widths ~= nil and emitter ~= nil then
+			-- The sample ahead belongs to the piece being run along, so the puff narrows as it
+			-- turns into a driveway rather than a sample late.
+			setPuffWidth(handle, emitter, widths[heading])
+		end
 		if t >= 1 then
 			stopEmitter(handle)
 			table.remove(bursts, index)
@@ -174,6 +195,7 @@ function Dust.Create(folder: Instance, plotFrame: CFrame, width: number, gapLimi
 		gapLimit = gapLimit,
 		part = nil,
 		emitter = nil,
+		puffWidth = nil,
 		destroyed = false,
 	}
 end
@@ -182,16 +204,24 @@ end
 -- revealed together are normally one chain running out from the entrance; a jump bigger than the
 -- handle's gap limit means they are not (two purchases in one frame), and the track ends there
 -- rather than streaking across the plot. A running burst on the same plot is superseded, so a fast
--- buyer never queues seconds of dust.
-function Dust.Burst(handle: Handle, points: { Vector3 }, color: Color3, seconds: number): ()
+-- buyer never queues seconds of dust. `widths`, when given, is the street's width at each point,
+-- and the puff is sized by it as it travels; without it the handle's width sizes the whole burst.
+function Dust.Burst(
+	handle: Handle,
+	points: { Vector3 },
+	color: Color3,
+	seconds: number,
+	widths: { number }?
+): ()
 	if handle.destroyed or #points == 0 then
 		return
 	end
 	local gapLimit = math.max(handle.gapLimit, 1)
 	local track: { Vector3 } = {}
 	local arcs: { number } = {}
+	local trackWidths: { number }? = if widths ~= nil then {} else nil
 	local total = 0
-	for _, point in points do
+	for index, point in points do
 		if #track > 0 then
 			local advance = (point - track[#track]).Magnitude
 			if advance < MIN_TRACK_STEP then
@@ -204,6 +234,9 @@ function Dust.Burst(handle: Handle, points: { Vector3 }, color: Color3, seconds:
 		end
 		table.insert(track, point)
 		table.insert(arcs, total)
+		if widths ~= nil and trackWidths ~= nil then
+			table.insert(trackWidths, widths[index] or handle.width)
+		end
 	end
 	if #track == 0 then
 		return
@@ -212,6 +245,9 @@ function Dust.Burst(handle: Handle, points: { Vector3 }, color: Color3, seconds:
 		-- A single sample has nowhere to travel; repeat it so the burst puffs in place.
 		table.insert(track, track[1])
 		table.insert(arcs, 0)
+		if trackWidths ~= nil then
+			table.insert(trackWidths, trackWidths[1])
+		end
 	end
 	drop(handle)
 	local emitter = ensureEmitter(handle)
@@ -221,11 +257,13 @@ function Dust.Burst(handle: Handle, points: { Vector3 }, color: Color3, seconds:
 	end
 	-- Per burst, so the puff follows the surface the plot wears right now.
 	emitter.Color = ColorSequence.new(color)
+	setPuffWidth(handle, emitter, if trackWidths ~= nil then trackWidths[1] else handle.width)
 	emitter.Enabled = true
 	table.insert(bursts, {
 		handle = handle,
 		points = track,
 		arcs = arcs,
+		widths = trackWidths,
 		total = total,
 		seconds = seconds,
 		elapsed = 0,
@@ -252,6 +290,7 @@ function Dust.Destroy(handle: Handle): ()
 		part:Destroy()
 		handle.part = nil
 		handle.emitter = nil
+		handle.puffWidth = nil
 	end
 end
 

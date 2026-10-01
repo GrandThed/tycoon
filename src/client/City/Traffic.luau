@@ -11,9 +11,12 @@
 --
 -- Wave 2d spacing: every car on a plot drives at one speed, so two cars that reach a node
 -- together would take the same lane and ride fused for the rest of their lives. Each lane keeps
--- the time it is free again (a car entered it and has since moved its own length plus
--- `vehicles.followGap`); a car at a node only takes a free lane -- the U-turn at a dead end too --
--- and waits at the node while none is. A lane's freedom always expires, so a wait never deadlocks.
+-- the time the vehicle that last entered it has its tail `vehicles.followGap` past the start; a
+-- vehicle at a node only takes a lane that has been clear for its own half length as well -- the
+-- U-turn at a dead end too -- and waits at the node while none is. So two vehicles enter a lane
+-- their half lengths plus the gap apart, whatever their lengths (M12 wave 2.2: a bus behind a
+-- car), which for equal lengths is the length plus the gap. A lane's freedom always expires, so a
+-- wait never deadlocks.
 --
 -- M12 wave 2.2: Swap changes one vehicle's model where it drives (a car that becomes a bus when
 -- the bus line is bought), so a prop change never re-seats the plot's traffic.
@@ -39,11 +42,16 @@ type Vehicle = {
 	ordinal: number,
 	model: Model,
 	lanes: Lanes,
-	-- The free-again time of each lane of `lanes`, shared by every vehicle on that graph.
+	-- When each lane of `lanes` is clear of the vehicle that last entered it, shared by every
+	-- vehicle on that graph: that vehicle's tail is `followGap` past the lane's start.
 	freeAt: { number },
-	-- Seconds this car keeps a lane it enters: (its length + followGap) / speed.
-	hold: number,
+	halfLength: number,
 	followGap: number,
+	-- Seconds this vehicle keeps a lane it enters: (halfLength + followGap) / speed.
+	hold: number,
+	-- Seconds a lane must have been clear before this vehicle takes it: halfLength / speed, the
+	-- room its own front half needs behind the one ahead.
+	lead: number,
 	lane: number,
 	distance: number,
 	speed: number,
@@ -90,8 +98,10 @@ local function freeAtFor(lanes: Lanes): { number }
 end
 
 -- A random free outgoing lane that is not the way back; at a dead end the way back, if it is free.
--- Nil when every candidate is taken, and the car waits at the node for a frame.
-local function nextLane(lanes: Lanes, lane: number, freeAt: { number }): number?
+-- Nil when every candidate is taken, and the car waits at the node for a frame. A lane is free
+-- for a vehicle once it has been clear for that vehicle's `lead`: the one ahead is then half this
+-- vehicle's length further on, so a long vehicle never enters into the tail of a short one.
+local function nextLane(lanes: Lanes, lane: number, freeAt: { number }, lead: number): number?
 	local back = lanes.reverse[lane]
 	local outgoing = lanes.outgoing[lanes.to[lane]]
 	local forward = 0
@@ -99,20 +109,20 @@ local function nextLane(lanes: Lanes, lane: number, freeAt: { number }): number?
 	for _, candidate in outgoing do
 		if candidate ~= back then
 			forward += 1
-			if freeAt[candidate] <= clock then
+			if freeAt[candidate] + lead <= clock then
 				free += 1
 			end
 		end
 	end
 	if forward == 0 then
-		return if freeAt[back] <= clock then back else nil
+		return if freeAt[back] + lead <= clock then back else nil
 	end
 	if free == 0 then
 		return nil
 	end
 	local pick = rng:NextInteger(1, free)
 	for _, candidate in outgoing do
-		if candidate ~= back and freeAt[candidate] <= clock then
+		if candidate ~= back and freeAt[candidate] + lead <= clock then
 			pick -= 1
 			if pick == 0 then
 				return candidate
@@ -122,13 +132,23 @@ local function nextLane(lanes: Lanes, lane: number, freeAt: { number }): number?
 	return nil
 end
 
--- Marks `lane` taken until a car `along` studs into it has moved its hold clear of the start.
+-- Marks `lane` taken until a vehicle `along` studs into it has its tail `followGap` past the
+-- start. With the follower's own `lead` on top, two vehicles enter a lane their two half lengths
+-- plus the gap apart, centre to centre: for equal lengths, the length plus the gap it always was.
 local function claim(vehicle: Vehicle, lane: number, along: number): ()
 	local freeAt = vehicle.freeAt
 	local freeFrom = clock + vehicle.hold - (if vehicle.speed > 0 then along / vehicle.speed else 0)
 	if freeFrom > freeAt[lane] then
 		freeAt[lane] = freeFrom
 	end
+end
+
+-- The two waits a vehicle's length gives it (see `hold` and `lead`).
+local function setLength(vehicle: Vehicle, length: number): ()
+	local speed = vehicle.speed
+	vehicle.halfLength = length / 2
+	vehicle.hold = if speed > 0 then (vehicle.halfLength + vehicle.followGap) / speed else 0
+	vehicle.lead = if speed > 0 then vehicle.halfLength / speed else 0
 end
 
 local function frameFor(position: Vector3, yaw: number): CFrame
@@ -209,7 +229,7 @@ local function step(dt: number): ()
 				distance = 0
 				break
 			end
-			local following = nextLane(lanes, lane, vehicle.freeAt)
+			local following = nextLane(lanes, lane, vehicle.freeAt, vehicle.lead)
 			if following == nil then
 				-- Every way on is taken: wait at the node and ask again next frame.
 				distance = lanes.length[lane]
@@ -373,8 +393,10 @@ function Traffic.SpawnPlot(
 			model = model,
 			lanes = lanes,
 			freeAt = freeAtFor(lanes),
-			hold = if driveSpeed > 0 then (shape.length + gap) / driveSpeed else 0,
+			halfLength = 0,
 			followGap = gap,
+			hold = 0,
+			lead = 0,
 			lane = lane,
 			distance = 0,
 			speed = driveSpeed,
@@ -388,6 +410,7 @@ function Traffic.SpawnPlot(
 			partOffsets = shape.offsets,
 			modelParts = shape.parts,
 		}
+		setLength(vehicle, shape.length)
 		seat(vehicle, lanes, lane, distance)
 		vehicle.blendElapsed = vehicle.turnSeconds
 		-- Placed before parenting so the model never flashes at the world origin.
@@ -474,8 +497,10 @@ function Traffic.Swap(plotId: number, ordinal: number, model: Model, parent: Ins
 		vehicle.model = model
 		vehicle.modelParts = modelParts
 		vehicle.partOffsets = partOffsets
-		-- A longer vehicle keeps the lanes it enters from here on for longer.
-		vehicle.hold = if vehicle.speed > 0 then (length + vehicle.followGap) / vehicle.speed else 0
+		-- A longer vehicle keeps its lane for longer, from where it is now: whoever has not yet
+		-- entered behind it waits for the new tail.
+		setLength(vehicle, length)
+		claim(vehicle, lane, vehicle.distance)
 		model.Parent = parent
 		rebuildArrays()
 		return true

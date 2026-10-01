@@ -63,18 +63,19 @@ type ModelMap = { [string]: Types.AssetModel }
 
 -- Appends one map's models under a key prefix, so a prop and a building sharing a name (the
 -- two maps are independent namespaces) never collapse into one entry. `skip` names models to
--- leave out.
+-- leave out; `only`, when given, names the models to take and leaves out every other.
 local function collectModels(
 	into: { [string]: Types.AssetModel },
 	models: ModelMap?,
 	keyPrefix: string,
-	skip: { [string]: boolean }?
+	skip: { [string]: boolean }?,
+	only: { [string]: boolean }?
 ): ()
 	if type(models) ~= "table" then
 		return
 	end
 	for modelName, assetModel in models :: ModelMap do
-		if skip ~= nil and skip[modelName] then
+		if (skip ~= nil and skip[modelName]) or (only ~= nil and not only[modelName]) then
 			continue
 		end
 		if type(assetModel) == "table" and type(assetModel.stages) == "table" then
@@ -111,6 +112,75 @@ local function neverSpawned(eraName: string): { [string]: boolean }
 	return skip
 end
 
+-- Every string anywhere inside `value`: a config block names its props as values, at whatever
+-- depth, and a string that is not a prop name matches nothing in Assets.json and costs nothing.
+local function collectStrings(into: { [string]: boolean }, value: any): ()
+	if type(value) == "string" then
+		into[value] = true
+	elseif type(value) == "table" then
+		for _, item in value do
+			collectStrings(into, item)
+		end
+	end
+end
+
+local function present(value: any): boolean
+	return type(value) == "table" and next(value) ~= nil
+end
+
+-- The props an era with a city fabric can still spawn, or nil for an era without one, which
+-- preloads every prop it has, as it always did. The fabric replaces the layout's lots, groves,
+-- greenery zones and parking, so the props those features draw from no longer appear and need no
+-- download. Nothing here lists a prop: the names are whatever the era's own config block says --
+-- its fabric (districts, sites, woods, marker, scaffold, upgrade layers), roads, lamps, signals,
+-- vehicles and their unlocks, walkers -- plus the plazas and wild singles its layout and fabric
+-- data place and the birds, and a block is left out only while the layout lacks what it is
+-- placed by. A new config key that names props is therefore picked up with no change here.
+local function spawnableProps(eraName: string): { [string]: boolean }?
+	local dressing = Catalog.GetCityDressingConfig()
+	local eras = if dressing ~= nil then dressing.eras else nil
+	local era: any = if type(eras) == "table" then eras[eraName] else nil
+	local data: any = Catalog.GetFabric(eraName)
+	-- The controller's own test for "this era grows a fabric".
+	if type(era) ~= "table" or type(era.fabric) ~= "table" or type(data) ~= "table" then
+		return nil
+	end
+	local layout: any = Catalog.GetLayout(eraName) or {}
+	local tiles = if type(era.road) == "table" then era.road.tiles else nil
+	-- Config block -> whether the layout still carries what that feature is placed by.
+	local placed: { [string]: boolean } = {
+		houses = present(layout.lots),
+		-- The layout names each plaza's prop itself; the config list is only its pool.
+		plazas = false,
+		-- Groves, or a tiles era's street trees and park-strip planters.
+		trees = present(layout.treeZones) or type(tiles) == "table",
+		greenery = present(layout.greeneryZones) or present(layout.lots),
+		parked = present(layout.parking),
+		subway = present(layout.subwayEntrances),
+		highway = present(layout.highway),
+	}
+	local names: { [string]: boolean } = {}
+	for key, block in era do
+		if placed[key] ~= false then
+			collectStrings(names, block)
+		end
+	end
+	if type(layout.plazas) == "table" then
+		for _, plaza in layout.plazas do
+			collectStrings(names, if type(plaza) == "table" then plaza.prop else nil)
+		end
+	end
+	if type(data.wild) == "table" then
+		for _, entry in data.wild do
+			collectStrings(names, if type(entry) == "table" then entry.prop else nil)
+		end
+	end
+	local ambient: any = if dressing ~= nil then dressing.ambient else nil
+	local birds = if type(ambient) == "table" then ambient.birds else nil
+	collectStrings(names, if type(birds) == "table" then birds.prop else nil)
+	return names
+end
+
 function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	local config = Catalog.GetAssetsConfig()
 	if config == nil then
@@ -124,8 +194,8 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	local propsByEra = config.props
 	local eraProps: ModelMap? = if propsByEra ~= nil then propsByEra[eraName] else nil
 	local models: { [string]: Types.AssetModel } = {}
-	collectModels(models, config.eras[eraName], BUILDING_KEY_PREFIX, neverSpawned(eraName))
-	collectModels(models, eraProps, PROP_KEY_PREFIX, nil)
+	collectModels(models, config.eras[eraName], BUILDING_KEY_PREFIX, neverSpawned(eraName), nil)
+	collectModels(models, eraProps, PROP_KEY_PREFIX, nil, spawnableProps(eraName))
 
 	-- Sorted so the request order (and so what the player sees first) is deterministic.
 	local modelKeys: { string } = {}

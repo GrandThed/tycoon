@@ -1439,8 +1439,11 @@ local function pieceCentreline(state: State, pieceId: string): { Vector3 }?
 	if chain == nil then
 		return nil
 	end
+	-- Sampled about the piece's own width apart: a driveway's corners are as much tighter than a
+	-- street's as it is narrower, and the chord must not stray further from them.
+	local spacing = if slotId ~= nil then state.spurWidth else state.width
 	local points: { Vector3 } = {}
-	for _, point in PathRibbon.Centreline(network, chain, from, to, state.width) do
+	for _, point in PathRibbon.Centreline(network, chain, from, to, spacing) do
 		table.insert(points, Vector3.new(point[1], 0, point[2]))
 	end
 	data.pieceCentrelines[pieceId] = points
@@ -1524,10 +1527,11 @@ local function pathDataFor(state: State): PathData
 		data.stretchChains[id] = chain
 		data.stretchArcs[id] = arcs
 	end
-	-- Sampled about a road width apart: on the tightest fillet (radius CORNER_RADIUS_WIDTHS *
-	-- width) the chord strays well under the clearance margin, and it is a fraction of what the
+	-- Sampled about a width apart, each chain by its own (a spur by the spur width): the tightest
+	-- fillet has a radius of CORNER_RADIUS_WIDTHS of that same width, so the chord strays the same
+	-- small share of it everywhere -- well under the clearance margin, and a fraction of what the
 	-- baked mesh holds.
-	for _, line in PathRibbon.SmoothedCentrelines(network, state.width) do
+	for _, line in PathRibbon.SmoothedCentrelines(network, state.width, state.spurWidth) do
 		local points: { Vector3 } = {}
 		for _, point in line do
 			table.insert(points, Vector3.new(point[1], 0, point[2]))
@@ -1821,6 +1825,12 @@ function RoadGraph.new(context: Context, near: boolean): State
 				return state.color
 			end,
 			width = width,
+			-- A driveway puffs as wide as it is, not as wide as the street it leaves.
+			widthOf = function(pieceId: string): number
+				return if string.match(pieceId, SPUR_PIECE_PATTERN) ~= nil
+					then state.spurWidth
+					else state.width
+			end,
 			centrelineOf = function(pieceId: string): { Vector3 }?
 				return pieceCentreline(state, pieceId)
 			end,

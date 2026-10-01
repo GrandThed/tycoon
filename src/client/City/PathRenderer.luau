@@ -49,7 +49,10 @@ export type Options = {
 	-- The road colour that tints the dust, read per burst rather than captured: a surface variant
 	-- changes it, and cobble must not puff dirt.
 	colorOf: () -> Color3,
-	width: number, -- the era's road width, which sizes the dust
+	width: number, -- the era's road width: how far apart two dust samples of one street can be
+	-- The piece's own width, which sizes the dust along it (M12 wave 2.2: a driveway is narrower
+	-- than the street it leaves).
+	widthOf: (pieceId: string) -> number,
 	-- The piece's smoothed centreline in plot-local studs, join end first, for the dust travel.
 	centrelineOf: (pieceId: string) -> { Vector3 }?,
 	onParts: () -> (), -- RoadGraph redraws every revealed road with Parts
@@ -184,20 +187,23 @@ end
 
 -- One burst over the whole batch of pieces revealed together, in reveal order (entrance
 -- outward), so a purchase reads as one puff running out to the new building. Dust decides where
--- the track breaks and how long it runs.
+-- the track breaks and how long it runs, and sizes the puff by the width of the piece under it.
 local function startBurst(handle: Handle, pieceIds: { string }): ()
 	local options = handle.options
 	local points: { Vector3 } = {}
+	local widths: { number } = {}
 	for _, pieceId in pieceIds do
 		local line = options.centrelineOf(pieceId)
 		if line == nil then
 			continue
 		end
+		local width = options.widthOf(pieceId)
 		for _, point in line do
 			table.insert(points, options.plotFrame:PointToWorldSpace(point))
+			table.insert(widths, width)
 		end
 	end
-	Dust.Burst(handle.dust, points, options.colorOf(), handle.paths.dustSeconds)
+	Dust.Burst(handle.dust, points, options.colorOf(), handle.paths.dustSeconds, widths)
 end
 
 -- ------------------------------------------------------------------ pieces

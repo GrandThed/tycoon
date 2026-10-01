@@ -643,13 +643,19 @@ function PathRibbon.Centreline(
 	return points
 end
 
--- The smoothed (pre-meander) centreline of every chain, about `spacing` apart: what tree
+-- The smoothed (pre-meander) centreline of every chain, about `spacing` apart (spur chains
+-- `spurSpacing` apart, when given: their corners are tighter in step with their width): what tree
 -- clearance is measured from, for every path the plot can ever have.
-function PathRibbon.SmoothedCentrelines(network: Network, spacing: number): { { Point } }
+function PathRibbon.SmoothedCentrelines(
+	network: Network,
+	spacing: number,
+	spurSpacing: number?
+): { { Point } }
 	local lines: { { Point } } = {}
 	for _, chain in network.chains do
 		local curve = chain.curve
-		local count = math.max(1, math.ceil(curve.total / math.max(spacing, DEDUPE_EPS)))
+		local step = if chain.kind == "spur" and spurSpacing ~= nil then spurSpacing else spacing
+		local count = math.max(1, math.ceil(curve.total / math.max(step, DEDUPE_EPS)))
 		local line: { Point } = {}
 		for k = 0, count do
 			local x, z = PathRibbon.CurvePoint(curve, curve.total * k / count)

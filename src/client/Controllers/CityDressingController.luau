@@ -160,7 +160,8 @@ type Build = {
 	fabricFlocks: { Scatter.Flock },
 	flockKey: string,
 	-- M12 review: every slot seen owned in this build, so a sync can tell one purchase from a bulk
-	-- restore. Only grows, like the roads: a building missing for a moment is not a new one later.
+	-- restore. Only grows, like the roads: a building missing for a moment is not a new one later,
+	-- and (wave 2.2) a vehicle unlock stays in force through it.
 	seen: { [string]: boolean },
 	-- os.clock when the build started, or when a restore last made it settle again.
 	createdAt: number,
@@ -1018,14 +1019,13 @@ local function vehicleTargetFor(
 end
 
 -- M12 wave 2.2: the unlocks in force right now -- the slot is owned and every prop the entry lists
--- has a template (a prop not uploaded yet turns that unlock off, silently).
-local function activeUnlocks(
-	build: Build,
-	owned: { [string]: boolean }
-): { [VehicleUnlock]: boolean }
+-- has a template (a prop not uploaded yet turns that unlock off, silently). Owned means seen owned
+-- in this build, the set the city fabric keeps too: a cosmetics refresh respawns every building
+-- over several frames, and a bus must not turn back into a car for the sync that misses its slot.
+local function activeUnlocks(build: Build): { [VehicleUnlock]: boolean }
 	local active: { [VehicleUnlock]: boolean } = {}
 	for _, unlock in build.vehicleUnlocks do
-		if not owned[unlock.slot] then
+		if not build.seen[unlock.slot] then
 			continue
 		end
 		local complete = true
@@ -1061,12 +1061,7 @@ local function vehiclePropFor(
 	return prop
 end
 
-local function spawnVehicles(
-	entry: PlotEntry,
-	build: Build,
-	config: Types.CityDressingConfig,
-	owned: { [string]: boolean }
-): ()
+local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
 	Traffic.ClearPlot(entry.index)
 	entry.vehiclesBlocked = false
 	table.clear(build.vehicleIndices)
@@ -1081,7 +1076,7 @@ local function spawnVehicles(
 	local models: { Model } = {}
 	local indices: { number } = {}
 	local shown: { string } = {}
-	local active = activeUnlocks(build, owned)
+	local active = activeUnlocks(build)
 	-- Scaled about the base before Traffic reads the part offsets, so the smaller car rides the
 	-- road surface with no height correction of its own.
 	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
@@ -1117,11 +1112,11 @@ end
 -- M12 wave 2.2: after a purchase that puts a vehicle unlock in force, the vehicles it takes change
 -- model where they drive; the rest of the plot's traffic is not touched. A no-op while every
 -- vehicle already wears its prop, which is every sync but that one.
-local function syncVehicleProps(entry: PlotEntry, build: Build, owned: { [string]: boolean }): ()
+local function syncVehicleProps(entry: PlotEntry, build: Build): ()
 	if #build.vehicleUnlocks == 0 or #build.vehicleIndices == 0 then
 		return
 	end
-	local active = activeUnlocks(build, owned)
+	local active = activeUnlocks(build)
 	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
 	for ordinal, index in build.vehicleIndices do
 		local prop = vehiclePropFor(build, index, active)
@@ -1794,10 +1789,10 @@ local function sync(entry: PlotEntry): ()
 	local target = vehicleTargetFor(entry, current, config, policy)
 	if target ~= entry.vehicleTarget then
 		entry.vehicleTarget = target
-		spawnVehicles(entry, current, config, owned)
+		spawnVehicles(entry, current, config)
 	elseif target > 0 and entry.vehiclesBlocked and Traffic.Room(config.budget.vehiclesMap) > 0 then
 		-- Room freed elsewhere since the map budget cut this plot short.
-		spawnVehicles(entry, current, config, owned)
+		spawnVehicles(entry, current, config)
 	elseif roadsChanged and target > 0 then
 		-- A plot whose streets were too short for all its cars (Traffic keeps them a car length
 		-- apart) respawns when they grow instead of carrying the short count forward.
@@ -1805,13 +1800,13 @@ local function sync(entry: PlotEntry): ()
 		if driving > 0 and driving >= target then
 			Traffic.SetLanes(entry.index, RoadGraph.GetLanes(current.roads))
 		else
-			spawnVehicles(entry, current, config, owned)
+			spawnVehicles(entry, current, config)
 		end
 	end
 	-- After any respawn above, which already picked every prop, so this only acts on the sync that
 	-- sees a vehicle unlock bought.
 	if entry.vehicleTarget > 0 then
-		syncVehicleProps(entry, current, owned)
+		syncVehicleProps(entry, current)
 	end
 
 	local walkerTarget = walkerTargetFor(entry, current, policy)
