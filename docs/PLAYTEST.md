@@ -4033,7 +4033,11 @@ houses that rise and get taller. Plant Flowers, Plant Trees and Hang Banners now
 instead of standing as one model. Client-only: prices, order and income are unchanged. Other eras
 look as before.
 
-- Setup: `docs/MANUAL_STEPS.md` "M12" §2. Open the **tycoon-m12** build, not the main one.
+- **Status 2026-10-01:** merged to `main` (Ben: "the village looks amazing"). Still owed: the
+  numbers from step 37.
+- Setup: `docs/MANUAL_STEPS.md` "M12" §2. Since the merge, the main build has Village too.
+- **On the `tycoon-m12` build (branch `m12-boomtown`):** skip the Boomtown check in step 34, and
+  see "M12 wave 2.0 — Village smoke and carts" below for the carts and smoke.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Houses only rise from **GrowthTier 2**. Buying without levelling stops the town at GrowthTier
   3, so **level landmarks (×10 / Max) as you go**.
@@ -4055,7 +4059,7 @@ differ a little:
       exist:
       - `ReplicatedStorage/Shared/Config/Fabric/Village`;
       - `ReplicatedStorage/Assets/Props/Village/NoticeBoard`.
-      Bug: either is missing (you opened the main build).
+      Bug: either is missing (a build from before the 2026-10-01 merge).
 - [ ] 2. Set up the cash lever:
       - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
       - name `GrantCash`, type **number**, value `1000000000`.
@@ -4252,7 +4256,9 @@ differ a little:
 - [ ] 34. Buy out Village, then **Advance Era**:
       - all of it clears: woods, houses, flowers, banners, the board, the stakes and the dirt pad;
       - Boomtown looks exactly as before M12 (houses, greenery, parked cars, walkers, smoke,
-        birds: PLAYTEST M9 4h).
+        birds: PLAYTEST M9 4h). **Main build only.** On the `tycoon-m12` build (branch
+        `m12-boomtown`) Boomtown's cars, lamps, signals and walkers sit about a stud inward until
+        the roads are re-baked: do not judge Boomtown there.
 - [ ] 35. In Edit mode, rename `ReplicatedStorage/Assets/Props/Village/NoticeBoard` to
       `NoticeBoard_bak`. Play:
       - the pads are still dirt-brown with stakes, but there is no board;
@@ -4290,8 +4296,9 @@ differ a little:
 - The house count jumps near the end (about 54 at tier 4, 116 at full), because the last four
   landmarks open the back streets. This is known.
 - Far plots show bare cleared patches. This is known; it gets tuned from step 37.
-- Village has no chimney smoke, parked carts, bushes or hedges any more. Moving carts, walkers,
-  lanterns and birds remain. This is known, and the lead decides.
+- On the main build, Village has no chimney smoke, parked carts, bushes or hedges. Moving carts,
+  walkers, lanterns and birds remain. Smoke and parked carts come back in wave 2.0 (next section);
+  bushes and hedges do not (lead's call).
 - You walk through houses, trees, banners and bunting (the no-collision rule).
 - Construction times, and the positions of walkers, carts and birds, differ between two players.
 - The three city-changer pads get a board and dirt, but no stakes, scaffold or building.
@@ -4308,3 +4315,208 @@ differ a little:
 ### Sign-off
 
 - [ ] 39. All boxes ticked → tell Claude "M12 Village signed off".
+
+## M12 wave 2.0 — Village smoke and carts
+
+**Goal:** Village gets back two things wave 1 lost: **parked carts** and **chimney smoke**.
+Client-only: prices, order and income are unchanged. Nothing was uploaded.
+
+**DO NOT JUDGE BOOMTOWN ON THIS BUILD.** On branch `m12-boomtown` Boomtown's roads are set to 6
+studs wide, but the uploaded road meshes are still 8 wide. Cars, lamps, signals and walkers sit
+about a stud inward. That is known and gets fixed with the re-bake (wave 2.2). Test **Village
+only**, and do not Advance Era.
+
+- Setup: `docs/MANUAL_STEPS.md` "M12 wave 2" §6. Open the **tycoon-m12** build.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- Buy in Build panel order. "Purchase 9" means the 9th slot in that list.
+
+**The rules, so you know what to expect:**
+- **Carts** need the Farm Plot (purchase 4). Each cart then waits for its own lane or its own
+  building, so they arrive one by one.
+- **House chimneys** smoke only when the **Village Well is level 50 or more** and `GrowthTier` is
+  3 or more. Below level 50 no house smokes, at any tier.
+- **Two camp fire pits** near the Watchtower smoke once those camps stand (by purchase 23).
+
+What you should see:
+
+| When | Parked carts | Smoke plumes |
+|---|---|---|
+| Purchases 1–8 | 0 | 0 |
+| After the Cottage (9) | 1 | 0 |
+| After the Bakery (10) | 2 | 0 |
+| All 24 bought, nothing levelled (`GrowthTier` 3) | 5 | 2 (the fire pits) |
+| Then the Well at level 50 | 5 | 13 (11 chimneys + 2 fire pits) |
+| `GrowthTier` 5 | 8 | 13 |
+
+### Setup
+
+- [ ] 1. Open the wave 2 build. In Edit mode: View (*Vista*) → **Command Bar** (*Barra de
+      comandos*), paste this line, press Enter:
+      ```
+      local c = require(game.ReplicatedStorage.Shared.Config.CityDressing) print(c.budget.plumes, c.eras.Village.fabric.upgrades.carts ~= nil)
+      ```
+      Output (*Salida*) must say `20 true`.
+      Bug: `nil false` (you opened the main build).
+- [ ] 2. Set up the cash lever:
+      - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
+      - name `GrantCash`, type **number**, value `1000000000`.
+      It pays out about 1 s after Play, then resets to 0. To add more during Play: on the Test
+      (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
+      **Client**.
+- [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
+- [ ] 4. **Play** (*Jugar*). With MANUAL_STEPS option A (the file), every Play starts a fresh
+      Village save. Then: Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) →
+      **Automatic** (*Automático*).
+
+### 1. Parked carts
+
+- [ ] 5. Buy purchases **1 to 8** (Campfire … Plant Flowers). **Do not level the Village Well
+      yet.**
+      - No parked cart anywhere, also not right after the Farm Plot (purchase 4). That is correct.
+      Bug: a parked cart before the Cottage.
+- [ ] 6. Buy the **Cottage** (purchase 9). Within a few seconds:
+      - **one cart** stands beside the lane near the Farm Plot, parallel to the lane, off the
+        trail.
+      Bug: no cart after 10 s; the cart on the trail.
+- [ ] 7. Buy the **Bakery** (purchase 10). Wait up to 40 s:
+      - a **second cart** appears in the yard of a workshop near the Cottage;
+      - it arrives **together with that building**, with a pop.
+      Bug: a cart beside a building site or beside bare woods.
+- [ ] 8. Walk to both carts. Each one:
+      - stands on cleared ground, wheels on the ground;
+      - is **not** inside a house, a tree, a flower bed or a pad, and **not** on a trail.
+      You walk through it. That is the no-collision rule, not a bug.
+
+### 2. No chimney smoke yet
+
+- [ ] 9. Buy the rest, up to all **24**. Still **do not level the Well**. Wait about a minute, until
+      houses stop rising. Check `GrowthTier` on Workspace → Plots → `Plot_<n>` → Attributes: it
+      is 3 (or 4 if you levelled other landmarks).
+      - about **5 parked carts** (7 at `GrowthTier` 4);
+      - **no smoke from any house chimney**;
+      - **two low plumes** from the **fire pits** of two camps near the Watchtower. They start
+        with the Town Wall (purchase 23) at the latest, once those camps have risen.
+      Bug: smoke from a house chimney while the Well is below level 50; smoke from a building
+      site.
+
+### 3. Chimney smoke
+
+- [ ] 10. Level the **Village Well** to **50 or more** (×10 a few times) and watch the middle of
+      town. Within about half a minute:
+      - the Well's model changes;
+      - about **11 houses** gain a storey, one after another, each with a pop and dust;
+      - **each of those houses starts to smoke** from its chimney right after it has finished
+        growing (the pop takes about 0.6 s).
+      Bug: smoke starts while the house is still growing; nothing smokes after a minute.
+- [ ] 11. Count the plumes: **11 chimneys + 2 fire pits = 13**. Walk up to three of the smoking
+      houses:
+      - the smoke starts **at the chimney top**, not beside the house and not in mid-air;
+      - it is pale grey and rises straight up;
+      - every smoking house is a finished house, mostly tall narrow terraced ones.
+      Bug: smoke hanging next to a roof; smoke from a house with no chimney; more than 13 plumes.
+- [ ] 12. Compare with the reference render (open it in Windows):
+      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12f_after_full.png`
+      (and `m12f_after_close.png`).
+      - The render marks each smoking house with a **row of pale spheres**. Those are markers,
+        not the real look.
+      - Expect the same houses to smoke.
+
+### 4. Full build
+
+- [ ] 13. Level until `GrowthTier` is **5** (Max on several landmarks):
+      - **8 parked carts**: 3 beside lanes, 5 in the yards of farm, market and craft buildings;
+      - still **13 plumes**. No new ones appear.
+- [ ] 14. Walk the whole town once.
+      Bug: a cart in a house, a tree, a flower bed, a banner pole or a pad; a cart on a trail; two
+      carts side by side (they keep at least 12 studs apart).
+
+### 5. City detail
+
+- [ ] 15. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
+      - **all smoke is gone**;
+      - the parked carts drop from 8 to **4**;
+      - the houses **stay**, and nothing flickers or rebuilds.
+- [ ] 16. Turn it **ON** again:
+      - the **same** 4 carts come back in the **same** spots;
+      - the **same 13** plumes come back at once, and no house rebuilds.
+
+### 6. Away and back
+
+- [ ] 17. Fly more than 290 studs away. On that plot the parked carts and all smoke vanish.
+- [ ] 18. Fly back. Within about 1 s:
+      - the carts are back in the same spots;
+      - the same houses smoke again;
+      - nothing replays: no scaffold, no rising houses.
+
+### Quick smoke town (for the next three checks)
+
+Each check below starts from a fresh save. This is the fastest way back to smoke:
+1. `GrantCash` is still set from step 2, so each Play pays again.
+2. Buy all 24 in Build panel order.
+3. Level the Village Well to 50 or more.
+4. Wait about a minute.
+
+Result: `GrowthTier` 3, about 94 houses, 5 parked carts, 13 plumes.
+
+### 7. Two players (Local Server)
+
+- [ ] 19. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). One `GrantCash` pays both players; set it in the **Server** window.
+- [ ] 20. Player 1 builds the quick smoke town. Player 2 stands by Player 1's plot:
+      - Player 2 sees the **same carts in the same spots**;
+      - Player 2 sees the **same houses smoking**.
+      The moment each house grows can differ a little between the two screens. That is fine.
+
+### 8. Phone
+
+- [ ] 21. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Build the
+      quick smoke town:
+      - chimney smoke and fire-pit smoke **still show** (phones keep them);
+      - the carts read well at phone size;
+      - the frame rate looks fine, and the Build panel is unchanged.
+
+### 9. Low graphics
+
+- [ ] 22. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
+      quality **1–3**. Stop (*Detener*), then Play. Build the quick smoke town:
+      - **no smoke at all**, also not from the fire pits;
+      - no dust puffs and no birds;
+      - the parked carts and the houses still appear.
+      Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
+      skip this step and say so.
+
+### 10. Output
+
+- [ ] 23. Watch **Output** (*Salida*) through the whole run: no red errors and no yellow warnings
+      from CityDressing, Fabric, Ambient, RoadGraph or PathRenderer. Studio's own warnings are
+      fine.
+
+### Not a bug (don't report these)
+
+- No cart right after the Farm Plot. The first one comes with the Cottage's lane.
+- No chimney smoke while the Well is below level 50, even at `GrowthTier` 5. A normal player
+  reaches Well 50 around tier 5.
+- Only 11 of the 116 houses smoke. Most homes only have a chimney on their last look. Giving the
+  narrow homes a chimney from their first look is an open decision (below).
+- The camp smoke is low, at ground level. It comes from a fire pit, not a chimney.
+- With City detail OFF on a **part-built** town, fewer than half the carts can stay (1 of 5 on the
+  quick smoke town). Judge the halving on a full build (step 15).
+- No bushes or hedges came back. Plant Flowers and the houses' own gardens carry the greenery
+  (lead's call).
+- The render shows smoke as pale spheres; the game shows real, larger smoke.
+- Plot renders made **before 2026-10-01** show paler ground than Studio. The renderer is fixed;
+  `m12f_*` and `m12b_*` are correct.
+- Boomtown on this build: cars, lamps, signals and walkers sit about a stud inward. Do not judge
+  it here.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- Is 11 smoking houses enough? Or should the three narrow home designs get a chimney from their
+  first look (a re-upload; then about 4 plumes at tier 2 and 13 to 16 at full)?
+- Are the carts in good spots? Are 8 enough?
+- The numbers from "M12 — Village growing city" step 37, if you have not sent them yet.
+
+### Sign-off
+
+- [ ] 24. All boxes ticked → tell Claude "M12 wave 2.0 signed off".

@@ -1555,11 +1555,29 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
    Upload the non-`_check` PNGs from `assets/marketing/final/thumbs/` in Creator Hub → Thumbnails,
    keep 2–5 active and turn on thumbnail personalization (`docs/DISCOVERY_CHECKLIST.md` §2).
 
-## M12 — Growing city (wave 1: Village)
+## M12 — Growing city
 
-Built in the worktree `C:\Users\benja\Desktop\tycoon-m12` (branch `m12-growing-city`), **not
-merged**. Run every command below **from that folder**, never from `C:\Users\benja\Desktop\tycoon`.
-`assets/` in the worktree is a junction to the main checkout's `assets/`.
+**Where things are (2026-10-01):**
+- **Wave 1 (Village): merged to `main` on 2026-10-01** (Ben: "the village looks amazing"). Its
+  branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
+- **Wave 2 (Boomtown):** a **new** worktree at the same path, `C:\Users\benja\Desktop\tycoon-m12`,
+  on branch `m12-boomtown`. §5–§9 below are wave 2.
+- Run every wave 2 command **from `C:\Users\benja\Desktop\tycoon-m12`**, never from
+  `C:\Users\benja\Desktop\tycoon`.
+- `assets/` in the worktree is a junction to the main checkout's `assets/`.
+- Two more worktrees hold the Boomtown layout candidates. They are **not for Studio**:
+  - `C:\Users\benja\Desktop\tycoon-m12-grid` (branch `m12-boomtown-grid`, commit `452059d`);
+  - `C:\Users\benja\Desktop\tycoon-m12-organic` (branch `m12-boomtown-organic`, commit `0fd20be`).
+
+**DO NOT JUDGE BOOMTOWN IN STUDIO ON `m12-boomtown`.**
+- On this branch Boomtown's `road.width` is 6 (was 8) and `pedestrians.offset` is 3.35, ahead of
+  the path re-bake.
+- The uploaded Boomtown road meshes are still 8 wide, so cars, lamps, signals and walkers sit about
+  a stud inward. `py tools/paths/bake.py --era Boomtown --list` fails on this branch. That is
+  expected.
+- **Village is unaffected.**
+- The branch does not merge to `main` until the chosen Boomtown layout is re-baked (wave 2.2). The
+  Village fix can go to `main` on its own if Ben wants it sooner: ask Claude.
 
 **Nothing on the Creator Hub:** no passes, products or audio. There is no profile change, so
 nothing needs republishing.
@@ -1567,7 +1585,7 @@ nothing needs republishing.
 Studio menus are written in English, with the Spanish in italics: View (*Vista*), Command Bar
 (*Barra de comandos*), Output (*Salida*).
 
-### 1. Assets: one harvest paste (**DONE 2026-10-01**, nothing owed; kept as the routine)
+### 1. Assets: one harvest paste (wave 1; **DONE 2026-10-01**, nothing owed; kept as the routine)
 
 43 new Village props, plus a path re-bake for the new layout, all in **one** paste:
 - props (blueprints in `tools/testfit/blueprints/_props/Village/`):
@@ -1627,50 +1645,145 @@ Studio menus are written in English, with the Spanish in italics: View (*Vista*)
 - 7. **If a record goes missing later:** re-run step 5 only. Do **not** re-run the uploaders: a
      non-zero id is never re-uploaded.
 
-### 2. Open the M12 build for the playtest
+### 2. Open the M12 build for the playtest (wave 1; **DONE**, replaced by §6 for wave 2)
+
+Steps 8–13 were for the wave 1 look. **For wave 2 use §6**, which has the same two options and a
+new check.
+
+- [x] 8–12. Rebuild or live sync from `C:\Users\benja\Desktop\tycoon-m12`, then open or connect
+      (done for the wave 1 look, 2026-10-01).
+- [x] 13. Check in Edit mode, in Explorer (*Explorador*):
+      - `ReplicatedStorage/Shared/Config/Fabric/Village` exists;
+      - `ReplicatedStorage/Assets/Props/Village/NoticeBoard` exists.
+      Since the merge, `main` has both too. So this check no longer tells the two builds apart:
+      use §6 step 23.
+
+### 3. Run the playtest (wave 1)
+
+- [x] 14. Ben's Studio look at Village, 2026-10-01: "the village looks amazing"
+      (`docs/PLAYTEST.md` "M12 — Village growing city").
+- [ ] 15. **Still owed:** send Claude the numbers from PLAYTEST M12 step 37: the instance counts
+      and the frame time. Either build works for this (main or `tycoon-m12`).
+
+### 4. After sign-off (lead, wave 1)
+
+- [x] 16. Merged `m12-growing-city` into `main` (2026-10-01); branch and worktree removed. `py
+      tools/paths/bake.py --era Village --list` is green again.
+- [ ] 17. Ben: when you are not testing wave 2, build and `rojo serve` from
+      `C:\Users\benja\Desktop\tycoon` as usual. `main` has the Village town now.
+
+### 5. M12 wave 2 — what is owed (2026-10-01)
+
+- **Creator Hub: nothing.** No passes, products or audio.
+- **Assets for wave 2.0: nothing.** No upload, no harvest paste. The Village smoke and carts fix
+  is client code and config only.
+- **Wave 2.1 (Boomtown layout mock): nothing for Studio.** 27 draft props exist as blueprints
+  only; none is uploaded. You look at renders (§8) and decide.
+- **Later, wave 2.3:** one harvest paste (Boomtown props and re-baked roads together). Not yet:
+  Claude will say when (§9).
+
+### 6. M12 wave 2 — open the build (for the Village smoke and carts look)
 
 Pick **one** of the two options. Option A gives a fresh Village save on every Play and touches no
 real save.
 
 **Option A: open the file**
-- [ ] 8. Rebuild, in PowerShell:
+- [ ] 18. Rebuild, in PowerShell:
       ```
       cd C:\Users\benja\Desktop\tycoon-m12
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build -o build/test.rbxl
       ```
-- [ ] 9. Studio → File (*Archivo*) → Open (*Abrir*) →
+- [ ] 19. Studio → File (*Archivo*) → Open (*Abrir*) →
       `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`.
-      Do **not** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, which has no
-      fabric.
+      Do **not** open:
+      - `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, with no parked carts and
+        no chimney smoke on Village;
+      - anything in `tycoon-m12-grid` or `tycoon-m12-organic`: those are layout candidates, and
+        their Boomtown roads are not baked.
 
 **Option B: live sync**
-- [ ] 10. Stop any other `rojo serve` first (the main checkout's, or a VS Code "serve" task). They
+- [ ] 20. Stop any other `rojo serve` first (the main checkout's, or a VS Code "serve" task). They
       all use port 34872, and the plugin would sync the wrong folder.
-- [ ] 11. In PowerShell:
+- [ ] 21. In PowerShell:
       ```
       cd C:\Users\benja\Desktop\tycoon-m12
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo serve
       ```
-- [ ] 12. Studio → Plugins (*Complementos*) → **Rojo** → **Connect**.
+- [ ] 22. Studio → Plugins (*Complementos*) → **Rojo** → **Connect**.
 
 **Either option:**
-- [ ] 13. Check in Edit mode, in Explorer (*Explorador*):
-      - `ReplicatedStorage/Shared/Config/Fabric/Village` exists (only the M12 tree has it);
-      - `ReplicatedStorage/Assets/Props/Village/NoticeBoard` exists.
-      If either is missing, you opened or synced `main`.
+- [ ] 23. Check that you opened the right build. In Edit mode: View (*Vista*) → **Command Bar**
+      (*Barra de comandos*), paste this one line, press Enter:
+      ```
+      local c = require(game.ReplicatedStorage.Shared.Config.CityDressing) print(c.budget.plumes, c.eras.Village.fabric.upgrades.carts ~= nil)
+      ```
+      Look at Output (*Salida*):
+      - `20 true` → the wave 2 build. Good.
+      - `nil false` → you opened or synced `main`. Go back to step 18 or 20.
+      No Command Bar? Explorer (*Explorador*) → `ReplicatedStorage/Shared/Config/CityDressing` →
+      double-click → Ctrl+F → `plumes`. Found = the wave 2 build.
 
-### 3. Run the playtest
+### 7. M12 wave 2 — run the playtest
 
-- [ ] 14. Run `docs/PLAYTEST.md` "M12 — Village growing city".
-- [ ] 15. Send Claude the numbers from PLAYTEST M12 step 37: the instance counts and the frame
-      time.
+- [ ] 24. Run `docs/PLAYTEST.md` "M12 wave 2.0 — Village smoke and carts". **Village only. Do not
+      Advance Era to look at Boomtown** (see the warning at the top of this section).
 
-### 4. After sign-off (lead)
+### 8. M12 wave 2 — the Boomtown layout gate (renders only, no Studio)
 
-- [ ] 16. Merge `m12-growing-city` into `main`. After the merge, `py tools/paths/bake.py --era
-      Village --list` is green on `main` again; until then it fails there, because the shared
-      `assets/build/paths/Village.json` holds the M12 bake.
-- [ ] 17. Rebuild from `C:\Users\benja\Desktop\tycoon`, and go back to the usual `rojo serve` from
-      there.
+Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+
+- [ ] 25. Open **`m12b_compare.png`**: today's Boomtown, the grid and the organic plan, each at
+      tier 1, tier 3 and full.
+- [ ] 26. Look closer at each candidate:
+      - grid: `m12b_grid_tier1.png`, `m12b_grid_tier3.png`, `m12b_grid_full.png`,
+        `m12b_grid_full_entrance.png`, `m12b_grid_streetplan.png`;
+      - organic: `m12b_organic_tier1.png`, `m12b_organic_tier3.png`, `m12b_organic_full.png`,
+        `m12b_organic_full_entrance.png`, `m12b_organic_streetplan.png`;
+      - today: `m12b_today_tier1.png`, `m12b_today_tier3.png`, `m12b_today_full.png`.
+- [ ] 27. Look at the draft props: `farmland_context.png`, `construction_context.png`,
+      `construction_suburb_context.png`, `construction_scale_check.png`.
+- [ ] 28. Village before and after the smoke and carts fix, in
+      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\`:
+      `m12f_before_full.png`, `m12f_after_full.png`, `m12f_before_close.png`,
+      `m12f_after_close.png`, `m12f_after_tier3.png`.
+- [ ] 29. Tell Claude your five answers:
+      1. **Layout:** grid, organic as shown, or a bolder organic pass?
+         - Grid: 93 lots. Houses by tier 0 / 25 / 45 / 59 / 93.
+         - Organic: 101 lots. Houses by tier 8 / 27 / 53 / 88 / 101. It reads as a kinked grid,
+           because landmarks must stay square to the compass for now.
+      2. **City-changers:** which of Fire Hydrant (`fireHydrant`), Billboard (`billboardSign`),
+         Light the Neon District (`neonDistrict`) and Open the Bus Line (`busLine`) should change
+         the city instead of standing as one model?
+      3. **Village chimneys:** should the three narrow home designs get a chimney from their first
+         look? (A re-upload that rides the Boomtown harvest paste. Then about 4 plumes at tier 2
+         and 13 to 16 at full, instead of 13 only once the Well is level 50.)
+      4. **Road width:** is the 6-stud Boomtown road right (it was 8)?
+      5. **Numbers:** step 37 of PLAYTEST "M12 — Village growing city" (§3 step 15 above).
+
+**Reading the renders:**
+- **Ground colour.** The plot renderer was fixed on 2026-10-01. Before that, flat colours (plot
+  base, roads, pads) came out much paler than the game: Boomtown's base (173, 138, 93) rendered
+  about (214, 198, 171). **Every plot render made before 2026-10-01 shows paler ground than
+  Studio, for every era.** Kit models were always right. The `m12b_*` and `m12f_*` renders are
+  correct.
+- **Smoke.** A row of pale spheres above a house marks a chimney plume. It is a marker, not the
+  look of the real smoke.
+- **Known weak points of both layouts** (already on the list for wave 2.2, no need to report):
+  - landmark driveways are road-wide asphalt stubs;
+  - the industrial lots at the front are rows of identical dark sheds (stand-ins);
+  - no green by the Clock Tower;
+  - shop side walls are blank.
+
+### 9. M12 wave 2 — later (not yet; Claude says when)
+
+- [ ] 30. **Lead, wave 2.2:** contracts for the chosen layout, then the Boomtown path re-bake and
+      upload (about 40 to 48 pieces). After it, `py tools/paths/bake.py --era Boomtown --list` is
+      green again and Boomtown can be judged in Studio.
+- [ ] 31. **Lead, wave 2.3:** real Boomtown props, strips to Ben, merge and upload.
+- [ ] 32. **Ben, wave 2.3: one harvest paste** (props and paths together). Same routine as §1
+      step 5, from `C:\Users\benja\Desktop\tycoon-m12`.
+- [ ] 33. **Lead:** templates and manifest (§1 step 6), review, QA, docs, then Ben's Boomtown
+      playtest.
+- [ ] 34. **Lead:** merge `m12-boomtown` into `main` after sign-off.
