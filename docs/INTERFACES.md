@@ -5612,8 +5612,9 @@ No new client code. Carts are a `fabric.upgrades` layer whose slot is bought ear
 
 ### Done when (wave 2.0)
 
-- A near Village at tier ≥ 2 shows plumes on about one house in six that has a chimney, and
-  carts beside the lanes and the farm and market lots once the farm is bought.
+- A near Village shows a plume on every house whose shown stage has a chimney (with the models
+  as uploaded: 13 at full build and none before tier 5, see "Data rulings"), and carts beside the
+  lanes and the farm and market lots once the farm is bought.
 - `py tools/fabric.py check Village`, `py tools/cityfabric.py selftest` and
   `py tools/streetplan.py Village` are green; stylua, selene, luau-lsp and `rojo build` are clean.
 - Before and after renders exist for Ben: `m12f_before_*.png`, `m12f_after_*.png`.
@@ -5660,6 +5661,32 @@ the real mirror, so the pick becomes wave 2.2's starting point with nothing thro
   sites visible at every tier.
 - **Stand-in models.** The real fabric props come in wave 2.3, with strips for Ben. The mock uses
   the existing Boomtown filler (`HouseA`–`HouseF`, `ShedA`, `ShedB`) plus draft props.
+
+### Groundwork rulings (lead, 2026-10-01, after the generator and prop drafts)
+
+- **Lot sizes:** small 6 × 6, medium 8 × 8, narrow 5 × 8. Suburb lots are mostly small: fabric
+  homes are built at a smaller kit scale than the landmarks, as on Village, so a kit bungalow fits
+  a 6 × 6 lot. Narrow lots are terraced Main Street shops.
+- **Road width 6** (was 8), with `pedestrians.offset` 3.35. The cars were halved in wave 2d, so
+  an 8-stud road is oversized, and frontage and block depth are what limit the lot count. Shown to
+  Ben in the gate renders; a config value, easy to put back.
+- **Density:** with 8-stud roads and 9 × 9 house lots a 120-stud plot holds 55 to 70 lots. 90 is
+  the target the candidates report against; what binds is frontage, not land.
+- **Field-pattern wild** (`plan.wild.pattern: "fields"` in `tools/fabric.py`): fields on a square
+  grid at scale 1 and in quarter turns, crops chosen by low-frequency noise so neighbours share a
+  crop, a fallow share that holds the singles, fields continuing into the skirt, and skirt
+  landmarks from a plan list. `Windbreak` is skirt-only: one clearing point cannot cover its three
+  trunks. A plan without `pattern` lays woods exactly as before.
+- **A pad marker is exempt from its own slot's path** in `fabric.py check`: the marker exists only
+  while the pad does, and the path is drawn only after the purchase.
+- **A fabric era has no street-furniture exemptions** in `streetplan.py`: every pad and footprint
+  rule applies to `paveMainStreet`, `streetlampRow`, `trafficLights`, `fireHydrant` and the
+  monument too, because their pads now stand beside the street.
+- **Layout facts** (generator's report): entrance at (0, −54.5); street points within ±55; a slot
+  centre sits 16 studs from the centreline it faces; pads at least 5 from every centreline; a
+  landmark join at most about 40 studs from the next along a street, or the lots between them
+  never develop; lots are only laid on stretches some landmark's path draws.
+- **Far plots** draw whole fields only, so they never show the farmstead or the wind pumps.
 
 ### Gate renders (`assets/testfit/out/Boomtown/`)
 

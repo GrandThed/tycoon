@@ -5,7 +5,7 @@ show exactly what the game shows -- tools/testfit/plotrender.py above all, which
 against.
 
     py tools/cityfabric.py selftest            # the contract's test vector, asserted
-    py tools/cityfabric.py timeline Village    # parcels by level and wild counts at tiers 1-5
+    py tools/cityfabric.py timeline Village    # parcels by level, plumes and wild counts at tiers 1-5
 
 What is mirrored, and from where (nothing is re-derived; a divergence is a bug in one of them):
   * develop, rect_distance, segment_distance, is_cleared: src/shared/CityFabric.luau, line for line
@@ -24,7 +24,11 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
   * the slot, pad and plaza rects: Scatter.Solids (harvested extents from Assets.json, the layout's
     placeholder without them) turned into rects by Fabric's footprintRect;
   * what the controller hands Fabric.Sync: the owned slots, each one's visible Stage<n> (PlotService's
-    stage rule over the template's harvested stages), GrowthTier and the pads PlotService shows.
+    stage rule over the template's harvested stages), GrowthTier and the pads PlotService shows;
+  * chimney smoke (M12 wave 2.0): the gates CityDressingController.smokeFor answers for lot and
+    fabric houses alike, Fabric.validChimneys, the candidates fixed by index, and the settled
+    Fabric.refreshPlume -- which houses smoke and where each plume stands. The device gate
+    (Ambient.Enabled) is taken as on, like every other near-plot layer drawn here.
 
 Heights. A landmark's height at a stage comes from its Assets.json stage parts, measured exactly as
 the client measures it (no entry: 0). A fabric prop uses Assets.json when it has an entry there;
@@ -553,6 +557,107 @@ def goal_for(config, index, parcel, state, prop_heights, landmark_height):
     return {"kind": BUILDING, "prop": prop, "stage": stage}
 
 
+def list_has(items, value):
+    """CityDressingController.listHas: whether a config table names `value`. Luau walks every value
+    of the table, so a JSON object counts by its values."""
+    if isinstance(items, dict):
+        items = list(items.values())
+    return isinstance(items, list) and any(item == value for item in items)
+
+
+def smoke_for(city, era_name, tier):
+    """CityDressingController.smokeFor: `ambient.smoke` while chimneys may smoke on a plot of this era
+    at this tier, else None. A missing `firstTier` is "never" (RoadGraph.BudgetValue's math.huge).
+    The caller adds the near plot and the detail policy's `living`; the device is taken as able."""
+    ambient = city.get("ambient") if isinstance(city, dict) else None
+    smoke = ambient.get("smoke") if isinstance(ambient, dict) else None
+    if not isinstance(smoke, dict) or not list_has(smoke.get("eras"), era_name):
+        return None
+    first_tier = smoke.get("firstTier")
+    if not is_number(first_tier) or first_tier != first_tier or tier < first_tier:
+        return None
+    return smoke
+
+
+def lot_chimney(smoke, era_name, prop):
+    """CityDressingController.syncSmoke's lookup for a wave 2c lot house: its chimney top (x, y, z)
+    in the prop frame from `smoke.props`, keyed "<Era>/<Prop>" first (two eras share prop names),
+    or None. Three numbers is all the client asks of it."""
+    props = smoke.get("props") if isinstance(smoke, dict) else None
+    if not isinstance(props, dict) or not isinstance(prop, str):
+        return None
+    offset = props.get(f"{era_name}/{prop}")
+    # Luau's `or` falls through on nil and false only; an empty table would not.
+    if offset is None or offset is False:
+        offset = props.get(prop)
+    if not isinstance(offset, list) or len(offset) < 3 or not all(is_number(v) for v in offset[:3]):
+        return None
+    return (offset[0], offset[1], offset[2])
+
+
+def valid_chimneys(smoke, era_name):
+    """Fabric.validChimneys: ({prop: {shown stage: (x, y, z)}}, every) from the fabric keys of
+    `ambient.smoke`, or (None, None) -- fabric smoke off -- unless `every` is a whole number of 1
+    or more and `fabricProps` a table. Only this era's "<Era>/<Prop>" keys are kept, by prop name;
+    a chimney top is exactly three finite numbers, and any other entry ([] by convention) is a
+    stage without one, as is a stage past the end of its list."""
+    if not isinstance(smoke, dict):
+        return None, None
+    every, props = smoke.get("every"), smoke.get("fabricProps")
+    if not isinstance(props, (dict, list)) or not finite(every) or every < 1 or every != math.floor(every):
+        return None, None
+    prefix = era_name + "/"
+    chimneys = {}
+    # A JSON array has only numeric keys in Luau and a JSON object only string ones: an array of
+    # props names no prop, and an object of stages has no stage index.
+    for key, stages in props.items() if isinstance(props, dict) else ():
+        if not isinstance(stages, (dict, list)) or not key.startswith(prefix):
+            continue
+        tops = {}
+        for stage, top in enumerate(stages if isinstance(stages, list) else ()):
+            if isinstance(top, list) and len(top) == 3 and all(finite(v) for v in top):
+                tops[stage] = (top[0], top[1], top[2])
+        chimneys[key[len(prefix) :]] = tops
+    return chimneys, every
+
+
+def smoke_candidate(index, every, parcel_budget):
+    """Fabric.new: parcel `index` (1-based) is a smoke candidate when it is every `every`-th parcel
+    inside the near budget. Fixed by index alone, so one house changing never moves another's
+    plume; never one without a valid `every`."""
+    return every is not None and (index - 1) % every == 0 and index <= parcel_budget
+
+
+def plume_for(view, look, chimneys):
+    """Fabric.refreshPlume, settled, for one parcel: where its plume stands (plot-local), or None.
+    A candidate smokes iff what stands on it is a building -- never a site -- whose prop lists a
+    chimney top for the stage shown; the plume is at the parcel's frame times that top."""
+    if not view["chimney"] or look is None or look["kind"] != BUILDING:
+        return None
+    top = (chimneys.get(look["prop"]) or {}).get(look["stage"])
+    if top is None:
+        return None
+    parcel = view["parcel"]
+    turned = rotate(top[0], top[2], parcel["rotationY"])
+    return {
+        "index": view["index"],
+        "prop": look["prop"],
+        "stage": look["stage"],
+        "x": parcel["x"] + turned[0],
+        "y": top[1],
+        "z": parcel["z"] + turned[1],
+    }
+
+
+def plumes_for(parcels, chimneys, smoking):
+    """Every plume of a settled sync: `parcels` are the views with the `look` each one shows (None
+    where nothing is drawn), `smoking` the five gates as the controller hands them to Fabric.Sync."""
+    if not smoking:
+        return []
+    found = (plume_for(view, view["look"], chimneys) for view in parcels)
+    return [plume for plume in found if plume is not None]
+
+
 def color_from(rgb, fallback):
     """Fabric.colorFrom: each channel a finite number clamped to 0..255 (a missing one is 0); the
     fallback when there is no list at all."""
@@ -816,6 +921,9 @@ class FabricPlot:
         self.config = (self.city.get("eras", {}).get(era_name) or {}).get("fabric")
         self.assets = assets if assets is not None else load_json(ASSETS_PATH)
         self.budget = self.city.get("budget") or {}
+        # Fabric.Context.smoke: `ambient.smoke` as it stands; _build_views validates its fabric keys.
+        ambient = self.city.get("ambient")
+        self.smoke = ambient.get("smoke") if isinstance(ambient, dict) else None
         self.game = load_json(GAME_CONFIG_PATH)
         layout = self.era.layout
         self.layout = layout
@@ -894,6 +1002,9 @@ class FabricPlot:
         parcel_budget = max(math.floor(number_or(self.budget.get("parcels"), 0)), 0)
         far_parcel_budget = max(math.floor(number_or(self.budget.get("parcelsFar"), parcel_budget)), 0)
         raw_parcels = data.get("parcels") if isinstance(data.get("parcels"), list) else []
+        chimneys, smoke_every = valid_chimneys(self.smoke, self.name)
+        self.chimneys = chimneys or {}
+        self.smoke_every = smoke_every
         self.parcel_views = []
         sizes = config.get("sizes")
         self.parcel_data, flags = validated_parcels(raw_parcels)
@@ -922,6 +1033,7 @@ class FabricPlot:
                     "sized": sized,
                     "nearOk": well_formed and sized and index <= parcel_budget,
                     "farOk": well_formed and sized and index <= far_parcel_budget,
+                    "chimney": smoke_candidate(index, smoke_every, parcel_budget),
                 }
             )
         self.wild_data = data.get("wild") if isinstance(data.get("wild"), list) else []
@@ -1302,11 +1414,11 @@ class FabricPlot:
             if view["nearOk"] and view["parcel"]["row"] == 1 and view["parcel"]["stretch"] in stretches
         ]
 
-    def snapshot(self, owned, stages, tier, near=True, share=1.0, upgrade_share=1.0):
+    def snapshot(self, owned, stages, tier, near=True, share=1.0, upgrade_share=1.0, living=True):
         """One settled Fabric.Sync: what a player who joins now sees on this plot.
 
         `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier;
-        `share` and `upgrade_share` are City detail's wildShare and upgradeShare."""
+        `share`, `upgrade_share` and `living` are City detail's wildShare, upgradeShare and living."""
         owned = set(owned)
         stretches, joins, segments, visible, drawn = self.network_view(owned)
         trace = []
@@ -1326,7 +1438,9 @@ class FabricPlot:
             parcels.append({**view, "state": state, "look": look if drawn else None})
         plazas = self.visible_plazas(tier)
         upgrades = self.upgrade_placements(owned, states, stretches, tier, near, upgrade_share)
-        mask = self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
+        # syncFabric's `smoke`: a near plot, `living`, and the era and tier gates lot smoke has.
+        smoking = near and living and smoke_for(self.city, self.name, tier) is not None
+        mask =self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
         cleared = self.cleared_flags(mask) if mask is not None else {}
         return {
             "tier": tier,
@@ -1346,6 +1460,7 @@ class FabricPlot:
             "wild": self.wild_placements(cleared, near, share),
             "pads": self.pad_dressing(owned, near),
             "upgrades": upgrades,
+            "plumes": plumes_for(parcels, self.chimneys, smoking),
             "near": near,
         }
 
@@ -1593,6 +1708,21 @@ SELFTEST_PARCELS = [
 
 LAYER = {"requiresSlot": "flowerBed", "props": ["FlowerPlanterA"], "tierOffset": 0, "stagger": 0.08, "budget": 60}
 
+# An `ambient.smoke` with every kind of entry the client must tell apart.
+SELFTEST_SMOKE = {
+    "firstTier": 2,
+    "eras": ["Village"],
+    "props": {"Village/HouseA": [1, 6.5, 0.2], "HouseB": [3, 6.5, 0.8], "Village/Bad": [1, "a", 2]},
+    "fabricProps": {
+        "Village/Home": [[], [1, 6, 2], [1, 9, 2, 0]],
+        "Village/Camp": [[0.25, 0.16, -1.75]],
+        "Village/Holes": [[1, math.inf, 2], [1, 2], {"x": 1}],
+        "Boomtown/Shop": [[1, 2, 3]],
+        "Home": [[1, 2, 3]],
+    },
+    "every": 3,
+}
+
 
 def selftest():
     failures = []
@@ -1666,6 +1796,50 @@ def selftest():
         ("layer: stagger absent is fine", valid_upgrade_layer({k: v for k, v in LAYER.items() if k != "stagger"}) is not None),
         ("layer: props missing turns it off", valid_upgrade_layer({k: v for k, v in LAYER.items() if k != "props"}) is None),
         ("layer: a non-name prop is a hole", (valid_upgrade_layer(dict(LAYER, props=["A", 3])) or {}).get("props") == ["A", None]),
+    ]
+    # Wave 2.0 chimney smoke: the controller's gates, Fabric.validChimneys, the candidates fixed by
+    # index, and the settled plume (never on a site, at the parcel's frame times the chimney top).
+    chimneys, every = valid_chimneys(SELFTEST_SMOKE, "Village")
+    smoke_city = {"ambient": {"smoke": SELFTEST_SMOKE}}
+
+    def without(key):
+        return {k: v for k, v in SELFTEST_SMOKE.items() if k != key}
+
+    no_tier = {"ambient": {"smoke": without("firstTier")}}
+    house ={"index": 4, "chimney": True, "parcel": dict(_parcel("medium", "L1_2", 6, 1), x=10, z=-5, rotationY=90)}
+
+    def shows(kind, stage, view=house):
+        return plume_for(view, {"kind": kind, "prop": "Home", "stage": stage}, chimneys or {})
+
+    # Turned 90 degrees, the prop's +X runs along plot -Z and its +Z along plot +X.
+    plume = shows(BUILDING, 1) or {}
+    at_top = all(abs(plume.get(axis, math.inf) - wanted) < 1e-9 for axis, wanted in (("x", 12), ("y", 6), ("z", -6)))
+    validation += [
+        ("smoke: on from firstTier in a listed era", smoke_for(smoke_city, "Village", 2) is SELFTEST_SMOKE),
+        ("smoke: off below firstTier", smoke_for(smoke_city, "Village", 1) is None),
+        ("smoke: off in an era not listed", smoke_for(smoke_city, "Metropolis", 5) is None),
+        ("smoke: no firstTier is never", smoke_for(no_tier, "Village", 5) is None),
+        ("chimneys: every kept", every == 3),
+        ("chimneys: only this era's Era/Prop keys", sorted(chimneys or {}) == ["Camp", "Holes", "Home"]),
+        ("chimneys: [] and four numbers are no chimney", (chimneys or {}).get("Home") == {1: (1, 6, 2)}),
+        ("chimneys: inf, two numbers, an object are none", (chimneys or {}).get("Holes") == {}),
+        ("chimneys: every 0 turns it off", valid_chimneys(dict(SELFTEST_SMOKE, every=0), "Village") == (None, None)),
+        ("chimneys: every 1.5 turns it off", valid_chimneys(dict(SELFTEST_SMOKE, every=1.5), "Village") == (None, None)),
+        ("chimneys: every missing turns it off", valid_chimneys(without("every"), "Village") == (None, None)),
+        ("chimneys: fabricProps missing turns it off", valid_chimneys(without("fabricProps"), "Village") == (None, None)),
+        ("candidates: every 3rd inside the budget", [i for i in range(1, 9) if smoke_candidate(i, 3, 5)] == [1, 4]),
+        ("candidates: none without a valid every", not smoke_candidate(1, None, 5)),
+        ("plume: at the parcel frame times the top", at_top),
+        ("plume: a site never smokes", shows(SITE, 1) is None),
+        ("plume: a stage without a chimney", shows(BUILDING, 0) is None and shows(BUILDING, 2) is None),
+        ("plume: a stage past the list", shows(BUILDING, 5) is None),
+        ("plume: not a candidate", shows(BUILDING, 1, dict(house, chimney=False)) is None),
+        ("plume: nothing drawn", plume_for(house, None, chimneys or {}) is None),
+        ("plumes: none while the gates are shut", plumes_for([dict(house, look=None)], chimneys or {}, False) == []),
+        ("lot chimney: Era/Prop key", lot_chimney(SELFTEST_SMOKE, "Village", "HouseA") == (1, 6.5, 0.2)),
+        ("lot chimney: bare prop key", lot_chimney(SELFTEST_SMOKE, "Village", "HouseB") == (3, 6.5, 0.8)),
+        ("lot chimney: not three numbers", lot_chimney(SELFTEST_SMOKE, "Village", "Bad") is None),
+        ("lot chimney: no entry", lot_chimney(SELFTEST_SMOKE, "Village", "HouseC") is None),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
@@ -1767,6 +1941,15 @@ def timeline(era_name):
         "sites what it shows, layers what is placed (and drawn on a near plot); wild counts are what a "
         "near (far) plot draws"
     )
+    candidates = sum(1 for view in plot.parcel_views if view["chimney"])
+    if plot.smoke_every is None:
+        print("  chimney smoke: off (ambient.smoke needs a table `fabricProps` and a whole `every` of 1 or more)")
+    else:
+        print(
+            f"  chimney smoke: every {plot.smoke_every:g} -> {candidates} candidate parcels, "
+            f"{len(plot.chimneys)} props with chimney entries; plumes are what a near plot shows "
+            "(device able, City detail on)"
+        )
     rows = []
     for tier in range(1, len(city["tier"]["thresholds"]) + 1):
         levels, actual, tick = tier_snapshot(history, tier)
@@ -1796,8 +1979,14 @@ def timeline(era_name):
             f"  {label:6s} ({moment:>12s}, GrowthTier {tier}): {len(owned):2d} owned, "
             f"{len(near['stretches']):2d} stretches | parcels L0 {counts[0]:2d}  L1 {counts[1]:2d}  "
             f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | houses {houses:2d}, sites {sites:2d} "
-            f"(far {far_houses}, {far_sites})"
+            f"(far {far_houses}, {far_sites}) | plumes {len(near['plumes']):2d}"
         )
+        if near["plumes"]:
+            smoking = {}
+            for plume in near["plumes"]:
+                key = f"{plume['prop']} s{plume['stage']}"
+                smoking[key] = smoking.get(key, 0) + 1
+            print(f"         smoking: {', '.join(f'{key} x{n}' for key, n in sorted(smoking.items()))}")
         print(f"         placed: {'; '.join(layer_texts) or 'no layers'}")
         print(
             f"         wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "

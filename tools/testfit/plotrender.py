@@ -25,6 +25,9 @@ What is mirrored, and from where (never re-derived, never duplicated as a consta
   * M12's city fabric -- parcels at their level, the wild land left after clearing, the dressed
     next pads -- and every owned landmark's stage at `--tier N` (the sim's greedy player at the last
     moment of tier N): tools/cityfabric.py, the mirror of CityFabric.luau and Fabric.luau;
+  * which houses smoke (wave 2c lot houses, M12 wave 2.0 fabric houses) and where each plume
+    stands: cityfabric again; the plume itself is a scene-only puff of spheres, since the game's
+    is a particle emitter;
   * tile cells, the connectivity mask table and the zebra rule: src/client/City/TileRenderer.luau
     (PIECE_BY_MASK, ARM_STEPS, CROSSING_MIN_RUN);
   * the ring cycle, the reveal-independent cell kinds and the ramp: src/client/City/Highway.luau
@@ -92,7 +95,12 @@ FIT_PASSES = 8
 
 # Scene-only drawing numbers (nothing here is a game tunable).
 DEFAULT_PART_RGB = [163, 162, 165]  # Medium stone grey: a new Part's colour, which pads keep
-GROUND_TINT = 0.55  # the apron outside the plot, so the plot edge is legible
+GROUND_TINT = 0.77  # the apron outside the plot, so the plot edge is legible
+# A chimney plume as a few pale spheres, bottom to top: (rise above the chimney top, drift toward
+# +X, diameter) in studs. It marks which houses smoke and must not hide the roofs behind it at the
+# overview camera, so it is far smaller than the emitter's plume.
+SMOKE_PUFFS = ((0.35, 0.0, 0.5), (1.15, 0.15, 0.7), (2.1, 0.4, 0.95), (3.2, 0.75, 1.2))
+SMOKE_ALPHA = 0.8
 PLAYER_SIZE = (2.0, 5.0, 1.0)
 PLAYER_COLOR = [48, 110, 210]
 SPUR_TOP = 0.1
@@ -103,6 +111,7 @@ STRAIGHT_ENOUGH = 0.9
 MIN_STEP = 0.05
 ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
 MIN_VEHICLE_STRETCH = 16.0
+SMALL_LOT = "small"  # Scatter.SMALL_LOT: the lot kind that draws from `houses.smallProps`
 # TileRenderer.luau ground-slab constants, mirrored (geometry, not tunables).
 BLOCK_DROP = 0.02  # a block slab's top, and a park strip's, sits this far under the kerb
 SPUR_DROP = 0.01  # RoadGraph.SPUR_DROP: a tiles-era footpath, half as far under the kerb
@@ -156,6 +165,16 @@ def centred_extents(size_x, size_z):
 
 def tint(color, factor):
     return [max(0, min(255, int(round(c * factor)))) for c in color]
+
+
+def smoke_color(smoke):
+    """Ambient.colorFor(smoke.color): each channel a number clamped to 0..255, a missing one 255."""
+    rgb = smoke.get("color")
+    channels = rgb if isinstance(rgb, list) else []
+    return [
+        min(max(channels[i], 0), 255) if i < len(channels) and cityfabric.is_number(channels[i]) else 255
+        for i in range(3)
+    ]
 
 
 def facing_rot(direction):
@@ -280,6 +299,7 @@ class PlotScene:
         self.fabric_view = None  # the settled Fabric.Sync, taken once in build()
         self.boxes = []
         self.models = []
+        self.spheres = []
         self.rng = random.Random(f"{era.name}:plotrender")
         self.lift = float(era.city["paths"].get("buildingLift", 0.0))
         self.thickness = float(era.city["road"]["thickness"])
@@ -338,6 +358,21 @@ class PlotScene:
         if placeholder:
             entry["placeholder"] = placeholder
         self.models.append(entry)
+
+    def plume(self, name, top, smoke):
+        """One chimney plume (Ambient.AddSmoke) at the plot-local point `top`, in the config's smoke
+        colour: upright whatever the house's turn, as the emitter is."""
+        color = smoke_color(smoke)
+        for index, (rise, drift, diameter) in enumerate(SMOKE_PUFFS):
+            self.spheres.append(
+                {
+                    "name": f"{name}_{index}",
+                    "pos": [round(top[0] + drift, 4), round(top[1] + rise, 4), round(top[2], 4)],
+                    "diameter": diameter,
+                    "color": color,
+                    "alpha": SMOKE_ALPHA,
+                }
+            )
 
     def ribbon(self, name, a, b, width, top, color, cap=True):
         """A flat slab along a-b, overlapped by half a width at each end so corners close -- the
@@ -437,16 +472,24 @@ class PlotScene:
             )
 
     def build_lots(self):
-        """Filler houses: the client picks one of `houses.props` per lot from the plot seed; the
-        render picks from its own seed, because which house stands where is not what is judged."""
+        """Filler houses: the client picks one of `houses.props` (`houses.smallProps` on a "small"
+        lot) per lot from the plot seed; the render picks from its own seed, because which house
+        stands where is not what is judged. Wave 2c chimney smoke: on a near plot, while the smoke
+        gates hold, a drawn house whose prop has a chimney top in `ambient.smoke.props` smokes."""
         era = self.era
-        props = era.dressing.get("houses", {}).get("props") or []
-        if not props:
-            return
+        houses = era.dressing.get("houses", {})
+        pools = {SMALL_LOT: houses.get("smallProps") or []}
+        house_props = houses.get("props") or []
+        smoke = cityfabric.smoke_for(era.city, era.name, self.tier) if self.near else None
+        plumes = 0
         for index, lot in enumerate(era.lots):
-            if lot["tier"] > self.tier:
+            # One draw per lot whatever its kind or tier (Scatter.Plan), so the same house stands
+            # on a lot in every render of the era; an empty pool leaves the lot bare.
+            draw = self.rng.random()
+            pool = pools.get(lot["kind"], house_props)
+            if lot["tier"] > self.tier or not pool:
                 continue
-            name = props[self.rng.randrange(len(props))]
+            name = pool[min(int(draw * len(pool)), len(pool) - 1)]
             self.model(
                 f"House{index}",
                 blueprint_path(era.name, name, prop=True),
@@ -455,6 +498,14 @@ class PlotScene:
                 placeholder=placeholder_for("house"),
                 wanted=name,
             )
+            chimney = cityfabric.lot_chimney(smoke, era.name, name)
+            if chimney is not None:
+                turned = cityfabric.rotate(chimney[0], chimney[2], lot["rotation"])
+                top = (lot["position"][0] + turned[0], chimney[1], lot["position"][1] + turned[1])
+                self.plume(f"LotSmoke{index}", top, smoke)
+                plumes += 1
+        if era.lots:
+            self.notes.append(f"lot smoke: {plumes} plumes")
 
     # -- streets ---------------------------------------------------------
 
@@ -855,10 +906,11 @@ class PlotScene:
         the district's prop at the stage its height cap allows -- the wild land the clearing mask
         leaves (whole clumps, the uncleared quarters of a partly cleared clump, singles; far plots
         whole clumps only; a skirt entry on the world ground), and on a near plot each pad's notice
-        board in the slot's frame with stakes and strings round the footprint; and (round 3) every
-        upgrade layer's placed entries (town trees, flowers, banners) at the stage the tier gives them. A far plot draws only the
-        parcels inside budget.parcelsFar. A name with no blueprint draws nothing, as a missing
-        template does in game."""
+        board in the slot's frame with stakes and strings round the footprint; (round 3) every
+        upgrade layer's placed entries (town trees, flowers, banners, carts) at the stage the tier
+        gives them; and (wave 2.0) a plume on every house whose chimney smokes. A far plot draws
+        only the parcels inside budget.parcelsFar. A name with no blueprint draws nothing, as a
+        missing template does in game."""
         view = self.fabric_view
         if view is None:
             return
@@ -917,6 +969,9 @@ class PlotScene:
                     wanted=item["prop"],
                     scale=item["scale"],
                 )
+        # Wave 2.0: the houses whose chimney smokes (empty on a far plot or below the smoke tier).
+        for plume in view["plumes"]:
+            self.plume(f"Smoke{plume['index']}", (plume["x"], plume["y"], plume["z"]), self.fabric.smoke)
         self.fabric_notes(view)
 
     def fabric_notes(self, view):
@@ -942,6 +997,8 @@ class PlotScene:
             f"fabric wild: {whole} whole clumps, {partial} partly cleared ({quarters} quarters), "
             f"{singles} singles of {len(fabric.wild_data)} entries"
         )
+        candidates = sum(1 for parcel_view in view["parcels"] if parcel_view["chimney"])
+        self.notes.append(f"fabric smoke: {len(view['plumes'])} plumes of {candidates} candidate parcels")
         dressed = [pad for pad in view["pads"] if pad["marker"] is not None or pad["stakes"]]
         self.notes.append(f"fabric pads: {len(view['pads'])} shown, {len(dressed)} dressed")
         if view["visible"] != self.visible:
@@ -1938,6 +1995,7 @@ def main():
         "sky": SKY,
         "boxes": scene.boxes,
         "models": scene.models,
+        "spheres": scene.spheres,
         "camera": camera_for(camera_name, era, scene),
     }
 

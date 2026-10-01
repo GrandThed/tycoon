@@ -2,9 +2,10 @@
 
 Runs inside Blender's Python, which has no Pillow and cannot import tools/streetplan.py, so the
 scene is handed over as a plain JSON file: boxes (plot base, pads, pavements, footpaths, roads on
-a non-tile era) and models (a blueprint path, a stage, a plot-local position in studs and a
-rotation about Y). Everything in that file is in the glTF/Roblox convention -- Y up, a model's
-front faces -Z -- exactly like a blueprint, and is converted to Blender's Z-up here.
+a non-tile era), models (a blueprint path, a stage, a plot-local position in studs and a
+rotation about Y) and spheres (chimney smoke puffs). Everything in that file is in the
+glTF/Roblox convention -- Y up, a model's front faces -Z -- exactly like a blueprint, and is
+converted to Blender's Z-up here.
 
     blender -b -P tools/testfit/plotscene.py -- --scene <scene.json>
 """
@@ -15,6 +16,7 @@ import math
 import os
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -38,6 +40,10 @@ FILL_ENERGY = 0.55
 # the palette texture as sRGB; Blender's importer reads them as linear and would wash space-kit's
 # orange out to pale amber and its dark slate to mid-grey, so they are decoded once here.
 SRGB_FACTOR_KITS = frozenset({"space-kit"})
+
+# A smoke puff is round at the overview camera's scale with this little geometry.
+PUFF_SUBDIVISIONS = 3
+PUFF_ROUGHNESS = 1.0
 
 
 def srgb_to_linear(c):
@@ -94,26 +100,49 @@ def to_blender(v):
 
 
 def rgb(color):
-    """A 0..255 colour from the scene file as a Blender base colour.
-
-    testfit renders with the Standard view transform and writes kit colours straight through, so
-    the plain slabs are written the same way or they would read darker than the kit pieces beside
-    them."""
+    """A linear 0..255 colour as a Blender base colour, which is scene-linear. Every builder here
+    takes its colours linear: tools/marketing/icon_scene.py decodes its own before handing them
+    over, and a scene file's are decoded once by `decode_scene_colours`."""
     return tuple(c / 255.0 for c in color)
+
+
+def linear(color):
+    """An sRGB 0..255 colour -- what the game shows: Color3.fromRGB, a layout's baseColor,
+    road.color -- as the linear 0..255 colour the builders take."""
+    return [srgb_to_linear(c / 255.0) * 255.0 for c in color]
+
+
+def decode_scene_colours(scene_spec):
+    """Decodes every surface colour of a plotrender scene file, in place, exactly as Blender
+    decodes a kit's sRGB colormap. Written straight through as linear, every box rendered far too
+    pale: Boomtown's base (173, 138, 93) came out (214, 198, 171) beside kit pieces at their true
+    colours. The sky is left alone: it is a light, and SUN_ENERGY and FILL_ENERGY were calibrated
+    against its numbers as linear radiance."""
+    for box in scene_spec.get("boxes", []):
+        box["color"] = linear(box["color"])
+    for model in scene_spec.get("models", []):
+        for box in model.get("placeholder") or []:
+            box["color"] = linear(box["color"])
+    for sphere in scene_spec.get("spheres", []):
+        sphere["color"] = linear(sphere["color"])
 
 
 class Materials:
     def __init__(self):
         self.cache = {}
 
-    def get(self, color, roughness=0.9):
-        key = (tuple(color), roughness)
+    def get(self, color, roughness=0.9, alpha=1.0):
+        key = (tuple(color), roughness, alpha)
         material = self.cache.get(key)
         if material is None:
             material = testfit.flat_material(f"C{len(self.cache)}", rgb(color))
             bsdf = material.node_tree.nodes.get("Principled BSDF")
             if bsdf:
                 bsdf.inputs["Roughness"].default_value = roughness
+                if alpha < 1.0:
+                    bsdf.inputs["Alpha"].default_value = alpha
+                    # Blended, not dithered: 24 samples of dither leave a puff grainy.
+                    material.surface_render_method = "BLENDED"
             self.cache[key] = material
         return material
 
@@ -129,6 +158,38 @@ def build_box(spec, collection, materials):
     )
     obj.rotation_euler = (0.0, 0.0, math.radians(spec.get("rotY", 0.0)))
     return obj
+
+
+class Puffs:
+    """Chimney smoke as plotrender marks it: translucent spheres that cast no shadow, so a plume
+    never darkens the roof it rises from. One unit-diameter mesh per material, scaled per puff."""
+
+    def __init__(self, materials):
+        self.materials = materials
+        self.meshes = {}
+
+    def mesh_for(self, material):
+        mesh = self.meshes.get(material.name)
+        if mesh is None:
+            mesh = bpy.data.meshes.new(f"Puff_{material.name}")
+            geometry = bmesh.new()
+            bmesh.ops.create_icosphere(geometry, subdivisions=PUFF_SUBDIVISIONS, radius=0.5)
+            geometry.to_mesh(mesh)
+            geometry.free()
+            for polygon in mesh.polygons:
+                polygon.use_smooth = True
+            mesh.materials.append(material)
+            self.meshes[material.name] = mesh
+        return mesh
+
+    def build(self, spec, collection):
+        material = self.materials.get(spec["color"], PUFF_ROUGHNESS, spec.get("alpha", 1.0))
+        obj = bpy.data.objects.new(spec.get("name", "Puff"), self.mesh_for(material))
+        obj.location = to_blender(spec["pos"])
+        obj.scale = (spec["diameter"],) * 3
+        obj.visible_shadow = False
+        collection.objects.link(obj)
+        return obj
 
 
 def build_placeholder(spec, collection, materials):
@@ -269,6 +330,7 @@ def main():
 
     with open(args.scene, "r", encoding="utf-8") as handle:
         scene_spec = json.load(handle)
+    decode_scene_colours(scene_spec)
 
     testfit.clear_scene()
     scene = bpy.context.scene
@@ -290,13 +352,17 @@ def main():
     for model in scene_spec.get("models", []):
         pieces += build_model(model, cache, plot, blueprints, missing, materials)
 
+    puffs = Puffs(materials)
+    for sphere in scene_spec.get("spheres", []):
+        puffs.build(sphere, plot)
+
     setup_lights(scene, scene_spec.get("sky", [200, 214, 232]))
     setup_camera(scene, scene_spec["camera"])
     bpy.context.view_layer.update()
 
     log(
         f"{len(scene_spec.get('boxes', []))} boxes, {len(scene_spec.get('models', []))} models, "
-        f"{pieces} kit pieces"
+        f"{pieces} kit pieces, {len(scene_spec.get('spheres', []))} smoke puffs"
     )
     if missing:
         listed = ", ".join(f"{name} x{count}" for name, count in sorted(missing.items()))

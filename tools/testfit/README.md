@@ -130,6 +130,29 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   bake drops it), and `space-kit`'s factors are decoded from sRGB once on import (palette.py
   `SRGB_FACTOR_KITS`, restated in `plotscene.py`), so its orange and dark slate match the game
   rather than washing out as they do in the single-building `testfit.py` strips.
+- **Box colours are sRGB too.** Every flat colour in the scene file (plot base, roads, pads,
+  pavements, placeholder boxes, stakes, smoke puffs) is a game colour, `Color3.fromRGB`'s 0-255.
+  `plotscene.decode_scene_colours` decodes them to linear once, as the file is read, which is what
+  a Blender base colour is and what Blender does to a kit's colormap on its own. The builders
+  themselves (`Materials`, `build_box`) take linear colours, and `tools/marketing/icon_scene.py`,
+  which calls them directly, decodes its own. Until 2026-10-01 the values went in undecoded and every box
+  rendered far too pale: Boomtown's base (173, 138, 93) came out (214, 198, 171) beside kit pieces
+  at their true colours. Measured on a flat swatch under this rig, a box and an sRGB texture of
+  the same colour now agree to 1/255, and both come out 1 to 16 values above the authored channel
+  (most in blue and on dark colours): that lift is the sky's fill light, and kit pieces get it
+  too. Renders made before that date show paler ground and roads than the game. The sky colour itself is **not** decoded: it is a
+  light, and the sun and fill energies were calibrated against it as it stands. The apron
+  (`GROUND_TINT`, scene-only) was retuned from 0.55 to 0.77 so it keeps the contrast with the
+  plot it had before.
+- **Chimney smoke** is drawn as a scene-only puff: four pale, slightly translucent spheres rising
+  from the chimney top and drifting toward +X (`SMOKE_PUFFS` in `plotrender.py`, 0.5 to 1.2 studs
+  across; the game's plume is a particle emitter several times larger). They cast no shadow. Which
+  houses smoke and where is the client's rule, from `tools/cityfabric.py`: fabric houses by
+  `ambient.smoke.fabricProps` and `every` (`snapshot()["plumes"]`), wave 2c lot houses by
+  `ambient.smoke.props`; both under `smokeFor`'s era and tier gates, on a near plot only
+  (`--far` draws none). The colour is `ambient.smoke.color`. A camp's plume starts at its fire pit.
+- **Filler lots** draw one of `houses.props`, or `houses.smallProps` on a `kind = "small"` lot, as
+  the client does; which one is the render's own seeded pick.
 - **Known deviation from the shipped client:** the ramp prop is placed with its highest cell one
   whole cell inward of the ring junction, which is what the contract describes and what
   `streetplan.py` checks (its three cells are `junction + direction * k`, k = 1..3, and its toe
