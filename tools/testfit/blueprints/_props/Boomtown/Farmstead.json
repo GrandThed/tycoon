@@ -14,6 +14,7 @@
     {"kit": "farmland-kit", "model": "bale-round", "pos": [1.1, 0.0125, -1.075], "rotY": 75, "stage": 0},
     {"kit": "farmland-kit", "model": "bale-round", "pos": [0.75, 0.0125, -0.8], "rotY": 10, "stage": 0},
     {"kit": "farmland-kit", "model": "haycock", "pos": [1.15, 0.0125, -0.65], "rotY": 0, "stage": 0},
-    {"kit": "farmland-kit", "model": "telegraph-pole", "pos": [-1.25, 0, -1.275], "rotY": 90, "stage": 0}
+    {"kit": "farmland-kit", "model": "telegraph-pole", "pos": [-1.25, 0, -1.275], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "tree-cottonwood-young", "pos": [1.0875, 0, 0.025], "rotY": 0, "stage": 0}
   ]
 }

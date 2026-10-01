@@ -1,0 +1,13 @@
+{
+  "id": "PastureQuarter",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "one 6 x 6 quarter-paddock in the local (+X, +Z) quadrant, inner corner at the origin, fence on the two outer edges (INTERFACES 'Fabric data'); farmland-kit is 1 unit = 4 studs, so scale is 4.0",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "pasture-grass", "pos": [0.71875, 0, 0.71875], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "trough", "pos": [0.90625, 0.0325, 1.19375], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "cow", "pos": [0.525, 0.02, 0.575], "rotY": 215, "stage": 0}
+  ]
+}

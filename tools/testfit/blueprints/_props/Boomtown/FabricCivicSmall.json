@@ -1,0 +1,14 @@
+{
+  "id": "FabricCivicSmall",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [6, 6],
+  "note": "civic filler, front -Z: stage 0 a mown lawn with a path to a paved stand; stage 1 adds a bench on the stand, a flower bed, a young cottonwood and a shrub",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "green-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "bench", "pos": [0, 0.035, 0.2625], "rotY": 0, "stage": 1},
+    {"kit": "farmland-kit", "model": "flower-bed", "pos": [0.4375, 0.02, -0.3875], "rotY": 90, "stage": 1},
+    {"kit": "farmland-kit", "model": "tree-cottonwood-young", "pos": [-0.3625, 0.0125, 0.325], "rotY": 0, "stage": 1},
+    {"kit": "farmland-kit", "model": "shrub", "pos": [0.5, 0.02, 0.5], "rotY": 0, "stage": 1}
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "FabricCivicMedium",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [8, 8],
+  "note": "civic filler, front -Z: stage 0 a mown green with a low hedge at the back; stage 1 adds two paths to a paved octagon with a flower bed at its heart, benches, three young cottonwoods and a second bed; stage 2 adds the bandstand on the octagon, whose plinth swallows the middle bed",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "green-medium", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "shrub", "pos": [-0.325, 0.02, 0.825], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "shrub", "pos": [0.025, 0.02, 0.8375], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "shrub", "pos": [0.375, 0.02, 0.825], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "green-medium-paths", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "farmland-kit", "model": "bench", "pos": [-0.6875, 0.02, 0.05], "rotY": 270, "stage": 1},
+    {"kit": "farmland-kit", "model": "bench", "pos": [0.3375, 0.02, -0.65], "rotY": 90, "stage": 1},
+    {"kit": "farmland-kit", "model": "tree-cottonwood-young", "pos": [-0.6375, 0.0125, 0.625], "rotY": 0, "stage": 1},
+    {"kit": "farmland-kit", "model": "tree-cottonwood-young", "pos": [0.65, 0.0125, 0.65], "rotY": 180, "stage": 1},
+    {"kit": "farmland-kit", "model": "tree-cottonwood-young", "pos": [-0.6375, 0.0125, -0.6375], "rotY": 90, "stage": 1},
+    {"kit": "farmland-kit", "model": "flower-bed", "pos": [0.7125, 0.02, -0.6375], "rotY": 90, "stage": 1},
+    {"kit": "farmland-kit", "model": "flower-bed", "pos": [0, 0, 0.05], "rotY": 0, "stage": 1},
+    {"kit": "farmland-kit", "model": "bandstand", "pos": [0, 0.03, 0.05], "rotY": 0, "stage": 2}
+  ]
+}

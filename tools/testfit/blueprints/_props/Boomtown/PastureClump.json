@@ -1,0 +1,25 @@
+{
+  "id": "PastureClump",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "exactly PastureQuarter at rotY 0, 90, 180 and 270 about the origin: a 12 x 12 field",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "pasture-grass", "pos": [0.71875, 0, 0.71875], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "trough", "pos": [0.90625, 0.0325, 1.19375], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "cow", "pos": [0.525, 0.02, 0.575], "rotY": 215, "stage": 0},
+    {"kit": "farmland-kit", "model": "pasture-grass", "pos": [0.71875, 0, -0.71875], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "trough", "pos": [1.19375, 0.0325, -0.90625], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "cow", "pos": [0.575, 0.02, -0.525], "rotY": 305, "stage": 0},
+    {"kit": "farmland-kit", "model": "pasture-grass", "pos": [-0.71875, 0, -0.71875], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "trough", "pos": [-0.90625, 0.0325, -1.19375], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "cow", "pos": [-0.525, 0.02, -0.575], "rotY": 35, "stage": 0},
+    {"kit": "farmland-kit", "model": "pasture-grass", "pos": [-0.71875, 0, 0.71875], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "trough", "pos": [-1.19375, 0.0325, 0.90625], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "cow", "pos": [-0.575, 0.02, 0.525], "rotY": 125, "stage": 0}
+  ]
+}

@@ -3,7 +3,7 @@
   "era": "Boomtown",
   "scale": 4.0,
   "footprint": [10, 5],
-  "note": "a shelterbelt: three cottonwoods in a row along X, trunks 2.5 studs apart, crowns merged",
+  "note": "a shelterbelt: three cottonwoods in a row along X, trunks 2.5 studs apart, crowns merged; skirt-only (INTERFACES wave 2.1)",
   "pieces": [
     {"kit": "farmland-kit", "model": "tree-cottonwood", "pos": [-0.625, 0, 0.0375], "rotY": 180, "stage": 0},
     {"kit": "farmland-kit", "model": "tree-cottonwood", "pos": [0, 0, -0.05], "rotY": 90, "stage": 0},
