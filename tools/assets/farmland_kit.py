@@ -45,7 +45,8 @@ Every other piece has its origin at its bottom centre, and fronts face -Z. green
 green-medium are whole lot floors (6 x 6 and 8 x 8), with the lot's street side on -Z.
 
 Colours are texels of city-kit-suburban's colormap.png (the four City Kits share one palette), and
-the turned soil of city-kit-industrial's, so the pieces sit in Boomtown's palette. They are tuned
+the turned soil of city-kit-industrial's, so the pieces sit in Boomtown's palette. The one exception
+is grass and foliage (GRASS, HEDGE, CROWN below), a leaf green that is in no colormap. They are tuned
 against the Boomtown plot base (173, 138, 93), a dusty tan that is not in the colormap: wheat takes
 the kit's saturated yellows over a darker stubble so it cannot sink into the ground, ploughed earth
 brown ridges over the dark end of the brick ramp, and the fence the kit's cream, because the
@@ -114,10 +115,17 @@ POLE_DARK = (131, 84, 66)
 YARD = (212, 147, 108)
 YARD_LIGHT = (220, 158, 119)
 # The kit's green ramp (roofs, trees, planters): the only green in any City Kit colormap, hue 144
-# to 165. LEAF is its lightest and yellowest step, so it is the grass.
+# to 165, a mint. It stays on the row crop, whose cabbages read well in it against brown soil.
 LEAF = (97, 203, 139)
-LEAF_MID = (76, 181, 129)
 LEAF_DARK = (61, 167, 122)
+# Grass and foliage: NOT colormap texels. Lawns, pasture and tree crowns in the mint above competed
+# with the kit's mint roofs, so these are a leaf green chosen for Boomtown (lead's ruling, wave
+# 2.3) and shared, value for value, with boomtown_extras_kit's home lawns. Change them in both.
+GRASS = (112, 168, 88)
+GRASS_LIGHT = (134, 186, 100)  # a lighter patch, a mown stripe
+HEDGE = (86, 146, 76)  # tussocks, hedges, shrubs, the leaves under a flower
+CROWN = (96, 156, 80)  # a cottonwood's crown
+CROWN_LIT = (122, 178, 92)  # its facets turned to the sky
 # Fence timber: the cream wall swatch and the step under it.
 CREAM = (253, 228, 199)
 TIMBER = (242, 191, 153)
@@ -345,17 +353,16 @@ TROUGH_AT = (0.75, 1.9)
 
 
 def make_pasture_grass() -> Part:
-    """Grazed grass, 5.35 studs square and 0.4 tall: a ragged-edged sward in the kit's lightest
-    green (the only green any City Kit colormap has is one mint-to-emerald ramp; this is its
-    yellowest step), three darker tussocks the cattle left, and a patch worn to earth round the
-    trough. A fallow cell then reads as pasture and not as bare plot."""
+    """Grazed grass, 5.35 studs square and 0.4 tall: a ragged-edged sward, three darker tussocks
+    the cattle left, and a patch worn to earth round the trough. A fallow cell then reads as
+    pasture and not as bare plot."""
     p = Part("pasture-grass")
     rng = random.Random(277)
-    plate(p, rounded_square(rng, PATCH / 2, 12, 12.0, 0.04), 0.0, 0.1, LEAF)
+    plate(p, rounded_square(rng, PATCH / 2, 12, 12.0, 0.04), 0.0, 0.1, GRASS)
     plate(p, blotch(rng, TROUGH_AT[0], TROUGH_AT[1] - 0.25, 1.3, 0.62, points=6), 0.02, 0.15, YARD)
     for x, z in ((-1.75, 1.3), (1.55, -1.5), (-0.7, -1.95)):
         top = 0.4 + rng.uniform(-0.06, 0.0)
-        tuft(p, x, z, 0.05, top, 0.3, 0.17, rng.uniform(0.0, math.pi / 2), LEAF_DARK, LEAF_MID)
+        tuft(p, x, z, 0.05, top, 0.3, 0.17, rng.uniform(0.0, math.pi / 2), HEDGE, HEDGE)
     return p
 
 
@@ -449,15 +456,15 @@ def cottonwood(name: str, size: float, fine: bool) -> Part:
     p = Part(name)
     lathe(p, [(0.44, 0.0), (0.32, 0.35), (0.22, 2.6)], [POLE_DARK, POLE], seg=5, phase=0.3)
     if fine:
-        crown(p, 1.9, 2.8, 2.2, 2.05, 251, colour=LEAF_MID, cut=-0.45, seg=8, rings=3, jitter=0.06)
-        crown(p, 3.3, 2.4, 1.45, 1.4, 257, at=(0.55, -0.35), colour=LEAF_MID, seg=6, rings=3, jitter=0.06)
-        crown(p, 2.5, 2.1, 1.2, 1.16, 263, at=(-1.15, 0.75), colour=LEAF_MID, seg=6, rings=3, jitter=0.06)
-        crown(p, 2.25, 1.9, 1.15, 1.1, 269, at=(-0.6, -1.15), colour=LEAF_MID, seg=6, rings=2, jitter=0.06)
+        crown(p, 1.9, 2.8, 2.2, 2.05, 251, colour=CROWN, cut=-0.45, seg=8, rings=3, jitter=0.06)
+        crown(p, 3.3, 2.4, 1.45, 1.4, 257, at=(0.55, -0.35), colour=CROWN, seg=6, rings=3, jitter=0.06)
+        crown(p, 2.5, 2.1, 1.2, 1.16, 263, at=(-1.15, 0.75), colour=CROWN, seg=6, rings=3, jitter=0.06)
+        crown(p, 2.25, 1.9, 1.15, 1.1, 269, at=(-0.6, -1.15), colour=CROWN, seg=6, rings=2, jitter=0.06)
     else:
-        crown(p, 1.9, 2.8, 2.3, 2.15, 251, colour=LEAF_MID, cut=-0.45, seg=7, rings=2, jitter=0.06)
-        crown(p, 3.3, 2.4, 1.55, 1.5, 257, at=(0.55, -0.35), colour=LEAF_MID, seg=5, rings=2, jitter=0.06)
-        crown(p, 2.5, 2.1, 1.3, 1.25, 263, at=(-1.15, 0.75), colour=LEAF_MID, seg=5, rings=2, jitter=0.06)
-    lit(p, LEAF_MID, LEAF)
+        crown(p, 1.9, 2.8, 2.3, 2.15, 251, colour=CROWN, cut=-0.45, seg=7, rings=2, jitter=0.06)
+        crown(p, 3.3, 2.4, 1.55, 1.5, 257, at=(0.55, -0.35), colour=CROWN, seg=5, rings=2, jitter=0.06)
+        crown(p, 2.5, 2.1, 1.3, 1.25, 263, at=(-1.15, 0.75), colour=CROWN, seg=5, rings=2, jitter=0.06)
+    lit(p, CROWN, CROWN_LIT)
     return scaled(p, size)
 
 
@@ -469,9 +476,8 @@ def make_tree_cottonwood() -> Part:
     centred on top read as a second tier; two domes of a height on opposite shoulders read as a
     heart, or a pair of ears, from the side that shows both.) Each dome has three rings of facets, which is what
     keeps its top from coming to a gem's point. The City Kits have no broadleaf tree (both suburban
-    trees are teardrop conifers, which read as cypress, not prairie) and no green outside the one
-    mint-to-emerald ramp, so the crown takes that ramp's two lightest steps: the lightest on the
-    facets turned to the sky, the kits' painted-light look."""
+    trees are teardrop conifers, which read as cypress, not prairie). The crown is two leaf greens,
+    the lighter on the facets turned to the sky: the kits' painted-light look."""
     return cottonwood("tree-cottonwood", 1.0, True)
 
 
@@ -636,12 +642,12 @@ def striped_lawn(p: Part, hx: float, hz: float, stripes: int, y: float) -> None:
     width = 2 * hx / stripes
     for i in range(stripes):
         x0, x1 = -hx + width * i, -hx + width * (i + 1)
-        green = LEAF if i % 2 else LEAF_MID
+        green = GRASS_LIGHT if i % 2 else GRASS
         face_out(p, [(x0, y, -hz), (x1, y, -hz), (x1, y, hz), (x0, y, hz)], green, (0.0, 1.0, 0.0))
         for z, out in ((-hz, -1.0), (hz, 1.0)):
-            face_out(p, [(x0, 0.0, z), (x1, 0.0, z), (x1, y, z), (x0, y, z)], LEAF_DARK, (0.0, 0.0, out))
+            face_out(p, [(x0, 0.0, z), (x1, 0.0, z), (x1, y, z), (x0, y, z)], HEDGE, (0.0, 0.0, out))
     for x, out in ((-hx, -1.0), (hx, 1.0)):
-        face_out(p, [(x, 0.0, -hz), (x, 0.0, hz), (x, y, hz), (x, y, -hz)], LEAF_DARK, (out, 0.0, 0.0))
+        face_out(p, [(x, 0.0, -hz), (x, 0.0, hz), (x, y, hz), (x, y, -hz)], HEDGE, (out, 0.0, 0.0))
 
 
 def kerb(p: Part, x0: float, x1: float, z0: float, z1: float) -> None:
@@ -726,15 +732,14 @@ def make_flower_bed() -> Part:
     for i, bloom in enumerate(blooms):
         x = -0.68 + 0.68 * (i % 3) + rng.uniform(-0.05, 0.05)
         z = (-0.24 if i < 3 else 0.24) + rng.uniform(-0.03, 0.03)
-        tuft(p, x, z, 0.15, 0.5 - rng.uniform(0.0, 0.06), 0.24, 0.17, rng.uniform(0.0, math.pi / 2), LEAF_DARK, bloom)
+        tuft(p, x, z, 0.15, 0.5 - rng.uniform(0.0, 0.06), 0.24, 0.17, rng.uniform(0.0, math.pi / 2), HEDGE, bloom)
     return p
 
 
 def make_shrub() -> Part:
-    """A clipped shrub, 1.1 studs across and 0.8 tall: one dark faceted dome, lighter on top."""
+    """A clipped shrub, 1.1 studs across and 0.8 tall: one dark faceted dome."""
     p = Part("shrub")
-    p.blob((0.0, 0.21, 0.0), (0.56, 0.6, 0.52), LEAF_DARK, seg=6, rings=2, jitter=0.08, seed=293)
-    lit(p, LEAF_DARK, LEAF_MID)
+    p.blob((0.0, 0.21, 0.0), (0.56, 0.6, 0.52), HEDGE, seg=6, rings=2, jitter=0.08, seed=293)
     return p
 
 
