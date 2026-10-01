@@ -43,7 +43,9 @@
 -- land that recedes, the next pad staked out, and a scaffold round each landmark bought. It reads
 -- two more things the server already replicates -- each building's Stage<n> child and the plot's
 -- Pads -- so the controller also watches those, but only a fabric plot re-syncs on them; every
--- other era behaves exactly as before.
+-- other era behaves exactly as before. Wave 2.0: the fabric's houses smoke under the same gates as
+-- the lot houses (`smokeFor`, near, `living`); the controller only passes the answer on with each
+-- sync, and Fabric owns the plumes because it alone knows which house stands when.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -498,6 +500,7 @@ local function newBuild(
 	local fabricData = Catalog.GetFabric(eraName)
 	local fabric: Fabric.Handle? = nil
 	local fabricFlocks: { Scatter.Flock } = {}
+	local ambient = config.ambient
 	-- A hand-edited config can hold a non-table here; that must turn the feature off, not error.
 	if type(fabricConfig) == "table" and type(fabricData) == "table" then
 		fabric = Fabric.new({
@@ -519,9 +522,10 @@ local function newBuild(
 			-- Bases rest on the ground plane (PlotService.buildWorld), a base's height below the top.
 			groundDrop = base.Size.Y,
 			padGraceSeconds = config.lod.refreshSeconds,
+			-- Wave 2.0: the fabric hangs the plumes on its own houses; the gates stay here.
+			smoke = if type(ambient) == "table" then ambient.smoke else nil,
 		})
 		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
-		local ambient = config.ambient
 		local birds = if ambient ~= nil then ambient.birds else nil
 		local zones: { Types.TreeZoneLayout } = layout.treeZones or {}
 		local wild = if type(fabricData) == "table" then fabricData.wild else nil
@@ -1119,19 +1123,34 @@ local function listHas(list: { string }?, value: string): boolean
 	return false
 end
 
--- Wave 2c chimney smoke: one plume on each placed house whose prop has a chimney offset, from the
--- smoke tier, in the eras the config names, and never on a low-end device (Ambient.Enabled).
-local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: number): ()
+-- The smoke config while chimneys may smoke on this plot at all: from the smoke tier, in the eras
+-- the config names, and never on a low-end device (Ambient.Enabled). Nil otherwise. Lot houses
+-- and (M12 wave 2.0) the city fabric's houses answer to the same gates, so they live here once;
+-- the caller adds the near plot and the detail policy's `living`.
+local function smokeFor(
+	build: Build,
+	config: Types.CityDressingConfig,
+	tier: number
+): Types.SmokeConfig?
 	local ambient = config.ambient
-	local smoke = if ambient ~= nil then ambient.smoke else nil
+	local smoke = if type(ambient) == "table" then ambient.smoke else nil
 	if
-		smoke == nil
+		type(smoke) ~= "table"
 		or not Ambient.Enabled()
 		or not listHas(smoke.eras, build.eraName)
 		-- A missing tier key is "never", like every other wave 2c key: the feature is simply off.
 		or tier < RoadGraph.BudgetValue(smoke.firstTier, math.huge)
-		or type(smoke.props) ~= "table"
 	then
+		return nil
+	end
+	return smoke
+end
+
+-- Wave 2c chimney smoke: one plume on each placed lot house whose prop has a chimney offset, while
+-- the smoke gates hold.
+local function syncSmoke(build: Build, config: Types.CityDressingConfig, tier: number): ()
+	local smoke = smokeFor(build, config, tier)
+	if smoke == nil or type(smoke.props) ~= "table" then
 		clearSmoke(build)
 		return
 	end
@@ -1423,7 +1442,8 @@ local function syncFabric(
 	ownedList: { string },
 	owned: { [string]: boolean },
 	animate: boolean,
-	policy: DetailPolicy
+	policy: DetailPolicy,
+	config: Types.CityDressingConfig
 ): ()
 	local stretches, joins, segments = RoadGraph.FabricNetwork(build.roads)
 	-- Plazas by the rule syncFiller places them by, not by what has spawned, so the woods clear the
@@ -1448,6 +1468,10 @@ local function syncFabric(
 		animate = animate,
 		wildShare = policy.wildShare,
 		upgradeShare = policy.upgradeShare,
+		-- Wave 2.0: exactly the gates lot smoke has in `sync` -- a near plot, `living`, and the
+		-- device, era and tier -- so a flip of any of them reaches the fabric's houses with this
+		-- pass and never needs a rebuild.
+		smoke = entry.near and policy.living and smokeFor(build, config, tier) ~= nil,
 	})
 end
 
@@ -1563,7 +1587,7 @@ local function sync(entry: PlotEntry): ()
 	local policy = detailPolicy(current.era, config)
 	local fabric = current.fabric
 	if fabric ~= nil then
-		syncFabric(entry, current, fabric, tier, ownedList, owned, animate, policy)
+		syncFabric(entry, current, fabric, tier, ownedList, owned, animate, policy, config)
 	end
 	if entry.near then
 		syncTrees(current, config, tier, folder, owned, policy)

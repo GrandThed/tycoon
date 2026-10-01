@@ -530,6 +530,135 @@
           "WalkerC",
           "WalkerD"
         ]
+      },
+      "fabric": {
+        "sizes": {
+          "small": [
+            6,
+            6
+          ],
+          "medium": [
+            9,
+            9
+          ],
+          "narrow": [
+            5,
+            8
+          ]
+        },
+        "pull": {
+          "radius": 26,
+          "tierTerm": 0.16,
+          "thresholds": [
+            0.9,
+            1.4,
+            1.7,
+            2.1
+          ],
+          "reach": 14,
+          "levelsOverTier": 1,
+          "smallMaxLevel": 3,
+          "rowLag": 0
+        },
+        "heightFloor": 4.6,
+        "districts": {
+          "suburb": {
+            "small": [
+              "ShedA",
+              "ShedB"
+            ],
+            "medium": [
+              "HouseA",
+              "HouseB",
+              "HouseC",
+              "HouseD",
+              "HouseE",
+              "HouseF"
+            ],
+            "narrow": [
+              "FabricShopNarrowA",
+              "FabricShopNarrowB",
+              "FabricShopNarrowC"
+            ]
+          },
+          "main": {
+            "narrow": [
+              "FabricShopNarrowA",
+              "FabricShopNarrowB",
+              "FabricShopNarrowC"
+            ]
+          },
+          "industry": {
+            "small": [
+              "ShedA",
+              "ShedB"
+            ]
+          },
+          "civic": {}
+        },
+        "sites": {
+          "small": "SiteSmall",
+          "medium": "SiteMedium",
+          "narrow": "SiteNarrow"
+        },
+        "wild": {
+          "clumps": [
+            "FieldClumpA",
+            "FieldClumpB",
+            "FieldClumpC"
+          ],
+          "quarters": [
+            "FieldQuarterA",
+            "FieldQuarterB",
+            "FieldQuarterC"
+          ],
+          "quarterRadius": 3.2,
+          "singleRadius": 1.0
+        },
+        "clear": {
+          "slot": 3,
+          "pad": 1.5,
+          "street": 6.5,
+          "parcel": 1.5
+        },
+        "construction": {
+          "minSeconds": 10,
+          "maxSeconds": 30,
+          "stagger": 0.4,
+          "stageSeconds": 1.2,
+          "riseSeconds": 0.6,
+          "revealSeconds": 1.5,
+          "maxPuffs": 4,
+          "spawnsPerFrame": 40
+        },
+        "marker": {
+          "prop": "LotSign",
+          "offset": [
+            5,
+            0,
+            -0.5
+          ],
+          "stakeColor": [
+            196,
+            160,
+            110
+          ],
+          "stringColor": [
+            240,
+            232,
+            210
+          ]
+        },
+        "padLook": {
+          "material": "Ground",
+          "color": [
+            138,
+            108,
+            74
+          ]
+        },
+        "reveal": "RevealScaffold",
+        "fallbackDistrict": "suburb"
       }
     },
     "Metropolis": {
@@ -857,6 +986,129 @@
           -0.36
         ]
       },
+      "fabricProps": {
+        "Village/FabricCampMedium": [
+          [
+            0.25,
+            0.16,
+            -1.75
+          ],
+          [
+            0.25,
+            0.16,
+            -1.75
+          ],
+          [
+            0.25,
+            0.16,
+            -1.75
+          ]
+        ],
+        "Village/FabricCampSmall": [
+          [
+            -0.37,
+            0.15,
+            -1.1
+          ],
+          [
+            -0.37,
+            0.15,
+            -1.1
+          ]
+        ],
+        "Village/FabricHomeMediumA": [
+          [],
+          [
+            2.75,
+            4.81,
+            1.88
+          ],
+          [
+            2.75,
+            4.81,
+            1.88
+          ]
+        ],
+        "Village/FabricHomeMediumB": [
+          [],
+          [],
+          [
+            -0.88,
+            7.94,
+            3.12
+          ]
+        ],
+        "Village/FabricHomeMediumC": [
+          [],
+          [],
+          [
+            2.0,
+            7.94,
+            2.5
+          ]
+        ],
+        "Village/FabricHomeMediumD": [
+          [],
+          [],
+          [
+            -1.75,
+            7.31,
+            1.62
+          ]
+        ],
+        "Village/FabricHomeNarrowA": [
+          [],
+          [],
+          [
+            0.0,
+            8.21,
+            0.0
+          ]
+        ],
+        "Village/FabricHomeNarrowB": [
+          [],
+          [],
+          [
+            0.5,
+            7.44,
+            0.75
+          ]
+        ],
+        "Village/FabricHomeNarrowC": [
+          [],
+          [],
+          [
+            0.0,
+            7.31,
+            1.8
+          ]
+        ],
+        "Village/FabricHomeSmallA": [
+          [],
+          [
+            -1.5,
+            5.44,
+            2.0
+          ]
+        ],
+        "Village/FabricHomeSmallB": [
+          [],
+          [
+            2.12,
+            4.81,
+            0.88
+          ]
+        ],
+        "Village/FabricHomeSmallC": [
+          [],
+          [
+            -1.95,
+            4.81,
+            2.0
+          ]
+        ]
+      },
+      "every": 1,
       "rate": 2,
       "lifetime": 3.5,
       "size": [

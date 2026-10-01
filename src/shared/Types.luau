@@ -659,6 +659,12 @@ export type SmokeConfig = {
 	lifetime: number,
 	size: { number }, -- [start, end] studs
 	color: { number }, -- RGB 0-255
+	-- M12 wave 2.0 (city fabric houses): "<Era>/<Prop>" -> the chimney top [x, y, z] in the prop
+	-- frame per shown stage + 1, where an entry that is not three numbers ([] by convention) is a
+	-- stage without a chimney; and `every`, which makes parcel i a smoke candidate when
+	-- (i − 1) % every == 0. Either absent = no fabric smoke.
+	fabricProps: { [string]: { { number } } }?,
+	every: number?,
 }
 export type BirdsConfig = {
 	firstTier: number,

@@ -5566,6 +5566,41 @@ No new client code. Carts are a `fabric.upgrades` layer whose slot is bought ear
   byte-identical: carts are placed last, in what is left.
 - The Village `parked` config block stays as it is and stays unused (the layout has no `parking`).
 
+### Client decisions (ui-engineer, 2026-10-01; the mirror copies the final-state ones)
+
+- **A valid offset is a list of exactly three finite numbers.** Only `"<Era>/<Prop>"` keys are
+  read for `fabricProps`; a bare prop name is not accepted (unlike `smoke.props`).
+- **A candidate must also be drawable:** well formed, with a footprint in `fabric.sizes`, and
+  `i ≤ max(floor(budget.parcels), 0)`.
+- **Plume position, plot-local,** with `a = radians(rotationY)`:
+  `X = x + ox·cos a + oz·sin a`, `Y = oy`, `Z = z − ox·sin a + oz·cos a`.
+- **"After the rise" means after the rise or pop animation ends** (about `riseSeconds` later).
+  An emitter attached while the house is still scaling would stay displaced.
+- **Fabric smoke does not need `smoke.props`;** lot smoke still does.
+- **City detail off thins the carts to `detail.treeShare`,** like every upgrade layer. The wave
+  2c parked carts were dropped entirely; the lead accepts the difference rather than fork the
+  generic layer code.
+- `Fabric.Context.smoke` carries the raw `ambient.smoke`; `Fabric.SyncInput.smoke` is the five
+  gates, computed by the controller (`smokeFor`).
+
+### Data rulings (economy-designer's report, 2026-10-01)
+
+- **Carts shipped:** 8 at full build (3 kerb, 5 yard), 0 / 2 / 2 / 4 / 8 by tier, drawn at scale
+  0.85 to 0.95 (the plan's `carts.scale`): at full size only one kerb gap survives.
+- **The clearing rule, as `check` enforces it.** A whole cart body cannot lie inside
+  `clear.street` or `clear.parcel` (a kerb body spans 2.9 to about 5.0 studs from the centreline).
+  So: the cart's *position* is inside its anchor's margin, and its *body* touches no wood disc
+  (`quarterRadius`, `singleRadius`) that the anchor alone would leave standing. Both depend only
+  on the anchor, so they hold in every ownership state.
+- **Chimneys today.** Measured from the kit GLBs: most homes only gain a chimney at their last
+  stage, and 93 of the 116 lots are narrow homes whose chimney arrives at stage 2 (level 4). So
+  with the models as uploaded, **no house smokes before tier 5** (13 plumes at full with `every`
+  1). The two camp props smoke from their fire pits (the lead keeps those entries).
+- **Open, Ben's call:** give `FabricHomeNarrowA/B/C` a chimney from stage 0. That is a blueprint
+  change and a re-upload, which would ride the Boomtown harvest paste; `every` is then re-tuned
+  to about 7 or 8 (4 plumes at tier 2, 13 to 16 at full). Until then `every` stays 1 and the
+  offsets describe the uploaded models exactly.
+
 ### Ownership (wave 2.0, disjoint)
 
 | Owner | Files |

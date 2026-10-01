@@ -21,6 +21,13 @@
 -- frame, nearest the camera first. A view keeps what it should show apart from what stands, and a
 -- queued job places whatever the view should show when its turn comes, so a goal that moved or went
 -- meanwhile is never placed stale. Removals and animated placements stay immediate.
+--
+-- Wave 2.0 (docs/INTERFACES.md "Chimney smoke on fabric houses"): every `ambient.smoke.every`-th
+-- parcel is a smoke candidate, and smokes while the house standing on it has a chimney top listed
+-- in `ambient.smoke.fabricProps` for its prop and stage. The plume is Ambient's, hung inside the
+-- house model once that stands at full size, so it goes with the house on every swap; the
+-- controller passes the wave 2c gates with each sync, and a gate that flips lights or puts out the
+-- plumes of the houses already standing.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -37,6 +44,7 @@ local Motion = require(uiFolder:WaitForChild("Motion"))
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Scatter = require(script.Parent:WaitForChild("Scatter"))
 local Dust = require(script.Parent:WaitForChild("Dust"))
+local Ambient = require(script.Parent:WaitForChild("Ambient"))
 
 -- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data").
 local SMALL = "small"
@@ -122,6 +130,12 @@ type ParcelView = {
 	model: Model?, -- what physically stands; a queued replacement leaves the old one up meanwhile
 	modelLook: Look?, -- the look `model` has
 	timer: thread?, -- a pending transition; it shows the newest goal when it fires
+	-- Wave 2.0: a smoke candidate (every `every`-th parcel inside the near budget); `model` is
+	-- still rising or popping, so its parts are not yet where a chimney top can be measured from;
+	-- and the plume inside `model`, which goes with it.
+	chimney: boolean,
+	moving: boolean,
+	plume: Attachment?,
 }
 
 -- One wild entry: the pieces that stand, and (review ruling) the ones the last sync wants, which
@@ -191,6 +205,9 @@ type Animation = {
 	kind: string, -- EFFECT_RISE | EFFECT_POP
 	seconds: number,
 	elapsed: number,
+	-- The parcel whose house this is (nil for an upgrade entry): its chimney smokes from the moment
+	-- the house stands at full size.
+	view: ParcelView?,
 }
 
 type Grid = { cells: { [number]: { number } }, mask: Mask }
@@ -216,6 +233,9 @@ export type Context = {
 	groundDrop: number,
 	-- lod.refreshSeconds: how long a pad's dressing outlives the pad.
 	padGraceSeconds: number,
+	-- Wave 2.0: CityDressing.json `ambient.smoke` as it stands (Fabric.new validates the fabric
+	-- keys); nil means no chimney ever smokes.
+	smoke: Types.SmokeConfig?,
 }
 
 export type SyncInput = {
@@ -233,6 +253,9 @@ export type SyncInput = {
 	animate: boolean,
 	wildShare: number, -- detailPolicy: the share of the wild layer kept, thinned by index
 	upgradeShare: number, -- detailPolicy: the share of every upgrade layer kept, thinned by index
+	-- Wave 2.0: every wave 2c smoke gate holds -- the device, a near plot, detailPolicy's `living`,
+	-- the era and the tier. The controller owns them, since lot smoke answers to the same ones.
+	smoke: boolean,
 }
 
 export type Handle = {
@@ -245,6 +268,11 @@ export type Handle = {
 	timing: Types.FabricConstructionConfig?,
 	maxPuffs: number?, -- concurrent puffs; nil means no cap
 	spawnsPerFrame: number?, -- unanimated spawns placed per frame; nil means no queue
+	-- Wave 2.0: the plume's look, nil when `fabricProps` or `every` is missing or invalid (fabric
+	-- smoke off); and this era's chimney tops in the parcel frame, by prop and then shown stage + 1
+	-- (a stage without a valid entry has none).
+	smoke: Types.SmokeConfig?,
+	chimneys: { [string]: { [number]: CFrame } },
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -289,6 +317,9 @@ export type Handle = {
 	queued: { [any]: boolean },
 	queueSorted: boolean,
 	lastTrigger: Vector3, -- plot-local; the last purchase or stage swap an animated sync saw
+	-- Wave 2.0: the smoke gates as the last sync saw them, for the houses a timer raises until the
+	-- next one.
+	smoking: boolean,
 	destroyed: boolean,
 }
 
@@ -513,6 +544,49 @@ local function validUpgradeItem(entry: any): boolean
 		return type(entry.stretch) == "string"
 	end
 	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
+end
+
+-- Wave 2.0: the fabric keys of `ambient.smoke`. `every` must be a whole number of 1 or more and
+-- `fabricProps` a table, or fabric smoke is off (nil). A chimney top is exactly three finite
+-- numbers; any other entry -- [] by convention -- is a stage without a chimney, as is a stage past
+-- the end of its list. Only this era's "<Era>/<Prop>" keys are kept, by prop name.
+local function validChimneys(
+	smoke: any,
+	eraName: string
+): ({ [string]: { [number]: CFrame } }?, number?)
+	if type(smoke) ~= "table" then
+		return nil, nil
+	end
+	local every, props = smoke.every, smoke.fabricProps
+	if type(props) ~= "table" or not finite(every) or every < 1 or every ~= math.floor(every) then
+		return nil, nil
+	end
+	local prefix = eraName .. "/"
+	local chimneys: { [string]: { [number]: CFrame } } = {}
+	for key, stages in props do
+		if
+			type(key) ~= "string"
+			or type(stages) ~= "table"
+			or string.sub(key, 1, #prefix) ~= prefix
+		then
+			continue
+		end
+		local tops: { [number]: CFrame } = {}
+		for index, top in stages do
+			if
+				type(index) == "number"
+				and type(top) == "table"
+				and #top == 3
+				and finite(top[1])
+				and finite(top[2])
+				and finite(top[3])
+			then
+				tops[index] = CFrame.new(top[1], top[2], top[3])
+			end
+		end
+		chimneys[string.sub(key, #prefix + 1)] = tops
+	end
+	return chimneys, every
 end
 
 -- ------------------------------------------------------------------ heights
@@ -811,6 +885,42 @@ local function applyScale(animation: Animation, scale: number): ()
 	end
 end
 
+-- Wave 2.0. Brings the parcel's plume in line with the house that stands on it: one plume while
+-- the gates hold, the parcel is a candidate, and the building standing there -- never a site, and
+-- never a house still rising or popping -- has a chimney top for its prop and stage; none
+-- otherwise. A plume left inside a model that was replaced went with that model, so only the
+-- reference is dropped. The plume stands at the parcel's frame times the chimney top; Ambient
+-- makes it rise upright and refuses it on a low-end device.
+local function refreshPlume(handle: Handle, view: ParcelView): ()
+	if not view.chimney then
+		return
+	end
+	local model = view.model
+	local look = view.modelLook
+	local smoke = handle.smoke
+	local top: CFrame? = nil
+	if
+		handle.smoking
+		and not handle.destroyed
+		and not view.moving
+		and model ~= nil
+		and look ~= nil
+		and look.kind == BUILDING
+	then
+		local tops = handle.chimneys[look.prop]
+		top = if tops ~= nil then tops[look.stage + 1] else nil
+	end
+	local plume = view.plume
+	if plume ~= nil and (top == nil or model == nil or not plume:IsDescendantOf(model)) then
+		plume:Destroy()
+		view.plume = nil
+		plume = nil
+	end
+	if plume == nil and top ~= nil and model ~= nil and smoke ~= nil then
+		view.plume = Ambient.AddSmoke(model, handle.context.plotFrame * view.frame * top, smoke)
+	end
+end
+
 local function step(dt: number): ()
 	for index = #animations, 1, -1 do
 		local animation = animations[index]
@@ -818,6 +928,12 @@ local function step(dt: number): ()
 		if animation.elapsed >= animation.seconds then
 			applyScale(animation, 1)
 			table.remove(animations, index)
+			-- The house stands at full size: its chimney may smoke now.
+			local view = animation.view
+			if view ~= nil and view.model == animation.model then
+				view.moving = false
+				refreshPlume(animation.owner, view)
+			end
 		else
 			applyScale(animation, scaleAt(animation.kind, animation.elapsed / animation.seconds))
 		end
@@ -830,14 +946,22 @@ local function step(dt: number): ()
 end
 
 -- Scales a freshly spawned model about its bottom-centre over riseSeconds (shortened by reduced
--- motion), on the one Heartbeat every fabric shares while anything moves.
-local function startAnimation(handle: Handle, model: Model, pivot: CFrame, kind: string): ()
+-- motion), on the one Heartbeat every fabric shares while anything moves. `view` is the parcel
+-- whose house the model is, if any. Returns whether anything moves: with no time to move in, the
+-- model simply stands.
+local function startAnimation(
+	handle: Handle,
+	model: Model,
+	pivot: CFrame,
+	kind: string,
+	view: ParcelView?
+): boolean
 	local timing = handle.timing
 	local seconds = if timing ~= nil
 		then Motion.Seconds(math.max(numberOr(timing.riseSeconds, 0), 0))
 		else 0
 	if seconds <= 0 then
-		return
+		return false
 	end
 	local animation: Animation = {
 		owner = handle,
@@ -849,6 +973,7 @@ local function startAnimation(handle: Handle, model: Model, pivot: CFrame, kind:
 		kind = kind,
 		seconds = seconds,
 		elapsed = 0,
+		view = view,
 	}
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("BasePart") then
@@ -862,6 +987,7 @@ local function startAnimation(handle: Handle, model: Model, pivot: CFrame, kind:
 	if heartbeat == nil then
 		heartbeat = RunService.Heartbeat:Connect(step)
 	end
+	return true
 end
 
 -- Drops the animations of one model (about to be destroyed) or of a whole handle.
@@ -1078,6 +1204,9 @@ local function applyParcelModel(handle: Handle, view: ParcelView): ()
 		stopAnimations(old, nil)
 		old:Destroy()
 	end
+	-- Placed at full size, so a chimney smokes at once.
+	view.moving = false
+	refreshPlume(handle, view)
 end
 
 -- Queues the model the parcel should show when what stands differs (also the retry for a template
@@ -1095,7 +1224,8 @@ end
 -- Puts `look` on the parcel in place of whatever stood there. Without an effect the spawn waits in
 -- the queue and what stood stays up until then; a removal and an animated placement are immediate.
 -- A puff marks only something that actually appeared or went, so a missing template stays silent in
--- every sense.
+-- every sense. Wave 2.0: the plume follows what stands; a house that rises or pops gets its own
+-- when the movement ends (`step`).
 local function place(handle: Handle, view: ParcelView, look: Look?, effect: string): ()
 	view.shown = look
 	if effect == EFFECT_NONE and look ~= nil then
@@ -1105,6 +1235,7 @@ local function place(handle: Handle, view: ParcelView, look: Look?, effect: stri
 	local old = view.model
 	view.model = nil
 	view.modelLook = nil
+	view.moving = false
 	if old ~= nil then
 		stopAnimations(old, nil)
 		old:Destroy()
@@ -1114,13 +1245,14 @@ local function place(handle: Handle, view: ParcelView, look: Look?, effect: stri
 		else nil
 	view.model = model
 	view.modelLook = if model ~= nil then look else nil
-	if effect == EFFECT_NONE or (model == nil and old == nil) then
-		return
+	if effect ~= EFFECT_NONE and (model ~= nil or old ~= nil) then
+		if model ~= nil and (effect == EFFECT_RISE or effect == EFFECT_POP) then
+			view.moving =
+				startAnimation(handle, model, handle.context.plotFrame * view.frame, effect, view)
+		end
+		puffAround(handle, view.rect)
 	end
-	if model ~= nil and (effect == EFFECT_RISE or effect == EFFECT_POP) then
-		startAnimation(handle, model, handle.context.plotFrame * view.frame, effect)
-	end
-	puffAround(handle, view.rect)
+	refreshPlume(handle, view)
 end
 
 local function cancelTimer(view: ParcelView): ()
@@ -1719,7 +1851,7 @@ local function placeUpgrade(
 		return
 	end
 	if effect == EFFECT_POP then
-		startAnimation(handle, model, handle.context.plotFrame * view.frame, EFFECT_POP)
+		startAnimation(handle, model, handle.context.plotFrame * view.frame, EFFECT_POP, nil)
 	end
 	if dust then
 		puffAt(handle, view.item.x, 0, view.item.z)
@@ -2181,6 +2313,7 @@ function Fabric.new(context: Context): Handle
 	local timing = if type(config.construction) == "table" then config.construction else nil
 	local maxPuffs = if timing ~= nil then timing.maxPuffs else nil
 	local spawnsPerFrame = if timing ~= nil then timing.spawnsPerFrame else nil
+	local chimneys, smokeEvery = validChimneys(context.smoke, context.eraName)
 	local handle: Handle = {
 		context = context,
 		pull = validPull(config.pull),
@@ -2192,6 +2325,8 @@ function Fabric.new(context: Context): Handle
 		spawnsPerFrame = if finite(spawnsPerFrame) and (spawnsPerFrame :: number) >= 1
 			then math.floor(spawnsPerFrame :: number)
 			else nil,
+		smoke = if chimneys ~= nil then context.smoke else nil,
+		chimneys = chimneys or {},
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
@@ -2227,6 +2362,7 @@ function Fabric.new(context: Context): Handle
 		queued = {},
 		queueSorted = true,
 		lastTrigger = context.entrance or Vector3.zero,
+		smoking = false,
 		destroyed = false,
 	}
 
@@ -2337,6 +2473,11 @@ function Fabric.new(context: Context): Handle
 			model = nil,
 			modelLook = nil,
 			timer = nil,
+			-- Candidates are fixed by index alone, inside the near budget, so one house changing
+			-- never moves another's plume.
+			chimney = smokeEvery ~= nil and (index - 1) % smokeEvery == 0 and index <= parcelBudget,
+			moving = false,
+			plume = nil,
 		})
 	end
 	local shortest = if timing ~= nil then math.max(numberOr(timing.minSeconds, 0), 0) else 0
@@ -2439,6 +2580,8 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	-- Every pass queues what it still needs from scratch, so near/far, detail and goal changes
 	-- since the last one never leave a stale spawn behind.
 	clearQueue(handle)
+	-- Before anything is placed: every house this pass or a later timer raises reads the gates.
+	handle.smoking = input.smoke
 	-- A purchase or a stage swap is where a ripple starts; the first sync of a build sees every
 	-- slot as new, but it is never animated.
 	local triggers: { Vector3 } = {}
@@ -2510,6 +2653,11 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	else
 		settleParcels(handle, input.near)
 	end
+	-- A gate that flipped (the smoke tier reached, the plot come near or gone far, City detail
+	-- switched) lights or puts out the plumes of the houses that stand, with no rebuild.
+	for _, view in handle.parcels do
+		refreshPlume(handle, view)
+	end
 	syncWild(handle, input, previous)
 	syncUpgrades(handle, input, rippling, fresh, triggers)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
@@ -2579,6 +2727,9 @@ function Fabric.Destroy(handle: Handle): ()
 		end
 		view.modelLook = nil
 		view.shown = nil
+		-- The plume went with the house it was in.
+		view.plume = nil
+		view.moving = false
 	end
 	for _, view in handle.wild do
 		local whole = view.whole

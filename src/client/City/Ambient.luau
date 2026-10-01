@@ -4,7 +4,9 @@
 -- are skipped entirely on low-end devices (Theme.lowEndDevice; phones keep them, spec section 10).
 --
 -- Smoke is one ParticleEmitter on an Attachment inside the house it rises from, so it goes when
--- the house goes and costs no Part and no Heartbeat. Birds are anchored, sealed prop clones moved
+-- the house goes and costs no Part and no Heartbeat. The controller hangs it on lot houses and
+-- (M12 wave 2.0) Fabric on the city fabric's houses, both through AddSmoke, so every plume in the
+-- game looks alike. Birds are anchored, sealed prop clones moved
 -- by one Heartbeat for the whole map, alive only while a bird exists; like Traffic it writes every
 -- CFrame into pre-allocated arrays and makes a single BulkMoveTo.
 --
