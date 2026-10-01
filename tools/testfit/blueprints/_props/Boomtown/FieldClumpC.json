@@ -1,0 +1,25 @@
+{
+  "id": "FieldClumpC",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "exactly FieldQuarterC at rotY 0, 90, 180 and 270 about the origin: a 12 x 12 field",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "field-plough", "pos": [0.71875, 0, 0.71875], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [0.975, 0.0125, 1.0375], "rotY": 25, "stage": 0},
+    {"kit": "farmland-kit", "model": "haycock", "pos": [0.3875, 0.025, 0.625], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-plough", "pos": [0.71875, 0, -0.71875], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [1.0375, 0.0125, -0.975], "rotY": 115, "stage": 0},
+    {"kit": "farmland-kit", "model": "haycock", "pos": [0.625, 0.025, -0.3875], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-plough", "pos": [-0.71875, 0, -0.71875], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [-0.975, 0.0125, -1.0375], "rotY": 205, "stage": 0},
+    {"kit": "farmland-kit", "model": "haycock", "pos": [-0.3875, 0.025, -0.625], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-plough", "pos": [-0.71875, 0, 0.71875], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [-1.0375, 0.0125, 0.975], "rotY": 295, "stage": 0},
+    {"kit": "farmland-kit", "model": "haycock", "pos": [-0.625, 0.025, 0.3875], "rotY": 270, "stage": 0}
+  ]
+}

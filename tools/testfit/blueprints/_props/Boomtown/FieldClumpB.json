@@ -1,0 +1,17 @@
+{
+  "id": "FieldClumpB",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "exactly FieldQuarterB at rotY 0, 90, 180 and 270 about the origin: a 12 x 12 field",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "field-rowcrop", "pos": [0.71875, 0, 0.71875], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-rowcrop", "pos": [0.71875, 0, -0.71875], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-rowcrop", "pos": [-0.71875, 0, -0.71875], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 180, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-rowcrop", "pos": [-0.71875, 0, 0.71875], "rotY": 270, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 270, "stage": 0}
+  ]
+}

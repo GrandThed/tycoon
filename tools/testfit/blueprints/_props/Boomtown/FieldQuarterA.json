@@ -1,0 +1,11 @@
+{
+  "id": "FieldQuarterA",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "one 6 x 6 quarter-field in the local (+X, +Z) quadrant, inner corner at the origin, fence on the two outer edges (INTERFACES 'Fabric data'); farmland-kit is 1 unit = 4 studs, so scale is 4.0",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "field-wheat", "pos": [0.71875, 0, 0.71875], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "field-fence", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

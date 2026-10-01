@@ -1,0 +1,9 @@
+{
+  "id": "TelegraphPole",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [1, 1],
+  "pieces": [
+    {"kit": "farmland-kit", "model": "telegraph-pole", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "Windpump",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "farmland-kit", "model": "windpump", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

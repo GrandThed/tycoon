@@ -1,0 +1,17 @@
+{
+  "id": "SiteNarrow",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [5, 8],
+  "note": "a shop shell on the shops' own building line (front wall 0.9 back from the street edge), so a row of sites and shops reads as one terrace",
+  "pieces": [
+    {"kit": "boomtown-extras-kit", "model": "site-ground-narrow", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "frame-shop", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "scaffold-bay", "pos": [0, 0, -0.8725], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "sold-stake", "pos": [0.275, 0, -0.875], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "cement-mixer", "pos": [0.225, 0.0625, 0.075], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "sawhorse", "pos": [-0.225, 0.0625, -0.3], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "lumber-stack", "pos": [0.175, 0, 0.8], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "brick-stack", "pos": [-0.4, 0, 0.65], "rotY": 0, "stage": 0}
+  ]
+}

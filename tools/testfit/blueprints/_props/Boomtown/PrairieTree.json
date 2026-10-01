@@ -1,0 +1,10 @@
+{
+  "id": "PrairieTree",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [5, 5],
+  "note": "a generated cottonwood: the suburban kit's trees are conifer-shaped. Clearing is by the trunk; the crown overhangs",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "tree-cottonwood", "pos": [0, 0, 0], "rotY": 90, "stage": 0}
+  ]
+}

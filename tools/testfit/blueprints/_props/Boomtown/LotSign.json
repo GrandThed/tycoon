@@ -1,0 +1,9 @@
+{
+  "id": "LotSign",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [2, 2],
+  "pieces": [
+    {"kit": "boomtown-extras-kit", "model": "lot-sign", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

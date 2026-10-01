@@ -1,0 +1,19 @@
+{
+  "id": "Farmstead",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [12, 12],
+  "note": "skirt landmark: barn doors face -Z; the pen is at the front-right (+X, -Z) corner, the silo behind it",
+  "pieces": [
+    {"kit": "farmland-kit", "model": "yard-ground", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "barn", "pos": [-0.425, 0, 0.225], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "silo", "pos": [1, 0, 0.85], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "fence-run", "pos": [0.9, 0, -1.4], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "fence-run", "pos": [1.4, 0, -0.9], "rotY": 90, "stage": 0},
+    {"kit": "farmland-kit", "model": "fence-run", "pos": [0.9, 0, -0.4], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [1.1, 0.0125, -1.075], "rotY": 75, "stage": 0},
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [0.75, 0.0125, -0.8], "rotY": 10, "stage": 0},
+    {"kit": "farmland-kit", "model": "haycock", "pos": [1.15, 0.0125, -0.65], "rotY": 0, "stage": 0},
+    {"kit": "farmland-kit", "model": "telegraph-pole", "pos": [-1.25, 0, -1.275], "rotY": 90, "stage": 0}
+  ]
+}

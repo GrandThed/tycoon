@@ -1,0 +1,9 @@
+{
+  "id": "HayBale",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [3, 3],
+  "pieces": [
+    {"kit": "farmland-kit", "model": "bale-round", "pos": [0, 0, 0], "rotY": 20, "stage": 0}
+  ]
+}
