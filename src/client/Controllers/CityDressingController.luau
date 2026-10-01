@@ -526,7 +526,7 @@ local function newBuild(
 			smoke = if type(ambient) == "table" then ambient.smoke else nil,
 		})
 		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
-		local birds = if ambient ~= nil then ambient.birds else nil
+		local birds = if type(ambient) == "table" then ambient.birds else nil
 		local zones: { Types.TreeZoneLayout } = layout.treeZones or {}
 		local wild = if type(fabricData) == "table" then fabricData.wild else nil
 		if birds ~= nil and #zones == 0 and type(wild) == "table" and #wild > 0 then
@@ -1300,7 +1300,7 @@ end
 
 local function birdsConfig(config: Types.CityDressingConfig): Types.BirdsConfig?
 	local ambient = config.ambient
-	return if ambient ~= nil then ambient.birds else nil
+	return if type(ambient) == "table" then ambient.birds else nil
 end
 
 -- The flocks a plot can show: its tree-zone flocks, or (M12) where the layout has no tree zones

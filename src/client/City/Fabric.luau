@@ -898,25 +898,31 @@ local function refreshPlume(handle: Handle, view: ParcelView): ()
 	local model = view.model
 	local look = view.modelLook
 	local smoke = handle.smoke
-	local top: CFrame? = nil
-	if
-		handle.smoking
+	local lit = handle.smoking
 		and not handle.destroyed
 		and not view.moving
 		and model ~= nil
 		and look ~= nil
 		and look.kind == BUILDING
-	then
-		local tops = handle.chimneys[look.prop]
-		top = if tops ~= nil then tops[look.stage + 1] else nil
-	end
 	local plume = view.plume
-	if plume ~= nil and (top == nil or model == nil or not plume:IsDescendantOf(model)) then
+	if plume ~= nil and (not lit or model == nil or not plume:IsDescendantOf(model)) then
 		plume:Destroy()
 		view.plume = nil
 		plume = nil
 	end
-	if plume == nil and top ~= nil and model ~= nil and smoke ~= nil then
+	-- A plume already inside the house that stands is the right one: a model never changes stage.
+	if plume ~= nil or not lit or model == nil or look == nil or smoke == nil then
+		return
+	end
+	local tops = handle.chimneys[look.prop]
+	if tops == nil then
+		return
+	end
+	-- The stage that stands, not the one asked for: a template short of a stage gives the clone
+	-- its highest one below, and that roof has its own chimney top or none.
+	local standing = PropFactory.ChosenStage(handle.context.eraName, look.prop, look.stage)
+	local top = if standing ~= nil then tops[standing + 1] else nil
+	if top ~= nil then
 		view.plume = Ambient.AddSmoke(model, handle.context.plotFrame * view.frame * top, smoke)
 	end
 end

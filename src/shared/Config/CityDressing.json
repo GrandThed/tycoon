@@ -40,7 +40,8 @@
     "parcels": 140,
     "wild": 110,
     "wildFar": 45,
-    "parcelsFar": 60
+    "parcelsFar": 60,
+    "plumes": 20
   },
   "trees": {
     "stages": 4,

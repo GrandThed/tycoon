@@ -5601,6 +5601,28 @@ No new client code. Carts are a `fabric.upgrades` layer whose slot is bought ear
   to about 7 or 8 (4 plumes at tier 2, 13 to 16 at full). Until then `every` stays 1 and the
   offsets describe the uploaded models exactly.
 
+### Review rulings (2026-10-01, wave 2.0 review: 0 Critical, 1 Major, 5 Minor)
+
+- **Major, accepted with a caveat: this branch's Boomtown is not today's Boomtown.**
+  `eras.Boomtown.road.width` 6 and `pedestrians.offset` 3.35 are live for the current layout,
+  whose uploaded path meshes are still 8 wide: lanes, lamps, signals and walkers move inward and
+  `py tools/paths/bake.py --era Boomtown --list` is red. The lead keeps the values, because both
+  layout candidates are generated against them and the re-bake lands with the chosen layout in
+  wave 2.2. Until then **nobody judges Boomtown in Studio on `m12-boomtown`**, and the branch does
+  not merge to `main`. The Village fix is separable: commits up to `6573b0c` plus the review fixes
+  carry no Boomtown change and can be cherry-picked to `main` on their own if Ben wants it sooner.
+- **The plume uses the stage that actually stands.** If a template lacks the wanted stage,
+  `PropFactory` falls back to a lower one; the chimney top is then that stage's entry, or none.
+  With every stage present the final state is unchanged.
+- **Carts: at least `require.carts` (6), within the layer's `budget` (12).** The "6 to 10" above
+  is the laid count today (8), not a checked ceiling.
+- **`budget.plumes` (20) is a tools-only gate:** `py tools/cityfabric.py timeline <Era>` fails
+  when any tier or the full build shows more fabric plumes. `every` is the only limiter in the
+  client, so a chimney change must retune `every` in the same commit.
+- `ambient` is type-guarded everywhere it is read.
+- **Noted for wave 2.2:** with the marker exempt from its own slot's path, a marker can stand on
+  the freshly drawn path for the pad's 0.5 s grace after a purchase.
+
 ### Ownership (wave 2.0, disjoint)
 
 | Owner | Files |
