@@ -1,0 +1,10 @@
+{
+  "id": "FabricWorksSmallA",
+  "era": "Boomtown",
+  "scale": 2.8,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "boomtown-extras-kit", "model": "works-a-yard", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "works-a-shop", "pos": [0, 0, 0], "rotY": 0, "stage": 1}
+  ]
+}

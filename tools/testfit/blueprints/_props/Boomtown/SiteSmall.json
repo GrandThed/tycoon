@@ -12,7 +12,7 @@
     {"kit": "boomtown-extras-kit", "model": "barrier", "pos": [0.4125, 0, -0.6], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "cone", "pos": [0.0625, 0, -0.5625], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "cone", "pos": [0.675, 0, -0.4], "rotY": 0, "stage": 0},
-    {"kit": "boomtown-extras-kit", "model": "cement-mixer", "pos": [0.4, 0, -0.325], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "cement-mixer", "pos": [0.4, 0, -0.3], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "brick-stack", "pos": [0.025, 0, -0.35], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "lumber-stack", "pos": [0.575, 0, 0.35], "rotY": 90, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "sawhorse", "pos": [0.2875, 0, 0.4], "rotY": 90, "stage": 0}

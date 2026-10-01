@@ -2,8 +2,8 @@
   "id": "RevealScaffold",
   "era": "Boomtown",
   "scale": 4.0,
-  "footprint": [9, 9],
-  "note": "one generated piece: a hollow pipe-scaffold ring inside +-4.48 studs, so the client's uniform footprint / 9 scale wraps any slot and the landmark rising inside stays in view",
+  "footprint": [10, 10],
+  "note": "one generated piece: a pipe-scaffold ring that stands wholly outside a 9 x 9 slot (nothing nearer the centre than 4.52, nothing beyond 4.97), so a landmark that fills its footprint touches none of it; the client still scales it by max(footprint) / 9",
   "pieces": [
     {"kit": "boomtown-extras-kit", "model": "scaffold-ring", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
   ]

@@ -1,0 +1,27 @@
+{
+  "id": "FabricHomeSmallE",
+  "era": "Boomtown",
+  "scale": 2.8,
+  "footprint": [6, 6],
+  "note": "the home-* pieces are authored in the kit house's frame: keep them at the house's pos",
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-h", "pos": [0, 0, 0.3214], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "home-e-dress", "pos": [0, 0, 0.3214], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0, -0.2786], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0, -0.6786], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0, -0.8357], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0.0304, -0.2786], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0.0304, -0.6786], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [0, 0.0304, -0.8357], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "lawn-small", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-0.8036, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-0.3571, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [0.3571, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [0.8036, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "mailbox", "pos": [0.2143, 0, -0.875], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.75, 0, -0.4643], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "flower-bed", "pos": [-0.4286, 0, -0.2214], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "hedge", "pos": [0.9107, 0, -0.0357], "rotY": 90, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "hedge", "pos": [0.9107, 0, 0.4643], "rotY": 90, "stage": 1}
+  ]
+}
