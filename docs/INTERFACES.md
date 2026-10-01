@@ -5481,3 +5481,167 @@ shape: `{ x, z, rotationY, scale, variant, anchor: "stretch" | "parcel", stretch
   (Village: 40) per frame across all plots: nearest plot first, and nearest to the camera first
   within a plot. Destroys stay immediate. Final states are unchanged,
   so the mirror needs no change.
+
+# M12 wave 2 — Boomtown (2026-10-01)
+
+Village is merged to `main` (Ben: "the village looks amazing"). Wave 2 is built in the worktree
+`C:\Users\benja\Desktop\tycoon-m12` on branch `m12-boomtown`; `assets/` there is a junction to
+the main checkout's `assets/`. Everything in "M12 contracts" above still holds and the code stays
+era-generic.
+
+## Wave 2.0 — Village chimney smoke and carts (regression from wave 1)
+
+Village lost its wave 2c chimney smoke and parked carts: they hung off `lots` and `parking`, which
+the fabric replaced. Bushes and hedges are **not** brought back as a separate layer: the Plant
+Flowers layer and the houses' own garnish carry the greenery (lead's call, reported to Ben).
+
+Client-only, as always: no server, remote, profile or economy change.
+
+### Chimney smoke on fabric houses
+
+**Config.** `ambient.smoke` gains two optional keys:
+
+```json
+"fabricProps": { "Village/FabricHomeMediumA": [[], [1.2, 5.9, 0.4], [1.2, 9.6, 0.4]] },
+"every": 6
+```
+
+- `fabricProps` maps `"<Era>/<Prop>"` to a list indexed by **shown stage + 1**. Each entry is the
+  chimney top `[x, y, z]` in the prop frame: studs, origin at the parcel centre on the ground,
+  front −Z, exactly the frame `ambient.smoke.props` already uses for lot houses.
+  - An entry that is not three finite numbers (`[]` by convention) means that stage has no
+    chimney. A stage past the end of the list has none either.
+- `every` is a whole number ≥ 1. Missing or invalid `fabricProps` or `every` turns fabric smoke
+  off, silently.
+
+**Rule (final state, normative; the mirror copies it).**
+- Fabric smoke is active under exactly the wave 2c gates: `Ambient.Enabled()`, a near plot, the
+  detail policy's `living` true, the era listed in `smoke.eras`, and `tier ≥ smoke.firstTier`.
+- **Candidates** are the parcels whose 1-based index `i` satisfies `(i − 1) % every == 0` and
+  `i ≤ budget.parcels`. Nothing else is ever a candidate, so one house changing never moves
+  another's plume.
+- A candidate **smokes** iff it shows a building (level ≥ 2) and
+  `fabricProps[era .. "/" .. prop][stage + 1]` is a valid offset, for the prop and stage given by
+  "What a parcel shows".
+- The plume stands at the parcel's frame times the offset: pivot (x, 0, z), turned `rotationY`,
+  then `CFrame.new(ox, oy, oz)`. It rises upright, as wave 2c plumes do (`Ambient.AddSmoke`).
+- `rate`, `lifetime`, `size` and `color` are shared with the lot plumes.
+
+**Lifecycle (client only, never mirrored).**
+- A plume appears when the stage that carries it is actually shown: after the rise out of the
+  site, or after the stage pop. A building site never smokes.
+- When the shown prop or stage changes, the old plume goes and the new stage's plume (if any)
+  is placed.
+- A plume lives inside the house model, so it goes when the house does. Far plots, detail off and
+  low-end devices have none; turning those back on restores them without a rebuild.
+- Unanimated syncs place the final state.
+
+**Mirror.** `tools/cityfabric.py` returns the final-state plume positions, and
+`tools/testfit/plotrender.py` draws each as a scene-only puff (a few pale spheres rising from the
+chimney), so a render shows which houses smoke.
+
+### Parked carts: one more upgrade layer
+
+No new client code. Carts are a `fabric.upgrades` layer whose slot is bought early:
+
+```json
+"carts": { "requiresSlot": "farmPlot", "props": ["CartParked"], "tierOffset": 0, "stagger": 0.3, "budget": 12 }
+```
+
+- **Data:** `upgrades.carts` in `Config/Fabric/Village.json`, laid by `fabric.py` from a new
+  `carts` block in `tools/fabric/Village.plan.json`. **6 to 10 carts** at full build
+  (`require.carts`), in two kinds:
+  - *kerb carts*, stretch-anchored: beside a street, parallel to it, in frontage nothing else took;
+  - *yard carts*, parcel-anchored: beside a farm, market or craft-district lot, so the cart arrives
+    with its building.
+- **Clearances** (`fabric.py check` enforces them, using `CartParked`'s harvested extents):
+  - the body keeps the walker reach from every street centreline (2.9) and spur (2.8);
+  - at least 0.5 from every parcel, landmark extent, pad, marker, lamp, the Sign, and every entry
+    of the other layers; at least 1 from the plot edge;
+  - at least 12 studs between two carts, and carts on at least three different streets;
+  - every cart stands on land the clearing mask has always cleared by the time its anchor is
+    developed (inside `clear.street` of its stretch, or inside `clear.parcel` of its parcel), so
+    no cart ever stands in the woods.
+- **Nothing else moves.** `parcels`, `wild` and the `trees`, `flowers` and `banners` lists stay
+  byte-identical: carts are placed last, in what is left.
+- The Village `parked` config block stays as it is and stays unused (the layout has no `parking`).
+
+### Ownership (wave 2.0, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `CityDressing.json` `eras.Village.fabric.upgrades.carts` |
+| economy-designer | `tools/fabric.py` (carts), `tools/fabric/Village.plan.json`, `Config/Fabric/Village.json` (generated), `CityDressing.json` **only** `ambient.smoke.fabricProps` and `ambient.smoke.every` |
+| ui-engineer | `src/client/City/Fabric.luau`, `src/client/Controllers/CityDressingController.luau`, `src/client/City/Ambient.luau`, `src/shared/Types.luau` (`SmokeConfig.fabricProps`, `SmokeConfig.every`, both optional) |
+| mirror-engineer (after both land) | `tools/cityfabric.py`, `tools/testfit/plotrender.py`; renders `assets/testfit/out/Village/m12f_*` |
+
+### Done when (wave 2.0)
+
+- A near Village at tier ≥ 2 shows plumes on about one house in six that has a chimney, and
+  carts beside the lanes and the farm and market lots once the farm is bought.
+- `py tools/fabric.py check Village`, `py tools/cityfabric.py selftest` and
+  `py tools/streetplan.py Village` are green; stylua, selene, luau-lsp and `rojo build` are clean.
+- Before and after renders exist for Ben: `m12f_before_*.png`, `m12f_after_*.png`.
+
+## Wave 2.1 — Boomtown growth-layout mock (a gate for Ben, not yet a contract)
+
+Ben judges looks only on renders, and a mock comes before contracts. This wave produces **two
+candidate street plans** for Boomtown, each as a real layout run through the real generator and
+the real mirror, so the pick becomes wave 2.2's starting point with nothing thrown away.
+
+- **Candidate "grid":** a period-correct 1950s Main Street grid. Straight streets at right
+  angles, Main Street on the entrance axis, numbered side streets.
+- **Candidate "organic":** the Village treatment. A Main Street that bends, side streets at
+  natural angles, curving suburban closes.
+
+### What both candidates share
+
+- **Untouched:** the 24 slot ids, their order, config and models (`Config/Eras/2_Boomtown.json`
+  is frozen). Only positions, rotations, spurs, streets and client dressing change.
+- **The growth rules of mock B** (`docs/CITY_GROWTH.md` §2.5): one heart at the entrance, slot k
+  roughly k-th in street distance from the entrance, frontage reserved between landmarks, the plan
+  a **tree** (roads grow with buildings as a shortest-path tree, so every side street is a dead end
+  that a landmark's path grows).
+- **Seed:** Main Street's mouth at the entrance. Shops fill the gaps between the storefront
+  landmarks until Main Street is one continuous frontage; suburbs spread down the side streets;
+  industry gathers by the service lanes; farmland covers everything else and retreats.
+- **"Lower, wider"** (Ben, era-kits ruling): filler never rises above its landmark, and only the
+  Fire Station, Radio Station and Clock Tower are tall.
+- **Districts** (a key per slot in the layout; the layout owner may move a slot between districts
+  and says why): `main` (Main Street shops), `suburb` (houses), `industry` (sheds, yards),
+  `civic` (greens, small parks). Boomtown has no house landmark, so the landmarks that stand out on
+  the side streets carry `suburb`.
+- **Street upgrades stay street upgrades:** `paveMainStreet`, `streetlampRow` and `trafficLights`
+  are `streetOnly`; their pads stand beside the street on ground nothing else uses (the Village
+  `dirtRoad` pattern: a one-point spur, no district).
+- **City-changer candidates are not decided:** `fireHydrant`, `billboardSign`, `neonDistrict` and
+  `busLine` keep their models and get ordinary positions in the mock. Ben decides after the gate.
+- **Wild land is farmland:** crop fields in a patchwork, hay, fences, telegraph poles, and a
+  farmstead (barn and silo) in the landscape band past the plot edge. A field is a fabric
+  `clump`: four quarter-fields of one design, cleared quarter by quarter as the town spreads.
+- **Density:** Ben wants the terrain filled ("waaay more houses"; 116 on Village was "perfecto").
+  Frontage is the bottleneck, not land: use terraced `narrow` shop lots on Main Street, back-row
+  infill and measured landmark extents. Target **at least 90 lots** at full build, with building
+  sites visible at every tier.
+- **Stand-in models.** The real fabric props come in wave 2.3, with strips for Ben. The mock uses
+  the existing Boomtown filler (`HouseA`–`HouseF`, `ShedA`, `ShedB`) plus draft props.
+
+### Gate renders (`assets/testfit/out/Boomtown/`)
+
+For each candidate `<c>` in `grid`, `organic`: `m12b_<c>_tier1.png`, `m12b_<c>_tier3.png`,
+`m12b_<c>_full.png`, `m12b_<c>_full_entrance.png`; and one sheet `m12b_compare.png` with today's
+Boomtown and both candidates at tier 1, tier 3 and full.
+
+### Ownership (wave 2.1)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `CityDressing.json` `eras.Boomtown.fabric` (schema and first values) |
+| economy-designer (groundwork) | `tools/fabric.py` (field-pattern wild, any Boomtown-only generator rule), `tools/streetplan.py`, `CityDressing.json` `eras.Boomtown.fabric` values |
+| prop-builder "farmland" | `tools/assets/farmland_kit.py` (new), draft blueprints under `tools/testfit/blueprints/_props/Boomtown/` (new files only) |
+| layout-designer "grid" (own worktree `tycoon-m12-grid`) | `src/shared/Layouts/Boomtown.luau`, `tools/fabric/Boomtown.plan.json`, `Config/Fabric/Boomtown.json`, renders `m12b_grid_*` |
+| layout-designer "organic" (own worktree `tycoon-m12-organic`) | the same files in its worktree, renders `m12b_organic_*` |
+
+Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts
+and config blocks, and the client (the code is generic; a candidate that needs a client change
+reports it instead).

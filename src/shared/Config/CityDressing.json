@@ -378,6 +378,15 @@
             "tierOffset": 0,
             "stagger": 0.15,
             "budget": 30
+          },
+          "carts": {
+            "requiresSlot": "farmPlot",
+            "props": [
+              "CartParked"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.3,
+            "budget": 12
           }
         }
       }
