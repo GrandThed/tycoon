@@ -1,0 +1,9 @@
+{
+  "id": "BillboardC",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [7.5, 1],
+  "pieces": [
+    {"kit": "boomtown-street-kit", "model": "billboard-c", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

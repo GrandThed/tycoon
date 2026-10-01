@@ -1,0 +1,9 @@
+{
+  "id": "BusStopA",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [4, 1.6],
+  "pieces": [
+    {"kit": "boomtown-street-kit", "model": "bus-stop", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

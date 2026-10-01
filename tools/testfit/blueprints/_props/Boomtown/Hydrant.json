@@ -1,0 +1,9 @@
+{
+  "id": "Hydrant",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [0.9, 0.9],
+  "pieces": [
+    {"kit": "boomtown-street-kit", "model": "hydrant", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

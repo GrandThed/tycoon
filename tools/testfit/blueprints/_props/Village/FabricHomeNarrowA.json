@@ -9,6 +9,7 @@
     {"kit": "fantasy-town-kit", "model": "wall-wood-door", "pos": [0, 0, 0.6], "rotY": 90, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "wall-wood-window-glass", "pos": [0, 0, 0.6], "rotY": 270, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "roof-gable", "pos": [0, 1, 0.6], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [0, 1, 0.7], "rotY": 0, "stage": 0},
     {"kit": "nature-kit", "model": "path_stone", "pos": [0, 0.05, -0.35], "rotY": 90, "stage": 0},
     {"kit": "nature-kit", "model": "flower_redA", "pos": [-0.27, 0.05, -0.62], "rotY": 0, "stage": 0},
     {"kit": "nature-kit", "model": "flower_yellowA", "pos": [0.27, 0.05, -0.3], "rotY": 0, "stage": 0},

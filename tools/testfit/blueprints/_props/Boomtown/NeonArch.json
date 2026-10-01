@@ -1,0 +1,9 @@
+{
+  "id": "NeonArch",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [9.6, 0.6],
+  "pieces": [
+    {"kit": "boomtown-street-kit", "model": "neon-arch", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

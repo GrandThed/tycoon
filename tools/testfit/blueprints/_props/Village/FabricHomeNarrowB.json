@@ -9,6 +9,7 @@
     {"kit": "fantasy-town-kit", "model": "wall-door", "pos": [0, 0, -0.45], "rotY": 90, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, -0.45], "rotY": 270, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "roof-gable-top", "pos": [0, 1, -0.45], "rotY": 90, "stage": 0},
+    {"kit": "fantasy-town-kit", "model": "chimney-top", "pos": [0, 1, -0.2], "rotY": 0, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "hedge-gate", "pos": [0, 0, -0.7], "rotY": 90, "stage": 0},
     {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.55], "rotY": 0, "stage": 1},
     {"kit": "fantasy-town-kit", "model": "wall", "pos": [0, 0, 0.55], "rotY": 180, "stage": 1},

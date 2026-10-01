@@ -1,0 +1,9 @@
+{
+  "id": "NeonSignB",
+  "era": "Boomtown",
+  "scale": 4.0,
+  "footprint": [0.8, 0.8],
+  "pieces": [
+    {"kit": "boomtown-street-kit", "model": "neon-sign-b", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
