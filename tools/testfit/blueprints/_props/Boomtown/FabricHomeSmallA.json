@@ -1,0 +1,26 @@
+{
+  "id": "FabricHomeSmallA",
+  "era": "Boomtown",
+  "scale": 2.8,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "city-kit-suburban", "model": "building-type-l", "pos": [-0.1786, 0, 0.4286], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0, -0.1114], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0, -0.5114], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0, -0.8357], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0.0196, -0.1114], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0.0196, -0.5114], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "path-long", "pos": [-0.4786, 0.0196, -0.8357], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "lawn-small", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "carport", "pos": [0.6964, 0, 0.4286], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.6964, 0.0196, -0.2357], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.6964, 0.0196, -0.6357], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "driveway-long", "pos": [0.6964, 0.0196, -0.8357], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-0.8214, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-0.1071, 0, -1.0179], "rotY": 0, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-1.0179, 0, -0.7679], "rotY": 90, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "picket-fence", "pos": [-1.0179, 0, -0.2679], "rotY": 90, "stage": 1},
+    {"kit": "boomtown-extras-kit", "model": "mailbox", "pos": [-0.2821, 0, -0.875], "rotY": 0, "stage": 1},
+    {"kit": "city-kit-suburban", "model": "tree-small", "pos": [-0.8214, 0, -0.4643], "rotY": 0, "stage": 1}
+  ]
+}

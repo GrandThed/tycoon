@@ -21,11 +21,17 @@ Why a custom kit (docs/CITY_GROWTH.md section 4, INTERFACES "M12 wave 2 -- Boomt
   cannot grow in place. The shops are therefore flat-roofed generated bodies that take a second
   storey cleanly: each variant is three pieces, one per additive stage.
 - The next-lot sign and the landmark-reveal scaffold, which no kit has.
+- Suburb homes and the works. The fabric's house lots are 6 x 6 and 8 x 8, so the kit houses go in
+  at a reduced blueprint scale; what makes a home lived-in or lets it grow (picket fence, mailbox,
+  porch, carport, lawn, an attached garage, a second storey) and what turns a shed into a works
+  (yard fence, pallets, drums, loading dock, tank) is generated here.
 
 **Units.** These GLBs are in City Kit units, **1 unit = 4 studs at blueprint scale 4.0**, because
 every prop that uses them also places suburban, industrial or roads pieces and a blueprint has one
-scale for all of its pieces. The literals below are studs as they come out at scale 4.0 and are
-divided by STUDS_PER_UNIT once, at export.
+scale for all of its pieces. The literals below are studs as they come out at the blueprint's scale
+and are divided by it once, at export: 4.0 (STUDS_PER_UNIT) unless PIECE_SCALE names another, which
+it does for the home pieces (2.8) and the works pieces (3.0). A piece is only right in a blueprint
+of its own scale.
 
 **Frames.** Small props (mixer, stacks, barrier, hoarding, signs) have their origin at the bottom
 centre and face -Z. The lot-sized pieces (site-ground-*, frame-*, shop-*, scaffold-ring) are
@@ -75,6 +81,7 @@ SLATE_LIGHT = (102, 107, 128)
 SLATE = (81, 85, 102)
 CHARCOAL = (56, 56, 61)
 GLASS = (208, 232, 255)
+BLUE = (103, 148, 217)  # the kit houses' window glass
 BLUE_PALE = (181, 204, 236)  # industrial
 NAVY = (71, 74, 172)  # industrial
 GREEN = (97, 203, 139)
@@ -236,8 +243,8 @@ def make_frame_house_small() -> Part:
 
 
 def make_frame_house_medium() -> Part:
-    """SiteMedium's house: a 5.6 x 4.4 slab, 2.75-stud walls, ridge at 5.0; 4 of 7 rafter pairs up."""
-    return house_frame("frame-house-medium", 5.6, 4.4, 2.75, 2.0, 4, 6, (0.6, 1.6), (2.4, 4.3))
+    """SiteMedium's house: a 5.0 x 4.0 slab, 2.75-stud walls, ridge at 4.9; 4 of 7 rafter pairs up."""
+    return house_frame("frame-house-medium", 5.0, 4.0, 2.75, 1.9, 4, 6, (0.6, 1.6), (2.2, 3.9))
 
 
 # The narrow lot's building line, shared by the shop shell and the three shops: the body stands
@@ -464,9 +471,9 @@ def make_site_ground_small() -> Part:
 
 
 def make_site_ground_medium() -> Part:
-    """Disturbed earth under a 9 x 9 site, 8.8 studs square."""
-    return ragged_ground("site-ground-medium", 4.3, 4.3, 172,
-                         ((-1.8, 1.4, 1.5, 1.0), (2.0, -1.6, 1.2, 0.9), (1.0, 2.6, 0.9, 0.6), (-2.6, -2.4, 0.8, 0.6)))
+    """Disturbed earth under an 8 x 8 site, 7.8 studs square."""
+    return ragged_ground("site-ground-medium", 3.82, 3.82, 172,
+                         ((-1.6, 1.2, 1.3, 0.9), (1.8, -1.4, 1.1, 0.8), (0.9, 2.3, 0.8, 0.55), (-2.3, -2.1, 0.7, 0.55)))
 
 
 def make_site_ground_narrow() -> Part:
@@ -791,6 +798,317 @@ def make_shop_c_upper() -> Part:
     return p
 
 
+# --- suburb homes (studs at blueprint scale HOME) -------------------------------------------------
+#
+# Boomtown's house lots are small (6 x 6 and 8 x 8), so its fabric homes place the suburban kit
+# houses at blueprint scale 2.8 where the landmarks use 4.0, the way Village's fabric homes are
+# built at 2.5. A blueprint has one scale for all of its pieces, so the pieces below are written in
+# studs as they come out at 2.8 and exported in kit units for that scale (PIECE_SCALE).
+#
+# The garnish pieces (fence, mailbox, porch, carport) have their origin at the bottom centre. The
+# home-h-* and home-m-* pieces are authored in the frame of the kit house they extend
+# (building-type-h, building-type-m), so a blueprint places them at the house's own position:
+# - building-type-h is a plain gable bungalow: walls at x +-0.62, z +-0.42 units, eaves from
+#   y 0.37, verges at x +-0.65, ridge 0.7375 along X. A storey as wide as the roof, started just
+#   under the eaves, swallows the whole roof (and its solar panels), so this one house can take a
+#   real second storey: no lip, because nothing of the kit roof is left outside.
+# - building-type-m is the L-shaped bungalow with a cross gable; its west gable end (x -0.564)
+#   takes a garage, and its extension goes up over that garage's flat roof, not over the kit roof.
+
+HOME = 2.8
+H_ROOF_X = 0.65 * HOME  # building-type-h: the verge
+H_ROOF_Z = 0.458 * HOME  # the eave line
+H_WALL_X = 0.62 * HOME
+GARAGE_H = 1.2  # a generated garage's roof deck: just above the kit eaves (1.04), below the ridge
+STOREY_H = 1.2  # a generated storey: the kits' 0.4-unit storey at this scale, and a little
+
+
+def pane(p: Part, axis: str, face: float, facing: int, a0: float, a1: float, y0: float, y1: float,
+         mullion: bool = False) -> None:
+    """A window in the kit houses' dress, a slate frame round blue glass, on the generated wall whose
+    outer face is at `face` on `axis` ("x" or "z") and looks toward `facing` (-1 or 1)."""
+
+    def slab(b0: float, b1: float, c0: float, c1: float, proud: float, colour: Rgb) -> None:
+        f0, f1 = sorted((face, face + facing * proud))
+        if axis == "z":
+            p.box(b0, b1, c0, c1, f0, f1, colour)
+        else:
+            p.box(f0, f1, c0, c1, b0, b1, colour)
+
+    m = 0.08
+    slab(a0, a1, y0, y1, 0.04, SLATE)
+    slab(a0 + m, a1 - m, y0 + m, y1 - m, 0.06, BLUE)
+    if mullion:
+        mid = (a0 + a1) / 2
+        slab(mid - 0.03, mid + 0.03, y0 + m, y1 - m, 0.075, SLATE)
+
+
+def home_storey(p: Part, x0: float, x1: float, z0: float, z1: float, y0: float, y1: float) -> None:
+    """A generated storey dressed like the kit houses: white walls over a slate band 0.02 proud,
+    the string course the two-storey kit houses carry between their floors."""
+    p.box(x0, x1, y0, y1, z0, z1, WALL)
+    e = 0.02
+    p.box(x0 - e, x1 + e, y0, y0 + 0.12, z0 - e, z1 + e, SLATE)
+
+
+def gable_roof(p: Part, cx: float, cz: float, half_ridge: float, half_span: float, eave: float, rise: float,
+               rot: float = 0.0, overhang: float = 0.1) -> None:
+    """A green gable roof over a white attic gable, centred on (cx, cz): the ridge runs along X at
+    rot 0 and along Z at rot 90. The roof plates are 0.1 thick and overhang the walls all round."""
+    r = Part("roof")
+    extrude_x(r, [(-half_span, eave), (half_span, eave), (0.0, eave + rise)], -half_ridge, half_ridge, WALL)
+    t = 0.1
+    xa, xb = -half_ridge - overhang, half_ridge + overhang
+    low = eave - overhang * rise / half_span
+    ridge = eave + rise
+    for sz in (-1, 1):
+        edge = sz * (half_span + overhang)
+        ring = [(xa, low, edge), (xb, low, edge), (xb, ridge, 0.0), (xa, ridge, 0.0)]
+        if sz > 0:
+            ring = [ring[3], ring[2], ring[1], ring[0]]
+        r.hexa(ring + [(x, y + t, z) for x, y, z in ring], GREEN, front=GREEN_DARK, back=GREEN_DARK,
+               left=GREEN_DARK, right=GREEN_DARK, bottom=WALL_SHADE)
+    place(p, r, rot, (cx, 0.0, cz))
+
+
+def home_chimney(p: Part, x: float, z: float, y0: float, top: float) -> None:
+    """A small brick stack under a slate cap; (x, top, z) is where its smoke starts."""
+    p.box(x - 0.2, x + 0.2, y0, top - 0.1, z - 0.2, z + 0.2, BRICK)
+    p.box(x - 0.25, x + 0.25, top - 0.1, top, z - 0.25, z + 0.25, SLATE, top=CHARCOAL)
+
+
+def garage(p: Part, x0: float, x1: float, z0: float, z1: float) -> None:
+    """An attached garage in the kit houses' dress: white walls on a slate plinth, a flat slate roof
+    inside a kerb, and a dark up-and-over door toward the street (-Z), like building-type-n's."""
+    p.box(x0, x1, 0.0, GARAGE_H, z0, z1, WALL, top=SLATE)
+    e = 0.02
+    p.box(x0 - e, x1 + e, 0.0, 0.14, z0 - e, z1 + e, SLATE)
+    k, kerb = 0.12, GARAGE_H + 0.12
+    p.box(x0, x1, GARAGE_H, kerb, z0, z0 + k, SLATE_LIGHT)
+    p.box(x0, x1, GARAGE_H, kerb, z1 - k, z1, SLATE_LIGHT)
+    for xa, xb in ((x0, x0 + k), (x1 - k, x1)):
+        p.box(xa, xb, GARAGE_H, kerb, z0 + k, z1 - k, SLATE_LIGHT)
+    cx = (x0 + x1) / 2
+    p.box(cx - 0.82, cx + 0.82, 0.14, 1.0, z0 - 0.03, z0, STONE)
+    p.box(cx - 0.72, cx + 0.72, 0.14, 0.92, z0 - 0.05, z0, SLATE)
+    p.box(cx - 0.72, cx + 0.72, 0.5, 0.56, z0 - 0.065, z0, SLATE_LIGHT)
+
+
+def make_picket_fence() -> Part:
+    """One white picket panel, 1.4 x 0.6 studs along X: five pickets on two rails. Panels set 1.4
+    apart carry the pickets on at one even pitch."""
+    p = Part("picket-fence")
+    for i in range(5):
+        x = -0.56 + i * 0.28
+        p.box(x - 0.08, x + 0.08, 0.05, 0.6, -0.03, 0.03, WHITE)
+    for y in (0.18, 0.44):
+        p.box(-0.7, 0.7, y - 0.035, y + 0.035, 0.03, 0.07, WALL_SHADE)
+    return p
+
+
+def make_mailbox() -> Part:
+    """A kerbside mailbox, 0.35 x 0.9 x 0.45 studs: a pale box on a post with its red flag up. As
+    tall as a kit door at this scale, on purpose: any smaller and it is not there."""
+    p = Part("mailbox")
+    p.box(-0.05, 0.05, 0.0, 0.58, -0.05, 0.05, BRICK)
+    p.box(-0.14, 0.14, 0.56, 0.8, -0.24, 0.2, LAVENDER, front=WALL, top=WALL)
+    p.box(0.14, 0.18, 0.62, 0.9, -0.04, 0.05, RED)
+    return p
+
+
+def make_porch() -> Part:
+    """A front porch, 1.8 x 1.35 x 0.95 studs: a step, two white posts and a green lean-to roof.
+    Its origin is on the wall line; it reaches 0.95 toward -Z."""
+    p = Part("porch")
+    p.box(-0.8, 0.8, 0.0, 0.1, -0.85, 0.0, LAVENDER, top=WALL_SHADE)
+    for x in (-0.7, 0.7):
+        p.box(x - 0.05, x + 0.05, 0.1, 1.08, -0.8, -0.7, WHITE)
+    ring = [(-0.9, 1.0, -0.95), (0.9, 1.0, -0.95), (0.9, 1.25, 0.0), (-0.9, 1.25, 0.0)]
+    p.hexa(ring + [(x, y + 0.1, z) for x, y, z in ring], GREEN, front=GREEN_DARK, left=GREEN_DARK,
+           right=GREEN_DARK, bottom=WALL_SHADE)
+    return p
+
+
+def make_carport() -> Part:
+    """A carport, 1.9 x 1.32 x 2.6 studs: four white posts under a flat slate roof with a white
+    fascia. Origin at the bottom centre; cars drive in from -Z."""
+    p = Part("carport")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            x, z = sx * 0.85, sz * 1.2
+            p.box(x - 0.05, x + 0.05, 0.0, 1.2, z - 0.05, z + 0.05, WHITE)
+    p.box(-0.95, 0.95, 1.2, 1.32, -1.3, 1.3, WALL, top=SLATE)
+    return p
+
+
+def make_lawn_small() -> Part:
+    """The lawn of a lived-in 6 x 6 lot, 5.7 studs square and 0.05 tall: grass on the dusty plot."""
+    p = Part("lawn-small")
+    p.box(-2.85, 2.85, 0.0, 0.05, -2.85, 2.85, GREEN_DARK)
+    return p
+
+
+def make_lawn_medium() -> Part:
+    """The lawn of a lived-in 8 x 8 lot, 7.7 studs square and 0.05 tall."""
+    p = Part("lawn-medium")
+    p.box(-3.85, 3.85, 0.0, 0.05, -3.85, 3.85, GREEN_DARK)
+    return p
+
+
+def make_home_h_garage() -> Part:
+    """building-type-h, stage 1: a garage against the west gable end, in the house's frame. It
+    overlaps the wall by 0.04, so the verge of the kit roof ends inside it."""
+    p = Part("home-h-garage")
+    garage(p, -H_WALL_X - 2.16, -H_WALL_X + 0.04, -1.05, 1.45)
+    return p
+
+
+def make_home_h_upper() -> Part:
+    """building-type-h, stage 2: a second storey, in the house's frame. It is as wide as the kit
+    roof plus 0.02 and starts at 1.0, under the eaves (1.04), so the roof and its solar panels end up
+    inside it; its green gable roof repeats the kit's pitch. Ridge 3.25, chimney top 3.6."""
+    p = Part("home-h-upper")
+    hx, hz = H_ROOF_X + 0.02, H_ROOF_Z + 0.02
+    y0, y1 = 1.0, 1.0 + STOREY_H
+    home_storey(p, -hx, hx, -hz, hz, y0, y1)
+    for x in (-1.15, 0.0, 1.15):
+        pane(p, "z", -hz, -1, x - 0.35, x + 0.35, y0 + 0.45, y0 + 0.95, mullion=True)
+    for x in (-0.8, 0.8):
+        pane(p, "z", hz, 1, x - 0.35, x + 0.35, y0 + 0.45, y0 + 0.95)
+    for facing in (-1, 1):
+        pane(p, "x", facing * hx, facing, -0.35, 0.35, y0 + 0.45, y0 + 0.95)
+    gable_roof(p, 0.0, 0.0, hx, hz, y1, 0.95)
+    home_chimney(p, 1.0, 0.5, y1 + 0.4, 3.6)
+    return p
+
+
+def make_home_m_garage() -> Part:
+    """building-type-m, stage 1: a garage against the west gable end (x -1.58), in the house's
+    frame. It stands 0.35 forward of the wall behind it and takes in the two kit bushes there."""
+    p = Part("home-m-garage")
+    garage(p, -3.7, -1.5, -0.75, 1.85)
+    return p
+
+
+def make_home_m_wing() -> Part:
+    """building-type-m, stage 2: a room over the garage, 0.03 proud of it all round so the garage's
+    kerb ends up inside, under a gable that faces the street. The L-shaped cross-gable roof of the
+    kit house cannot take a storey, so the house grows beside its roof, not on it. Ridge 3.3."""
+    p = Part("home-m-wing")
+    e = 0.03
+    x0, x1, z0, z1 = -3.7 - e, -1.5 + e, -0.75 - e, 1.85 + e
+    y0, y1 = GARAGE_H, GARAGE_H + STOREY_H - 0.05
+    home_storey(p, x0, x1, z0, z1, y0, y1)
+    cx = (x0 + x1) / 2
+    pane(p, "z", z0, -1, cx - 0.55, cx + 0.55, y0 + 0.42, y0 + 0.92, mullion=True)
+    pane(p, "z", z1, 1, cx - 0.4, cx + 0.4, y0 + 0.42, y0 + 0.92)
+    for z in (-0.05, 1.15):
+        pane(p, "x", x0, -1, z - 0.33, z + 0.33, y0 + 0.42, y0 + 0.92)
+    gable_roof(p, cx, (z0 + z1) / 2, (z1 - z0) / 2, (x1 - x0) / 2, y1, 0.85, rot=90.0)
+    return p
+
+
+# --- the works (studs at blueprint scale WORKS) ---------------------------------------------------
+#
+# The industry district's 8 x 8 lot: building-p (a shed) at the street, building-t (a warehouse)
+# behind it, both at blueprint scale 3.0 along the west side, and a fenced yard down the east side
+# that the camera looks into. works-yard and works-dock are in the lot frame; the rest are props.
+
+WORKS = 3.0
+YARD_X = 1.3  # the yard strip starts here; the buildings end at 1.27
+
+
+def fence_run(p: Part, a, b) -> None:
+    """A yard fence from a to b ((x, z), axis-aligned): three slate rails on posts no more than
+    2 studs apart, 0.9 tall. Open rails, not boards: the east run stands between the camera and the
+    yard, and a boarded fence there hid everything in it."""
+    ax, az = a
+    bx, bz = b
+    length = math.hypot(bx - ax, bz - az)
+    count = max(1, math.ceil(length / 2.0))
+    for k in range(count + 1):
+        x, z = ax + (bx - ax) * k / count, az + (bz - az) * k / count
+        p.box(x - 0.07, x + 0.07, 0.0, 0.9, z - 0.07, z + 0.07, SLATE)
+    x0, x1 = sorted((ax, bx))
+    z0, z1 = sorted((az, bz))
+    for y in (0.3, 0.55, 0.8):
+        p.box(x0 - 0.03, x1 + 0.03, y - 0.035, y + 0.035, z0 - 0.03, z1 + 0.03, SLATE_LIGHT)
+
+
+def make_works_yard() -> Part:
+    """The works' hardstanding and fence, in the lot frame: concrete down the east strip and along
+    the street in front of the shed, a rail fence on the east side and the back, and a gateway at
+    the street with its sliding gate half open."""
+    p = Part("works-yard")
+    p.box(YARD_X, 3.95, 0.0, 0.05, -3.95, 3.95, STONE_DARK)
+    p.box(-3.95, YARD_X, 0.0, 0.05, -3.95, -3.3, STONE_DARK)
+    fence_run(p, (3.85, -3.85), (3.85, 3.85))
+    fence_run(p, (3.85, 3.85), (YARD_X + 0.1, 3.85))
+    for x in (YARD_X + 0.1, 3.85):
+        p.box(x - 0.1, x + 0.1, 0.0, 1.4, -3.95, -3.75, SLATE, top=ORANGE)
+    for y in (0.2, 0.95):
+        p.box(2.75, 3.85, y - 0.04, y + 0.04, -3.74, -3.68, SLATE_LIGHT)
+    for x in (2.8, 3.15, 3.5, 3.8):
+        p.box(x - 0.035, x + 0.035, 0.2, 0.95, -3.74, -3.68, SLATE_LIGHT)
+    return p
+
+
+def make_pallet_stack() -> Part:
+    """Three pallets, 1.1 x 0.48 x 0.9 studs, the top one askew."""
+    p = Part("pallet-stack")
+    pallet = Part("pallet")
+    for z in (-0.38, 0.38):
+        pallet.box(-0.55, 0.55, 0.0, 0.08, z - 0.07, z + 0.07, BRICK)
+    pallet.box(-0.55, 0.55, 0.08, 0.15, -0.45, 0.45, WOOD, top=SAND)
+    for i, rot in enumerate((0.0, 0.0, 9.0)):
+        place(p, pallet, rot, (0.0, 0.16 * i, 0.0))
+    return p
+
+
+def make_drums() -> Part:
+    """Three oil drums, 0.95 x 0.75 x 0.9 studs: navy, orange, slate."""
+    p = Part("drums")
+    for (x, z), colour in (((-0.24, -0.2), NAVY), ((0.24, -0.14), ORANGE), ((0.02, 0.24), SLATE_LIGHT)):
+        lathe(p, [(0.22, 0.0), (0.22, 0.75)], [colour], seg=8, at=(x, 0.0, z))
+        lathe(p, [(0.15, 0.75), (0.15, 0.77)], [SLATE], seg=6, at=(x, 0.0, z))
+    return p
+
+
+def make_works_dock() -> Part:
+    """The loading dock on the warehouse's east wall (x 1.27), in the lot frame: a concrete platform
+    with a step at the street end, an orange roller door on the wall, a flat canopy on two posts and
+    two crates waiting on the deck. 2.17 studs tall."""
+    p = Part("works-dock")
+    x0, x1, z0, z1 = 1.25, 2.2, 0.2, 2.2
+    p.box(x0, x1, 0.0, 0.5, z0, z1, STONE, top=LAVENDER)
+    p.box(x1, x1 + 0.04, 0.3, 0.5, z0, z1, SLATE)
+    p.box(x0, x1, 0.0, 0.25, z0 - 0.4, z0, STONE_DARK, top=STONE)
+    p.box(x0, x0 + 0.1, 0.5, 1.95, 0.5, 1.9, SLATE)
+    p.box(x0, x0 + 0.13, 0.5, 1.85, 0.6, 1.8, ORANGE)
+    for y in (0.95, 1.4):
+        p.box(x0, x0 + 0.15, y - 0.025, y + 0.025, 0.6, 1.8, TERRACOTTA)
+    for z in (0.45, 1.95):
+        p.box(x1 - 0.12, x1 - 0.02, 0.5, 2.05, z - 0.05, z + 0.05, SLATE)
+    p.box(x0, x1 + 0.1, 2.05, 2.17, 0.3, 2.1, SLATE_LIGHT, top=SLATE)
+    p.box(1.55, 2.0, 0.5, 0.95, 0.3, 0.75, WOOD, top=SAND)
+    p.box(1.6, 1.95, 0.95, 1.3, 0.35, 0.7, PEACH, top=SAND)
+    return p
+
+
+def make_works_tank() -> Part:
+    """A vertical process tank on four legs, 1.25 studs across and 2.45 tall: white, with the
+    industrial kit's orange band and a slate vent."""
+    p = Part("works-tank")
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            x, z = sx * 0.36, sz * 0.36
+            p.box(x - 0.05, x + 0.05, 0.0, 0.75, z - 0.05, z + 0.05, SLATE)
+    profile = [(0.3, 0.5), (0.62, 0.72), (0.62, 1.2), (0.62, 1.45), (0.62, 2.05), (0.3, 2.3), (0.0, 2.33)]
+    lathe(p, profile, [LAVENDER, WALL, ORANGE, WALL, WALL_SHADE, WALL_SHADE], seg=8, phase=math.pi / 8)
+    p.box(-0.06, 0.06, 2.3, 2.45, -0.06, 0.06, SLATE)
+    return p
+
+
 PIECES = {
     "site-ground-small": make_site_ground_small,
     "site-ground-medium": make_site_ground_medium,
@@ -821,15 +1139,49 @@ PIECES = {
     "shop-c-ground": make_shop_c_ground,
     "shop-c-front": make_shop_c_front,
     "shop-c-upper": make_shop_c_upper,
+    "picket-fence": make_picket_fence,
+    "mailbox": make_mailbox,
+    "porch": make_porch,
+    "carport": make_carport,
+    "lawn-small": make_lawn_small,
+    "lawn-medium": make_lawn_medium,
+    "home-h-garage": make_home_h_garage,
+    "home-h-upper": make_home_h_upper,
+    "home-m-garage": make_home_m_garage,
+    "home-m-wing": make_home_m_wing,
+    "works-yard": make_works_yard,
+    "pallet-stack": make_pallet_stack,
+    "drums": make_drums,
+    "works-dock": make_works_dock,
+    "works-tank": make_works_tank,
+}
+
+# The blueprint scale each piece is written for, where it is not STUDS_PER_UNIT.
+PIECE_SCALE = {
+    "picket-fence": HOME,
+    "mailbox": HOME,
+    "porch": HOME,
+    "carport": HOME,
+    "lawn-small": HOME,
+    "lawn-medium": HOME,
+    "home-h-garage": HOME,
+    "home-h-upper": HOME,
+    "home-m-garage": HOME,
+    "home-m-wing": HOME,
+    "works-yard": WORKS,
+    "pallet-stack": WORKS,
+    "drums": WORKS,
+    "works-dock": WORKS,
+    "works-tank": WORKS,
 }
 
 
 # --- export -------------------------------------------------------------------------------------
 
 
-def to_kit_units(part: Part) -> Part:
+def to_kit_units(part: Part, studs_per_unit: float) -> Part:
     out = Part(part.name)
-    k = 1.0 / STUDS_PER_UNIT
+    k = 1.0 / studs_per_unit
     out.verts = [(x * k, y * k, z * k) for x, y, z in part.verts]
     out.faces = list(part.faces)
     return out
@@ -842,12 +1194,14 @@ def generate(out_dir: str) -> int:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         part = make()
         assert part.name == name, f"{name}: Part is named {part.name!r}"
-        export(build_object(to_kit_units(part), {}), out_dir)
+        scale = PIECE_SCALE.get(name, STUDS_PER_UNIT)
+        export(build_object(to_kit_units(part, scale), {}), out_dir)
         total += part.tris
         lo, hi = part.bounds()
         print(
             f"[{KIT}] {name}.glb: {part.tris} tris, "
-            f"x[{lo[0]:.2f}, {hi[0]:.2f}] y[{lo[1]:.2f}, {hi[1]:.2f}] z[{lo[2]:.2f}, {hi[2]:.2f}] studs at scale 4",
+            f"x[{lo[0]:.2f}, {hi[0]:.2f}] y[{lo[1]:.2f}, {hi[1]:.2f}] z[{lo[2]:.2f}, {hi[2]:.2f}] "
+            f"studs at scale {scale:g}",
             flush=True,
         )
     print(f"[{KIT}] {len(PIECES)} pieces, {total} tris total -> {os.path.relpath(out_dir, REPO_ROOT)}", flush=True)
