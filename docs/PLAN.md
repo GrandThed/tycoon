@@ -58,6 +58,11 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   merged tree 2026-09-23 (`3769c2a`) and Ben signed off waves 2b and 2c the same day ("looks
   good, lets finish this") — M9 is complete**; **wave 2d (half-size cars at runtime, 4× traffic with a lane-hold rule, two parked per bay in Boomtown + Metropolis) and the mirrored-kit-node winding fix (19 stages re-uploaded) signed off 2026-09-23 ("looks good!")**; carried forward: the 12cx MicroProfiler number and
   the 12cy part counts were not reported, so the part-budget re-cut stays a lead watch item)
+- [~] M12 — Growing city (**wave 1 Village built 2026-10-01**: a client-only city fabric of 116
+  growing lots, receding woods, construction ripples and three city-changer slots; assets
+  harvested and templated 2026-10-01; **Studio playtest pending**; branch `m12-growing-city` in
+  the worktree `C:\Users\benja\Desktop\tycoon-m12`, **not merged**; waves 2–4 for Boomtown,
+  Metropolis and Orbital come later — see "M12" below)
 
 ---
 
@@ -1844,3 +1849,150 @@ phones.** Plan of record: `docs/WEAPONS.md` §2; contracts: `docs/INTERFACES.md`
 
 - [x] P3 built, reviewed and QA green (definition of done in INTERFACES "P3 contracts")
 - [ ] Ben's playtest (`docs/PLAYTEST.md` "P3 — Abilities + SMG / Beam / Chain Gun")
+
+## M12 — Growing city
+
+**Goal:** the city should feel "alive and like a growing city, not a grid being filled" (Ben,
+2026-09-28). The 24 slots stay the landmarks; around them the client grows a town by itself.
+Core gameplay is untouched.
+- Plan of record: `docs/CITY_GROWTH.md` (approved 2026-09-29).
+- Contracts: `docs/INTERFACES.md` "M12 contracts", from wave 1 through round 3 and every review
+  ruling.
+- Memory: `.claude/memory/growing-city-2026-09-28.md`.
+- Where: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-growing-city`. (M11 is the
+  unmerged feature-unlocks milestone on branch `m11-unlocks`.)
+
+**Rulings (Ben):**
+1. 2026-09-29: growth layouts (mock B), with an **organic street plan** for Village.
+2. One era per wave, Village first. Each era gets its own layout mock before contracts.
+3. First look: "waaay more houses filling the terrain". Village needs ≥ 100 lots in rows, and
+   `treeOak` becomes **Plant Trees**.
+4. Round 2: the density is "perfecto"; narrow terraced lots with alleys between them are fine.
+5. Round 3: `flowerBed` becomes **Plant Flowers** and `bannerPole` becomes **Hang Banners**.
+
+**Shipped (wave 1, Village, 2026-09-29 → 2026-10-01, commits `495c529` … `e747ebb`):**
+- **Client-only.** No server, remote, profile, economy or balance change. Slots, order, prices,
+  income and levels are unchanged.
+- **New organic Village layout** (`src/shared/Layouts/Village.luau`):
+  - a curving high street from the campsite at the entrance up to the Castle Keep;
+  - a square halfway along it, and lanes at angles;
+  - a district tag per slot (camp, home, craft, farm, market, civic).
+  - Village dropped its old `lots`, `treeZones`, `greeneryZones` and `parking`.
+- **City fabric:**
+  - `src/shared/CityFabric.luau` (pure): pull along the drawn streets, level, governor and
+    district per lot.
+  - `src/client/City/Fabric.luau`: the renderer, hooked into `CityDressingController`,
+    `RoadGraph.FabricNetwork`, walk solids and birds.
+  - Data: `src/shared/Config/Fabric/Village.json`, generated.
+- **116 lots** in three sizes: small 6×6, medium 8×8, narrow 4×6 terraced. They go in rows 1–3,
+  and each develops wild land → building site → house that grows.
+- **Wild land:** 109 woods entries (clumps, quarters, single trees, rocks), plus a landscape
+  skirt past the plot edge. The woods recede as the town spreads.
+- **Construction ripple:**
+  - a reveal scaffold on each purchase;
+  - building sites that ripple out from it;
+  - houses rising 10–30 s later, and stage pops on growth.
+  - Dust puffs, at most 4 at once per plot.
+- **Next-pad dressing:** a notice board, stakes and string around the footprint, and a dirt-coloured
+  pad.
+- **Three city-changer slots** (`streetOnly`; cost, income and `requires` unchanged). Each runs a
+  planting wave when bought:
+
+  | Slot | # in order | At full build |
+  |---|---|---|
+  | Plant Flowers (`flowerBed`) | 8 | 43 flower beds and planters |
+  | Plant Trees (`treeOak`) | 14 | 65 trees (sapling → young at tier 4 → full at tier 5) |
+  | Hang Banners (`bannerPole`) | 20 | 16 banners and bunting |
+- **Config:**
+  - `CityDressing.json` v4 gains the Village `fabric` block, with `upgrades` for the three layers
+    and `construction.spawnsPerFrame` 40.
+  - Budgets: `parcels` 140 near, `parcelsFar` 60, `wild` 110 near, `wildFar` 45.
+  - `Config/Eras/1_Village.json`: the three slots renamed and made `streetOnly`.
+- **Models:**
+  - 43 new prop blueprints in `tools/testfit/blueprints/_props/Village/`: homes, camp, craft,
+    farm, market, civic, sites, reveal scaffold, notice board, woods, town trees, flowers and
+    banners.
+  - A generated `village-extras-kit` (`tools/assets/village_extras_kit.py`).
+  - 82 prop stages uploaded.
+- **Paths re-baked** for the new layout: 47 pieces (was 58), 94 meshes uploaded, 15 retired piece
+  ids removed.
+- **One harvest paste, 2026-10-01:** 82 prop stages and 94 path meshes. Templates: 43 props, 47
+  paths.
+- **Tools:**
+  - `py tools/fabric.py build|check Village` generates and checks the fabric data.
+  - `py tools/cityfabric.py selftest|timeline Village` is the Python mirror.
+  - `tools/testfit/plotrender.py` draws the fabric, and its pad bug is fixed.
+  - `tools/streetplan.py` checks fabric eras.
+
+**Timeline** (`py tools/cityfabric.py timeline Village`, the sim's greedy player at the end of each
+tier):
+
+| Tier | Houses | Sites | Trees | Flowers | Banners |
+|---|---|---|---|---|---|
+| 1 | 0 | 8 | 0 | 0 | 0 |
+| 2 | 20 | 1 | 0 | 15 | 0 |
+| 3 | 21 | 20 | 33 | 17 | 0 |
+| 4 | 54 | 10 | 44 | 30 | 16 |
+| full | 116 | 0 | 65 | 43 | 16 |
+
+**Rounds driven by Ben's feedback:**
+1. **Wave 1 (1a + 1b):** contracts, layout, fabric, client and mirror, with ≥ 40 lots. Ben liked
+   the gate renders but wanted far more houses.
+2. **Wave 1c:** rows 1–3, town trees and Plant Trees. Only 32 houses fitted, because street
+   frontage was the bottleneck.
+3. **Round 2:**
+   - narrow terraced lots, block infill and landmark clearance measured from harvested extents
+     gave 97 houses;
+   - re-pacing (`rowLag` 0, `tierTerm` 0.16) gave 109, with building sites at every tier.
+4. **Round 3:** generic upgrade layers (trees, flowers, banners); Plant Flowers and Hang
+   Banners; 116 houses.
+
+**Review rulings (all applied; the text is in INTERFACES):**
+- **Wave 1:**
+  - a bulk change is a restore (no animation);
+  - config validated once;
+  - the puff cap;
+  - the clearing mask follows ownership;
+  - `marker.offset` is in the slot frame.
+- **Wave 1c:**
+  - growth steps are staggered;
+  - street-only slots are not walk solids;
+  - stricter row and `tierOffset` validation.
+- **Rounds 2–3:** unanimated spawns go through a per-frame queue (`spawnsPerFrame`, nearest plot
+  first).
+
+**Status:** awaiting Ben's Studio playtest (`docs/PLAYTEST.md` "M12 — Village growing city";
+setup in `docs/MANUAL_STEPS.md` "M12"). The branch is not merged.
+
+**Known follow-ups:**
+- **economy-designer:** `FlowerBorderA` is built and uploaded but never placed, because every lane
+  corner is taken. Place it or drop it after the playtest.
+- **economy-designer:** the house count jumps between tier 4 (54) and full (116), because the last
+  four landmarks open the back streets. This is a layout matter, not config; only change it if
+  Ben notices.
+- **lead:** far plots show bare cleared patches where lots past `parcelsFar` (60) developed. Tune
+  `parcelsFar` after Ben's Studio measurement.
+- **lead → ui-engineer:** the `TreeOak`, `FlowerBed` and `BannerPole` meshes are still preloaded
+  but never spawned (those slots are street-only now). Drop them from `AssetPreloader`.
+- **lead:** the shared `assets/build/paths/Village.json` (a junction to the main checkout) holds
+  the M12 bake, so `py tools/paths/bake.py --era Village --list` fails on `main` until this branch
+  merges.
+- **Ben → lead:** the budget baseline. Ben reports the instance count and frame time on a full
+  Village with neighbours (PLAYTEST M12 step 37); the lead re-cuts the caps from those numbers.
+- **lead (decide):** Village no longer has chimney smoke, parked carts, bushes or hedges. They
+  lived on the lots and zones the fabric replaced; moving carts, walkers, lanterns and birds
+  remain. Decide whether fabric homes get smoke and parked carts.
+
+**Next waves:**
+- **Wave 2, Boomtown:**
+  - a growth-layout mock first, then contracts;
+  - models: about 20 blueprints, strips to Ben before upload;
+  - a path re-bake and one harvest paste.
+- **Waves 3–4, Metropolis then Orbital:** a lattice layout study first, because every block holds
+  exactly one landmark today. Then the same routine.
+- The code is shared; each era adds data, config and models.
+
+- [x] Wave 1 (Village) built, review rulings applied, assets harvested and templated (2026-10-01)
+- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "M12 — Village growing city")
+- [ ] lead: merge `m12-growing-city` into `main` after sign-off (then `bake.py --list` is green on
+  `main` again)

@@ -1554,3 +1554,123 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
    `py tools/marketing/caption.py --check` and look at the `_check.png` files (bottom 15 % shaded).
    Upload the non-`_check` PNGs from `assets/marketing/final/thumbs/` in Creator Hub → Thumbnails,
    keep 2–5 active and turn on thumbnail personalization (`docs/DISCOVERY_CHECKLIST.md` §2).
+
+## M12 — Growing city (wave 1: Village)
+
+Built in the worktree `C:\Users\benja\Desktop\tycoon-m12` (branch `m12-growing-city`), **not
+merged**. Run every command below **from that folder**, never from `C:\Users\benja\Desktop\tycoon`.
+`assets/` in the worktree is a junction to the main checkout's `assets/`.
+
+**Nothing on the Creator Hub:** no passes, products or audio. There is no profile change, so
+nothing needs republishing.
+
+Studio menus are written in English, with the Spanish in italics: View (*Vista*), Command Bar
+(*Barra de comandos*), Output (*Salida*).
+
+### 1. Assets: one harvest paste (**DONE 2026-10-01**, nothing owed; kept as the routine)
+
+43 new Village props, plus a path re-bake for the new layout, all in **one** paste:
+- props (blueprints in `tools/testfit/blueprints/_props/Village/`):
+  - homes, camp, craft, farm, market and civic lots;
+  - building sites (`SiteSmall`, `SiteMedium`, `SiteNarrow`), `RevealScaffold`, `NoticeBoard`;
+  - woods (`WoodsClumpA–C`, `WoodsQuarterA–C`, `WoodsPine`, `WoodsRound`, `MeadowRock`);
+  - town trees (`TownTreeA–C`), flowers (`FlowerPlanterA`, `FlowerBorderA`) and banners
+    (`StreetBannerA/B`, `BuntingA`);
+- 82 prop stages and 94 path meshes (47 pieces), with 15 retired path ids removed.
+
+- [x] 1. **Regenerate the kit** (only if `village_extras_kit.py` changes; Git Bash):
+      ```
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/village_extras_kit.py
+      ```
+      This writes `assets/kenney3d/village-extras-kit/Models/GLB format/`. `assets/` is gitignored,
+      so the script is the committed artifact.
+- [x] 2. **Fabric data and gates:**
+      ```
+      py tools/fabric.py build Village
+      py tools/fabric.py check Village
+      py tools/cityfabric.py selftest
+      py tools/streetplan.py Village
+      ```
+      `build` writes `src/shared/Config/Fabric/Village.json` (generated only; never hand-edit it).
+      Rebuild it after any change to `fabric.pull` in `CityDressing.json`, or `check` fails.
+- [x] 3. **Lead: path re-bake and upload** (94 meshes):
+      ```
+      py tools/paths/bake.py --era Village --list
+      py tools/paths/bake.py --era Village
+      py tools/assets/upload_paths.py --era Village --dry-run
+      py tools/assets/upload_paths.py --era Village
+      ```
+- [x] 4. **Lead: props merge and upload** (82 stages):
+      1. `"/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Village`
+      2. `py tools/assets/upload_models.py --props --era Village --dry-run`
+      3. `py tools/assets/upload_models.py --props --era Village`
+      This was committed as `bcdede3`. Never run an upload while another session uploads or
+      harvests.
+- [x] 5. **Ben: the one harvest paste** (done 2026-10-01). Studio in **Edit mode**:
+      1. From `tycoon-m12`: `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`.
+         The path meshes ride along with the props.
+      2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → paste → Enter → wait for
+         `[HARVEST-DONE]`.
+      3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
+      4. `py tools/assets/harvest.py --props`. It merged 82 prop stages and 94 path meshes
+         (commit `4650c6a`).
+- [x] 6. **Templates and manifest:**
+      ```
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --paths
+      py tools/assets/gen_templates.py --check
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+      This gave 43 prop templates and 47 path templates, with 15 retired path templates deleted
+      (commit `e747ebb`).
+- 7. **If a record goes missing later:** re-run step 5 only. Do **not** re-run the uploaders: a
+     non-zero id is never re-uploaded.
+
+### 2. Open the M12 build for the playtest
+
+Pick **one** of the two options. Option A gives a fresh Village save on every Play and touches no
+real save.
+
+**Option A: open the file**
+- [ ] 8. Rebuild, in PowerShell:
+      ```
+      cd C:\Users\benja\Desktop\tycoon-m12
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      ```
+- [ ] 9. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`.
+      Do **not** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, which has no
+      fabric.
+
+**Option B: live sync**
+- [ ] 10. Stop any other `rojo serve` first (the main checkout's, or a VS Code "serve" task). They
+      all use port 34872, and the plugin would sync the wrong folder.
+- [ ] 11. In PowerShell:
+      ```
+      cd C:\Users\benja\Desktop\tycoon-m12
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo serve
+      ```
+- [ ] 12. Studio → Plugins (*Complementos*) → **Rojo** → **Connect**.
+
+**Either option:**
+- [ ] 13. Check in Edit mode, in Explorer (*Explorador*):
+      - `ReplicatedStorage/Shared/Config/Fabric/Village` exists (only the M12 tree has it);
+      - `ReplicatedStorage/Assets/Props/Village/NoticeBoard` exists.
+      If either is missing, you opened or synced `main`.
+
+### 3. Run the playtest
+
+- [ ] 14. Run `docs/PLAYTEST.md` "M12 — Village growing city".
+- [ ] 15. Send Claude the numbers from PLAYTEST M12 step 37: the instance counts and the frame
+      time.
+
+### 4. After sign-off (lead)
+
+- [ ] 16. Merge `m12-growing-city` into `main`. After the merge, `py tools/paths/bake.py --era
+      Village --list` is green on `main` again; until then it fails there, because the shared
+      `assets/build/paths/Village.json` holds the M12 bake.
+- [ ] 17. Rebuild from `C:\Users\benja\Desktop\tycoon`, and go back to the usual `rojo serve` from
+      there.

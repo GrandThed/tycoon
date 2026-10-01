@@ -4025,3 +4025,286 @@ Setup: `docs/MANUAL_STEPS.md` "P3". Keys: **Q** melee ability, **E** ranged abil
 - Cross-slot refunds (melee kills also shorten your ranged ability): fun or spammy?
 - Should the SMG hurt armoured enemies (step 11)?
 - Anything wrong: step numbers, PC or phone. If you tuned: the **Export** output.
+
+## M12 — Village growing city
+
+**Goal:** Village grows as one town around your landmarks: woods first, then building sites, then
+houses that rise and get taller. Plant Flowers, Plant Trees and Hang Banners now change the town
+instead of standing as one model. Client-only: prices, order and income are unchanged. Other eras
+look as before.
+
+- Setup: `docs/MANUAL_STEPS.md` "M12" §2. Open the **tycoon-m12** build, not the main one.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- Houses only rise from **GrowthTier 2**. Buying without levelling stops the town at GrowthTier
+  3, so **level landmarks (×10 / Max) as you go**.
+
+What the town has at the end of each tier, for the sim's player (who levels). Your numbers can
+differ a little:
+
+| Tier | Houses | Sites | Trees | Flowers | Banners |
+|---|---|---|---|---|---|
+| 1 | 0 | 8 | 0 | 0 | 0 |
+| 2 | 20 | 1 | 0 | 15 | 0 |
+| 3 | 21 | 20 | 33 | 17 | 0 |
+| 4 | 54 | 10 | 44 | 30 | 16 |
+| full | 116 | 0 | 65 | 43 | 16 |
+
+### Setup
+
+- [ ] 1. Open the M12 build. In Edit mode, check in Explorer (*Explorador*) that both of these
+      exist:
+      - `ReplicatedStorage/Shared/Config/Fabric/Village`;
+      - `ReplicatedStorage/Assets/Props/Village/NoticeBoard`.
+      Bug: either is missing (you opened the main build).
+- [ ] 2. Set up the cash lever:
+      - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
+      - name `GrantCash`, type **number**, value `1000000000`.
+      It pays out about 1 s after Play, then resets to 0. To add more during Play: on the Test
+      (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
+      **Client**.
+- [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
+
+### 1. A fresh plot
+
+- [ ] 4. **Play** (*Jugar*). With MANUAL_STEPS option A (the file), every Play starts a fresh save
+      in Village. If your save is not a fresh Village, use option A. Then:
+      - Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Automatic**
+        (*Automático*).
+      - Check your plot: Workspace → Plots → `Plot_<n>` → Attributes. `EraName` is Village and
+        `GrowthTier` is 0.
+- [ ] 5. **Woods:**
+      - pine clumps, round trees and rocks cover most of the plot;
+      - along the front edge they are low and sparse;
+      - the ground is open at the entrance and around the Campfire pad;
+      - the woods carry on past the back and sides of the plot, onto the grey ground.
+      Bug: a bare plot; a tree on the pad; trees past the edge floating or sunk.
+- [ ] 6. **The next pad (Campfire):**
+      - it is **dirt-brown**, not grey;
+      - its name and price label still shows;
+      - a wooden **notice board** stands beside it;
+      - four **stakes with string** mark where the Campfire will stand.
+      Bug: a grey pad; no board; stakes away from the pad.
+
+### 2. The first purchases
+
+- [ ] 7. Walk onto the Campfire pad (touch-to-buy works as before). Within about a second:
+      - an open **timber scaffold** ring stands around the Campfire, then goes after about 1.5 s
+        with dust;
+      - the Campfire rises as before;
+      - trees around it and along its new trail vanish, each with a small dust puff;
+      - the board, stakes and dirt move to the **Small Tent** pad.
+      **No building sites yet.** That is correct: one landmark alone does not pull enough.
+      Bug: the scaffold stays; a tree is left on the trail; the old board is still there after 1 s.
+- [ ] 8. Buy the **Small Tent**:
+      - about **8 building sites** appear (stakes, timber scaffold, planks, logs);
+      - they come one after another, about 0.4 s apart, spreading out from the tent, each with
+        dust;
+      - they stay sites for now.
+      Bug: a site deep in the woods, away from any trail.
+
+### 3. Houses rise (GrowthTier 2)
+
+- [ ] 9. Keep buying in Build panel order, and watch `GrowthTier` on your `Plot_<n>`. Without
+      levelling it reaches **2** at purchase 8 (Plant Flowers). Levelling with ×10 gets there
+      sooner.
+- [ ] 10. When it turns 2:
+      - each site stands for **10–30 s** (each for its own time), then a **house rises** out of it
+        with dust;
+      - expect about 8–14 huts and cottages around the tent and the Well;
+      - a few sites at the edge of town may stay sites, which is correct.
+      Bug: a house appears with no site first; all houses come at the same instant; nothing rises
+      within 40 s.
+- [ ] 11. Sites and houses only grow **next to the town**, along drawn trails.
+      Bug: a patch of houses alone in the woods.
+
+### 4. Through the era
+
+- [ ] 12. Buy on with `GrantCash`, and level as you go (×10 / Max) so `GrowthTier` climbs to 5.
+      Compare against the table at the top.
+- [ ] 13. **Woods recede.** Each new trail and each new house clears its trees, with puffs. A cleared
+      tree **never comes back**.
+- [ ] 14. **Streets:**
+      - the high street curves from the campsite up toward the Castle Keep's spot;
+      - a square sits halfway, with the Well, Fountain, Market and Tavern around it;
+      - lanes branch off at angles.
+- [ ] 15. **Rows:**
+      - houses take the street frontage first, then back rows fill in behind;
+      - **narrow terraced houses** stand shoulder to shoulder along the high street, with narrow
+        alleys between them;
+      - workshops grow by the Woodcutter and Blacksmith, fields by the Farm, booths by the Market,
+        and gardens and greens by the Chapel.
+      Bug: a house on a trail, on a pad or inside a landmark; two houses overlapping.
+- [ ] 16. **Tier-ups.** At each tier step, houses gain a storey with a pop, one after another,
+      never all in one frame.
+- [ ] 17. **Taller neighbours.** Own the Market Stall (purchase 13) with `GrowthTier` 3 or more.
+      Then level only the **Village Well**:
+      - at **10** and at **25** its model changes, and at most one house nearby changes;
+      - at **50**, about **6 houses** around the Well (11 if you own the Chapel) gain a storey,
+        each about 1.2 s after the swap, with a pop and dust.
+      If `GrowthTier` ticks up at the same moment, other houses grow too, so judge only the houses
+      around the Well.
+      Bug: nothing changes at 50.
+- [ ] 18. **Walkers** (from GrowthTier 2) walk the trail edges and turn back at houses.
+      Bug: a walker walks through a house.
+
+### 5. City-changers
+
+- [ ] 19. **Plant Flowers** (purchase 8).
+      - After the Well, two pads show at once: **Plant Flowers** and **Cottage**.
+      - Both get the board and the dirt. Plant Flowers gets **no stakes**, because it builds
+        nothing.
+      - Buy it: about **11 flower beds and planters** bloom in a quick wave (about 1 s) from its
+        pad, with puffs. No scaffold, no building.
+      - Later, more planters appear in front of new houses, each together with its house. Full
+        build: 43.
+      Bug: a flower on a trail or a pad; anything taller than knee height.
+- [ ] 20. **Plant Trees** (purchase 14). Its pad shows next to the Blacksmith's after the Market
+      Stall.
+      - Buy it: about **26 staked saplings** plant in a wave (about 3 s) along the lanes, on the
+        green and in yards.
+      - They grow into **young trees at GrowthTier 4** and **full trees at 5**, one after another
+        with pops.
+      - More appear as streets and houses grow. Full build: 65.
+      - They are a brighter green than the forest pines.
+      Bug: a tree on a trail, pad or house; trees that never grow.
+- [ ] 21. **Hang Banners** (purchase 20). Its pad shows next to the Stables' after the Manor
+      House. Buy it, then walk under the bunting:
+      - **16 red and blue banner poles** go up along the high street and the square's lane,
+        alternating sides;
+      - **bunting** is strung across the lane at a few spots;
+      - it all goes up in a wave of about 2.5 s.
+      Bug: a pole in the middle of a trail or inside a house; bunting down at ground level.
+
+### 6. Full build
+
+- [ ] 22. Buy all 24 and level until `GrowthTier` is 5 (Max on several landmarks). Expect a packed
+      village:
+      - about **116 houses** and no sites;
+      - 65 trees, 43 flowers and 16 banners;
+      - the woods are only a thin border, plus the band past the edge.
+- [ ] 23. Compare with the reference renders:
+      - `assets/testfit/out/Village/m12e_full.png` and `m12e_full_entrance.png`;
+      - or render fresh from the `tycoon-m12` folder: `py tools/testfit/plotrender.py Village`
+        writes `assets/testfit/out/Village/plot_overview.png`, and `--camera entrance` writes
+        the entrance view.
+      Expect the same streets, rows and woods edge. Heights can differ, because the render shows
+      every landmark at its last stage, and houses near a lower landmark stay lower.
+
+### 7. Two players (Local Server)
+
+- [ ] 24. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). One `GrantCash` pays both players; set it in the **Server** window.
+- [ ] 25. Player 2 stands by Player 1's plot while Player 1 buys up to `GrowthTier` 3:
+      - Player 2 sees the same scaffold, sites and rising houses; start times may differ by a
+        moment;
+      - 30 s after the last purchase, both screens show the same houses in the same spots, the
+        same cleared woods, and the same flowers and trees.
+- [ ] 26. **Late arrival:**
+      - Player 2 flies far away (over 290 studs, across the hub);
+      - Player 1 buys 3–4 more slots;
+      - Player 2 comes back: the town is already there, **finished**. No scaffold ring, no rising
+        houses, no wave of dust.
+      This is what a player who joins later sees. Player 2 may be up to 30 s ahead of Player 1's
+      own screen, which is correct.
+      Bug: construction replays for Player 2.
+- [ ] 27. Player 2's own plot is still fresh woods, dressed separately.
+
+### 8. Far plots
+
+- [ ] 28. On a full town, fly more than 290 studs away. On that plot:
+      - the town trees, flowers, banners, single trees and part-cleared clumps vanish;
+      - the board and stakes vanish, but the dirt pad stays;
+      - the houses near the heart and the whole woods clumps stay.
+      Some cleared ground looks bare. That is known, so don't report it.
+- [ ] 29. Fly back:
+      - everything returns in the same spots within about 1 s;
+      - there is **no big stutter**: a tiny hitch is fine, but a freeze of half a second or more
+        is a bug.
+      Note anything you see for step 37.
+
+### 9. City detail
+
+- [ ] 30. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
+      - the woods drop to about **half**;
+      - the town trees, flowers and banners drop to about half;
+      - the houses and sites **stay**;
+      - nothing flickers or rebuilds.
+- [ ] 31. Turn it **ON** again: the **same** items come back in the **same** spots.
+
+### 10. Phone and low graphics
+
+- [ ] 32. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. On a
+      Village plot at `GrowthTier` 3 or more:
+      - the frame rate looks fine;
+      - the board and stakes read well at phone size;
+      - buy one slot: no visible stall; the scaffold, sites and dust look right; houses rise
+        without an overshoot bounce (phones use reduced motion);
+      - the Build panel is unchanged.
+- [ ] 33. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
+      quality **1–3**. Stop (*Detener*), then Play. Buy a slot:
+      - **no dust puffs** anywhere, and **no birds**;
+      - the scaffold, sites, houses and trees still appear.
+      Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
+      skip this step and say so.
+
+### 11. Other eras and missing pieces
+
+- [ ] 34. Buy out Village, then **Advance Era**:
+      - all of it clears: woods, houses, flowers, banners, the board, the stakes and the dirt pad;
+      - Boomtown looks exactly as before M12 (houses, greenery, parked cars, walkers, smoke,
+        birds: PLAYTEST M9 4h).
+- [ ] 35. In Edit mode, rename `ReplicatedStorage/Assets/Props/Village/NoticeBoard` to
+      `NoticeBoard_bak`. Play:
+      - the pads are still dirt-brown with stakes, but there is no board;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+- [ ] 36. In Edit mode, rename `ReplicatedStorage/Shared/Config/Fabric/Village` to `Village_bak`.
+      Play:
+      - no woods, no houses, no board or stakes, grey pads;
+      - landmarks, trails, pads and buying all still work;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+
+### 12. Measure (report the numbers)
+
+- [ ] 37. **Counts and frame time:**
+      1. Start a Local Server with **3 players** (or 2 if 3 is too slow) and build every plot to a
+         full Village.
+      2. In one **player** window (not the Server window), stand where all the plots are near
+         (within 250 studs).
+      3. View (*Vista*) → **Command Bar** (*Barra de comandos*), and run:
+         ```
+         print(#workspace.CityDressing:GetDescendants())
+         print(#workspace.CityDressing:FindFirstChild("Plot1"):GetDescendants())
+         ```
+         Replace `Plot1` with your plot's folder, `Plot<n>` (no underscore).
+      4. Press **Ctrl+F6** (MicroProfiler) and read the frame time in ms over several frames.
+      Report both counts, the frame time and how many plots were built.
+- [ ] 38. Watch **Output** (*Salida*) through the whole run: no red errors and no yellow warnings
+      from CityDressing, Fabric, RoadGraph or PathRenderer. Studio's own warnings are fine.
+
+### Not a bug (don't report these)
+
+- No building sites after the Campfire alone.
+- Buying without levelling stops the town at GrowthTier 3 (about 94 houses, plus sites).
+- The house count jumps near the end (about 54 at tier 4, 116 at full), because the last four
+  landmarks open the back streets. This is known.
+- Far plots show bare cleared patches. This is known; it gets tuned from step 37.
+- Village has no chimney smoke, parked carts, bushes or hedges any more. Moving carts, walkers,
+  lanterns and birds remain. This is known, and the lead decides.
+- You walk through houses, trees, banners and bunting (the no-collision rule).
+- Construction times, and the positions of walkers, carts and birds, differ between two players.
+- The three city-changer pads get a board and dirt, but no stakes, scaffold or building.
+- `FlowerBorderA` never appears. This is known.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- The step 37 numbers.
+- Does it feel like a growing town? Is 10–30 s for a site too long or too short?
+- Are the three city-changers worth buying?
+- Anything that looks off compared with the render (step 23).
+
+### Sign-off
+
+- [ ] 39. All boxes ticked → tell Claude "M12 Village signed off".
