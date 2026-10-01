@@ -5945,3 +5945,149 @@ Heights are measured against the landmarks (a City Kit storey is 1.6 studs at sc
   Village and Boomtown; `bake.py --list` agrees with the client for both eras (Boomtown stays
   "stale mesh" until the re-bake that follows Ben's approval); stylua, selene, luau-lsp and
   `rojo build` are clean.
+
+## Wave 2.4 — back lanes: every house on a road (Ben, 2026-10-01)
+
+Ben at the second gate: "it seems good, but the fact that the houses are not connected to any road
+bothers me, can we create at least smaller roads that lead to the houses and connects them between
+them?" About 70 of Boomtown's 102 lots are back-row infill with no road. Ruling: the props and the
+street plan stand; block interiors get **lanes**.
+
+Client-only, as always. Streets, slots, pads and landmark paths do not move, so the baked path
+pieces are unaffected.
+
+### The idea
+
+- A **lane** is a small road, 3 studs wide, that leaves a street through a gap in the frontage and
+  runs into the block. Lots line it on both sides and face it. Two lanes may meet in the middle of
+  a block, which connects two streets.
+- **Every lot of row 2 or 3 fronts a lane.** No lot stands in a block interior without one.
+- A lane **grows with its houses**: it is drawn from its mouth as far as the farthest lot on it
+  that has at least a building site.
+- Lots deeper along a lane develop later, so a lane fills from the street inward and its far end
+  shows building sites.
+
+### Fabric data (`Config/Fabric/<Era>.json`)
+
+```json
+"lanes": [
+  { "points": [[12.0, -27.6], [12.0, -14.0], [20.5, -14.0]], "stretch": "L2_3", "along": 12.4 }
+],
+"parcels": [
+  { "x": 14.9, "z": -20.0, "rotationY": 90, "size": "small", "stretch": "L2_3", "along": 12.4,
+    "row": 2, "front": 31, "lane": 1, "laneAlong": 7.6 }
+]
+```
+
+- `lanes` is optional. Lane `k` is its 1-based index. `points` is a polyline of 2 to 4 points in
+  plot coordinates; the first is the **mouth**, on the centreline of the street the lane leaves.
+  `stretch` and `along` are the mouth's address on that street, as for a parcel.
+- A parcel may carry `lane` (a lane index) and `laneAlong` (studs along the lane from the mouth to
+  the foot of the perpendicular from the lot's front-centre). It is then a row-2 or row-3 lot whose
+  `stretch` and `along` are the lane's, and whose `front` is the row-1 lot nearest the mouth, as
+  the infill rule already requires. Its `rotationY` faces the lane.
+- A parcel with a malformed `lane` or `laneAlong` is a blank that keeps its index. A malformed lane
+  is not drawn and its lots are blanks.
+
+### `CityFabric.Develop` (normative change; the mirror follows)
+
+Step 3 gains one rule: **a parcel with `lane` adds its `laneAlong` to its distance from every
+landmark** (`d = min(...) + laneAlong`). Everything else is unchanged: contiguity is still row 1
+only, and a back-row lot's level is still capped by its front's.
+
+New pure function, mirrored one to one:
+
+```lua
+CityFabric.LaneReach(lane: Types.FabricLane, parcels: { Types.FabricParcel },
+	levels: { number }, sizes: { [string]: { number } }): number
+```
+
+- The lane's length is the sum of its legs (`sqrt`, never `hypot`).
+- Its reach is the largest `laneAlong + frontage / 2` over its lots with `level ≥ 1`, where
+  `frontage` is `sizes[size][1]`, capped at the length; 0 when no lot has a site yet.
+- Lots are visited in index order; only in-budget, well-formed lots count.
+
+### Drawing a lane (client `Fabric.luau`; the mirror copies the final state)
+
+- Near plots only. A lane is drawn from its mouth to its reach when the reach is above 0.
+- **Shape:** width `fabric.lanes.width`; a rim `fabric.lanes.rim` wider on each side; a disc of the
+  same width at every interior point and at the growing tip. Tops: fill at `fabric.lanes.fillHeight`
+  and rim at `fabric.lanes.rimHeight` above the plot, both **under** the street's fill
+  (`paths.fillHeight` 0.07) so the street covers the mouth, and the lane's fill **over** the
+  street's rim (`paths.rimHeight` 0.02) so no kerb line crosses the mouth.
+- **Surface:** the plot's live street surface. In the baked renderer the fill and rim carry the
+  same images as the baked pieces (the fill and rim textures of the current surface variant) as
+  `Texture` instances tiled every `paths.tileStuds` studs and offset so that they line up in plot
+  coordinates, as the baked pieces' planar UVs do; when the variant changes (Pave Main Street), the
+  lanes change with the streets. Without those images (the parts renderer, a missing asset) the
+  lane takes the road's live material and colour, the rim a darker shade.
+- **Instances:** anchored Parts; `CanCollide`, `CanQuery`, `CanTouch` false. One fill and one rim
+  per leg, resized as the reach grows, so a lane never adds parts per house.
+- **Animation:** on an animated sync on a near plot the lane extends to its new reach over
+  `fabric.lanes.growSeconds` with one dust puff at the tip (`maxPuffs` applies). Unanimated syncs
+  and restores place the final state.
+- **Clearing mask:** every drawn lane leg is a segment with margin `clear.lane`.
+- Lanes are not walk solids and carry no walk or vehicle lanes. Walkers on the street cross a lane
+  mouth as open ground.
+- A missing `lanes` list or `fabric.lanes` block means no lane is drawn, silently; the lots still
+  develop.
+
+Config (`eras.Boomtown.fabric`, lead-applied):
+
+```json
+"lanes": { "width": 3, "rim": 0.4, "fillHeight": 0.05, "rimHeight": 0.01, "growSeconds": 0.5 },
+"clear": { "lane": 1.5 }
+```
+
+### Generator (`tools/fabric.py`, plan block `parcels.lanes`)
+
+- Lays lanes in every block interior that can hold at least three lots: straight, or with one or
+  two bends; from a mouth on a drawn street; two lanes may meet end to end.
+- A mouth is a gap in the row-1 frontage as wide as the lane and its rims, with no kerb-side layer
+  entry, lamp or signal in it, and clear of crossings.
+- Lots line each lane on both sides, fronts `parcels.lanes.setback` from its centreline, facing it,
+  with the usual gaps. Sizes are small, with a medium now and then.
+- **No lot of row 2 or 3 is laid without a lane.** `rows` and `infill` keep their meaning for
+  Village, whose plan has no `lanes` block and must build byte-identical.
+- Lanes keep clear of landmark extents, pads, markers, spur strips, the plaza, other lanes (except
+  where two meet) and the plot edge.
+- The layer placers treat a lane as a street for their clearances; driveway cars may stand beside
+  lane lots.
+- `check` enforces: the rules above; every `laneAlong` within its lane's length; every lane lot's
+  front within 0.5 of the lane's setback line; at least two lots per lane; every lane lot reaches
+  level 2 at full build (no lane to nowhere); `require.parcels`.
+- **Targets:** at least 95 lots (floor 90), at least 20 terraced shops kept, building sites at
+  every tier, and a tier 4 → full jump no larger than 15. `pull` may be re-tuned for the added
+  lane distances.
+
+### Ownership (wave 2.4, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `CityDressing.json` `fabric.lanes` and `clear.lane`; the asset run |
+| economy-designer "generator" | `tools/fabric.py`, `tools/streetplan.py`, `tools/fabric/Boomtown.plan.json`, `Config/Fabric/Boomtown.json`, `eras.Boomtown.fabric.pull` |
+| ui-engineer | `src/shared/CityFabric.luau`, `src/shared/Types.luau` (`FabricLane`, parcel `lane` and `laneAlong`, `FabricLanesConfig`, `clear.lane`), `src/client/City/Fabric.luau`, `src/client/Controllers/CityDressingController.luau` |
+| mirror-engineer | `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py` |
+| luau-engineer | the Studio start-era switch (below) |
+
+### Studio start-era switch (luau-engineer)
+
+Ben's Studio playtests of later eras need Village bought out first. A Studio-only switch starts a
+fresh save in a chosen era, in the style of the Proving Grounds build (a place file with the switch
+baked in, because adding an attribute by hand is hard for Ben in a Spanish Studio).
+
+- Workspace attribute `DebugStartEra` (a whole number 2 to 4), read once per player on load, only
+  under `RunService:IsStudio()`, and only for a profile that is still at its fresh defaults (era 1,
+  no slots, no rebirths). It sets the era index, nothing else: cash, Legacy and stats stay at their
+  defaults, and the normal Advance Era path is not run (no Legacy gain, no analytics event).
+- A second place build bakes it in: `build/boomtown.rbxl` from a project file that differs from
+  `default.project.json` only by that Workspace attribute set to 2. `GrantCash` works as before.
+- Inert outside Studio and when the attribute is absent or invalid. No remote, no config constant
+  duplicated in code.
+
+### Done when (wave 2.4 gate, renders for Ben)
+
+- `assets/testfit/out/Boomtown/m12d_{tier1,tier3,full,full_entrance}.png`, a close shot of one
+  block's lanes, and `m12d_compare.png` against `m12c_full.png`.
+- `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village and
+  Boomtown, Village data byte-identical; stylua, selene, luau-lsp and `rojo build` clean.

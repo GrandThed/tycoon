@@ -644,7 +644,8 @@
           "slot": 3,
           "pad": 1.5,
           "street": 5.5,
-          "parcel": 1.5
+          "parcel": 1.5,
+          "lane": 1.5
         },
         "construction": {
           "minSeconds": 10,
@@ -737,6 +738,13 @@
             "stagger": 0.1,
             "budget": 40
           }
+        },
+        "lanes": {
+          "width": 3,
+          "rim": 0.4,
+          "fillHeight": 0.05,
+          "rimHeight": 0.01,
+          "growSeconds": 0.5
         }
       }
     },
