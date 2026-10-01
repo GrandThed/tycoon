@@ -6,7 +6,7 @@
   "pieces": [
     {"kit": "boomtown-extras-kit", "model": "site-ground-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "frame-house-small", "pos": [-0.275, 0, 0.2875], "rotY": 0, "stage": 0},
-    {"kit": "boomtown-extras-kit", "model": "ladder", "pos": [-0.025, 0, -0.2125], "rotY": 0, "stage": 0},
+    {"kit": "boomtown-extras-kit", "model": "ladder", "pos": [-0.025, 0, -0.17], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "hoarding", "pos": [-0.4375, 0, -0.6875], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "sold-stake", "pos": [0, 0, -0.675], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "barrier", "pos": [0.4125, 0, -0.6], "rotY": 0, "stage": 0},
