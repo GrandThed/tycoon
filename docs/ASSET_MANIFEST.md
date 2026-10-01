@@ -49,19 +49,19 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 5 | `HouseSmallA` | Small House | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 6 | `RoadCobblestone` | Pave the Road | unlock | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `Well` | Village Well | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 8 | `FlowerBed` | Flower Bed | decor | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `FlowerBed` | Plant Flowers | decor | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `HouseSmallB` | Cottage | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 10 | `Bakery` | Bakery | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 11 | `Windmill` | Windmill | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 12 | `Fountain` | Found the Village Square | unlock | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 13 | `MarketStall` | Market Stall | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 14 | `TreeOak` | Oak Tree | decor | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `TreeOak` | Plant Trees | decor | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 15 | `Blacksmith` | Blacksmith | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 16 | `Tavern` | Tavern | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 17 | `CartWagon` | Open the Trade Route | unlock | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 18 | `Chapel` | Chapel | building | yes | castle-kit, fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 19 | `HouseLargeA` | Manor House | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 20 | `BannerPole` | Banner Pole | decor | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `BannerPole` | Hang Banners | decor | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 21 | `Stables` | Stables | building | yes | fantasy-town-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 22 | `Watchtower` | Watchtower | building | yes | castle-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 23 | `WallGate` | Raise the Town Wall | unlock | yes | castle-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -71,30 +71,73 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Village/` -- templates: `templates/_props/Village/` -- in game: `ReplicatedStorage/Assets/Props/Village/`
 
-Summary: 20/20 blueprints, 20/20 uploaded, 20/20 harvested, 20/20 templated
+Summary: 63/63 blueprints, 63/63 uploaded, 63/63 harvested, 63/63 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
 | 1 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 2 | `BushA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 3 | `BushB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `CartParked` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `CottageA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `CottageB` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `FlowerBedA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `FlowerBedB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 10 | `HedgeA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 11 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 13 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 14 | `Lantern` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 15 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 16 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 17 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 18 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 19 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 20 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 2 | `BuntingA` | — | prop | yes | village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 3 | `BushA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 4 | `BushB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `Cart` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 6 | `CartParked` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `CottageA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `CottageB` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 9 | `FabricCampMedium` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 10 | `FabricCampSmall` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 11 | `FabricCivicMedium` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 12 | `FabricCivicSmall` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 13 | `FabricCraftMedium` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 14 | `FabricCraftSmall` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 15 | `FabricFarmMedium` | — | prop | yes | fantasy-town-kit, nature-kit, village-extras-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 16 | `FabricFarmSmall` | — | prop | yes | fantasy-town-kit, nature-kit, village-extras-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 17 | `FabricHomeMediumA` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 18 | `FabricHomeMediumB` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 19 | `FabricHomeMediumC` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 20 | `FabricHomeMediumD` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 21 | `FabricHomeNarrowA` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 22 | `FabricHomeNarrowB` | — | prop | yes | fantasy-town-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 23 | `FabricHomeNarrowC` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 24 | `FabricHomeSmallA` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 25 | `FabricHomeSmallB` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 26 | `FabricHomeSmallC` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 27 | `FabricHomeSmallD` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 28 | `FabricMarketMedium` | — | prop | yes | fantasy-town-kit, nature-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 29 | `FabricMarketSmall` | — | prop | yes | fantasy-town-kit, nature-kit | 2 | 2/2 | 2/2 | 2/2 | yes |
+| 30 | `FlowerBedA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 31 | `FlowerBedB` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 32 | `FlowerBorderA` | — | prop | yes | nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 33 | `FlowerPlanterA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 34 | `HedgeA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 35 | `HouseA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 36 | `HouseB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 37 | `HouseC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 38 | `Lantern` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 39 | `MeadowRock` | — | prop | yes | nature-kit, village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 40 | `NoticeBoard` | — | prop | yes | village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 41 | `PlazaA` | — | prop | yes | fantasy-town-kit, nature-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 42 | `RevealScaffold` | — | prop | yes | village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 43 | `SiteMedium` | — | prop | yes | fantasy-town-kit, nature-kit, village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 44 | `SiteNarrow` | — | prop | yes | fantasy-town-kit, village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 45 | `SiteSmall` | — | prop | yes | fantasy-town-kit, nature-kit, village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 46 | `StreetBannerA` | — | prop | yes | village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 47 | `StreetBannerB` | — | prop | yes | village-extras-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 48 | `TownTreeA` | — | prop | yes | village-extras-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 49 | `TownTreeB` | — | prop | yes | village-extras-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 50 | `TownTreeC` | — | prop | yes | village-extras-kit | 3 | 3/3 | 3/3 | 3/3 | yes |
+| 51 | `TreeGrowing` | — | prop | yes | nature-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 52 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 53 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 54 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 55 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 56 | `WoodsClumpA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 57 | `WoodsClumpB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 58 | `WoodsClumpC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 59 | `WoodsPine` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 60 | `WoodsQuarterA` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 61 | `WoodsQuarterB` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 62 | `WoodsQuarterC` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 63 | `WoodsRound` | — | prop | yes | fantasy-town-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 2 — Boomtown
 
@@ -313,7 +356,7 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 | Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |
 |-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|
 | Boomtown | 38 | 41956 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 76/76 | 76/76 | 38/38 | in game |
-| Village | 58 | 33380 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 116/116 | 116/116 | 58/58 | in game |
+| Village | 47 | 30840 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 94/94 | 94/94 | 47/47 | in game |
 
 ## Totals
 

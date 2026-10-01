@@ -23,9 +23,9 @@
         <string name="Name">Rim</string>
         <bool name="Anchored">true</bool>
         <CoordinateFrame name="CFrame">
-          <X>-28.0007</X>
+          <X>19.0267</X>
           <Y>0.0225</Y>
-          <Z>-7.8084</Z>
+          <Z>-33.9817</Z>
           <R00>-1</R00>
           <R01>0</R01>
           <R02>0</R02>
@@ -43,18 +43,18 @@
         <token name="CollisionFidelity">2</token>
         <Color3uint8 name="Color3uint8">16777215</Color3uint8>
         <Vector3 name="InitialSize">
-          <X>5.4212</X>
+          <X>18.1761</X>
           <Y>0.005</Y>
-          <Z>6.1972</Z>
+          <Z>5.9172</Z>
         </Vector3>
         <token name="Material">272</token>
         <Content name="MeshContent">
-          <uri>rbxassetid://120830070618402</uri>
+          <uri>rbxassetid://102087699954766</uri>
         </Content>
         <Vector3 name="size">
-          <X>5.4212</X>
+          <X>18.1761</X>
           <Y>0.005</Y>
-          <Z>6.1972</Z>
+          <Z>5.9172</Z>
         </Vector3>
         <Content name="TextureContent">
           <uri>rbxassetid://134713724632339</uri>
@@ -66,9 +66,9 @@
         <string name="Name">Fill</string>
         <bool name="Anchored">true</bool>
         <CoordinateFrame name="CFrame">
-          <X>-28.1484</X>
+          <X>19.0309</X>
           <Y>0.0725</Y>
-          <Z>-7.8529</Z>
+          <Z>-33.8621</Z>
           <R00>-1</R00>
           <R01>0</R01>
           <R02>0</R02>
@@ -86,18 +86,18 @@
         <token name="CollisionFidelity">2</token>
         <Color3uint8 name="Color3uint8">16777215</Color3uint8>
         <Vector3 name="InitialSize">
-          <X>4.6803</X>
+          <X>17.19</X>
           <Y>0.005</Y>
-          <Z>5.2825</Z>
+          <Z>5.1065</Z>
         </Vector3>
         <token name="Material">272</token>
         <Content name="MeshContent">
-          <uri>rbxassetid://110678971566742</uri>
+          <uri>rbxassetid://125205039461143</uri>
         </Content>
         <Vector3 name="size">
-          <X>4.6803</X>
+          <X>17.19</X>
           <Y>0.005</Y>
-          <Z>5.2825</Z>
+          <Z>5.1065</Z>
         </Vector3>
         <Content name="TextureContent">
           <uri>rbxassetid://125065635800265</uri>
