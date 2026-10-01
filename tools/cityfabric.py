@@ -5,7 +5,8 @@ show exactly what the game shows -- tools/testfit/plotrender.py above all, which
 against.
 
     py tools/cityfabric.py selftest            # the contract's test vector, asserted
-    py tools/cityfabric.py timeline Village    # parcels by level, plumes and wild counts at tiers 1-5
+    py tools/cityfabric.py timeline Village    # parcels by level, plumes and wild counts at tiers 1-5;
+                                               # exits 1 when a moment shows more plumes than budget.plumes
 
 What is mirrored, and from where (nothing is re-derived; a divergence is a bug in one of them):
   * develop, rect_distance, segment_distance, is_cleared: src/shared/CityFabric.luau, line for line
@@ -656,6 +657,24 @@ def plumes_for(parcels, chimneys, smoking):
         return []
     found = (plume_for(view, view["look"], chimneys) for view in parcels)
     return [plume for plume in found if plume is not None]
+
+
+def plume_cap(budget):
+    """`budget.plumes`: the most fabric plumes one plot may show at any moment of the timeline, or
+    None (no gate) without the key. A tools-only gate -- the client never reads it: `every` is the
+    only thing that limits the emitters in game, and nothing else checks that it still does after
+    a chimney is added to a common prop."""
+    if not isinstance(budget, dict) or budget.get("plumes") is None:
+        return None
+    cap = budget["plumes"]
+    if not finite(cap) or cap < 0:
+        raise SystemExit(f"cityfabric: budget.plumes must be a number of 0 or more, not {cap!r}")
+    return cap
+
+
+def over_plume_cap(count, cap):
+    """Whether `count` plumes break the cap; never without one."""
+    return cap is not None and count > cap
 
 
 def color_from(rgb, fallback):
@@ -1440,7 +1459,7 @@ class FabricPlot:
         upgrades = self.upgrade_placements(owned, states, stretches, tier, near, upgrade_share)
         # syncFabric's `smoke`: a near plot, `living`, and the era and tier gates lot smoke has.
         smoking = near and living and smoke_for(self.city, self.name, tier) is not None
-        mask =self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
+        mask = self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
         cleared = self.cleared_flags(mask) if mask is not None else {}
         return {
             "tier": tier,
@@ -1806,7 +1825,7 @@ def selftest():
         return {k: v for k, v in SELFTEST_SMOKE.items() if k != key}
 
     no_tier = {"ambient": {"smoke": without("firstTier")}}
-    house ={"index": 4, "chimney": True, "parcel": dict(_parcel("medium", "L1_2", 6, 1), x=10, z=-5, rotationY=90)}
+    house = {"index": 4, "chimney": True, "parcel": dict(_parcel("medium", "L1_2", 6, 1), x=10, z=-5, rotationY=90)}
 
     def shows(kind, stage, view=house):
         return plume_for(view, {"kind": kind, "prop": "Home", "stage": stage}, chimneys or {})
@@ -1840,6 +1859,11 @@ def selftest():
         ("lot chimney: bare prop key", lot_chimney(SELFTEST_SMOKE, "Village", "HouseB") == (3, 6.5, 0.8)),
         ("lot chimney: not three numbers", lot_chimney(SELFTEST_SMOKE, "Village", "Bad") is None),
         ("lot chimney: no entry", lot_chimney(SELFTEST_SMOKE, "Village", "HouseC") is None),
+        ("plume cap: read from budget.plumes", plume_cap({"plumes": 20}) == 20),
+        ("plume cap: a missing key is no gate", plume_cap({}) is None and not over_plume_cap(999, None)),
+        ("plume cap: at the cap passes", not over_plume_cap(20, 20)),
+        ("plume cap: one over fails", over_plume_cap(21, 20)),
+        ("plume cap: a cap of 0 allows none", over_plume_cap(1, plume_cap({"plumes": 0}))),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
@@ -1942,13 +1966,16 @@ def timeline(era_name):
         "near (far) plot draws"
     )
     candidates = sum(1 for view in plot.parcel_views if view["chimney"])
+    cap = plume_cap(plot.budget)
+    cap_text = f"cap {cap:g}" if cap is not None else "no cap"
     if plot.smoke_every is None:
         print("  chimney smoke: off (ambient.smoke needs a table `fabricProps` and a whole `every` of 1 or more)")
     else:
         print(
             f"  chimney smoke: every {plot.smoke_every:g} -> {candidates} candidate parcels, "
             f"{len(plot.chimneys)} props with chimney entries; plumes are what a near plot shows "
-            "(device able, City detail on)"
+            "(device able, City detail on), against "
+            + (f"budget.plumes {cap:g} (a tools-only gate)" if cap is not None else "no budget.plumes (no gate)")
         )
     rows = []
     for tier in range(1, len(city["tier"]["thresholds"]) + 1):
@@ -1959,6 +1986,7 @@ def timeline(era_name):
     everything = {slot["id"] for slot in plot.era.config["slots"] if slot["id"] in plot.layout["slots"]}
     rows.append(("full", "final stages", everything, plot.final_stages(everything), len(city["tier"]["thresholds"])))
     fragile_notes = []
+    over_cap = []
     for label, moment, owned, stages, tier in rows:
         near = plot.snapshot(owned, stages, tier, near=True)
         far = plot.snapshot(owned, stages, tier, near=False)
@@ -1979,8 +2007,10 @@ def timeline(era_name):
             f"  {label:6s} ({moment:>12s}, GrowthTier {tier}): {len(owned):2d} owned, "
             f"{len(near['stretches']):2d} stretches | parcels L0 {counts[0]:2d}  L1 {counts[1]:2d}  "
             f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | houses {houses:2d}, sites {sites:2d} "
-            f"(far {far_houses}, {far_sites}) | plumes {len(near['plumes']):2d}"
+            f"(far {far_houses}, {far_sites}) | plumes {len(near['plumes']):2d} ({cap_text})"
         )
+        if over_plume_cap(len(near["plumes"]), cap):
+            over_cap.append(f"{label}: {len(near['plumes'])} fabric plumes, over budget.plumes {cap:g}")
         if near["plumes"]:
             smoking = {}
             for plume in near["plumes"]:
@@ -2007,6 +2037,15 @@ def timeline(era_name):
     print(f"  woods that grow back when their pad's slot is bought (any purchase order): {len(risks)}")
     for risk in risks:
         print(f"    {risk}")
+    if over_cap:
+        print(f"timeline FAILED: more chimney plumes than budget.plumes at {len(over_cap)} moment(s)")
+        for note in over_cap:
+            print(f"   {note}")
+        print(
+            "   every plume is a ParticleEmitter and only ambient.smoke.every limits them in game: raise "
+            "`every` (CityDressing.json) with the chimney change, or raise budget.plumes on purpose"
+        )
+        return 1
     return 0
 
 

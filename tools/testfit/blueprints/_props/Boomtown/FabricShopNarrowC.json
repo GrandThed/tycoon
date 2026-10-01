@@ -5,7 +5,7 @@
   "footprint": [5, 8],
   "pieces": [
     {"kit": "boomtown-extras-kit", "model": "shop-c-ground", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "city-kit-suburban", "model": "path-short", "pos": [0.4, 0.015, -0.875], "rotY": 0, "stage": 0},
+    {"kit": "city-kit-suburban", "model": "path-short", "pos": [0.445, 0.015, -0.875], "rotY": 0, "stage": 0},
     {"kit": "city-kit-suburban", "model": "fence", "pos": [-0.3125, 0, 0.955], "rotY": 0, "stage": 0},
     {"kit": "city-kit-suburban", "model": "fence", "pos": [0.3125, 0, 0.955], "rotY": 0, "stage": 0},
     {"kit": "boomtown-extras-kit", "model": "shop-c-front", "pos": [0, 0, 0], "rotY": 0, "stage": 1},

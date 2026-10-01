@@ -196,6 +196,7 @@ def stud_wall(p: Part, a, b, base: float, height: float, openings=(), spacing: f
         wbox(o0, o1, base + head, base + head + PLATE, TERRACOTTA)
         if sill > 0.0:
             wbox(o0, o1, base + sill - STUD, base + sill, TERRACOTTA)
+        if sill > 2 * STUD + 0.05:  # room for a cripple between the sole plate and the sill
             mid = (o0 + o1) / 2
             wbox(mid - h, mid + h, base + STUD, base + sill - STUD, WOOD)
 
@@ -220,8 +221,9 @@ def house_frame(name: str, width: float, depth: float, wall: float, rise: float,
     d0, d1 = door
     w0, w1 = window
     ex = wx + STUD / 2  # the street and back walls run corner to corner; the side walls fit between
-    stud_wall(p, (-ex, -wz), (ex, -wz), SLAB, wall, openings=((d0, d1, 0.0, 2.05), (w0, w1, 0.85, 2.05)))
-    stud_wall(p, (-ex, wz), (ex, wz), SLAB, wall, openings=((lx * 0.3, lx * 0.3 + 1.0, 0.85, 2.05),))
+    head, sill = wall - 0.6, 0.5  # openings at the kits' door height, not a full-size one
+    stud_wall(p, (-ex, -wz), (ex, -wz), SLAB, wall, openings=((d0, d1, 0.0, head), (w0, w1, sill, head)))
+    stud_wall(p, (-ex, wz), (ex, wz), SLAB, wall, openings=((lx * 0.3, lx * 0.3 + 1.0, sill, head),))
     for x in (-wx, wx):
         stud_wall(p, (x, -wz + STUD / 2), (x, wz - STUD / 2), SLAB, wall)
     eave = SLAB + wall
@@ -238,23 +240,27 @@ def house_frame(name: str, width: float, depth: float, wall: float, rise: float,
 
 
 def make_frame_house_small() -> Part:
-    """SiteSmall's house: a 3.4 x 3.0 slab, 2.45-stud walls, ridge at 4.15; 3 of 5 rafter pairs up."""
-    return house_frame("frame-house-small", 3.4, 3.0, 2.45, 1.45, 3, 4, (0.45, 1.3), (1.75, 2.6))
+    """SiteSmall's house: a 3.4 x 3.0 slab, 1.9-stud walls, ridge at 3.25; 3 of 5 rafter pairs up.
+    No taller than the small homes that replace it (2.9 to 3.2)."""
+    return house_frame("frame-house-small", 3.4, 3.0, 1.9, 1.1, 3, 4, (0.45, 1.3), (1.75, 2.6))
 
 
 def make_frame_house_medium() -> Part:
-    """SiteMedium's house: a 5.0 x 4.0 slab, 2.75-stud walls, ridge at 4.9; 4 of 7 rafter pairs up."""
-    return house_frame("frame-house-medium", 5.0, 4.0, 2.75, 1.9, 4, 6, (0.6, 1.6), (2.2, 3.9))
+    """SiteMedium's house: a 5.0 x 4.0 slab, 2.2-stud walls, ridge at 3.85; 4 of 7 rafter pairs up."""
+    return house_frame("frame-house-medium", 5.0, 4.0, 2.2, 1.4, 4, 6, (0.6, 1.6), (2.2, 3.9))
 
 
 # The narrow lot's building line, shared by the shop shell and the three shops: the body stands
 # 0.9 studs back from the street edge (room for an awning or a scaffold) and leaves a 2.1-stud yard.
+# The roof decks are the City Kits' own: their storey is 0.4 units, 1.6 studs at the landmarks'
+# scale 4, and a one-storey flat kit building's deck stands near 2.0 with its kerb. (A first cut used
+# 3.5-stud storeys; beside the Barber Shop its doors were twice the landmark's.)
 SHOP_HX = 2.45
 SHOP_FRONT = -3.1
 SHOP_BACK = 1.9
-SHOP_H1 = 3.5  # ground-floor roof deck
-SHOP_H2 = 6.8  # upper-floor roof deck
-CHIMNEY_RISE = (0.95, 1.15)  # a chimney's height above the ground-floor and the upper-floor deck
+SHOP_H1 = 1.85  # ground-floor roof deck
+SHOP_H2 = 3.45  # upper-floor roof deck
+CHIMNEY_RISE = (0.4, 0.55)  # a chimney's height above the ground-floor and the upper-floor deck
 STACK_A = (-1.5, 1.0)  # chimney centres (x, z) in the lot frame; shop b has a roof ventilator instead
 STACK_C = (1.4, 0.9)
 
@@ -270,14 +276,14 @@ def make_frame_shop() -> Part:
     wx, zf, zb = hx - 0.15, SHOP_FRONT + 0.15, SHOP_BACK - 0.15
     wall = SHOP_H1 - SLAB
     ex = wx + STUD / 2
-    stud_wall(p, (-ex, zf), (ex, zf), SLAB, wall, openings=((0.4, 1.4, 0.0, 2.2), (1.8, 4.2, 0.6, 2.2)))
-    stud_wall(p, (-ex, zb), (ex, zb), SLAB, wall, openings=((3.0, 3.9, 0.0, 2.2),), spacing=0.8)
+    stud_wall(p, (-ex, zf), (ex, zf), SLAB, wall, openings=((0.4, 1.1, 0.0, 1.15), (1.5, 4.2, 0.35, 1.15)))
+    stud_wall(p, (-ex, zb), (ex, zb), SLAB, wall, openings=((3.0, 3.7, 0.0, 1.15),), spacing=0.8)
     for x in (-wx, wx):
         stud_wall(p, (x, zf + STUD / 2), (x, zb - STUD / 2), SLAB, wall, spacing=0.75)
     for k in range(5):  # roof joists, front to back
         z = zf + 0.55 + (zb - zf - 1.1) * k / 4
         beam(p, (-wx - 0.02, SHOP_H1 + 0.1, z), (wx + 0.02, SHOP_H1 + 0.1, z), 0.16, 0.2, RAFTER, ends=SAND)
-    stud_wall(p, (-ex, zf), (ex, zf), SHOP_H1, 1.1, spacing=0.75)  # the false front's cripples, to 4.6
+    stud_wall(p, (-ex, zf), (ex, zf), SHOP_H1, 1.1, spacing=0.75)  # the false front's cripples, to 2.95
     return p
 
 
@@ -374,10 +380,10 @@ def make_barrier() -> Part:
 
 
 def make_hoarding() -> Part:
-    """One hoarding panel, 2.4 x 1.75 x 0.26 studs: white boards between slate posts under a red
+    """One hoarding panel, 2.4 x 1.45 x 0.26 studs: white boards between slate posts under a red
     top band, the white-and-red of every Boomtown site and sale board. Panels butt end to end."""
     p = Part("hoarding")
-    half, height = 1.2, 1.6
+    half, height = 1.2, 1.3
     boards = 6
     w = 2 * half / boards
     for i in range(boards):
@@ -391,30 +397,32 @@ def make_hoarding() -> Part:
 
 
 def make_sold_stake() -> Part:
-    """A stake with a red SOLD board and a white band, 1.0 x 1.6 x 0.23 studs, facing -Z."""
+    """A stake with a red SOLD board and a white band, 1.0 x 1.3 x 0.23 studs, facing -Z. It
+    stands under the lower lift of scaffold-bay."""
     p = Part("sold-stake")
-    p.box(-0.07, 0.07, 0.0, 1.6, 0.0, 0.14, BRICK)
-    p.box(-0.5, 0.5, 0.9, 1.5, -0.06, 0.0, RED)
-    p.box(-0.36, 0.36, 1.12, 1.28, -0.09, -0.06, WHITE)
+    p.box(-0.07, 0.07, 0.0, 1.3, 0.0, 0.14, BRICK)
+    p.box(-0.5, 0.5, 0.66, 1.22, -0.06, 0.0, RED)
+    p.box(-0.36, 0.36, 0.86, 1.02, -0.09, -0.06, WHITE)
     return p
 
 
 def make_scaffold_bay() -> Part:
-    """Steel-pipe scaffold across a shop front, 4.6 x 4.4 x 0.9 studs, centred on its own middle:
+    """Steel-pipe scaffold across a shop front, 4.6 x 3.4 x 0.9 studs, centred on its own middle:
     six slate standards in two rows, ledgers at two lifts, a plank deck on the lower lift with a
-    guard rail above it, one diagonal brace per bay toward the street."""
+    guard rail above it, one diagonal brace per bay toward the street. It stands a little over the
+    shell's false front (2.95)."""
     p = Part("scaffold-bay")
-    hx, hz, height, pipe = 2.2, 0.32, 4.4, 0.16
+    hx, hz, height, pipe = 2.2, 0.32, 3.4, 0.16
     for x in (-hx, 0.0, hx):
         for z in (-hz, hz):
             p.box(x - pipe / 2, x + pipe / 2, 0.0, height, z - pipe / 2, z + pipe / 2, SLATE, top=SLATE_LIGHT)
-    lifts = (2.1, 4.0)
+    lifts = (1.5, 3.0)
     for y in lifts:
         for z in (-hz, hz):
             beam(p, (-hx - 0.1, y, z), (hx + 0.1, y, z), pipe, pipe, SLATE)
         for x in (-hx, 0.0, hx):
             beam(p, (x, y - 0.14, -hz - 0.08), (x, y - 0.14, hz + 0.08), pipe * 0.8, pipe * 0.8, SLATE_LIGHT)
-    beam(p, (-hx - 0.1, 3.1, -hz), (hx + 0.1, 3.1, -hz), pipe * 0.8, pipe * 0.8, SLATE_LIGHT)  # guard rail
+    beam(p, (-hx - 0.1, 2.3, -hz), (hx + 0.1, 2.3, -hz), pipe * 0.8, pipe * 0.8, SLATE_LIGHT)  # guard rail
     deck = lifts[0] + 0.08
     p.box(-hx - 0.08, hx + 0.08, deck, deck + 0.1, -hz - 0.06, hz + 0.06, WOOD, front=SAND, left=CREAM, right=CREAM)
     zb = -hz - pipe / 2 - 0.05
@@ -424,15 +432,15 @@ def make_scaffold_bay() -> Part:
 
 
 def make_ladder() -> Part:
-    """A 4.1-stud ladder leaning back 15 degrees: feet at the origin, top 3.96 up and 1.06 toward +Z."""
+    """A 2.6-stud ladder leaning back 15 degrees: feet at the origin, top 2.51 up and 0.67 toward +Z."""
     p = Part("ladder")
-    length, tilt = 4.1, math.radians(15.0)
+    length, tilt = 2.6, math.radians(15.0)
     top_y, top_z = length * math.cos(tilt), length * math.sin(tilt)
     half = 0.36
     for sx in (-1, 1):
         beam(p, (sx * half, 0.02, 0.0), (sx * half, top_y, top_z), 0.13, 0.13, BRICK)
-    for i in range(6):
-        f = (i + 0.7) / 6.3
+    for i in range(5):
+        f = (i + 0.7) / 5.3
         beam(p, (-half, top_y * f, top_z * f), (half, top_y * f, top_z * f), 0.09, 0.09, TERRACOTTA)
     return p
 
@@ -550,34 +558,33 @@ def make_lot_sign() -> Part:
 # --- Main Street shops ----------------------------------------------------------------------------
 #
 # Three anonymous shops for the 5 x 8 narrow lot, each built from one piece per stage, all in the
-# lot frame. Stages are additive, so each later piece is made to swallow the earlier ones:
-# - stage 0, shop-<v>-ground: a one-storey flat-roofed body with a plain front (3.75 studs);
+# lot frame, at the City Kits' storey height (see SHOP_H1). Stages are additive, so each later piece
+# is made to swallow the earlier ones:
+# - stage 0, shop-<v>-ground: a one-storey flat-roofed body with a plain front (kerb at 2.0);
 # - stage 1, shop-<v>-front: a false-front parapet standing on the front wall, a sign board on it
-#   and an awning over the window (5.2 to 5.7);
+#   and an awning over the window (3.1 to 3.4);
 # - stage 2, shop-<v>-upper: a second storey 0.03 proud of the body on every side, so the roof
-#   kerb and the false front end up inside it. The sign board is 0.14 proud, so it stays in view
-#   as the fascia between the floors; a taller sign goes on top (8.55 to 8.7).
+#   kerb and the false front end up inside it. The sign board is 0.12 proud, so it stays in view
+#   as the fascia between the floors; a taller sign goes on top (4.45, under the Barber Shop's 4.6).
 # Side walls are blank and stand 0.05 inside the lot line: shops meet in a terrace. All colour is
-# on the front: brick red (a), pale blue (b) and cream (c).
+# on the front: brick red (a), pale blue (b) and cream (c). At this height the awnings hide the top
+# of the shop windows from the tycoon camera, so the awnings and the sign boards carry the fronts.
 
 
 def window(p: Part, x0: float, x1: float, y0: float, y1: float, z: float, facing: int, frame: Rgb = SLATE,
-           mullions: int = 0, bar: bool = False) -> None:
+           mullions: int = 0) -> None:
     """A framed pane on a wall whose outer face is at z and faces `facing` (-1 = -Z, 1 = +Z)."""
 
     def zbox(a0, a1, b0, b1, proud, colour):
         za, zb = sorted((z, z + facing * proud))
         p.box(a0, a1, b0, b1, za, zb, colour)
 
-    m = 0.11
-    zbox(x0, x1, y0, y1, 0.06, frame)
-    zbox(x0 + m, x1 - m, y0 + m, y1 - m, 0.085, GLASS)
+    m = 0.08
+    zbox(x0, x1, y0, y1, 0.05, frame)
+    zbox(x0 + m, x1 - m, y0 + m, y1 - m, 0.07, GLASS)
     for k in range(mullions):
         x = x0 + (x1 - x0) * (k + 1) / (mullions + 1)
-        zbox(x - 0.045, x + 0.045, y0 + m, y1 - m, 0.11, frame)
-    if bar:
-        y = y0 + (y1 - y0) * 0.68
-        zbox(x0 + m, x1 - m, y - 0.045, y + 0.045, 0.11, frame)
+        zbox(x - 0.035, x + 0.035, y0 + m, y1 - m, 0.09, frame)
 
 
 def door(p: Part, x0: float, x1: float, y1: float, z: float, facing: int, leaf: Rgb, frame: Rgb = SLATE,
@@ -586,19 +593,19 @@ def door(p: Part, x0: float, x1: float, y1: float, z: float, facing: int, leaf: 
         za, zb = sorted((z, z + facing * proud))
         p.box(a0, a1, b0, b1, za, zb, colour)
 
-    zbox(x0, x1, 0.0, y1, 0.06, frame)
-    zbox(x0 + 0.1, x1 - 0.1, 0.0, y1 - 0.1, 0.085, leaf)
+    zbox(x0, x1, 0.0, y1, 0.05, frame)
+    zbox(x0 + 0.07, x1 - 0.07, 0.0, y1 - 0.07, 0.07, leaf)
     if glazed:
-        zbox(x0 + 0.24, x1 - 0.24, y1 * 0.5, y1 - 0.26, 0.11, GLASS)
+        zbox(x0 + 0.17, x1 - 0.17, y1 * 0.5, y1 - 0.2, 0.09, GLASS)
 
 
 def chimney(p: Part, x: float, z: float, deck: float, rise: float) -> None:
     """A brick stack with a slab cap and a flue pot, standing `rise` above the roof deck. Its top
     centre is where the smoke config puts a plume."""
     top = deck + rise
-    p.box(x - 0.32, x + 0.32, deck, top - 0.2, z - 0.32, z + 0.32, BRICK)
-    p.box(x - 0.38, x + 0.38, top - 0.2, top - 0.1, z - 0.38, z + 0.38, STONE_DARK, top=LAVENDER)
-    p.box(x - 0.16, x + 0.16, top - 0.1, top, z - 0.16, z + 0.16, SLATE, top=CHARCOAL)
+    p.box(x - 0.22, x + 0.22, deck, top - 0.14, z - 0.22, z + 0.22, BRICK)
+    p.box(x - 0.27, x + 0.27, top - 0.14, top - 0.07, z - 0.27, z + 0.27, STONE_DARK, top=LAVENDER)
+    p.box(x - 0.11, x + 0.11, top - 0.07, top, z - 0.11, z + 0.11, SLATE, top=CHARCOAL)
 
 
 def shop_ground(name: str, facade: Rgb, trim: Rgb, leaf: Rgb, layout: str, stack=None) -> Part:
@@ -607,74 +614,75 @@ def shop_ground(name: str, facade: Rgb, trim: Rgb, leaf: Rgb, layout: str, stack
     # the pavement apron runs the full lot width, so a terrace's aprons join into one sidewalk
     p.box(-NARROW[0] / 2, NARROW[0] / 2, 0.0, 0.06, -NARROW[1] / 2, zf, LAVENDER)
     p.box(-hx, hx, 0.0, SHOP_H1, zf, zb, WALL, front=facade, top=SLATE)
-    kerb, k = SHOP_H1 + 0.25, 0.18
+    kerb, k = SHOP_H1 + 0.15, 0.14
     p.box(-hx, hx, SHOP_H1, kerb, zf, zf + k, trim)
     p.box(-hx, hx, SHOP_H1, kerb, zb - k, zb, LAVENDER)
     for x0, x1 in ((-hx, -hx + k), (hx - k, hx)):
         p.box(x0, x1, SHOP_H1, kerb, zf + k, zb - k, LAVENDER)
-    riser = 0.5
+    riser, head = 0.3, 1.3
 
-    def shop_window(x0: float, x1: float, mullions: int, bar: bool = False) -> None:
-        p.box(x0, x1, 0.0, riser, zf - 0.07, zf, trim)
-        window(p, x0, x1, riser, 2.4, zf, -1, mullions=mullions, bar=bar)
+    def shop_window(x0: float, x1: float, mullions: int) -> None:
+        p.box(x0, x1, 0.0, riser, zf - 0.06, zf, trim)
+        window(p, x0, x1, riser, head, zf, -1, mullions=mullions)
 
     if layout == "centre":
-        door(p, -0.5, 0.5, 2.4, zf, -1, leaf)
-        shop_window(-2.15, -0.72, 0)
-        shop_window(0.72, 2.15, 0)
+        door(p, -0.32, 0.32, head, zf, -1, leaf)
+        shop_window(-2.15, -0.55, 1)
+        shop_window(0.55, 2.15, 1)
     elif layout == "left":
-        door(p, -2.1, -1.1, 2.4, zf, -1, leaf)
-        shop_window(-0.8, 2.15, 2)
+        door(p, -2.1, -1.46, head, zf, -1, leaf)
+        shop_window(-1.2, 2.15, 3)
     else:
-        door(p, 1.1, 2.1, 2.4, zf, -1, leaf)
-        shop_window(-2.15, 0.8, 1, bar=True)
+        door(p, 1.46, 2.1, head, zf, -1, leaf)
+        shop_window(-2.15, 1.2, 2)
     # the back: a plain service door and a small window, for anyone who walks round
-    door(p, 0.9, 1.8, 2.2, zb, 1, SLATE_LIGHT, glazed=False)
-    window(p, -1.6, -0.5, 1.2, 2.2, zb, 1)
+    door(p, 0.9, 1.5, 1.2, zb, 1, SLATE_LIGHT, glazed=False)
+    window(p, -1.6, -0.6, 0.55, 1.15, zb, 1)
     if stack:
         chimney(p, stack[0], stack[1], SHOP_H1, CHIMNEY_RISE[0])
     return p
 
 
 def striped_awning(p: Part, x0: float, x1: float, colours, stripes: int) -> None:
-    """A canvas awning over the shop window: a striped slope from the wall at 3.1 down to 2.45 at
-    0.82 out, a valance along its front edge and a closed cheek at each end."""
+    """A canvas awning over the shop window: a striped slope from the wall at 1.74 down to 1.44 at
+    0.45 out, a valance along its front edge and a closed cheek at each end. Shallow, so the
+    camera still sees glass under it."""
     zw = SHOP_FRONT
-    zf = zw - 0.82
-    yt, yf, t = 3.1, 2.45, 0.08
+    zf = zw - 0.45
+    yt, yf, t = 1.74, 1.44, 0.06
     w = (x1 - x0) / stripes
     for i in range(stripes):
         xa, xb = x0 + i * w, x0 + (i + 1) * w
         c = colours[i % 2]
         p.hexa([(xa, yf - t, zf), (xb, yf - t, zf), (xb, yt - t, zw), (xa, yt - t, zw),
                 (xa, yf, zf), (xb, yf, zf), (xb, yt, zw), (xa, yt, zw)], c)
-        p.box(xa, xb, yf - 0.34, yf - t, zf, zf + 0.06, c)
-    for xa, xb in ((x0 - 0.05, x0), (x1, x1 + 0.05)):
+        p.box(xa, xb, yf - 0.2, yf - t, zf, zf + 0.05, c)
+    for xa, xb in ((x0 - 0.04, x0), (x1, x1 + 0.04)):
         extrude_x(p, [(zw, yt), (zf, yf), (zf, yf - t), (zw, yf - t)], xa, xb, colours[1])
 
 
 def flat_canopy(p: Part, x0: float, x1: float, colour: Rgb, edge: Rgb) -> None:
-    """A rigid 1950s canopy: a slab hung 0.85 out from the wall on two tie rods."""
+    """A rigid 1950s canopy: a slab hung 0.5 out from the wall on two tie rods."""
     zw = SHOP_FRONT
-    zf = zw - 0.85
-    p.box(x0, x1, 2.72, 2.9, zf, zw, colour)
-    p.box(x0 - 0.03, x1 + 0.03, 2.66, 2.96, zf - 0.04, zf + 0.04, edge)
+    zf = zw - 0.5
+    p.box(x0, x1, 1.5, 1.6, zf, zw, colour)
+    p.box(x0 - 0.03, x1 + 0.03, 1.46, 1.64, zf - 0.03, zf + 0.03, edge)
     for x in (x0 + 0.5, x1 - 0.5):
-        beam(p, (x, 2.92, zf + 0.12), (x, 3.42, zw), 0.06, 0.06, SLATE)
+        beam(p, (x, 1.61, zf + 0.1), (x, 1.82, zw), 0.05, 0.05, SLATE)
 
 
 def sign_board(p: Part, x0: float, x1: float, board: Rgb, band: Rgb) -> None:
-    """The fascia sign, 0.14 proud of the front wall: a board with a lettering band across it."""
+    """The fascia sign, 0.12 proud of the front wall: a board with a lettering band across it."""
     zw = SHOP_FRONT
-    p.box(x0, x1, 3.72, 4.82, zw - 0.14, zw, board)
-    p.box(x0 + 0.22, x1 - 0.22, 4.0, 4.54, zw - 0.18, zw - 0.14, band)
+    p.box(x0, x1, 2.1, 2.65, zw - 0.12, zw, board)
+    p.box(x0 + 0.2, x1 - 0.2, 2.23, 2.52, zw - 0.15, zw - 0.12, band)
 
 
 def parapet(p: Part, x0: float, x1: float, top: float, facade: Rgb, cap: Rgb) -> None:
-    """One block of the false front: 0.3 thick on the front wall, with a cap."""
+    """One block of the false front: 0.25 thick on the front wall, with a cap."""
     zw = SHOP_FRONT
-    p.box(x0, x1, SHOP_H1, top, zw, zw + 0.3, facade, back=WALL)
-    p.box(x0, x1, top, top + 0.13, zw, zw + 0.34, cap)
+    p.box(x0, x1, SHOP_H1, top, zw, zw + 0.25, facade, back=WALL)
+    p.box(x0, x1, top, top + 0.1, zw, zw + 0.29, cap)
 
 
 def upper(p: Part, facade: Rgb, trim: Rgb, windows, stack=None) -> None:
@@ -685,14 +693,14 @@ def upper(p: Part, facade: Rgb, trim: Rgb, windows, stack=None) -> None:
     hx, zf, zb = SHOP_HX + e, SHOP_FRONT - e, SHOP_BACK + e
     p.box(-hx, hx, SHOP_H1, SHOP_H2, zf, zb, WALL, front=facade, top=SLATE)
     for x0, x1, mullions in windows:
-        window(p, x0, x1, 5.15, 6.35, zf, -1, mullions=mullions)
-        p.box(x0 - 0.06, x1 + 0.06, 5.02, 5.15, zf - 0.1, zf, trim)
-    window(p, -0.7, 0.7, 5.1, 6.2, zb, 1, mullions=1)
-    kerb, k = SHOP_H2 + 0.25, 0.18
-    p.box(-hx, hx, SHOP_H2 - 0.08, kerb + 0.05, zf - 0.09, zf + 0.22, trim)
+        window(p, x0, x1, 2.78, 3.3, zf, -1, mullions=mullions)
+        p.box(x0 - 0.05, x1 + 0.05, 2.7, 2.78, zf - 0.08, zf, trim)
+    window(p, -0.6, 0.6, 2.6, 3.15, zb, 1, mullions=1)
+    kerb, k = SHOP_H2 + 0.15, 0.14
+    p.box(-hx, hx, SHOP_H2 - 0.06, kerb + 0.05, zf - 0.07, zf + 0.18, trim)
     p.box(-hx, hx, SHOP_H2, kerb, zb - k, zb, LAVENDER)
     for x0, x1 in ((-hx, -hx + k), (hx - k, hx)):
-        p.box(x0, x1, SHOP_H2, kerb, zf + 0.22, zb - k, LAVENDER)
+        p.box(x0, x1, SHOP_H2, kerb, zf + 0.18, zb - k, LAVENDER)
     if stack:
         chimney(p, stack[0], stack[1], SHOP_H2, CHIMNEY_RISE[1])
 
@@ -703,30 +711,30 @@ def make_shop_a_ground() -> Part:
 
 
 def make_shop_a_front() -> Part:
-    """Shop a, stage 1: a level false front to 5.23, a green and white striped awning, a yellow sign."""
+    """Shop a, stage 1: a level false front to 3.1, a green and white striped awning, a yellow sign."""
     p = Part("shop-a-front")
-    parapet(p, -SHOP_HX, SHOP_HX, 5.1, TERRACOTTA, WHITE)
+    parapet(p, -SHOP_HX, SHOP_HX, 3.0, TERRACOTTA, WHITE)
     striped_awning(p, -2.25, 2.25, (GREEN, WHITE), 9)
     sign_board(p, -1.9, 1.9, YELLOW, SLATE)
     return p
 
 
 def make_shop_a_upper() -> Part:
-    """Shop a, stage 2: a second storey with two windows and a yellow roof sign with a dark band, 8.7."""
+    """Shop a, stage 2: a second storey with two windows and a yellow roof sign with a dark band, 4.45."""
     p = Part("shop-a-upper")
-    upper(p, TERRACOTTA, WHITE, ((-1.9, -0.5, 1), (0.5, 1.9, 1)), stack=STACK_A)
-    z = SHOP_FRONT + 0.3
-    for x in (-1.2, 1.2):
-        p.box(x - 0.08, x + 0.08, SHOP_H2 + 0.25, 7.6, z - 0.08, z + 0.08, SLATE)
-    p.box(-1.7, 1.7, 7.5, 8.7, z - 0.2, z - 0.08, YELLOW, back=SLATE_LIGHT)
-    p.box(-1.45, 1.45, 7.84, 8.36, z - 0.24, z - 0.2, SLATE)
+    upper(p, TERRACOTTA, WHITE, ((-1.9, -0.6, 1), (0.6, 1.9, 1)), stack=STACK_A)
+    z = SHOP_FRONT + 0.25
+    for x in (-1.1, 1.1):
+        p.box(x - 0.06, x + 0.06, SHOP_H2 + 0.15, 3.85, z - 0.06, z + 0.06, SLATE)
+    p.box(-1.6, 1.6, 3.8, 4.45, z - 0.16, z - 0.06, YELLOW, back=SLATE_LIGHT)
+    p.box(-1.38, 1.38, 3.98, 4.27, z - 0.19, z - 0.16, SLATE)
     return p
 
 
 def ventilator(p: Part, deck: float) -> None:
-    """Shop b's roof ventilator: a louvred box under a slate lid, 0.62 above the deck."""
-    p.box(0.6, 1.5, deck, deck + 0.5, 0.2, 1.1, LAVENDER, top=SLATE_LIGHT)
-    p.box(0.5, 1.6, deck + 0.5, deck + 0.62, 0.1, 1.2, SLATE)
+    """Shop b's roof ventilator: a louvred box under a slate lid, 0.36 above the deck."""
+    p.box(0.7, 1.4, deck, deck + 0.28, 0.3, 1.0, LAVENDER, top=SLATE_LIGHT)
+    p.box(0.63, 1.47, deck + 0.28, deck + 0.36, 0.23, 1.07, SLATE)
 
 
 def make_shop_b_ground() -> Part:
@@ -738,43 +746,43 @@ def make_shop_b_ground() -> Part:
 
 
 def make_shop_b_front() -> Part:
-    """Shop b, stage 1: a stepped false front to 5.73, a yellow flat canopy, a yellow sign."""
+    """Shop b, stage 1: a stepped false front to 3.4, a yellow flat canopy, a white sign."""
     p = Part("shop-b-front")
     for x0, x1 in ((-SHOP_HX, -1.15), (1.15, SHOP_HX)):
-        parapet(p, x0, x1, 4.95, BLUE_PALE, NAVY)
-    parapet(p, -1.15, 1.15, 5.6, BLUE_PALE, NAVY)
+        parapet(p, x0, x1, 2.9, BLUE_PALE, NAVY)
+    parapet(p, -1.15, 1.15, 3.3, BLUE_PALE, NAVY)
     flat_canopy(p, -2.3, 2.3, YELLOW, WHITE)
     sign_board(p, -1.9, 1.9, WHITE, NAVY)
     return p
 
 
 def make_shop_b_upper() -> Part:
-    """Shop b, stage 2: a second storey with three windows and a yellow blade sign at the corner, 8.55."""
+    """Shop b, stage 2: a second storey with three windows and a yellow blade sign at the corner, 4.45."""
     p = Part("shop-b-upper")
-    upper(p, BLUE_PALE, NAVY, ((-2.0, -1.0, 0), (-0.5, 0.5, 0), (1.0, 1.65, 0)))
+    upper(p, BLUE_PALE, NAVY, ((-2.0, -1.1, 0), (-0.45, 0.45, 0), (1.0, 1.62, 0)))
     ventilator(p, SHOP_H2)
     zw = SHOP_FRONT - 0.03
-    x0, x1 = 1.82, 2.0
-    p.box(x0, x1, 4.95, 8.4, zw - 0.82, zw - 0.12, YELLOW, front=NAVY)
-    p.box(x0 - 0.03, x1 + 0.03, 8.4, 8.55, zw - 0.86, zw - 0.08, NAVY)
+    x0, x1 = 1.84, 2.0
+    p.box(x0, x1, 2.75, 4.35, zw - 0.6, zw - 0.1, YELLOW, front=NAVY)
+    p.box(x0 - 0.03, x1 + 0.03, 4.35, 4.45, zw - 0.63, zw - 0.07, NAVY)
     for xa, xb in ((x0 - 0.03, x0), (x1, x1 + 0.03)):  # the lettering band, on both faces
-        p.box(xa, xb, 5.4, 7.95, zw - 0.56, zw - 0.38, NAVY)
-    for y in (5.2, 6.45):
-        p.box(x0 + 0.03, x1 - 0.03, y, y + 0.12, zw - 0.12, zw, SLATE)
+        p.box(xa, xb, 2.95, 4.15, zw - 0.42, zw - 0.28, NAVY)
+    for y in (2.86, 3.25):
+        p.box(x0 + 0.03, x1 - 0.03, y, y + 0.08, zw - 0.1, zw, SLATE)
     return p
 
 
 def make_shop_c_ground() -> Part:
-    """Shop c, stage 0: cream front, red trim, the door at the right of a barred window."""
+    """Shop c, stage 0: cream front, red trim, the door at the right of one wide window."""
     return shop_ground("shop-c-ground", CREAM, RED, RED, "right", stack=STACK_C)
 
 
 def make_shop_c_front() -> Part:
-    """Shop c, stage 1: a false front with end piers to 5.58, a red and white awning, a red sign."""
+    """Shop c, stage 1: a false front with end piers to 3.25, a red and white awning, a red sign."""
     p = Part("shop-c-front")
-    parapet(p, -1.95, 1.95, 4.9, CREAM, RED)
+    parapet(p, -1.95, 1.95, 2.9, CREAM, RED)
     for x0, x1 in ((-SHOP_HX, -1.95), (1.95, SHOP_HX)):
-        parapet(p, x0, x1, 5.45, CREAM, RED)
+        parapet(p, x0, x1, 3.15, CREAM, RED)
     striped_awning(p, -2.25, 2.25, (RED, WHITE), 9)
     sign_board(p, -1.75, 1.75, RED, WHITE)
     return p
@@ -782,17 +790,17 @@ def make_shop_c_front() -> Part:
 
 def make_shop_c_upper() -> Part:
     """Shop c, stage 2: a second storey with two windows under a stepped pediment that carries a red
-    roundel, 8.6."""
+    roundel, 4.45."""
     p = Part("shop-c-upper")
     upper(p, CREAM, RED, ((-1.9, -0.6, 1), (0.6, 1.9, 1)), stack=STACK_C)
     zf = SHOP_FRONT - 0.03
-    top = SHOP_H2 + 0.3
-    p.box(-1.5, 1.5, top, top + 0.8, zf, zf + 0.3, CREAM, back=WALL)
-    p.box(-1.5, 1.5, top + 0.8, top + 0.93, zf - 0.03, zf + 0.33, RED)
-    p.box(-0.7, 0.7, top + 0.93, top + 1.37, zf, zf + 0.3, CREAM, back=WALL)
-    p.box(-0.7, 0.7, top + 1.37, top + 1.5, zf - 0.03, zf + 0.33, RED)
-    for r, z0, colour in ((0.4, zf - 0.07, RED), (0.19, zf - 0.1, WHITE)):
-        ring = [(r * math.cos(2 * math.pi * (k + 0.5) / 8), top + 0.42 + r * math.sin(2 * math.pi * (k + 0.5) / 8))
+    top = SHOP_H2 + 0.2
+    p.box(-1.5, 1.5, top, top + 0.4, zf, zf + 0.25, CREAM, back=WALL)
+    p.box(-1.5, 1.5, top + 0.4, top + 0.5, zf - 0.03, zf + 0.28, RED)
+    p.box(-0.7, 0.7, top + 0.5, top + 0.7, zf, zf + 0.25, CREAM, back=WALL)
+    p.box(-0.7, 0.7, top + 0.7, top + 0.8, zf - 0.03, zf + 0.28, RED)
+    for r, z0, colour in ((0.2, zf - 0.06, RED), (0.1, zf - 0.09, WHITE)):
+        ring = [(r * math.cos(2 * math.pi * (k + 0.5) / 8), top + 0.2 + r * math.sin(2 * math.pi * (k + 0.5) / 8))
                 for k in range(8)]
         extrude_z(p, ring, z0, zf, colour)
     return p
