@@ -11,7 +11,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
-local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
+local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+local Types = require(sharedFolder:WaitForChild("Types"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
 local RemoteService = require(script.Parent:WaitForChild("RemoteService"))
 
@@ -68,6 +70,11 @@ local SAVE_CONFIRM_TIMEOUT_SECONDS = 10
 -- retries throttled DataStore calls internally and never surfaces them), so a boolean attribute
 -- on Workspace, toggled live in the Properties pane, stands in for one. Ignored outside Studio.
 local FORCE_LOAD_FAILURE_ATTRIBUTE = "ForceLoadFailure"
+-- Studio-only playtest lever (docs/INTERFACES.md "Studio start-era switch"): a later era is only
+-- reachable by buying out every era before it, so a whole-number Workspace attribute starts a
+-- FRESH save in that era instead. boomtown.project.json bakes it into build/boomtown.rbxl, the
+-- same way the Proving Grounds build carries its switch. Ignored outside Studio.
+local DEBUG_START_ERA_ATTRIBUTE = "DebugStartEra"
 
 local playerStore: PlayerStore? = nil
 local profiles: { [Player]: Profile } = {}
@@ -142,6 +149,51 @@ local function publishLoadStatus(player: Player, phase: LoadPhase, retryAvailabl
 	RemoteService.FireClient(player, "StateChanged", status)
 end
 
+-- The start-era lever. It writes the era index and nothing else: the Advance Era path (Legacy,
+-- stats, inheritance, analytics) is deliberately not run, and the join sequence then builds the
+-- plot for that era exactly as it does for any save standing in it with no slots.
+-- "Fresh" is measured against the template rather than restated here, and it is what keeps the
+-- lever off every save with progress: with Studio API access on, a profile is a real one.
+local function applyDebugStartEra(player: Player, state: Types.PlayerState): ()
+	if not RunService:IsStudio() then
+		return
+	end
+	local value = workspace:GetAttribute(DEBUG_START_ERA_ATTRIBUTE)
+	-- `% 1` also refuses NaN and both infinities, whose remainder is NaN.
+	if
+		typeof(value) ~= "number"
+		or value % 1 ~= 0
+		or value <= PROFILE_TEMPLATE.era
+		or value > Catalog.GetEraCount()
+	then
+		return
+	end
+	-- A numbering gap in Config/Eras would otherwise write an era that has no config into the
+	-- profile, and that save would load onto a bare plot from then on.
+	local eraConfig = Catalog.GetEraConfig(value)
+	if eraConfig == nil then
+		return
+	end
+	if
+		state.era ~= PROFILE_TEMPLATE.era
+		or state.rebirthCount ~= PROFILE_TEMPLATE.rebirthCount
+		or next(state.slots) ~= nil
+	then
+		-- Said out loud because the build looks broken otherwise: the place opens in the save's
+		-- own era with nothing in Output to explain why.
+		print(
+			`[DataService] {DEBUG_START_ERA_ATTRIBUTE} lever skipped for {player.Name}: the save`
+				.. ` already has progress (era {state.era}, rebirths {state.rebirthCount})`
+		)
+		return
+	end
+	state.era = value
+	warn(
+		`[DataService] {DEBUG_START_ERA_ATTRIBUTE} lever: fresh save for {player.Name} starts in`
+			.. ` era {value} ({eraConfig.name})`
+	)
+end
+
 -- One attempt: session start, left-during-yield guard, reconcile + migrate, session-end hook.
 local function attemptLoad(player: Player): Types.PlayerState?
 	if RunService:IsStudio() and workspace:GetAttribute(FORCE_LOAD_FAILURE_ATTRIBUTE) == true then
@@ -164,6 +216,9 @@ local function attemptLoad(player: Player): Types.PlayerState?
 	profile:AddUserId(player.UserId) -- GDPR right-to-erasure association
 	profile:Reconcile() -- fill fields added to the template since this profile was created
 	runMigrations(profile.Data, player)
+	-- Before the profile is published: no join step, remote handler or parked duplicate loader
+	-- can ever read the fresh save in its template era.
+	applyDebugStartEra(player, profile.Data)
 
 	profiles[player] = profile
 	profile.OnSessionEnd:Connect(function()
