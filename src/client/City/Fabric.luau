@@ -28,6 +28,12 @@
 -- house model once that stands at full size, so it goes with the house on every swap; the
 -- controller passes the wave 2c gates with each sync, and a gate that flips lights or puts out the
 -- plumes of the houses already standing.
+--
+-- Wave 2.4 (docs/INTERFACES.md "Wave 2.4 — back lanes"): a back-row lot may front a lane, a small
+-- road from a street into the block. A lane is drawn, on near plots, from its mouth as far as the
+-- farthest of its lots that has at least a building site (CityFabric.LaneReach), as a few flat
+-- Parts that are resized as it grows, never one per house; it wears the streets' live surface,
+-- which the controller passes with each sync, and its legs clear the wild land like a street.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -102,6 +108,23 @@ local BACK_OVERSHOOT = 1.70158
 local GRID_CELL = 16
 local GRID_BIAS = 1024 -- keeps cell indices positive anywhere on the map
 local GRID_ROW = 4096
+-- Wave 2.4 back lanes. A lane's Parts are slabs sunk into the plot base, so only their tops show.
+local LANE_FILL_NAME = "LaneFill"
+local LANE_RIM_NAME = "LaneRim"
+local LANE_THICKNESS = 0.2
+-- A reach or a leg shorter than this draws nothing.
+local LANE_MIN = 0.01
+-- A leg's slabs overlap the next leg's and the discs at their joints, and a turned slab's surface
+-- cannot line up with its neighbour's, so two tops in one plane would shimmer. Discs keep the
+-- contract's height; legs sit one or two steps under it, alternating; every other lane half a
+-- step lower again, for where two lanes meet. The rim's band above the plot is thinner, so its
+-- step is a share of its height.
+local LANE_STEP = 0.005
+local LANE_RIM_STEPS = 5
+-- Without the surface's own rim image the rim is the road colour, this much darker.
+local LANE_RIM_SHADE = 0.8
+local QUARTER_TURN = math.pi / 2
+local ASSET_PREFIX = "rbxassetid://"
 
 type Rect = CityFabric.FabricRect
 type Segment = CityFabric.FabricSegment
@@ -187,6 +210,66 @@ type PadView = {
 
 type Reveal = { model: Model, rect: Rect, timer: thread? }
 
+-- Wave 2.4: what the plot's streets are surfaced with right now (RoadGraph.Surface): the live
+-- road material and colour, and while the baked renderer draws, the fill and rim images its
+-- pieces wear and the pitch of their plot-planar tiling.
+export type Surface = {
+	material: Enum.Material,
+	color: Color3,
+	fillImageId: number?,
+	rimImageId: number?,
+	tileStuds: number?,
+}
+
+-- One Part of a lane -- a leg's slab, or a disc (a Cylinder on end) -- and the Texture on its
+-- upward face while the surface has an image for it. `u` and `v` are that face's texture offsets
+-- in studs, which anchor the image to the plot rather than to the Part.
+type LanePiece = {
+	part: Part,
+	texture: Texture?,
+	rim: boolean,
+	disc: boolean,
+	u: number,
+	v: number,
+}
+
+-- One straight leg of a lane: its start, unit direction, the arc length at its start and its own
+-- length, with its two slabs and (from the second leg on) the two discs on its start point.
+type LaneLeg = {
+	ax: number,
+	az: number,
+	dx: number,
+	dz: number,
+	start: number,
+	length: number,
+	fill: LanePiece?,
+	rim: LanePiece?,
+	jointFill: LanePiece?,
+	jointRim: LanePiece?,
+}
+
+type LaneView = {
+	index: number, -- its 1-based index in the data, which its lots name it by
+	lane: Types.FabricLane,
+	legs: { LaneLeg },
+	length: number,
+	reach: number, -- how far it is drawn in the final state (CityFabric.LaneReach)
+	grew: boolean, -- the last develop moved the reach, so a ripple plays it
+	drawn: number, -- how far its Parts reach now
+	tipFill: LanePiece?,
+	tipRim: LanePiece?,
+	growth: LaneGrowth?,
+}
+
+-- A lane extending to its reach on a near plot; `view.reach` is read as it runs.
+type LaneGrowth = {
+	owner: Handle,
+	view: LaneView,
+	from: number,
+	seconds: number,
+	elapsed: number,
+}
+
 -- One dust puff: a Dust handle of its own (a handle plays one burst at a time) and the timer that
 -- destroys it once the burst and its particles are gone.
 type Puff = { dust: Dust.Handle, cleanup: thread? }
@@ -256,6 +339,8 @@ export type SyncInput = {
 	-- Wave 2.0: every wave 2c smoke gate holds -- the device, a near plot, detailPolicy's `living`,
 	-- the era and the tier. The controller owns them, since lot smoke answers to the same ones.
 	smoke: boolean,
+	-- Wave 2.4: the streets' surface as of this pass, which the lanes wear.
+	surface: Surface,
 }
 
 export type Handle = {
@@ -273,6 +358,15 @@ export type Handle = {
 	-- (a stage without a valid entry has none).
 	smoke: Types.SmokeConfig?,
 	chimneys: { [string]: { [number]: CFrame } },
+	-- Wave 2.4: how lanes are drawn (nil: none are), the valid lanes in data order, the near-plot
+	-- parcel budget and the footprints by size that decide which lots count toward a reach, and
+	-- the surface the lanes wear with the key it was last painted under.
+	lanesConfig: Types.FabricLanesConfig?,
+	lanes: { LaneView },
+	parcelBudget: number,
+	laneSizes: { [string]: { number } },
+	surface: Surface?,
+	surfaceKey: string,
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -328,6 +422,9 @@ local heartbeat: RBXScriptConnection? = nil
 -- The plots whose spawn queue is not empty, and the one Heartbeat draining them, alive only then.
 local queuedHandles: { [Handle]: boolean } = {}
 local queueHeartbeat: RBXScriptConnection? = nil
+-- Wave 2.4: the lanes extending right now, and the one Heartbeat moving them, alive only then.
+local laneGrowths: { LaneGrowth } = {}
+local laneHeartbeat: RBXScriptConnection? = nil
 -- Reused by every clearing lookup (none of them yields): the candidates near one wild item.
 local scratchRects: { Rect } = {}
 local scratchSegments: { Segment } = {}
@@ -546,6 +643,47 @@ local function validUpgradeItem(entry: any): boolean
 	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
 end
 
+-- Wave 2.4: a lane the renderer can lay -- a polyline of 2 to 4 [x, z] points of finite numbers
+-- and its mouth's address on the street it leaves. Any other entry is not drawn, and its lots are
+-- blanks.
+local function validLane(lane: any): boolean
+	if type(lane) ~= "table" or type(lane.stretch) ~= "string" or not finite(lane.along) then
+		return false
+	end
+	local points = lane.points
+	if type(points) ~= "table" or #points < 2 or #points > 4 then
+		return false
+	end
+	for index = 1, #points do
+		local point = points[index]
+		if type(point) ~= "table" or not finite(point[1]) or not finite(point[2]) then
+			return false
+		end
+	end
+	return true
+end
+
+-- Wave 2.4: `fabric.lanes` as the renderer may use it -- five finite numbers, a width above 0, a
+-- rim and a grow time of 0 or more -- or nil, which draws no lane (their lots still develop).
+local function validLanesConfig(lanes: any): Types.FabricLanesConfig?
+	if
+		type(lanes) ~= "table"
+		or not (finite(lanes.width) and lanes.width > 0)
+		or not (finite(lanes.rim) and lanes.rim >= 0)
+		or not (finite(lanes.fillHeight) and finite(lanes.rimHeight))
+		or not (finite(lanes.growSeconds) and lanes.growSeconds >= 0)
+	then
+		return nil
+	end
+	return {
+		width = lanes.width,
+		rim = lanes.rim,
+		fillHeight = lanes.fillHeight,
+		rimHeight = lanes.rimHeight,
+		growSeconds = lanes.growSeconds,
+	}
+end
+
 -- Wave 2.0: the fabric keys of `ambient.smoke`. `every` must be a whole number of 1 or more and
 -- `fabricProps` a table, or fabric smoke is off (nil). A chimney top is exactly three finite
 -- numbers; any other entry -- [] by convention -- is a stage without a chimney, as is a stage past
@@ -703,7 +841,7 @@ local function cellOf(value: number): number
 end
 
 -- Buckets every rect by its bounding square (centre +- half diagonal + margin) and every segment by
--- its box grown by the street margin. A point within reach of an item always shares a cell with
+-- its box grown by its margin (the street margin, or a lane leg's own). A point within reach of an item always shares a cell with
 -- it, so a lookup over the cells round the point sees every item that could clear it.
 local function buildGrid(mask: Mask): Grid
 	local cells: { [number]: { number } } = {}
@@ -725,8 +863,8 @@ local function buildGrid(mask: Mask): Grid
 		insert(id, rect.x - reach, rect.x + reach, rect.z - reach, rect.z + reach)
 	end
 	local rectCount = #mask.rects
-	local street = math.max(mask.streetClear, 0)
 	for index, segment in mask.segments do
+		local street = math.max(segment.margin or mask.streetClear, 0)
 		insert(
 			rectCount + index,
 			math.min(segment.ax, segment.bx) - street,
@@ -1126,6 +1264,385 @@ local function clearQueue(handle: Handle): ()
 	queuedHandles[handle] = nil
 end
 
+-- ------------------------------------------------------------------ back lanes (wave 2.4)
+
+-- The top of a lane Part above the plot: the contract's height for a disc (`level` 0), one or two
+-- steps under it for a leg (see LANE_STEP).
+local function laneTop(
+	config: Types.FabricLanesConfig,
+	view: LaneView,
+	rim: boolean,
+	level: number
+): number
+	local steps = level + ((view.index - 1) % 2) / 2
+	if rim then
+		return config.rimHeight - config.rimHeight / LANE_RIM_STEPS * steps
+	end
+	return config.fillHeight - LANE_STEP * steps
+end
+
+-- The look of one piece under the surface the streets wear: the road's live material and colour
+-- (the rim a darker shade), and over it, while the baked renderer draws, the same fill or rim
+-- image the baked path pieces carry, tiled at their pitch and offset so the tiling is anchored to
+-- the plot. Called again whenever the surface changes, so a lane is repaved with its streets.
+local function paintLanePiece(handle: Handle, piece: LanePiece): ()
+	local surface = handle.surface
+	if surface == nil then
+		return
+	end
+	local part = piece.part
+	local color = surface.color
+	part.Color = if piece.rim
+		then Color3.new(
+			color.R * LANE_RIM_SHADE,
+			color.G * LANE_RIM_SHADE,
+			color.B * LANE_RIM_SHADE
+		)
+		else color
+	local imageId = if piece.rim then surface.rimImageId else surface.fillImageId
+	local tile = surface.tileStuds
+	local texture = piece.texture
+	if imageId == nil or tile == nil then
+		part.Material = surface.material
+		if texture ~= nil then
+			texture:Destroy()
+			piece.texture = nil
+		end
+		return
+	end
+	-- Flat under the image, as the baked meshes are: a road material's relief would show through.
+	part.Material = Enum.Material.SmoothPlastic
+	if texture == nil then
+		local created = Instance.new("Texture")
+		-- A slab shows its top; a disc is a Cylinder stood on end, whose upward cap is its Right.
+		created.Face = if piece.disc then Enum.NormalId.Right else Enum.NormalId.Top
+		created.Parent = part
+		piece.texture = created
+		texture = created
+	end
+	local image = texture :: Texture
+	-- Ids are up to 15 digits; %d keeps them integral where tostring could print an exponent.
+	image.Texture = ASSET_PREFIX .. string.format("%d", imageId)
+	image.StudsPerTileU = tile
+	image.StudsPerTileV = tile
+	image.OffsetStudsU = piece.u % tile
+	image.OffsetStudsV = piece.v % tile
+end
+
+local function newLanePiece(rim: boolean, disc: boolean): LanePiece
+	local part = Instance.new("Part")
+	part.Name = if rim then LANE_RIM_NAME else LANE_FILL_NAME
+	if disc then
+		part.Shape = Enum.PartType.Cylinder
+	end
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.CastShadow = false
+	PropFactory.Seal(part)
+	return { part = part, texture = nil, rim = rim, disc = disc, u = 0, v = 0 }
+end
+
+-- Shows a piece that has just been sized and placed. A new one is painted for the offsets it now
+-- has and parented only then, so it never flashes at the world origin or unpainted; one already
+-- out only has its image re-anchored (a tip disc moves as its lane extends), which leaves a
+-- growing lane's every frame at a few property writes.
+local function showLanePiece(handle: Handle, piece: LanePiece): ()
+	if piece.part.Parent == nil then
+		paintLanePiece(handle, piece)
+		piece.part.Parent = handle.context.folder
+		return
+	end
+	local surface = handle.surface
+	local tile = if surface ~= nil then surface.tileStuds else nil
+	local texture = piece.texture
+	if texture ~= nil and tile ~= nil then
+		texture.OffsetStudsU = piece.u % tile
+		texture.OffsetStudsV = piece.v % tile
+	end
+end
+
+-- One slab of a leg, `span` studs long from the leg's start. The Part's +Z runs along the leg and
+-- it grows from its start, so the corner its top's texture is laid from never moves: the offsets
+-- are that corner's coordinates in the Part's own turned frame, which puts every slab of one
+-- heading on a single tiling over the whole plot.
+local function setLaneLeg(
+	handle: Handle,
+	config: Types.FabricLanesConfig,
+	view: LaneView,
+	leg: LaneLeg,
+	piece: LanePiece,
+	level: number,
+	span: number
+): ()
+	local width = config.width + (if piece.rim then 2 * config.rim else 0)
+	local y = laneTop(config, view, piece.rim, level) - LANE_THICKNESS / 2
+	local cx, cz = leg.ax + leg.dx * span / 2, leg.az + leg.dz * span / 2
+	local part = piece.part
+	part.Size = Vector3.new(width, LANE_THICKNESS, span)
+	part.CFrame = handle.context.plotFrame
+		* CFrame.lookAt(Vector3.new(cx, y, cz), Vector3.new(cx - leg.dx, y, cz - leg.dz))
+	piece.u = leg.ax * leg.dz - leg.az * leg.dx - width / 2
+	piece.v = leg.ax * leg.dx + leg.az * leg.dz
+	showLanePiece(handle, piece)
+end
+
+-- One disc centred on (x, z): a Cylinder stood on end and turned so that its upward cap's image
+-- runs +X across and +Z down, plot-wise. Every disc then shares the one tiling the baked pieces'
+-- planar UVs have (u = x, v = z over tileStuds), as does a slab that heads +Z.
+local function setLaneDisc(
+	handle: Handle,
+	config: Types.FabricLanesConfig,
+	view: LaneView,
+	piece: LanePiece,
+	x: number,
+	z: number
+): ()
+	local diameter = config.width + (if piece.rim then 2 * config.rim else 0)
+	local y = laneTop(config, view, piece.rim, 0) - LANE_THICKNESS / 2
+	local part = piece.part
+	part.Size = Vector3.new(LANE_THICKNESS, diameter, diameter)
+	part.CFrame = handle.context.plotFrame
+		* CFrame.new(x, y, z)
+		* CFrame.Angles(0, -QUARTER_TURN, 0)
+		* CFrame.Angles(0, 0, QUARTER_TURN)
+	piece.u = x - diameter / 2
+	piece.v = z - diameter / 2
+	showLanePiece(handle, piece)
+end
+
+local function destroyLanePiece(piece: LanePiece?): ()
+	if piece ~= nil then
+		piece.part:Destroy()
+	end
+end
+
+-- Takes a lane off the plot (it went far, or the fabric is going).
+local function clearLane(view: LaneView): ()
+	for _, leg in view.legs do
+		destroyLanePiece(leg.fill)
+		destroyLanePiece(leg.rim)
+		destroyLanePiece(leg.jointFill)
+		destroyLanePiece(leg.jointRim)
+		leg.fill, leg.rim, leg.jointFill, leg.jointRim = nil, nil, nil, nil
+	end
+	destroyLanePiece(view.tipFill)
+	destroyLanePiece(view.tipRim)
+	view.tipFill, view.tipRim = nil, nil
+	view.drawn = 0
+end
+
+-- Draws the lane from its mouth `drawn` studs in: each leg it has reached as a fill and a rim
+-- slab of the length it has got along that leg, a disc pair on every interior point it has passed,
+-- and a disc pair at its tip. A piece is made the first time the lane reaches it and only resized
+-- or moved afterwards, so a lane's part count depends on its shape, never on its houses.
+local function layLane(handle: Handle, view: LaneView, drawn: number): ()
+	local config = handle.lanesConfig
+	if config == nil or handle.destroyed then
+		return
+	end
+	if drawn < LANE_MIN then
+		clearLane(view)
+		return
+	end
+	view.drawn = drawn
+	local tipX, tipZ = view.legs[1].ax, view.legs[1].az
+	for index, leg in view.legs do
+		local span = math.min(drawn - leg.start, leg.length)
+		if span < LANE_MIN then
+			break
+		end
+		local level = 1 + (index - 1) % 2
+		local fill = leg.fill or newLanePiece(false, false)
+		local rim = leg.rim or newLanePiece(true, false)
+		leg.fill, leg.rim = fill, rim
+		setLaneLeg(handle, config, view, leg, fill, level, span)
+		setLaneLeg(handle, config, view, leg, rim, level, span)
+		if index > 1 and leg.jointFill == nil then
+			local jointFill = newLanePiece(false, true)
+			local jointRim = newLanePiece(true, true)
+			leg.jointFill, leg.jointRim = jointFill, jointRim
+			setLaneDisc(handle, config, view, jointFill, leg.ax, leg.az)
+			setLaneDisc(handle, config, view, jointRim, leg.ax, leg.az)
+		end
+		tipX, tipZ = leg.ax + leg.dx * span, leg.az + leg.dz * span
+	end
+	local tipFill = view.tipFill or newLanePiece(false, true)
+	local tipRim = view.tipRim or newLanePiece(true, true)
+	view.tipFill, view.tipRim = tipFill, tipRim
+	setLaneDisc(handle, config, view, tipFill, tipX, tipZ)
+	setLaneDisc(handle, config, view, tipRim, tipX, tipZ)
+end
+
+-- Where the lane is `arc` studs from its mouth.
+local function lanePoint(view: LaneView, arc: number): (number, number)
+	local x, z = view.legs[1].ax, view.legs[1].az
+	for _, leg in view.legs do
+		local span = math.clamp(arc - leg.start, 0, leg.length)
+		x, z = leg.ax + leg.dx * span, leg.az + leg.dz * span
+		if arc <= leg.start + leg.length then
+			break
+		end
+	end
+	return x, z
+end
+
+local function stopLaneGrowth(view: LaneView): ()
+	local growth = view.growth
+	if growth == nil then
+		return
+	end
+	view.growth = nil
+	local index = table.find(laneGrowths, growth)
+	if index ~= nil then
+		table.remove(laneGrowths, index)
+	end
+end
+
+local function stepLanes(dt: number): ()
+	for index = #laneGrowths, 1, -1 do
+		local growth = laneGrowths[index]
+		local view = growth.view
+		growth.elapsed += dt
+		local t = math.min(growth.elapsed / growth.seconds, 1)
+		if t >= 1 or growth.owner.destroyed then
+			table.remove(laneGrowths, index)
+			view.growth = nil
+		end
+		layLane(growth.owner, view, growth.from + (view.reach - growth.from) * quadOut(t))
+	end
+	local connection = laneHeartbeat
+	if #laneGrowths == 0 and connection ~= nil then
+		connection:Disconnect()
+		laneHeartbeat = nil
+	end
+end
+
+-- A purchase on a near plot let the lane run further: it extends to its new reach over
+-- growSeconds (shortened by reduced motion), with one puff where it will end.
+local function growLane(handle: Handle, config: Types.FabricLanesConfig, view: LaneView): ()
+	local x, z = lanePoint(view, view.reach)
+	puffAt(handle, x, 0, z)
+	local seconds = Motion.Seconds(config.growSeconds)
+	if seconds <= 0 then
+		stopLaneGrowth(view)
+		layLane(handle, view, view.reach)
+		return
+	end
+	local growth = view.growth
+	if growth ~= nil then
+		-- Already extending: carry on from where it has got to, toward the newer reach.
+		growth.from = view.drawn
+		growth.elapsed = 0
+		growth.seconds = seconds
+		return
+	end
+	local started: LaneGrowth = {
+		owner = handle,
+		view = view,
+		from = view.drawn,
+		seconds = seconds,
+		elapsed = 0,
+	}
+	view.growth = started
+	table.insert(laneGrowths, started)
+	if laneHeartbeat == nil then
+		laneHeartbeat = RunService.Heartbeat:Connect(stepLanes)
+	end
+end
+
+-- Each lane's final-state reach from the levels just developed. Within a build a reach only
+-- grows, like everything it is measured from, so the land a lane cleared is never given back.
+local function updateLaneReaches(handle: Handle): ()
+	if #handle.lanes == 0 then
+		return
+	end
+	local levels: { number } = {}
+	for index, state in handle.states do
+		levels[index] = state.level
+	end
+	for _, view in handle.lanes do
+		local reach = CityFabric.LaneReach(
+			view.lane,
+			view.index,
+			handle.parcelData,
+			levels,
+			handle.laneSizes,
+			handle.parcelBudget
+		)
+		if reach > view.reach then
+			view.reach = reach
+			view.grew = true
+		end
+	end
+end
+
+-- Repaints every lane piece when the streets' surface changed (a street upgrade bought, or the
+-- baked renderer fell back to Parts), so lanes are repaved with their streets and never rebuilt.
+local function syncLaneSurface(handle: Handle, surface: Surface): ()
+	local color = surface.color
+	local key = string.format(
+		"%s|%.4f,%.4f,%.4f|%s|%s|%s",
+		surface.material.Name,
+		color.R,
+		color.G,
+		color.B,
+		tostring(surface.fillImageId),
+		tostring(surface.rimImageId),
+		tostring(surface.tileStuds)
+	)
+	handle.surface = surface
+	if key == handle.surfaceKey then
+		return
+	end
+	handle.surfaceKey = key
+	for _, view in handle.lanes do
+		local pieces: { LanePiece? } = { view.tipFill, view.tipRim }
+		for _, leg in view.legs do
+			table.insert(pieces, leg.fill)
+			table.insert(pieces, leg.rim)
+			table.insert(pieces, leg.jointFill)
+			table.insert(pieces, leg.jointRim)
+		end
+		for _, piece in pieces do
+			if piece ~= nil then
+				paintLanePiece(handle, piece)
+			end
+		end
+	end
+end
+
+-- Near plots draw every lane to its reach; far plots draw none. A reach the last develop moved
+-- on an animated sync extends over growSeconds; anything else -- a join, a restore, a plot coming
+-- near -- lays the final state through the spawn queue.
+local function syncLanes(handle: Handle, input: SyncInput, rippling: boolean): ()
+	local config = handle.lanesConfig
+	if config == nil then
+		return
+	end
+	for _, view in handle.lanes do
+		local grew = view.grew
+		view.grew = false
+		if not input.near then
+			stopLaneGrowth(view)
+			clearLane(view)
+			continue
+		end
+		if rippling and grew then
+			growLane(handle, config, view)
+			continue
+		end
+		if view.growth ~= nil and rippling then
+			continue -- still extending to a reach that stands
+		end
+		stopLaneGrowth(view)
+		if view.reach - view.drawn >= LANE_MIN then
+			enqueue(handle, view, view.legs[1].ax, view.legs[1].az, function()
+				layLane(handle, view, view.reach)
+			end)
+		end
+	end
+end
+
 -- ------------------------------------------------------------------ parcels
 
 local function sameLook(a: Look?, b: Look?): boolean
@@ -1507,8 +2024,8 @@ local function maskKeyOf(handle: Handle, input: SyncInput): string
 end
 
 -- The clearing mask ("Clearing", with the review amendment's pads): owned slot footprints, the
--- footprint and pad of every buyable slot, developed parcels, visible plazas, and the visible
--- stretches and drawn spurs.
+-- footprint and pad of every buyable slot, developed parcels, visible plazas, the visible
+-- stretches and drawn spurs, and (wave 2.4) the lanes as far as they reach.
 local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: SyncInput): Mask
 	local rects: { Rect } = {}
 	local slotMargin = numberOr(clear.slot, 0)
@@ -1548,7 +2065,29 @@ local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: 
 			table.insert(rects, grown(rect, parcelMargin))
 		end
 	end
-	return { rects = rects, segments = input.segments, streetClear = numberOr(clear.street, 0) }
+	-- Wave 2.4: every lane leg as far as the lane's final-state reach, with the lanes' own margin.
+	-- The reach, not what a near plot happens to have drawn, so near and far clients clear alike.
+	local segments = input.segments
+	if #handle.lanes > 0 then
+		segments = table.clone(input.segments)
+		local laneMargin = numberOr(clear.lane, 0)
+		for _, view in handle.lanes do
+			for _, leg in view.legs do
+				local span = math.min(view.reach - leg.start, leg.length)
+				if span <= 0 then
+					break
+				end
+				table.insert(segments, {
+					ax = leg.ax,
+					az = leg.az,
+					bx = leg.ax + leg.dx * span,
+					bz = leg.az + leg.dz * span,
+					margin = laneMargin,
+				})
+			end
+		end
+	end
+	return { rects = rects, segments = segments, streetClear = numberOr(clear.street, 0) }
 end
 
 -- Which quarters of each wild entry the mask clears: a clump's four `quads` at quarterRadius, a
@@ -2333,6 +2872,12 @@ function Fabric.new(context: Context): Handle
 			else nil,
 		smoke = if chimneys ~= nil then context.smoke else nil,
 		chimneys = chimneys or {},
+		lanesConfig = validLanesConfig(config.lanes),
+		lanes = {},
+		parcelBudget = 0,
+		laneSizes = {},
+		surface = nil,
+		surfaceKey = "",
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
@@ -2435,9 +2980,76 @@ function Fabric.new(context: Context): Handle
 		then data.parcels
 		else {}
 	local sizes = config.sizes
+	handle.parcelBudget = parcelBudget
+	if type(sizes) == "table" then
+		for size, footprint in sizes :: { [string]: { number } } do
+			if type(footprint) == "table" and finite(footprint[1]) and finite(footprint[2]) then
+				handle.laneSizes[size] = footprint
+			end
+		end
+	end
+	-- Wave 2.4: the lanes before the lots that name them. A malformed lane is not laid and its lots
+	-- become blanks; a valid one gets a view only while `fabric.lanes` says how to draw it, but its
+	-- lots develop either way.
+	local rawLanes: { Types.FabricLane } = if type(data) == "table"
+			and type(data.lanes) == "table"
+		then data.lanes
+		else {}
+	local laneValid: { [number]: boolean } = {}
+	for index = 1, #rawLanes do
+		local lane = rawLanes[index]
+		laneValid[index] = validLane(lane)
+		if not laneValid[index] or handle.lanesConfig == nil then
+			continue
+		end
+		local legs: { LaneLeg } = {}
+		local length = 0
+		for point = 2, #lane.points do
+			local a, b = lane.points[point - 1], lane.points[point]
+			local dx, dz = b[1] - a[1], b[2] - a[2]
+			local legLength = math.sqrt(dx * dx + dz * dz)
+			-- Two points on one spot make no leg; the arc simply carries on from the next.
+			if legLength >= LANE_MIN then
+				table.insert(legs, {
+					ax = a[1],
+					az = a[2],
+					dx = dx / legLength,
+					dz = dz / legLength,
+					start = length,
+					length = legLength,
+					fill = nil,
+					rim = nil,
+					jointFill = nil,
+					jointRim = nil,
+				})
+				length += legLength
+			end
+		end
+		if #legs > 0 then
+			table.insert(handle.lanes, {
+				index = index,
+				lane = lane,
+				legs = legs,
+				length = length,
+				reach = 0,
+				grew = false,
+				drawn = 0,
+				tipFill = nil,
+				tipRim = nil,
+				growth = nil,
+			})
+		end
+	end
 	for index = 1, #rawParcels do
 		local raw = rawParcels[index]
 		local wellFormed = validParcel(raw)
+		-- Wave 2.4: a lot on a lane names a lane that can be laid and says how far along it stands.
+		if wellFormed and raw.lane ~= nil then
+			local laneAlong = raw.laneAlong
+			wellFormed = laneValid[raw.lane] == true
+				and finite(laneAlong)
+				and (laneAlong :: number) >= 0
+		end
 		-- A row-k parcel (k 2 or 3) stands behind an earlier parcel of row k - 1, which the data
 		-- lists first; one that does not is malformed and becomes a blank that keeps its index.
 		if wellFormed and raw.row ~= 1 then
@@ -2588,6 +3200,8 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	clearQueue(handle)
 	-- Before anything is placed: every house this pass or a later timer raises reads the gates.
 	handle.smoking = input.smoke
+	-- And every lane piece laid from here on wears the surface the streets have now.
+	syncLaneSurface(handle, input.surface)
 	-- A purchase or a stage swap is where a ripple starts; the first sync of a build sees every
 	-- slot as new, but it is never animated.
 	local triggers: { Vector3 } = {}
@@ -2626,6 +3240,8 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 			end
 			view.goal = goal
 		end
+		-- Before the mask below, which the lanes' legs are part of.
+		updateLaneReaches(handle)
 	end
 
 	local previous = handle.cleared
@@ -2664,6 +3280,7 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	for _, view in handle.parcels do
 		refreshPlume(handle, view)
 	end
+	syncLanes(handle, input, rippling)
 	syncWild(handle, input, previous)
 	syncUpgrades(handle, input, rippling, fresh, triggers)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
@@ -2736,6 +3353,10 @@ function Fabric.Destroy(handle: Handle): ()
 		-- The plume went with the house it was in.
 		view.plume = nil
 		view.moving = false
+	end
+	for _, view in handle.lanes do
+		stopLaneGrowth(view)
+		clearLane(view)
 	end
 	for _, view in handle.wild do
 		local whole = view.whole

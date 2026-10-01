@@ -6,10 +6,10 @@
 -- lets tools/cityfabric.py mirror it one to one and every client derive the same town from the
 -- same owned slots, tier and visible stretches. Every tunable arrives as an argument.
 
--- Structural copies of Types.FabricParcel and Types.FabricPullConfig: requiring Types would need
--- `script`, which purity forbids. The old solver compares nested tables invariantly, so these must
--- stay field for field in lockstep with Types.luau, or callers passing Types.* tables stop
--- typechecking.
+-- Structural copies of Types.FabricParcel, Types.FabricLane and Types.FabricPullConfig: requiring
+-- Types would need `script`, which purity forbids. The old solver compares nested tables
+-- invariantly, so these must stay field for field in lockstep with Types.luau, or callers passing
+-- Types.* tables stop typechecking.
 type FabricParcel = {
 	x: number,
 	z: number,
@@ -19,7 +19,10 @@ type FabricParcel = {
 	along: number,
 	row: number,
 	front: number,
+	lane: number?,
+	laneAlong: number?,
 }
+type FabricLane = { points: { { number } }, stretch: string, along: number }
 type FabricPullConfig = {
 	radius: number,
 	tierTerm: number,
@@ -49,7 +52,9 @@ export type FabricRect = {
 	rotationY: number,
 	margin: number,
 }
-export type FabricSegment = { ax: number, az: number, bx: number, bz: number }
+-- A segment clears whatever comes closer than its `margin` to it, or than the mask's `streetClear`
+-- when it carries none (a street or a spur; wave 2.4's lane legs bring their own).
+export type FabricSegment = { ax: number, az: number, bx: number, bz: number, margin: number? }
 export type FabricMask = {
 	rects: { FabricRect },
 	segments: { FabricSegment },
@@ -180,9 +185,15 @@ function CityFabric.Develop(input: FabricInput, pull: FabricPullConfig): { Fabri
 		local governor: FabricLandmark? = nil
 		local governorPull = 0
 		if stretch ~= nil then
+			-- Wave 2.4: a lot on a lane is reached through the lane's mouth, so it stands its
+			-- `laneAlong` further from every landmark than the mouth does.
+			local laneAlong = if parcel.lane ~= nil then parcel.laneAlong or 0 else 0
 			for landmarkIndex, landmark in landmarks do
-				local distance =
-					parcelDistance(landmarkDistances[landmarkIndex], stretch, parcel.along)
+				local distance = parcelDistance(
+					landmarkDistances[landmarkIndex],
+					stretch,
+					parcel.along
+				) + laneAlong
 				local landmarkPull = math.max(0, 1 - distance / pull.radius)
 				if landmarkPull > 0 then
 					influence += landmarkPull
@@ -274,6 +285,46 @@ function CityFabric.Develop(input: FabricInput, pull: FabricPullConfig): { Fabri
 	return states
 end
 
+-- Wave 2.4: how far along lane `laneIndex` a road is drawn, in studs of arc from its mouth: as far
+-- as the far edge of the frontage of the farthest of its lots that has at least a building site
+-- (`laneAlong` + half its frontage, `sizes[size][1]`), never past the lane's end, and 0 while none
+-- has. Its lots are the parcels naming it by `lane`; `levels[i]` is parcel i's level. Only a lot
+-- that can be drawn counts: its index within `budget` (the near plots' parcel budget) and its size
+-- one `sizes` has a footprint for. Lots are visited in index order.
+function CityFabric.LaneReach(
+	lane: FabricLane,
+	laneIndex: number,
+	parcels: { FabricParcel },
+	levels: { number },
+	sizes: { [string]: { number } },
+	budget: number
+): number
+	local length = 0
+	local points = lane.points
+	for index = 2, #points do
+		local dx = points[index][1] - points[index - 1][1]
+		local dz = points[index][2] - points[index - 1][2]
+		length += math.sqrt(dx * dx + dz * dz)
+	end
+	local reach = 0
+	for index, parcel in parcels do
+		local laneAlong = parcel.laneAlong
+		local footprint = sizes[parcel.size]
+		local level = levels[index]
+		if
+			parcel.lane == laneIndex
+			and laneAlong ~= nil
+			and index <= budget
+			and footprint ~= nil
+			and level ~= nil
+			and level >= 1
+		then
+			reach = math.max(reach, laneAlong + footprint[1] / 2)
+		end
+	end
+	return math.min(reach, length)
+end
+
 -- 0 inside the rect. The point is taken into the rect's frame with the inverse of
 -- CFrame.Angles(0, a, 0), which maps local (x, z) to (x·cos a + z·sin a, −x·sin a + z·cos a).
 function CityFabric.RectDistance(px: number, pz: number, rect: FabricRect): number
@@ -299,8 +350,8 @@ function CityFabric.SegmentDistance(px: number, pz: number, seg: FabricSegment):
 	return math.sqrt(ex * ex + ez * ez)
 end
 
--- True when a point of `radius` falls inside any rect's margin or within `streetClear` of any
--- segment ("Clearing").
+-- True when a point of `radius` falls inside any rect's margin, or within any segment's own margin
+-- (`streetClear` for one that carries none) ("Clearing").
 function CityFabric.IsCleared(px: number, pz: number, radius: number, mask: FabricMask): boolean
 	for _, rect in mask.rects do
 		-- No point of a rect lies farther than |hx| + |hz| from its centre.
@@ -312,7 +363,8 @@ function CityFabric.IsCleared(px: number, pz: number, radius: number, mask: Fabr
 		end
 	end
 	for _, segment in mask.segments do
-		if CityFabric.SegmentDistance(px, pz, segment) - radius < mask.streetClear then
+		local margin = segment.margin or mask.streetClear
+		if CityFabric.SegmentDistance(px, pz, segment) - radius < margin then
 			return true
 		end
 	end

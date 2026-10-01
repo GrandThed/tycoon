@@ -695,7 +695,9 @@ export type FabricParcelSize = "small" | "medium" | "narrow"
 -- fronts and `along` the studs from that stretch's `a` end to the foot of the perpendicular from
 -- its front-centre. Row 1 has front 0. A row-k parcel (k = 2 or 3, wave 1c) stands behind parcel
 -- `front`, the row k − 1 parcel, which the list always names first. Row 2 repeats its front's
--- stretch and along.
+-- stretch and along. Wave 2.4: a back-row lot on a lane names it by `lane` (1-based into
+-- `lanes`) with `laneAlong`, the studs along the lane from its mouth to the foot of the
+-- perpendicular from the lot's front-centre; its stretch and along are then the lane's.
 export type FabricParcel = {
 	x: number,
 	z: number,
@@ -705,7 +707,13 @@ export type FabricParcel = {
 	along: number,
 	row: number,
 	front: number,
+	lane: number?,
+	laneAlong: number?,
 }
+-- Wave 2.4 "back lanes": a small road into a block interior. `points` is a polyline of 2 to 4
+-- [x, z] points; the first is the mouth, on the centreline of the street the lane leaves, and
+-- `stretch` and `along` are the mouth's address on that street, as for a parcel.
+export type FabricLane = { points: { { number } }, stretch: string, along: number }
 -- A clump draws `fabric.wild.clumps[variant]` (1-based, like any Luau array) and lists its four
 -- quarter centres in `quads`, in plot coordinates, for clearing tests only; quarter q is the
 -- quarter prop turned rotationY + 90·(q − 1). A single draws `prop`. `skirt` marks an entry
@@ -741,6 +749,7 @@ export type FabricData = {
 	parcels: { FabricParcel },
 	wild: { FabricWild },
 	upgrades: { [string]: { FabricUpgradeItem } }?, -- wave 1c round 3; keyed by layer name
+	lanes: { FabricLane }?, -- wave 2.4; absent = no lanes
 }
 -- CityFabric.Develop's tunables: pull fades to 0 at `radius` studs along the drawn streets, a
 -- parcel needs a landmark or a developed parcel within `reach` studs to develop, it never runs
@@ -767,8 +776,24 @@ export type FabricWildConfig = {
 	singleRadius: number,
 }
 -- Clearing margins in studs beyond owned slot footprints, pads, developed parcels and plazas, and
--- street and spur centrelines.
-export type FabricClearConfig = { slot: number, pad: number, street: number, parcel: number }
+-- street and spur centrelines; `lane` (wave 2.4) beyond the centreline of a lane as far as it
+-- has grown.
+export type FabricClearConfig = {
+	slot: number,
+	pad: number,
+	street: number,
+	parcel: number,
+	lane: number?,
+}
+-- Wave 2.4: how a back lane is drawn. `rim` is the extra width on each side of the darker rim
+-- under the fill; the heights are the tops above the plot, both under the streets' own fill.
+export type FabricLanesConfig = {
+	width: number,
+	rim: number,
+	fillHeight: number,
+	rimHeight: number,
+	growSeconds: number,
+}
 export type FabricConstructionConfig = {
 	minSeconds: number,
 	maxSeconds: number,
@@ -819,6 +844,7 @@ export type FabricConfig = {
 	padLook: FabricPadLookConfig?,
 	reveal: string?,
 	upgrades: { [string]: FabricUpgradeLayerConfig }?,
+	lanes: FabricLanesConfig?,
 }
 
 export type CityEraDressingConfig = {

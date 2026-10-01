@@ -1628,6 +1628,9 @@ local function syncFabric(
 		-- device, era and tier -- so a flip of any of them reaches the fabric's houses with this
 		-- pass and never needs a rebuild.
 		smoke = entry.near and policy.living and smokeFor(build, config, tier) ~= nil,
+		-- Wave 2.4: what the streets wear as of the SetSurface and Flush earlier in this pass, so
+		-- the back lanes are repaved with them (and fall back to Parts' look with them).
+		surface = RoadGraph.Surface(build.roads),
 	})
 end
 

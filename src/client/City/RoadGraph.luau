@@ -103,6 +103,19 @@ export type StreetLines = { runs: { SpineRun }, spurs: { { Vector3 } } }
 -- Wave 1e: the corner of a crossing a signal prop stands on.
 export type SignalSpot = { node: number, position: Vector3, yaw: number }
 
+-- M12 wave 2.4: what the plot's streets are surfaced with right now, for dressing that must match
+-- them (the city fabric's back lanes). The images are the ones the baked pieces wear -- the
+-- current variant's, or the era's own for "default" -- and are nil unless the baked renderer is
+-- drawing and both are uploaded; `tileStuds` is the pitch of their world-planar tiling. The
+-- material and colour are the live road look the Parts renderer draws with.
+export type Surface = {
+	material: Enum.Material,
+	color: Color3,
+	fillImageId: number?,
+	rimImageId: number?,
+	tileStuds: number?,
+}
+
 -- Wave 2c: something a walker must not walk through -- a plot-local rectangle about `origin`,
 -- turned by `rotation` (Scatter.Footprint has this shape). `slotId` marks a slot's own building
 -- and pad, which that slot's footpath is allowed to cross.
@@ -238,6 +251,9 @@ export type State = {
 	near: boolean,
 	-- Wave 1e: the surface variant the whole plot wears; "" until the base is first applied.
 	surfaceVariant: string,
+	-- That variant's uploaded images; nil while the plot wears the texture baked into the templates.
+	variantFillImageId: number?,
+	variantRimImageId: number?,
 	visible: { [number]: boolean }, -- stretch id -> revealed
 	-- Groups that have been revealed. Tracked explicitly because a revealed group may legitimately
 	-- draw zero Parts (its stretches outside the near budget), and it must still be redrawn on a
@@ -1625,6 +1641,8 @@ local function setVariant(
 		return
 	end
 	state.surfaceVariant = name
+	state.variantFillImageId = fillImageId
+	state.variantRimImageId = rimImageId
 	local road = state.context.era.road
 	local paths = road.paths
 	local variants = if paths ~= nil then paths.variants else nil
@@ -1740,6 +1758,8 @@ function RoadGraph.new(context: Context, near: boolean): State
 		pieceSpecs = {},
 		near = near,
 		surfaceVariant = "",
+		variantFillImageId = nil,
+		variantRimImageId = nil,
 		visible = {},
 		revealedGroups = {},
 		spurs = {},
@@ -1882,6 +1902,44 @@ end
 function RoadGraph.UsesPaths(state: State): boolean
 	local paths = state.paths
 	return paths ~= nil and paths.mode == "baked"
+end
+
+-- M12 wave 2.4: the surface the streets wear as of the last SetSurface (see `Surface`). A variant
+-- change or a fallback to Parts shows here on the next call, so a caller that asks every sync
+-- follows the streets with no event of its own.
+function RoadGraph.Surface(state: State): Surface
+	local surface: Surface = {
+		material = state.material,
+		color = state.color,
+		fillImageId = nil,
+		rimImageId = nil,
+		tileStuds = nil,
+	}
+	local paths = state.context.era.road.paths
+	local tileStuds = if paths ~= nil then paths.tileStuds else nil
+	if not RoadGraph.UsesPaths(state) or type(tileStuds) ~= "number" or not (tileStuds > 0) then
+		return surface
+	end
+	local fillImageId, rimImageId = state.variantFillImageId, state.variantRimImageId
+	if fillImageId == nil or rimImageId == nil then
+		-- "default": the templates carry the era's own images, whose ids Assets.json records.
+		local assets = Catalog.GetAssetsConfig()
+		local pathsByEra = if assets ~= nil then assets.paths else nil
+		local eraPaths = if pathsByEra ~= nil then pathsByEra[state.context.eraName] else nil
+		fillImageId = if eraPaths ~= nil then eraPaths.fillImageId else nil
+		rimImageId = if eraPaths ~= nil then eraPaths.rimImageId else nil
+	end
+	if
+		type(fillImageId) == "number"
+		and type(rimImageId) == "number"
+		and fillImageId > 0
+		and rimImageId > 0
+	then
+		surface.fillImageId = fillImageId
+		surface.rimImageId = rimImageId
+		surface.tileStuds = tileStuds
+	end
+	return surface
 end
 
 -- Reveals the shortest path from the entrance to `node`, returning the groups that changed. The
