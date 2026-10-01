@@ -79,3 +79,9 @@ See [[living-city-2026-09-23]], [[city-dressing-2026-09-16]], [[metropolis-stree
 - **Pipeline lessons:**
   - Ben may paste the harvest Output into the chat instead of saying "done". It gets truncated there, but his clipboard still holds the full Output, so run `harvest.py --props` anyway.
   - A killed `upload_paths.py` resumes cleanly; it records each id as it goes.
+
+**Merged to main 2026-10-01.**
+- Ben's verdict: "the village looks amazing". His playtest numbers (PLAYTEST step 37) haven't been
+  reported yet.
+- **Boomtown is next, in a NEW session,** from `docs/prompts/m12-boomtown.md`. It starts with the
+  Village smoke and carts regression, then a mock first.
