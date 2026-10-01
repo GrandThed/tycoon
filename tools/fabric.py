@@ -1993,12 +1993,17 @@ def place_edges(build, placer):
 def place_backs(build, placer):
     """A board behind a lot the placer names, parcel-anchored, front to the lot's street over its
     roof, `gap` behind the lot's back edge: wherever no back-row lot took the ground. `lateral`
-    lists where along the back to try, as shares of the lot's width. Up to `count`."""
+    lists where along the back to try, as shares of the lot's width. Up to `count`, nearest the
+    entrance first -- or, with `order` "hubFacing", the lots that face the hub most squarely first,
+    so the boards the hub sees from the front are the ones that get the spots."""
     site = build.site
     variants = placer["variants"]
     count = placer.get("count", math.inf)
     placed = 0
-    for index, parcel in build.lots(placer):
+    lots = list(build.lots(placer))
+    if placer.get("order") == "hubFacing":
+        lots.sort(key=lambda lot: (round(streetplan.facing(lot[1]["rotationY"])[1], DECIMALS), lot[0]))
+    for index, parcel in lots:
         if placed >= count:
             break
         variant = variants[placed % len(variants)]
@@ -2043,12 +2048,14 @@ PLACERS = {
 
 def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild):
     """One plan-laid layer, in data order: nearest the entrance first. Its placers run in the
-    plan's order, each in what the ones before it left."""
+    plan's order, each in what the ones before it left. Returns (entries, how many each placer
+    laid): a placer that lays nothing is a promise the plan does not keep, and nothing in the data
+    says which placer an entry came from."""
     build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild)
     for placer in build.cfg["placers"]:
         PLACERS[placer["kind"]](build, placer)
     build.entries.sort(key=lambda e: entry_order(site, e))
-    return build.entries
+    return build.entries, [len(build.own.get(id(placer), ())) for placer in build.cfg["placers"]]
 
 
 # --------------------------------------------------------------------------------------------
@@ -2503,7 +2510,8 @@ ENTRY_KEYS = ("x", "z", "rotationY", "scale", "variant", "anchor", "stretch", "p
 
 
 def build(era_name, city=None, era=None, network=None):
-    """The document and the generator's bookkeeping (tree kinds) for the summary."""
+    """The document and the generator's bookkeeping: the tree kinds, and for every plan-laid layer
+    how many entries each of its placers laid."""
     site = Site(era_name, city, era, network)
     plan = load_plan(era_name)
     parcels = generate_parcels(site, plan)
@@ -2513,16 +2521,17 @@ def build(era_name, city=None, era=None, network=None):
     # Last, in what every other list left: nothing above may depend on the carts.
     if upgrade_config(site, CARTS) and plan.get(CARTS):
         upgrades[CARTS] = generate_carts(site, plan, parcels, levels, districts, upgrades, wild)
+    laid = {}
     for name in plan_layers(plan):
         if upgrade_config(site, name) and plan.get(name):
-            upgrades[name] = generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild)
+            upgrades[name], laid[name] = generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild)
     doc = {
         "version": FORMAT_VERSION,
         "parcels": [{key: p[key] for key in PARCEL_KEYS} for p in parcels],
         "upgrades": {name: [{key: e[key] for key in ENTRY_KEYS if key in e} for e in entries] for name, entries in upgrades.items()},
         "wild": wild,
     }
-    return doc, [t["kind"] for t in upgrades.get("trees", [])]
+    return doc, [t["kind"] for t in upgrades.get("trees", [])], laid
 
 
 def build_document(era_name, city=None, era=None, network=None):
@@ -2827,6 +2836,7 @@ def upgrade_messages(site, plan, doc):
             messages.append(f"{name}: {placed} placed with the whole era owned, need at least {need[name]}")
         if name in laid:
             messages += layer_rules(site, plan, name, entries, parcels)
+            messages += unused_prop_messages(site, plan, name, props, entries, levels)
     trees = upgrades.get("trees", [])
     for i, tree in enumerate(trees):
         for j in range(i + 1, len(trees)):
@@ -2900,6 +2910,41 @@ def layer_clearance(site, plan, name, index, label, entry, props, ground, polys)
         front = CHECK_OWN_LOT if own is None and post else 0.0
         problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index))
         messages += [f"{label}: {problem}" for problem in problems]
+    return messages
+
+
+def placer_variants(placer):
+    """The 1-based prop indices a placer lays."""
+    return list(placer["variants"]) if "variants" in placer else [placer["variant"]]
+
+
+def placer_messages(plan, laid):
+    """A placer that lays nothing breaks what its layer promises without the layer's count showing
+    it (another placer can make up the number). `laid` is the fresh build's count per placer; a
+    placer the plan marks `optional` may come up empty."""
+    messages = []
+    for name, counts in laid.items():
+        for index, (placer, count) in enumerate(zip(plan[name]["placers"], counts), start=1):
+            if count == 0 and not placer.get("optional"):
+                messages.append(f"{name}: placer {index} ({placer['kind']}) lays nothing on this layout; fix the plan or mark the placer `optional`")
+    return messages
+
+
+def unused_prop_messages(site, plan, name, props, entries, levels):
+    """Every prop a plan-laid layer's config lists must stand somewhere once the era is owned: a
+    prop no entry uses is art that was built, uploaded and promised, and never seen. A prop only
+    `optional` placers lay is excused."""
+    used = {entry["variant"] for entry in entries if placed_at_full(site, entry, levels) and isinstance(entry.get("variant"), int)}
+    placers = (plan.get(name) or {}).get("placers") or []
+    messages = []
+    for variant, prop in enumerate(props, start=1):
+        if variant in used:
+            continue
+        naming = [placer for placer in placers if variant in placer_variants(placer)]
+        if not naming:
+            messages.append(f"{name}: {prop} is in fabric.upgrades.{name}.props but no placer of the plan lays it")
+        elif not all(placer.get("optional") for placer in naming):
+            messages.append(f"{name}: {prop} is in fabric.upgrades.{name}.props but no entry placed at full build uses it")
     return messages
 
 
@@ -3169,13 +3214,17 @@ def field_messages(site, plan, entries):
 
 def check_document(era_name, doc, compare_committed=True, city=None, era=None, network=None):
     """Every rule of INTERFACES "Tools" (`fabric.py check`) and "Wave 1c", plus the layout minimums
-    the plan asks for. Returns violation strings; empty means green."""
+    the plan asks for. Returns violation strings; empty means green. With `compare_committed` the
+    committed file is judged, against a fresh build -- and the fresh build is where a placer that
+    lays nothing shows, so that rule is only judged then."""
     site = Site(era_name, city, era, network)
     plan = load_plan(era_name)
     messages = []
     if compare_committed:
         path = out_path(era_name)
-        fresh = render(build_document(era_name, site.city, site.era, site.network))
+        fresh_doc, _, laid = build(era_name, site.city, site.era, site.network)
+        fresh = render(fresh_doc)
+        messages += placer_messages(plan, laid)
         if not path.exists():
             messages.append(f"{path.relative_to(REPO_ROOT)} is missing; run `py tools/fabric.py build {era_name}`")
         elif path.read_text(encoding="utf-8") != fresh:
