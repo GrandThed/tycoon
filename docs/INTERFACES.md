@@ -5609,8 +5609,17 @@ No new client code. Carts are a `fabric.upgrades` layer whose slot is bought ear
   `py tools/paths/bake.py --era Boomtown --list` is red. The lead keeps the values, because both
   layout candidates are generated against them and the re-bake lands with the chosen layout in
   wave 2.2. Until then **nobody judges Boomtown in Studio on `m12-boomtown`**, and the branch does
-  not merge to `main`. The Village fix is separable: commits up to `6573b0c` plus the review fixes
-  carry no Boomtown change and can be cherry-picked to `main` on their own if Ben wants it sooner.
+  not merge to `main`. The Village fix can still go to `main` on its own if Ben wants it sooner,
+  but not as a clean cherry-pick range: `7c6e49f` also carries the (inert) Boomtown `fabric`
+  block, `60a5e6a` sits between the fix commits, and the review fixes in `a6cf170` were written
+  on top of `80bfb78`. Port it file by file (the wave 2.0 client files, `Fabric/Village.json`,
+  the Village plan, the `carts` and `ambient.smoke` config keys, the mirror), leaving
+  `eras.Boomtown.road.width` and `pedestrians.offset` at their `main` values.
+- **Smoke and carts depend on the Well and on houses, not on the tier as such** (docs-keeper,
+  from the mirror): the 11 house plumes need the Well at level 50 and tier ≥ 3; the two camp
+  fire pits are governed by the Watchtower and smoke from the Town Wall (purchase 23); the first
+  cart arrives with the Cottage (purchase 9), not when the Farm Plot is bought. The greedy
+  timeline's 0 plumes through tier 4 is a pacing fact, not a rule.
 - **The plume uses the stage that actually stands.** If a template lacks the wanted stage,
   `PropFactory` falls back to a lower one; the chimney top is then that stage's entry, or none.
   With every stage present the final state is unchanged.
