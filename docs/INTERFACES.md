@@ -5874,6 +5874,42 @@ Heights are measured against the landmarks (a City Kit storey is 1.6 studs at sc
 | mirror-engineer | base | `tools/paths/**`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py` |
 | prop-builders | base | new and changed blueprints under `tools/testfit/blueprints/_props/{Boomtown,Village}/`, `tools/assets/{farmland,boomtown_extras}_kit.py`, a new `tools/assets/boomtown_street_kit.py` |
 
+### Rulings after the wave 2.2 reports (lead, 2026-10-01)
+
+- **Laying order is the plan's `layers` list, pickiest first:** `busStops`, `billboards`,
+  `parked`, `neon`, `hydrants`. In the table's order the cars and hydrants took the few
+  shelter-sized gaps. Each layer still has its own random stream.
+- **Small kerbside posts may lean into a lot's front.** The corridor between the walkers' reach
+  (3.95) and the lot fronts (4.5) is 0.55 wide, so `check` lets a stretch-anchored entry no larger
+  than 1 x 1 lean up to 0.6 into the front of the lot it stands before (hydrants 0.37, arch posts
+  0.3). Shelters, cars and billboards get no allowance.
+- **A billboard behind a shop row is parcel-anchored** to the lot it stands behind and rises with
+  it; roadside boards stay stretch-anchored.
+- **"Stands on cleared land" is checked for carts and the five Boomtown layers.** Village's trees,
+  flowers and banners keep their own rules.
+- **Plan keys** (`tools/fabric/<Era>.plan.json`): `layers` (laying order), `footprints` (a prop's
+  ground size until it is harvested; a span lists its posts), one block per layer with `placers`
+  of kind `kerb` (modes `gaps`, `spaced`), `lotFront`, `driveway`, `span`, `ends`, `edges`,
+  `backs`; `parcels.keepClear` (rectangles the lots stay off, to hold a gap for a shelter);
+  `parcels.infill.frontReach`; `parcels.terraceFill`; `wild.fallow.paddock` (the share and caps of
+  fallow cells that become pasture).
+- **`heightFloor` is 3.4:** every first and second stage is free; the tall last stages (shop 4.45,
+  civic medium 4.42, medium works 5.39) wait for their landmark.
+- **The spur rules apply only when `spurWidth` is set** (a positive finite number, no
+  `road.tiles`): spur fillet radius and minimum leg scale with it, walk lanes on a spur run at
+  `max(offset - (W - S)/2, 0)`, and no spur carries a vehicle lane. An era without the key keeps
+  every earlier rule, so Village and Metropolis do not move.
+- **The bus draw:** one stream `Seed(plotIndex, era) + 7007`; for each unlock in config order and
+  each vehicle index, draw `roll` then `pick`; an unlock takes vehicle i when `i == j` (its own
+  position in the list, which forces at least one bus) or `roll < share`. Python cannot reproduce
+  Roblox's picks, so renders show the rule, not the game's exact cars.
+- **`bake.py --list` exit codes:** 0 all agree; 1 client and bake disagree, or a mesh folds
+  visibly; 2 they agree but the meshes on disk are stale. A real bake refuses a visible fold.
+- **The marker at 5.3 costs about a stud of frontage per landmark** (96 lots on the first organic
+  layout, was 101). Accepted: it is what lets landmarks turn.
+- **The smoke config runs ahead of the uploaded Village models** from this commit until the
+  harvest: `fabricProps` lists stage-0 chimneys the templates do not have yet.
+
 ### Done when (wave 2.2 gate, renders for Ben)
 
 - `assets/testfit/out/Boomtown/m12c_{tier1,tier3,full,full_entrance}.png` from the merged
