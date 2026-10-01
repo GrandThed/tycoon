@@ -5771,7 +5771,7 @@ one-point spur and no `district` (the `dirtRoad` pattern).
 | Layer | `requiresSlot` | Props | Entries | At full build |
 |---|---|---|---|---|
 | `parked` | `gasStation` | `ParkedA`, `ParkedB`, `ParkedC` (entry `scale` 0.5) | kerb bays beside streets (stretch) and driveways beside homes (parcel) | 10 to 16 |
-| `hydrants` | `fireHydrant` | `Hydrant` | stretch-anchored, on the lamp line between the walkers and the lots, every 14 to 18 studs, alternating sides | at least 20 |
+| `hydrants` | `fireHydrant` | `Hydrant` | stretch-anchored, on the lamp line between the walkers and the lots, every 12.5 to 14 studs, on either side (`check` enforces 8 apart and the minimum) | at least 20 |
 | `busStops` | `busLine` | `BusStopA` | stretch-anchored kerbside shelters facing the street, on at least three streets | 4 to 8 |
 | `billboards` | `billboardSign` | `BillboardA`, `BillboardB` (roadside), `BillboardC` (large) | stretch-anchored: street ends, the plot edges facing a street, gaps behind the shop rows | at least 8 |
 | `neon` | `neonDistrict` | `NeonSignA`, `NeonSignB`, `NeonSignC`, `NeonArch` | a sign at the front edge of every terrace-street shop lot (parcel-anchored); 2 or 3 arches over Main Street (stretch-anchored; posts outside the walker reach, the span at least 4 studs up, exempt from lane clearance like the Village bunting) | at least 15 |
@@ -5909,6 +5909,33 @@ Heights are measured against the landmarks (a City Kit storey is 1.6 studs at sc
   layout, was 101). Accepted: it is what lets landmarks turn.
 - **The smoke config runs ahead of the uploaded Village models** from this commit until the
   harvest: `fabricProps` lists stage-0 chimneys the templates do not have yet.
+
+### Review rulings (2026-10-01, wave 2.2 review: 0 Critical, 1 Major, 10 Minor)
+
+- **Major, fixed: lane holds count both vehicles' lengths.** A lane is free for a vehicle once the
+  one ahead has moved its own half-length plus `followGap` plus the follower's half-length, so a
+  bus never enters a lane inside the car ahead; `Traffic.Swap` re-claims the lane at the new
+  length. Equal lengths behave as before.
+- **A placer that lays nothing, or a layer prop no entry uses at full build, is a `check`
+  violation** (unless the plan marks the placer `optional`). `BillboardC` now stands behind the
+  shop rows, parcel-anchored.
+- **Driveway details:** the reveal dust is sized by the piece's own width; spur curves are sampled
+  `spurWidth` apart; the meander taper also scales with `spurWidth` (client and mirror agree).
+  Row lamps and tree keep-outs still measure a driveway at road width, in client and mirror alike.
+- **Unlocks read the sticky owned set,** so a cosmetics refresh does not flick buses to cars.
+- **The preloader loads only what an era can spawn:** for a fabric era, the props its fabric
+  config names plus the features that still run. Boomtown's `houses`, `trees`, `greenery` and
+  `parked` config blocks and the `Boomtown/House*` smoke entries are now unread, like Village's
+  `parked`; they stay until the old filler props are retired from `Assets.json`.
+- **Open until Ben's step-37 numbers:** far Boomtown plots draw only 45 of 85 fields (`wildFar`),
+  so a tier-0 far plot shows its hub-side fields bare. The fix is a larger or per-era far budget.
+- **The harvest moves the generator's inputs:** plan `footprints` give way to harvested extents,
+  so the harvest commit rebuilds `Fabric/Boomtown.json` and re-runs the gates.
+- **Fewer than before, by layout:** `streetlampRow` gives 8 lamps (spacing 24 on 314 studs) and
+  `trafficLights` 2 signals (the plan has two crossroads).
+- **On this branch before the upload:** Boomtown's fabric props have no templates, so its plot
+  shows landmarks, parked cars and Parts roads only; Village's early plumes rise over chimney-less
+  roofs. Nobody judges either in Studio until the harvest.
 
 ### Done when (wave 2.2 gate, renders for Ben)
 
