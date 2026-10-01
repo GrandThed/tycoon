@@ -4037,7 +4037,8 @@ look as before.
   numbers from step 37.
 - Setup: `docs/MANUAL_STEPS.md` "M12" §2. Since the merge, the main build has Village too.
 - **On the `tycoon-m12` build (branch `m12-boomtown`):** skip the Boomtown check in step 34, and
-  see "M12 wave 2.0 — Village smoke and carts" below for the carts and smoke.
+  see "M12 wave 2.0 — Village smoke and carts" below for the carts. Village smoke on that build
+  waits for the harvest.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Houses only rise from **GrowthTier 2**. Buying without levelling stops the town at GrowthTier
   3, so **level landmarks (×10 / Max) as you go**.
@@ -4257,8 +4258,8 @@ differ a little:
       - all of it clears: woods, houses, flowers, banners, the board, the stakes and the dirt pad;
       - Boomtown looks exactly as before M12 (houses, greenery, parked cars, walkers, smoke,
         birds: PLAYTEST M9 4h). **Main build only.** On the `tycoon-m12` build (branch
-        `m12-boomtown`) Boomtown's cars, lamps, signals and walkers sit about a stud inward until
-        the roads are re-baked: do not judge Boomtown there.
+        `m12-boomtown`) Boomtown is the new layout with no models yet (landmarks, parked cars and
+        plain block roads only) until the upload and the harvest: do not judge Boomtown there.
 - [ ] 35. In Edit mode, rename `ReplicatedStorage/Assets/Props/Village/NoticeBoard` to
       `NoticeBoard_bak`. Play:
       - the pads are still dirt-brown with stakes, but there is no board;
@@ -4318,13 +4319,25 @@ differ a little:
 
 ## M12 wave 2.0 — Village smoke and carts
 
+**READ FIRST (2026-10-01): on the current build, only the cart steps are valid.**
+- The plume counts and positions in this section are those of commit `a6cf170`.
+- From commit `d3d6427` on, the smoke config is ahead of the uploaded models: the narrow homes
+  get a chimney from their first look, and those models are not uploaded yet. In Studio the early
+  plumes rise over roofs with no chimney.
+- So **Village smoke must wait for the harvest** (`docs/MANUAL_STEPS.md` "M12" §10 step 40).
+  After it, this section gets new numbers. Expected then, for the sim's player by tier:
+  0 / 2 / 2 / 9 / 16 plumes, all on narrow homes.
+- **Valid now:** setup steps 1–4, cart steps 5–8, step 14, and the cart lines of steps 13 and
+  15–18.
+- **Wait for the harvest:** steps 9–12, 19–22, the smoke lines of steps 13 and 15–18, the
+  plume column of the table, and the "Quick smoke town" numbers.
+
 **Goal:** Village gets back two things wave 1 lost: **parked carts** and **chimney smoke**.
 Client-only: prices, order and income are unchanged. Nothing was uploaded.
 
-**DO NOT JUDGE BOOMTOWN ON THIS BUILD.** On branch `m12-boomtown` Boomtown's roads are set to 6
-studs wide, but the uploaded road meshes are still 8 wide. Cars, lamps, signals and walkers sit
-about a stud inward. That is known and gets fixed with the re-bake (wave 2.2). Test **Village
-only**, and do not Advance Era.
+**DO NOT JUDGE BOOMTOWN ON THIS BUILD.** On branch `m12-boomtown` the new Boomtown has no models
+yet: a Boomtown plot shows landmarks, parked cars and plain block roads only. That is known and
+is fixed by the upload and the harvest. Test **Village only**, and do not Advance Era.
 
 - Setup: `docs/MANUAL_STEPS.md` "M12 wave 2" §6. Open the **tycoon-m12** build.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
@@ -4506,17 +4519,58 @@ Result: `GrowthTier` 3, about 94 houses, 5 parked carts, 13 plumes.
 - The render shows smoke as pale spheres; the game shows real, larger smoke.
 - Plot renders made **before 2026-10-01** show paler ground than Studio. The renderer is fixed;
   `m12f_*` and `m12b_*` are correct.
-- Boomtown on this build: cars, lamps, signals and walkers sit about a stud inward. Do not judge
-  it here.
+- Boomtown on this build: landmarks, parked cars and plain block roads only, until the upload and
+  the harvest. Do not judge it here.
+- Until the harvest: early Village plumes over narrow-house roofs with no chimney (see "READ
+  FIRST" at the top).
 
 ### What to tell Claude
 
 - Any failed step numbers, with the Output line.
-- Is 11 smoking houses enough? Or should the three narrow home designs get a chimney from their
-  first look (a re-upload; then about 4 plumes at tier 2 and 13 to 16 at full)?
+- (Answered 2026-10-01: **yes**, the three narrow home designs get a chimney from their first
+  look. It arrives with the harvest.)
 - Are the carts in good spots? Are 8 enough?
 - The numbers from "M12 — Village growing city" step 37, if you have not sent them yet.
 
 ### Sign-off
 
-- [ ] 24. All boxes ticked → tell Claude "M12 wave 2.0 signed off".
+- [ ] 24. All boxes ticked → tell Claude "M12 wave 2.0 signed off". Before the harvest, say "M12
+      wave 2.0 carts signed off" for the cart steps alone.
+
+## M12 wave 2 — Boomtown growing city (after the harvest)
+
+**Placeholder. There are no steps yet, and nothing here can be tested now.** The checklist is
+written after the upload and the harvest (`docs/MANUAL_STEPS.md` "M12" §10), because lot and layer
+counts can still move when the harvested sizes replace the planned ones.
+
+Until then, judge Boomtown only on the renders (`docs/MANUAL_STEPS.md` "M12" §9).
+
+What the checklist will cover (from `docs/INTERFACES.md` "Wave 2.2", its two rulings blocks, and
+the wave 1 Village checklist above):
+
+- **Setup:** the right-build check, the `GrantCash` lever, reaching Boomtown.
+- **A fresh plot:** farmland instead of woods (crop fields, pasture, hay, telegraph poles), a
+  farmstead and wind pumps past the plot edge, and the next pad's "lot for sale" sign, stakes and
+  dirt.
+- **Growth:** fields clear as the town spreads; building sites, then shops, homes and works that
+  rise and grow. Today's numbers for the sim's player, houses by tier: 11 / 36 / 66 / 89 / 102.
+- **The layout:** Main Street leaning up to the Clock Tower, terraced shops, suburbs, industry at
+  the back-east, the green at the tower's foot, landmarks facing their streets.
+- **The five layers, each with its purchase:**
+  - parked cars (Gas Station, purchase 4): 14 at full build;
+  - Install Fire Hydrants (8): 22;
+  - Open the Bus Line (17): 4 shelters on 3 streets, and buses among the cars (at least one);
+  - Put Up Billboards (20): 10, two large ones behind shop rows;
+  - Light the Neon District (23): 26 (a sign on each of the 23 shops, 3 arches).
+- **Traffic:** a bus never rides into the car ahead; buses stay buses; cars keep off the
+  driveways.
+- **Driveways:** 3 studs wide, with walkers and reveal dust that fit them.
+- **Street upgrades:** Pave Main Street, Streetlamp Row (8 lamps) and Install Traffic Lights (2
+  signals).
+- **Smoke:** Boomtown chimneys (12 plumes at full build today), and Village's new numbers
+  (0 / 2 / 2 / 9 / 16 by tier).
+- **The usual passes:** two players in Local Server, far plots, City detail off and on, the phone
+  at 375×667, low graphics, a missing template, the other eras unchanged, a clean Output, and the
+  instance counts.
+- **Known before testing:** a far tier-0 Boomtown plot draws only 45 of its 85 fields, so its
+  hub-side fields look bare. This waits for Ben's step-37 numbers.

@@ -1561,22 +1561,31 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
 - **Wave 1 (Village): merged to `main` on 2026-10-01** (Ben: "the village looks amazing"). Its
   branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
 - **Wave 2 (Boomtown):** a **new** worktree at the same path, `C:\Users\benja\Desktop\tycoon-m12`,
-  on branch `m12-boomtown`. §5–§9 below are wave 2.
+  on branch `m12-boomtown`. §5–§10 below are wave 2.
 - Run every wave 2 command **from `C:\Users\benja\Desktop\tycoon-m12`**, never from
   `C:\Users\benja\Desktop\tycoon`.
 - `assets/` in the worktree is a junction to the main checkout's `assets/`.
 - Two more worktrees hold the Boomtown layout candidates. They are **not for Studio**:
-  - `C:\Users\benja\Desktop\tycoon-m12-grid` (branch `m12-boomtown-grid`, commit `452059d`);
-  - `C:\Users\benja\Desktop\tycoon-m12-organic` (branch `m12-boomtown-organic`, commit `0fd20be`).
+  - `C:\Users\benja\Desktop\tycoon-m12-organic` (branch `m12-boomtown-organic`): **chosen**. Its
+    layout is already on `m12-boomtown`;
+  - `C:\Users\benja\Desktop\tycoon-m12-grid` (branch `m12-boomtown-grid`, commit `452059d`): not
+    chosen.
 
-**DO NOT JUDGE BOOMTOWN IN STUDIO ON `m12-boomtown`.**
-- On this branch Boomtown's `road.width` is 6 (was 8) and `pedestrians.offset` is 3.35, ahead of
-  the path re-bake.
-- The uploaded Boomtown road meshes are still 8 wide, so cars, lamps, signals and walkers sit about
-  a stud inward. `py tools/paths/bake.py --era Boomtown --list` fails on this branch. That is
-  expected.
-- **Village is unaffected.**
-- The branch does not merge to `main` until the chosen Boomtown layout is re-baked (wave 2.2). The
+**Where wave 2 stands (2026-10-01):** the new Boomtown is built, reviewed and QA green, and
+**nothing is uploaded yet**. Ben looks at renders and prop strips (§9). After his approval comes
+the asset run (§10), where Ben does **one paste**.
+
+**UNTIL THE HARVEST (§10 step 40): DO NOT JUDGE BOOMTOWN, OR VILLAGE'S SMOKE, IN STUDIO ON
+`m12-boomtown`.**
+- **Boomtown** has no models for its new town yet. A Boomtown plot shows landmarks, parked cars
+  and plain block roads only. No fields, houses, shops, hydrants, billboards, neon, bus shelters
+  or buses. That is expected.
+- **Boomtown's roads** are waiting for the re-bake. `py tools/paths/bake.py --era Boomtown --list`
+  exits with code 2 ("stale") on this branch. That is expected.
+- **Village's smoke** is ahead of the uploaded models. Early plumes rise over narrow-house roofs
+  that have no chimney yet. That is expected, and it is fixed by the harvest.
+- **Village's parked carts, and the rest of Village, are fine.**
+- The branch does not merge to `main` until the upload, the harvest and Ben's sign-off. The
   Village fix can go to `main` on its own if Ben wants it sooner: ask Claude.
 
 **Nothing on the Creator Hub:** no passes, products or audio. There is no profile change, so
@@ -1675,14 +1684,18 @@ new check.
 ### 5. M12 wave 2 — what is owed (2026-10-01)
 
 - **Creator Hub: nothing.** No passes, products or audio.
-- **Assets for wave 2.0: nothing.** No upload, no harvest paste. The Village smoke and carts fix
-  is client code and config only.
-- **Wave 2.1 (Boomtown layout mock): nothing for Studio.** 27 draft props exist as blueprints
-  only; none is uploaded. You look at renders (§8) and decide.
-- **Later, wave 2.3:** one harvest paste (Boomtown props and re-baked roads together). Not yet:
-  Claude will say when (§9).
+- **From Ben now:**
+  1. look at the renders and the prop strips, and approve them or say what to change (§9);
+  2. the numbers from PLAYTEST "M12 — Village growing city" step 37 (§3 step 15).
+- **From Ben later: one harvest paste** (§10 step 40). Claude says when.
+- **Assets: nothing is uploaded yet.** 46 Boomtown props and 3 changed Village homes exist as
+  blueprints only. The uploads are the lead's steps in §10.
 
-### 6. M12 wave 2 — open the build (for the Village smoke and carts look)
+### 6. M12 wave 2 — open the build (only for the Village carts, until the harvest)
+
+**Until the harvest there is nothing new to see in Studio** beyond the Village parked carts that
+wave 2.0 described. The new Boomtown and the Village smoke both wait for §10. You can skip §6 and
+§7 until then.
 
 Pick **one** of the two options. Option A gives a fresh Village save on every Play and touches no
 real save.
@@ -1727,28 +1740,34 @@ real save.
 
 ### 7. M12 wave 2 — run the playtest
 
-- [ ] 24. Run `docs/PLAYTEST.md` "M12 wave 2.0 — Village smoke and carts". **Village only. Do not
-      Advance Era to look at Boomtown** (see the warning at the top of this section).
+- [ ] 24. Run `docs/PLAYTEST.md` "M12 wave 2.0 — Village smoke and carts", **cart steps only**
+      (steps 1–8). The smoke steps wait for the harvest: read the note at the top of that section.
+      **Village only. Do not Advance Era to look at Boomtown** (see the warning at the top of this
+      section).
 
-### 8. M12 wave 2 — the Boomtown layout gate (renders only, no Studio)
+### 8. M12 wave 2 — the first Boomtown gate, grid or organic (**DONE 2026-10-01**)
 
-Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+Ben's answers: **organic, with a bolder pass**; **all four** city-changers; roads **stay 6
+studs**; **yes** to chimneys on the narrow Village homes. The step-37 numbers are still owed. The
+steps below are kept as the record.
 
-- [ ] 25. Open **`m12b_compare.png`**: today's Boomtown, the grid and the organic plan, each at
+Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+
+- [x] 25. Open **`m12b_compare.png`**: today's Boomtown, the grid and the organic plan, each at
       tier 1, tier 3 and full.
-- [ ] 26. Look closer at each candidate:
+- [x] 26. Look closer at each candidate:
       - grid: `m12b_grid_tier1.png`, `m12b_grid_tier3.png`, `m12b_grid_full.png`,
         `m12b_grid_full_entrance.png`, `m12b_grid_streetplan.png`;
       - organic: `m12b_organic_tier1.png`, `m12b_organic_tier3.png`, `m12b_organic_full.png`,
         `m12b_organic_full_entrance.png`, `m12b_organic_streetplan.png`;
       - today: `m12b_today_tier1.png`, `m12b_today_tier3.png`, `m12b_today_full.png`.
-- [ ] 27. Look at the draft props: `farmland_context.png`, `construction_context.png`,
+- [x] 27. Look at the draft props: `farmland_context.png`, `construction_context.png`,
       `construction_suburb_context.png`, `construction_scale_check.png`.
-- [ ] 28. Village before and after the smoke and carts fix, in
+- [x] 28. Village before and after the smoke and carts fix, in
       `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\`:
       `m12f_before_full.png`, `m12f_after_full.png`, `m12f_before_close.png`,
       `m12f_after_close.png`, `m12f_after_tier3.png`.
-- [ ] 29. Tell Claude your five answers:
+- [x] 29. Tell Claude your five answers (1–4 answered 2026-10-01; **5 is still owed**):
       1. **Layout:** grid, organic as shown, or a bolder organic pass?
          - Grid: 93 lots. Houses by tier 0 / 25 / 45 / 59 / 93.
          - Organic: 101 lots. Houses by tier 8 / 27 / 53 / 88 / 101. It reads as a kinked grid,
@@ -1770,20 +1789,138 @@ Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\test
   correct.
 - **Smoke.** A row of pale spheres above a house marks a chimney plume. It is a marker, not the
   look of the real smoke.
-- **Known weak points of both layouts** (already on the list for wave 2.2, no need to report):
+- **Known weak points of both layouts** (all four were addressed in wave 2.2):
   - landmark driveways are road-wide asphalt stubs;
   - the industrial lots at the front are rows of identical dark sheds (stand-ins);
   - no green by the Clock Tower;
   - shop side walls are blank.
 
-### 9. M12 wave 2 — later (not yet; Claude says when)
+### 9. M12 wave 2 — the second Boomtown gate (renders and strips only, no Studio)
 
-- [ ] 30. **Lead, wave 2.2:** contracts for the chosen layout, then the Boomtown path re-bake and
-      upload (about 40 to 48 pieces). After it, `py tools/paths/bake.py --era Boomtown --list` is
-      green again and Boomtown can be judged in Studio.
-- [ ] 31. **Lead, wave 2.3:** real Boomtown props, strips to Ben, merge and upload.
-- [ ] 32. **Ben, wave 2.3: one harvest paste** (props and paths together). Same routine as §1
-      step 5, from `C:\Users\benja\Desktop\tycoon-m12`.
-- [ ] 33. **Lead:** templates and manifest (§1 step 6), review, QA, docs, then Ben's Boomtown
-      playtest.
-- [ ] 34. **Lead:** merge `m12-boomtown` into `main` after sign-off.
+**What you are approving:** the final Boomtown layout, and the final look of every new prop,
+before anything is uploaded.
+
+What changed since the first gate:
+- The bolder organic plan: Main Street leans 16° up to the Clock Tower, landmarks face their
+  streets, industry moved to the back-east, and a green stands at the tower's foot.
+- 102 lots: 23 terraced shops, 74 small homes, 5 medium.
+- Four purchases now change the whole town instead of standing as one model:
+
+  | Purchase | What it does at full build |
+  |---|---|
+  | Install Fire Hydrants (8th) | 22 red hydrants along the streets |
+  | Open the Bus Line (17th) | 4 bus shelters, and buses among the cars (about 15% of the traffic, at least one) |
+  | Put Up Billboards (20th) | 10 billboards, two large ones behind shop rows |
+  | Light the Neon District (23rd) | a neon sign on each of the 23 shops, and 3 neon arches |
+
+- Parked cars come back with the Gas Station (4th purchase): 14 at full build.
+- Driveways are 3 studs wide. Cars keep to the streets.
+- By layout, Streetlamp Row now gives 8 lamps and Install Traffic Lights 2 signals.
+
+Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+
+- [ ] 30. Open **`m12c_compare.png`**: today's Boomtown against the new layout, at tier 1, tier 3
+      and full.
+- [ ] 31. Look closer: `m12c_tier1.png`, `m12c_tier3.png`, `m12c_full.png`,
+      `m12c_full_entrance.png`, `m12c_streetplan.png`.
+- [ ] 32. The four city-changers: `m12c_changers_before.png`, then `m12c_changers_after.png`.
+- [ ] 33. The props, one strip each, in the subfolder **`strips\`** (46 strips, named
+      `<Prop>_strip.png`), plus `strips\street_context.png`.
+- [ ] 34. The props in context (back in the `Boomtown\` folder): `construction_context.png`,
+      `construction_suburb_context.png`, `construction_scale_check.png`, `farmland_context.png`,
+      `farmland_civic_context.png`.
+- [ ] 35. The Village narrow homes with their new chimneys:
+      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
+- [ ] 36. Tell Claude:
+      1. the layout: approved, or what to change;
+      2. the props: approved, or which props to redo (use the strip's file name);
+      3. the step-37 numbers, if you have them (§3 step 15).
+
+**Reading the renders:**
+- A row of pale spheres above a house marks a chimney plume. It is a marker, not the real smoke.
+- The buses in a render show the rule (about 15%), not the exact cars the game will pick.
+- The full-build renders show every landmark at its last stage. In the game, houses near a lower
+  landmark stay lower.
+
+### 10. M12 wave 2 — the asset run (after Ben approves §9; **Ben's only step is 40**)
+
+Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need Git Bash.
+
+**Rules for the lead:**
+- Never run an upload or a harvest while another session uploads or harvests.
+- `upload_models.py --props --dry-run` and `upload_paths.py --dry-run` both **write
+  `Assets.json`**. They are not read-only.
+- Commit `src/shared/Config/Assets.json` right after each upload.
+- A non-zero `modelAssetId` is never re-uploaded. A changed model must be cleared first (step 39).
+
+- [ ] 37. **Lead: regenerate the three kits.**
+      1. Delete any cached palette for them in `assets/build/palettes/`: `farmland-kit.*`,
+         `boomtown-extras-kit.*`, `boomtown-street-kit.*`. None exists as of 2026-10-01; check
+         again on the day.
+      2. Run:
+         ```
+         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/farmland_kit.py
+         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/boomtown_extras_kit.py
+         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/boomtown_street_kit.py
+         ```
+      Each writes `assets/kenney3d/<kit>/Models/GLB format/`.
+- [ ] 38. **Lead: Boomtown path re-bake and upload** (38 pieces, 76 meshes):
+      ```
+      py tools/paths/bake.py --era Boomtown --list
+      py tools/paths/bake.py --era Boomtown
+      py tools/assets/upload_paths.py --era Boomtown
+      ```
+      The `--list` line must exit **2** before the bake (client and bake agree; meshes stale).
+      Exit 1 means client and bake disagree: stop and fix the mirror. Commit `Assets.json`.
+- [ ] 39. **Lead: props merge and upload** (71 Boomtown stages, 9 Village stages).
+      1. Clear `modelAssetId` and `parts` of the Village props `FabricHomeNarrowA`,
+         `FabricHomeNarrowB` and `FabricHomeNarrowC` (3 stages each) through
+         `assets_config.save_assets`. Never hand-edit `Assets.json`.
+      2. Merge:
+         ```
+         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Boomtown
+         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Village
+         ```
+      3. Upload, and commit `Assets.json` after each line:
+         ```
+         py tools/assets/upload_models.py --props --era Boomtown
+         py tools/assets/upload_models.py --props --era Village
+         ```
+      An "Unknown Error" from Open Cloud is normal now and then: run the same line again.
+- [ ] 40. **Ben: the one harvest paste** (props and paths together). Studio in **Edit mode**:
+      1. Claude runs this, which puts the script on your clipboard:
+         `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
+      2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
+         Enter → wait for `[HARVEST-DONE]` in Output (*Salida*).
+      3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
+      4. Tell Claude "done". Do not copy anything else before Claude answers: your clipboard
+         holds the result.
+- [ ] 41. **Lead: harvest, templates, fabric data, gates, manifest.**
+      ```
+      py tools/assets/harvest.py --props
+      py tools/assets/gen_templates.py --props
+      py tools/assets/gen_templates.py --paths
+      py tools/assets/gen_templates.py --check
+      py tools/fabric.py build Boomtown
+      py tools/fabric.py check Boomtown
+      py tools/fabric.py check Village
+      py tools/cityfabric.py selftest
+      py tools/cityfabric.py timeline Boomtown
+      py tools/cityfabric.py timeline Village
+      py tools/streetplan.py Boomtown
+      py tools/streetplan.py Village
+      py tools/paths/bake.py --era Boomtown --list
+      py tools/paths/bake.py --era Village --list
+      py tools/gen_asset_manifest.py
+      py tools/gen_asset_manifest.py --check
+      ```
+      - `fabric.py build Boomtown` is needed because the harvested sizes replace the plan's
+        `footprints`. Lot and layer counts can move; update PLAN and PLAYTEST if they do.
+      - Both `--list` lines must now exit 0.
+      - Then stylua, selene, luau-lsp and `rojo build -o build/test.rbxl`.
+- [ ] 42. **Lead:** review, QA, the Boomtown PLAYTEST section. Then **Ben: the Boomtown Studio
+      playtest**, and the smoke steps of "M12 wave 2.0 — Village smoke and carts" with their new
+      numbers.
+- [ ] 43. **Lead:** merge `m12-boomtown` into `main` after Ben's sign-off.
+- 44. **If a record goes missing later:** re-run step 40 and the first line of step 41 only. Do
+      **not** re-run the uploaders.
