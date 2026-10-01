@@ -524,6 +524,9 @@ export type CityEraPathsConfig = {
 	tileStuds: number,
 	surface: CitySurfaceConfig?,
 	variants: { [string]: CitySurfaceVariantLook }?,
+	-- M12 wave 2.2 "narrow driveways": the width in studs of every spur (a landmark's path from
+	-- its join to its slot), baked pieces and parts fallback alike. Absent = `road.width`.
+	spurWidth: number?,
 }
 -- Wave 2a: kit road tiles on a `tileStuds` lattice, one prop per cell chosen by the cell's
 -- visible connectivity. Excludes `paths` and `meander`. Spurs stay plain footpath Parts.
@@ -612,6 +615,10 @@ export type CityEraSignalsConfig = {
 	offset: number,
 	maxPerPlot: number,
 }
+-- M12 wave 2.2 "buses in the traffic": while `slot` is owned, each street vehicle of the plot
+-- takes a prop from `props` with probability `share` (seeded per vehicle index), and at least one
+-- does once the plot has any vehicle.
+export type CityVehicleUnlock = { slot: string, props: { string }, share: number }
 export type CityEraVehiclesConfig = {
 	props: { string },
 	perPlot: number,
@@ -620,6 +627,7 @@ export type CityEraVehiclesConfig = {
 	scale: number?,
 	-- Wave 2d: studs kept between a car and the one ahead where they enter the same lane.
 	followGap: number?,
+	unlocks: { CityVehicleUnlock }?,
 }
 -- Wave 2c (docs/INTERFACES.md "Wave 2c — living city"). Every `perTier` is cumulative and indexed
 -- by tier (1-5); tier 0 shows none.

@@ -19,6 +19,12 @@
 -- curve the bake used -- and trees keep clear of the smoothed centreline of every potential
 -- path.
 --
+-- M12 wave 2.2 "narrow driveways": an era's `road.paths.spurWidth` makes every spur narrower than
+-- its streets. The network -- nodes, stretches, piece ids, routes, budgets -- never reads it; it
+-- reaches the spur chains' smoothing (PathRibbon), the Parts a spur is drawn with, and the lanes:
+-- vehicles keep off a spur narrower than the road, and walkers keep the distance from a spur's
+-- edge that they keep from a street's. An era without the key is exactly as it was.
+--
 -- Everything is computed in plot-local studs (origin at the plot's top-centre, front -Z, Y 0) and
 -- placed through the plot frame, so every client derives identical geometry from the layout.
 -- The network, the shortest-path tree and every budget decision are fixed once per plot/era
@@ -183,10 +189,15 @@ export type State = {
 	thickness: number,
 	material: Enum.Material,
 	color: Color3,
+	-- The width every spur is drawn at: a tiles era's footpath (wave 2a), a paths era's
+	-- `spurWidth` (M12 wave 2.2), else the road's own.
+	spurWidth: number,
+	-- M12 wave 2.2: the era sets `road.paths.spurWidth`, so its spurs are driveways with lane rules
+	-- of their own (see buildLanes and buildWalkLanes); false keeps every lane where it always was.
+	driveways: boolean,
 	-- Wave 2a: a tiles era draws its spurs as a narrow footpath with its own look. Nil elsewhere,
 	-- because the spine's look is live: wave 1e's surface variants repaint state.material/color and
 	-- a snapshot taken at build time would leave a Village spur dirt on a cobbled plot.
-	spurWidth: number,
 	spurMaterial: Enum.Material?,
 	spurColor: Color3?,
 	-- Studs from the spine centreline at which a tiles-era footpath stops: the outer edge of the
@@ -459,13 +470,15 @@ end
 -- Centreline points of one straight run, meandered when the era has `road.meander`: cut into
 -- pieces of about segmentLength, each cut moved sideways by amplitude * taper * wave(arc).
 -- The taper is 0 at both ends (every run ends at a network node, spur corner or spur end), so
--- anything meeting there lines up exactly.
+-- anything meeting there lines up exactly; it reaches full strength one `width` in, the width of
+-- the run itself (a spur's own, which may be narrower than the road's).
 local function centreline(
 	state: State,
 	a: Vector3,
 	b: Vector3,
 	arcStart: number,
-	phases: Noise.Phases
+	phases: Noise.Phases,
+	width: number
 ): ({ Vector3 }, { number })
 	local length = (b - a).Magnitude
 	local meander = state.meander
@@ -480,7 +493,7 @@ local function centreline(
 	local arcs: { number } = {}
 	for index = 0, count do
 		local u = length * index / count
-		local taper = math.clamp(math.min(u, length - u) / state.width, 0, 1)
+		local taper = math.clamp(math.min(u, length - u) / width, 0, 1)
 		local arc = arcStart + u
 		local offset = meander.amplitude * taper * Noise.Wave(arc, wavelength, phases[1], phases[2])
 		table.insert(points, a + along * u + right * offset)
@@ -531,19 +544,19 @@ local function slab(
 	table.insert(into, part)
 end
 
--- The widest a meandered piece can be (its width is width + widthJitter * wave, wave in [-1, 1]),
--- so a corner disc is never narrower than the pieces it joins.
-local function discDiameter(state: State): number
+-- The widest a meandered piece of a run `width` wide can be (its width is width + widthJitter *
+-- wave, wave in [-1, 1]), so a corner disc is never narrower than the pieces it joins.
+local function discDiameter(state: State, width: number): number
 	local meander = state.meander
 	if meander == nil then
-		return state.width
+		return width
 	end
-	return state.width + math.max(meander.widthJitter, 0)
+	return width + math.max(meander.widthJitter, 0)
 end
 
--- A flat round disc (a Cylinder stood on end) that rounds a meandered corner.
-local function disc(state: State, into: { Instance }, point: Vector3): ()
-	local diameter = discDiameter(state)
+-- A flat round disc (a Cylinder stood on end) that rounds a meandered corner of a run `width` wide.
+local function disc(state: State, into: { Instance }, point: Vector3, width: number): ()
+	local diameter = discDiameter(state, width)
 	local part = Instance.new("Part")
 	part.Name = BEND_PART_NAME
 	part.Shape = Enum.PartType.Cylinder
@@ -563,8 +576,8 @@ local function meanderedNow(state: State): boolean
 	return state.meander ~= nil and state.near
 end
 
--- Meandered pieces of one run: width jitters per piece, and pieces overlap by half a width so
--- the joints between slightly turned pieces stay closed.
+-- Meandered pieces of one run `baseWidth` wide: width jitters per piece, and pieces overlap by
+-- half a width so the joints between slightly turned pieces stay closed.
 local function drawMeandered(
 	state: State,
 	into: { Instance },
@@ -572,15 +585,16 @@ local function drawMeandered(
 	a: Vector3,
 	b: Vector3,
 	arcStart: number,
-	phases: Noise.Phases
+	phases: Noise.Phases,
+	baseWidth: number
 ): ()
 	local meander = state.meander :: Types.CityMeanderConfig
 	local wavelength = math.max(meander.wavelength, MIN_LENGTH)
-	local points, arcs = centreline(state, a, b, arcStart, phases)
+	local points, arcs = centreline(state, a, b, arcStart, phases, baseWidth)
 	for index = 2, #points do
 		local arc = (arcs[index - 1] + arcs[index]) / 2
 		local width = math.max(
-			state.width + meander.widthJitter * Noise.Wave(arc, wavelength, phases[3], phases[4]),
+			baseWidth + meander.widthJitter * Noise.Wave(arc, wavelength, phases[3], phases[4]),
 			MIN_LENGTH
 		)
 		slab(
@@ -622,7 +636,8 @@ local function drawGroup(state: State, groupIndex: number): ()
 					stretch.a,
 					stretch.b,
 					stretch.arcStart,
-					state.polylinePhases[stretch.polyline]
+					state.polylinePhases[stretch.polyline],
+					state.width
 				)
 			end
 		end
@@ -706,11 +721,12 @@ local function drawSpur(state: State, slotId: string): ()
 				points[index - 1],
 				points[index],
 				arc,
-				route.phases
+				route.phases,
+				state.spurWidth
 			)
 			arc += (points[index] - points[index - 1]).Magnitude
 			if index < #points then
-				disc(state, into, points[index])
+				disc(state, into, points[index], state.spurWidth)
 			end
 		end
 		return
@@ -767,7 +783,7 @@ local function drawBends(state: State): ()
 		-- Every stretch at the node, not just one: a trail that dead-ends at a bend vertex would
 		-- otherwise get a disc sticking out past its end.
 		if state.nearBendAllowed[node] and nodeSpineVisible(state, node) then
-			disc(state, state.bendParts, state.nodes[node])
+			disc(state, state.bendParts, state.nodes[node], state.width)
 		end
 	end
 end
@@ -1464,6 +1480,7 @@ local function pathDataFor(state: State): PathData
 	local meander = context.era.road.meander
 	local network = PathRibbon.Build({
 		width = state.width,
+		spurWidth = state.spurWidth,
 		meander = if meander ~= nil
 			then { amplitude = meander.amplitude, wavelength = meander.wavelength }
 			else nil,
@@ -1662,13 +1679,26 @@ function RoadGraph.new(context: Context, near: boolean): State
 	local laneFraction = if road.laneOffsetFraction ~= nil
 		then road.laneOffsetFraction
 		else context.config.road.laneOffsetFraction
+	-- M12 wave 2.2: a paths era may draw its spurs at a width of their own. Anything but a
+	-- positive, finite number is the key left out, and tiles (which exclude paths) keep their own
+	-- footpath width.
+	local pathsConfig = if tilesConfig == nil then road.paths else nil
+	local ownSpurWidth = if type(pathsConfig) == "table" then pathsConfig.spurWidth else nil
+	local driveway: number? = if type(ownSpurWidth) == "number"
+			and ownSpurWidth > 0
+			and ownSpurWidth < math.huge
+		then math.max(ownSpurWidth, MIN_LENGTH)
+		else nil
 	local state: State = {
 		context = context,
 		width = width,
 		thickness = math.max(context.config.road.thickness, MIN_LENGTH),
 		material = materialFor(road.material),
 		color = colorFor(road.color),
-		spurWidth = if spurLook ~= nil then math.max(spurLook.width, MIN_LENGTH) else width,
+		spurWidth = if spurLook ~= nil
+			then math.max(spurLook.width, MIN_LENGTH)
+			else driveway or width,
+		driveways = driveway ~= nil,
 		spurMaterial = if spurLook ~= nil then materialFor(spurLook.material) else nil,
 		spurColor = if spurLook ~= nil then colorFor(spurLook.color) else nil,
 		spurClip = if spurLook ~= nil
@@ -2089,7 +2119,8 @@ local function stretchLine(state: State, id: number): { Vector3 }?
 				stretch.a,
 				stretch.b,
 				stretch.arcStart,
-				state.polylinePhases[stretch.polyline]
+				state.polylinePhases[stretch.polyline],
+				state.width
 			)
 		)
 	end
@@ -2227,7 +2258,12 @@ end
 -- PathRenderer take PathRibbon's meandered centreline instead -- the curve the meshes were baked
 -- from -- with the network's own node ids at stretch ends and joins, since the drawn curves meet
 -- only to within float noise.
+--
+-- M12 wave 2.2: where the era narrows its spurs below the road (`road.paths.spurWidth`), a spur is
+-- a driveway and gets no vehicle lanes at all, so the traffic keeps to the streets. Every other
+-- era's cars turn into its spurs as they always have (a tiles era's footpaths included).
 local function buildLanes(state: State): Lanes
+	local spurLanes = not (state.driveways and state.spurWidth < state.width)
 	local lanes: Lanes = {
 		count = 0,
 		to = {},
@@ -2323,7 +2359,12 @@ local function buildLanes(state: State): Lanes
 		for _, slotId in state.spurSlotIds do
 			local route = state.spurs[slotId]
 			local chainIndex = network.spurChains[slotId]
-			if route == nil or chainIndex == nil or not state.pathSpurAllowed[slotId] then
+			if
+				not spurLanes
+				or route == nil
+				or chainIndex == nil
+				or not state.pathSpurAllowed[slotId]
+			then
 				continue
 			end
 			local lo, hi = PathRibbon.FullSpan(network, chainIndex)
@@ -2359,7 +2400,8 @@ local function buildLanes(state: State): Lanes
 						stretch.a,
 						stretch.b,
 						stretch.arcStart,
-						state.polylinePhases[stretch.polyline]
+						state.polylinePhases[stretch.polyline],
+						state.width
 					)
 				)
 			)
@@ -2367,13 +2409,13 @@ local function buildLanes(state: State): Lanes
 	end
 	for _, slotId in state.spurSlotIds do
 		local route = state.spurs[slotId]
-		if route == nil or (meandered and not state.nearSpurAllowed[slotId]) then
+		if not spurLanes or route == nil or (meandered and not state.nearSpurAllowed[slotId]) then
 			continue
 		end
 		local arc = 0
 		for index = 2, #route.points do
 			local a, b = route.points[index - 1], route.points[index]
-			chain((centreline(state, a, b, arc, route.phases)))
+			chain((centreline(state, a, b, arc, route.phases, state.spurWidth)))
 			arc += (b - a).Magnitude
 		end
 	end
@@ -2706,14 +2748,19 @@ local function buildWalkLanes(
 				stretch.a,
 				stretch.b,
 				stretch.arcStart,
-				state.polylinePhases[stretch.polyline]
+				state.polylinePhases[stretch.polyline],
+				state.width
 			)
 			chainBetween(points, stretch.fromNode, stretch.toNode, offset)
 		end
 	end
 
 	local layout = state.context.layout
-	local spurSide = math.min(offset, state.spurWidth / 2)
+	-- A driveway (M12 wave 2.2) keeps a walker as far from its edge as a street does:
+	-- offset - (road width - spur width) / 2. Any other spur pulls its lanes in to its own edges.
+	local spurSide = if state.driveways
+		then math.max(offset - (state.width - state.spurWidth) / 2, 0)
+		else math.min(offset, state.spurWidth / 2)
 	for _, slotId in state.spurSlotIds do
 		local route = state.spurs[slotId]
 		local slot = layout.slots[slotId]
@@ -2733,7 +2780,7 @@ local function buildWalkLanes(
 			local arc = 0
 			for index = 2, #route.points do
 				local a, b = route.points[index - 1], route.points[index]
-				local leg = centreline(state, a, b, arc, route.phases)
+				local leg = centreline(state, a, b, arc, route.phases, state.spurWidth)
 				for legIndex, point in leg do
 					if legIndex > 1 or #joined == 0 then
 						table.insert(joined, point)

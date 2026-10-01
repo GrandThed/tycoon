@@ -14,6 +14,9 @@
 -- the time it is free again (a car entered it and has since moved its own length plus
 -- `vehicles.followGap`); a car at a node only takes a free lane -- the U-turn at a dead end too --
 -- and waits at the node while none is. A lane's freedom always expires, so a wait never deadlocks.
+--
+-- M12 wave 2.2: Swap changes one vehicle's model where it drives (a car that becomes a bus when
+-- the bus line is bought), so a prop change never re-seats the plot's traffic.
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -32,12 +35,15 @@ local DEFAULT_FOLLOW_GAP = 0.6
 
 type Vehicle = {
 	plotId: number,
+	-- Its place in the `models` list SpawnPlot was given, which is how Swap names it.
+	ordinal: number,
 	model: Model,
 	lanes: Lanes,
 	-- The free-again time of each lane of `lanes`, shared by every vehicle on that graph.
 	freeAt: { number },
 	-- Seconds this car keeps a lane it enters: (its length + followGap) / speed.
 	hold: number,
+	followGap: number,
 	lane: number,
 	distance: number,
 	speed: number,
@@ -143,6 +149,21 @@ local function lengthOf(modelParts: { BasePart }, partOffsets: { CFrame }): numb
 		high = math.max(high, offset.Z + half)
 	end
 	return if low <= high then high - low else 0
+end
+
+-- A clone's parts, their offsets from its bottom-centre pivot and its length, read off the model
+-- as spawned (at an identity pivot), so a wave 2d ScaleTo done about the base before this is
+-- already in every offset: a half-size car rides at half the height with no correction here.
+local function measure(model: Model): ({ BasePart }, { CFrame }, number)
+	local modelParts: { BasePart } = {}
+	local partOffsets: { CFrame } = {}
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			table.insert(modelParts, descendant)
+			table.insert(partOffsets, descendant.CFrame)
+		end
+	end
+	return modelParts, partOffsets, lengthOf(modelParts, partOffsets)
 end
 
 local function rebuildArrays(): ()
@@ -304,20 +325,10 @@ function Traffic.SpawnPlot(
 	local gap = math.max(numberOr(followGap, DEFAULT_FOLLOW_GAP), 0)
 	local driveSpeed = math.max(speed, 0)
 
-	-- Read off the clones as spawned, so a wave 2d ScaleTo (done about the base, before this) is
-	-- already in every offset: a half-size car rides at half the height with no correction here.
 	local measured: { { parts: { BasePart }, offsets: { CFrame }, length: number } } = {}
 	local spacing = gap
 	for index, model in models do
-		local modelParts: { BasePart } = {}
-		local partOffsets: { CFrame } = {}
-		for _, descendant in model:GetDescendants() do
-			if descendant:IsA("BasePart") then
-				table.insert(modelParts, descendant)
-				table.insert(partOffsets, descendant.CFrame)
-			end
-		end
-		local length = lengthOf(modelParts, partOffsets)
+		local modelParts, partOffsets, length = measure(model)
 		measured[index] = { parts = modelParts, offsets = partOffsets, length = length }
 		spacing = math.max(spacing, length + gap)
 	end
@@ -358,10 +369,12 @@ function Traffic.SpawnPlot(
 		local shape = measured[index]
 		local vehicle: Vehicle = {
 			plotId = plotId,
+			ordinal = index,
 			model = model,
 			lanes = lanes,
 			freeAt = freeAtFor(lanes),
 			hold = if driveSpeed > 0 then (shape.length + gap) / driveSpeed else 0,
+			followGap = gap,
 			lane = lane,
 			distance = 0,
 			speed = driveSpeed,
@@ -430,6 +443,45 @@ function Traffic.SetLanes(plotId: number, lanes: Lanes): ()
 		vehicle.fromYaw = vehicle.renderYaw
 		vehicle.blendElapsed = 0
 	end
+end
+
+-- M12 wave 2.2: gives the plot's vehicle `ordinal` (its place in the list SpawnPlot was given)
+-- the new `model`, pivoted like SpawnPlot's, exactly where the old one is drawn: same lane, same
+-- distance along it, same facing. Traffic owns the model either way; false (and the model
+-- destroyed) when the plot has no such vehicle, which a street too short for it or a full map
+-- budget can leave it without.
+function Traffic.Swap(plotId: number, ordinal: number, model: Model, parent: Instance): boolean
+	for _, vehicle in vehicles do
+		if vehicle.plotId ~= plotId or vehicle.ordinal ~= ordinal then
+			continue
+		end
+		local modelParts, partOffsets, length = measure(model)
+		local lanes = vehicle.lanes
+		local lane = vehicle.lane
+		local turnSeconds = vehicle.turnSeconds
+		local alpha = if turnSeconds > 0 then math.min(vehicle.blendElapsed / turnSeconds, 1) else 1
+		local frame = frameFor(
+			lanes.origin[lane]
+				+ lanes.direction[lane] * vehicle.distance
+				+ vehicle.blendOffset * (1 - alpha),
+			vehicle.renderYaw
+		)
+		-- Placed before parenting so the model never flashes at the world origin.
+		for partIndex, part in modelParts do
+			part.CFrame = frame * partOffsets[partIndex]
+		end
+		vehicle.model:Destroy()
+		vehicle.model = model
+		vehicle.modelParts = modelParts
+		vehicle.partOffsets = partOffsets
+		-- A longer vehicle keeps the lanes it enters from here on for longer.
+		vehicle.hold = if vehicle.speed > 0 then (length + vehicle.followGap) / vehicle.speed else 0
+		model.Parent = parent
+		rebuildArrays()
+		return true
+	end
+	model:Destroy()
+	return false
 end
 
 -- Vehicles the whole map can still take under `mapVehicleBudget`.

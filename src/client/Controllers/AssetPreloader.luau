@@ -62,20 +62,53 @@ local AssetPreloader = {}
 type ModelMap = { [string]: Types.AssetModel }
 
 -- Appends one map's models under a key prefix, so a prop and a building sharing a name (the
--- two maps are independent namespaces) never collapse into one entry.
+-- two maps are independent namespaces) never collapse into one entry. `skip` names models to
+-- leave out.
 local function collectModels(
 	into: { [string]: Types.AssetModel },
 	models: ModelMap?,
-	keyPrefix: string
+	keyPrefix: string,
+	skip: { [string]: boolean }?
 ): ()
 	if type(models) ~= "table" then
 		return
 	end
 	for modelName, assetModel in models :: ModelMap do
+		if skip ~= nil and skip[modelName] then
+			continue
+		end
 		if type(assetModel) == "table" and type(assetModel.stages) == "table" then
 			into[keyPrefix .. modelName] = assetModel
 		end
 	end
+end
+
+-- The era's building models that can never spawn: every slot naming one is `streetOnly`, for
+-- which the server lays an empty marker and the client redresses the streets instead (wave 1e;
+-- M12's city-changer slots). Their meshes would be downloaded for nothing. Read from the slot
+-- flag, so a slot that changes kind needs no change here; a model no slot names is kept, as it
+-- always was.
+local function neverSpawned(eraName: string): { [string]: boolean }
+	local spawns: { [string]: boolean } = {}
+	local skip: { [string]: boolean } = {}
+	for eraIndex = 1, Catalog.GetEraCount() do
+		local eraConfig = Catalog.GetEraConfig(eraIndex)
+		if eraConfig == nil or eraConfig.name ~= eraName then
+			continue
+		end
+		for _, slot in eraConfig.slots do
+			if slot.streetOnly == true then
+				skip[slot.modelName] = true
+			else
+				spawns[slot.modelName] = true
+			end
+		end
+		break
+	end
+	for modelName in spawns do
+		skip[modelName] = nil
+	end
+	return skip
 end
 
 function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
@@ -91,8 +124,8 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	local propsByEra = config.props
 	local eraProps: ModelMap? = if propsByEra ~= nil then propsByEra[eraName] else nil
 	local models: { [string]: Types.AssetModel } = {}
-	collectModels(models, config.eras[eraName], BUILDING_KEY_PREFIX)
-	collectModels(models, eraProps, PROP_KEY_PREFIX)
+	collectModels(models, config.eras[eraName], BUILDING_KEY_PREFIX, neverSpawned(eraName))
+	collectModels(models, eraProps, PROP_KEY_PREFIX, nil)
 
 	-- Sorted so the request order (and so what the player sees first) is deterministic.
 	local modelKeys: { string } = {}

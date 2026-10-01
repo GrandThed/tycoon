@@ -88,8 +88,22 @@ local DEFAULT_TREE_SHARE = 0.5
 -- Wave 2c: how far walkers keep from solids when `pedestrians.clearance` is missing (lead ruling,
 -- the figure's half-width plus a hand's breadth); the config value wins whenever it is present.
 local DEFAULT_WALK_CLEARANCE = 0.6
+-- M12 wave 2.2: the vehicle unlock draws take a stream of their own, so no other plan moves when
+-- an unlock is added. The salts before it: Scatter 7001-7004, Ambient 7005, Fabric 7006.
+local VEHICLE_UNLOCK_SALT = 7007
 
 type TreeInstance = { model: Model, stage: number }
+
+-- M12 wave 2.2 ("Buses in the traffic"): one valid `vehicles.unlocks` entry with its seeded picks.
+-- `position` is its place in the config list, which is also the vehicle it always takes (so the
+-- plot has one of its props as soon as it has that many vehicles); `taken` maps every vehicle
+-- index it takes to the prop it gives it.
+type VehicleUnlock = {
+	position: number,
+	slot: string,
+	props: { string },
+	taken: { [number]: string },
+}
 
 -- What the `cityDetail` setting allows right now. A nil cap = every planned tree / planter.
 type DetailPolicy = {
@@ -133,6 +147,12 @@ type Build = {
 	greenery: { [number]: Model },
 	parked: { [number]: Model },
 	smoke: { [number]: Attachment },
+	-- M12 wave 2.2: the era's vehicle unlocks in config order, and for each street vehicle Traffic
+	-- holds (by its place in the list it was spawned from) its plan index and the prop it wears,
+	-- so a purchase swaps only the vehicles whose prop changed.
+	vehicleUnlocks: { VehicleUnlock },
+	vehicleIndices: { number },
+	vehicleShown: { string },
 	-- M12: nil in an era without fabric data or a `fabric` config block.
 	fabric: Fabric.Handle?,
 	-- The flocks a layout with no tree zones plans over the fabric's clumps (empty otherwise), and
@@ -390,6 +410,57 @@ end
 -- Forward-declared: a build's fallback callback schedules its own plot.
 local schedule: (entry: PlotEntry) -> ()
 
+-- M12 wave 2.2: the seeded picks of every `vehicles.unlocks` entry over the plot's `count` planned
+-- vehicles. One stream for the whole list, and every entry -- malformed ones too -- consumes two
+-- draws per vehicle (the share roll, then the prop pick), so an entry's picks depend only on its
+-- place in the list. An entry takes the vehicle whose index is its own position whatever the roll
+-- (the "at least one" the contract asks for) and every vehicle whose roll falls under `share`. A
+-- malformed entry plans nothing, silently.
+local function planVehicleUnlocks(
+	seed: number,
+	vehicles: Types.CityEraVehiclesConfig,
+	count: number
+): { VehicleUnlock }
+	local planned: { VehicleUnlock } = {}
+	local unlocks: any = vehicles.unlocks
+	if type(unlocks) ~= "table" then
+		return planned
+	end
+	local rng = Random.new(seed + VEHICLE_UNLOCK_SALT)
+	for position = 1, #unlocks do
+		local unlock = unlocks[position]
+		local slot = if type(unlock) == "table" then unlock.slot else nil
+		local props = if type(unlock) == "table" then unlock.props else nil
+		local share = if type(unlock) == "table" then unlock.share else nil
+		local valid = type(slot) == "string"
+			and type(props) == "table"
+			and #props > 0
+			and type(share) == "number"
+			and share >= 0
+			and share < math.huge
+		if valid then
+			for _, prop in props do
+				valid = valid and type(prop) == "string"
+			end
+		end
+		local taken: { [number]: string } = {}
+		for index = 1, count do
+			local roll = rng:NextNumber()
+			local pick = rng:NextNumber()
+			if valid and (index == position or roll < share) then
+				taken[index] = props[math.min(math.floor(pick * #props) + 1, #props)]
+			end
+		end
+		if valid then
+			table.insert(
+				planned,
+				{ position = position, slot = slot, props = props, taken = taken }
+			)
+		end
+	end
+	return planned
+end
+
 local function newBuild(
 	entry: PlotEntry,
 	config: Types.CityDressingConfig,
@@ -559,6 +630,13 @@ local function newBuild(
 		greenery = {},
 		parked = {},
 		smoke = {},
+		vehicleUnlocks = planVehicleUnlocks(
+			Scatter.Seed(entry.index, eraName),
+			era.vehicles,
+			#plan.vehicleProps
+		),
+		vehicleIndices = {},
+		vehicleShown = {},
 		fabric = fabric,
 		fabricFlocks = fabricFlocks,
 		flockKey = "",
@@ -939,9 +1017,60 @@ local function vehicleTargetFor(
 	return math.clamp(wanted, 0, math.min(#build.plan.vehicleProps, room))
 end
 
-local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityDressingConfig): ()
+-- M12 wave 2.2: the unlocks in force right now -- the slot is owned and every prop the entry lists
+-- has a template (a prop not uploaded yet turns that unlock off, silently).
+local function activeUnlocks(
+	build: Build,
+	owned: { [string]: boolean }
+): { [VehicleUnlock]: boolean }
+	local active: { [VehicleUnlock]: boolean } = {}
+	for _, unlock in build.vehicleUnlocks do
+		if not owned[unlock.slot] then
+			continue
+		end
+		local complete = true
+		for _, prop in unlock.props do
+			if PropFactory.Template(build.eraName, prop) == nil then
+				complete = false
+				break
+			end
+		end
+		active[unlock] = complete
+	end
+	return active
+end
+
+-- The prop street vehicle `index` wears: its ordinary seeded pick, unless an unlock in force takes
+-- it. Where several do, the entry whose own guaranteed vehicle this is wins, else the last in
+-- config order.
+local function vehiclePropFor(
+	build: Build,
+	index: number,
+	active: { [VehicleUnlock]: boolean }
+): string?
+	local prop: string? = build.plan.vehicleProps[index]
+	for _, unlock in build.vehicleUnlocks do
+		local taken = unlock.taken[index]
+		if taken ~= nil and active[unlock] then
+			prop = taken
+			if unlock.position == index then
+				break
+			end
+		end
+	end
+	return prop
+end
+
+local function spawnVehicles(
+	entry: PlotEntry,
+	build: Build,
+	config: Types.CityDressingConfig,
+	owned: { [string]: boolean }
+): ()
 	Traffic.ClearPlot(entry.index)
 	entry.vehiclesBlocked = false
+	table.clear(build.vehicleIndices)
+	table.clear(build.vehicleShown)
 	if entry.vehicleTarget <= 0 then
 		return
 	end
@@ -950,27 +1079,26 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 		return
 	end
 	local models: { Model } = {}
+	local indices: { number } = {}
+	local shown: { string } = {}
+	local active = activeUnlocks(build, owned)
 	-- Scaled about the base before Traffic reads the part offsets, so the smaller car rides the
 	-- road surface with no height correction of its own.
 	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
 	for index = 1, entry.vehicleTarget do
-		local model = PropFactory.Spawn(
-			build.eraName,
-			build.plan.vehicleProps[index],
-			0,
-			CFrame.identity,
-			nil,
-			scale
-		)
-		if model ~= nil then
+		local prop = vehiclePropFor(build, index, active)
+		local model = PropFactory.Spawn(build.eraName, prop, 0, CFrame.identity, nil, scale)
+		if model ~= nil and prop ~= nil then
 			table.insert(models, model)
+			table.insert(indices, index)
+			table.insert(shown, prop)
 		end
 	end
 	if #models == 0 then
 		return
 	end
 	-- Only a full map budget is worth retrying; a street too short for more cars stays as it is.
-	local _, budgetLimited = Traffic.SpawnPlot(
+	local placed, budgetLimited = Traffic.SpawnPlot(
 		entry.index,
 		lanes,
 		models,
@@ -981,6 +1109,39 @@ local function spawnVehicles(entry: PlotEntry, build: Build, config: Types.CityD
 		config.budget.vehiclesMap
 	)
 	entry.vehiclesBlocked = budgetLimited
+	-- Traffic keeps the first `placed` models of the list and destroys the rest.
+	build.vehicleIndices = table.move(indices, 1, placed, 1, {})
+	build.vehicleShown = table.move(shown, 1, placed, 1, {})
+end
+
+-- M12 wave 2.2: after a purchase that puts a vehicle unlock in force, the vehicles it takes change
+-- model where they drive; the rest of the plot's traffic is not touched. A no-op while every
+-- vehicle already wears its prop, which is every sync but that one.
+local function syncVehicleProps(entry: PlotEntry, build: Build, owned: { [string]: boolean }): ()
+	if #build.vehicleUnlocks == 0 or #build.vehicleIndices == 0 then
+		return
+	end
+	local active = activeUnlocks(build, owned)
+	local scale = PropFactory.ScaleOf(build.era.vehicles.scale)
+	for ordinal, index in build.vehicleIndices do
+		local prop = vehiclePropFor(build, index, active)
+		if prop == nil or prop == build.vehicleShown[ordinal] then
+			continue
+		end
+		local model = PropFactory.Spawn(build.eraName, prop, 0, CFrame.identity, nil, scale)
+		if model == nil then
+			continue
+		end
+		if Traffic.Swap(entry.index, ordinal, model, entry.folder) then
+			build.vehicleShown[ordinal] = prop
+		else
+			-- The plot's traffic was cleared without a respawn (it left the vehicle plots): there
+			-- is nothing to swap until the next spawn, which picks the props itself.
+			table.clear(build.vehicleIndices)
+			table.clear(build.vehicleShown)
+			return
+		end
+	end
 end
 
 -- The ring's cars ride the same Traffic loop on their own lane graph, so they never take the ramp
@@ -1633,10 +1794,10 @@ local function sync(entry: PlotEntry): ()
 	local target = vehicleTargetFor(entry, current, config, policy)
 	if target ~= entry.vehicleTarget then
 		entry.vehicleTarget = target
-		spawnVehicles(entry, current, config)
+		spawnVehicles(entry, current, config, owned)
 	elseif target > 0 and entry.vehiclesBlocked and Traffic.Room(config.budget.vehiclesMap) > 0 then
 		-- Room freed elsewhere since the map budget cut this plot short.
-		spawnVehicles(entry, current, config)
+		spawnVehicles(entry, current, config, owned)
 	elseif roadsChanged and target > 0 then
 		-- A plot whose streets were too short for all its cars (Traffic keeps them a car length
 		-- apart) respawns when they grow instead of carrying the short count forward.
@@ -1644,8 +1805,13 @@ local function sync(entry: PlotEntry): ()
 		if driving > 0 and driving >= target then
 			Traffic.SetLanes(entry.index, RoadGraph.GetLanes(current.roads))
 		else
-			spawnVehicles(entry, current, config)
+			spawnVehicles(entry, current, config, owned)
 		end
+	end
+	-- After any respawn above, which already picked every prop, so this only acts on the sync that
+	-- sees a vehicle unlock bought.
+	if entry.vehicleTarget > 0 then
+		syncVehicleProps(entry, current, owned)
 	end
 
 	local walkerTarget = walkerTargetFor(entry, current, policy)

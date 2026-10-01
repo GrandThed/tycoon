@@ -14,6 +14,12 @@
 -- The whole network (every spine polyline, connector and routable spur) is smoothed once per
 -- layout, whatever is owned, so adding a path never changes another path's geometry and every
 -- client derives the same curves as the bake did.
+--
+-- M12 wave 2.2 "narrow driveways": a spur may be drawn narrower than the streets (`spurWidth`).
+-- What shapes a spur's own ribbon -- its corner radius, the shortest leg it can bend on, how far
+-- from its ends the wobble fades -- then scales with the spur's width; what measures the street
+-- it joins -- the host reach, and how far its mouth runs past the host's centreline -- stays in
+-- street widths. With `spurWidth` equal to the width, every number is the one it always was.
 
 export type Point = { number }
 
@@ -58,6 +64,7 @@ export type SpurInput = { id: string, points: { Point } }
 
 export type NetworkInput = {
 	width: number,
+	spurWidth: number?, -- the width spur chains are shaped at; absent = `width`
 	meander: MeanderConfig?,
 	polylines: { { Point } },
 	connectors: { ConnectorInput },
@@ -68,6 +75,7 @@ export type Network = {
 	-- The road width the chains were smoothed with, as in network.py's Bake: callers pass their
 	-- own copy of it, so this is the record of what these curves were actually built from.
 	width: number,
+	spurWidth: number, -- the same record for the spur chains (equal to `width` unless narrowed)
 	amplitude: number,
 	wavelength: number,
 	sampleSpacing: number, -- how finely callers should walk a curve (SAMPLE_SPACING)
@@ -81,7 +89,9 @@ export type Network = {
 -- must smooth and meander exactly as the bake did or the lanes and tree clearance would drift
 -- off the baked path, so these are code (and part of the approved look), not config.
 local SAMPLE_SPACING = 0.6 -- pathgeom SAMPLE_STEP: arc-length resample spacing
-local CORNER_RADIUS_WIDTHS = 2 -- pathgeom FILLET_RADIUS_WIDTHS: corner radius / road width
+-- The three `_WIDTHS` constants that shape a chain's own ribbon are in widths of that chain (a
+-- spur's `spurWidth`); EXTEND and ROUND_END are in widths of the street being joined.
+local CORNER_RADIUS_WIDTHS = 2 -- pathgeom FILLET_RADIUS_WIDTHS: corner radius / chain width
 local FILLET_MIN_DEG = 4 -- gentler corners are left to the spline
 local ARC_STEP_DEG = 12 -- fillet arc sampling
 local CR_ALPHA = 0.5 -- centripetal Catmull-Rom: no loops or cusps on uneven legs
@@ -400,9 +410,11 @@ end
 
 function PathRibbon.Build(input: NetworkInput): Network
 	local width = input.width
+	local spurWidth = input.spurWidth or width
 	local meander = input.meander
 	local network: Network = {
 		width = width,
+		spurWidth = spurWidth,
 		amplitude = if meander ~= nil then meander.amplitude else 0,
 		wavelength = if meander ~= nil and meander.wavelength > 0
 			then meander.wavelength
@@ -442,10 +454,16 @@ function PathRibbon.Build(input: NetworkInput): Network
 		network.spurChains[spur.id] = #chains
 	end
 
-	local radius = CORNER_RADIUS_WIDTHS * width
-	local minLeg = MIN_LEG_WIDTHS * width
+	-- The width a chain's own ribbon is drawn at: a spur's may be narrower than the streets'.
+	local function widthOf(chain: Chain): number
+		return if chain.kind == "spur" then spurWidth else width
+	end
+	local function smoothed(chain: Chain): Curve
+		local own = widthOf(chain)
+		return smoothCurve(chain.points, CORNER_RADIUS_WIDTHS * own, MIN_LEG_WIDTHS * own)
+	end
 	for _, chain in chains do
-		chain.curve = smoothCurve(chain.points, radius, minLeg)
+		chain.curve = smoothed(chain)
 		chain.raw = newCurve(chain.points, 0, 0)
 	end
 
@@ -504,7 +522,7 @@ function PathRibbon.Build(input: NetworkInput): Network
 				chain.joinEnd = true
 			end
 			chain.points = dedupe(pts, DEDUPE_EPS)
-			chain.curve = smoothCurve(chain.points, radius, minLeg)
+			chain.curve = smoothed(chain)
 			table.insert(host.junctions, arc)
 			-- A join at a lane's dead end rounds that end off past the join.
 			if arc < ROUND_END_REACH then
@@ -516,16 +534,18 @@ function PathRibbon.Build(input: NetworkInput): Network
 		end
 	end
 
-	local taperLength = MEANDER_TAPER_WIDTHS * width
 	for _, chain in chains do
 		local curve = chain.curve
 		local total = curve.total
+		local taperLength = MEANDER_TAPER_WIDTHS * widthOf(chain)
 		chain.phase = (chain.key * GOLDEN_ANGLE) % FULL_TURN
 		local nodes: { number } = { 0, total }
 		for _, junction in chain.junctions do
 			table.insert(nodes, junction)
 		end
-		-- The plot entrance stays open at full width (Wave 1c fix to the mock): no extension.
+		-- The plot entrance stays open at full width (Wave 1c fix to the mock): no extension. The
+		-- extensions stay in street widths whatever the chain: a spur's mouth runs past its host's
+		-- centreline, and must end inside the street it joins.
 		local extStart = if chain.joinStart
 			then EXTEND_WIDTHS * width
 			elseif chain.roundStart and not chain.entrance then ROUND_END_WIDTHS * width
