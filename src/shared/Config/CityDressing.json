@@ -393,7 +393,7 @@
     },
     "Boomtown": {
       "road": {
-        "width": 8,
+        "width": 6,
         "material": "Asphalt",
         "color": [
           72,
@@ -519,7 +519,7 @@
           6,
           7
         ],
-        "offset": 4.35,
+        "offset": 3.35,
         "clearance": 0.6,
         "speed": 3,
         "bobHeight": 0.1,
@@ -538,8 +538,8 @@
             6
           ],
           "medium": [
-            9,
-            9
+            8,
+            8
           ],
           "narrow": [
             5,
@@ -547,7 +547,7 @@
           ]
         },
         "pull": {
-          "radius": 26,
+          "radius": 30,
           "tierTerm": 0.16,
           "thresholds": [
             0.9,
@@ -555,7 +555,7 @@
             1.7,
             2.1
           ],
-          "reach": 14,
+          "reach": 20,
           "levelsOverTier": 1,
           "smallMaxLevel": 3,
           "rowLag": 0
@@ -564,16 +564,14 @@
         "districts": {
           "suburb": {
             "small": [
-              "ShedA",
-              "ShedB"
+              "FabricHomeSmallA",
+              "FabricHomeSmallB",
+              "FabricHomeSmallC",
+              "FabricHomeSmallD"
             ],
             "medium": [
-              "HouseA",
-              "HouseB",
-              "HouseC",
-              "HouseD",
-              "HouseE",
-              "HouseF"
+              "FabricHomeMediumA",
+              "FabricHomeMediumB"
             ],
             "narrow": [
               "FabricShopNarrowA",
@@ -592,6 +590,9 @@
             "small": [
               "ShedA",
               "ShedB"
+            ],
+            "medium": [
+              "FabricWorksMediumA"
             ]
           },
           "civic": {}
@@ -612,13 +613,13 @@
             "FieldQuarterB",
             "FieldQuarterC"
           ],
-          "quarterRadius": 3.2,
+          "quarterRadius": 3.0,
           "singleRadius": 1.0
         },
         "clear": {
           "slot": 3,
           "pad": 1.5,
-          "street": 6.5,
+          "street": 5.5,
           "parcel": 1.5
         },
         "construction": {
@@ -634,7 +635,7 @@
         "marker": {
           "prop": "LotSign",
           "offset": [
-            5,
+            4.1,
             0,
             -0.5
           ],

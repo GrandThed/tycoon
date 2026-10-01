@@ -212,7 +212,8 @@ WILD_COLOURS = {"clump": (40, 110, 55, 70), "single": (60, 120, 60, 110)}
 WILD_RADIUS = {"clump": 2.6, "single": 1.0}  # studs, preview only
 TOWN_TREE_COLOURS = {1: (60, 170, 70), 2: (230, 140, 50), 3: (40, 110, 210)}  # by variant
 TOWN_TREE_RADIUS = 1.2  # studs, preview only
-UPGRADE_COLOURS = {"flowers": (230, 80, 170), "banners": (200, 40, 40)}  # wave 1c round 3 layers
+# wave 1c round 3 layers, and wave 2.0's parked carts
+UPGRADE_COLOURS = {"flowers": (230, 80, 170), "banners": (200, 40, 40), "carts": (120, 78, 40)}
 UPGRADE_DOT = 0.7  # studs, preview only
 
 # --------------------------------------------------------------------------
@@ -691,10 +692,13 @@ def greedy_buy_tiers(era_name, city):
 class Era:
     def __init__(self, name, city):
         self.name = name
-        self.furniture = set(STREET_FURNITURE.get(name, ()))
         # M12: the fabric replaces lots, greenery zones, tree zones and parked bays.
         self.fabric_path = FABRIC_DIR / f"{name}.json"
         self.has_fabric = self.fabric_path.exists()
+        # A growth layout stands nothing on a street (INTERFACES "Wave 2.1": a street upgrade's pad
+        # is beside the street, on ground nothing else uses), so the furniture exemptions the old
+        # plans needed do not apply to it: every pad and footprint keeps every rule again.
+        self.furniture = set() if self.has_fabric else set(STREET_FURNITURE.get(name, ()))
         self.layout = parse_layout(LAYOUTS_DIR / f"{name}.luau")
         self.config = load_era_config(name)
         # M12 wave 1c: in a fabric era a streetOnly slot's footprint is nominal (no model spawns and
@@ -3213,10 +3217,16 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     if fabric_doc is not None:
         entries.append((PARCEL_ROW_COLOURS[1], "fabric parcel, row 1 (index; tick = front)"))
         entries.append((PARCEL_ROW_COLOURS[2], "fabric parcel, row 2"))
-        entries.append((WILD_COLOURS["clump"], "wild: woods clump quarter / single"))
-        entries.append((TOWN_TREE_COLOURS[3], "town tree (blue street, orange orchard, green)"))
-        entries.append((UPGRADE_COLOURS["flowers"], "flowers (planter, border, bed)"))
-        entries.append((UPGRADE_COLOURS["banners"], "banners (street banner, bunting)"))
+        entries.append((WILD_COLOURS["clump"], "wild: clump quarter / single"))
+        layers = fabric_doc.get("upgrades") or {}
+        for layer, colour, text in (
+            ("trees", TOWN_TREE_COLOURS[3], "town tree (blue street, orange orchard, green)"),
+            ("flowers", UPGRADE_COLOURS["flowers"], "flowers (planter, border, bed)"),
+            ("banners", UPGRADE_COLOURS["banners"], "banners (street banner, bunting)"),
+            ("carts", UPGRADE_COLOURS["carts"], "parked carts (kerb, yard)"),
+        ):
+            if layer in layers:
+                entries.append((colour, text))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))

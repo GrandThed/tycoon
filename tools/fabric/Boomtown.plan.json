@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "seed": "Boomtown:fabric:b1",
+  "parcels": {
+    "frontSetback": 4.5,
+    "gap": 0.6,
+    "terraceGap": 0.1,
+    "terraceStreets": [1],
+    "mediumShare": 0.2,
+    "walkStep": 0.5,
+    "endMargin": 0.2,
+    "setbackJitter": 0.3,
+    "turnJitter": 0.0,
+    "rows": 3,
+    "minLevel": 2,
+    "infill": {
+      "step": 0.5,
+      "sizes": ["small"],
+      "rows": { "2": [11.1, 26.0], "3": [26.0, 42.0] }
+    },
+    "edge": 1.0,
+    "landmark": 0.5,
+    "slot": 1.0,
+    "pad": 0.5,
+    "plaza": 1.0,
+    "sign": 1.0,
+    "marker": 0.5,
+    "street": 5.1,
+    "spur": 4.05
+  },
+  "require": {
+    "parcels": 90,
+    "houses": 90,
+    "medium": 4
+  },
+  "wild": {
+    "pattern": "fields",
+    "grid": { "pitch": 13.3, "origin": [0, 0], "angle": 0, "edge": 0.5 },
+    "clumps": { "size": 11.92, "quarterOffset": 3.0 },
+    "crops": {
+      "noise": { "waves": 3, "base": 0.05 },
+      "bands": [
+        { "variant": 2, "share": 0.25 },
+        { "variant": 1, "share": 0.5 },
+        { "variant": 3, "share": 0.25 }
+      ]
+    },
+    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.3 },
+    "skirt": {
+      "depth": 14,
+      "sideFrom": 20,
+      "gap": 0.5,
+      "fallow": 0.3,
+      "singles": { "props": ["Windbreak", "PrairieTree"], "count": 4, "jitter": 1.5, "turnJitter": 8, "scale": [0.95, 1.1] }
+    },
+    "singles": { "props": ["HayBale", "HayBale", "PrairieTree"], "perCell": [1, 2], "inset": 3.0, "spacing": 4.5, "scale": [0.9, 1.1], "count": 28 },
+    "poles": {
+      "prop": "TelegraphPole",
+      "lines": [{ "axis": "z", "lane": 1.5, "from": -3.5, "to": 5.5, "step": 2 }]
+    },
+    "landmarks": [
+      { "prop": "Farmstead", "cell": [2, 5], "rotationY": 0, "size": [12, 12] },
+      { "prop": "Windpump", "cell": [-5, 4], "rotationY": 0, "size": [3, 3] },
+      { "prop": "Windpump", "cell": [5, 2], "rotationY": 90, "size": [3, 3] }
+    ]
+  }
+}

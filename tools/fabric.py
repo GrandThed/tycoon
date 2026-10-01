@@ -35,11 +35,15 @@ tuning them never moves a parcel, a tree, a flower, a banner or the woods: kerb 
 lot took (anchored to their stretch, parallel to it), yard carts beside a lot of the plan's cart
 districts (anchored to that parcel). A cart never stands in woods its own anchor leaves standing.
 
-Wild. Merged clumps of woods laid by blue noise (variable spacing, any turn, varied scale) wherever
-the density plan says woods, singles and round trees on a finer blue noise where the woods thin out
-and round a few small glades, a low sparse band at the front so the camera always sees the next pad,
-and a skirt past the side and back edges that tapers toward the hub corners. A clump is four copies
-of one quarter design, and `quads` holds each quarter's centre by the contract's rotation mapping.
+Wild. The plan's `wild.pattern` picks what the town grows out of. Woods (the default): merged
+clumps laid by blue noise (variable spacing, any turn, varied scale) wherever the density plan says
+woods, singles and round trees on a finer blue noise where the woods thin out and round a few small
+glades, a low sparse band at the front so the camera always sees the next pad, and a skirt past the
+side and back edges that tapers toward the hub corners. Fields ("fields"): a fenced field per cell of
+a square grid, crops and pasture chosen by low-frequency noise so they gather into larger fields,
+hay and trees on the pasture, a telegraph line, and a landscape band past the edges with the plan's
+landmarks. Either way a clump is four copies of one quarter design, and `quads` holds each
+quarter's centre by the contract's rotation mapping.
 
 The JSON is deterministic: string-seeded random streams, fixed iteration order, numbers rounded
 to 0.01 and written by a fixed formatter, so two builds are byte-identical and `check` can demand
@@ -118,6 +122,7 @@ TOP_TIER = 5  # GrowthTier at the end of an era (CityGrowth thresholds has five 
 QUARTERS = 4
 SIZES = ("small", "medium", "narrow")
 KINDS = ("clump", "single")
+FIELDS = "fields"  # the plan's `wild.pattern` for farmland on a grid; absent means woods
 ANCHORS = ("stretch", "parcel")
 
 
@@ -1247,6 +1252,20 @@ def cart_prop(site, plan):
     return props[variant - 1] if isinstance(variant, int) and 1 <= variant <= len(props) else None
 
 
+def cart_extents(site, plan):
+    """The cart prop's ground extents: harvested (the contract's measure) once it is uploaded;
+    before that the plan's `carts.footprints` entry, centred, as the flower and banner layers are
+    measured, so a layer can be laid for props that only exist as blueprints. None with neither."""
+    prop = cart_prop(site, plan)
+    if prop is None:
+        return None
+    harvested = site.prop_extents(prop)
+    if harvested is not None:
+        return harvested
+    declared = (plan[CARTS].get("footprints") or {}).get(prop)
+    return (-declared[0] / 2, declared[0] / 2, -declared[1] / 2, declared[1] / 2) if declared is not None else None
+
+
 def cart_body(extents, entry):
     """A cart's ground rectangle: its prop's harvested extents x the entry's scale, turned rotationY."""
     return extents_poly((entry["x"], entry["z"]), entry["rotationY"], tuple(v * entry["scale"] for v in extents))
@@ -1361,8 +1380,7 @@ def generate_carts(site, plan, parcels, levels, districts, upgrades, wild):
     prop's origin lies inside its extents, so a smaller cart on the same spot stands inside the
     larger one."""
     cfg = plan[CARTS]
-    prop = cart_prop(site, plan)
-    extents = site.prop_extents(prop) if prop is not None else None
+    extents = cart_extents(site, plan)
     if extents is None:
         return []
     rng = random.Random(f"{plan['seed']}:{CARTS}")
@@ -1481,8 +1499,10 @@ def density(x, z, plan, noise, half, glades=()):
     wobble = noise(x, z)
     if z < -half:
         return 0.0
-    skirt = wild["skirt"]
+    skirt = wild.get("skirt")
     if x < -half or x > half or z > half:
+        if skirt is None:
+            return 0.0
         beyond = max(-half - x, x - half, z - half)
         reach = skirt["depth"] + skirt["wobble"] * wobble
         if z <= half and (x < -half or x > half):
@@ -1492,13 +1512,16 @@ def density(x, z, plan, noise, half, glades=()):
         if beyond > reach:
             return 0.0
         return woods * min(1.0, (reach - beyond) / skirt["fade"])
-    band = wild["front"]
-    ramp = min(1.0, max(0.0, (z + half - band["start"] - band["wobble"] * wobble) / band["ramp"]))
-    value = band["low"] + (woods - band["low"]) * ramp
-    heart = wild["heart"]
-    distance = math.dist((x, z), tuple(heart["centre"])) + heart["wobble"] * wobble
-    if distance < heart["clear"] + heart["fade"]:
-        value = min(value, band["low"] + (woods - band["low"]) * max(0.0, (distance - heart["clear"]) / heart["fade"]))
+    band, heart = wild.get("front"), wild.get("heart")
+    low = band["low"] if band is not None else 0.0  # how thin the woods get where the plan opens them
+    value = woods
+    if band is not None:
+        ramp = min(1.0, max(0.0, (z + half - band["start"] - band["wobble"] * wobble) / band["ramp"]))
+        value = low + (woods - low) * ramp
+    if heart is not None:
+        distance = math.dist((x, z), tuple(heart["centre"])) + heart["wobble"] * wobble
+        if distance < heart["clear"] + heart["fade"]:
+            value = min(value, low + (woods - low) * max(0.0, (distance - heart["clear"]) / heart["fade"]))
     for gx, gz, radius, fade in glades:
         d = math.dist((x, z), (gx, gz))
         if d < radius + fade:
@@ -1553,9 +1576,11 @@ def quad_centres(x, z, rotation, scale, offset):
 
 def pick_glades(plan, noise, half):
     """A few small clearings deep in the plot's woods, apart from each other and the heart."""
-    cfg = plan["wild"]["glades"]
+    cfg = plan["wild"].get("glades")
+    if cfg is None:
+        return []
     rng = random.Random(f"{plan['seed']}:glades")
-    heart = tuple(plan["wild"]["heart"]["centre"])
+    heart = plan["wild"].get("heart")
     inner = half - cfg["inset"]
     glades = []
     for _ in range(cfg["attempts"]):
@@ -1563,7 +1588,7 @@ def pick_glades(plan, noise, half):
             break
         x, z = rng.uniform(-inner, inner), rng.uniform(-inner, inner)
         radius = rng.uniform(*cfg["radius"])
-        if math.dist((x, z), heart) < plan["wild"]["heart"]["clear"] + cfg["apart"]:
+        if heart is not None and math.dist((x, z), tuple(heart["centre"])) < heart["clear"] + cfg["apart"]:
             continue
         if density(x, z, plan, noise, half) < cfg["minDensity"]:
             continue
@@ -1574,14 +1599,38 @@ def pick_glades(plan, noise, half):
 
 
 def generate_wild(site, plan):
+    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields."""
+    if plan["wild"].get("pattern") == FIELDS:
+        return generate_fields(site, plan)
+    return generate_woods(site, plan)
+
+
+def wild_order(site, clumps, singles):
+    """The client draws a fixed prefix of the wild list (INTERFACES "Review amendments"): near plots
+    the first budget.wild entries, far plots the first budget.wildFar clumps. So the skirt's clumps
+    lead -- a far town that has cleared its own land still sits in its landscape band -- then the
+    plot's clumps farthest from the entrance first, because the town grows out from the entrance
+    and clears those last: the far prefix then keeps the wild land a near view still shows. Singles
+    come last, in the order given. Ties keep a front-to-back order."""
+    entrance = site.entrance
+
+    def order(entry):
+        reach = 0.0 if entry["skirt"] else round(math.dist(entrance, (entry["x"], entry["z"])), DECIMALS)
+        return (0 if entry["skirt"] else 1, -reach, entry["z"], entry["x"])
+
+    return sorted(clumps, key=order) + singles
+
+
+def generate_woods(site, plan):
     wild = plan["wild"]
     names = site.config["wild"]
     half = site.era.half_x
     noise = Noise(f"{plan['seed']}:noise", wild["noise"]["waves"], wild["noise"]["base"])
     spread = Noise(f"{plan['seed']}:spread", wild["noise"]["waves"], wild["noise"]["base"] * 1.7)
     glades = pick_glades(plan, noise, half)
-    clumps_cfg, singles_cfg = wild["clumps"], wild["singles"]
-    limit = half + wild["skirt"]["depth"] + wild["skirt"]["wobble"]
+    clumps_cfg, singles_cfg = wild["clumps"], wild.get("singles")
+    skirt = wild.get("skirt")
+    limit = half + (skirt["depth"] + skirt["wobble"] if skirt is not None else 0.0)
 
     def woods(x, z):
         return density(x, z, plan, noise, half, glades)
@@ -1621,6 +1670,8 @@ def generate_wild(site, plan):
                 "quads": [[rounded(q[0]), rounded(q[1])] for q in quads],
             }
         )
+    if singles_cfg is None:
+        return wild_order(site, clumps, [])
     # Singles: where the woods thin out (their edge, the front band, the glades' rims), a finer blue
     # noise of round trees, pines and rocks, never inside a clump.
     srng = random.Random(f"{plan['seed']}:singles")
@@ -1656,20 +1707,195 @@ def generate_wild(site, plan):
                 "skirt": not inside,
             }
         )
-    # The client draws a fixed prefix of this list (INTERFACES "Review amendments"): near plots the
-    # first budget.wild entries, far plots the first budget.wildFar clumps. So the skirt's clumps
-    # lead -- a far town that has cleared its own woods still sits in its landscape band -- then the
-    # plot's clumps farthest from the entrance first, because the town grows out from the entrance
-    # and clears those last: the far prefix then keeps the woods a near view still shows. Singles
-    # come last. Ties keep a front-to-back order.
-    entrance = site.entrance
+    singles.sort(key=lambda entry: (entry["z"], entry["x"]))
+    return wild_order(site, clumps, singles)
 
-    def order(entry):
-        group = 0 if entry["kind"] == "clump" and entry["skirt"] else 1 if entry["kind"] == "clump" else 2
-        reach = round(math.dist(entrance, (entry["x"], entry["z"])), DECIMALS) if group == 1 else 0.0
-        return (group, -reach, entry["z"], entry["x"])
 
-    return sorted(clumps + singles, key=order)
+# --------------------------------------------------------------------------------------------
+# Wild land as farmland (INTERFACES "Wave 2.1"): fields on a grid, pasture, a landscape band
+# --------------------------------------------------------------------------------------------
+
+
+def grid_point(grid, i, j):
+    """The plot position of grid coordinate (i, j): cell (i, j)'s centre for whole numbers, the lane
+    crossing between four cells for halves. The grid is square, `pitch` studs a cell, turned `angle`
+    about its `origin`."""
+    dx, dz = rotate(i * grid["pitch"], j * grid["pitch"], grid["angle"])
+    return (grid["origin"][0] + dx, grid["origin"][1] + dz)
+
+
+def plot_rect(site):
+    return streetplan.square((0.0, 0.0), 2 * site.era.half_x, 2 * site.era.half_z, 0)
+
+
+def on_plot(site, poly, inset):
+    return all(abs(v[0]) <= site.era.half_x - inset and abs(v[1]) <= site.era.half_z - inset for v in poly)
+
+
+def beyond_plot(site, point):
+    """How far a point lies past the plot's back and side edges, 0 on it; None in front of it, where
+    the hub approach stays open."""
+    if point[1] < -site.era.half_z:
+        return None
+    dx, dz = max(abs(point[0]) - site.era.half_x, 0.0), max(point[1] - site.era.half_z, 0.0)
+    return math.sqrt(dx * dx + dz * dz)
+
+
+def field_poly(wild, x, z, rotation):
+    size = wild["clumps"]["size"]
+    return streetplan.square((x, z), size, size, rotation)
+
+
+def landmark_polys(wild):
+    """Each skirt landmark of the plan as (entry, position, its ground rectangle): it stands on a
+    grid cell (`cell`, halves allowed), so it moves with the grid."""
+    out = []
+    for landmark in wild.get("landmarks") or []:
+        x, z = grid_point(wild["grid"], *landmark["cell"])
+        x, z = rounded(x), rounded(z)
+        size = landmark["size"]
+        out.append((landmark, (x, z), streetplan.square((x, z), size[0], size[1], landmark["rotationY"])))
+    return out
+
+
+def ranked(cells, noise, share):
+    """The `share` of `cells` where the noise field is highest: a quantile, so the count is exact,
+    and of a smooth field, so the chosen cells cluster."""
+    order = sorted(cells, key=lambda cell: (-noise(*cell["centre"]), cell["key"]))
+    return {cell["key"] for cell in order[: int(round(share * len(cells)))]}
+
+
+def thinned(items, cap):
+    """At most `cap` of `items`, kept evenly through the list."""
+    count = len(items)
+    if count <= cap:
+        return items
+    return [item for index, item in enumerate(items, start=1) if (index * cap) // count != ((index - 1) * cap) // count]
+
+
+def generate_fields(site, plan):
+    """Farmland (INTERFACES "Wave 2.1"): a fenced field per grid cell, each a clump of four
+    quarter-fields that the town clears quarter by quarter. Three things keep it from reading as a
+    quilt: a cell's crop comes from a low-frequency noise field, so neighbouring cells share a crop
+    and read as one larger field; a share of the cells, clustered by a second field, lies fallow as
+    pasture with hay, trees and a telegraph line across it; and the fields run on past the back and
+    side edges into a landscape band with the plan's landmarks. A field stands wholly on the plot
+    or wholly off it: the ground past the edge is lower."""
+    wild = plan["wild"]
+    grid, clumps_cfg, skirt = wild["grid"], wild["clumps"], wild["skirt"]
+    seed = plan["seed"]
+    rng = random.Random(f"{seed}:wild")
+    landmarks = landmark_polys(wild)
+    reach = max(site.era.half_x, site.era.half_z) + skirt["depth"] + clumps_cfg["size"]
+    span = int(math.ceil(reach * math.sqrt(2) / grid["pitch"])) + 1
+    plot = plot_rect(site)
+    on, off = [], []
+    for j in range(-span, span + 1):
+        for i in range(-span, span + 1):
+            centre = grid_point(grid, i, j)
+            centre = (rounded(centre[0]), rounded(centre[1]))
+            poly = field_poly(wild, centre[0], centre[1], grid["angle"])
+            cell = {"key": (j, i), "centre": centre, "poly": poly}
+            if any(gap(poly, rect) < skirt["gap"] for _, _, rect in landmarks):
+                continue
+            if on_plot(site, poly, grid["edge"]):
+                on.append(cell)
+                continue
+            past = beyond_plot(site, centre)
+            beside = abs(centre[0]) > site.era.half_x and centre[1] <= site.era.half_z
+            if past is None or past > skirt["depth"] or gap(poly, plot) < skirt["gap"]:
+                continue
+            # Beside the plot the band only runs from `sideFrom` back: it tapers out toward the hub.
+            if beside and centre[1] < skirt["sideFrom"]:
+                continue
+            off.append(cell)
+    fallow_noise = Noise(f"{seed}:fallow", wild["fallow"]["noise"]["waves"], wild["fallow"]["noise"]["base"])
+    pasture = ranked(on, fallow_noise, wild["fallow"]["share"])
+    skirt_pasture = ranked(off, fallow_noise, skirt["fallow"])
+    fields = [cell for cell in on if cell["key"] not in pasture] + [cell for cell in off if cell["key"] not in skirt_pasture]
+    # Crops in bands along one smooth field: the band order is the plan's, so the middle crop is the
+    # sea the others stand in as patches.
+    crop_noise = Noise(f"{seed}:crops", wild["crops"]["noise"]["waves"], wild["crops"]["noise"]["base"])
+    by_noise = sorted(fields, key=lambda cell: (crop_noise(*cell["centre"]), cell["key"]))
+    crop, taken, share = {}, 0, 0.0
+    for band in wild["crops"]["bands"]:
+        share += band["share"]
+        upto = int(round(share * len(by_noise)))
+        for cell in by_noise[taken:upto]:
+            crop[cell["key"]] = band["variant"]
+        taken = max(taken, upto)
+    for cell in by_noise[taken:]:
+        crop[cell["key"]] = wild["crops"]["bands"][-1]["variant"]
+    on_keys = {cell["key"] for cell in on}
+    clumps = []
+    for cell in fields:
+        x, z = cell["centre"]
+        rotation = rounded(norm_degrees(grid["angle"] + QUARTER_TURN * rng.randrange(QUARTERS)))
+        clumps.append(
+            {
+                "kind": "clump",
+                "variant": crop[cell["key"]],
+                "x": x,
+                "z": z,
+                "rotationY": rotation,
+                "scale": 1.0,
+                "skirt": cell["key"] not in on_keys,
+                "quads": [[rounded(q[0]), rounded(q[1])] for q in quad_centres(x, z, rotation, 1.0, clumps_cfg["quarterOffset"])],
+            }
+        )
+
+    def single(prop, x, z, rotation, scale, is_skirt):
+        return {"kind": "single", "prop": prop, "x": rounded(x), "z": rounded(z), "rotationY": rounded(norm_degrees(rotation)), "scale": rounded(scale), "skirt": is_skirt}
+
+    # Singles lead with what the landscape cannot do without, in case a budget ever cuts the tail:
+    # the landmarks, the skirt's shelterbelts, the telegraph line, then the pasture's hay and trees.
+    singles = [single(landmark["prop"], x, z, landmark["rotationY"], 1.0, True) for landmark, (x, z), _ in landmarks]
+    # Shelterbelts and trees in the skirt's pasture, a row lying along the plot edge it stands off.
+    # Skirt-only props: nothing past the edge is ever cleared, so a prop wider than the clearing test
+    # of a single (one point, `singleRadius`) is safe there and nowhere else.
+    dress = skirt.get("singles")
+    if dress is not None:
+        srng = random.Random(f"{seed}:skirt")
+        for index, cell in enumerate(thinned([cell for cell in off if cell["key"] in skirt_pasture], dress["count"])):
+            x, z = cell["centre"]
+            behind = z - site.era.half_z >= abs(x) - site.era.half_x
+            turn = (0.0 if behind else QUARTER_TURN) + srng.uniform(-dress["turnJitter"], dress["turnJitter"])
+            x, z = x + srng.uniform(-dress["jitter"], dress["jitter"]), z + srng.uniform(-dress["jitter"], dress["jitter"])
+            singles.append(single(dress["props"][index % len(dress["props"])], x, z, turn, srng.uniform(*dress["scale"]), True))
+    # The telegraph line: poles at lane crossings along a grid line, so no pole stands in a field.
+    poles = wild.get("poles")
+    if poles is not None:
+        for line in poles["lines"]:
+            count = int(math.floor((line["to"] - line["from"]) / line["step"] + 1e-9)) + 1
+            for k in range(count):
+                along = line["from"] + k * line["step"]
+                point = grid_point(grid, *((along, line["lane"]) if line["axis"] == "x" else (line["lane"], along)))
+                past = beyond_plot(site, point)
+                inside = abs(point[0]) <= site.era.half_x - grid["edge"] and abs(point[1]) <= site.era.half_z - grid["edge"]
+                outside = past is not None and skirt["gap"] <= past <= skirt["depth"]
+                pole = single(poles["prop"], point[0], point[1], grid["angle"] + line.get("turn", 0.0), 1.0, not inside)
+                crossing = any((pole["x"], pole["z"]) == (other["x"], other["z"]) for other in singles)  # two lines meet
+                if (inside or outside) and not crossing and all(point_gap(point, rect) >= skirt["gap"] for _, _, rect in landmarks):
+                    singles.append(pole)
+    # Hay and trees on the plot's pasture, clear of the cell's edge (the lanes and the fences).
+    loose = wild.get("singles")
+    if loose is not None:
+        lrng = random.Random(f"{seed}:singles")
+        scattered = []
+        room = grid["pitch"] / 2 - loose["inset"]
+        for cell in on:
+            if cell["key"] not in pasture:
+                continue
+            for _ in range(lrng.randint(*loose["perCell"])):
+                dx, dz = rotate(lrng.uniform(-room, room), lrng.uniform(-room, room), grid["angle"])
+                x, z = cell["centre"][0] + dx, cell["centre"][1] + dz
+                prop, turn, scale = loose["props"][lrng.randrange(len(loose["props"]))], lrng.uniform(0.0, 360.0), lrng.uniform(*loose["scale"])
+                if all(math.dist((x, z), (other["x"], other["z"])) >= loose["spacing"] for other in scattered):
+                    scattered.append(single(prop, x, z, turn, scale, False))
+        scattered = thinned(scattered, loose["count"])
+        scattered.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
+        singles += scattered
+    return wild_order(site, clumps, singles)
 
 
 # --------------------------------------------------------------------------------------------
@@ -1763,8 +1989,8 @@ def marker_poly(site, slot, offset):
 
 
 def marker_messages(site):
-    """A marker may not sit on a slot footprint (+CHECK_MARKER_SLOT), a pad, or a street or spur
-    strip. streetOnly slots count: their pad is real."""
+    """A marker may not sit on a slot footprint (+CHECK_MARKER_SLOT), a pad, a street strip or another
+    slot's path strip. streetOnly slots count: their pad is real."""
     messages = []
     strip = site.width / 2 + CHECK_STRIP_EXTRA
     for slot in site.era.slots:
@@ -1784,6 +2010,11 @@ def marker_messages(site):
             if d < strip - EPS:
                 messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {strip:g})")
         for other_id, a, b in site.spur_segments:
+            # A marker stands only while its slot has a pad, and that slot's own path is only drawn
+            # once the slot is bought: the two never share the ground. On a road-wide path that is
+            # the one place beside the pad that costs the street no frontage.
+            if other_id == slot["id"]:
+                continue
             d = segment_gap(a, b, poly)
             if d < strip - EPS:
                 messages.append(f"{label}: {d:.2f} from the {other_id} path (strip {strip:g})")
@@ -1951,12 +2182,12 @@ def upgrade_messages(site, plan, doc):
     need = plan.get("require") or {}
     everything = [(name, e) for name in LAYERS for e in upgrades.get(name, [])]
     carts = upgrades.get(CARTS, [])
-    cart_extents = site.prop_extents(cart_prop(site, plan)) if carts else None
+    cart_size = cart_extents(site, plan) if carts else None
     ground = None
-    if cart_extents is not None:
+    if cart_size is not None:
         ground = CartGround(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS)
     elif carts:
-        messages.append(f"{CARTS}: no harvested extents in Assets.json for the layer's prop (the plan's {CARTS}.variant), so no cart can be judged")
+        messages.append(f"{CARTS}: the layer's prop has neither harvested extents in Assets.json nor a `{CARTS}.footprints` entry in the plan, so no cart can be judged")
     for name in upgrades:
         if name not in LAYERS:
             messages.append(f"upgrades: layer {name!r} is not one of {LAYERS}")
@@ -1982,7 +2213,7 @@ def upgrade_messages(site, plan, doc):
             elif name != CARTS:
                 messages += item_clearance(site, plan, name, label, entry, props, polys, streets, spurs, everything)
             elif ground is not None:
-                messages += cart_clearance(site, plan, label, entry, cart_extents, ground, polys, districts)
+                messages += cart_clearance(site, plan, label, entry, cart_size, ground, polys, districts)
         budget = config.get("budget")
         if isinstance(budget, (int, float)) and len(entries) > budget:
             messages.append(f"{name}: {len(entries)} entries, more than upgrades.{name}.budget {budget:g} -- near plots never draw the tail")
@@ -2167,7 +2398,7 @@ def wild_messages(site, plan, doc):
         if any(not a["skirt"] and b["skirt"] for a, b in zip(shown, shown[1:])):
             messages.append("wild: an on-plot clump comes before a skirt clump")
     names = site.config["wild"]
-    singles_allowed = set(plan["wild"]["singles"]["trees"]) | set(plan["wild"]["singles"]["meadow"])
+    singles_allowed = wild_single_props(plan["wild"])
     half = site.era.half_x
     offset = plan["wild"]["clumps"]["quarterOffset"]
     for index, item in enumerate(wild, start=1):
@@ -2186,6 +2417,77 @@ def wild_messages(site, plan, doc):
                 messages.append(f"{label}: quads do not match the contract's rotation of ({offset:g}, {offset:g}) x scale")
         elif item["prop"] not in singles_allowed:
             messages.append(f"{label}: single prop {item['prop']!r} is not in the plan's single pools")
+    if plan["wild"].get("pattern") == FIELDS:
+        messages += field_messages(site, plan, wild)
+    return messages
+
+
+def wild_single_props(wild):
+    """Every prop the plan may write as a `single`, whichever pattern it lays."""
+    loose = wild.get("singles") or {}
+    names = {prop for pool in ("trees", "meadow", "props") for prop in loose.get(pool, ())}
+    names |= set(((wild.get("skirt") or {}).get("singles") or {}).get("props", ()))
+    names |= {landmark["prop"] for landmark in wild.get("landmarks") or []}
+    if wild.get("poles") is not None:
+        names.add(wild["poles"]["prop"])
+    return names
+
+
+def field_messages(site, plan, entries):
+    """The field pattern's own rules (INTERFACES "Wave 2.1"): fields at scale 1, square to the grid,
+    wholly on the plot or wholly off it and off each other; the skirt-only props (landmarks and the
+    skirt's shelterbelts, too wide for a single's one-point clearing test) past the edge; no single
+    in a field; and clearing margins wide enough that a quarter left standing never reaches into
+    what cleared its neighbour."""
+    wild = plan["wild"]
+    messages = []
+    plot = plot_rect(site)
+    landmarks = landmark_polys(wild)
+    # A prop the plan lays past the edge and never on the plot is a skirt-only prop.
+    plot_props = set((wild.get("singles") or {}).get("props", ())) | ({wild["poles"]["prop"]} if wild.get("poles") is not None else set())
+    skirt_only = (set(((wild["skirt"].get("singles") or {}).get("props", ()))) | {landmark["prop"] for landmark, _, _ in landmarks}) - plot_props
+    fields, points = [], []
+    for index, item in enumerate(entries, start=1):
+        label = f"wild {index} ({number(item['x'])}, {number(item['z'])})"
+        if item["kind"] != "clump":
+            points.append((label, (item["x"], item["z"])))
+            if item.get("prop") in skirt_only and not item["skirt"]:
+                messages.append(f"{label}: {item['prop']} is a skirt-only prop but stands on the plot, where it would be cleared by one point")
+            continue
+        poly = field_poly(wild, item["x"], item["z"], item["rotationY"])
+        fields.append((label, poly, box_of(poly)))
+        if item["scale"] != 1:
+            messages.append(f"{label}: a field is laid at scale 1, not {number(item['scale'])}")
+        turn = (item["rotationY"] - wild["grid"]["angle"]) % QUARTER_TURN
+        if min(turn, QUARTER_TURN - turn) > EPS:
+            messages.append(f"{label}: turned {number(item['rotationY'])}, not the grid's angle plus quarter turns")
+        if item["skirt"] and gap(poly, plot) <= 0:
+            messages.append(f"{label}: a skirt field reaches onto the plot base")
+        if not item["skirt"] and not on_plot(site, poly, 0.0):
+            messages.append(f"{label}: a field of the plot hangs over its edge")
+    for i, (label, poly, box) in enumerate(fields):
+        for other, other_poly, other_box in fields[i + 1 :]:
+            if not boxes_apart(box, other_box, 0.0) and gap(poly, other_poly) <= 0:
+                messages.append(f"{label}: overlaps the field {other}")
+        for what, point in points:
+            if not point_box_apart(point, box, 0.0) and streetplan.point_in_polygon(point, poly):
+                messages.append(f"{what}: stands in the field {label}")
+    for landmark, _, rect in landmarks:
+        if gap(rect, plot) <= 0:
+            messages.append(f"wild: the landmark {landmark['prop']} at cell {landmark['cell']} stands on the plot; landmarks belong to the skirt")
+        for label, poly, box in fields:
+            if not boxes_apart(box, box_of(rect), 0.0) and gap(poly, rect) <= 0:
+                messages.append(f"{label}: overlaps the landmark {landmark['prop']}")
+    # IsCleared takes a quarter down when its centre comes within margin + quarterRadius of what
+    # clears; a quarter still standing is a square whose corner reaches its half-diagonal that way.
+    reach = wild["clumps"]["size"] / 4 * math.sqrt(2)
+    least = min(site.config["clear"].values())
+    radius = site.config["wild"]["quarterRadius"]
+    if least + radius < reach - EPS:
+        messages.append(
+            f"wild: clear margin {least:g} + quarterRadius {radius:g} is under a quarter-field's half-diagonal "
+            f"{reach:.2f}, so a standing quarter can overlap what cleared its neighbour"
+        )
     return messages
 
 
