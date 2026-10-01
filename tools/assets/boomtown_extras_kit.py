@@ -41,7 +41,8 @@ authored in the lot frame: origin at the lot centre on the ground, front -Z, so 
 them at [0, 0, 0] and the stages of one shop register exactly.
 
 Colours are texels of the City Kits' colormap.png (suburban, industrial and roads share it), so
-the pieces sit in the Boomtown palette. Lumber is the kits' orange wood rather than pale pine: the
+the pieces sit in the Boomtown palette; the one exception is the three garden greens (see LAWN).
+Lumber is the kits' orange wood rather than pale pine: the
 Boomtown plot base is a dusty tan (173, 138, 93), which the plot renderer shows paler still, and
 cream timber disappears on it. Materials are plain colour factors with no texture, written linear
 like garden-kit's; merge_stages.py routes them through palette.py (not an sRGB-factor kit).
@@ -93,9 +94,13 @@ BLUE_PALE = (181, 204, 236)  # industrial
 NAVY = (71, 74, 172)  # industrial
 GREEN = (97, 203, 139)
 GREEN_DARK = (61, 167, 122)
-HEDGE_DARK = (44, 149, 113)  # industrial: deep in the same green ramp
-LAWN = (76, 181, 129)  # the leafiest step of that ramp below the roofs' green
-LAWN_LIGHT = (87, 193, 134)  # industrial
+# Garden greens. Not colormap texels: the City Kits have one mint-to-teal green ramp, which the
+# roofs, awnings and kit trees wear, and a lawn in it reads as a teal mat under a teal roof. These
+# three leaf greens are shared with farmland_kit.py (pasture, civic greens, cottonwoods), so every
+# planted thing in Boomtown is one family; the kit roofs and kit trees keep the mint.
+LAWN = (112, 168, 88)
+LAWN_LIGHT = (134, 186, 100)
+HEDGE = (86, 146, 76)  # hedges and shrubs
 YELLOW = (255, 192, 68)
 ORANGE = (255, 126, 68)
 RED = (207, 83, 79)
@@ -1146,6 +1151,7 @@ STOREY_H = 1.2  # a generated storey: the kits' 0.4-unit storey at this scale, a
 
 ROOF_RED = (TERRACOTTA, BRICK)  # (the slope, its edges)
 ROOF_BROWN = (BRICK, EARTH_DARK)
+ROOF_TAUPE = (EARTH, EARTH_DARK)  # a warm grey-brown, greyer and darker than ROOF_BROWN
 ROOF_GREY = (STONE, SLATE_LIGHT)
 ROOF_BLUE = (SLATE_BLUE, SLATE_LIGHT)
 ROOF_GREEN = (GREEN, GREEN_DARK)
@@ -1376,13 +1382,13 @@ def make_lawn_medium() -> Part:
 
 
 def make_hedge() -> Part:
-    """A clipped garden hedge, 1.4 x 0.5 x 0.4 studs along X: a dark core under three rounded crowns.
+    """A clipped garden hedge, 1.4 x 0.5 x 0.4 studs along X: a core under three rounded crowns.
     Lengths butt end to end."""
     p = Part("hedge")
-    p.box(-0.7, 0.7, 0.0, 0.3, -0.2, 0.2, HEDGE_DARK)
+    p.box(-0.7, 0.7, 0.0, 0.3, -0.2, 0.2, HEDGE)
     for i in range(3):
         x = -0.46 + i * 0.46
-        p.blob((x, 0.3, 0.0), (0.25, 0.2, 0.21), GREEN_DARK, seg=5, rings=2, cut=0.0, jitter=0.05, seed=191 + i)
+        p.blob((x, 0.3, 0.0), (0.25, 0.2, 0.21), HEDGE, seg=5, rings=2, cut=0.0, jitter=0.05, seed=191 + i)
     return p
 
 
@@ -1395,7 +1401,7 @@ def make_flower_bed() -> Part:
     for i, bloom in enumerate(blooms):
         x = -0.55 + i * 0.22
         z = 0.07 if i % 2 else -0.07
-        p.box(x - 0.09, x + 0.09, 0.1, 0.24, z - 0.09, z + 0.09, GREEN_DARK)
+        p.box(x - 0.09, x + 0.09, 0.1, 0.24, z - 0.09, z + 0.09, HEDGE)
         p.box(x - 0.055, x + 0.055, 0.24, 0.35, z - 0.055, z + 0.055, bloom)
     return p
 
@@ -1428,8 +1434,10 @@ def make_home_c_dress() -> Part:
 
 
 def make_home_d_dress() -> Part:
-    """FabricHomeSmallD (building-type-n): the kit's green roof, a navy front door, red shutters."""
+    """FabricHomeSmallD (building-type-n): a warm grey-brown roof, garage wing and door hood too, a
+    navy front door and red shutters."""
     p = Part("home-d-dress")
+    roof_skin(p, "building-type-n", *ROOF_TAUPE, HOME)
     door_slab(p, -0.214, -0.074, -0.259, NAVY)
     shutters(p, -0.644, -0.444, 0.15, 0.25, -0.239, RED)
     shutters(p, -0.644, -0.444, 0.55, 0.65, -0.239, RED)
