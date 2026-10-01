@@ -30,10 +30,19 @@ round the civic and farm landmarks and the tree slot's green (anchored to the la
 stretch), yard trees behind the last row of houses (anchored to the nearest parcel). Every one keeps
 off the walker and car lanes and clear of parcels, slots, pads, markers and lamps.
 
-Parked carts. Laid last, from their own random stream, in what every other list left, so adding or
-tuning them never moves a parcel, a tree, a flower, a banner or the woods: kerb carts in frontage no
-lot took (anchored to their stretch, parallel to it), yard carts beside a lot of the plan's cart
-districts (anchored to that parcel). A cart never stands in woods its own anchor leaves standing.
+Parked carts. Laid after the wild, from their own random stream, in what every other list left, so
+adding or tuning them never moves a parcel, a tree, a flower, a banner or the woods: kerb carts in
+frontage no lot took (anchored to their stretch, parallel to it), yard carts beside a lot of the
+plan's cart districts (anchored to that parcel). A cart never stands in woods its own anchor leaves
+standing.
+
+Plan-laid layers (INTERFACES "Wave 2.2"). Any further layer the plan lists in `layers` is laid by
+the placers its own plan block names, each layer from its own random stream, in the list's order,
+in what everything before it left: kerb entries beside the streets (in frontage no lot took, or one
+every so many studs on the lamp line), an entry at a lot's front edge or beside a lot, spans over a
+street on two posts, and boards past street ends, at the plot's edges and behind a row. Their
+footprints come from the plan's `footprints` until the props are harvested, and every one answers
+to the cart rules.
 
 Wild. The plan's `wild.pattern` picks what the town grows out of. Woods (the default): merged
 clumps laid by blue noise (variable spacing, any turn, varied scale) wherever the density plan says
@@ -84,7 +93,7 @@ CHECK_SIZE_GAP = 0.6  # between lots of different sizes; terraced narrow lots ma
 CHECK_PAD = 0.5
 CHECK_PLAZA = 1.0
 CHECK_EDGE = 1.0
-CHECK_STRIP_EXTRA = 1.0  # a street or spur strip is road width / 2 + this
+CHECK_STRIP_EXTRA = 1.0  # a street or spur strip is its own width / 2 + this
 CHECK_FRONT_SLACK = 2.0
 CHECK_MARKER_SLOT = 0.5  # the next-pad marker's daylight to any slot footprint (and any parcel)
 CHECK_TREE = 1.0  # a town tree's daylight to a parcel, slot footprint, pad, marker or lamp
@@ -110,6 +119,12 @@ CHECK_CART_MARGINS = {
     "edge": CHECK_CART_EDGE,
     "wood": 0.0,  # "in the woods" is touching a wood's clearing disc
 }
+# A plan-laid layer (INTERFACES "Wave 2.2") answers to the cart margins. Two things may stand
+# closer to a lot than CHECK_CART: a parcel-anchored entry to its own lot, and a kerbside post (a
+# hydrant, a sign pole, an arch post: no side longer than CHECK_POST_SIZE) to the lot it stands
+# before, on the lamp line. Either may lean CHECK_OWN_LOT into that lot, as a planter does.
+CHECK_POST_SIZE = 1.0
+CHECK_FACING = 0.02  # |sin| between where a kerb entry faces and where its layer says it must
 MARKER_SIZE = 2.0  # the marker prop's ground square, the contract's cap
 BUILT_LEVEL = 2  # a parcel's house stands from level 2 (a parcel-anchored tree needs it)
 MAX_ROW = 3
@@ -277,6 +292,11 @@ class Site:
         self.config = fabric_config(self.city, era_name)
         self.sizes = {name: tuple(float(v) for v in self.config["sizes"][name]) for name in SIZES if name in self.config["sizes"]}
         self.width = float(self.era.width)
+        # A spur is as wide as its street unless the era narrows it (`road.paths.spurWidth`,
+        # INTERFACES "Wave 2.2": narrow driveways); its strip follows its own width.
+        self.spur_width = float(streetplan.spur_path_width(self.era))
+        self.street_strip = self.width / 2 + CHECK_STRIP_EXTRA
+        self.spur_strip = self.spur_width / 2 + CHECK_STRIP_EXTRA
         self.ids = piece_ids(self.network)
         self.stretch_by_id = {pid: index for index, pid in enumerate(self.ids)}
         # Every stretch some building's path draws once the whole era is owned (wave 1b's rule).
@@ -338,6 +358,8 @@ class Site:
         lamps = self.era.dressing.get("lamps") or {}
         post = streetplan.post_size(self.era, lamps.get("prop"))
         self.lamps = [streetplan.square(p, post, post, 0) for p in streetplan.row_lamp_posts(self.era, self.network)]
+        post = streetplan.post_size(self.era, (self.era.dressing.get("signals") or {}).get("prop"))
+        self.signals = [streetplan.square(p, post, post, 0) for p in streetplan.signal_spots(self.era, self.network)]
         walkers = self.era.dressing.get("pedestrians") or {}
         offset = float(walkers.get("offset", self.width / 2))
         clearance = float(walkers.get("clearance", 0.0))
@@ -348,17 +370,22 @@ class Site:
         # meandering walker's whole reach off every street and spur.
         meander = float((self.era.meander or {}).get("amplitude", 0.0))
         self.walker_street = offset + meander + clearance
-        self.walker_spur = min(offset, streetplan.spur_path_width(self.era) / 2) + meander + clearance
+        self.walker_spur = streetplan.spur_walk_offset(self.era, offset) + meander + clearance
 
     def solid_boxes(self, rules):
         """(polygon, its bounding box, the daylight a parcel keeps from it) for every solid."""
-        key = (rules["slot"], rules["landmark"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"])
+        # `keepClear` (optional): ground the plan holds back from the lots, for what a later layer
+        # stands there -- a shelter needs a gap in the frontage as wide as a lot.
+        held = [(rect["x"], rect["z"], rect["size"][0], rect["size"][1], rect.get("rotationY", 0.0)) for rect in rules.get("keepClear", ())]
+        key = (rules["slot"], rules["landmark"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"], tuple(held))
         if getattr(self, "_solids_key", None) != key:
             solids = [(poly, rules["landmark"] if measured else rules["slot"]) for poly, measured in self.landmark_polys.values()]
             solids += [(poly, rules["pad"]) for poly in self.pad_polys.values()]
             solids += [(poly, rules["plaza"]) for poly in self.plaza_polys]
             solids += [(poly, rules["marker"]) for poly in self.marker_polys.values()]
             solids.append((self.era.sign_poly, rules["sign"]))
+            # Any overlap counts: `gap` is 0 for two shapes that touch or cross.
+            solids += [(streetplan.square((x, z), width, depth, rotation), COLLINEAR) for x, z, width, depth, rotation in held]
             self._solids = [(poly, box_of(poly), margin) for poly, margin in solids]
             self._solids_key = key
         return self._solids
@@ -585,11 +612,23 @@ def infill(site, rules, parcels, row):
     """Back-row lots anywhere in the block interior behind a street's frontage (INTERFACES "Wave 1c,
     round 2"): a raster over each run side, front edges within the row's band of studs off the
     chord, facing the street square on, each laid where it keeps every clearance (back rows keep a
-    walker's reach off every street and spur). Fronts and addresses are set afterwards."""
+    walker's reach off every street and spur). Fronts and addresses are set afterwards. With the
+    plan's optional `infill.frontReach`, a lot is only laid within that many studs of the lot that
+    will be its front: a lot takes its front's address, so one laid a block away would develop
+    with a street it does not stand on, and the spot is better left to a nearer street's raster."""
     band = rules["infill"]["rows"][str(row)]
     step = rules["infill"]["step"]
+    front_reach = rules["infill"].get("frontReach")
     sizes = [size for size in rules["infill"]["sizes"] if size in site.sizes]
     added = []
+
+    def front_near(candidate):
+        front = nearest_front(parcels, candidate, row)
+        if front is None:
+            return False
+        ahead = parcels[front - 1]
+        return math.dist((ahead["x"], ahead["z"]), (candidate["x"], candidate["z"])) <= front_reach
+
     for run in street_runs(site):
         a, d = run["a"], run["d"]
         length = math.dist(a, run["b"])
@@ -611,7 +650,8 @@ def infill(site, rules, parcels, row):
                         reach = depth_edge + depth / 2
                         centre = (a[0] + d[0] * mid + n[0] * reach, a[1] + d[1] * mid + n[1] * reach)
                         candidate = make_parcel(site, size, centre, square_on, where[0], where[1], row, 0, run, side)
-                        if parcel_clear(site, candidate["poly"], rules, set(), parcels + added, size):
+                        clear = parcel_clear(site, candidate["poly"], rules, set(), parcels + added, size)
+                        if clear and (front_reach is None or front_near(candidate)):
                             added.append(candidate)
                             s += w - step
                             break
@@ -633,8 +673,13 @@ def generate_parcels(site, plan):
             return ("narrow",)
         return ("medium", "small") if stream.random() < rules["mediumShare"] else ("small", "medium")
 
+    # A terrace street's leftover holes take narrow lots only, unless the plan's optional
+    # `terraceFill` names more sizes: where a deep landmark stands behind the frontage, a narrow lot
+    # (the deepest size) cannot stand and a shallower one can.
+    terrace_fill = tuple(rules.get("terraceFill", ("narrow",)))
+
     def fill_pass(_stream, run):
-        return ("narrow",) if run["polyline"] + 1 in terrace else ("small", "narrow")
+        return terrace_fill if run["polyline"] + 1 in terrace else ("small", "narrow")
 
     # Frontage first: terraces of narrow lots on the terrace streets, cottages mostly medium
     # elsewhere; then a second walk fills every hole a lot still fits.
@@ -990,13 +1035,19 @@ class ItemSpots:
         return True
 
 
+def depth_inside(point, poly):
+    """How deep a point lies inside a polygon: its distance to the nearest edge, 0 outside.
+    (streetplan.point_polygon_distance is the daylight to a polygon, so it is 0 for every point
+    inside one and cannot measure this.)"""
+    if not streetplan.point_in_polygon(point, poly):
+        return 0.0
+    return min(streetplan.point_segment_distance(point, a, b)[0] for a, b in streetplan.polygon_edges(poly))
+
+
 def polygon_within(poly, lot, depth):
     """True when `poly` overlaps `lot` by at most `depth` studs (every vertex inside the lot lies
     within `depth` of its boundary)."""
-    for vertex in poly:
-        if streetplan.point_in_polygon(vertex, lot) and streetplan.point_polygon_distance(vertex, lot) > depth + EPS:
-            return False
-    return True
+    return all(depth_inside(vertex, lot) <= depth + EPS for vertex in poly)
 
 
 def item_poly(plan, layer, prop, x, z, rotation, scale):
@@ -1290,45 +1341,46 @@ def cart_anchor(site, polys, entry):
     return None
 
 
-class CartGround:
-    """Everything a parked cart answers to, with the daylight each kind asks for. The generator
-    builds it with the plan's margins and `check` with the contract's, so both judge a cart by one
-    rule. A cart's body keeps a walker's whole reach off every street and spur (carts are not walk
-    solids), `lot` from every parcel, `solid` from every landmark's harvested extents, pad, marker,
-    plaza and the Sign, `lamp` from every lamp, `tree` from every town tree's trunk, `item` from
-    every flower, banner and bunting, and `edge` from the plot edge. And it never stands in the
-    woods: it stands on land its own anchor clears, clear of every wood that anchor leaves."""
+PARCEL = "parcel"  # the tag kind of a Ground solid that is a parcel
 
-    def __init__(self, site, plan, polys, upgrades, wild, margins, tolerance):
-        self.site, self.margins, self.tolerance = site, margins, tolerance
-        solids = [(f"parcel {index}", poly, margins["lot"]) for index, poly in enumerate(polys, start=1)]
-        solids += [(f"the {slot_id} extents", poly, margins["solid"]) for slot_id, (poly, _) in site.landmark_polys.items()]
-        solids += [(f"the {slot_id} pad", poly, margins["solid"]) for slot_id, poly in site.pad_polys.items()]
-        solids += [(f"the {slot_id} marker", poly, margins["solid"]) for slot_id, poly in site.marker_polys.items()]
-        solids += [(f"plaza {index}", poly, margins["solid"]) for index, poly in enumerate(site.plaza_polys, start=1)]
-        solids += [(f"lamp {index}", poly, margins["lamp"]) for index, poly in enumerate(site.lamps, start=1)]
-        solids.append(("the Sign", site.era.sign_poly, margins["solid"]))
+
+def leans_within(body, lot, depth):
+    """True when `body` and `lot` overlap by at most `depth` studs: no corner of either lies deeper
+    than that inside the other."""
+    return polygon_within(body, lot, depth) and polygon_within(lot, body, depth)
+
+
+class Ground:
+    """Everything a laid entry answers to, with the daylight each kind asks for. The generator
+    builds it with the plan's margins and `check` with the contract's, so both judge an entry by one
+    rule. A body keeps a walker's whole reach off every street and spur (entries are not walk
+    solids), `lot` from every parcel, `solid` from every landmark's harvested extents, pad, marker,
+    plaza and the Sign, `lamp` from every lamp and signal, `tree` from every town tree's trunk,
+    `item` from every other entry of every layer, and `edge` from the plot edge. And it never
+    stands in the wild: it stands on land its own anchor clears, clear of every wood or field that
+    anchor leaves. `leave_out` names layers whose entries are not solids here (the carts' own:
+    two carts answer to their spacing instead)."""
+
+    def __init__(self, site, plan, polys, upgrades, wild, margins, tolerance, leave_out=(), frames=None):
+        self.site, self.plan, self.margins, self.tolerance = site, plan, margins, tolerance
+        # (x, z, rotationY, width, depth) of every parcel, for "stands before a lot's front"
+        self.frames = frames
+        solids = [(f"parcel {index}", poly, margins["lot"], (PARCEL, index)) for index, poly in enumerate(polys, start=1)]
+        solids += [(f"the {slot_id} extents", poly, margins["solid"], None) for slot_id, (poly, _) in site.landmark_polys.items()]
+        solids += [(f"the {slot_id} pad", poly, margins["solid"], None) for slot_id, poly in site.pad_polys.items()]
+        solids += [(f"the {slot_id} marker", poly, margins["solid"], None) for slot_id, poly in site.marker_polys.items()]
+        solids += [(f"plaza {index}", poly, margins["solid"], None) for index, poly in enumerate(site.plaza_polys, start=1)]
+        solids += [(f"lamp {index}", poly, margins["lamp"], None) for index, poly in enumerate(site.lamps, start=1)]
+        solids += [(f"signal {index}", poly, margins["lamp"], None) for index, poly in enumerate(site.signals, start=1)]
+        solids.append(("the Sign", site.era.sign_poly, margins["solid"], None))
+        self.solids = [(label, poly, box_of(poly), margin, tag) for label, poly, margin, tag in solids]
         self.trunks = []  # (label, point): a layer the plan gives no footprints is a layer of trees
-        self.strings = []  # (label, post, post): a bunting's pennants hang at about a cart's height
-        for name in LAYERS:
-            if name == CARTS:
+        self.strings = []  # (label, post, post, tag): what hangs between two posts, overhead
+        for name in layer_names(plan):
+            if name in leave_out:
                 continue
-            props = upgrade_config(site, name).get("props") or []
-            footprints = (plan.get(name) or {}).get("footprints")
-            bunting = (plan.get(name) or {}).get("bunting")
-            for entry in upgrades.get(name, []):
-                label = f"the {name} entry at ({number(entry['x'])}, {number(entry['z'])})"
-                variant = entry.get("variant")
-                prop = props[variant - 1] if isinstance(variant, int) and 1 <= variant <= len(props) else None
-                if footprints is None:
-                    self.trunks.append((label, (entry["x"], entry["z"])))
-                elif bunting is not None and prop == bunting["prop"]:
-                    posts = bunting_posts(plan, entry)
-                    solids += [(label, streetplan.square(post, bunting["post"], bunting["post"], entry["rotationY"]), margins["item"]) for post in posts]
-                    self.strings.append((label, posts[0], posts[1]))
-                elif prop in footprints:
-                    solids.append((label, item_poly(plan, name, prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"]), margins["item"]))
-        self.solids = [(label, poly, box_of(poly), margin) for label, poly, margin in solids]
+            for index, entry in enumerate(upgrades.get(name, []), start=1):
+                self.add(name, index, entry)
         self.streets = [(f"street {polyline + 1}", a, b, box) for polyline, _, a, b, box in site.street_boxes]
         self.spurs = [(f"the {slot_id} path", a, b, box_of((a, b))) for slot_id, a, b in site.spur_segments]
         radii = site.config["wild"]
@@ -1339,9 +1391,52 @@ class CartGround:
             else:
                 self.woods.append(((item["x"], item["z"]), radii["singleRadius"]))
 
-    def problems(self, body, centre, anchor_gap, clear):
-        """What is wrong with a cart standing as `body`, one text per broken rule, lazily, so a
-        search can stop at the first. `anchor_gap` and `clear` are cart_anchor's pair."""
+    def add(self, name, index, entry):
+        """One more entry of layer `name` that later bodies keep `item` (a tree: `tree`) from."""
+        site, plan, margin = self.site, self.plan, self.margins["item"]
+        label = f"the {name} entry at ({number(entry['x'])}, {number(entry['z'])})"
+        tag = (name, index)
+        props = upgrade_config(site, name).get("props") or []
+        variant = entry.get("variant")
+        prop = props[variant - 1] if isinstance(variant, int) and 1 <= variant <= len(props) else None
+        shapes = []
+        if name in plan_layers(plan):
+            found = prop_shapes(site, plan, prop, entry) if prop is not None else None
+            if found is not None:
+                shapes, string = found
+                if string is not None:
+                    self.strings.append((label, string[0], string[1], tag))
+        elif name == CARTS:
+            extents = cart_extents(site, plan)
+            shapes = [cart_body(extents, entry)] if extents is not None else []
+        else:
+            footprints = (plan.get(name) or {}).get("footprints")
+            bunting = (plan.get(name) or {}).get("bunting")
+            if footprints is None:
+                self.trunks.append((label, (entry["x"], entry["z"])))
+            elif bunting is not None and prop == bunting["prop"]:
+                posts = bunting_posts(plan, entry)
+                shapes = [streetplan.square(post, bunting["post"], bunting["post"], entry["rotationY"]) for post in posts]
+                self.strings.append((label, posts[0], posts[1], tag))
+            elif prop in footprints:
+                shapes = [item_poly(plan, name, prop, entry["x"], entry["z"], entry["rotationY"], entry["scale"])]
+        self.solids += [(label, shape, box_of(shape), margin, tag) for shape in shapes]
+
+    def stands_before(self, point, parcel, depth):
+        """Whether `point` lies in front of parcel `parcel` (1-based): within its width, and no more
+        than `depth` behind its front edge."""
+        if self.frames is None or not 1 <= parcel <= len(self.frames):
+            return False
+        x, z, rotation, width, lot_depth = self.frames[parcel - 1]
+        lx, lz = rotate(point[0] - x, point[1] - z, -rotation)
+        return abs(lx) <= width / 2 + EPS and lz <= -lot_depth / 2 + depth + EPS
+
+    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None):
+        """What is wrong with an entry standing as `body`, one text per broken rule, lazily, so a
+        search can stop at the first. `anchor_gap` and `clear` are cart_anchor's pair. `own` is the
+        parcel a parcel-anchored entry belongs to: it may stand inside that lot's margin and lean
+        `lean` into it, as a planter does. `front_lean` is how far a kerbside post may lean into the
+        front of the lot it stands before. `skip` is the entry's own tag, when it is in the ground."""
         site, margins, slack = self.site, self.margins, self.tolerance
         edge = margins["edge"] - slack
         if any(abs(v[0]) > site.era.half_x - edge or abs(v[1]) > site.era.half_z - edge for v in body):
@@ -1351,18 +1446,25 @@ class CartGround:
             for what, a, b, lane_box in lanes:
                 if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
                     yield f"{segment_gap(a, b, body):.2f} from {what}, inside the walker reach (need {need:g})"
-        for what, poly, poly_box, margin in self.solids:
-            if not boxes_apart(box, poly_box, margin) and gap(body, poly) < margin - slack:
-                yield f"{gap(body, poly):.2f} from {what} (need {margin:g})"
+        for what, poly, poly_box, margin, tag in self.solids:
+            if (tag is not None and tag == skip) or boxes_apart(box, poly_box, margin) or gap(body, poly) >= margin - slack:
+                continue
+            if tag is not None and tag[0] == PARCEL:
+                allowed = lean if tag[1] == own else front_lean if front_lean > 0 and self.stands_before(centre, tag[1], front_lean) else None
+                if allowed is not None:
+                    if not leans_within(body, poly, allowed):
+                        yield f"leans more than {allowed:g} into {what}"
+                    continue
+            yield f"{gap(body, poly):.2f} from {what} (need {margin:g})"
         for what, point in self.trunks:
             if not point_box_apart(point, box, margins["tree"]) and point_gap(point, body) < margins["tree"] - slack:
                 yield f"{point_gap(point, body):.2f} from {what} (need {margins['tree']:g})"
-        for what, a, b in self.strings:
-            if segment_gap(a, b, body) < margins["item"] - slack:
+        for what, a, b, tag in self.strings:
+            if tag != skip and segment_gap(a, b, body) < margins["item"] - slack:
                 yield f"{segment_gap(a, b, body):.2f} from the string of {what} (need {margins['item']:g})"
         # INTERFACES "Wave 2.0": no cart ever stands in the woods. The mask clears a wood whose
         # disc comes within `clear` of the anchor (IsCleared: distance - radius < margin), so the
-        # cart's own spot must be inside that margin and its body off every wood the anchor leaves.
+        # entry's own spot must be inside that margin and its body off every wood the anchor leaves.
         # EPS keeps a wood on the boundary on the standing side, whichever way the game rounds it.
         if anchor_gap(centre) >= clear - EPS:
             yield f"stands {anchor_gap(centre):.2f} from its anchor, outside the {clear:g} its anchor clears"
@@ -1385,7 +1487,7 @@ def generate_carts(site, plan, parcels, levels, districts, upgrades, wild):
         return []
     rng = random.Random(f"{plan['seed']}:{CARTS}")
     polys = [parcel["poly"] for parcel in parcels]
-    ground = CartGround(site, plan, polys, upgrades, wild, cfg, 0.0)
+    ground = Ground(site, plan, polys, upgrades, wild, cfg, 0.0, leave_out=(CARTS,))
     largest = cfg["scale"][1]
     half_width = max(-extents[0], extents[1]) * largest
     half_length = max(-extents[2], extents[3]) * largest
@@ -1467,6 +1569,486 @@ def generate_carts(site, plan, parcels, levels, districts, upgrades, wild):
                     break
     carts.sort(key=lambda e: entry_order(site, e))
     return carts
+
+
+# --------------------------------------------------------------------------------------------
+# Plan-laid layers (INTERFACES "Wave 2.2"): every layer the plan lists in `layers`, each laid by
+# the placers its own plan block names, in that order, after the parcels, the wild and the carts
+# --------------------------------------------------------------------------------------------
+
+
+def plan_layers(plan):
+    """The layers the plan lays with the generic placers, in the order they are laid."""
+    return [name for name in plan.get("layers") or [] if name not in LAYERS]
+
+
+def layer_names(plan):
+    """Every layer the data may carry: the four with rules of their own, then the plan's."""
+    return list(LAYERS) + plan_layers(plan)
+
+
+def prop_shapes(site, plan, prop, entry):
+    """What a plan-laid entry stands on, as (ground polygons, string): one rectangle and no string
+    for an ordinary prop -- its harvested extents once it is uploaded, the plan's `footprints`
+    entry (width x depth, centred) before that; two posts and the string between them for a prop
+    the plan declares as a span (`{ posts, post }`: what hangs between is overhead, so only the
+    posts stand on the ground, whatever the harvest measures). Everything x the entry's scale,
+    turned rotationY. None for a prop nothing measures."""
+    spec = (plan.get("footprints") or {}).get(prop)
+    x, z, rotation, scale = entry["x"], entry["z"], entry["rotationY"], entry["scale"]
+    if isinstance(spec, dict):
+        width, depth = spec["post"]
+        centres = []
+        for post_x, post_z in spec["posts"]:
+            dx, dz = rotate(post_x * scale, post_z * scale, rotation)
+            centres.append((x + dx, z + dz))
+        return [streetplan.square(centre, width * scale, depth * scale, rotation) for centre in centres], (centres[0], centres[-1])
+    extents = site.prop_extents(prop)
+    if extents is None and spec is not None:
+        extents = (-spec[0] / 2, spec[0] / 2, -spec[1] / 2, spec[1] / 2)
+    if extents is None:
+        return None
+    return [cart_body(extents, entry)], None
+
+
+def shape_centre(shape):
+    return (sum(v[0] for v in shape) / len(shape), sum(v[1] for v in shape) / len(shape))
+
+
+class LayerBuild:
+    """One plan-laid layer while it is laid: its ground (everything laid before it, at the plan's
+    margins), its own random stream, and what it has placed so far. Every spot is proved with the
+    largest scale its placer allows and then takes a scale from the placer's range, as a cart does."""
+
+    def __init__(self, site, plan, name, parcels, levels, districts, upgrades, wild):
+        self.site, self.plan, self.name = site, plan, name
+        self.cfg = plan[name]
+        self.config = upgrade_config(site, name)
+        self.props = self.config.get("props") or []
+        self.parcels, self.levels, self.districts = parcels, levels, districts
+        self.polys = [parcel["poly"] for parcel in parcels]
+        self.rng = random.Random(f"{plan['seed']}:{name}")
+        frames = [(parcel["x"], parcel["z"], parcel["rotationY"]) + site.sizes[parcel["size"]] for parcel in parcels]
+        self.ground = Ground(site, plan, self.polys, upgrades, wild, self.cfg["margins"], 0.0, frames=frames)
+        self.entries = []
+        self.own = {}  # id(placer) -> the points that placer has placed, for its own `spacing`
+
+    def full(self):
+        budget = self.config.get("budget")
+        return isinstance(budget, (int, float)) and len(self.entries) >= budget
+
+    def scales(self, placer):
+        value = placer.get("scale", self.cfg.get("scale", 1.0))
+        return (value[0], value[1]) if isinstance(value, list) else (value, value)
+
+    def shapes(self, entry):
+        prop = self.props[entry["variant"] - 1]
+        found = prop_shapes(self.site, self.plan, prop, entry)
+        if found is None:
+            raise SystemExit(f"fabric: {self.name} lays {prop}, which has neither harvested extents nor a `footprints` entry in the plan")
+        return found[0]
+
+    def toward(self, placer, variant, rotation, direction):
+        """How far a body turned `rotation` reaches from its origin along `direction`, at the
+        placer's largest scale: measured on the body, so an off-centre harvest is placed as it is."""
+        probe = make_entry(0.0, 0.0, rotation, self.scales(placer)[1], variant, {})
+        return max(v[0] * direction[0] + v[1] * direction[1] for shape in self.shapes(probe) for v in shape)
+
+    def entry(self, placer, x, z, rotation, variant, anchor):
+        return make_entry(x, z, rotation, self.scales(placer)[1], variant, anchor)
+
+    def fits(self, placer, entry, own=None):
+        """Whether `entry` keeps every clearance of the layer's ground, the layer's `spacing` from
+        every entry of the layer and the placer's own `spacing` from what that placer has placed.
+        With the placer's `minHubFacing`, a prop with a blank back (a board) is also refused where
+        it would turn that back on the hub: its facing's share toward the plot's front edge, 1
+        square on to -1 square away, may not be less. With `entranceClear`, nothing stands that
+        near the entrance, so the view up the first street stays open."""
+        resolved = cart_anchor(self.site, self.polys, entry)
+        if resolved is None:
+            return False
+        if "minHubFacing" in placer and -streetplan.facing(entry["rotationY"])[1] < placer["minHubFacing"]:
+            return False
+        point = (entry["x"], entry["z"])
+        if math.dist(point, self.site.entrance) < placer.get("entranceClear", 0.0):
+            return False
+        if any(math.dist(point, (other["x"], other["z"])) < self.cfg.get("spacing", 0.0) for other in self.entries):
+            return False
+        if any(math.dist(point, other) < placer.get("spacing", 0.0) for other in self.own.get(id(placer), ())):
+            return False
+        shapes = self.shapes(entry)
+        for shape in shapes:
+            centre = point if len(shapes) == 1 else shape_centre(shape)
+            problems = self.ground.problems(
+                shape, centre, *resolved, own=own, lean=placer.get("lean", 0.0), front_lean=placer.get("frontLean", 0.0)
+            )
+            if next(problems, None) is not None:
+                return False
+        return True
+
+    def commit(self, placer, entry, own=None):
+        """Place `entry` if it still fits beside what was placed since it was found."""
+        if self.full() or not self.fits(placer, entry, own):
+            return False
+        low, high = self.scales(placer)
+        if high > low:
+            entry["scale"] = rounded(self.rng.uniform(low, high))
+        self.entries.append(entry)
+        self.own.setdefault(id(placer), []).append((entry["x"], entry["z"]))
+        self.ground.add(self.name, len(self.entries), entry)
+        return True
+
+    def lots(self, placer):
+        """(1-based index, parcel) of every lot a parcel-anchored placer may use: built at full
+        build, and of the rows, sizes, streets and districts the placer names (each optional)."""
+        rows = set(placer["rows"]) if "rows" in placer else None
+        sizes = set(placer["sizes"]) if "sizes" in placer else None
+        streets = set(placer["streets"]) if "streets" in placer else None
+        districts = set(placer["districts"]) if "districts" in placer else None
+        for index, parcel in enumerate(self.parcels, start=1):
+            if self.levels[index - 1] < BUILT_LEVEL:
+                continue
+            if rows is not None and parcel["row"] not in rows or sizes is not None and parcel["size"] not in sizes:
+                continue
+            if streets is not None and parcel_polyline(parcel) + 1 not in streets:
+                continue
+            if districts is not None and self.districts[index - 1] not in districts:
+                continue
+            yield index, parcel
+
+
+def kerb_runs(site, placer):
+    streets = set(placer["streets"]) if "streets" in placer else None
+    return [run for run in street_runs(site) if streets is None or run["polyline"] + 1 in streets]
+
+
+def kerb_pose(build, placer, run, side, s, variant):
+    """(x, z, rotationY, anchor) of a kerb entry `s` studs along a run on `side`, its street-side
+    edge at the walkers' reach plus the placer's `slack`: the lamp line. None where the run's
+    stretch is never drawn. `facing` turns it nose along its side's travel ("along", a parked car)
+    or front to the street ("street", a shelter, a hydrant, a roadside board)."""
+    site = build.site
+    where = locate(site, run, s)
+    if where is None or where[0] not in site.drawn:
+        return None
+    d = run["d"]
+    n = (-d[1] * side, d[0] * side)
+    heading = {"along": (d[0] * side, d[1] * side), "street": (-n[0], -n[1])}[placer["facing"]]
+    rotation = facing_rot(heading)
+    reach = site.walker_street + placer["slack"] + build.toward(placer, variant, rotation, (-n[0], -n[1]))
+    x, z = run["a"][0] + d[0] * s + n[0] * reach, run["a"][1] + d[1] * s + n[1] * reach
+    return x, z, rotation, {"anchor": "stretch", "stretch": site.ids[where[0]]}
+
+
+def place_kerb(build, placer):
+    """Kerb entries, stretch-anchored, beside the streets the placer names (all of them without
+    `streets`). Two ways to choose spots:
+      * "gaps" (the cart rule): both sides of every straight run are swept, and each unbroken
+        reach of frontage where the prop fits gives its middle -- or up to `perGap` spots `pitch`
+        apart, a bay -- nearest the entrance first, up to `count`; with `spread` the streets take
+        turns, so each gets its first spot before any gets a second;
+      * "spaced" (the banner rule): one every `every` studs along each street, alternating sides,
+        each tried at a few `shifts` (and on the other side, with `eitherSide`), stepping on by
+        `step` where none fits."""
+    site = build.site
+    variants = placer["variants"]
+    runs = kerb_runs(site, placer)
+    count = placer.get("count", math.inf)
+    placed = 0
+    if placer["mode"] == "gaps":
+        step = placer["step"]
+
+        def spot(run, side, s, variant):
+            pose = kerb_pose(build, placer, run, side, s, variant)
+            return build.entry(placer, pose[0], pose[1], pose[2], variant, pose[3]) if pose is not None else None
+
+        found = []  # (the entry that proved the spot, its run, side and distance along)
+        for sweep_index, (run, side) in enumerate((run, side) for run in runs for side in (1, -1)):
+            # One prop proves a whole sweep: the props of a placer differ little, and a spot is
+            # proved again for the prop that takes it.
+            variant = variants[sweep_index % len(variants)]
+            length = math.dist(run["a"], run["b"])
+            sweep = []
+            for index in range(int(length / step) + 1):
+                s = index * step
+                entry = spot(run, side, s, variant)
+                sweep.append((entry, run, side, s) if entry is not None and build.fits(placer, entry) else None)
+            for fits, fitting in itertools.groupby(sweep, key=lambda item: item is not None):
+                if fits:
+                    found += bay(list(fitting), placer, step)
+        found.sort(key=lambda item: entry_order(site, item[0]))
+        if placer.get("spread"):
+            queues = {}
+            for item in found:
+                queues.setdefault(parcel_polyline(item[0]), []).append(item)
+            found = [queue[turn] for turn in range(len(found)) for queue in queues.values() if turn < len(queue)]
+        for proved, run, side, s in found:
+            if placed >= count:
+                break
+            # The props take turns, so the mix is even; one that does not fit the spot leaves it
+            # to the next, and the prop that proved it comes last.
+            turns = [variants[(placed + k) % len(variants)] for k in range(len(variants))]
+            for variant in turns + [proved["variant"]]:
+                entry = spot(run, side, s, variant)
+                if entry is not None and build.commit(placer, entry):
+                    placed += 1
+                    break
+        return
+    side, polyline, s = 1, None, 0.0
+    for run in runs:
+        length = math.dist(run["a"], run["b"])
+        # A street that bends is still one street: the spacing runs on round the bend.
+        s = max(s, placer["endMargin"]) if run["polyline"] == polyline else placer["start"]
+        polyline = run["polyline"]
+        while s < length - placer["endMargin"] and placed < count:
+            done = None
+            for trial in (side, -side) if placer.get("eitherSide") else (side,):
+                for shift in placer["shifts"]:
+                    t = s + shift
+                    if not placer["endMargin"] <= t <= length - placer["endMargin"]:
+                        continue
+                    variant = variants[placed % len(variants)]
+                    pose = kerb_pose(build, placer, run, trial, t, variant)
+                    if pose is not None and build.commit(placer, build.entry(placer, pose[0], pose[1], pose[2], variant, pose[3])):
+                        done = (trial, t)
+                        break
+                if done is not None:
+                    break
+            if done is not None:
+                placed += 1
+                side = -done[0]
+                s = done[1] + build.rng.uniform(*placer["every"])
+            else:
+                s += placer["step"]
+        s -= length
+
+
+def bay(fitting, placer, step):
+    """The spots one unbroken reach of fitting sweep positions gives: its middle, or up to `perGap`
+    of them `pitch` apart, centred on it."""
+    per, pitch = placer.get("perGap", 1), placer.get("pitch")
+    span = (len(fitting) - 1) * step
+    if per <= 1 or not pitch:
+        return [fitting[len(fitting) // 2]]
+    n = min(per, int(span / pitch + 1e-9) + 1)
+    first = (span - (n - 1) * pitch) / 2
+    return [fitting[int(round((first + k * pitch) / step))] for k in range(n)]
+
+
+def place_lot_front(build, placer):
+    """One entry at the front edge of every lot the placer names, parcel-anchored, front to the
+    street, its street-side edge at the walkers' reach: the lamp line, where a planter stands. It
+    may lean `lean` into its own lot's front. `lateral` lists where along the front to try, in
+    studs off the middle; `mirror` turns the list round on every other lot."""
+    site = build.site
+    variants = placer["variants"]
+    placed = 0
+    for index, parcel in build.lots(placer):
+        st = site.network.stretches[site.stretch_by_id[parcel["stretch"]]]
+        fc = front_centre(parcel["x"], parcel["z"], parcel["rotationY"], site.sizes[parcel["size"]][1])
+        _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
+        normal = streetplan.unit((fc[0] - foot[0], fc[1] - foot[1]))
+        if normal is None:
+            continue
+        variant = variants[placed % len(variants)]
+        mirror = -1 if placer.get("mirror") and placed % 2 else 1
+        reach = site.walker_street + placer["slack"] + build.toward(placer, variant, parcel["rotationY"], (-normal[0], -normal[1]))
+        for lateral in placer["lateral"]:
+            x = foot[0] + normal[0] * reach - normal[1] * lateral * mirror
+            z = foot[1] + normal[1] * reach + normal[0] * lateral * mirror
+            entry = build.entry(placer, x, z, parcel["rotationY"], variant, {"anchor": "parcel", "parcel": index})
+            if build.commit(placer, entry, own=index):
+                placed += 1
+                break
+
+
+def place_driveway(build, placer):
+    """An entry beside a lot the placer names, parcel-anchored, hugging the lot's side so the lot's
+    own clearing covers it: nose to the street or, for a `reversed` share, backed in; a little
+    askew with `turnJitter`. Each lot is taken with probability `share`, one spot per lot, up to
+    `count`."""
+    site, rng = build.site, build.rng
+    variants = placer["variants"]
+    count = placer.get("count", math.inf)
+    placed = 0
+    for index, parcel in build.lots(placer):
+        # Every lot draws the same numbers whether or not it is used, so one lot's outcome never
+        # moves another's.
+        take = rng.random() < placer.get("share", 1.0)
+        turn = rng.uniform(-placer.get("turnJitter", 0.0), placer.get("turnJitter", 0.0))
+        backed = rng.random() < placer.get("reversed", 0.0)
+        sides = (1, -1) if rng.random() < 0.5 else (-1, 1)
+        if not take or placed >= count:
+            continue
+        variant = variants[placed % len(variants)]
+        width, depth = site.sizes[parcel["size"]]
+        rotation = parcel["rotationY"] + turn + (HALF_TURN if backed else 0.0)
+        for side, shift in ((side, shift) for side in sides for shift in placer["shifts"]):
+            inward = rotate(-side, 0.0, parcel["rotationY"])  # from the spot toward the lot
+            across = build.toward(placer, variant, rotation, inward)
+            dx, dz = rotate(side * (width / 2 + placer["gap"] + across), shift * depth, parcel["rotationY"])
+            entry = build.entry(placer, parcel["x"] + dx, parcel["z"] + dz, rotation, variant, {"anchor": "parcel", "parcel": index})
+            if build.commit(placer, entry, own=index):
+                placed += 1
+                break
+
+
+def place_span(build, placer):
+    """Spans over the streets the placer names (the bunting rule), stretch-anchored on the
+    centreline, local X across the street: the two posts keep every clearance, what hangs between
+    them is overhead and answers to none. The first spot from `start` along each run where both
+    posts fit, then the next at least the placer's `spacing` away, up to `count`."""
+    site = build.site
+    variant = placer["variant"]
+    count = placer.get("count", math.inf)
+    placed = 0
+    for run in kerb_runs(site, placer):
+        length = math.dist(run["a"], run["b"])
+        d = run["d"]
+        rotation = facing_rot(d)  # local X across the street, the front down it
+        s = placer["start"]
+        while s < length - placer["endMargin"] and placed < count:
+            where = locate(site, run, s)
+            if where is not None and where[0] in site.drawn:
+                x, z = run["a"][0] + d[0] * s, run["a"][1] + d[1] * s
+                if build.commit(placer, build.entry(placer, x, z, rotation, variant, {"anchor": "stretch", "stretch": site.ids[where[0]]})):
+                    placed += 1
+            s += placer["step"]
+
+
+def dead_ends(site):
+    """(end point, unit direction out of the street, stretch index) for every end of the drawn
+    network but the entrance, in stretch order."""
+    stretches, nodes = site.network.stretches, site.network.nodes
+    degree = {}
+    for index in site.drawn:
+        for node in (stretches[index]["from"], stretches[index]["to"]):
+            degree[node] = degree.get(node, 0) + 1
+    out = []
+    for index in sorted(site.drawn):
+        st = stretches[index]
+        for node, other in ((st["from"], st["to"]), (st["to"], st["from"])):
+            point = nodes[node]
+            direction = streetplan.unit((point[0] - nodes[other][0], point[1] - nodes[other][1]))
+            if degree[node] == 1 and node != site.network.entrance and direction is not None:
+                out.append((point, direction, index))
+    return out
+
+
+def place_ends(build, placer):
+    """A board past the end of each dead-end street, stretch-anchored to the street's last
+    stretch, front back down the street: on the arc `angles` (degrees off the street's line) at
+    the walkers' reach plus each of `reach`, the first spot that fits. Up to `count`."""
+    site = build.site
+    variants = placer["variants"]
+    count = placer.get("count", math.inf)
+    placed = 0
+    for point, d, stretch in dead_ends(site):
+        if placed >= count:
+            break
+        variant = variants[placed % len(variants)]
+        for extra, angle in ((extra, angle) for extra in placer["reach"] for angle in placer["angles"]):
+            a = math.radians(angle)
+            out = (d[0] * math.cos(a) - d[1] * math.sin(a), d[0] * math.sin(a) + d[1] * math.cos(a))
+            rotation = facing_rot((-out[0], -out[1]))
+            radius = site.walker_street + placer["slack"] + extra + build.toward(placer, variant, rotation, (-out[0], -out[1]))
+            entry = build.entry(placer, point[0] + out[0] * radius, point[1] + out[1] * radius, rotation, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+            if build.commit(placer, entry):
+                placed += 1
+                break
+
+
+def place_edges(build, placer):
+    """Boards along the plot's edges, back to the edge and front to the town, each stretch-anchored
+    to the drawn stretch nearest it -- so only where a street comes close enough to the edge to
+    clear the land the board stands on. Nearest the entrance first, up to `count`."""
+    site = build.site
+    variants = placer["variants"]
+    count = placer.get("count", math.inf)
+    half_x, half_z = site.era.half_x, site.era.half_z
+    edges = {"left": ((-half_x, 0.0), (1.0, 0.0), half_z), "right": ((half_x, 0.0), (-1.0, 0.0), half_z), "back": ((0.0, half_z), (0.0, -1.0), half_x)}
+    spots = []
+    for name in placer.get("sides", ("left", "right", "back")):
+        middle, inward, half = edges[name]
+        along = (-inward[1], inward[0])
+        rotation = facing_rot(inward)
+        for index in range(int(2 * (half - placer["endMargin"]) / placer["step"]) + 1):
+            t = -half + placer["endMargin"] + index * placer["step"]
+            spots.append((middle[0] + along[0] * t, middle[1] + along[1] * t, inward, rotation))
+    spots.sort(key=lambda spot: entry_order(site, {"x": spot[0], "z": spot[1]}))
+    placed = 0
+    for x, z, inward, rotation in spots:
+        if placed >= count:
+            break
+        variant = variants[placed % len(variants)]
+        inset = build.cfg["margins"]["edge"] + placer["slack"] + build.toward(placer, variant, rotation, (-inward[0], -inward[1]))
+        point = (x + inward[0] * inset, z + inward[1] * inset)
+        stretch = site.nearest_drawn(point)
+        if stretch is None:
+            continue
+        if build.commit(placer, build.entry(placer, point[0], point[1], rotation, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})):
+            placed += 1
+
+
+def place_backs(build, placer):
+    """A board behind a lot the placer names, parcel-anchored, front to the lot's street over its
+    roof, `gap` behind the lot's back edge: wherever no back-row lot took the ground. `lateral`
+    lists where along the back to try, as shares of the lot's width. Up to `count`."""
+    site = build.site
+    variants = placer["variants"]
+    count = placer.get("count", math.inf)
+    placed = 0
+    for index, parcel in build.lots(placer):
+        if placed >= count:
+            break
+        variant = variants[placed % len(variants)]
+        face = streetplan.facing(parcel["rotationY"])
+        width, depth = site.sizes[parcel["size"]]
+        reach = depth / 2 + placer["gap"] + build.toward(placer, variant, parcel["rotationY"], face)
+        for lateral in placer["lateral"]:
+            x = parcel["x"] - face[0] * reach - face[1] * lateral * width
+            z = parcel["z"] - face[1] * reach + face[0] * lateral * width
+            entry = build.entry(placer, x, z, parcel["rotationY"], variant, {"anchor": "parcel", "parcel": index})
+            if build.commit(placer, entry, own=index):
+                placed += 1
+                break
+
+
+def layer_outlines(era_name, doc, city=None, era=None, network=None):
+    """(layer, ground polygons, string) for every plan-laid entry in `doc`, in layer order: what
+    tools/streetplan.py draws, so its preview shows each entry as `check` judges it."""
+    site = Site(era_name, city, era, network)
+    plan = load_plan(era_name)
+    out = []
+    for name in plan_layers(plan):
+        props = upgrade_config(site, name).get("props") or []
+        for entry in (doc.get("upgrades") or {}).get(name, []):
+            variant = entry.get("variant")
+            found = prop_shapes(site, plan, props[variant - 1], entry) if isinstance(variant, int) and 1 <= variant <= len(props) else None
+            if found is not None:
+                out.append((name, found[0], found[1]))
+    return out
+
+
+PLACERS = {
+    "kerb": place_kerb,
+    "lotFront": place_lot_front,
+    "driveway": place_driveway,
+    "span": place_span,
+    "ends": place_ends,
+    "edges": place_edges,
+    "backs": place_backs,
+}
+
+
+def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild):
+    """One plan-laid layer, in data order: nearest the entrance first. Its placers run in the
+    plan's order, each in what the ones before it left."""
+    build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild)
+    for placer in build.cfg["placers"]:
+        PLACERS[placer["kind"]](build, placer)
+    build.entries.sort(key=lambda e: entry_order(site, e))
+    return build.entries
 
 
 # --------------------------------------------------------------------------------------------
@@ -1777,9 +2359,10 @@ def generate_fields(site, plan):
     """Farmland (INTERFACES "Wave 2.1"): a fenced field per grid cell, each a clump of four
     quarter-fields that the town clears quarter by quarter. Three things keep it from reading as a
     quilt: a cell's crop comes from a low-frequency noise field, so neighbouring cells share a crop
-    and read as one larger field; a share of the cells, clustered by a second field, lies fallow as
-    pasture with hay, trees and a telegraph line across it; and the fields run on past the back and
-    side edges into a landscape band with the plan's landmarks. A field stands wholly on the plot
+    and read as one larger field; a share of the cells, clustered by a second field, lies fallow --
+    part of it fenced pasture, the rest open ground with hay, trees and a telegraph line across it;
+    and the fields run on past the back and side edges into a landscape band with the plan's
+    landmarks. A field stands wholly on the plot
     or wholly off it: the ground past the edge is lower."""
     wild = plan["wild"]
     grid, clumps_cfg, skirt = wild["grid"], wild["clumps"], wild["skirt"]
@@ -1813,6 +2396,17 @@ def generate_fields(site, plan):
     pasture = ranked(on, fallow_noise, wild["fallow"]["share"])
     skirt_pasture = ranked(off, fallow_noise, skirt["fallow"])
     fields = [cell for cell in on if cell["key"] not in pasture] + [cell for cell in off if cell["key"] not in skirt_pasture]
+    # A share of the fallow cells, the ones deepest in the fallow field so they gather, is fenced
+    # pasture with stock on it (`fallow.paddock`): a clump like a field, cleared quarter by quarter.
+    # Its prop is the heaviest of the wild, so the plan caps it on the plot and past the edge. The
+    # rest of the fallow stays open ground under the hay, the trees and the shelterbelts.
+    paddock = wild["fallow"].get("paddock")
+    paddocks = []
+    if paddock is not None:
+        for cells, cap in (([c for c in on if c["key"] in pasture], paddock["max"]), ([c for c in off if c["key"] in skirt_pasture], paddock["skirtMax"])):
+            keys = ranked(cells, fallow_noise, min(paddock["share"], cap / len(cells)) if cells else 0.0)
+            paddocks += [cell for cell in cells if cell["key"] in keys]
+    open_ground = (pasture | skirt_pasture) - {cell["key"] for cell in paddocks}
     # Crops in bands along one smooth field: the band order is the plan's, so the middle crop is the
     # sea the others stand in as patches.
     crop_noise = Noise(f"{seed}:crops", wild["crops"]["noise"]["waves"], wild["crops"]["noise"]["base"])
@@ -1826,9 +2420,11 @@ def generate_fields(site, plan):
         taken = max(taken, upto)
     for cell in by_noise[taken:]:
         crop[cell["key"]] = wild["crops"]["bands"][-1]["variant"]
+    for cell in paddocks:
+        crop[cell["key"]] = paddock["variant"]
     on_keys = {cell["key"] for cell in on}
     clumps = []
-    for cell in fields:
+    for cell in fields + paddocks:
         x, z = cell["centre"]
         rotation = rounded(norm_degrees(grid["angle"] + QUARTER_TURN * rng.randrange(QUARTERS)))
         clumps.append(
@@ -1856,7 +2452,7 @@ def generate_fields(site, plan):
     dress = skirt.get("singles")
     if dress is not None:
         srng = random.Random(f"{seed}:skirt")
-        for index, cell in enumerate(thinned([cell for cell in off if cell["key"] in skirt_pasture], dress["count"])):
+        for index, cell in enumerate(thinned([cell for cell in off if cell["key"] in open_ground], dress["count"])):
             x, z = cell["centre"]
             behind = z - site.era.half_z >= abs(x) - site.era.half_x
             turn = (0.0 if behind else QUARTER_TURN) + srng.uniform(-dress["turnJitter"], dress["turnJitter"])
@@ -1884,7 +2480,7 @@ def generate_fields(site, plan):
         scattered = []
         room = grid["pitch"] / 2 - loose["inset"]
         for cell in on:
-            if cell["key"] not in pasture:
+            if cell["key"] not in open_ground:
                 continue
             for _ in range(lrng.randint(*loose["perCell"])):
                 dx, dz = rotate(lrng.uniform(-room, room), lrng.uniform(-room, room), grid["angle"])
@@ -1917,6 +2513,9 @@ def build(era_name, city=None, era=None, network=None):
     # Last, in what every other list left: nothing above may depend on the carts.
     if upgrade_config(site, CARTS) and plan.get(CARTS):
         upgrades[CARTS] = generate_carts(site, plan, parcels, levels, districts, upgrades, wild)
+    for name in plan_layers(plan):
+        if upgrade_config(site, name) and plan.get(name):
+            upgrades[name] = generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild)
     doc = {
         "version": FORMAT_VERSION,
         "parcels": [{key: p[key] for key in PARCEL_KEYS} for p in parcels],
@@ -1960,10 +2559,11 @@ def render(doc):
     lines = ["{", f'  "version": {doc["version"]},', '  "parcels": [']
     lines += entries(doc.get("parcels", []), "    ")
     lines += ["  ],", '  "upgrades": {']
-    layers = [name for name in LAYERS if name in doc.get("upgrades", {})]
+    upgrades = doc.get("upgrades", {})
+    layers = [name for name in LAYERS if name in upgrades] + [name for name in upgrades if name not in LAYERS]
     for n, name in enumerate(layers):
         lines.append(f'    "{name}": [')
-        lines += entries(doc["upgrades"][name], "      ")
+        lines += entries(upgrades[name], "      ")
         lines.append("    ]" + ("," if n < len(layers) - 1 else ""))
     lines += ["  },", '  "wild": [']
     lines += entries(doc.get("wild", []), "    ")
@@ -1992,7 +2592,6 @@ def marker_messages(site):
     """A marker may not sit on a slot footprint (+CHECK_MARKER_SLOT), a pad, a street strip or another
     slot's path strip. streetOnly slots count: their pad is real."""
     messages = []
-    strip = site.width / 2 + CHECK_STRIP_EXTRA
     for slot in site.era.slots:
         poly = site.marker_polys[slot["id"]]
         label = f"{slot['id']} marker"
@@ -2007,8 +2606,8 @@ def marker_messages(site):
                 messages.append(f"{label}: overlaps the {other_id} pad")
         for polyline, _segment, a, b in site.street_segments:
             d = segment_gap(a, b, poly)
-            if d < strip - EPS:
-                messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {strip:g})")
+            if d < site.street_strip - EPS:
+                messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {site.street_strip:g})")
         for other_id, a, b in site.spur_segments:
             # A marker stands only while its slot has a pad, and that slot's own path is only drawn
             # once the slot is bought: the two never share the ground. On a road-wide path that is
@@ -2016,15 +2615,14 @@ def marker_messages(site):
             if other_id == slot["id"]:
                 continue
             d = segment_gap(a, b, poly)
-            if d < strip - EPS:
-                messages.append(f"{label}: {d:.2f} from the {other_id} path (strip {strip:g})")
+            if d < site.spur_strip - EPS:
+                messages.append(f"{label}: {d:.2f} from the {other_id} path (strip {site.spur_strip:g})")
     return messages
 
 
 def parcel_messages(site, plan, parcels):
     """Placement, address and row rules for every parcel, then the order and the counts."""
     messages = []
-    strip = site.width / 2 + CHECK_STRIP_EXTRA
     front_line = plan["parcels"]["frontSetback"]
     polys = []
     for index, parcel in enumerate(parcels, start=1):
@@ -2061,8 +2659,8 @@ def parcel_messages(site, plan, parcels):
         if gap(poly, site.era.sign_poly) <= 0:
             messages.append(f"{label}: overlaps the Sign")
         back_row = parcel["row"] != 1
-        street_need = site.walker_street if back_row else strip
-        spur_need = site.walker_spur if back_row else strip
+        street_need = site.walker_street if back_row else site.street_strip
+        spur_need = site.walker_spur if back_row else site.spur_strip
         for polyline, _segment, a, b in site.street_segments:
             d = segment_gap(a, b, poly)
             if d < street_need - EPS:
@@ -2181,17 +2779,23 @@ def upgrade_messages(site, plan, doc):
     spurs = [(f"the {slot_id} path", a, b) for slot_id, a, b in site.spur_segments]
     need = plan.get("require") or {}
     everything = [(name, e) for name in LAYERS for e in upgrades.get(name, [])]
+    names = layer_names(plan)
+    laid = plan_layers(plan)
+    laid_ground = None
+    if any(upgrades.get(name) for name in laid):
+        frames = [(q["x"], q["z"], q["rotationY"]) + tuple(site.sizes.get(q["size"], (0.0, 0.0))) for q in parcels]
+        laid_ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS, frames=frames)
     carts = upgrades.get(CARTS, [])
     cart_size = cart_extents(site, plan) if carts else None
     ground = None
     if cart_size is not None:
-        ground = CartGround(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS)
+        ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS, leave_out=(CARTS,))
     elif carts:
         messages.append(f"{CARTS}: the layer's prop has neither harvested extents in Assets.json nor a `{CARTS}.footprints` entry in the plan, so no cart can be judged")
     for name in upgrades:
-        if name not in LAYERS:
-            messages.append(f"upgrades: layer {name!r} is not one of {LAYERS}")
-    for name in LAYERS:
+        if name not in names:
+            messages.append(f"upgrades: layer {name!r} is not one of {tuple(names)}")
+    for name in names:
         config = upgrade_config(site, name)
         entries = upgrades.get(name, [])
         if not config:
@@ -2208,7 +2812,9 @@ def upgrade_messages(site, plan, doc):
             point = (entry["x"], entry["z"])
             if abs(point[0]) > site.era.half_x - CHECK_TREE_EDGE + EPS or abs(point[1]) > site.era.half_z - CHECK_TREE_EDGE + EPS:
                 messages.append(f"{label}: within {CHECK_TREE_EDGE} of the plot edge")
-            if name == "trees":
+            if name in laid:
+                messages += layer_clearance(site, plan, name, index, label, entry, props, laid_ground, polys)
+            elif name == "trees":
                 messages += tree_clearance(site, label, entry, polys, streets + spurs)
             elif name != CARTS:
                 messages += item_clearance(site, plan, name, label, entry, props, polys, streets, spurs, everything)
@@ -2219,6 +2825,8 @@ def upgrade_messages(site, plan, doc):
             messages.append(f"{name}: {len(entries)} entries, more than upgrades.{name}.budget {budget:g} -- near plots never draw the tail")
         if placed < need.get(name, 0):
             messages.append(f"{name}: {placed} placed with the whole era owned, need at least {need[name]}")
+        if name in laid:
+            messages += layer_rules(site, plan, name, entries, parcels)
     trees = upgrades.get("trees", [])
     for i, tree in enumerate(trees):
         for j in range(i + 1, len(trees)):
@@ -2247,7 +2855,7 @@ def cart_street(site, parcels, cart):
 
 
 def cart_clearance(site, plan, label, cart, extents, ground, polys, districts):
-    """A parked cart (INTERFACES "Wave 2.0"): CartGround's clearances at the contract's margins,
+    """A parked cart (INTERFACES "Wave 2.0"): Ground's clearances at the contract's margins,
     then its kind's own rule -- a kerb cart stands parallel to its stretch, a yard cart beside a lot
     of one of the plan's cart districts."""
     anchor = cart_anchor(site, polys, cart)
@@ -2266,6 +2874,68 @@ def cart_clearance(site, plan, label, cart, extents, ground, polys, districts):
         district = districts[cart["parcel"] - 1]
         if district not in allowed:
             messages.append(f"{label}: parcel {cart['parcel']} is a {district} lot, not one of {allowed}")
+    return messages
+
+
+def layer_clearance(site, plan, name, index, label, entry, props, ground, polys):
+    """A plan-laid entry (INTERFACES "Wave 2.2": "Clearances are the cart rules"): Ground's
+    clearances at the contract's margins for each thing it stands on -- its footprint, or each post
+    of a span -- with the two leans CHECK_POST_SIZE describes."""
+    variant = entry.get("variant")
+    if not (isinstance(variant, int) and 1 <= variant <= len(props)):
+        return []  # anchor_messages has said why
+    prop = props[variant - 1]
+    found = prop_shapes(site, plan, prop, entry)
+    if found is None:
+        return [f"{label}: {prop} has neither harvested extents in Assets.json nor a `footprints` entry in the plan, so it cannot be judged"]
+    anchor = cart_anchor(site, polys, entry)
+    if anchor is None:
+        return []
+    shapes = found[0]
+    own = entry["parcel"] if entry["anchor"] == "parcel" else None
+    messages = []
+    for shape in shapes:
+        centre = (entry["x"], entry["z"]) if len(shapes) == 1 else shape_centre(shape)
+        post = max(math.dist(shape[0], shape[1]), math.dist(shape[1], shape[2])) <= CHECK_POST_SIZE + EPS
+        front = CHECK_OWN_LOT if own is None and post else 0.0
+        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index))
+        messages += [f"{label}: {problem}" for problem in problems]
+    return messages
+
+
+def layer_rules(site, plan, name, entries, parcels):
+    """What a plan-laid layer's own plan block asks of the whole layer: `spacing` (no two entries
+    nearer than that), `minStreets` (spread over at least that many streets) and `stretchFacing`
+    (every stretch-anchored entry fronts its street, "street", or stands parallel to it, "along")."""
+    cfg = plan.get(name) or {}
+    messages = []
+    spacing = cfg.get("spacing", 0.0)
+    for i, entry in enumerate(entries):
+        for j in range(i + 1, len(entries)):
+            apart = math.dist((entry["x"], entry["z"]), (entries[j]["x"], entries[j]["z"]))
+            if apart < spacing - EPS:
+                messages.append(f"{name} {i + 1} and {j + 1}: {apart:.2f} apart (the plan's {name}.spacing is {spacing:g})")
+    streets = {cart_street(site, parcels, entry) for entry in entries} - {None}
+    if entries and len(streets) < cfg.get("minStreets", 0):
+        messages.append(f"{name}: on {len(streets)} street(s), need at least {cfg['minStreets']} different ones")
+    facing = cfg.get("stretchFacing")
+    for index, entry in enumerate(entries, start=1):
+        stretch = site.stretch_by_id.get(entry.get("stretch")) if entry.get("anchor") == "stretch" else None
+        if facing is None or stretch is None:
+            continue
+        st = site.network.stretches[stretch]
+        label = f"{name} {index} ({number(entry['x'])}, {number(entry['z'])})"
+        face = streetplan.facing(entry["rotationY"])
+        point = (entry["x"], entry["z"])
+        if facing == "street":
+            _, foot = streetplan.point_segment_distance(point, st["a"], st["b"])
+            toward = streetplan.unit((foot[0] - point[0], foot[1] - point[1]))
+            if toward is None or abs(face[0] * toward[1] - face[1] * toward[0]) > CHECK_FACING or face[0] * toward[0] + face[1] * toward[1] < 0:
+                messages.append(f"{label}: does not front its street, {entry['stretch']}")
+        else:
+            along = streetplan.unit((st["b"][0] - st["a"][0], st["b"][1] - st["a"][1]))
+            if along is not None and abs(face[0] * along[1] - face[1] * along[0]) > CHECK_FACING:
+                messages.append(f"{label}: does not stand parallel to its street, {entry['stretch']}")
     return messages
 
 
@@ -2472,6 +3142,12 @@ def field_messages(site, plan, entries):
         for what, point in points:
             if not point_box_apart(point, box, 0.0) and streetplan.point_in_polygon(point, poly):
                 messages.append(f"{what}: stands in the field {label}")
+    paddock = wild["fallow"].get("paddock")
+    if paddock is not None:
+        stock = [item for item in entries if item["kind"] == "clump" and item["variant"] == paddock["variant"]]
+        for where, cap, count in (("on the plot", paddock["max"], sum(1 for item in stock if not item["skirt"])), ("in the skirt", paddock["skirtMax"], sum(1 for item in stock if item["skirt"]))):
+            if count > cap:
+                messages.append(f"wild: {count} pasture clumps {where}, more than the plan's {cap} (the heaviest wild prop)")
     for landmark, _, rect in landmarks:
         if gap(rect, plot) <= 0:
             messages.append(f"wild: the landmark {landmark['prop']} at cell {landmark['cell']} stands on the plot; landmarks belong to the skirt")
@@ -2556,6 +3232,12 @@ def summary(era_name, doc):
         f"{len(clumps)} clumps ({sum(1 for c in clumps if not c['skirt'])} on the plot, "
         f"{sum(1 for c in clumps if c['skirt'])} skirt), {len(singles)} singles "
         f"({sum(1 for s in singles if not s['skirt'])} on the plot, {sum(1 for s in singles if s['skirt'])} skirt)"
+        + "".join(
+            f"; {name} {len(entries)} (stretch {sum(1 for e in entries if e.get('anchor') == 'stretch')}, "
+            f"parcel {sum(1 for e in entries if e.get('anchor') == 'parcel')})"
+            for name, entries in upgrades.items()
+            if name not in LAYERS
+        )
     )
 
 

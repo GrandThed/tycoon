@@ -40,14 +40,11 @@ FILL_ENERGY = 0.55
 # the palette texture as sRGB; Blender's importer reads them as linear and would wash space-kit's
 # orange out to pale amber and its dark slate to mid-grey, so they are decoded once here.
 SRGB_FACTOR_KITS = frozenset({"space-kit"})
+srgb_to_linear = testfit.srgb_to_linear
 
 # A smoke puff is round at the overview camera's scale with this little geometry.
 PUFF_SUBDIVISIONS = 3
 PUFF_ROUGHNESS = 1.0
-
-
-def srgb_to_linear(c):
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
 
 
 class PlotPieceCache(testfit.PieceCache):

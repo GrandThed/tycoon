@@ -29,7 +29,11 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
   * chimney smoke (M12 wave 2.0): the gates CityDressingController.smokeFor answers for lot and
     fabric houses alike, Fabric.validChimneys, the candidates fixed by index, and the settled
     Fabric.refreshPlume -- which houses smoke and where each plume stands. The device gate
-    (Ambient.Enabled) is taken as on, like every other near-plot layer drawn here.
+    (Ambient.Enabled) is taken as on, like every other near-plot layer drawn here;
+  * street vehicles (M12 wave 2.2): how many a plot plans and shows at a tier (Scatter.Plan's cap,
+    the controller's vehicleTargetFor) and which of them a `vehicles.unlocks` entry turns into its
+    own prop (planVehicleUnlocks, vehiclePropFor). The rule is mirrored, not the picks: Roblox's
+    Random cannot be reproduced here, so a caller brings its own stream.
 
 Heights. A landmark's height at a stage comes from its Assets.json stage parts, measured exactly as
 the client measures it (no entry: 0). A fabric prop uses Assets.json when it has an entry there;
@@ -675,6 +679,76 @@ def plume_cap(budget):
 def over_plume_cap(count, cap):
     """Whether `count` plumes break the cap; never without one."""
     return cap is not None and count > cap
+
+
+def planned_vehicles(vehicles, budget):
+    """Scatter.Plan: how many street vehicles a plot plans a prop for -- `perPlot` under
+    `budget.vehiclesPerPlot`, none without a prop to pick from."""
+    props = vehicles.get("props") if isinstance(vehicles, dict) else None
+    if not isinstance(props, list) or not props:
+        return 0
+    cap = min(max(number_or(vehicles.get("perPlot"), 0), 0), number_or((budget or {}).get("vehiclesPerPlot"), 0))
+    return max(math.floor(cap), 0)
+
+
+def vehicle_target(vehicles, city, tier, planned, on_deck=0):
+    """CityDressingController.vehicleTargetFor on a near plot that has its share of the map's
+    vehicles: none below `vehicles.firstTier`, then `perPlot` scaled by the tier, never more than
+    were planned or than the plot's budget leaves once the highway deck's `on_deck` are counted."""
+    tier_count = len((city.get("tier") or {}).get("thresholds") or [])
+    first_tier = (city.get("vehicles") or {}).get("firstTier")
+    if tier_count <= 0 or not is_number(first_tier) or tier < first_tier:
+        return 0
+    wanted = math.ceil(number_or(vehicles.get("perPlot"), 0) * tier / tier_count)
+    room = max(number_or((city.get("budget") or {}).get("vehiclesPerPlot"), 0) - on_deck, 0)
+    return max(min(wanted, planned, math.floor(room)), 0)
+
+
+def plan_vehicle_unlocks(vehicles, count, draw):
+    """CityDressingController.planVehicleUnlocks: what every `vehicles.unlocks` entry takes of the
+    plot's `count` planned vehicles. `draw()` is the next uniform number in [0, 1) of ONE stream
+    for the whole list, and every entry -- a malformed one too -- takes two draws per vehicle (the
+    share roll, then the prop pick), so an entry's picks depend only on its place in the list. A
+    valid entry takes the vehicle whose index is its own position whatever the roll (the "at least
+    one") and every vehicle whose roll falls under `share`. Returns the valid entries as
+    {position, slot, props, taken: {vehicle index: prop}}."""
+    unlocks = vehicles.get("unlocks") if isinstance(vehicles, dict) else None
+    planned = []
+    for position, unlock in enumerate(unlocks if isinstance(unlocks, list) else [], start=1):
+        unlock = unlock if isinstance(unlock, dict) else {}
+        slot, props, share = unlock.get("slot"), unlock.get("props"), unlock.get("share")
+        valid = (
+            isinstance(slot, str)
+            and isinstance(props, list)
+            and len(props) > 0
+            and is_number(share)
+            and 0 <= share < math.inf
+            and all(isinstance(prop, str) for prop in props)
+        )
+        taken = {}
+        for index in range(1, count + 1):
+            roll = draw()
+            pick = draw()
+            if valid and (index == position or roll < share):
+                taken[index] = props[min(math.floor(pick * len(props)), len(props) - 1)]
+        if valid:
+            planned.append({"position": position, "slot": slot, "props": props, "taken": taken})
+    return planned
+
+
+def vehicle_prop(ordinary, index, planned, in_force):
+    """CityDressingController.vehiclePropFor: the prop street vehicle `index` (1-based) wears -- its
+    ordinary pick, unless an unlock in force (`in_force(unlock)`: its slot is owned and, in game,
+    every prop it lists has a template) takes it. Where several do, the entry whose own
+    guaranteed vehicle this is wins, else the last in config order."""
+    prop = ordinary
+    for unlock in planned:
+        taken = unlock["taken"].get(index)
+        if taken is not None and in_force(unlock):
+            prop = taken
+            if unlock["position"] == index:
+                break
+    return prop
 
 
 def color_from(rgb, fallback):
@@ -1864,6 +1938,45 @@ def selftest():
         ("plume cap: at the cap passes", not over_plume_cap(20, 20)),
         ("plume cap: one over fails", over_plume_cap(21, 20)),
         ("plume cap: a cap of 0 allows none", over_plume_cap(1, plume_cap({"plumes": 0}))),
+    ]
+
+    # Wave 2.2 vehicle unlocks: three entries over three vehicles, the middle one malformed. Each
+    # entry reads (roll, pick) per vehicle from the one stream, malformed or not.
+    draws = iter(
+        [0.9, 0.6, 0.2, 0.1, 0.7, 0.0]  # entry 1: vehicle 1 is its own, 2 rolls under 0.5, 3 does not
+        + [0.0] * 6  # entry 2 plans nothing but still reads its six
+        + [0.0, 0.0, 0.3, 0.9, 0.99, 0.5]  # entry 3: share 0.4 takes 1 and 2 by roll, 3 is its own
+    )
+    unlock_config = {
+        "props": ["Car"],
+        "perPlot": 3,
+        "unlocks": [
+            {"slot": "busLine", "props": ["BusA", "BusB"], "share": 0.5},
+            {"slot": "tram", "props": [], "share": 0.5},
+            {"slot": "taxis", "props": ["Taxi"], "share": 0.4},
+        ],
+    }
+    planned = plan_vehicle_unlocks(unlock_config, 3, lambda: next(draws))
+    taken = [(unlock["position"], unlock["slot"], unlock["taken"]) for unlock in planned]
+
+    def worn(owned):
+        return [vehicle_prop("Car", index, planned, lambda unlock: unlock["slot"] in owned) for index in (1, 2, 3)]
+
+    tiers = {"tier": {"thresholds": [1, 2, 3, 4, 5]}, "vehicles": {"firstTier": 2}, "budget": {"vehiclesPerPlot": 32}}
+    validation += [
+        ("unlocks: every entry reads two draws per vehicle", next(draws, None) is None),
+        ("unlocks: its own vehicle, then the rolls under share", taken[:1] == [(1, "busLine", {1: "BusB", 2: "BusA"})]),
+        ("unlocks: a malformed entry plans nothing", [position for position, _, _ in taken] == [1, 3]),
+        ("unlocks: share and position together", taken[1:] == [(3, "taxis", {1: "Taxi", 2: "Taxi", 3: "Taxi"})]),
+        ("unlocks: none in force leaves the ordinary picks", worn(set()) == ["Car", "Car", "Car"]),
+        ("unlocks: one in force", worn({"busLine"}) == ["BusB", "BusA", "Car"]),
+        # Vehicle 1 is busLine's own, so the later entry cannot take it; vehicle 2 goes to the last.
+        ("unlocks: the own vehicle wins, else the last entry", worn({"busLine", "taxis"}) == ["BusB", "Taxi", "Taxi"]),
+        ("vehicles: perPlot under the budget", planned_vehicles({"props": ["Car"], "perPlot": 40}, {"vehiclesPerPlot": 32}) == 32),
+        ("vehicles: none without props", planned_vehicles({"props": [], "perPlot": 24}, {"vehiclesPerPlot": 32}) == 0),
+        ("vehicles: none below firstTier", vehicle_target({"perPlot": 24}, tiers, 1, 24) == 0),
+        ("vehicles: scaled by the tier", vehicle_target({"perPlot": 24}, tiers, 3, 24) == 15),
+        ("vehicles: the deck's share comes off", vehicle_target({"perPlot": 32}, tiers, 5, 32, on_deck=2) == 30),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")

@@ -571,14 +571,16 @@
           "smallMaxLevel": 3,
           "rowLag": 0
         },
-        "heightFloor": 4.6,
+        "heightFloor": 3.4,
         "districts": {
           "suburb": {
             "small": [
               "FabricHomeSmallA",
               "FabricHomeSmallB",
               "FabricHomeSmallC",
-              "FabricHomeSmallD"
+              "FabricHomeSmallD",
+              "FabricHomeSmallE",
+              "FabricHomeSmallF"
             ],
             "medium": [
               "FabricHomeMediumA",
@@ -587,26 +589,35 @@
             "narrow": [
               "FabricShopNarrowA",
               "FabricShopNarrowB",
-              "FabricShopNarrowC"
+              "FabricShopNarrowC",
+              "FabricShopNarrowD"
             ]
           },
           "main": {
             "narrow": [
               "FabricShopNarrowA",
               "FabricShopNarrowB",
-              "FabricShopNarrowC"
+              "FabricShopNarrowC",
+              "FabricShopNarrowD"
             ]
           },
           "industry": {
             "small": [
-              "ShedA",
-              "ShedB"
+              "FabricWorksSmallA",
+              "FabricWorksSmallB"
             ],
             "medium": [
               "FabricWorksMediumA"
             ]
           },
-          "civic": {}
+          "civic": {
+            "small": [
+              "FabricCivicSmall"
+            ],
+            "medium": [
+              "FabricCivicMedium"
+            ]
+          }
         },
         "sites": {
           "small": "SiteSmall",
@@ -617,12 +628,14 @@
           "clumps": [
             "FieldClumpA",
             "FieldClumpB",
-            "FieldClumpC"
+            "FieldClumpC",
+            "PastureClump"
           ],
           "quarters": [
             "FieldQuarterA",
             "FieldQuarterB",
-            "FieldQuarterC"
+            "FieldQuarterC",
+            "PastureQuarter"
           ],
           "quarterRadius": 3.0,
           "singleRadius": 1.0
@@ -1123,8 +1136,16 @@
           ]
         ],
         "Village/FabricHomeNarrowA": [
-          [],
-          [],
+          [
+            0.85,
+            4.06,
+            1.75
+          ],
+          [
+            0.85,
+            4.06,
+            1.75
+          ],
           [
             0.0,
             8.21,
@@ -1132,8 +1153,16 @@
           ]
         ],
         "Village/FabricHomeNarrowB": [
-          [],
-          [],
+          [
+            0.85,
+            4.06,
+            -0.5
+          ],
+          [
+            0.85,
+            4.06,
+            -0.5
+          ],
           [
             0.5,
             7.44,
@@ -1141,8 +1170,16 @@
           ]
         ],
         "Village/FabricHomeNarrowC": [
-          [],
-          [],
+          [
+            0.85,
+            4.06,
+            1.25
+          ],
+          [
+            0.85,
+            4.06,
+            1.25
+          ],
           [
             0.0,
             7.31,
@@ -1172,9 +1209,163 @@
             4.81,
             2.0
           ]
+        ],
+        "Boomtown/FabricShopNarrowA": [
+          [
+            -1.5,
+            2.25,
+            1.0
+          ],
+          [
+            -1.5,
+            2.25,
+            1.0
+          ],
+          [
+            -1.5,
+            4.0,
+            1.0
+          ]
+        ],
+        "Boomtown/FabricShopNarrowC": [
+          [
+            1.4,
+            2.25,
+            0.9
+          ],
+          [
+            1.4,
+            2.25,
+            0.9
+          ],
+          [
+            1.4,
+            4.0,
+            0.9
+          ]
+        ],
+        "Boomtown/FabricShopNarrowD": [
+          [
+            1.5,
+            2.25,
+            1.1
+          ],
+          [
+            1.5,
+            2.25,
+            1.1
+          ],
+          [
+            1.5,
+            4.0,
+            1.1
+          ]
+        ],
+        "Boomtown/FabricHomeSmallA": [
+          [
+            -0.95,
+            2.57,
+            2.13
+          ],
+          [
+            -0.95,
+            2.57,
+            2.13
+          ]
+        ],
+        "Boomtown/FabricHomeSmallB": [
+          [
+            1.58,
+            2.81,
+            2.2
+          ],
+          [
+            1.58,
+            2.81,
+            2.2
+          ]
+        ],
+        "Boomtown/FabricHomeSmallC": [
+          [
+            0.29,
+            2.91,
+            0.23
+          ],
+          [
+            0.29,
+            2.91,
+            0.23
+          ]
+        ],
+        "Boomtown/FabricHomeSmallD": [
+          [
+            0.61,
+            1.63,
+            -0.13
+          ],
+          [
+            0.61,
+            1.63,
+            -0.13
+          ]
+        ],
+        "Boomtown/FabricHomeSmallF": [
+          [
+            -0.37,
+            1.59,
+            -0.08
+          ],
+          [
+            -0.37,
+            1.59,
+            -0.08
+          ]
+        ],
+        "Boomtown/FabricHomeMediumA": [
+          [],
+          [],
+          [
+            2.04,
+            3.6,
+            1.5
+          ]
+        ],
+        "Boomtown/FabricHomeMediumB": [
+          [
+            0.58,
+            1.59,
+            0.32
+          ],
+          [
+            0.58,
+            1.59,
+            0.32
+          ],
+          [
+            0.58,
+            1.59,
+            0.32
+          ]
+        ],
+        "Boomtown/FabricWorksMediumA": [
+          [],
+          [],
+          [
+            -2.7,
+            5.39,
+            2.3
+          ]
+        ],
+        "Boomtown/FabricWorksSmallA": [
+          [],
+          [
+            2.25,
+            3.1,
+            2.0
+          ]
         ]
       },
-      "every": 1,
+      "every": 7,
       "rate": 2,
       "lifetime": 3.5,
       "size": [

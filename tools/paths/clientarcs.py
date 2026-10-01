@@ -21,8 +21,10 @@ point special case:
                                revealed (on some owned spur's shortest path) and inside
                                `budget.pathPieces`, and a spur must be inside both budgets
 
-`verify()` compares all of that against the piece table bake.py is about to emit and against the
-`<Era>.json` the meshes on disk were actually baked from.
+`verify()` compares all of that against the piece table bake.py is about to emit; `stale()`
+compares that table against the `<Era>.json` the meshes on disk were actually baked from. They are
+two different findings: the first is a mirror that has drifted from the client, the second a
+layout or a width that changed after the last bake and only needs a re-bake.
 
 What this cannot do: it does not read RoadGraph.luau. It proves the Python side is self-consistent
 and that the meshes on disk match today's mirror; it cannot prove the Luau still mirrors network.py.
@@ -175,11 +177,11 @@ def load_record(era: str) -> dict | None:
         return json.load(fh)
 
 
-def verify(bake, pieces: list[dict], record: dict | None) -> list[str]:
-    """Compare the client's derivation with what the bake emits, and with what was baked.
+def verify(bake, pieces: list[dict]) -> list[str]:
+    """Compare the client's derivation with what the bake emits.
 
-    Returns one line per disagreement; empty means the three agree on the piece set, the piece
-    count and every piece's arc pair.
+    Returns one line per disagreement; empty means the two agree on the piece set, the piece
+    count and every piece's arc pair and chain.
     """
     problems: list[str] = []
     baked = {p["id"]: p for p in pieces}
@@ -211,7 +213,17 @@ def verify(bake, pieces: list[dict], record: dict | None) -> list[str]:
                 f"{piece_id}: the client puts it on chain {client[piece_id]['chain']!r}, "
                 f"the bake on {baked[piece_id]['chain']!r}"
             )
+    return problems
 
+
+def stale(bake, pieces: list[dict], record: dict | None) -> list[str]:
+    """Compare what the bake would emit today with what the meshes on disk were baked from.
+
+    Returns one line per difference; empty means the GLBs on disk (and the uploaded models made
+    from them) are today's pieces, or that nothing was ever baked.
+    """
+    problems: list[str] = []
+    baked = {p["id"]: p for p in pieces}
     if record:
         known = record.get("pieces") or {}
         gone = sorted(set(known) - set(baked))

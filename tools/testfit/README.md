@@ -9,6 +9,7 @@ so a building can be judged at every stage before anything is uploaded to Roblox
 blender -b -P tools/testfit/testfit.py -- --blueprint tools/testfit/blueprints/Village/Tavern.json --out assets/testfit/out
 blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --out <dir> --stage 2   # one stage only
 blender -b -P tools/testfit/testfit.py -- --dump-bounds fantasy-town-kit                  # measure a kit
+blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --ground 173,138,93     # on an era's plot colour
 ```
 
 `blender` is `"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"`. Kits are read from
@@ -19,7 +20,12 @@ no Pillow). Stdout lists piece count and bounding box in studs per stage and war
 leaves the footprint. A missing GLB is a warning, never a crash.
 
 The render shows a light-grey ground, a red footprint frame (9 x 9 studs unless the blueprint
-says otherwise) and a blue 5-stud reference "player" box beside it.
+says otherwise) and a blue 5-stud reference "player" box beside it. `--ground r,g,b` swaps the
+grey card for a game colour (sRGB 0-255, as a layout's `baseColor` is written: Village
+106,127,63, Boomtown 173,138,93, Metropolis 88,90,94, Orbital Colony 56,53,60), decoded to
+linear like a kit's colormap, so a prop is judged on the ground it will stand on. This rig is
+about a third brighter than the plot render's, so the ground and the kit both come out lighter
+than in game, by the same amount; `plotrender.py` is the reference for absolute colour.
 
 ## Blueprint format
 
@@ -100,6 +106,21 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   outside the ring, looking up the entrance avenue.
 - Non-tile eras (Village, Boomtown) draw their spine as plain slabs of `road.width` in
   `road.color` -- deliberately the stand-in, not the baked mesh pieces, which `tools/paths` judges.
+  Spurs are slabs too, at RoadGraph's `spurWidth` (`streetplan.spur_path_width`): a tiles era's
+  footpath width, a paths era's `road.paths.spurWidth` (Boomtown's 3-stud driveways), else the
+  road's own.
+- **Street vehicles:** as many as the controller's `vehicleTargetFor` wants at the tier (none
+  below `vehicles.firstTier`, then `perPlot` scaled by the tier, less the highway deck's share),
+  but only one to a visible stretch of 16 studs or more, the longest first -- so a plot with few
+  long streets shows fewer cars than the game seats (Boomtown: 8 of 24). None on a far plot, and
+  never on a spur. Each car's prop is the render's own round-robin pick, then `vehicles.unlocks`
+  by the client's rule (`cityfabric.plan_vehicle_unlocks` / `vehicle_prop`): while the entry's
+  slot is owned, vehicle `j` is entry `j`'s own and every other vehicle joins it when its roll
+  falls under `share`. The rolls come from this tool's own seeded stream, because Roblox's
+  `Random` cannot be reproduced in Python: a render shows the right kind of mix (the first car is
+  a bus once `busLine` is owned, about `share` of the rest), never the same cars a real plot
+  picks. An unlock prop without a blueprint is a placeholder box (2.4 x 2.2 x 6 studs before
+  `vehicles.scale`); in game that unlock stays off until every prop it lists has a template.
 - **Park strips** (`road.tiles.parkStrips`) are drawn for every planned cell whose street has not
   grown yet, so `--tier N` is the way to look at them -- a finished plot has none. The kerb and the
   strips share one cut (`cut_against`): each cell in turn subtracts what is already laid, in the
@@ -135,15 +156,17 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   `plotscene.decode_scene_colours` decodes them to linear once, as the file is read, which is what
   a Blender base colour is and what Blender does to a kit's colormap on its own. The builders
   themselves (`Materials`, `build_box`) take linear colours, and `tools/marketing/icon_scene.py`,
-  which calls them directly, decodes its own. Until 2026-10-01 the values went in undecoded and every box
-  rendered far too pale: Boomtown's base (173, 138, 93) came out (214, 198, 171) beside kit pieces
-  at their true colours. Measured on a flat swatch under this rig, a box and an sRGB texture of
-  the same colour now agree to 1/255, and both come out 1 to 16 values above the authored channel
-  (most in blue and on dark colours): that lift is the sky's fill light, and kit pieces get it
-  too. Renders made before that date show paler ground and roads than the game. The sky colour itself is **not** decoded: it is a
-  light, and the sun and fill energies were calibrated against it as it stands. The apron
-  (`GROUND_TINT`, scene-only) was retuned from 0.55 to 0.77 so it keeps the contrast with the
-  plot it had before.
+  which calls them directly, decodes its own. Until 2026-10-01 the values went in undecoded and
+  every box rendered far too pale: Boomtown's base (173, 138, 93) came out (214, 198, 171) beside
+  kit pieces at their true colours. Measured on a flat swatch under this rig, a box and an sRGB
+  texture of the same colour now agree to 1/255, and both come out 1 to 16 values above the
+  authored channel (most in blue and on dark colours): that lift is the sky's fill light, and kit
+  pieces get it too. Renders made before that date show paler ground and roads than the game.
+  The sky colour itself is **not** decoded: it is a light, and the sun and fill energies were
+  calibrated against it as it stands. The apron (`GROUND_TINT`, scene-only) was retuned from 0.55
+  to 0.77 so it keeps the contrast with the plot it had before. `testfit.py`'s card (ground,
+  frame, player box) is decoded the same way since wave 2.2, with its defaults re-expressed in
+  sRGB so the default strips look as they did.
 - **Chimney smoke** is drawn as a scene-only puff: four pale, slightly translucent spheres rising
   from the chimney top and drifting toward +X (`SMOKE_PUFFS` in `plotrender.py`, 0.5 to 1.2 studs
   across; the game's plume is a particle emitter several times larger). They cast no shadow. Which

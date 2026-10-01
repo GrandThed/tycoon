@@ -3,6 +3,7 @@
 Run inside Blender (headless):
 
     blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --out <dir> [--stage N]
+    blender -b -P tools/testfit/testfit.py -- --blueprint <file.json> --ground 173,138,93
     blender -b -P tools/testfit/testfit.py -- --dump-bounds <kit-slug>
 
 A city-dressing prop blueprint (blueprints/_props/<Era>/, or any blueprint with --props) renders
@@ -33,6 +34,11 @@ PLAYER_HEIGHT_STUDS = 5.0
 RENDER_SIZE = (1280, 960)
 # Three-quarter view from the front-right; the front of a building faces -Z in glTF space.
 CAMERA_DIR_GLTF = Vector((1.0, 0.72, -1.35))
+# The test card, in sRGB 0..255 like every game colour (Color3.fromRGB): a neutral ground, the
+# footprint frame and the reference player box.
+GROUND_RGB = (206, 206, 203)
+FRAME_RGB = (237, 137, 124)
+PLAYER_RGB = (124, 179, 237)
 
 
 def log(msg):
@@ -140,7 +146,12 @@ def make_box(name, size, center, material, collection):
     return obj
 
 
+def srgb_to_linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
 def flat_material(name, rgb):
+    """A plain material from a scene-linear 0..1 colour, which is what a Blender base colour is."""
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
@@ -148,6 +159,13 @@ def flat_material(name, rgb):
         bsdf.inputs["Base Color"].default_value = (*rgb, 1.0)
         bsdf.inputs["Roughness"].default_value = 0.9
     return mat
+
+
+def card_material(name, color):
+    """A plain material from an sRGB 0..255 colour, decoded as Blender decodes a kit's colormap.
+    Undecoded, an era's base colour put in as the ground renders far paler than the game shows it
+    beside kit pieces at their true colours."""
+    return flat_material(name, tuple(srgb_to_linear(c / 255.0) for c in color))
 
 
 def setup_render(scene, out_path):
@@ -256,7 +274,7 @@ class PieceCache:
         return [copy_tree(r, parent) for r in roots]
 
 
-def render_blueprint(bp_path, out_dir, only_stage, prop=False):
+def render_blueprint(bp_path, out_dir, only_stage, prop=False, ground=GROUND_RGB):
     try:
         bp = load_blueprint(bp_path)
     except BlueprintError as exc:
@@ -296,9 +314,9 @@ def render_blueprint(bp_path, out_dir, only_stage, prop=False):
     # Footprint in kit units: fx along X, fz along glTF Z (Blender -Y); the frame is drawn to fit it.
     fx = bp.footprint[0] / scale
     fz = bp.footprint[1] / scale
-    ground_mat = flat_material("Ground", (0.62, 0.62, 0.60))
-    frame_mat = flat_material("Frame", (0.85, 0.25, 0.2))
-    player_mat = flat_material("Player", (0.2, 0.45, 0.85))
+    ground_mat = card_material("Ground", ground)
+    frame_mat = card_material("Frame", FRAME_RGB)
+    player_mat = card_material("Player", PLAYER_RGB)
     fp = max(fx, fz)
     make_box("Ground", (fp * 60, fp * 60, 0.02), (0, 0, -0.011), ground_mat, props)
     t = 0.16 / scale  # frame thickness: 0.16 studs
@@ -431,6 +449,17 @@ def dump_bounds(kit):
                 block.remove(item)
 
 
+def ground_colour(text):
+    """`--ground r,g,b`: three whole numbers 0..255, as a layout's baseColor is written."""
+    try:
+        channels = tuple(int(part) for part in text.split(","))
+    except ValueError:
+        channels = ()
+    if len(channels) != 3 or not all(0 <= channel <= 255 for channel in channels):
+        raise argparse.ArgumentTypeError(f"expected r,g,b with each 0-255, got {text!r}")
+    return channels
+
+
 def main():
     argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     parser = argparse.ArgumentParser(prog="testfit.py")
@@ -439,6 +468,14 @@ def main():
     parser.add_argument("--stage", type=int, help="render only this stage (0-4)")
     parser.add_argument("--props", action="store_true", help="treat the blueprint as a city-dressing prop wherever it lives")
     parser.add_argument("--dump-bounds", metavar="KIT", help="print size and origin of every GLB in a kit")
+    parser.add_argument(
+        "--ground",
+        type=ground_colour,
+        default=GROUND_RGB,
+        metavar="R,G,B",
+        help="ground colour, sRGB 0-255: an era's plot baseColor (Boomtown 173,138,93) to judge a "
+        "prop on the ground it will stand on. Default: the neutral light-grey card",
+    )
     args = parser.parse_args(argv)
 
     if args.dump_bounds:
@@ -452,7 +489,7 @@ def main():
             out_dir = os.path.join(OUT_ROOT, os.path.basename(os.path.dirname(bp_path)), "props")
         else:
             out_dir = OUT_ROOT
-        render_blueprint(bp_path, os.path.abspath(out_dir), args.stage, prop)
+        render_blueprint(bp_path, os.path.abspath(out_dir), args.stage, prop, args.ground)
     else:
         parser.print_help()
 

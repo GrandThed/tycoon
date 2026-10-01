@@ -21,6 +21,12 @@ uploaded assets and hand the client ids it cannot resolve.
 `--list` additionally runs tools/paths/clientarcs.py, which re-derives every piece the way
 RoadGraph does and fails when the ids, the count or an arc pair disagree with what was baked. A
 piece whose arcs move is a mesh laid down in the wrong place, and nothing in game reports it.
+It also builds every mesh in memory and checks what the importer accepts but a player would see:
+a ribbon folded over itself on a bend tighter than its half-width.
+
+`--list` exit codes: 0 the client, the bake and the meshes on disk all agree; 1 the client and
+the bake disagree, or a mesh has a geometric problem (fix the mirror or the layout); 2 they agree
+but the meshes on disk were baked from another layout or width (re-bake and re-upload).
 """
 
 from __future__ import annotations
@@ -81,6 +87,36 @@ def check_ids(era: str, layout_hash: str, ids: list[str]) -> list[str]:
     return []
 
 
+def geometry(bake, pieces: list[dict]) -> tuple[list[str], str]:
+    """Every mesh of the era, built in memory: one line per visible defect, and a summary."""
+    problems: list[str] = []
+    meshes = 0
+    worst = (0.0, "-")
+    for piece in pieces:
+        for layer in LAYERS:
+            rim = layer == "Rim"
+            mesh = geom.ribbon(piece["_chain"], piece["window"], bake.seeds(piece, rim), rim=rim, tile=bake.tile_studs)
+            name = f"{layer}_{piece['id']}"
+            meshes += 1
+            folded = geom.back_run(mesh)
+            worst = max(worst, (folded, name))
+            if folded > geom.FOLD_VISIBLE:
+                problems.append(
+                    f"{name}: an outline folds back over {folded:.2f} studs (a bend tighter than the ribbon's "
+                    f"half-width; more than {geom.FOLD_VISIBLE:g} shows as a spike)"
+                )
+    if problems:
+        summary = f"{meshes} mesh(es), {len(problems)} visible fold(s)"
+    elif worst[0] < 0.005:
+        summary = f"{meshes} mesh(es), no outline runs backwards anywhere"
+    else:
+        summary = (
+            f"{meshes} mesh(es), no visible fold; the longest outline back-run is {worst[0]:.2f} studs "
+            f"({worst[1]}), under the {geom.FOLD_VISIBLE:g} that shows"
+        )
+    return problems, summary
+
+
 def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[int, dict]:
     bake = net.bake_for(era)
     pieces = bake.pieces()
@@ -90,6 +126,12 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
         warn(line)
     if problems:
         warn("refusing to bake; fix the layout or clear the era's pieces in Assets.json first")
+        return 1, {}
+    problems, _ = geometry(bake, pieces)
+    for line in problems:
+        warn(line)
+    if problems:
+        warn("refusing to bake: a piece with a visible defect would be uploaded as it is; fix the layout")
         return 1, {}
     if only:
         unknown = [i for i in only if i not in ids]
@@ -106,6 +148,9 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
         "layoutHash": bake.layout_hash(),
         "pieces": {},
     }
+    # Only when the era narrows its spurs, so an era without the key bakes the record it always did.
+    if bake.spur_width != bake.era.width:
+        record["spurWidth"] = bake.spur_width
     # A single-piece re-bake keeps the other pieces' records, but only while the layout has not
     # moved under them; if it has, every piece has to be re-baked anyway.
     existing = era_json_path(era, build_root)
@@ -196,11 +241,17 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
 def listing(era: str) -> int:
     """The piece table, with the arc pair spelled out so a future drift is one diff away, and the
     client/bake agreement check of INTERFACES "Wave 1d". A disagreement exits 1: a piece whose arcs
-    have moved is a mesh in the wrong place on a live plot, which is invisible in Studio."""
+    have moved is a mesh in the wrong place on a live plot, which is invisible in Studio. Meshes
+    on disk that were baked from another layout exit 2: nothing is wrong with the mirror, the era
+    is due a re-bake."""
     bake = net.bake_for(era)
     pieces = bake.pieces()
     client = arcs.requested(bake)
-    log(f"{era}: layout hash {bake.layout_hash()}, tile {bake.tile_studs:g} studs, width {bake.era.width:g}")
+    narrowed = bake.spur_width != bake.era.width
+    log(
+        f"{era}: layout hash {bake.layout_hash()}, tile {bake.tile_studs:g} studs, width {bake.era.width:g}"
+        + (f", spur width {bake.spur_width:g} (road.paths.spurWidth)" if narrowed else "")
+    )
     for piece in pieces:
         a, b = piece["nodeArcs"]
         win = piece["window"]
@@ -212,17 +263,34 @@ def listing(era: str) -> int:
             f"{piece['nodes'][1][0]:7.2f},{piece['nodes'][1][1]:7.2f} "
             f"arc {a:8.3f}-{b:8.3f} client {arc_text} baked {win['lo']:8.3f}-{win['hi']:8.3f}"
         )
-    log(f"{era}: {len(pieces)} piece(s) = {sum(1 for p in pieces if p['kind'] == 'stretch')} stretch + {sum(1 for p in pieces if p['kind'] == 'spur')} spur")
-    problems = arcs.verify(bake, pieces, arcs.load_record(era))
-    for line in problems:
+    spurs = sum(1 for p in pieces if p["kind"] == "spur")
+    log(
+        f"{era}: {len(pieces)} piece(s) = {len(pieces) - spurs} stretch + {spurs} spur"
+        + (f" (spurs {bake.spur_width:g} wide, streets {bake.era.width:g})" if narrowed else "")
+    )
+    defects, summary = geometry(bake, pieces)
+    log(f"{era}: geometry -- {summary}")
+    problems = arcs.verify(bake, pieces)
+    for line in problems + defects:
         warn(line)
     if problems:
         warn(
             "client/bake disagreement: RoadGraph and tools/paths/network.py have drifted apart. "
             "Fix the mirror, then re-bake and re-upload the pieces it names."
         )
+    if problems or defects:
         return 1
     log(f"{era}: client/bake check OK -- {len(client)} piece(s) requested, ids, count and arcs all agree")
+    stale = arcs.stale(bake, pieces, arcs.load_record(era))
+    for line in stale:
+        warn(f"stale mesh: {line}")
+    if stale:
+        warn(
+            f"{era}: the meshes on disk are STALE ({len(stale)} difference(s) from today's layout): "
+            f"re-bake, re-upload and re-harvest before this era is judged in Studio"
+        )
+        return 2
+    log(f"{era}: the meshes on disk were baked from this layout")
     return 0
 
 

@@ -26,12 +26,78 @@
     "sign": 1.0,
     "marker": 0.5,
     "street": 5.1,
-    "spur": 4.05
+    "spur": 2.55
   },
   "require": {
     "parcels": 90,
     "houses": 90,
-    "medium": 4
+    "medium": 4,
+    "parked": 10,
+    "hydrants": 20,
+    "busStops": 4,
+    "billboards": 8,
+    "neon": 15
+  },
+  "layers": ["busStops", "billboards", "parked", "neon", "hydrants"],
+  "footprints": {
+    "Hydrant": [0.9, 0.9],
+    "BusStopA": [4.0, 1.6],
+    "BillboardA": [4.0, 0.6],
+    "BillboardB": [4.0, 0.6],
+    "BillboardC": [7.5, 1.0],
+    "NeonSignA": [0.8, 0.8],
+    "NeonSignB": [0.8, 0.8],
+    "NeonSignC": [0.8, 0.8],
+    "NeonArch": { "posts": [[-4.5, 0], [4.5, 0]], "post": [0.6, 0.6] }
+  },
+  "parked": {
+    "scale": 0.5,
+    "spacing": 3.0,
+    "stretchFacing": "along",
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      { "kind": "kerb", "mode": "gaps", "variants": [1, 2, 3], "facing": "along", "entranceClear": 10.0, "slack": 0.05, "step": 0.5, "perGap": 2, "pitch": 4.2, "spacing": 4.0, "count": 4 },
+      { "kind": "driveway", "variants": [1, 2, 3], "districts": ["suburb", "industry"], "gap": 0.1, "shifts": [0.0, 0.15, -0.15, 0.3], "share": 0.6, "reversed": 0.3, "turnJitter": 3.0, "count": 10 }
+    ]
+  },
+  "hydrants": {
+    "scale": 1.0,
+    "spacing": 8.0,
+    "stretchFacing": "street",
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      { "kind": "kerb", "mode": "spaced", "variants": [1], "facing": "street", "slack": 0.02, "start": 5.0, "endMargin": 2.0, "every": [14.0, 15.5], "step": 0.5, "shifts": [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2, -2, 2.5, -2.5, 3, -3], "eitherSide": true, "frontLean": 0.4 }
+    ]
+  },
+  "busStops": {
+    "scale": 1.0,
+    "spacing": 24.0,
+    "minStreets": 3,
+    "stretchFacing": "street",
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      { "kind": "kerb", "mode": "gaps", "variants": [1], "facing": "street", "slack": 0.05, "step": 0.5, "spread": true, "count": 6 }
+    ]
+  },
+  "billboards": {
+    "scale": 1.0,
+    "spacing": 10.0,
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      { "kind": "ends", "variants": [1, 2], "minHubFacing": -0.2, "slack": 0.05, "reach": [0.0, 0.4, 0.8], "angles": [0, 20, -20, 40, -40, 60, -60], "count": 6 },
+      { "kind": "backs", "variants": [3], "minHubFacing": -0.2, "streets": [1], "gap": 0.55, "lateral": [0.0, 0.25, -0.25, 0.5, -0.5], "spacing": 18.0, "count": 4 },
+      { "kind": "kerb", "mode": "gaps", "variants": [1, 2], "minHubFacing": -0.2, "facing": "street", "entranceClear": 14.0, "slack": 0.05, "step": 0.5, "spread": true, "spacing": 20.0, "count": 6 },
+      { "kind": "edges", "variants": [1, 2], "minHubFacing": -0.2, "slack": 0.05, "step": 1.0, "endMargin": 4.0, "count": 4 }
+    ]
+  },
+  "neon": {
+    "scale": 1.0,
+    "spacing": 1.5,
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      { "kind": "span", "variant": 4, "streets": [1], "start": 8.0, "step": 0.5, "endMargin": 4.0, "spacing": 26.0, "count": 3, "frontLean": 0.4 },
+      { "kind": "lotFront", "variants": [1, 2, 3], "sizes": ["narrow"], "rows": [1], "slack": 0.02, "lateral": [1.5, -1.5, 0.8, -0.8, 0.0, 1.65, -1.65, 0.4, -0.4], "mirror": true, "lean": 0.4 }
+    ]
   },
   "wild": {
     "pattern": "fields",
@@ -45,7 +111,7 @@
         { "variant": 3, "share": 0.25 }
       ]
     },
-    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.2 },
+    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.2, "paddock": { "variant": 4, "share": 0.5, "max": 8, "skirtMax": 2 } },
     "skirt": {
       "depth": 14,
       "sideFrom": 20,

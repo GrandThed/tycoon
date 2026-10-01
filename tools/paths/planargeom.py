@@ -44,6 +44,8 @@ RIM_CAP_EXTRA = 0.45  # and it runs this much past the fill at every tip
 CROWN = 0.005  # a hair of centre lift so no uploaded mesh has a zero-height bounding box
 MESH_WIDTH_FACTOR = 1.2  # mesh width / nominal path width (pathtest's EDGE)
 MIN_HALF_WIDTH = 0.004  # a cap never collapses a cross-section to exactly zero width
+# An outline loop shorter than the edge noise's own amplitude cannot be told from that noise.
+FOLD_VISIBLE = EDGE_AMP
 
 STEP = 0.25  # studs between cross-sections: ~8 per shortest noise wavelength, so the edge is smooth
 TURN_DEG = 2.5  # ...or sooner when the heading turns this much
@@ -199,6 +201,27 @@ def ribbon(c: dict, win: dict, seeds: tuple[int, int], rim: bool = False, tile: 
                     b, cc = cc, b
                 tris.append((a, b, cc))
     return {"verts": verts, "uvs": uvs, "tris": tris, "sections": len(xs), "flipped": 0}
+
+
+def back_run(mesh: dict) -> float:
+    """The longest stretch, in studs, over which either outline runs backwards against the
+    centreline: on the inside of a bend tighter than the ribbon's half-width the outline folds
+    into a loop that long. The winding fix in `ribbon` hides a fold from the importer and the
+    planar UVs hide a small one from the eye, so it is measured here; one longer than FOLD_VISIBLE
+    shows as a spike in the outline."""
+    verts = mesh["verts"]
+    longest = 0.0
+    for column in (0, COLUMNS - 1):
+        run = 0.0
+        for i in range(mesh["sections"] - 1):
+            centre, ahead = verts[COLUMNS * i + 1], verts[COLUMNS * (i + 1) + 1]
+            a, b = verts[COLUMNS * i + column], verts[COLUMNS * (i + 1) + column]
+            dx, dz = ahead[0] - centre[0], ahead[2] - centre[2]
+            step = math.hypot(dx, dz)
+            along = ((b[0] - a[0]) * dx + (b[2] - a[2]) * dz) / step if step > 1e-12 else 0.0
+            run = run - along if along < 0 else 0.0
+            longest = max(longest, run)
+    return longest
 
 
 def bounds(verts):

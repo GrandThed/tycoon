@@ -28,6 +28,10 @@ What is mirrored, and from where (never re-derived, never duplicated as a consta
   * which houses smoke (wave 2c lot houses, M12 wave 2.0 fabric houses) and where each plume
     stands: cityfabric again; the plume itself is a scene-only puff of spheres, since the game's
     is a particle emitter;
+  * how many street vehicles a plot shows at a tier and which of them a `vehicles.unlocks` entry
+    turns into a bus (M12 wave 2.2): cityfabric's mirror of the controller's rule, over this
+    file's own seeded stream -- Roblox's Random cannot be reproduced, so which car is the bus on
+    a real plot differs, how many there are does not;
   * tile cells, the connectivity mask table and the zebra rule: src/client/City/TileRenderer.luau
     (PIECE_BY_MASK, ARM_STEPS, CROSSING_MIN_RUN);
   * the ring cycle, the reveal-independent cell kinds and the ramp: src/client/City/Highway.luau
@@ -105,7 +109,6 @@ PLAYER_SIZE = (2.0, 5.0, 1.0)
 PLAYER_COLOR = [48, 110, 210]
 SPUR_TOP = 0.1
 SLAB_THICKNESS = 0.2
-VEHICLES_ON_STREETS = 6
 # Scatter.luau constants and paths, mirrored (geometry, not tunables).
 STRAIGHT_ENOUGH = 0.9
 MIN_STEP = 0.05
@@ -129,6 +132,7 @@ PLACEHOLDER_TUBE_HEIGHT = 4.5
 PLACEHOLDER_HULL = [215, 222, 232]
 PLACEHOLDER_ROCK = [232, 132, 99]
 PLACEHOLDER_ORANGE = [255, 160, 52]
+PLACEHOLDER_BUS = [226, 172, 52]
 PLACEHOLDER_TRACK = (0.8, 1.6)  # beam depth and width under the wheel plane
 PLACEHOLDER_PIER = 1.0
 PLACEHOLDERS = {
@@ -138,6 +142,7 @@ PLACEHOLDERS = {
     "plaza": ((12.0, 0.4, 12.0), PLACEHOLDER_HULL),
     "lamp": ((0.5, 5.0, 0.5), PLACEHOLDER_ORANGE),
     "vehicle": ((2.4, 1.6, 4.5), PLACEHOLDER_ORANGE),
+    "bus": ((2.4, 2.2, 6.0), PLACEHOLDER_BUS),
     "kiosk": ((4.0, 3.0, 5.0), PLACEHOLDER_HULL),
 }
 
@@ -147,9 +152,11 @@ def placeholder_box(size, color, offset=(0.0, 0.0, 0.0)):
     return {"size": [round(v, 4) for v in size], "offset": [round(v, 4) for v in offset], "color": list(color)}
 
 
-def placeholder_for(role):
+def placeholder_for(role, scale=1.0):
+    """The stand-in for `role`. plotscene draws a placeholder unscaled, so a prop the client
+    resizes at spawn (`vehicles.scale`) has its box sized here."""
     size, color = PLACEHOLDERS[role]
-    return [placeholder_box(size, color)]
+    return [placeholder_box([v * scale for v in size], color)]
 
 
 def blueprint_path(era_name, model_name, prop=False):
@@ -318,6 +325,7 @@ class PlotScene:
         self.block_rects = []
         self.strip_cells = set()
         self.missing = {}  # blueprint name -> how many placements fell back to a placeholder
+        self.deck_vehicles = 0  # the highway's vehicles, which come off the plot's street share
 
     # -- helpers ---------------------------------------------------------
 
@@ -699,10 +707,11 @@ class PlotScene:
 
     def build_spurs(self):
         """The footpath from the pad's kerb to the slot anchor. A tiles era gives it its own look
-        (`tiles.spur`); elsewhere it is the road itself, which is what the baked spur bakes."""
+        (`tiles.spur`); elsewhere it is the road itself, which is what the baked spur bakes, at
+        the road's width or (M12 wave 2.2) the era's narrower `road.paths.spurWidth`."""
         era = self.era
         spur_cfg = (era.tiles or {}).get("spur")
-        width = float(spur_cfg["width"]) if spur_cfg else era.width
+        width = streetplan.spur_path_width(era)  # RoadGraph's state.spurWidth
         colour = [int(v) for v in (spur_cfg["color"] if spur_cfg else era.dressing["road"]["color"])]
         # RoadGraph.drawSpur: a footpath's centre sits at -SPUR_DROP, so its top is that far under
         # the kerb and none of the four ground planes coincide. A non-tiles era draws baked meshes
@@ -817,6 +826,7 @@ class PlotScene:
         if height is None or not props:
             return
         count = int(vehicles.get("count", 1))
+        self.deck_vehicles = count
         perimeter = 8 * ring
         for index in range(count):
             position, heading = loop_point(ring, index * perimeter / max(count, 1))
@@ -841,7 +851,8 @@ class PlotScene:
         lane = era.width * float(era.dressing["road"].get("laneOffsetFraction", era.city["road"]["laneOffsetFraction"]))
         # One car each way, on the two long legs, on the right of its own travel direction.
         runs = (((0.0, -ring), (1.0, 0.0)), ((0.0, ring), (-1.0, 0.0)))
-        for index in range(min(int(vehicles.get("count", 2)), len(runs))):
+        self.deck_vehicles = int(vehicles.get("count", 2))
+        for index in range(min(self.deck_vehicles, len(runs))):
             centre, heading = runs[index]
             right = right_of(heading)
             along = (index * 2 - 1) * ring * 0.35
@@ -1564,13 +1575,22 @@ class PlotScene:
             )
 
     def build_street_vehicles(self):
-        """Cars on the longest visible stretches, on the right of their travel direction (Traffic's
-        lane graph is the centreline offset by laneOffsetFraction * width to the right)."""
+        """Cars on the longest visible stretches, one to a stretch, on the right of their travel
+        direction (Traffic's lane graph is the centreline offset by laneOffsetFraction * width to
+        the right; a spur narrower than the road has no vehicle lane, and none is drawn on one).
+
+        How many: the controller's vehicleTargetFor for this tier on a near plot, as far as the
+        stretches go round. Which prop: the render's own ordinary pick, then `vehicles.unlocks`
+        (M12 wave 2.2) by the client's rule over this file's own stream -- vehicle 1 becomes the
+        first unlock's prop once its slot is owned, and about `share` of the rest. An unlock prop
+        with no blueprint yet is a placeholder box; in game that unlock is off until the prop has
+        a template."""
         era = self.era
         if era.dressing.get("parked"):
             self.notes.append("parked cars not drawn")
-        props = era.dressing.get("vehicles", {}).get("props") or []
-        if not props or not self.visible:
+        vehicles = era.dressing.get("vehicles") or {}
+        props = vehicles.get("props") or []
+        if not props or not self.visible or not self.near:
             return
         scale = self.vehicle_scale()
         if scale != 1.0:
@@ -1580,7 +1600,12 @@ class PlotScene:
             (self.network.stretches[i] for i in self.visible if self.network.stretches[i]["length"] >= MIN_VEHICLE_STRETCH),
             key=lambda s: -s["length"],
         )
-        count = min(int(era.dressing["vehicles"].get("perPlot", VEHICLES_ON_STREETS)), len(candidates))
+        planned = cityfabric.planned_vehicles(vehicles, era.city.get("budget"))
+        target = cityfabric.vehicle_target(vehicles, era.city, self.tier, planned, self.deck_vehicles)
+        count = min(target, len(candidates))
+        stream = random.Random(f"{era.name}:plotrender:vehicleUnlocks")
+        unlocks = cityfabric.plan_vehicle_unlocks(vehicles, planned, stream.random)
+        unlocked = {}
         for index in range(count):
             stretch = candidates[index]
             a, b = stretch["a"], stretch["b"]
@@ -1591,13 +1616,23 @@ class PlotScene:
             right = right_of(heading)
             t = 0.3 + 0.4 * ((index * 0.37) % 1.0)
             centre = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            ordinary = props[index % len(props)]
+            prop = cityfabric.vehicle_prop(ordinary, index + 1, unlocks, lambda unlock: unlock["slot"] in self.owned)
+            if prop != ordinary:
+                unlocked[prop] = unlocked.get(prop, 0) + 1
             self.model(
                 f"Car{index}",
-                blueprint_path(era.name, props[index % len(props)], prop=True),
+                blueprint_path(era.name, prop, prop=True),
                 (centre[0] + right[0] * lane, 0.0, centre[1] + right[1] * lane),
                 rot_y=facing_rot(heading),
+                placeholder=placeholder_for("bus", scale) if prop != ordinary else None,
+                wanted=prop,
                 scale=scale,
             )
+        self.notes.append(
+            f"street vehicles: {count} drawn of {target} wanted at tier {self.tier} ({planned} planned, one to a stretch)"
+            + "".join(f"; {n} wear {name}" for name, n in sorted(unlocked.items()))
+        )
 
     def build_player(self):
         """A 2 x 5 x 1 box by the plot entrance: every other size in the frame is judged against it."""

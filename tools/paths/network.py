@@ -9,6 +9,12 @@ streetplan's node/stretch numbering -- and apply the same smoothing.
 Chains are maximal (one per polyline, one per connector, one per spur) and never depend on what is
 owned, exactly as PathRibbon does, so a piece's geometry is fixed for the layout.
 
+M12 wave 2.2 "narrow driveways" (`road.paths.spurWidth`): a spur chain has a width of its own.
+As in PathRibbon.Build, what shapes the spur's own ribbon scales with it -- the corner radius,
+the shortest leg it can bend on, the meander taper, and here the mesh width -- while what
+measures the street it joins stays in street widths: the host reach and the run past the host's
+centreline. Without the key the spur width is the road's and every number is the one it was.
+
 Piece ids (INTERFACES "Wave 1d - Pieces"):
     L<polylineIndex>_<stretchIndex>   one spine stretch, `polylineIndex` 1-based and
                                       `stretchIndex` the 1-based rank of the stretch among the
@@ -62,6 +68,8 @@ class Bake:
             raise ValueError(f"{era_name}: eras.{era_name}.road.paths.tileStuds is missing from CityDressing.json")
         self.tile_studs = float(paths_cfg["tileStuds"])
         self.network = streetplan.Network(self.era)
+        # RoadGraph's state.spurWidth, which it hands PathRibbon.Build as `spurWidth`.
+        self.spur_width = float(streetplan.spur_path_width(self.era))
         meander = self.era.meander
         self.amplitude = float(meander["amplitude"]) if meander else 0.0
         self.wavelength = float(meander["wavelength"]) if meander and meander.get("wavelength") else FALLBACK_WAVELENGTH
@@ -112,9 +120,14 @@ class Bake:
 
     def _prepare(self) -> None:
         width = self.era.width
-        radius = pg.FILLET_RADIUS_WIDTHS * width
+
+        def smoothed(c):
+            # smooth_curve derives the shortest leg from the radius: MIN_LEG_WIDTHS chain widths.
+            return pg.smooth_curve(c["points"], pg.FILLET_RADIUS_WIDTHS * c["width"])
+
         for c in self.chains:
-            c["curve"] = pg.smooth_curve(c["points"], radius)
+            c["width"] = self.spur_width if c["kind"] == "spur" else width
+            c["curve"] = smoothed(c)
             c["raw"] = pg.Curve(list(c["points"]))
 
         reach = width / 2 + HOST_REACH_EXTRA
@@ -150,21 +163,23 @@ class Bake:
                     pts[-1] = target
                     c["join_end"] = True
                 c["points"] = pg.dedupe(pts, DEDUPE_EPS)
-                c["curve"] = pg.smooth_curve(c["points"], radius)
+                c["curve"] = smoothed(c)
                 host["junctions"].append(arc)
                 if arc < ROUND_END_REACH:
                     host["round_start"] = True
                 if arc > host["curve"].total - ROUND_END_REACH:
                     host["round_end"] = True
 
-        taper_length = pg.MEANDER_TAPER_WIDTHS * width
         for c in self.chains:
             curve = c["curve"]
             total = curve.total
+            taper_length = pg.MEANDER_TAPER_WIDTHS * c["width"]
             phase = (c["key"] * GOLDEN_ANGLE) % (2 * math.pi)
             c["phase"] = phase
             nodes = [0.0, total] + list(c["junctions"])
-            # The plot entrance stays open at full width: no extension there.
+            # The plot entrance stays open at full width: no extension there. The extensions stay
+            # in street widths whatever the chain: a spur's mouth runs past its host's centreline
+            # and must end inside the street it joins.
             ext_s = (
                 pg.EXTEND_WIDTHS * width
                 if c["join_start"]
@@ -193,7 +208,7 @@ class Bake:
                 kept_smooth.append(total + ext_e)
             c["final_smooth"] = kept_smooth
             c["ext"] = (ext_s, ext_e)
-            c["width_at"] = lambda s, c=c: width + self.jitter * pg.wave(
+            c["width_at"] = lambda s, c=c: c["width"] + self.jitter * pg.wave(
                 s * 1.37, c["phase"] + 2.1, self.wavelength * 0.8
             ) * 0.5
 
@@ -360,6 +375,9 @@ class Bake:
             "meander": self.era.meander,
             "tileStuds": self.tile_studs,
         }
+        # Only when it narrows the spurs: an era without the key keeps the hash its meshes carry.
+        if self.spur_width != self.era.width:
+            payload["spurWidth"] = self.spur_width
         text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 

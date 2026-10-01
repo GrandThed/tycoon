@@ -215,6 +215,9 @@ TOWN_TREE_RADIUS = 1.2  # studs, preview only
 # wave 1c round 3 layers, and wave 2.0's parked carts
 UPGRADE_COLOURS = {"flowers": (230, 80, 170), "banners": (200, 40, 40), "carts": (120, 78, 40)}
 UPGRADE_DOT = 0.7  # studs, preview only
+# Wave 2.2: a plan-laid layer is drawn as the ground each entry stands on, one colour per layer in
+# the order the plan lays them.
+LAID_COLOURS = ((40, 60, 160), (220, 30, 30), (240, 150, 20), (110, 50, 150), (0, 170, 190), (90, 90, 90))
 
 # --------------------------------------------------------------------------
 # Luau subset parser (tables, numbers, strings, booleans, Vector3/Color3 constructors)
@@ -1770,12 +1773,24 @@ def band(a, b, half):
     return [(a2[0] + nx, a2[1] + nz), (b2[0] + nx, b2[1] + nz), (b2[0] - nx, b2[1] - nz), (a2[0] - nx, a2[1] - nz)]
 
 
+def driveway_width(era):
+    """RoadGraph's `driveway` (INTERFACES "Wave 2.2", narrow driveways): a paths era's
+    `road.paths.spurWidth` when it is a positive finite number, else None -- the key left out, a
+    tiles era (which excludes paths), or a value the client ignores."""
+    if era.tiles is not None or not isinstance(era.paths, dict):
+        return None
+    value = era.paths.get("spurWidth")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < value < math.inf:
+        return None
+    return max(float(value), MIN_LENGTH)
+
+
 def spur_half_width(era):
-    """A tiles era draws spurs as narrower footpaths (road.tiles.spur.width); elsewhere a spur is
-    as wide as the road."""
+    """Half the ground a spur covers: a tiles era's footpath (road.tiles.spur.width), else the
+    spur's own width (a driveway's, or the road's) plus the meander's swing."""
     if era.tiles and "spur" in era.tiles:
         return float(era.tiles["spur"]["width"]) / 2
-    return era.width / 2 + era.amplitude
+    return spur_path_width(era) / 2 + era.amplitude
 
 
 def spur_segments(era):
@@ -1811,10 +1826,22 @@ def ramp_squares(era):
 
 
 def spur_path_width(era):
-    """RoadGraph's state.spurWidth: a tiles era's footpath width, the road width elsewhere."""
+    """RoadGraph's state.spurWidth: a tiles era's footpath width, a paths era's driveway width
+    (`road.paths.spurWidth`), the road width elsewhere."""
     if era.tiles and "spur" in era.tiles:
         return float(era.tiles["spur"]["width"])
-    return era.width
+    driveway = driveway_width(era)
+    return driveway if driveway is not None else era.width
+
+
+def spur_walk_offset(era, offset):
+    """RoadGraph.buildWalkLanes' spurSide: how far off a spur's centreline its walk lanes run. A
+    driveway keeps a walker as far from its edge as a street does; any other spur pulls its lanes
+    in to its own edges."""
+    driveway = driveway_width(era)
+    if driveway is not None:
+        return max(offset - (era.width - driveway) / 2, 0.0)
+    return min(offset, spur_path_width(era) / 2)
 
 
 def trimmed(points, start, back):
@@ -1853,8 +1880,8 @@ def offset_polyline(points, off):
 def walk_lanes(era, network, visible):
     """RoadGraph.buildWalkLanes at full ownership, on straight centrelines (a meander moves lanes and
     the things beside them alike): both sides of every drawn stretch at `pedestrians.offset`, and
-    both sides of every drawn spur at min(offset, spurWidth / 2), from the pad's inner edge (the
-    door) to the kerb of the street it joins."""
+    both sides of every drawn spur at spur_walk_offset, from the pad's inner edge (the door) to the
+    kerb of the street it joins."""
     config = era.dressing.get("pedestrians")
     if not config or "offset" not in config:
         return []
@@ -1866,7 +1893,7 @@ def walk_lanes(era, network, visible):
             segments = offset_polyline([stretch["a"], stretch["b"]], offset * side)
             if segments:
                 lanes.append({"kind": "street", "key": sid, "owner": None, "segments": segments})
-    spur_side = min(offset, spur_path_width(era) / 2)
+    spur_side = spur_walk_offset(era, offset)
     for slot in era.slots:
         spur = era.spurs[slot["id"]]
         if spur["none"] or len(spur["points"]) < 2:
@@ -2642,6 +2669,9 @@ def check(era, network, visible, unreachable):
         obstacles.append((f"plaza {i + 1}", plaza["poly"], None))
     obstacles.append(("Sign", era.sign_poly, None))
     all_segments = [(a, b) for _, a, b in era.spine_segments()]
+    # A driveway (wave 2.2) is narrower than the road, so it cuts less; every other era's spurs keep
+    # the rule they had.
+    spur_cut = spur_half_width(era) if driveway_width(era) is not None else half_road
     longest = (0.0, None)
     for slot in era.slots:
         spur = era.spurs[slot["id"]]
@@ -2670,8 +2700,8 @@ def check(era, network, visible, unreachable):
                 if owner == slot["id"]:
                     continue  # Wave 1b: a spur runs out from under its own building and pad
                 d = segment_polygon_distance(a, b, poly)
-                if d < half_road - 1e-6:
-                    add(f"{label} {fmt(a)}->{fmt(b)}: cuts {name} ({d:.2f} < {half_road:g})")
+                if d < spur_cut - 1e-6:
+                    add(f"{label} {fmt(a)}->{fmt(b)}: cuts {name} ({d:.2f} < {spur_cut:g})")
         for p in points:
             if abs(p[0]) > era.half_x or abs(p[1]) > era.half_z:
                 add(f"{label}: point {fmt(p)} leaves the plot")
@@ -3040,15 +3070,16 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
             return 0.0
         return min(1.0, min((math.dist(p, n) for n in nodes), default=era.width) / era.width)
 
-    def road_piece(a, b, colour, arc0, phase):
-        """One centreline segment, meandered when the era has a meander; arc0 is the arc length of
-        a along its whole line so the wobble never depends on which stretches are visible."""
+    def road_piece(a, b, colour, arc0, phase, width):
+        """One centreline segment `width` wide, meandered when the era has a meander; arc0 is the
+        arc length of a along its whole line so the wobble never depends on which stretches are
+        visible."""
         length = math.dist(a, b)
         if length < MIN_LENGTH:
             return
         ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
         if era.meander is None:
-            half = era.width / 2
+            half = width / 2
             nx, nz = -uz * half, ux * half
             a2 = (a[0] - ux * half, a[1] - uz * half)
             b2 = (b[0] + ux * half, b[1] + uz * half)
@@ -3063,24 +3094,26 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
             p = (a[0] + ux * s, a[1] + uz * s)
             offset = era.amplitude * taper(p) * wobble(arc0 + s, phase)
             q = (p[0] - uz * offset, p[1] + ux * offset)
-            radius = (era.width + era.meander["widthJitter"] * wobble(arc0 + s, phase + 2.1)) / 2
+            radius = (width + era.meander["widthJitter"] * wobble(arc0 + s, phase + 2.1)) / 2
             c = px(q)
             r = radius * PX_PER_STUD
             canvas.ellipse((c[0] - r, c[1] - r, c[0] + r, c[1] + r), fill=colour)
 
+    # A driveway (wave 2.2) is drawn at its own width; every other era's preview is as it was.
+    spur_width = spur_path_width(era) if driveway_width(era) is not None else era.width
     for slot in sorted(era.slots, key=lambda s: s["id"]):
         spur = era.spurs[slot["id"]]
         colour = (170, 90, 170, 210) if spur["override"] else (130, 105, 80, 210)
         arc = 0.0
         phase = sum(map(ord, slot["id"])) * 0.37
         for a, b in polyline_segments(spur["points"]):
-            road_piece(a, b, colour, arc, phase)
+            road_piece(a, b, colour, arc, phase, spur_width)
             arc += math.dist(a, b)
 
     for stretch_id, stretch in enumerate(network.stretches):
         tier = visible.get(stretch_id)
         colour = TIER_COLOURS.get(tier, NEVER_COLOUR) + ((225,) if tier else (90,))
-        road_piece(stretch["a"], stretch["b"], colour, stretch["arc_start"], stretch["polyline"] * 1.3)
+        road_piece(stretch["a"], stretch["b"], colour, stretch["arc_start"], stretch["polyline"] * 1.3, era.width)
     for index, street in enumerate(era.streets):
         for a, b in polyline_segments(street):
             canvas.line([px(a), px(b)], fill=(255, 255, 255, 120), width=1)
@@ -3117,7 +3150,7 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
 
     fabric_doc = load_fabric(era)
     if fabric_doc is not None:
-        draw_fabric(era, fabric_doc, canvas, px, poly, small)
+        draw_fabric(era, network, fabric_doc, canvas, px, poly, small)
 
     for index, spot in enumerate(era.parking):
         poly(spot["poly"], fill=(60, 60, 70, 200), outline=(250, 250, 250), width=1)
@@ -3227,6 +3260,8 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         ):
             if layer in layers:
                 entries.append((colour, text))
+        for index, layer in enumerate(name for name in layers if name not in ("trees", *UPGRADE_COLOURS)):
+            entries.append((LAID_COLOURS[index % len(LAID_COLOURS)], f"{layer} (the ground each entry stands on)"))
     for colour, text in entries:
         canvas.rectangle((lx, y, lx + 26, y + 12), fill=colour)
         canvas.text((lx + 34, y - 2), text, font=font, fill=(0, 0, 0))
@@ -3301,10 +3336,13 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     image.save(path)
 
 
-def draw_fabric(era, doc, canvas, px, poly, font):
+def draw_fabric(era, network, doc, canvas, px, poly, font):
     """The M12 city fabric: wild land faint under everything, the town trees, then each parcel's
-    footprint by row, with a tick toward the street it fronts and its 1-based index."""
+    footprint by row, with a tick toward the street it fronts and its 1-based index, and last the
+    plan-laid layers (wave 2.2) as the ground they stand on."""
     sizes = era.dressing.get("fabric", {}).get("sizes", {})
+    laid = fabric_module().layer_outlines(era.name, doc, era.city, era, network)
+    laid_names = list(dict.fromkeys(layer for layer, _, _ in laid))
     for item in doc.get("wild", []):
         points = item.get("quads") if item["kind"] == "clump" else [(item["x"], item["z"])]
         radius = WILD_RADIUS[item["kind"]] * PX_PER_STUD
@@ -3312,6 +3350,8 @@ def draw_fabric(era, doc, canvas, px, poly, font):
             c = px(point)
             canvas.ellipse((c[0] - radius, c[1] - radius, c[0] + radius, c[1] + radius), fill=WILD_COLOURS[item["kind"]])
     for layer, items in (doc.get("upgrades") or {}).items():
+        if layer in laid_names:
+            continue
         for item in items:
             c = px((item["x"], item["z"]))
             radius = (TOWN_TREE_RADIUS if layer == "trees" else UPGRADE_DOT) * PX_PER_STUD
@@ -3326,6 +3366,12 @@ def draw_fabric(era, doc, canvas, px, poly, font):
         canvas.line([px(centre), px(tip)], fill=(120, 80, 30), width=2)
         c = px(centre)
         canvas.text((c[0] - 6, c[1] - 6), str(index), font=font, fill=(60, 30, 0))
+    for layer, shapes, string in laid:
+        colour = LAID_COLOURS[laid_names.index(layer) % len(LAID_COLOURS)]
+        if string is not None:
+            canvas.line([px(string[0]), px(string[1])], fill=colour + (160,), width=2)
+        for shape in shapes:
+            poly(shape, fill=colour + (235,), outline=(0, 0, 0), width=1)
 
 
 def main():
