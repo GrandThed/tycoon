@@ -785,15 +785,10 @@ export type FabricClearConfig = {
 	parcel: number,
 	lane: number?,
 }
--- Wave 2.4: how a back lane is drawn. `rim` is the extra width on each side of the darker rim
--- under the fill; the heights are the tops above the plot, both under the streets' own fill.
-export type FabricLanesConfig = {
-	width: number,
-	rim: number,
-	fillHeight: number,
-	rimHeight: number,
-	growSeconds: number,
-}
+-- Waves 2.4 and 2.5: a back lane is a baked path piece (`LN_<k>`), so the client reads only its
+-- `width` (the dust along it) and, for a lane it has to lay as flat Parts instead, `fillHeight`,
+-- the top of those Parts above the plot. Whatever else the block carries is the bake's.
+export type FabricLanesConfig = { width: number, fillHeight: number }
 export type FabricConstructionConfig = {
 	minSeconds: number,
 	maxSeconds: number,

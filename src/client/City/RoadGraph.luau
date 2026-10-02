@@ -19,6 +19,11 @@
 -- curve the bake used -- and trees keep clear of the smoothed centreline of every potential
 -- path.
 --
+-- M12 wave 2.5 "baked lanes": the city fabric's back lanes are baked path pieces too (`LN_<k>`),
+-- outside the street network: SetLanes takes the lanes the fabric wants shown, and the ones whose
+-- template exists (and that fit budget.pathPieces) are cloned, revealed, repainted and dropped by
+-- PathRenderer with every other piece. The fabric draws the rest itself.
+--
 -- M12 wave 2.2 "narrow driveways": an era's `road.paths.spurWidth` makes every spur narrower than
 -- its streets. The network -- nodes, stretches, piece ids, routes, budgets -- never reads it; it
 -- reaches the spur chains' smoothing (PathRibbon), the Parts a spur is drawn with, and the lanes:
@@ -51,6 +56,8 @@ local SPUR_PART_NAME = "Spur"
 local SPINE_PIECE_FORMAT = "L%d_%d"
 local SPUR_PIECE_PREFIX = "SP_"
 local SPUR_PIECE_PATTERN = "^SP_(.+)$"
+-- M12 wave 2.5: lane k of the era's fabric data (docs/INTERFACES.md "Wave 2.5 — Pieces").
+local LANE_PIECE_FORMAT = "LN_%d"
 local BEND_PART_NAME = "RoadBend"
 -- A tiles-era footpath is dropped this far under the kerb it runs off (TileRenderer keeps the
 -- block and park slabs twice as far down), so none of the four ground planes coincide: a spur
@@ -103,18 +110,9 @@ export type StreetLines = { runs: { SpineRun }, spurs: { { Vector3 } } }
 -- Wave 1e: the corner of a crossing a signal prop stands on.
 export type SignalSpot = { node: number, position: Vector3, yaw: number }
 
--- M12 wave 2.4: what the plot's streets are surfaced with right now, for dressing that must match
--- them (the city fabric's back lanes). The images are the ones the baked pieces wear -- the
--- current variant's, or the era's own for "default" -- and are nil unless the baked renderer is
--- drawing and both are uploaded; `tileStuds` is the pitch of their world-planar tiling. The
--- material and colour are the live road look the Parts renderer draws with.
-export type Surface = {
-	material: Enum.Material,
-	color: Color3,
-	fillImageId: number?,
-	rimImageId: number?,
-	tileStuds: number?,
-}
+-- M12 wave 2.5: a back lane the city fabric wants shown: its 1-based index in the fabric data
+-- (piece `LN_<index>`), its polyline in plot-local studs, mouth first, and its width.
+export type LaneSpec = { index: number, points: { Vector3 }, width: number }
 
 -- Wave 2c: something a walker must not walk through -- a plot-local rectangle about `origin`,
 -- turned by `rotation` (Scatter.Footprint has this shape). `slotId` marks a slot's own building
@@ -243,6 +241,13 @@ export type State = {
 	-- Baked-piece plan: one cloned Model per stretch and per spur, capped by budget.pathPieces.
 	pathStretchAllowed: { [number]: boolean },
 	pathSpurAllowed: { [string]: boolean },
+	-- M12 wave 2.5: what budget.pathPieces has left once every stretch and spur has its piece,
+	-- which is how many lanes may be cloned; the lane pieces the baked renderer shows now, in lane
+	-- order, with the key they were last handed over under; and each one's spec by piece id.
+	pathSpare: number,
+	laneIds: { string },
+	lanesKey: string,
+	laneSpecs: { [string]: LaneSpec },
 	-- Tile plan (wave 2a): the stretches whose cells fit budget.tileCells.
 	tileStretchAllowed: { [number]: boolean },
 	pieceKeys: { string },
@@ -251,9 +256,6 @@ export type State = {
 	near: boolean,
 	-- Wave 1e: the surface variant the whole plot wears; "" until the base is first applied.
 	surfaceVariant: string,
-	-- That variant's uploaded images; nil while the plot wears the texture baked into the templates.
-	variantFillImageId: number?,
-	variantRimImageId: number?,
 	visible: { [number]: boolean }, -- stretch id -> revealed
 	-- Groups that have been revealed. Tracked explicitly because a revealed group may legitimately
 	-- draw zero Parts (its stretches outside the near budget), and it must still be redrawn on a
@@ -1326,6 +1328,7 @@ local function allocate(state: State): ()
 				pathRemaining -= 1
 			end
 		end
+		state.pathSpare = math.max(pathRemaining, 0)
 	end
 
 	if state.meander == nil then
@@ -1412,6 +1415,10 @@ pathPieceIds = function(state: State): { string }
 			table.insert(ids, SPUR_PIECE_PREFIX .. slotId)
 		end
 	end
+	-- M12 wave 2.5: the back lanes after the network they leave, so a burst reaches a lane last.
+	for _, pieceId in state.laneIds do
+		table.insert(ids, pieceId)
+	end
 	return ids
 end
 
@@ -1426,6 +1433,22 @@ local function pieceCentreline(state: State, pieceId: string): { Vector3 }?
 	local cached = data.pieceCentrelines[pieceId]
 	if cached ~= nil then
 		return cached
+	end
+	local lane = state.laneSpecs[pieceId]
+	if lane ~= nil then
+		-- A lane's own polyline, mouth first, sampled a width apart so the dust keeps to one track
+		-- (the baked mesh rounds the bends; a puff does not show the difference).
+		local track: { Vector3 } = {}
+		local spacing = math.max(lane.width, MIN_LENGTH)
+		for index = 2, #lane.points do
+			local a, b = lane.points[index - 1], lane.points[index]
+			local steps = math.max(1, math.ceil((b - a).Magnitude / spacing))
+			for step = if index == 2 then 0 else 1, steps do
+				table.insert(track, a:Lerp(b, step / steps))
+			end
+		end
+		data.pieceCentrelines[pieceId] = track
+		return track
 	end
 	local network = data.network
 	local chain: number?
@@ -1641,8 +1664,6 @@ local function setVariant(
 		return
 	end
 	state.surfaceVariant = name
-	state.variantFillImageId = fillImageId
-	state.variantRimImageId = rimImageId
 	local road = state.context.era.road
 	local paths = road.paths
 	local variants = if paths ~= nil then paths.variants else nil
@@ -1674,6 +1695,9 @@ end
 local function redrawParts(state: State): ()
 	state.lanes = nil
 	state.walkLanes = nil
+	-- The baked pieces are gone, the lanes' with them: the fabric draws them from its next sync.
+	state.laneIds = {}
+	state.lanesKey = ""
 	for groupIndex in state.revealedGroups do
 		drawGroup(state, groupIndex)
 	end
@@ -1753,13 +1777,15 @@ function RoadGraph.new(context: Context, near: boolean): State
 		nearBendAllowed = {},
 		pathStretchAllowed = {},
 		pathSpurAllowed = {},
+		pathSpare = 0,
+		laneIds = {},
+		lanesKey = "",
+		laneSpecs = {},
 		tileStretchAllowed = {},
 		pieceKeys = {},
 		pieceSpecs = {},
 		near = near,
 		surfaceVariant = "",
-		variantFillImageId = nil,
-		variantRimImageId = nil,
 		visible = {},
 		revealedGroups = {},
 		spurs = {},
@@ -1847,6 +1873,10 @@ function RoadGraph.new(context: Context, near: boolean): State
 			width = width,
 			-- A driveway puffs as wide as it is, not as wide as the street it leaves.
 			widthOf = function(pieceId: string): number
+				local lane = state.laneSpecs[pieceId]
+				if lane ~= nil then
+					return lane.width
+				end
 				return if string.match(pieceId, SPUR_PIECE_PATTERN) ~= nil
 					then state.spurWidth
 					else state.width
@@ -1904,42 +1934,39 @@ function RoadGraph.UsesPaths(state: State): boolean
 	return paths ~= nil and paths.mode == "baked"
 end
 
--- M12 wave 2.4: the surface the streets wear as of the last SetSurface (see `Surface`). A variant
--- change or a fallback to Parts shows here on the next call, so a caller that asks every sync
--- follows the streets with no event of its own.
-function RoadGraph.Surface(state: State): Surface
-	local surface: Surface = {
-		material = state.material,
-		color = state.color,
-		fillImageId = nil,
-		rimImageId = nil,
-		tileStuds = nil,
-	}
-	local paths = state.context.era.road.paths
-	local tileStuds = if paths ~= nil then paths.tileStuds else nil
-	if not RoadGraph.UsesPaths(state) or type(tileStuds) ~= "number" or not (tileStuds > 0) then
-		return surface
+-- M12 wave 2.5: the back lanes the city fabric wants shown right now (every lane with a lot on
+-- it, sorted by index, the same list on near and far plots). Returns the indices the baked
+-- renderer shows -- the plot draws baked pieces, lane k is within what budget.pathPieces has
+-- left, and its `LN_<k>` template exists -- and the caller draws every other lane itself. Like a
+-- spur, a lane is only handed to PathRenderer by the next Flush; `animate` gives one that is new
+-- the appear effect, and from then on it is a piece like any other: it loses its rim on a far
+-- plot and takes every surface variant with the streets.
+function RoadGraph.SetLanes(
+	state: State,
+	lanes: { LaneSpec },
+	animate: boolean?
+): { [number]: boolean }
+	local shown: { [number]: boolean } = {}
+	local paths = state.paths
+	local ids: { string } = {}
+	if paths ~= nil and paths.mode == "baked" then
+		for _, lane in lanes do
+			local pieceId = string.format(LANE_PIECE_FORMAT, lane.index)
+			if lane.index <= state.pathSpare and PathRenderer.Has(paths, pieceId) then
+				shown[lane.index] = true
+				state.laneSpecs[pieceId] = lane
+				table.insert(ids, pieceId)
+			end
+		end
 	end
-	local fillImageId, rimImageId = state.variantFillImageId, state.variantRimImageId
-	if fillImageId == nil or rimImageId == nil then
-		-- "default": the templates carry the era's own images, whose ids Assets.json records.
-		local assets = Catalog.GetAssetsConfig()
-		local pathsByEra = if assets ~= nil then assets.paths else nil
-		local eraPaths = if pathsByEra ~= nil then pathsByEra[state.context.eraName] else nil
-		fillImageId = if eraPaths ~= nil then eraPaths.fillImageId else nil
-		rimImageId = if eraPaths ~= nil then eraPaths.rimImageId else nil
+	local key = table.concat(ids, ",")
+	if key ~= state.lanesKey then
+		state.lanesKey = key
+		state.laneIds = ids
+		state.pathsDirty = true
+		state.pathsAnimate = state.pathsAnimate or animate == true
 	end
-	if
-		type(fillImageId) == "number"
-		and type(rimImageId) == "number"
-		and fillImageId > 0
-		and rimImageId > 0
-	then
-		surface.fillImageId = fillImageId
-		surface.rimImageId = rimImageId
-		surface.tileStuds = tileStuds
-	end
-	return surface
+	return shown
 end
 
 -- Reveals the shortest path from the entrance to `node`, returning the groups that changed. The

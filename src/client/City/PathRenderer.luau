@@ -386,6 +386,14 @@ function PathRenderer.Create(options: Options): Handle?
 	}
 end
 
+-- Whether the era's templates hold `pieceId`. Update drops the whole plot to Parts when a piece
+-- it is asked for is missing, which is right for the street network (half a network is worse
+-- than none) but not for a piece outside it: RoadGraph asks first for a back lane (M12 wave 2.5),
+-- and one that has not been baked yet is simply drawn another way.
+function PathRenderer.Has(handle: Handle, pieceId: string): boolean
+	return templateFor(handle.options.eraName, pieceId) ~= nil
+end
+
 -- The plot's surface variant (docs/INTERFACES.md "Wave 1e — Surfaces"): nil ids mean the texture
 -- baked into the templates. Every live Fill/Rim is rewritten and every later clone follows.
 function PathRenderer.SetSurface(handle: Handle, fillImageId: number?, rimImageId: number?): ()

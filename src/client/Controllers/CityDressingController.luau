@@ -1628,9 +1628,13 @@ local function syncFabric(
 		-- device, era and tier -- so a flip of any of them reaches the fabric's houses with this
 		-- pass and never needs a rebuild.
 		smoke = entry.near and policy.living and smokeFor(build, config, tier) ~= nil,
-		-- Wave 2.4: what the streets wear as of the SetSurface and Flush earlier in this pass, so
-		-- the back lanes are repaved with them (and fall back to Parts' look with them).
-		surface = RoadGraph.Surface(build.roads),
+		-- Wave 2.5: back lanes are baked path pieces. The fabric says which lanes it wants and
+		-- RoadGraph answers which the path renderer shows (cloned by the Flush that follows this);
+		-- the rest the fabric lays as Parts in the road's look as SetSurface just left it.
+		surface = { material = build.roads.material, color = build.roads.color },
+		showLanes = function(lanes: { Fabric.LaneRequest }, animateLanes: boolean)
+			return RoadGraph.SetLanes(build.roads, lanes, animateLanes)
+		end,
 	})
 end
 
@@ -1737,17 +1741,20 @@ local function sync(entry: PlotEntry): ()
 	RoadGraph.SetSurface(current.roads, owned, animate)
 	-- Paved blocks follow the same owned set; the slab goes down before the trees on it.
 	RoadGraph.SetBlocks(current.roads, owned, animate)
-	-- One renderer update for every spur revealed above.
-	RoadGraph.Flush(current.roads)
-	RoadGraph.RefreshPieces(current.roads)
-	syncFiller(current, tier, folder)
-	syncHighway(current, owned, animate)
-
+	-- M12: the fabric grows along the streets revealed above (the network is current before the
+	-- flush draws it). Wave 2.5: it comes before the flush because its back lanes are path pieces
+	-- too, so a purchase's driveway and the lanes it opens go to the renderer in one update and
+	-- share one dust burst instead of the second cutting the first short.
 	local policy = detailPolicy(current.era, config)
 	local fabric = current.fabric
 	if fabric ~= nil then
 		syncFabric(entry, current, fabric, tier, ownedList, owned, animate, policy, config)
 	end
+	-- One renderer update for every spur and lane revealed above.
+	RoadGraph.Flush(current.roads)
+	RoadGraph.RefreshPieces(current.roads)
+	syncFiller(current, tier, folder)
+	syncHighway(current, owned, animate)
 	if entry.near then
 		syncTrees(current, config, tier, folder, owned, policy)
 		syncParkTrees(current, folder, policy)
