@@ -4036,9 +4036,9 @@ look as before.
 - **Status 2026-10-01:** merged to `main` (Ben: "the village looks amazing"). Still owed: the
   numbers from step 37.
 - Setup: `docs/MANUAL_STEPS.md` "M12" §2. Since the merge, the main build has Village too.
-- **On the `tycoon-m12` build (branch `m12-boomtown`):** skip the Boomtown check in step 34, and
-  see "M12 wave 2.0 — Village smoke and carts" below for the carts. Village smoke on that build
-  waits for the harvest.
+- **On the `tycoon-m12` build (branch `m12-boomtown`):** step 34's Boomtown line does not apply
+  (Boomtown is the new town there). See "M12 wave 2.0 — Village smoke and carts" for the carts
+  and "M12 wave 2 — Boomtown growing city" for Boomtown and the Village smoke.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Houses only rise from **GrowthTier 2**. Buying without levelling stops the town at GrowthTier
   3, so **level landmarks (×10 / Max) as you go**.
@@ -4258,8 +4258,8 @@ differ a little:
       - all of it clears: woods, houses, flowers, banners, the board, the stakes and the dirt pad;
       - Boomtown looks exactly as before M12 (houses, greenery, parked cars, walkers, smoke,
         birds: PLAYTEST M9 4h). **Main build only.** On the `tycoon-m12` build (branch
-        `m12-boomtown`) Boomtown is the new layout with no models yet (landmarks, parked cars and
-        plain block roads only) until the upload and the harvest: do not judge Boomtown there.
+        `m12-boomtown`) Boomtown is the new growing town: judge it with "M12 wave 2 — Boomtown
+        growing city" instead.
 - [ ] 35. In Edit mode, rename `ReplicatedStorage/Assets/Props/Village/NoticeBoard` to
       `NoticeBoard_bak`. Play:
       - the pads are still dirt-brown with stakes, but there is no board;
@@ -4298,8 +4298,8 @@ differ a little:
   landmarks open the back streets. This is known.
 - Far plots show bare cleared patches. This is known; it gets tuned from step 37.
 - On the main build, Village has no chimney smoke, parked carts, bushes or hedges. Moving carts,
-  walkers, lanterns and birds remain. Smoke and parked carts come back in wave 2.0 (next section);
-  bushes and hedges do not (lead's call).
+  walkers, lanterns and birds remain. Smoke and parked carts come back on the `tycoon-m12` build
+  (the next two sections); bushes and hedges do not (lead's call).
 - You walk through houses, trees, banners and bunting (the no-collision rule).
 - Construction times, and the positions of walkers, carts and birds, differ between two players.
 - The three city-changer pads get a board and dirt, but no stakes, scaffold or building.
@@ -4319,52 +4319,38 @@ differ a little:
 
 ## M12 wave 2.0 — Village smoke and carts
 
-**READ FIRST (2026-10-01): on the current build, only the cart steps are valid.**
-- The plume counts and positions in this section are those of commit `a6cf170`.
-- From commit `d3d6427` on, the smoke config is ahead of the uploaded models: the narrow homes
-  get a chimney from their first look, and those models are not uploaded yet. In Studio the early
-  plumes rise over roofs with no chimney.
-- So **Village smoke must wait for the harvest** (`docs/MANUAL_STEPS.md` "M12" §10 step 40).
-  After it, this section gets new numbers. Expected then, for the sim's player by tier:
-  0 / 2 / 2 / 9 / 16 plumes, all on narrow homes.
-- **Valid now:** setup steps 1–4, cart steps 5–8, step 14, and the cart lines of steps 13 and
-  15–18.
-- **Wait for the harvest:** steps 9–12, 19–22, the smoke lines of steps 13 and 15–18, the
-  plume column of the table, and the "Quick smoke town" numbers.
+**Status 2026-10-02: this section is now the parked-carts check only.**
+- **The smoke part is superseded.** The narrow homes have a chimney from their first look, and the
+  Well no longer gates the smoke. The Village smoke checks are steps 49–57 of "M12 wave 2 —
+  Boomtown growing city" below.
+- The cart steps are unchanged and valid on today's build.
+- Boomtown can be judged in Studio now: see the next section.
 
-**Goal:** Village gets back two things wave 1 lost: **parked carts** and **chimney smoke**.
-Client-only: prices, order and income are unchanged. Nothing was uploaded.
+**Goal:** Village gets back the **parked carts** wave 1 lost. Client-only: prices, order and income
+are unchanged.
 
-**DO NOT JUDGE BOOMTOWN ON THIS BUILD.** On branch `m12-boomtown` the new Boomtown has no models
-yet: a Boomtown plot shows landmarks, parked cars and plain block roads only. That is known and
-is fixed by the upload and the harvest. Test **Village only**, and do not Advance Era.
-
-- Setup: `docs/MANUAL_STEPS.md` "M12 wave 2" §6. Open the **tycoon-m12** build.
+- Setup: `docs/MANUAL_STEPS.md` "M12" §11. Open
+  `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Buy in Build panel order. "Purchase 9" means the 9th slot in that list.
-
-**The rules, so you know what to expect:**
-- **Carts** need the Farm Plot (purchase 4). Each cart then waits for its own lane or its own
+- Carts need the Farm Plot (purchase 4). Each cart then waits for its own lane or its own
   building, so they arrive one by one.
-- **House chimneys** smoke only when the **Village Well is level 50 or more** and `GrowthTier` is
-  3 or more. Below level 50 no house smokes, at any tier.
-- **Two camp fire pits** near the Watchtower smoke once those camps stand (by purchase 23).
 
 What you should see:
 
-| When | Parked carts | Smoke plumes |
-|---|---|---|
-| Purchases 1–8 | 0 | 0 |
-| After the Cottage (9) | 1 | 0 |
-| After the Bakery (10) | 2 | 0 |
-| All 24 bought, nothing levelled (`GrowthTier` 3) | 5 | 2 (the fire pits) |
-| Then the Well at level 50 | 5 | 13 (11 chimneys + 2 fire pits) |
-| `GrowthTier` 5 | 8 | 13 |
+| When | Parked carts |
+|---|---|
+| Purchases 1–8 | 0 |
+| After the Cottage (9) | 1 |
+| After the Bakery (10) | 2 |
+| All 24 bought, nothing levelled (`GrowthTier` 3) | 5 |
+| `GrowthTier` 4 | 7 |
+| `GrowthTier` 5 | 8 |
 
 ### Setup
 
-- [ ] 1. Open the wave 2 build. In Edit mode: View (*Vista*) → **Command Bar** (*Barra de
-      comandos*), paste this line, press Enter:
+- [ ] 1. Open `build/test.rbxl` from the `tycoon-m12` folder. In Edit mode: View (*Vista*) →
+      **Command Bar** (*Barra de comandos*), paste this line, press Enter:
       ```
       local c = require(game.ReplicatedStorage.Shared.Config.CityDressing) print(c.budget.plumes, c.eras.Village.fabric.upgrades.carts ~= nil)
       ```
@@ -4377,14 +4363,11 @@ What you should see:
       (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
       **Client**.
 - [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
-- [ ] 4. **Play** (*Jugar*). With MANUAL_STEPS option A (the file), every Play starts a fresh
-      Village save. Then: Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) →
-      **Automatic** (*Automático*).
+- [ ] 4. **Play** (*Jugar*). Every Play starts a fresh Village save.
 
-### 1. Parked carts
+### 1. The first carts
 
-- [ ] 5. Buy purchases **1 to 8** (Campfire … Plant Flowers). **Do not level the Village Well
-      yet.**
+- [ ] 5. Buy purchases **1 to 8** (Campfire … Plant Flowers).
       - No parked cart anywhere, also not right after the Farm Plot (purchase 4). That is correct.
       Bug: a parked cart before the Cottage.
 - [ ] 6. Buy the **Cottage** (purchase 9). Within a few seconds:
@@ -4400,177 +4383,391 @@ What you should see:
       - is **not** inside a house, a tree, a flower bed or a pad, and **not** on a trail.
       You walk through it. That is the no-collision rule, not a bug.
 
-### 2. No chimney smoke yet
+### 2. Full build
 
-- [ ] 9. Buy the rest, up to all **24**. Still **do not level the Well**. Wait about a minute, until
-      houses stop rising. Check `GrowthTier` on Workspace → Plots → `Plot_<n>` → Attributes: it
-      is 3 (or 4 if you levelled other landmarks).
-      - about **5 parked carts** (7 at `GrowthTier` 4);
-      - **no smoke from any house chimney**;
-      - **two low plumes** from the **fire pits** of two camps near the Watchtower. They start
-        with the Town Wall (purchase 23) at the latest, once those camps have risen.
-      Bug: smoke from a house chimney while the Well is below level 50; smoke from a building
-      site.
-
-### 3. Chimney smoke
-
-- [ ] 10. Level the **Village Well** to **50 or more** (×10 a few times) and watch the middle of
-      town. Within about half a minute:
-      - the Well's model changes;
-      - about **11 houses** gain a storey, one after another, each with a pop and dust;
-      - **each of those houses starts to smoke** from its chimney right after it has finished
-        growing (the pop takes about 0.6 s).
-      Bug: smoke starts while the house is still growing; nothing smokes after a minute.
-- [ ] 11. Count the plumes: **11 chimneys + 2 fire pits = 13**. Walk up to three of the smoking
-      houses:
-      - the smoke starts **at the chimney top**, not beside the house and not in mid-air;
-      - it is pale grey and rises straight up;
-      - every smoking house is a finished house, mostly tall narrow terraced ones.
-      Bug: smoke hanging next to a roof; smoke from a house with no chimney; more than 13 plumes.
-- [ ] 12. Compare with the reference render (open it in Windows):
-      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12f_after_full.png`
-      (and `m12f_after_close.png`).
-      - The render marks each smoking house with a **row of pale spheres**. Those are markers,
-        not the real look.
-      - Expect the same houses to smoke.
-
-### 4. Full build
-
-- [ ] 13. Level until `GrowthTier` is **5** (Max on several landmarks):
-      - **8 parked carts**: 3 beside lanes, 5 in the yards of farm, market and craft buildings;
-      - still **13 plumes**. No new ones appear.
-- [ ] 14. Walk the whole town once.
+- [ ] 9. Buy the rest, up to all **24**. Wait about a minute: about **5 parked carts** (7 if
+      `GrowthTier` is 4).
+- [ ] 10. Level until `GrowthTier` is **5** (Max on several landmarks): **8 parked carts**, 3
+      beside lanes and 5 in the yards of farm, market and craft buildings.
+- [ ] 11. Walk the whole town once.
       Bug: a cart in a house, a tree, a flower bed, a banner pole or a pad; a cart on a trail; two
       carts side by side (they keep at least 12 studs apart).
 
-### 5. City detail
+### 3. City detail, away and back
 
-- [ ] 15. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
-      - **all smoke is gone**;
-      - the parked carts drop from 8 to **4**;
-      - the houses **stay**, and nothing flickers or rebuilds.
-- [ ] 16. Turn it **ON** again:
-      - the **same** 4 carts come back in the **same** spots;
-      - the **same 13** plumes come back at once, and no house rebuilds.
+- [ ] 12. Settings (⚙ in the bottom bar) → **City detail OFF**: the parked carts drop from 8 to
+      **4** within a second. Turn it **ON**: the **same** 4 carts come back in the **same** spots.
+- [ ] 13. Fly more than 290 studs away: the parked carts vanish on that plot. Fly back: they are
+      back in the same spots within about 1 s.
 
-### 6. Away and back
+### 4. Two players and phone
 
-- [ ] 17. Fly more than 290 studs away. On that plot the parked carts and all smoke vanish.
-- [ ] 18. Fly back. Within about 1 s:
-      - the carts are back in the same spots;
-      - the same houses smoke again;
-      - nothing replays: no scaffold, no rising houses.
-
-### Quick smoke town (for the next three checks)
-
-Each check below starts from a fresh save. This is the fastest way back to smoke:
-1. `GrantCash` is still set from step 2, so each Play pays again.
-2. Buy all 24 in Build panel order.
-3. Level the Village Well to 50 or more.
-4. Wait about a minute.
-
-Result: `GrowthTier` 3, about 94 houses, 5 parked carts, 13 plumes.
-
-### 7. Two players (Local Server)
-
-- [ ] 19. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
-      **Start** (*Iniciar*). One `GrantCash` pays both players; set it in the **Server** window.
-- [ ] 20. Player 1 builds the quick smoke town. Player 2 stands by Player 1's plot:
-      - Player 2 sees the **same carts in the same spots**;
-      - Player 2 sees the **same houses smoking**.
-      The moment each house grows can differ a little between the two screens. That is fine.
-
-### 8. Phone
-
-- [ ] 21. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Build the
-      quick smoke town:
-      - chimney smoke and fire-pit smoke **still show** (phones keep them);
-      - the carts read well at phone size;
-      - the frame rate looks fine, and the Build panel is unchanged.
-
-### 9. Low graphics
-
-- [ ] 22. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
-      quality **1–3**. Stop (*Detener*), then Play. Build the quick smoke town:
-      - **no smoke at all**, also not from the fire pits;
-      - no dust puffs and no birds;
-      - the parked carts and the houses still appear.
-      Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
-      skip this step and say so.
-
-### 10. Output
-
-- [ ] 23. Watch **Output** (*Salida*) through the whole run: no red errors and no yellow warnings
-      from CityDressing, Fabric, Ambient, RoadGraph or PathRenderer. Studio's own warnings are
-      fine.
+- [ ] 14. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). Set `GrantCash` in the **Server** window. Player 1 buys through the
+      Bakery (purchase 10). Player 2 stands by Player 1's plot and sees the **same 2 carts in the
+      same spots**.
+- [ ] 15. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Buy through
+      the Bakery: both carts read well at phone size, and the Build panel is unchanged.
+- [ ] 16. **Output** (*Salida*) through the whole run: no red errors and no yellow warnings from
+      CityDressing, Fabric, RoadGraph or PathRenderer. Studio's own warnings are fine.
 
 ### Not a bug (don't report these)
 
 - No cart right after the Farm Plot. The first one comes with the Cottage's lane.
-- No chimney smoke while the Well is below level 50, even at `GrowthTier` 5. A normal player
-  reaches Well 50 around tier 5.
-- Only 11 of the 116 houses smoke. Most homes only have a chimney on their last look. Giving the
-  narrow homes a chimney from their first look is an open decision (below).
-- The camp smoke is low, at ground level. It comes from a fire pit, not a chimney.
-- With City detail OFF on a **part-built** town, fewer than half the carts can stay (1 of 5 on the
-  quick smoke town). Judge the halving on a full build (step 15).
+- With City detail OFF on a **part-built** town, fewer than half the carts can stay (1 of 5 with
+  all 24 bought and nothing levelled). Judge the halving on a full build (step 12).
 - No bushes or hedges came back. Plant Flowers and the houses' own gardens carry the greenery
   (lead's call).
-- The render shows smoke as pale spheres; the game shows real, larger smoke.
-- Plot renders made **before 2026-10-01** show paler ground than Studio. The renderer is fixed;
-  `m12f_*` and `m12b_*` are correct.
-- Boomtown on this build: landmarks, parked cars and plain block roads only, until the upload and
-  the harvest. Do not judge it here.
-- Until the harvest: early Village plumes over narrow-house roofs with no chimney (see "READ
-  FIRST" at the top).
+- You walk through carts.
 
 ### What to tell Claude
 
 - Any failed step numbers, with the Output line.
-- (Answered 2026-10-01: **yes**, the three narrow home designs get a chimney from their first
-  look. It arrives with the harvest.)
 - Are the carts in good spots? Are 8 enough?
-- The numbers from "M12 — Village growing city" step 37, if you have not sent them yet.
 
 ### Sign-off
 
-- [ ] 24. All boxes ticked → tell Claude "M12 wave 2.0 signed off". Before the harvest, say "M12
-      wave 2.0 carts signed off" for the cart steps alone.
+- [ ] 17. All boxes ticked → tell Claude "M12 wave 2.0 carts signed off".
 
-## M12 wave 2 — Boomtown growing city (after the harvest)
+## M12 wave 2 — Boomtown growing city
 
-**Placeholder. There are no steps yet, and nothing here can be tested now.** The checklist is
-written after the upload and the harvest (`docs/MANUAL_STEPS.md` "M12" §10), because lot and layer
-counts can still move when the harvested sizes replace the planned ones.
+**Goal:** Boomtown grows as one prairie town. Farmland first, then building sites, then shops and
+homes, with **back lanes** so every house stands on a road. Four purchases now change the whole
+town: hydrants, the bus line, billboards and neon. Client-only: prices, order and income are
+unchanged.
 
-Until then, judge Boomtown only on the renders (`docs/MANUAL_STEPS.md` "M12" §9).
+**NEVER PUBLISH `build/boomtown.rbxl`.** Open it from the disk only. Never use File (*Archivo*) →
+Publish to Roblox (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*) from that file.
+It carries a switch that starts fresh saves in Boomtown; on a published place it would move a
+fresh real save to era 2.
 
-What the checklist will cover (from `docs/INTERFACES.md` "Wave 2.2", its two rulings blocks, and
-the wave 1 Village checklist above):
+- Setup: `docs/MANUAL_STEPS.md` "M12" §11 (rebuild first, then open the file).
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- **Every Play starts a fresh Boomtown plot.** Buy in Build panel order. "Purchase 7" means the
+  7th slot in that list.
+- Reference renders, in `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`:
+  `m12d_full.png`, `m12d_full_entrance.png`, `m12d_block.png` (one block's lanes),
+  `m12d_tier1.png`, `m12d_tier3.png`.
 
-- **Setup:** the right-build check, the `GrantCash` lever, reaching Boomtown.
-- **A fresh plot:** farmland instead of woods (crop fields, pasture, hay, telegraph poles), a
-  farmstead and wind pumps past the plot edge, and the next pad's "lot for sale" sign, stakes and
-  dirt.
-- **Growth:** fields clear as the town spreads; building sites, then shops, homes and works that
-  rise and grow. Today's numbers for the sim's player, houses by tier: 11 / 36 / 66 / 89 / 102.
-- **The layout:** Main Street leaning up to the Clock Tower, terraced shops, suburbs, industry at
-  the back-east, the green at the tower's foot, landmarks facing their streets.
-- **The five layers, each with its purchase:**
-  - parked cars (Gas Station, purchase 4): 14 at full build;
-  - Install Fire Hydrants (8): 22;
-  - Open the Bus Line (17): 4 shelters on 3 streets, and buses among the cars (at least one);
-  - Put Up Billboards (20): 10, two large ones behind shop rows;
-  - Light the Neon District (23): 26 (a sign on each of the 23 shops, 3 arches).
-- **Traffic:** a bus never rides into the car ahead; buses stay buses; cars keep off the
-  driveways.
-- **Driveways:** 3 studs wide, with walkers and reveal dust that fit them.
-- **Street upgrades:** Pave Main Street, Streetlamp Row (8 lamps) and Install Traffic Lights (2
-  signals).
-- **Smoke:** Boomtown chimneys (12 plumes at full build today), and Village's new numbers
-  (0 / 2 / 2 / 9 / 16 by tier).
-- **The usual passes:** two players in Local Server, far plots, City detail off and on, the phone
-  at 375×667, low graphics, a missing template, the other eras unchanged, a clean Output, and the
-  instance counts.
-- **Known before testing:** a far tier-0 Boomtown plot draws only 45 of its 85 fields, so its
-  hub-side fields look bare. This waits for Ben's step-37 numbers.
+What you should see if you buy in order and level nothing. Levelling moves `GrowthTier` up
+sooner, so your numbers can differ a little:
+
+| After purchase | `GrowthTier` | Houses | Sites | Lanes | New on screen |
+|---|---|---|---|---|---|
+| 3 Diner | 1 | 0 | 6 | 0 | the first building sites |
+| 4 Gas Station | 1 | 4 | 2 | 0 | the first houses; 1 parked car |
+| 6 Pave Main Street | 1 | 7 | 0 | 0 | streets turn from gravel to asphalt |
+| 7 Barber Shop | 1 | 11 | 5 | 1 | **the first lane** |
+| 8 Install Fire Hydrants | 2 | 13 | 3 | 1 | 8 hydrants; walkers; 3 smoke plumes |
+| 9 Grocery Store | 2 | 21 | 4 | 2 | the second lane |
+| 13 Cinema | 2 | 37 | 12 | 5 | three more lanes |
+| 15 Auto Repair Shop | 2 | 38 | 22 | 7 | two lanes from one point |
+| 16 Bowling Alley | 2 | 42 | 27 | 8 | the last lane |
+| 17 Open the Bus Line | 2 | 42 | 27 | 8 | 4 bus shelters; buses |
+| 20 Put Up Billboards | 3 | 61 | 13 | 8 | 11 billboards (12 after purchase 21) |
+| 23 Light the Neon District | 3 | 67 | 8 | 8 | 22 neon signs, 3 arches |
+| 24 Clock Tower | 3 | 68 | 7 | 8 | 7 smoke plumes |
+| Levelled to `GrowthTier` 5 | 5 | **75** | 0 | 8 | 14 parked cars, 21 hydrants |
+
+### Setup
+
+- [ ] 1. Open `C:\Users\benja\Desktop\tycoon-m12\build\boomtown.rbxl` with File (*Archivo*) → Open
+      (*Abrir*). **Never publish this file.**
+- [ ] 2. Set up the cash lever:
+      - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
+      - name `GrantCash`, type **number**, value `10000000000000` (10T).
+      It pays out about 1 s after Play, then resets to 0. To add more during Play: on the Test
+      (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
+      **Client**.
+      `DebugStartEra` is already in that Attributes list, set to 2. Leave it.
+- [ ] 3. Only needed for step 31: in the same place, add `GrantLegacy`, type **number**, value
+      `3000`.
+- [ ] 4. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
+- [ ] 5. **Play** (*Jugar*). Check both:
+      - Output shows this **yellow** line (with your name):
+        `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
+      - you stand at a Boomtown plot: crop fields, and one pad, the **Newsstand**, which is free.
+      Stop and tell Claude if:
+      - Output says `DebugStartEra lever skipped ... already has progress`: this session is on a
+        real save. Stop (*Detener*) and close the file without saving;
+      - there is no such line and you are in Village: you opened `test.rbxl`.
+- [ ] 6. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Automatic**
+      (*Automático*). Then check your plot: Workspace → Plots → `Plot_<n>` → Attributes. `EraName`
+      is Boomtown and `GrowthTier` is 0.
+
+### 1. To the first lane (purchases 1–7)
+
+- [ ] 7. Buy purchases **1 to 5** (Newsstand … Motel). On the way:
+      - nothing but landmarks after purchases 1 and 2;
+      - about **6 building sites** after the Diner (3);
+      - the **first houses** rise after the Gas Station (4), and **one parked car** appears.
+- [ ] 8. Buy **Pave Main Street** (purchase 6). Its pad gets a sign and dirt, but no stakes.
+      - Every street turns from gravel to **asphalt in the same instant**.
+      - No scaffold and no building.
+      Bug: one street piece stays gravel.
+- [ ] 9. Turn the camera to the street the Barber Shop's pad stands on, and look at the ground on
+      the entrance side of it. Buy the **Barber Shop** (purchase 7) and watch:
+      - a **lane** (a small road, 3 studs wide) runs out from the street into the block, in about
+        half a second, with dust at its tip;
+      - it arrives **whole**: about 39 studs long, with one bend;
+      - **building sites** stand along it;
+      - 10–30 s later the lots nearest the street become houses. The far end stays building
+        sites for now.
+      Bug: houses along bare ground with no lane; a lane with nothing on it after a minute.
+      **Question for you:** is "the whole lane at once" fine, or should the road creep in as its
+      houses come?
+
+### 2. The lane's surface (the most likely thing to be wrong)
+
+- [ ] 10. Look **straight down** at the lane's **bend**, and then at its **round end**. Zoom in.
+      - Good: the road's pattern runs on unbroken through the bend and to the end.
+      - Bad: a round patch at the bend or the end where the pattern is turned or shifted.
+- [ ] 11. Look at the lane's **mouth**, where it leaves the street.
+      - Good: the street covers the mouth; the lane is the **same shade** as the street.
+      - Bad: a dark kerb line across the mouth; a lane lighter or darker than the street.
+- [ ] 12. Zoom **far out** and move the camera slowly.
+      - Good: the lane's dark kerbs sit still.
+      - Bad: the kerbs flicker against the ground; a shimmer at the bend.
+- [ ] 13. Buy **Install Fire Hydrants** (8), then turn to the Grocery Store's pad and buy the
+      **Grocery Store** (9). A second lane grows. Watch its **round tip** while it moves:
+      - Good: the pattern under the tip stays still on the ground.
+      - Bad: the pattern slides along with the tip.
+- [ ] 14. The two lanes **meet end to end** near the front corner of the plot. Look straight down
+      at the spot.
+      - Good: one unbroken surface.
+      - Bad: a square or a round patch where they meet.
+- [ ] 15. Keep buying. After the **Cinema** (13) there are 5 lanes, after the **Auto Repair Shop**
+      (15) 7, after the **Bowling Alley** (16) all **8**. Check after the Auto Repair Shop:
+      - two lanes leave the **same point** of one street, one to each side;
+      - Good: no dark kerb line across either mouth, and no darker patch between them.
+- [ ] 16. Walk every lane once. Each house on a lane **faces the lane**.
+      Bug: a house on the lane's surface; a field or a fence on a lane; a lane running into a
+      landmark, a pad or the plot edge.
+
+### 3. Smoke
+
+- [ ] 17. From `GrowthTier` 2 (purchase 8 if you level nothing), look at the roofs:
+      - about **3 plumes** at first, **7** by the end;
+      - each plume starts **at a chimney top**: on the shops with a stack, on small homes, and
+        on one workshop;
+      - a plume starts right after its house has finished rising.
+      Bug: smoke beside or above a roof instead of on the chimney; smoke on a building site; many
+      more than 7 plumes.
+
+### 4. The city-changers (purchases 8, 17, 20, 23)
+
+Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. Buying it shows
+**no scaffold and no building**. Its layer spreads across the town as a quick wave from the pad.
+
+- [ ] 18. **Install Fire Hydrants** (8): about **8 red hydrants** along the drawn streets. More
+      come as streets grow: 21 at full build.
+      Bug: a hydrant on the road, in a lane mouth or inside a house.
+- [ ] 19. **Open the Bus Line** (17): **4 bus shelters** on two streets, and **buses** among the
+      cars.
+- [ ] 20. **Put Up Billboards** (20): about **11 billboards**: by the roads, at street ends, and
+      large ones behind shop rows. 12 after the Radio Station (21).
+- [ ] 21. **Light the Neon District** (23): a neon sign at the front of each of the **22 shops**,
+      and **3 neon arches** over the shop streets.
+- [ ] 22. **Parked cars** are not a purchase of their own. The first comes with the Gas Station
+      (4); there are 14 at full build, in kerb bays and beside homes.
+      Bug: a parked car on the road, on a lane or in a house.
+- [ ] 23. The two other street purchases: **Install Traffic Lights** (12) gives **2 signals**, one
+      at each crossroads. **Streetlamp Row** (14) gives **8 lamps**.
+
+### 5. Neon arches
+
+- [ ] 24. Stand under each of the 3 arches and watch the traffic for a minute:
+      - buses and cars pass **under** the span with room to spare;
+      - the posts stand clear of the walkers' line.
+      Bug: a bus clipping the span; a walker walking through a post.
+
+### 6. Which way things face
+
+- [ ] 25. Check each:
+      - **bus shelters** open toward the street;
+      - **billboards** face a road;
+      - **neon signs** stand at the shop fronts, not behind the shops;
+      - **buses and cars** drive nose first;
+      - the **"lot for sale" sign** stands beside the next pad, not on it;
+      - every **landmark** faces its street.
+      Bug: anything turned backwards or sideways. Say which one.
+
+### 7. Traffic and driveways
+
+- [ ] 26. After Open the Bus Line: there is **at least one bus**, and about 1 vehicle in 7 is a
+      bus.
+- [ ] 27. Follow one bus for a minute.
+      Bug: a bus riding **inside** the car ahead (overlapping it for more than a moment).
+- [ ] 28. **Driveways** (the path from a street to a landmark) are **3 studs** wide, half the
+      street. Look where one meets the street:
+      - Good: a clean join, same shade, no kerb line across it.
+- [ ] 29. Watch a junction with a driveway for a minute: **no car turns into a driveway**.
+- [ ] 30. Walkers stroll beside the streets and beside the driveways, never through a landmark.
+- [ ] 31. **Buses stay buses.** Count the buses you can see. Open the **Legacy** panel (bottom
+      bar) and buy any one perk (this needs step 3). Every building re-appears at once, silently.
+      Count again.
+      Bug: the buses turned into cars, or flicked to cars and back.
+
+### 8. Farmland
+
+- [ ] 32. Around the town:
+      - crop fields in a patchwork, with hay bales, trees and telegraph poles;
+      - some fields are **pasture**: a fenced paddock with **cows**;
+      - past the plot's edge: a **barn with a silo**, and **wind pumps**.
+      Bug: a field floating or sunk past the edge; cows on a road.
+- [ ] 33. **Fields recede.** Each new street, lane and house clears the field under it, quarter by
+      quarter. A cleared field never comes back.
+      Bug: a crop row across a road, a lane or a house.
+
+### 9. The construction ripple
+
+- [ ] 34. On any later purchase of a building, watch the pad:
+      - before: the **"lot for sale" sign**, four **stakes with string**, and a dirt pad;
+      - on buying: a **scaffold** stands around the new building for about 1.5 s, then goes with
+        dust;
+      - **building sites** ripple out, about 0.4 s apart;
+      - each site becomes a house **10–30 s** later, each at its own time.
+      Bug: the scaffold stays; a house with no site first; all houses in the same instant.
+- [ ] 35. Buy all 24 first (`GrowthTier` 3 or more). Then level the **Diner** to **50** (×10):
+      - its model changes at 10, 25 and 50;
+      - at 50, about **6 shops** near it gain their top storey, one after another, with a pop.
+      Levelling most other landmarks changes no house. That is correct: only the tall top storeys
+      wait for their landmark.
+
+### 10. Full build
+
+- [ ] 36. Level until `GrowthTier` is **5** (Max on the first five landmarks is the cheapest
+      way). Expect:
+      - **75 houses** and no sites (the first render you saw had 102; the lanes cost 27 lots);
+      - 22 terraced shops on the shop streets, the rest homes and workshops;
+      - 8 lanes, 14 parked cars, 21 hydrants, 4 shelters, 12 billboards, 25 neon pieces;
+      - a **green** at the foot of the Clock Tower (from `GrowthTier` 4).
+- [ ] 37. Compare with `m12d_full.png` and `m12d_full_entrance.png`: the same streets, lanes and
+      rows. Heights can differ: the render shows every landmark at its last look.
+
+### 11. City detail, away and back
+
+- [ ] 38. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
+      - **all smoke is gone**;
+      - each layer drops to about **half** (hydrants 21 → 10, neon 25 → 12, billboards 12 → 6,
+        parked cars 14 → 7, shelters 4 → 2), and the fields to about half;
+      - the houses and the lanes **stay**; nothing flickers or rebuilds.
+- [ ] 39. Turn it **ON**: the **same** items come back in the **same** spots.
+- [ ] 40. Fly more than 290 studs away. On that plot: no lanes, no layers, no smoke, fewer houses
+      (about 60), whole fields only. Fly back: everything returns in the same spots within about
+      1 s, with no scaffold and no rising houses.
+      Bug: a freeze of half a second or more on the way back.
+
+### 12. Phone, low graphics, two players
+
+- [ ] 41. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Buy
+      through the Grocery Store (purchase 9):
+      - the lanes do **not** shimmer or flicker when you zoom out (step 12 again);
+      - smoke still shows (phones keep it);
+      - the sign and stakes read well at phone size;
+      - the frame rate looks fine, and the Build panel is unchanged.
+- [ ] 42. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
+      quality **1–3**. Stop (*Detener*), then Play. Buy through the Grocery Store:
+      - **no smoke**, no dust puffs, no birds;
+      - lanes, sites, houses and hydrants still appear.
+      Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
+      skip this step and say so.
+- [ ] 43. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). Both players start in Boomtown. Set `GrantCash` in the **Server**
+      window; it pays both.
+- [ ] 44. Player 1 buys through the Grocery Store (9). Player 2 stands by Player 1's plot:
+      - the **same lanes, houses, sites, hydrants and parked cars** in the same spots;
+      - start times may differ by a moment; moving cars and walkers differ. That is fine.
+- [ ] 45. Player 2's own plot is still untouched farmland. Player 1 flies more than 290 studs
+      away from it and looks back: **only part of its fields show** (45 of 85), and the ones
+      nearest the hub are bare. That is **known**; it waits on your numbers (step 58).
+- [ ] 46. **Output** (*Salida*) through the whole run: no red errors and no yellow warnings from
+      CityDressing, Fabric, RoadGraph, PathRenderer, Traffic or Ambient. The one yellow
+      `DebugStartEra` line from step 5 is expected. Studio's own warnings are fine.
+
+### 13. Missing pieces
+
+- [ ] 47. In Edit mode, rename `ReplicatedStorage/Assets/Props/Boomtown/Hydrant` to `Hydrant_bak`.
+      Play and buy through Install Fire Hydrants (8):
+      - no hydrants; everything else normal;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+- [ ] 48. In Edit mode, rename `ReplicatedStorage/Shared/Config/Fabric/Boomtown` to `Boomtown_bak`.
+      Play and buy the first four:
+      - no fields, no houses, no lanes, no sign or stakes, grey pads;
+      - landmarks, streets, pads and buying all still work;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+
+### 14. Village (the normal build)
+
+- [ ] 49. Stop. Open `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`. Set `GrantCash` to
+      `1000000000` as in step 2. Play: a fresh **Village**.
+- [ ] 50. Buy purchases **1 to 7** (Campfire … Village Well): **no smoke** yet.
+- [ ] 51. Buy **Plant Flowers** (purchase 8). `GrowthTier` turns 2 and houses rise.
+- [ ] 52. **2 narrow houses smoke**, near the Campfire and the Farm Plot, right after they finish
+      rising.
+- [ ] 53. Walk up to both:
+      - the narrow house has a **chimney** now, even at its first look;
+      - the smoke starts **at the chimney top**.
+      Bug: smoke over a roof with no chimney; smoke on a building site.
+- [ ] 54. Buy all 24 without levelling (`GrowthTier` 3): about **13 plumes**, all on narrow
+      terraced houses. Level to `GrowthTier` 5: **16**.
+- [ ] 55. Level the **Village Well** to 50: the count of plumes does **not** change. (The Well no
+      longer decides the smoke.)
+- [ ] 56. Compare the narrow homes with
+      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
+- [ ] 57. Parked carts: as in "M12 wave 2.0 — Village smoke and carts" (8 at `GrowthTier` 5).
+      Everything else in Village is as before; there is no need to re-run its checklist.
+
+### 15. Measure (report the numbers)
+
+- [ ] 58. **Village**, if you have not sent them yet: step 37 of "M12 — Village growing city" (the
+      two counts and the frame time, on a full Village with neighbours).
+- [ ] 59. **Boomtown**, the same:
+      1. Open `build/boomtown.rbxl`. Start a Local Server with **3 players** (or 2 if 3 is too
+         slow) and build every plot to a full Boomtown.
+      2. In one **player** window (not the Server window), stand where all the plots are near
+         (within 250 studs).
+      3. View (*Vista*) → **Command Bar** (*Barra de comandos*), and run:
+         ```
+         print(#workspace.CityDressing:GetDescendants())
+         print(#workspace.CityDressing:FindFirstChild("Plot1"):GetDescendants())
+         ```
+         Replace `Plot1` with your plot's folder, `Plot<n>` (no underscore).
+      4. Press **Ctrl+F6** (MicroProfiler) and read the frame time in ms over several frames.
+      Report both counts, the frame time and how many plots were built.
+
+### Not a bug (don't report these)
+
+- **75 houses, not 102.** The lanes took the room; you approved this on the render.
+- **Each lane arrives whole** in one purchase. Known; step 9 asks whether you want it to creep.
+- **Lanes are always asphalt.** The first lane comes with the Barber Shop (7), which needs Pave
+  Main Street (6) first. No lane is ever seen on gravel.
+- On the **one diagonal lane piece** (front of the plot, after the Cinema), the road pattern is
+  turned. Only that piece.
+- **Few houses smoke** (7 at full build): only about one lot in seven can, by design.
+- **No small parks on the lots.** The civic lot props never appear yet. This is open with the
+  lead. The green at the Clock Tower's foot is separate and does appear.
+- **Fewer lamps and signals than before**: 8 lamps and 2 signals. The new plan has two crossroads.
+- **Far plots** show no lanes, no layers, about 60 houses, and only part of the fields. The field
+  part is known and waits on your numbers.
+- Buses in the render are not the same cars as in the game. Only the share is the same.
+- You walk through houses, hydrants, shelters, billboards and neon (the no-collision rule).
+- Construction times, and the positions of walkers and moving cars, differ between two players.
+- Village's two camp fire pits no longer smoke. Only the narrow houses do.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- **The lane surface** (steps 10–15): good or bad, and where.
+- **How a lane arrives** (step 9): whole at once, or should the road creep in?
+- **Density:** are 75 houses enough? Two pockets could be opened by moving landmarks (a second
+  harvest paste).
+- Anything facing the wrong way (step 25).
+- The numbers from steps 58 and 59.
+- Does it feel like a growing town?
+
+### Sign-off
+
+- [ ] 60. All boxes ticked → tell Claude "M12 Boomtown signed off".

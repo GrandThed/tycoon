@@ -44,7 +44,8 @@
 			"$className": "Workspace",
 			"$ignoreUnknownInstances": true,
 			"$attributes": {
-				"DebugStartEra": 2
+				"DebugStartEra": 2,
+				"GrantCash": 100000000000000
 			}
 		},
 		"StarterPlayer": {

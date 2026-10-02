@@ -1557,11 +1557,11 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
 
 ## M12 — Growing city
 
-**Where things are (2026-10-01):**
+**Where things are (2026-10-02):**
 - **Wave 1 (Village): merged to `main` on 2026-10-01** (Ben: "the village looks amazing"). Its
   branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
 - **Wave 2 (Boomtown):** a **new** worktree at the same path, `C:\Users\benja\Desktop\tycoon-m12`,
-  on branch `m12-boomtown`. §5–§10 below are wave 2.
+  on branch `m12-boomtown`. §5–§11 below are wave 2.
 - Run every wave 2 command **from `C:\Users\benja\Desktop\tycoon-m12`**, never from
   `C:\Users\benja\Desktop\tycoon`.
 - `assets/` in the worktree is a junction to the main checkout's `assets/`.
@@ -1571,22 +1571,20 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
   - `C:\Users\benja\Desktop\tycoon-m12-grid` (branch `m12-boomtown-grid`, commit `452059d`): not
     chosen.
 
-**Where wave 2 stands (2026-10-01):** the new Boomtown is built, reviewed and QA green, and
-**nothing is uploaded yet**. Ben looks at renders and prop strips (§9). After his approval comes
-the asset run (§10), where Ben does **one paste**.
+**Where wave 2 stands (2026-10-02): built, uploaded and harvested. It waits for Ben's Studio
+playtest.**
+- The asset run (§10) is **done**: Ben's one paste was on 2026-10-02.
+- From commit `4e4253f` the Boomtown and Village models, roads and data all match. **Boomtown and
+  the Village smoke can be judged in Studio now.**
+- Ben's next step is §11: open `build/boomtown.rbxl` and run the playtest.
+- The branch does not merge to `main` until Ben signs off.
 
-**UNTIL THE HARVEST (§10 step 40): DO NOT JUDGE BOOMTOWN, OR VILLAGE'S SMOKE, IN STUDIO ON
-`m12-boomtown`.**
-- **Boomtown** has no models for its new town yet. A Boomtown plot shows landmarks, parked cars
-  and plain block roads only. No fields, houses, shops, hydrants, billboards, neon, bus shelters
-  or buses. That is expected.
-- **Boomtown's roads** are waiting for the re-bake. `py tools/paths/bake.py --era Boomtown --list`
-  exits with code 2 ("stale") on this branch. That is expected.
-- **Village's smoke** is ahead of the uploaded models. Early plumes rise over narrow-house roofs
-  that have no chimney yet. That is expected, and it is fixed by the harvest.
-- **Village's parked carts, and the rest of Village, are fine.**
-- The branch does not merge to `main` until the upload, the harvest and Ben's sign-off. The
-  Village fix can go to `main` on its own if Ben wants it sooner: ask Claude.
+**NEVER PUBLISH `build/boomtown.rbxl`.** It is for local Studio use only.
+- It carries the switch `DebugStartEra` = 2, which starts a **fresh** save in Boomtown.
+- Opened from the disk it is harmless: every Play is a throwaway save.
+- On a published place, with API access on, the switch would move a fresh **real** save to era 2.
+- So: open it with File (*Archivo*) → Open (*Abrir*) only. Never use Publish to Roblox (*Publicar
+  en Roblox*) or Save to Roblox (*Guardar en Roblox*) from it.
 
 **Nothing on the Creator Hub:** no passes, products or audio. There is no profile change, so
 nothing needs republishing.
@@ -1681,21 +1679,22 @@ new check.
 - [ ] 17. Ben: when you are not testing wave 2, build and `rojo serve` from
       `C:\Users\benja\Desktop\tycoon` as usual. `main` has the Village town now.
 
-### 5. M12 wave 2 — what is owed (2026-10-01)
+### 5. M12 wave 2 — what is owed (2026-10-02)
 
 - **Creator Hub: nothing.** No passes, products or audio.
+- **Assets: nothing.** Everything is uploaded, harvested and templated (§10).
 - **From Ben now:**
-  1. look at the renders and the prop strips, and approve them or say what to change (§9);
-  2. the numbers from PLAYTEST "M12 — Village growing city" step 37 (§3 step 15).
-- **From Ben later: one harvest paste** (§10 step 40). Claude says when.
-- **Assets: nothing is uploaded yet.** 46 Boomtown props and 3 changed Village homes exist as
-  blueprints only. The uploads are the lead's steps in §10.
+  1. the Boomtown Studio playtest (§11, then `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing
+     city");
+  2. the numbers: step 37 of PLAYTEST "M12 — Village growing city" (§3 step 15), and the same on
+     Boomtown (step 59 of the Boomtown section).
+- **From the lead now: nothing.** The lane-texture fix is in (`e109635`, 2026-10-02), and both
+  place files were rebuilt with it.
 
-### 6. M12 wave 2 — open the build (only for the Village carts, until the harvest)
+### 6. M12 wave 2 — open the normal build (`test.rbxl`, Village)
 
-**Until the harvest there is nothing new to see in Studio** beyond the Village parked carts that
-wave 2.0 described. The new Boomtown and the Village smoke both wait for §10. You can skip §6 and
-§7 until then.
+This is the normal build: it starts in Village. Use it for the Village carts and the Village
+smoke. **For Boomtown use §11 instead.** §11 step 45 already rebuilds this file too.
 
 Pick **one** of the two options. Option A gives a fresh Village save on every Play and touches no
 real save.
@@ -1738,12 +1737,11 @@ real save.
       No Command Bar? Explorer (*Explorador*) → `ReplicatedStorage/Shared/Config/CityDressing` →
       double-click → Ctrl+F → `plumes`. Found = the wave 2 build.
 
-### 7. M12 wave 2 — run the playtest
+### 7. M12 wave 2 — run the Village checks
 
-- [ ] 24. Run `docs/PLAYTEST.md` "M12 wave 2.0 — Village smoke and carts", **cart steps only**
-      (steps 1–8). The smoke steps wait for the harvest: read the note at the top of that section.
-      **Village only. Do not Advance Era to look at Boomtown** (see the warning at the top of this
-      section).
+- [ ] 24. On `build/test.rbxl`, run in `docs/PLAYTEST.md`:
+      - "M12 wave 2.0 — Village smoke and carts" (the parked carts);
+      - steps 49–57 of "M12 wave 2 — Boomtown growing city" (the Village smoke).
 
 ### 8. M12 wave 2 — the first Boomtown gate, grid or organic (**DONE 2026-10-01**)
 
@@ -1795,10 +1793,23 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
   - no green by the Clock Tower;
   - shop side walls are blank.
 
-### 9. M12 wave 2 — the second Boomtown gate (renders and strips only, no Studio)
+### 9. M12 wave 2 — the second Boomtown gate (**DONE 2026-10-01**; then the back lanes)
 
-**What you are approving:** the final Boomtown layout, and the final look of every new prop,
-before anything is uploaded.
+**Ben's answer (2026-10-01):** "it seems good ... i love everything else", with one request:
+the houses were not connected to any road.
+
+**What followed (wave 2.4, back lanes):**
+- 8 lanes, 330 studs in all. Every back house now stands on a lane.
+- Boomtown went from 102 lots to **75**: 22 terraced shops, 50 small homes, 3 medium.
+- Ben saw the new renders and said "the houses look fantastic!".
+- Today's counts at full build: 14 parked cars, 21 hydrants, 4 bus shelters (on two streets), 12
+  billboards (4 large), 25 neon pieces (22 signs, 3 arches).
+- Lane renders, in the same folder as below: `m12d_compare.png`, `m12d_tier1.png`,
+  `m12d_tier3.png`, `m12d_full.png`, `m12d_full_entrance.png`, `m12d_block.png`,
+  `m12d_streetplan.png`.
+
+The rest of this section is the record of the second gate. **Its numbers are the ones shown
+then (102 lots), not today's.**
 
 What changed since the first gate:
 - The bolder organic plan: Main Street leans 16° up to the Clock Tower, landmarks face their
@@ -1819,22 +1830,22 @@ What changed since the first gate:
 
 Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
 
-- [ ] 30. Open **`m12c_compare.png`**: today's Boomtown against the new layout, at tier 1, tier 3
+- [x] 30. Open **`m12c_compare.png`**: today's Boomtown against the new layout, at tier 1, tier 3
       and full.
-- [ ] 31. Look closer: `m12c_tier1.png`, `m12c_tier3.png`, `m12c_full.png`,
+- [x] 31. Look closer: `m12c_tier1.png`, `m12c_tier3.png`, `m12c_full.png`,
       `m12c_full_entrance.png`, `m12c_streetplan.png`.
-- [ ] 32. The four city-changers: `m12c_changers_before.png`, then `m12c_changers_after.png`.
-- [ ] 33. The props, one strip each, in the subfolder **`strips\`** (46 strips, named
+- [x] 32. The four city-changers: `m12c_changers_before.png`, then `m12c_changers_after.png`.
+- [x] 33. The props, one strip each, in the subfolder **`strips\`** (46 strips, named
       `<Prop>_strip.png`), plus `strips\street_context.png`.
-- [ ] 34. The props in context (back in the `Boomtown\` folder): `construction_context.png`,
+- [x] 34. The props in context (back in the `Boomtown\` folder): `construction_context.png`,
       `construction_suburb_context.png`, `construction_scale_check.png`, `farmland_context.png`,
       `farmland_civic_context.png`.
-- [ ] 35. The Village narrow homes with their new chimneys:
+- [x] 35. The Village narrow homes with their new chimneys:
       `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
-- [ ] 36. Tell Claude:
+- [x] 36. Tell Claude:
       1. the layout: approved, or what to change;
       2. the props: approved, or which props to redo (use the strip's file name);
-      3. the step-37 numbers, if you have them (§3 step 15).
+      3. the step-37 numbers, if you have them (§3 step 15). **Still owed.**
 
 **Reading the renders:**
 - A row of pale spheres above a house marks a chimney plume. It is a marker, not the real smoke.
@@ -1842,9 +1853,10 @@ Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\test
 - The full-build renders show every landmark at its last stage. In the game, houses near a lower
   landmark stay lower.
 
-### 10. M12 wave 2 — the asset run (after Ben approves §9; **Ben's only step is 40**)
+### 10. M12 wave 2 — the asset run (**DONE 2026-10-02**; kept as the routine)
 
-Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need Git Bash.
+Everything ran from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need Git Bash. The
+other two Claude sessions acknowledged before the uploads and were told when they finished.
 
 **Rules for the lead:**
 - Never run an upload or a harvest while another session uploads or harvests.
@@ -1853,7 +1865,7 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
 - Commit `src/shared/Config/Assets.json` right after each upload.
 - A non-zero `modelAssetId` is never re-uploaded. A changed model must be cleared first (step 39).
 
-- [ ] 37. **Lead: regenerate the three kits.**
+- [x] 37. **Lead: regenerate the three kits** (done before the uploads).
       1. Delete any cached palette for them in `assets/build/palettes/`: `farmland-kit.*`,
          `boomtown-extras-kit.*`, `boomtown-street-kit.*`. None exists as of 2026-10-01; check
          again on the day.
@@ -1864,7 +1876,8 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
          "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/boomtown_street_kit.py
          ```
       Each writes `assets/kenney3d/<kit>/Models/GLB format/`.
-- [ ] 38. **Lead: Boomtown path re-bake and upload** (38 pieces, 76 meshes):
+- [x] 38. **Lead: Boomtown path re-bake and upload** (38 pieces, 76 meshes; done 2026-10-01,
+      commit `98df960`):
       ```
       py tools/paths/bake.py --era Boomtown --list
       py tools/paths/bake.py --era Boomtown
@@ -1872,7 +1885,8 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
       ```
       The `--list` line must exit **2** before the bake (client and bake agree; meshes stale).
       Exit 1 means client and bake disagree: stop and fix the mirror. Commit `Assets.json`.
-- [ ] 39. **Lead: props merge and upload** (71 Boomtown stages, 9 Village stages).
+- [x] 39. **Lead: props merge and upload** (71 Boomtown stages, 9 Village stages; done
+      2026-10-02, commit `e823eab`).
       1. Clear `modelAssetId` and `parts` of the Village props `FabricHomeNarrowA`,
          `FabricHomeNarrowB` and `FabricHomeNarrowC` (3 stages each) through
          `assets_config.save_assets`. Never hand-edit `Assets.json`.
@@ -1887,7 +1901,8 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
          py tools/assets/upload_models.py --props --era Village
          ```
       An "Unknown Error" from Open Cloud is normal now and then: run the same line again.
-- [ ] 40. **Ben: the one harvest paste** (props and paths together). Studio in **Edit mode**:
+- [x] 40. **Ben: the one harvest paste** (props and paths together; done 2026-10-02, 156
+      assets). Studio in **Edit mode**:
       1. Claude runs this, which puts the script on your clipboard:
          `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
       2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
@@ -1895,7 +1910,12 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
       3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
       4. Tell Claude "done". Do not copy anything else before Claude answers: your clipboard
          holds the result.
-- [ ] 41. **Lead: harvest, templates, fabric data, gates, manifest.**
+      **For the next harvest:** if you paste the Output into the chat instead, that is fine. The
+      chat cuts it short, but your clipboard still holds all of it, and the lead reads the
+      clipboard anyway (`py tools/assets/harvest.py --props`). That is what happened on 2026-10-02.
+- [x] 41. **Lead: harvest, templates, fabric data, gates, manifest** (done 2026-10-02: harvest
+      `82b5d53`, 80 prop stages and 76 path meshes; templates, data, manifest and builds
+      `4e4253f`).
       ```
       py tools/assets/harvest.py --props
       py tools/assets/gen_templates.py --props
@@ -1915,12 +1935,45 @@ Everything runs from `C:\Users\benja\Desktop\tycoon-m12`. The Blender lines need
       py tools/gen_asset_manifest.py --check
       ```
       - `fabric.py build Boomtown` is needed because the harvested sizes replace the plan's
-        `footprints`. Lot and layer counts can move; update PLAN and PLAYTEST if they do.
-      - Both `--list` lines must now exit 0.
-      - Then stylua, selene, luau-lsp and `rojo build -o build/test.rbxl`.
-- [ ] 42. **Lead:** review, QA, the Boomtown PLAYTEST section. Then **Ben: the Boomtown Studio
-      playtest**, and the smoke steps of "M12 wave 2.0 — Village smoke and carts" with their new
-      numbers.
+        `footprints`. Lot and layer counts can move; this time they did not (still 75 lots).
+      - Both `--list` lines must now exit 0. They do.
+      - Then stylua, selene, luau-lsp and the place builds (`build/test.rbxl`,
+        `build/boomtown.rbxl`).
+      - Result: templates for 49 props and 38 Boomtown path pieces; 8 retired path templates
+        removed.
+- [ ] 42. **Ben: the Boomtown Studio playtest** (§11). Review, QA, the lane-texture fix
+      (`e109635`) and the PLAYTEST section are done.
 - [ ] 43. **Lead:** merge `m12-boomtown` into `main` after Ben's sign-off.
 - 44. **If a record goes missing later:** re-run step 40 and the first line of step 41 only. Do
       **not** re-run the uploaders.
+
+### 11. M12 wave 2 — build and open the Boomtown file, then playtest
+
+`build/boomtown.rbxl` is the same game as `build/test.rbxl`, with one switch baked in: a fresh
+save starts in **Boomtown**. No need to buy out Village first.
+
+**NEVER PUBLISH THIS FILE.** Open it from the disk only (see the warning at the top of this
+section).
+
+- [ ] 45. **Rebuild both files**, in PowerShell. The files in the folder already carry the
+      lane-texture fix (`e109635`), so this is only to be safe. It is harmless to repeat:
+      ```
+      cd C:\Users\benja\Desktop\tycoon-m12
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build boomtown.project.json -o build/boomtown.rbxl
+      rojo build -o build/test.rbxl
+      ```
+- [ ] 46. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon-m12\build\boomtown.rbxl`.
+- [ ] 47. Press **Play** (*Jugar*). Check the right build:
+      - View (*Vista*) → **Output** (*Salida*) shows this **yellow** line:
+        `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
+      - you stand at a fresh Boomtown plot with one free pad, the Newsstand.
+      If Output says `DebugStartEra lever skipped ... already has progress`, the session is on a
+      real save: Stop (*Detener*), close the file **without saving**, and tell Claude.
+- [ ] 48. Run `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city". Its Village part (steps
+      49–57) uses `build/test.rbxl`.
+- [ ] 49. Send Claude the numbers from steps 58 and 59 of that section.
+- When you close `boomtown.rbxl`, Studio may ask to save. Saving to the same file on the disk is
+  fine (it keeps your `GrantCash` attribute). Rebuilding (step 45) overwrites the file, so add the
+  attribute again after a rebuild.

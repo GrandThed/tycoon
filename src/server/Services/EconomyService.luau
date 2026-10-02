@@ -616,7 +616,6 @@ local function consumeGrantCashLever(): ()
 	if typeof(value) ~= "number" or value <= 0 or value ~= value or value == math.huge then
 		return
 	end
-	workspace:SetAttribute(GRANT_CASH_ATTRIBUTE, 0)
 	local granted = 0
 	for _, player in Players:GetPlayers() do
 		local state = DataService.GetState(player)
@@ -628,6 +627,12 @@ local function consumeGrantCashLever(): ()
 		EconomyService.MarkDirty(player, { cash = true })
 		granted += 1
 	end
+	-- A place file can carry the lever baked in (build/boomtown.rbxl), and the first tick may come
+	-- before anyone's profile has loaded: keep the value until someone is there to receive it.
+	if granted == 0 then
+		return
+	end
+	workspace:SetAttribute(GRANT_CASH_ATTRIBUTE, 0)
 	warn(
 		`[EconomyService] {GRANT_CASH_ATTRIBUTE} lever: granted {value} cash to {granted}`
 			.. ` loaded player(s); attribute reset to 0`

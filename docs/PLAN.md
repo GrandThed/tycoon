@@ -64,9 +64,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   worktree `C:\Users\benja\Desktop\tycoon-m12`: wave 2.0 (Village chimney smoke and parked carts)
   built; wave 2.1 mock gate answered 2026-10-01 (**organic, bolder pass**; four more
   city-changer slots; 6-stud roads; chimneys on the narrow Village homes); waves 2.2 and 2.3
-  (layout, five city layers, buses, narrow driveways, 46 final props) built, reviewed and QA green,
-  **waiting at the second render gate for Ben's approval; nothing uploaded yet, so nothing new to
-  judge in Studio until the harvest**; Metropolis and Orbital come later — see "M12" below)
+  (layout, five city layers, buses, narrow driveways, 46 final props) and wave 2.4 (**back lanes**,
+  75 lots) built and reviewed; assets uploaded, **harvested 2026-10-02** and templated;
+  **awaiting Ben's Boomtown Studio playtest** on `build/boomtown.rbxl`; Metropolis and Orbital
+  come later — see "M12" below)
 
 ---
 
@@ -1997,10 +1998,10 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 - [x] lead: merged `m12-growing-city` into `main` (2026-10-01); branch and worktree removed
 - The step 37 numbers are still owed; the open box is under "Wave 2 — Boomtown" (box 5).
 
-### Wave 2 — Boomtown (2026-10-01, in progress)
+### Wave 2 — Boomtown (2026-10-01 → 2026-10-02; built and harvested, awaiting Ben's Studio playtest)
 
 **Where:**
-- Wave 2: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-boomtown` (HEAD `d119ad2`).
+- Wave 2: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-boomtown` (HEAD `e109635`).
   `assets/` there is a junction to the main checkout's `assets/`.
 - Layout candidate "organic" (**chosen**): worktree `C:\Users\benja\Desktop\tycoon-m12-organic`,
   branch `m12-boomtown-organic`. The first candidate (`0fd20be`) was merged in `20df3ed`; the
@@ -2010,21 +2011,17 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 - Layout candidate "grid" (not chosen): worktree `C:\Users\benja\Desktop\tycoon-m12-grid`, branch
   `m12-boomtown-grid`, commit `452059d`.
 - Contract: `docs/INTERFACES.md` "M12 wave 2 — Boomtown", with "Wave 2.2" and its two rulings
-  blocks.
+  blocks, and "Wave 2.4 — back lanes" with its rulings.
 
-**BRANCH CAVEAT. Nobody judges Boomtown or Village's new look in Studio on `m12-boomtown` until
-the harvest.**
-- **Boomtown:** its 46 fabric and layer props have no templates yet. A Boomtown plot shows
-  landmarks, parked cars and Parts roads only: no fields, houses, shops, hydrants, billboards,
-  neon, bus shelters or buses.
-- **Boomtown roads:** the uploaded path meshes are the old layout's. `py tools/paths/bake.py --era
-  Boomtown --list` exits 2 (client and bake agree; the meshes on disk are stale) until the re-bake.
-- **Village smoke:** from commit `d3d6427` the smoke config runs ahead of the uploaded models. The
-  early plumes rise over narrow-home roofs that have no chimney yet.
-- **Village carts and everything else in Village are unaffected** (`--era Village --list` exits 0).
-- The branch does not merge to `main` until the upload, the harvest and Ben's sign-off.
-- The Village fix can still go to `main` on its own if Ben wants it sooner, ported file by file
-  (INTERFACES, wave 2.0 "Review rulings").
+**Status (2026-10-02): built, uploaded, harvested. Awaiting Ben's Studio playtest.**
+- **The branch caveat is over.** From commit `4e4253f` the Boomtown and Village models, paths and
+  data all match. `py tools/paths/bake.py --list` exits 0 for both eras.
+- Boomtown is tested on `build/boomtown.rbxl` (a fresh save starts in era 2). **That file is for
+  local Studio use only and must never be published.**
+- Village's early plumes now sit on real chimneys.
+- The branch does not merge to `main` until Ben signs off.
+- The numbers in the wave 2.0, 2.1 and 2.2/2.3 blocks below are the record of each gate. **Today's
+  numbers are in the wave 2.4 block.**
 
 **Shipped to playtest (wave 2.0 — Village chimney smoke and parked carts, 2026-10-01):**
 - **Client-only.** No server, remote, profile or economy change. No new assets, no upload, no
@@ -2125,9 +2122,10 @@ What the mock was (kept as the record):
   - no civic green by the Clock Tower;
   - shop side walls are blank.
 
-**Built, waiting at the second render gate (waves 2.2 and 2.3, 2026-10-01, commits `20df3ed` …
-`d119ad2`).** Nothing is uploaded. Nothing new can be judged in Studio until the harvest (see the
-branch caveat).
+**Second render gate passed (waves 2.2 and 2.3, 2026-10-01, commits `20df3ed` … `d119ad2`).**
+Ben: "it seems good ... i love everything else", with one request: the houses were not connected
+to any road. That became wave 2.4. The lot, layer and plume numbers in this block are the ones
+shown at that gate (102 lots); wave 2.4 changed them.
 - **Client-only again.** No server, remote or profile change. The economy is unchanged:
   `sim_economy.py` total 16:20:04, legacy 887.
 - **Four more city-changer slots** (`Config/Eras/2_Boomtown.json`). All are `streetOnly`; cost,
@@ -2173,7 +2171,7 @@ branch caveat).
   - Plumes by tier: 0 / 2 / 2 / 9 / 16, all on narrow homes.
   - The two camp fire pits are no longer smoke candidates at `every` 7 (parcels 25 and 69).
     **lead:** confirm this is intended.
-- **Props (wave 2.3), not uploaded:**
+- **Props (wave 2.3; uploaded and harvested 2026-10-02):**
   - 46 Boomtown blueprints (71 stages) in `tools/testfit/blueprints/_props/Boomtown/`, plus the 3
     changed Village homes (9 stages);
   - generated kits: `farmland-kit`, `boomtown-extras-kit`, `boomtown-street-kit` (scripts in
@@ -2197,44 +2195,100 @@ text in INTERFACES "Review rulings").
 - Bus picks read the sticky owned set; the preloader loads only what an era can spawn.
 
 **QA (wave 2.2): all green.**
-- `py tools/paths/bake.py --era Boomtown --list` exits **2** (client and bake agree on 38 pieces;
-  the meshes on disk are stale) until the re-bake. `--era Village --list` exits 0.
+- At that gate `py tools/paths/bake.py --era Boomtown --list` exited **2** (client and bake agreed
+  on 38 pieces; the meshes on disk were stale). It exits 0 since the re-bake.
 - `py tools/cityfabric.py timeline` passes for Village and Boomtown; `py tools/gen_asset_manifest.py
   --check` passes.
 
+**Shipped to playtest (wave 2.4 — back lanes, the asset run and the start-era switch, 2026-10-01
+→ 2026-10-02, commits `241b36e` … `e109635`):**
+- **Client-only again**, apart from one Studio-only lever in `DataService` (below).
+- **Back lanes:** 8 lanes, 330 studs in all, each 3 studs wide. Every back lot fronts a lane, and
+  47 of the lots are lane lots.
+  - A lane leaves a street through a gap in the frontage. Two pairs of lanes meet end to end.
+  - It is drawn on the plot's live street surface, so it changes with the streets.
+  - **A lane arrives whole** in one purchase, then fills with houses from the street inward.
+    Accepted for the playtest; Ben is asked whether the road should creep in.
+- **75 lots** (was 102): 22 terraced shops, 50 small homes, 3 medium. Ben accepted this on the
+  render: "the houses look fantastic!".
+- **`pull` re-tuned** for the lane distances: radius 120, `tierTerm` 0.35, thresholds
+  [2.2, 3.4, 3.8, 4.3].
+- **Timeline** (`py tools/cityfabric.py timeline Boomtown`, the sim's player at the end of each
+  tier):
+
+  | Tier | Houses | Sites | Lanes | Plumes | Parked cars | Hydrants | Bus shelters | Billboards | Neon |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 1 | 4 | 2 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+  | 2 | 31 | 4 | 2 | 5 | 6 | 14 | 0 | 0 | 0 |
+  | 3 | 46 | 17 | 7 | 6 | 12 | 17 | 0 | 0 | 0 |
+  | 4 | 65 | 9 | 8 | 7 | 14 | 20 | 4 | 0 | 0 |
+  | full | 75 | 0 | 8 | 7 | 14 | 21 | 4 | 12 | 25 |
+
+  Bus shelters stand on two streets. 4 of the 12 billboards are large. Neon is 22 signs and 3
+  arches.
+- **For a player buying in Build panel order:** the first lane comes with the Barber Shop
+  (purchase 7), and all 8 are drawn by the Bowling Alley (purchase 16).
+- **Village plumes by tier:** 0 / 2 / 2 / 9 / 16, on real chimneys since the harvest.
+- **The asset run (done):**
+  - kits regenerated;
+  - 38 Boomtown path pieces re-baked and uploaded, 76 meshes (`98df960`, 2026-10-01);
+  - 71 Boomtown prop stages and 9 Village narrow-home stages uploaded (`e823eab`, 2026-10-02);
+  - **Ben's one harvest paste, 2026-10-02:** 156 assets (`82b5d53`);
+  - templates for 49 props and 38 path pieces (8 retired), fabric data rebuilt from harvested
+    extents (still 75 lots), manifest and place builds (`4e4253f`).
+- **Studio start-era switch** (`3cb4add`): Workspace attribute `DebugStartEra`, Studio only, fresh
+  saves only. A second place build bakes it in:
+  `rojo build boomtown.project.json -o build/boomtown.rbxl`. **Never publish that file.**
+- **Renders:** `assets/testfit/out/Boomtown/m12d_{tier1,tier3,full,full_entrance}.png`,
+  `m12d_block.png`, `m12d_compare.png`, `m12d_streetplan.png`.
+
+**Review (wave 2.4): 0 Critical, 2 Major, 8 Minor** (text in INTERFACES "Rulings after the wave 2.4
+reports and review").
+- **Major 1, fixed (`e109635`):** lane parts were turned, which broke the street texture's tiling
+  at bends and ends. Axis-aligned legs are now laid unturned, so they tile with the streets; only
+  the one diagonal leg carries a turned tiling. Both place files were rebuilt in that commit.
+- **Major 2, ruled:** the lot target. Ben accepted 75.
+- Minors applied: `fabric.lanes.rimHeight` 0.02 and `clear.lane` 2.0.
+- Minor open: the civic lot props never draw.
+- Minor accepted for the playtest: each lane arrives whole.
+
+**QA (2026-10-02): all gates green** (`4e4253f`). `bake.py --list` exits 0 for both eras;
+`cityfabric.py timeline` passes for both; `gen_asset_manifest.py --check` passes.
+
 **Known follow-ups (wave 2):**
-- **Ben → lead (open):** the step-37 numbers. The far-plot field budget depends on them: a far
-  tier-0 Boomtown plot draws 45 of its 85 fields (`budget.wildFar`), so its hub-side fields are
-  bare. The fix is a larger or per-era far budget.
-- **lead (harvest commit):** plan footprints give way to harvested extents, so rebuild
-  `Fabric/Boomtown.json` and re-run every gate.
+- **Ben (open):** the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing
+  city"; setup in `docs/MANUAL_STEPS.md` "M12" §11).
+- **Ben → lead (open):** the numbers: Village step 37, and the same on a full Boomtown (step 59
+  of the Boomtown section).
+- **lead (after Ben's numbers):** the far-plot field budget. A far tier-0 Boomtown plot draws 45
+  of its 85 fields (`budget.wildFar`), so its hub-side fields are bare.
+- **lead (open):** `FabricCivicSmall` and `FabricCivicMedium` never draw, because no lot's nearest
+  landmark is the Clock Tower or the Fire Station. Give those landmarks lots to govern, or retire
+  the props.
+- **lead (if Ben asks):** let a lane creep in with its houses (the reach would count lots at
+  level 2).
+- **lead (if Ben asks):** density. Moving landmarks could open two pockets (about 8 more lots; a
+  re-bake and a second harvest paste), or a narrower lane house (new props).
+- **lead (note from the docs pass):** no lane can be seen on gravel. The first lane needs the
+  Barber Shop (purchase 7), which requires Pave Main Street (purchase 6). The gravel lane surface
+  and "lanes turn to asphalt with the streets" cannot be checked in Studio.
+- **lead (confirm intended):** Village's two camp fire pits no longer smoke at `every` 7.
 - **lead:** Boomtown's `houses`, `trees`, `greenery` and `parked` config blocks and the
   `Boomtown/House*` smoke entries are unread now. Remove them when the old filler props are
   retired from `Assets.json`.
 - **lead (watch in Studio):** row lamps and tree keep-outs still measure a driveway at road width.
 - **lead (open since the wave 2.0 review):** a pad marker can stand on the freshly drawn path for
-  the pad's 0.5 s grace after a purchase. The wave 2.2 rulings do not mention it.
+  the pad's 0.5 s grace after a purchase.
 - **lead (housekeeping):** remove the `tycoon-m12-grid` and `tycoon-m12-organic` worktrees and
   their branches once nothing more is needed from them.
-- **docs-keeper (after the harvest):** the Boomtown PLAYTEST section, and new smoke numbers in
-  "M12 wave 2.0 — Village smoke and carts" (`every` 7).
-- **Done in wave 2.2:** parked cars as an upgrade layer; smoke through
-  `ambient.smoke.fabricProps`; `parcels.infill.frontReach` and `parcels.terraceFill` in the
-  generator; the narrow driveway; narrow-home chimneys with `every` 7.
 
-**Next (after Ben approves; the lead runs these, Ben does one paste; commands in
-`docs/MANUAL_STEPS.md` "M12" §10):**
-1. Regenerate the three kits.
-2. Re-bake and upload the Boomtown paths (38 pieces, 76 meshes).
-3. Merge and upload the props (71 Boomtown stages, 9 Village stages).
-4. **Ben: one harvest paste** (props and paths together).
-5. Harvest, templates, rebuild `Fabric/Boomtown.json`, every gate, manifest.
-6. Review, QA, the Boomtown PLAYTEST section, Ben's Studio playtest, then the merge to `main`.
-
-Later:
-- **Waves 3–4, Metropolis then Orbital:** a lattice layout study first, because every block holds
-  exactly one landmark today. Then the same routine.
-- The code is shared; each era adds data, config and models.
+**Next:**
+1. Ben's Boomtown Studio playtest, and his numbers.
+2. Fixes from the playtest.
+3. Merge `m12-boomtown` into `main` after Ben's sign-off.
+4. **Metropolis, then Orbital:** a lattice layout study first, because every block holds exactly
+   one landmark today. Then the same routine. The code is shared; each era adds data, config and
+   models.
 
 - [x] Wave 2.0 (Village smoke and carts) built, reviewed, QA green (2026-10-01)
 - [x] Wave 2.1 mock built: two candidates, gate renders ready (2026-10-01)
@@ -2245,14 +2299,17 @@ Later:
   (2026-10-01)
 - [x] Ben decided 4: Boomtown roads stay 6 studs wide (2026-10-01)
 - [ ] Ben → lead 5: the numbers from PLAYTEST M12 step 37 (instance counts and frame time on a
-  full Village with neighbours)
+  full Village with neighbours), and now the same on a full Boomtown
 - [x] Waves 2.2 and 2.3 built, reviewed, QA green (2026-10-01)
-- [ ] Ben: approve the layout renders (`m12c_*`)
-- [ ] Ben: approve the prop strips (`assets/testfit/out/Boomtown/strips/`)
-- [ ] Ben: Studio look at the Village carts (`docs/PLAYTEST.md` "M12 wave 2.0 — Village smoke and
-  carts", cart steps only; the smoke steps wait for the harvest)
-- [ ] lead: kits, path re-bake and upload, props merge and upload (steps 1–3)
-- [ ] Ben: the one harvest paste (step 4)
-- [ ] lead: harvest, templates, rebuilt fabric data, gates, manifest (step 5)
-- [ ] Review, QA, Boomtown PLAYTEST section, Ben's Studio playtest (step 6)
+- [x] Ben at the second gate (2026-10-01): layout and props approved, with the request for roads
+  to the houses
+- [x] Wave 2.4 (back lanes) built and reviewed; Ben approved the lane renders at 75 lots
+- [x] lead: kits, path re-bake and upload, props merge and upload (2026-10-01 → 2026-10-02)
+- [x] Ben: the one harvest paste (2026-10-02)
+- [x] lead: harvest, templates, rebuilt fabric data, gates, manifest (2026-10-02, `4e4253f`)
+- [x] lead → ui-engineer: the lane-texture fix, with both place files rebuilt (2026-10-02,
+  `e109635`)
+- [ ] Ben: the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city")
+- [ ] Ben: the Village carts and smoke on `build/test.rbxl` ("M12 wave 2.0 — Village smoke and
+  carts", and steps 49–57 of the Boomtown section)
 - [ ] lead: merge `m12-boomtown` into `main` after Ben's sign-off
