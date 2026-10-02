@@ -2103,10 +2103,11 @@ Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, h
 Checks run by qa-runner on 2026-10-02, all passing: stylua, selene (only the known
 `LegacyPanel.luau:200` warning), luau-lsp on both trees, both `rojo build`s, `sim_economy`,
 `sim_combat`, `sim_range`, `gen_asset_manifest --check`, `fabric.py check Village` and
-`cityfabric.py selftest`. **Not run:** `streetplan.py`, `bake.py --list` and
-`gen_templates.py --check`, because the Boomtown session was running the asset pipeline and those
-tools share its output folder; wave 1 touches no layout, template or asset. Run them before the
-merge.
+`cityfabric.py selftest`. `streetplan.py` (0 violations), `bake.py --era Village --list` and
+`gen_templates.py --check` were held back while the Boomtown session ran the asset pipeline and
+run by the lead once it finished, also on 2026-10-02: all green. (`streetplan.py` was given
+`--out-dir` to a scratch folder so it did not overwrite that session's pictures in
+`assets/testfit/out`.)
 
 **Known follow-ups:**
 - **lead:** tune the haze in `World.json` from Ben's two screenshots (PLAYTEST M13 step 15). The
@@ -2133,7 +2134,7 @@ merge.
 - **Wave 3:** river, pond, lake and bridges (the wade-through and solid-bridge ruling).
 
 - [x] Wave 1 built, review rulings taken (2026-10-02)
-- [x] lead: checks green (2026-10-02; three gates deferred to the merge, see "Status")
+- [x] lead: checks green (2026-10-02, every gate)
 - [x] lead: commit wave 1
 - [ ] Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads")
 - [ ] lead: haze tuning round from Ben's screenshots
