@@ -369,11 +369,16 @@ export type RemotesConfig = {
 
 export type DebugConfig = { studioIncomeMultiplier: number, studioFreeBuy: boolean }
 
+-- Where an owner's character arrives: `distance` studs outside the plot's hub-facing edge, on
+-- the entrance axis, with the root part `height` studs over the plot top.
+export type PlotSpawnConfig = { distance: number, height: number }
+
 export type GameConfig = {
 	tickRate: number,
 	plotCount: number,
 	plotMargin: number,
 	hubRadius: number,
+	plotSpawn: PlotSpawnConfig,
 	maxLevel: number,
 	levelIncomeBonus: number,
 	milestoneLevels: { number },

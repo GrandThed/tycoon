@@ -44,6 +44,14 @@ geometry/visual constants in the era's layout module.
 
 - `"plotMargin": 20` — studs of gap between adjacent plots on the ring.
 - `"hubRadius": 30` — radius in studs of the central hub platform players spawn on.
+- `"plotSpawn": { "distance": 8, "height": 3 }` (2026-10-02) — where an owner arrives: `distance`
+  studs outside the plot's hub-facing edge on the entrance axis, root part `height` studs over the
+  plot top, turned to look at the plot. `PlotService` pivots the owner's character there on
+  `ClaimPlot` and one frame after every later spawn (the engine places a new character on the hub
+  `Spawn` after `CharacterAdded`, so an earlier pivot is overwritten). The hub `Spawn` stays the
+  only SpawnLocation: a player without a plot (failed load, no free plot) stays there. No remote
+  and no new attribute: the client (`PlotVisualsController`) turns the default camera's yaw to the
+  plot when `PlotIndex` is set and on every local `CharacterAdded`.
 - `remotes` gains `"padTouchDebounce": 0.5` — seconds between accepted touches per buy pad.
 - `levelCost` gains `"minBase"` (v1.2) — floor substituted for `baseCost` in the level-up cost
   formula so zero-cost starter slots don't get free level-ups. Value owned by economy-designer.

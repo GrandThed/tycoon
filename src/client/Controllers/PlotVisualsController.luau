@@ -25,6 +25,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local ContentProvider = game:GetService("ContentProvider")
@@ -45,6 +46,7 @@ local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
 local PLOT_ATTRIBUTE = "PlotIndex"
 local PLOTS_FOLDER = "Plots"
 local PLOT_PREFIX = "Plot_"
+local BASE_NAME = "Base"
 local BUILDINGS_FOLDER = "Buildings"
 local BUILDING_PREFIX = "Building_"
 local PROMPT_ANCHOR = "PromptAnchor" -- Attachment under a template's Base (M7 contracts)
@@ -773,6 +775,40 @@ local function watchLocalPlot(): ()
 	plotWatch = plot.DescendantAdded:Connect(silenceEmitter)
 end
 
+-- The server stands an owner in front of their plot on claim and on every spawn (PlotService),
+-- but the default camera keeps the heading it had at the hub, so turn it to look into the plot.
+-- Yaw only: the pitch stays the player's.
+local function faceLocalPlot(): ()
+	task.spawn(function()
+		-- On a new character the default camera resets its heading from the character on its next
+		-- update, and the server's move may not have arrived by then. Let one whole render step
+		-- pass so this write lands after that reset, whenever in the frame the character arrived.
+		RunService.RenderStepped:Wait()
+		RunService.Heartbeat:Wait()
+		local plotIndex = player:GetAttribute(PLOT_ATTRIBUTE)
+		if typeof(plotIndex) ~= "number" then
+			return
+		end
+		local plot = Workspace:WaitForChild(PLOTS_FOLDER)
+			:FindFirstChild(PLOT_PREFIX .. tostring(plotIndex))
+		local base = if plot ~= nil then plot:FindFirstChild(BASE_NAME) else nil
+		local camera = Workspace.CurrentCamera
+		if base == nil or not base:IsA("BasePart") or camera == nil then
+			return
+		end
+		-- The base's -Z points at the hub, so +Z looks from the arrival point into the plot.
+		local into = -base.CFrame.LookVector
+		local look = camera.CFrame.LookVector
+		local flat = math.sqrt(math.max(0, 1 - look.Y * look.Y))
+		-- The default camera derives its next frame from the current look vector, so one write
+		-- turns it and leaves it under the player's control.
+		camera.CFrame = CFrame.lookAlong(
+			camera.CFrame.Position,
+			Vector3.new(into.X * flat, look.Y, into.Z * flat)
+		)
+	end)
+end
+
 local PlotVisualsController = {}
 
 function PlotVisualsController.Init(): ()
@@ -802,6 +838,10 @@ function PlotVisualsController.Start(): ()
 		player:GetAttributeChangedSignal(PLOT_ATTRIBUTE):Connect(watchLocalPlot)
 		watchLocalPlot()
 	end
+	-- The claim (possibly before we run) and every later spawn put the character at the plot.
+	player:GetAttributeChangedSignal(PLOT_ATTRIBUTE):Connect(faceLocalPlot)
+	player.CharacterAdded:Connect(faceLocalPlot)
+	faceLocalPlot()
 end
 
 return PlotVisualsController

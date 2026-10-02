@@ -3,6 +3,7 @@
 	"plotCount": 10,
 	"plotMargin": 20,
 	"hubRadius": 30,
+	"plotSpawn": { "distance": 8, "height": 3 },
 	"maxLevel": 100,
 	"levelIncomeBonus": 0.12,
 	"milestoneLevels": [10, 25, 50, 100],

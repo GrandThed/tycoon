@@ -5277,3 +5277,37 @@ If your plot is not the first one, find the water from the hub. It is in plain s
 
 - [ ] 25. All boxes ticked (9 and 18 may be skipped) → tell Claude "M13 wave 2 signed off", with
       the letters and the three screenshots.
+
+## Plot spawn — arrive in front of your plot (2026-10-02)
+
+**Goal:** you no longer start on the pad in the middle of the hub. You arrive on the road in
+front of your own plot, looking at it, when you join and every time you respawn.
+
+- Setup: open `build/test.rbxl` in Studio and press Play. Nothing to prepare.
+- Where you should stand: on the dirt road, about 8 studs before your plot's front edge, with
+  your plot sign straight ahead.
+
+- [ ] 1. Press Play. When the load screen clears you are standing in front of your plot, not in
+      the hub. Your sign and your first buildings are ahead of you.
+- [ ] 2. The camera looks at your plot, not sideways or back at the hub.
+- [ ] 3. Walk to the hub, then reset your character (Esc → Reset Character, *Reiniciar
+      personaje*). You come back in front of your plot, and the camera looks at it again.
+- [ ] 4. Reset three more times. You land in the same place each time and never stay in the hub.
+- [ ] 5. You land on your feet: no fall of more than a small step, and you are not stuck in the
+      road or the kerb.
+- [ ] 6. Optional, two players (Test → Clients and Servers, *Clientes y servidores*, 2 players):
+      each player arrives in front of a different plot, each looking at their own.
+
+### Not a bug (don't report these)
+
+- A small drop as you arrive. You are placed a little above the road.
+- For a moment before the load screen clears you may see the hub. The save has to load before
+  the game knows which plot is yours.
+- The grey pad in the middle of the hub is still there. A player whose save fails to load, or
+  who finds no free plot, still starts on it.
+
+### What to tell Claude
+
+- Any failed step numbers.
+- If you ever respawn in the hub (steps 3 and 4), say how often: every time, or only sometimes.
+- Is 8 studs the right distance? Closer, farther, or right on the plot?

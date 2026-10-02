@@ -258,12 +258,56 @@ local function applyTitleTag(player: Player): ()
 	billboard.Parent = head
 end
 
+-- Where an owner arrives: outside the plot's hub-facing edge, on the entrance axis, turned to
+-- look at their own plot. The ground out there is lower than the plot top, so the character
+-- drops the last stud.
+local function arrivalCFrame(record: PlotRecord): CFrame
+	local spawnConfig = Catalog.GetGameConfig().plotSpawn
+	local base = record.base
+	return base.CFrame
+		* CFrame.new(
+			0,
+			base.Size.Y / 2 + spawnConfig.height,
+			-(base.Size.Z / 2 + spawnConfig.distance)
+		)
+		-- The base's -Z points at the hub; half a turn faces the plot.
+		* CFrame.Angles(0, math.pi, 0)
+end
+
+-- Moves an owner's live character in front of their plot. Without a plot (failed load, no free
+-- plot) the player stays on the hub Spawn.
+local function sendToPlot(player: Player): ()
+	local record = plotsByPlayer[player]
+	local character = player.Character
+	if record == nil or character == nil or not character:IsDescendantOf(Workspace) then
+		return
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil or humanoid.Health <= 0 then
+		-- A dead character respawns through onCharacterAdded.
+		return
+	end
+	character:PivotTo(arrivalCFrame(record))
+end
+
 local function onCharacterAdded(player: Player, character: Model): ()
 	task.spawn(function()
 		if character:WaitForChild("Head", HEAD_WAIT_SECONDS) == nil then
 			return
 		end
 		applyTitleTag(player)
+	end)
+	-- Roblox moves a new character onto the hub Spawn after CharacterAdded, once the model is in
+	-- Workspace, and would overwrite a pivot made any earlier. One frame after the model is
+	-- parented the engine's own placement is done.
+	task.spawn(function()
+		if not character:IsDescendantOf(Workspace) then
+			character.AncestryChanged:Wait()
+		end
+		RunService.Heartbeat:Wait()
+		if player.Character == character then
+			sendToPlot(player)
+		end
 	end)
 end
 
@@ -1464,6 +1508,9 @@ function PlotService.ClaimPlot(player: Player): ()
 	rebuildPlotForEra(record, state)
 	refreshSign(record, player, state)
 	applyTitleTag(player)
+	-- The character usually spawned at the hub while the profile was loading; one that spawns
+	-- after the claim is moved by onCharacterAdded.
+	sendToPlot(player)
 end
 
 -- MonetizationService calls this when a pass is granted mid-session and LegacyShopService after
