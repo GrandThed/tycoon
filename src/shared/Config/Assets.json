@@ -11255,8 +11255,8 @@
   "paths": {
     "Boomtown": {
       "tileStuds": 11.0,
-      "layoutHash": "75871e8243adb4ee",
-      "triangles": 31520,
+      "layoutHash": "32d9c630015c0a6a",
+      "triangles": 43888,
       "fillAssetId": 107829129655009,
       "fillImageId": 127993867745508,
       "fillSha256": "17e3ea71dd8c7c2d21694360bde20ec1e63af2369adf0c39bc9fe728209ef548",
@@ -11608,6 +11608,134 @@
             "size": [24.5564, 0.005, 13.0259],
             "offset": [-47.0318, 0.0025, -30.9407],
             "sha256": "2f0d32c953dafab11c09d3c05cb8db2d43776214708d20d14384882b83ade415"
+          }
+        },
+        "LN_1": {
+          "fill": {
+            "assetId": 108191874407533,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "62b0aef0e6e814a41b59f9d933dae5ce6f6ed52851f517a2c0a4032eaef23e0e"
+          },
+          "rim": {
+            "assetId": 94343921416973,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "8b26aab82873d73bb273face7a925c802e832eeb1042b90f6f08cd8bcc688fc2"
+          }
+        },
+        "LN_2": {
+          "fill": {
+            "assetId": 130075327357975,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "fda46600656bd05f227cd77f3ff4d9fa65d9f7500feb6f529387bef72ce694f9"
+          },
+          "rim": {
+            "assetId": 118838497040874,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "4801d4eea12bcb8eeba277a490b85bfdab7714724a9486d752ca7d45c6fdd9fd"
+          }
+        },
+        "LN_3": {
+          "fill": {
+            "assetId": 75609713911170,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0c53340c7702e9153f46d8bfe726de746ca3916d018adbd2e81bf7066bd1a2d1"
+          },
+          "rim": {
+            "assetId": 83977568629922,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "d03a8b11b834c4b34d5b69293fbc0a4c6574ea9cf2807e8c4d54f407f7f58a5e"
+          }
+        },
+        "LN_4": {
+          "fill": {
+            "assetId": 111071200205623,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "a728105b77dbf924e1054681404e267f266037a261365d859fed4978cd669705"
+          },
+          "rim": {
+            "assetId": 89767720924482,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "c450cd0bcf9b03fe804de6d9571a85f84d8347659b8e5c23ad8f238c738d4910"
+          }
+        },
+        "LN_5": {
+          "fill": {
+            "assetId": 140402250902196,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "622335d43a0b6611959d8b2b4425614ead2befaaed415e8531c9b5ebc5524257"
+          },
+          "rim": {
+            "assetId": 113181314106399,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "bf5bb8b5ec24ca471013dc17c03ee1d0fad9fe8e2eb70e558e0249ade282f539"
+          }
+        },
+        "LN_6": {
+          "fill": {
+            "assetId": 127919119759262,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "639411641e2f06df3ec48900b2570b40497eb29c324030e1cfc22f55d9432871"
+          },
+          "rim": {
+            "assetId": 74295940417830,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "84031ab160f2545f772bc89fa760059434e5d9c1cc1c65e97c5a838fb6aa375e"
+          }
+        },
+        "LN_7": {
+          "fill": {
+            "assetId": 89922143995759,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "5c13ef63e12ec387052f46148a73028990d23ce9bd2f765fe7cb7691efbcb306"
+          },
+          "rim": {
+            "assetId": 86018107006427,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "ebbc0823e7f57e4f7685a7c53b1f01510926452489d5a836947269a46d0e1203"
+          }
+        },
+        "LN_8": {
+          "fill": {
+            "assetId": 82451876226851,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "29eea842f2506d5cc9b4b3992e3cd44a425a0735be50ec2e71933e854fcb5cbf"
+          },
+          "rim": {
+            "assetId": 107250434644029,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "c3d089a3307847019d2a8555d65e255140fb5e7a4297e6ade03b272851a3fb0a"
           }
         },
         "SP_autoRepair": {

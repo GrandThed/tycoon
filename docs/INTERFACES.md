@@ -6167,6 +6167,28 @@ driveway.
 - `fabric.lanes.rim`, `fillHeight` and `rimHeight` are no longer read by the baked renderer; the
   fallback uses `width` and `fillHeight`. `growSeconds` is unused and is removed from the config.
 
+### Rulings after the wave 2.5 reports (lead, 2026-10-02)
+
+- **A lane's bends turn on one lane width (3 studs), not a spur's two.** At a spur's radius the
+  centreline cut each right-angle bend by 2.49 studs and the fill reached 0.96 studs into the lot
+  inside the bend (lots stand 2.2 from the data polyline). At one width the fill stays off every
+  lot and no outline folds. `LANE_FILLET_WIDTHS` in `tools/paths/network.py`.
+- **A lane's far end** runs 2.4 studs (fill) and 2.85 (rim) past its last point as a round cap;
+  its mouth runs 2.7 studs under the street like a spur's. The street it leaves gets no junction
+  and no rounded end, which is what keeps every existing street mesh byte-identical.
+- **Far plots** keep a lane's fill and drop its rim, as for every path piece. A far plot can
+  therefore show a lane whose houses are past `parcelsFar`.
+- **The piece budget:** lane k is requested as `LN_<k>` while
+  `k <= budget.pathPieces - (stretch pieces + spur pieces)`; a lane past it, or one whose template
+  is missing, is drawn as the flat Parts fallback on near plots only.
+- **`fabric.lanes` is `{ width, rim, fillHeight }`.** The client reads `width` and `fillHeight`
+  (the fallback); the generator and `streetplan.py` read `rim` for a lane's ground footprint.
+  `rimHeight` and `growSeconds` are gone.
+- The fabric sync now runs before `RoadGraph.Flush` in fabric eras, so a purchase's driveway and
+  the lanes it opens reach the renderer in one update.
+- The layout hash covers the lane polylines and width when an era has lanes; the stale test is
+  per piece, so adding lanes left the 38 existing Boomtown pieces "fresh".
+
 ### Ownership (wave 2.5, disjoint)
 
 | Owner | Files |
