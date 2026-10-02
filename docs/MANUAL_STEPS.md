@@ -1675,16 +1675,18 @@ real save.
 - [ ] 17. Rebuild from `C:\Users\benja\Desktop\tycoon`, and go back to the usual `rojo serve` from
       there.
 
-## M13 — The Valley (wave 1: sky, ground, hub, roads)
+## M13 — The Valley (waves 1 and 2)
 
 Built in the worktree `C:\Users\benja\Desktop\tycoon-m13` (branch `m13-valley`), **not merged**.
 Run every command below **from that folder**, never from `C:\Users\benja\Desktop\tycoon` or
 `C:\Users\benja\Desktop\tycoon-m12`. `assets/` in the worktree is a junction to the main
 checkout's `assets/`.
 
-**Nothing on the Creator Hub. No upload. No harvest paste.** Wave 1 is Parts and Lighting only:
-the server builds the sky, ground, hub and roads when the game starts. There is no profile change,
-so nothing needs republishing.
+**Ben's part is §1 and §2 only: open the build and run the playtest.**
+- **Nothing on the Creator Hub.** There is no profile change, so nothing needs republishing.
+- **Wave 1** (sky, ground, hub, roads) was Parts and Lighting only: no upload, no harvest.
+- **Wave 2** (the Valley meshes) needed one upload batch and **one harvest paste. Both are done**
+  (2026-10-02). §4 keeps the routine as a record.
 
 Studio menus are written in English, with the Spanish in italics: File (*Archivo*), Open
 (*Abrir*).
@@ -1695,9 +1697,10 @@ Pick **one** of the two options. Option A is the simple one: it gives a fresh Vi
 every Play and touches no real save.
 
 **Option A: open the file**
-- [x] 1. **Lead:** rebuild after the last code or `World.json` change, from `tycoon-m13`:
-      `rojo build -o build/test.rbxl`. Tick this once the checks are green. A file built before
-      wave 1 shows the old grey world.
+- [ ] 1. **Lead:** rebuild after the last code, config or template change, from `tycoon-m13`:
+      `rojo build -o build/test.rbxl`. Tick this once the wave 2 review fixes are in and the
+      checks are green. (The wave 1 rebuild was done on 2026-10-02; this box is for wave 2.) A
+      file built before wave 2 shows no mountains.
 - [ ] 2. Studio → File (*Archivo*) → Open (*Abrir*) →
       `C:\Users\benja\Desktop\tycoon-m13\build\test.rbxl`.
       Do **not** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, which has
@@ -1715,33 +1718,96 @@ every Play and touches no real save.
       Then Studio → Plugins (*Complementos*) → **Rojo** → **Connect**.
 
 **Either option:**
-- [ ] 5. Press **Play** (*Jugar*) and look at the ground around the hub. It is **green**.
-      If it is grey, you opened `main` or an old file. Close Studio, rebuild in PowerShell, then
-      do step 2 again:
+- [ ] 5. Press **Play** (*Jugar*) and look around from the hub. The ground is **green** and there
+      are **mountains all around**.
+      - **Grey ground:** you opened `main` or a file from before M13.
+      - **Green ground, straight roads, no mountains:** an old wave 1 file, or the Valley did not
+        load. Look in Output (*Salida*) for a line that starts with `[Landscape]`, and copy it
+        to Claude.
+      For an old file: close Studio, rebuild in PowerShell, then do step 2 again:
       ```
       cd C:\Users\benja\Desktop\tycoon-m13
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build -o build/test.rbxl
       ```
 
-### 2. Run the Studio look
+### 2. Run the Studio playtest
 
-- [ ] 6. Run `docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads".
-- [ ] 7. Send Claude the two screenshots from PLAYTEST M13 step 15 and the haze letter from
-      step 10.
+- [ ] 6. Run `docs/PLAYTEST.md` "M13 wave 2 — The Valley: mountains, river, bridges". The wave 1
+      section above it is superseded: do not run it.
+- [ ] 7. Send Claude the three screenshots from PLAYTEST M13 wave 2 step 22, and the letters
+      from its "What to tell Claude" list.
 
 ### 3. Tuning round (lead, then Ben)
 
-The haze values are a first guess, so expect this once.
+The haze values are still the first guess from wave 1, so expect this once.
 
-- [ ] 8. **Lead:** change the numbers in `src/shared/Config/World.json` from the screenshots, and
-      rebuild (step 1). No code changes.
-- [ ] 9. Open the new file (step 2), and repeat PLAYTEST M13 steps 9–12 and 16.
+- [ ] 8. **Lead:** make the changes and rebuild (step 1).
+      - Haze, the wall and the apron colours are numbers in `src/shared/Config/World.json`:
+        config only.
+      - Anything in the meshes goes through the generator and §4 again. Whether that needs a
+        new harvest paste is the lead's call, and the lead says so before asking for one.
+- [ ] 9. Open the new file (step 2), and repeat the PLAYTEST steps Claude names.
 
-### 4. Coming in wave 2 (nothing to do yet)
+### 4. Wave 2 assets: one harvest paste (**DONE 2026-10-02**, nothing owed; kept as the routine)
 
-- Wave 2 adds the mountains, foothills, forest and waterfall as a generated kit. It needs **one
-  upload** (lead) and **one harvest paste** (Ben), the same routine as M12 §1 step 5.
-- It waits until the Boomtown session's harvest is committed. Never run an upload or a harvest
-  while another session uploads or harvests.
-- The steps get written here when wave 2 is built.
+28 generated meshes (131,768 triangles) and one palette image. No Kenney kit, no Blender join:
+the generator writes the GLBs itself.
+
+- [x] 10. **Lead: generate, and check the bake:**
+      ```
+      py tools/world/valley.py build
+      py tools/world/valley.py check
+      py tools/worldplan.py selftest
+      ```
+      - `build` writes the GLBs, the palette and the bake record under `assets/build/world/`,
+        and `src/shared/Config/Valley.json` (generated only; never hand-edit it).
+      - Preview gate: the baked GLBs were rendered and compared with the A2 mock before anything
+        was uploaded (`sheetV_*.png` in
+        `C:\Users\benja\Desktop\tycoon\assets\research\2026-10-01-worldmock\out\`).
+      - Committed as `3f2e863`.
+- [x] 11. **Lead: upload.** Announce it to the other session first and wait for its ack. Never
+      run an upload while another session uploads or harvests.
+      ```
+      py tools/assets/upload_world.py --dry-run
+      py tools/assets/upload_world.py --only Details --only Mountains_3
+      py tools/assets/upload_world.py
+      ```
+      - `--dry-run` writes nothing.
+      - The `--only` line is the trial: `Details` has the most triangles and `Mountains_3` the
+        largest box (1,444 studs).
+      - All 28 meshes and the palette were accepted first try (commit `6f1c415`).
+- [x] 12. **Ben: the one harvest paste** (done 2026-10-02). Studio in **Edit mode**:
+      1. From `tycoon-m13`: `py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip`.
+      2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → paste → Enter → wait for
+         `[HARVEST-DONE]`.
+      3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
+      4. `py tools/assets/harvest.py`. It merged all 28 meshes and the palette at once. Every
+         harvested size matched the bake, so Roblox rescaled nothing (commit `e33d87f`).
+- [x] 13. **Lead: templates and manifest:**
+      ```
+      py tools/assets/gen_templates.py --world
+      py tools/assets/gen_templates.py --check
+      py tools/gen_asset_manifest.py
+      ```
+      This gave 28 templates in `templates/_world/Valley/`, which the build maps to
+      `ServerStorage/Assets/World/Valley` (commit `2179a21`).
+- 14. **Lead: build.** `rojo build -o build/test.rbxl`. This is step 1; tick it there.
+- 15. **If a record goes missing later:** re-run step 12 only. The uploader skips every mesh
+      whose file has not changed.
+
+### 5. Re-bake for the 6-plot ring (lead; **one more harvest paste** for Ben, not yet)
+
+- The meshes are baked for **10 plots**. `Valley.json` records that.
+- When `m11-unlocks` (6 plots) merges, the Valley must be regenerated and re-uploaded: §4 again,
+  steps 10–14, including **one harvest paste**.
+- Until then a 6-plot ring shows the wave 1 look (green ground, straight roads, no mountains),
+  with one `[Landscape]` warning in Output. Nothing breaks.
+
+### 6. Before any pipeline run on a merged tree (lead)
+
+- `tools/assets/assets_config.py` from this branch must be in place before any uploader or
+  harvest runs on a tree merged with `m12-boomtown`. An older copy erases the `world` block of
+  `Assets.json`.
+- After that merge, any new list that carries `skirt` entries needs the same river gate as the
+  Village woods.

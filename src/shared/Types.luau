@@ -324,6 +324,10 @@ export type AssetsConfig = {
 	-- ids -- it clones the generated templates -- but the preloader warms them, and an era with no
 	-- entry simply has nothing to warm.
 	paths: { [string]: AssetPathsEra }?,
+	-- M13 wave 2: uploaded world mesh sets by set name ("Valley"); absent in older files. Luau reads
+	-- only these two keys -- planHash ties Valley.json to the meshes that were uploaded -- and the
+	-- ids and sizes beside them in the file are the template generator's.
+	world: { [string]: { plotCount: number, planHash: string } }?,
 }
 
 -- Game.json v1.3 mirror; field names follow the JSON keys exactly.

@@ -121,7 +121,9 @@ local function build(): River?
 	if type(plan) ~= "table" or type(world) ~= "table" then
 		return nil
 	end
-	if livePlotCount() ~= plan.plotCount or not valleyStands() then
+	-- The cheap test first: in every wave 1 fallback this runs on each call, and counting the plots
+	-- walks the whole ring.
+	if not valleyStands() or livePlotCount() ~= plan.plotCount then
 		return nil
 	end
 	local valley = world.valley

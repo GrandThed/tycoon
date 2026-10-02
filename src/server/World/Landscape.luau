@@ -9,12 +9,12 @@
 -- geometry lives here. Without the file the ground and hub come out exactly as before M13 and
 -- nothing else is touched, and a missing block switches only its own feature off.
 --
--- Wave 2, "mesh mode": when the generated Valley.json and its templates are both present and fit
--- the live ring, the baked Valley meshes replace the earth ring and the roads (the basin mesh
--- carries both), each plot gets its apron, and the few things a player can touch (the wall, the
--- bridges, the stepping stones) are invisible Parts built from the generator's data. Meshes are
--- only ever looked at: the Ground Part stays the one floor. Anything missing falls back to the
--- wave 1 look.
+-- Wave 2, "mesh mode": when World.json has a `valley` block and the generated Valley.json and its
+-- templates are present, from the same build, and fit the live ring, the baked Valley meshes
+-- replace the earth ring and the roads (the basin mesh carries both), each plot gets its apron,
+-- and the few things a player can touch (the wall, the bridges, the stepping stones) are invisible
+-- Parts built from the generator's data. Meshes are only ever looked at: the Ground Part stays the
+-- one floor. Anything missing or mismatched falls back to what the rest of World.json gives.
 --
 -- Levels are frozen: plot tops and the hub top are at Y = 0 and the ground top is at -plotSize.Y
 -- (the client's dressing and the plot renderers assume it). The wave 1 parts never share a visible
@@ -411,6 +411,12 @@ local WALL_PLACE_KEYS: { string } = {}
 local WALL_SIZE_KEYS = { "height", "thickness", "segments" }
 -- Fewer slabs than a triangle's enclose nothing.
 local MIN_WALL_SEGMENTS = 3
+-- Two naming facts of the generator (tools/world/valley.py), kept here and nowhere else: the mesh
+-- of the n-th entry of Valley.json `bridges` is `Bridge_<n>`, and the visible stepping stones are
+-- part of the `Details` mesh. A collider is only built under a mesh that was placed, so nobody
+-- ever bumps into a deck or a stone they cannot see.
+local BRIDGE_NAME_PREFIX = "Bridge_"
+local STONES_MESH_NAME = "Details"
 -- A WedgePart's slope rises toward its local +Z: its one upright face is its Back face. Every ramp
 -- takes its facing from this sign, so if ramps ever come out backwards this is the only edit.
 local WEDGE_UPHILL_Z = 1
@@ -455,9 +461,11 @@ local function hasNumbers(entry: any, placeKeys: { string }, sizeKeys: { string 
 	return true
 end
 
--- World structures (docs/INTERFACES.md wave 2, "What collides"): solid to characters and nothing
--- else. Invisible because the mesh standing over each is what players see, and deaf to raycasts
--- and touches so no camera, pad or prompt ever notices them.
+-- World structures (docs/INTERFACES.md wave 2, "What collides"): solid to characters, and
+-- invisible because the mesh standing over each is what players see. They fire no touch events.
+-- They do still answer raycasts: the engine honours CanQuery = false only on a part that does not
+-- collide, so the flag below records the contract's intent and changes nothing. Nothing in the
+-- hub raycasts against the world.
 local function makeCollider(part: BasePart): ()
 	part.Anchored = true
 	part.Transparency = 1
@@ -511,9 +519,7 @@ local function tintsOf(valleyConfig: any): Tints
 	for tint in TINT_APRON_KEYS do
 		tints[tint] = {}
 	end
-	local aprons = if valleyConfig ~= nil
-		then blockOf(valleyConfig.aprons, "valley.aprons")
-		else nil
+	local aprons = blockOf(valleyConfig.aprons, "valley.aprons")
 	if aprons == nil then
 		return tints
 	end
@@ -550,7 +556,10 @@ local function applyTints(parts: { TintedPart }, tints: Tints, eraName: any): ()
 	end
 end
 
-local function buildWall(wallRadius: any, config: any, groundTop: number, parent: Instance): ()
+-- Returns false, after one warning, when there is no valid wall to build. The caller then gives
+-- up the whole Valley: its meshes never collide, so without the wall players would walk through
+-- the foothills and off the edge of the ground.
+local function buildWall(wallRadius: any, config: any, groundTop: number, parent: Instance): boolean
 	if
 		not isFinite(wallRadius)
 		or wallRadius <= 0
@@ -561,9 +570,9 @@ local function buildWall(wallRadius: any, config: any, groundTop: number, parent
 		warn(
 			"[Landscape] the Valley wall needs Valley.json wallRadius > 0 and World.json valley.wall"
 				.. ` with height > 0, thickness > 0 and a whole number of segments >= {MIN_WALL_SEGMENTS};`
-				.. " no wall built"
+				.. " building the wave 1 world"
 		)
-		return
+		return false
 	end
 	local height: number, thickness: number, segments: number =
 		config.height, config.thickness, config.segments
@@ -590,9 +599,10 @@ local function buildWall(wallRadius: any, config: any, groundTop: number, parent
 		slab.CFrame = CFrame.lookAt(position, Vector3.new(0, position.Y, 0))
 		slab.Parent = parent
 	end
+	return true
 end
 
-local function buildBridge(index: number, entry: Types.ValleyBridge, groundTop: number): Model
+local function buildBridge(name: string, entry: Types.ValleyBridge, groundTop: number): Model
 	-- The long axis straight from the contract's definition of yaw (0 = +X, turning toward +Z),
 	-- handed to the CFrame as its X column. That is CFrame.Angles(0, -yaw, 0): Roblox's positive
 	-- turn about +Y takes +X toward -Z, the other way, and writing the axis out leaves no sign
@@ -601,7 +611,7 @@ local function buildBridge(index: number, entry: Types.ValleyBridge, groundTop: 
 	local centre = Vector3.new(entry.x, groundTop, entry.z)
 
 	local bridge = Instance.new("Model")
-	bridge.Name = "Bridge_" .. index
+	bridge.Name = name
 
 	local deck = Instance.new("Part")
 	deck.Name = "Deck"
@@ -633,28 +643,30 @@ local function buildBridge(index: number, entry: Types.ValleyBridge, groundTop: 
 	return bridge
 end
 
--- The wall, the bridges and the stepping stones, in a folder that is not parented yet.
-local function buildCollision(plan: any, valleyConfig: any, groundTop: number): Folder
-	local collision = Instance.new("Folder")
-	collision.Name = "Collision"
-	buildWall(
-		plan.wallRadius,
-		if valleyConfig ~= nil then valleyConfig.wall else nil,
-		groundTop,
-		collision
-	)
-
+-- Bridge and stepping-stone collision, each only under a mesh that was placed (`placed` holds the
+-- names of the world meshes cloned). A mesh that is missing was already named in the "left out"
+-- warning; only a bad number in the data is reported here.
+local function buildMeshColliders(
+	plan: any,
+	placed: { [string]: boolean },
+	groundTop: number,
+	parent: Instance
+): ()
 	local skipped: { string } = {}
 	if type(plan.bridges) == "table" then
 		for index, entry in plan.bridges do
+			local name = BRIDGE_NAME_PREFIX .. index
+			if not placed[name] then
+				continue
+			end
 			if hasNumbers(entry, BRIDGE_PLACE_KEYS, BRIDGE_SIZE_KEYS) then
-				buildBridge(index, entry, groundTop).Parent = collision
+				buildBridge(name, entry, groundTop).Parent = parent
 			else
-				table.insert(skipped, `Bridge_{index}`)
+				table.insert(skipped, name)
 			end
 		end
 	end
-	if type(plan.stones) == "table" then
+	if placed[STONES_MESH_NAME] and type(plan.stones) == "table" then
 		for index, entry in plan.stones do
 			if hasNumbers(entry, STONE_PLACE_KEYS, STONE_SIZE_KEYS) then
 				local stone = newDisc(
@@ -664,7 +676,7 @@ local function buildCollision(plan: any, valleyConfig: any, groundTop: number): 
 					Vector3.new(entry.x, groundTop + entry.top / 2, entry.z)
 				)
 				makeCollider(stone)
-				stone.Parent = collision
+				stone.Parent = parent
 			else
 				table.insert(skipped, `Stone_{index}`)
 			end
@@ -676,18 +688,21 @@ local function buildCollision(plan: any, valleyConfig: any, groundTop: number): 
 				.. table.concat(skipped, ", ")
 		)
 	end
-	return collision
 end
 
 -- Decides mesh mode and, in it, returns the whole Valley in a `Landscape` folder that is NOT
--- parented yet, with the state AttachPlot needs. nil means the wave 1 look: silently when
--- Valley.json or the template set is simply not there (a checkout before the bake), and with one
--- warning naming the condition when they are there but do not fit.
+-- parented yet, with the state AttachPlot needs. nil means "no Valley": the caller builds what
+-- the rest of World.json gives. That is silent when the Valley is simply not configured or not
+-- baked here (no `valley` block, no Valley.json, no templates, no upload record), and comes with
+-- exactly one warning naming the condition when everything is there but does not fit.
 local function assembleValley(
 	ring: WorldPlan.Ring,
 	plotSize: Vector3,
 	valleyConfig: Types.WorldValleyConfig?
 ): (Folder?, ValleyState?)
+	if valleyConfig == nil then
+		return nil, nil
+	end
 	local plan: any = Catalog.GetValleyPlan()
 	if plan == nil then
 		return nil, nil
@@ -696,6 +711,13 @@ local function assembleValley(
 	if set == nil then
 		return nil, nil
 	end
+	local assets = Catalog.GetAssetsConfig()
+	local uploadedSets = if assets ~= nil then assets.world else nil
+	local uploaded = if uploadedSets ~= nil then uploadedSets[VALLEY_SET_NAME] else nil
+	if uploaded == nil then
+		return nil, nil
+	end
+
 	if type(plan) ~= "table" or type(plan.meshes) ~= "table" then
 		warn("[Landscape] Valley.json has no meshes list; building the wave 1 world")
 		return nil, nil
@@ -708,11 +730,23 @@ local function assembleValley(
 		)
 		return nil, nil
 	end
+	-- Valley.json carries what collides and where the river runs; the templates carry the look.
+	-- One generator run stamps the same hash on both, so two hashes mean one was rebuilt without
+	-- the other and the bridges, stones and wall may no longer stand where the meshes show them.
+	if type(plan.planHash) ~= "string" or plan.planHash ~= uploaded.planHash then
+		warn(
+			`[Landscape] Valley.json planHash ({plan.planHash}) is not the planHash of the uploaded`
+				.. ` meshes (Assets.json world.{VALLEY_SET_NAME}: {uploaded.planHash});`
+				.. " building the wave 1 world"
+		)
+		return nil, nil
+	end
 
 	local worldMeshes: { ValleyMeshTemplate } = {}
 	local plotMeshes: { ValleyMeshTemplate } = {}
 	local missingRequired: { string } = {}
 	local leftOut: { string } = {}
+	local unknownTints: { string } = {}
 	for index, entry in plan.meshes do
 		local item: any = if type(entry) == "table" then entry else {}
 		local template = templateOf(set, item.name)
@@ -728,10 +762,7 @@ local function assembleValley(
 				if TINT_APRON_KEYS[item.tint] ~= nil then
 					tint = item.tint
 				else
-					warn(
-						`[Landscape] Valley.json mesh {template.Name} names an unknown tint;`
-							.. " left as templated"
-					)
+					table.insert(unknownTints, template.Name)
 				end
 			end
 			table.insert(plotMeshes, { name = template.Name, template = template, tint = tint })
@@ -746,14 +777,29 @@ local function assembleValley(
 		)
 		return nil, nil
 	end
+
+	-- The wall first, before anything is cloned: it is the last thing that can refuse the Valley.
+	local groundTop = -plotSize.Y
+	local collision = Instance.new("Folder")
+	collision.Name = "Collision"
+	if not buildWall(plan.wallRadius, valleyConfig.wall, groundTop, collision) then
+		return nil, nil
+	end
+
+	-- From here the Valley stands, so what follows only reports what it stands without.
 	if #leftOut > 0 then
 		warn(
 			`[Landscape] Valley meshes left out (no Model template, or no "world"/"plot" frame):`
 				.. ` {table.concat(leftOut, ", ")}`
 		)
 	end
+	if #unknownTints > 0 then
+		warn(
+			"[Landscape] Valley.json meshes name an unknown tint and are left as templated: "
+				.. table.concat(unknownTints, ", ")
+		)
+	end
 
-	local groundTop = -plotSize.Y
 	local landscape = Instance.new("Folder")
 	landscape.Name = "Landscape"
 
@@ -761,12 +807,15 @@ local function assembleValley(
 	valleyFolder.Name = "Valley"
 	-- Generator Y = 0 is the ground top, and its X and Z are already world studs.
 	local worldFrame = CFrame.new(0, groundTop, 0)
+	local placed: { [string]: boolean } = {}
 	for _, mesh in worldMeshes do
 		placeClone(mesh.template, worldFrame).Parent = valleyFolder
+		placed[mesh.name] = true
 	end
 	valleyFolder.Parent = landscape
 
-	buildCollision(plan, valleyConfig, groundTop).Parent = landscape
+	buildMeshColliders(plan, placed, groundTop, collision)
+	collision.Parent = landscape
 
 	local state: ValleyState = {
 		folder = valleyFolder,

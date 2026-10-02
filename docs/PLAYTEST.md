@@ -4312,6 +4312,28 @@ differ a little:
 
 ## M13 wave 1 — The Valley: sky, ground, hub, roads
 
+> **Superseded by wave 2 (2026-10-02). Do not run this section on the current build.** Run "M13
+> wave 2 — The Valley: mountains, river, bridges" below instead. This section is kept as the
+> record of wave 1.
+>
+> - Ben saw wave 1 in Studio on 2026-10-02: one screenshot with the green ground, the roads and
+>   the haze showing, and no complaint. No haze letter and no formal sign-off were given, so the
+>   boxes stay unticked.
+> - What no longer matches the current build:
+>   - **Steps 3–5, the earth ring.** It is no longer a Part with a 0.2-stud step. It is painted
+>     flat into the ground mesh.
+>   - **Steps 4 and 6–8, the roads.** They are no longer straight Parts. They are painted into
+>     the ground mesh and bend gently.
+>   - **Steps 9 and 11, "no clouds", "flat green to the horizon".** There are clouds now, and
+>     mountains all around.
+>   - **Step 12, far roads,** is replaced by the flat-layers check in wave 2.
+>   - **Step 13, woods.** Still true, except that no woods tree stands in the river.
+>   - **Steps 15 and 16** are replaced by wave 2's three screenshots and its phone pass.
+>   - In "Not a bug": the lines about no mountains, the road under the ring, the ground ramp
+>     "in wave 2" and the ground's square edge. The 1-stud kerb at the plots **stays**.
+> - This section still describes what you see if the Valley meshes cannot load (for example on a
+>   6-plot ring before the re-bake): the wave 1 look, with one `[Landscape]` line in Output.
+
 **Goal:** the world around the plots stops being flat grey. This wave adds a hazed sky, a green
 ground to the horizon, a stone hub with an earth ring, and a dirt road from the hub to every plot.
 Mountains, forest, waterfall and river come in waves 2 and 3. Plots, buying, income and all city
@@ -4491,3 +4513,265 @@ What to expect, on `main`'s ring of 10 plots:
 
 - [ ] 18. All boxes ticked → tell Claude "M13 wave 1 signed off", with the haze letter and the two
       screenshots.
+
+## M13 wave 2 — The Valley: mountains, river, bridges
+
+**Goal:** the whole Valley around the ring. Snow-capped mountains, forest and a waterfall behind
+the plots. A river with a pond and a lake. Bridges, stepping stones, groves and flowers in the
+middle. A gravel apron and a fence at each plot. Plots, buying, income and city dressing are
+unchanged, except that no woods tree stands in the river.
+
+- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open the **tycoon-m13** build, not the main one.
+- Nothing to prepare in Studio: no attributes, no cash lever. Steps 9 and 18 are **optional**.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- Reference pictures are in
+  `C:\Users\benja\Desktop\tycoon\assets\research\2026-10-01-worldmock\out\`. Use the **right-hand
+  panel, "V (baked)"**, of each. That is what Studio should look like:
+  - `sheetV_hub.png`: from the hub;
+  - `sheetV_plot.png`: from a plot's entrance;
+  - `sheetV_pond.png`: by the pond and the bridges;
+  - `sheetV_back.png`: from the back of a plot, looking at the hub;
+  - `sheetV_aerial.png`: from above;
+  - `sheetV_apron2.png`: the aprons around two plots.
+- **Six things can only be judged in Studio.** Those steps say **"Say which"**: there is no pass
+  or fail, just tell Claude what you see. They are steps 5, 8, 10–11, 19, 20 and 21.
+- No two-player test: nothing multiplayer changed. The server builds the Valley once and it is
+  the same for everyone.
+- No step for missing meshes or a missing `Valley.json`. Those fallbacks were checked in the code
+  review.
+
+How the Valley is built, so you know what to expect:
+
+| Thing | How it behaves |
+|---|---|
+| Valley floor | flat everywhere; the plots keep their 1-stud kerb |
+| River and pond | a coloured bed under a see-through water sheet; you wade ankle-deep and never swim |
+| Bridges, stepping stones | solid |
+| Trees, rocks, fences, hub posts, bridge rails | you walk through them |
+| Mountains, forest, lake, waterfall | behind an invisible wall at the foothills; look only |
+| Roads, earth ring | painted into the ground; the roads bend gently |
+| Tallest peak | about 310 studs |
+| Clouds | low-poly, 900–1,260 studs out |
+
+Where things are. The file build gives you the first plot (`Plot_1`):
+
+| Thing | Where |
+|---|---|
+| Pond, stepping stones | to your **left** when you stand on the hub and face your plot, about 50 studs from the hub's edge |
+| Bridges | 4. Two by the pond, two further along the river. Each carries a road |
+| River | comes in between your plot and its left neighbour, runs past the hub, and leaves between two plots on the far side |
+| Waterfall | behind your plot's left side, where the river comes in |
+| Lake | at the far end of the river, behind the wall |
+| Wall | about 22 studs behind each plot's back edge |
+
+If your plot is not the first one, find the water from the hub. It is in plain sight.
+
+### Setup
+
+- [ ] 1. Open the M13 build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
+      and keep it open the whole time.
+- [ ] 2. **Play** (*Jugar*). You start on the hub. There are **mountains all around**.
+      Bug: green ground but no mountains and straight roads (the Valley did not load: copy the
+      `[Landscape]` line from Output to Claude); grey ground (you opened the main build: see
+      MANUAL_STEPS "M13" step 5).
+
+### 1. From the hub
+
+- [ ] 3. Turn all the way round. Compare with `sheetV_hub.png`:
+      - the hub is pale stone, with a kerb and stone posts around it;
+      - a patch of packed earth lies around the hub, with an uneven edge;
+      - **10 dirt roads** leave the hub, bend gently, and each reaches a plot;
+      - groves of trees stand between the roads, with a few flower patches;
+      - mountains with snow caps and forest stand behind the plots, on every side;
+      - there are clouds in the sky.
+      Bug: a gap in the mountains with sky down to the ground; a road that ends short of a plot or
+      crosses one; a road through a grove; trees floating above the grass.
+- [ ] 4. Walk from the hub along your road to your plot:
+      - one step down off the hub (1 stud, as before M13), then **flat all the way**: earth, road
+        and grass are one level;
+      - walk through a grove on the way: the trees do not block you;
+      - at the plot, a short **fence** stands on each side of the road;
+      - the road ends at the middle of the plot's front edge, at the sign;
+      - you step up 1 stud onto the plot, as before.
+      Bug: an invisible bump or step on the way; a fence across the road; the road ending to one
+      side of the sign.
+
+### 2. River, pond, bridges
+
+- [ ] 5. **Water. Say which.** Go to the pond and look at the water from the bank. Compare with
+      `sheetV_pond.png`:
+      - **A.** it looks like water: blue, and you see the bed and the paler bank through it;
+      - **B.** it flickers or shimmers when the camera moves;
+      - **C.** it hides the bed completely, like a flat painted sheet;
+      - **D.** you cannot see any water.
+- [ ] 6. **Wade.** Walk into the river, along it, and across the pond:
+      - the floor is flat and the water is around your ankles;
+      - you never swim, sink or float.
+      Bug: you swim; you fall through; something invisible blocks you in the water.
+- [ ] 7. **Stepping stones.** 7 stones cross the pond. Step onto each one:
+      - you stand on top of it, with your feet above the water.
+      Bug: you sink through a stone to the floor; you stand on air beside a stone.
+- [ ] 8. **Bridges. Say which.** Walk over all 4 bridges, both ways: up the ramp, across the deck,
+      down the other ramp, without jumping. For each bridge, one of:
+      - **A.** fine;
+      - **B.** a ramp is backwards: a wall where the slope should be;
+      - **C.** you sink into the planks, or float above them;
+      - **D.** the solid part is beside the bridge you see, not on it.
+      Each bridge carries its road across the river.
+      Bug: a bridge away from its road; no bridge where a road crosses the river.
+- [ ] 9. **Optional. Only if a bridge felt wrong in step 8.** This shows the solid shapes:
+      1. During Play: View (*Vista*) → **Command Bar** (*Barra de comandos*).
+      2. Paste this line and press Enter:
+         ```
+         for _, p in workspace.Landscape.Collision:GetDescendants() do if p:IsA("BasePart") then p.Transparency = 0.5 end end
+         ```
+      3. Grey see-through shapes appear: a flat deck with a wedge at each end on every bridge, a
+         disc on every stone, and tall slabs at the foothills (the wall).
+      4. Look at the bridge that felt wrong, and tell Claude what you see. Is a wedge's high
+         edge at the deck, or at the far end? Are the shapes on the planks, or beside them?
+      Do not fix anything. Stop (*Detener*) puts everything back.
+
+### 3. Mountains, forest, wall
+
+- [ ] 10. **Haze, near. Say which.** Stand at your plot's entrance, by the sign, with your back to
+      the hub. Compare with `sheetV_plot.png` (it shows a full Village; a new plot is mostly
+      woods):
+      - mountains with snow caps stand behind your plot;
+      - pines cover the foothills.
+      Then pick one:
+      - **A.** the peaks and the snow read clearly, a little paler than near things;
+      - **B.** the peaks are washed out, close to the sky's colour;
+      - **C.** there is no haze at all: far and near look equally sharp.
+- [ ] 11. **Haze, far. Say which.** Turn to face the hub, and look across the ring at the far
+      plots and the mountains behind them (600–1,000 studs away). Pick A, B or C again, and say
+      whether you can still make out the far plots.
+- [ ] 12. **Waterfall and lake.** Look only; both are behind the wall:
+      - the waterfall drops in two tiers where the river comes in;
+      - the river runs on from it without a break;
+      - the lake lies at the far end of the river, where it leaves the ring. Say whether you can
+        see it from the ground.
+      Bug: a waterfall hanging in the air, away from the cliff or the river.
+- [ ] 13. **Wall.** Walk out of the middle of the back of your plot, toward the forest:
+      - about 22 studs past the back edge, something invisible stops you, just before the ground
+        starts to rise;
+      - jumping does not get you over it;
+      - wading along the river does not get you past it either.
+      Bug: you walk up into the forest or the mountains; you get out along the river; the wall
+      stops you in the open meadow, far from the slope.
+- [ ] 14. **Looking back.** From the back of your plot, look toward the hub. Compare with
+      `sheetV_back.png`: meadow, groves, bending roads, the far plots, mountains behind them and
+      clouds above.
+
+### 4. Aprons, woods, plots
+
+- [ ] 15. **Apron.** Look at the ground around your plot. `sheetV_apron2.png` shows the shape, on
+      other eras:
+      - two flat bands lie around the plot, with an uneven outer edge;
+      - on **Village** they are subtle: a little darker than the meadow, the inner band darker;
+      - they are cut open where the road comes in.
+      Bug: a band that is black or like a scorch mark; a plain grey band on a Village plot; a band
+      lying over the road or over the river's water.
+- [ ] 16. **Woods and the river.** Walk along the side of your plot where the river passes:
+      - the woods carry on past the plot's edge, as before;
+      - **no woods tree or rock stands in the water or on its bank**.
+      Then check the other side and the back: the woods there are as before, standing on the
+      ground.
+      Bug: a woods tree in the river; no woods at all past the edges; trees floating or sunk.
+- [ ] 17. **Everything on the plots.** Compared with before M13:
+      - the plot's base colour, the pads, the sign and its text are the same;
+      - buy the next slot by walking onto its pad (on a fresh plot the Campfire is free): it
+        builds as before and income ticks;
+      - whatever your plot has of these looks and moves as before: buildings, trails or streets,
+        houses, trees, lamps, walkers, vehicles, birds;
+      - the plot still has its 1-stud kerb all round.
+      Bug: anything on a plot moved, changed colour, sank or floats; a pad that does not react.
+- [ ] 18. **Optional: the apron follows the era.** The Village colour in step 15 is what counts.
+      Do this only if you want to see the change. It needs the `GrantCash` lever (PLAYTEST M12
+      step 2):
+      - buy out Village, then **Advance Era**;
+      - the two bands around your plot turn **sandy** (Boomtown) at once;
+      - the other plots' bands stay as they were.
+      If you skip it, say so.
+
+### 5. Flicker, low graphics, frame rate
+
+- [ ] 19. **Flat layers. Say which.** The ground, the aprons, the river bed and the water lie in
+      thin layers. Stand on the hub, then on a front corner of your plot. Look at far things at a
+      low angle: far roads, the aprons of far plots, the river and the pond from far away. Move
+      the camera slowly. One of:
+      - **A.** nothing flickers;
+      - **B.** something flickers or shows stripes. Say what (roads, aprons, river bed, water) and
+        roughly how far away.
+- [ ] 20. **Low graphics. Say which.** Esc → Settings (*Configuración*) → Graphics Mode (*Modo de
+      gráficos*) → **Manual**, and pull the quality **all the way down**. From your plot's
+      entrance:
+      - are the mountains and the forest **behind your plot** still drawn?
+      - turn round: are the mountains and the forest **across the ring** still drawn?
+      - are the clouds, the groves, the river and the bridges still drawn?
+      Say what vanished, if anything. If far things vanish, that is not a number to tune: just
+      report it. Then set Graphics Mode back to **Automatic** (*Automático*).
+- [ ] 21. **Frame rate. Say which.** Back on Automatic, walk around and look at the forest from
+      the hub:
+      - **A.** as smooth as before M13;
+      - **B.** a little worse;
+      - **C.** clearly worse. Say where you were looking.
+      For a number, Ctrl+F6 shows the frame time, as in PLAYTEST M12 step 37.
+
+### 6. Screenshots
+
+- [ ] 22. Take **three screenshots** (Win+Shift+S) and send them to Claude:
+      1. **From your plot,** looking outward at the mountains (the view of step 10).
+      2. **From the hub** (the view of step 3, as in `sheetV_hub.png`).
+      3. **By the pond,** with the bridges in view (as in `sheetV_pond.png`).
+
+### 7. Phone
+
+- [ ] 23. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Then:
+      - **flat layers:** repeat step 19. This is the main thing to check on the phone;
+      - the mountains, the forest and the clouds are drawn;
+      - **water:** repeat step 5, and note the letter if it differs from the desktop one;
+      - walk over one bridge and the stepping stones with the thumbstick: no snag;
+      - the HUD and the Build panel are unchanged;
+      - the frame rate: A, B or C as in step 21.
+      Bug: flicker that shows only on the phone; mountains missing only on the phone.
+
+### 8. Output
+
+- [ ] 24. Read **Output** (*Salida*) from the whole run:
+      - no line that starts with `[Landscape]`;
+      - no red errors.
+      Studio's own warnings are fine. If a `[Landscape]` line shows, copy it to Claude.
+
+### Not a bug (don't report these)
+
+- You walk through trees, rocks, fences, the hub's posts and the bridge rails.
+- A straight seam where two neighbours' aprons meet, at the plots' inner corners.
+- From very high above (a flying camera), you see the terrain's outer edge.
+- The 1-stud kerb at every plot edge. It stays; there is no ramp.
+- Flowers are sparse.
+- The Village apron is hard to see. It is only a little darker than the meadow.
+- The lake, the waterfall, the forest and the mountains cannot be reached.
+- Meshes may pop in for a moment right after you join.
+- The road still ends at the plot's front edge, and the plot's first trail or street starts a
+  little further in (3.5 studs on Village). Say how the entrance reads.
+- The sun, the brightness and the time of day are the same as before M13.
+- The haze is still the first guess from wave 1. Steps 10 and 11 are there to tune it.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- The three screenshots (step 22).
+- **Water** (step 5): A, B, C or D, on desktop and on the phone.
+- **Bridges** (step 8): A, B, C or D for each. If you did step 9, what the shapes looked like.
+- **Haze** (steps 10 and 11): A, B or C, near and far. Do the peaks still read?
+- **Flat layers** (steps 19 and 23): A or B, and what flickered.
+- **Low graphics** (step 20): what vanished, if anything.
+- **Frame rate** (steps 21 and 23): A, B or C.
+- Does the entrance to your plot read well (fences, road end, kerb)?
+- Colours: the meadow, the water, the Village apron. Anything too pale or too dark?
+- Anything that looks off compared with the "V (baked)" pictures.
+
+### Sign-off
+
+- [ ] 25. All boxes ticked (9 and 18 may be skipped) → tell Claude "M13 wave 2 signed off", with
+      the letters and the three screenshots.

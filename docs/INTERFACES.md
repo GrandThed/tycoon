@@ -5948,7 +5948,7 @@ may ever exist (Rojo does not merge an explicit child into a same-named director
   - builds `Ground` and `Hub` as in wave 1, and **no** `HubSurround` and **no** `Road_<i>` (both
     are baked into the basin);
   - clones every world-frame mesh once into `Workspace.Landscape.Valley`;
-  - builds `Wall_<k>` (invisible, `CanCollide` true, `CanQuery` and `CanTouch` false),
+  - builds `Wall_<k>` (invisible, `CanCollide` true, `CanTouch` false),
     `Bridge_<n>` collision (one deck Part and two `WedgePart` ramps each, invisible) and
     `Stone_<n>` collision (invisible cylinders) under `Workspace.Landscape.Collision`.
 - `Landscape.AttachPlot(plotFolder: Folder, base: BasePart): ()`, called by
@@ -6032,6 +6032,34 @@ text above differs, these win:
 - The meadow's facet contrast was halved after the first preview (the mosaic read as a pattern).
 - Known and accepted: trees and boulders inside the wall do not collide; a straight seam shows
   where two aprons meet at the inner corners; the terrain's outer edge is visible from high above.
+
+### Review rulings (2026-10-02, roblox-reviewer: no Critical, two Warnings)
+
+Placement, the wall, the bridge decks and wedges, the stones, the aprons, the client rule and the
+Rojo mapping were verified against the real templates and data. Taken:
+
+- **Mesh mode also needs the `valley` config and a wall.** No `World.json` or no `valley` block:
+  not mesh mode, silently. A `valley.wall` that fails validation: not mesh mode, one warning.
+  (Without a wall, players could walk through the foothills and off the ground's edge.)
+- **`planHash` ties the data to the meshes.** `Valley.json planHash` must equal
+  `Assets.json world.Valley.planHash` (written at upload). The server checks it: a mismatch is one
+  warning and the wave 1 world. `valley.py check` checks it too, so a re-bake that was never
+  uploaded turns QA red. The hash covers the plan file, the ring, `plotSize` and `World.json`
+  `ground`, `hub`, `roads` and `valley.wall.segments`: **changing any of those needs a re-bake, an
+  upload and a harvest paste.** Haze, lighting, apron colours, wall height and thickness and
+  `skirtMargin` are config-only.
+- **A collider is built only when its mesh was placed:** `Bridge_<n>` collision needs the
+  `Bridge_<n>` mesh, the stones need `Details`.
+- `CanQuery = false` has no effect on a part that collides, so the wall, decks, ramps and stones
+  still answer raycasts. Nothing in the hub raycasts; the flags stay as written above.
+- `WorldBlock` tests for `Workspace.Landscape.Valley` before it counts the plots.
+- **A build that is not the one being uploaded must use `--out-root`.** `assets/build/world` is
+  shared by every worktree; a 6-plot bake from another worktree would overwrite this branch's
+  bake record.
+- Open for the Studio look: `Water` is one large translucent MeshPart, so smoke and dust seen
+  across the river may sort wrongly (the fix is splitting it); mountains and clouds have centres
+  930 to 1,000 studs out and may be culled at low graphics quality; a skirt tree can stand in the
+  river until a plot's next sync if the Valley folder replicates late (accepted).
 
 ### Done when (wave 2)
 

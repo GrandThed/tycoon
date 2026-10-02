@@ -49,6 +49,7 @@ GENERATOR = "EraCityTycoon world"
 PLAN_PATH = HERE / "Valley.plan.json"
 DATA_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Valley.json"
 BAKE_ROOT = REPO_ROOT / "assets" / "build" / "world"
+ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"
 CELL = 16  # palette swatch, pixels (tools/assets/palette.py)
 
 # The contract's hard limits, asserted on every build.
@@ -354,6 +355,16 @@ def summary(result, log):
     log("props: " + ", ".join(f"{k} {v}" for k, v in result["stats"].items()))
 
 
+def uploaded_plan_hash(assets_path):
+    """The planHash the uploaded meshes were baked from (Assets.json world.Valley), or None when
+    nothing is uploaded yet. Read-only: assets_config owns every write to that file."""
+    if not assets_path.exists():
+        return None
+    assets = json.loads(assets_path.read_text(encoding="utf-8"))
+    entry = (assets.get("world") or {}).get(SET_NAME) or {}
+    return entry.get("planHash") or None
+
+
 def main(argv):
     parser = argparse.ArgumentParser(prog="valley.py", description="Build or check the Valley meshes and their game data.")
     parser.add_argument("command", choices=("build", "check"))
@@ -373,6 +384,17 @@ def main(argv):
         if committed != fresh:
             print(f"valley check: {path} differs from a fresh build (planHash now {result['planHash']}); run `py tools/world/valley.py build`")
             return 1
+        # The game data is only right for the meshes baked with it. Every other gate compares one
+        # file with itself (data with a build, templates with Assets.json), so this is the one place
+        # a re-bake that was never uploaded shows up. A scratch check has no upload to compare with.
+        if args.count is None and path.resolve() == DATA_PATH.resolve():
+            uploaded = uploaded_plan_hash(ASSETS_PATH)
+            if uploaded is not None and uploaded != result["planHash"]:
+                print(
+                    f"valley check: the uploaded meshes are planHash {uploaded} and Valley.json is {result['planHash']}; "
+                    "upload and harvest the new bake (py tools/assets/upload_world.py), or the game runs new data under old meshes"
+                )
+                return 1
         print(f"valley check: ok ({len(result['meshes'])} meshes, planHash {result['planHash']}, {time.time() - started:.1f}s)")
         return 0
     print(f"== Valley build ({'Game.json plotCount' if args.count is None else f'--count {args.count}'})")

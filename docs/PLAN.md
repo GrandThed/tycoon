@@ -64,10 +64,13 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   the worktree `C:\Users\benja\Desktop\tycoon-m12`, **not merged**; waves 2–4 for Boomtown,
   Metropolis and Orbital come later — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
-  A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub with an earth ring,
-  a dirt road from the hub to every plot; server-only, Parts and Lighting only, no uploads;
-  review no Critical, one Warning; **checks green, awaiting Ben's Studio look**; **waves 2**
-  (mountains, forest, waterfall) **and 3** (river, lake, bridges) **not started**; branch
+  A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
+  every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
+  screenshot, no complaint, no formal sign-off) and asked for the rest: "we didnt do step A2
+  yet? do it"; **wave 2 built 2026-10-02**, the whole A2 Valley in one wave: mountains, forest,
+  waterfall, river, pond, lake, 4 bridges, stepping stones, groves, era aprons and clouds as 28
+  generated meshes (131,768 triangles), **uploaded, harvested in one paste and templated**;
+  **review and checks pending, Studio playtest pending**; there is no wave 3; branch
   `m13-valley` in the worktree `C:\Users\benja\Desktop\tycoon-m13`, **not merged** — see "M13"
   below)
 
@@ -2010,8 +2013,9 @@ setup in `docs/MANUAL_STEPS.md` "M12"). The branch is not merged.
 rivers and such"). The target is a meadow basin ringed by snow-capped low-poly mountains, with
 forest on the foothills, a waterfall, a river through the ring and a small lake. Core gameplay is
 untouched.
-- Contracts: `docs/INTERFACES.md` "M13 contracts — The Valley (wave 1: sky, ground, hub, roads)",
-  through its "Review rulings".
+- Contracts: `docs/INTERFACES.md` "M13 contracts — The Valley (wave 1: sky, ground, hub, roads)".
+  Wave 1 runs through its "Review rulings". Wave 2 is "Wave 2 — the Valley meshes (Ben,
+  2026-10-02)", through "Preview gate rulings" and "Done when (wave 2)".
 - Memory: `.claude/memory/world-landscape-2026-10-01.md` (in the main checkout).
 - Mock: `assets/research/2026-10-01-worldmock/` (gitignored), sheets in its `out/` folder.
 - Where: worktree `C:\Users\benja\Desktop\tycoon-m13`, branch `m13-valley`, off `main` `e5df035`.
@@ -2022,20 +2026,24 @@ untouched.
 1. 2026-10-01: three landscapes were rendered around the real plots: A Valley, B Island, C Lake.
    Ben chose **A**: "i love A valley". The Island and the Lake are closed.
 2. Start now, alongside the Boomtown session.
-3. Three waves, each one a Studio look.
-4. **The river is shallow and wade-through, with solid wooden bridges** (wave 3). Bridges are
-   server geometry that collides. That is a new category next to the M9 rule "no dressing part
+3. Three waves, each one a Studio look. **Replaced by ruling 5.**
+4. **The river is shallow and wade-through, with solid wooden bridges.** Bridges are server
+   geometry that collides. That is a new category next to the M9 rule "no dressing part
    collides", not a change to it.
+5. 2026-10-02, after his first Studio look at wave 1: "we didnt do step A2 yet? do it". **The
+   whole A2 Valley in one wave** (the old waves 2 and 3 together), so one upload batch and one
+   harvest paste.
 
 **Waves:**
 
 | Wave | What | Assets | State |
 |---|---|---|---|
-| 1 | sky, haze, green ground, hub, dirt roads | Parts and Lighting only, **no uploads** | built, awaiting Ben's look |
-| 2 | mountains, foothills, forest and waterfall as a generated kit; invisible wall at the foothills; ground ramped to the plot edges; era aprons; low-poly clouds | one upload, one harvest paste | not started |
-| 3 | river, pond, lake, bridges | set by its contract | not started |
+| 1 | sky, haze, green ground, hub, dirt roads | Parts and Lighting only, **no uploads** | done; Ben saw it in Studio 2026-10-02 |
+| 2 | the whole A2 Valley: mountains, foothills, forest, waterfall, far hills; ground with patches and baked roads; river, pond, lake; bridges and stepping stones; groves; era aprons; clouds; invisible wall at the foothills | 28 generated meshes, one upload batch, **one harvest paste (done)** | built, uploaded, harvested, templated; review, checks and playtest pending |
 
-Wave 2's upload waits until the Boomtown session's harvest is committed.
+There is no wave 3. The river, pond, lake and bridges moved into wave 2.
+
+**Wave 1**
 
 **Shipped (wave 1, 2026-10-01 → 2026-10-02):**
 - **Server-only and static.** The server builds the landscape once at boot, next to the plots. No
@@ -2096,9 +2104,16 @@ INTERFACES):**
 - `lift` 0.1 is the only separation between a road and the ground. If a far road shimmers, raise
   `lift` and `hub.surround.height` together.
 
-**Status:** built, **checks green** (2026-10-02), committed on `m13-valley`, not merged. Awaiting
-Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads"; setup in
-`docs/MANUAL_STEPS.md` "M13").
+**Status (wave 1):** built, **checks green** (2026-10-02), committed on `m13-valley` (`7389467`,
+`1d5cfcc`, `fef4b1c`), not merged.
+- **Ben's Studio look, 2026-10-02:** one screenshot with the green ground, the roads and the haze
+  all showing, and no complaint.
+- He gave **no haze letter** and did **not formally sign off** the wave 1 checklist. The wave 2
+  playtest asks the haze questions again.
+- The wave 1 PLAYTEST section is kept as a record. The current build shows wave 2, so nobody runs
+  it now.
+- The wave 1 look is still what the game shows when the Valley meshes cannot be used (see "Baked
+  for 10 plots" below).
 
 Checks run by qa-runner on 2026-10-02, all passing: stylua, selene (only the known
 `LegacyPanel.luau:200` warning), luau-lsp on both trees, both `rojo build`s, `sim_economy`,
@@ -2109,35 +2124,162 @@ run by the lead once it finished, also on 2026-10-02: all green. (`streetplan.py
 `--out-dir` to a scratch folder so it did not overwrite that session's pictures in
 `assets/testfit/out`.)
 
-**Known follow-ups:**
-- **lead:** tune the haze in `World.json` from Ben's two screenshots (PLAYTEST M13 step 15). The
-  `lighting` block exists for this round if the haze alone is not enough.
-- **lead:** `tools/testfit/plotrender.py` still draws the ground outside a plot as the darkened
-  plot colour. Update it in wave 2, after `m12-boomtown` merges (that branch edits the same
-  files).
-- **lead:** `tools/marketing/SHOTLIST.md` item 4 says the game uses the default Lighting. That
-  stops being true with the haze; correct it before the next thumbnail shoot.
-- **lead (wave 2):** era aprons looked like scorch marks around Metropolis and Orbital in the
-  second mock pass. They need a different approach.
-- **lead (wave 2):** a road ends at the plot's front face, and each era's first street starts
-  further in: 3.5 studs (Village), 5.5 (Boomtown), 11 (Metropolis, Orbital). The Sign post stands
-  on the road's centreline. If Ben says the gap reads badly, it goes with the ground ramp and
-  entrance work.
-- **lead (wave 2):** a Python mirror of `WorldPlan`, so the tools lay things out from the same
-  ring.
+**Wave 2 — the Valley meshes**
 
-**Next waves:**
-- **Wave 2:** contracts first. A generated landscape kit (mountains, foothills, forest,
-  waterfall), **one upload and one harvest paste**, after the Boomtown session's harvest is
-  committed. Then the invisible wall at the foothills, the ground ramp to the plot edges, the era
-  aprons and the low-poly clouds.
-- **Wave 3:** river, pond, lake and bridges (the wade-through and solid-bridge ruling).
+**Shipped (wave 2, 2026-10-02; commits `3f2e863` code, tools, generator and `Valley.json`,
+`6f1c415` uploaded, `e33d87f` harvested, `2179a21` templates and manifest):**
+- **Generator:** `tools/world/valley.py` (with `valleyland.py`, `valleyprops.py`, `wgeom.py` and
+  the art numbers in `tools/world/Valley.plan.json`), plus `tools/worldplan.py`, the Python mirror
+  of `WorldPlan.Ring`.
+  - Deterministic: two builds give byte-identical files.
+  - Gates: `py tools/world/valley.py check` and `py tools/worldplan.py selftest`.
+  - It writes the GLBs, the palette and the bake record under `assets/build/world/`, and
+    `src/shared/Config/Valley.json` (generated; never hand-edit it).
+- **28 meshes, 131,768 triangles, one palette image:**
+
+  | Meshes | What |
+  |---|---|
+  | `Basin_1..2` (required) | the flat ground overlay: meadow, patches, earth ring, bent dirt roads, river and pond bed |
+  | `Mountains_1..4` | foothills, mountains and far hills, one per world quadrant |
+  | `Forest_1..6` | pines on the foothills |
+  | `Groves`, `Details` | tree clumps between the roads; stepping stones, hub kerb and bollards, flowers and tufts |
+  | `RiverBed`, `Water`, `Waterfall` | the bed repeated above the aprons in the two river gaps; the see-through water sheet; the two-tier fall |
+  | `Bridge_1..4` | plank deck, ramps and rails |
+  | `Clouds_1..4` | flat low-poly clusters |
+  | `ApronInner`, `ApronOuter`, `Entrance` | per plot: two gravel bands tinted by era, and two short fence runs at the road |
+- **World pipeline** (a copy of the baked-paths route):
+  - `tools/assets/upload_world.py` (new);
+  - `harvest.py` kinds `worldMesh` and `worldTexture`, with a check of each harvested size against
+    the bake;
+  - `gen_templates.py --world`, and a "World" table in `gen_asset_manifest.py`;
+  - a `world` block in `Assets.json`, serialised by `assets_config.py`.
+- **Templates:** 28 in `templates/_world/Valley/`, mapped to `ServerStorage.Assets.World.Valley`.
+- **Server, mesh mode in `Landscape`:**
+  - on when `Valley.json` exists, the template set exists, `plotCount` matches the ring and every
+    required mesh has a template;
+  - clones the world meshes once into `Workspace.Landscape.Valley`, and the aprons and entrance
+    once per plot (`Landscape.AttachPlot`, the only PlotService change);
+  - apron bands take the colour of the plot's era from `World.json` `valley.aprons`, and follow
+    `EraName` when it changes;
+  - builds the collision as invisible Parts under `Workspace.Landscape.Collision`: a wall of 36
+    slabs at radius 358.9 and 160 studs tall, 4 bridges (a solid deck and two ramps each) and 7
+    stepping stones;
+  - builds **no** road Parts and **no** earth-ring Part: both are baked into the basin mesh.
+- **Client:** `src/client/City/WorldBlock.luau` and a hook in `Fabric.luau`: no skirt tree, rock
+  or bird flock centre stands in the river.
+- **Config:** `World.json` gains a `valley` block (wall, apron colours per era, `skirtMargin`).
+  `Catalog.GetValleyPlan` and the Valley types are new. No remote, profile, economy or balance
+  change.
+
+**Design facts (wave 2):**
+- **The floor is flat and collision is Parts only.** The `Ground` Part stays the only floor. Every
+  mesh is visual. The plots keep their 1-stud kerb (no ramp).
+- **The river is not carved.** It is a coloured bed under a see-through water sheet 0.35 studs
+  above the ground, so a player wades ankle-deep and never swims.
+- **Solid:** the wall, the bridge decks and ramps, the stepping stones. **Walk-through:** trees,
+  rocks, fences, bridge rails and every other mesh.
+- **Behind the wall:** mountains, forest, lake and waterfall. The foothills start at radius 362.3.
+- **Stacking above the ground top:** basin 0.10, aprons 0.16, river bed 0.22, water 0.35, bridge
+  deck 0.70.
+- **Sizes:** the tallest summit is 310.5 studs, at radius 722.6. The terrain ends at radius 1,400.
+  Clouds stand 900 to 1,260 studs out.
+- **Roads bend gently.** They still end at the hub and at the centre of each plot's front edge.
+- **Baked for 10 plots.** `Valley.json` records `plotCount`. On any other ring the server warns
+  once and builds the wave 1 look.
+- **Everything degrades to wave 1:** no `Valley.json`, no templates, a `plotCount` mismatch or a
+  missing required mesh. A missing optional mesh is left out and named in one warning.
+
+**Preview gate (lead, 2026-10-02):** the baked GLBs were rendered from the mock's cameras with
+back-face culling on, compared with the A2 renders and accepted (`sheetV_*.png` in the mock's
+`out/` folder, A2 | baked). Rulings from it:
+- Aprons are **light era gravel in two flat bands**. The dark base colour bleeding outward read as
+  scorch marks.
+- No signposts: each plot already has its Sign.
+- `RiverBed` was added, because both neighbours' aprons lay over the painted bed in the two river
+  gaps.
+- The meadow's facet contrast was halved (the mosaic read as a pattern).
+- Known and accepted: trees and boulders inside the wall do not collide; a straight seam shows
+  where two aprons meet at the inner corners; the terrain's outer edge is visible from high above.
+
+**Upload and harvest (done 2026-10-02):**
+- Trial upload of 2 meshes first: `Details` (most triangles) and `Mountains_3` (largest box,
+  1,444 studs). Then the batch.
+- All 28 meshes and the palette were accepted first try.
+- Ben's **one harvest paste** was merged at once. Every mesh's harvested size matched the bake, so
+  Roblox rescaled nothing.
+- `docs/ASSET_MANIFEST.md` was regenerated by the lead (the "World" table).
+
+**Open for the Studio playtest** (things only Studio can show; PLAYTEST asks each one plainly):
+- **Low graphics quality:** are the mountains and the forest still drawn? If far meshes vanish on
+  weak devices, that is a design change, not a tuning number.
+- **Water sheet:** water over the bed, or flicker, or the bed hidden.
+- **Flicker between the stacked flat layers**, far away at a low angle, most of all on the phone
+  emulator.
+- **Bridge ramps:** up, across and down, or a ramp built backwards.
+- **Haze over the mountains:** do the peaks still read? The wave 1 haze values are untuned.
+- **Frame rate** against before M13.
+
+**Status (wave 2):** built, uploaded, harvested, templated, reviewed, **checks green**
+(2026-10-02), committed on `m13-valley`. Ben's Studio playtest is pending (`docs/PLAYTEST.md`
+"M13 wave 2 — The Valley: mountains, river, bridges"; setup in `docs/MANUAL_STEPS.md` "M13"). Not
+merged.
+
+**Review (roblox-reviewer, 2026-10-02): no Critical, two Warnings, both taken.** Placement, wall,
+bridge decks and wedges, stones, aprons, the client rule and the Rojo mapping were verified
+against the real templates and data. Rulings (INTERFACES "Review rulings" under wave 2):
+- Mesh mode also needs the `valley` config and a wall that can be built; otherwise wave 1.
+- `Valley.json planHash` must equal `Assets.json world.Valley.planHash`. The server checks it and
+  so does `valley.py check`, so a re-bake that was never uploaded falls back to wave 1 and turns
+  QA red. `World.json` `ground`, `hub`, `roads` and `valley.wall.segments` are in the hash:
+  **changing them needs a re-bake, an upload and a harvest paste.**
+- A bridge or stone collider is built only when its mesh was placed.
+
+**Checks (qa-runner, 2026-10-02), all passing:** stylua, selene (only the known
+`LegacyPanel.luau:200` warning), luau-lsp on both trees, both `rojo build`s, `sim_economy`,
+`sim_combat`, `sim_range`, `worldplan.py selftest`, `valley.py check`, `gen_templates.py --check`
+(355 templates), `gen_asset_manifest.py --check`, `fabric.py check Village`,
+`cityfabric.py selftest`, `bake.py --era Village --list`, `streetplan.py` (0 violations, with
+`--out-dir` to scratch) and `upload_world.py --dry-run` (0 pending).
+
+**Known follow-ups:**
+- **lead (known cost):** the meshes are baked for 10 plots. When `m11-unlocks` (6 plots) merges,
+  the Valley must be regenerated and re-uploaded: **one more harvest paste** by Ben. Until then a
+  6-plot ring shows the wave 1 look, with one warning.
+- **lead:** tune the haze in `World.json` from Ben's screenshots (PLAYTEST M13 wave 2 step 22).
+  The `lighting` block exists for this round if the haze alone is not enough.
+- **lead:** `tools/testfit/plotrender.py` still draws the ground outside a plot as the darkened
+  plot colour. Update it after `m12-boomtown` merges (that branch edits the same files).
+- **lead:** `tools/marketing/SHOTLIST.md` item 4 says the game uses the default Lighting. That is
+  no longer true; correct it before the next thumbnail shoot.
+- **lead:** the client's river rule for skirt entries is deliberately **not** mirrored in
+  `tools/cityfabric.py` or `plotrender.py` (a single-plot render does not know where the plot
+  sits in the world). This is the one sanctioned difference between the mirror and the client.
+- **lead (at the `m12-boomtown` merge):**
+  - any new list that carries `skirt` entries needs the same river gate;
+  - `tools/assets/assets_config.py` from this branch must be in place before any uploader or
+    harvest runs on the merged tree. An older copy erases the `world` block of `Assets.json`.
+- **lead:** the server has no load gate for the Valley, so meshes may pop in for a moment on
+  join.
+- **lead:** a road still ends at the plot's front face, and each era's first street starts
+  further in: 3.5 studs (Village), 5.5 (Boomtown), 11 (Metropolis, Orbital). Wave 2 added the
+  fence runs but no ground ramp. Open until Ben says how the entrance reads.
+- **Closed by wave 2:** the scorch-mark aprons (now two light gravel bands); the Python mirror of
+  `WorldPlan` (`tools/worldplan.py`).
+
+**After the playtest:**
+- A tuning round. Haze, wall and apron colours are `World.json` numbers. Anything in the meshes
+  goes back through the generator and the pipeline.
+- If far meshes vanish at low graphics quality: a design decision for Ben, before any tuning.
+- Then the merge into `main`, the lead's call on timing against `m12-boomtown` and `m11-unlocks`.
 
 - [x] Wave 1 built, review rulings taken (2026-10-02)
-- [x] lead: checks green (2026-10-02, every gate)
+- [x] lead: checks green for wave 1 (2026-10-02, every gate)
 - [x] lead: commit wave 1
-- [ ] Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads")
-- [ ] lead: haze tuning round from Ben's screenshots
-- [ ] Wave 2 (waits for the Boomtown harvest commit)
-- [ ] Wave 3
+- [x] Ben saw wave 1 in Studio (2026-10-02, one screenshot; no formal sign-off, no haze letter)
+- [x] Wave 2 built, uploaded, harvested (one paste) and templated (2026-10-02)
+- [x] lead: wave 2 review rulings taken and checks green (2026-10-02)
+- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "M13 wave 2 — The Valley: mountains, river,
+  bridges")
+- [ ] lead: tuning round from Ben's screenshots and answers
+- [ ] lead: re-bake for 6 plots when `m11-unlocks` merges (one more harvest paste)
 - [ ] lead: merge `m13-valley` into `main`
