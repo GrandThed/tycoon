@@ -6536,6 +6536,54 @@
           }
         ]
       },
+      "BillboardA": {
+        "stages": [
+          {
+            "modelAssetId": 139555267140987,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.45, 0.6],
+                "offset": [0.0, 3.225, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "BillboardB": {
+        "stages": [
+          {
+            "modelAssetId": 126003766897875,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.45, 0.6],
+                "offset": [0.0, 3.225, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "BillboardC": {
+        "stages": [
+          {
+            "modelAssetId": 125179480941109,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.5, 8.9, 0.96],
+                "offset": [0.0, 4.45, -0.02]
+              }
+            ]
+          }
+        ]
+      },
       "Bird": {
         "stages": [
           {
@@ -6547,6 +6595,22 @@
                 "imageId": 112640019675941,
                 "size": [0.896, 0.238, 0.728],
                 "offset": [0.0, 0.119, 0.028]
+              }
+            ]
+          }
+        ]
+      },
+      "BusStopA": {
+        "stages": [
+          {
+            "modelAssetId": 87228561209695,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.897, 1.6],
+                "offset": [0.0, 1.449, 0.0]
               }
             ]
           }
@@ -6584,6 +6648,921 @@
           }
         ]
       },
+      "FabricCivicMedium": {
+        "stages": [
+          {
+            "modelAssetId": 120133653334725,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.88, 0.89, 7.88],
+                "offset": [0.0, 0.445, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89130273876470,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.899, 3.356, 7.88],
+                "offset": [0.01, 1.678, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 70920050825648,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.899, 4.42, 7.88],
+                "offset": [0.01, 2.21, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricCivicSmall": {
+        "stages": [
+          {
+            "modelAssetId": 110654947546913,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.88, 0.17, 5.88],
+                "offset": [0.0, 0.085, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 132117572365998,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.88, 3.356, 5.88],
+                "offset": [0.0, 1.678, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeMediumA": {
+        "stages": [
+          {
+            "modelAssetId": 71724145115611,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.816, 2.143, 2.808],
+                "offset": [1.04, 1.128, 1.0]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.64, 2.065, 6.182],
+                "offset": [1.04, 1.032, -0.809]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 111106297472493,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 2.199, 7.678],
+                "offset": [0.05, 1.1, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.454, 2.148, 6.182],
+                "offset": [0.467, 1.074, -0.809]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71209914410122,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.8, 3.6, 7.678],
+                "offset": [0.05, 1.8, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.454, 2.148, 6.182],
+                "offset": [0.467, 1.074, -0.809]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeMediumB": {
+        "stages": [
+          {
+            "modelAssetId": 80070861321217,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.814, 0.7, 0.045],
+                "offset": [1.752, 0.406, -0.346]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.998, 2.065, 7.099],
+                "offset": [0.85, 1.032, -0.35]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 123183988666731,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.85, 1.32, 7.678],
+                "offset": [0.025, 0.66, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.344, 2.148, 7.099],
+                "offset": [1.023, 1.074, -0.35]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98348766087969,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.85, 3.3, 7.678],
+                "offset": [0.025, 1.65, -0.041]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.744, 2.148, 7.099],
+                "offset": [1.223, 1.074, -0.35]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 128825512872657,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.101, 2.975, 2.691],
+                "offset": [-0.32, 1.543, 1.368]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.894, 2.938, 5.528],
+                "offset": [-0.5, 1.469, -0.136]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 83818491500074,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 3.031, 5.677],
+                "offset": [-0.05, 1.515, -0.042]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.048, 2.938, 5.528],
+                "offset": [-0.07, 1.469, -0.136]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallB": {
+        "stages": [
+          {
+            "modelAssetId": 135225824537845,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.304, 1.82, 0.045],
+                "offset": [0.157, 0.966, 0.418]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.998, 3.185, 5.722],
+                "offset": [-0.0, 1.593, -0.039]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109375478664893,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.742, 1.876, 5.677],
+                "offset": [-0.079, 0.938, -0.042]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.494, 3.185, 5.722],
+                "offset": [-0.248, 1.593, -0.039]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallC": {
+        "stages": [
+          {
+            "modelAssetId": 82111696976495,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.845, 3.227, 4.118],
+                "offset": [0.474, 1.669, 0.906]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.998, 3.185, 5.762],
+                "offset": [0.3, 1.593, -0.013]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 92360086335087,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.8, 3.283, 5.845],
+                "offset": [0.0, 1.641, 0.043]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.244, 3.185, 5.762],
+                "offset": [0.423, 1.593, -0.013]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallD": {
+        "stages": [
+          {
+            "modelAssetId": 80554538087274,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.174, 3.227, 4.028],
+                "offset": [0.005, 1.669, 0.899]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.996, 3.185, 5.729],
+                "offset": [0.0, 1.593, -0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 95105759853119,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.742, 3.283, 5.793],
+                "offset": [-0.079, 1.641, 0.016]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.996, 3.185, 5.729],
+                "offset": [0.0, 1.593, -0.035]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallE": {
+        "stages": [
+          {
+            "modelAssetId": 87515389541132,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.816, 2.143, 2.879],
+                "offset": [0.0, 1.128, 0.864]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.64, 2.065, 5.082],
+                "offset": [0.0, 1.032, -0.359]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76317725589625,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 2.199, 5.677],
+                "offset": [0.0, 1.1, -0.042]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.215, 2.065, 5.082],
+                "offset": [-0.287, 1.032, -0.359]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHomeSmallF": {
+        "stages": [
+          {
+            "modelAssetId": 84877769058716,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.845, 2.107, 3.845],
+                "offset": [0.074, 1.109, 0.974]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.998, 2.065, 5.699],
+                "offset": [-0.1, 1.032, -0.05]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 97407448538922,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 2.163, 5.776],
+                "offset": [-0.05, 1.081, 0.008]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.594, 2.148, 5.699],
+                "offset": [0.198, 1.074, -0.05]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 83359957990084,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 2.25, 5.97],
+                "offset": [0.0, 1.125, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.5, 0.708, 7.298],
+                "offset": [-0.85, 0.354, -0.251]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 118601403158833,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 3.1, 5.97],
+                "offset": [0.0, 1.55, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 1.08, 7.87],
+                "offset": [0.0, 0.54, 0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 102049915846549,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 4.45, 6.02],
+                "offset": [0.0, 2.225, -0.99]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 2.268, 7.87],
+                "offset": [0.0, 1.134, 0.035]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 73855917119993,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 2.21, 5.97],
+                "offset": [0.0, 1.105, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.8, 0.04, 0.8],
+                "offset": [-1.78, 0.08, -3.5]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 106943056692743,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 3.4, 5.97],
+                "offset": [0.0, 1.7, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 1.08, 7.87],
+                "offset": [0.0, 0.54, 0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 82746005443674,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 4.45, 6.02],
+                "offset": [0.0, 2.225, -0.99]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 2.268, 7.87],
+                "offset": [0.0, 1.134, 0.035]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowC": {
+        "stages": [
+          {
+            "modelAssetId": 114752286484606,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 2.25, 5.97],
+                "offset": [0.0, 1.125, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 1.08, 7.87],
+                "offset": [0.0, 0.54, 0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 122024071418495,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 3.25, 5.97],
+                "offset": [0.0, 1.625, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 1.08, 7.87],
+                "offset": [0.0, 0.54, 0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 123444445216066,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 4.45, 6.02],
+                "offset": [0.0, 2.225, -0.99]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 2.268, 7.87],
+                "offset": [0.0, 1.134, 0.035]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowD": {
+        "stages": [
+          {
+            "modelAssetId": 129567660265005,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 2.25, 5.97],
+                "offset": [0.0, 1.125, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.48, 0.708, 7.298],
+                "offset": [0.36, 0.354, -0.251]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72264314489306,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 3.4, 5.97],
+                "offset": [0.0, 1.7, -1.015]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 1.08, 7.87],
+                "offset": [0.0, 0.54, 0.035]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 75779477400218,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 4.45, 6.02],
+                "offset": [0.0, 2.225, -0.99]
+              },
+              {
+                "kit": "city-kit-suburban",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.4, 2.268, 7.87],
+                "offset": [0.0, 1.134, 0.035]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricWorksMediumA": {
+        "stages": [
+          {
+            "modelAssetId": 131848063830825,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.9, 1.3, 4.35],
+                "offset": [0.0, 0.65, -1.775]
+              },
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.714, 2.001, 2.778],
+                "offset": [-1.54, 1.0, -1.91]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121762456601090,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.9, 1.3, 4.35],
+                "offset": [0.0, 0.65, -1.775]
+              },
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.707, 2.841, 7.145],
+                "offset": [-0.043, 1.42, 0.274]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 105166871885168,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.9, 2.45, 5.123],
+                "offset": [0.0, 1.225, -1.389]
+              },
+              {
+                "kit": "city-kit-industrial",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.707, 5.39, 7.145],
+                "offset": [-0.043, 2.695, 0.274]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricWorksSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 133788531833668,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.74, 1.729, 5.75],
+                "offset": [0.0, 0.865, -0.025]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 131293935531708,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.74, 3.1, 5.75],
+                "offset": [0.0, 1.55, -0.025]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricWorksSmallB": {
+        "stages": [
+          {
+            "modelAssetId": 101873203550094,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.74, 1.75, 5.749],
+                "offset": [0.0, 0.875, -0.025]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 83139374949994,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.74, 2.95, 5.75],
+                "offset": [0.0, 1.475, -0.025]
+              }
+            ]
+          }
+        ]
+      },
+      "Farmstead": {
+        "stages": [
+          {
+            "modelAssetId": 132092696226444,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.554, 10.0, 11.569],
+                "offset": [0.002, 5.0, 0.005]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldClumpA": {
+        "stages": [
+          {
+            "modelAssetId": 90774913421668,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.92, 1.1, 11.92],
+                "offset": [0.0, 0.55, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldClumpB": {
+        "stages": [
+          {
+            "modelAssetId": 138091253363102,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.92, 1.1, 11.92],
+                "offset": [0.0, 0.55, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldClumpC": {
+        "stages": [
+          {
+            "modelAssetId": 76471337714839,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.92, 1.477, 11.92],
+                "offset": [0.0, 0.738, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldQuarterA": {
+        "stages": [
+          {
+            "modelAssetId": 70972205610847,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.96, 1.1, 5.96],
+                "offset": [2.98, 0.55, 2.98]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldQuarterB": {
+        "stages": [
+          {
+            "modelAssetId": 94451473670084,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.96, 1.1, 5.96],
+                "offset": [2.98, 0.55, 2.98]
+              }
+            ]
+          }
+        ]
+      },
+      "FieldQuarterC": {
+        "stages": [
+          {
+            "modelAssetId": 82469931692221,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.96, 1.477, 5.96],
+                "offset": [2.98, 0.738, 2.98]
+              }
+            ]
+          }
+        ]
+      },
       "FlowerBedA": {
         "stages": [
           {
@@ -6595,6 +7574,22 @@
                 "imageId": 86687282637390,
                 "size": [3.0, 0.6303, 2.0],
                 "offset": [0.0, 0.3152, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "HayBale": {
+        "stages": [
+          {
+            "modelAssetId": 106306630542223,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.791, 1.427, 1.875],
+                "offset": [0.0, 0.713, 0.0]
               }
             ]
           }
@@ -6712,6 +7707,22 @@
           }
         ]
       },
+      "Hydrant": {
+        "stages": [
+          {
+            "modelAssetId": 137640042654753,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.84, 1.3, 0.84],
+                "offset": [0.0, 0.65, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "Junction": {
         "stages": [
           {
@@ -6739,6 +7750,86 @@
                 "imageId": 130771765354100,
                 "size": [0.45, 6.075, 2.025],
                 "offset": [0.0, 3.0375, 0.7875]
+              }
+            ]
+          }
+        ]
+      },
+      "LotSign": {
+        "stages": [
+          {
+            "modelAssetId": 136151017486955,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.94, 3.4, 0.26],
+                "offset": [0.0, 1.7, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "NeonArch": {
+        "stages": [
+          {
+            "modelAssetId": 109797325888449,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.5, 6.465, 0.5],
+                "offset": [0.0, 3.233, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "NeonSignA": {
+        "stages": [
+          {
+            "modelAssetId": 135201881302602,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.56, 4.6, 0.8],
+                "offset": [0.0, 2.3, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "NeonSignB": {
+        "stages": [
+          {
+            "modelAssetId": 96933565065906,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.56, 4.3, 0.8],
+                "offset": [0.0, 2.15, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "NeonSignC": {
+        "stages": [
+          {
+            "modelAssetId": 88095544840274,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.56, 4.73, 0.78],
+                "offset": [0.0, 2.365, 0.0]
               }
             ]
           }
@@ -6792,6 +7883,38 @@
           }
         ]
       },
+      "PastureClump": {
+        "stages": [
+          {
+            "modelAssetId": 105032085657772,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [11.92, 1.38, 11.92],
+                "offset": [0.0, 0.69, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "PastureQuarter": {
+        "stages": [
+          {
+            "modelAssetId": 87704689685684,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.96, 1.38, 5.96],
+                "offset": [2.98, 0.69, 2.98]
+              }
+            ]
+          }
+        ]
+      },
       "PlanterA": {
         "stages": [
           {
@@ -6826,6 +7949,38 @@
                 "imageId": 75804611199159,
                 "size": [11.7481, 4.108, 12.286],
                 "offset": [-0.0046, 2.054, 0.257]
+              }
+            ]
+          }
+        ]
+      },
+      "PrairieTree": {
+        "stages": [
+          {
+            "modelAssetId": 136139106698908,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.139, 5.7, 4.332],
+                "offset": [-0.08, 2.85, 0.162]
+              }
+            ]
+          }
+        ]
+      },
+      "RevealScaffold": {
+        "stages": [
+          {
+            "modelAssetId": 113714031170338,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.94, 7.6, 9.94],
+                "offset": [0.0, 3.8, 0.0]
               }
             ]
           }
@@ -6872,6 +8027,77 @@
                 "imageId": 75804611199159,
                 "size": [2.55, 0.6022, 1.36],
                 "offset": [-1.275, 0.3011, 2.312]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteMedium": {
+        "stages": [
+          {
+            "modelAssetId": 117101069300220,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.81, 3.96, 7.873],
+                "offset": [-0.02, 1.98, 0.007]
+              },
+              {
+                "kit": "city-kit-roads",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.1, 0.838, 1.48],
+                "offset": [3.33, 0.419, 0.2]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteNarrow": {
+        "stages": [
+          {
+            "modelAssetId": 112856374753479,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.839, 3.4, 7.893],
+                "offset": [0.0, 1.7, -0.044]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteSmall": {
+        "stages": [
+          {
+            "modelAssetId": 73986505974836,
+            "parts": [
+              {
+                "kit": "boomtown-extras-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 3.36, 5.836],
+                "offset": [0.0, 1.68, 0.006]
+              }
+            ]
+          }
+        ]
+      },
+      "TelegraphPole": {
+        "stages": [
+          {
+            "modelAssetId": 125763870206555,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.0, 6.6, 0.346],
+                "offset": [0.0, 3.3, 0.0]
               }
             ]
           }
@@ -6977,6 +8203,22 @@
           }
         ]
       },
+      "VehicleBus": {
+        "stages": [
+          {
+            "modelAssetId": 103151381709432,
+            "parts": [
+              {
+                "kit": "boomtown-street-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.092, 4.303, 10.806],
+                "offset": [0.031, 2.152, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "VehicleC": {
         "stages": [
           {
@@ -7052,6 +8294,38 @@
                 "imageId": 112640019675941,
                 "size": [0.84, 1.75, 0.61],
                 "offset": [0.0, 0.875, -0.025]
+              }
+            ]
+          }
+        ]
+      },
+      "Windbreak": {
+        "stages": [
+          {
+            "modelAssetId": 130398586324855,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.009, 5.7, 4.504],
+                "offset": [0.0, 2.85, 0.047]
+              }
+            ]
+          }
+        ]
+      },
+      "Windpump": {
+        "stages": [
+          {
+            "modelAssetId": 100183078182643,
+            "parts": [
+              {
+                "kit": "farmland-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.6, 9.4, 2.567],
+                "offset": [0.0, 4.7, 0.166]
               }
             ]
           }
@@ -8838,59 +10112,59 @@
       "FabricHomeNarrowA": {
         "stages": [
           {
-            "modelAssetId": 96375823119414,
+            "modelAssetId": 82218969166489,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 87267194772821,
-                "imageId": 76536101627711,
-                "size": [2.6768, 3.9268, 2.75],
-                "offset": [0.0, 1.9634, -1.5]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.677, 4.062, 2.75],
+                "offset": [0.0, 2.031, 1.5]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 73026808356237,
-                "imageId": 96503344088534,
-                "size": [2.0586, 1.1462, 3.3501],
-                "offset": [0.0, 0.5731, 1.3001]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.059, 1.146, 3.35],
+                "offset": [0.0, 0.573, -1.3]
               }
             ]
           },
           {
-            "modelAssetId": 92866367705416,
+            "modelAssetId": 115377560083997,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 93824834015840,
-                "imageId": 76536101627711,
-                "size": [2.6768, 4.1018, 5.125],
-                "offset": [0.0, 2.0509, -0.3125]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.677, 4.102, 5.125],
+                "offset": [0.0, 2.051, 0.312]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 73026808356237,
-                "imageId": 96503344088534,
-                "size": [2.0586, 1.1462, 3.3501],
-                "offset": [0.0, 0.5731, 1.3001]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.059, 1.146, 3.35],
+                "offset": [0.0, 0.573, -1.3]
               }
             ]
           },
           {
-            "modelAssetId": 78605945489964,
+            "modelAssetId": 107574734677444,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 108256183011862,
-                "imageId": 76536101627711,
-                "size": [2.8354, 8.2125, 5.75],
-                "offset": [0.0, 4.1063, 0.0]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.835, 8.213, 5.75],
+                "offset": [0.0, 4.106, 0.0]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 73026808356237,
-                "imageId": 96503344088534,
-                "size": [2.0586, 1.1462, 3.3501],
-                "offset": [0.0, 0.5731, 1.3001]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.059, 1.146, 3.35],
+                "offset": [0.0, 0.573, -1.3]
               }
             ]
           }
@@ -8899,38 +10173,38 @@
       "FabricHomeNarrowB": {
         "stages": [
           {
-            "modelAssetId": 121776319458095,
+            "modelAssetId": 70627059879946,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 79204443224829,
-                "imageId": 76536101627711,
-                "size": [2.5, 3.4398, 3.125],
-                "offset": [0.0, 1.7199, 1.4375]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.5, 4.062, 3.125],
+                "offset": [0.0, 2.031, -1.437]
               }
             ]
           },
           {
-            "modelAssetId": 103509520855198,
+            "modelAssetId": 81207460278795,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 107004081303072,
-                "imageId": 76536101627711,
-                "size": [2.5, 3.4398, 5.625],
-                "offset": [0.0, 1.7199, 0.1875]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.5, 4.062, 5.625],
+                "offset": [0.0, 2.031, -0.187]
               }
             ]
           },
           {
-            "modelAssetId": 88080458603471,
+            "modelAssetId": 139936989592837,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 94676929130323,
-                "imageId": 76536101627711,
-                "size": [2.5, 7.4375, 5.7927],
-                "offset": [0.0, 3.7188, 0.1036]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.5, 7.438, 5.793],
+                "offset": [0.0, 3.719, -0.104]
               }
             ]
           }
@@ -8939,59 +10213,59 @@
       "FabricHomeNarrowC": {
         "stages": [
           {
-            "modelAssetId": 134841300088820,
+            "modelAssetId": 124682375061802,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 85914179733430,
-                "imageId": 76536101627711,
-                "size": [2.75, 3.75, 2.75],
-                "offset": [0.0, 1.875, -1.25]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.75, 4.063, 2.75],
+                "offset": [0.0, 2.031, 1.25]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 92028483763305,
-                "imageId": 96503344088534,
-                "size": [2.7015, 0.7312, 2.999],
-                "offset": [0.0356, 0.3656, 1.4995]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.701, 0.731, 2.999],
+                "offset": [-0.036, 0.366, -1.499]
               }
             ]
           },
           {
-            "modelAssetId": 78967360136980,
+            "modelAssetId": 90506143468312,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 127123173135308,
-                "imageId": 76536101627711,
-                "size": [2.8354, 5.2795, 5.25],
-                "offset": [0.0, 2.6398, 0.0]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.835, 5.28, 5.25],
+                "offset": [0.0, 2.64, -0.0]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 92028483763305,
-                "imageId": 96503344088534,
-                "size": [2.7015, 0.7312, 2.999],
-                "offset": [0.0356, 0.3656, 1.4995]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.701, 0.731, 2.999],
+                "offset": [-0.036, 0.366, -1.499]
               }
             ]
           },
           {
-            "modelAssetId": 126758506901821,
+            "modelAssetId": 107576104262677,
             "parts": [
               {
                 "kit": "fantasy-town-kit",
-                "meshId": 104615037471460,
-                "imageId": 76536101627711,
-                "size": [2.8354, 7.3125, 5.25],
-                "offset": [0.0, 3.6563, 0.0]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.835, 7.313, 5.25],
+                "offset": [0.0, 3.656, 0.0]
               },
               {
                 "kit": "nature-kit",
-                "meshId": 92028483763305,
-                "imageId": 96503344088534,
-                "size": [2.7015, 0.7312, 2.999],
-                "offset": [0.0356, 0.3656, 1.4995]
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.701, 0.731, 2.999],
+                "offset": [-0.036, 0.366, -1.499]
               }
             ]
           }
