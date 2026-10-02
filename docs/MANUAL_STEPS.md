@@ -1580,7 +1580,8 @@ playtest.**
 - The branch does not merge to `main` until Ben signs off.
 
 **NEVER PUBLISH `build/boomtown.rbxl`.** It is for local Studio use only.
-- It carries the switch `DebugStartEra` = 2, which starts a **fresh** save in Boomtown.
+- It carries two switches: `DebugStartEra` = 2, which starts a **fresh** save in Boomtown, and
+  `GrantCash` = 100T, which pays that cash on joining.
 - Opened from the disk it is harmless: every Play is a throwaway save.
 - On a published place, with API access on, the switch would move a fresh **real** save to era 2.
 - So: open it with File (*Archivo*) → Open (*Abrir*) only. Never use Publish to Roblox (*Publicar
@@ -1949,8 +1950,11 @@ other two Claude sessions acknowledged before the uploads and were told when the
 
 ### 11. M12 wave 2 — build and open the Boomtown file, then playtest
 
-`build/boomtown.rbxl` is the same game as `build/test.rbxl`, with one switch baked in: a fresh
-save starts in **Boomtown**. No need to buy out Village first.
+`build/boomtown.rbxl` is the same game as `build/test.rbxl`, with two switches baked in:
+- a fresh save starts in **Boomtown** (no need to buy out Village first);
+- you start with **100T cash** (no attribute to add by hand).
+
+Press Play again and you get a fresh Boomtown and the cash again.
 
 **NEVER PUBLISH THIS FILE.** Open it from the disk only (see the warning at the top of this
 section).
@@ -1968,12 +1972,18 @@ section).
 - [ ] 47. Press **Play** (*Jugar*). Check the right build:
       - View (*Vista*) → **Output** (*Salida*) shows this **yellow** line:
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
-      - you stand at a fresh Boomtown plot with one free pad, the Newsstand.
+      - about a second later, a second **yellow** line:
+        `[EconomyService] GrantCash lever: granted 1e+14 cash to 1 loaded player(s); attribute reset to 0`;
+      - your cash reads **100T**, and you stand at a fresh Boomtown plot with one free pad, the
+        Newsstand.
       If Output says `DebugStartEra lever skipped ... already has progress`, the session is on a
       real save: Stop (*Detener*), close the file **without saving**, and tell Claude.
 - [ ] 48. Run `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city". Its Village part (steps
       49–57) uses `build/test.rbxl`.
 - [ ] 49. Send Claude the numbers from steps 58 and 59 of that section.
 - When you close `boomtown.rbxl`, Studio may ask to save. Saving to the same file on the disk is
-  fine (it keeps your `GrantCash` attribute). Rebuilding (step 45) overwrites the file, so add the
-  attribute again after a rebuild.
+  fine. Rebuilding (step 45) overwrites the file; the two switches are rebuilt with it, so there
+  is nothing to add again. Only an optional `GrantLegacy` attribute (PLAYTEST step 3) would be
+  lost.
+- `build/test.rbxl` (Village) has no cash baked in. There the `GrantCash` attribute is still added
+  by hand (PLAYTEST step 49).

@@ -4443,8 +4443,9 @@ fresh real save to era 2.
 
 - Setup: `docs/MANUAL_STEPS.md` "M12" §11 (rebuild first, then open the file).
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
-- **Every Play starts a fresh Boomtown plot.** Buy in Build panel order. "Purchase 7" means the
-  7th slot in that list.
+- **Every Play starts a fresh Boomtown plot with 100T cash.** Press Play again and you get a
+  fresh Boomtown and the cash again. Nothing to add by hand.
+- Buy in Build panel order. "Purchase 7" means the 7th slot in that list.
 - Reference renders, in `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`:
   `m12d_full.png`, `m12d_full_entrance.png`, `m12d_block.png` (one block's lanes),
   `m12d_tier1.png`, `m12d_tier3.png`.
@@ -4473,24 +4474,25 @@ sooner, so your numbers can differ a little:
 
 - [ ] 1. Open `C:\Users\benja\Desktop\tycoon-m12\build\boomtown.rbxl` with File (*Archivo*) → Open
       (*Abrir*). **Never publish this file.**
-- [ ] 2. Set up the cash lever:
-      - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
-      - name `GrantCash`, type **number**, value `10000000000000` (10T).
-      It pays out about 1 s after Play, then resets to 0. To add more during Play: on the Test
-      (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
-      **Client**.
-      `DebugStartEra` is already in that Attributes list, set to 2. Leave it.
-- [ ] 3. Only needed for step 31: in the same place, add `GrantLegacy`, type **number**, value
-      `3000`.
+- [ ] 2. **Cash: nothing to set up.** The file pays you **100T** about a second after you join.
+      That is enough to buy and level everything. Under Workspace → Attributes (*Atributos*),
+      `DebugStartEra` (2) and `GrantCash` are already there. Leave both alone.
+- [ ] 3. **Optional, only for step 31.** Explorer → **Workspace** → Properties (*Propiedades*) →
+      Attributes (*Atributos*) → **+**; name `GrantLegacy`, type **number**, value `3000`. Skip
+      this if you skip step 31.
 - [ ] 4. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
-- [ ] 5. **Play** (*Jugar*). Check both:
+- [ ] 5. **Play** (*Jugar*). Check all four:
       - Output shows this **yellow** line (with your name):
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
+      - about a second later, a second **yellow** line:
+        `[EconomyService] GrantCash lever: granted 1e+14 cash to 1 loaded player(s); attribute reset to 0`;
+      - your cash reads **100T**;
       - you stand at a Boomtown plot: crop fields, and one pad, the **Newsstand**, which is free.
       Stop and tell Claude if:
       - Output says `DebugStartEra lever skipped ... already has progress`: this session is on a
         real save. Stop (*Detener*) and close the file without saving;
-      - there is no such line and you are in Village: you opened `test.rbxl`.
+      - there is no `DebugStartEra` line and you are in Village: you opened `test.rbxl`;
+      - there is no `GrantCash` line and no cash after 10 s.
 - [ ] 6. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Automatic**
       (*Automático*). Then check your plot: Workspace → Plots → `Plot_<n>` → Attributes. `EraName`
       is Boomtown and `GrowthTier` is 0.
@@ -4603,9 +4605,14 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
       - Good: a clean join, same shade, no kerb line across it.
 - [ ] 29. Watch a junction with a driveway for a minute: **no car turns into a driveway**.
 - [ ] 30. Walkers stroll beside the streets and beside the driveways, never through a landmark.
-- [ ] 31. **Buses stay buses.** Count the buses you can see. Open the **Legacy** panel (bottom
-      bar) and buy any one perk (this needs step 3). Every building re-appears at once, silently.
-      Count again.
+- [ ] 31. **Optional: buses stay buses.** It needs step 3, the only attribute you would add by
+      hand. It is optional because what it guards against only happens right after a perk or pass
+      purchase, and the fix was reviewed in code. With step 3 your income is higher in that Play;
+      that does not matter here.
+      - Count the buses you can see.
+      - Open the **Legacy** panel (bottom bar) and buy any one perk. Every building re-appears at
+        once, silently.
+      - Count again.
       Bug: the buses turned into cars, or flicked to cars and back.
 
 ### 8. Farmland
@@ -4673,8 +4680,9 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
       Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
       skip this step and say so.
 - [ ] 43. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
-      **Start** (*Iniciar*). Both players start in Boomtown. Set `GrantCash` in the **Server**
-      window; it pays both.
+      **Start** (*Iniciar*). Both players start in Boomtown. The 100T goes to whoever has loaded
+      when it pays out, often only one player. Use that player as Player 1; one player with cash
+      is enough here.
 - [ ] 44. Player 1 buys through the Grocery Store (9). Player 2 stands by Player 1's plot:
       - the **same lanes, houses, sites, hydrants and parked cars** in the same spots;
       - start times may differ by a moment; moving cars and walkers differ. That is fine.
@@ -4682,8 +4690,8 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
       away from it and looks back: **only part of its fields show** (45 of 85), and the ones
       nearest the hub are bare. That is **known**; it waits on your numbers (step 58).
 - [ ] 46. **Output** (*Salida*) through the whole run: no red errors and no yellow warnings from
-      CityDressing, Fabric, RoadGraph, PathRenderer, Traffic or Ambient. The one yellow
-      `DebugStartEra` line from step 5 is expected. Studio's own warnings are fine.
+      CityDressing, Fabric, RoadGraph, PathRenderer, Traffic or Ambient. The two yellow lines
+      from step 5 (`DebugStartEra`, `GrantCash`) are expected. Studio's own warnings are fine.
 
 ### 13. Missing pieces
 
@@ -4701,8 +4709,14 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 
 ### 14. Village (the normal build)
 
-- [ ] 49. Stop. Open `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`. Set `GrantCash` to
-      `1000000000` as in step 2. Play: a fresh **Village**.
+- [ ] 49. Stop. Open `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`. This file has **no**
+      cash baked in, so set up the cash lever by hand:
+      - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
+      - name `GrantCash`, type **number**, value `1000000000`.
+      It pays out about 1 s after Play, then resets to 0. To add more during Play: on the Test
+      (*Prueba*) tab, flip **Client/Server** to **Server**, set it again, then flip back to
+      **Client**.
+      Then Play: a fresh **Village**.
 - [ ] 50. Buy purchases **1 to 7** (Campfire … Village Well): **no smoke** yet.
 - [ ] 51. Buy **Plant Flowers** (purchase 8). `GrowthTier` turns 2 and houses rise.
 - [ ] 52. **2 narrow houses smoke**, near the Campfire and the Farm Plot, right after they finish
@@ -4726,7 +4740,10 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
       two counts and the frame time, on a full Village with neighbours).
 - [ ] 59. **Boomtown**, the same:
       1. Open `build/boomtown.rbxl`. Start a Local Server with **3 players** (or 2 if 3 is too
-         slow) and build every plot to a full Boomtown.
+         slow) and build every plot to a full Boomtown. The 100T may reach only the first
+         player. For the others, in the **Server** window: Workspace → Attributes (*Atributos*)
+         → `GrantCash` is already in the list (at 0); type `100000000000000` once everyone has
+         joined. One full plot is also a useful number if this is too much.
       2. In one **player** window (not the Server window), stand where all the plots are near
          (within 250 studs).
       3. View (*Vista*) → **Command Bar** (*Barra de comandos*), and run:
