@@ -401,7 +401,7 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 
 | Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |
 |-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|
-| Boomtown | 38 | 31520 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 76/76 | 76/76 | 38/38 | in game |
+| Boomtown | 46 | 43888 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 92/92 | 92/92 | 46/46 | in game |
 | Village | 47 | 30840 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 94/94 | 94/94 | 47/47 | in game |
 
 ## Totals
