@@ -358,6 +358,16 @@ An era without both harvested image ids, or a piece without both harvested mesh 
 | Boomtown | 38 | 41956 | 107829129655009/127993867745508 | 113247091242051/115125466569784 | 76/76 | 76/76 | 38/38 | in game |
 | Village | 47 | 30840 | 77277500354141/125065635800265 | 140492424900816/134713724632339 | 94/94 | 94/94 | 47/47 | in game |
 
+## World
+
+Pipeline: `tools/world/valley.py build` (one GLB per mesh -> Models, one palette PNG -> Decal) -> `tools/assets/upload_world.py` -> Studio harvest (the size check) -> `tools/assets/gen_templates.py --world` -> `templates/_world/<Set>/<Mesh>.rbxmx` -> `ServerStorage/Assets/World/<Set>/`.
+
+A mesh without a harvested mesh id has no template, and neither has a palette mesh while the set's palette image id is missing; the server then leaves the mesh out, or falls back to the wave 1 world when the mesh is a required one.
+
+| Set | Plots | Meshes | Triangles | Palette asset/image | Uploaded | Harvested | Templates | Status |
+|-----|-------|--------|-----------|---------------------|----------|-----------|-----------|--------|
+| Valley | 10 | 28 | 131768 | 122048418008875/138692341998180 | 28/28 | 28/28 | 28/28 | in game |
+
 ## Totals
 
 96 models: 96/96 blueprints, 96/96 uploaded, 96/96 harvested, 96/96 templated
