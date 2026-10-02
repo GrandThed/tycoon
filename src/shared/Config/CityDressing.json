@@ -645,7 +645,7 @@
           "pad": 1.5,
           "street": 5.5,
           "parcel": 1.5,
-          "lane": 1.5
+          "lane": 2.0
         },
         "construction": {
           "minSeconds": 10,
@@ -743,7 +743,7 @@
           "width": 3,
           "rim": 0.4,
           "fillHeight": 0.05,
-          "rimHeight": 0.01,
+          "rimHeight": 0.02,
           "growSeconds": 0.5
         }
       }

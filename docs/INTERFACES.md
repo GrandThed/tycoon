@@ -5998,8 +5998,8 @@ only, and a back-row lot's level is still capped by its front's.
 New pure function, mirrored one to one:
 
 ```lua
-CityFabric.LaneReach(lane: Types.FabricLane, parcels: { Types.FabricParcel },
-	levels: { number }, sizes: { [string]: { number } }): number
+CityFabric.LaneReach(lane: Types.FabricLane, laneIndex: number, parcels: { Types.FabricParcel },
+	levels: { number }, sizes: { [string]: { number } }, budget: number): number
 ```
 
 - The lane's length is the sum of its legs (`sqrt`, never `hypot`).
@@ -6035,8 +6035,8 @@ CityFabric.LaneReach(lane: Types.FabricLane, parcels: { Types.FabricParcel },
 Config (`eras.Boomtown.fabric`, lead-applied):
 
 ```json
-"lanes": { "width": 3, "rim": 0.4, "fillHeight": 0.05, "rimHeight": 0.01, "growSeconds": 0.5 },
-"clear": { "lane": 1.5 }
+"lanes": { "width": 3, "rim": 0.4, "fillHeight": 0.05, "rimHeight": 0.02, "growSeconds": 0.5 },
+"clear": { "lane": 2.0 }
 ```
 
 ### Generator (`tools/fabric.py`, plan block `parcels.lanes`)
@@ -6084,6 +6084,39 @@ baked in, because adding an attribute by hand is hard for Ben in a Spanish Studi
   `default.project.json` only by that Workspace attribute set to 2. `GrantCash` works as before.
 - Inert outside Studio and when the attribute is absent or invalid. No remote, no config constant
   duplicated in code.
+
+### Rulings after the wave 2.4 reports and review (lead, 2026-10-02)
+
+- **Ben accepted the lanes at 75 lots** ("the houses look fantastic!", on `m12d_compare.png` and
+  the block render, told that Boomtown went from 102 lots to 75). The contract's targets above
+  give way: `require.parcels` and `require.houses` are **74**, `require.medium` **3**, and bus
+  shelters stand on at least **two** streets. A lane lot needs its frontage plus half a lane, four
+  street lots became mouths, and two pockets have no way in while the layout is frozen (its street
+  meshes are uploaded). Ways back to density, if Ben asks: move landmarks to open the two pockets
+  (about +8 lots, a re-bake and a second harvest paste) or a narrower lane house (new props).
+- **Lanes are plan-authored:** `parcels.lanes.lines` (polylines, mouth first; `through: true` for
+  a line that ends on a street, which the generator cuts into two lanes that meet). A plan with a
+  `lanes` block lays no infill rows. Boomtown: 8 lanes, 330 studs, 47 lane lots, all row 2.
+- **`pull` for Boomtown:** radius 120, `tierTerm` 0.35, thresholds [2.2, 3.4, 3.8, 4.3]. With
+  `laneAlong` added to every distance the old radius left every lane empty. The governor is still
+  the nearest landmark, so height caps and districts keep their meaning.
+- **A lane arrives whole.** With that radius every lot on a lane gets at least a site as soon as
+  its front lot develops, so each lane appears at full length in one purchase and fills with
+  houses from the street inward. Accepted for the playtest; if Ben wants the road to creep, the
+  reach should count lots at level 2.
+- **Review (0 Critical, 2 Major, 8 Minor):**
+  - *Major, fixed:* an axis-aligned lane leg is laid as an unturned Part with its `Texture`
+    offsets taken from its corner in plot coordinates, so it shows the same texels as the baked
+    streets and the discs; only a diagonal leg carries a turned tiling.
+  - *Major, ruled:* the lot target, as above.
+  - `fabric.lanes.rimHeight` 0.02 (was 0.01: too close to the ground) and `clear.lane` 2.0 (was
+    1.5: a field edge stood on a lane's kerb).
+  - `FabricCivicSmall` and `FabricCivicMedium` never draw: no lot's nearest landmark is the Clock
+    Tower or the Fire Station. Open: give those landmarks lots to govern, or retire the props.
+  - `build/boomtown.rbxl` is for local Studio use only and must never be published: with API
+    access on, the lever would move a fresh real save to era 2.
+- **`LaneReach`** takes `laneIndex` and the near parcel budget as well. The mask's lane segments
+  use the final-state reach on near and far plots alike, and need a valid `fabric.lanes` block.
 
 ### Done when (wave 2.4 gate, renders for Ben)
 

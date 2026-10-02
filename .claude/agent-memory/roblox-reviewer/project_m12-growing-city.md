@@ -1,6 +1,6 @@
 ---
 name: m12-growing-city-review
-description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.2) — recurring patterns (claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix), the scratch probes that settle them without Studio, and the numbers found
+description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.4) — recurring patterns (claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix, turned Parts under a planar texture, a retune that empties a mechanism, gates lowered to pass), the scratch probes that settle them without Studio, and the numbers found
 metadata:
   type: project
 ---
@@ -117,6 +117,45 @@ archive of the base commit and HEAD.
   22/25/8/4/14; near full build ~288 clones (202 fabric), far ~107.
 - HEAD moved during the review (a manifest + builds commit): `git log <start>..HEAD` before
   reporting, then cite the new hash.
+
+**Wave 2.4 (2026-10-02, branch `m12-boomtown`, 37ab7da..4e4253f, SHIP TO PLAYTEST: 0 Critical /
+2 Major / Minors):** back lanes (pure `LaneReach`, lane distance in `Develop`, lane Parts in
+`Fabric.luau`), the `DebugStartEra` Studio lever + `boomtown.project.json`, the asset harvest. All
+gates green in scratch (stylua, selene, luau-lsp, three rojo builds byte-size equal to the committed
+ones, fabric check x2, cityfabric selftest/timeline, streetplan, bake --list 0/0, gen_templates
+--check 373). Lever proven inert (IsStudio first, fresh = era/rebirthCount/slots vs the template,
+write before `profiles[player]`; `erasCompleted` is write-only, `highestEra` is raised lazily).
+
+- **Recurring pattern (new): Parts wearing a baked-mesh texture lose the planar-UV recipe.** Lane
+  slabs are turned Parts (`CFrame.lookAt` along the leg), so only legs heading +Z share the
+  streets' plot-planar tiling (3 of 17); every other leg carries a rotated copy and each bend/tip
+  disc cuts the pattern. Fix shape: lay axis-aligned legs as UN-rotated Parts (swap Size X/Z,
+  offsets from the min corner). Three Roblox conventions the author could not verify (Top-face UV
+  axes, the tiling's anchor corner, `OffsetStuds` sign, plus Cylinder-cap mapping) decide whether
+  even the discs line up: say what a wrong one looks like instead of guessing.
+- **Offsets under the proven clearance are a z-fight risk worth naming:** street rim top is 0.025
+  over the plot, fill 0.07-0.075; lane rims sit at 0.005-0.01 and lane pieces 0.0025-0.005 apart.
+- **A retune can make a contract mechanism vacuous.** radius 30 -> 120 (sum of pulls over 7-17
+  landmarks) lets every lane lot pass threshold 1 as soon as its front develops, so each of the 8
+  lanes goes 0 -> full length in ONE purchase; partial reach never happens in the greedy order.
+  Probe: per-purchase `snapshot()['laneReaches']` over `greedy_history`.
+- **A gate lowered to pass is a finding:** contract targets 95 lots (floor 90); the generator
+  shipped 75 and cut `require.parcels` 90 -> 74, `medium` 4 -> 3, `busStops.minStreets` 3 -> 2
+  with no ruling in INTERFACES. Diff the plan's `require` block every wave.
+- **District props nobody governs:** no lot's nearest landmark is the clock tower or fire station,
+  so `FabricCivicSmall/Medium` (5 uploaded stages) never draw (true since wave 2.2). The checker's
+  unused-prop rule covers layers only. Probe: Counter of `look['prop']` at full build.
+- Probes that settled things offline: a GLB triangle reader over `assets/build/stages/_props/<Era>/
+  <Prop>_S<n>.glb` (bbox equals harvested extents with x/z negated, so the files are what was
+  uploaded) gives the mesh height under each `fabricProps` chimney point (hollow pots read 0.2-0.4
+  low at the centre: compare the top within 0.45 studs); the same reader measures arch clearance
+  (NeonArch opening 4.86 over the road, posts at |x| 4.25-4.75; bus 2.15 tall at scale 0.5).
+  Template check = regex over `.rbxmx` (Stage<n> count, MeshPart X/Z = -offset, R00 = R22 = -1).
+  11 lane mutations of `check_document` all fired. Traffic port with the harvested bus (5.4 studs):
+  5.5% any-pair vs the 4.7% cars-only baseline, so the 2.2 Major is fixed.
+- Numbers: 75 lots (28 row 1, 47 on lanes), 8 lanes / 330 studs, 68 lane Parts + 68 Textures on a
+  full near plot, far 0; houses 4/31/46/65/75; no level drop or prop flip over 63 replay states;
+  farthest governor 55 studs by network (lot 49, lane 2).
 
 **How to apply:** at the next era wave, re-run the scratch replay against the final layout and the
 mirror (`tools/cityfabric.py`); check the claim fix and that the far prefix reaches the plot's own
