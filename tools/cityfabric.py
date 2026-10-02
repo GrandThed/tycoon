@@ -530,15 +530,23 @@ def valid_parcel(parcel):
 
 
 def valid_lane(lane):
-    """Fabric.validLane: a polyline of 2 to 4 [x, z] points of finite numbers, and the mouth's
-    address on the street it leaves (`stretch`, `along`). Any other entry is not drawn, and its
-    lots are blanks."""
+    """Fabric.validLane: a polyline of 2 to 4 [x, z] points of finite numbers, at least one leg of
+    which is long enough to draw, and the mouth's address on the street it leaves (`stretch`,
+    `along`). Any other entry is not drawn, and its lots are blanks: a lane whose points all
+    coincide must not let houses rise beside a road that never comes."""
     if not isinstance(lane, dict) or not isinstance(lane.get("stretch"), str) or not finite(lane.get("along")):
         return False
     points = lane.get("points")
     if not isinstance(points, list) or not 2 <= len(points) <= 4:
         return False
-    return all(isinstance(p, list) and len(p) >= 2 and finite(p[0]) and finite(p[1]) for p in points)
+    if not all(isinstance(p, list) and len(p) >= 2 and finite(p[0]) and finite(p[1]) for p in points):
+        return False
+    for index in range(1, len(points)):
+        dx = points[index][0] - points[index - 1][0]
+        dz = points[index][1] - points[index - 1][1]
+        if math.sqrt(dx * dx + dz * dz) >= LANE_MIN:
+            return True
+    return False
 
 
 def valid_lane_config(value):

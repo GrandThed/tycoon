@@ -114,17 +114,34 @@ local LANE_RIM_NAME = "LaneRim"
 local LANE_THICKNESS = 0.2
 -- A reach or a leg shorter than this draws nothing.
 local LANE_MIN = 0.01
--- A leg's slabs overlap the next leg's and the discs at their joints, and a turned slab's surface
--- cannot line up with its neighbour's, so two tops in one plane would shimmer. Discs keep the
--- contract's height; legs sit one or two steps under it, alternating; every other lane half a
--- step lower again, for where two lanes meet. The rim's band above the plot is thinner, so its
--- step is a share of its height.
+-- A leg whose heading is this close to a plot axis (the sine of its angle off it) is laid as an
+-- unturned Part, so its surface tiles in plot coordinates exactly as the streets' does. Over the
+-- longest lane the slab then strays from the true line by well under a tenth of a stud.
+local LANE_SQUARE = 0.002
+-- A leg's slabs overlap the next leg's and the discs at their joints. Unturned slabs and discs
+-- tile alike, so their overlaps cannot be seen, but a turned slab's surface is turned with it,
+-- and two tops in one plane with different tilings would shimmer. So no two overlapping fills
+-- share a plane: legs alternate between the contract's height and one step under it, discs sit
+-- two steps under (lowest, so a disc only shows past the slabs: the outside of a bend, the round
+-- of the tip), and every other lane half a step lower again, for where two lanes meet. The rim's
+-- band above the plot is thinner: unturned rims keep the contract's height, so they stand as
+-- clear of the ground as they can, a disc's rim is one share of that height lower and a turned
+-- leg's two.
 local LANE_STEP = 0.005
 local LANE_RIM_STEPS = 5
 -- Without the surface's own rim image the rim is the road colour, this much darker.
 local LANE_RIM_SHADE = 0.8
 local QUARTER_TURN = math.pi / 2
 local ASSET_PREFIX = "rbxassetid://"
+-- Studio only: with this Workspace attribute true (baked into the Boomtown debug build), every
+-- lane piece is tinted by kind, so a break in the tiling can be matched to the kind of piece that
+-- causes it -- an unturned leg, a disc, or a turned leg.
+local DEBUG_TILES_ATTRIBUTE = "DebugLaneTiles"
+local DEBUG_LEG_TINT = Color3.fromRGB(190, 255, 190)
+local DEBUG_DISC_TINT = Color3.fromRGB(190, 215, 255)
+local DEBUG_TURNED_TINT = Color3.fromRGB(255, 190, 190)
+local NO_TINT = Color3.new(1, 1, 1)
+local IS_STUDIO = RunService:IsStudio()
 
 type Rect = CityFabric.FabricRect
 type Segment = CityFabric.FabricSegment
@@ -229,6 +246,7 @@ type LanePiece = {
 	texture: Texture?,
 	rim: boolean,
 	disc: boolean,
+	turned: boolean, -- a slab turned along a diagonal leg, whose tiling turns with it
 	u: number,
 	v: number,
 }
@@ -242,6 +260,7 @@ type LaneLeg = {
 	dz: number,
 	start: number,
 	length: number,
+	square: boolean, -- heads along a plot axis (within LANE_SQUARE), so its slabs are not turned
 	fill: LanePiece?,
 	rim: LanePiece?,
 	jointFill: LanePiece?,
@@ -643,9 +662,10 @@ local function validUpgradeItem(entry: any): boolean
 	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
 end
 
--- Wave 2.4: a lane the renderer can lay -- a polyline of 2 to 4 [x, z] points of finite numbers
--- and its mouth's address on the street it leaves. Any other entry is not drawn, and its lots are
--- blanks.
+-- Wave 2.4: a lane the renderer can lay -- a polyline of 2 to 4 [x, z] points of finite numbers,
+-- at least one leg of which is long enough to draw, and its mouth's address on the street it
+-- leaves. Any other entry is not drawn, and its lots are blanks: a lane whose points all coincide
+-- must not let houses rise beside a road that never comes.
 local function validLane(lane: any): boolean
 	if type(lane) ~= "table" or type(lane.stretch) ~= "string" or not finite(lane.along) then
 		return false
@@ -660,7 +680,14 @@ local function validLane(lane: any): boolean
 			return false
 		end
 	end
-	return true
+	for index = 2, #points do
+		local dx = points[index][1] - points[index - 1][1]
+		local dz = points[index][2] - points[index - 1][2]
+		if math.sqrt(dx * dx + dz * dz) >= LANE_MIN then
+			return true
+		end
+	end
+	return false
 end
 
 -- Wave 2.4: `fabric.lanes` as the renderer may use it -- five finite numbers, a width above 0, a
@@ -841,8 +868,9 @@ local function cellOf(value: number): number
 end
 
 -- Buckets every rect by its bounding square (centre +- half diagonal + margin) and every segment by
--- its box grown by its margin (the street margin, or a lane leg's own). A point within reach of an item always shares a cell with
--- it, so a lookup over the cells round the point sees every item that could clear it.
+-- its box grown by its margin (the street margin, or a lane leg's own). A point within reach of an
+-- item always shares a cell with it, so a lookup over the cells round the point sees every item
+-- that could clear it.
 local function buildGrid(mask: Mask): Grid
 	local cells: { [number]: { number } } = {}
 	local function insert(id: number, x0: number, x1: number, z0: number, z1: number): ()
@@ -1266,19 +1294,32 @@ end
 
 -- ------------------------------------------------------------------ back lanes (wave 2.4)
 
--- The top of a lane Part above the plot: the contract's height for a disc (`level` 0), one or two
--- steps under it for a leg (see LANE_STEP).
+-- The top of a lane piece above the plot (see LANE_STEP): `legIndex` is the leg a slab belongs
+-- to, nil for a disc. Every fill stays over every rim, over the street's rim and under the
+-- street's fill; every rim stays under the street's rim.
 local function laneTop(
 	config: Types.FabricLanesConfig,
 	view: LaneView,
-	rim: boolean,
-	level: number
+	piece: LanePiece,
+	legIndex: number?
 ): number
-	local steps = level + ((view.index - 1) % 2) / 2
-	if rim then
-		return config.rimHeight - config.rimHeight / LANE_RIM_STEPS * steps
+	if piece.rim then
+		local level = if piece.disc then 1 elseif piece.turned then 2 else 0
+		return config.rimHeight - config.rimHeight / LANE_RIM_STEPS * level
 	end
-	return config.fillHeight - LANE_STEP * steps
+	local level = if legIndex ~= nil then (legIndex - 1) % 2 else 2
+	return config.fillHeight - LANE_STEP * (level + ((view.index - 1) % 2) / 2)
+end
+
+-- Studio only (see DEBUG_TILES_ATTRIBUTE): the tint that tells the kinds of piece apart.
+local function debugTint(piece: LanePiece): Color3?
+	if not IS_STUDIO or Workspace:GetAttribute(DEBUG_TILES_ATTRIBUTE) ~= true then
+		return nil
+	end
+	return if piece.disc
+		then DEBUG_DISC_TINT
+		elseif piece.turned then DEBUG_TURNED_TINT
+		else DEBUG_LEG_TINT
 end
 
 -- The look of one piece under the surface the streets wear: the road's live material and colour
@@ -1291,14 +1332,11 @@ local function paintLanePiece(handle: Handle, piece: LanePiece): ()
 		return
 	end
 	local part = piece.part
+	local tint = debugTint(piece) or NO_TINT
+	local shade = if piece.rim then LANE_RIM_SHADE else 1
 	local color = surface.color
-	part.Color = if piece.rim
-		then Color3.new(
-			color.R * LANE_RIM_SHADE,
-			color.G * LANE_RIM_SHADE,
-			color.B * LANE_RIM_SHADE
-		)
-		else color
+	part.Color =
+		Color3.new(color.R * shade * tint.R, color.G * shade * tint.G, color.B * shade * tint.B)
 	local imageId = if piece.rim then surface.rimImageId else surface.fillImageId
 	local tile = surface.tileStuds
 	local texture = piece.texture
@@ -1323,13 +1361,14 @@ local function paintLanePiece(handle: Handle, piece: LanePiece): ()
 	local image = texture :: Texture
 	-- Ids are up to 15 digits; %d keeps them integral where tostring could print an exponent.
 	image.Texture = ASSET_PREFIX .. string.format("%d", imageId)
+	image.Color3 = tint
 	image.StudsPerTileU = tile
 	image.StudsPerTileV = tile
 	image.OffsetStudsU = piece.u % tile
 	image.OffsetStudsV = piece.v % tile
 end
 
-local function newLanePiece(rim: boolean, disc: boolean): LanePiece
+local function newLanePiece(rim: boolean, disc: boolean, turned: boolean): LanePiece
 	local part = Instance.new("Part")
 	part.Name = if rim then LANE_RIM_NAME else LANE_FILL_NAME
 	if disc then
@@ -1339,7 +1378,7 @@ local function newLanePiece(rim: boolean, disc: boolean): LanePiece
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.CastShadow = false
 	PropFactory.Seal(part)
-	return { part = part, texture = nil, rim = rim, disc = disc, u = 0, v = 0 }
+	return { part = part, texture = nil, rim = rim, disc = disc, turned = turned, u = 0, v = 0 }
 end
 
 -- Shows a piece that has just been sized and placed. A new one is painted for the offsets it now
@@ -1361,34 +1400,55 @@ local function showLanePiece(handle: Handle, piece: LanePiece): ()
 	end
 end
 
--- One slab of a leg, `span` studs long from the leg's start. The Part's +Z runs along the leg and
--- it grows from its start, so the corner its top's texture is laid from never moves: the offsets
--- are that corner's coordinates in the Part's own turned frame, which puts every slab of one
--- heading on a single tiling over the whole plot.
+-- One slab of a leg, `span` studs long from the leg's start.
+--
+-- A leg along a plot axis is an unturned Part: the plot's own axes are its axes, its Size simply
+-- takes the span on X or on Z, and its top's image is offset by the plot coordinates of the
+-- Part's minimum corner, where a block face's tiling starts. The image then shows at every spot
+-- the texel the streets' plot-planar UVs and the discs show there (u = x, v = z over tileStuds),
+-- so where such slabs, discs and streets overlap there is nothing to see.
+--
+-- Any other leg has to be turned along its heading (the Part's +Z), and its image turns with it;
+-- the offsets are then its start corner's coordinates in that turned frame, which at least puts
+-- every slab of one heading on a single tiling, and the height steps keep the mismatch still.
 local function setLaneLeg(
 	handle: Handle,
 	config: Types.FabricLanesConfig,
 	view: LaneView,
 	leg: LaneLeg,
+	legIndex: number,
 	piece: LanePiece,
-	level: number,
 	span: number
 ): ()
 	local width = config.width + (if piece.rim then 2 * config.rim else 0)
-	local y = laneTop(config, view, piece.rim, level) - LANE_THICKNESS / 2
-	local cx, cz = leg.ax + leg.dx * span / 2, leg.az + leg.dz * span / 2
+	local y = laneTop(config, view, piece, legIndex) - LANE_THICKNESS / 2
 	local part = piece.part
-	part.Size = Vector3.new(width, LANE_THICKNESS, span)
-	part.CFrame = handle.context.plotFrame
-		* CFrame.lookAt(Vector3.new(cx, y, cz), Vector3.new(cx - leg.dx, y, cz - leg.dz))
-	piece.u = leg.ax * leg.dz - leg.az * leg.dx - width / 2
-	piece.v = leg.ax * leg.dx + leg.az * leg.dz
+	if leg.square then
+		local alongX = math.abs(leg.dx) > math.abs(leg.dz)
+		local sizeX = if alongX then span else width
+		local sizeZ = if alongX then width else span
+		local cx = if alongX then leg.ax + math.sign(leg.dx) * span / 2 else leg.ax
+		local cz = if alongX then leg.az else leg.az + math.sign(leg.dz) * span / 2
+		part.Size = Vector3.new(sizeX, LANE_THICKNESS, sizeZ)
+		part.CFrame = handle.context.plotFrame * CFrame.new(cx, y, cz)
+		piece.u = cx - sizeX / 2
+		piece.v = cz - sizeZ / 2
+	else
+		local cx, cz = leg.ax + leg.dx * span / 2, leg.az + leg.dz * span / 2
+		part.Size = Vector3.new(width, LANE_THICKNESS, span)
+		part.CFrame = handle.context.plotFrame
+			* CFrame.lookAt(Vector3.new(cx, y, cz), Vector3.new(cx - leg.dx, y, cz - leg.dz))
+		piece.u = leg.ax * leg.dz - leg.az * leg.dx - width / 2
+		piece.v = leg.ax * leg.dx + leg.az * leg.dz
+	end
 	showLanePiece(handle, piece)
 end
 
 -- One disc centred on (x, z): a Cylinder stood on end and turned so that its upward cap's image
--- runs +X across and +Z down, plot-wise. Every disc then shares the one tiling the baked pieces'
--- planar UVs have (u = x, v = z over tileStuds), as does a slab that heads +Z.
+-- runs +X across and +Z down, plot-wise, and offset by the plot coordinates of its bounding
+-- square's minimum corner. Every disc then shares the one tiling the baked pieces' planar UVs and
+-- the unturned slabs have. A disc lies under the slabs, so if a cap turns out to tile otherwise
+-- than a block face does, only the little of a disc that shows past them can be off.
 local function setLaneDisc(
 	handle: Handle,
 	config: Types.FabricLanesConfig,
@@ -1398,7 +1458,7 @@ local function setLaneDisc(
 	z: number
 ): ()
 	local diameter = config.width + (if piece.rim then 2 * config.rim else 0)
-	local y = laneTop(config, view, piece.rim, 0) - LANE_THICKNESS / 2
+	local y = laneTop(config, view, piece, nil) - LANE_THICKNESS / 2
 	local part = piece.part
 	part.Size = Vector3.new(LANE_THICKNESS, diameter, diameter)
 	part.CFrame = handle.context.plotFrame
@@ -1451,23 +1511,22 @@ local function layLane(handle: Handle, view: LaneView, drawn: number): ()
 		if span < LANE_MIN then
 			break
 		end
-		local level = 1 + (index - 1) % 2
-		local fill = leg.fill or newLanePiece(false, false)
-		local rim = leg.rim or newLanePiece(true, false)
+		local fill = leg.fill or newLanePiece(false, false, not leg.square)
+		local rim = leg.rim or newLanePiece(true, false, not leg.square)
 		leg.fill, leg.rim = fill, rim
-		setLaneLeg(handle, config, view, leg, fill, level, span)
-		setLaneLeg(handle, config, view, leg, rim, level, span)
+		setLaneLeg(handle, config, view, leg, index, fill, span)
+		setLaneLeg(handle, config, view, leg, index, rim, span)
 		if index > 1 and leg.jointFill == nil then
-			local jointFill = newLanePiece(false, true)
-			local jointRim = newLanePiece(true, true)
+			local jointFill = newLanePiece(false, true, false)
+			local jointRim = newLanePiece(true, true, false)
 			leg.jointFill, leg.jointRim = jointFill, jointRim
 			setLaneDisc(handle, config, view, jointFill, leg.ax, leg.az)
 			setLaneDisc(handle, config, view, jointRim, leg.ax, leg.az)
 		end
 		tipX, tipZ = leg.ax + leg.dx * span, leg.az + leg.dz * span
 	end
-	local tipFill = view.tipFill or newLanePiece(false, true)
-	local tipRim = view.tipRim or newLanePiece(true, true)
+	local tipFill = view.tipFill or newLanePiece(false, true, false)
+	local tipRim = view.tipRim or newLanePiece(true, true, false)
 	view.tipFill, view.tipRim = tipFill, tipRim
 	setLaneDisc(handle, config, view, tipFill, tipX, tipZ)
 	setLaneDisc(handle, config, view, tipRim, tipX, tipZ)
@@ -3008,7 +3067,8 @@ function Fabric.new(context: Context): Handle
 			local a, b = lane.points[point - 1], lane.points[point]
 			local dx, dz = b[1] - a[1], b[2] - a[2]
 			local legLength = math.sqrt(dx * dx + dz * dz)
-			-- Two points on one spot make no leg; the arc simply carries on from the next.
+			-- Two points on one spot make no leg; the arc simply carries on from the next
+			-- (validLane has made sure at least one leg is left).
 			if legLength >= LANE_MIN then
 				table.insert(legs, {
 					ax = a[1],
@@ -3017,6 +3077,7 @@ function Fabric.new(context: Context): Handle
 					dz = dz / legLength,
 					start = length,
 					length = legLength,
+					square = math.min(math.abs(dx), math.abs(dz)) / legLength <= LANE_SQUARE,
 					fill = nil,
 					rim = nil,
 					jointFill = nil,
