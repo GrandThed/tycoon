@@ -63,6 +63,13 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   harvested and templated 2026-10-01; **Studio playtest pending**; branch `m12-growing-city` in
   the worktree `C:\Users\benja\Desktop\tycoon-m12`, **not merged**; waves 2–4 for Boomtown,
   Metropolis and Orbital come later — see "M12" below)
+- [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
+  A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub with an earth ring,
+  a dirt road from the hub to every plot; server-only, Parts and Lighting only, no uploads;
+  review no Critical, one Warning; **checks green, awaiting Ben's Studio look**; **waves 2**
+  (mountains, forest, waterfall) **and 3** (river, lake, bridges) **not started**; branch
+  `m13-valley` in the worktree `C:\Users\benja\Desktop\tycoon-m13`, **not merged** — see "M13"
+  below)
 
 ---
 
@@ -1996,3 +2003,140 @@ setup in `docs/MANUAL_STEPS.md` "M12"). The branch is not merged.
 - [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "M12 — Village growing city")
 - [ ] lead: merge `m12-growing-city` into `main` after sign-off (then `bake.py --list` is green on
   `main` again)
+
+## M13 — The Valley
+
+**Goal:** give the world outside the plots a landscape (Ben, 2026-10-01: "low poly mountains,
+rivers and such"). The target is a meadow basin ringed by snow-capped low-poly mountains, with
+forest on the foothills, a waterfall, a river through the ring and a small lake. Core gameplay is
+untouched.
+- Contracts: `docs/INTERFACES.md` "M13 contracts — The Valley (wave 1: sky, ground, hub, roads)",
+  through its "Review rulings".
+- Memory: `.claude/memory/world-landscape-2026-10-01.md` (in the main checkout).
+- Mock: `assets/research/2026-10-01-worldmock/` (gitignored), sheets in its `out/` folder.
+- Where: worktree `C:\Users\benja\Desktop\tycoon-m13`, branch `m13-valley`, off `main` `e5df035`.
+- The M12 Boomtown session works in `tycoon-m12` at the same time. Never touch it, and announce
+  every upload or harvest to it first.
+
+**Rulings (Ben):**
+1. 2026-10-01: three landscapes were rendered around the real plots: A Valley, B Island, C Lake.
+   Ben chose **A**: "i love A valley". The Island and the Lake are closed.
+2. Start now, alongside the Boomtown session.
+3. Three waves, each one a Studio look.
+4. **The river is shallow and wade-through, with solid wooden bridges** (wave 3). Bridges are
+   server geometry that collides. That is a new category next to the M9 rule "no dressing part
+   collides", not a change to it.
+
+**Waves:**
+
+| Wave | What | Assets | State |
+|---|---|---|---|
+| 1 | sky, haze, green ground, hub, dirt roads | Parts and Lighting only, **no uploads** | built, awaiting Ben's look |
+| 2 | mountains, foothills, forest and waterfall as a generated kit; invisible wall at the foothills; ground ramped to the plot edges; era aprons; low-poly clouds | one upload, one harvest paste | not started |
+| 3 | river, pond, lake, bridges | set by its contract | not started |
+
+Wave 2's upload waits until the Boomtown session's harvest is committed.
+
+**Shipped (wave 1, 2026-10-01 → 2026-10-02):**
+- **Server-only and static.** The server builds the landscape once at boot, next to the plots. No
+  client, remote, profile, economy or balance change.
+- **Code:**
+  - `src/shared/WorldPlan.luau` (new, pure): the ring maths, moved out of
+    `PlotService.buildWorld`.
+  - `src/server/World/Landscape.luau` (new): builds the sky, ground, hub, earth ring and roads.
+    It sits outside `Services`, so the combat place never mounts it.
+  - `src/shared/Config/World.json` (new), `Catalog.GetWorldConfig`, and the World types in
+    `Types.luau`.
+  - `PlotService.buildWorld` now calls `WorldPlan` and `Landscape.Build`. `Spawn`, the `Plots`
+    folder and everything per plot are unchanged.
+- **What `World.json` ships:**
+
+  | Block | Result |
+  |---|---|
+  | `atmosphere` | haze: one `Atmosphere` under `Lighting` (density 0.25, offset 0.2, haze 1, glare 0) |
+  | `ground` | green `Plastic` (126, 155, 76), 2048 studs square |
+  | `hub` | pale stone (182, 176, 164) |
+  | `hub.surround` | packed-earth ring (166, 138, 100), radius 38, 0.2 above the ground |
+  | `roads` | one straight dirt road (158, 126, 88) per plot, 6 studs wide, 0.1 above the ground |
+- **Left out on purpose** (reasons in the contract's "First values"):
+  - no `lighting` block: brightness, ambient light and time of day are unchanged, because every
+    building Ben approved was judged under the default Lighting;
+  - no `clouds` block: the mock's clouds are low-poly meshes, which come in wave 2.
+- **Collision:** roads are flat strips you walk through (`CanCollide`, `CanQuery`, `CanTouch`
+  off). The ground, the hub and the earth ring collide.
+- **Levels are unchanged:** plot and hub tops at Y = 0, ground top at Y = −1. The earth ring's top
+  is at −0.8 and a road's top at −0.9.
+- **Ring numbers** (from `Game.json` and the layout, no code change between them):
+
+  | Plots | Ring radius | Road length |
+  |---|---|---|
+  | 10 (`main`) | 277.02 | 187 |
+  | 6 (unmerged `m11-unlocks`) | 183.92 | 93.9 |
+- **Everything degrades:**
+  - without `World.json` the world is exactly as before M13;
+  - a missing block switches off only that feature;
+  - a bad material or colour warns once (`[Landscape]`) and falls back to the Part default.
+- **No assets.** `docs/ASSET_MANIFEST.md` is unchanged.
+- **Preview Ben was shown:** the STEP 1 panel of `sheet2_plot.png`, `sheet2_hub.png` and
+  `sheet2_aerial.png` in the mock's `out/` folder.
+
+**Review rulings (roblox-reviewer, 2026-10-02: no Critical, one Warning; all taken, text in
+INTERFACES):**
+- Roads are left out, with one warning, if `roads.lift` is not lower than `hub.surround.height`.
+- The new work cannot stop the server boot: the sky, and the ring and roads, each run guarded. A
+  failure warns and costs only that feature.
+- `PlotService` resolves the `Landscape` module inside `buildWorld`, not at module scope.
+- A road's inner end is closed against the hub wall.
+
+**Open for the Studio look (config only, no code):**
+- The haze values are a first guess that cannot be checked offline. The target is about 20% at
+  500 studs, so the far side of the ring stays readable. **One tuning round is expected.**
+- With `glare` 0, `decay` may have no visible effect. If the sky shows no blue fall-off, raise
+  `glare` slightly before re-tuning `decay`.
+- `lift` 0.1 is the only separation between a road and the ground. If a far road shimmers, raise
+  `lift` and `hub.surround.height` together.
+
+**Status:** built, **checks green** (2026-10-02), committed on `m13-valley`, not merged. Awaiting
+Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads"; setup in
+`docs/MANUAL_STEPS.md` "M13").
+
+Checks run by qa-runner on 2026-10-02, all passing: stylua, selene (only the known
+`LegacyPanel.luau:200` warning), luau-lsp on both trees, both `rojo build`s, `sim_economy`,
+`sim_combat`, `sim_range`, `gen_asset_manifest --check`, `fabric.py check Village` and
+`cityfabric.py selftest`. **Not run:** `streetplan.py`, `bake.py --list` and
+`gen_templates.py --check`, because the Boomtown session was running the asset pipeline and those
+tools share its output folder; wave 1 touches no layout, template or asset. Run them before the
+merge.
+
+**Known follow-ups:**
+- **lead:** tune the haze in `World.json` from Ben's two screenshots (PLAYTEST M13 step 15). The
+  `lighting` block exists for this round if the haze alone is not enough.
+- **lead:** `tools/testfit/plotrender.py` still draws the ground outside a plot as the darkened
+  plot colour. Update it in wave 2, after `m12-boomtown` merges (that branch edits the same
+  files).
+- **lead:** `tools/marketing/SHOTLIST.md` item 4 says the game uses the default Lighting. That
+  stops being true with the haze; correct it before the next thumbnail shoot.
+- **lead (wave 2):** era aprons looked like scorch marks around Metropolis and Orbital in the
+  second mock pass. They need a different approach.
+- **lead (wave 2):** a road ends at the plot's front face, and each era's first street starts
+  further in: 3.5 studs (Village), 5.5 (Boomtown), 11 (Metropolis, Orbital). The Sign post stands
+  on the road's centreline. If Ben says the gap reads badly, it goes with the ground ramp and
+  entrance work.
+- **lead (wave 2):** a Python mirror of `WorldPlan`, so the tools lay things out from the same
+  ring.
+
+**Next waves:**
+- **Wave 2:** contracts first. A generated landscape kit (mountains, foothills, forest,
+  waterfall), **one upload and one harvest paste**, after the Boomtown session's harvest is
+  committed. Then the invisible wall at the foothills, the ground ramp to the plot edges, the era
+  aprons and the low-poly clouds.
+- **Wave 3:** river, pond, lake and bridges (the wade-through and solid-bridge ruling).
+
+- [x] Wave 1 built, review rulings taken (2026-10-02)
+- [x] lead: checks green (2026-10-02; three gates deferred to the merge, see "Status")
+- [x] lead: commit wave 1
+- [ ] Ben's Studio look (`docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads")
+- [ ] lead: haze tuning round from Ben's screenshots
+- [ ] Wave 2 (waits for the Boomtown harvest commit)
+- [ ] Wave 3
+- [ ] lead: merge `m13-valley` into `main`

@@ -4076,7 +4076,8 @@ differ a little:
       - pine clumps, round trees and rocks cover most of the plot;
       - along the front edge they are low and sparse;
       - the ground is open at the entrance and around the Campfire pad;
-      - the woods carry on past the back and sides of the plot, onto the grey ground.
+      - the woods carry on past the back and sides of the plot, onto the ground around it (green
+        from M13 on, grey in older builds).
       Bug: a bare plot; a tree on the pad; trees past the edge floating or sunk.
 - [ ] 6. **The next pad (Campfire):**
       - it is **dirt-brown**, not grey;
@@ -4308,3 +4309,185 @@ differ a little:
 ### Sign-off
 
 - [ ] 39. All boxes ticked → tell Claude "M12 Village signed off".
+
+## M13 wave 1 — The Valley: sky, ground, hub, roads
+
+**Goal:** the world around the plots stops being flat grey. This wave adds a hazed sky, a green
+ground to the horizon, a stone hub with an earth ring, and a dirt road from the hub to every plot.
+Mountains, forest, waterfall and river come in waves 2 and 3. Plots, buying, income and all city
+dressing are unchanged.
+
+- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open the **tycoon-m13** build, not the main one.
+- Nothing to prepare in Studio: no attributes, no cash lever.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- Reference pictures are in
+  `C:\Users\benja\Desktop\tycoon\assets\research\2026-10-01-worldmock\out\`. Use the **STEP 1**
+  panel (the middle one) of each:
+  - `sheet2_plot.png`: from a plot's entrance;
+  - `sheet2_hub.png`: from the hub;
+  - `sheet2_aerial.png`: from above.
+- The haze is a first guess. One tuning round after this look is expected, so steps 9–11 ask what
+  you see.
+- No two-player test: nothing multiplayer changed. The server builds the world once and it is the
+  same for everyone.
+- No step for a missing `World.json` or a bad value in it. Those fallbacks were checked in the
+  code review (2026-10-02).
+
+What to expect, on `main`'s ring of 10 plots:
+
+| Thing | Size |
+|---|---|
+| Hub | pale stone disc, radius 30 |
+| Earth ring | 8 studs wide around the hub |
+| Roads | 10, each 6 studs wide and 187 long (the first 8 studs lie under the ring) |
+| Step, grass → ring | 0.2 studs up |
+| Step, ring → hub | 0.8 studs up |
+
+### Setup
+
+- [ ] 1. Open the M13 build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
+      and keep it open the whole time.
+- [ ] 2. **Play** (*Jugar*). You start on the hub. Look at the ground past the hub: it is
+      **green**.
+      Bug: grey ground everywhere (you opened the main build or an old file: see MANUAL_STEPS
+      "M13" step 5).
+
+### 1. The hub
+
+- [ ] 3. Look around from the hub. Compare with `sheet2_hub.png`, STEP 1:
+      - the hub is a **pale stone** disc;
+      - a ring of **packed earth** (light brown) lies around it, lower than the hub;
+      - past the ring the ground is green.
+      Bug: no earth ring; the ring higher than the hub; a grey patch in the grass.
+- [ ] 4. Turn all the way round and count the roads:
+      - **10 dirt roads** fan out from the earth ring, one to each plot;
+      - each road starts at the ring's outer edge;
+      - no two roads touch.
+      Bug: a plot without a road; a road pointing between two plots; a brown stripe lying on top
+      of the ring or the hub; green grass between the ring and a road's start.
+- [ ] 5. Walk hub → ring → grass, then back up, grass → ring → hub:
+      - you step down and up without jumping;
+      - the hub, the ring and the grass are all solid.
+      Then stand still and turn the camera slowly while looking at the three joins: hub and ring,
+      ring and grass, ring and road.
+      Bug: flicker or shimmering stripes at a join; you get stuck on an edge; you fall through.
+
+### 2. A road
+
+- [ ] 6. Find your plot (the sign shows your name). Stand on the earth ring where its road starts
+      and look along it:
+      - the road is **straight**, and the same width all the way;
+      - it ends at the plot's front edge;
+      - the plot's **sign post** stands in the middle of the road's end.
+      Bug: the road ends to one side of the sign; a bend or a break in it; it stops short of the
+      plot; it runs up onto the plot.
+- [ ] 7. Walk the whole road to your plot:
+      - it feels the same as walking on the grass: no bump, no step, nothing blocks you;
+      - it stays a solid brown under your feet.
+      Bug: you trip, float or sink; the road flickers as you move; the road casts a shadow line.
+- [ ] 8. Stop where the road meets your plot:
+      - the road ends at the plot's front face;
+      - you step up about 1 stud onto the plot, as before M13;
+      - your first trail starts about 3.5 studs further in (Village).
+      This gap is known. Look at how it reads and say so in "What to tell Claude".
+
+### 3. Sky, haze and horizon
+
+- [ ] 9. **Sky.** Stand at your plot's entrance, by the sign, with your back to the hub. Look
+      across your plot. Compare with `sheet2_plot.png`, STEP 1 (it shows a full Village; a new
+      plot is mostly woods, so compare only the sky and the ground):
+      - the sky is blue, and paler toward the horizon;
+      - a soft pale band sits on the horizon;
+      - buildings, trees and your plot are as bright as before M13.
+      Bug: a grey or white sky; everything darker, washed out or tinted.
+      There are **no clouds** yet. That is correct.
+- [ ] 10. **Far side of the ring.** Turn to face the hub, and look at the plots across it (about
+      430–550 studs away). Pick the one that fits:
+      - **A.** paler and bluer than the near plots, but you still make out the plot's shape and
+        what stands on it. This is the target.
+      - **B.** almost lost in the haze.
+      - **C.** as sharp as the near plots, with no haze at all.
+      B and C are not failures: write the letter down for "What to tell Claude".
+- [ ] 11. **Ground and horizon.** Walk to the back edge of your plot and look away from the hub:
+      - the ground is one flat green, all the way to the horizon;
+      - the horizon is a soft, hazed line.
+      Bug: a hard edge where the ground stops, seen from standing height; a grey strip; sky
+      showing under the ground.
+- [ ] 12. **Far roads.** Stand on a front corner of your plot. Look at a road on the far side of
+      the ring (300–500 studs away), where you see it at a low angle. Turn the camera slowly,
+      then walk a few steps:
+      - the road stays a solid brown stripe.
+      Bug: the road shimmers, flickers or sparkles; green stripes break through it. Note it; the
+      fix is a number in the config.
+
+### 4. Plots are unchanged
+
+- [ ] 13. **Village woods.** On a Village plot, go to a side edge and then the back edge:
+      - the woods carry on up to about 19 studs past the edge, onto the green ground;
+      - every trunk and rock there stands on the ground.
+      Bug: trees past the edge floating above the grass or sunk into it; no trees past the edge.
+      The file build gives a fresh Village plot on every Play. If your plot is not Village, skip
+      this step and say so.
+- [ ] 14. **Everything on the plots.** Compared with before M13:
+      - the plot's base colour, the pads, the sign and its text are the same;
+      - buy the next slot by walking onto its pad (on a fresh plot the Campfire is free): it
+        builds as before and income ticks;
+      - whatever your plot has of these looks and moves as before: buildings, trails or streets,
+        houses, trees, lamps, walkers, vehicles, birds;
+      - the other plots look as before.
+      Bug: anything on a plot moved, changed colour, sank or floats; a pad that does not react.
+
+### 5. Screenshots
+
+- [ ] 15. Take **two screenshots** (Win+Shift+S) and send them to Claude. They are for tuning the
+      haze:
+      1. **From your plot:** the view of step 9 (at the entrance, back to the hub, looking across
+         your plot to the horizon).
+      2. **From the hub:** stand on the hub and look at the plots, as in `sheet2_hub.png`, STEP 1.
+
+### 6. Phone
+
+- [ ] 16. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Then:
+      - **haze:** repeat step 10, and note the letter if it differs from the desktop one;
+      - **far roads:** repeat step 12. This is the main thing to check on the phone;
+      - walk hub → ring → grass with the thumbstick: no snag;
+      - the HUD and the Build panel are unchanged;
+      - the frame rate looks the same as before M13.
+      Bug: a far road that flickers only on the phone; far plots lost in haze only on the phone.
+
+### 7. Output
+
+- [ ] 17. Read **Output** (*Salida*) from the whole run:
+      - no line that starts with `[Landscape]`;
+      - no red errors.
+      Studio's own warnings are fine. If a `[Landscape]` line shows, copy it to Claude.
+
+### Not a bug (don't report these)
+
+- No clouds, mountains, forest, waterfall or river yet: waves 2 and 3.
+- The sun, the brightness and the time of day are the same as before. That is on purpose.
+- You walk through the roads: they are painted on the ground. The ground, the hub and the earth
+  ring are solid.
+- A road shows only from the earth ring's outer edge. Its first 8 studs lie under the ring.
+- The 1-stud step up at each plot's front edge. The ground gets ramped up to the plots in wave 2.
+- The gap between the road's end and the plot's first trail or street: 3.5 studs on Village, 5.5
+  on Boomtown, 11 on Metropolis and Orbital. Known; say how it reads.
+- The sign post stands in the middle of the road's end.
+- From high above (a flying camera), the ground is a square with a visible edge. The mountains
+  hide it in wave 2.
+- The ground's green differs from a Village plot's green. Each era's plot keeps its own colour.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- The two screenshots (step 15).
+- Haze: A, B or C from step 10, on desktop and on the phone.
+- Sky: does it get paler toward the horizon, or is it one flat blue?
+- Far roads: any shimmer (steps 12 and 16)?
+- The road's end at your plot (step 8): fine, or does the gap look wrong?
+- Colours: is the green right? Are the hub, the ring and the roads too pale or too dark?
+
+### Sign-off
+
+- [ ] 18. All boxes ticked → tell Claude "M13 wave 1 signed off", with the haze letter and the two
+      screenshots.

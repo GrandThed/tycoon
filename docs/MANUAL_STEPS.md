@@ -1674,3 +1674,74 @@ real save.
       `assets/build/paths/Village.json` holds the M12 bake.
 - [ ] 17. Rebuild from `C:\Users\benja\Desktop\tycoon`, and go back to the usual `rojo serve` from
       there.
+
+## M13 — The Valley (wave 1: sky, ground, hub, roads)
+
+Built in the worktree `C:\Users\benja\Desktop\tycoon-m13` (branch `m13-valley`), **not merged**.
+Run every command below **from that folder**, never from `C:\Users\benja\Desktop\tycoon` or
+`C:\Users\benja\Desktop\tycoon-m12`. `assets/` in the worktree is a junction to the main
+checkout's `assets/`.
+
+**Nothing on the Creator Hub. No upload. No harvest paste.** Wave 1 is Parts and Lighting only:
+the server builds the sky, ground, hub and roads when the game starts. There is no profile change,
+so nothing needs republishing.
+
+Studio menus are written in English, with the Spanish in italics: File (*Archivo*), Open
+(*Abrir*).
+
+### 1. Open the M13 build
+
+Pick **one** of the two options. Option A is the simple one: it gives a fresh Village save on
+every Play and touches no real save.
+
+**Option A: open the file**
+- [x] 1. **Lead:** rebuild after the last code or `World.json` change, from `tycoon-m13`:
+      `rojo build -o build/test.rbxl`. Tick this once the checks are green. A file built before
+      wave 1 shows the old grey world.
+- [ ] 2. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon-m13\build\test.rbxl`.
+      Do **not** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, which has
+      no landscape.
+
+**Option B: live sync**
+- [ ] 3. Stop any other `rojo serve` first (the main checkout's, `tycoon-m12`'s, or a VS Code
+      "serve" task). They all use port 34872, and the plugin would sync the wrong folder.
+- [ ] 4. In PowerShell:
+      ```
+      cd C:\Users\benja\Desktop\tycoon-m13
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo serve
+      ```
+      Then Studio → Plugins (*Complementos*) → **Rojo** → **Connect**.
+
+**Either option:**
+- [ ] 5. Press **Play** (*Jugar*) and look at the ground around the hub. It is **green**.
+      If it is grey, you opened `main` or an old file. Close Studio, rebuild in PowerShell, then
+      do step 2 again:
+      ```
+      cd C:\Users\benja\Desktop\tycoon-m13
+      $env:PATH = "$HOME\.rokit\bin;$env:PATH"
+      rojo build -o build/test.rbxl
+      ```
+
+### 2. Run the Studio look
+
+- [ ] 6. Run `docs/PLAYTEST.md` "M13 wave 1 — The Valley: sky, ground, hub, roads".
+- [ ] 7. Send Claude the two screenshots from PLAYTEST M13 step 15 and the haze letter from
+      step 10.
+
+### 3. Tuning round (lead, then Ben)
+
+The haze values are a first guess, so expect this once.
+
+- [ ] 8. **Lead:** change the numbers in `src/shared/Config/World.json` from the screenshots, and
+      rebuild (step 1). No code changes.
+- [ ] 9. Open the new file (step 2), and repeat PLAYTEST M13 steps 9–12 and 16.
+
+### 4. Coming in wave 2 (nothing to do yet)
+
+- Wave 2 adds the mountains, foothills, forest and waterfall as a generated kit. It needs **one
+  upload** (lead) and **one harvest paste** (Ben), the same routine as M12 §1 step 5.
+- It waits until the Boomtown session's harvest is committed. Never run an upload or a harvest
+  while another session uploads or harvests.
+- The steps get written here when wave 2 is built.
