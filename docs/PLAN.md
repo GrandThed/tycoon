@@ -70,7 +70,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   yet? do it"; **wave 2 built 2026-10-02**, the whole A2 Valley in one wave: mountains, forest,
   waterfall, river, pond, lake, 4 bridges, stepping stones, groves, era aprons and clouds as 28
   generated meshes (131,768 triangles), **uploaded, harvested in one paste and templated**;
-  **review and checks pending, Studio playtest pending**; there is no wave 3; branch
+  **reviewed, checks green, Studio playtest pending**; there is no wave 3; branch
   `m13-valley` in the worktree `C:\Users\benja\Desktop\tycoon-m13`, **not merged** — see "M13"
   below)
 

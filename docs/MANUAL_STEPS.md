@@ -1697,7 +1697,7 @@ Pick **one** of the two options. Option A is the simple one: it gives a fresh Vi
 every Play and touches no real save.
 
 **Option A: open the file**
-- [ ] 1. **Lead:** rebuild after the last code, config or template change, from `tycoon-m13`:
+- [x] 1. **Lead:** rebuild after the last code, config or template change, from `tycoon-m13`:
       `rojo build -o build/test.rbxl`. Tick this once the wave 2 review fixes are in and the
       checks are green. (The wave 1 rebuild was done on 2026-10-02; this box is for wave 2.) A
       file built before wave 2 shows no mountains.
