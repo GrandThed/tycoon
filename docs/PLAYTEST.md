@@ -4441,6 +4441,11 @@ Publish to Roblox (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*)
 It carries a switch that starts fresh saves in Boomtown; on a published place it would move a
 fresh real save to era 2.
 
+**RE-CHECK FIRST (wave 2.5, 2026-10-02): the lane flicker.** On your first look the lanes
+flickered from a distance ("a texture above each other"). The lanes are now baked road pieces,
+like the streets and driveways, which is what fixes it. **Steps 9–12 check exactly that; do them
+before anything else.**
+
 - Setup: `docs/MANUAL_STEPS.md` "M12" §11 (rebuild first, then open the file).
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - **Every Play starts a fresh Boomtown plot with 100T cash.** Press Play again and you get a
@@ -4507,42 +4512,55 @@ sooner, so your numbers can differ a little:
       - Every street turns from gravel to **asphalt in the same instant**.
       - No scaffold and no building.
       Bug: one street piece stays gravel.
-- [ ] 9. Turn the camera to the street the Barber Shop's pad stands on, and look at the ground on
-      the entrance side of it. Buy the **Barber Shop** (purchase 7) and watch:
-      - a **lane** (a small road, 3 studs wide) runs out from the street into the block, in about
-        half a second, with dust at its tip;
-      - it arrives **whole**: about 39 studs long, with one bend;
+- [ ] 9. Stand near the street the Barber Shop's pad is on, and look at the ground on the
+      entrance side of it. Buy the **Barber Shop** (purchase 7) and watch:
+      - a **lane** (a small road, 3 studs wide) appears, **whole and at once**: about 39 studs
+        long, with one rounded bend;
+      - its dark **kerb comes first, then the surface**, then **one run of dust** along it;
       - **building sites** stand along it;
       - 10–30 s later the lots nearest the street become houses. The far end stays building
         sites for now.
-      Bug: houses along bare ground with no lane; a lane with nothing on it after a minute.
-      **Question for you:** is "the whole lane at once" fine, or should the road creep in as its
-      houses come?
+      Bug: houses along bare ground with no lane; a lane with nothing on it after a minute; the
+      lane drawn piece by piece.
 
-### 2. The lane's surface (the most likely thing to be wrong)
+### 2. The lanes (re-check this first: it is what flickered)
 
-- [ ] 10. Look **straight down** at the lane's **bend**, and then at its **round end**. Zoom in.
-      - Good: the road's pattern runs on unbroken through the bend and to the end.
-      - Bad: a round patch at the bend or the end where the pattern is turned or shifted.
+- [ ] 10. **Flicker.** Zoom **far out** over the lane and move the camera **slowly**, from several
+      angles.
+      - Good: the kerbs and the surface **sit still**, like the streets.
+      - Bad: the lane flickers or shimmers; two surfaces swap as the camera moves.
 - [ ] 11. Look at the lane's **mouth**, where it leaves the street.
-      - Good: the street covers the mouth; the lane is the **same shade** as the street.
+      - Good: **no kerb line across** the mouth; the lane is the **same shade** as the street.
       - Bad: a dark kerb line across the mouth; a lane lighter or darker than the street.
-- [ ] 12. Zoom **far out** and move the camera slowly.
-      - Good: the lane's dark kerbs sit still.
-      - Bad: the kerbs flicker against the ground; a shimmer at the bend.
-- [ ] 13. Buy **Install Fire Hydrants** (8), then turn to the Grocery Store's pad and buy the
-      **Grocery Store** (9). A second lane grows. Watch its **round tip** while it moves:
-      - Good: the pattern under the tip stays still on the ground.
-      - Bad: the pattern slides along with the tip.
-- [ ] 14. The two lanes **meet end to end** near the front corner of the plot. Look straight down
-      at the spot.
-      - Good: one unbroken surface.
-      - Bad: a square or a round patch where they meet.
+- [ ] 12. **Is it the baked lane?** While still in Play: View (*Vista*) → **Command Bar** (*Barra
+      de comandos*), paste this line, press Enter. Replace `Plot1` with your plot's folder,
+      `Plot<n>` (no underscore):
+      ```
+      local f = workspace.CityDressing:FindFirstChild("Plot1") local n = 0 for _, c in f:GetChildren() do if c.Name:sub(1, 3) == "LN_" then n += 1 end end print(n, f:FindFirstChild("Lane") ~= nil)
+      ```
+      - Good: Output (*Salida*) says `1 false` now, and `8 false` on a full town.
+      - Bad: `0 true`, or anything ending in `true`. A part named `Lane` means the flat fallback
+        is drawing instead of the baked piece. Tell Claude.
+      The same in Explorer (*Explorador*): Workspace → CityDressing → `Plot<n>` holds models named
+      `LN_<k>`, and no part named `Lane`.
+- [ ] 13. Buy **Install Fire Hydrants** (8), then stand near the Grocery Store's pad and buy the
+      **Grocery Store** (9). A second lane appears, the same way: kerb first, then the surface,
+      one run of dust, whole at once.
+- [ ] 14. Those two lanes **meet end to end** near the front corner of the plot on that side.
+      Look straight down at the spot.
+      - Good: **one unbroken surface**, no kerb line through it.
+      - Bad: a seam, a dark line or a patch where they meet.
+      After the **Cinema** (13) two more lanes meet near the other front corner: check that spot
+      the same way.
 - [ ] 15. Keep buying. After the **Cinema** (13) there are 5 lanes, after the **Auto Repair Shop**
-      (15) 7, after the **Bowling Alley** (16) all **8**. Check after the Auto Repair Shop:
-      - two lanes leave the **same point** of one street, one to each side;
-      - Good: no dark kerb line across either mouth, and no darker patch between them.
-- [ ] 16. Walk every lane once. Each house on a lane **faces the lane**.
+      (15) 7, after the **Bowling Alley** (16) all **8**. After the Auto Repair Shop, find where
+      **two lanes leave the same point** of the street east of Main Street, one to each side:
+      - Good: it reads as a small **crossroads**.
+      - **Report it** if the street narrows to a point there, with dark kerbs. That spot is a
+        known open item, and we want to know how it looks to you.
+- [ ] 16. Walk every lane once, the two east lanes from step 15 first.
+      - No crop field's edge lies **on a lane's kerb**.
+      - Each house on a lane **faces the lane**.
       Bug: a house on the lane's surface; a field or a fence on a lane; a lane running into a
       landmark, a pad or the plot edge.
 
@@ -4660,16 +4678,21 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
         parked cars 14 → 7, shelters 4 → 2), and the fields to about half;
       - the houses and the lanes **stay**; nothing flickers or rebuilds.
 - [ ] 39. Turn it **ON**: the **same** items come back in the **same** spots.
-- [ ] 40. Fly more than 290 studs away. On that plot: no lanes, no layers, no smoke, fewer houses
-      (about 60), whole fields only. Fly back: everything returns in the same spots within about
-      1 s, with no scaffold and no rising houses.
-      Bug: a freeze of half a second or more on the way back.
+- [ ] 40. Fly more than 290 studs away. On that plot:
+      - the **lanes stay**, without their dark kerbs, exactly like the streets;
+      - they do **not** flicker from there either;
+      - no layers, no smoke, fewer houses (about 60), whole fields only.
+      Fly back: everything returns in the same spots within about 1 s, with no scaffold and no
+      rising houses.
+      Bug: the lanes vanish or flicker from far away; a freeze of half a second or more on the
+      way back.
 
 ### 12. Phone, low graphics, two players
 
 - [ ] 41. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Buy
       through the Grocery Store (purchase 9):
-      - the lanes do **not** shimmer or flicker when you zoom out (step 12 again);
+      - the lanes do **not** shimmer or flicker when you zoom far out and move the camera slowly
+        (step 10 again);
       - smoke still shows (phones keep it);
       - the sign and stakes read well at phone size;
       - the frame rate looks fine, and the Build panel is unchanged.
@@ -4758,17 +4781,16 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 ### Not a bug (don't report these)
 
 - **75 houses, not 102.** The lanes took the room; you approved this on the render.
-- **Each lane arrives whole** in one purchase. Known; step 9 asks whether you want it to creep.
+- **Each lane appears whole** in one purchase. It is one baked piece, like a driveway.
 - **Lanes are always asphalt.** The first lane comes with the Barber Shop (7), which needs Pave
   Main Street (6) first. No lane is ever seen on gravel.
-- On the **one diagonal lane piece** (front of the plot, after the Cinema), the road pattern is
-  turned. Only that piece.
 - **Few houses smoke** (7 at full build): only about one lot in seven can, by design.
 - **No small parks on the lots.** The civic lot props never appear yet. This is open with the
   lead. The green at the Clock Tower's foot is separate and does appear.
 - **Fewer lamps and signals than before**: 8 lamps and 2 signals. The new plan has two crossroads.
-- **Far plots** show no lanes, no layers, about 60 houses, and only part of the fields. The field
-  part is known and waits on your numbers.
+- **Far plots** keep their streets and lanes without kerbs, and show no layers, about 60 houses
+  and only part of the fields. A far lane can run past houses that are not drawn. The field part
+  is known and waits on your numbers.
 - Buses in the render are not the same cars as in the game. Only the share is the same.
 - You walk through houses, hydrants, shelters, billboards and neon (the no-collision rule).
 - Construction times, and the positions of walkers and moving cars, differ between two players.
@@ -4777,8 +4799,8 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 ### What to tell Claude
 
 - Any failed step numbers, with the Output line.
-- **The lane surface** (steps 10–15): good or bad, and where.
-- **How a lane arrives** (step 9): whole at once, or should the road creep in?
+- **The lane flicker** (steps 10, 40 and 41): gone, or still there? From how far?
+- **The lanes** (steps 11–16): mouths, the spots where lanes meet, the two-lane point.
 - **Density:** are 75 houses enough? Two pockets could be opened by moving landmarks (a second
   harvest paste).
 - Anything facing the wrong way (step 25).

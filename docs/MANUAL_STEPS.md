@@ -1576,6 +1576,9 @@ playtest.**
 - The asset run (§10) is **done**: Ben's one paste was on 2026-10-02.
 - From commit `4e4253f` the Boomtown and Village models, roads and data all match. **Boomtown and
   the Village smoke can be judged in Studio now.**
+- **Wave 2.5 (2026-10-02):** Ben's first Studio look found the lanes flickering from a distance.
+  The lanes are now baked road pieces. That took a **second, short paste** from Ben the same day
+  (§10 step 41b). The build files carry the fix from commit `a78b4f1`.
 - Ben's next step is §11: open `build/boomtown.rbxl` and run the playtest.
 - The branch does not merge to `main` until Ben signs off.
 
@@ -1689,8 +1692,9 @@ new check.
      city");
   2. the numbers: step 37 of PLAYTEST "M12 — Village growing city" (§3 step 15), and the same on
      Boomtown (step 59 of the Boomtown section).
-- **From the lead now: nothing.** The lane-texture fix is in (`e109635`, 2026-10-02), and both
-  place files were rebuilt with it.
+- **From the lead now: nothing.** The lane flicker from Ben's first look is fixed by baked lanes
+  (wave 2.5, 2026-10-02), and both place files were rebuilt with it (`a78b4f1`).
+- **Nothing else is owed by Ben:** only the playtest and the numbers above. Both pastes are done.
 
 ### 6. M12 wave 2 — open the normal build (`test.rbxl`, Village)
 
@@ -1942,8 +1946,22 @@ other two Claude sessions acknowledged before the uploads and were told when the
         `build/boomtown.rbxl`).
       - Result: templates for 49 props and 38 Boomtown path pieces; 8 retired path templates
         removed.
-- [ ] 42. **Ben: the Boomtown Studio playtest** (§11). Review, QA, the lane-texture fix
-      (`e109635`) and the PLAYTEST section are done.
+- [x] 41a. **Lead, wave 2.5: lanes baked and uploaded** (done 2026-10-02, commit `afcb43d`).
+      The bake now makes 46 Boomtown pieces: 21 stretches, 17 driveways and **8 lanes**
+      (`LN_1` … `LN_8`). The 38 older pieces came out byte-identical, so only the 16 lane meshes
+      were uploaded:
+      ```
+      py tools/paths/bake.py --era Boomtown
+      py tools/assets/upload_paths.py --era Boomtown
+      ```
+- [x] 41b. **Ben, wave 2.5: a second, short harvest paste** (done 2026-10-02, 16 lane meshes,
+      commit `2827521`). Same routine as step 40. The other Claude session's paste and this one
+      were taken in turn on Ben's clipboard.
+- [x] 41c. **Lead, wave 2.5: templates, manifest and builds** (done 2026-10-02, commit `ccc9dc9`:
+      `templates/_paths/Boomtown/LN_1.rbxmx` … `LN_8.rbxmx`; rulings and rebuilt place files in
+      `a78b4f1`). `py tools/paths/bake.py --list` exits 0 for both eras.
+- [ ] 42. **Ben: the Boomtown Studio playtest** (§11). Review, QA, the baked lanes and the
+      PLAYTEST section are done.
 - [ ] 43. **Lead:** merge `m12-boomtown` into `main` after Ben's sign-off.
 - 44. **If a record goes missing later:** re-run step 40 and the first line of step 41 only. Do
       **not** re-run the uploaders.
@@ -1960,7 +1978,7 @@ Press Play again and you get a fresh Boomtown and the cash again.
 section).
 
 - [ ] 45. **Rebuild both files**, in PowerShell. The files in the folder already carry the
-      lane-texture fix (`e109635`), so this is only to be safe. It is harmless to repeat:
+      baked lanes (`a78b4f1`), so this is only to be safe. It is harmless to repeat:
       ```
       cd C:\Users\benja\Desktop\tycoon-m12
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"

@@ -65,8 +65,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   built; wave 2.1 mock gate answered 2026-10-01 (**organic, bolder pass**; four more
   city-changer slots; 6-stud roads; chimneys on the narrow Village homes); waves 2.2 and 2.3
   (layout, five city layers, buses, narrow driveways, 46 final props) and wave 2.4 (**back lanes**,
-  75 lots) built and reviewed; assets uploaded, **harvested 2026-10-02** and templated;
-  **awaiting Ben's Boomtown Studio playtest** on `build/boomtown.rbxl`; Metropolis and Orbital
+  75 lots) built and reviewed; assets uploaded, **harvested 2026-10-02** and templated; Ben's
+  first Studio look found the lanes flickering from a distance, fixed the same day by wave 2.5
+  (**baked lanes**, a second short paste); **awaiting Ben's Boomtown Studio playtest** on
+  `build/boomtown.rbxl`; Metropolis and Orbital
   come later — see "M12" below)
 
 ---
@@ -2001,7 +2003,7 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 ### Wave 2 — Boomtown (2026-10-01 → 2026-10-02; built and harvested, awaiting Ben's Studio playtest)
 
 **Where:**
-- Wave 2: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-boomtown` (HEAD `e109635`).
+- Wave 2: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-boomtown` (HEAD `a78b4f1`).
   `assets/` there is a junction to the main checkout's `assets/`.
 - Layout candidate "organic" (**chosen**): worktree `C:\Users\benja\Desktop\tycoon-m12-organic`,
   branch `m12-boomtown-organic`. The first candidate (`0fd20be`) was merged in `20df3ed`; the
@@ -2011,7 +2013,8 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 - Layout candidate "grid" (not chosen): worktree `C:\Users\benja\Desktop\tycoon-m12-grid`, branch
   `m12-boomtown-grid`, commit `452059d`.
 - Contract: `docs/INTERFACES.md` "M12 wave 2 — Boomtown", with "Wave 2.2" and its two rulings
-  blocks, and "Wave 2.4 — back lanes" with its rulings.
+  blocks, "Wave 2.4 — back lanes" with its rulings, and "Wave 2.5 — baked lanes" with its two
+  rulings blocks.
 
 **Status (2026-10-02): built, uploaded, harvested. Awaiting Ben's Studio playtest.**
 - **The branch caveat is over.** From commit `4e4253f` the Boomtown and Village models, paths and
@@ -2019,9 +2022,11 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 - Boomtown is tested on `build/boomtown.rbxl` (a fresh save starts in era 2). **That file is for
   local Studio use only and must never be published.**
 - Village's early plumes now sit on real chimneys.
+- **Ben's first Studio look (2026-10-02)** found one defect: the lanes flickered from a distance.
+  Wave 2.5 (baked lanes) fixes it; Ben re-checks that first.
 - The branch does not merge to `main` until Ben signs off.
 - The numbers in the wave 2.0, 2.1 and 2.2/2.3 blocks below are the record of each gate. **Today's
-  numbers are in the wave 2.4 block.**
+  numbers are in the wave 2.4 block**; wave 2.5 did not change them.
 
 **Shipped to playtest (wave 2.0 — Village chimney smoke and parked carts, 2026-10-01):**
 - **Client-only.** No server, remote, profile or economy change. No new assets, no upload, no
@@ -2208,7 +2213,7 @@ text in INTERFACES "Review rulings").
   - A lane leaves a street through a gap in the frontage. Two pairs of lanes meet end to end.
   - It is drawn on the plot's live street surface, so it changes with the streets.
   - **A lane arrives whole** in one purchase, then fills with houses from the street inward.
-    Accepted for the playtest; Ben is asked whether the road should creep in.
+    Since wave 2.5 that is the contract: a lane is one baked piece.
 - **75 lots** (was 102): 22 terraced shops, 50 small homes, 3 medium. Ben accepted this on the
   render: "the houses look fantastic!".
 - **`pull` re-tuned** for the lane distances: radius 120, `tierTerm` 0.35, thresholds
@@ -2244,9 +2249,9 @@ text in INTERFACES "Review rulings").
 
 **Review (wave 2.4): 0 Critical, 2 Major, 8 Minor** (text in INTERFACES "Rulings after the wave 2.4
 reports and review").
-- **Major 1, fixed (`e109635`):** lane parts were turned, which broke the street texture's tiling
-  at bends and ends. Axis-aligned legs are now laid unturned, so they tile with the streets; only
-  the one diagonal leg carries a turned tiling. Both place files were rebuilt in that commit.
+- **Major 1, fixed (`e109635`), then replaced by wave 2.5:** lane parts were turned, which broke
+  the street texture's tiling at bends and ends. The fix laid axis-aligned legs unturned. Wave 2.5
+  removed that texture path altogether.
 - **Major 2, ruled:** the lot target. Ben accepted 75.
 - Minors applied: `fabric.lanes.rimHeight` 0.02 and `clear.lane` 2.0.
 - Minor open: the civic lot props never draw.
@@ -2255,7 +2260,41 @@ reports and review").
 **QA (2026-10-02): all gates green** (`4e4253f`). `bake.py --list` exits 0 for both eras;
 `cityfabric.py timeline` passes for both; `gen_asset_manifest.py --check` passes.
 
+**Shipped to playtest (wave 2.5 — baked lanes, 2026-10-02, commits `5a54b39` … `a78b4f1`):**
+- **The defect:** on Ben's first Studio look at Boomtown the lanes flickered from a distance ("a
+  texture above each other ... if you get close enough it renders it well"). That was z-fighting
+  between the wave 2.4 lane Parts: a kerb Part and a surface Part 0.02 to 0.03 studs apart.
+- **The fix:** every lane is a **baked path piece**, `LN_1` … `LN_8`, like a landmark's driveway.
+  - Boomtown now bakes **46 pieces**: 21 stretches, 17 spurs, 8 lanes. The 38 older pieces came
+    out byte-identical; only the 16 lane meshes were uploaded.
+  - A lane is drawn whole once any lot on it has a building site: kerb, then surface, then dust.
+  - Lane bends turn on one lane width (3 studs).
+  - Far plots keep a lane's surface and drop its kerb, as for the streets.
+  - Without its template a lane falls back to one layer of flat Parts named `Lane`. That is not
+    reachable today: all eight templates exist.
+  - `clear.lane` is 2.8 (was 2.0), so fields keep off the lane kerbs. `fabric.lanes` is now
+    `{ width, rim, fillHeight }`.
+- **Commits:** `5a54b39` (contract), `78e756d` (client), `e0e5651` (pipeline), `afcb43d` (bake
+  and upload), `2827521` (harvest: **Ben's second, short paste**, 16 lane meshes), `ccc9dc9` (lane
+  templates, manifest, builds), `a78b4f1` (rulings, `clear.lane` 2.8, builds).
+- **Lot, layer and plume numbers are unchanged** from the wave 2.4 block.
+
+**Review (wave 2.5): 0 Critical, 0 Major, 6 Minor.** No z-fight source remains in the baked
+renderer. Three Minors are open (below). `bake.py --list` exits 0 for both eras (Boomtown: 46
+pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` passes.
+
 **Known follow-ups (wave 2):**
+- **lead (open, wave 2.5 review):** the Parts fallback for a lane still sits 0.02 to 0.03 studs
+  from a street mesh where it runs under one, and stacks coplanar pieces at bends. Players never
+  see it. Fix when next in `Fabric.luau`: start the first slab at the street's edge, raise
+  `fabric.lanes.fillHeight` to 0.12, drop the discs.
+- **lead (open, for the next Boomtown street re-bake):** the street pinch at (22.0, 24.9).
+  Polylines 3 and 4 meet end to end there without joining, so their meshes end in round caps
+  that only touch. Lanes 6 and 8 cover it, so it reads as a crossroads. Do not move that mouth
+  until the two polylines are one. Ben is asked to report how it looks (PLAYTEST step 15).
+- **lead (open, wave 2.5 review):** lane clearances in `fabric.py check` should use the bake's own
+  half-width and cap overrun, not the data polyline plus `rim`; `fabric.lanes.fillHeight` should
+  not be required for a baked lane.
 - **Ben (open):** the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing
   city"; setup in `docs/MANUAL_STEPS.md` "M12" §11).
 - **Ben → lead (open):** the numbers: Village step 37, and the same on a full Boomtown (step 59
@@ -2265,8 +2304,6 @@ reports and review").
 - **lead (open):** `FabricCivicSmall` and `FabricCivicMedium` never draw, because no lot's nearest
   landmark is the Clock Tower or the Fire Station. Give those landmarks lots to govern, or retire
   the props.
-- **lead (if Ben asks):** let a lane creep in with its houses (the reach would count lots at
-  level 2).
 - **lead (if Ben asks):** density. Moving landmarks could open two pockets (about 8 more lots; a
   re-bake and a second harvest paste), or a narrower lane house (new props).
 - **lead (note from the docs pass):** no lane can be seen on gravel. The first lane needs the
@@ -2309,6 +2346,10 @@ reports and review").
 - [x] lead: harvest, templates, rebuilt fabric data, gates, manifest (2026-10-02, `4e4253f`)
 - [x] lead → ui-engineer: the lane-texture fix, with both place files rebuilt (2026-10-02,
   `e109635`)
+- [x] Ben's first Studio look at Boomtown (2026-10-02): one defect, the lanes flicker from a
+  distance
+- [x] Wave 2.5 (baked lanes) built, reviewed, uploaded, harvested (Ben's second paste) and
+  templated (2026-10-02, `a78b4f1`)
 - [ ] Ben: the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city")
 - [ ] Ben: the Village carts and smoke on `build/test.rbxl` ("M12 wave 2.0 — Village smoke and
   carts", and steps 49–57 of the Boomtown section)
