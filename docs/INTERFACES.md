@@ -6124,3 +6124,59 @@ baked in, because adding an attribute by hand is hard for Ben in a Spanish Studi
   block's lanes, and `m12d_compare.png` against `m12c_full.png`.
 - `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village and
   Boomtown, Village data byte-identical; stylua, selene, luau-lsp and `rojo build` clean.
+
+## Wave 2.5 — baked lanes (Ben's first Studio look at Boomtown, 2026-10-02)
+
+Ben, with two Studio screenshots: "it seems like this street is glitching with the texture. it
+seems like there is a texture above each other and renders them depending on how you are seeing
+it. but if you get close enough it renders it well". That is z-fighting: wave 2.4 drew a lane as
+a rim Part under a fill Part 0.02 to 0.03 studs apart, each with a `Texture`, and at a distance
+the depth buffer cannot separate them. Part-based paths failed the same way on Village (M9 wave
+1c). **Lanes become baked meshes, the approved recipe of wave 1d**, exactly like a landmark's
+driveway.
+
+### Pieces
+
+- Every lane in `Config/Fabric/<Era>.json` is one baked path piece, id **`LN_<k>`** (k = the
+  lane's 1-based index): a fill mesh and a rim mesh with world-planar UVs, the irregular edge and
+  the heights of every other piece (`paths.rimHeight`, `paths.fillHeight`). Overlaps with the
+  street at the mouth, and with another lane where two meet, are invisible for the same reason
+  junctions are.
+- Geometry is a spur's: the lane's polyline at width `fabric.lanes.width`, bends filleted as a
+  spur's are, the mouth running under the street as a spur's does, and a round end at the far
+  point (two lanes that meet simply overlap).
+- `tools/paths/bake.py --era <Era>` bakes them from the fabric data together with the street and
+  spur pieces. Existing pieces must come out byte-identical, so only the lane meshes upload.
+  `--list` checks the lane pieces against the fabric data (ids, count, the polyline) as it checks
+  the others against the client.
+- Templates land in `templates/_paths/<Era>/LN_<k>.rbxmx` like every piece.
+- `budget.pathPieces` covers them (Boomtown: 38 + 8).
+
+### Client
+
+- **A lane is drawn whole once its reach is above 0** (any lot on it has at least a building
+  site). `CityFabric.LaneReach` and the clearing mask are unchanged; only the drawing changes.
+  With Boomtown's pull every lane reached its full length in one purchase anyway.
+- In the baked renderer the lane is its `LN_<k>` template, shown by the same code that shows
+  spur pieces: rim, then fill, then the dust burst on an animated sync; the plot-wide surface swap
+  (Pave Main Street) reaches it with every other piece. Near and far plots follow the path
+  pieces' own rule.
+- Without the template (the parts renderer, a missing asset) the lane is a single layer of flat
+  Parts in the road's live material and colour: fill only, no rim, no `Texture`, so nothing lies
+  on anything else. The wave 2.4 texture code goes.
+- `fabric.lanes.rim`, `fillHeight` and `rimHeight` are no longer read by the baked renderer; the
+  fallback uses `width` and `fillHeight`. `growSeconds` is unused and is removed from the config.
+
+### Ownership (wave 2.5, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `CityDressing.json` `fabric.lanes`; the bake, upload, harvest and templates |
+| mirror-engineer | `tools/paths/**`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `tools/assets/upload_paths.py` and `gen_templates.py` only if lane ids need it |
+| ui-engineer | `src/client/City/Fabric.luau`, `PathRenderer.luau`, `RoadGraph.luau`, `src/client/Controllers/CityDressingController.luau`, `AssetPreloader.luau`, `src/shared/Types.luau` |
+
+### Done when
+
+- `py tools/paths/bake.py --era Boomtown --list` exits 2 before the bake (agrees, 16 new meshes
+  missing) and 0 after the harvest; Village's stays 0 and its meshes byte-identical.
+- In Studio: lanes look like the streets and driveways from every distance, with no flicker.
