@@ -1,0 +1,18 @@
+{
+	"version": 1,
+	"atmosphere": {
+		"density": 0.25,
+		"offset": 0.2,
+		"color": [204, 222, 240],
+		"decay": [170, 195, 225],
+		"glare": 0,
+		"haze": 1
+	},
+	"ground": { "material": "Plastic", "color": [126, 155, 76], "side": 2048 },
+	"hub": {
+		"material": "Plastic",
+		"color": [182, 176, 164],
+		"surround": { "radius": 38, "height": 0.2, "material": "Plastic", "color": [166, 138, 100] }
+	},
+	"roads": { "width": 6, "lift": 0.1, "material": "Plastic", "color": [158, 126, 88] }
+}

@@ -384,4 +384,22 @@ function Catalog.GetLayout(eraName: string): Types.EraLayout?
 	return layout
 end
 
+-- World.json (M13) is optional in the same sense as Assets.json: nil IS the signal, and the server
+-- then builds the world exactly as it did before M13 (default ground and hub, Lighting untouched).
+-- Re-checked per call until the module shows up, cached from then on.
+local cachedWorldConfig: Types.WorldConfig? = nil
+function Catalog.GetWorldConfig(): Types.WorldConfig?
+	local cached = cachedWorldConfig
+	if cached ~= nil then
+		return cached
+	end
+	local worldModule = configFolder:FindFirstChild("World")
+	if worldModule == nil or not worldModule:IsA("ModuleScript") then
+		return nil
+	end
+	cached = require(worldModule) :: Types.WorldConfig
+	cachedWorldConfig = cached
+	return cached
+end
+
 return Catalog

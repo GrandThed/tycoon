@@ -5481,3 +5481,242 @@ shape: `{ x, z, rotationY, scale, variant, anchor: "stretch" | "parcel", stretch
   (Village: 40) per frame across all plots: nearest plot first, and nearest to the camera first
   within a plot. Destroys stay immediate. Final states are unchanged,
   so the mirror needs no change.
+
+---
+
+# M13 contracts — The Valley (wave 1: sky, ground, hub, roads)
+
+Ben, 2026-10-01: "can you imagine what the environment outside the city squares could look like?
+low poly mountains, rivers and such". Three landscapes were rendered around the real plots
+(`assets/research/2026-10-01-worldmock/`, sheets in `out/`); Ben chose **A, the Valley** ("i love
+A valley"). M13 is built in the worktree `C:\Users\benja\Desktop\tycoon-m13` on branch
+`m13-valley`. The M12 Boomtown session works in `tycoon-m12` at the same time: never touch it,
+and announce every upload or harvest to it first.
+
+Ben's rulings:
+
+1. The Valley: a meadow basin ringed by snow-capped low-poly mountains, forest on the foothills,
+   a waterfall, a river through the ring and a small lake. The Island and the Lake are closed.
+2. Three waves, each one a Studio look:
+   - **Wave 1 (this section):** sky, haze, green ground, hub and dirt roads. Parts and Lighting
+     only, **no uploads**.
+   - **Wave 2:** mountains, foothills, forest and waterfall as a generated kit (one upload, one
+     harvest paste), an invisible wall at the foothills, the ground ramped up to the plot edges,
+     era aprons.
+   - **Wave 3:** river, lake and bridges.
+3. **The river is shallow and wade-through, with solid wooden bridges** (wave 3). Bridges are
+   server geometry that collides. That is a new category next to the M9 rule "no dressing part
+   collides", not a change to it: client dressing still never collides.
+
+The reference for looks is the mock (`wm_land.py`, and the `step1_*` renders for this wave).
+Where this contract and the mock differ, the contract wins.
+
+## Principles
+
+- **Static and server-built.** The landscape is the same for every player and never changes with
+  game state, so the server builds it once at boot, next to the plots. No remote, attribute,
+  profile, economy or client change in wave 1.
+- **Derived from the ring, never hand-placed.** Every position comes from `Game.json`
+  (`plotCount`, `plotMargin`, `hubRadius`) and the layout's `plotSize`. `plotCount` is 10 on
+  `main` and 6 on the unmerged `m11-unlocks`; both must come out right with no code change.
+- **Levels are frozen.** Plot tops and the hub top are at Y = 0. The ground top is at
+  Y = −`plotSize.Y` (−1). The client (`CityDressingController` `groundDrop`), `tools/cityfabric.py`
+  and `tools/testfit/plotrender.py` all assume that level, and Village woods stand on the world
+  ground up to about 19 studs past each plot's sides and back. Nothing in M13 may raise, lower
+  or cover the ground inside that band without changing those three together.
+- **Everything degrades.** Without `World.json` the world is built exactly as before M13: the
+  default-grey `Ground` square and `Hub`, no roads, and Lighting untouched. A missing block in the
+  file switches that one feature off. A bad material or colour warns once and falls back to the
+  Part default. Nothing raises an Output error.
+- **Every number in config.** Colours, materials, sizes and Lighting values live in `World.json`.
+  Code holds only derived geometry.
+- **Never two visible coplanar faces.** New parts sink into or stand proud of their neighbours.
+
+## `World.json` — schema v1 (`src/shared/Config/World.json`, lead-applied)
+
+Colours are RGB 0–255 and materials are `Enum.Material` names, as in `FabricPadLookConfig`.
+Every block is optional; absent means "leave as before M13".
+
+```json
+{
+  "version": 1,
+  "lighting": {
+    "clockTime": 14.5,
+    "geographicLatitude": 35,
+    "brightness": 2.5,
+    "ambient": [110, 116, 128],
+    "outdoorAmbient": [150, 156, 166],
+    "exposureCompensation": 0
+  },
+  "atmosphere": {
+    "density": 0.3,
+    "offset": 0.25,
+    "color": [199, 215, 235],
+    "decay": [106, 132, 170],
+    "glare": 0,
+    "haze": 0.6
+  },
+  "clouds": { "cover": 0.45, "density": 0.35, "color": [255, 255, 255] },
+  "ground": { "material": "SmoothPlastic", "color": [106, 153, 78], "side": 2048 },
+  "hub": {
+    "material": "SmoothPlastic",
+    "color": [205, 200, 188],
+    "surround": { "radius": 40, "height": 0.5, "material": "SmoothPlastic", "color": [150, 118, 84] }
+  },
+  "roads": { "width": 8, "lift": 0.1, "material": "SmoothPlastic", "color": [150, 118, 84] }
+}
+```
+
+The values above show the shape. The values in the committed file are the mock's (`step1_*`
+renders, `out/step1_numbers.json`) and win over this listing.
+
+**First values (lead, 2026-10-01).** The committed file has **no `lighting` and no `clouds`
+block**, on purpose:
+- Every building and plot Ben approved was judged under the default Lighting. Brightness and
+  ambient values taken from an offline render are guesses, so wave 1 leaves them alone and adds
+  only the haze. The `lighting` block exists for tuning after his Studio look.
+- The mock's clouds are low-poly meshes (wave 2). Roblox's volumetric `Clouds` are a different
+  look and are not in the `step1_*` renders Ben was shown.
+- The `atmosphere` numbers are a first guess that cannot be checked offline. The target is the
+  mock's haze: about 20% at 500 studs, so the far side of the ring stays readable.
+- Ground, hub and roads use `Plastic`, the material the plot bases already have.
+
+Keys:
+
+- `lighting`: each key, when present, is written to the `Lighting` property of the same name
+  (`ClockTime`, `GeographicLatitude`, `Brightness`, `Ambient`, `OutdoorAmbient`,
+  `ExposureCompensation`). An absent key leaves that property alone.
+- `atmosphere`: one `Atmosphere` under `Lighting` (`Density`, `Offset`, `Color`, `Decay`, `Glare`,
+  `Haze`). An existing `Atmosphere` child is reused, never duplicated.
+- `clouds`: one `Clouds` under `Workspace.Terrain` (`Cover`, `Density`, `Color`). If the place has
+  no `Terrain`, clouds are skipped silently.
+- `ground`: `material`, `color`, and `side`, the square's side in studs. The side used is
+  `min(2048, max(side, 2 × (ringRadius + plotSize.Z)))`, so the ground never shrinks below today's.
+- `hub`: `material` and `color` for the existing `Hub` cylinder. `surround` adds one wider, lower
+  cylinder around it: `radius` (> `hubRadius`, else it is skipped with a warning) and `height`,
+  how far its top stands above the ground top (0 < `height` < `plotSize.Y`).
+- `roads`: one flat strip from the hub to each plot's front edge. `width` in studs; `lift`, how
+  far the strip's top stands above the ground top. A strip starts at the hub wall and runs under
+  the surround, so **`lift` must be lower than `hub.surround.height`** (equal tops would z-fight
+  in that band; a higher road would lie on top of the ring).
+
+## `src/shared/WorldPlan.luau` (new; pure, no Roblox globals)
+
+The ring maths, moved out of `PlotService.buildWorld` so the server, later waves and a Python
+mirror (wave 2) share one definition. Angles are radians; plot `index` is 1-based.
+
+```lua
+export type Ring = {
+	plotCount: number,
+	radius: number,      -- plot centres
+	halfSector: number,  -- pi / plotCount
+	frontRadius: number, -- radius - plotSizeZ / 2: the hub-side edge
+	backRadius: number,  -- radius + plotSizeZ / 2
+}
+export type Road = { angle: number, innerRadius: number, outerRadius: number, width: number }
+
+WorldPlan.Ring(plotCount, plotMargin, hubRadius, plotSizeX, plotSizeZ): Ring
+WorldPlan.PlotAngle(ring: Ring, index: number): number            -- (index - 1) / plotCount * 2π
+WorldPlan.GroundSide(ring: Ring, plotSizeZ: number, wantedSide: number?): number
+WorldPlan.Roads(ring: Ring, hubRadius: number, width: number): { Road }
+```
+
+- `Ring` is today's formula, unchanged:
+  `radius = max(plotSizeZ / 2 + (plotSizeX / 2 · cos(halfSector) + plotMargin / 2) / sin(halfSector),
+  hubRadius + plotMargin + plotSizeZ / 2)`. A plot's centre is `(cos(angle), sin(angle)) · radius`
+  in X, Z.
+- `GroundSide` is the rule under `ground` above; with `wantedSide` nil it returns today's
+  `2 × (radius + plotSizeZ)`.
+- `Roads` returns one road per plot, on the plot's radial. `outerRadius = frontRadius`.
+  `innerRadius = max(hubRadius, width / (2 · tan(halfSector)))`: the second term is where two
+  neighbouring strips would start to overlap, so strips never share a coplanar top at any
+  `plotCount`. A road whose `innerRadius ≥ outerRadius` is left out.
+
+## Server — `src/server/World/Landscape.luau` (new) and `PlotService.buildWorld`
+
+`Landscape` is a plain module, not a service: it has no `Init`/`Start` and is not added to
+`orderedServices`. It lives outside `src/server/Services`, so the combat place never mounts it.
+
+```lua
+Landscape.Build(ring: WorldPlan.Ring, layout: Types.EraLayout, gameConfig: Types.GameConfig): ()
+```
+
+`PlotService.buildWorld` calls `WorldPlan.Ring` and `WorldPlan.PlotAngle` for the ring it used
+to compute inline, and calls `Landscape.Build` where it used to create `Ground` and `Hub`. `Spawn`,
+the `Plots` folder and everything per plot stay in PlotService, byte-for-byte in behaviour.
+
+`Landscape.Build` reads `Catalog.GetWorldConfig()` and creates:
+
+| Instance | Parent | Geometry | Collision |
+|---|---|---|---|
+| `Ground` (Part) | `Workspace` | square of `GroundSide`, thickness `plotSize.Y`, top at −`plotSize.Y` | collides, as today |
+| `Hub` (cylinder) | `Workspace` | exactly today's: radius `hubRadius`, top at 0 | collides, as today |
+| `HubSurround` (cylinder) | `Workspace.Landscape` | radius `surround.radius`, top at −`plotSize.Y` + `height`, bottom inside the ground | collides |
+| `Road_<index>` (Part) | `Workspace.Landscape` | `width` × (`outerRadius` − `innerRadius`), centred on the plot's radial, top at −`plotSize.Y` + `lift`, bottom `lift` below the ground top | none: `CanCollide`, `CanQuery`, `CanTouch` false |
+
+- Every part is `Anchored`. Roads and the surround have `CastShadow` false (a flat strip gains
+  nothing from casting); roads also have smooth `TopSurface`/`BottomSurface`.
+- With `World.json` absent: `Ground` and `Hub` exactly as before M13 (default colour and material,
+  today's side), no `Landscape` folder, Lighting untouched.
+- Lighting, atmosphere and clouds are applied in the same call, before the parts are parented.
+- Colour and material parsing is local to `Landscape` (warn once per bad value, fall back to the
+  Part default). `ArenaService`'s helpers are combat's and are not touched.
+
+### Types and Catalog (luau-engineer)
+
+- `Types.WorldConfig` and its block types (`WorldLightingConfig`, `WorldAtmosphereConfig`,
+  `WorldCloudsConfig`, `WorldGroundConfig`, `WorldHubConfig`, `WorldHubSurroundConfig`,
+  `WorldRoadsConfig`), mirroring the JSON exactly; every block and every `lighting` key is `T?`.
+  Add them after `ProvingGroundsConfig`, away from the regions `m11-unlocks` and `m12-boomtown`
+  change.
+- `Catalog.GetWorldConfig(): Types.WorldConfig?`, the nil-is-the-signal shape of
+  `GetCityDressingConfig`. Add it at the end of the getters, **not** next to
+  `GetProvingGroundsConfig` (`m11-unlocks` inserts `GetUnlocksConfig` there).
+
+## Ownership (wave 1, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section, `src/shared/Config/World.json` |
+| luau-engineer | `src/shared/WorldPlan.luau` (new), `src/server/World/Landscape.luau` (new), `src/server/Services/PlotService.luau` (`buildWorld` only), `src/shared/Types.luau` (World types only), `src/shared/Catalog.luau` (`GetWorldConfig` only) |
+| docs-keeper | `docs/PLAN.md`, `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md` |
+
+- **Frozen:** everything else. In particular every client file, `Main.server.luau`, both project
+  files, `Game.json`, the layouts, and every tool under `tools/` (the plot renderer's apron colour
+  is updated in wave 2, after `m12-boomtown` merges, because that branch edits the same files).
+
+### Review rulings (2026-10-02, roblox-reviewer: no Critical, one Warning)
+
+- **`roads.lift` ≥ `hub.surround.height` builds no roads.** With a surround built, that
+  combination warns once, naming both keys, and the roads are left out.
+- **The new work cannot stop the boot.** `Landscape.Build` runs inside `PlotService.Init` before
+  the spawn, the plots and the remote handlers. Lighting, atmosphere and clouds, and the surround
+  and roads, each run under `pcall`: a failure warns and costs only that feature, and leaves no
+  half-built `Landscape` folder. `Ground` and `Hub` stay unguarded, as before M13.
+- **PlotService resolves `Landscape` inside `buildWorld`,** not at module scope. The combat place
+  has no `Server/World`, and a module-scope wait there would hang any future combat-side require.
+- **A road's inner end reaches the hub wall at its corners.** The strip is lengthened inward by
+  `hubRadius − √(hubRadius² − (width / 2)²)`, hidden inside the hub, so roads look right with or
+  without a surround. `WorldPlan.Roads` is unchanged; this is a rendering detail in `Landscape`.
+- **Open for the Studio look, no code in wave 1:**
+  - With `glare` 0, `decay` may have no visible effect. If the sky shows no blue fall-off away
+    from the sun, raise `glare` slightly before re-tuning `decay`.
+  - `lift` 0.1 is the only separation between a road and the ground, and roads are seen from 300
+    to 500 studs at grazing angles. If a far road shimmers, raise `lift` and
+    `hub.surround.height` together.
+  - A road ends at the plot's front face; each era's first street starts 3.5 (Village), 5.5
+    (Boomtown) or 11 (Metropolis, Orbital) studs further in, and the Sign post stands on the
+    road's centreline. If the gap reads badly it is a wave 2 item (ground ramp and entrance).
+
+## Done when (wave 1)
+
+- Studio, `build/test.rbxl` from this worktree: a blue hazed sky, a green ground to the horizon,
+  a pale stone hub with an earth ring, and a dirt road from the hub to every plot's front edge.
+  Plots, pads, signs, buildings and all city dressing look and behave exactly as before. Village
+  woods past the plot edge still stand on the ground.
+- With `World.json` removed, the place builds and looks as it did before M13, with no Output error.
+- `WorldPlan.Ring` returns a radius of about 277.0 for 10 plots and 183.9 for 6.
+- Checks: stylua, selene, luau-lsp (both trees) and both `rojo build`s are clean; the existing
+  gates (`sim_economy`, `streetplan`, `fabric.py check Village`, `cityfabric.py selftest`,
+  `gen_templates.py --check`, `gen_asset_manifest.py --check`, `bake.py --era Village --list`) are
+  unchanged and green.

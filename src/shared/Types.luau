@@ -1803,6 +1803,56 @@ export type ProvingGroundsConfig = {
 	abilities: RangeAbilitiesConfig,
 }
 
+-- World.json v1 mirror (M13 wave 1, docs/INTERFACES.md "M13 contracts"); field names follow the
+-- JSON keys exactly. Colours are RGB 0-255 and materials are Enum.Material names, as in
+-- FabricPadLookConfig. Every block is optional: absent means that feature stays as it was before
+-- M13. Each `lighting` key is optional as well: absent leaves that Lighting property alone.
+export type WorldLightingConfig = {
+	clockTime: number?,
+	geographicLatitude: number?,
+	brightness: number?,
+	ambient: { number }?,
+	outdoorAmbient: { number }?,
+	exposureCompensation: number?,
+}
+export type WorldAtmosphereConfig = {
+	density: number,
+	offset: number,
+	color: { number },
+	decay: { number },
+	glare: number,
+	haze: number,
+}
+export type WorldCloudsConfig = { cover: number, density: number, color: { number } }
+-- `side` is the wanted side of the ground square in studs; WorldPlan.GroundSide bounds it.
+export type WorldGroundConfig = { material: string, color: { number }, side: number }
+-- `radius` must exceed Game.json's hubRadius; `height` is how far the surround's top stands above
+-- the ground top (0 < height < plotSize.Y).
+export type WorldHubSurroundConfig = {
+	radius: number,
+	height: number,
+	material: string,
+	color: { number },
+}
+export type WorldHubConfig = {
+	material: string,
+	color: { number },
+	surround: WorldHubSurroundConfig?,
+}
+-- `width` in studs; `lift` is how far a strip's top stands above the ground top. A strip starts at
+-- the hub wall and runs under the surround, so `lift` must be lower than `hub.surround.height`:
+-- with a surround built and `lift` not below it, no roads are built.
+export type WorldRoadsConfig = { width: number, lift: number, material: string, color: { number } }
+export type WorldConfig = {
+	version: number,
+	lighting: WorldLightingConfig?,
+	atmosphere: WorldAtmosphereConfig?,
+	clouds: WorldCloudsConfig?,
+	ground: WorldGroundConfig?,
+	hub: WorldHubConfig?,
+	roads: WorldRoadsConfig?,
+}
+
 -- Crowd replication. CrowdSpawn (reliable) introduces an enemy once; CrowdSnapshot (unreliable,
 -- buffer via CrowdCodec) carries every live enemy at crowd.snapshotHz; CrowdRemove ends it.
 export type CrowdState = "idle" | "move" | "windup" | "stagger" | "airborne" | "dead"
