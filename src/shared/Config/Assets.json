@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "textures": {
     "castle-kit": {
       "vipSwatchAssetId": 103844883997226,
@@ -11382,6 +11382,284 @@
             "offset": [10.8337, 0.0025, 27.8111],
             "sha256": "b1da9950b6b726fac781093a9b1d9296551ffc56b13d4b618a98c884676c872a"
           }
+        }
+      }
+    }
+  },
+  "world": {
+    "Valley": {
+      "plotCount": 10,
+      "planHash": "8421477aa817ba97",
+      "triangles": 131768,
+      "paletteAssetId": 122048418008875,
+      "paletteImageId": 0,
+      "paletteSha256": "08ba0ea9bbf6002fb47e219f2fe294e449c2df2266a418c0aa78b742c340be75",
+      "meshes": {
+        "ApronInner": {
+          "assetId": 140015497918990,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "b78c08196fb8a0fdbf63eda1018976f053f313a72d607c969785dde24774b544",
+          "triangles": 258,
+          "look": "flat",
+          "color": [128, 128, 128],
+          "transparency": 0.0
+        },
+        "ApronOuter": {
+          "assetId": 121619864364341,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "fa854d3733d57a64d2cde9a1ad162f3417d3ee46f64371b995c37f64bf098054",
+          "triangles": 282,
+          "look": "flat",
+          "color": [128, 128, 128],
+          "transparency": 0.0
+        },
+        "Basin_1": {
+          "assetId": 90046741396792,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "abae3827f26056d3dce377661e6bf5f8684e23c0f92c8f50aaf82bbef14948e6",
+          "triangles": 9461,
+          "look": "palette"
+        },
+        "Basin_2": {
+          "assetId": 72765390645974,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "23b86fadb488c5ebb526365583bae2dcea48469d4bbbe60161ca831bc8854d4c",
+          "triangles": 9460,
+          "look": "palette"
+        },
+        "Bridge_1": {
+          "assetId": 70489738550246,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "db94fddcee45f155694d4dbe35883293421bcab5dc595820b338809217c0731f",
+          "triangles": 352,
+          "look": "palette"
+        },
+        "Bridge_2": {
+          "assetId": 92896267211353,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "19380e24e00579da15b05835aba04a28bfa2fa7078bbd74651d86b2d3311641e",
+          "triangles": 496,
+          "look": "palette"
+        },
+        "Bridge_3": {
+          "assetId": 102851345542830,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "9a370277f7b358000372f269b54f1afae9390b707347f3ee2ab4830ada99018b",
+          "triangles": 496,
+          "look": "palette"
+        },
+        "Bridge_4": {
+          "assetId": 133303682968222,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "7a750a274cb0f94f74d78729ef78224c6e850e426cbc7d4aba14f6819a767e56",
+          "triangles": 352,
+          "look": "palette"
+        },
+        "Clouds_1": {
+          "assetId": 128593785956893,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "bd94813d69e838641c714d9973caa4cf41f3d51d002a57caf7bc7082aa65885e",
+          "triangles": 580,
+          "look": "flat",
+          "color": [250, 252, 255],
+          "transparency": 0.0
+        },
+        "Clouds_2": {
+          "assetId": 126936826592548,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "2593a507ff24408ef5d5461fe724116360d293a2d420bf06228a2d3308e6e0a7",
+          "triangles": 560,
+          "look": "flat",
+          "color": [250, 252, 255],
+          "transparency": 0.0
+        },
+        "Clouds_3": {
+          "assetId": 137501384507776,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "ef4d0408b555434dcf3da1e5faa2141bf6abe669b6dbe470ad2fc9f9a853e4bf",
+          "triangles": 440,
+          "look": "flat",
+          "color": [250, 252, 255],
+          "transparency": 0.0
+        },
+        "Clouds_4": {
+          "assetId": 121365757392516,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "dee07523e3e7f135371fd82d57ca32f5965fbbd57b46acaedc87107c884e7351",
+          "triangles": 560,
+          "look": "flat",
+          "color": [250, 252, 255],
+          "transparency": 0.0
+        },
+        "Details": {
+          "assetId": 76652999807331,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "a8db95e3fb5e5d94899eb0772f270c1687f5fb8cf4647a79a83ddf2756d1bac6",
+          "triangles": 16037,
+          "look": "palette"
+        },
+        "Entrance": {
+          "assetId": 121786618759395,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "55a71c13a74d77115afaf3af409bb9f79d0e4276d6507f922c2bd1934f6d4860",
+          "triangles": 128,
+          "look": "palette"
+        },
+        "Forest_1": {
+          "assetId": 79346269024578,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "60a25cceb0e725c91ed861a44f39cc968cd90452584f317dbcfcda4d4f00b04f",
+          "triangles": 8880,
+          "look": "palette"
+        },
+        "Forest_2": {
+          "assetId": 75697919936056,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "212a856017fcf6d34a7ccf6138151819c206e498ecfb827332a511dec9a13fb6",
+          "triangles": 8860,
+          "look": "palette"
+        },
+        "Forest_3": {
+          "assetId": 83723560013870,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "00e94d09f69a1465116005679e98066a31bb4855451fb5986ba94f3133c7406a",
+          "triangles": 14584,
+          "look": "palette"
+        },
+        "Forest_4": {
+          "assetId": 81817632455501,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "7e672483107fad884372a9745e49cc80e97c6c46a961668bcb96e406a8a146a6",
+          "triangles": 10544,
+          "look": "palette"
+        },
+        "Forest_5": {
+          "assetId": 109068123471770,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "d7257d5e95bd1d867f3c0a7a6403dadc162f28107eb99b0c88d8b37d07f86448",
+          "triangles": 12140,
+          "look": "palette"
+        },
+        "Forest_6": {
+          "assetId": 131017137608360,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "f9a62dbf9b3ba0897bd0006d6fa4f7232f3c81876cb0603368aa33aa35db7695",
+          "triangles": 12136,
+          "look": "palette"
+        },
+        "Groves": {
+          "assetId": 128599128077663,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "8c05eaaf0261cfb54bab2192e7536817c8cade793a728d5b880b6b10d5fb8578",
+          "triangles": 7884,
+          "look": "palette"
+        },
+        "Mountains_1": {
+          "assetId": 72441000682674,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "3b1b097850abb81185504ea3287a2bd03029c4e3247ce264d6f32545983513ac",
+          "triangles": 2880,
+          "look": "palette"
+        },
+        "Mountains_2": {
+          "assetId": 139826244983029,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "86fb3d861168ab5eee5e96f20439a264ba3f57b443567bbf9854872711c8bb50",
+          "triangles": 2890,
+          "look": "palette"
+        },
+        "Mountains_3": {
+          "assetId": 79532039008519,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "ec8eef449d5ff96385873ddee3e61bf2b3848e5a6b586d339af21b90fbcb26c6",
+          "triangles": 4688,
+          "look": "palette"
+        },
+        "Mountains_4": {
+          "assetId": 136052150177182,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "14f2434e9e67e3b459caba095e9324d2f7a1187e1d16b7543cd5b7680a9b8224",
+          "triangles": 3640,
+          "look": "palette"
+        },
+        "RiverBed": {
+          "assetId": 79809758362565,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "8e25f84ca39f102a26bd49d7cac18dcbe178b65fd202b38c618fed8280de6518",
+          "triangles": 1596,
+          "look": "palette"
+        },
+        "Water": {
+          "assetId": 125232910555937,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "5c4ddd243096825b34942564b8dd1b4aecf0306b36bc3d2891a2a58368474f09",
+          "triangles": 1334,
+          "look": "flat",
+          "color": [70, 156, 208],
+          "transparency": 0.3
+        },
+        "Waterfall": {
+          "assetId": 96607080851177,
+          "meshId": 0,
+          "size": [0, 0, 0],
+          "offset": [0, 0, 0],
+          "sha256": "2db5b8b9c87c88ba6cbb77649a05dd14c70ebf0be1e1103563993bc545c11abe",
+          "triangles": 250,
+          "look": "palette"
         }
       }
     }
