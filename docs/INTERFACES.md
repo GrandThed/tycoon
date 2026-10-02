@@ -6189,6 +6189,28 @@ driveway.
 - The layout hash covers the lane polylines and width when an era has lanes; the stale test is
   per piece, so adding lanes left the 38 existing Boomtown pieces "fresh".
 
+### Review rulings (2026-10-02, wave 2.5 review: 0 Critical, 0 Major, 6 Minor)
+
+- **No z-fight source remains in the baked renderer.** All 93 path templates share rim and fill
+  heights; the eight `LN_*` templates are placed, turned and textured like every other piece; at
+  every mouth the street's rim lies under the lane's fill and the lane's rim under the street's.
+- **`clear.lane` is 2.8** (was 2.0). The baked lane is wider than its data polyline (rim out to
+  2.2 to 2.75 studs), and two field quarters stood on a lane's kerb for a few purchases.
+- **Open, lead to route:** the Parts fallback for a lane still sits 0.02 to 0.03 studs from a
+  street mesh where it runs under one, and stacks coplanar pieces at bends. Players never see it
+  (all eight templates exist and 82 piece slots are spare), only `road.renderer = "parts"` or a
+  partial upload does. Fix when next in `Fabric.luau`: start the first slab at the street's edge,
+  raise `fabric.lanes.fillHeight` to 0.12, drop the discs.
+- **Open, for the next Boomtown street re-bake:** polylines 3 and 4 meet end to end at (22.0,
+  24.9) without joining, so their two street meshes end in round caps that only touch. Lanes 6
+  and 8 leave that point and their fills cover it, so it reads as a crossroads. Do not move that
+  mouth until the two polylines are one.
+- **Open:** lane clearances in `fabric.py check` use the data polyline plus `rim`; they should use
+  the bake's own half-width and cap overrun. `fabric.lanes.fillHeight` should not be required for
+  a baked lane.
+- **`GrantCash`** pays whoever is loaded on the tick it fires and then resets, so in a Local
+  Server usually one player is paid.
+
 ### Ownership (wave 2.5, disjoint)
 
 | Owner | Files |

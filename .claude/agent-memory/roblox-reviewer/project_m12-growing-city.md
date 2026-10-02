@@ -1,6 +1,6 @@
 ---
 name: m12-growing-city-review
-description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.4) — recurring patterns (claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix, turned Parts under a planar texture, a retune that empties a mechanism, gates lowered to pass), the scratch probes that settle them without Studio, and the numbers found
+description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.5) — recurring patterns (claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix, turned Parts under a planar texture, a retune that empties a mechanism, gates lowered to pass, a baked mesh wider than the polyline its clearances were tuned on), the scratch probes that settle them without Studio (replay, checker mutation, path GLB reader in plot coordinates), and the numbers found
 metadata:
   type: project
 ---
@@ -156,6 +156,49 @@ write before `profiles[player]`; `erasCompleted` is write-only, `highestEra` is 
 - Numbers: 75 lots (28 row 1, 47 on lanes), 8 lanes / 330 studs, 68 lane Parts + 68 Textures on a
   full near plot, far 0; houses 4/31/46/65/75; no level drop or prop flip over 63 replay states;
   farthest governor 55 studs by network (lot 49, lane 2).
+
+**Wave 2.5 (2026-10-02, branch `m12-boomtown`, 120216d..ccc9dc9, SHIP TO PLAYTEST: 0 Critical /
+0 Major / Minors):** the wave 2.4 lane Parts z-fought in Ben's Studio look, so lanes became baked
+`LN_<k>` path pieces (RoadGraph.SetLanes, PathRenderer.Has, fabric sync moved before the Flush), with
+flat single-layer Parts as the fallback; `GrantCash` baked into `boomtown.project.json`. All gates
+green in scratch, three rojo builds byte-identical to the committed ones, 92 GLB sha256 = Assets.json.
+
+- **Recurring pattern (new): a baked piece is wider and longer than the polyline the generator,
+  the checker and the clearing mask measure.** Mesh half-width = 1.2 x width / 2 +- 0.35 edge noise,
+  rim +0.4 +- 0.2; a free end runs 2.4 (fill) / 2.85 (rim) past its last point, a join 0.45 road
+  widths past the host centreline with a +40% flare, bends are filleted. `fabric.py` still judges a
+  lane as `width / 2 + rim` (1.9) on the raw polyline, and `clear.lane` 2.0 was tuned for 3-wide
+  Parts. Measured: fill never on a lot (tightest 0.01), rim up to 0.28 into lot rects, rim 0.15 from
+  the plot edge (LN_6), standing field quarters 0.27-0.38 over a lane's rim in mid-game. Whenever a
+  Part-drawn thing becomes a baked piece, re-measure every clearance against the MESH.
+- **Probe: the path GLBs are in plot coordinates.** `assets/build/paths/<Era>/{Fill,Rim}_<id>.glb`
+  vertices are plot-local (x, z), UV = (x, z) / tileStuds, crowned (edges y 0, centreline 0.005);
+  template X/Z = GLB bbox centre = -harvest offset, R00 = R22 = -1, Rim Y 0.0225, Fill Y 0.0725 for
+  all 93 templates. A 40-line GLB reader + barycentric samples against `fabric.Site('<Era>')` polys
+  (lots via `fabric.rect`, `landmark_polys`, `pad_polys`, `layer_outlines`) and point-in-triangle
+  coverage between pieces answers "what lies on what" without Studio; PIL is installed (numpy,
+  shapely, matplotlib are not), so a top-down PNG of rims-then-fills is cheap. The folder keeps
+  retired pieces' GLBs: filter by the ids in `<Era>.json`.
+- **The bake gate now needs the mesh folders**, not only `<Era>.json`: copy
+  `assets/build/paths/<Era>/` and `<Era>.json` into the scratch tree or it exits 2 "missing".
+- **Two same-layer polylines that meet end to end each get a plain round cap**, so the street pinches
+  to nothing at the shared node (Boomtown L3_4/L4_1 at (22.0, 24.9), in the uploaded meshes since
+  wave 2.2). Only the LN_6/LN_8 crossing laid on that node hides it. Print `ext`, `join_*`,
+  `round_*` for every chain of `network.Bake(era, city)` when a layout's polylines change.
+- **Ground heights that exist on a Boomtown plot:** plot 0, path rims 0.02-0.025, fabric yard slabs
+  0.05 (garden paths 0.08), path fills 0.07-0.075, field soil 0.10, Parts streets 0.20. A new flat
+  Part at 0.05 is coplanar with every yard; the lane fallback only misses them because it is narrow.
+- The Parts fallback still has exactly coplanar overlaps (slab / slab / disc at each bend, tip disc
+  on the last slab) and in a baked plot sits 0.02 under the street fill: unreachable with all eight
+  templates present (pathSpare is 82), so Minor.
+- Sync-order rule: anything that asks RoadGraph for pieces (SetLanes) only marks dirty, so it must
+  run before `RoadGraph.Flush` or it waits a whole sync. FabricNetwork reads `visible` / `spurs`
+  only, so the fabric sees a current network before the flush.
+- A lever that resets itself once ANY player is loaded pays only that player: in a 2-player Local
+  Server the second profile to load gets nothing. Check baked levers against two players.
+- Replay facts (greedy): lanes appear at slot purchases 7 (LN_3), 9 (LN_4), 13 (LN_1, 2, 5),
+  15 (LN_6, 8 together with L3_4 + L4_1), 16 (LN_7); a reach is never partial; triangles per near
+  plot 31,520 -> 43,888.
 
 **How to apply:** at the next era wave, re-run the scratch replay against the final layout and the
 mirror (`tools/cityfabric.py`); check the claim fix and that the far prefix reaches the plot's own

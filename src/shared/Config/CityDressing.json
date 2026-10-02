@@ -645,7 +645,7 @@
           "pad": 1.5,
           "street": 5.5,
           "parcel": 1.5,
-          "lane": 2.0
+          "lane": 2.8
         },
         "construction": {
           "minSeconds": 10,
