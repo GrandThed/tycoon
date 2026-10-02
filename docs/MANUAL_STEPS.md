@@ -1560,27 +1560,25 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
 **Where things are (2026-10-02):**
 - **Wave 1 (Village): merged to `main` on 2026-10-01** (Ben: "the village looks amazing"). Its
   branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
-- **Wave 2 (Boomtown):** a **new** worktree at the same path, `C:\Users\benja\Desktop\tycoon-m12`,
-  on branch `m12-boomtown`. §5–§11 below are wave 2.
-- Run every wave 2 command **from `C:\Users\benja\Desktop\tycoon-m12`**, never from
-  `C:\Users\benja\Desktop\tycoon`.
-- `assets/` in the worktree is a junction to the main checkout's `assets/`.
-- Two more worktrees hold the Boomtown layout candidates. They are **not for Studio**:
-  - `C:\Users\benja\Desktop\tycoon-m12-organic` (branch `m12-boomtown-organic`): **chosen**. Its
-    layout is already on `m12-boomtown`;
-  - `C:\Users\benja\Desktop\tycoon-m12-grid` (branch `m12-boomtown-grid`, commit `452059d`): not
-    chosen.
+- **Wave 2 (Boomtown): signed off by Ben and merged to `main` on 2026-10-02** (`main` at
+  `86d1d99`). §5–§11 below are wave 2.
+- **Everything is in the main checkout now, `C:\Users\benja\Desktop\tycoon`.** Run every command
+  and open every build from there.
+- **The worktrees are removed:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic` no longer
+  exist, and the branch `m12-boomtown` is deleted. The branches `m12-boomtown-grid` and
+  `m12-boomtown-organic` are kept as the record of the two layout candidates.
+- Where a done step below says something "ran from `tycoon-m12`", that is the record of where it
+  ran then.
 
-**Where wave 2 stands (2026-10-02): built, uploaded and harvested. It waits for Ben's Studio
-playtest.**
-- The asset run (§10) is **done**: Ben's one paste was on 2026-10-02.
-- From commit `4e4253f` the Boomtown and Village models, roads and data all match. **Boomtown and
-  the Village smoke can be judged in Studio now.**
-- **Wave 2.5 (2026-10-02):** Ben's first Studio look found the lanes flickering from a distance.
-  The lanes are now baked road pieces. That took a **second, short paste** from Ben the same day
-  (§10 step 41b). The build files carry the fix from commit `a78b4f1`.
-- Ben's next step is §11: open `build/boomtown.rbxl` and run the playtest.
-- The branch does not merge to `main` until Ben signs off.
+**Where wave 2 stands (2026-10-02): done. Signed off and merged.**
+- The asset run (§10) is **done**: two pastes from Ben on 2026-10-02 (the props and roads, then
+  the 16 lane meshes).
+- **Wave 2.5:** Ben's first Studio look found the lanes flickering from a distance. The lanes are
+  now baked road pieces. Ben re-checked them and signed off: "looks really good! lets send it".
+- **The sign-off was a look in Studio at the lanes and the town.** It was not a report of the
+  60-step checklist. The phone, low-graphics, two-player and measurement steps were not reported;
+  they stay open as watch items.
+- **Still owed by Ben:** only the numbers (§3 step 15 and §11 step 49).
 
 **NEVER PUBLISH `build/boomtown.rbxl`.** It is for local Studio use only.
 - It carries two switches: `DebugStartEra` = 2, which starts a **fresh** save in Boomtown, and
@@ -1636,7 +1634,8 @@ Studio menus are written in English, with the Spanish in italics: View (*Vista*)
       This was committed as `bcdede3`. Never run an upload while another session uploads or
       harvests.
 - [x] 5. **Ben: the one harvest paste** (done 2026-10-01). Studio in **Edit mode**:
-      1. From `tycoon-m12`: `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`.
+      1. From the main checkout (then: from `tycoon-m12`):
+         `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`.
          The path meshes ride along with the props.
       2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → paste → Enter → wait for
          `[HARVEST-DONE]`.
@@ -1674,32 +1673,31 @@ new check.
 - [x] 14. Ben's Studio look at Village, 2026-10-01: "the village looks amazing"
       (`docs/PLAYTEST.md` "M12 — Village growing city").
 - [ ] 15. **Still owed:** send Claude the numbers from PLAYTEST M12 step 37: the instance counts
-      and the frame time. Either build works for this (main or `tycoon-m12`).
+      and the frame time. Use the main build (`C:\Users\benja\Desktop\tycoon\build\test.rbxl`).
 
 ### 4. After sign-off (lead, wave 1)
 
 - [x] 16. Merged `m12-growing-city` into `main` (2026-10-01); branch and worktree removed. `py
       tools/paths/bake.py --era Village --list` is green again.
-- [ ] 17. Ben: when you are not testing wave 2, build and `rojo serve` from
-      `C:\Users\benja\Desktop\tycoon` as usual. `main` has the Village town now.
+- [x] 17. Ben: build and `rojo serve` from `C:\Users\benja\Desktop\tycoon` as usual. Since the
+      wave 2 merge (2026-10-02) there is no other M12 folder.
 
 ### 5. M12 wave 2 — what is owed (2026-10-02)
 
 - **Creator Hub: nothing.** No passes, products or audio.
 - **Assets: nothing.** Everything is uploaded, harvested and templated (§10).
-- **From Ben now:**
-  1. the Boomtown Studio playtest (§11, then `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing
-     city");
-  2. the numbers: step 37 of PLAYTEST "M12 — Village growing city" (§3 step 15), and the same on
-     Boomtown (step 59 of the Boomtown section).
-- **From the lead now: nothing.** The lane flicker from Ben's first look is fixed by baked lanes
-  (wave 2.5, 2026-10-02), and both place files were rebuilt with it (`a78b4f1`).
-- **Nothing else is owed by Ben:** only the playtest and the numbers above. Both pastes are done.
+- **From Ben: only the numbers.** He has still not sent them:
+  1. step 37 of PLAYTEST "M12 — Village growing city" (§3 step 15);
+  2. the same on Boomtown (step 59 of "M12 wave 2 — Boomtown growing city").
+- **Watch items, no deadline:** the checklist steps Ben did not report on: the phone at 375×667,
+  low graphics, two players, and the measurement. Run them when convenient.
+- **From the lead: nothing for Ben to wait on.** The open follow-ups are in `docs/PLAN.md` "M12".
 
 ### 6. M12 wave 2 — open the normal build (`test.rbxl`, Village)
 
-This is the normal build: it starts in Village. Use it for the Village carts and the Village
-smoke. **For Boomtown use §11 instead.** §11 step 45 already rebuilds this file too.
+This is the normal build, from the main checkout: it starts in Village. Use it for the Village
+carts and the Village smoke. **For Boomtown use §11 instead.** §11 step 45 already rebuilds this
+file too.
 
 Pick **one** of the two options. Option A gives a fresh Village save on every Play and touches no
 real save.
@@ -1707,24 +1705,20 @@ real save.
 **Option A: open the file**
 - [ ] 18. Rebuild, in PowerShell:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m12
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build -o build/test.rbxl
       ```
 - [ ] 19. Studio → File (*Archivo*) → Open (*Abrir*) →
-      `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`.
-      Do **not** open:
-      - `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, with no parked carts and
-        no chimney smoke on Village;
-      - anything in `tycoon-m12-grid` or `tycoon-m12-organic`: those are layout candidates, and
-        their Boomtown roads are not baked.
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl`.
+      The `tycoon-m12` folders are gone; there is no other M12 build to open by mistake.
 
 **Option B: live sync**
-- [ ] 20. Stop any other `rojo serve` first (the main checkout's, or a VS Code "serve" task). They
+- [ ] 20. Stop any other `rojo serve` first (another worktree's, or a VS Code "serve" task). They
       all use port 34872, and the plugin would sync the wrong folder.
 - [ ] 21. In PowerShell:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m12
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo serve
       ```
@@ -1737,10 +1731,10 @@ real save.
       local c = require(game.ReplicatedStorage.Shared.Config.CityDressing) print(c.budget.plumes, c.eras.Village.fabric.upgrades.carts ~= nil)
       ```
       Look at Output (*Salida*):
-      - `20 true` → the wave 2 build. Good.
-      - `nil false` → you opened or synced `main`. Go back to step 18 or 20.
+      - `20 true` → a build with wave 2 in it. Good.
+      - `nil false` → a build from before the 2026-10-02 merge. Go back to step 18 or 20.
       No Command Bar? Explorer (*Explorador*) → `ReplicatedStorage/Shared/Config/CityDressing` →
-      double-click → Ctrl+F → `plumes`. Found = the wave 2 build.
+      double-click → Ctrl+F → `plumes`. Found = a build with wave 2 in it.
 
 ### 7. M12 wave 2 — run the Village checks
 
@@ -1754,7 +1748,7 @@ Ben's answers: **organic, with a bolder pass**; **all four** city-changers; road
 studs**; **yes** to chimneys on the narrow Village homes. The step-37 numbers are still owed. The
 steps below are kept as the record.
 
-Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+Folder: `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Boomtown\`
 
 - [x] 25. Open **`m12b_compare.png`**: today's Boomtown, the grid and the organic plan, each at
       tier 1, tier 3 and full.
@@ -1767,7 +1761,7 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
 - [x] 27. Look at the draft props: `farmland_context.png`, `construction_context.png`,
       `construction_suburb_context.png`, `construction_scale_check.png`.
 - [x] 28. Village before and after the smoke and carts fix, in
-      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\`:
+      `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Village\`:
       `m12f_before_full.png`, `m12f_after_full.png`, `m12f_before_close.png`,
       `m12f_after_close.png`, `m12f_after_tier3.png`.
 - [x] 29. Tell Claude your five answers (1–4 answered 2026-10-01; **5 is still owed**):
@@ -1833,7 +1827,7 @@ What changed since the first gate:
 - Driveways are 3 studs wide. Cars keep to the streets.
 - By layout, Streetlamp Row now gives 8 lamps and Install Traffic Lights 2 signals.
 
-Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`
+Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Boomtown\`
 
 - [x] 30. Open **`m12c_compare.png`**: today's Boomtown against the new layout, at tier 1, tier 3
       and full.
@@ -1846,7 +1840,7 @@ Open the PNGs in Windows. Folder: `C:\Users\benja\Desktop\tycoon-m12\assets\test
       `construction_suburb_context.png`, `construction_scale_check.png`, `farmland_context.png`,
       `farmland_civic_context.png`.
 - [x] 35. The Village narrow homes with their new chimneys:
-      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
+      `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
 - [x] 36. Tell Claude:
       1. the layout: approved, or what to change;
       2. the props: approved, or which props to redo (use the strip's file name);
@@ -1960,9 +1954,11 @@ other two Claude sessions acknowledged before the uploads and were told when the
 - [x] 41c. **Lead, wave 2.5: templates, manifest and builds** (done 2026-10-02, commit `ccc9dc9`:
       `templates/_paths/Boomtown/LN_1.rbxmx` … `LN_8.rbxmx`; rulings and rebuilt place files in
       `a78b4f1`). `py tools/paths/bake.py --list` exits 0 for both eras.
-- [ ] 42. **Ben: the Boomtown Studio playtest** (§11). Review, QA, the baked lanes and the
-      PLAYTEST section are done.
-- [ ] 43. **Lead:** merge `m12-boomtown` into `main` after Ben's sign-off.
+- [x] 42. **Ben: the Boomtown Studio playtest** (§11). **Signed off on a Studio look,
+      2026-10-02:** "looks really good! lets send it", after re-checking the baked lanes. It was
+      a look at the lanes and the town, not a report of all 60 steps.
+- [x] 43. **Lead:** merged `m12-boomtown` into `main` (2026-10-02, merge commit `86d1d99`). The three
+      `tycoon-m12*` worktrees are removed and the branch `m12-boomtown` is deleted.
 - 44. **If a record goes missing later:** re-run step 40 and the first line of step 41 only. Do
       **not** re-run the uploaders.
 
@@ -1974,20 +1970,23 @@ other two Claude sessions acknowledged before the uploads and were told when the
 
 Press Play again and you get a fresh Boomtown and the cash again.
 
+**Status:** done for the sign-off on 2026-10-02 (then from the old `tycoon-m12` folder). The
+steps below are how to open the file again, now from the main checkout.
+
 **NEVER PUBLISH THIS FILE.** Open it from the disk only (see the warning at the top of this
 section).
 
-- [ ] 45. **Rebuild both files**, in PowerShell. The files in the folder already carry the
-      baked lanes (`a78b4f1`), so this is only to be safe. It is harmless to repeat:
+- [x] 45. **Rebuild both files**, in PowerShell, from the main checkout. It is harmless to
+      repeat:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m12
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build boomtown.project.json -o build/boomtown.rbxl
       rojo build -o build/test.rbxl
       ```
-- [ ] 46. Studio → File (*Archivo*) → Open (*Abrir*) →
-      `C:\Users\benja\Desktop\tycoon-m12\build\boomtown.rbxl`.
-- [ ] 47. Press **Play** (*Jugar*). Check the right build:
+- [x] 46. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon\build\boomtown.rbxl`.
+- [x] 47. Press **Play** (*Jugar*). Check the right build:
       - View (*Vista*) → **Output** (*Salida*) shows this **yellow** line:
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
       - about a second later, a second **yellow** line:
@@ -1996,9 +1995,11 @@ section).
         Newsstand.
       If Output says `DebugStartEra lever skipped ... already has progress`, the session is on a
       real save: Stop (*Detener*), close the file **without saving**, and tell Claude.
-- [ ] 48. Run `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city". Its Village part (steps
-      49–57) uses `build/test.rbxl`.
-- [ ] 49. Send Claude the numbers from steps 58 and 59 of that section.
+- [x] 48. Run `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city". Its Village part (steps
+      49–57) uses `build/test.rbxl`. **Signed off on a Studio look, 2026-10-02.** Not reported:
+      the phone (41), low graphics (42), two players (43–45) and the measurement (58–59). They
+      stay open as watch items.
+- [ ] 49. **Still owed:** send Claude the numbers from steps 58 and 59 of that section.
 - When you close `boomtown.rbxl`, Studio may ask to save. Saving to the same file on the disk is
   fine. Rebuilding (step 45) overwrites the file; the two switches are rebuilt with it, so there
   is nothing to add again. Only an optional `GrantLegacy` attribute (PLAYTEST step 3) would be

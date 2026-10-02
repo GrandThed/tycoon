@@ -60,16 +60,14 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   the 12cy part counts were not reported, so the part-budget re-cut stays a lead watch item)
 - [~] M12 — Growing city (**wave 1 Village merged to `main` 2026-10-01**, Ben: "the village looks
   amazing": a client-only city fabric of 116 growing lots, receding woods, construction ripples
-  and three city-changer slots; **wave 2 Boomtown in progress** on branch `m12-boomtown` in the
-  worktree `C:\Users\benja\Desktop\tycoon-m12`: wave 2.0 (Village chimney smoke and parked carts)
-  built; wave 2.1 mock gate answered 2026-10-01 (**organic, bolder pass**; four more
-  city-changer slots; 6-stud roads; chimneys on the narrow Village homes); waves 2.2 and 2.3
-  (layout, five city layers, buses, narrow driveways, 46 final props) and wave 2.4 (**back lanes**,
-  75 lots) built and reviewed; assets uploaded, **harvested 2026-10-02** and templated; Ben's
-  first Studio look found the lanes flickering from a distance, fixed the same day by wave 2.5
-  (**baked lanes**, a second short paste); **awaiting Ben's Boomtown Studio playtest** on
-  `build/boomtown.rbxl`; Metropolis and Orbital
-  come later — see "M12" below)
+  and three city-changer slots; **wave 2 Boomtown signed off by Ben and merged to `main`
+  2026-10-02** (merge commit `86d1d99`): an organic prairie-town layout, 75 lots on 8 baked back
+  lanes, receding farmland, five city layers (parked cars, hydrants, bus shelters and buses,
+  billboards, neon), chimneys on the narrow Village homes; the sign-off was a Studio look at the
+  lanes and the town ("looks really good! lets send it"), not a report of the 60-step checklist,
+  so the phone, low-graphics, two-player and measurement steps stay watch items, and Ben's
+  step-37 numbers are still owed; **next: Metropolis** (a lattice layout study first), then
+  Orbital — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
   A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
   every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
@@ -1879,8 +1877,8 @@ Core gameplay is untouched.
 - Where:
   - Wave 1 (Village) is on `main` (`e5df035`). Its branch `m12-growing-city` and its worktree
     were merged and removed on 2026-10-01.
-  - Wave 2 (Boomtown) is built in a new worktree at the same path,
-    `C:\Users\benja\Desktop\tycoon-m12`, on branch `m12-boomtown`. See "Wave 2 — Boomtown" below.
+  - Wave 2 (Boomtown) is on `main` too, merged on 2026-10-02 (merge commit `86d1d99`). Its worktree
+    and branch are removed. See "Wave 2 — Boomtown" below.
   - (M11 is the unmerged feature-unlocks milestone on branch `m11-unlocks`.)
 
 **Rulings (Ben):**
@@ -2010,31 +2008,30 @@ amazing". Still owed: Ben's numbers from PLAYTEST M12 step 37 (box 5 under "Wave
 - [x] lead: merged `m12-growing-city` into `main` (2026-10-01); branch and worktree removed
 - The step 37 numbers are still owed; the open box is under "Wave 2 — Boomtown" (box 5).
 
-### Wave 2 — Boomtown (2026-10-01 → 2026-10-02; built and harvested, awaiting Ben's Studio playtest)
+### Wave 2 — Boomtown (2026-10-01 → 2026-10-02; signed off and merged to `main` 2026-10-02)
 
 **Where:**
-- Wave 2: worktree `C:\Users\benja\Desktop\tycoon-m12`, branch `m12-boomtown` (HEAD `a78b4f1`).
-  `assets/` there is a junction to the main checkout's `assets/`.
-- Layout candidate "organic" (**chosen**): worktree `C:\Users\benja\Desktop\tycoon-m12-organic`,
-  branch `m12-boomtown-organic`. The first candidate (`0fd20be`) was merged in `20df3ed`; the
-  bolder pass (`c58136f`) was copied in by `4ebe5f1`. The layout file on `m12-boomtown` is
-  identical to `c58136f`, but that commit is not an ancestor, so git does not list the branch as
-  merged.
-- Layout candidate "grid" (not chosen): worktree `C:\Users\benja\Desktop\tycoon-m12-grid`, branch
-  `m12-boomtown-grid`, commit `452059d`.
+- **The work lives on `main`**, in the main checkout `C:\Users\benja\Desktop\tycoon` (`main` at
+  `86d1d99`, which also holds M13 Valley, the P3 load fix and the compile gate).
+- **The worktrees are gone:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic` are removed,
+  and the branch `m12-boomtown` is deleted. The last commit of the wave on that branch was
+  `a78b4f1`, plus the docs commit `2f9fbc2`.
+- **Kept as the record of the two layout candidates:** the branches `m12-boomtown-organic`
+  (**chosen**; first candidate `0fd20be`, bolder pass `c58136f`, whose layout file was copied in
+  by `4ebe5f1`) and `m12-boomtown-grid` (not chosen, `452059d`).
 - Contract: `docs/INTERFACES.md` "M12 wave 2 — Boomtown", with "Wave 2.2" and its two rulings
   blocks, "Wave 2.4 — back lanes" with its rulings, and "Wave 2.5 — baked lanes" with its two
   rulings blocks.
 
-**Status (2026-10-02): built, uploaded, harvested. Awaiting Ben's Studio playtest.**
-- **The branch caveat is over.** From commit `4e4253f` the Boomtown and Village models, paths and
-  data all match. `py tools/paths/bake.py --list` exits 0 for both eras.
-- Boomtown is tested on `build/boomtown.rbxl` (a fresh save starts in era 2). **That file is for
-  local Studio use only and must never be published.**
-- Village's early plumes now sit on real chimneys.
-- **Ben's first Studio look (2026-10-02)** found one defect: the lanes flickered from a distance.
-  Wave 2.5 (baked lanes) fixes it; Ben re-checks that first.
-- The branch does not merge to `main` until Ben signs off.
+**Status (2026-10-02): signed off by Ben and merged to `main`.**
+- **Ben's sign-off:** "looks really good! lets send it", after re-checking the baked lanes.
+- **What the sign-off was:** a look in Studio at the lanes and the town. It was **not** a report
+  of the 60-step checklist. Not reported, and open as watch items: the phone at 375×667, low
+  graphics, two players, and the measurement.
+- **Still owed by Ben:** the step-37 numbers (and the same on Boomtown). He has not sent them.
+- Boomtown is tested on `build/boomtown.rbxl` (a fresh save starts in era 2, with 100T cash).
+  **That file is for local Studio use only and must never be published.**
+- `py tools/paths/bake.py --list` exits 0 for both eras.
 - The numbers in the wave 2.0, 2.1 and 2.2/2.3 blocks below are the record of each gate. **Today's
   numbers are in the wave 2.4 block**; wave 2.5 did not change them.
 
@@ -2301,14 +2298,15 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 - **lead (open, for the next Boomtown street re-bake):** the street pinch at (22.0, 24.9).
   Polylines 3 and 4 meet end to end there without joining, so their meshes end in round caps
   that only touch. Lanes 6 and 8 cover it, so it reads as a crossroads. Do not move that mouth
-  until the two polylines are one. Ben is asked to report how it looks (PLAYTEST step 15).
+  until the two polylines are one. Ben did not report a pinch there at the sign-off.
 - **lead (open, wave 2.5 review):** lane clearances in `fabric.py check` should use the bake's own
   half-width and cap overrun, not the data polyline plus `rim`; `fabric.lanes.fillHeight` should
   not be required for a baked lane.
-- **Ben (open):** the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing
-  city"; setup in `docs/MANUAL_STEPS.md` "M12" §11).
-- **Ben → lead (open):** the numbers: Village step 37, and the same on a full Boomtown (step 59
-  of the Boomtown section).
+- **Ben → lead (open, still not sent):** the numbers: Village step 37, and the same on a full
+  Boomtown (step 59 of the Boomtown section).
+- **Watch items (Ben, when convenient; lead to keep an eye):** the checklist steps the sign-off
+  did not cover: the phone at 375×667 (step 41), low graphics (42), two players (43–45) and the
+  measurement (58–59) of `docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city".
 - **lead (after Ben's numbers):** the far-plot field budget. A far tier-0 Boomtown plot draws 45
   of its 85 fields (`budget.wildFar`), so its hub-side fields are bare.
 - **lead (open):** `FabricCivicSmall` and `FabricCivicMedium` never draw, because no lot's nearest
@@ -2326,16 +2324,17 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 - **lead (watch in Studio):** row lamps and tree keep-outs still measure a driveway at road width.
 - **lead (open since the wave 2.0 review):** a pad marker can stand on the freshly drawn path for
   the pad's 0.5 s grace after a purchase.
-- **lead (housekeeping):** remove the `tycoon-m12-grid` and `tycoon-m12-organic` worktrees and
-  their branches once nothing more is needed from them.
+- **Done (housekeeping, 2026-10-02):** the three `tycoon-m12*` worktrees are removed. The
+  branches `m12-boomtown-grid` and `m12-boomtown-organic` are kept as the record.
 
 **Next:**
-1. Ben's Boomtown Studio playtest, and his numbers.
-2. Fixes from the playtest.
-3. Merge `m12-boomtown` into `main` after Ben's sign-off.
-4. **Metropolis, then Orbital:** a lattice layout study first, because every block holds exactly
-   one landmark today. Then the same routine. The code is shared; each era adds data, config and
-   models.
+1. **Metropolis (wave 3):** a lattice layout study first (`docs/CITY_GROWTH.md` §3), because every
+   block holds exactly one landmark today. Then the routine that Village and Boomtown followed:
+   a layout mock for Ben, contracts, props with strips, one harvest paste, review, QA, playtest.
+2. **Orbital (wave 4):** the same, after Metropolis.
+3. Alongside: the open follow-ups above, and Ben's numbers when they arrive.
+
+The code is shared; each era adds data, config and models.
 
 - [x] Wave 2.0 (Village smoke and carts) built, reviewed, QA green (2026-10-01)
 - [x] Wave 2.1 mock built: two candidates, gate renders ready (2026-10-01)
@@ -2360,10 +2359,13 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
   distance
 - [x] Wave 2.5 (baked lanes) built, reviewed, uploaded, harvested (Ben's second paste) and
   templated (2026-10-02, `a78b4f1`)
-- [ ] Ben: the Boomtown Studio playtest (`docs/PLAYTEST.md` "M12 wave 2 — Boomtown growing city")
+- [x] Ben: the Boomtown Studio playtest: signed off on a Studio look at the lanes and the town
+  (2026-10-02, "looks really good! lets send it"); not a report of all 60 steps
+- [x] lead: merged `m12-boomtown` into `main` (2026-10-02, merge commit `86d1d99`); worktrees removed
+- [ ] Watch items: the unreported checklist steps (phone, low graphics, two players, measurement)
 - [ ] Ben: the Village carts and smoke on `build/test.rbxl` ("M12 wave 2.0 — Village smoke and
-  carts", and steps 49–57 of the Boomtown section)
-- [ ] lead: merge `m12-boomtown` into `main` after Ben's sign-off
+  carts", and steps 49–57 of the Boomtown section): not reported
+- [ ] lead: wave 3, Metropolis (a lattice layout study first)
 
 ## M13 — The Valley
 

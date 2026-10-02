@@ -4331,7 +4331,7 @@ differ a little:
 are unchanged.
 
 - Setup: `docs/MANUAL_STEPS.md` "M12" §11. Open
-  `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`.
+  `C:\Users\benja\Desktop\tycoon\build\test.rbxl`.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Buy in Build panel order. "Purchase 9" means the 9th slot in that list.
 - Carts need the Farm Plot (purchase 4). Each cart then waits for its own lane or its own
@@ -4350,13 +4350,13 @@ What you should see:
 
 ### Setup
 
-- [ ] 1. Open `build/test.rbxl` from the `tycoon-m12` folder. In Edit mode: View (*Vista*) →
+- [ ] 1. Open `build/test.rbxl` from the `tycoon` folder. In Edit mode: View (*Vista*) →
       **Command Bar** (*Barra de comandos*), paste this line, press Enter:
       ```
       local c = require(game.ReplicatedStorage.Shared.Config.CityDressing) print(c.budget.plumes, c.eras.Village.fabric.upgrades.carts ~= nil)
       ```
       Output (*Salida*) must say `20 true`.
-      Bug: `nil false` (you opened the main build).
+      Bug: `nil false` (a build from before the 2026-10-02 merge).
 - [ ] 2. Set up the cash lever:
       - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
       - name `GrantCash`, type **number**, value `1000000000`.
@@ -4432,6 +4432,10 @@ What you should see:
 
 ## M12 wave 2 — Boomtown growing city
 
+**Status 2026-10-02: signed off on a Studio look ("looks really good! lets send it") and merged to
+`main`.** The sign-off covered the lanes and the town, not all 60 steps. This checklist stays as
+the regression list; the phone, low-graphics, two-player and measurement steps were not reported.
+
 **Goal:** Boomtown grows as one prairie town. Farmland first, then building sites, then shops and
 homes, with **back lanes** so every house stands on a road. Four purchases now change the whole
 town: hydrants, the bus line, billboards and neon. Client-only: prices, order and income are
@@ -4452,7 +4456,7 @@ before anything else.**
 - **Every Play starts a fresh Boomtown plot with 100T cash.** Press Play again and you get a
   fresh Boomtown and the cash again. Nothing to add by hand.
 - Buy in Build panel order. "Purchase 7" means the 7th slot in that list.
-- Reference renders, in `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Boomtown\`:
+- Reference renders, in `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Boomtown\`:
   `m12d_full.png`, `m12d_full_entrance.png`, `m12d_block.png` (one block's lanes),
   `m12d_tier1.png`, `m12d_tier3.png`.
 
@@ -4478,7 +4482,7 @@ sooner, so your numbers can differ a little:
 
 ### Setup
 
-- [ ] 1. Open `C:\Users\benja\Desktop\tycoon-m12\build\boomtown.rbxl` with File (*Archivo*) → Open
+- [ ] 1. Open `C:\Users\benja\Desktop\tycoon\build\boomtown.rbxl` with File (*Archivo*) → Open
       (*Abrir*). **Never publish this file.**
 - [ ] 2. **Cash: nothing to set up.** The file pays you **100T** about a second after you join.
       That is enough to buy and level everything. Under Workspace → Attributes (*Atributos*),
@@ -4733,7 +4737,7 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 
 ### 14. Village (the normal build)
 
-- [ ] 49. Stop. Open `C:\Users\benja\Desktop\tycoon-m12\build\test.rbxl`. This file has **no**
+- [ ] 49. Stop. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. This file has **no**
       cash baked in, so set up the cash lever by hand:
       - Explorer → **Workspace** → Properties (*Propiedades*) → Attributes (*Atributos*) → **+**;
       - name `GrantCash`, type **number**, value `1000000000`.
@@ -4754,7 +4758,7 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 - [ ] 55. Level the **Village Well** to 50: the count of plumes does **not** change. (The Well no
       longer decides the smoke.)
 - [ ] 56. Compare the narrow homes with
-      `C:\Users\benja\Desktop\tycoon-m12\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
+      `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Village\m12g_narrow_chimneys.png`.
 - [ ] 57. Parked carts: as in "M12 wave 2.0 — Village smoke and carts" (8 at `GrowthTier` 5).
       Everything else in Village is as before; there is no need to re-run its checklist.
 
