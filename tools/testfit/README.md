@@ -104,11 +104,27 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   a 120-stud plot seen from a corner puts its near corner far off the view axis, and a
   centre-aimed camera wastes half the frame. `entrance` is a fixed eye at character height just
   outside the ring, looking up the entrance avenue.
-- Non-tile eras (Village, Boomtown) draw their spine as plain slabs of `road.width` in
-  `road.color` -- deliberately the stand-in, not the baked mesh pieces, which `tools/paths` judges.
+- Non-tile eras (Village, Boomtown) draw their spine as plain slabs of `road.width` --
+  deliberately the stand-in, not the baked mesh pieces, which `tools/paths` judges.
   Spurs are slabs too, at RoadGraph's `spurWidth` (`streetplan.spur_path_width`): a tiles era's
   footpath width, a paths era's `road.paths.spurWidth` (Boomtown's 3-stud driveways), else the
   road's own.
+- **The streets wear their live surface** (wave 1e, `cityfabric.road_look`, RoadGraph's
+  `resolveVariant`): the last owned upgrade of `road.paths.surface`, else its base, else the era's
+  own `road.color`. So Boomtown's streets are gravel (164, 158, 145) until Pave Main Street is
+  owned and asphalt after, and Village's trails turn from dirt to cobble (186, 176, 158) with
+  Pave the Road -- which the finished plot always owns. Spurs and back lanes follow the streets.
+  Renders made before 2026-10-02 drew every street in `road.color` whatever was owned. The colour
+  is the variant's flat `paths.variants` look, not the texture the baked pieces carry in game.
+- **Back lanes** (M12 wave 2.4) are drawn piece for piece as `Fabric.layLane` lays them, from
+  `cityfabric`'s `snapshot()["lanes"]`: per lane drawn to its reach, a rim slab and a fill slab
+  for each leg and a rim disc and a fill disc on every corner it has passed and at its tip, at
+  `Fabric.laneTop`'s heights (a hair under `fabric.lanes.fillHeight` / `rimHeight`, staggered so
+  overlapping tops never share a plane). Fill in the streets' live colour, rim 0.8 of it; in game
+  they carry the baked pieces' fill and rim images instead while the baked renderer draws. Near
+  plots only (`--far` draws none, though the lanes still clear the wild land). The street's slab
+  lies above both, so the mouth disappears under the street; the render's plain streets have no
+  rim, so a lane's darker edges stop at the street edge without a kerb to join.
 - **Street vehicles:** as many as the controller's `vehicleTargetFor` wants at the tier (none
   below `vehicles.firstTier`, then `perPlot` scaled by the tier, less the highway deck's share),
   but only one to a visible stretch of 16 studs or more, the longest first -- so a plot with few

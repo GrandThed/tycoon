@@ -33,7 +33,12 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
   * street vehicles (M12 wave 2.2): how many a plot plans and shows at a tier (Scatter.Plan's cap,
     the controller's vehicleTargetFor) and which of them a `vehicles.unlocks` entry turns into its
     own prop (planVehicleUnlocks, vehiclePropFor). The rule is mirrored, not the picks: Roblox's
-    Random cannot be reproduced here, so a caller brings its own stream.
+    Random cannot be reproduced here, so a caller brings its own stream;
+  * back lanes (M12 wave 2.4): a lane lot's extra distance in `develop`, CityFabric.LaneReach,
+    Fabric.luau's validation of lanes and lane lots, the lane legs in the clearing mask (by the
+    reach, on near and far plots alike), and Fabric.layLane's settled pieces with their tops;
+  * the surface the plot's streets wear right now (RoadGraph.resolveVariant / setVariant), which
+    spurs and lanes follow.
 
 Heights. A landmark's height at a stage comes from its Assets.json stage parts, measured exactly as
 the client measures it (no entry: 0). A fabric prop uses Assets.json when it has an entry there;
@@ -79,6 +84,7 @@ SINGLE = "single"
 ANCHOR_STRETCH = "stretch"
 ANCHOR_PARCEL = "parcel"
 BUILT_LEVEL = 2
+DEFAULT_VARIANT = "default"  # RoadGraph.DEFAULT_VARIANT: the era's own road look
 # CityFabric.DEFAULT_ROW_LAG: an absent `pull.rowLag` holds a back row one level behind its front.
 DEFAULT_ROW_LAG = 1
 SITE = "site"
@@ -95,6 +101,15 @@ STAKE_HEIGHT = 1.4
 STRING_THICKNESS = 0.08
 STRING_HEIGHT = 1.1
 CORNER_SIGNS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
+# Fabric.luau's back lanes (wave 2.4): a reach or a leg shorter than LANE_MIN draws nothing; the
+# slabs are LANE_THICKNESS thick; a leg's top sits one or two LANE_STEPs under the contract's
+# height (a fifth of the rim's height per step, for the rim) so overlapping tops never share a
+# plane; without its own image the rim is the road colour, LANE_RIM_SHADE as bright.
+LANE_MIN = 0.01
+LANE_THICKNESS = 0.2
+LANE_STEP = 0.005
+LANE_RIM_STEPS = 5
+LANE_RIM_SHADE = 0.8
 # The numeric pull fields Fabric.validPull demands finite; with `thresholds`, the contract's six.
 PULL_NUMBERS = ("radius", "tierTerm", "reach", "levelsOverTier", "smallMaxLevel")
 # A score, a network distance or a pull this close to its threshold could fall the other way in game,
@@ -198,8 +213,11 @@ def develop(input, pull, trace=None):
         governor, governor_pull = None, 0
         pulls = []
         if stretch is not None:
+            # Wave 2.4: a lot on a lane is reached through the lane's mouth, so it stands its
+            # `laneAlong` further from every landmark than the mouth does.
+            lane_along = (parcel.get("laneAlong") or 0) if parcel.get("lane") is not None else 0
             for landmark_index, landmark in enumerate(landmarks):
-                distance = _parcel_distance(landmark_distances[landmark_index], stretch, parcel["along"])
+                distance = _parcel_distance(landmark_distances[landmark_index], stretch, parcel["along"]) + lane_along
                 landmark_pull = max(0, 1 - distance / pull["radius"])
                 pulls.append((landmark["slotId"], distance))
                 if landmark_pull > 0:
@@ -286,6 +304,89 @@ def develop(input, pull, trace=None):
     return states
 
 
+def lane_length(lane):
+    """The sum of a lane's legs, with sqrt(x*x + z*z) like every distance here."""
+    total = 0
+    points = lane["points"]
+    for index in range(1, len(points)):
+        dx, dz = points[index][0] - points[index - 1][0], points[index][1] - points[index - 1][1]
+        total += math.sqrt(dx * dx + dz * dz)
+    return total
+
+
+def lane_reach(lane, lane_index, parcels, levels, sizes, budget):
+    """CityFabric.LaneReach: how far along lane `lane_index` (1-based) a road is drawn, in studs of
+    arc from its mouth -- as far as the far edge of the frontage of the farthest of its lots that
+    has at least a building site (`laneAlong` + half its frontage, `sizes[size][1]`), never past
+    the lane's end, and 0 while none has. Only a lot that can be drawn counts: its index within
+    `budget` and its size one `sizes` has a footprint for. Lots are visited in index order."""
+    length = lane_length(lane)
+    reach = 0
+    for index, parcel in enumerate(parcels, start=1):
+        lane_along = parcel.get("laneAlong")
+        footprint = sizes.get(parcel["size"])
+        level = levels[index - 1] if index <= len(levels) else None
+        if (
+            parcel.get("lane") == lane_index
+            and lane_along is not None
+            and index <= budget
+            and footprint is not None
+            and level is not None
+            and level >= 1
+        ):
+            reach = max(reach, lane_along + footprint[0] / 2)
+    return min(reach, length)
+
+
+def lane_legs(lane):
+    """Fabric.new's legs of a lane: each straight run as {ax, az, dx, dz, start, length} -- its
+    start, unit direction, the arc at its start and its length. Two points on one spot (closer
+    than LANE_MIN) make no leg; the arc carries on from the next."""
+    legs = []
+    length = 0
+    points = lane["points"]
+    for index in range(1, len(points)):
+        a, b = points[index - 1], points[index]
+        dx, dz = b[0] - a[0], b[1] - a[1]
+        leg_length = math.sqrt(dx * dx + dz * dz)
+        if leg_length >= LANE_MIN:
+            legs.append({"ax": a[0], "az": a[1], "dx": dx / leg_length, "dz": dz / leg_length, "start": length, "length": leg_length})
+            length += leg_length
+    return legs
+
+
+def lane_top(config, lane_index, rim, level):
+    """Fabric.laneTop: the top of a lane Part above the plot -- the contract's height for a disc
+    (`level` 0), one or two steps under it for a leg, and every other lane half a step lower
+    again, for where two lanes meet."""
+    steps = level + ((lane_index - 1) % 2) / 2
+    if rim:
+        return config["rimHeight"] - config["rimHeight"] / LANE_RIM_STEPS * steps
+    return config["fillHeight"] - LANE_STEP * steps
+
+
+def lane_pieces(view, drawn):
+    """Fabric.layLane: what a lane drawn `drawn` studs from its mouth is made of -- (slabs, discs).
+    A slab per leg it has reached, {a, b, level}, level 1 or 2 alternating by leg; a disc on
+    every interior point it has passed and one at its tip, as (x, z). Each stands for a fill and
+    a rim Part. Nothing below LANE_MIN."""
+    slabs, discs = [], []
+    if drawn < LANE_MIN:
+        return slabs, discs
+    tip = (view["legs"][0]["ax"], view["legs"][0]["az"])
+    for index, leg in enumerate(view["legs"], start=1):
+        span = min(drawn - leg["start"], leg["length"])
+        if span < LANE_MIN:
+            break
+        start = (leg["ax"], leg["az"])
+        tip = (leg["ax"] + leg["dx"] * span, leg["az"] + leg["dz"] * span)
+        slabs.append({"a": start, "b": tip, "level": 1 + (index - 1) % 2})
+        if index > 1:
+            discs.append(start)
+    discs.append(tip)
+    return slabs, discs
+
+
 def rect_distance(px, pz, rect):
     """CityFabric.RectDistance: 0 inside; the point is taken into the rect's frame with the inverse
     of CFrame.Angles(0, a, 0)."""
@@ -319,7 +420,12 @@ def is_cleared(px, pz, radius, mask):
         if not out_of_reach and rect_distance(px, pz, rect) - radius < rect["margin"]:
             return True
     for segment in mask["segments"]:
-        if segment_distance(px, pz, segment) - radius < mask["streetClear"]:
+        # A lane leg brings its own margin (wave 2.4); a street or a spur carries none. Luau's
+        # `segment.margin or mask.streetClear` keeps a margin of 0, which Python's `or` would not.
+        margin = segment.get("margin")
+        if margin is None:
+            margin = mask["streetClear"]
+        if segment_distance(px, pz, segment) - radius < margin:
             return True
     return False
 
@@ -423,13 +529,51 @@ def valid_parcel(parcel):
     )
 
 
-def validated_parcels(raw_parcels):
+def valid_lane(lane):
+    """Fabric.validLane: a polyline of 2 to 4 [x, z] points of finite numbers, and the mouth's
+    address on the street it leaves (`stretch`, `along`). Any other entry is not drawn, and its
+    lots are blanks."""
+    if not isinstance(lane, dict) or not isinstance(lane.get("stretch"), str) or not finite(lane.get("along")):
+        return False
+    points = lane.get("points")
+    if not isinstance(points, list) or not 2 <= len(points) <= 4:
+        return False
+    return all(isinstance(p, list) and len(p) >= 2 and finite(p[0]) and finite(p[1]) for p in points)
+
+
+def valid_lane_config(value):
+    """Fabric.validLanesConfig: `fabric.lanes` as the renderer may use it -- five finite numbers, a
+    width above 0, a rim and a grow time of 0 or more -- or None, which draws no lane (their lots
+    still develop)."""
+    if not isinstance(value, dict):
+        return None
+    keys = ("width", "rim", "fillHeight", "rimHeight", "growSeconds")
+    if not all(finite(value.get(key)) for key in keys):
+        return None
+    if not (value["width"] > 0 and value["rim"] >= 0 and value["growSeconds"] >= 0):
+        return None
+    return {key: value[key] for key in keys}
+
+
+def valid_lane_lot(parcel, lanes_valid):
+    """Fabric.new: a parcel that names a lane must name one that can be laid (by its 1-based index
+    in the data) and say how far along it stands, a finite 0 or more. A parcel without `lane` is
+    not a lane lot, whatever else it carries."""
+    lane = parcel.get("lane")
+    if lane is None:
+        return True
+    along = parcel.get("laneAlong")
+    return luau_index(lanes_valid, lane) is True and finite(along) and along >= 0
+
+
+def validated_parcels(raw_parcels, lanes_valid=()):
     """Fabric.new's parcel validation: (parcel data, well-formed flags). A malformed parcel, or a
     row-k parcel (k 2 or 3) whose `front` is not an earlier index of a row-(k - 1) parcel in the data
-    as validated so far (a blank counts as row 1), becomes a blank that keeps its index."""
+    as validated so far (a blank counts as row 1), or (wave 2.4) one whose `lane` or `laneAlong`
+    is malformed or names a malformed lane, becomes a blank that keeps its index."""
     data, flags = [], []
     for index, raw in enumerate(raw_parcels, start=1):
-        well_formed = valid_parcel(raw)
+        well_formed = valid_parcel(raw) and valid_lane_lot(raw, lanes_valid)
         if well_formed and raw["row"] != 1:
             front = raw["front"]
             ahead = data[int(front) - 1] if front == math.floor(front) and 1 <= front < index else None
@@ -679,6 +823,32 @@ def plume_cap(budget):
 def over_plume_cap(count, cap):
     """Whether `count` plumes break the cap; never without one."""
     return cap is not None and count > cap
+
+
+def road_look(road, owned, variant_images):
+    """RoadGraph.resolveVariant and setVariant: (variant name, colour) of the surface the whole
+    plot's streets wear right now -- the last owned upgrade of `road.paths.surface`, else its base,
+    else "default"; a variant whose fill and rim images are not uploaded (`variant_images`,
+    Assets.json `paths.<Era>.variants`) is "default" too. "default" is the era's own road colour by
+    definition; any other variant takes its `paths.variants` look."""
+    paths = road.get("paths") if isinstance(road, dict) else None
+    surface = paths.get("surface") if isinstance(paths, dict) else None
+    name = DEFAULT_VARIANT
+    if isinstance(surface, dict):
+        name = surface.get("base")
+        upgrades = surface.get("upgrades")
+        for upgrade in upgrades if isinstance(upgrades, list) else ():
+            if upgrade.get("slot") in owned:
+                name = upgrade.get("variant")
+        if name != DEFAULT_VARIANT:
+            images = (variant_images or {}).get(name) or {}
+            fill, rim = images.get("fillImageId"), images.get("rimImageId")
+            if not (is_number(fill) and is_number(rim) and fill > 0 and rim > 0):
+                name = DEFAULT_VARIANT
+    variants = paths.get("variants") if isinstance(paths, dict) else None
+    look = variants.get(name) if name != DEFAULT_VARIANT and isinstance(variants, dict) else None
+    source = look if look is not None else road
+    return name, color_from(source.get("color"), (0, 0, 0))
 
 
 def planned_vehicles(vehicles, budget):
@@ -1100,7 +1270,28 @@ class FabricPlot:
         self.smoke_every = smoke_every
         self.parcel_views = []
         sizes = config.get("sizes")
-        self.parcel_data, flags = validated_parcels(raw_parcels)
+        # Wave 2.4 back lanes, before the lots that name them. A malformed lane is not laid and its
+        # lots become blanks; a valid one gets a view only while `fabric.lanes` says how to draw
+        # it, but its lots develop either way.
+        self.lane_data = data.get("lanes") if isinstance(data.get("lanes"), list) else []
+        self.lanes_valid = [valid_lane(lane) for lane in self.lane_data]
+        self.lane_config = valid_lane_config(config.get("lanes"))
+        self.lane_views = []
+        for index, lane in enumerate(self.lane_data, start=1):
+            if not self.lanes_valid[index - 1] or self.lane_config is None:
+                continue
+            legs = lane_legs(lane)
+            if legs:
+                self.lane_views.append(
+                    {"index": index, "lane": lane, "legs": legs, "length": legs[-1]["start"] + legs[-1]["length"]}
+                )
+        # The footprints by size that decide which lots count toward a lane's reach.
+        self.lane_sizes = {}
+        for size, footprint in sizes.items() if isinstance(sizes, dict) else ():
+            if isinstance(footprint, list) and finite(luau_index(footprint, 1)) and finite(luau_index(footprint, 2)):
+                self.lane_sizes[size] = footprint
+        self.parcel_budget = parcel_budget
+        self.parcel_data, flags = validated_parcels(raw_parcels, self.lanes_valid)
         for index, (parcel, well_formed) in enumerate(zip(self.parcel_data, flags), start=1):
             if not isinstance(sizes, dict):
                 continue
@@ -1279,10 +1470,12 @@ class FabricPlot:
                 landmarks.append({"slotId": slot_id, "node": node, "district": district})
         return develop({"tier": tier, "stretches": stretches, "landmarks": landmarks, "parcels": parcels}, self.pull, trace)
 
-    def mask(self, owned, states, segments, plazas):
+    def mask(self, owned, states, segments, plazas, reaches=None):
         """Fabric.buildMask: owned footprints (+clear.slot) and their pads (+clear.pad), every buyable
-        slot's footprint and pad (+clear.pad), parcels at level 1 and up (+clear.parcel, budget or not), visible plazas
-        (+clear.parcel), and the street segments (clear.street)."""
+        slot's footprint and pad (+clear.pad), parcels at level 1 and up (+clear.parcel, budget or
+        not), visible plazas (+clear.parcel), the street segments (clear.street) and (wave 2.4)
+        every lane leg as far as the lane's reach (clear.lane) -- the reach, not what a near plot
+        draws, so near and far plots clear alike."""
         clear = self.clear
         if clear is None:
             return {"rects": [], "segments": [], "streetClear": 0}
@@ -1312,7 +1505,48 @@ class FabricPlot:
             rect = self.plaza_rects.get(index)
             if rect is not None:
                 rects.append(grown(rect, parcel_margin))
-        return {"rects": rects, "segments": segments, "streetClear": number_or(clear.get("street"), 0)}
+        lane_margin = number_or(clear.get("lane"), 0)
+        lane_segments = []
+        for view in self.lane_views:
+            reach = (reaches or {}).get(view["index"], 0)
+            for leg in view["legs"]:
+                span = min(reach - leg["start"], leg["length"])
+                if span <= 0:
+                    break
+                lane_segments.append(
+                    {
+                        "ax": leg["ax"],
+                        "az": leg["az"],
+                        "bx": leg["ax"] + leg["dx"] * span,
+                        "bz": leg["az"] + leg["dz"] * span,
+                        "margin": lane_margin,
+                    }
+                )
+        return {
+            "rects": rects,
+            "segments": list(segments) + lane_segments,
+            "streetClear": number_or(clear.get("street"), 0),
+        }
+
+    def lane_reaches(self, states):
+        """Fabric.updateLaneReaches, settled: {lane index: reach} for every lane that can be laid,
+        on near and far plots alike."""
+        levels = [state["level"] for state in states]
+        return {
+            view["index"]: lane_reach(view["lane"], view["index"], self.parcel_data, levels, self.lane_sizes, self.parcel_budget)
+            for view in self.lane_views
+        }
+
+    def lanes(self, reaches, near):
+        """Fabric.syncLanes, settled: every lane a near plot draws, laid to its reach, as {index,
+        length, reach, slabs, discs} (see `lane_pieces`). A far plot draws none."""
+        drawn = []
+        for view in self.lane_views if near else ():
+            reach = reaches[view["index"]]
+            slabs, discs = lane_pieces(view, reach)
+            if slabs:
+                drawn.append({"index": view["index"], "length": view["length"], "reach": reach, "slabs": slabs, "discs": discs})
+        return drawn
 
     def cleared_flags(self, mask):
         """Fabric.clearedFlags: bit q-1 per cleared quarter of a clump, bit 0 for a single; a
@@ -1527,13 +1761,14 @@ class FabricPlot:
                 self.heights.prop,
                 lambda slot_id: self.landmark_height(slot_id, stages),
             )
-            drawn = view["nearOk"] if near else view["farOk"]
-            parcels.append({**view, "state": state, "look": look if drawn else None})
+            shown = view["nearOk"] if near else view["farOk"]
+            parcels.append({**view, "state": state, "look": look if shown else None})
         plazas = self.visible_plazas(tier)
+        reaches = self.lane_reaches(states)
         upgrades = self.upgrade_placements(owned, states, stretches, tier, near, upgrade_share)
         # syncFabric's `smoke`: a near plot, `living`, and the era and tier gates lot smoke has.
         smoking = near and living and smoke_for(self.city, self.name, tier) is not None
-        mask = self.mask(owned, states, segments, plazas) if self.wild_config is not None else None
+        mask = self.mask(owned, states, segments, plazas, reaches) if self.wild_config is not None else None
         cleared = self.cleared_flags(mask) if mask is not None else {}
         return {
             "tier": tier,
@@ -1554,6 +1789,8 @@ class FabricPlot:
             "pads": self.pad_dressing(owned, near),
             "upgrades": upgrades,
             "plumes": plumes_for(parcels, self.chimneys, smoking),
+            "laneReaches": reaches,
+            "lanes": self.lanes(reaches, near),
             "near": near,
         }
 
@@ -1978,6 +2215,102 @@ def selftest():
         ("vehicles: scaled by the tier", vehicle_target({"perPlot": 24}, tiers, 3, 24) == 15),
         ("vehicles: the deck's share comes off", vehicle_target({"perPlot": 32}, tiers, 5, 32, on_deck=2) == 30),
     ]
+
+    # Wave 2.4 back lanes. The distance rule: P1 fronts L1_2 at 6, so the tavern pulls it from 6
+    # studs and the well from 16 (level 2 at tier 4). The same spot 6 studs up a lane is 12 and 22
+    # away (level 1); 18 studs up it is out of every landmark's radius, and a back row then keeps
+    # its front's district with level 0. rowLag 0, so the front never does the capping here.
+    def on_lane(lane, lane_along):
+        return dict(_parcel("medium", "L1_2", 6, 2, front=1), lane=lane, laneAlong=lane_along)
+
+    def lane_levels(lot):
+        return [state["level"] for state in run("lane", 4, [SELFTEST_PARCELS[0], lot], pull=lag0)[1]]
+
+    expect(run("lane lot 6 studs up its lane", 4, [SELFTEST_PARCELS[0], on_lane(1, 6)], pull=lag0), [(2, *market), (1, *market)])
+    expect(run("lane lot out of reach of every landmark", 4, [SELFTEST_PARCELS[0], on_lane(1, 18)], pull=lag0), [(2, *market), (0, *market)])
+    # The reach: a dogleg lane 18 studs long with three lots, 6, 8 and 6 studs of frontage.
+    dogleg = {"points": [[0, 0], [0, 10], [8, 10]], "stretch": "L1_2", "along": 6}
+    lane_lots = [
+        SELFTEST_PARCELS[0],
+        dict(_parcel("small", "L1_2", 6, 2, front=1), lane=1, laneAlong=4),
+        dict(_parcel("medium", "L1_2", 6, 2, front=1), lane=1, laneAlong=12),
+        dict(_parcel("small", "L1_2", 6, 2, front=1), lane=1, laneAlong=16),
+        dict(_parcel("narrow", "L1_2", 6, 2, front=1), lane=1, laneAlong=17),
+        dict(_parcel("medium", "L1_2", 6, 2, front=1), lane=2, laneAlong=17),
+    ]
+    footprints = {"small": [6, 6], "medium": [8, 8]}
+
+    def reach(levels, budget=99):
+        return lane_reach(dogleg, 1, lane_lots, levels, footprints, budget)
+
+    view = {"index": 1, "lane": dogleg, "legs": lane_legs(dogleg)}
+    stutter = lane_legs({"points": [[0, 0], [0, 0.005], [0, 10]]})
+    lane_looks = {"width": 3, "rim": 0.4, "fillHeight": 0.05, "rimHeight": 0.01, "growSeconds": 0.5}
+    lot_flags = validated_parcels(
+        [
+            _parcel("medium", "L1_2", 6, 1),
+            on_lane(1, 3),
+            on_lane(2, 3),  # names a malformed lane
+            on_lane(3, 3),  # names no lane at all
+            on_lane(1.5, 3),
+            on_lane(1, None),
+            on_lane(1, -1),
+            dict(_parcel("medium", "L1_2", 6, 2, front=1), laneAlong=3),  # `laneAlong` alone is ignored
+        ],
+        [True, False],
+    )[1]
+    lane_mask = {
+        "rects": [],
+        "segments": [chord((-10, 20), (10, 20)), {**chord((0, 0), (0, 7)), "margin": 1.5}, {**chord((30, 0), (30, 7)), "margin": 0}],
+        "streetClear": 2,
+    }
+    surfaced = {
+        "color": [72, 74, 82],
+        "paths": {
+            "surface": {"base": "gravel", "upgrades": [{"slot": "paveMainStreet", "variant": "default"}]},
+            "variants": {"gravel": {"color": [164, 158, 145]}},
+        },
+    }
+    uploaded = {"gravel": {"fillImageId": 11, "rimImageId": 12}}
+    validation = [
+        ("lane: a lot not on a lane ignores laneAlong", lane_levels(dict(on_lane(None, 18))) == [2, 2]),
+        ("lane: laneAlong 0 is the mouth's own distance", lane_levels(on_lane(1, 0)) == [2, 2]),
+        ("reach: 0 while no lot has a site", reach([2, 0, 0, 0, 0, 0]) == 0),
+        ("reach: the far edge of the first lot's frontage", reach([2, 1, 0, 0, 0, 0]) == 7),
+        ("reach: the farthest lot with a site", reach([2, 1, 2, 0, 0, 0]) == 16),
+        ("reach: never past the lane's end", reach([2, 0, 0, 1, 0, 0]) == 18),
+        ("reach: a lot past the budget does not count", reach([2, 1, 2, 0, 0, 0], budget=2) == 7),
+        ("reach: a size without a footprint does not count", reach([2, 0, 0, 0, 1, 0]) == 0),
+        ("reach: another lane's lot does not count", reach([2, 0, 0, 0, 0, 1]) == 0),
+        ("lane: valid", valid_lane(dogleg)),
+        ("lane: one point is no lane", not valid_lane(dict(dogleg, points=[[0, 0]]))),
+        ("lane: five points are too many", not valid_lane(dict(dogleg, points=[[0, k] for k in range(5)]))),
+        ("lane: a point must be two finite numbers", not valid_lane(dict(dogleg, points=[[0, 0], [0, "a"]]))),
+        ("lane: needs its mouth's stretch", not valid_lane({k: v for k, v in dogleg.items() if k != "stretch"})),
+        ("lane: needs a finite along", not valid_lane(dict(dogleg, along=math.inf))),
+        ("lane lots: malformed ones are blanks", lot_flags == [True, True, False, False, False, False, False, True]),
+        ("lane config: valid", valid_lane_config(lane_looks) == lane_looks),
+        ("lane config: growSeconds missing draws no lane", valid_lane_config({k: v for k, v in lane_looks.items() if k != "growSeconds"}) is None),
+        ("lane config: width 0 draws no lane", valid_lane_config(dict(lane_looks, width=0)) is None),
+        ("lane config: a negative rim draws no lane", valid_lane_config(dict(lane_looks, rim=-0.1)) is None),
+        ("legs: two points on one spot make no leg", [(leg["start"], leg["length"]) for leg in stutter] == [(0, 9.995)]),
+        ("pieces: one slab and the tip disc", lane_pieces(view, 7) == ([{"a": (0, 0), "b": (0.0, 7.0), "level": 1}], [(0.0, 7.0)])),
+        ("pieces: a disc on the corner it has passed", lane_pieces(view, 14)[1] == [(0, 10), (4.0, 10.0)]),
+        ("pieces: legs alternate levels", [slab["level"] for slab in lane_pieces(view, 18)[0]] == [1, 2]),
+        ("pieces: a reach on the corner stops there", lane_pieces(view, 10) == ([{"a": (0, 0), "b": (0.0, 10.0), "level": 1}], [(0.0, 10.0)])),
+        ("pieces: nothing under LANE_MIN", lane_pieces(view, 0.005) == ([], [])),
+        ("tops: a disc at the contract's height", lane_top(lane_looks, 1, False, 0) == 0.05 and lane_top(lane_looks, 1, True, 0) == 0.01),
+        ("tops: a leg one step under", abs(lane_top(lane_looks, 1, False, 1) - 0.045) < 1e-12 and abs(lane_top(lane_looks, 1, True, 1) - 0.008) < 1e-12),
+        ("tops: every other lane half a step lower", abs(lane_top(lane_looks, 2, False, 2) - 0.0375) < 1e-12),
+        ("mask: a lane leg clears by its own margin", is_cleared(1.4, 3, 0, lane_mask)),
+        ("mask: not by the street's wider one", not is_cleared(1.8, 3, 0, lane_mask)),
+        ("mask: a margin of 0 stays 0", not is_cleared(30.5, 3, 0, lane_mask)),
+        ("mask: a street keeps streetClear", is_cleared(0, 18.5, 0, lane_mask)),
+        ("surface: the base before any upgrade", road_look(surfaced, set(), uploaded) == ("gravel", (164, 158, 145))),
+        ("surface: the owned upgrade", road_look(surfaced, {"paveMainStreet"}, uploaded) == ("default", (72, 74, 82))),
+        ("surface: a variant not uploaded is default", road_look(surfaced, set(), {}) == ("default", (72, 74, 82))),
+        ("surface: no paths block is default", road_look({"color": [1, 2, 3]}, set(), None) == ("default", (1, 2, 3))),
+    ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
         if not good:
@@ -2100,6 +2433,9 @@ def timeline(era_name):
     rows.append(("full", "final stages", everything, plot.final_stages(everything), len(city["tier"]["thresholds"])))
     fragile_notes = []
     over_cap = []
+    # Wave 2.4: the lanes that can be laid and their summed length, which a finished town draws.
+    lane_count = len(plot.lane_views)
+    lane_total = sum(view["length"] for view in plot.lane_views)
     for label, moment, owned, stages, tier in rows:
         near = plot.snapshot(owned, stages, tier, near=True)
         far = plot.snapshot(owned, stages, tier, near=False)
@@ -2121,6 +2457,12 @@ def timeline(era_name):
             f"{len(near['stretches']):2d} stretches | parcels L0 {counts[0]:2d}  L1 {counts[1]:2d}  "
             f"L2 {counts[2]:2d}  L3 {counts[3]:2d}  L4 {counts[4]:2d} | houses {houses:2d}, sites {sites:2d} "
             f"(far {far_houses}, {far_sites}) | plumes {len(near['plumes']):2d} ({cap_text})"
+            + (
+                f" | lanes {len(near['lanes']):2d} of {lane_count}, "
+                f"{sum(lane['reach'] for lane in near['lanes']):.0f} of {lane_total:.0f} studs"
+                if lane_count
+                else ""
+            )
         )
         if over_plume_cap(len(near["plumes"]), cap):
             over_cap.append(f"{label}: {len(near['plumes'])} fabric plumes, over budget.plumes {cap:g}")

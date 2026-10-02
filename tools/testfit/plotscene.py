@@ -3,9 +3,9 @@
 Runs inside Blender's Python, which has no Pillow and cannot import tools/streetplan.py, so the
 scene is handed over as a plain JSON file: boxes (plot base, pads, pavements, footpaths, roads on
 a non-tile era), models (a blueprint path, a stage, a plot-local position in studs and a
-rotation about Y) and spheres (chimney smoke puffs). Everything in that file is in the
-glTF/Roblox convention -- Y up, a model's front faces -Z -- exactly like a blueprint, and is
-converted to Blender's Z-up here.
+rotation about Y), discs (the round joints and tips of a back lane) and spheres (chimney smoke
+puffs). Everything in that file is in the glTF/Roblox convention -- Y up, a model's front faces
+-Z -- exactly like a blueprint, and is converted to Blender's Z-up here.
 
     blender -b -P tools/testfit/plotscene.py -- --scene <scene.json>
 """
@@ -45,6 +45,7 @@ srgb_to_linear = testfit.srgb_to_linear
 # A smoke puff is round at the overview camera's scale with this little geometry.
 PUFF_SUBDIVISIONS = 3
 PUFF_ROUGHNESS = 1.0
+DISC_SEGMENTS = 32  # a 3-stud disc reads round up close with this many sides
 
 
 class PlotPieceCache(testfit.PieceCache):
@@ -115,7 +116,7 @@ def decode_scene_colours(scene_spec):
     pale: Boomtown's base (173, 138, 93) came out (214, 198, 171) beside kit pieces at their true
     colours. The sky is left alone: it is a light, and SUN_ENERGY and FILL_ENERGY were calibrated
     against its numbers as linear radiance."""
-    for box in scene_spec.get("boxes", []):
+    for box in scene_spec.get("boxes", []) + scene_spec.get("discs", []):
         box["color"] = linear(box["color"])
     for model in scene_spec.get("models", []):
         for box in model.get("placeholder") or []:
@@ -155,6 +156,37 @@ def build_box(spec, collection, materials):
     )
     obj.rotation_euler = (0.0, 0.0, math.radians(spec.get("rotY", 0.0)))
     return obj
+
+
+class Discs:
+    """Flat round slabs (a Roblox Cylinder stood on end): one unit mesh per material, scaled to
+    each disc's diameter and height. `pos` is the disc's centre."""
+
+    def __init__(self, materials):
+        self.materials = materials
+        self.meshes = {}
+
+    def mesh_for(self, material):
+        mesh = self.meshes.get(material.name)
+        if mesh is None:
+            mesh = bpy.data.meshes.new(f"Disc_{material.name}")
+            geometry = bmesh.new()
+            bmesh.ops.create_cone(
+                geometry, cap_ends=True, segments=DISC_SEGMENTS, radius1=0.5, radius2=0.5, depth=1.0
+            )
+            geometry.to_mesh(mesh)
+            geometry.free()
+            mesh.materials.append(material)
+            self.meshes[material.name] = mesh
+        return mesh
+
+    def build(self, spec, collection):
+        material = self.materials.get(spec["color"], spec.get("roughness", 0.9))
+        obj = bpy.data.objects.new(spec.get("name", "Disc"), self.mesh_for(material))
+        obj.location = to_blender(spec["pos"])
+        obj.scale = (spec["diameter"], spec["diameter"], spec["height"])
+        collection.objects.link(obj)
+        return obj
 
 
 class Puffs:
@@ -348,6 +380,10 @@ def main():
     pieces = 0
     for model in scene_spec.get("models", []):
         pieces += build_model(model, cache, plot, blueprints, missing, materials)
+
+    discs = Discs(materials)
+    for disc in scene_spec.get("discs", []):
+        discs.build(disc, plot)
 
     puffs = Puffs(materials)
     for sphere in scene_spec.get("spheres", []):

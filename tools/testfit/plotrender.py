@@ -307,6 +307,11 @@ class PlotScene:
         self.boxes = []
         self.models = []
         self.spheres = []
+        self.discs = []
+        # The surface the plot's streets wear for what is owned (wave 1e): Boomtown gravel until
+        # Pave Main Street, Village cobble once the road is paved. Spurs and back lanes follow it.
+        variants = ((self.assets_json().get("paths") or {}).get(era.name) or {}).get("variants")
+        self.road_variant, self.road_color = cityfabric.road_look(era.dressing["road"], owned, variants)
         self.rng = random.Random(f"{era.name}:plotrender")
         self.lift = float(era.city["paths"].get("buildingLift", 0.0))
         self.thickness = float(era.city["road"]["thickness"])
@@ -366,6 +371,25 @@ class PlotScene:
         if placeholder:
             entry["placeholder"] = placeholder
         self.models.append(entry)
+
+    @staticmethod
+    def assets_json():
+        try:
+            return json.loads(ASSETS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def disc(self, name, centre, diameter, top, thickness, color):
+        """A flat round slab (a Cylinder stood on end) with its top at `top`."""
+        self.discs.append(
+            {
+                "name": name,
+                "pos": [round(centre[0], 4), round(top - thickness / 2, 4), round(centre[1], 4)],
+                "diameter": round(diameter, 4),
+                "height": thickness,
+                "color": list(color),
+            }
+        )
 
     def plume(self, name, top, smoke):
         """One chimney plume (Ambient.AddSmoke) at the plot-local point `top`, in the config's smoke
@@ -700,10 +724,11 @@ class PlotScene:
         client draws baked mesh pieces there; this is deliberately the plain stand-in, because the
         bake is judged by tools/paths and this render is about the plot reading as a place."""
         era = self.era
-        colour = [int(v) for v in era.dressing["road"]["color"]]
+        colour = list(self.road_color)
         for stretch_id in sorted(self.visible):
             stretch = self.network.stretches[stretch_id]
             self.ribbon(f"Road{stretch_id}", stretch["a"], stretch["b"], era.width, self.thickness / 2, colour)
+        self.notes.append(f"street surface: {self.road_variant} {tuple(colour)}")
 
     def build_spurs(self):
         """The footpath from the pad's kerb to the slot anchor. A tiles era gives it its own look
@@ -712,7 +737,7 @@ class PlotScene:
         era = self.era
         spur_cfg = (era.tiles or {}).get("spur")
         width = streetplan.spur_path_width(era)  # RoadGraph's state.spurWidth
-        colour = [int(v) for v in (spur_cfg["color"] if spur_cfg else era.dressing["road"]["color"])]
+        colour = [int(v) for v in spur_cfg["color"]] if spur_cfg else list(self.road_color)
         # RoadGraph.drawSpur: a footpath's centre sits at -SPUR_DROP, so its top is that far under
         # the kerb and none of the four ground planes coincide. A non-tiles era draws baked meshes
         # in the client, so SPUR_TOP there is this tool's stand-in and mirrors nothing.
@@ -723,6 +748,44 @@ class PlotScene:
                 continue
             for index, (a, b) in enumerate(streetplan.polyline_segments(spur["points"])):
                 self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, top, colour)
+
+    def build_lanes(self):
+        """M12 wave 2.4 back lanes, piece for piece as Fabric.layLane lays them on a near plot: for
+        every lane drawn to its reach, a rim slab and a fill slab per leg and a rim and a fill disc
+        on every interior point it has passed and at its tip, at Fabric.laneTop's heights. They
+        take the streets' live colour, the rim a darker shade: in game, while the baked renderer
+        draws, they wear the baked pieces' own fill and rim images instead, which this render's
+        plain streets do not show either. Every top lies under the street's own slab, which
+        therefore covers the mouth."""
+        view = self.fabric_view
+        if view is None or not self.fabric.lane_views:
+            return
+        config = self.fabric.lane_config
+        thickness = cityfabric.LANE_THICKNESS
+        looks = (
+            ("Rim", True, config["width"] + 2 * config["rim"], tint(self.road_color, cityfabric.LANE_RIM_SHADE)),
+            ("Fill", False, config["width"], list(self.road_color)),
+        )
+        for lane in view["lanes"]:
+            for name, rim, width, colour in looks:
+                for index, slab in enumerate(lane["slabs"]):
+                    a, b = slab["a"], slab["b"]
+                    top = cityfabric.lane_top(config, lane["index"], rim, slab["level"])
+                    self.box(
+                        f"Lane{lane['index']}_{name}{index}",
+                        (width, thickness, math.dist(a, b)),
+                        ((a[0] + b[0]) / 2, top - thickness / 2, (a[1] + b[1]) / 2),
+                        colour,
+                        rot_y=facing_rot((b[0] - a[0], b[1] - a[1])),
+                    )
+                top = cityfabric.lane_top(config, lane["index"], rim, 0)
+                for index, centre in enumerate(lane["discs"]):
+                    self.disc(f"Lane{lane['index']}_{name}Disc{index}", centre, width, top, thickness, colour)
+        self.notes.append(
+            f"fabric lanes: {len(view['lanes'])} of {len(self.fabric.lane_views)} drawn, "
+            f"{sum(lane['reach'] for lane in view['lanes']):.0f} of "
+            f"{sum(lane['length'] for lane in self.fabric.lane_views):.0f} studs"
+        )
 
     # -- highway, subway, dressing ---------------------------------------
 
@@ -1664,6 +1727,7 @@ class PlotScene:
         self.build_blocks()
         self.build_park_strips()
         self.build_spurs()
+        self.build_lanes()
         self.build_pads()
         self.build_buildings()
         self.build_lots()
@@ -2030,6 +2094,7 @@ def main():
         "sky": SKY,
         "boxes": scene.boxes,
         "models": scene.models,
+        "discs": scene.discs,
         "spheres": scene.spheres,
         "camera": camera_for(camera_name, era, scene),
     }
