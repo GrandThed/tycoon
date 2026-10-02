@@ -25,6 +25,12 @@ earlier lot of the row in front on the same side of the same street and repeats 
 CityFabric keeps each back row a `rowLag` behind its front, so a lot that would never become a house
 is not laid. Lots keep clear of each landmark's harvested extents (INTERFACES "Wave 1c, round 2").
 
+Back lanes (INTERFACES "Wave 2.4"). A plan with a `parcels.lanes` block lays no infill: its lines
+are lanes, small roads that leave a street through a gap in the frontage, and every lot behind the
+street lots stands beside one, facing it. A `through` line runs from one street to another and is
+written as two lanes that meet. A lane lot takes its lane's mouth as its address and adds its
+distance along the lane to its distance from every landmark, so a lane fills from the street inward.
+
 Town trees. Street trees in frontage no lot took (anchored to their stretch), green and orchard trees
 round the civic and farm landmarks and the tree slot's green (anchored to the landmark's approach
 stretch), yard trees behind the last row of houses (anchored to the nearest parcel). Every one keeps
@@ -124,6 +130,17 @@ CHECK_CART_MARGINS = {
 # hydrant, a sign pole, an arch post: no side longer than CHECK_POST_SIZE) to the lot it stands
 # before, on the lamp line. Either may lean CHECK_OWN_LOT into that lot, as a planter does.
 CHECK_POST_SIZE = 1.0
+# A back lane (INTERFACES "Wave 2.4"). Its body is its fill and both rims; that body keeps
+# CHECK_LANE from every landmark's extents, pad, marker, plaza, lamp, signal and the Sign, stays out
+# of every spur's strip and (past its mouth) every street's, keeps CHECK_LANE_APART from another
+# lane's body unless the two meet end to end, and CHECK_EDGE from the plot edge. Its mouth stands a
+# road's half-width, its own body and CHECK_LANE_CROSSING from every crossing.
+CHECK_LANE = 0.5
+CHECK_LANE_APART = 0.5
+CHECK_LANE_CROSSING = 1.0
+CHECK_LANE_FRONT = 0.5  # a lane lot's front, from its lane's setback line
+CHECK_LANE_ALONG = 0.05  # a lane lot's `laneAlong`, from the foot of its front on the lane
+CHECK_LANE_LOTS = 2  # a lane with fewer lots is a road to nowhere
 CHECK_FACING = 0.02  # |sin| between where a kerb entry faces and where its layer says it must
 MARKER_SIZE = 2.0  # the marker prop's ground square, the contract's cap
 BUILT_LEVEL = 2  # a parcel's house stands from level 2 (a parcel-anchored tree needs it)
@@ -428,9 +445,12 @@ def lot_gap(rules, size, other):
     return rules["terraceGap"] if size == other == "narrow" else rules["gap"]
 
 
-def parcel_clear(site, poly, rules, own_segments, placed, size=None):
+def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), gap_for=None):
     """Every clearance the generator keeps (the plan's numbers, at least the contract's). A
-    bounding-box test skips every obstacle too far away to matter before the exact one runs."""
+    bounding-box test skips every obstacle too far away to matter before the exact one runs.
+    `lanes` are the lane lines of the plan (wave 2.4): no lot comes within the plan's `lanes.clear`
+    of one, which is what leaves each mouth open in the street frontage. `gap_for` overrides the
+    daylight kept from each lot already placed."""
     era = site.era
     edge = era.half_x - rules["edge"]
     if any(abs(v[0]) > edge or abs(v[1]) > era.half_z - rules["edge"] for v in poly):
@@ -446,10 +466,15 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None):
     for a, b, segment_box in site.spur_boxes:
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
             return False
+    for points in lanes:
+        need = rules["lanes"]["clear"]
+        for a, b in polyline_legs(points):
+            if not boxes_apart(box, box_of((a, b)), need) and segment_gap(a, b, poly) < need - EPS:
+                return False
     for other in placed:
         # Coordinates are rounded to 0.01, so a neighbour laid exactly `gap` away can measure a
         # hair under it.
-        need = lot_gap(rules, size, other["size"])
+        need = gap_for(other) if gap_for is not None else lot_gap(rules, size, other["size"])
         if not boxes_apart(box, other["box"], need) and gap(poly, other["poly"]) < need - EPS:
             return False
     return True
@@ -532,7 +557,7 @@ def parcel_polyline(parcel):
     return int(parcel["stretch"][1:].split("_")[0]) - 1
 
 
-def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed):
+def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, lanes=()):
     """Lay parcels along one side of a straight run, fronts near the setback line, from its start.
     A small or medium lot stands a little back from the line and a few degrees off square (the
     plan's jitter, its own random stream), so a row of cottages reads as grown; narrow lots stand
@@ -569,7 +594,7 @@ def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed):
             st = site.network.stretches[stretch]
             _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
             candidate["along"] = rounded(math.dist(st["a"], foot))
-            if parcel_clear(site, candidate["poly"], rules, own, placed, size):
+            if parcel_clear(site, candidate["poly"], rules, own, placed, size, lanes):
                 accepted = candidate
                 break
         if accepted is None:
@@ -661,8 +686,15 @@ def infill(site, rules, parcels, row):
 
 
 def generate_parcels(site, plan):
-    """Parcels in data order: row 1 by distance from the entrance, then row 2 and row 3, each in the
-    order of its fronts (INTERFACES "Wave 1c": Order)."""
+    """The parcels alone (see generate_lots)."""
+    return generate_lots(site, plan)[0]
+
+
+def generate_lots(site, plan):
+    """(parcels, lanes). Parcels in data order: row 1 by distance from the entrance, then row 2 and
+    row 3, each in the order of its fronts (INTERFACES "Wave 1c": Order). A plan with a
+    `parcels.lanes` block (wave 2.4) lays no infill: every lot behind the street frontage fronts a
+    lane, and the lanes come back with the lots. Any other plan has no lanes."""
     rules = plan["parcels"]
     rng = random.Random(f"{plan['seed']}:parcels")
     jitter = random.Random(f"{plan['seed']}:jitter")
@@ -683,14 +715,18 @@ def generate_parcels(site, plan):
 
     # Frontage first: terraces of narrow lots on the terrace streets, cottages mostly medium
     # elsewhere; then a second walk fills every hole a lot still fits.
+    lines = plan_lanes(site, rules) if rules.get("lanes") else []
+    obstacles = [line["points"] for line in lines]
     placed = []
     for sizes_for in (first_pass, fill_pass):
         for run in street_runs(site):
             for side in (1, -1):
-                walk_run(site, rules, run, side, sizes_for, rng, jitter, placed)
+                walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, obstacles)
     min_level = rules["minLevel"]
     parcels = settle_first_row(site, placed, min_level)
     parcels.sort(key=lambda parcel: entrance_order(site, parcel))
+    if rules.get("lanes"):
+        return lay_lanes(site, plan, parcels, lines)
     for row in range(2, min(rules["rows"], MAX_ROW) + 1):
         kept = []
         for candidate in infill(site, rules, parcels, row):
@@ -705,7 +741,7 @@ def generate_parcels(site, plan):
         kept.sort(key=lambda parcel: (parcel["front"],) + entrance_order(site, parcel))
         levels = full_build_levels(site, parcels + kept)[len(parcels) :]
         parcels += [parcel for parcel, level in zip(kept, levels) if level >= min_level]
-    return parcels
+    return parcels, []
 
 
 def full_build_levels(site, parcels):
@@ -761,12 +797,17 @@ def full_build_states(site, parcels):
     levels, districts = [], []
     for parcel in parcels:
         st = lengths.get(parcel["stretch"])
+        # Wave 2.4: a lot on a lane stands its `laneAlong` further from every landmark; one whose
+        # `laneAlong` is not a distance is a blank, as it is in the game.
+        lane_along = parcel.get("laneAlong", 0.0) if "lane" in parcel else 0.0
+        if isinstance(lane_along, bool) or not isinstance(lane_along, (int, float)) or not math.isfinite(lane_along) or lane_along < 0:
+            st = None
         influence, pulled = 0.0, False
         governor, strongest = None, 0.0
         for _, node, district in landmarks:
             if st is None:
                 break
-            share = max(0.0, 1.0 - reach(per_node[node], st, parcel["along"]) / pull["radius"])
+            share = max(0.0, 1.0 - (reach(per_node[node], st, parcel["along"]) + lane_along) / pull["radius"])
             if share > 0:
                 influence += share
                 pulled = True
@@ -808,6 +849,280 @@ def full_build_states(site, parcels):
             levels[index] = max(0, min(levels[index], front_level - lag))
             districts[index] = districts[front] if 0 <= front < index else None
     return levels, districts
+
+
+# --------------------------------------------------------------------------------------------
+# Back lanes (INTERFACES "Wave 2.4"): every lot behind the street frontage fronts a lane
+# --------------------------------------------------------------------------------------------
+
+LANE_POINTS = (2, 4)  # the contract's bounds on a lane's polyline
+LANE_ROW = 2  # every lane lot is a row-2 lot whose front is the street lot beside its lane's mouth
+LANE_MOUTH_SNAP = 0.5  # how far off a centreline the plan may write a mouth and still mean "on it"
+
+
+def lane_half(site):
+    """Half the ground a lane covers: half its fill plus one rim (`fabric.lanes`); 0 without it."""
+    cfg = site.config.get("lanes") or {}
+    return float(cfg.get("width", 0.0)) / 2 + float(cfg.get("rim", 0.0))
+
+
+def polyline_legs(points):
+    return [(tuple(a), tuple(b)) for a, b in zip(points, points[1:])]
+
+
+def polyline_length(points):
+    return sum(math.dist(a, b) for a, b in polyline_legs(points))
+
+
+def polyline_at(points, arc):
+    """The point `arc` studs along a polyline, clamped to its ends."""
+    walked = 0.0
+    for a, b in polyline_legs(points):
+        length = math.dist(a, b)
+        if arc <= walked + length and length > 0:
+            t = max(arc - walked, 0.0) / length
+            return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        walked += length
+    return tuple(points[-1])
+
+
+def polyline_foot(points, point):
+    """(distance, arc from the first point) of the point of a polyline nearest `point`; the earliest
+    along it on a tie, so a lot at a bend is addressed on the leg nearer the mouth."""
+    best, walked = (math.inf, 0.0), 0.0
+    for a, b in polyline_legs(points):
+        d, foot = streetplan.point_segment_distance(point, a, b)
+        if d < best[0] - 1e-9:
+            best = (d, walked + math.dist(a, foot))
+        walked += math.dist(a, b)
+    return best
+
+
+def street_address(site, point, what):
+    """(the point on the nearest street centreline, stretch index, along, polyline) for a lane's
+    mouth; the plan must put it on a drawn street."""
+    best = min(((streetplan.point_segment_distance(point, a, b), polyline, segment, a, b) for polyline, segment, a, b in site.street_segments), key=lambda hit: hit[0][0])
+    (distance, foot), polyline, segment, a, b = best
+    if distance > LANE_MOUTH_SNAP:
+        raise SystemExit(f"fabric: {what} is {distance:.2f} studs from the nearest street; a lane starts on a street's centreline")
+    length = math.dist(a, b)
+    stretch = site.stretch_at(polyline, segment, math.dist(a, foot) / length if length > 0 else 0.0)
+    if stretch is None or stretch not in site.drawn:
+        raise SystemExit(f"fabric: {what} is on a stretch no landmark's path draws, so the lane would never be reached")
+    return foot, stretch, math.dist(site.network.stretches[stretch]["a"], foot), polyline
+
+
+def plan_lanes(site, rules):
+    """The plan's lane lines (`parcels.lanes.lines`), each mouth moved onto the centreline of the
+    street it leaves and every point rounded as it will be written: [{points, through}]. A `through`
+    line ends on a street too: it is laid as one road and written as two lanes that meet."""
+    lines = []
+    for index, line in enumerate(rules["lanes"]["lines"], start=1):
+        points = [tuple(float(v) for v in point) for point in line["points"]]
+        through = bool(line.get("through"))
+        points[0] = street_address(site, points[0], f"lane line {index}'s mouth")[0]
+        if through:
+            points[-1] = street_address(site, points[-1], f"lane line {index}'s far mouth")[0]
+        lines.append({"points": [(rounded(x), rounded(z)) for x, z in points], "through": through})
+    return lines
+
+
+def lane_lot(site, size, centre, rotation):
+    """A lot beside a lane, before it knows its lane: the generator's bookkeeping only."""
+    x, z = rounded(centre[0]), rounded(centre[1])
+    rotation = rounded(norm_degrees(rotation))
+    poly = rect((x, z), site.sizes[size], rotation)
+    return {"x": x, "z": z, "rotationY": rotation, "size": size, "row": LANE_ROW, "poly": poly, "box": box_of(poly)}
+
+
+def walk_lane(site, rules, points, placed, rng, lanes, head):
+    """Lots along both sides of every leg of one lane line, fronts on the setback line, facing the
+    lane: small, with a medium now and then, each where it keeps every clearance. A lot may stand
+    `overhang` past a leg's end, which fills the outside of a bend; `head` adds one lot across the
+    end of a cul-de-sac, looking back down it. Returns the lots, in the order they were laid."""
+    lane_rules = rules["lanes"]
+    setback, step, overhang = lane_rules["setback"], lane_rules["step"], lane_rules["overhang"]
+    # A lane lot is a back lot: off a street it keeps the walkers' reach (`lanes.street`), not the
+    # corner envelope a street lot keeps from the street it does not front.
+    beside = dict(rules, street=lane_rules["street"])
+    lots = []
+
+    def sizes():
+        return ("medium", "small") if rng.random() < lane_rules["mediumShare"] else ("small",)
+
+    def fits(candidate):
+        def gap_for(other):
+            # Two lane lots of one size stand as close as the plan lets a lane's houses stand.
+            same = other["row"] == LANE_ROW and other["size"] == candidate["size"]
+            return lane_rules["gap"] if same else rules["gap"]
+
+        return parcel_clear(site, candidate["poly"], beside, set(), placed + lots, candidate["size"], lanes, gap_for)
+
+    legs = polyline_legs(points)
+    for a, b in legs:
+        length = math.dist(a, b)
+        d = streetplan.unit((b[0] - a[0], b[1] - a[1]))
+        for side in (1, -1):
+            n = (-d[1] * side, d[0] * side)
+            square_on = facing_rot((-n[0], -n[1]))
+            s = -overhang - site.sizes["small"][0] / 2
+            while s < length + overhang:
+                accepted = None
+                for size in sizes():
+                    width, depth = site.sizes[size]
+                    mid = s + width / 2
+                    if not -overhang <= mid <= length + overhang:
+                        continue
+                    reach = setback + depth / 2
+                    candidate = lane_lot(site, size, (a[0] + d[0] * mid + n[0] * reach, a[1] + d[1] * mid + n[1] * reach), square_on)
+                    if fits(candidate):
+                        accepted = candidate
+                        break
+                if accepted is None:
+                    s += step
+                    continue
+                lots.append(accepted)
+                s += site.sizes[accepted["size"]][0] + lane_rules["gap"]
+    if head:
+        a, b = legs[-1]
+        d = streetplan.unit((b[0] - a[0], b[1] - a[1]))
+        size = "small"
+        candidate = lane_lot(site, size, (b[0] + d[0] * (setback + site.sizes[size][1] / 2), b[1] + d[1] * (setback + site.sizes[size][1] / 2)), facing_rot((-d[0], -d[1])))
+        if fits(candidate):
+            lots.append(candidate)
+    return lots
+
+
+def lane_arc(site, points, lot):
+    """Where a lot fronts a lane: the arc of the point of the lane nearest its front centre."""
+    fc = front_centre(lot["x"], lot["z"], lot["rotationY"], site.sizes[lot["size"]][1])
+    return polyline_foot(points, fc)[1]
+
+
+def split_through(site, points, lots):
+    """A through line as two lanes that meet: (lane A's points, lane B's points, the lots of A, the
+    lots of B). They meet where a lot fronts the line nearest its middle, so that lot's own lane
+    reaches the meeting point; among such points, the one that leaves the other lane the shortest
+    stub to its own nearest lot. None when no lot gives both lanes two lots and four points."""
+    total = polyline_length(points)
+    arcs = [lane_arc(site, points, lot) for lot in lots]
+    corners, walked = [], 0.0
+    for a, b in polyline_legs(points)[:-1]:
+        walked += math.dist(a, b)
+        corners.append(walked)
+    best = None
+    for meet in sorted(set(arcs)):
+        if any(abs(meet - corner) < 1.0 for corner in corners) or not 1.0 < meet < total - 1.0:
+            continue
+        # The first lot that fronts the meeting point is the near lane's; one across the lane from
+        # it is the far lane's, so both lanes are drawn right up to where they meet.
+        at = [index for index, arc in enumerate(arcs) if abs(arc - meet) <= EPS]
+        near = [index for index, arc in enumerate(arcs) if arc < meet - EPS] + at[:1]
+        far = [index for index, arc in enumerate(arcs) if arc > meet + EPS] + at[1:]
+        before = sum(1 for corner in corners if corner < meet)
+        if len(near) < 2 or len(far) < 2 or before + 2 > LANE_POINTS[1] or len(corners) - before + 2 > LANE_POINTS[1]:
+            continue
+        stub = min(max(arcs[index] - site.sizes[lots[index]["size"]][0] / 2 - meet, 0.0) for index in far)
+        key = (round(stub, DECIMALS), round(abs(meet - total / 2), DECIMALS), meet)
+        if best is None or key < best[0]:
+            best = (key, meet, near, far)
+    if best is None:
+        return None
+    _, meet, near, far = best
+    point = polyline_at(points, meet)
+    point = (rounded(point[0]), rounded(point[1]))
+    before = sum(1 for corner in corners if corner < meet)
+    first = list(points[: before + 1]) + [point]
+    second = list(reversed(points[before + 1 :])) + [point]
+    return first, second, [lots[index] for index in near], [lots[index] for index in far]
+
+
+def trim_lane(site, points, lots):
+    """A cul-de-sac's points cut where its last lot's frontage ends: the road it will ever draw."""
+    reach = max(lane_arc(site, points, lot) + site.sizes[lot["size"]][0] / 2 for lot in lots)
+    if reach >= polyline_length(points):
+        return list(points)
+    kept, walked = [points[0]], 0.0
+    for a, b in polyline_legs(points):
+        length = math.dist(a, b)
+        if reach <= walked + length:
+            end = polyline_at(points, reach)
+            end = (rounded(end[0]), rounded(end[1]))
+            if math.dist(end, kept[-1]) > 0.5:
+                kept.append(end)
+            break
+        kept.append(b)
+        walked += length
+    return kept
+
+
+def mouth_front(site, parcels, points, polyline):
+    """The street lot a lane's lots answer to: the row-1 parcel nearest the mouth on the side of
+    its street the lane leaves by, or across the street when that side has none (1-based; the
+    lower index on a tie). None for a street without a lot."""
+    side = street_side(site, polyline, points[1])
+    best = {}
+    for index, parcel in enumerate(parcels, start=1):
+        if parcel["row"] != 1 or parcel_polyline(parcel) != polyline:
+            continue
+        same = street_side(site, polyline, (parcel["x"], parcel["z"])) == side
+        d = math.dist(points[0], (parcel["x"], parcel["z"]))
+        if same not in best or d < best[same][1] - 1e-9:
+            best[same] = (index, d)
+    found = best.get(True) or best.get(False)
+    return found[0] if found is not None else None
+
+
+def lay_lanes(site, plan, parcels, lines):
+    """The lane lots behind the street lots `parcels`, and the lanes they stand on, for a plan with
+    a `parcels.lanes` block. Each line is walked for lots, a through line is cut in two where its
+    lanes meet, each lot takes its lane's address and its distance along it, and a lot that would
+    never become a house -- Develop adds that distance to its distance from every landmark -- is
+    not laid. A line that ends up with fewer than `minLots` lots is the plan's mistake: its mouth
+    would be a hole in the frontage for nothing."""
+    rules = plan["parcels"]
+    lane_rules = rules["lanes"]
+    rng = random.Random(f"{plan['seed']}:lanes")
+    obstacles = [line["points"] for line in lines]
+    walked = []
+    for line in lines:
+        lots = walk_lane(site, rules, line["points"], parcels + [lot for _, found in walked for lot in found], rng, obstacles, not line["through"])
+        walked.append((line, lots))
+    lanes, lane_lots = [], []
+    for number, (line, lots) in enumerate(walked, start=1):
+        # A lot dropped for never building can move where a through line's lanes meet, so the cut
+        # and the levels are settled together.
+        while True:
+            if len(lots) < lane_rules["minLots"]:
+                raise SystemExit(f"fabric: lane line {number} holds {len(lots)} lot(s) that become houses, under lanes.minLots {lane_rules['minLots']}; take it out of the plan")
+            if line["through"]:
+                cut = split_through(site, line["points"], lots)
+                if cut is None:
+                    raise SystemExit(f"fabric: lane line {number} is `through` but no lot on it lets its two lanes meet with two lots each")
+                halves = [(cut[0], cut[2]), (cut[1], cut[3])]
+            else:
+                halves = [(trim_lane(site, line["points"], lots), lots)]
+            dressed = []
+            for points, members in halves:
+                _, stretch, along, polyline = street_address(site, points[0], f"lane line {number}'s mouth")
+                front = mouth_front(site, parcels, points, polyline)
+                if front is None:
+                    raise SystemExit(f"fabric: lane line {number} leaves street {polyline + 1}, which has no street lot for its lots to answer to")
+                for lot in members:
+                    lot.update(stretch=site.ids[stretch], along=rounded(along), front=front, laneAlong=rounded(lane_arc(site, points, lot)))
+                dressed.append((points, stretch, along, members))
+            levels = full_build_levels(site, parcels + lots)[len(parcels) :]
+            keep = [lot for lot, level in zip(lots, levels) if level >= rules["minLevel"]]
+            if len(keep) == len(lots):
+                break
+            lots = keep
+        for points, stretch, along, members in dressed:
+            lanes.append({"points": [[x, z] for x, z in points], "stretch": site.ids[stretch], "along": rounded(along)})
+            for lot in members:
+                lot["lane"] = len(lanes)
+            lane_lots += members
+    lane_lots.sort(key=lambda lot: (lot["front"], lot["lane"], lot["laneAlong"], lot["z"], lot["x"]))
+    return parcels + lane_lots, lanes
 
 
 # --------------------------------------------------------------------------------------------
@@ -1361,8 +1676,10 @@ class Ground:
     anchor leaves. `leave_out` names layers whose entries are not solids here (the carts' own:
     two carts answer to their spacing instead)."""
 
-    def __init__(self, site, plan, polys, upgrades, wild, margins, tolerance, leave_out=(), frames=None):
+    def __init__(self, site, plan, polys, upgrades, wild, margins, tolerance, leave_out=(), frames=None, lanes=()):
         self.site, self.plan, self.margins, self.tolerance = site, plan, margins, tolerance
+        # Wave 2.4: a lane is a street to everything laid beside it. (label, a, b, box) per leg.
+        self.lanes = [(f"lane {number}", a, b, box_of((a, b))) for number, lane in enumerate(lanes, start=1) for a, b in polyline_legs(lane["points"])]
         # (x, z, rotationY, width, depth) of every parcel, for "stands before a lot's front"
         self.frames = frames
         solids = [(f"parcel {index}", poly, margins["lot"], (PARCEL, index)) for index, poly in enumerate(polys, start=1)]
@@ -1446,6 +1763,10 @@ class Ground:
             for what, a, b, lane_box in lanes:
                 if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
                     yield f"{segment_gap(a, b, body):.2f} from {what}, inside the walker reach (need {need:g})"
+        need = lane_half(site) + margins["solid"]
+        for what, a, b, lane_box in self.lanes:
+            if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
+                yield f"{segment_gap(a, b, body):.2f} from the centreline of {what} (need {need:g})"
         for what, poly, poly_box, margin, tag in self.solids:
             if (tag is not None and tag == skip) or boxes_apart(box, poly_box, margin) or gap(body, poly) >= margin - slack:
                 continue
@@ -1620,7 +1941,7 @@ class LayerBuild:
     margins), its own random stream, and what it has placed so far. Every spot is proved with the
     largest scale its placer allows and then takes a scale from the placer's range, as a cart does."""
 
-    def __init__(self, site, plan, name, parcels, levels, districts, upgrades, wild):
+    def __init__(self, site, plan, name, parcels, levels, districts, upgrades, wild, lanes=()):
         self.site, self.plan, self.name = site, plan, name
         self.cfg = plan[name]
         self.config = upgrade_config(site, name)
@@ -1629,7 +1950,7 @@ class LayerBuild:
         self.polys = [parcel["poly"] for parcel in parcels]
         self.rng = random.Random(f"{plan['seed']}:{name}")
         frames = [(parcel["x"], parcel["z"], parcel["rotationY"]) + site.sizes[parcel["size"]] for parcel in parcels]
-        self.ground = Ground(site, plan, self.polys, upgrades, wild, self.cfg["margins"], 0.0, frames=frames)
+        self.ground = Ground(site, plan, self.polys, upgrades, wild, self.cfg["margins"], 0.0, frames=frames, lanes=lanes)
         self.entries = []
         self.own = {}  # id(placer) -> the points that placer has placed, for its own `spacing`
 
@@ -2046,12 +2367,12 @@ PLACERS = {
 }
 
 
-def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild):
+def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild, lanes=()):
     """One plan-laid layer, in data order: nearest the entrance first. Its placers run in the
     plan's order, each in what the ones before it left. Returns (entries, how many each placer
     laid): a placer that lays nothing is a promise the plan does not keep, and nothing in the data
     says which placer an entry came from."""
-    build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild)
+    build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild, lanes)
     for placer in build.cfg["placers"]:
         PLACERS[placer["kind"]](build, placer)
     build.entries.sort(key=lambda e: entry_order(site, e))
@@ -2506,6 +2827,7 @@ def generate_fields(site, plan):
 # --------------------------------------------------------------------------------------------
 
 PARCEL_KEYS = ("x", "z", "rotationY", "size", "stretch", "along", "row", "front")
+LANE_KEYS = ("lane", "laneAlong")  # only on a lot that fronts a lane (wave 2.4)
 ENTRY_KEYS = ("x", "z", "rotationY", "scale", "variant", "anchor", "stretch", "parcel")
 
 
@@ -2514,7 +2836,7 @@ def build(era_name, city=None, era=None, network=None):
     how many entries each of its placers laid."""
     site = Site(era_name, city, era, network)
     plan = load_plan(era_name)
-    parcels = generate_parcels(site, plan)
+    parcels, lanes = generate_lots(site, plan)
     levels, districts = full_build_states(site, parcels)
     upgrades = generate_upgrades(site, plan, parcels, levels)
     wild = generate_wild(site, plan)
@@ -2524,13 +2846,15 @@ def build(era_name, city=None, era=None, network=None):
     laid = {}
     for name in plan_layers(plan):
         if upgrade_config(site, name) and plan.get(name):
-            upgrades[name], laid[name] = generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild)
-    doc = {
-        "version": FORMAT_VERSION,
-        "parcels": [{key: p[key] for key in PARCEL_KEYS} for p in parcels],
+            upgrades[name], laid[name] = generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild, lanes)
+    doc = {"version": FORMAT_VERSION}
+    if lanes:
+        doc["lanes"] = lanes
+    doc.update({
+        "parcels": [{key: p[key] for key in PARCEL_KEYS + LANE_KEYS if key in p} for p in parcels],
         "upgrades": {name: [{key: e[key] for key in ENTRY_KEYS if key in e} for e in entries] for name, entries in upgrades.items()},
         "wild": wild,
-    }
+    })
     return doc, [t["kind"] for t in upgrades.get("trees", [])], laid
 
 
@@ -2565,7 +2889,10 @@ def render(doc):
     def entries(items, indent):
         return [f"{indent}{entry_text(item)}{',' if i < len(items) - 1 else ''}" for i, item in enumerate(items)]
 
-    lines = ["{", f'  "version": {doc["version"]},', '  "parcels": [']
+    lines = ["{", f'  "version": {doc["version"]},']
+    if doc.get("lanes"):
+        lines += ['  "lanes": ['] + entries(doc["lanes"], "    ") + ["  ],"]
+    lines.append('  "parcels": [')
     lines += entries(doc.get("parcels", []), "    ")
     lines += ["  ],", '  "upgrades": {']
     upgrades = doc.get("upgrades", {})
@@ -2706,6 +3033,8 @@ def parcel_messages(site, plan, parcels):
             if not (isinstance(front, int) and 1 <= front < index and parcels[front - 1]["row"] == row - 1):
                 messages.append(f"{label}: front {front!r} is not an earlier row-{row - 1} parcel")
                 continue
+            if "lane" in parcel:
+                continue  # its address and its front are its lane's: lane_messages
             ahead = parcels[front - 1]
             if ahead["stretch"] != parcel["stretch"] or abs(ahead["along"] - parcel["along"]) > EPS:
                 messages.append(f"{label}: must repeat parcel {front}'s stretch and along")
@@ -2775,6 +3104,166 @@ def parcel_messages(site, plan, parcels):
     return messages
 
 
+def stretch_polyline(stretch_id):
+    """The street (0-based polyline) of a piece id `L<polyline>_<rank>`."""
+    return int(stretch_id[1:].split("_")[0]) - 1
+
+
+def lane_messages(site, plan, doc):
+    """INTERFACES "Wave 2.4": every lane and every lot on one. A plan with a `parcels.lanes` block
+    also has no lot behind the street frontage without a lane."""
+    messages = []
+    lanes = doc.get("lanes") or []
+    parcels = doc.get("parcels", [])
+    lane_rules = plan["parcels"].get("lanes")
+    half = lane_half(site)
+    polys = [rect((q["x"], q["z"]), site.sizes.get(q["size"], (0.0, 0.0)), q["rotationY"]) for q in parcels]
+    solids = [(f"the {slot_id} extents", poly) for slot_id, (poly, _) in site.landmark_polys.items()]
+    solids += [(f"the {slot_id} pad", poly) for slot_id, poly in site.pad_polys.items()]
+    solids += [(f"the {slot_id} marker", poly) for slot_id, poly in site.marker_polys.items()]
+    solids += [(f"plaza {index}", poly) for index, poly in enumerate(site.plaza_polys, start=1)]
+    solids += [(f"lamp {index}", poly) for index, poly in enumerate(site.lamps, start=1)]
+    solids += [(f"signal {index}", poly) for index, poly in enumerate(site.signals, start=1)]
+    solids.append(("the Sign", site.era.sign_poly))
+    degree = {}
+    for index in site.drawn:
+        for node in (site.network.stretches[index]["from"], site.network.stretches[index]["to"]):
+            degree[node] = degree.get(node, 0) + 1
+    crossings = [site.network.nodes[node] for node, count in sorted(degree.items()) if count >= 3]
+    crossing_need = site.width / 2 + half + CHECK_LANE_CROSSING
+    street_need = site.street_strip + half
+    spur_need = site.spur_strip + half
+    sound = {}  # lane index -> (points, length) for every lane the lots can be judged against
+    for k, lane in enumerate(lanes, start=1):
+        label = f"lane {k}"
+        points = lane.get("points")
+        well_formed = (
+            isinstance(points, list)
+            and LANE_POINTS[0] <= len(points) <= LANE_POINTS[1]
+            and all(isinstance(point, list) and len(point) == 2 and all(isinstance(v, (int, float)) and math.isfinite(v) for v in point) for point in points)
+        )
+        if not well_formed:
+            messages.append(f"{label}: `points` must be {LANE_POINTS[0]} to {LANE_POINTS[1]} pairs of finite numbers")
+            continue
+        points = [tuple(point) for point in points]
+        legs = polyline_legs(points)
+        if any(math.dist(a, b) < streetplan.MIN_LENGTH for a, b in legs):
+            messages.append(f"{label}: two of its points coincide")
+            continue
+        sound[k] = (points, polyline_length(points))
+        # The mouth: on a drawn street, where its address says, away from every crossing.
+        stretch = site.stretch_by_id.get(lane.get("stretch"))
+        along = lane.get("along")
+        if stretch is None or stretch not in site.drawn:
+            messages.append(f"{label}: stretch {lane.get('stretch')!r} is not a drawn piece of this network")
+        elif not (isinstance(along, (int, float)) and -EPS <= along <= site.network.stretches[stretch]["length"] + EPS):
+            messages.append(f"{label}: along {along!r} is outside its stretch")
+        else:
+            st = site.network.stretches[stretch]
+            t = along / st["length"] if st["length"] > 0 else 0.0
+            address = (st["a"][0] + (st["b"][0] - st["a"][0]) * t, st["a"][1] + (st["b"][1] - st["a"][1]) * t)
+            if math.dist(address, points[0]) > CHECK_LANE_ALONG:
+                messages.append(f"{label}: its mouth {streetplan.fmt(points[0])} is not on {lane['stretch']} at along {number_text(along)}")
+        for crossing in crossings:
+            d = math.dist(points[0], crossing)
+            if d < crossing_need - EPS:
+                messages.append(f"{label}: its mouth is {d:.2f} from the crossing at {streetplan.fmt(crossing)} (need {crossing_need:g})")
+        # Its body.
+        for leg, (a, b) in enumerate(legs, start=1):
+            body = streetplan.band(a, b, half)
+            if any(abs(v[0]) > site.era.half_x - CHECK_EDGE + EPS or abs(v[1]) > site.era.half_z - CHECK_EDGE + EPS for v in body):
+                messages.append(f"{label}: leg {leg} comes within {CHECK_EDGE} of the plot edge")
+            box = box_of(body)
+            for what, poly in solids:
+                if not boxes_apart(box, box_of(poly), CHECK_LANE) and gap(body, poly) < CHECK_LANE - EPS:
+                    messages.append(f"{label}: leg {leg} is {gap(body, poly):.2f} from {what} (need {CHECK_LANE})")
+            # Past its mouth a lane keeps out of every street's strip and every landmark path's:
+            # the first leg from where it has left its own street, every later leg whole. (At the
+            # mouth itself a path may join the street from the other side.)
+            start = a
+            if leg == 1:
+                lead = street_need * 1.1
+                if math.dist(a, b) <= lead:
+                    messages.append(f"{label}: its first leg is {math.dist(a, b):.2f} long, too short to leave its street (need over {lead:.2f})")
+                    start = None
+                else:
+                    start = polyline_at([a, b], lead)
+            if start is not None:
+                for polyline, _segment, p, q in site.street_segments:
+                    d = streetplan.segment_polygon_distance(p, q, [start, b])
+                    if d < street_need - EPS:
+                        messages.append(f"{label}: leg {leg} is {d:.2f} from street {polyline + 1} past its mouth (need {street_need:g})")
+                for slot_id, p, q in site.spur_segments:
+                    d = streetplan.segment_polygon_distance(p, q, [start, b])
+                    if d < spur_need - EPS:
+                        messages.append(f"{label}: leg {leg} is {d:.2f} from the {slot_id} path (its strip and the lane's body need {spur_need:g})")
+            for index, poly in enumerate(polys, start=1):
+                if not boxes_apart(box, box_of(poly), 0.0) and segment_gap(a, b, poly) < half - EPS:
+                    messages.append(f"{label}: parcel {index} stands {segment_gap(a, b, poly):.2f} from its centreline, on the lane (need {half:g})")
+        count = sum(1 for parcel in parcels if parcel.get("lane") == k)
+        if count < CHECK_LANE_LOTS:
+            messages.append(f"{label}: {count} lot(s) front it, need at least {CHECK_LANE_LOTS}")
+    # Two lanes keep apart unless they meet: end to end, where their last legs touch, or mouth to
+    # mouth, where they leave one point of a street by its two sides and make a crossing.
+    apart = 2 * half + CHECK_LANE_APART
+    numbers = sorted(sound)
+    for i, first in enumerate(numbers):
+        for second in numbers[i + 1 :]:
+            one, two = sound[first][0], sound[second][0]
+            ends = math.dist(one[-1], two[-1]) <= EPS
+            mouths = math.dist(one[0], two[0]) <= EPS
+            for k, (a, b) in enumerate(polyline_legs(one)):
+                for m, (c, d) in enumerate(polyline_legs(two)):
+                    if (ends and k == len(one) - 2 and m == len(two) - 2) or (mouths and k == 0 and m == 0):
+                        continue
+                    distance = streetplan.segment_polygon_distance(a, b, [c, d])
+                    if distance < apart - EPS:
+                        messages.append(f"lanes {first} and {second}: {distance:.2f} apart (need {apart:g}, unless they meet end to end)")
+    # The lots.
+    for index, parcel in enumerate(parcels, start=1):
+        label = f"parcel {index} ({number(parcel['x'])}, {number(parcel['z'])})"
+        if "lane" not in parcel and "laneAlong" not in parcel:
+            if lane_rules is not None and parcel.get("row") != 1:
+                messages.append(f"{label}: a row-{parcel.get('row')} lot without a lane, in a plan that lays lanes")
+            continue
+        lane = parcel.get("lane")
+        if lane not in sound:
+            messages.append(f"{label}: lane {lane!r} is not a lane of this data")
+            continue
+        points, length = sound[lane]
+        if parcel.get("row") == 1:
+            messages.append(f"{label}: a row-1 lot fronts its street, not a lane")
+        record = lanes[lane - 1]
+        if parcel.get("stretch") != record.get("stretch") or not isinstance(parcel.get("along"), (int, float)) or abs(parcel["along"] - record.get("along", math.inf)) > EPS:
+            messages.append(f"{label}: must repeat lane {lane}'s stretch and along")
+        if record.get("stretch") in site.stretch_by_id:
+            expected = mouth_front(site, parcels, points, stretch_polyline(record["stretch"]))
+            if parcel.get("front") != expected:
+                messages.append(f"{label}: front {parcel.get('front')!r} is not the street lot nearest lane {lane}'s mouth (parcel {expected})")
+        size = site.sizes.get(parcel["size"])
+        along = parcel.get("laneAlong")
+        if size is None or not (isinstance(along, (int, float)) and math.isfinite(along)):
+            messages.append(f"{label}: laneAlong {along!r} is not a number")
+            continue
+        if not -EPS <= along <= length + EPS:
+            messages.append(f"{label}: laneAlong {number(along)} is outside lane {lane}'s length {length:.2f}")
+        fc = front_centre(parcel["x"], parcel["z"], parcel["rotationY"], size[1])
+        distance, arc = polyline_foot(points, fc)
+        if abs(arc - along) > CHECK_LANE_ALONG + EPS:
+            messages.append(f"{label}: laneAlong {number(along)} is not the foot of its front on lane {lane} ({arc:.2f})")
+        if lane_rules is not None and abs(distance - lane_rules["setback"]) > CHECK_LANE_FRONT + EPS:
+            messages.append(f"{label}: front {distance:.2f} from lane {lane}, not within {CHECK_LANE_FRONT} of the setback line {lane_rules['setback']:g}")
+        foot = polyline_at(points, arc)
+        face = streetplan.facing(parcel["rotationY"])
+        if face[0] * (foot[0] - fc[0]) + face[1] * (foot[1] - fc[1]) < -EPS:
+            messages.append(f"{label}: faces away from lane {lane}")
+    return messages
+
+
+def number_text(value):
+    return number(value) if isinstance(value, (int, float)) else repr(value)
+
+
 def upgrade_messages(site, plan, doc):
     """INTERFACES "Wave 1c, round 3": every layer's schema, anchors, clearances, budget and floor."""
     messages = []
@@ -2793,7 +3282,7 @@ def upgrade_messages(site, plan, doc):
     laid_ground = None
     if any(upgrades.get(name) for name in laid):
         frames = [(q["x"], q["z"], q["rotationY"]) + tuple(site.sizes.get(q["size"], (0.0, 0.0))) for q in parcels]
-        laid_ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS, frames=frames)
+        laid_ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS, frames=frames, lanes=doc.get("lanes") or ())
     carts = upgrades.get(CARTS, [])
     cart_size = cart_extents(site, plan) if carts else None
     ground = None
@@ -3231,6 +3720,8 @@ def check_document(era_name, doc, compare_committed=True, city=None, era=None, n
             messages.append(f"{path.relative_to(REPO_ROOT)} differs from a fresh build; run `py tools/fabric.py build {era_name}`")
         doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else doc
     messages += parcel_messages(site, plan, doc.get("parcels", []))
+    if doc.get("lanes") or plan["parcels"].get("lanes") or any("lane" in parcel for parcel in doc.get("parcels", [])):
+        messages += lane_messages(site, plan, doc)
     if site.marker_offset is not None:
         messages += marker_messages(site)
     messages += upgrade_messages(site, plan, doc)
@@ -3281,6 +3772,12 @@ def summary(era_name, doc):
         f"{len(clumps)} clumps ({sum(1 for c in clumps if not c['skirt'])} on the plot, "
         f"{sum(1 for c in clumps if c['skirt'])} skirt), {len(singles)} singles "
         f"({sum(1 for s in singles if not s['skirt'])} on the plot, {sum(1 for s in singles if s['skirt'])} skirt)"
+        + (
+            f"; {len(doc['lanes'])} lanes ({sum(polyline_length(lane['points']) for lane in doc['lanes']):.0f} studs, "
+            f"{sum(1 for p in parcels if 'lane' in p)} lots)"
+            if doc.get("lanes")
+            else ""
+        )
         + "".join(
             f"; {name} {len(entries)} (stretch {sum(1 for e in entries if e.get('anchor') == 'stretch')}, "
             f"parcel {sum(1 for e in entries if e.get('anchor') == 'parcel')})"

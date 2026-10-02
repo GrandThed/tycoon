@@ -218,6 +218,7 @@ UPGRADE_DOT = 0.7  # studs, preview only
 # Wave 2.2: a plan-laid layer is drawn as the ground each entry stands on, one colour per layer in
 # the order the plan lays them.
 LAID_COLOURS = ((40, 60, 160), (220, 30, 30), (240, 150, 20), (110, 50, 150), (0, 170, 190), (90, 90, 90))
+LANE_COLOURS = ((70, 62, 54), (128, 118, 104))  # wave 2.4: a back lane's rim and fill, preview only
 
 # --------------------------------------------------------------------------
 # Luau subset parser (tables, numbers, strings, booleans, Vector3/Color3 constructors)
@@ -3251,6 +3252,8 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
         entries.append((PARCEL_ROW_COLOURS[1], "fabric parcel, row 1 (index; tick = front)"))
         entries.append((PARCEL_ROW_COLOURS[2], "fabric parcel, row 2"))
         entries.append((WILD_COLOURS["clump"], "wild: clump quarter / single"))
+        if fabric_doc.get("lanes"):
+            entries.append((LANE_COLOURS[1], "back lane (row-2 lots front it)"))
         layers = fabric_doc.get("upgrades") or {}
         for layer, colour, text in (
             ("trees", TOWN_TREE_COLOURS[3], "town tree (blue street, orange orchard, green)"),
@@ -3343,6 +3346,15 @@ def draw_fabric(era, network, doc, canvas, px, poly, font):
     sizes = era.dressing.get("fabric", {}).get("sizes", {})
     laid = fabric_module().layer_outlines(era.name, doc, era.city, era, network)
     laid_names = list(dict.fromkeys(layer for layer, _, _ in laid))
+    # Wave 2.4: back lanes, each as its rims and its fill, whole (the game draws one as far as its
+    # farthest lot with a building site).
+    lane_look = era.dressing.get("fabric", {}).get("lanes") or {}
+    lane_width, lane_rim = float(lane_look.get("width", 0.0)), float(lane_look.get("rim", 0.0))
+    for lane in doc.get("lanes") or []:
+        legs = list(polyline_segments([tuple(point) for point in lane["points"]]))
+        for half, colour in ((lane_width / 2 + lane_rim, LANE_COLOURS[0]), (lane_width / 2, LANE_COLOURS[1])):
+            for a, b in legs:
+                poly(band(a, b, half), fill=colour + (235,))
     for item in doc.get("wild", []):
         points = item.get("quads") if item["kind"] == "clump" else [(item["x"], item["z"])]
         radius = WILD_RADIUS[item["kind"]] * PX_PER_STUD

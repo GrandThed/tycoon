@@ -11,12 +11,24 @@
     "endMargin": 0.2,
     "setbackJitter": 0.0,
     "turnJitter": 0.0,
-    "rows": 3,
     "minLevel": 2,
-    "infill": {
+    "lanes": {
+      "setback": 2.2,
+      "clear": 2.15,
+      "street": 4.05,
+      "gap": 0.3,
       "step": 0.3,
-      "sizes": ["small"],
-      "rows": { "2": [11.1, 26.5], "3": [30.9, 44.2] }
+      "overhang": 1.4,
+      "mediumShare": 0.3,
+      "minLots": 3,
+      "lines": [
+        { "points": [[-49.8, -23.66], [-49.8, -47.6], [-27, -47.6], [-15.2, -39.5], [-15.2, -25.9]], "through": true },
+        { "points": [[28.2, -19.9], [28.2, -47.6], [47, -47.6], [47, -15.9]], "through": true },
+        { "points": [[-44.5, -24.41], [-44.5, 2.9], [-25, 2.9]] },
+        { "points": [[21.9, 24.88], [21.9, 11.3], [57, 11.3]] },
+        { "points": [[-44, 17.6], [-44, 48], [-56.5, 48]] },
+        { "points": [[21.9, 24.88], [21.9, 47.5], [0.5, 47.5]] }
+      ]
     },
     "edge": 1.0,
     "landmark": 0.5,
@@ -26,13 +38,12 @@
     "sign": 1.0,
     "marker": 0.5,
     "street": 5.1,
-    "spur": 2.55,
-    "keepClear": [{ "x": -44.8, "z": 31.3, "size": [8.7, 2.2], "rotationY": 0 }]
+    "spur": 2.55
   },
   "require": {
-    "parcels": 90,
-    "houses": 90,
-    "medium": 4,
+    "parcels": 74,
+    "houses": 74,
+    "medium": 3,
     "parked": 10,
     "hydrants": 20,
     "busStops": 4,
@@ -73,11 +84,11 @@
   "busStops": {
     "scale": 1.0,
     "spacing": 24.0,
-    "minStreets": 3,
+    "minStreets": 2,
     "stretchFacing": "street",
     "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
     "placers": [
-      { "kind": "kerb", "mode": "gaps", "variants": [1], "facing": "street", "slack": 0.05, "step": 0.5, "spread": true, "count": 6 }
+      { "kind": "kerb", "mode": "gaps", "variants": [1], "facing": "street", "slack": 0.05, "step": 0.1, "spread": true, "count": 6 }
     ]
   },
   "billboards": {
