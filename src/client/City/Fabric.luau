@@ -52,6 +52,7 @@ local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local Scatter = require(script.Parent:WaitForChild("Scatter"))
 local Dust = require(script.Parent:WaitForChild("Dust"))
 local Ambient = require(script.Parent:WaitForChild("Ambient"))
+local WorldBlock = require(script.Parent:WaitForChild("WorldBlock"))
 
 -- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data").
 local SMALL = "small"
@@ -1864,6 +1865,31 @@ local function wildGround(handle: Handle, entry: Types.FabricWild): number
 	return if entry.skirt == true then -handle.context.groundDrop else 0
 end
 
+-- M13: a skirt entry standing in the Valley's river (WorldBlock, by world position) is absent, for
+-- the woods and the birds alike: a single by its point, a clump by its centre or by the trees of
+-- any quarter (its `quads` at quarterRadius, as clearing measures them), and then as a whole. It
+-- still holds its place in the wild budgets, which are positional.
+local function inRiver(handle: Handle, entry: Types.FabricWild): boolean
+	if entry.skirt ~= true then
+		return false
+	end
+	local frame = handle.context.plotFrame
+	local world = frame:PointToWorldSpace(Vector3.new(entry.x, 0, entry.z))
+	local blocked = WorldBlock.Blocked(world.X, world.Z)
+	local quads = entry.quads
+	local wildConfig = handle.wildConfig
+	if not blocked and entry.kind == CLUMP and type(quads) == "table" and wildConfig ~= nil then
+		for quarter = 1, QUARTERS do
+			local point = quads[quarter]
+			if type(point) == "table" and finite(point[1]) and finite(point[2]) then
+				world = frame:PointToWorldSpace(Vector3.new(point[1], 0, point[2]))
+				blocked = blocked or WorldBlock.Blocked(world.X, world.Z, wildConfig.quarterRadius)
+			end
+		end
+	end
+	return blocked
+end
+
 local function wildFrame(handle: Handle, entry: Types.FabricWild, turn: number): CFrame
 	return CFrame.new(entry.x, wildGround(handle, entry), entry.z)
 		* CFrame.Angles(0, math.rad(entry.rotationY + turn), 0)
@@ -1979,7 +2005,7 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 		local inBudget = if input.near
 			then handle.wildNear[index] == true
 			else handle.wildFar[index] == true
-		local show = kept and inBudget
+		local show = kept and inBudget and not inRiver(handle, entry)
 		local clump = entry.kind == CLUMP
 		local wantWhole = clump and show and bits == 0
 		local wantQuarters = clump and show and input.near and bits ~= 0 and bits ~= ALL_QUARTERS
@@ -3052,6 +3078,7 @@ function Fabric.SurvivingClumps(handle: Handle): { Vector3 }
 			and entry.kind == CLUMP
 			and handle.wildNear[index]
 			and (handle.cleared[index] or 0) ~= ALL_QUARTERS
+			and not inRiver(handle, entry)
 		then
 			table.insert(if entry.skirt then skirt else centres, Vector3.new(entry.x, 0, entry.z))
 		end

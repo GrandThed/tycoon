@@ -1,5 +1,6 @@
 --!strict
--- Owns world geometry and purchases: hub + plot ring at Init, plot claim/release, buy pads,
+-- Owns world geometry and purchases: plot ring at Init (ground, hub and the static landscape
+-- come from World/Landscape, called from buildWorld), plot claim/release, buy pads,
 -- building spawns (template at the level's stage → placeholder, M7), stage swaps on base
 -- milestones, the VIP texture swap, level-up prompts, the M2 era actions
 -- (Advance Era / Rebirth with plot teardown + rebuild), the M3 plot sign, and the M3 FxEvent
@@ -20,6 +21,7 @@ local Economy = require(sharedFolder:WaitForChild("Economy"))
 local Format = require(sharedFolder:WaitForChild("Format"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local CityGrowth = require(sharedFolder:WaitForChild("CityGrowth"))
+local WorldPlan = require(sharedFolder:WaitForChild("WorldPlan"))
 local AnalyticsService = require(script.Parent:WaitForChild("AnalyticsService"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
@@ -1324,37 +1326,23 @@ local function buildWorld(): ()
 	end
 	local gameConfig = Catalog.GetGameConfig()
 	local plotSize = layout.plotSize
-	local plotCount = gameConfig.plotCount
 
-	-- Plots are radial rectangles, so neighbours converge toward the hub and their inner
-	-- corners collide first. Size the ring so each inner corner stays plotMargin / 2 clear of
-	-- the radial line splitting two plots; coplanar overlapping bases z-fight at the seam.
-	local halfSector = math.pi / plotCount
-	local ringRadius = math.max(
-		plotSize.Z / 2
-			+ (plotSize.X / 2 * math.cos(halfSector) + gameConfig.plotMargin / 2)
-				/ math.sin(halfSector),
-		gameConfig.hubRadius + gameConfig.plotMargin + plotSize.Z / 2
+	-- The ring maths is shared (M13): the landscape, later waves and the tools lay things out
+	-- from the same ring the plots stand on.
+	local ring = WorldPlan.Ring(
+		gameConfig.plotCount,
+		gameConfig.plotMargin,
+		gameConfig.hubRadius,
+		plotSize.X,
+		plotSize.Z
 	)
 
-	-- Ground plane so players can walk from the hub to any plot; bases rest on its top and all
-	-- walkable tops sit at Y = 0 (attachment Y in layouts is a ground-level offset).
-	local groundSide = 2 * (ringRadius + plotSize.Z)
-	local ground = Instance.new("Part")
-	ground.Name = "Ground"
-	ground.Anchored = true
-	ground.Size = Vector3.new(groundSide, plotSize.Y, groundSide)
-	ground.CFrame = CFrame.new(0, -plotSize.Y - plotSize.Y / 2, 0)
-	ground.Parent = Workspace
-
-	local hub = Instance.new("Part")
-	hub.Name = "Hub"
-	hub.Shape = Enum.PartType.Cylinder
-	hub.Anchored = true
-	hub.Size = Vector3.new(plotSize.Y, gameConfig.hubRadius * 2, gameConfig.hubRadius * 2)
-	-- A cylinder's axis is X; stand it upright so the flat face is the floor.
-	hub.CFrame = CFrame.new(0, -plotSize.Y / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
-	hub.Parent = Workspace
+	-- Ground, hub and everything static around the plots. All walkable tops sit at Y = 0
+	-- (attachment Y in layouts is a ground-level offset); Spawn and the plots stay here.
+	-- Required here, not at module scope: Server/World exists only in the hub place, and the
+	-- combat place mounts this folder, so a module-scope wait would hang any require from there.
+	local Landscape = require(script.Parent.Parent.World.Landscape)
+	Landscape.Build(ring, layout, gameConfig)
 
 	local spawnLocation = Instance.new("SpawnLocation")
 	spawnLocation.Name = "Spawn"
@@ -1367,10 +1355,13 @@ local function buildWorld(): ()
 	plotsFolder.Name = "Plots"
 	plotsFolder.Parent = Workspace
 
-	for index = 1, plotCount do
-		local angle = (index - 1) / plotCount * 2 * math.pi
-		local position =
-			Vector3.new(math.cos(angle) * ringRadius, -plotSize.Y / 2, math.sin(angle) * ringRadius)
+	for index = 1, ring.plotCount do
+		local angle = WorldPlan.PlotAngle(ring, index)
+		local position = Vector3.new(
+			math.cos(angle) * ring.radius,
+			-plotSize.Y / 2,
+			math.sin(angle) * ring.radius
+		)
 
 		local plotFolder = Instance.new("Folder")
 		plotFolder.Name = "Plot_" .. index
@@ -1428,6 +1419,8 @@ local function buildWorld(): ()
 		}
 		-- Before parenting, so clients never observe a plot without its attributes.
 		publishLobbyAttributes(record)
+		-- After the attributes: the Valley's per-plot meshes take their colour from EraName.
+		Landscape.AttachPlot(plotFolder, base)
 		plotFolder.Parent = plotsFolder
 		table.insert(plots, record)
 	end

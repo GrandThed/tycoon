@@ -1,6 +1,6 @@
 """Read, shape and write src/shared/Config/Assets.json (schema v1, INTERFACES.md "M7 contracts";
 v2 adds the city-dressing `props` block, "M9 contracts"; v3 adds the baked-path `paths` block,
-"Wave 1d — baked paths").
+"Wave 1d — baked paths"; v4 adds the landscape `world` block, "M13 Wave 2 — the Valley meshes").
 
 Shared by upload_models.py (writes modelAssetId / vipSwatchAssetId), harvest.py (writes meshId,
 imageId, size, offset, vipImageId) and gen_templates.py (reads everything). Every writer goes
@@ -35,6 +35,14 @@ PATH_LAYERS = ("fill", "rim")
 # Surface variants (INTERFACES "Wave 1e"): extra fill/rim image pairs the client swaps onto the
 # same baked meshes, so they live beside the era's default pair and never touch the piece list.
 PATH_VARIANTS_KEY = "variants"
+# A file only becomes v4 once it carries landscape meshes, so every earlier run keeps its bytes.
+WORLD_SCHEMA_VERSION = 4
+WORLD_KEY = "world"
+# How a landscape mesh is coloured (INTERFACES "M13 Wave 2 - The generator"): `palette` meshes
+# share the set's one palette image; a `flat` mesh has one colour and no texture.
+WORLD_LOOK_PALETTE = "palette"
+WORLD_LOOK_FLAT = "flat"
+WORLD_LOOKS = (WORLD_LOOK_PALETTE, WORLD_LOOK_FLAT)
 SINGLE_STAGE_TYPES = ("unlock", "decor", "monument")
 
 _NUMBER_LIST = re.compile(r"\[\s*((?:-?\d+(?:\.\d+)?(?:e-?\d+)?\s*,\s*)*-?\d+(?:\.\d+)?(?:e-?\d+)?)\s*\]")
@@ -198,6 +206,52 @@ def path_piece_harvested(piece: dict) -> bool:
     return all(int((piece.get(layer) or {}).get("meshId", 0)) != 0 for layer in PATH_LAYERS)
 
 
+def ensure_world_set(assets: dict, set_name: str, plot_count: int, plan_hash: str, triangles: int = 0) -> dict:
+    """Pre-list one landscape set (INTERFACES "M13 Wave 2 - Pipeline") without touching ids; marks
+    the file v4. `plotCount` and `planHash` say which ring the meshes were baked for, so a reader
+    can tell a stale upload from the committed file alone (assets/build is gitignored)."""
+    assets["version"] = max(int(assets.get("version", SCHEMA_VERSION)), WORLD_SCHEMA_VERSION)
+    entry = assets.setdefault(WORLD_KEY, {}).setdefault(set_name, {})
+    entry["plotCount"] = int(plot_count)
+    entry["planHash"] = str(plan_hash)
+    entry["triangles"] = int(triangles or entry.get("triangles", 0))
+    entry.setdefault("paletteAssetId", 0)
+    entry.setdefault("paletteImageId", 0)
+    entry.setdefault("paletteSha256", "")
+    entry.setdefault("meshes", {})
+    return entry
+
+
+def ensure_world_mesh(
+    assets: dict,
+    set_name: str,
+    mesh_name: str,
+    triangles: int,
+    look: str,
+    color: list | None = None,
+    transparency: float | None = None,
+) -> dict:
+    """Pre-list one landscape mesh without touching ids. The look, and a flat mesh's colour and
+    transparency, are the bake record's and are refreshed on every run: they are how the template
+    is drawn, not something an upload or a harvest decides."""
+    mesh = assets[WORLD_KEY][set_name]["meshes"].setdefault(mesh_name, {})
+    for key, default in empty_path_mesh().items():
+        mesh.setdefault(key, default)
+    mesh["triangles"] = int(triangles)
+    mesh["look"] = look
+    if look == WORLD_LOOK_FLAT:
+        mesh["color"] = [int(v) for v in (color or [255, 255, 255])]
+        mesh["transparency"] = float(transparency or 0)
+    else:
+        mesh.pop("color", None)
+        mesh.pop("transparency", None)
+    return mesh
+
+
+def world_mesh_harvested(mesh: dict) -> bool:
+    return int((mesh or {}).get("meshId", 0)) != 0
+
+
 def stage_harvested(stage: dict) -> bool:
     parts = stage.get("parts") or []
     return bool(parts) and all(int(p.get("meshId", 0)) != 0 for p in parts)
@@ -243,6 +297,8 @@ def render_assets(assets: dict) -> str:
         ordered[PROPS_KEY] = {era: {name: props[era][name] for name in sorted(props[era])} for era in sorted(props)}
     if PATHS_KEY in assets:
         ordered[PATHS_KEY] = {era: render_path_era(assets[PATHS_KEY][era]) for era in sorted(assets[PATHS_KEY])}
+    if WORLD_KEY in assets:
+        ordered[WORLD_KEY] = {name: render_world_set(assets[WORLD_KEY][name]) for name in sorted(assets[WORLD_KEY])}
     text = json.dumps(ordered, indent=2, ensure_ascii=False)
     text = _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
     return text + "\n"
@@ -278,6 +334,37 @@ def render_path_era(entry: dict) -> dict:
         }
         for piece_id in sorted(pieces)
     }
+    return out
+
+
+def render_world_set(entry: dict) -> dict:
+    """Fixed key order for one landscape set (INTERFACES "M13 Wave 2 - Pipeline"). `color` and
+    `transparency` exist on flat meshes only, so a palette mesh never carries a colour nobody uses."""
+    out: dict = {
+        "plotCount": int(entry.get("plotCount", 0)),
+        "planHash": str(entry.get("planHash", "")),
+        "triangles": int(entry.get("triangles", 0)),
+        "paletteAssetId": int(entry.get("paletteAssetId", 0)),
+        "paletteImageId": int(entry.get("paletteImageId", 0)),
+        "paletteSha256": str(entry.get("paletteSha256", "")),
+        "meshes": {},
+    }
+    meshes = entry.get("meshes") or {}
+    for name in sorted(meshes):
+        mesh = meshes[name] or {}
+        row: dict = {
+            "assetId": int(mesh.get("assetId", 0)),
+            "meshId": int(mesh.get("meshId", 0)),
+            "size": list(mesh.get("size") or [0, 0, 0]),
+            "offset": list(mesh.get("offset") or [0, 0, 0]),
+            "sha256": str(mesh.get("sha256", "")),
+            "triangles": int(mesh.get("triangles", 0)),
+            "look": str(mesh.get("look", WORLD_LOOK_PALETTE)),
+        }
+        if row["look"] == WORLD_LOOK_FLAT:
+            row["color"] = [int(v) for v in (mesh.get("color") or [255, 255, 255])]
+            row["transparency"] = mesh.get("transparency", 0)
+        out["meshes"][name] = row
     return out
 
 

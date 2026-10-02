@@ -6224,3 +6224,593 @@ driveway.
 - `py tools/paths/bake.py --era Boomtown --list` exits 2 before the bake (agrees, 16 new meshes
   missing) and 0 after the harvest; Village's stays 0 and its meshes byte-identical.
 - In Studio: lanes look like the streets and driveways from every distance, with no flicker.
+
+---
+
+# M13 contracts — The Valley (wave 1: sky, ground, hub, roads)
+
+Ben, 2026-10-01: "can you imagine what the environment outside the city squares could look like?
+low poly mountains, rivers and such". Three landscapes were rendered around the real plots
+(`assets/research/2026-10-01-worldmock/`, sheets in `out/`); Ben chose **A, the Valley** ("i love
+A valley"). M13 is built in the worktree `C:\Users\benja\Desktop\tycoon-m13` on branch
+`m13-valley`. The M12 Boomtown session works in `tycoon-m12` at the same time: never touch it,
+and announce every upload or harvest to it first.
+
+Ben's rulings:
+
+1. The Valley: a meadow basin ringed by snow-capped low-poly mountains, forest on the foothills,
+   a waterfall, a river through the ring and a small lake. The Island and the Lake are closed.
+2. Three waves, each one a Studio look:
+   - **Wave 1 (this section):** sky, haze, green ground, hub and dirt roads. Parts and Lighting
+     only, **no uploads**.
+   - **Wave 2:** mountains, foothills, forest and waterfall as a generated kit (one upload, one
+     harvest paste), an invisible wall at the foothills, the ground ramped up to the plot edges,
+     era aprons.
+   - **Wave 3:** river, lake and bridges.
+3. **The river is shallow and wade-through, with solid wooden bridges** (wave 3). Bridges are
+   server geometry that collides. That is a new category next to the M9 rule "no dressing part
+   collides", not a change to it: client dressing still never collides.
+
+The reference for looks is the mock (`wm_land.py`, and the `step1_*` renders for this wave).
+Where this contract and the mock differ, the contract wins.
+
+## Principles
+
+- **Static and server-built.** The landscape is the same for every player and never changes with
+  game state, so the server builds it once at boot, next to the plots. No remote, attribute,
+  profile, economy or client change in wave 1.
+- **Derived from the ring, never hand-placed.** Every position comes from `Game.json`
+  (`plotCount`, `plotMargin`, `hubRadius`) and the layout's `plotSize`. `plotCount` is 10 on
+  `main` and 6 on the unmerged `m11-unlocks`; both must come out right with no code change.
+- **Levels are frozen.** Plot tops and the hub top are at Y = 0. The ground top is at
+  Y = −`plotSize.Y` (−1). The client (`CityDressingController` `groundDrop`), `tools/cityfabric.py`
+  and `tools/testfit/plotrender.py` all assume that level, and Village woods stand on the world
+  ground up to about 19 studs past each plot's sides and back. Nothing in M13 may raise, lower
+  or cover the ground inside that band without changing those three together.
+- **Everything degrades.** Without `World.json` the world is built exactly as before M13: the
+  default-grey `Ground` square and `Hub`, no roads, and Lighting untouched. A missing block in the
+  file switches that one feature off. A bad material or colour warns once and falls back to the
+  Part default. Nothing raises an Output error.
+- **Every number in config.** Colours, materials, sizes and Lighting values live in `World.json`.
+  Code holds only derived geometry.
+- **Never two visible coplanar faces.** New parts sink into or stand proud of their neighbours.
+
+## `World.json` — schema v1 (`src/shared/Config/World.json`, lead-applied)
+
+Colours are RGB 0–255 and materials are `Enum.Material` names, as in `FabricPadLookConfig`.
+Every block is optional; absent means "leave as before M13".
+
+```json
+{
+  "version": 1,
+  "lighting": {
+    "clockTime": 14.5,
+    "geographicLatitude": 35,
+    "brightness": 2.5,
+    "ambient": [110, 116, 128],
+    "outdoorAmbient": [150, 156, 166],
+    "exposureCompensation": 0
+  },
+  "atmosphere": {
+    "density": 0.3,
+    "offset": 0.25,
+    "color": [199, 215, 235],
+    "decay": [106, 132, 170],
+    "glare": 0,
+    "haze": 0.6
+  },
+  "clouds": { "cover": 0.45, "density": 0.35, "color": [255, 255, 255] },
+  "ground": { "material": "SmoothPlastic", "color": [106, 153, 78], "side": 2048 },
+  "hub": {
+    "material": "SmoothPlastic",
+    "color": [205, 200, 188],
+    "surround": { "radius": 40, "height": 0.5, "material": "SmoothPlastic", "color": [150, 118, 84] }
+  },
+  "roads": { "width": 8, "lift": 0.1, "material": "SmoothPlastic", "color": [150, 118, 84] }
+}
+```
+
+The values above show the shape. The values in the committed file are the mock's (`step1_*`
+renders, `out/step1_numbers.json`) and win over this listing.
+
+**First values (lead, 2026-10-01).** The committed file has **no `lighting` and no `clouds`
+block**, on purpose:
+- Every building and plot Ben approved was judged under the default Lighting. Brightness and
+  ambient values taken from an offline render are guesses, so wave 1 leaves them alone and adds
+  only the haze. The `lighting` block exists for tuning after his Studio look.
+- The mock's clouds are low-poly meshes (wave 2). Roblox's volumetric `Clouds` are a different
+  look and are not in the `step1_*` renders Ben was shown.
+- The `atmosphere` numbers are a first guess that cannot be checked offline. The target is the
+  mock's haze: about 20% at 500 studs, so the far side of the ring stays readable.
+- Ground, hub and roads use `Plastic`, the material the plot bases already have.
+
+Keys:
+
+- `lighting`: each key, when present, is written to the `Lighting` property of the same name
+  (`ClockTime`, `GeographicLatitude`, `Brightness`, `Ambient`, `OutdoorAmbient`,
+  `ExposureCompensation`). An absent key leaves that property alone.
+- `atmosphere`: one `Atmosphere` under `Lighting` (`Density`, `Offset`, `Color`, `Decay`, `Glare`,
+  `Haze`). An existing `Atmosphere` child is reused, never duplicated.
+- `clouds`: one `Clouds` under `Workspace.Terrain` (`Cover`, `Density`, `Color`). If the place has
+  no `Terrain`, clouds are skipped silently.
+- `ground`: `material`, `color`, and `side`, the square's side in studs. The side used is
+  `min(2048, max(side, 2 × (ringRadius + plotSize.Z)))`, so the ground never shrinks below today's.
+- `hub`: `material` and `color` for the existing `Hub` cylinder. `surround` adds one wider, lower
+  cylinder around it: `radius` (> `hubRadius`, else it is skipped with a warning) and `height`,
+  how far its top stands above the ground top (0 < `height` < `plotSize.Y`).
+- `roads`: one flat strip from the hub to each plot's front edge. `width` in studs; `lift`, how
+  far the strip's top stands above the ground top. A strip starts at the hub wall and runs under
+  the surround, so **`lift` must be lower than `hub.surround.height`** (equal tops would z-fight
+  in that band; a higher road would lie on top of the ring).
+
+## `src/shared/WorldPlan.luau` (new; pure, no Roblox globals)
+
+The ring maths, moved out of `PlotService.buildWorld` so the server, later waves and a Python
+mirror (wave 2) share one definition. Angles are radians; plot `index` is 1-based.
+
+```lua
+export type Ring = {
+	plotCount: number,
+	radius: number,      -- plot centres
+	halfSector: number,  -- pi / plotCount
+	frontRadius: number, -- radius - plotSizeZ / 2: the hub-side edge
+	backRadius: number,  -- radius + plotSizeZ / 2
+}
+export type Road = { angle: number, innerRadius: number, outerRadius: number, width: number }
+
+WorldPlan.Ring(plotCount, plotMargin, hubRadius, plotSizeX, plotSizeZ): Ring
+WorldPlan.PlotAngle(ring: Ring, index: number): number            -- (index - 1) / plotCount * 2π
+WorldPlan.GroundSide(ring: Ring, plotSizeZ: number, wantedSide: number?): number
+WorldPlan.Roads(ring: Ring, hubRadius: number, width: number): { Road }
+```
+
+- `Ring` is today's formula, unchanged:
+  `radius = max(plotSizeZ / 2 + (plotSizeX / 2 · cos(halfSector) + plotMargin / 2) / sin(halfSector),
+  hubRadius + plotMargin + plotSizeZ / 2)`. A plot's centre is `(cos(angle), sin(angle)) · radius`
+  in X, Z.
+- `GroundSide` is the rule under `ground` above; with `wantedSide` nil it returns today's
+  `2 × (radius + plotSizeZ)`.
+- `Roads` returns one road per plot, on the plot's radial. `outerRadius = frontRadius`.
+  `innerRadius = max(hubRadius, width / (2 · tan(halfSector)))`: the second term is where two
+  neighbouring strips would start to overlap, so strips never share a coplanar top at any
+  `plotCount`. A road whose `innerRadius ≥ outerRadius` is left out.
+
+## Server — `src/server/World/Landscape.luau` (new) and `PlotService.buildWorld`
+
+`Landscape` is a plain module, not a service: it has no `Init`/`Start` and is not added to
+`orderedServices`. It lives outside `src/server/Services`, so the combat place never mounts it.
+
+```lua
+Landscape.Build(ring: WorldPlan.Ring, layout: Types.EraLayout, gameConfig: Types.GameConfig): ()
+```
+
+`PlotService.buildWorld` calls `WorldPlan.Ring` and `WorldPlan.PlotAngle` for the ring it used
+to compute inline, and calls `Landscape.Build` where it used to create `Ground` and `Hub`. `Spawn`,
+the `Plots` folder and everything per plot stay in PlotService, byte-for-byte in behaviour.
+
+`Landscape.Build` reads `Catalog.GetWorldConfig()` and creates:
+
+| Instance | Parent | Geometry | Collision |
+|---|---|---|---|
+| `Ground` (Part) | `Workspace` | square of `GroundSide`, thickness `plotSize.Y`, top at −`plotSize.Y` | collides, as today |
+| `Hub` (cylinder) | `Workspace` | exactly today's: radius `hubRadius`, top at 0 | collides, as today |
+| `HubSurround` (cylinder) | `Workspace.Landscape` | radius `surround.radius`, top at −`plotSize.Y` + `height`, bottom inside the ground | collides |
+| `Road_<index>` (Part) | `Workspace.Landscape` | `width` × (`outerRadius` − `innerRadius`), centred on the plot's radial, top at −`plotSize.Y` + `lift`, bottom `lift` below the ground top | none: `CanCollide`, `CanQuery`, `CanTouch` false |
+
+- Every part is `Anchored`. Roads and the surround have `CastShadow` false (a flat strip gains
+  nothing from casting); roads also have smooth `TopSurface`/`BottomSurface`.
+- With `World.json` absent: `Ground` and `Hub` exactly as before M13 (default colour and material,
+  today's side), no `Landscape` folder, Lighting untouched.
+- Lighting, atmosphere and clouds are applied in the same call, before the parts are parented.
+- Colour and material parsing is local to `Landscape` (warn once per bad value, fall back to the
+  Part default). `ArenaService`'s helpers are combat's and are not touched.
+
+### Types and Catalog (luau-engineer)
+
+- `Types.WorldConfig` and its block types (`WorldLightingConfig`, `WorldAtmosphereConfig`,
+  `WorldCloudsConfig`, `WorldGroundConfig`, `WorldHubConfig`, `WorldHubSurroundConfig`,
+  `WorldRoadsConfig`), mirroring the JSON exactly; every block and every `lighting` key is `T?`.
+  Add them after `ProvingGroundsConfig`, away from the regions `m11-unlocks` and `m12-boomtown`
+  change.
+- `Catalog.GetWorldConfig(): Types.WorldConfig?`, the nil-is-the-signal shape of
+  `GetCityDressingConfig`. Add it at the end of the getters, **not** next to
+  `GetProvingGroundsConfig` (`m11-unlocks` inserts `GetUnlocksConfig` there).
+
+## Ownership (wave 1, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section, `src/shared/Config/World.json` |
+| luau-engineer | `src/shared/WorldPlan.luau` (new), `src/server/World/Landscape.luau` (new), `src/server/Services/PlotService.luau` (`buildWorld` only), `src/shared/Types.luau` (World types only), `src/shared/Catalog.luau` (`GetWorldConfig` only) |
+| docs-keeper | `docs/PLAN.md`, `docs/PLAYTEST.md`, `docs/MANUAL_STEPS.md` |
+
+- **Frozen:** everything else. In particular every client file, `Main.server.luau`, both project
+  files, `Game.json`, the layouts, and every tool under `tools/` (the plot renderer's apron colour
+  is updated in wave 2, after `m12-boomtown` merges, because that branch edits the same files).
+
+### Review rulings (2026-10-02, roblox-reviewer: no Critical, one Warning)
+
+- **`roads.lift` ≥ `hub.surround.height` builds no roads.** With a surround built, that
+  combination warns once, naming both keys, and the roads are left out.
+- **The new work cannot stop the boot.** `Landscape.Build` runs inside `PlotService.Init` before
+  the spawn, the plots and the remote handlers. Lighting, atmosphere and clouds, and the surround
+  and roads, each run under `pcall`: a failure warns and costs only that feature, and leaves no
+  half-built `Landscape` folder. `Ground` and `Hub` stay unguarded, as before M13.
+- **PlotService resolves `Landscape` inside `buildWorld`,** not at module scope. The combat place
+  has no `Server/World`, and a module-scope wait there would hang any future combat-side require.
+- **A road's inner end reaches the hub wall at its corners.** The strip is lengthened inward by
+  `hubRadius − √(hubRadius² − (width / 2)²)`, hidden inside the hub, so roads look right with or
+  without a surround. `WorldPlan.Roads` is unchanged; this is a rendering detail in `Landscape`.
+- **Open for the Studio look, no code in wave 1:**
+  - With `glare` 0, `decay` may have no visible effect. If the sky shows no blue fall-off away
+    from the sun, raise `glare` slightly before re-tuning `decay`.
+  - `lift` 0.1 is the only separation between a road and the ground, and roads are seen from 300
+    to 500 studs at grazing angles. If a far road shimmers, raise `lift` and
+    `hub.surround.height` together.
+  - A road ends at the plot's front face; each era's first street starts 3.5 (Village), 5.5
+    (Boomtown) or 11 (Metropolis, Orbital) studs further in, and the Sign post stands on the
+    road's centreline. If the gap reads badly it is a wave 2 item (ground ramp and entrance).
+
+## Done when (wave 1)
+
+- Studio, `build/test.rbxl` from this worktree: a blue hazed sky, a green ground to the horizon,
+  a pale stone hub with an earth ring, and a dirt road from the hub to every plot's front edge.
+  Plots, pads, signs, buildings and all city dressing look and behave exactly as before. Village
+  woods past the plot edge still stand on the ground.
+- With `World.json` removed, the place builds and looks as it did before M13, with no Output error.
+- `WorldPlan.Ring` returns a radius of about 277.0 for 10 plots and 183.9 for 6.
+- Checks: stylua, selene, luau-lsp (both trees) and both `rojo build`s are clean; the existing
+  gates (`sim_economy`, `streetplan`, `fabric.py check Village`, `cityfabric.py selftest`,
+  `gen_templates.py --check`, `gen_asset_manifest.py --check`, `bake.py --era Village --list`) are
+  unchanged and green.
+
+## Wave 2 — the Valley meshes (Ben, 2026-10-02)
+
+Ben's first Studio look at wave 1 (one screenshot, no complaint): "we didnt do step A2 yet? do
+it". Rulings:
+
+1. **The whole A2 Valley in one wave** (the old waves 2 and 3 together): mountains, foothills,
+   forest, waterfall, far hills, the ground with its patches and baked roads, river, pond, lake,
+   bridges, stepping stones, groves, aprons, clouds. One upload batch, **one harvest paste**.
+2. The look reference is the mock's A2 renders (`out/A2_*.png`, `wm_valley2.py`,
+   `out/A2_numbers.json`), with two changes the lead announced: **aprons are light era gravel in
+   two flat bands** (the dark base colour bleeding outward read as scorch marks), and no signposts
+   (each plot already has its Sign).
+
+### Principles
+
+- **Collision stays flat and made of Parts.** The `Ground` Part at Y = −`plotSize.Y` stays the
+  only floor, visible, in the meadow green. Every mesh is visual: `Anchored`, with `CanCollide`,
+  `CanQuery` and `CanTouch` false. Nothing depends on a MeshPart's collision geometry.
+- **So the walkable basin is flat.** Inside the wall the visual ground never rises more than
+  `overlayLift` above the Ground Part. The 1-stud kerb at the plot edges stays (no visual ramp:
+  feet would sink into it). The river is not carved: its bed is coloured faces in the ground
+  overlay and its water is a translucent sheet `water.lift` above the ground, so a player wades
+  ankle-deep on the flat floor.
+- **What collides, as server Parts built from data:** the wall, each bridge (deck and two ramps)
+  and each stepping stone. These are world structures, a category next to client dressing; the
+  M9 rule "no dressing part collides" is unchanged.
+- **One source of truth for geometry: the generator.** A Python tool derives everything from the
+  ring and writes both the meshes and `src/shared/Config/Valley.json`. Luau reads that data and
+  never recomputes the river, the bridges or the wall. (`WorldPlan` keeps only the ring and the
+  wave 1 roads.)
+- **Baked for one `plotCount`.** The meshes fit the ring they were generated for. `Valley.json`
+  records `plotCount`; if it differs from the live ring, the server warns once and builds the
+  wave 1 look. When `m11-unlocks` (6 plots) merges, the Valley is regenerated and re-uploaded:
+  one more harvest paste.
+- **Everything degrades to wave 1.** No `Valley.json`, no `ServerStorage.Assets.World.Valley`, a
+  `plotCount` mismatch, or a missing **required** mesh → the wave 1 world, with one warning. A
+  missing optional mesh is left out, named in one warning.
+- **Levels stay frozen** (wave 1). The skirt band around each plot stays at ground level.
+
+### Frames
+
+- **World frame** (`"frame": "world"`): X and Z are Roblox world studs (plot `i` centre at
+  `(cos, sin)(angle_i) · radius`); generator Y = 0 is the **ground top**. The server places a world
+  mesh with `PivotTo(CFrame.new(0, -plotSize.Y, 0))`.
+- **Plot frame** (`"frame": "plot"`): the plot's local frame, origin at the plot centre, −Z toward
+  the hub, generator Y = 0 at the ground top. One template, cloned once per plot with
+  `PivotTo(base.CFrame * CFrame.new(0, -plotSize.Y / 2, 0))`.
+- Blender is Z-up: Blender `(x, y, z)` is glTF/Roblox `(x, z, −y)`. A sign slip mirrors the
+  valley; the preview gate below exists to catch it.
+- 1 glTF unit = 1 stud, no scale anywhere. A template places a mesh at its generator coordinates
+  with its facing preserved (verified on all 94 Village path meshes).
+
+### The generator — `tools/world/valley.py` (landscape-builder)
+
+```
+py tools/world/valley.py build            # GLBs, palette, bake record, Valley.json
+py tools/world/valley.py check            # QA gate: committed Valley.json == a fresh build
+py tools/world/valley.py build --count 6 --out-root <scratch> --data <scratch>/Valley.json
+```
+
+- Reads `Game.json` (`plotCount`, `plotMargin`, `hubRadius`), the Village layout's `plotSize`,
+  `World.json` (road width, colours it shares with wave 1) and its own art numbers in
+  `tools/world/Valley.plan.json` (palette, noise, river widths, densities). The ring comes from
+  `tools/worldplan.py`, a line-for-line mirror of `WorldPlan.Ring` with a `selftest` (277.0217
+  and 183.9230).
+- Writes, under the shared `assets/build/world/`: `Valley/<Mesh>.glb`, `Valley/palette.png`,
+  `Valley.json` (the bake record). Writes `src/shared/Config/Valley.json` in the worktree.
+- **Deterministic.** Two `build` runs give byte-identical GLBs, PNG and JSON (seeded noise, the
+  pure-Python GLB writer of `tools/paths/planargeom.py`, no Blender exporter). It may run under
+  `py` or under Blender's bundled Python (for numpy), like `tools/paths/texture.py`.
+- **GLB shape:** one scene, one node, one mesh, **one primitive, no material, no image**:
+  `POSITION`, per-face `NORMAL`, `TEXCOORD_0`, uint32 indices. Front faces are counter-clockwise
+  seen from outside; nothing is double-sided. A flat sheet gets a hair of height (the importer
+  rejects a zero-height bounding box).
+- **Colour:** a `palette` mesh maps each face's UVs to the centre of its colour's swatch in
+  `palette.png` (16-px swatches, opaque, one PNG for the whole set). A `flat` mesh has one colour,
+  set on the MeshPart by the template or at runtime, and no texture.
+- **Hard limits, asserted at build:** ≤ 20,000 triangles per mesh (aim ≤ 18,000); every bounding
+  box side ≤ 1,500 studs; terrain outer radius ≤ 1,600; mesh names `[A-Za-z0-9_]`, ≤ 24
+  characters; ≤ 32 meshes in the set.
+
+Mesh set (names are a guide; the builder may split or merge within the limits):
+
+| Mesh | Frame | Look | Required | Contents |
+|---|---|---|---|---|
+| `Basin_<k>` | world | palette | yes | the flat ground overlay inside the foothills at `overlayLift`: two-tone meadow, darker and wildflower patches, the earth ring, the bent dirt roads with rims, river and pond bed, banks, sand; holes under the hub and the plots are not needed (they sit above it) |
+| `Details` | world | palette | no | stepping stones, hub kerb and bollards, flowers and tufts |
+| `Groves` | world | palette | no | the tree clumps between the roads |
+| `Water` | world | flat | no | river, pond and lake surface, translucent |
+| `Bridge_<n>` | world | palette | no | plank deck, ramps and rails, one mesh per bridge |
+| `Foothills_<k>`, `Mountains_<k>`, `FarHills_<k>` | world | palette | no | terrain outside the wall, rock and snow lines as in A2, the lake shore |
+| `Forest_<k>` | world | palette | no | generated pines on the foothills |
+| `Waterfall` | world | palette | no | the two-tier fall above the river's source |
+| `Clouds` | world | flat | no | the flat low-poly clusters |
+| `ApronInner`, `ApronOuter` | plot | flat | no | two flat bands around a plot, irregular outer edge, 16–40 studs reach where the wedge has room; clipped to the plot's own sector (0.3 studs short of the bisector, so neighbours never overlap) and cut open for the road corridor; `ApronOuter` lies outside `ApronInner`, never under it |
+| `Entrance` | plot | palette | no | two short fence runs flanking the road at the plot's front edge |
+
+- Roads bend gently as in A2 and still end at the centre of each plot's front edge (plot-local
+  `(0, −plotSize.Z / 2)`) and at the hub. The river uses the mock's gaps (it enters between plot
+  N and plot 1 and leaves after plot `round(N / 2) + 1`), widths and pond.
+- Stacking above the ground top, so no two visible faces are coplanar: `overlayLift` 0.10 (basin),
+  aprons 0.16, water `water.lift` 0.35, bridge deck 0.70. Trees, stones and fences start at the
+  overlay.
+- Trees, fences, stones and bridges are generated geometry in the set's palette (colours sampled
+  from the Village kits so they sit with the skirt woods). No kit GLB is baked in.
+
+### `Valley.json` — generated data (`src/shared/Config/Valley.json`, never hand-edited)
+
+Heights are studs above the ground top. `yaw` is radians about +Y, 0 = the bridge's long axis
+along +X, turning toward +Z.
+
+```json
+{
+  "version": 1,
+  "plotCount": 10,
+  "ringRadius": 277.0217,
+  "planHash": "9c1f0a7e2b6d4c35",
+  "overlayLift": 0.1,
+  "wallRadius": 358.3,
+  "meshes": [
+    { "name": "Basin_1", "frame": "world", "required": true },
+    { "name": "ApronInner", "frame": "plot", "tint": "apronInner" },
+    { "name": "ApronOuter", "frame": "plot", "tint": "apronOuter" }
+  ],
+  "bridges": [
+    { "x": -141.9, "z": -98.6, "yaw": 0.61, "length": 23.7, "width": 7, "deckTop": 0.7, "deckThickness": 0.5, "rampLength": 3.5 }
+  ],
+  "stones": [ { "x": 0, "z": -67, "radius": 1.75, "top": 0.62 } ],
+  "river": [ [221.0, -71.8, 5.5] ]
+}
+```
+
+- `meshes`: every template to place, in order. `required` (default false). `tint` (plot frame
+  only): the mesh is recoloured per plot from `World.json valley.aprons` by the plot's era.
+- `bridges`: `length` is the deck (ramps add `rampLength` at each end); the deck's top is at
+  `deckTop` and the ramps fall from it to the ground top.
+- `stones`: an upright cylinder each, top at `top`.
+- `river`: channel samples `[x, z, halfWidth]` in world studs along the centreline, pond included,
+  from the wall inward only. It exists for the client's skirt rule below. `halfWidth` covers the
+  visible water plus its bank.
+
+### `World.json` additions (lead-applied)
+
+```json
+"valley": {
+  "wall": { "height": 160, "thickness": 4, "segments": 36 },
+  "aprons": {
+    "Village": { "inner": [114, 142, 66], "outer": [120, 149, 71] },
+    "Boomtown": { "inner": [178, 160, 102], "outer": [152, 158, 89] },
+    "Metropolis": { "inner": [150, 150, 144], "outer": [138, 153, 110] },
+    "OrbitalColony": { "inner": [136, 134, 138], "outer": [131, 145, 107] }
+  },
+  "skirtMargin": 1.5
+}
+```
+
+- `wall`: `segments` flat invisible Parts in a ring, their inner faces tangent to
+  `Valley.json wallRadius`, standing from the ground top to `height`, `thickness` deep.
+- `aprons.<EraName>`: `inner` and `outer` colours (`outer` is halfway to the meadow). An era with
+  no entry hides both bands.
+- `skirtMargin`: extra studs around the river channel in the client's skirt rule.
+
+### Pipeline — a copy of the baked-paths route (pipeline-engineer)
+
+The props route is not used (it needs kits, blueprints, a Blender join and has no hash).
+
+- `tools/assets/assets_config.py`: a `world` block that `render_assets` serialises (today unknown
+  top-level keys are erased on the next save). Shape, key order fixed like `render_path_era`:
+  ```json
+  "world": { "Valley": {
+    "plotCount": 10, "planHash": "9c1f0a7e2b6d4c35", "triangles": 103084,
+    "paletteAssetId": 0, "paletteImageId": 0, "paletteSha256": "",
+    "meshes": { "Basin_1": {
+      "assetId": 0, "meshId": 0, "size": [0, 0, 0], "offset": [0, 0, 0], "sha256": "",
+      "triangles": 17500, "look": "palette" },
+      "Water": { "assetId": 0, "meshId": 0, "size": [0, 0, 0], "offset": [0, 0, 0], "sha256": "",
+      "triangles": 900, "look": "flat", "color": [58, 144, 200], "transparency": 0.25 } } } }
+  ```
+- `tools/assets/upload_world.py` (new), modelled on `upload_paths.py`: reads the bake record,
+  uploads each GLB as a Model and the palette as a Decal, sha256 skip, `Assets.json` saved after
+  every upload, resumable, the 50-character display-name guard (`EraCityTycoon_World_<Set>_<Mesh>`
+  else `ECT_World_…`), `--only <Mesh>` for the trial upload, `--dry-run` that writes **nothing**,
+  and the scratch flags (`--assets-json`, `--bake-root`). Meshes no longer in the bake record are
+  dropped. The palette PNG check: opaque, any size.
+- `tools/assets/harvest.py`: kinds `worldMesh` and `worldTexture` ride along with whichever paste
+  comes next, like the path kinds (the Decal branch must accept `worldTexture`). `merge` requires
+  exactly one MeshPart per mesh and **checks the harvested `size` against the bake record's**
+  (tolerance 0.01 studs or 0.1%): a mismatch means the importer rescaled the mesh; it is reported
+  per mesh and exits non-zero after merging the rest.
+- `tools/assets/gen_templates.py`: `--world`, `GROUP_DIRNAMES["world"] = "_world"`, and the world
+  tree in `--check`. Output `templates/_world/<Set>/<Mesh>.rbxmx` (two levels, so a branch
+  without this change never mistakes it for an era folder): a `Model "<Mesh>"`, `WorldPivot`
+  identity, one MeshPart `Mesh` with `Anchored` true, `CanCollide`/`CanQuery`/`CanTouch` false,
+  `CastShadow` false, `CollisionFidelity` Box, `RenderFidelity` Precise, `Material`
+  SmoothPlastic, `harvested_cframe` with lift 0. `palette`: white, `TextureContent` = the palette
+  image. `flat`: `Color3uint8` = `color`, `Transparency` = `transparency`, no texture.
+- `tools/gen_asset_manifest.py`: a "World" table (set, meshes, triangles, uploaded/templated).
+- The bake record (`assets/build/world/Valley.json`), written by the generator, read by the
+  uploader and by harvest:
+  ```json
+  { "set": "Valley", "plotCount": 10, "ringRadius": 277.0217, "planHash": "9c1f0a7e2b6d4c35",
+    "palette": { "file": "Valley/palette.png", "sha256": "…", "size": [112, 96] },
+    "meshes": { "Basin_1": { "file": "Valley/Basin_1.glb", "sha256": "…", "triangles": 17500,
+      "vertices": 52500, "centre": [0, 0.05, 0], "size": [754.6, 0.11, 754.6],
+      "look": "palette" } } }
+  ```
+  A `flat` mesh adds `"color"` and `"transparency"`.
+
+### Rojo (luau-engineer)
+
+`default.project.json`: add `"templates/_world"` to `globIgnorePaths` and a child
+`"World": { "$className": "Folder", "$path": { "optional": "templates/_world" } }` under
+`ServerStorage.Assets`. `combat.project.json`: the ignore entry only. No `templates/World` folder
+may ever exist (Rojo does not merge an explicit child into a same-named directory).
+
+### Server — `Landscape` (luau-engineer)
+
+- `Catalog.GetValleyPlan(): Types.ValleyPlan?` (nil is the signal) and the `ValleyPlan` types,
+  placed like the wave 1 additions. `WorldConfig.valley` types.
+- **Mesh mode** when `Valley.json` exists, `ServerStorage.Assets.World.Valley` exists,
+  `plotCount` matches the ring and every `required` mesh has a template. Otherwise wave 1, with
+  one warning saying which condition failed (no warning when `Valley.json` or the folder is
+  simply absent).
+- In mesh mode `Landscape.Build`:
+  - builds `Ground` and `Hub` as in wave 1, and **no** `HubSurround` and **no** `Road_<i>` (both
+    are baked into the basin);
+  - clones every world-frame mesh once into `Workspace.Landscape.Valley`;
+  - builds `Wall_<k>` (invisible, `CanCollide` true, `CanTouch` false),
+    `Bridge_<n>` collision (one deck Part and two `WedgePart` ramps each, invisible) and
+    `Stone_<n>` collision (invisible cylinders) under `Workspace.Landscape.Collision`.
+- `Landscape.AttachPlot(plotFolder: Folder, base: BasePart): ()`, called by
+  `PlotService.buildWorld` once per plot inside its loop (the only PlotService change): in mesh
+  mode it clones every plot-frame mesh for that plot into `Workspace.Landscape.Valley` and, for
+  `tint` meshes, sets the colour from the plot folder's `EraName` attribute now and on every
+  change of it. Outside mesh mode it does nothing.
+- All of it runs under the wave 1 boot guard: a failure costs the Valley, never the plots.
+
+### Client — skirt entries in the river (ui-engineer)
+
+Village woods (and any later era's `skirt` entries) stand up to 19 studs past a plot's sides, and
+the river runs through two 20-stud gaps. A `skirt` entry whose world position lies within
+`halfWidth + valley.skirtMargin` of a `Valley.json river` segment is absent: not drawn, and not
+a bird flock centre. A segment's `halfWidth` is the larger of its two ends. A **clump** is also
+absent if any of its `quads` lies within that reach plus the fabric's `quarterRadius` (a clump's
+trees stand up to 6 studs from its centre).
+
+- New `src/client/City/WorldBlock.luau`: `WorldBlock.Blocked(worldX, worldZ, extraRadius?)`. It
+  builds the test lazily from `Catalog.GetValleyPlan()` and `Catalog.GetWorldConfig()`, and only
+  once all three hold: the plan exists, its `plotCount` equals the number of plots in
+  `Workspace.Plots`, and **`Workspace.Landscape.Valley` exists** (the server's sign that it is
+  in mesh mode; in every fallback there is no river and the woods stay). Until then it blocks
+  nothing and caches nothing.
+- `Fabric.luau` changes only by the hook that asks it, for `skirt` entries only (`syncWild` and
+  `SurvivingClumps`). The wild budgets stay positional: a blocked entry keeps its place in them.
+  The file is being edited on `m12-boomtown`: keep the hunks minimal. After that merge, any new
+  list that carries `skirt` entries needs the same gate.
+- Not mirrored in `tools/cityfabric.py` or `plotrender.py`: the rule depends on where a plot sits
+  in the world, which a single-plot render does not have. This is the one sanctioned difference
+  between the mirror and the client.
+
+### Gates and order (lead)
+
+1. `valley.py build`, then the builder's preview renders of **the baked GLBs** with back-face
+   culling on, from the mock's cameras, on the real ring of plots. The lead compares them with
+   `A2_*.png` before anything is uploaded.
+2. Announce to the Boomtown session and wait for its ack. Trial: `upload_world.py --only` the
+   mesh with the most triangles and the mesh with the largest bounding box (18,000 triangles and
+   1,000 studs are both untested through Open Cloud; the largest so far are 12,044 and 61).
+3. The batch upload, **one harvest paste** by Ben, `harvest.py` (size check), `gen_templates.py
+   --world`, `gen_asset_manifest.py`, `rojo build`.
+4. Review, QA, docs.
+
+### Ownership (wave 2a, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section, `World.json` (`valley`), pipeline runs, `src/shared/Config/Assets.json`, `templates/_world/**`, `tools/assets/harvest.luau` |
+| landscape-builder | `tools/world/**` (new: `valley.py`, `Valley.plan.json`, `preview.py`, helpers), `tools/worldplan.py` (new), `src/shared/Config/Valley.json` (generated), `assets/build/world/**` |
+| pipeline-engineer | `tools/assets/assets_config.py`, `tools/assets/upload_world.py` (new), `tools/assets/harvest.py`, `tools/assets/gen_templates.py`, `tools/gen_asset_manifest.py` |
+| luau-engineer | `src/server/World/Landscape.luau`, `src/server/Services/PlotService.luau` (`buildWorld`: the `AttachPlot` call only), `src/shared/Types.luau` (Valley and `WorldConfig.valley` types only), `src/shared/Catalog.luau` (`GetValleyPlan` only), `default.project.json`, `combat.project.json` |
+| ui-engineer | `src/client/City/WorldBlock.luau` (new), `src/client/City/Fabric.luau` and `src/client/Controllers/CityDressingController.luau` (the skirt hook only) |
+
+- **Frozen:** everything else, and every existing tool's behaviour for buildings, props and paths
+  (their templates and `--check` output must stay byte-identical).
+
+### Preview gate rulings (lead, 2026-10-02)
+
+The baked GLBs were rendered from the mock's cameras with back-face culling on
+(`assets/research/2026-10-01-worldmock/out/sheetV_*.png`, A2 | baked) and accepted. Where the
+text above differs, these win:
+
+- **28 meshes, about 132,000 triangles.** `Basin_1..2` (required), `Mountains_1..4` (one per
+  world quadrant; each holds foothills, mountains and far hills, so there is no `Foothills_` or
+  `FarHills_` mesh), `Forest_1..6`, `Groves`, `Details`, `RiverBed`, `Waterfall`, `Water`,
+  `Bridge_1..4`, `Clouds_1..4`, `ApronInner`, `ApronOuter`, `Entrance`.
+- **`RiverBed` is new** (palette, world, optional), at 0.22. Both neighbours' aprons reach their
+  shared bisector, which in the two river gaps is the river's centreline, so the aprons (0.16)
+  lay over the painted bed; `RiverBed` repeats the bed and banks above them there. Stacking is
+  now: basin 0.10, aprons 0.16, river bed 0.22, water 0.35, bridge deck 0.70.
+- **Terrain ends at radius 1,400** (a quadrant must fit the 1,500-stud box). Clouds stand 900 to
+  1,260 studs out for the same reason.
+- `wallRadius` is 358.9; the foothills start at 362.3. The tallest summit is 310.5 studs above
+  the ground top at radius 722.6.
+- `Valley.json` `river` starts at the foothills, 3.4 studs outside the wall. `yaw` is folded into
+  (−π/2, π/2]. Positions are rounded to 3 decimals and `yaw` to 4.
+- A `--count` scratch build writes the game data to `--data` and the bake record next to it as
+  `Valley.bake.json`.
+- The trial meshes are `Details` (most triangles) and `Mountains_3` (largest box, 1,444 studs).
+- The meadow's facet contrast was halved after the first preview (the mosaic read as a pattern).
+- Known and accepted: trees and boulders inside the wall do not collide; a straight seam shows
+  where two aprons meet at the inner corners; the terrain's outer edge is visible from high above.
+
+### Review rulings (2026-10-02, roblox-reviewer: no Critical, two Warnings)
+
+Placement, the wall, the bridge decks and wedges, the stones, the aprons, the client rule and the
+Rojo mapping were verified against the real templates and data. Taken:
+
+- **Mesh mode also needs the `valley` config and a wall.** No `World.json` or no `valley` block:
+  not mesh mode, silently. A `valley.wall` that fails validation: not mesh mode, one warning.
+  (Without a wall, players could walk through the foothills and off the ground's edge.)
+- **`planHash` ties the data to the meshes.** `Valley.json planHash` must equal
+  `Assets.json world.Valley.planHash` (written at upload). The server checks it: a mismatch is one
+  warning and the wave 1 world. `valley.py check` checks it too, so a re-bake that was never
+  uploaded turns QA red. The hash covers the plan file, the ring, `plotSize` and `World.json`
+  `ground`, `hub`, `roads` and `valley.wall.segments`: **changing any of those needs a re-bake, an
+  upload and a harvest paste.** Haze, lighting, apron colours, wall height and thickness and
+  `skirtMargin` are config-only.
+- **A collider is built only when its mesh was placed:** `Bridge_<n>` collision needs the
+  `Bridge_<n>` mesh, the stones need `Details`.
+- `CanQuery = false` has no effect on a part that collides, so the wall, decks, ramps and stones
+  still answer raycasts. Nothing in the hub raycasts; the flags stay as written above.
+- `WorldBlock` tests for `Workspace.Landscape.Valley` before it counts the plots.
+- **A build that is not the one being uploaded must use `--out-root`.** `assets/build/world` is
+  shared by every worktree; a 6-plot bake from another worktree would overwrite this branch's
+  bake record.
+- Open for the Studio look: `Water` is one large translucent MeshPart, so smoke and dust seen
+  across the river may sort wrongly (the fix is splitting it); mountains and clouds have centres
+  930 to 1,000 studs out and may be culled at low graphics quality; a skirt tree can stand in the
+  river until a plot's next sync if the Valley folder replicates late (accepted).
+
+### Done when (wave 2)
+
+- Studio: the A2 Valley around the ring. Mountains, forest and waterfall behind the plots; the
+  river, pond and lake; bridges you walk over and a river you wade through; stepping stones you
+  stand on; groves and flower patches in the centre; a light gravel apron around each plot that
+  changes with its era; a wall you cannot pass at the foothills. Plots and city dressing are
+  unchanged, except that no skirt tree stands in the river.
+- With `templates/_world` or `Valley.json` removed: the wave 1 world, no Output error.
+- `valley.py check`, `worldplan.py selftest`, `gen_templates.py --check` and
+  `gen_asset_manifest.py --check` are green; every existing gate is unchanged and green.

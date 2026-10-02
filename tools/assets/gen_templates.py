@@ -4,7 +4,8 @@
     py tools/assets/gen_templates.py           # (re)write templates/<Era>/<ModelName>.rbxmx
     py tools/assets/gen_templates.py --props   # (re)write templates/_props/<Era>/<PropName>.rbxmx
     py tools/assets/gen_templates.py --paths   # (re)write templates/_paths/<Era>/<pieceId>.rbxmx
-    py tools/assets/gen_templates.py --check   # regenerate all three trees in memory, diff against disk, exit 1 if stale
+    py tools/assets/gen_templates.py --world   # (re)write templates/_world/<Set>/<Mesh>.rbxmx
+    py tools/assets/gen_templates.py --check   # regenerate all four trees in memory, diff against disk, exit 1 if stale
 
 Template shape (frozen in INTERFACES.md "M7 contracts"):
 
@@ -40,6 +41,22 @@ Both are sealed (anchored, no collide/query/touch, no shadow, Box collision) and
 `harvested_cframe` as buildings and props. A piece is written only when both its meshes are
 harvested and its era has both harvested image ids; otherwise the client falls back to the Parts
 renderer.
+
+Landscape meshes (Assets.json `world`, INTERFACES.md "M13 Wave 2 - the Valley meshes") copy the
+path shape, under templates/_world/ -> ServerStorage.Assets.World:
+
+    Model "<Mesh>"               WorldPivot identity, so PivotTo(frame) places the mesh
+      MeshPart "Mesh"            sealed like a path mesh, RenderFidelity Precise, SmoothPlastic;
+                                 `palette` look: white with the set's palette image;
+                                 `flat` look: its colour and transparency, no texture
+
+The tree is two levels deep (<Set>/<Mesh>.rbxmx) on purpose: a checkout that predates it reads
+templates/_world as an era folder and finds no template directly inside. A mesh is written once it
+is harvested (a palette mesh also needs the set's harvested palette image); a missing one is left
+out and the server falls back as INTERFACES describes.
+
+--out points every run at another templates root (fixtures and dry runs), as --assets-json does
+for the config.
 """
 
 from __future__ import annotations
@@ -58,16 +75,28 @@ TEMPLATES_DIR = os.path.join(cfg.REPO_ROOT, "templates")
 CITY_DRESSING_PATH = os.path.join(cfg.REPO_ROOT, "src", "shared", "Config", "CityDressing.json")
 PROPS_DIRNAME = "_props"
 PATHS_DIRNAME = "_paths"
-GROUP_DIRNAMES = {"props": PROPS_DIRNAME, "paths": PATHS_DIRNAME}
+WORLD_DIRNAME = "_world"
+GROUP_DIRNAMES = {"props": PROPS_DIRNAME, "paths": PATHS_DIRNAME, "world": WORLD_DIRNAME}
 MATERIAL_SMOOTH_PLASTIC = 272
 BASE_SIZE = (1.0, 0.2, 1.0)
 COLLISION_FIDELITY_BOX = 2
+# Enum.RenderFidelity.Precise: Automatic draws a decimated copy at a distance, and most of the
+# landscape is only ever seen from a distance.
+RENDER_FIDELITY_PRECISE = 1
+WORLD_MESH_NAME = "Mesh"
 MATERIAL_PLASTIC = 256
 COLOR_WHITE = 16777215  # Color3uint8 packing of (255, 255, 255)
 
 
 def log(msg: str) -> None:
     print(f"[templates] {msg}", flush=True)
+
+
+def use_templates_dir(path: str | None) -> None:
+    """Point every Tree at another templates root (fixtures and dry runs)."""
+    global TEMPLATES_DIR
+    if path:
+        TEMPLATES_DIR = os.path.abspath(path)
 
 
 def num(v: float) -> str:
@@ -274,10 +303,86 @@ def generate_paths(assets: dict) -> tuple[dict[str, str], list[str]]:
     return out, notes
 
 
+def color3uint8(color) -> int:
+    """rbx-dom's Color3uint8 packing, the one COLOR_WHITE uses: 0xRRGGBB."""
+    r, g, b = (max(0, min(255, int(v))) for v in color)
+    return (r << 16) | (g << 8) | b
+
+
+def world_template_xml(mesh_name: str, mesh: dict, image_id: int) -> str:
+    """One landscape mesh: the path template's shape with a single MeshPart. `harvested_cframe`
+    with no lift puts the mesh back at its generator coordinates, so the server only has to
+    PivotTo the frame the mesh was generated in (INTERFACES "M13 Wave 2 - Frames")."""
+    refs = Referents()
+    flat = mesh.get("look") == cfg.WORLD_LOOK_FLAT
+    lines = [
+        '<roblox version="4">',
+        f'  <Item class="Model" referent="{refs.next()}">',
+        "    <Properties>",
+        f'      <string name="Name">{escape(mesh_name)}</string>',
+        '      <bool name="NeedsPivotMigration">false</bool>',
+    ]
+    lines += coordinate_frame("WorldPivot", (0, 0, 0), "      ")
+    lines.append("    </Properties>")
+    p = "        "
+    lines += [f'    <Item class="MeshPart" referent="{refs.next()}">', "      <Properties>"]
+    lines.append(f'{p}<string name="Name">{WORLD_MESH_NAME}</string>')
+    lines.append(f'{p}<bool name="Anchored">true</bool>')
+    lines += harvested_cframe(mesh.get("offset") or [0, 0, 0], p)
+    lines.append(f'{p}<bool name="CanCollide">false</bool>')
+    lines.append(f'{p}<bool name="CanQuery">false</bool>')
+    lines.append(f'{p}<bool name="CanTouch">false</bool>')
+    lines.append(f'{p}<bool name="CastShadow">false</bool>')
+    lines.append(f'{p}<token name="CollisionFidelity">{COLLISION_FIDELITY_BOX}</token>')
+    colour = color3uint8(mesh.get("color") or (255, 255, 255)) if flat else COLOR_WHITE
+    lines.append(f'{p}<Color3uint8 name="Color3uint8">{colour}</Color3uint8>')
+    lines += vector3("InitialSize", mesh["size"], p)
+    lines.append(f'{p}<token name="Material">{MATERIAL_SMOOTH_PLASTIC}</token>')
+    lines.append(f'{p}<Content name="MeshContent">')
+    lines.append(f"{p}  <uri>rbxassetid://{int(mesh['meshId'])}</uri>")
+    lines.append(f"{p}</Content>")
+    lines.append(f'{p}<token name="RenderFidelity">{RENDER_FIDELITY_PRECISE}</token>')
+    lines += vector3("size", mesh["size"], p)
+    if flat:
+        lines.append(f'{p}<float name="Transparency">{num(mesh.get("transparency", 0))}</float>')
+    else:
+        lines.append(f'{p}<Content name="TextureContent">')
+        lines.append(f"{p}  <uri>rbxassetid://{int(image_id)}</uri>")
+        lines.append(f"{p}</Content>")
+    lines += ["      </Properties>", "    </Item>", "  </Item>", "</roblox>"]
+    return "\n".join(lines) + "\n"
+
+
+def generate_world(assets: dict) -> tuple[dict[str, str], list[str]]:
+    out: dict[str, str] = {}
+    notes: list[str] = []
+    for set_name, entry in sorted((assets.get(cfg.WORLD_KEY) or {}).items()):
+        image_id = int(entry.get("paletteImageId", 0))
+        waiting_for_palette = []
+        for mesh_name, mesh in sorted((entry.get("meshes") or {}).items()):
+            if int(mesh.get("assetId", 0)) == 0:
+                continue
+            if not cfg.world_mesh_harvested(mesh):
+                notes.append(f"world/{set_name}/{mesh_name}: uploaded but not harvested; mesh left out")
+                continue
+            if mesh.get("look") != cfg.WORLD_LOOK_FLAT and image_id == 0:
+                waiting_for_palette.append(mesh_name)
+                continue
+            out[f"{set_name}/{mesh_name}.rbxmx"] = world_template_xml(mesh_name, mesh, image_id)
+        if waiting_for_palette:
+            notes.append(
+                f"world/{set_name}: no harvested palette image id; {len(waiting_for_palette)} palette mesh(es) left out"
+                f" ({', '.join(waiting_for_palette)})"
+            )
+    return out, notes
+
+
 def generate(assets: dict, group: str = "eras") -> tuple[dict[str, str], list[str]]:
     """relative path -> xml, plus notes about what was skipped and why; group "props" for props."""
     if group == "paths":
         return generate_paths(assets)
+    if group == "world":
+        return generate_world(assets)
     prop = group == "props"
     prefix = f"{group}/" if prop else ""
     out: dict[str, str] = {}
@@ -303,7 +408,7 @@ def generate(assets: dict, group: str = "eras") -> tuple[dict[str, str], list[st
 
 class Tree:
     """One template root: buildings in templates/, props in templates/_props/, baked path pieces
-    in templates/_paths/."""
+    in templates/_paths/, landscape meshes in templates/_world/."""
 
     def __init__(self, group: str):
         self.group = group
@@ -332,24 +437,27 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--check", action="store_true", help="fail if templates/ differs from what Assets.json produces")
     parser.add_argument("--props", action="store_true", help="write city-dressing prop templates to templates/_props/")
     parser.add_argument("--paths", action="store_true", help="write baked path templates to templates/_paths/")
+    parser.add_argument("--world", action="store_true", help="write landscape mesh templates to templates/_world/")
     parser.add_argument("--assets-json", help="read this Assets.json instead of src/shared/Config/Assets.json")
+    parser.add_argument("--out", help="read and write this templates root instead of templates/")
     args = parser.parse_args(argv)
     cfg.use_assets_path(args.assets_json)
+    use_templates_dir(args.out)
 
     assets = cfg.load_assets() if os.path.isfile(cfg.ASSETS_PATH) else cfg.new_assets()
     if args.check:
         return check(assets)
-    if args.props and args.paths:
-        print("pass at most one of --props and --paths")
+    chosen = [group for group in GROUP_DIRNAMES if getattr(args, group)]
+    if len(chosen) > 1:
+        print("pass at most one of --props, --paths and --world")
         return 1
-    group = "props" if args.props else ("paths" if args.paths else "eras")
-    return write(assets, Tree(group))
+    return write(assets, Tree(chosen[0] if chosen else "eras"))
 
 
 def check(assets: dict) -> int:
     problems = []
     total = 0
-    for tree in (Tree("eras"), Tree("props"), Tree("paths")):
+    for tree in (Tree("eras"), Tree("props"), Tree("paths"), Tree("world")):
         wanted, notes = generate(assets, tree.group)
         for note in notes:
             log(note)
@@ -368,7 +476,7 @@ def check(assets: dict) -> int:
     if problems:
         hints = [
             f" ({flag} for {Tree(group).label})"
-            for group, flag in (("props", "--props"), ("paths", "--paths"))
+            for group, flag in (("props", "--props"), ("paths", "--paths"), ("world", "--world"))
             if any(line.startswith(Tree(group).label + "/") for line in problems)
         ]
         print(f"CHECK: FAIL -- {len(problems)} problem(s); rerun py tools/assets/gen_templates.py{''.join(hints)}")
@@ -406,7 +514,7 @@ def write(assets: dict, tree: Tree) -> int:
                 os.rmdir(folder)  # Rojo maps the folder tree; an empty era folder is just clutter
         if tree.group in GROUP_DIRNAMES and not os.listdir(tree.root):
             os.rmdir(tree.root)
-    kind = {"props": "prop ", "paths": "path "}.get(tree.group, "")
+    kind = {"props": "prop ", "paths": "path ", "world": "world "}.get(tree.group, "")
     log(f"{len(wanted)} {kind}template(s): {written} written, {unchanged} unchanged, {removed} removed")
     return 0
 
