@@ -70,9 +70,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   yet? do it"; **wave 2 built 2026-10-02**, the whole A2 Valley in one wave: mountains, forest,
   waterfall, river, pond, lake, 4 bridges, stepping stones, groves, era aprons and clouds as 28
   generated meshes (131,768 triangles), **uploaded, harvested in one paste and templated**;
-  **reviewed, checks green, Studio playtest pending**; there is no wave 3; branch
-  `m13-valley` in the worktree `C:\Users\benja\Desktop\tycoon-m13`, **not merged** — see "M13"
-  below)
+  reviewed, checks green; **Ben approved it in Studio 2026-10-02 ("approved!") and it is merged
+  into `main`**; there is no wave 3; open: the re-bake for 6 plots when `m11-unlocks` merges —
+  see "M13" below)
 
 ---
 
@@ -2220,9 +2220,11 @@ back-face culling on, compared with the A2 renders and accepted (`sheetV_*.png` 
 - **Frame rate** against before M13.
 
 **Status (wave 2):** built, uploaded, harvested, templated, reviewed, **checks green**
-(2026-10-02), committed on `m13-valley`. Ben's Studio playtest is pending (`docs/PLAYTEST.md`
-"M13 wave 2 — The Valley: mountains, river, bridges"; setup in `docs/MANUAL_STEPS.md` "M13"). Not
-merged.
+(2026-10-02), committed on `m13-valley`. **Ben approved it in Studio on 2026-10-02
+("approved!")**, with no letters, screenshots or step results from the checklist
+(`docs/PLAYTEST.md` "M13 wave 2 — The Valley: mountains, river, bridges"), so the Studio-only
+questions (lowest graphics level, phone, water, flicker, haze) have no recorded answer. Merged
+into `main` the same day.
 
 **Review (roblox-reviewer, 2026-10-02): no Critical, two Warnings, both taken.** Placement, wall,
 bridge decks and wedges, stones, aprons, the client rule and the Rojo mapping were verified
@@ -2278,8 +2280,8 @@ against the real templates and data. Rulings (INTERFACES "Review rulings" under 
 - [x] Ben saw wave 1 in Studio (2026-10-02, one screenshot; no formal sign-off, no haze letter)
 - [x] Wave 2 built, uploaded, harvested (one paste) and templated (2026-10-02)
 - [x] lead: wave 2 review rulings taken and checks green (2026-10-02)
-- [ ] Ben's Studio playtest (`docs/PLAYTEST.md` "M13 wave 2 — The Valley: mountains, river,
-  bridges")
-- [ ] lead: tuning round from Ben's screenshots and answers
+- [x] Ben's Studio playtest: "approved!" (2026-10-02; no checklist answers given)
+- [~] lead: tuning round — nothing asked for; the haze is still the wave 1 first guess, and the
+  low-graphics and phone questions are unanswered
 - [ ] lead: re-bake for 6 plots when `m11-unlocks` merges (one more harvest paste)
-- [ ] lead: merge `m13-valley` into `main`
+- [x] lead: merge `m13-valley` into `main` (2026-10-02)
