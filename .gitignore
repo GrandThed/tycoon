@@ -1,4 +1,6 @@
 tools/__pycache__/
+# luau-compile, downloaded on first run by tools/check_compile.py.
+/tools/bin/
 
 # Secrets — never commit. Holds the Roblox Open Cloud API key for tools/upload_audio.py.
 .env

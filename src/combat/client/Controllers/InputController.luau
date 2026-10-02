@@ -63,7 +63,7 @@
 --  * Touch: the ability buttons (name, a shrinking cooldown disc with whole seconds, dimmed
 --    while busy, a ready pulse) and the slot button (the other slot's family, closing the P2
 --    known limit) join the right-thumb cluster MovementController.ClusterRect lays out.
---    Still no attack button.
+--    Still no attack button. RangeTouchButtons builds and draws them; the rules stay here.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -79,17 +79,20 @@ local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local HitShapes = require(sharedFolder:WaitForChild("HitShapes"))
 
-local uiFolder = script.Parent.Parent:WaitForChild("UI")
-local Theme = require(uiFolder:WaitForChild("Theme"))
-local Create = require(uiFolder:WaitForChild("Create"))
+local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local MovementController = require(script.Parent:WaitForChild("MovementController"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
+local RangeTouchButtons = require(script.Parent:WaitForChild("RangeTouchButtons"))
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
+
+-- A module's top level is one Luau function, and Studio (debug level 2) gives it 200 local
+-- registers, constants included. So related constants and state live in a few tables here and
+-- the touch buttons in RangeTouchButtons; tools/check_compile.py is the gate.
 
 local ENEMIES_FOLDER = "Enemies"
 local ENEMY_ID_ATTRIBUTE = "EnemyId"
@@ -98,33 +101,38 @@ local DEAD_ATTRIBUTE = "Dead"
 -- ordinary strings wherever a slot name is passed to a shared module.
 local MELEE_SLOT: Stance = "melee"
 local RANGED_SLOT: Stance = "ranged"
--- Fallbacks used only when Combat.json is missing; the config is the real home of both.
-local DEFAULT_HIT_PAD = 3
-local DEFAULT_AIM_ASSIST_DEGREES = 20
-local DEFAULT_TOUCH_ASSIST_DEGREES = 12
-local DEFAULT_MAX_TARGETS = 24
-local DEFAULT_COMBO_TOLERANCE = 0.8
+-- Fallbacks used only when Combat.json is missing; the config is the real home of them all.
+local DEFAULTS = table.freeze({
+	HIT_PAD = 3,
+	AIM_ASSIST_DEGREES = 20,
+	TOUCH_ASSIST_DEGREES = 12,
+	MAX_TARGETS = 24,
+	COMBO_TOLERANCE = 0.8,
+})
 local HALF = 0.5
-local ACTION_ATTACK = "CombatAttack"
-local ACTION_ABILITY_MELEE = "CombatAbilityMelee"
-local ACTION_ABILITY_RANGED = "CombatAbilityRanged"
-local ACTION_STANCE = "CombatStance"
-local ACTIONS = { ACTION_ATTACK, ACTION_ABILITY_MELEE, ACTION_ABILITY_RANGED, ACTION_STANCE }
+-- ContextActionService action names: the mission path's four, then the range path's five.
+local ACTION = table.freeze({
+	ATTACK = "CombatAttack",
+	ABILITY_MELEE = "CombatAbilityMelee",
+	ABILITY_RANGED = "CombatAbilityRanged",
+	STANCE = "CombatStance",
+	RANGE_FIRE = "RangeFire",
+	RANGE_ADS = "RangeAds",
+	RANGE_SWAP = "RangeSwap",
+	RANGE_ABILITY_MELEE = "RangeAbilityMelee",
+	RANGE_ABILITY_RANGED = "RangeAbilityRanged",
+})
+local ACTIONS = { ACTION.ATTACK, ACTION.ABILITY_MELEE, ACTION.ABILITY_RANGED, ACTION.STANCE }
 
 -- P1 range path.
 type Device = "pc" | "touch" | "pad"
 local RANGE_BIND = "RangeInput"
-local ACTION_RANGE_FIRE = "RangeFire"
-local ACTION_RANGE_ADS = "RangeAds"
-local ACTION_RANGE_SWAP = "RangeSwap"
-local ACTION_RANGE_ABILITY_MELEE = "RangeAbilityMelee"
-local ACTION_RANGE_ABILITY_RANGED = "RangeAbilityRanged"
 local RANGE_ACTIONS = {
-	ACTION_RANGE_FIRE,
-	ACTION_RANGE_ADS,
-	ACTION_RANGE_SWAP,
-	ACTION_RANGE_ABILITY_MELEE,
-	ACTION_RANGE_ABILITY_RANGED,
+	ACTION.RANGE_FIRE,
+	ACTION.RANGE_ADS,
+	ACTION.RANGE_SWAP,
+	ACTION.RANGE_ABILITY_MELEE,
+	ACTION.RANGE_ABILITY_RANGED,
 }
 local MIN_RATE = 0.05
 -- The sword's pose index restarts after this many swing intervals without a swing.
@@ -137,23 +145,6 @@ local GROUND_PROBE_LIFT = HitShapes.GROUND_PROBE_LIFT
 local GROUND_PROBE_DEPTH = HitShapes.GROUND_PROBE_DEPTH
 -- A cast still unanswered after two pings plus this was refused or dropped by the server.
 local CAST_ACK_SLACK_SECONDS = 0.3
--- Touch buttons (purely visual). The ADS toggle sits above Roblox's jump button; the cluster
--- itself is MovementController.ClusterRect.
-local COLOR_ADS_OFF = Color3.fromRGB(70, 74, 84)
-local COLOR_ADS_ON = Color3.fromRGB(255, 200, 87)
-local COLOR_ABILITY = Color3.fromRGB(150, 110, 235)
-local COLOR_SLOT = Color3.fromRGB(80, 160, 150)
-local COLOR_READY = COLOR_ADS_ON
--- Caption box inside a round button: wide at the middle chord, two lines tall.
-local CAPTION_WIDTH = 0.9
-local CAPTION_HEIGHT = 0.62
-local SECONDS_TEXT_FRACTION = 0.42
-local SECONDS_STROKE_TRANSPARENCY = 0.4
-local BUSY_BUTTON_TRANSPARENCY = 0.75
-local BUSY_TEXT_TRANSPARENCY = 0.55
-local READY_PULSE_SECONDS = 0.35
-local READY_PULSE_SCALE = 0.18
-local READY_STROKE_THICKNESS = 4
 
 local InputController = {}
 
@@ -161,72 +152,106 @@ local armoryConfig: Types.ArmoryConfig? = nil
 local combatConfig: Types.CombatConfig? = nil
 
 local stance: Stance = MELEE_SLOT
-local gear: SlotTiers = { melee = 0, ranged = 0 }
-local abilityReadyIn: SlotTiers = { melee = 0, ranged = 0 }
-local phase = "lobby"
-local onStanceChanged: ((Stance) -> ())? = nil
-
-local requestAttack: RemoteEvent? = nil
-local requestFire: RemoteEvent? = nil
-local requestAbility: RemoteEvent? = nil
--- C2: the bow's draw start. The server caps a shot's charge by the time since this stamp, so
--- a release with no draw before it is a weak shot however long the button was held.
-local requestDraw: RemoteEvent? = nil
-
-local attackSeq = 0
-local fireSeq = 0
-local comboStep = 0
-local lastSwingAt = 0
-local lastFireAt = 0
-local chargeStartedAt: number? = nil
-local holdToken = 0
-local attackHeld = false
 local connections: { RBXScriptConnection } = {}
-
 local rangeMode = false
-local activeSlot: Stance = MELEE_SLOT
--- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
-local loadout: Types.RangeLoadout? = nil
-local drawStartedAt: number? = nil
-local drawFamily = ""
--- autoFire: when the target left the assist cone during an under-charged draw. The draw
--- survives controls.tapBufferSeconds so a flickering target does not cancel and restart it.
-local targetLostAt: number? = nil
-local rangeHeld = false
-local adsHeld = false
-local adsToggled = false
-local adsActive = false
-local tapQueuedAt: number? = nil
-local lastRangeAttackAt = -math.huge
-local lastShotAt = -math.huge
-local bloom = 0
-local rangeSeq = 0
-local swingStep = 0
-local device: Device = "pc"
--- drawing = a still hold that became a bow draw (tapFire).
-type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
-local rangeTouches: { [InputObject]: TapState } = {}
-local requestRangeAttack: RemoteEvent? = nil
-local requestRangeDraw: RemoteEvent? = nil
-local rangeGui: ScreenGui? = nil
-local adsButton: TextButton? = nil
-local rangeStarted = false
--- Sustained-fire accumulator (see dueShots): when the next shot is due, the interval it was
--- scheduled at, and whether the previous frame wanted to fire (a stream in progress).
-local nextShotAt = -math.huge
-local scheduledInterval = 0
-local firingStream = false
--- Touch auto-fire: a held beam keeps firing until then after its target leaves the cone.
-local beamHoldUntil = 0
 
--- P3 abilities. Every time here is workspace:GetServerTimeNow() unless named "clock".
-local requestRangeAbility: RemoteEvent? = nil
-local serverAbility: Types.RangeAbilityState? = nil
-local abilitySeq = 0
--- A mirror of the server's rangeAbility token bucket (RemoteService: capacity = rate), so a
--- cast the server would drop unanswered is never sent, while Q then E stays one burst.
-local castTokens = math.huge
-local castTokensClock = 0
+-- Mission-path state (C1-C2.5).
+type MissionState = {
+	gear: SlotTiers,
+	abilityReadyIn: SlotTiers,
+	phase: string,
+	onStanceChanged: ((Stance) -> ())?,
+	requestAttack: RemoteEvent?,
+	requestFire: RemoteEvent?,
+	requestAbility: RemoteEvent?,
+	-- C2: the bow's draw start. The server caps a shot's charge by the time since this stamp,
+	-- so a release with no draw before it is a weak shot however long the button was held.
+	requestDraw: RemoteEvent?,
+	attackSeq: number,
+	fireSeq: number,
+	comboStep: number,
+	lastSwingAt: number,
+	lastFireAt: number,
+	chargeStartedAt: number?,
+	holdToken: number,
+	attackHeld: boolean,
+	-- The crosshair ray ignores every player character, as the server's shot ray does. The
+	-- list changes only when a character spawns or a player joins or leaves, so it is cached.
+	crosshairParams: RaycastParams?,
+	characterConnections: { [Player]: RBXScriptConnection },
+}
+local missionState: MissionState = {
+	gear = { melee = 0, ranged = 0 },
+	abilityReadyIn = { melee = 0, ranged = 0 },
+	phase = "lobby",
+	attackSeq = 0,
+	fireSeq = 0,
+	comboStep = 0,
+	lastSwingAt = 0,
+	lastFireAt = 0,
+	holdToken = 0,
+	attackHeld = false,
+	characterConnections = {},
+}
+
+-- Range-path state (P1-P3): the slot and loadout, the held inputs, the draw and the fire
+-- pacing.
+-- drawing = a still hold that became a bow draw or a held beam (tapFire).
+type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
+type RangeState = {
+	rangeStarted: boolean,
+	activeSlot: Stance,
+	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
+	loadout: Types.RangeLoadout?,
+	device: Device,
+	rangeTouches: { [InputObject]: TapState },
+	requestRangeAttack: RemoteEvent?,
+	requestRangeDraw: RemoteEvent?,
+	rangeHeld: boolean,
+	adsHeld: boolean,
+	adsToggled: boolean,
+	adsActive: boolean,
+	drawStartedAt: number?,
+	drawFamily: string,
+	-- autoFire: when the target left the assist cone during an under-charged draw. The draw
+	-- survives controls.tapBufferSeconds so a flickering target does not cancel and restart it.
+	targetLostAt: number?,
+	tapQueuedAt: number?,
+	lastRangeAttackAt: number,
+	lastShotAt: number,
+	bloom: number,
+	rangeSeq: number,
+	swingStep: number,
+	-- Sustained-fire accumulator (see dueShots): when the next shot is due, the interval it
+	-- was scheduled at, and whether the previous frame wanted to fire (a stream in progress).
+	nextShotAt: number,
+	scheduledInterval: number,
+	firingStream: boolean,
+	-- Touch auto-fire: a held beam keeps firing until then after its target leaves the cone.
+	beamHoldUntil: number,
+}
+local rangeState: RangeState = {
+	rangeStarted = false,
+	activeSlot = MELEE_SLOT,
+	device = "pc",
+	rangeTouches = {},
+	rangeHeld = false,
+	adsHeld = false,
+	adsToggled = false,
+	adsActive = false,
+	drawFamily = "",
+	lastRangeAttackAt = -math.huge,
+	lastShotAt = -math.huge,
+	bloom = 0,
+	rangeSeq = 0,
+	swingStep = 0,
+	nextShotAt = -math.huge,
+	scheduledInterval = 0,
+	firingStream = false,
+	beamHoldUntil = 0,
+}
+
+-- P3 ability state. Every time here is workspace:GetServerTimeNow() unless named "clock".
 -- A cast the server has not answered yet: its predicted cooldown, floor and busy window, and
 -- the os.clock it was sent at (keyed by slot).
 type PendingCast = {
@@ -237,47 +262,32 @@ type PendingCast = {
 	floorAt: number,
 	busyUntil: number,
 }
-local pendingCasts: { [string]: PendingCast } = {}
--- What GetAbilityState hands out: the server state with the predictions laid over it.
-local abilityViewState: Types.RangeAbilityState = {
-	melee = { ability = "", readyAt = 0, floorAt = 0 },
-	ranged = { ability = "", readyAt = 0, floorAt = 0 },
-	busyUntil = 0,
-}
 -- Mag Dump: the ranged slot fires by itself until `untilAt` at rate x rateMult.
 type MagDump = { family: string, untilAt: number, rateMult: number }
-local magDump: MagDump? = nil
-
-type AbilityButton = {
-	slot: Stance,
-	key: MovementController.ClusterKey,
-	button: TextButton,
-	scale: UIScale,
-	stroke: UIStroke?,
-	strokeColor: Color3,
-	strokeThickness: number,
-	baseTransparency: number,
-	nameLabel: TextLabel,
-	nameConstraint: UITextSizeConstraint,
-	fill: Frame,
-	secondsLabel: TextLabel,
-	shownName: string,
-	shownSeconds: number,
-	shownFill: number,
-	dimmed: boolean,
-	cooling: boolean,
-	pulseAt: number?,
+type CastState = {
+	requestRangeAbility: RemoteEvent?,
+	serverAbility: Types.RangeAbilityState?,
+	abilitySeq: number,
+	-- A mirror of the server's rangeAbility token bucket (RemoteService: capacity = rate), so
+	-- a cast the server would drop unanswered is never sent, while Q then E stays one burst.
+	castTokens: number,
+	castTokensClock: number,
+	pendingCasts: { [string]: PendingCast },
+	-- What GetAbilityState hands out: the server state with the predictions laid over it.
+	abilityViewState: Types.RangeAbilityState,
+	magDump: MagDump?,
 }
-type SlotButton = {
-	button: TextButton,
-	label: TextLabel,
-	constraint: UITextSizeConstraint,
-	baseTransparency: number,
-	shownName: string,
-	dimmed: boolean,
+local castState: CastState = {
+	abilitySeq = 0,
+	castTokens = math.huge,
+	castTokensClock = 0,
+	pendingCasts = {},
+	abilityViewState = {
+		melee = { ability = "", readyAt = 0, floorAt = 0 },
+		ranged = { ability = "", readyAt = 0, floorAt = 0 },
+		busyUntil = 0,
+	},
 }
-local abilityButtons: { [string]: AbilityButton } = {}
-local slotButton: SlotButton? = nil
 
 local function slotTier(tiers: SlotTiers, slot: string): number
 	return if slot == MELEE_SLOT then tiers.melee else tiers.ranged
@@ -291,7 +301,7 @@ local function weaponFor(
 	if cfg == nil then
 		return nil, nil
 	end
-	local tierDef = Armory.TierDef(cfg, slot, slotTier(gear, slot))
+	local tierDef = Armory.TierDef(cfg, slot, slotTier(missionState.gear, slot))
 	if tierDef == nil then
 		return nil, nil
 	end
@@ -300,17 +310,17 @@ end
 
 local function hitPad(): number
 	local cfg = combatConfig
-	return if cfg ~= nil then cfg.player.hitDistancePad else DEFAULT_HIT_PAD
+	return if cfg ~= nil then cfg.player.hitDistancePad else DEFAULTS.HIT_PAD
 end
 
 local function aimAssistDegrees(): number
 	local cfg = combatConfig
-	return if cfg ~= nil then cfg.player.aimAssistDegrees else DEFAULT_AIM_ASSIST_DEGREES
+	return if cfg ~= nil then cfg.player.aimAssistDegrees else DEFAULTS.AIM_ASSIST_DEGREES
 end
 
 local function touchAssistDegrees(): number
 	local cfg = combatConfig
-	return if cfg ~= nil then cfg.camera.touchAimAssistDegrees else DEFAULT_TOUCH_ASSIST_DEGREES
+	return if cfg ~= nil then cfg.camera.touchAimAssistDegrees else DEFAULTS.TOUCH_ASSIST_DEGREES
 end
 
 -- Touch and gamepad get the soft lock; a locked mouse aims exactly where the crosshair is.
@@ -321,20 +331,22 @@ end
 
 local function maxTargets(): number
 	local cfg = combatConfig
-	return if cfg ~= nil then cfg.director.maxAlive else DEFAULT_MAX_TARGETS
+	return if cfg ~= nil then cfg.director.maxAlive else DEFAULTS.MAX_TARGETS
 end
 
 -- The same tolerance CombatService gates a swing and a shot with, read from the same key:
 -- anything sent earlier than this is certain to come back as `refused cooldown`.
 local function comboTolerance(): number
 	local cfg = combatConfig
-	return if cfg ~= nil then cfg.player.comboTimingTolerance else DEFAULT_COMBO_TOLERANCE
+	return if cfg ~= nil then cfg.player.comboTimingTolerance else DEFAULTS.COMBO_TOLERANCE
 end
 
 -- Only phases where a swing can possibly land. The server refuses the rest anyway; not
 -- sending keeps the attack bucket for real swings.
 local function inPlay(): boolean
-	return phase == "wave" or phase == "breather" or phase == "boss"
+	return missionState.phase == "wave"
+		or missionState.phase == "breather"
+		or missionState.phase == "boss"
 end
 
 type LocalRig = { root: BasePart, head: BasePart, humanoid: Humanoid }
@@ -430,17 +442,12 @@ local function nearestInCone(
 	return best
 end
 
--- The crosshair ray ignores every player character, as the server's shot ray does. The
--- list changes only when a character spawns or a player joins or leaves, so it is cached.
-local crosshairParams: RaycastParams? = nil
-local characterConnections: { [Player]: RBXScriptConnection } = {}
-
 local function invalidateCrosshair(): ()
-	crosshairParams = nil
+	missionState.crosshairParams = nil
 end
 
 local function crosshairParamsFor(): RaycastParams
-	local cached = crosshairParams
+	local cached = missionState.crosshairParams
 	if cached ~= nil then
 		return cached
 	end
@@ -454,22 +461,22 @@ local function crosshairParamsFor(): RaycastParams
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = list
-	crosshairParams = params
+	missionState.crosshairParams = params
 	return params
 end
 
 local function watchPlayer(player: Player): ()
-	local existing: RBXScriptConnection? = characterConnections[player]
+	local existing: RBXScriptConnection? = missionState.characterConnections[player]
 	if existing ~= nil then
 		existing:Disconnect()
 	end
-	characterConnections[player] = player.CharacterAdded:Connect(invalidateCrosshair)
+	missionState.characterConnections[player] = player.CharacterAdded:Connect(invalidateCrosshair)
 	invalidateCrosshair()
 end
 
 local function forgetPlayer(player: Player): ()
-	local existing: RBXScriptConnection? = characterConnections[player]
-	characterConnections[player] = nil
+	local existing: RBXScriptConnection? = missionState.characterConnections[player]
+	missionState.characterConnections[player] = nil
 	if existing ~= nil then
 		existing:Disconnect()
 	end
@@ -532,7 +539,7 @@ local function sendMelee(): ()
 	if rig == nil or not inPlay() then
 		return
 	end
-	local remote = requestAttack
+	local remote = missionState.requestAttack
 	local tierDef, class = weaponFor(MELEE_SLOT)
 	if remote == nil or tierDef == nil or class == nil then
 		return
@@ -542,14 +549,16 @@ local function sendMelee(): ()
 	local now = os.clock()
 	-- The server drops a swing that arrives inside the previous window; spending an attack
 	-- token on a swing that is certainly refused only starves the next real one.
-	local previousWindow = windows[comboStep] or 0
-	if now - lastSwingAt < previousWindow * comboTolerance() then
+	local previousWindow = windows[missionState.comboStep] or 0
+	if now - missionState.lastSwingAt < previousWindow * comboTolerance() then
 		return
 	end
-	local step = if now - lastSwingAt > reset then 1 else comboStep % 3 + 1
+	local step = if now - missionState.lastSwingAt > reset
+		then 1
+		else missionState.comboStep % 3 + 1
 	local window = windows[step] or windows[1] or 0
-	comboStep = step
-	lastSwingAt = now
+	missionState.comboStep = step
+	missionState.lastSwingAt = now
 
 	-- Melee keeps its wider C1 assist on every device: the cone sits on the camera's look,
 	-- and the rig turns to the enemy for the swing (the server measures the arc from it).
@@ -578,8 +587,8 @@ local function sendMelee(): ()
 		end
 	end
 
-	attackSeq += 1
-	remote:FireServer(attackSeq, ids)
+	missionState.attackSeq += 1
+	remote:FireServer(missionState.attackSeq, ids)
 	WeaponController.Swing(step, window)
 	SoundController.Play(if step >= 3 then "finisher" else "swing")
 end
@@ -599,22 +608,22 @@ local function sendFire(charge: number): ()
 	if rig == nil or not inPlay() then
 		return
 	end
-	local remote = requestFire
+	local remote = missionState.requestFire
 	local tierDef, class = weaponFor(RANGED_SLOT)
 	if remote == nil or tierDef == nil or class == nil then
 		return
 	end
 	local cooldown = class.cooldown or 0
 	local now = os.clock()
-	if now - lastFireAt < cooldown * comboTolerance() then
+	if now - missionState.lastFireAt < cooldown * comboTolerance() then
 		return
 	end
-	lastFireAt = now
+	missionState.lastFireAt = now
 
 	local origin = rig.head.Position
 	local direction = withSpread((aim(origin, class.range)), class.spreadDegrees or 0)
-	fireSeq += 1
-	remote:FireServer(fireSeq, origin, direction, math.clamp(charge, 0, 1))
+	missionState.fireSeq += 1
+	remote:FireServer(missionState.fireSeq, origin, direction, math.clamp(charge, 0, 1))
 	WeaponController.Shoot(origin, direction, class.range, class.fire or "semi")
 	SoundController.Play(fireSoundKey(class))
 end
@@ -628,20 +637,20 @@ local function beginRanged(): ()
 	end
 	local fire = class.fire
 	if fire == "charge" then
-		local drawRemote = requestDraw
+		local drawRemote = missionState.requestDraw
 		if drawRemote ~= nil and inPlay() and localRig() ~= nil then
 			drawRemote:FireServer()
 		end
-		chargeStartedAt = os.clock()
+		missionState.chargeStartedAt = os.clock()
 		WeaponController.Draw(class.chargeSeconds or 1)
 		SoundController.Play("bowDraw")
 		return
 	end
 	if fire == "auto" then
-		holdToken += 1
-		local token = holdToken
+		missionState.holdToken += 1
+		local token = missionState.holdToken
 		task.spawn(function()
-			while attackHeld and token == holdToken do
+			while missionState.attackHeld and token == missionState.holdToken do
 				sendFire(1)
 				task.wait(math.max(class.cooldown or 0, 0))
 			end
@@ -652,9 +661,9 @@ local function beginRanged(): ()
 end
 
 local function endRanged(): ()
-	local startedAt = chargeStartedAt
-	chargeStartedAt = nil
-	holdToken += 1
+	local startedAt = missionState.chargeStartedAt
+	missionState.chargeStartedAt = nil
+	missionState.holdToken += 1
 	if startedAt == nil then
 		return
 	end
@@ -668,10 +677,10 @@ local function endRanged(): ()
 end
 
 local function attackBegan(): ()
-	if attackHeld then
+	if missionState.attackHeld then
 		return
 	end
-	attackHeld = true
+	missionState.attackHeld = true
 	if stance == MELEE_SLOT then
 		sendMelee()
 	else
@@ -680,10 +689,10 @@ local function attackBegan(): ()
 end
 
 local function attackEnded(): ()
-	if not attackHeld then
+	if not missionState.attackHeld then
 		return
 	end
-	attackHeld = false
+	missionState.attackHeld = false
 	if stance == RANGED_SLOT then
 		endRanged()
 	end
@@ -717,7 +726,7 @@ local function sendAbility(slot: string): ()
 	if not inPlay() or localRig() == nil then
 		return
 	end
-	local remote = requestAbility
+	local remote = missionState.requestAbility
 	local tierDef, class = weaponFor(slot)
 	local cfg = armoryConfig
 	if remote == nil or tierDef == nil or class == nil or cfg == nil then
@@ -728,7 +737,7 @@ local function sendAbility(slot: string): ()
 	end
 	-- Predicted only to save the bucket: the authoritative cooldown is the server's, and it
 	-- comes back in every RunState as PartyMember.abilityReadyIn.
-	if slotTier(abilityReadyIn, slot) > 0 then
+	if slotTier(missionState.abilityReadyIn, slot) > 0 then
 		return
 	end
 	local ability = Armory.AbilityDef(cfg, tierDef.ability)
@@ -736,9 +745,9 @@ local function sendAbility(slot: string): ()
 	SoundController.Play("abilityCast")
 	if ability ~= nil then
 		if slot == MELEE_SLOT then
-			abilityReadyIn.melee = ability.cooldown
+			missionState.abilityReadyIn.melee = ability.cooldown
 		else
-			abilityReadyIn.ranged = ability.cooldown
+			missionState.abilityReadyIn.ranged = ability.cooldown
 		end
 		if ability.kind == "burst" and ability.dashStuds ~= nil then
 			dash(ability.dashStuds)
@@ -751,11 +760,11 @@ local function setStance(nextStance: Stance): ()
 		return
 	end
 	stance = nextStance
-	comboStep = 0
-	chargeStartedAt = nil
-	holdToken += 1
+	missionState.comboStep = 0
+	missionState.chargeStartedAt = nil
+	missionState.holdToken += 1
 	WeaponController.SetStance(nextStance)
-	local handler = onStanceChanged
+	local handler = missionState.onStanceChanged
 	if handler ~= nil then
 		handler(nextStance)
 	end
@@ -795,17 +804,17 @@ local function onGamepadAction(
 	_input: InputObject
 ): Enum.ContextActionResult
 	local began = state == Enum.UserInputState.Begin
-	if action == ACTION_ATTACK then
+	if action == ACTION.ATTACK then
 		if began then
 			attackBegan()
 		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
 			attackEnded()
 		end
-	elseif began and action == ACTION_ABILITY_MELEE then
+	elseif began and action == ACTION.ABILITY_MELEE then
 		sendAbility(MELEE_SLOT)
-	elseif began and action == ACTION_ABILITY_RANGED then
+	elseif began and action == ACTION.ABILITY_RANGED then
 		sendAbility(RANGED_SLOT)
-	elseif began and action == ACTION_STANCE then
+	elseif began and action == ACTION.STANCE then
 		setStance(if stance == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
 	end
 	return Enum.ContextActionResult.Sink
@@ -814,10 +823,10 @@ end
 local function bindGamepad(): ()
 	local priority = Enum.ContextActionPriority.High.Value
 	local bindings: { { action: string, key: Enum.KeyCode } } = {
-		{ action = ACTION_ATTACK, key = Enum.KeyCode.ButtonR2 },
-		{ action = ACTION_ABILITY_MELEE, key = Enum.KeyCode.ButtonL1 },
-		{ action = ACTION_ABILITY_RANGED, key = Enum.KeyCode.ButtonR1 },
-		{ action = ACTION_STANCE, key = Enum.KeyCode.ButtonY },
+		{ action = ACTION.ATTACK, key = Enum.KeyCode.ButtonR2 },
+		{ action = ACTION.ABILITY_MELEE, key = Enum.KeyCode.ButtonL1 },
+		{ action = ACTION.ABILITY_RANGED, key = Enum.KeyCode.ButtonR1 },
+		{ action = ACTION.STANCE, key = Enum.KeyCode.ButtonY },
 	}
 	for _, binding in bindings do
 		ContextActionService:BindActionAtPriority(
@@ -842,7 +851,7 @@ local function slotFamily(
 	cfg: Types.ProvingGroundsConfig,
 	slot: Stance
 ): (string, Types.RangeWeaponDef?)
-	local held = loadout
+	local held = rangeState.loadout
 	local family
 	if slot == MELEE_SLOT then
 		family = if held ~= nil then held.melee else cfg.loadout.melee
@@ -858,7 +867,7 @@ end
 
 -- The family in the active slot.
 local function activeFamily(cfg: Types.ProvingGroundsConfig): (string, Types.RangeWeaponDef?)
-	return slotFamily(cfg, activeSlot)
+	return slotFamily(cfg, rangeState.activeSlot)
 end
 
 -- (variant, family id) for the active slot. The loadout's variant choice wins
@@ -868,7 +877,7 @@ local function currentVariant(cfg: Types.ProvingGroundsConfig): (Types.RangeWeap
 	if def == nil then
 		return nil, family
 	end
-	local held = loadout
+	local held = rangeState.loadout
 	local chosen = if held ~= nil then held.variants[family] else nil
 	local key = if chosen ~= nil and def.variants[chosen] ~= nil then chosen else def.default
 	return def.variants[key], family
@@ -889,7 +898,7 @@ end
 
 -- Draw progress 0-1 of the current draw against the variant's live chargeSeconds.
 local function chargeOf(variant: Types.RangeWeaponVariant): number
-	local startedAt = drawStartedAt
+	local startedAt = rangeState.drawStartedAt
 	if startedAt == nil then
 		return 0
 	end
@@ -901,17 +910,22 @@ local function chargeOf(variant: Types.RangeWeaponVariant): number
 end
 
 local function firstShotReady(cfg: Types.ProvingGroundsConfig): boolean
-	return os.clock() - lastShotAt >= cfg.shooting.firstShotSeconds
+	return os.clock() - rangeState.lastShotAt >= cfg.shooting.firstShotSeconds
 end
 
 -- Half-angle (degrees) of the cone the next shot is drawn from: 0 for a first shot, for
 -- melee and during Mag Dump, otherwise the bloom with the ADS multiplier.
 local function nextSpreadDegrees(cfg: Types.ProvingGroundsConfig): number
 	local variant = currentVariant(cfg)
-	if variant == nil or not isRanged(variant) or magDump ~= nil or firstShotReady(cfg) then
+	if
+		variant == nil
+		or not isRanged(variant)
+		or castState.magDump ~= nil
+		or firstShotReady(cfg)
+	then
 		return 0
 	end
-	return bloom * (if adsActive then cfg.shooting.adsBloomMult else 1)
+	return rangeState.bloom * (if rangeState.adsActive then cfg.shooting.adsBloomMult else 1)
 end
 
 local function updateBloom(cfg: Types.ProvingGroundsConfig, rig: LocalRig, deltaTime: number): ()
@@ -920,12 +934,12 @@ local function updateBloom(cfg: Types.ProvingGroundsConfig, rig: LocalRig, delta
 	local moving = Vector3.new(velocity.X, 0, velocity.Z).Magnitude > shooting.bloomMovingSpeed
 		or MovementController.IsAirborne()
 	if moving then
-		bloom += shooting.bloomMovePerSecond * deltaTime
+		rangeState.bloom += shooting.bloomMovePerSecond * deltaTime
 	else
-		bloom -= shooting.bloomRecoverPerSecond * deltaTime
+		rangeState.bloom -= shooting.bloomRecoverPerSecond * deltaTime
 	end
 	local low = shooting.bloomMinDegrees
-	bloom = math.clamp(bloom, low, math.max(shooting.bloomMaxDegrees, low))
+	rangeState.bloom = math.clamp(rangeState.bloom, low, math.max(shooting.bloomMaxDegrees, low))
 end
 
 -- Uniform over the disc of a cone with this half-angle.
@@ -1050,11 +1064,11 @@ local function enemyInReach(
 end
 
 local function autoFireOn(cfg: Types.ProvingGroundsConfig): boolean
-	return device == "touch" and cfg.controls.touchMode == "autoFire"
+	return rangeState.device == "touch" and cfg.controls.touchMode == "autoFire"
 end
 
 local function tapFireOn(cfg: Types.ProvingGroundsConfig): boolean
-	return device == "touch" and cfg.controls.touchMode == "tapFire"
+	return rangeState.device == "touch" and cfg.controls.touchMode == "tapFire"
 end
 
 -- Touch auto-fire's "on target": the assist cone for guns and bows, the whole cone for a cone
@@ -1078,14 +1092,14 @@ end
 
 -- A queued tap still inside its buffer; an expired one is dropped.
 local function tapPending(cfg: Types.ProvingGroundsConfig): boolean
-	local queued = tapQueuedAt
+	local queued = rangeState.tapQueuedAt
 	if queued == nil then
 		return false
 	end
 	if os.clock() - queued <= cfg.controls.tapBufferSeconds then
 		return true
 	end
-	tapQueuedAt = nil
+	rangeState.tapQueuedAt = nil
 	return false
 end
 
@@ -1095,7 +1109,7 @@ local function touchDrawHeld(cfg: Types.ProvingGroundsConfig): boolean
 	local controls = cfg.controls
 	local now = os.clock()
 	local held = false
-	for _, state in rangeTouches do
+	for _, state in rangeState.rangeTouches do
 		if
 			not state.drawing
 			and now - state.at > controls.tapMaxSeconds
@@ -1113,7 +1127,7 @@ local function wantsRangeAttack(
 	variant: Types.RangeWeaponVariant,
 	rig: LocalRig
 ): boolean
-	if rangeHeld or tapPending(cfg) then
+	if rangeState.rangeHeld or tapPending(cfg) then
 		return true
 	end
 	local continuous = variant.continuous == true
@@ -1125,11 +1139,11 @@ local function wantsRangeAttack(
 		return false
 	end
 	if targetOnAuto(cfg, variant, rig) then
-		beamHoldUntil = os.clock() + cfg.controls.tapBufferSeconds
+		rangeState.beamHoldUntil = os.clock() + cfg.controls.tapBufferSeconds
 		return true
 	end
 	-- A held beam rides out a target flickering on the cone's edge instead of stuttering.
-	return continuous and os.clock() < beamHoldUntil
+	return continuous and os.clock() < rangeState.beamHoldUntil
 end
 
 -- How many sustained-fire shots are due this frame. A true accumulator: a shot is due once
@@ -1143,19 +1157,19 @@ end
 --    from the last attack.
 local function dueShots(interval: number, frameSeconds: number, fresh: boolean): number
 	local now = os.clock()
-	if interval ~= scheduledInterval then
-		scheduledInterval = interval
-		nextShotAt = lastRangeAttackAt + interval
+	if interval ~= rangeState.scheduledInterval then
+		rangeState.scheduledInterval = interval
+		rangeState.nextShotAt = rangeState.lastRangeAttackAt + interval
 	end
-	if now < nextShotAt then
+	if now < rangeState.nextShotAt then
 		return 0
 	end
-	nextShotAt = math.max(nextShotAt, if fresh then now else now - interval)
+	rangeState.nextShotAt = math.max(rangeState.nextShotAt, if fresh then now else now - interval)
 	local limit = if frameSeconds > interval then MAX_SHOTS_PER_FRAME else 1
 	local count = 0
-	while count < limit and now >= nextShotAt do
+	while count < limit and now >= rangeState.nextShotAt do
 		count += 1
-		nextShotAt += interval
+		rangeState.nextShotAt += interval
 	end
 	return count
 end
@@ -1171,25 +1185,35 @@ local function rangeAttack(
 	interval: number,
 	steady: boolean
 ): ()
-	local remote = requestRangeAttack
+	local remote = rangeState.requestRangeAttack
 	if remote == nil then
 		return
 	end
 	local now = os.clock()
-	local idle = now - lastRangeAttackAt > interval * SWING_RESET_INTERVALS
-	lastRangeAttackAt = now
-	tapQueuedAt = nil
-	rangeSeq += 1
+	local idle = now - rangeState.lastRangeAttackAt > interval * SWING_RESET_INTERVALS
+	rangeState.lastRangeAttackAt = now
+	rangeState.tapQueuedAt = nil
+	rangeState.rangeSeq += 1
 	if isRanged(variant) then
 		local origin, look = shotRay(rig)
 		local direction = if steady then look else spreadDirection(look, nextSpreadDegrees(cfg))
-		remote:FireServer(family, rangeSeq, origin, direction, adsActive, charge)
-		lastShotAt = now
+		remote:FireServer(
+			family,
+			rangeState.rangeSeq,
+			origin,
+			direction,
+			rangeState.adsActive,
+			charge
+		)
+		rangeState.lastShotAt = now
 		if not steady then
 			-- P3: bloomMult scales what one shot adds (SMG sprays tighter, a beam adds none).
 			local shooting = cfg.shooting
 			local added = shooting.bloomPerShot * math.max(variant.bloomMult or 1, 0)
-			bloom = math.min(bloom + added, math.max(shooting.bloomMaxDegrees, bloom))
+			rangeState.bloom = math.min(
+				rangeState.bloom + added,
+				math.max(shooting.bloomMaxDegrees, rangeState.bloom)
+			)
 		end
 		-- A local muzzle flash and tracer the instant the trigger is pulled; a projectile's
 		-- flight is drawn from the server's CombatFxShot, so it gets no instant tracer. A held
@@ -1200,13 +1224,13 @@ local function rangeAttack(
 		return
 	end
 	local forward = flatCameraLook()
-	remote:FireServer(family, rangeSeq, rig.root.Position, forward, false, charge)
+	remote:FireServer(family, rangeState.rangeSeq, rig.root.Position, forward, false, charge)
 	local chain = variant.chain
 	local length = if chain ~= nil and #chain > 0 then #chain else 1
-	swingStep = if idle then 1 else swingStep % length + 1
-	local pose = if length > 1 and swingStep >= length
+	rangeState.swingStep = if idle then 1 else rangeState.swingStep % length + 1
+	local pose = if length > 1 and rangeState.swingStep >= length
 		then FINISHER_POSE
-		else math.min(swingStep, 2)
+		else math.min(rangeState.swingStep, 2)
 	WeaponController.Swing(pose, interval)
 	if MovementController.IsAirborne() then
 		MovementController.AirHang(cfg.movement.airAttackHangSeconds)
@@ -1214,11 +1238,11 @@ local function rangeAttack(
 end
 
 local function startDraw(variant: Types.RangeWeaponVariant, family: string): ()
-	drawStartedAt = os.clock()
-	drawFamily = family
-	targetLostAt = nil
+	rangeState.drawStartedAt = os.clock()
+	rangeState.drawFamily = family
+	rangeState.targetLostAt = nil
 	-- The server's own draw clock starts here and caps whatever charge the release claims.
-	local remote = requestRangeDraw
+	local remote = rangeState.requestRangeDraw
 	if remote ~= nil then
 		remote:FireServer(family)
 	end
@@ -1226,12 +1250,12 @@ local function startDraw(variant: Types.RangeWeaponVariant, family: string): ()
 end
 
 local function cancelDraw(): ()
-	if drawStartedAt == nil then
+	if rangeState.drawStartedAt == nil then
 		return
 	end
-	drawStartedAt = nil
-	drawFamily = ""
-	targetLostAt = nil
+	rangeState.drawStartedAt = nil
+	rangeState.drawFamily = ""
+	rangeState.targetLostAt = nil
 	WeaponController.Release()
 end
 
@@ -1242,9 +1266,9 @@ local function releaseDraw(
 	rig: LocalRig
 ): ()
 	local charge = chargeOf(variant)
-	drawStartedAt = nil
-	drawFamily = ""
-	targetLostAt = nil
+	rangeState.drawStartedAt = nil
+	rangeState.drawFamily = ""
+	rangeState.targetLostAt = nil
 	WeaponController.Release()
 	rangeAttack(cfg, variant, family, rig, charge, intervalOf(variant), false)
 end
@@ -1262,10 +1286,10 @@ local function stepCharge(
 	family: string,
 	rig: LocalRig
 ): ()
-	local ready = os.clock() - lastRangeAttackAt >= intervalOf(variant)
-	local auto = autoFireOn(cfg) and not rangeHeld
-	local heldDraw = rangeHeld or (tapFireOn(cfg) and touchDrawHeld(cfg))
-	if drawStartedAt == nil then
+	local ready = os.clock() - rangeState.lastRangeAttackAt >= intervalOf(variant)
+	local auto = autoFireOn(cfg) and not rangeState.rangeHeld
+	local heldDraw = rangeState.rangeHeld or (tapFireOn(cfg) and touchDrawHeld(cfg))
+	if rangeState.drawStartedAt == nil then
 		if tapPending(cfg) then
 			if ready then
 				startDraw(variant, family)
@@ -1279,14 +1303,14 @@ local function stepCharge(
 	local release = false
 	if auto then
 		if targetOnAuto(cfg, variant, rig) then
-			targetLostAt = nil
+			rangeState.targetLostAt = nil
 			release = chargeOf(variant) >= 1
 		elseif chargeOf(variant) >= (variant.minChargeFraction or 0) then
 			release = true
 		else
 			local now = os.clock()
-			local lostAt = targetLostAt or now
-			targetLostAt = lostAt
+			local lostAt = rangeState.targetLostAt or now
+			rangeState.targetLostAt = lostAt
 			if now - lostAt > cfg.controls.tapBufferSeconds then
 				cancelDraw()
 			end
@@ -1300,31 +1324,16 @@ local function stepCharge(
 	end
 end
 
-local function refreshAdsButton(variant: Types.RangeWeaponVariant?): ()
-	local button = adsButton
-	if button == nil then
-		return
-	end
-	local visible = variant ~= nil and isRanged(variant)
-	if button.Visible ~= visible then
-		button.Visible = visible
-	end
-	local color = if adsActive then COLOR_ADS_ON else COLOR_ADS_OFF
-	if button.BackgroundColor3 ~= color then
-		button.BackgroundColor3 = color
-	end
-end
-
 -- The slot actually changes here: a player's choice (requestSlot) or a cast (ruling 1).
 local function setActiveSlot(slot: Stance): ()
-	if slot == activeSlot then
+	if slot == rangeState.activeSlot then
 		return
 	end
-	activeSlot = slot
+	rangeState.activeSlot = slot
 	cancelDraw()
-	adsToggled = false
-	swingStep = 0
-	tapQueuedAt = nil
+	rangeState.adsToggled = false
+	rangeState.swingStep = 0
+	rangeState.tapQueuedAt = nil
 	-- The stance drives WeaponController's held model and the HUD's stance glyph.
 	setStance(slot)
 end
@@ -1364,9 +1373,9 @@ end
 -- Stops what this client started for a cast in `slot`: its prediction, and Mag Dump (ranged)
 -- or the leap / lunge / Whirlwind walk (melee).
 local function cancelLocalCast(slot: string): ()
-	pendingCasts[slot] = nil
+	castState.pendingCasts[slot] = nil
 	if slot == RANGED_SLOT then
-		magDump = nil
+		castState.magDump = nil
 	else
 		MovementController.CancelAbility()
 	end
@@ -1384,7 +1393,7 @@ local function onAbilityState(payload: any): ()
 		return
 	end
 	local refusedSeq = payload.refusedSeq
-	serverAbility = {
+	castState.serverAbility = {
 		melee = copySlotState(payload.melee),
 		ranged = copySlotState(payload.ranged),
 		busyUntil = payload.busyUntil,
@@ -1393,7 +1402,7 @@ local function onAbilityState(payload: any): ()
 	-- The answer to a refused cast names it: everything this client started for it stops now
 	-- (the timeout in reconcileCasts stays as the fallback for a lost answer).
 	if typeof(refusedSeq) == "number" then
-		for slot, pending in pendingCasts do
+		for slot, pending in castState.pendingCasts do
 			if pending.seq == refusedSeq then
 				cancelLocalCast(slot)
 			end
@@ -1422,19 +1431,19 @@ end
 -- was refused (or dropped), so its local effects stop; with no server state at all (an older
 -- server) the prediction simply runs out.
 local function reconcileCasts(cfg: Types.ProvingGroundsConfig): ()
-	if next(pendingCasts) == nil then
+	if next(castState.pendingCasts) == nil then
 		return
 	end
-	local state = serverAbility
+	local state = castState.serverAbility
 	local now = serverNow()
 	local early = cfg.abilities.earlySeconds
 	local window = 2 * math.max(Players.LocalPlayer:GetNetworkPing(), 0) + CAST_ACK_SLACK_SECONDS
-	for slot, pending in pendingCasts do
+	for slot, pending in castState.pendingCasts do
 		local answered = state ~= nil and castAcked(state, slot, pending, early)
 		if not answered and state ~= nil and os.clock() - pending.sentClock > window then
 			cancelLocalCast(slot)
 		elseif answered or now >= math.max(pending.readyAt, pending.busyUntil) then
-			pendingCasts[slot] = nil
+			castState.pendingCasts[slot] = nil
 		end
 	end
 end
@@ -1465,40 +1474,40 @@ end
 -- The server state with any unanswered cast laid over it, so the HUD and the buttons react on
 -- the press instead of a ping later. nil until either exists. One table, rewritten in place.
 local function abilityView(cfg: Types.ProvingGroundsConfig): Types.RangeAbilityState?
-	local state = serverAbility
-	local pendingMelee = pendingCasts[MELEE_SLOT]
-	local pendingRanged = pendingCasts[RANGED_SLOT]
+	local state = castState.serverAbility
+	local pendingMelee = castState.pendingCasts[MELEE_SLOT]
+	local pendingRanged = castState.pendingCasts[RANGED_SLOT]
 	if state == nil and pendingMelee == nil and pendingRanged == nil then
 		return nil
 	end
 	fillSlotView(
-		abilityViewState.melee,
+		castState.abilityViewState.melee,
 		if state ~= nil then state.melee else nil,
 		pendingMelee,
 		abilityIdOf(cfg, MELEE_SLOT)
 	)
 	fillSlotView(
-		abilityViewState.ranged,
+		castState.abilityViewState.ranged,
 		if state ~= nil then state.ranged else nil,
 		pendingRanged,
 		abilityIdOf(cfg, RANGED_SLOT)
 	)
 	local busyUntil = if state ~= nil then state.busyUntil else 0
-	for _, pending in pendingCasts do
+	for _, pending in castState.pendingCasts do
 		busyUntil = math.max(busyUntil, pending.busyUntil)
 	end
-	abilityViewState.busyUntil = busyUntil
-	return abilityViewState
+	castState.abilityViewState.busyUntil = busyUntil
+	return castState.abilityViewState
 end
 
 -- Busy = the server's lock, or the local window of a cast it has not answered yet.
 local function isBusy(): boolean
 	local now = serverNow()
-	local state = serverAbility
+	local state = castState.serverAbility
 	if state ~= nil and now < state.busyUntil then
 		return true
 	end
-	for _, pending in pendingCasts do
+	for _, pending in castState.pendingCasts do
 		if now < pending.busyUntil then
 			return true
 		end
@@ -1589,7 +1598,7 @@ local function applyCast(
 		-- The lunge flattens the aim itself; the server's capsule uses the same flat line.
 		MovementController.Lunge(direction, ability.range or 0, ability.delaySeconds or 0)
 	elseif id == "magDump" then
-		magDump = {
+		castState.magDump = {
 			family = family,
 			untilAt = castAt + math.max(ability.durationSeconds or 0, 0),
 			rateMult = math.max(ability.rateMult or 1, 0),
@@ -1605,18 +1614,19 @@ local function takeCastToken(): boolean
 		return true
 	end
 	local clock = os.clock()
-	castTokens = math.min(perSecond, castTokens + (clock - castTokensClock) * perSecond)
-	castTokensClock = clock
-	if castTokens < 1 then
+	castState.castTokens =
+		math.min(perSecond, castState.castTokens + (clock - castState.castTokensClock) * perSecond)
+	castState.castTokensClock = clock
+	if castState.castTokens < 1 then
 		return false
 	end
-	castTokens -= 1
+	castState.castTokens -= 1
 	return true
 end
 
 -- Q / E, gamepad L1 / R1 and the touch buttons all land here (P3 "Client APIs").
 local function castAbility(slot: Stance): ()
-	local remote = requestRangeAbility
+	local remote = castState.requestRangeAbility
 	local rig = localRig()
 	if not rangeMode or remote == nil or rig == nil then
 		return
@@ -1639,13 +1649,13 @@ local function castAbility(slot: Stance): ()
 	setActiveSlot(slot)
 	-- Ruling 4: the camera ray exactly as a shot sends it, without spread.
 	local origin, direction = shotRay(rig)
-	abilitySeq += 1
-	remote:FireServer(slot, abilitySeq, origin, direction)
+	castState.abilitySeq += 1
+	remote:FireServer(slot, castState.abilitySeq, origin, direction)
 	local castAt = serverNow()
 	local scale = math.max(cfg.abilities.cooldownScale, 0)
 	local busySeconds = busySecondsOf(ability)
-	pendingCasts[slot] = {
-		seq = abilitySeq,
+	castState.pendingCasts[slot] = {
+		seq = castState.abilitySeq,
 		castAt = castAt,
 		sentClock = clock,
 		readyAt = castAt + math.max(ability.cooldownSeconds, 0) * scale,
@@ -1654,7 +1664,7 @@ local function castAbility(slot: Stance): ()
 	}
 	if busySeconds > 0 then
 		cancelDraw()
-		tapQueuedAt = nil
+		rangeState.tapQueuedAt = nil
 	end
 	applyCast(family, ability, rig, origin, direction, castAt)
 end
@@ -1669,248 +1679,41 @@ local function requestSlot(slot: Stance): ()
 end
 
 local function toggleSlot(): ()
-	requestSlot(if activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
+	requestSlot(if rangeState.activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
 end
 
--- Touch ability and slot buttons -----------------------------------------------------------
-
--- A scaled, wrapped caption centred in a round button: at most two short lines, never below
--- COMBAT_ABILITY_MIN_TEXT and never above the button's own text size (set on layout).
-local function makeCaption(
-	button: TextButton,
-	name: string,
-	zIndex: number
-): (TextLabel, UITextSizeConstraint)
-	local label = Create("TextLabel", {
-		Name = name,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(CAPTION_WIDTH, CAPTION_HEIGHT),
-		BackgroundTransparency = 1,
-		Font = Theme.FONT_BOLD,
-		Text = "",
-		TextColor3 = Theme.COLOR_TEXT,
-		TextScaled = true,
-		TextWrapped = true,
-		ZIndex = zIndex,
-		Parent = button,
-	}) :: TextLabel
-	local constraint = Create("UITextSizeConstraint", {
-		MinTextSize = Theme.COMBAT_ABILITY_MIN_TEXT,
-		MaxTextSize = Theme.COMBAT_ABILITY_MIN_TEXT,
-		Parent = label,
-	}) :: UITextSizeConstraint
-	return label, constraint
-end
-
-local function makeAbilityButton(gui: ScreenGui, slot: Stance): AbilityButton
-	local melee = slot == MELEE_SLOT
-	local button = MovementController.MakeTouchButton(
-		if melee then "AbilityMelee" else "AbilityRanged",
-		"",
-		gui
-	)
-	button.BackgroundColor3 = COLOR_ABILITY
-	button.Visible = false
-	local scale = Create("UIScale", { Parent = button }) :: UIScale
-	local nameLabel, nameConstraint = makeCaption(button, "Name", 1)
-	-- The "shrinking fill": a dark disc that starts as the whole button and shrinks to nothing
-	-- as the cooldown runs out. Round like the button, so no corner shows past its edge.
-	local fill = Create("Frame", {
-		Name = "Cooldown",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(0, 0),
-		BackgroundColor3 = Theme.COLOR_BG,
-		BackgroundTransparency = Theme.COMBAT_ABILITY_COOLDOWN_TRANSPARENCY,
-		BorderSizePixel = 0,
-		Visible = false,
-		ZIndex = 2,
-		Parent = button,
-	}) :: Frame
-	Create("UICorner", { CornerRadius = UDim.new(0.5, 0), Parent = fill })
-	local secondsLabel = Create("TextLabel", {
-		Name = "Seconds",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Font = Theme.FONT_BOLD,
-		Text = "",
-		TextColor3 = Theme.COLOR_TEXT,
-		TextStrokeTransparency = SECONDS_STROKE_TRANSPARENCY,
-		Visible = false,
-		ZIndex = 3,
-		Parent = button,
-	}) :: TextLabel
-	local stroke = button:FindFirstChildOfClass("UIStroke")
-	local entry: AbilityButton = {
-		slot = slot,
-		key = if melee then "abilityMelee" else "abilityRanged",
-		button = button,
-		scale = scale,
-		stroke = stroke,
-		strokeColor = if stroke ~= nil then stroke.Color else Theme.COLOR_TEXT,
-		strokeThickness = if stroke ~= nil then stroke.Thickness else 0,
-		baseTransparency = button.BackgroundTransparency,
-		nameLabel = nameLabel,
-		nameConstraint = nameConstraint,
-		fill = fill,
-		secondsLabel = secondsLabel,
-		shownName = "",
-		shownSeconds = -1,
-		shownFill = -1,
-		dimmed = false,
-		cooling = false,
-		pulseAt = nil,
-	}
-	-- Press, not release: an ability that waits for the finger to lift is a late ability.
-	table.insert(
-		connections,
-		button.MouseButton1Down:Connect(function()
-			castAbility(slot)
-		end)
-	)
-	return entry
-end
-
-local function makeSlotButton(gui: ScreenGui): SlotButton
-	local button = MovementController.MakeTouchButton("Slot", "", gui)
-	button.BackgroundColor3 = COLOR_SLOT
-	local label, constraint = makeCaption(button, "Family", 1)
-	table.insert(connections, button.MouseButton1Down:Connect(toggleSlot))
-	return {
-		button = button,
-		label = label,
-		constraint = constraint,
-		baseTransparency = button.BackgroundTransparency,
-		shownName = "",
-		dimmed = false,
-	}
-end
-
--- Reduce motion (every touch device, spec section 10) keeps the pulse, shorter and smaller.
-local function motionScale(): number
-	return if Theme.reducedMotion then Theme.REDUCED_MOTION_FACTOR else 1
-end
-
-local function setDimmed(
-	button: TextButton,
-	label: TextLabel,
-	baseTransparency: number,
-	dimmed: boolean
-): ()
-	button.BackgroundTransparency = if dimmed then BUSY_BUTTON_TRANSPARENCY else baseTransparency
-	label.TextTransparency = if dimmed then BUSY_TEXT_TRANSPARENCY else 0
-end
-
--- Polled every frame, so only a change touches an instance.
-local function refreshAbilityButton(
-	entry: AbilityButton,
+-- This frame's faces for the touch buttons (RangeTouchButtons draws them and reports the
+-- presses): the aim toggle, both ability cooldowns and the family the slot button switches to.
+local function refreshTouch(
 	cfg: Types.ProvingGroundsConfig,
-	current: Types.RangeAbilityState?,
-	busy: boolean,
-	now: number
+	variant: Types.RangeWeaponVariant?,
+	busy: boolean
 ): ()
-	local _, def = slotFamily(cfg, entry.slot)
-	local ability = if def ~= nil then def.ability else nil
-	local button = entry.button
-	local visible = ability ~= nil
-	if button.Visible ~= visible then
-		button.Visible = visible
-	end
-	if ability == nil then
+	if not RangeTouchButtons.IsBuilt() then
 		return
 	end
-	if entry.shownName ~= ability.name then
-		entry.shownName = ability.name
-		entry.nameLabel.Text = ability.name
-	end
-	local slotState = if current == nil
-		then nil
-		elseif entry.slot == MELEE_SLOT then current.melee
-		else current.ranged
-	local remaining = if slotState ~= nil then slotState.readyAt - now else 0
-	local cooling = remaining > cfg.abilities.earlySeconds
-	local total = math.max(ability.cooldownSeconds, 0) * math.max(cfg.abilities.cooldownScale, 0)
-	local share = if cooling and total > 0 then math.clamp(remaining / total, 0, 1) else 0
-	if share ~= entry.shownFill then
-		entry.shownFill = share
-		entry.fill.Visible = share > 0
-		entry.fill.Size = UDim2.fromScale(share, share)
-	end
-	local seconds = if cooling then math.ceil(remaining) else 0
-	if seconds ~= entry.shownSeconds then
-		entry.shownSeconds = seconds
-		entry.secondsLabel.Visible = seconds > 0
-		entry.secondsLabel.Text = if seconds > 0 then tostring(seconds) else ""
-		-- While it cools, the seconds are the face; the fixed position (Q left, E right)
-		-- still says which ability it is.
-		entry.nameLabel.Visible = seconds <= 0
-	end
-	if busy ~= entry.dimmed then
-		entry.dimmed = busy
-		setDimmed(button, entry.nameLabel, entry.baseTransparency, busy)
-	end
-	if entry.cooling and not cooling then
-		entry.pulseAt = os.clock()
-	end
-	entry.cooling = cooling
-	local scaleValue = 1
-	local pulsing = false
-	local pulseAt = entry.pulseAt
-	if pulseAt ~= nil then
-		local factor = motionScale()
-		local t = (os.clock() - pulseAt) / (READY_PULSE_SECONDS * factor)
-		if t >= 1 then
-			entry.pulseAt = nil
-		else
-			pulsing = true
-			scaleValue = 1 + READY_PULSE_SCALE * factor * math.sin(math.pi * t)
-		end
-	end
-	if entry.scale.Scale ~= scaleValue then
-		entry.scale.Scale = scaleValue
-	end
-	local stroke = entry.stroke
-	if stroke ~= nil then
-		local color = if pulsing then COLOR_READY else entry.strokeColor
-		if stroke.Color ~= color then
-			stroke.Color = color
-			stroke.Thickness = if pulsing then READY_STROKE_THICKNESS else entry.strokeThickness
-		end
-	end
-end
-
--- The slot button names the family it switches TO: the other slot's.
-local function refreshSlotButton(cfg: Types.ProvingGroundsConfig, busy: boolean): ()
-	local entry = slotButton
-	if entry == nil then
-		return
-	end
-	local family, def =
-		slotFamily(cfg, if activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
-	local name = if def ~= nil then def.name else family
-	if name ~= entry.shownName then
-		entry.shownName = name
-		entry.label.Text = name
-	end
-	if busy ~= entry.dimmed then
-		entry.dimmed = busy
-		setDimmed(entry.button, entry.label, entry.baseTransparency, busy)
-	end
-end
-
-local function refreshTouchButtons(cfg: Types.ProvingGroundsConfig, busy: boolean): ()
-	if slotButton == nil and next(abilityButtons) == nil then
-		return
-	end
+	RangeTouchButtons.SetAim(variant ~= nil and isRanged(variant), rangeState.adsActive)
 	local current = abilityView(cfg)
 	local now = serverNow()
-	for _, entry in abilityButtons do
-		refreshAbilityButton(entry, cfg, current, busy, now)
-	end
-	refreshSlotButton(cfg, busy)
+	local _, meleeDef = slotFamily(cfg, MELEE_SLOT)
+	local _, rangedDef = slotFamily(cfg, RANGED_SLOT)
+	RangeTouchButtons.SetAbility(
+		MELEE_SLOT,
+		if meleeDef ~= nil then meleeDef.ability else nil,
+		if current ~= nil then current.melee.readyAt - now else 0,
+		cfg.abilities,
+		busy
+	)
+	RangeTouchButtons.SetAbility(
+		RANGED_SLOT,
+		if rangedDef ~= nil then rangedDef.ability else nil,
+		if current ~= nil then current.ranged.readyAt - now else 0,
+		cfg.abilities,
+		busy
+	)
+	local otherFamily, otherDef =
+		slotFamily(cfg, if rangeState.activeSlot == MELEE_SLOT then RANGED_SLOT else MELEE_SLOT)
+	RangeTouchButtons.SetSlot(if otherDef ~= nil then otherDef.name else otherFamily, busy)
 end
 
 -- Frame step --------------------------------------------------------------------------------
@@ -1925,10 +1728,10 @@ local function stepMagDump(
 	frameSeconds: number
 ): ()
 	local interval = 1 / math.max(variant.rate * dump.rateMult, MIN_RATE)
-	for _ = 1, dueShots(interval, frameSeconds, not firingStream) do
+	for _ = 1, dueShots(interval, frameSeconds, not rangeState.firingStream) do
 		rangeAttack(cfg, variant, family, rig, 1, interval, true)
 	end
-	firingStream = true
+	rangeState.firingStream = true
 end
 
 local function rangeStep(deltaTime: number): ()
@@ -1936,33 +1739,41 @@ local function rangeStep(deltaTime: number): ()
 	local rig = localRig()
 	reconcileCasts(cfg)
 	local variant, family = currentVariant(cfg)
-	local dump = magDump
+	local dump = castState.magDump
 	if
 		dump ~= nil
 		and (rig == nil or variant == nil or family ~= dump.family or serverNow() >= dump.untilAt)
 	then
-		magDump = nil
+		castState.magDump = nil
 		dump = nil
 	end
 	local busy = isBusy()
 	-- A draw never survives its weapon: a slot switch, a loadout change, death or a busy
 	-- ability drops it.
 	if
-		drawStartedAt ~= nil
-		and (rig == nil or variant == nil or family ~= drawFamily or not isCharge(variant) or busy)
+		rangeState.drawStartedAt ~= nil
+		and (
+			rig == nil
+			or variant == nil
+			or family ~= rangeState.drawFamily
+			or not isCharge(variant)
+			or busy
+		)
 	then
 		cancelDraw()
 	end
-	local wantAds = rig ~= nil and variant ~= nil and isRanged(variant) and (adsHeld or adsToggled)
-	if wantAds ~= adsActive then
-		adsActive = wantAds
+	local wantAds = rig ~= nil
+		and variant ~= nil
+		and isRanged(variant)
+		and (rangeState.adsHeld or rangeState.adsToggled)
+	if wantAds ~= rangeState.adsActive then
+		rangeState.adsActive = wantAds
 		CameraController.SetAds(wantAds)
 	end
-	MovementController.SetSpeedMult(if adsActive then cfg.shooting.adsSpeedMult else 1)
-	refreshAdsButton(variant)
-	refreshTouchButtons(cfg, busy)
+	MovementController.SetSpeedMult(if rangeState.adsActive then cfg.shooting.adsSpeedMult else 1)
+	refreshTouch(cfg, variant, busy)
 	if rig == nil or variant == nil then
-		firingStream = false
+		rangeState.firingStream = false
 		return
 	end
 	updateBloom(cfg, rig, deltaTime)
@@ -1974,9 +1785,9 @@ local function rangeStep(deltaTime: number): ()
 		return
 	end
 	if busy or isCharge(variant) then
-		firingStream = false
+		rangeState.firingStream = false
 		if busy then
-			tapQueuedAt = nil
+			rangeState.tapQueuedAt = nil
 		else
 			stepCharge(cfg, variant, family, rig)
 		end
@@ -1987,11 +1798,11 @@ local function rangeStep(deltaTime: number): ()
 	local wanted = wantsRangeAttack(cfg, variant, rig)
 	if wanted then
 		local interval = intervalOf(variant)
-		for _ = 1, dueShots(interval, deltaTime, not firingStream) do
+		for _ = 1, dueShots(interval, deltaTime, not rangeState.firingStream) do
 			rangeAttack(cfg, variant, family, rig, 1, interval, false)
 		end
 	end
-	firingStream = wanted
+	rangeState.firingStream = wanted
 end
 
 local function deviceOf(inputType: Enum.UserInputType): Device?
@@ -2012,7 +1823,7 @@ end
 local function onDeviceChanged(inputType: Enum.UserInputType): ()
 	local nextDevice: Device? = deviceOf(inputType)
 	if nextDevice ~= nil then
-		device = nextDevice
+		rangeState.device = nextDevice
 	end
 end
 
@@ -2022,9 +1833,9 @@ local function onRangeInputBegan(input: InputObject, processed: boolean): ()
 	end
 	local inputType = input.UserInputType
 	if inputType == Enum.UserInputType.MouseButton1 then
-		rangeHeld = true
+		rangeState.rangeHeld = true
 	elseif inputType == Enum.UserInputType.MouseButton2 then
-		adsHeld = true
+		rangeState.adsHeld = true
 	elseif inputType == Enum.UserInputType.Touch then
 		local camera = Workspace.CurrentCamera
 		local split = if camera ~= nil
@@ -2032,7 +1843,8 @@ local function onRangeInputBegan(input: InputObject, processed: boolean): ()
 			else math.huge
 		if input.Position.X >= split then
 			local start = Vector2.new(input.Position.X, input.Position.Y)
-			rangeTouches[input] = { start = start, at = os.clock(), moved = 0, drawing = false }
+			rangeState.rangeTouches[input] =
+				{ start = start, at = os.clock(), moved = 0, drawing = false }
 		end
 	elseif inputType == Enum.UserInputType.Keyboard then
 		local key = input.KeyCode
@@ -2049,7 +1861,7 @@ local function onRangeInputBegan(input: InputObject, processed: boolean): ()
 end
 
 local function onRangeInputChanged(input: InputObject): ()
-	local state = rangeTouches[input]
+	local state = rangeState.rangeTouches[input]
 	if state ~= nil then
 		local position = Vector2.new(input.Position.X, input.Position.Y)
 		state.moved = math.max(state.moved, (position - state.start).Magnitude)
@@ -2059,12 +1871,12 @@ end
 local function onRangeInputEnded(input: InputObject): ()
 	local inputType = input.UserInputType
 	if inputType == Enum.UserInputType.MouseButton1 then
-		rangeHeld = false
+		rangeState.rangeHeld = false
 	elseif inputType == Enum.UserInputType.MouseButton2 then
-		adsHeld = false
+		rangeState.adsHeld = false
 	elseif inputType == Enum.UserInputType.Touch then
-		local state = rangeTouches[input]
-		rangeTouches[input] = nil
+		local state = rangeState.rangeTouches[input]
+		rangeState.rangeTouches[input] = nil
 		local controls = Tuning.Get().controls
 		if state == nil or state.drawing or controls.touchMode ~= "tapFire" then
 			return
@@ -2073,7 +1885,7 @@ local function onRangeInputEnded(input: InputObject): ()
 			os.clock() - state.at <= controls.tapMaxSeconds
 			and state.moved <= controls.tapMaxPixels
 		then
-			tapQueuedAt = os.clock()
+			rangeState.tapQueuedAt = os.clock()
 		end
 	end
 end
@@ -2085,108 +1897,37 @@ local function onRangeAction(
 ): Enum.ContextActionResult
 	local began = state == Enum.UserInputState.Begin
 	local held = began or state == Enum.UserInputState.Change
-	if action == ACTION_RANGE_FIRE then
-		rangeHeld = held
-	elseif action == ACTION_RANGE_ADS then
-		adsHeld = held
-	elseif began and action == ACTION_RANGE_SWAP then
+	if action == ACTION.RANGE_FIRE then
+		rangeState.rangeHeld = held
+	elseif action == ACTION.RANGE_ADS then
+		rangeState.adsHeld = held
+	elseif began and action == ACTION.RANGE_SWAP then
 		toggleSlot()
-	elseif began and action == ACTION_RANGE_ABILITY_MELEE then
+	elseif began and action == ACTION.RANGE_ABILITY_MELEE then
 		castAbility(MELEE_SLOT)
-	elseif began and action == ACTION_RANGE_ABILITY_RANGED then
+	elseif began and action == ACTION.RANGE_ABILITY_RANGED then
 		castAbility(RANGED_SLOT)
 	end
 	return Enum.ContextActionResult.Sink
 end
 
-local function placeButton(
-	button: GuiObject,
-	viewport: Vector2,
-	key: MovementController.ClusterKey
-): number
-	local centre, size = MovementController.ClusterRect(viewport, key)
-	button.Position = UDim2.fromOffset(centre.X, centre.Y)
-	button.Size = UDim2.fromOffset(size, size)
-	return size
-end
-
-local function captionMax(size: number): number
-	return math.max(MovementController.TextSize(size), Theme.COMBAT_ABILITY_MIN_TEXT)
-end
-
-local function layoutRangeControls(): ()
-	local camera = Workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local viewport = camera.ViewportSize
-	local ads = adsButton
-	if ads ~= nil then
-		ads.TextSize = MovementController.TextSize(placeButton(ads, viewport, "aim"))
-	end
-	for _, entry in abilityButtons do
-		local size = placeButton(entry.button, viewport, entry.key)
-		entry.nameConstraint.MaxTextSize = captionMax(size)
-		entry.secondsLabel.TextSize = math.floor(size * SECONDS_TEXT_FRACTION)
-	end
-	local slot = slotButton
-	if slot ~= nil then
-		slot.constraint.MaxTextSize = captionMax(placeButton(slot.button, viewport, "slot"))
-	end
-end
-
-local function buildRangeTouchControls(): ()
-	if not UserInputService.TouchEnabled then
-		return
-	end
-	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-	-- Physical-pixel offsets mirrored off Roblox's jump button; no UIScale, by design.
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "RangeInput"
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.Parent = playerGui
-	rangeGui = gui
-	local button = MovementController.MakeTouchButton("Aim", "Aim", gui)
-	button.Visible = false
-	adsButton = button
-	table.insert(
-		connections,
-		button.MouseButton1Down:Connect(function()
-			adsToggled = not adsToggled
-		end)
-	)
-	-- P3: two ability buttons and the slot button join the thumb cluster. Still no attack
-	-- button: attacks stay auto-fire / auto-swing / tap-fire.
-	abilityButtons[MELEE_SLOT] = makeAbilityButton(gui, MELEE_SLOT)
-	abilityButtons[RANGED_SLOT] = makeAbilityButton(gui, RANGED_SLOT)
-	slotButton = makeSlotButton(gui)
-	layoutRangeControls()
-	local camera = Workspace.CurrentCamera
-	if camera ~= nil then
-		table.insert(
-			connections,
-			camera:GetPropertyChangedSignal("ViewportSize"):Connect(layoutRangeControls)
-		)
-	end
-end
-
 local function startRange(): ()
-	rangeStarted = true
-	bloom = Tuning.Get().shooting.bloomMinDegrees
+	rangeState.rangeStarted = true
+	rangeState.bloom = Tuning.Get().shooting.bloomMinDegrees
 	local initial: Device? = deviceOf(UserInputService:GetLastInputType())
 	if initial ~= nil then
-		device = initial
+		rangeState.device = initial
 	elseif UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
-		device = "touch"
+		rangeState.device = "touch"
 	end
 	task.spawn(function()
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
 		local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
-		requestRangeAttack = remotes:WaitForChild("RequestRangeAttack", timeout) :: RemoteEvent?
-		requestRangeDraw = remotes:WaitForChild("RequestRangeDraw", timeout) :: RemoteEvent?
-		if requestRangeAttack == nil then
+		rangeState.requestRangeAttack =
+			remotes:WaitForChild("RequestRangeAttack", timeout) :: RemoteEvent?
+		rangeState.requestRangeDraw =
+			remotes:WaitForChild("RequestRangeDraw", timeout) :: RemoteEvent?
+		if rangeState.requestRangeAttack == nil then
 			warn("[InputController] RequestRangeAttack missing — range attacks are disabled")
 		end
 	end)
@@ -2196,10 +1937,10 @@ local function startRange(): ()
 		local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
 		local stateEvent = remotes:WaitForChild("RangeAbility", timeout) :: RemoteEvent?
 		local castRemote = remotes:WaitForChild("RequestRangeAbility", timeout) :: RemoteEvent?
-		if not rangeStarted then
+		if not rangeState.rangeStarted then
 			return -- destroyed while waiting
 		end
-		requestRangeAbility = castRemote
+		castState.requestRangeAbility = castRemote
 		if stateEvent ~= nil then
 			table.insert(connections, stateEvent.OnClientEvent:Connect(onAbilityState))
 		end
@@ -2216,19 +1957,19 @@ local function startRange(): ()
 	table.insert(
 		connections,
 		Players.LocalPlayer.CharacterAdded:Connect(function()
-			magDump = nil
-			for _, pending in pendingCasts do
+			castState.magDump = nil
+			for _, pending in castState.pendingCasts do
 				pending.busyUntil = pending.castAt
 			end
 		end)
 	)
 	local priority = Enum.ContextActionPriority.High.Value
 	local bindings: { { action: string, key: Enum.KeyCode } } = {
-		{ action = ACTION_RANGE_FIRE, key = Enum.KeyCode.ButtonR2 },
-		{ action = ACTION_RANGE_ADS, key = Enum.KeyCode.ButtonL2 },
-		{ action = ACTION_RANGE_SWAP, key = Enum.KeyCode.ButtonY },
-		{ action = ACTION_RANGE_ABILITY_MELEE, key = Enum.KeyCode.ButtonL1 },
-		{ action = ACTION_RANGE_ABILITY_RANGED, key = Enum.KeyCode.ButtonR1 },
+		{ action = ACTION.RANGE_FIRE, key = Enum.KeyCode.ButtonR2 },
+		{ action = ACTION.RANGE_ADS, key = Enum.KeyCode.ButtonL2 },
+		{ action = ACTION.RANGE_SWAP, key = Enum.KeyCode.ButtonY },
+		{ action = ACTION.RANGE_ABILITY_MELEE, key = Enum.KeyCode.ButtonL1 },
+		{ action = ACTION.RANGE_ABILITY_RANGED, key = Enum.KeyCode.ButtonR1 },
 	}
 	for _, binding in bindings do
 		ContextActionService:BindActionAtPriority(
@@ -2241,7 +1982,15 @@ local function startRange(): ()
 	end
 	-- After the camera, so the aim ray and the auto-fire test use this frame's view.
 	RunService:BindToRenderStep(RANGE_BIND, Enum.RenderPriority.Camera.Value + 1, rangeStep)
-	buildRangeTouchControls()
+	-- Touch only: the aim toggle, two ability buttons and the slot button. Still no attack
+	-- button: attacks stay auto-fire / auto-swing / tap-fire.
+	RangeTouchButtons.Build({
+		onAim = function()
+			rangeState.adsToggled = not rangeState.adsToggled
+		end,
+		onCast = castAbility,
+		onToggleSlot = toggleSlot,
+	})
 end
 
 function InputController.Init(): ()
@@ -2261,18 +2010,18 @@ function InputController.Start(): ()
 	end
 	task.spawn(function()
 		local remotes = ReplicatedStorage:WaitForChild("Remotes")
-		requestAttack =
+		missionState.requestAttack =
 			remotes:WaitForChild("RequestAttack", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
-		requestAbility =
+		missionState.requestAbility =
 			remotes:WaitForChild("RequestAbility", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
 		-- C1 adds RequestFire; an older server build simply leaves ranged fire inert.
-		requestFire =
+		missionState.requestFire =
 			remotes:WaitForChild("RequestFire", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
-		if requestFire == nil then
+		if missionState.requestFire == nil then
 			warn("[InputController] RequestFire missing — ranged attacks are disabled")
 		end
 		-- C2 adds RequestDraw; without it a C1 server still takes the client's charge.
-		requestDraw =
+		missionState.requestDraw =
 			remotes:WaitForChild("RequestDraw", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
 	end)
 	table.insert(connections, UserInputService.InputBegan:Connect(onInputBegan))
@@ -2289,7 +2038,7 @@ end
 -- points the mouse does; touch never reaches InputBegan because the button consumes it.
 function InputController.AttackDown(): ()
 	if rangeMode then
-		rangeHeld = true -- the range should not show this button; a stray press still attacks
+		rangeState.rangeHeld = true -- the range should not show this button; a stray press still attacks
 		return
 	end
 	attackBegan()
@@ -2297,7 +2046,7 @@ end
 
 function InputController.AttackUp(): ()
 	if rangeMode then
-		rangeHeld = false
+		rangeState.rangeHeld = false
 		return
 	end
 	attackEnded()
@@ -2367,7 +2116,7 @@ end
 
 -- True while aiming down sights (range gun only).
 function InputController.IsAiming(): boolean
-	return adsActive
+	return rangeState.adsActive
 end
 
 -- The crosshair ray: unshaken camera position and unit look direction.
@@ -2383,13 +2132,13 @@ end
 -- family changed loses its running ability, so this client's part of it stops at once.
 function InputController.SetLoadout(nextLoadout: Types.RangeLoadout): ()
 	if not rangeMode then
-		loadout = nextLoadout
+		rangeState.loadout = nextLoadout
 		return
 	end
 	local cfg = Tuning.Get()
 	local meleeBefore = slotFamily(cfg, MELEE_SLOT)
 	local rangedBefore = slotFamily(cfg, RANGED_SLOT)
-	loadout = nextLoadout
+	rangeState.loadout = nextLoadout
 	if slotFamily(cfg, MELEE_SLOT) ~= meleeBefore then
 		cancelLocalCast(MELEE_SLOT)
 	end
@@ -2400,7 +2149,7 @@ end
 
 -- The slot 1 / 2 / gamepad Y last picked (range only; missions keep GetStance).
 function InputController.GetActiveSlot(): Stance
-	return activeSlot
+	return rangeState.activeSlot
 end
 
 -- The bow's draw progress 0-1 for the HUD ring. In the range it is never nil (0 while
@@ -2411,7 +2160,7 @@ function InputController.GetCharge(): number?
 		local variant = currentVariant(Tuning.Get())
 		return if variant ~= nil then chargeOf(variant) else 0
 	end
-	local startedAt = chargeStartedAt
+	local startedAt = missionState.chargeStartedAt
 	if startedAt == nil then
 		return nil
 	end
@@ -2428,32 +2177,32 @@ function InputController.GetStance(): Stance
 end
 
 function InputController.SetStanceChanged(handler: (Stance) -> ()): ()
-	onStanceChanged = handler
+	missionState.onStanceChanged = handler
 end
 
 -- Pushed from the Snapshot by CombatUIController, which pushes the same gear to
 -- WeaponController: which weapons the profile actually holds right now.
 function InputController.SetGear(nextGear: SlotTiers): ()
-	gear = nextGear
-	comboStep = 0
+	missionState.gear = nextGear
+	missionState.comboStep = 0
 end
 
 -- Pushed from RunState: the server's own cooldown clock, which overrides the prediction.
 function InputController.SetAbilityReady(readyIn: SlotTiers): ()
-	abilityReadyIn = readyIn
+	missionState.abilityReadyIn = readyIn
 end
 
 function InputController.SetPhase(nextPhase: string): ()
-	phase = nextPhase
+	missionState.phase = nextPhase
 	if not inPlay() then
-		attackHeld = false
-		chargeStartedAt = nil
-		holdToken += 1
+		missionState.attackHeld = false
+		missionState.chargeStartedAt = nil
+		missionState.holdToken += 1
 	end
 end
 
 function InputController.Destroy(): ()
-	rangeStarted = false
+	rangeState.rangeStarted = false
 	for _, connection in connections do
 		connection:Disconnect()
 	end
@@ -2469,31 +2218,24 @@ function InputController.Destroy(): ()
 		CameraController.SetAds(false)
 		MovementController.Destroy()
 	end
-	local gui = rangeGui
-	rangeGui = nil
-	adsButton = nil
-	table.clear(abilityButtons)
-	slotButton = nil
-	if gui ~= nil then
-		gui:Destroy()
-	end
-	table.clear(rangeTouches)
-	table.clear(pendingCasts)
-	serverAbility = nil
-	magDump = nil
-	drawStartedAt = nil
-	drawFamily = ""
-	rangeHeld = false
-	adsHeld = false
-	adsToggled = false
-	adsActive = false
-	for _, connection in characterConnections do
+	RangeTouchButtons.Destroy()
+	table.clear(rangeState.rangeTouches)
+	table.clear(castState.pendingCasts)
+	castState.serverAbility = nil
+	castState.magDump = nil
+	rangeState.drawStartedAt = nil
+	rangeState.drawFamily = ""
+	rangeState.rangeHeld = false
+	rangeState.adsHeld = false
+	rangeState.adsToggled = false
+	rangeState.adsActive = false
+	for _, connection in missionState.characterConnections do
 		connection:Disconnect()
 	end
-	table.clear(characterConnections)
-	crosshairParams = nil
-	holdToken += 1
-	attackHeld = false
+	table.clear(missionState.characterConnections)
+	missionState.crosshairParams = nil
+	missionState.holdToken += 1
+	missionState.attackHeld = false
 end
 
 return InputController

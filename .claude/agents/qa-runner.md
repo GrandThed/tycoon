@@ -15,6 +15,7 @@ Run these in order, from the repo root, and capture the output of each:
 3. `rojo build -o build/test.rbxl` (create `build/` if missing)
 4. `python3 tools/sim_economy.py` if the file exists
 5. `python3 tools/gen_asset_manifest.py --check` if the file exists
+6. `py tools/check_compile.py` if the file exists (compiles every Luau file with Studio's debug settings; catches scripts that pass lint and typecheck but cannot load in Studio)
 
 Report in this exact shape and nothing else:
 - One line per command: `PASS` or `FAIL`.
