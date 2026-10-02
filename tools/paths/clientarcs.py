@@ -20,6 +20,14 @@ point special case:
 * which pieces exist           `RoadGraph.pathPieceIds` at full ownership: a stretch must be both
                                revealed (on some owned spur's shortest path) and inside
                                `budget.pathPieces`, and a spur must be inside both budgets
+* back lanes (wave 2.5)        `RoadGraph.SetLanes`: lane k is piece `LN_<k>` when the fabric
+                               wants it shown (some lot on it has a building site) and k is
+                               within what `budget.pathPieces` has left after every stretch and
+                               spur. The client reads no arc for a lane -- it clones the template
+                               where the bake put it -- so a lane is checked against the fabric
+                               data instead: its polyline, its width, its mouth's address. That
+                               side comes from tools/cityfabric.py (the mirror of Fabric.luau),
+                               never from network.py's own lane chains
 
 `verify()` compares all of that against the piece table bake.py is about to emit; `stale()`
 compares that table against the `<Era>.json` the meshes on disk were actually baked from. They are
@@ -34,24 +42,38 @@ Keep the two in step by hand, and diff `--list` when either moves.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
+sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "pathmock"))
 sys.path.insert(0, HERE)
+import pathgeom  # noqa: E402
+import cityfabric  # noqa: E402
 import streetplan  # noqa: E402
 
 # RoadGraph.luau's own value. Luau stretch ids are 1-based and network.py's are 0-based, so this
 # is one less than network.CONNECTOR_KEY_BASE and the two keys agree.
 CONNECTOR_KEY_BASE = 96
 SPUR_PIECE_PREFIX = "SP_"
+LANE_PIECE_FORMAT = "LN_{}"  # RoadGraph.LANE_PIECE_FORMAT
+# A lane's data points are written to 2 decimals and its baked polyline is the same points, so a
+# real difference is never this small; the mouth alone may move, by the join snap.
+LANE_POINT_EPS = 0.05
 # Two derivations of the same float64 expression, so a real difference is never this small. Well
 # under a texel of the 11-stud path tile either way.
 ARC_EPS = 1e-3
 # <Era>.json rounds arcs to 4 decimals.
 RECORD_EPS = 1e-3
+HOST_REACH = 0.1  # network.HOST_REACH_EXTRA: how far past half a road width a join still lands
+
+
+def pg_curve(points):
+    """A plain polyline as a curve, for distance tests."""
+    return pathgeom.Curve([tuple(p) for p in points])
 
 
 def _full_span(chain) -> tuple[float, float]:
@@ -107,8 +129,31 @@ def spur_pieces(bake) -> dict[str, dict]:
     return out
 
 
+def lane_pieces(bake) -> dict[int, dict]:
+    """lane index -> {id, lane, points, width}: the lanes the fabric hands RoadGraph.SetLanes on a
+    finished plot -- every lane that can be laid and has a lot with at least a building site --
+    with the polyline (mouth first) and width it hands over."""
+    plot = cityfabric.FabricPlot.load(bake.era_name, city=bake.era.city, era=bake.era, network=bake.network)
+    if plot is None:
+        return {}
+    everything = {slot["id"] for slot in plot.era.config["slots"] if slot["id"] in plot.layout["slots"]}
+    tiers = len(bake.era.city["tier"]["thresholds"])
+    reaches = plot.snapshot(everything, plot.final_stages(everything), tiers)["laneReaches"]
+    return {
+        view["index"]: {
+            "id": LANE_PIECE_FORMAT.format(view["index"]),
+            "lane": view["lane"],
+            "points": [(p[0], p[1]) for p in view["lane"]["points"]],
+            "width": plot.lane_config["width"],
+        }
+        for view in plot.lane_views
+        if reaches[view["index"]] > 0
+    }
+
+
 def requested(bake) -> dict[str, dict]:
-    """Every piece id `RoadGraph.pathPieceIds` can ever return for this era, with its arc pair.
+    """Every piece id `RoadGraph.pathPieceIds` can ever return for this era, with its arc pair
+    (a lane piece carries its fabric data instead; see `lane_pieces`).
 
     That is the reveal rule and both budgets together: a stretch is drawn only if some owned
     building's shortest path from the entrance runs over it, its spine group survived
@@ -161,7 +206,51 @@ def requested(bake) -> dict[str, dict]:
         piece = spur_pieces(bake).get(slot_id)
         if piece is not None:
             out[piece["id"]] = piece
+    # RoadGraph.SetLanes: lane k is cloned while k is within what the budget has left.
+    for index, piece in sorted(lane_pieces(bake).items()):
+        if index <= remaining:
+            out[piece["id"]] = piece
     return out
+
+
+def lane_problems(bake, piece_id: str, want: dict, got: dict) -> list[str]:
+    """One baked lane piece against the fabric data it stands for: the polyline, the width, the
+    join onto a street and the mouth's address on that street."""
+    problems: list[str] = []
+    chain = got["_chain"]
+    lane, points = want["lane"], want["points"]
+    if chain["width"] != want["width"]:
+        problems.append(f"{piece_id}: baked {chain['width']:g} wide, fabric.lanes.width is {want['width']:g}")
+    # The baked control polyline, far point first; the data's points must all lie on it and its
+    # ends must be the data's ends.
+    control = pg_curve(chain["points"])
+    worst = max(control.project(p)[0] for p in points[1:])
+    far = math.dist(chain["points"][0], points[-1])
+    if worst > LANE_POINT_EPS or far > LANE_POINT_EPS:
+        problems.append(
+            f"{piece_id}: the baked polyline leaves the fabric data's by {max(worst, far):.2f} studs "
+            f"(data {[list(p) for p in points]})"
+        )
+    reach = bake.era.width / 2 + HOST_REACH
+    if not chain["join_end"]:
+        problems.append(f"{piece_id}: its mouth {list(points[0])} is on no street, so nothing covers it")
+    elif math.dist(chain["points"][-1], points[0]) > reach:
+        problems.append(f"{piece_id}: the mouth was snapped {math.dist(chain['points'][-1], points[0]):.2f} studs from the data's")
+    # The mouth's address: `along` studs from the `a` end of the stretch it names.
+    ids = {bake.piece_id(index): index for index in range(len(bake.network.stretches))}
+    stretch_index = ids.get(lane["stretch"])
+    if stretch_index is None:
+        problems.append(f"{piece_id}: its mouth is on stretch {lane['stretch']!r}, which the network does not have")
+    else:
+        stretch = bake.network.stretches[stretch_index]
+        t = lane["along"] / stretch["length"] if stretch["length"] > 0 else 0.0
+        at = (stretch["a"][0] + (stretch["b"][0] - stretch["a"][0]) * t, stretch["a"][1] + (stretch["b"][1] - stretch["a"][1]) * t)
+        if math.dist(at, points[0]) > reach:
+            problems.append(
+                f"{piece_id}: {lane['stretch']} at {lane['along']:g} is ({at[0]:.2f}, {at[1]:.2f}), "
+                f"{math.dist(at, points[0]):.2f} studs from the lane's mouth {list(points[0])}"
+            )
+    return problems
 
 
 def _record_path(era: str) -> str:
@@ -201,6 +290,12 @@ def verify(bake, pieces: list[dict]) -> list[str]:
         problems.append(f"piece count: client {len(client)}, bake {len(baked)}")
 
     for piece_id in sorted(set(client) & set(baked)):
+        if baked[piece_id]["kind"] == "lane" or "lane" in client[piece_id]:
+            if baked[piece_id]["kind"] != "lane" or "lane" not in client[piece_id]:
+                problems.append(f"{piece_id}: a lane on one side and a street piece on the other")
+            else:
+                problems += lane_problems(bake, piece_id, client[piece_id], baked[piece_id])
+            continue
         want = client[piece_id]["arcs"]
         got = baked[piece_id]["nodeArcs"]
         if max(abs(want[0] - got[0]), abs(want[1] - got[1])) > ARC_EPS:
@@ -216,36 +311,41 @@ def verify(bake, pieces: list[dict]) -> list[str]:
     return problems
 
 
-def stale(bake, pieces: list[dict], record: dict | None) -> list[str]:
+def stale(bake, pieces: list[dict], record: dict | None) -> tuple[list[str], str]:
     """Compare what the bake would emit today with what the meshes on disk were baked from.
 
-    Returns one line per difference; empty means the GLBs on disk (and the uploaded models made
-    from them) are today's pieces, or that nothing was ever baked.
+    Returns one line per difference and a one-line tally. No lines means every piece of today
+    has its two GLBs on disk, baked at today's arcs from today's layout. The tally counts piece
+    by piece, so a new kind of piece (a lane) or a moved hash never makes a street piece that
+    has not moved look stale: it stays "fresh" and the upload's own sha256 check skips it.
     """
     problems: list[str] = []
     baked = {p["id"]: p for p in pieces}
-    if record:
-        known = record.get("pieces") or {}
-        gone = sorted(set(known) - set(baked))
-        added = sorted(set(baked) - set(known))
-        if gone or added:
+    known = (record or {}).get("pieces") or {}
+    missing = sorted(set(baked) - set(known))
+    retired = sorted(set(known) - set(baked))
+    moved, fresh = [], []
+    for piece_id in sorted(set(known) & set(baked)):
+        was = known[piece_id].get("nodeArcs") or [None, None]
+        now = baked[piece_id]["nodeArcs"]
+        files = [mesh.get("glb") for mesh in (known[piece_id].get("meshes") or {}).values()]
+        absent = [rel for rel in files if not rel or not os.path.isfile(os.path.join(REPO_ROOT, rel))]
+        drift = 0.0 if None in was else max(abs(was[0] - now[0]), abs(was[1] - now[1]))
+        if drift > RECORD_EPS:
+            moved.append(piece_id)
             problems.append(
-                f"assets/build/paths/{bake.era_name}.json was baked from a different piece set: "
-                f"{len(added)} new {added[:6]}, {len(gone)} gone {gone[:6]}"
+                f"{piece_id}: the mesh on disk was baked at arcs {was[0]:.3f}-{was[1]:.3f}, "
+                f"today's network says {now[0]:.3f}-{now[1]:.3f} ({drift:.3f} studs) -- re-bake and re-upload"
             )
-        for piece_id in sorted(set(known) & set(baked)):
-            was = (known[piece_id].get("nodeArcs") or [None, None])
-            now = baked[piece_id]["nodeArcs"]
-            if was[0] is None or was[1] is None:
-                continue
-            drift = max(abs(was[0] - now[0]), abs(was[1] - now[1]))
-            if drift > RECORD_EPS:
-                problems.append(
-                    f"{piece_id}: the mesh on disk was baked at arcs {was[0]:.3f}-{was[1]:.3f}, "
-                    f"today's network says {now[0]:.3f}-{now[1]:.3f} ({drift:.3f} studs) -- re-bake and re-upload"
-                )
-        if record.get("layoutHash") and record["layoutHash"] != bake.layout_hash():
-            problems.append(
-                f"layout hash moved since the bake: {record['layoutHash']} -> {bake.layout_hash()}"
-            )
-    return problems
+        elif absent or len(files) < 2:
+            missing.append(piece_id)
+        else:
+            fresh.append(piece_id)
+    if missing:
+        problems.append(f"{len(missing)} piece(s) have no mesh on disk yet: {', '.join(sorted(missing))}")
+    if retired:
+        problems.append(f"{len(retired)} piece(s) on disk are no longer baked: {', '.join(retired)}")
+    if record and record.get("layoutHash") and record["layoutHash"] != bake.layout_hash():
+        problems.append(f"layout hash moved since the bake: {record['layoutHash']} -> {bake.layout_hash()}")
+    tally = f"{len(fresh)} piece(s) fresh, {len(missing)} missing, {len(moved)} moved, {len(retired)} retired"
+    return problems, tally

@@ -116,15 +116,17 @@ About 60-100 s per render; most of that is importing the kit GLBs.
   Pave the Road -- which the finished plot always owns. Spurs and back lanes follow the streets.
   Renders made before 2026-10-02 drew every street in `road.color` whatever was owned. The colour
   is the variant's flat `paths.variants` look, not the texture the baked pieces carry in game.
-- **Back lanes** (M12 wave 2.4) are drawn piece for piece as `Fabric.layLane` lays them, from
-  `cityfabric`'s `snapshot()["lanes"]`: per lane drawn to its reach, a rim slab and a fill slab
-  for each leg and a rim disc and a fill disc on every corner it has passed and at its tip, at
-  `Fabric.laneTop`'s heights (a hair under `fabric.lanes.fillHeight` / `rimHeight`, staggered so
-  overlapping tops never share a plane). Fill in the streets' live colour, rim 0.8 of it; in game
-  they carry the baked pieces' fill and rim images instead while the baked renderer draws. Near
-  plots only (`--far` draws none, though the lanes still clear the wild land). The street's slab
-  lies above both, so the mouth disappears under the street; the render's plain streets have no
-  rim, so a lane's darker edges stop at the street edge without a kerb to join.
+- **Back lanes** (M12 wave 2.5) are drawn as their baked `LN_<k>` path pieces lie in game, from
+  `cityfabric`'s `snapshot()["lanes"]`: every lane with a reach above 0, whole. The slabs follow
+  the bake's own centreline and width profile (`tools/paths/network.py`, `planargeom.half_width`):
+  bends filleted, the mouth run under the street, a round end past the far point, the rim
+  `RIM_BASE` outside the fill, at `paths.fillHeight` and `paths.rimHeight`. Fill in the streets'
+  live colour; rim in the mean colour of the rim image that surface wears (a darker shoulder on
+  gravel, the pale concrete kerb once Main Street is paved). `--far` keeps the fill and drops the
+  rim (`paths.rimNearOnly`). As with the streets and spurs the fill is drawn at the nominal width
+  with a clean edge; the mesh is 1.2 times wider with a noisy outline, which
+  `py tools/paths/bake.py --era <Era> --list` judges. The Parts fallback of a lane whose piece is
+  missing or past `budget.pathPieces` is not drawn.
 - **Street vehicles:** as many as the controller's `vehicleTargetFor` wants at the tier (none
   below `vehicles.firstTier`, then `perPlot` scaled by the tier, less the highway deck's share),
   but only one to a visible stretch of 16 studs or more, the longest first -- so a plot with few

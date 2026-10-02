@@ -742,9 +742,7 @@
         "lanes": {
           "width": 3,
           "rim": 0.4,
-          "fillHeight": 0.05,
-          "rimHeight": 0.02,
-          "growSeconds": 0.5
+          "fillHeight": 0.05
         }
       }
     },

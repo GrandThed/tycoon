@@ -34,9 +34,10 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     the controller's vehicleTargetFor) and which of them a `vehicles.unlocks` entry turns into its
     own prop (planVehicleUnlocks, vehiclePropFor). The rule is mirrored, not the picks: Roblox's
     Random cannot be reproduced here, so a caller brings its own stream;
-  * back lanes (M12 wave 2.4): a lane lot's extra distance in `develop`, CityFabric.LaneReach,
-    Fabric.luau's validation of lanes and lane lots, the lane legs in the clearing mask (by the
-    reach, on near and far plots alike), and Fabric.layLane's settled pieces with their tops;
+  * back lanes (M12 waves 2.4 and 2.5): a lane lot's extra distance in `develop`,
+    CityFabric.LaneReach, Fabric.luau's validation of lanes and lane lots, the lane legs in the
+    clearing mask (by the reach, on near and far plots alike), and which lanes are shown -- each
+    whole, as its baked `LN_<k>` path piece (tools/paths bakes it), once its reach is above 0;
   * the surface the plot's streets wear right now (RoadGraph.resolveVariant / setVariant), which
     spurs and lanes follow.
 
@@ -101,15 +102,8 @@ STAKE_HEIGHT = 1.4
 STRING_THICKNESS = 0.08
 STRING_HEIGHT = 1.1
 CORNER_SIGNS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
-# Fabric.luau's back lanes (wave 2.4): a reach or a leg shorter than LANE_MIN draws nothing; the
-# slabs are LANE_THICKNESS thick; a leg's top sits one or two LANE_STEPs under the contract's
-# height (a fifth of the rim's height per step, for the rim) so overlapping tops never share a
-# plane; without its own image the rim is the road colour, LANE_RIM_SHADE as bright.
+# Fabric.luau's back lanes (wave 2.4): two points closer than LANE_MIN make no leg.
 LANE_MIN = 0.01
-LANE_THICKNESS = 0.2
-LANE_STEP = 0.005
-LANE_RIM_STEPS = 5
-LANE_RIM_SHADE = 0.8
 # The numeric pull fields Fabric.validPull demands finite; with `thresholds`, the contract's six.
 PULL_NUMBERS = ("radius", "tierTerm", "reach", "levelsOverTier", "smallMaxLevel")
 # A score, a network distance or a pull this close to its threshold could fall the other way in game,
@@ -355,38 +349,6 @@ def lane_legs(lane):
     return legs
 
 
-def lane_top(config, lane_index, rim, level):
-    """Fabric.laneTop: the top of a lane Part above the plot -- the contract's height for a disc
-    (`level` 0), one or two steps under it for a leg, and every other lane half a step lower
-    again, for where two lanes meet."""
-    steps = level + ((lane_index - 1) % 2) / 2
-    if rim:
-        return config["rimHeight"] - config["rimHeight"] / LANE_RIM_STEPS * steps
-    return config["fillHeight"] - LANE_STEP * steps
-
-
-def lane_pieces(view, drawn):
-    """Fabric.layLane: what a lane drawn `drawn` studs from its mouth is made of -- (slabs, discs).
-    A slab per leg it has reached, {a, b, level}, level 1 or 2 alternating by leg; a disc on
-    every interior point it has passed and one at its tip, as (x, z). Each stands for a fill and
-    a rim Part. Nothing below LANE_MIN."""
-    slabs, discs = [], []
-    if drawn < LANE_MIN:
-        return slabs, discs
-    tip = (view["legs"][0]["ax"], view["legs"][0]["az"])
-    for index, leg in enumerate(view["legs"], start=1):
-        span = min(drawn - leg["start"], leg["length"])
-        if span < LANE_MIN:
-            break
-        start = (leg["ax"], leg["az"])
-        tip = (leg["ax"] + leg["dx"] * span, leg["az"] + leg["dz"] * span)
-        slabs.append({"a": start, "b": tip, "level": 1 + (index - 1) % 2})
-        if index > 1:
-            discs.append(start)
-    discs.append(tip)
-    return slabs, discs
-
-
 def rect_distance(px, pz, rect):
     """CityFabric.RectDistance: 0 inside; the point is taken into the rect's frame with the inverse
     of CFrame.Angles(0, a, 0)."""
@@ -550,17 +512,33 @@ def valid_lane(lane):
 
 
 def valid_lane_config(value):
-    """Fabric.validLanesConfig: `fabric.lanes` as the renderer may use it -- five finite numbers, a
-    width above 0, a rim and a grow time of 0 or more -- or None, which draws no lane (their lots
-    still develop)."""
+    """Fabric.validLanesConfig (wave 2.5): `fabric.lanes` as far as the client reads it -- a width
+    above 0 and the height of a Parts lane's top, both finite; any other key is ignored. None
+    draws no lane and clears nothing for one; their lots still develop."""
     if not isinstance(value, dict):
         return None
-    keys = ("width", "rim", "fillHeight", "rimHeight", "growSeconds")
-    if not all(finite(value.get(key)) for key in keys):
+    width, fill_height = value.get("width"), value.get("fillHeight")
+    if not (finite(width) and width > 0 and finite(fill_height)):
         return None
-    if not (value["width"] > 0 and value["rim"] >= 0 and value["growSeconds"] >= 0):
-        return None
-    return {key: value[key] for key in keys}
+    return {"width": width, "fillHeight": fill_height}
+
+
+def shown_lanes(lane_views, reaches):
+    """Fabric.syncLanes, settled (wave 2.5): the lanes shown, each WHOLE from the moment any lot on
+    it has a building site (its reach is above 0), as {index, points (mouth first), length,
+    reach}. In game such a lane is its baked `LN_<index>` path piece, on near and far plots like
+    any piece, or flat Parts on a near plot while that piece is missing or past
+    budget.pathPieces. The reach still decides how far the lane clears the wild land."""
+    return [
+        {
+            "index": view["index"],
+            "points": [(p[0], p[1]) for p in view["lane"]["points"]],
+            "length": view["length"],
+            "reach": reaches[view["index"]],
+        }
+        for view in lane_views
+        if reaches[view["index"]] > 0
+    ]
 
 
 def valid_lane_lot(parcel, lanes_valid):
@@ -1545,16 +1523,9 @@ class FabricPlot:
             for view in self.lane_views
         }
 
-    def lanes(self, reaches, near):
-        """Fabric.syncLanes, settled: every lane a near plot draws, laid to its reach, as {index,
-        length, reach, slabs, discs} (see `lane_pieces`). A far plot draws none."""
-        drawn = []
-        for view in self.lane_views if near else ():
-            reach = reaches[view["index"]]
-            slabs, discs = lane_pieces(view, reach)
-            if slabs:
-                drawn.append({"index": view["index"], "length": view["length"], "reach": reach, "slabs": slabs, "discs": discs})
-        return drawn
+    def lanes(self, reaches):
+        """Fabric.syncLanes, settled: the lanes this plot shows (see `shown_lanes`)."""
+        return shown_lanes(self.lane_views, reaches)
 
     def cleared_flags(self, mask):
         """Fabric.clearedFlags: bit q-1 per cleared quarter of a clump, bit 0 for a single; a
@@ -1798,7 +1769,7 @@ class FabricPlot:
             "upgrades": upgrades,
             "plumes": plumes_for(parcels, self.chimneys, smoking),
             "laneReaches": reaches,
-            "lanes": self.lanes(reaches, near),
+            "lanes": self.lanes(reaches),
             "near": near,
         }
 
@@ -2251,9 +2222,10 @@ def selftest():
     def reach(levels, budget=99):
         return lane_reach(dogleg, 1, lane_lots, levels, footprints, budget)
 
-    view = {"index": 1, "lane": dogleg, "legs": lane_legs(dogleg)}
     stutter = lane_legs({"points": [[0, 0], [0, 0.005], [0, 10]]})
-    lane_looks = {"width": 3, "rim": 0.4, "fillHeight": 0.05, "rimHeight": 0.01, "growSeconds": 0.5}
+    # Two lanes of the dogleg's shape: one reached 4 studs up, one not reached at all.
+    shown = shown_lanes([{"index": k, "lane": dogleg, "length": lane_length(dogleg)} for k in (1, 2)], {1: 4.0, 2: 0})
+    lane_looks = {"width": 3, "fillHeight": 0.05}
     lot_flags = validated_parcels(
         [
             _parcel("medium", "L1_2", 6, 1),
@@ -2297,19 +2269,12 @@ def selftest():
         ("lane: needs its mouth's stretch", not valid_lane({k: v for k, v in dogleg.items() if k != "stretch"})),
         ("lane: needs a finite along", not valid_lane(dict(dogleg, along=math.inf))),
         ("lane lots: malformed ones are blanks", lot_flags == [True, True, False, False, False, False, False, True]),
-        ("lane config: valid", valid_lane_config(lane_looks) == lane_looks),
-        ("lane config: growSeconds missing draws no lane", valid_lane_config({k: v for k, v in lane_looks.items() if k != "growSeconds"}) is None),
+        ("lane config: width and fillHeight are enough", valid_lane_config(lane_looks) == lane_looks),
+        ("lane config: the retired keys are ignored", valid_lane_config(dict(lane_looks, rim="x", growSeconds=None)) == lane_looks),
+        ("lane config: fillHeight missing draws no lane", valid_lane_config({"width": 3}) is None),
         ("lane config: width 0 draws no lane", valid_lane_config(dict(lane_looks, width=0)) is None),
-        ("lane config: a negative rim draws no lane", valid_lane_config(dict(lane_looks, rim=-0.1)) is None),
+        ("shown: a lane is whole from its first building site", shown == [{"index": 1, "points": [(0, 0), (0, 10), (8, 10)], "length": 18.0, "reach": 4.0}]),
         ("legs: two points on one spot make no leg", [(leg["start"], leg["length"]) for leg in stutter] == [(0, 9.995)]),
-        ("pieces: one slab and the tip disc", lane_pieces(view, 7) == ([{"a": (0, 0), "b": (0.0, 7.0), "level": 1}], [(0.0, 7.0)])),
-        ("pieces: a disc on the corner it has passed", lane_pieces(view, 14)[1] == [(0, 10), (4.0, 10.0)]),
-        ("pieces: legs alternate levels", [slab["level"] for slab in lane_pieces(view, 18)[0]] == [1, 2]),
-        ("pieces: a reach on the corner stops there", lane_pieces(view, 10) == ([{"a": (0, 0), "b": (0.0, 10.0), "level": 1}], [(0.0, 10.0)])),
-        ("pieces: nothing under LANE_MIN", lane_pieces(view, 0.005) == ([], [])),
-        ("tops: a disc at the contract's height", lane_top(lane_looks, 1, False, 0) == 0.05 and lane_top(lane_looks, 1, True, 0) == 0.01),
-        ("tops: a leg one step under", abs(lane_top(lane_looks, 1, False, 1) - 0.045) < 1e-12 and abs(lane_top(lane_looks, 1, True, 1) - 0.008) < 1e-12),
-        ("tops: every other lane half a step lower", abs(lane_top(lane_looks, 2, False, 2) - 0.0375) < 1e-12),
         ("mask: a lane leg clears by its own margin", is_cleared(1.4, 3, 0, lane_mask)),
         ("mask: not by the street's wider one", not is_cleared(1.8, 3, 0, lane_mask)),
         ("mask: a margin of 0 stays 0", not is_cleared(30.5, 3, 0, lane_mask)),
@@ -2441,7 +2406,8 @@ def timeline(era_name):
     rows.append(("full", "final stages", everything, plot.final_stages(everything), len(city["tier"]["thresholds"])))
     fragile_notes = []
     over_cap = []
-    # Wave 2.4: the lanes that can be laid and their summed length, which a finished town draws.
+    # Waves 2.4 and 2.5: the lanes that can be shown and their summed length; the column counts a
+    # shown lane whole, as it is drawn from the moment its reach is above 0.
     lane_count = len(plot.lane_views)
     lane_total = sum(view["length"] for view in plot.lane_views)
     for label, moment, owned, stages, tier in rows:
@@ -2467,7 +2433,7 @@ def timeline(era_name):
             f"(far {far_houses}, {far_sites}) | plumes {len(near['plumes']):2d} ({cap_text})"
             + (
                 f" | lanes {len(near['lanes']):2d} of {lane_count}, "
-                f"{sum(lane['reach'] for lane in near['lanes']):.0f} of {lane_total:.0f} studs"
+                f"{sum(lane['length'] for lane in near['lanes']):.0f} of {lane_total:.0f} studs"
                 if lane_count
                 else ""
             )

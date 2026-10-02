@@ -108,6 +108,16 @@ SMOKE_ALPHA = 0.8
 PLAYER_SIZE = (2.0, 5.0, 1.0)
 PLAYER_COLOR = [48, 110, 210]
 SPUR_TOP = 0.1
+# A back lane is drawn as slabs laid along the bake's own centreline: a cross-section is looked at
+# every LANE_WALK studs, and a new slab starts once the heading has turned LANE_TURN or the half
+# width has changed LANE_WIDEN since the last one, so a straight leg is one slab and a bend or a
+# round end a fan of short ones.
+LANE_WALK = 0.1
+LANE_TURN = math.radians(5.0)
+LANE_WIDEN = 0.06
+# The rim of a surface whose rim image cannot be read: tools/paths/texture.py's planar_rim gain.
+RIM_SHADE = 0.72
+PATH_IMAGES_DIR = REPO_ROOT / "assets" / "paths"
 SLAB_THICKNESS = 0.2
 # Scatter.luau constants and paths, mirrored (geometry, not tunables).
 STRAIGHT_ENOUGH = 0.9
@@ -168,6 +178,37 @@ def blueprint_path(era_name, model_name, prop=False):
 def centred_extents(size_x, size_z):
     """Scatter.centredExtents: (minX, maxX, minZ, maxZ) about the origin."""
     return (-size_x / 2, size_x / 2, -size_z / 2, size_z / 2)
+
+
+def rim_look(era_name, variant, road_color):
+    """The colour a baked rim shows beside a street surface of `road_color`: the mean of the rim
+    image that surface wears (tools/paths/texture.py writes it; a darker copy of the fill, or
+    Boomtown's pale concrete kerb once Main Street is paved), else the road colour RIM_SHADE as
+    bright. Scene-only: the game shows the image itself."""
+    name = f"{era_name}_rim.png" if variant == "default" else f"{era_name}_{variant}_rim.png"
+    try:
+        from PIL import Image, ImageStat
+
+        with Image.open(PATH_IMAGES_DIR / name) as image:
+            return [round(v) for v in ImageStat.Stat(image.convert("RGB")).mean]
+    except (ImportError, OSError, ValueError):
+        return tint(road_color, RIM_SHADE)
+
+
+def lane_bake(era):
+    """tools/paths' chains for the era: the centreline and width profile its lane pieces are baked
+    from. None in an era that bakes no paths."""
+    for folder in ("pathmock", "paths"):
+        path = str(REPO_ROOT / "tools" / folder)
+        if path not in sys.path:
+            sys.path.append(path)
+    import network as path_network
+    import planargeom
+
+    try:
+        return path_network.Bake(era.name, era.city), planargeom
+    except ValueError:
+        return None, planargeom
 
 
 def tint(color, factor):
@@ -750,42 +791,90 @@ class PlotScene:
                 self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, top, colour)
 
     def build_lanes(self):
-        """M12 wave 2.4 back lanes, piece for piece as Fabric.layLane lays them on a near plot: for
-        every lane drawn to its reach, a rim slab and a fill slab per leg and a rim and a fill disc
-        on every interior point it has passed and at its tip, at Fabric.laneTop's heights. They
-        take the streets' live colour, the rim a darker shade: in game, while the baked renderer
-        draws, they wear the baked pieces' own fill and rim images instead, which this render's
-        plain streets do not show either. Every top lies under the street's own slab, which
-        therefore covers the mouth."""
+        """M12 wave 2.5 back lanes: every lane the settled fabric shows (any lot on it has a
+        building site), WHOLE, as its baked `LN_<k>` piece lies in the game -- along the bake's
+        own centreline (bends filleted, the mouth run under the street, a round end past the far
+        point) with the bake's width profile, the rim RIM_BASE outside the fill, at the baked
+        pieces' two heights (`paths.fillHeight`, `paths.rimHeight`), both under the street's own
+        slab, which therefore covers the mouth. The fill takes the streets' live colour and the
+        rim the mean of the rim image that surface wears. A far plot keeps the fill and drops the
+        rim, as `paths.rimNearOnly` has every baked piece do.
+
+        Like this render's streets and spurs the fill is drawn at the path's nominal width and
+        with a clean edge: the mesh is MESH_WIDTH_FACTOR wider and its outline is cut by the edge
+        noise, which tools/paths judges. A lane whose piece is missing or past
+        `budget.pathPieces` is flat Parts in the game (near plots only); that fallback is not
+        drawn here."""
         view = self.fabric_view
         if view is None or not self.fabric.lane_views:
             return
-        config = self.fabric.lane_config
-        thickness = cityfabric.LANE_THICKNESS
-        looks = (
-            ("Rim", True, config["width"] + 2 * config["rim"], tint(self.road_color, cityfabric.LANE_RIM_SHADE)),
-            ("Fill", False, config["width"], list(self.road_color)),
+        shown = view["lanes"]
+        total_length = sum(lane["length"] for lane in self.fabric.lane_views)
+        note = (
+            f"fabric lanes: {len(shown)} of {len(self.fabric.lane_views)} shown whole, "
+            f"{sum(lane['length'] for lane in shown):.0f} of {total_length:.0f} studs"
         )
-        for lane in view["lanes"]:
-            for name, rim, width, colour in looks:
-                for index, slab in enumerate(lane["slabs"]):
-                    a, b = slab["a"], slab["b"]
-                    top = cityfabric.lane_top(config, lane["index"], rim, slab["level"])
-                    self.box(
-                        f"Lane{lane['index']}_{name}{index}",
-                        (width, thickness, math.dist(a, b)),
-                        ((a[0] + b[0]) / 2, top - thickness / 2, (a[1] + b[1]) / 2),
-                        colour,
-                        rot_y=facing_rot((b[0] - a[0], b[1] - a[1])),
-                    )
-                top = cityfabric.lane_top(config, lane["index"], rim, 0)
-                for index, centre in enumerate(lane["discs"]):
-                    self.disc(f"Lane{lane['index']}_{name}Disc{index}", centre, width, top, thickness, colour)
-        self.notes.append(
-            f"fabric lanes: {len(view['lanes'])} of {len(self.fabric.lane_views)} drawn, "
-            f"{sum(lane['reach'] for lane in view['lanes']):.0f} of "
-            f"{sum(lane['length'] for lane in self.fabric.lane_views):.0f} studs"
-        )
+        if not shown:
+            self.notes.append(note)
+            return
+        bake, geom = lane_bake(self.era)
+        pieces = {piece["lane"]: piece for piece in bake.pieces() if piece["kind"] == "lane"} if bake else {}
+        paths = self.era.city["paths"]
+        rim_only_near = bool(paths.get("rimNearOnly"))
+        layers = [("Fill", False, float(paths["fillHeight"]), list(self.road_color))]
+        if self.near or not rim_only_near:
+            rim_colour = rim_look(self.era.name, self.road_variant, self.road_color)
+            layers.insert(0, ("Rim", True, float(paths["rimHeight"]), rim_colour))
+        unbaked = []
+        for lane in shown:
+            piece = pieces.get(lane["index"])
+            if piece is None:
+                unbaked.append(lane["index"])
+                continue
+            for name, rim, top, colour in layers:
+                self.lane_ribbon(f"Lane{lane['index']}_{name}", geom, piece, rim, top, colour)
+        self.notes.append(note)
+        if unbaked:
+            self.notes.append(f"fabric lanes: tools/paths bakes no piece for lane(s) {unbaked}; not drawn")
+
+    def lane_ribbon(self, name, geom, piece, rim, top, colour):
+        """One layer of a lane piece as slabs: the cross-sections of planargeom's own profile,
+        thinned to where the heading or the width changes, each pair bridged by a slab as wide as
+        the wider of the two and lapped over its neighbours so a bend shows no wedge."""
+        c = piece["_chain"]
+        curve = c["final"]
+        lo, hi, start_cap, end_cap = geom.span(c, piece["window"], rim)
+        count = max(1, math.ceil((hi - lo) / LANE_WALK))
+        sections = []
+        for k in range(count + 1):
+            s = lo + (hi - lo) * k / count
+            arc = max(0.0, min(curve.total, s))
+            tangent = curve.tangent(arc, 0.2)
+            point = curve.point(arc)  # clamped to the curve, as the mesh's own sections are
+            half = geom.half_width(c, s, lo, hi, start_cap, end_cap)[0] / geom.MESH_WIDTH_FACTOR
+            if rim:
+                half += geom.RIM_BASE
+            heading = math.atan2(tangent[1], tangent[0])
+            if sections and k < count:
+                last = sections[-1]
+                turned = abs(math.remainder(heading - last[2], 2 * math.pi))
+                if turned < LANE_TURN and abs(half - last[1]) < LANE_WIDEN:
+                    continue
+            sections.append((point, half, heading))
+        for index in range(len(sections) - 1):
+            (a, half_a, _), (b, half_b, _) = sections[index], sections[index + 1]
+            length = math.dist(a, b)
+            if length < 1e-6:
+                continue
+            half = max(half_a, half_b)
+            lap = half * math.tan(LANE_TURN / 2)
+            self.box(
+                f"{name}{index}",
+                (2 * half, SLAB_THICKNESS, length + 2 * lap),
+                ((a[0] + b[0]) / 2, top - SLAB_THICKNESS / 2, (a[1] + b[1]) / 2),
+                colour,
+                rot_y=facing_rot((b[0] - a[0], b[1] - a[1])),
+            )
 
     # -- highway, subway, dressing ---------------------------------------
 

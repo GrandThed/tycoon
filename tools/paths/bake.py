@@ -26,7 +26,11 @@ a ribbon folded over itself on a bend tighter than its half-width.
 
 `--list` exit codes: 0 the client, the bake and the meshes on disk all agree; 1 the client and
 the bake disagree, or a mesh has a geometric problem (fix the mirror or the layout); 2 they agree
-but the meshes on disk were baked from another layout or width (re-bake and re-upload).
+but meshes on disk were baked from another layout or width, or are missing (bake and upload).
+
+M12 wave 2.5: the era's back lanes (Config/Fabric/<Era>.json `lanes`) bake as `LN_<k>` pieces
+with the streets and spurs, and `--list` checks them against the fabric data -- ids, count, each
+polyline, the width, the mouth's address -- since the client reads no arc for a lane.
 """
 
 from __future__ import annotations
@@ -151,6 +155,9 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
     # Only when the era narrows its spurs, so an era without the key bakes the record it always did.
     if bake.spur_width != bake.era.width:
         record["spurWidth"] = bake.spur_width
+    # Likewise only for an era with back lanes.
+    if bake.lane_chains:
+        record["laneWidth"] = bake.lane_width
     # A single-piece re-bake keeps the other pieces' records, but only while the layout has not
     # moved under them; if it has, every piece has to be re-baked anyway.
     existing = era_json_path(era, build_root)
@@ -181,6 +188,8 @@ def build(era: str, only: list[str], dry_run: bool, build_root: str) -> tuple[in
         }
         if piece["kind"] == "spur":
             entry["slot"] = piece["slot"]
+        elif piece["kind"] == "lane":
+            entry["lane"] = piece["lane"]
         else:
             entry["stretch"] = piece["stretch"]
         for layer in LAYERS:
@@ -256,7 +265,13 @@ def listing(era: str) -> int:
         a, b = piece["nodeArcs"]
         win = piece["window"]
         seen = client.get(piece["id"])
-        arc_text = f"{seen['arcs'][0]:8.3f}-{seen['arcs'][1]:8.3f}" if seen else "   (never requested)"
+        if seen is None:
+            arc_text = "   (never requested)"
+        elif "lane" in seen:
+            # The client reads no arc for a lane; what stands here is the fabric data it is checked against.
+            arc_text = f"lane {len(seen['points'])} points"
+        else:
+            arc_text = f"{seen['arcs'][0]:8.3f}-{seen['arcs'][1]:8.3f}"
         log(
             f"  {piece['id']:<16} {piece['kind']:<7} chain {piece['chain']:<12} "
             f"nodes {piece['nodes'][0][0]:7.2f},{piece['nodes'][0][1]:7.2f} -> "
@@ -264,9 +279,12 @@ def listing(era: str) -> int:
             f"arc {a:8.3f}-{b:8.3f} client {arc_text} baked {win['lo']:8.3f}-{win['hi']:8.3f}"
         )
     spurs = sum(1 for p in pieces if p["kind"] == "spur")
+    lanes = sum(1 for p in pieces if p["kind"] == "lane")
     log(
-        f"{era}: {len(pieces)} piece(s) = {len(pieces) - spurs} stretch + {spurs} spur"
+        f"{era}: {len(pieces)} piece(s) = {len(pieces) - spurs - lanes} stretch + {spurs} spur"
+        + (f" + {lanes} lane" if lanes else "")
         + (f" (spurs {bake.spur_width:g} wide, streets {bake.era.width:g})" if narrowed else "")
+        + (f" (lanes {bake.lane_width:g} wide)" if lanes else "")
     )
     defects, summary = geometry(bake, pieces)
     log(f"{era}: geometry -- {summary}")
@@ -274,23 +292,33 @@ def listing(era: str) -> int:
     for line in problems + defects:
         warn(line)
     if problems:
-        warn(
-            "client/bake disagreement: RoadGraph and tools/paths/network.py have drifted apart. "
-            "Fix the mirror, then re-bake and re-upload the pieces it names."
-        )
+        # A lane piece is checked against the fabric data, so there the data may be what is wrong.
+        if all(line.startswith("LN_") for line in problems):
+            warn(
+                "lane/bake disagreement: a lane piece does not match its lane in the fabric data. Fix the "
+                "lane (tools/fabric.py's plan) or tools/paths/network.py, then re-bake the pieces named."
+            )
+        else:
+            warn(
+                "client/bake disagreement: RoadGraph and tools/paths/network.py have drifted apart. "
+                "Fix the mirror, then re-bake and re-upload the pieces it names."
+            )
     if problems or defects:
         return 1
-    log(f"{era}: client/bake check OK -- {len(client)} piece(s) requested, ids, count and arcs all agree")
-    stale = arcs.stale(bake, pieces, arcs.load_record(era))
+    log(
+        f"{era}: client/bake check OK -- {len(client)} piece(s) requested, ids, count and arcs all agree"
+        + (f"; {lanes} lane piece(s) match the fabric data (polyline, width, mouth)" if lanes else "")
+    )
+    stale, tally = arcs.stale(bake, pieces, arcs.load_record(era))
     for line in stale:
         warn(f"stale mesh: {line}")
     if stale:
         warn(
-            f"{era}: the meshes on disk are STALE ({len(stale)} difference(s) from today's layout): "
-            f"re-bake, re-upload and re-harvest before this era is judged in Studio"
+            f"{era}: the meshes on disk are STALE or missing ({tally}): "
+            f"bake, upload and harvest before this era is judged in Studio"
         )
         return 2
-    log(f"{era}: the meshes on disk were baked from this layout")
+    log(f"{era}: the meshes on disk were baked from this layout ({tally})")
     return 0
 
 

@@ -15,11 +15,22 @@ the shortest leg it can bend on, the meander taper, and here the mesh width -- w
 measures the street it joins stays in street widths: the host reach and the run past the host's
 centreline. Without the key the spur width is the road's and every number is the one it was.
 
-Piece ids (INTERFACES "Wave 1d - Pieces"):
+M12 wave 2.5 "baked lanes": every back lane of the era's fabric data (Config/Fabric/<Era>.json
+`lanes`) is a piece too. PathRibbon knows nothing of them -- the client clones `LN_<k>` where the
+bake put it and reads no arc -- so their geometry is the bake's own, and it is a spur's: the lane's
+polyline from its far point to its mouth at `fabric.lanes.width`, bends filleted at the lane's
+width, the mouth snapped onto the street's smoothed centreline and run EXTEND_WIDTHS street widths
+past it. The far point is a round end that runs on by the cap's length, so the lane is full
+width at its last point and two lanes that meet there overlap instead of pinching. Lane chains
+come after every other chain and never touch the street they join (no junction, no rounding), so
+the street and spur pieces bake to the bytes they had before.
+
+Piece ids (INTERFACES "Wave 1d - Pieces", "Wave 2.5 - Pieces"):
     L<polylineIndex>_<stretchIndex>   one spine stretch, `polylineIndex` 1-based and
                                       `stretchIndex` the 1-based rank of the stretch among the
                                       stretches of that polyline, in network creation order
     SP_<slotId>                       one spur
+    LN_<laneIndex>                    one back lane, by its 1-based index in the fabric data
 
 A reader can verify the match without running Studio: `py tools/paths/bake.py --era <Era>
 --list` prints every piece id with its node points and arc range, and the client builds the same
@@ -40,6 +51,7 @@ REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "pathmock"))
 sys.path.insert(0, HERE)
+import cityfabric  # noqa: E402
 import pathgeom as pg  # noqa: E402
 import planargeom as geom  # noqa: E402
 import streetplan  # noqa: E402
@@ -55,6 +67,13 @@ CONNECTOR_KEY_BASE = 97  # a connector's meander phase key: 97 + its 0-based str
 GOLDEN_ANGLE = 2.399963
 CENTRELINE_SPACING = 1.0  # studs between the centreline points written to <Era>.json
 FALLBACK_WAVELENGTH = 18.0  # unused without a meander (amplitude 0), kept finite
+LANE_LAYER = 3  # above the spurs' 2: a lane may join any street or connector, never a spur or a lane
+LANE_KEY_BASE = 4000  # a lane's meander phase key: 4000 + its index (spurs use their id's byte sum)
+# A lane's bend radius in lane widths. A spur's radius (2 widths) cuts each right-angle bend 2.49
+# studs inside its data point, which put a lane's fill 0.96 studs into the lot on the inside of
+# the bend: lots stand 2.2 from the lane's data polyline. At 1 width the fill stays off every lot
+# and no outline folds (INTERFACES "Wave 2.5", lead's ruling).
+LANE_FILLET_WIDTHS = 1.0
 
 
 class Bake:
@@ -78,8 +97,11 @@ class Bake:
         self.polyline_chains: dict[int, int] = {}
         self.connector_chains: dict[int, int] = {}
         self.spur_chains: dict[str, int] = {}
+        self.lane_chains: dict[int, int] = {}
+        self.lane_width: float | None = None
         self._build_chains()
         self._prepare()
+        self._build_lanes(city)
 
     # -- chains -------------------------------------------------------------
 
@@ -118,29 +140,33 @@ class Bake:
             self.chains.append(self._new_chain("spur", slot_id, 2, sum(map(ord, slot_id)), points))
             self.spur_chains[slot_id] = len(self.chains) - 1
 
+    @staticmethod
+    def _smoothed(c: dict):
+        # smooth_curve derives the shortest leg from the radius: MIN_LEG_WIDTHS chain widths.
+        widths = LANE_FILLET_WIDTHS if c["kind"] == "backlane" else pg.FILLET_RADIUS_WIDTHS
+        return pg.smooth_curve(c["points"], widths * c["width"])
+
+    def _host_for(self, c: dict, q):
+        """The nearest lower-layer street or connector whose unsmoothed centreline passes within
+        half a road width of `q`, as (distance, arc on its smoothed curve, chain), or None."""
+        reach = self.era.width / 2 + HOST_REACH_EXTRA
+        best = None
+        for host in self.chains:
+            if host["kind"] == "spur" or host["layer"] >= c["layer"]:
+                continue
+            d, _ = host["raw"].project(q)
+            if d <= reach and (best is None or d < best[0]):
+                best = (d, host["curve"].project(q)[1], host)
+        return best
+
     def _prepare(self) -> None:
         width = self.era.width
-
-        def smoothed(c):
-            # smooth_curve derives the shortest leg from the radius: MIN_LEG_WIDTHS chain widths.
-            return pg.smooth_curve(c["points"], pg.FILLET_RADIUS_WIDTHS * c["width"])
+        smoothed, host_for = self._smoothed, self._host_for
 
         for c in self.chains:
             c["width"] = self.spur_width if c["kind"] == "spur" else width
             c["curve"] = smoothed(c)
             c["raw"] = pg.Curve(list(c["points"]))
-
-        reach = width / 2 + HOST_REACH_EXTRA
-
-        def host_for(c, q):
-            best = None
-            for host in self.chains:
-                if host["kind"] == "spur" or host["layer"] >= c["layer"]:
-                    continue
-                d, _ = host["raw"].project(q)
-                if d <= reach and (best is None or d < best[0]):
-                    best = (d, host["curve"].project(q)[1], host)
-            return best
 
         for index in sorted(range(len(self.chains)), key=lambda i: (self.chains[i]["layer"], i)):
             c = self.chains[index]
@@ -171,12 +197,6 @@ class Bake:
                     host["round_end"] = True
 
         for c in self.chains:
-            curve = c["curve"]
-            total = curve.total
-            taper_length = pg.MEANDER_TAPER_WIDTHS * c["width"]
-            phase = (c["key"] * GOLDEN_ANGLE) % (2 * math.pi)
-            c["phase"] = phase
-            nodes = [0.0, total] + list(c["junctions"])
             # The plot entrance stays open at full width: no extension there. The extensions stay
             # in street widths whatever the chain: a spur's mouth runs past its host's centreline
             # and must end inside the street it joins.
@@ -190,27 +210,74 @@ class Bake:
                 if c["join_end"]
                 else (pg.ROUND_END_WIDTHS * width if c["round_end"] else 0.0)
             )
-            count = max(8, math.ceil(total / MEANDER_STEP))
-            kept, kept_smooth = [], []
-            for k in range(count + 1):
-                s = total * k / count
-                t = curve.tangent(s)
-                nearest = min(abs(s - node) for node in nodes)
-                offset = self.amplitude * pg.smoothstep(nearest / taper_length) * pg.wave(s, phase, self.wavelength)
-                point = pg.add(curve.point(s), pg.mul((-t[1], t[0]), offset))
-                if not kept or pg.length(pg.sub(point, kept[-1])) > DENSE_DEDUPE_EPS:
-                    kept.append(point)
-                    kept_smooth.append(s)
-            c["final"] = pg.Curve(kept, ext_s, ext_e)
-            if ext_s > 0 and len(kept) >= 2:
-                kept_smooth.insert(0, -ext_s)
-            if ext_e > 0 and len(kept) >= 2:
-                kept_smooth.append(total + ext_e)
-            c["final_smooth"] = kept_smooth
-            c["ext"] = (ext_s, ext_e)
-            c["width_at"] = lambda s, c=c: c["width"] + self.jitter * pg.wave(
-                s * 1.37, c["phase"] + 2.1, self.wavelength * 0.8
-            ) * 0.5
+            self._finish(c, ext_s, ext_e)
+
+    def _finish(self, c: dict, ext_s: float, ext_e: float) -> None:
+        """The drawn curve of a smoothed chain: the meander, then the straight end extensions."""
+        curve = c["curve"]
+        total = curve.total
+        taper_length = pg.MEANDER_TAPER_WIDTHS * c["width"]
+        phase = (c["key"] * GOLDEN_ANGLE) % (2 * math.pi)
+        c["phase"] = phase
+        nodes = [0.0, total] + list(c["junctions"])
+        count = max(8, math.ceil(total / MEANDER_STEP))
+        kept, kept_smooth = [], []
+        for k in range(count + 1):
+            s = total * k / count
+            t = curve.tangent(s)
+            nearest = min(abs(s - node) for node in nodes)
+            offset = self.amplitude * pg.smoothstep(nearest / taper_length) * pg.wave(s, phase, self.wavelength)
+            point = pg.add(curve.point(s), pg.mul((-t[1], t[0]), offset))
+            if not kept or pg.length(pg.sub(point, kept[-1])) > DENSE_DEDUPE_EPS:
+                kept.append(point)
+                kept_smooth.append(s)
+        c["final"] = pg.Curve(kept, ext_s, ext_e)
+        if ext_s > 0 and len(kept) >= 2:
+            kept_smooth.insert(0, -ext_s)
+        if ext_e > 0 and len(kept) >= 2:
+            kept_smooth.append(total + ext_e)
+        c["final_smooth"] = kept_smooth
+        c["ext"] = (ext_s, ext_e)
+        c["width_at"] = lambda s, c=c: c["width"] + self.jitter * pg.wave(
+            s * 1.37, c["phase"] + 2.1, self.wavelength * 0.8
+        ) * 0.5
+
+    def _build_lanes(self, city: dict) -> None:
+        """The back lanes of the era's fabric data as chains, after every other chain is finished.
+
+        A lane gets a chain when the client can show it: the era has a valid `fabric.lanes` block
+        and the lane is well formed with at least one leg (Fabric.luau's rules, read through
+        tools/cityfabric.py). The chain runs from the lane's far point to its mouth, which makes
+        it a spur in every respect that matters to the ribbon: it joins at its end."""
+        fabric = city["eras"][self.era_name].get("fabric") or {}
+        config = cityfabric.valid_lane_config(fabric.get("lanes"))
+        data = cityfabric.load_fabric_data(self.era_name)
+        lanes = data.get("lanes") if isinstance(data, dict) else None
+        if config is None or not isinstance(lanes, list):
+            return
+        self.lane_width = float(config["width"])
+        # The round end: the fill's cap, and the rim's run past the fill's tip, both on real curve
+        # (a tip on the chain's very end would cut the rim off square).
+        ext_start = pg.CAP_LENGTH + geom.RIM_CAP_EXTRA
+        for index, lane in enumerate(lanes, start=1):
+            if not cityfabric.valid_lane(lane) or not cityfabric.lane_legs(lane):
+                continue
+            points = [(float(p[0]), float(p[1])) for p in reversed(lane["points"])]
+            c = self._new_chain("backlane", f"backlane{index}", LANE_LAYER, LANE_KEY_BASE + index, points)
+            c["lane"] = index
+            c["width"] = self.lane_width
+            c["raw"] = pg.Curve(list(c["points"]))
+            hit = self._host_for(c, c["points"][-1])
+            if hit is not None:
+                # Snapped onto the street's smoothed centreline like any joiner, but the street is
+                # left exactly as it was: a junction or a rounded end would move its own pieces.
+                _, arc, host = hit
+                c["points"] = pg.dedupe(list(c["points"][:-1]) + [host["curve"].point(arc)], DEDUPE_EPS)
+                c["join_end"] = True
+            c["curve"] = self._smoothed(c)
+            self._finish(c, ext_start, pg.EXTEND_WIDTHS * self.era.width if c["join_end"] else 0.0)
+            self.chains.append(c)
+            self.lane_chains[index] = len(self.chains) - 1
 
     # -- arcs ---------------------------------------------------------------
 
@@ -299,7 +366,8 @@ class Bake:
         )
 
     def pieces(self) -> list[dict]:
-        """Every piece of the era, sorted by id: one per drawn spine stretch, one per spur."""
+        """Every piece of the era, sorted by id: one per drawn spine stretch, one per spur, one
+        per back lane."""
         out = []
         for stretch_index in self.visible_stretches():
             stretch = self.network.stretches[stretch_index]
@@ -335,6 +403,28 @@ class Bake:
                     "nodeArcs": [ext_s, total - ext_e],
                     "distances": [None, None],
                     "window": self._window(c, ext_s, total - ext_e),
+                    "_chain": c,
+                }
+            )
+        for lane_index, chain_index in self.lane_chains.items():
+            c = self.chains[chain_index]
+            total = c["final"].total
+            ext_s, ext_e = c["ext"]
+            out.append(
+                {
+                    "id": f"LN_{lane_index}",
+                    "kind": "lane",
+                    "lane": lane_index,
+                    "chain": c["id"],
+                    "nodes": [list(c["points"][0]), list(c["points"][-1])],
+                    "nodeArcs": [ext_s, total - ext_e],
+                    "distances": [None, None],
+                    # The fill starts where the rim's extra ends, caps round over CAP_LENGTH and is
+                    # full width at the lane's far point; the rim wraps the tip. The mouth ends in
+                    # the join extension like a spur's, with a round tip if it met no street.
+                    "window": geom.window(
+                        geom.RIM_CAP_EXTRA, total, pg.CAP_LENGTH, ext_e if ext_e > 0 else pg.CAP_LENGTH, True, ext_e == 0
+                    ),
                     "_chain": c,
                 }
             )
@@ -378,6 +468,12 @@ class Bake:
         # Only when it narrows the spurs: an era without the key keeps the hash its meshes carry.
         if self.spur_width != self.era.width:
             payload["spurWidth"] = self.spur_width
+        # Likewise only for an era with lane pieces, whose polylines and width the set depends on.
+        if self.lane_chains:
+            payload["lanes"] = {
+                str(index): [list(p) for p in self.chains[chain]["raw"].p] for index, chain in sorted(self.lane_chains.items())
+            }
+            payload["laneWidth"] = self.lane_width
         text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 

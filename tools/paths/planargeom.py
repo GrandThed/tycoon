@@ -130,6 +130,45 @@ def chain_window(c: dict, lo: float, hi: float, cap_length: float = pg.CAP_LENGT
     )
 
 
+def span(c: dict, win: dict, rim: bool = False) -> tuple[float, float, float, float]:
+    """(lo, hi, start cap, end cap): the arc range the ribbon for `win` really covers, and the
+    length of the round cap at each end of it. A rim runs RIM_CAP_EXTRA past the fill at every
+    extended tip."""
+    total = c["final"].total
+    extra = RIM_CAP_EXTRA if rim else 0.0
+    lo_r = max(-extra, win["lo"] - (extra if win["extend_start"] else 0.0))
+    hi_r = min(total + extra, win["hi"] + (extra if win["extend_end"] else 0.0))
+    # The cap grows by `extra` at both ends whether or not that tip was extended: where it was
+    # not (a join extension), the rim then runs out a little before the fill does, which is what
+    # keeps a rim from showing past a joiner's tip on its host.
+    return lo_r, hi_r, win["start_cap"] + extra, win["end_cap"] + extra
+
+
+def half_width(c: dict, s: float, lo_r: float, hi_r: float, start_cap: float, end_cap: float) -> tuple[float, float]:
+    """(half width, cap factor) of the fill at arc `s`, before any edge noise: the chain's width
+    (MESH_WIDTH_FACTOR wider in the mesh), the flare at a join, and the round caps of `span`. The
+    rim's outline lies RIM_BASE outside it. tools/testfit/plotrender.py draws its lanes from this
+    profile, so its picture and the baked mesh cannot drift apart."""
+    total = c["final"].total
+    ext_s, ext_e = c["ext"]
+    hw = MESH_WIDTH_FACTOR * c["width_at"](s - ext_s) / 2
+    flare = 1.0
+    if c["join_start"]:
+        flare = max(flare, 1 + pg.FLARE_GAIN * pg.smoothstep(1 - (s - ext_s) / pg.FLARE_LENGTH))
+    if c["join_end"]:
+        flare = max(flare, 1 + pg.FLARE_GAIN * pg.smoothstep(1 - (total - ext_e - s) / pg.FLARE_LENGTH))
+    cap = 1.0
+    if start_cap > 0:
+        x0 = (s - lo_r) / start_cap
+        if x0 < 1:
+            cap = min(cap, math.sqrt(max(0.0, 1 - (1 - x0) ** 2)))
+    if end_cap > 0:
+        x1 = (hi_r - s) / end_cap
+        if x1 < 1:
+            cap = min(cap, math.sqrt(max(0.0, 1 - (1 - x1) ** 2)))
+    return max(hw * flare * cap, MIN_HALF_WIDTH), cap
+
+
 def ribbon(c: dict, win: dict, seeds: tuple[int, int], rim: bool = False, tile: float = 11.0) -> dict:
     """One flat ribbon over `win` of chain `c`'s final curve, at y = 0 (plus the crown).
 
@@ -143,16 +182,8 @@ def ribbon(c: dict, win: dict, seeds: tuple[int, int], rim: bool = False, tile: 
     """
     cur = c["final"]
     total = cur.total
-    ext_s, ext_e = c["ext"]
-    lo, hi = win["lo"], win["hi"]
-    start_cap, end_cap = win["start_cap"], win["end_cap"]
-    extra = RIM_CAP_EXTRA if rim else 0.0
-    lo_r = max(-extra, lo - (extra if win["extend_start"] else 0.0))
-    hi_r = min(total + extra, hi + (extra if win["extend_end"] else 0.0))
-    # The cap grows by `extra` at both ends whether or not that tip was extended: where it was
-    # not (a join extension), the rim then runs out a little before the fill does, which is what
-    # keeps a rim from showing past a joiner's tip on its host.
-    start_cap, end_cap = start_cap + extra, end_cap + extra
+    ext_e = c["ext"][1]
+    lo_r, hi_r, start_cap, end_cap = span(c, win, rim)
     dense = [(lo_r, lo_r + start_cap), (hi_r - end_cap, hi_r)]
     if c["join_end"]:
         dense.append((total - ext_e - pg.FLARE_LENGTH, hi_r))
@@ -164,22 +195,7 @@ def ribbon(c: dict, win: dict, seeds: tuple[int, int], rim: bool = False, tile: 
         point = cur.point(max(0.0, min(total, s)))
         t = cur.tangent(max(0.0, min(total, s)), 0.2)
         nrm = (-t[1], t[0])
-        hw = MESH_WIDTH_FACTOR * c["width_at"](s - ext_s) / 2
-        flare = 1.0
-        if c["join_start"]:
-            flare = max(flare, 1 + pg.FLARE_GAIN * pg.smoothstep(1 - (s - ext_s) / pg.FLARE_LENGTH))
-        if c["join_end"]:
-            flare = max(flare, 1 + pg.FLARE_GAIN * pg.smoothstep(1 - (total - ext_e - s) / pg.FLARE_LENGTH))
-        cap = 1.0
-        if start_cap > 0:
-            x0 = (s - lo_r) / start_cap
-            if x0 < 1:
-                cap = min(cap, math.sqrt(max(0.0, 1 - (1 - x0) ** 2)))
-        if end_cap > 0:
-            x1 = (hi_r - s) / end_cap
-            if x1 < 1:
-                cap = min(cap, math.sqrt(max(0.0, 1 - (1 - x1) ** 2)))
-        h = max(hw * flare * cap, MIN_HALF_WIDTH)
+        h, cap = half_width(c, s, lo_r, hi_r, start_cap, end_cap)
         taper = pg.smoothstep(min(s - lo_r, hi_r - s) / EDGE_TAPER)
         base = RIM_BASE + h if rim else h
         jitter = RIM_JITTER if rim else EDGE_AMP
