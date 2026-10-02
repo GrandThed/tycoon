@@ -1419,6 +1419,8 @@ local function buildWorld(): ()
 		}
 		-- Before parenting, so clients never observe a plot without its attributes.
 		publishLobbyAttributes(record)
+		-- After the attributes: the Valley's per-plot meshes take their colour from EraName.
+		Landscape.AttachPlot(plotFolder, base)
 		plotFolder.Parent = plotsFolder
 		table.insert(plots, record)
 	end

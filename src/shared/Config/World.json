@@ -14,5 +14,15 @@
 		"color": [182, 176, 164],
 		"surround": { "radius": 38, "height": 0.2, "material": "Plastic", "color": [166, 138, 100] }
 	},
-	"roads": { "width": 6, "lift": 0.1, "material": "Plastic", "color": [158, 126, 88] }
+	"roads": { "width": 6, "lift": 0.1, "material": "Plastic", "color": [158, 126, 88] },
+	"valley": {
+		"wall": { "height": 160, "thickness": 4, "segments": 36 },
+		"aprons": {
+			"Village": { "inner": [114, 142, 66], "outer": [120, 149, 71] },
+			"Boomtown": { "inner": [178, 160, 102], "outer": [152, 158, 89] },
+			"Metropolis": { "inner": [150, 150, 144], "outer": [138, 153, 110] },
+			"OrbitalColony": { "inner": [136, 134, 138], "outer": [131, 145, 107] }
+		},
+		"skirtMargin": 1.5
+	}
 }

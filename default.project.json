@@ -1,6 +1,6 @@
 {
 	"name": "EraCityTycoon",
-	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies"],
+	"globIgnorePaths": ["templates/_props", "templates/_paths", "templates/_enemies", "templates/_world"],
 	"tree": {
 		"$className": "DataModel",
 		"ReplicatedStorage": {
@@ -37,7 +37,11 @@
 			"$ignoreUnknownInstances": true,
 			"Assets": {
 				"$className": "Folder",
-				"$path": { "optional": "templates" }
+				"$path": { "optional": "templates" },
+				"World": {
+					"$className": "Folder",
+					"$path": { "optional": "templates/_world" }
+				}
 			}
 		},
 		"Workspace": {

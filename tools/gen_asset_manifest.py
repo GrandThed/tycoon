@@ -19,6 +19,11 @@ Assets.json `props` (optional key) and templates/_props/<Era>/.
 Baked paths (wave 1d) get one table from Assets.json `paths` (optional key): per era the piece
 count, the triangle total, the two texture ids and how far the pieces have travelled.
 
+Landscape meshes (M13 wave 2) get a "World" table from Assets.json `world` (optional key): per set
+the mesh count, the triangle total, the palette ids and how far the meshes have travelled. The
+section is written only when that key exists, so a manifest from before the first landscape upload
+keeps its bytes.
+
 Output is deterministic (stable ordering, no timestamps) so --check can diff
 it. The GLB column is the one local-only fact (assets/build is gitignored), so
 --check masks that column on both sides before comparing.
@@ -28,6 +33,8 @@ Usage:
   py tools/gen_asset_manifest.py --check   # validate configs + blueprints and
                                            # compare the committed manifest;
                                            # exit 1 and print one line per problem
+  --assets-json, --templates and --out read another Assets.json and templates root and write (or
+  --check) another manifest file: fixtures and dry runs.
 """
 
 from __future__ import annotations
@@ -46,6 +53,7 @@ BLUEPRINTS_DIR = REPO_ROOT / "tools" / "testfit" / "blueprints"
 STAGES_DIR = REPO_ROOT / "assets" / "build" / "stages"
 TEMPLATES_DIR = REPO_ROOT / "templates"
 PROPS_DIRNAME = "_props"
+WORLD_DIRNAME = "_world"
 PROP_TYPE = "prop"
 MANIFEST_PATH = REPO_ROOT / "docs" / "ASSET_MANIFEST.md"
 
@@ -302,6 +310,14 @@ def collect(era: dict, assets: dict | None) -> tuple[list[Coverage], list[str]]:
     return rows, notes
 
 
+def shown(path: Path) -> str:
+    """A path for a message: repo-relative as before, or as given for a fixture outside the repo."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def md_cell(text: object) -> str:
     return str(text).replace("|", r"\|").replace("\n", " ")
 
@@ -455,8 +471,62 @@ def render(eras: list[dict], assets: dict | None) -> tuple[str, list[str]]:
                 lines.append(render_row(index, {"modelName": prop_name, "name": NONE, "type": PROP_TYPE}, cov))
             lines.append("")
     lines += render_paths(assets)
+    lines += render_world(assets)
     lines += ["## Totals", "", f"{totals['slots']} models: {summary_line(totals)}", ""]
     return "\n".join(lines), notes
+
+
+def render_world(assets: dict | None) -> list[str]:
+    """One row per landscape set. Unlike the paths section this one is absent, heading and all,
+    until Assets.json has a `world` key: the committed manifest must not go stale on a checkout
+    that has the tool but no upload yet."""
+    block = assets.get("world") if assets is not None else None
+    if not isinstance(block, dict) or not block:
+        return []
+    lines = [
+        "## World",
+        "",
+        "Pipeline: `tools/world/valley.py build` (one GLB per mesh -> Models, one palette PNG ->"
+        " Decal) -> `tools/assets/upload_world.py` -> Studio harvest (the size check)"
+        f" -> `tools/assets/gen_templates.py --world` -> `templates/{WORLD_DIRNAME}/<Set>/<Mesh>.rbxmx`"
+        " -> `ServerStorage/Assets/World/<Set>/`.",
+        "",
+        "A mesh without a harvested mesh id has no template, and neither has a palette mesh while"
+        " the set's palette image id is missing; the server then leaves the mesh out, or falls back"
+        " to the wave 1 world when the mesh is a required one.",
+        "",
+        "| Set | Plots | Meshes | Triangles | Palette asset/image | Uploaded | Harvested | Templates | Status |",
+        "|-----|-------|--------|-----------|---------------------|----------|-----------|-----------|--------|",
+    ]
+    for set_name in sorted(block):
+        entry = block[set_name] if isinstance(block[set_name], dict) else {}
+        meshes = entry.get("meshes") or {}
+        uploaded = sum(1 for m in meshes.values() if int(m.get("assetId") or 0) != 0)
+        harvested = sum(1 for m in meshes.values() if int(m.get("meshId") or 0) != 0)
+        palette_asset = int(entry.get("paletteAssetId") or 0)
+        palette_image = int(entry.get("paletteImageId") or 0)
+        needs_palette = any(m.get("look") != "flat" for m in meshes.values())
+        templates = sum(
+            1 for name in meshes if (TEMPLATES_DIR / WORLD_DIRNAME / set_name / f"{name}.rbxmx").is_file()
+        )
+        if not meshes:
+            status = "not baked"
+        elif uploaded == 0 and palette_asset == 0:
+            status = "baked, not uploaded"
+        elif uploaded < len(meshes) or (needs_palette and palette_asset == 0):
+            status = "uploading"
+        elif harvested < len(meshes) or (needs_palette and palette_image == 0):
+            status = "uploaded, awaiting harvest"
+        elif templates < len(meshes):
+            status = "harvested, templates stale"
+        else:
+            status = "in game"
+        lines.append(
+            f"| {md_cell(set_name)} | {int(entry.get('plotCount') or 0)} | {len(meshes)} "
+            f"| {int(entry.get('triangles') or 0)} | {palette_asset or NONE}/{palette_image or NONE} "
+            f"| {uploaded}/{len(meshes)} | {harvested}/{len(meshes)} | {templates}/{len(meshes)} | {status} |"
+        )
+    return lines + [""]
 
 
 def render_paths(assets: dict | None) -> list[str]:
@@ -536,7 +606,17 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="validate the era configs and blueprints and fail if the committed manifest is stale",
     )
+    parser.add_argument("--assets-json", help="read this Assets.json instead of src/shared/Config/Assets.json")
+    parser.add_argument("--templates", help="look for templates under this root instead of templates/")
+    parser.add_argument("--out", help="write (or --check) this file instead of docs/ASSET_MANIFEST.md")
     args = parser.parse_args(argv)
+    global ASSETS_CONFIG_PATH, TEMPLATES_DIR, MANIFEST_PATH
+    if args.assets_json:
+        ASSETS_CONFIG_PATH = Path(args.assets_json).resolve()
+    if args.templates:
+        TEMPLATES_DIR = Path(args.templates).resolve()
+    if args.out:
+        MANIFEST_PATH = Path(args.out).resolve()
 
     eras = load_eras()
     if not eras:
@@ -552,11 +632,11 @@ def main(argv: list[str]) -> int:
             committed = MANIFEST_PATH.read_text(encoding="utf-8")
             if mask_volatile(committed) != mask_volatile(text):
                 problems.append(
-                    f"{MANIFEST_PATH.relative_to(REPO_ROOT)} is stale -- "
+                    f"{shown(MANIFEST_PATH)} is stale -- "
                     "rerun py tools/gen_asset_manifest.py"
                 )
         else:
-            problems.append(f"{MANIFEST_PATH.relative_to(REPO_ROOT)} is missing")
+            problems.append(f"{shown(MANIFEST_PATH)} is missing")
         for line in warnings:
             print(line)
         for line in problems:
@@ -570,7 +650,7 @@ def main(argv: list[str]) -> int:
     with open(MANIFEST_PATH, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
     total = sum(len(era.get("slots", [])) for era in eras)
-    print(f"wrote {MANIFEST_PATH.relative_to(REPO_ROOT)}: {len(eras)} eras, {total} models")
+    print(f"wrote {shown(MANIFEST_PATH)}: {len(eras)} eras, {total} models")
     for line in validate(eras) + blueprint_problems:
         print(WARNING_PREFIX, line)
     for line in warnings:
