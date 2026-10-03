@@ -39,7 +39,12 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     clearing mask (by the reach, on near and far plots alike), and which lanes are shown -- each
     whole, as its baked `LN_<k>` path piece (tools/paths bakes it), once its reach is above 0;
   * the surface the plot's streets wear right now (RoadGraph.resolveVariant / setVariant), which
-    spurs and lanes follow.
+    spurs and lanes follow;
+  * `fabric.levelStages` (M12 wave 3.1), the stage a level-2, -3 or -4 parcel starts from before
+    the height cap (level_stage). Implemented here first: Fabric.luau follows in wave 3.2 and copies
+    level_stage and valid_level_stages exactly.
+
+`timeline --fabric <data.json>` reads data built with `fabric.py build --out` instead of the era's own.
 
 Heights. A landmark's height at a stage comes from its Assets.json stage parts, measured exactly as
 the client measures it (no entry: 0). A fabric prop uses Assets.json when it has an entry there;
@@ -664,11 +669,32 @@ def district_list(config, district, size):
     return chosen if isinstance(chosen, list) and len(chosen) > 0 else None
 
 
+def valid_level_stages(value):
+    """`fabric.levelStages` (INTERFACES "Wave 3.1"): a non-empty array of whole numbers 0 or more,
+    or None -- absent, or anything else, which then reads as absent ([0, 1, 2], today's rule)."""
+    if not isinstance(value, list) or not value:
+        return None
+    if not all(is_number(entry) and finite(entry) and entry >= 0 and entry == math.floor(entry) for entry in value):
+        return None
+    return value
+
+
+def level_stage(config, level):
+    """The stage a level-L parcel (L >= 2) starts from before the height cap: `levelStages[L - 1]`
+    (Luau index), and past the list's end one stage more per level past its last entry, so the
+    default [0, 1, 2] is exactly today's L - 2 at every level."""
+    stages = valid_level_stages(config.get("levelStages")) or [0, 1, 2]
+    step = level - 2
+    if step < len(stages):
+        return int(stages[step])
+    return int(stages[-1]) + step - (len(stages) - 1)
+
+
 def goal_for(config, index, parcel, state, prop_heights, landmark_height):
     """Fabric.goalFor ("What a parcel shows"): nothing at level 0, the site at 1 (`sites[size]`), and
     from 2 the district's prop for parcel `index` (or `fallbackDistrict`'s for a size the district
-    lacks) at the highest stage its level allows that stays under the governor's height, never
-    under heightFloor. `prop_heights(prop)` and `landmark_height(slotId)`
+    lacks) at the highest stage its level allows (`levelStages`, wave 3.1) that stays under the
+    governor's height, never under heightFloor. `prop_heights(prop)` and `landmark_height(slotId)`
     answer as the client's propHeights and landmarkHeight."""
     if state is None or state["level"] <= 0:
         return None
@@ -685,7 +711,7 @@ def goal_for(config, index, parcel, state, prop_heights, landmark_height):
     if not isinstance(prop, str):
         return None
     heights = prop_heights(prop)
-    stage = max(min(state["level"] - 2, len(heights) - 1), 0)
+    stage = max(min(level_stage(config, state["level"]), len(heights) - 1), 0)
     cap = max(number_or(config.get("heightFloor"), 0), landmark_height(state["governor"]))
     while stage > 0 and heights[stage] > cap:
         stage -= 1
@@ -2252,7 +2278,9 @@ def selftest():
         },
     }
     uploaded = {"gravel": {"fillImageId": 11, "rimImageId": 12}}
-    validation = [
+    # `+=`: until wave 3.1 this list was assigned with `=`, which silently dropped every validation,
+    # smoke and vehicle case above it from the run.
+    validation += [
         ("lane: a lot not on a lane ignores laneAlong", lane_levels(dict(on_lane(None, 18))) == [2, 2]),
         ("lane: laneAlong 0 is the mouth's own distance", lane_levels(on_lane(1, 0)) == [2, 2]),
         ("reach: 0 while no lot has a site", reach([2, 0, 0, 0, 0, 0]) == 0),
@@ -2283,6 +2311,34 @@ def selftest():
         ("surface: the owned upgrade", road_look(surfaced, {"paveMainStreet"}, uploaded) == ("default", (72, 74, 82))),
         ("surface: a variant not uploaded is default", road_look(surfaced, set(), {}) == ("default", (72, 74, 82))),
         ("surface: no paths block is default", road_look({"color": [1, 2, 3]}, set(), None) == ("default", (1, 2, 3))),
+    ]
+
+    # Wave 3.1 `levelStages`: the stage a level starts from, which the height cap then lowers as
+    # before. A five-stage tower 3.0 / 4.6 / 6.2 / 7.8 / 9.4 studs tall, its governor 100 tall
+    # unless a case says otherwise.
+    tower = [3.0, 4.6, 6.2, 7.8, 9.4]
+    plain = {"districts": {"office": {"medium": ["Tower"]}}, "sites": {"medium": "SiteMedium"}, "heightFloor": 3.4}
+    staged = dict(plain, levelStages=[1, 3, 4])
+
+    def stage_at(level, config, heights=tower, governor=100.0):
+        state = {"level": level, "district": "office", "governor": "bankTower"}
+        look = goal_for(config, 1, {"size": "medium"}, state, lambda _prop: heights, lambda _slot: governor)
+        return look["stage"] if look is not None and look["kind"] == BUILDING else None
+
+    validation += [
+        ("levelStages: absent is level - 2", [stage_at(level, plain) for level in (2, 3, 4)] == [0, 1, 2]),
+        ("levelStages: [1, 3, 4] on a five-stage tower", [stage_at(level, staged) for level in (2, 3, 4)] == [1, 3, 4]),
+        ("levelStages: never past the prop's last stage", [stage_at(level, staged, tower[:3]) for level in (2, 3, 4)] == [1, 2, 2]),
+        ("levelStages: the height cap lowers the start", stage_at(4, staged, governor=6.2) == 2),
+        ("levelStages: under heightFloor, stage 0 still stands", stage_at(3, staged, governor=0.0) == 0),
+        ("levelStages: a site at level 1 is unchanged", goal_for(staged, 1, {"size": "medium"}, {"level": 1, "district": "office", "governor": "x"}, lambda _p: tower, lambda _s: 100.0) == {"kind": SITE, "prop": "SiteMedium", "stage": 0}),
+        ("levelStages: past the list, one stage more per level", level_stage(staged, 5) == 5 and level_stage(plain, 5) == 3),
+        ("levelStages: 1.5 reads as absent", level_stage({"levelStages": [1.5, 3, 4]}, 2) == 0),
+        ("levelStages: -1 reads as absent", level_stage({"levelStages": [-1, 3, 4]}, 3) == 1),
+        ("levelStages: a string reads as absent", level_stage({"levelStages": [1, "3", 4]}, 4) == 2),
+        ("levelStages: a boolean reads as absent", level_stage({"levelStages": [True, 3, 4]}, 2) == 0),
+        ("levelStages: an empty list reads as absent", level_stage({"levelStages": []}, 3) == 1),
+        ("levelStages: an object reads as absent", level_stage({"levelStages": {"1": 1}}, 2) == 0),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
@@ -2358,9 +2414,12 @@ def wild_counts(snap):
     return whole, partial, quarters, singles
 
 
-def timeline(era_name):
+def timeline(era_name, data_path=None):
+    """`data_path` is `--fabric`: fabric data read instead of Config/Fabric/<Era>.json (a plan built
+    with `fabric.py build --out`)."""
     city = load_json(CITY_CONFIG_PATH)
-    plot = FabricPlot.load(era_name, city=city)
+    data = load_json(data_path) if data_path is not None else None
+    plot = FabricPlot.load(era_name, city=city, data=data)
     if plot is None:
         print(f"{era_name}: no fabric (needs src/shared/Config/Fabric/{era_name}.json and a `fabric` config block)")
         return 1
@@ -2484,10 +2543,11 @@ def main(argv):
     sub.add_parser("selftest", help="assert the contract's test vector")
     line = sub.add_parser("timeline", help="parcels by level and wild counts at tiers 1-5")
     line.add_argument("era")
+    line.add_argument("--fabric", type=Path, help="fabric data to read instead of src/shared/Config/Fabric/<Era>.json")
     args = parser.parse_args(argv)
     if args.command == "selftest":
         return selftest()
-    return timeline(args.era)
+    return timeline(args.era, args.fabric)
 
 
 if __name__ == "__main__":

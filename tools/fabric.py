@@ -60,6 +60,20 @@ hay and trees on the pasture, a telegraph line, and a landscape band past the ed
 landmarks. Either way a clump is four copies of one quarter design, and `quads` holds each
 quarter's centre by the contract's rotation mapping.
 
+A tiles era (`road.tiles`, INTERFACES "Wave 3.1": Metropolis). A street is whole lattice cells with a
+pavement either side and a U round its ends, so its hard surface is a square-ended band reaching
+road.width / 2 + pavement.width (7.5) from the centreline; no lot stands on it, and lots keep
+`parcels.tileSolid` (at least 0.5) from the ring deck's band, the ramp's cells and the subway kiosks.
+The wild keeps off every planned street's band (a park strip covers it until the street draws), the
+deck band, the ramp cells and the kiosks: a field that would stand there is moved `wild.grid.shift`
+studs (one lattice cell) if that fits, else dropped, and such a single is dropped. A single's ground
+is its harvested extents, else the plan's `footprints` entry, else a `singleRadius` square. Kerb layer
+entries keep the walkers' reach (pedestrians.offset + clearance) as everywhere, which in a tiles era
+puts them on the pavement's outer edge, between the walkers and the lot fronts.
+
+    py tools/fabric.py build Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
+    py tools/fabric.py check Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
+
 The JSON is deterministic: string-seeded random streams, fixed iteration order, numbers rounded
 to 0.01 and written by a fixed formatter, so two builds are byte-identical and `check` can demand
 that the committed file equals a fresh build.
@@ -142,6 +156,14 @@ CHECK_LANE_FRONT = 0.5  # a lane lot's front, from its lane's setback line
 CHECK_LANE_ALONG = 0.05  # a lane lot's `laneAlong`, from the foot of its front on the lane
 CHECK_LANE_LOTS = 2  # a lane with fewer lots is a road to nowhere
 CHECK_FACING = 0.02  # |sin| between where a kerb entry faces and where its layer says it must
+# A tiles era (INTERFACES "Wave 3.1"): a lot keeps this much daylight from the ring deck's band, a
+# ramp cell and a subway kiosk; it may touch a street's hard surface but never overlap it.
+CHECK_TILE_SOLID = 0.5
+# Two shapes that share no area deeper than this only touch (coordinates are written to 0.01).
+TOUCH = 1e-6
+# A wild cell that a tile street, the deck or a kiosk takes is moved this many grid steps when the
+# plan's `wild.grid.shift` asks for it: across, along, then diagonally (INTERFACES "Wave 3.1").
+SHIFTS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1))
 MARKER_SIZE = 2.0  # the marker prop's ground square, the contract's cap
 BUILT_LEVEL = 2  # a parcel's house stands from level 2 (a parcel-anchored tree needs it)
 MAX_ROW = 3
@@ -198,6 +220,26 @@ def segment_gap(a, b, poly):
     return streetplan.segment_polygon_distance(a, b, poly)
 
 
+def overlap_depth(p, q):
+    """How far two convex polygons reach into each other along the axis that separates them best
+    (the separating-axis test): above 0 for a shared area, 0 when they only touch, below 0 for
+    daylight. `gap` is 0 both for touching and for overlapping, so it cannot tell a lot flush
+    against a pavement from one standing on it; this can."""
+    depth = math.inf
+    for poly in (p, q):
+        for i in range(len(poly)):
+            a, b = poly[i], poly[(i + 1) % len(poly)]
+            nx, nz = b[1] - a[1], a[0] - b[0]
+            length = math.sqrt(nx * nx + nz * nz)
+            if length < 1e-12:
+                continue
+            nx, nz = nx / length, nz / length
+            ps = [v[0] * nx + v[1] * nz for v in p]
+            qs = [v[0] * nx + v[1] * nz for v in q]
+            depth = min(depth, min(max(ps), max(qs)) - max(min(ps), min(qs)))
+    return depth
+
+
 def front_centre(x, z, rotation, depth):
     f = streetplan.facing(rotation)
     return (x + f[0] * depth / 2, z + f[1] * depth / 2)
@@ -234,6 +276,36 @@ def facing_rot(direction):
     return math.degrees(math.atan2(-direction[0], -direction[1]))
 
 
+def deck_band(era):
+    """The elevated ring's ground (INTERFACES "Wave 2a"): `ring` plus or minus half a cell on all
+    four sides, as four rectangles. Every pier stands inside it. None without a layout highway."""
+    if era.highway is None or era.tile_studs <= 0:
+        return []
+    ring, half = float(era.highway["ring"]), era.tile_studs / 2
+    long_side, short_side = 2 * (ring + half), 2 * half
+    return [
+        streetplan.square((0.0, -ring), long_side, short_side, 0),
+        streetplan.square((0.0, ring), long_side, short_side, 0),
+        streetplan.square((-ring, 0.0), short_side, long_side, 0),
+        streetplan.square((ring, 0.0), short_side, long_side, 0),
+    ]
+
+
+def keepout_hits(site, shapes):
+    """(label, depth) of every tiles-era keep-out (a street's hard surface, the deck band, a ramp
+    cell, a kiosk) that any of `shapes` stands on; touching is not standing on."""
+    hits = []
+    for label, poly, box in site.wild_keepout:
+        for shape in shapes:
+            if boxes_apart(box_of(shape), box, 0.0):
+                continue
+            depth = overlap_depth(shape, poly)
+            if depth > TOUCH:
+                hits.append((label, depth))
+                break
+    return hits
+
+
 # --------------------------------------------------------------------------------------------
 # Inputs
 # --------------------------------------------------------------------------------------------
@@ -243,10 +315,23 @@ def load_city():
     return json.loads(CITY_CONFIG_PATH.read_text(encoding="utf-8"))
 
 
-def load_plan(era_name):
-    path = PLAN_DIR / f"{era_name}.plan.json"
+def shown(path):
+    """A path as the messages print it: from the repo root when it lies inside, whole otherwise."""
+    try:
+        return str(Path(path).resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def plan_path(era_name, path=None):
+    """The plan `--plan` names, or the era's own tools/fabric/<Era>.plan.json."""
+    return Path(path) if path is not None else PLAN_DIR / f"{era_name}.plan.json"
+
+
+def load_plan(era_name, path=None):
+    path = plan_path(era_name, path)
     if not path.exists():
-        raise SystemExit(f"no fabric plan for {era_name}: {path.relative_to(REPO_ROOT)}")
+        raise SystemExit(f"no fabric plan for {era_name}: {shown(path)}")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -312,7 +397,15 @@ class Site:
         # A spur is as wide as its street unless the era narrows it (`road.paths.spurWidth`,
         # INTERFACES "Wave 2.2": narrow driveways); its strip follows its own width.
         self.spur_width = float(streetplan.spur_path_width(self.era))
-        self.street_strip = self.width / 2 + CHECK_STRIP_EXTRA
+        # The road's own strip: what a next-pad marker keeps off a street in every era, because a
+        # pad (and so its marker) may stand on a tile street's pavement but never on its road.
+        self.road_strip = self.width / 2 + CHECK_STRIP_EXTRA
+        # A tiles era (`road.tiles`, INTERFACES "Wave 3.1") draws each street as whole lattice cells
+        # with a pavement either side and a U round its ends: its hard surface reaches `street_half`
+        # from the centreline and has square ends, so a lot is judged against that band.
+        self.tiles = self.era.tiles is not None
+        self.street_half = max(self.width, self.era.tile_studs) / 2 + self.era.pavement if self.tiles else None
+        self.street_strip = self.street_half if self.tiles else self.road_strip
         self.spur_strip = self.spur_width / 2 + CHECK_STRIP_EXTRA
         self.ids = piece_ids(self.network)
         self.stretch_by_id = {pid: index for index, pid in enumerate(self.ids)}
@@ -371,6 +464,23 @@ class Site:
                     self.spur_segments.append((slot["id"], a, b))
         self.street_boxes = [(pl, seg, a, b, box_of((a, b))) for pl, seg, a, b in self.street_segments]
         self.spur_boxes = [(a, b, box_of((a, b))) for _, a, b in self.spur_segments]
+        # Tiles era only, empty elsewhere: every planned street's hard surface (label, polyline,
+        # segment, band, box) -- planned, because a park strip covers an undrawn cell and its
+        # pavement band until the street draws -- and the ground the tile renderer and the highway
+        # build on (label, polygon, box): the deck's band on all four sides, which holds every pier,
+        # the ramp's cells and the subway kiosks.
+        self.street_bands = []
+        self.tile_solids = []
+        if self.tiles:
+            for polyline, segment, a, b in self.street_segments:
+                band = streetplan.band(a, b, self.street_half)
+                self.street_bands.append((f"street {polyline + 1}", polyline, segment, band, box_of(band)))
+            solids = [("the deck band", poly) for poly in deck_band(self.era)]
+            solids += [(f"the ramp cell {streetplan.fmt(shape_centre(poly))}", poly) for poly in streetplan.ramp_squares(self.era)]
+            solids += [(f"subway kiosk {index}", entry["poly"]) for index, entry in enumerate(self.era.subways, start=1)]
+            self.tile_solids = [(label, poly, box_of(poly)) for label, poly in solids]
+        # What the wild keeps off in a tiles era (INTERFACES "Wave 3.1"): all of the above.
+        self.wild_keepout = [(f"the hard surface of {label}", band, box) for label, _, _, band, box in self.street_bands] + self.tile_solids
         self.entrance = self.era.streets[0][0] if self.era.streets and self.era.streets[0] else (0.0, -self.era.half_z)
         lamps = self.era.dressing.get("lamps") or {}
         post = streetplan.post_size(self.era, lamps.get("prop"))
@@ -394,13 +504,17 @@ class Site:
         # `keepClear` (optional): ground the plan holds back from the lots, for what a later layer
         # stands there -- a shelter needs a gap in the frontage as wide as a lot.
         held = [(rect["x"], rect["z"], rect["size"][0], rect["size"][1], rect.get("rotationY", 0.0)) for rect in rules.get("keepClear", ())]
-        key = (rules["slot"], rules["landmark"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"], tuple(held))
+        tile_margin = rules.get("tileSolid", CHECK_TILE_SOLID)
+        key = (rules["slot"], rules["landmark"], rules["pad"], rules["plaza"], rules["sign"], rules["marker"], tile_margin, tuple(held))
         if getattr(self, "_solids_key", None) != key:
             solids = [(poly, rules["landmark"] if measured else rules["slot"]) for poly, measured in self.landmark_polys.values()]
             solids += [(poly, rules["pad"]) for poly in self.pad_polys.values()]
             solids += [(poly, rules["plaza"]) for poly in self.plaza_polys]
             solids += [(poly, rules["marker"]) for poly in self.marker_polys.values()]
             solids.append((self.era.sign_poly, rules["sign"]))
+            # A tiles era's deck band, ramp cells and kiosks (empty elsewhere): the plan's optional
+            # `parcels.tileSolid`, at least the contract's 0.5.
+            solids += [(poly, tile_margin) for _, poly, _ in self.tile_solids]
             # Any overlap counts: `gap` is 0 for two shapes that touch or cross.
             solids += [(streetplan.square((x, z), width, depth, rotation), COLLINEAR) for x, z, width, depth, rotation in held]
             self._solids = [(poly, box_of(poly), margin) for poly, margin in solids]
@@ -462,6 +576,15 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
     for polyline, segment, a, b, segment_box in site.street_boxes:
         need = rules["frontSetback"] - 0.05 if (polyline, segment) in own_segments else rules["street"]
         if not boxes_apart(box, segment_box, need) and segment_gap(a, b, poly) < need:
+            return False
+    # A tiles era: no lot on a street's hard surface, square ends and corners included; a lot
+    # keeps the plan's `street` (from the centreline) off the surface of every other street leg.
+    for _, polyline, segment, band, band_box in site.street_bands:
+        own = (polyline, segment) in own_segments
+        need = 0.0 if own else max(rules["street"] - site.street_half, 0.0)
+        if boxes_apart(box, band_box, need):
+            continue
+        if overlap_depth(poly, band) > TOUCH or (need > 0 and gap(poly, band) < need):
             return False
     for a, b, segment_box in site.spur_boxes:
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
@@ -1690,6 +1813,9 @@ class Ground:
         solids += [(f"lamp {index}", poly, margins["lamp"], None) for index, poly in enumerate(site.lamps, start=1)]
         solids += [(f"signal {index}", poly, margins["lamp"], None) for index, poly in enumerate(site.signals, start=1)]
         solids.append(("the Sign", site.era.sign_poly, margins["solid"], None))
+        # A tiles era's deck band, ramp cells and kiosks (empty elsewhere). Its street bands are
+        # not solids here: a kerb entry stands on the pavement, past the walkers' reach.
+        solids += [(label, poly, margins["solid"], None) for label, poly, _ in site.tile_solids]
         self.solids = [(label, poly, box_of(poly), margin, tag) for label, poly, margin, tag in solids]
         self.trunks = []  # (label, point): a layer the plan gives no footprints is a layer of trees
         self.strings = []  # (label, post, post, tag): what hangs between two posts, overhead
@@ -2508,6 +2634,35 @@ def pick_glades(plan, noise, half):
     return glades
 
 
+def wild_shapes(site, plan, item):
+    """The ground a wild entry covers, for the tiles-era keep-outs: a clump of a plan with a field
+    `clumps.size` is that square (x scale, turned rotationY); any other clump is its four quarters,
+    each a square of the clearing test's diameter (`quarterRadius`); a single is its prop's
+    harvested extents, else the plan's `footprints` entry (width x depth, centred), else a square of
+    the clearing test's diameter (`singleRadius`), x scale and turned rotationY."""
+    radii = site.config["wild"]
+    scale = item.get("scale", 1.0)
+    if item["kind"] == "clump":
+        size = (plan["wild"].get("clumps") or {}).get("size")
+        if size is not None:
+            return [streetplan.square((item["x"], item["z"]), size * scale, size * scale, item["rotationY"])]
+        side = 2 * radii["quarterRadius"] * scale
+        return [streetplan.square((q[0], q[1]), side, side, item["rotationY"]) for q in item["quads"]]
+    extents = site.prop_extents(item.get("prop"))
+    declared = (plan.get("footprints") or {}).get(item.get("prop"))
+    if extents is None and isinstance(declared, list) and len(declared) == 2:
+        extents = (-declared[0] / 2, declared[0] / 2, -declared[1] / 2, declared[1] / 2)
+    if extents is None:
+        r = radii["singleRadius"]
+        extents = (-r, r, -r, r)
+    return [cart_body(extents, item)]
+
+
+def kept_out(site, plan, item):
+    """Whether a wild entry stands on ground a tiles era keeps it off (never in another era)."""
+    return bool(site.wild_keepout) and bool(keepout_hits(site, wild_shapes(site, plan, item)))
+
+
 def generate_wild(site, plan):
     """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields."""
     if plan["wild"].get("pattern") == FIELDS:
@@ -2568,18 +2723,18 @@ def generate_woods(site, plan):
         # A clump sits wholly on the plot or wholly off it: the ground past the edge is lower.
         if any((abs(q[0]) <= half and abs(q[1]) <= half) != inside for q in quads):
             continue
-        clumps.append(
-            {
-                "kind": "clump",
-                "variant": variant,
-                "x": cx,
-                "z": cz,
-                "rotationY": rotation,
-                "scale": scale,
-                "skirt": not inside,
-                "quads": [[rounded(q[0]), rounded(q[1])] for q in quads],
-            }
-        )
+        clump = {
+            "kind": "clump",
+            "variant": variant,
+            "x": cx,
+            "z": cz,
+            "rotationY": rotation,
+            "scale": scale,
+            "skirt": not inside,
+            "quads": [[rounded(q[0]), rounded(q[1])] for q in quads],
+        }
+        if not kept_out(site, plan, clump):
+            clumps.append(clump)
     if singles_cfg is None:
         return wild_order(site, clumps, [])
     # Singles: where the woods thin out (their edge, the front band, the glades' rims), a finer blue
@@ -2606,17 +2761,17 @@ def generate_woods(site, plan):
             pool, scales = singles_cfg["meadow"], singles_cfg["meadowScale"]
         prop = pool[int(pick * len(pool)) % len(pool)]
         inside = abs(x) <= half and abs(z) <= half
-        singles.append(
-            {
-                "kind": "single",
-                "prop": prop,
-                "x": rounded(x),
-                "z": rounded(z),
-                "rotationY": rounded(norm_degrees(rotation)),
-                "scale": rounded(scales[0] + (scales[1] - scales[0]) * grow),
-                "skirt": not inside,
-            }
-        )
+        entry = {
+            "kind": "single",
+            "prop": prop,
+            "x": rounded(x),
+            "z": rounded(z),
+            "rotationY": rounded(norm_degrees(rotation)),
+            "scale": rounded(scales[0] + (scales[1] - scales[0]) * grow),
+            "skirt": not inside,
+        }
+        if not kept_out(site, plan, entry):
+            singles.append(entry)
     singles.sort(key=lambda entry: (entry["z"], entry["x"]))
     return wild_order(site, clumps, singles)
 
@@ -2701,6 +2856,10 @@ def generate_fields(site, plan):
     span = int(math.ceil(reach * math.sqrt(2) / grid["pitch"])) + 1
     plot = plot_rect(site)
     on, off = [], []
+    # A tiles era (INTERFACES "Wave 3.1"): a field on a street's hard surface (or where a park strip
+    # covers it until the street draws), the deck band, a ramp cell or a kiosk waits here, to be moved
+    # by the plan's `grid.shift` or dropped; the runtime mask is never left to clear it.
+    waiting = []
     for j in range(-span, span + 1):
         for i in range(-span, span + 1):
             centre = grid_point(grid, i, j)
@@ -2710,7 +2869,10 @@ def generate_fields(site, plan):
             if any(gap(poly, rect) < skirt["gap"] for _, _, rect in landmarks):
                 continue
             if on_plot(site, poly, grid["edge"]):
-                on.append(cell)
+                if site.wild_keepout and keepout_hits(site, [poly]):
+                    waiting.append(cell)
+                else:
+                    on.append(cell)
                 continue
             past = beyond_plot(site, centre)
             beside = abs(centre[0]) > site.era.half_x and centre[1] <= site.era.half_z
@@ -2720,6 +2882,23 @@ def generate_fields(site, plan):
             if beside and centre[1] < skirt["sideFrom"]:
                 continue
             off.append(cell)
+    # A moved field keeps its cell's key (so its noise rank) and must clear everything a field in
+    # place clears, and every field already kept; the first move that does wins, in SHIFTS order.
+    step = grid.get("shift")
+    for cell in waiting if step else ():
+        for di, dj in SHIFTS:
+            dx, dz = rotate(di * step, dj * step, grid["angle"])
+            centre = (rounded(cell["centre"][0] + dx), rounded(cell["centre"][1] + dz))
+            poly = field_poly(wild, centre[0], centre[1], grid["angle"])
+            if not on_plot(site, poly, grid["edge"]) or keepout_hits(site, [poly]):
+                continue
+            if any(gap(poly, rect) < skirt["gap"] for _, _, rect in landmarks):
+                continue
+            # As field_messages judges two fields: touching counts.
+            if any(gap(poly, other["poly"]) <= 0 for other in on if not boxes_apart(box_of(poly), box_of(other["poly"]), 0.0)):
+                continue
+            on.append({"key": cell["key"], "centre": centre, "poly": poly})
+            break
     fallow_noise = Noise(f"{seed}:fallow", wild["fallow"]["noise"]["waves"], wild["fallow"]["noise"]["base"])
     pasture = ranked(on, fallow_noise, wild["fallow"]["share"])
     skirt_pasture = ranked(off, fallow_noise, skirt["fallow"])
@@ -2814,11 +2993,16 @@ def generate_fields(site, plan):
                 dx, dz = rotate(lrng.uniform(-room, room), lrng.uniform(-room, room), grid["angle"])
                 x, z = cell["centre"][0] + dx, cell["centre"][1] + dz
                 prop, turn, scale = loose["props"][lrng.randrange(len(loose["props"]))], lrng.uniform(0.0, 360.0), lrng.uniform(*loose["scale"])
+                candidate = single(prop, x, z, turn, scale, False)
+                if kept_out(site, plan, candidate):
+                    continue
                 if all(math.dist((x, z), (other["x"], other["z"])) >= loose["spacing"] for other in scattered):
-                    scattered.append(single(prop, x, z, turn, scale, False))
+                    scattered.append(candidate)
         scattered = thinned(scattered, loose["count"])
         scattered.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
         singles += scattered
+    # The landmarks, shelterbelts and poles keep off a tiles era's streets, deck and kiosks too.
+    singles = [entry for entry in singles if not kept_out(site, plan, entry)]
     return wild_order(site, clumps, singles)
 
 
@@ -2831,11 +3015,11 @@ LANE_KEYS = ("lane", "laneAlong")  # only on a lot that fronts a lane (wave 2.4)
 ENTRY_KEYS = ("x", "z", "rotationY", "scale", "variant", "anchor", "stretch", "parcel")
 
 
-def build(era_name, city=None, era=None, network=None):
+def build(era_name, city=None, era=None, network=None, plan_file=None):
     """The document and the generator's bookkeeping: the tree kinds, and for every plan-laid layer
-    how many entries each of its placers laid."""
+    how many entries each of its placers laid. `plan_file` is `--plan`'s path, else the era's own."""
     site = Site(era_name, city, era, network)
-    plan = load_plan(era_name)
+    plan = load_plan(era_name, plan_file)
     parcels, lanes = generate_lots(site, plan)
     levels, districts = full_build_states(site, parcels)
     upgrades = generate_upgrades(site, plan, parcels, levels)
@@ -2858,8 +3042,8 @@ def build(era_name, city=None, era=None, network=None):
     return doc, [t["kind"] for t in upgrades.get("trees", [])], laid
 
 
-def build_document(era_name, city=None, era=None, network=None):
-    return build(era_name, city, era, network)[0]
+def build_document(era_name, city=None, era=None, network=None, plan_file=None):
+    return build(era_name, city, era, network, plan_file)[0]
 
 
 def number(value):
@@ -2907,8 +3091,15 @@ def render(doc):
     return "\n".join(lines) + "\n"
 
 
-def out_path(era_name):
-    return OUT_DIR / f"{era_name}.json"
+def out_path(era_name, path=None):
+    """The data `--out` names, or the era's own Config/Fabric/<Era>.json."""
+    return Path(path) if path is not None else OUT_DIR / f"{era_name}.json"
+
+
+def build_command(era_name, plan_file=None, data_file=None):
+    """The command that rebuilds this data, as a stale-data message quotes it."""
+    extra = (f" --plan {shown(plan_file)}" if plan_file is not None else "") + (f" --out {shown(data_file)}" if data_file is not None else "")
+    return f"py tools/fabric.py build {era_name}{extra}"
 
 
 # --------------------------------------------------------------------------------------------
@@ -2940,10 +3131,16 @@ def marker_messages(site):
         for other_id, pad in site.pad_polys.items():
             if gap(poly, pad) <= 0:
                 messages.append(f"{label}: overlaps the {other_id} pad")
+        # The road's strip, not a tile street's whole hard surface: a pad may stand on a pavement.
         for polyline, _segment, a, b in site.street_segments:
             d = segment_gap(a, b, poly)
-            if d < site.street_strip - EPS:
-                messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {site.street_strip:g})")
+            if d < site.road_strip - EPS:
+                messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {site.road_strip:g})")
+        # INTERFACES "Wave 3.1": nothing stands in the deck band, on a ramp cell or on a kiosk.
+        for what, solid, _ in site.tile_solids:
+            depth = overlap_depth(poly, solid)
+            if depth > TOUCH:
+                messages.append(f"{label}: stands {depth:.2f} into {what}")
         for other_id, a, b in site.spur_segments:
             # A marker stands only while its slot has a pad, and that slot's own path is only drawn
             # once the slot is bought: the two never share the ground. On a road-wide path that is
@@ -3005,6 +3202,22 @@ def parcel_messages(site, plan, parcels):
             d = segment_gap(a, b, poly)
             if d < spur_need - EPS:
                 messages.append(f"{label}: {d:.2f} from the {slot_id} path (need {spur_need:g})")
+        # A tiles era (INTERFACES "Wave 3.1"): no lot of any row on a planned street's road cells or
+        # pavement (square ends and corners included), and CHECK_TILE_SOLID from the deck band, a
+        # ramp cell and a kiosk.
+        box = box_of(poly)
+        for what, _polyline, _segment, band, band_box in site.street_bands:
+            if boxes_apart(box, band_box, 0.0):
+                continue
+            depth = overlap_depth(poly, band)
+            if depth > TOUCH:
+                messages.append(f"{label}: stands {depth:.2f} into the hard surface of {what} (road and pavement reach {site.street_half:g} from its centreline)")
+        for what, solid, solid_box in site.tile_solids:
+            if boxes_apart(box, solid_box, CHECK_TILE_SOLID):
+                continue
+            d = gap(poly, solid)
+            if d < CHECK_TILE_SOLID - EPS:
+                messages.append(f"{label}: {d:.2f} from {what} (need {CHECK_TILE_SOLID})")
         stretch = site.stretch_by_id.get(parcel["stretch"])
         if stretch is None:
             messages.append(f"{label}: stretch {parcel['stretch']!r} is not a piece of this network")
@@ -3621,6 +3834,12 @@ def wild_messages(site, plan, doc):
                 messages.append(f"{label}: quads do not match the contract's rotation of ({offset:g}, {offset:g}) x scale")
         elif item["prop"] not in singles_allowed:
             messages.append(f"{label}: single prop {item['prop']!r} is not in the plan's single pools")
+        # A tiles era (INTERFACES "Wave 3.1"): the wild never stands on a planned street's cells or
+        # pavement (a park strip covers them until the street draws), the deck band, a ramp cell or
+        # a kiosk. The runtime mask knows none of these, so the data must keep off them.
+        if site.wild_keepout:
+            for what, depth in keepout_hits(site, wild_shapes(site, plan, item)):
+                messages.append(f"{label}: stands {depth:.2f} into {what}")
     if plan["wild"].get("pattern") == FIELDS:
         messages += field_messages(site, plan, wild)
     return messages
@@ -3701,23 +3920,25 @@ def field_messages(site, plan, entries):
     return messages
 
 
-def check_document(era_name, doc, compare_committed=True, city=None, era=None, network=None):
+def check_document(era_name, doc, compare_committed=True, city=None, era=None, network=None, plan_file=None, data_file=None):
     """Every rule of INTERFACES "Tools" (`fabric.py check`) and "Wave 1c", plus the layout minimums
     the plan asks for. Returns violation strings; empty means green. With `compare_committed` the
     committed file is judged, against a fresh build -- and the fresh build is where a placer that
-    lays nothing shows, so that rule is only judged then."""
+    lays nothing shows, so that rule is only judged then. `plan_file` and `data_file` are `--plan`
+    and `--out`: the plan and the data judged instead of the era's own."""
     site = Site(era_name, city, era, network)
-    plan = load_plan(era_name)
+    plan = load_plan(era_name, plan_file)
     messages = []
     if compare_committed:
-        path = out_path(era_name)
-        fresh_doc, _, laid = build(era_name, site.city, site.era, site.network)
+        path = out_path(era_name, data_file)
+        fresh_doc, _, laid = build(era_name, site.city, site.era, site.network, plan_file)
         fresh = render(fresh_doc)
         messages += placer_messages(plan, laid)
+        command = build_command(era_name, plan_file, data_file)
         if not path.exists():
-            messages.append(f"{path.relative_to(REPO_ROOT)} is missing; run `py tools/fabric.py build {era_name}`")
+            messages.append(f"{shown(path)} is missing; run `{command}`")
         elif path.read_text(encoding="utf-8") != fresh:
-            messages.append(f"{path.relative_to(REPO_ROOT)} differs from a fresh build; run `py tools/fabric.py build {era_name}`")
+            messages.append(f"{shown(path)} differs from a fresh build; run `{command}`")
         doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else doc
     messages += parcel_messages(site, plan, doc.get("parcels", []))
     if doc.get("lanes") or plan["parcels"].get("lanes") or any("lane" in parcel for parcel in doc.get("parcels", [])):
@@ -3791,19 +4012,21 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=("build", "check"))
     parser.add_argument("era")
+    parser.add_argument("--plan", type=Path, help="the plan to build from (default tools/fabric/<Era>.plan.json)")
+    parser.add_argument("--out", type=Path, help="the data to write or judge (default src/shared/Config/Fabric/<Era>.json)")
     args = parser.parse_args(argv)
     if args.command == "build":
-        doc = build_document(args.era)
-        path = out_path(args.era)
+        doc = build_document(args.era, plan_file=args.plan)
+        path = out_path(args.era, args.out)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(render(doc))
-        print(f"wrote {path.relative_to(REPO_ROOT)}")
+        print(f"wrote {shown(path)}")
         print(summary(args.era, doc))
         return 0
-    path = out_path(args.era)
+    path = out_path(args.era, args.out)
     doc = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"parcels": [], "upgrades": {}, "wild": []}
-    messages = check_document(args.era, doc)
+    messages = check_document(args.era, doc, plan_file=args.plan, data_file=args.out)
     print(summary(args.era, doc))
     for message in messages:
         print(f"   VIOLATION: {message}")

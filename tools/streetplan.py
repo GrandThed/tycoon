@@ -877,6 +877,12 @@ class Era:
             )
         self.spurs = {slot["id"]: self.spur_for(slot) for slot in self.slots}
 
+    def real_footprint(self, slot_id):
+        """Whether a slot's footprint is ground a model stands on: not street furniture (the old plans'
+        exemption) and not a fabric era's streetOnly slot, whose footprint is nominal (M12 wave 1c;
+        INTERFACES "Wave 3.1" for the tiles checks). Its pad is real either way."""
+        return slot_id not in self.furniture and slot_id not in self.nominal
+
     def road_cells(self):
         """Every lattice cell the tile renderer would rasterise the plan to, drawn or not. The
         client picks a cell's prop from its visible neighbours, so the cell -- not the centreline
@@ -1411,7 +1417,7 @@ def cell_violations(era, cells):
     solids = []
     for slot in era.slots:
         solids.append((f"{slot['id']} pad", slot["pad_poly"]))
-        if slot["id"] not in era.furniture:
+        if era.real_footprint(slot["id"]):
             solids.append((f"{slot['id']} footprint", slot["footprint"]))
     solids += [(f"lot {i + 1}", lot["poly"]) for i, lot in enumerate(era.lots)]
     for cell in sorted(cells):
@@ -1473,7 +1479,9 @@ def highway_violations(era):
     for slot in era.slots:
         if slot["id"] in era.furniture:
             continue  # streetOnly: no model spawns, the 9x9 is nominal
-        for what, poly in (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])):
+        # A fabric era keeps the pad of a streetOnly slot (it is real) and drops only its footprint.
+        checks = (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])) if era.real_footprint(slot["id"]) else (("pad", slot["pad_poly"]),)
+        for what, poly in checks:
             reach = ring_reach(poly)
             if reach > inner - 1e-6:
                 messages.append(
@@ -1524,7 +1532,8 @@ def highway_violations(era):
         for slot in era.slots:
             if slot["id"] in era.furniture:
                 continue
-            for what, other in (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])):
+            checks = (("footprint", slot["footprint"]), ("pad", slot["pad_poly"])) if era.real_footprint(slot["id"]) else (("pad", slot["pad_poly"]),)
+            for what, other in checks:
                 if polygon_polygon_distance(poly, other) < 1e-6:
                     messages.append(f"highway ramp: cell {fmt(centre)} crosses {slot['id']} {what}")
     return messages
@@ -1553,7 +1562,7 @@ def subway_violations(era, cells):
             # A streetOnly slot's footprint is nominal (no model spawns), but its pad is a real
             # part an entrance must not stand in.
             checks = [("pad", slot["pad_poly"])]
-            if slot["id"] not in era.furniture:
+            if era.real_footprint(slot["id"]):
                 checks.append(("footprint", slot["footprint"]))
             for what, other in checks:
                 d = polygon_polygon_distance(poly, other)
@@ -2743,7 +2752,8 @@ def check(era, network, visible, unreachable):
         if not PLAZA_TIERS[0] <= plaza["tier"] <= PLAZA_TIERS[1]:
             add(f"{label}: tier {plaza['tier']} outside {PLAZA_TIERS}")
         for slot in era.slots:
-            if polygon_polygon_distance(plaza["poly"], slot["footprint"]) < 1:
+            # A fabric era's streetOnly footprint is nominal; its pad (below) is not.
+            if slot["id"] not in era.nominal and polygon_polygon_distance(plaza["poly"], slot["footprint"]) < 1:
                 add(f"{label}: overlaps {slot['id']}")
             if polygon_polygon_distance(plaza["poly"], slot["pad_poly"]) < 1:
                 add(f"{label}: overlaps the {slot['id']} pad")

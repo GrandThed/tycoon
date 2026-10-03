@@ -1018,7 +1018,7 @@
             "OldTownQuarterB",
             "OldTownQuarterC"
           ],
-          "quarterRadius": 3.0,
+          "quarterRadius": 3.3,
           "singleRadius": 1.0
         },
         "clear": {
