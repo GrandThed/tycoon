@@ -681,6 +681,27 @@ def load_sim():
     return module
 
 
+def make_street_only(era, slot_ids):
+    """A what-if for proposal renders (M12 wave 3.1, city-changers), never the game's data: each
+    named slot becomes `streetOnly` in this Era's copy of its config -- no model spawns -- loses its
+    layout `district`, so it pulls no lot, and gets a one-point spur, so no path is drawn to it, as a
+    street upgrade's layout gives it. Its position and pad stay. Build the Network afterwards."""
+    for slot_id in slot_ids:
+        config = next((slot for slot in era.config["slots"] if slot["id"] == slot_id), None)
+        layout = era.layout["slots"].get(slot_id)
+        if config is None or layout is None:
+            raise SystemExit(f"--street-only: {slot_id} is not a slot of {era.name}")
+        config["streetOnly"] = True
+        layout.pop("district", None)
+        for slot in era.slots:
+            if slot["id"] == slot_id:
+                slot["spur_override"] = [slot["position"]]
+                era.spurs[slot_id] = era.spur_for(slot)
+        if era.has_fabric:
+            era.nominal.add(slot_id)
+    return era
+
+
 def greedy_buy_tiers(era_name, city):
     """slotId -> growth tier right after the greedy player buys it (lap 1, legacy carried in from
     the earlier eras), so the preview can colour each stretch by the tier it first appears at."""

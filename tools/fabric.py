@@ -524,6 +524,11 @@ class Site:
         meander = float((self.era.meander or {}).get("amplitude", 0.0))
         self.walker_street = offset + meander + clearance
         self.walker_spur = streetplan.spur_walk_offset(self.era, offset) + meander + clearance
+        # Wave 3.1 (city-changer proposals): a `kerbside` layer stands between the road's edge and
+        # the walkers -- on a tile street's pavement, between `road_half` (the road cell's half) and
+        # `walker_inner` (the walk lane less its clearance) -- instead of past the walkers' reach.
+        self.walker_inner = offset - clearance
+        self.road_half = max(self.width, self.era.tile_studs) / 2 if self.tiles else self.width / 2 + meander
 
     def solid_boxes(self, rules):
         """(polygon, its bounding box, the daylight a parcel keeps from it) for every solid."""
@@ -1837,6 +1842,13 @@ def cart_anchor(site, polys, entry):
 PARCEL = "parcel"  # the tag kind of a Ground solid that is a parcel
 
 
+def in_kerb_strip(site, a, b, body, slack):
+    """Whether a body stands in the kerb strip of the street leg a-b: no nearer its centreline than
+    the road's half, no farther than the walkers' inner edge (wave 3.1, `kerbside` layers)."""
+    far = max(streetplan.point_segment_distance(v, a, b)[0] for v in body)
+    return segment_gap(a, b, body) >= site.road_half - slack - EPS and far <= site.walker_inner + slack + EPS
+
+
 def leans_within(body, lot, depth):
     """True when `body` and `lot` overlap by at most `depth` studs: no corner of either lies deeper
     than that inside the other."""
@@ -1929,7 +1941,7 @@ class Ground:
         lx, lz = rotate(point[0] - x, point[1] - z, -rotation)
         return abs(lx) <= width / 2 + EPS and lz <= -lot_depth / 2 + depth + EPS
 
-    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None):
+    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None, kerbside=False):
         """What is wrong with an entry standing as `body`, one text per broken rule, lazily, so a
         search can stop at the first. `anchor_gap` and `clear` are cart_anchor's pair. `own` is the
         parcel a parcel-anchored entry belongs to: it may stand inside that lot's margin and lean
@@ -1943,7 +1955,17 @@ class Ground:
         for lanes, need in ((self.streets, site.walker_street), (self.spurs, site.walker_spur)):
             for what, a, b, lane_box in lanes:
                 if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
+                    # A kerbside layer may stand in a street's kerb strip: off its road, short of
+                    # its walkers. Anywhere else the walkers' whole reach holds.
+                    if kerbside and lanes is self.streets and in_kerb_strip(site, a, b, body, slack):
+                        continue
                     yield f"{segment_gap(a, b, body):.2f} from {what}, inside the walker reach (need {need:g})"
+        if kerbside:
+            # The road's own cells, square ends included: a kerb strip ends where its street does.
+            for what, a, b, _lane_box in self.streets:
+                road = streetplan.band(a, b, site.road_half)
+                if not boxes_apart(box, box_of(road), 0.0) and overlap_depth(body, road) > TOUCH + slack:
+                    yield f"stands {overlap_depth(body, road):.2f} on the road of {what}"
         need = lane_half(site) + margins["solid"]
         for what, a, b, lane_box in self.lanes:
             if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
@@ -2182,7 +2204,13 @@ class LayerBuild:
         for shape in shapes:
             centre = point if len(shapes) == 1 else shape_centre(shape)
             problems = self.ground.problems(
-                shape, centre, *resolved, own=own, lean=placer.get("lean", 0.0), front_lean=placer.get("frontLean", 0.0)
+                shape,
+                centre,
+                *resolved,
+                own=own,
+                lean=placer.get("lean", 0.0),
+                front_lean=placer.get("frontLean", 0.0),
+                kerbside=bool(self.cfg.get("kerbside")),
             )
             if next(problems, None) is not None:
                 return False
@@ -2237,7 +2265,9 @@ def kerb_pose(build, placer, run, side, s, variant):
     n = (-d[1] * side, d[0] * side)
     heading = {"along": (d[0] * side, d[1] * side), "street": (-n[0], -n[1])}[placer["facing"]]
     rotation = facing_rot(heading)
-    reach = site.walker_street + placer["slack"] + build.toward(placer, variant, rotation, (-n[0], -n[1]))
+    # A kerbside layer (wave 3.1) puts its street-side edge at the road's edge, not past the walkers.
+    base = site.road_half if build.cfg.get("kerbside") else site.walker_street
+    reach = base + placer["slack"] + build.toward(placer, variant, rotation, (-n[0], -n[1]))
     x, z = run["a"][0] + d[0] * s + n[0] * reach, run["a"][1] + d[1] * s + n[1] * reach
     return x, z, rotation, {"anchor": "stretch", "stretch": site.ids[where[0]]}
 
@@ -3779,7 +3809,8 @@ def layer_clearance(site, plan, name, index, label, entry, props, ground, polys)
         centre = (entry["x"], entry["z"]) if len(shapes) == 1 else shape_centre(shape)
         post = max(math.dist(shape[0], shape[1]), math.dist(shape[1], shape[2])) <= CHECK_POST_SIZE + EPS
         front = CHECK_OWN_LOT if own is None and post else 0.0
-        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index))
+        kerbside = bool((plan.get(name) or {}).get("kerbside"))
+        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index), kerbside=kerbside)
         messages += [f"{label}: {problem}" for problem in problems]
     return messages
 
