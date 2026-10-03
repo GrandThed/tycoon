@@ -3,13 +3,19 @@ wave 3), generated as a Kenney-style kit.
 
 Runs inside Blender (headless):
 
-    blender -b -P tools/assets/oldtown_kit.py [-- --out <dir>] [--only name,name]
+    blender -b -P tools/assets/oldtown_kit.py [-- --out <dir>] [--only name,name] [--write-blueprints]
 
 Writes one GLB per piece into assets/kenney3d/oldtown-kit/Models/GLB format/, the folder convention
 every Kenney kit uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py discover the kit
 with no registration step. assets/ is gitignored, so this script is the committed artifact and the
 GLBs regenerate from it. The mesh container and the export plumbing come from garden_kit.py, the
 geometry helpers from village_extras_kit.py.
+
+`--write-blueprints` also (re)writes the kit's 15 blueprints under
+tools/testfit/blueprints/_props/Metropolis/ (OldTownQuarterA-C and their OldTownClumpA-C, the three
+old-town singles, the four sites, RevealScaffold and LotHoarding) from blueprints() below. That is
+how to regenerate them: never edit a clump by hand, it is its quarter turned four times. Add
+`--only <piece>` to skip rebuilding the other GLBs.
 
 Why a custom kit (INTERFACES "M12 wave 3 -- Metropolis", docs/CITY_GROWTH.md sections 2.1 and 4):
 - The old town. Metropolis's wild land is the low, worn city the towers replace: surface car parks,
@@ -71,6 +77,7 @@ only, DECAL_LIFT above what it lies on.
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import random
@@ -684,6 +691,7 @@ def make_billboard() -> Part:
 # layout has narrow (4 x 8) and small (6 x 6) lots only, so there is no medium site.
 
 HOARD_H = 1.35
+FRAME_SLAB = 0.2  # a frame's ground slab and floor slabs; what stands on the ground slab stands this high
 
 
 def site_ground(name: str, hx: float, hz: float, seed: int, patches) -> Part:
@@ -715,7 +723,7 @@ def concrete_frame(name: str, x0: float, x1: float, z0: float, z1: float, cols_x
     height), standing above the rest. Fresh concrete is the kit's pale wall grey, so the frame
     reads as the new city arriving. (A slab over the whole grid read as a solid block.)"""
     p = Part(name)
-    slab_t = 0.2
+    slab_t = FRAME_SLAB
     block(p, x0, x1, 0.0, slab_t, z0, z1, STONE, top=STONE_LIGHT)
     c = 0.13
     floor1 = STOREY
@@ -1018,6 +1026,155 @@ PIECES = {
 }
 
 
+# --- blueprints ----------------------------------------------------------------------------------
+#
+# The 15 old-town and site blueprints are written from here (--write-blueprints), so a position that
+# depends on a piece's geometry (a car in its bay, the tank on the shop's roof, the fire escape on
+# the corner building's back, blocks on a frame's slab) uses that piece's own constant, and a clump
+# is generated from its quarter and cannot drift from it.
+
+BLUEPRINT_DIR = os.path.join(REPO_ROOT, "tools", "testfit", "blueprints", "_props", "Metropolis")
+ERA = "Metropolis"
+
+
+def placed(model: str, pos: Vec, rot: int = 0) -> dict:
+    """One blueprint piece of this kit: `pos` in studs (the kit's unit), `rot` degrees about Y."""
+    return {"kit": KIT, "model": model, "pos": [round(v, 4) for v in pos], "rotY": rot, "stage": 0}
+
+
+def quarter_turned(piece: dict, turns: int) -> dict:
+    """A quarter's piece as its clump shows it after `turns` quarter turns about the clump origin,
+    by Roblox's CFrame.Angles(0, a, 0) mapping (INTERFACES "Fabric data"): (x, z) -> (x cos a +
+    z sin a, -x sin a + z cos a), and the piece's own rotY grows by the same angle."""
+    a = math.radians(90 * turns)
+    c, s = round(math.cos(a)), round(math.sin(a))
+    x, y, z = piece["pos"]
+    out = dict(piece)
+    # + 0.0: every coordinate of a clump piece is written as a float, and never as -0.0
+    out["pos"] = [round(x * c + z * s, 4) + 0.0, y + 0.0, round(-x * s + z * c, 4) + 0.0]
+    out["rotY"] = (piece["rotY"] + 90 * turns) % 360
+    return out
+
+
+def blueprints() -> list[dict]:
+    """Every blueprint this kit owns, in the schema of tools/testfit/blueprint.py."""
+    frame = "in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data')"
+    bay = ROW_IN + BAY_D / 2
+    quarters = {
+        "A": (
+            f"one quarter of a surface car park {frame}: asphalt to the clump axes, kerbs, four bays, the corner "
+            "island with the pay booth and the light, three parked cars; oldtown-kit is 1 unit = 1 stud, so scale "
+            "is 1.0",
+            [
+                placed("carpark-quarter", (0, 0, 0)),
+                placed("pay-booth", (4.65, KERB_TOP, 5.85), 0),
+                placed("carpark-light", (5.85, KERB_TOP, 4.75), 90),
+                placed("car-a", (GAP + BAY_W * 0.5, LOT_TOP, bay), 180),
+                placed("car-b", (bay, LOT_TOP, GAP + BAY_W * 0.5), 90),
+                placed("car-c", (bay, LOT_TOP, GAP + BAY_W * 1.5), 270),
+            ],
+            "surface car park (four quarters)",
+        ),
+        "B": (
+            f"one quarter of a fenced vacant lot {frame}: earth, weeds and the corner of a demolished building's "
+            "floor slab to the clump axes, chain-link on the two outer edges, fallen bricks and a skip; scale 1.0",
+            [
+                placed("lot-quarter", (0, 0, 0)),
+                placed("chainlink-quarter", (0, 0, 0)),
+                placed("skip", (4.95, MIN_GAP, 2.4), 90),
+            ],
+            "fenced vacant lot (four quarters)",
+        ),
+        "C": (
+            f"one quarter of an old brick block {frame}: paved yard to the clump axes, a two-storey corner building "
+            "and a one-storey shop on the +Z street (3.57 tall at most, under the first landmarks), a water tank on "
+            "the shop's roof and a fire escape on the corner building's back; scale 1.0",
+            [
+                placed("brick-quarter", (0, 0, 0)),
+                placed("water-tank", (1.5, B_TOP + CAP, 4.45)),
+                placed("fire-escape", (4.63, 0, A_Z0)),
+            ],
+            "old brick block (four quarters)",
+        ),
+    }
+    out = []
+
+    def add(bid: str, footprint: list, note: str, pieces: list[dict]) -> None:
+        out.append({"id": bid, "era": ERA, "scale": 1.0, "footprint": footprint, "note": note, "pieces": pieces})
+
+    for key, (note, pieces, title) in quarters.items():
+        add(f"OldTownQuarter{key}", [13, 13], note, pieces)
+        clump = [quarter_turned(piece, turns) for turns in range(4) for piece in pieces]
+        add(f"OldTownClump{key}", [13, 13],
+            f"exactly OldTownQuarter{key} at rotY 0, 90, 180 and 270 about the origin: a {title}, 13 x 13 on the "
+            "14-stud grid", clump)
+
+    add("OldTownBillboard", [2, 1],
+        "an old billboard on a steel frame, facing -Z; colour blocks, no lettering; the piece sits 0.155 back so the "
+        "frame and catwalk are centred on the origin", [placed("billboard", (0, 0, 0.155))])
+    add("OldTownRubble", [2, 2], "a heap of demolition rubble", [placed("rubble", (0, 0, 0))])
+    add("OldTownSkip", [2, 1.2], "an open builder's skip", [placed("skip", (0, 0, 0))])
+
+    narrow = [
+        placed("site-ground-narrow", (0, 0, 0)),
+        placed("frame-narrow", (0, 0, 0)),
+        placed("scaffold-narrow", (0, 0, -1.6)),
+        placed("hoarding", (-0.95, 0, -3.85)),
+        placed("hoarding-half", (1.45, 0, -3.85)),
+        placed("mixer", (0.95, 0, -2.6), 90),
+        placed("block-pallet", (-1.3, 0, -2.65)),
+    ]
+    small = [
+        placed("site-ground-small", (0, 0, 0)),
+        placed("frame-small", (0, 0, 0)),
+        placed("scaffold", (1.45, 0, 0.72), 90),
+        placed("hoarding", (-2.0, 0, -2.85)),
+        placed("hoarding", (1.95, 0, -2.85)),
+        placed("steel-stack", (2.4, 0, -0.35), 90),
+    ]
+    blocks_on_slab = placed("block-pallet", (0.0, FRAME_SLAB, -0.3))
+    add("SiteNarrow", [4, 8],
+        "a concrete frame going up on a 4 x 8 terraced lot, in the lot frame: scaffold on its street face, blue "
+        "hoarding with a gate, a mixer and blocks in the front yard", narrow)
+    add("SiteSmall", [6, 6],
+        "a concrete frame going up on a 6 x 6 lot, in the lot frame: scaffold on its +X face, blue hoarding with a "
+        "gate, steel, blocks and a mixer", small + [placed("mixer", (2.35, 0, 2.2)), blocks_on_slab])
+    add("SiteNarrowCrane", [4, 8],
+        "SiteNarrow with the slim tower crane (site variant): the mast stands at the back of the lot through the "
+        "frame, the jib runs front to back over the lot (tip 0.25 inside the front), the counter-jib overhangs the "
+        "back by 1.35, overhead. Mast 9.8, cat-head 11.75",
+        narrow + [placed("tower-crane-slim", (0.8, 0, 3.45), 270)])
+    add("SiteSmallCrane", [6, 6],
+        "SiteSmall with the slim tower crane (site variant) at its back-right corner, the mixer moved into the gate; "
+        "the jib runs front to back and overhangs the front by 1.75, the counter-jib the back by 1.35, overhead. "
+        "Mast 9.8, cat-head 11.75",
+        small + [placed("mixer", (0.0, 0, -2.4), 90), blocks_on_slab, placed("tower-crane-slim", (2.45, 0, 2.45), 270)])
+    add("RevealScaffold", [10, 10],
+        "one generated piece: a pipe-scaffold ring with blue netting and a hoarding skirt that stands wholly outside "
+        "a 9 x 9 slot (nothing nearer the centre than 4.54, nothing beyond 4.97), so a landmark that fills its "
+        "footprint touches none of it; the client still scales it by max(footprint) / 9",
+        [placed("scaffold-ring", (0, 0, 0))])
+    add("LotHoarding", [2, 2],
+        "the next-pad marker: a development board on two posts, facing -Z, painted on both faces",
+        [placed("lot-hoarding", (0, 0, 0))])
+    return out
+
+
+def write_blueprints() -> None:
+    """Writes every blueprint of blueprints() as the repo keeps them: one key per line, one piece
+    per line, LF."""
+    for bp in blueprints():
+        lines = ["{"]
+        lines += [f'  "{key}": {json.dumps(value)},' for key, value in bp.items() if key != "pieces"]
+        lines.append('  "pieces": [')
+        lines.append(",\n".join("    " + json.dumps(piece, separators=(", ", ": ")) for piece in bp["pieces"]))
+        lines += ["  ]", "}"]
+        path = os.path.join(BLUEPRINT_DIR, bp["id"] + ".json")
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("\n".join(lines) + "\n")
+        print(f"[{KIT}] wrote {os.path.relpath(path, REPO_ROOT)}", flush=True)
+
+
 # --- export --------------------------------------------------------------------------------------
 
 
@@ -1062,9 +1219,13 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate the oldtown-kit GLBs.")
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
     parser.add_argument("--only", default="", help="comma list of pieces to build (default: all)")
+    parser.add_argument("--write-blueprints", action="store_true", help="also (re)write the kit's 15 blueprints")
     args = parser.parse_args(argv)
     only = {name for name in args.only.split(",") if name} or None
-    return generate(args.out, only)
+    status = generate(args.out, only)
+    if args.write_blueprints:
+        write_blueprints()
+    return status
 
 
 if __name__ == "__main__":
