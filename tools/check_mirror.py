@@ -11,7 +11,11 @@ the finished plot -- and compares what they answer:
   * `IsCleared`: every wild clearing point (each clump quarter, each single) against the moment's
     clearing mask (so `RectDistance` and `SegmentDistance` too, which are also compared number for
     number on the finished plot);
-  * `LevelStage` and `RingRects` (INTERFACES "Wave 3.2") once the Luau module exports them.
+  * the looks (INTERFACES "Wave 3.2"): at every moment, the site every level-1 parcel shows
+    (`SiteProp`) and the prop every building shows once the swaps have had their say (`ValidSwaps`,
+    `SwappedProp`), from the era's real config; and all three on synthetic vectors, malformed
+    configs included;
+  * `LevelStage` and `RingRects` on synthetic vectors.
 
 A Luau export this script has no comparison for, and a comparison whose Luau function does not exist
 yet, are listed; with `--strict` either one fails the run. Any difference exits 1.
@@ -84,6 +88,48 @@ LANE_CASES = (
     ([0, 0, 0, 0, 0], LANE_SIZES, 99),
 )
 
+# Looks (wave 3.2). Site configs beyond the eras' own: malformed and partial ones.
+SITE_SIZES = ("small", "medium", "narrow", "large")
+SITE_INDEXES = range(1, 9)
+SITES = {"small": "SiteSmall", "medium": "SiteMedium", "narrow": "SiteNarrow"}
+SITE_CONFIGS = (
+    {"sites": SITES, "siteVariants": {"narrow": ["SiteNarrow", "SiteNarrowCrane", "SiteNarrow"], "small": ["SiteSmall", "SiteSmallCrane"]}},
+    {"sites": SITES, "siteVariants": None},
+    {"sites": SITES, "siteVariants": "x"},
+    {"sites": SITES, "siteVariants": []},
+    {"sites": SITES, "siteVariants": {"narrow": []}},
+    {"sites": SITES, "siteVariants": {"narrow": "SiteNarrow"}},
+    {"sites": SITES, "siteVariants": {"narrow": ["A", 3, "C"], "small": {"a": "b"}}},
+    {"sites": SITES, "siteVariants": {"narrow": [True, "B"], "medium": ["M"]}},
+    {"sites": None, "siteVariants": {"narrow": ["A", "B"]}},
+    {"sites": "x", "siteVariants": None},
+    {"sites": {"small": 5, "medium": "SiteMedium"}, "siteVariants": {"large": ["Z"]}},
+    {"sites": {"large": "Big"}, "siteVariants": {"large": ["Z"]}},
+)
+# Swap lists. An empty JSON object for `districts` reads in Luau as an empty list (a table either
+# way): Python skips that entry and Luau keeps it with no district, so neither ever swaps. It is
+# therefore in the SwappedProp vectors (SWAP_ONLY_LISTS) and left out of the ValidSwaps ones.
+SWAP_LISTS = (
+    None,
+    "x",
+    {"requiresSlot": "a", "suffix": "G"},
+    [],
+    [{"requiresSlot": "a", "suffix": "Green"}],
+    [{"requiresSlot": "a", "suffix": "Green"}, {"requiresSlot": "b", "suffix": "Crown"}],
+    [{"requiresSlot": "a", "suffix": "Green", "districts": ["residential", "retail"]}],
+    [{"requiresSlot": "a", "suffix": "Green", "districts": []}],
+    [{"requiresSlot": "a", "suffix": "Green", "districts": {"x": "residential"}}],
+    [{"requiresSlot": "a", "suffix": "Green", "districts": ["residential", 3]}],
+    [{"requiresSlot": "a", "suffix": ""}, {"requiresSlot": "b", "suffix": "Crown"}],
+    [{"requiresSlot": 4, "suffix": "Green"}, "junk", ["requiresSlot"], {"suffix": "Crown"}, {"requiresSlot": "b", "suffix": "Crown"}],
+    [{"requiresSlot": "a", "suffix": "Green", "districts": "residential"}],
+)
+SWAP_ONLY_LISTS = ([{"requiresSlot": "a", "suffix": "Green", "districts": {}}],)
+SWAP_EXISTING = ("TowerGreen", "TowerGreenCrown", "TowerCrown", "ShopGreen", "FabricResNarrowAGreen", "OfficeCrown")
+SWAP_PROPS = ("Tower", "Shop", "Office", "FabricResNarrowA", "Plaza")
+SWAP_DISTRICTS = (None, "residential", "retail", "office")
+SWAP_OWNED = ([], ["a"], ["b"], ["a", "b"], ["rooftopGarden"], ["rooftopGarden", "a", "b"])
+
 HARNESS = r"""
 local CityFabric = require("./CityFabric")
 local data = require("./cases")
@@ -100,6 +146,10 @@ for name, value in CityFabric do
 end
 table.sort(exported)
 print("EXPORTS " .. table.concat(exported, " "))
+
+local siteProp = (CityFabric :: any).SiteProp
+local validSwaps = (CityFabric :: any).ValidSwaps
+local swappedProp = (CityFabric :: any).SwappedProp
 
 for e, era in data.eras do
 	for c, case in era.cases do
@@ -125,6 +175,31 @@ for e, era in data.eras do
 			bits[index] = if CityFabric.IsCleared(point[1], point[2], point[3], case.mask) then "1" else "0"
 		end
 		print(string.format("CLR %d %d %s", e, c, table.concat(bits)))
+		-- Wave 3.2 looks: a level-1 parcel's site, and a building's prop after the swaps. The prop a
+		-- building starts from is Fabric.luau's business (district lists, heights), so Python hands
+		-- it over; the level and the district are this run's own.
+		if siteProp ~= nil and validSwaps ~= nil and swappedProp ~= nil then
+			local owned = {}
+			for _, slot in case.owned do
+				owned[slot] = true
+			end
+			local swaps = validSwaps(era.swaps)
+			local function exists(name)
+				return era.exists[name] == true
+			end
+			local looks = {}
+			for index, state in states do
+				local base = case.base[tostring(index)]
+				if state.level == 1 then
+					looks[index] = "S:" .. (siteProp(era.sites, era.siteVariants, era.parcels[index].size, index) or "-")
+				elseif state.level >= 2 and base ~= nil then
+					looks[index] = "B:" .. swappedProp(base, state.district, swaps, owned, exists)
+				else
+					looks[index] = "-"
+				end
+			end
+			print(string.format("LOOK %d %d %s", e, c, table.concat(looks, " ")))
+		end
 	end
 	local last = era.cases[#era.cases]
 	if last ~= nil then
@@ -144,6 +219,51 @@ end
 
 for index, vector in data.laneCases do
 	print(string.format("LANEV %d %s", index, num(CityFabric.LaneReach(data.laneDogleg, 1, data.laneLots, vector.levels, vector.sizes, vector.budget))))
+end
+
+if siteProp ~= nil then
+	for index, vector in data.siteVectors do
+		local ok, prop = pcall(siteProp, vector.sites, vector.variants, vector.size, vector.index)
+		print(string.format("SITE %d %s", index, if ok then (prop or "-") else "error:" .. tostring(prop)))
+	end
+end
+
+if validSwaps ~= nil then
+	for index, vector in data.swapLists do
+		local ok, swaps = pcall(validSwaps, vector.swaps)
+		if ok then
+			local out = {}
+			for _, swap in swaps do
+				local names = {}
+				if swap.districts ~= nil then
+					for name in swap.districts do
+						table.insert(names, name)
+					end
+					table.sort(names)
+				end
+				table.insert(out, string.format("%s|%s|%s", swap.requiresSlot, swap.suffix, if swap.districts ~= nil then table.concat(names, ",") else "*"))
+			end
+			print(string.format("VALID %d %s", index, table.concat(out, ";")))
+		else
+			print(string.format("VALID %d error:%s", index, tostring(swaps)))
+		end
+	end
+end
+
+if validSwaps ~= nil and swappedProp ~= nil then
+	local function exists(name)
+		return data.swapExisting[name] == true
+	end
+	for index, vector in data.swapVectors do
+		local owned = {}
+		for _, slot in vector.owned do
+			owned[slot] = true
+		end
+		local ok, prop = pcall(function()
+			return swappedProp(vector.prop, vector.district, validSwaps(vector.swaps), owned, exists)
+		end)
+		print(string.format("SWAP %d %s", index, if ok then prop else "error:" .. tostring(prop)))
+	end
 end
 
 local levelStage = (CityFabric :: any).LevelStage
@@ -227,19 +347,24 @@ def g17(value) -> str:
 
 
 def moments(plot, city):
-    """(label, owned set, GrowthTier) for an era: after each slot the greedy player buys, at the
-    last moment of each tier, and the finished plot."""
+    """(label, owned set, GrowthTier, each owned landmark's visible stage) for an era: after each
+    slot the greedy player buys, at the last moment of each tier, and the finished plot."""
     history = cityfabric.greedy_history(plot.name, city)
     tiers = cityfabric.buy_tiers(history)
+
+    def stages_of(owned, levels):
+        return {slot_id: plot.visible_stage(slot_id, levels.get(slot_id, 1)) for slot_id in owned}
+
     out = []
     for tick, kind, slot_id, levels in history["purchases"]:
         if kind == "slot":
-            out.append((f"buys {slot_id}", set(levels), cityfabric.tier_at_tick(history["tier_times"], tick)))
+            out.append((f"buys {slot_id}", set(levels), cityfabric.tier_at_tick(history["tier_times"], tick), stages_of(set(levels), levels)))
     for tier in range(1, len(city["tier"]["thresholds"]) + 1):
         levels, actual, _tick = cityfabric.tier_snapshot(history, tier)
-        out.append((f"end of tier {tier}", {slot_id for slot_id in levels if tiers.get(slot_id, 99) <= tier}, actual))
+        owned = {slot_id for slot_id in levels if tiers.get(slot_id, 99) <= tier}
+        out.append((f"end of tier {tier}", owned, actual, stages_of(owned, levels)))
     everything = {slot["id"] for slot in plot.era.config["slots"] if slot["id"] in plot.layout["slots"]}
-    out.append(("full build", everything, len(city["tier"]["thresholds"])))
+    out.append(("full build", everything, len(city["tier"]["thresholds"]), plot.final_stages(everything)))
     return out
 
 
@@ -256,7 +381,15 @@ def era_cases(era_name, city):
         else:
             points.append([entry["x"], entry["z"], radii.get("singleRadius", 0)])
     cases, expected = [], []
-    for label, owned, tier in moments(plot, city):
+    config = plot.config or {}
+    swaps = cityfabric.valid_swaps(config.get("swaps"))
+    asked = {}  # every name the swaps asked about -> whether it can spawn
+
+    def exists(name):
+        asked[name] = plot.heights.exists(name)
+        return asked[name]
+
+    for label, owned, tier, stages in moments(plot, city):
         stretches, joins, segments, _visible, _drawn = plot.network_view(owned)
         given = plot.develop_input(owned, tier, stretches, joins)
         states = cityfabric.develop(given, plot.pull)
@@ -266,7 +399,19 @@ def era_cases(era_name, city):
             for index, lane in enumerate(plot.lane_data, start=1)
         ]
         mask = plot.mask(owned, states, segments, plot.visible_plazas(tier), plot.lane_reaches(states))
-        cases.append({"tier": tier, "stretches": stretches, "landmarks": given["landmarks"], "mask": mask})
+        # The looks, budget or not: what goal_for chooses, then the swaps. `base` is the building
+        # prop before the swaps, which only Fabric.luau can choose in the game.
+        base, looks = {}, []
+        for index, (parcel, state) in enumerate(zip(plot.parcel_data, states), start=1):
+            look = cityfabric.goal_for(config, index, parcel, state, plot.heights.prop, lambda slot_id: plot.landmark_height(slot_id, stages))
+            if state["level"] == 1:
+                looks.append("S:" + (look["prop"] if look is not None else "-"))
+            elif look is not None:
+                base[str(index)] = look["prop"]
+                looks.append("B:" + cityfabric.swapped_look(look, state["district"], swaps, owned, exists)["prop"])
+            else:
+                looks.append("-")
+        cases.append({"tier": tier, "stretches": stretches, "landmarks": given["landmarks"], "mask": mask, "owned": sorted(owned), "base": base})
         expected.append(
             {
                 "label": label,
@@ -274,6 +419,7 @@ def era_cases(era_name, city):
                 "reaches": [g17(reach) for reach in reaches],
                 "cleared": "".join("1" if cityfabric.is_cleared(p[0], p[1], p[2], mask) else "0" for p in points),
                 "mask": mask,
+                "looks": looks,
             }
         )
     distances = []
@@ -291,8 +437,59 @@ def era_cases(era_name, city):
         "budget": plot.parcel_budget,
         "points": points,
         "cases": cases,
+        "sites": config.get("sites"),
+        "siteVariants": config.get("siteVariants"),
+        "swaps": config.get("swaps"),
+        "exists": {name: True for name, can in asked.items() if can},
     }
-    return table, {"cases": expected, "distances": distances, "parcels": len(plot.parcel_data), "lanes": len(plot.lane_data), "points": len(points)}
+    sites = sum(1 for case in expected for look in case["looks"] if look.startswith("S:"))
+    swapped = sum(1 for case, given in zip(expected, cases) for index, look in enumerate(case["looks"], start=1) if look.startswith("B:") and look[2:] != given["base"].get(str(index)))
+    return table, {
+        "cases": expected,
+        "distances": distances,
+        "parcels": len(plot.parcel_data),
+        "lanes": len(plot.lane_data),
+        "points": len(points),
+        "sites": sites,
+        "swapped": swapped,
+    }
+
+
+def look_vectors(city):
+    """(site vectors, swap-list vectors, swapped-prop vectors), each as [(what Luau gets, what Python
+    answers)]: every fabric era's own site config and swap list, then the malformed ones above."""
+    site_configs, swap_lists = [], []
+    for era in city.get("eras", {}).values():
+        fabric = era.get("fabric") if isinstance(era, dict) else None
+        if isinstance(fabric, dict):
+            site_configs.append({"sites": fabric.get("sites"), "siteVariants": fabric.get("siteVariants")})
+            if fabric.get("swaps") is not None:
+                swap_lists.append(fabric.get("swaps"))
+    site_configs += list(SITE_CONFIGS)
+    swap_lists += list(SWAP_LISTS)
+    sites = []
+    for config in site_configs:
+        present = {key: value for key, value in config.items() if value is not None}
+        for size in SITE_SIZES:
+            for index in SITE_INDEXES:
+                look = cityfabric.site_look(present, size, index)
+                sites.append(({"sites": config["sites"], "variants": config["siteVariants"], "size": size, "index": index}, look["prop"] if look is not None else "-"))
+    valid = []
+    for swaps in swap_lists:
+        want = ";".join(
+            f"{swap['requiresSlot']}|{swap['suffix']}|{','.join(sorted(swap['districts'])) if swap['districts'] is not None else '*'}"
+            for swap in cityfabric.valid_swaps(swaps)
+        )
+        valid.append(({"swaps": swaps}, want))
+    swapped = []
+    for swaps in swap_lists + list(SWAP_ONLY_LISTS):
+        checked = cityfabric.valid_swaps(swaps)
+        for prop in SWAP_PROPS:
+            for district in SWAP_DISTRICTS:
+                for owned in SWAP_OWNED:
+                    look = cityfabric.swapped_look({"kind": cityfabric.BUILDING, "prop": prop, "stage": 2}, district, checked, set(owned), lambda name: name in SWAP_EXISTING)
+                    swapped.append(({"swaps": swaps, "prop": prop, "district": district, "owned": owned}, look["prop"]))
+    return sites, valid, swapped
 
 
 def level_stage_vectors():
@@ -332,6 +529,7 @@ def run(eras, keep=None, strict=False, module=MODULE):
         tables.append(built[0])
         expected.append(built[1])
     stage_vectors, rings = level_stage_vectors(), ring_vectors()
+    site_vectors, valid_vectors, swap_vectors = look_vectors(city)
     lane_lots = [
         {"x": 0, "z": 0, "rotationY": 0, "size": size, "stretch": "L1_1", "along": 3, "row": 2, "front": 1, "lane": lane, "laneAlong": along}
         for size, lane, along in LANE_LOTS
@@ -343,6 +541,10 @@ def run(eras, keep=None, strict=False, module=MODULE):
         "eras": tables,
         "distancePoints": DISTANCE_POINTS,
         "distanceRects": DISTANCE_RECTS,
+        "siteVectors": [vector for vector, _ in site_vectors],
+        "swapLists": [vector for vector, _ in valid_vectors],
+        "swapVectors": [vector for vector, _ in swap_vectors],
+        "swapExisting": {name: True for name in SWAP_EXISTING},
         "levelStages": [vector for vector, _ in stage_vectors],
         "rings": [vector for vector, _ in rings],
     }
@@ -367,7 +569,8 @@ def run(eras, keep=None, strict=False, module=MODULE):
         lines.setdefault(head, []).append(rest)
     exports = (lines.get("EXPORTS") or [""])[0].split()
     problems = []
-    by_case = {kind: {tuple(int(v) for v in rest.split(" ", 2)[:2]): rest.split(" ", 2)[2] if rest.count(" ") >= 2 else "" for rest in lines.get(kind, [])} for kind in ("DEV", "LANE", "CLR")}
+    by_case = {kind: {tuple(int(v) for v in rest.split(" ", 2)[:2]): rest.split(" ", 2)[2] if rest.count(" ") >= 2 else "" for rest in lines.get(kind, [])} for kind in ("DEV", "LANE", "CLR", "LOOK")}
+    looks_run = all(name in exports for name in ("SiteProp", "ValidSwaps", "SwappedProp"))
     for e, (table, want) in enumerate(zip(tables, expected), start=1):
         found = []
         for c, case in enumerate(want["cases"], start=1):
@@ -375,11 +578,15 @@ def run(eras, keep=None, strict=False, module=MODULE):
             found += differences("Develop", label, case["states"], by_case["DEV"].get((e, c), "").split())
             found += differences("LaneReach", label, case["reaches"], by_case["LANE"].get((e, c), "").split())
             found += differences("IsCleared", label, list(case["cleared"]), list(by_case["CLR"].get((e, c), "")))
+            if looks_run:
+                found += differences("SiteProp/SwappedProp", label, case["looks"], by_case["LOOK"].get((e, c), "").split())
         got = next((rest.split(" ", 1)[1].split() if " " in rest else [] for rest in lines.get("DIST", []) if rest.split(" ", 1)[0] == str(e)), [])
         found += differences("RectDistance/SegmentDistance", table["name"], want["distances"], got)
         print(
             f"{table['name']}: {len(want['cases'])} moments x {want['parcels']} parcels, {want['lanes']} lanes, "
-            f"{want['points']} clearing points, {len(want['distances'])} distances: "
+            f"{want['points']} clearing points, {len(want['distances'])} distances"
+            + (f", {want['sites']} sites and {want['swapped']} swaps shown" if looks_run else "")
+            + ": "
             + ("identical" if not found else f"{len(found)} DIFFERENCES")
         )
         problems += found
@@ -390,8 +597,14 @@ def run(eras, keep=None, strict=False, module=MODULE):
     problems += found
     covered = {"Develop", "LaneReach", "IsCleared", "RectDistance", "SegmentDistance"}
     waiting = []
-    for name, kind, vectors in (("LevelStage", "STAGE", stage_vectors), ("RingRects", "RING", rings)):
-        if name not in exports:
+    for name, kind, vectors in (
+        ("LevelStage", "STAGE", stage_vectors),
+        ("RingRects", "RING", rings),
+        ("SiteProp", "SITE", site_vectors),
+        ("ValidSwaps", "VALID", valid_vectors),
+        ("SwappedProp", "SWAP", swap_vectors),
+    ):
+        if name not in exports or (name == "SwappedProp" and "ValidSwaps" not in exports):
             waiting.append(name)
             continue
         covered.add(name)
