@@ -1,0 +1,11 @@
+{
+  "id": "FabricPlazaMedium",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [8, 8],
+  "pieces": [
+    {"kit": "tower-kit", "model": "plaza-medium-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "tower-kit", "model": "plaza-medium-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "tower-kit", "model": "plaza-medium-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2}
+  ]
+}

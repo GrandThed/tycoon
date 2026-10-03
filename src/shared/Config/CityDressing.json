@@ -978,7 +978,8 @@
               "FabricOfficeMediumB"
             ],
             "narrow": [
-              "FabricOfficeNarrowA"
+              "FabricOfficeNarrowA",
+              "FabricOfficeNarrowB"
             ]
           },
           "retail": {
