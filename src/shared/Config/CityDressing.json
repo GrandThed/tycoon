@@ -767,7 +767,7 @@
             "crossing": "RoadCrossing"
           },
           "pavement": {
-            "width": 4,
+            "width": 2,
             "material": "Concrete",
             "color": [
               176,
@@ -912,7 +912,7 @@
           7,
           8
         ],
-        "offset": 5.5,
+        "offset": 4.5,
         "clearance": 0.6,
         "speed": 3.2,
         "bobHeight": 0.08,

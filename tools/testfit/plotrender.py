@@ -2216,7 +2216,10 @@ def main():
     parser.add_argument(
         "--camera",
         default="overview",
-        help="overview | entrance | ramp | plaza | cityhall | x,z",
+        help="overview | entrance | ramp | plaza | cityhall | x,z[,half[,elevation]]: a point camera on "
+        "(x, z), framing `half` studs either side (default 20) from the tycoon direction raised to "
+        "`elevation` (the y of a direction whose ground part is (0.8, -1); default 0.6, higher looks "
+        "down on the roofs)",
     )
     parser.add_argument(
         "--out",
@@ -2239,12 +2242,20 @@ def main():
         help="a CityDressing.json to read instead of src/shared/Config/CityDressing.json (a scratch copy "
         "for a proposal render; the repo's file is never touched)",
     )
+    parser.add_argument(
+        "--street-only",
+        default="",
+        help="comma list of slot ids drawn as street upgrades (a city-changer proposal): no model, no "
+        "district, no path. A what-if for renders only; pair it with --fabric data built the same way",
+    )
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args()
 
     started = time.time()
     city = json.loads((Path(args.config) if args.config else CITY_CONFIG_PATH).read_text(encoding="utf-8"))
     era = streetplan.Era(args.era, city)
+    if args.street_only:
+        streetplan.make_street_only(era, [slot.strip() for slot in args.street_only.split(",") if slot.strip()])
     network = streetplan.Network(era)
     tier = args.tier
     owned = resolve_owned(era, args.owned, tier)
@@ -2263,10 +2274,19 @@ def main():
     camera_name = args.camera
     if camera_name not in CAMERAS and camera_name != "entrance":
         try:
-            x, z = (float(part) for part in camera_name.split(","))
+            numbers = [float(part) for part in camera_name.split(",")]
         except ValueError:
             raise SystemExit(f"unknown --camera {camera_name!r}")
-        CAMERAS["point"]["at"] = (x, z)
+        if not 2 <= len(numbers) <= 4:
+            raise SystemExit(f"--camera {camera_name!r}: x,z[,half[,elevation]]")
+        CAMERAS["point"]["at"] = (numbers[0], numbers[1])
+        if len(numbers) >= 3:
+            # A wider frame keeps the towers in it too: the fitted box is at least as tall as wide.
+            CAMERAS["point"]["half"] = (numbers[2], numbers[2])
+            CAMERAS["point"]["height"] = max(CAMERAS["point"]["height"], numbers[2])
+        if len(numbers) == 4:
+            direction = CAMERAS["point"]["dir"]
+            CAMERAS["point"]["dir"] = (direction[0], numbers[3], direction[2])
         camera_name = "point"
 
     scene = PlotScene(
