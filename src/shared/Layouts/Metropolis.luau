@@ -76,7 +76,7 @@ return {
 			district = "residential",
 		},
 		officeLowRise = {
-			position = Vector3.new(-14, 0, -2),
+			position = Vector3.new(-14, 0, 2.1),
 			rotationY = 270,
 			district = "office",
 		},
@@ -131,7 +131,7 @@ return {
 			spur = { Vector3.new(-42.9, 0, -47) },
 		},
 		-- the last tier-3 join on the west avenue, so only its final block waits for tier 5
-		hospital = { position = Vector3.new(-21, 0, 7.25), rotationY = 90, district = "civic" },
+		hospital = { position = Vector3.new(-21, 0, 11.35), rotationY = 90, district = "civic" },
 		-- the east avenue's first landmark, at the head of its inner row
 		cityPark = { position = Vector3.new(21, 0, -11.6), rotationY = 270, district = "civic" },
 		-- the two towers flank the Skyscraper on ground no street fronts; their paths come down to
@@ -178,9 +178,9 @@ return {
 			district = "civic",
 		},
 		rooftopGarden = {
-			position = Vector3.new(-47.5, 0, 18.75),
+			position = Vector3.new(-47.5, 0, 6.55),
 			rotationY = 270,
-			padPosition = Vector3.new(-41.5, 0, 18.75),
+			padPosition = Vector3.new(-41.5, 0, 6.55),
 			district = "residential",
 		},
 		-- the side closers stand 12 past their avenue's end, pads beside the end on the pavement,
