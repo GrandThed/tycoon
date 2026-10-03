@@ -124,6 +124,11 @@ SUBWAY_CLEARANCE = 0.5  # daylight between an entrance and any footprint, pad or
 # blueprint may still declare the pre-resize envelope while the prop is reworked, so the checker
 # takes whichever is bigger -- a stale file must never pass a plan the real prop will not fit.
 PLAZA_MIN_SIZE = (14.0, 14.0)
+# M12 wave 3.1 (lead): two landmarks' harvested extents -- the union of every stage, as Scatter and
+# the fabric measure them, a declared footprint until a harvest -- keep this much daylight. 0.25, not
+# 0.5: Boomtown's shipped carDealership and bank stand 0.30 apart, and moving either would cost a
+# path re-bake and a harvest paste for no visible gain.
+LANDMARK_GAP = 0.25
 PLAZA_EDGE_SLACK = 0.5  # how far the front edge may sit from the pavement's outer edge
 # Wave 2b: a tiles era without pavement (Orbital tubes) has no apron to build in, so its plaza is
 # the prop's own blueprint footprint (this fallback when the blueprint declares none) and its front
@@ -2903,10 +2908,44 @@ def check(era, network, visible, unreachable):
     if era.dressing.get("pedestrians"):
         detail["walkClips"] = clips
         detail["walkClipKinds"] = clip_kinds
+    for message in landmark_gap_violations(era):
+        add(message)
     if era.has_fabric:
         for message in fabric_module().check_document(era.name, load_fabric(era), city=era.city, era=era, network=network):
             add(f"fabric: {message}")
     return violations, notes, near, far, detail
+
+
+def landmark_extents(era):
+    """(slot id, ground polygon, harvested?) for every slot that spawns a model: its harvested
+    extents over all stages placed as Fabric.footprintRect, else its declared footprint. A
+    streetOnly slot spawns nothing and is left out."""
+    fabric = fabric_module()
+    harvested = (fabric.load_assets().get("eras") or {}).get(era.name) or {}
+    configs = {slot["id"]: slot for slot in era.config["slots"]}
+    out = []
+    for slot in era.slots:
+        config = configs[slot["id"]]
+        if config.get("streetOnly"):
+            continue
+        extents = fabric.model_extents(harvested.get(config.get("modelName")))
+        poly = fabric.extents_poly(slot["position"], slot["rotation"], extents) if extents else slot["footprint"]
+        out.append((slot["id"], poly, extents is not None))
+    return out
+
+
+def landmark_gap_violations(era):
+    """Two landmarks never overlap, and keep LANDMARK_GAP of daylight (wave 3.1; nothing checked it
+    before, so two layouts could pass with buildings standing in each other)."""
+    messages = []
+    items = landmark_extents(era)
+    for i, (first, poly, measured) in enumerate(items):
+        for second, other, other_measured in items[i + 1 :]:
+            d = polygon_polygon_distance(poly, other)
+            if d < LANDMARK_GAP - 1e-6:
+                what = "harvested extents" if measured and other_measured else "extents or footprints"
+                messages.append(f"landmarks {first} and {second}: {what} {d:.2f} apart (need {LANDMARK_GAP})")
+    return messages
 
 
 def fabric_module():

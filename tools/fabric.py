@@ -70,7 +70,12 @@ when those rects join the clearing mask with `clear.parcel`; whatever stands the
 their reach. A field that breaks either rule, or lies across the plot's edge, is moved
 `wild.grid.shift` studs (one lattice cell) if that fits, else dropped; such a single is dropped. A
 single's ground is its harvested extents, else the plan's `footprints` entry, else a `singleRadius`
-square. A fields plan may leave out `skirt` (nothing past the edge, and no landmarks). Kerb layer
+square. A fields plan may leave out `skirt` (nothing past the edge, and no landmarks). Alleys (wave
+2.4 lanes in a tiles era, "density" rulings) keep their mouth on the street centreline; their ground
+is the polyline from the pavement's outer edge on, at `fabric.lanes` half-width, and it stands on no
+street's band and keeps CHECK_LANE from landmarks, pads, markers, kiosks, the deck band and the ramp
+cells. `parcels.sideSizes` gives one side of a street its own lot sizes, `parcels.lanes.sizes` the
+alleys' lots theirs. Kerb layer
 entries keep the walkers' reach (pedestrians.offset + clearance) as everywhere, which in a tiles era
 puts them on the pavement's outer edge, between the walkers and the lot fronts.
 
@@ -164,6 +169,9 @@ CHECK_FACING = 0.02  # |sin| between where a kerb entry faces and where its laye
 CHECK_TILE_SOLID = 0.5
 # Two shapes that share no area deeper than this only touch (coordinates are written to 0.01).
 TOUCH = 1e-6
+# A lot laid exactly a street clearance away measures a hair under it in floating point (a plan
+# with `frontSetback` and `street` both 7.8 lost its corner lots): the generator forgives this much.
+STREET_SLACK = 1e-6
 # A wild cell that a tile street, the deck or a kiosk takes is moved this many grid steps when the
 # plan's `wild.grid.shift` asks for it: across, along, then diagonally (INTERFACES "Wave 3.1").
 SHIFTS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1))
@@ -593,7 +601,7 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
             return False
     for polyline, segment, a, b, segment_box in site.street_boxes:
         need = rules["frontSetback"] - 0.05 if (polyline, segment) in own_segments else rules["street"]
-        if not boxes_apart(box, segment_box, need) and segment_gap(a, b, poly) < need:
+        if not boxes_apart(box, segment_box, need) and segment_gap(a, b, poly) < need - STREET_SLACK:
             return False
     # A tiles era: no lot on a street's hard surface, square ends and corners included; a lot
     # keeps the plan's `street` (from the centreline) off the surface of every other street leg.
@@ -602,7 +610,7 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
         need = 0.0 if own else max(rules["street"] - site.street_half, 0.0)
         if boxes_apart(box, band_box, need):
             continue
-        if overlap_depth(poly, band) > TOUCH or (need > 0 and gap(poly, band) < need):
+        if overlap_depth(poly, band) > TOUCH or (need > 0 and gap(poly, band) < need - STREET_SLACK):
             return False
     for a, b, segment_box in site.spur_boxes:
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
@@ -745,6 +753,25 @@ def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, lanes=()):
         s += site.sizes[accepted["size"]][0] + (rules["terraceGap"] if accepted["size"] == "narrow" else rules["gap"])
 
 
+SIDES = {"left": (1,), "right": (-1,), "both": (1, -1)}
+
+
+def street_side_sizes(rules):
+    """The plan's optional `parcels.sideSizes` (wave 3.1) as {(polyline, side): sizes}: keyed by the
+    street's 1-based polyline number, then "left", "right" or "both" -- left and right as seen
+    walking the polyline from its first point, looking down with +X to the right and +Z ahead (so a
+    street drawn toward +Z has "left" on -X) -- each naming the sizes its row-1 lots try, in order,
+    in place of the terrace and mediumShare rules."""
+    out = {}
+    for polyline, sides in (rules.get("sideSizes") or {}).items():
+        for key, sizes in sides.items():
+            if key not in SIDES or not isinstance(sizes, list) or not all(size in SIZES for size in sizes):
+                raise SystemExit(f"fabric: parcels.sideSizes[{polyline!r}][{key!r}] must be one of {sorted(SIDES)} -> a list of {SIZES}")
+            for side in SIDES[key]:
+                out[(int(polyline), side)] = tuple(sizes)
+    return out
+
+
 def entrance_order(site, parcel):
     """Straight-line distance from the entrance (the first point of polyline 1), ties by position."""
     return (round(math.dist(site.entrance, (parcel["x"], parcel["z"])), DECIMALS), parcel["z"], parcel["x"])
@@ -858,11 +885,15 @@ def generate_lots(site, plan):
     # elsewhere; then a second walk fills every hole a lot still fits.
     lines = plan_lanes(site, rules) if rules.get("lanes") else []
     obstacles = [line["points"] for line in lines]
+    side_sizes = street_side_sizes(rules)
     placed = []
     for sizes_for in (first_pass, fill_pass):
         for run in street_runs(site):
             for side in (1, -1):
-                walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, obstacles)
+                # `sideSizes` (wave 3.1) gives one side of one street its own sizes, in both walks.
+                chosen = side_sizes.get((run["polyline"] + 1, side))
+                walker = (lambda _stream, _run, sizes=chosen: sizes) if chosen is not None else sizes_for
+                walk_run(site, rules, run, side, walker, rng, jitter, placed, obstacles)
     min_level = rules["minLevel"]
     parcels = settle_first_row(site, placed, min_level)
     parcels.sort(key=lambda parcel: entrance_order(site, parcel))
@@ -1088,7 +1119,13 @@ def walk_lane(site, rules, points, placed, rng, lanes, head):
     beside = dict(rules, street=lane_rules["street"])
     lots = []
 
+    # Optional `lanes.sizes` (wave 3.1): every lane lot tries these sizes in order (a tiles era's
+    # narrow towers); without it, small with a medium now and then.
+    fixed = tuple(lane_rules["sizes"]) if lane_rules.get("sizes") else None
+
     def sizes():
+        if fixed is not None:
+            return fixed
         return ("medium", "small") if rng.random() < lane_rules["mediumShare"] else ("small",)
 
     def fits(candidate):
@@ -3415,7 +3452,8 @@ def lane_messages(site, plan, doc):
         for node in (site.network.stretches[index]["from"], site.network.stretches[index]["to"]):
             degree[node] = degree.get(node, 0) + 1
     crossings = [site.network.nodes[node] for node, count in sorted(degree.items()) if count >= 3]
-    crossing_need = site.width / 2 + half + CHECK_LANE_CROSSING
+    # A tiles era measures from the street's hard surface (the band), not from its road.
+    crossing_need = (site.street_half if site.tiles else site.width / 2) + half + CHECK_LANE_CROSSING
     street_need = site.street_strip + half
     spur_need = site.spur_strip + half
     sound = {}  # lane index -> (points, length) for every lane the lots can be judged against
@@ -3454,7 +3492,9 @@ def lane_messages(site, plan, doc):
             if d < crossing_need - EPS:
                 messages.append(f"{label}: its mouth is {d:.2f} from the crossing at {streetplan.fmt(crossing)} (need {crossing_need:g})")
         # Its body.
-        for leg, (a, b) in enumerate(legs, start=1):
+        if site.tiles:
+            messages += tile_lane_messages(site, label, points, half, solids, polys, spur_need)
+        for leg, (a, b) in enumerate(legs if not site.tiles else (), start=1):
             body = streetplan.band(a, b, half)
             if any(abs(v[0]) > site.era.half_x - CHECK_EDGE + EPS or abs(v[1]) > site.era.half_z - CHECK_EDGE + EPS for v in body):
                 messages.append(f"{label}: leg {leg} comes within {CHECK_EDGE} of the plot edge")
@@ -3542,6 +3582,63 @@ def lane_messages(site, plan, doc):
         face = streetplan.facing(parcel["rotationY"])
         if face[0] * (foot[0] - fc[0]) + face[1] * (foot[1] - fc[1]) < -EPS:
             messages.append(f"{label}: faces away from lane {lane}")
+    return messages
+
+
+def lane_ground(site, points, half):
+    """A tiles-era alley's ground (INTERFACES "Wave 3.1", density rulings) as (leg number, a, b):
+    its polyline from where it leaves its street's pavement -- `street_half + half` along the first
+    leg from the mouth, so a leg's body (half its width past each end, as the footpath slab it is
+    drawn as) starts flush with the pavement's outer edge -- then every later leg whole. Empty when
+    the first leg ends inside that reach."""
+    legs = polyline_legs(points)
+    clip = site.street_half + half
+    a, b = legs[0]
+    if math.dist(a, b) <= clip + streetplan.MIN_LENGTH:
+        return []
+    return [(1, polyline_at([a, b], clip), b)] + [(k, a, b) for k, (a, b) in enumerate(legs[1:], start=2)]
+
+
+def tile_lane_messages(site, label, points, half, solids, polys, spur_need):
+    """A tiles-era alley's body: its ground keeps CHECK_LANE from every landmark's extents, pad,
+    marker, plaza, lamp, signal and the Sign, and from the deck band, the ramp cells and the kiosks;
+    stands on no street's hard surface (its own included, past the mouth); keeps its strip off every
+    landmark path; stays CHECK_EDGE inside the plot. Its mouth, where it crosses its own street's
+    pavement, holds no kiosk; and no lot stands on it, mouth included."""
+    messages = []
+    clip = site.street_half + half
+    ground = lane_ground(site, points, half)
+    if not ground:
+        first = math.dist(*polyline_legs(points)[0])
+        return [f"{label}: its first leg is {first:.2f} long and never leaves its street's pavement (need over {clip:g})"]
+    mouth = streetplan.band(points[0], ground[0][1], half)
+    for what, poly, _box in site.tile_solids:
+        if what.startswith("subway kiosk") and gap(mouth, poly) < CHECK_LANE - EPS:
+            messages.append(f"{label}: {what} stands {gap(mouth, poly):.2f} from its mouth across the pavement (need {CHECK_LANE})")
+    others = solids + [(what, poly) for what, poly, _box in site.tile_solids]
+    for leg, a, b in ground:
+        body = streetplan.band(a, b, half)
+        if any(abs(v[0]) > site.era.half_x - CHECK_EDGE + EPS or abs(v[1]) > site.era.half_z - CHECK_EDGE + EPS for v in body):
+            messages.append(f"{label}: leg {leg} comes within {CHECK_EDGE} of the plot edge")
+        box = box_of(body)
+        for what, poly in others:
+            if not boxes_apart(box, box_of(poly), CHECK_LANE) and gap(body, poly) < CHECK_LANE - EPS:
+                messages.append(f"{label}: leg {leg} is {gap(body, poly):.2f} from {what} (need {CHECK_LANE})")
+        for what, _polyline, _segment, band, band_box in site.street_bands:
+            if boxes_apart(box, band_box, 0.0):
+                continue
+            depth = overlap_depth(body, band)
+            if depth > TOUCH:
+                messages.append(f"{label}: leg {leg} stands {depth:.2f} on the hard surface of {what}")
+        for slot_id, p, q in site.spur_segments:
+            d = streetplan.segment_polygon_distance(p, q, [a, b])
+            if d < spur_need - EPS:
+                messages.append(f"{label}: leg {leg} is {d:.2f} from the {slot_id} path (its strip and the lane's body need {spur_need:g})")
+    for leg, (a, b) in enumerate(polyline_legs(points), start=1):
+        box = box_of(streetplan.band(a, b, half))
+        for index, poly in enumerate(polys, start=1):
+            if not boxes_apart(box, box_of(poly), 0.0) and segment_gap(a, b, poly) < half - EPS:
+                messages.append(f"{label}: parcel {index} stands {segment_gap(a, b, poly):.2f} from its centreline, on the lane (need {half:g})")
     return messages
 
 

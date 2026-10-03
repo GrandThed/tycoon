@@ -182,6 +182,20 @@ def placeholder_for(role, scale=1.0):
     return [placeholder_box([v * scale for v in size], color)]
 
 
+def trim_end(points, clip):
+    """RoadGraph.spurDrawPoints: a polyline's last leg cut `clip` studs short of its end, or dropped
+    when it is no longer than that."""
+    points = [tuple(point) for point in points]
+    if len(points) < 2:
+        return points
+    last, before = points[-1], points[-2]
+    length = math.dist(last, before)
+    if length < streetplan.MIN_LENGTH or length <= clip:
+        return points[:-1]
+    t = (length - clip) / length
+    return points[:-1] + [(before[0] + (last[0] - before[0]) * t, before[1] + (last[1] - before[1]) * t)]
+
+
 def blueprint_path(era_name, model_name, prop=False):
     root = BLUEPRINTS_DIR / "_props" / era_name if prop else BLUEPRINTS_DIR / era_name
     path = root / f"{model_name}.json"
@@ -796,12 +810,41 @@ class PlotScene:
         # the kerb and none of the four ground planes coincide. A non-tiles era draws baked meshes
         # in the client, so SPUR_TOP there is this tool's stand-in and mirrors nothing.
         top = self.thickness / 2 - SPUR_DROP if spur_cfg else SPUR_TOP
+        clip = self.footpath_clip()
         for slot in era.slots:
             spur = era.spurs[slot["id"]]
             if slot["id"] not in self.owned or not spur["points"]:
                 continue
-            for index, (a, b) in enumerate(streetplan.polyline_segments(spur["points"])):
+            points = trim_end(spur["points"], clip) if clip is not None else spur["points"]
+            for index, (a, b) in enumerate(streetplan.polyline_segments(points)):
                 self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, top, colour)
+
+    def footpath_clip(self):
+        """RoadGraph's state.spurClip: in a tiles era a footpath stops this far short of the
+        centreline it joins -- the road's half, the pavement and half the footpath, so the slab,
+        which overlaps half its width past each end, abuts the pavement's outer edge. None elsewhere."""
+        tiles = self.era.tiles
+        spur_cfg = (tiles or {}).get("spur")
+        if spur_cfg is None:
+            return None
+        return self.era.width / 2 + max(self.era.pavement, 0.0) + max(float(spur_cfg["width"]), streetplan.MIN_LENGTH) / 2
+
+    def build_tile_lanes(self, shown):
+        """M12 wave 3.1 alleys: a tiles era draws each shown lane (whole, once its reach is above
+        0) exactly as RoadGraph draws a tiles-era spur's footpath -- `road.tiles.spur` width and
+        colour, one flat slab per leg overlapping half its width past each end, its top SPUR_DROP
+        under the kerb -- from where it leaves the pavement: the first leg trimmed by the footpath
+        clip from the mouth (a first leg no longer than the clip is dropped, as spurDrawPoints
+        drops a last one). No rim, no discs, nothing baked."""
+        spur_cfg = self.era.tiles["spur"]
+        width = streetplan.spur_path_width(self.era)
+        colour = [int(v) for v in spur_cfg["color"]]
+        top = self.thickness / 2 - SPUR_DROP
+        clip = self.footpath_clip()
+        for lane in shown:
+            points = list(reversed(trim_end(list(reversed(lane["points"])), clip)))
+            for index, (a, b) in enumerate(streetplan.polyline_segments(points)):
+                self.ribbon(f"Lane{lane['index']}_{index}", a, b, width, top, colour)
 
     def build_lanes(self):
         """M12 wave 2.5 back lanes: every lane the settled fabric shows (any lot on it has a
@@ -829,6 +872,10 @@ class PlotScene:
         )
         if not shown:
             self.notes.append(note)
+            return
+        if self.era.tiles is not None:
+            self.build_tile_lanes(shown)
+            self.notes.append(note + " (tiles-era footpaths)")
             return
         bake, geom = lane_bake(self.era)
         pieces = {piece["lane"]: piece for piece in bake.pieces() if piece["kind"] == "lane"} if bake else {}
