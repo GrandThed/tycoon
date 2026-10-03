@@ -6408,7 +6408,7 @@ render; economy is untouched either way (type, cost, income, multiplier and `req
 **Prop swap (proposed, mirrored for the renders only):**
 `fabric.swaps: [{ requiresSlot, suffix, districts? }]`. While `requiresSlot` is owned, a parcel whose
 look is a building shows `<prop><suffix>` in place of `<prop>`, if that prop exists, limited to
-`districts` if given. Stage rules, height cap and lot are unchanged. A twin shares its body with the
+`districts` if given (the gate renders use none: twin existence already limits each swap). Stage rules, height cap and lot are unchanged. A twin shares its body with the
 original and changes only the roofs, so the swap plays as an ordinary stage-swap pop.
 
 **Site variants (lead, 2026-10-02; mirrored now, client in wave 3.2):** `fabric.siteVariants:
@@ -6439,6 +6439,28 @@ never showed the tower cranes CITY_GROWTH §2.3 promises for Metropolis.
 
 Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts and
 config blocks, and the client code.
+
+### State at the gate (lead, 2026-10-02)
+
+| | Avenues (`m12-metropolis-avenues`) | Boulevard (`m12-metropolis-boulevard`) |
+|---|---|---|
+| Lots at full build | **67**, all narrow, all on streets | **75**, all narrow: 13 on streets, 62 on four alleys |
+| Houses / sites by tier 1–4, full | 0/8, 15/3, 35/5, 48/3, 67/0 | 1/2, 30/13, 49/23, 62/13, 75/0 |
+| Tile cells | 42 | 39 |
+| `pull` | radius 34.5, tierTerm 0.15, thresholds [0.5, 1.5, 2.3, 3.2] | radius 110.37, tierTerm 0.4, reach 26, thresholds [2.2, 3.4, 4.6, 6.0] |
+| Reads as | three avenues of towers, open and varied | two massed alley superblocks and a tower row on the axis |
+
+Every gate is green on both branches: `fabric.py check` (all three fabric eras), `streetplan.py`
+under the fabric rules, `cityfabric.py selftest` and `timeline` (no FRAGILE), stylua and selene.
+
+City-changer lot effects on avenues: Bus Line 0, Street Trees **−10** (the park governs a whole row),
+Green Rooftops 0 (45 of 67 towers swap once the `districts` filter is dropped, as the renders do),
+Finance crowns 0 (16 office towers swap). All four at once: 53 lots.
+
+Known weak points: far plots draw 60 parcels (`budget.parcelsFar`), so 7 or 15 lots don't show there;
+civic landmarks govern residential towers (civic has no narrow prop); two cranes can stand side by side
+on one run; a highway pier stands in the plot entrance (as today); the cross-town street's south row
+shows its backs to the hub.
 
 ---
 
