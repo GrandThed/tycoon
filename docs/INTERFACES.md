@@ -6342,6 +6342,26 @@ point with nothing thrown away.
 - `eras.Metropolis.fabric` (config applied) names the draft props. `pull` holds first values for
   the layout owners to tune.
 
+### Rulings after the groundwork (lead, 2026-10-02)
+
+- **`levelStages` validity:** a non-empty array of whole numbers ≥ 0, otherwise absent. Past the
+  end of the list, each further level adds one stage to the last entry. Then `#stages − 1` and the
+  height cap apply as before.
+- **Old-town quarters** span [0, 6.5] in their local (+X, +Z) quadrant (`quarterOffset` 3.25), so a
+  clump is 13 × 13 and fits a pitch-28 block between its pavements. Grid pitch 14, aligned to the
+  lattice. `wild.quarterRadius` is 3.3 (the field rule needs `clear.pad` + radius ≥ 4.77).
+- **Old town may stand in the deck band and on the ramp cells until the highway is bought.** When
+  `highway.requiresSlot` is owned, the four deck-band rects and the ramp cells join the clearing
+  mask as rects with margin `clear.parcel`, so the ring clears its own ground. Lots never stand
+  there. Mirrored now; the client follows in wave 3.2. Wild stays off street bands and kiosks.
+- **No skirt for Metropolis:** the ring is the city's edge, and the Valley lies outside it.
+- **Tiles-era rules in `fabric.py check`** (each proven by mutation): no lot overlaps any planned
+  street's band (7.5); lots keep 0.5 off the deck band, ramp cells and kiosks; a next-pad marker
+  may not overlap the deck band, a ramp cell or a kiosk; no wild entry overlaps a street band or a
+  kiosk. `streetplan.py` tests a fabric era's street-only slots by their pads, not their nominal
+  footprints.
+- Markers may stand on the pavement over the walker line (as pads do); revisit in wave 3.2.
+
 ### Gate renders (`assets/testfit/out/Metropolis/`)
 
 - `m12m_today_{tier1,tier3,full}.png`: today's Metropolis with the current renderer (true colours).
