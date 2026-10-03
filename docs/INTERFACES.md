@@ -6309,7 +6309,7 @@ point with nothing thrown away.
   plot at tier 0 and redeveloped as the city spreads. It keeps off every planned street cell and
   its pavement band (where the park strips are), the deck band, the ramp cells and the kiosks.
   The skirt past the plot edge is optional and low.
-- **Lot sizes:** narrow 5 × 8, small 6 × 6, medium 8 × 8.
+- **Lot sizes:** narrow 4 × 8 (was 5 × 8; see the step 1 rulings), small 6 × 6, medium 8 × 8.
 - **Targets:** at least **110 lots** at full build (floor 90; `budget.parcels` is 140), building
   sites at every tier, and no tier 4 → full jump above 25 lots.
 - **Stand-in models:** this wave's draft props. `plotrender.py` draws blueprints, so nothing is
@@ -6341,6 +6341,56 @@ point with nothing thrown away.
   pieces.
 - `eras.Metropolis.fabric` (config applied) names the draft props. `pull` holds first values for
   the layout owners to tune.
+
+### Rulings after the groundwork (lead, 2026-10-02)
+
+- **`levelStages` validity:** a non-empty array of whole numbers ≥ 0, otherwise absent. Past the
+  end of the list, each further level adds one stage to the last entry. Then `#stages − 1` and the
+  height cap apply as before.
+- **Old-town quarters** span [0, 6.5] in their local (+X, +Z) quadrant (`quarterOffset` 3.25), so a
+  clump is 13 × 13 and fits a pitch-28 block between its pavements. Grid pitch 14, aligned to the
+  lattice. `wild.quarterRadius` is 3.3 (the field rule needs `clear.pad` + radius ≥ 4.77).
+- **Old town may stand in the deck band and on the ramp cells until the highway is bought.** When
+  `highway.requiresSlot` is owned, the four deck-band rects and the ramp cells join the clearing
+  mask as rects with margin `clear.parcel`, so the ring clears its own ground. Lots never stand
+  there. Mirrored now; the client follows in wave 3.2. Wild stays off street bands and kiosks.
+- **No skirt for Metropolis:** the ring is the city's edge, and the Valley lies outside it.
+- **Tiles-era rules in `fabric.py check`** (each proven by mutation): no lot overlaps any planned
+  street's band (7.5); lots keep 0.5 off the deck band, ramp cells and kiosks; a next-pad marker
+  may not overlap the deck band, a ramp cell or a kiosk; no wild entry overlaps a street band or a
+  kiosk. `streetplan.py` tests a fabric era's street-only slots by their pads, not their nominal
+  footprints.
+- Markers may stand on the pavement over the walker line (as pads do); revisit in wave 3.2.
+
+### Rulings after the step 1 layouts (lead, 2026-10-02): density
+
+Both candidates are legal, and both proved that **lots on streets alone cannot reach 90**: boulevard
+38, avenues 52. A street line costs about 31.6 studs of depth (15 of street, an 8-deep row on each
+side), so only three fit across the 105 studs inside the deck. Even with every landmark removed and
+the whole square tiled with rows, about 136 narrow lots would fit; after 22 landmarks, about 93. The
+contract's 110 was set from Village and Boomtown without that arithmetic. So:
+
+- **Narrow lots are 4 × 8** (frontage 4; config applied). About 25% more terrace towers.
+- **The candidates now differ in density as well as street shape**, so Ben chooses both together:
+  - **"avenues": lots on streets only** (no new technology). Target at least 60 lots.
+  - **"boulevard": streets plus pedestrian alleys** into deeper blocks, with a second row of
+    towers facing each alley. Target at least 90 lots. The boulevard concept stays; blocks get
+    deeper, and cross streets get fewer if needed.
+- **Tiles-era alleys** are the wave 2.4 lanes in a tiles era, drawn as Metropolis footpaths:
+  - Data: as wave 2.4. The `lanes` polyline's first point (the mouth) lies on the street
+    centreline; `stretch` and `along` give the mouth's address. Lots line both sides at
+    `parcels.lanes.setback`, facing the alley, with `lane` and `laneAlong`. `Develop` adds
+    `laneAlong`, as on Boomtown.
+  - Drawing: exactly a tiles-era spur's footpath: `road.tiles.spur` width (3), material and colour,
+    one flat Part per leg, top `SPUR_DROP` (0.01) under the kerb, clipped at the pavement's outer
+    edge (7.5 from the centreline), so it abuts the pavement and overlaps nothing. No rim, no discs,
+    no `Texture`. A tiles era bakes nothing. It is drawn whole once its reach is above 0, as in
+    wave 2.5. This is the look of the footpaths Ben approved in wave 2a.
+  - Config (applied): `fabric.lanes` `{ width 3, rim 0, fillHeight 0.09 }`; `clear.lane` 2.0.
+  - Alleys keep clear of landmark extents, pads, markers, kiosks, the deck band, ramp cells and
+    every other street's band except at their own mouth. A mouth is a gap in the street's frontage
+    at least the alley's width, clear of crossings and kiosks. Two alleys may meet end to end.
+  - The mirror draws them now; the client follows in wave 3.2.
 
 ### Gate renders (`assets/testfit/out/Metropolis/`)
 

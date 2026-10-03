@@ -12,8 +12,10 @@ coloured rectangles.
     py tools/testfit/plotrender.py Metropolis --tier 3
     py tools/testfit/plotrender.py Boomtown --camera overview
     py tools/testfit/plotrender.py Village --tier 2 --far
+    py tools/testfit/plotrender.py Metropolis --tier 3 --fabric <data.json> --out <dir>/try_tier3.png
 
-Outputs land in assets/testfit/out/<Era>/plot_<camera>.png.
+Outputs land in assets/testfit/out/<Era>/plot_<camera>.png, or where an `--out` ending in .png says.
+`--fabric` draws fabric data built with `fabric.py build --out` instead of the era's own.
 
 This half runs under the system `py` because it imports tools/streetplan.py, which needs Pillow;
 the rendering half is tools/testfit/plotscene.py, which runs inside Blender (no Pillow, no PIL
@@ -123,6 +125,7 @@ SLAB_THICKNESS = 0.2
 STRAIGHT_ENOUGH = 0.9
 MIN_STEP = 0.05
 ASSETS_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"  # read only, never written
+CITY_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json"
 MIN_VEHICLE_STRETCH = 16.0
 SMALL_LOT = "small"  # Scatter.SMALL_LOT: the lot kind that draws from `houses.smallProps`
 # TileRenderer.luau ground-slab constants, mirrored (geometry, not tunables).
@@ -155,6 +158,16 @@ PLACEHOLDERS = {
     "bus": ((2.4, 2.2, 6.0), PLACEHOLDER_BUS),
     "kiosk": ((4.0, 3.0, 5.0), PLACEHOLDER_HULL),
 }
+# M12 fabric props whose blueprints do not exist yet (wave 3.1 drafts): a lot's footprint inset by
+# FABRIC_INSET, a site FABRIC_SITE_HEIGHT tall and a building one FABRIC_STOREY per stage shown; a
+# wild clump or quarter a slab per quarter filling its quarter less FABRIC_INSET; a single a cube.
+# Scene-only numbers, so a mock reads before its props are drafted; the game draws nothing there.
+FABRIC_INSET = 0.5
+FABRIC_SITE_HEIGHT = 0.5
+FABRIC_STOREY = 1.6
+FABRIC_SLAB = 0.6
+FABRIC_SINGLE = 1.6
+FABRIC_COLORS = {"site": [214, 140, 52], "building": [176, 168, 158], "wild": [128, 102, 86], "single": [150, 120, 96]}
 
 
 def placeholder_box(size, color, offset=(0.0, 0.0, 0.0)):
@@ -1083,26 +1096,30 @@ class PlotScene:
             if look is None:
                 continue
             parcel = parcel_view["parcel"]
+            path = blueprint_path(era.name, look["prop"], prop=True)
             self.model(
                 f"Parcel{parcel_view['index']}",
-                blueprint_path(era.name, look["prop"], prop=True),
+                path,
                 (parcel["x"], 0.0, parcel["z"]),
                 rot_y=parcel["rotationY"],
                 stage=look["stage"],
                 wanted=look["prop"],
+                placeholder=self.parcel_placeholder(parcel_view) if path is None else None,
             )
         for item in view["wild"]:
             if item["prop"] is None:
                 continue  # a variant with no name in the config's lists: nothing spawns
             suffix = f"_{item['quarter']}" if item["kind"] == "quarter" else ""
+            path = blueprint_path(era.name, item["prop"], prop=True)
             self.model(
                 f"Wild{item['index']}{suffix}",
-                blueprint_path(era.name, item["prop"], prop=True),
+                path,
                 (item["x"], item["y"], item["z"]),
                 rot_y=item["rotationY"],
                 stage=0,
                 wanted=item["prop"],
                 scale=item["scale"],
+                placeholder=self.wild_placeholder(item) if path is None else None,
             )
         for pad in view["pads"]:
             marker = pad["marker"]
@@ -1136,6 +1153,29 @@ class PlotScene:
         for plume in view["plumes"]:
             self.plume(f"Smoke{plume['index']}", (plume["x"], plume["y"], plume["z"]), self.fabric.smoke)
         self.fabric_notes(view)
+
+    def parcel_placeholder(self, parcel_view):
+        """A fabric lot whose prop has no blueprint yet: its footprint, a site's low slab or a
+        building one storey per stage shown (FABRIC_* above)."""
+        look = parcel_view["look"]
+        rect = parcel_view["rect"]
+        width, depth = max(2 * rect["hx"] - FABRIC_INSET, 0.5), max(2 * rect["hz"] - FABRIC_INSET, 0.5)
+        if look["kind"] == cityfabric.SITE:
+            return [placeholder_box((width, FABRIC_SITE_HEIGHT, depth), FABRIC_COLORS["site"])]
+        return [placeholder_box((width, FABRIC_STOREY * (look["stage"] + 1), depth), FABRIC_COLORS["building"])]
+
+    def wild_placeholder(self, item):
+        """A wild entry whose prop has no blueprint yet: a slab per quarter -- its quarters' centres
+        read back from the data's `quads`, so the slab sits where the quarter prop's content will --
+        or a cube for a single."""
+        if item["kind"] == "single":
+            return [placeholder_box((FABRIC_SINGLE, FABRIC_SINGLE, FABRIC_SINGLE), FABRIC_COLORS["single"])]
+        entry = self.fabric.wild_data[item["index"] - 1]
+        quad = entry["quads"][0]
+        offset = cityfabric.rotate(quad[0] - entry["x"], quad[1] - entry["z"], -entry["rotationY"])[0]
+        side = max(2 * abs(offset) - FABRIC_INSET, 0.5)
+        corners = [(offset, offset)] if item["kind"] == "quarter" else [(sx * offset, sz * offset) for sx in (1, -1) for sz in (1, -1)]
+        return [placeholder_box((side, FABRIC_SLAB, side), FABRIC_COLORS["wild"], (x, 0.0, z)) for x, z in corners]
 
     def fabric_notes(self, view):
         fabric = self.fabric
@@ -2127,7 +2167,16 @@ def main():
         default="overview",
         help="overview | entrance | ramp | plaza | cityhall | x,z",
     )
-    parser.add_argument("--out", help="output file stem (default plot_<camera>)")
+    parser.add_argument(
+        "--out",
+        help="output file stem under assets/testfit/out/<Era>/ (default plot_<camera>), or a path ending "
+        "in .png, written there",
+    )
+    parser.add_argument(
+        "--fabric",
+        help="city fabric data to draw instead of src/shared/Config/Fabric/<Era>.json (a plan built with "
+        "`fabric.py build --out`)",
+    )
     parser.add_argument(
         "--far",
         action="store_true",
@@ -2138,7 +2187,7 @@ def main():
     args = parser.parse_args()
 
     started = time.time()
-    city = json.loads((REPO_ROOT / "src" / "shared" / "Config" / "CityDressing.json").read_text(encoding="utf-8"))
+    city = json.loads(CITY_CONFIG_PATH.read_text(encoding="utf-8"))
     era = streetplan.Era(args.era, city)
     network = streetplan.Network(era)
     tier = args.tier
@@ -2152,7 +2201,8 @@ def main():
         history = cityfabric.greedy_history(era.name, city)
         levels, fabric_tier, moment = cityfabric.tier_snapshot(history, tier)
         stages = cityfabric.landmark_stages(era.config, owned, levels)
-    fabric = cityfabric.FabricPlot.load(era.name, city=city, era=era, network=network)
+    data = cityfabric.load_json(args.fabric) if args.fabric else None
+    fabric = cityfabric.FabricPlot.load(era.name, city=city, era=era, network=network, data=data)
 
     camera_name = args.camera
     if camera_name not in CAMERAS and camera_name != "entrance":
@@ -2175,7 +2225,7 @@ def main():
         near=not args.far,
     ).build()
     stem = args.out or f"plot_{args.camera.replace(',', '_')}"
-    out_path = OUT_ROOT / era.name / f"{stem}.png"
+    out_path = Path(stem).resolve() if stem.lower().endswith(".png") else OUT_ROOT / era.name / f"{stem}.png"
     scene_spec = {
         "era": era.name,
         "out": str(out_path),
