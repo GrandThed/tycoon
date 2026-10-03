@@ -297,7 +297,7 @@ def render_blueprint(bp_path, out_dir, only_stage, prop=False, ground=GROUND_RGB
     library.hide_viewport = True
 
     cache = PieceCache(library)
-    placed = []  # (stage, root_empty, name)
+    placed = []  # (piece, root_empty)
     for piece in bp.pieces:
         roots = cache.get(piece.kit, piece.model)
         if roots is None:
@@ -307,7 +307,7 @@ def render_blueprint(bp_path, out_dir, only_stage, prop=False, ground=GROUND_RGB
         holder.rotation_euler = (0.0, 0.0, math.radians(piece.rot_y))
         building.objects.link(holder)
         cache.instantiate(roots, holder, building)
-        placed.append((piece.stage, holder, piece.label))
+        placed.append((piece, holder))
 
     bpy.context.view_layer.update()
 
@@ -345,9 +345,12 @@ def render_blueprint(bp_path, out_dir, only_stage, prop=False, ground=GROUND_RGB
     stages = [only_stage] if only_stage is not None else list(range(stage_total))
     outputs = {}
     for stage in stages:
+        # Which pieces a stage has is the blueprint's rule (`stage`, `untilStage`), not this loop's.
+        present = {piece.index for piece in bp.pieces_at(stage)}
+        retired = len(bp.retired_at(stage))
         visible = []
-        for pstage, holder, _ in placed:
-            show = pstage <= stage
+        for piece, holder in placed:
+            show = piece.index in present
             for o in all_descendants([holder]):
                 o.hide_render = not show
             if show:
@@ -359,14 +362,15 @@ def render_blueprint(bp_path, out_dir, only_stage, prop=False, ground=GROUND_RGB
             lo, hi = bounds
             size = (hi - lo) * scale
             log(
-                f"stage {stage}: {len(visible)} pieces, bounds studs "
+                f"stage {stage}: {len(visible)} pieces{f' ({retired} retired)' if retired else ''}, bounds studs "
                 f"x[{lo.x * scale:.2f}, {hi.x * scale:.2f}] "
                 f"y[{lo.y * scale:.2f}, {hi.y * scale:.2f}] "
                 f"z[{lo.z * scale:.2f}, {hi.z * scale:.2f}] "
                 f"size {size.x:.2f} x {size.y:.2f} x {size.z:.2f}"
             )
-        for pstage, holder, name in placed:
-            if pstage != stage:
+        for piece, holder in placed:
+            name = piece.label
+            if piece.stage != stage:
                 continue
             b = gltf_bounds([holder])
             if b is None:

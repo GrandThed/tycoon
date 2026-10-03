@@ -51,9 +51,23 @@ renders here merges there.
 - `pos`: kit units before scaling, X / Y / Z with Y up (glTF and Roblox convention). The
   building's front faces -Z.
 - `rotY`: degrees about Y. `+90` turns a piece's +X side to face -Z.
-- `stage`: first stage (0 to 4) at which the piece exists. Stages only ever add pieces: a piece
-  with stage N is present at every stage >= N. Nothing is ever removed, so a roof that a later
-  storey replaces has to be buried inside that storey (see the notes below).
+- `stage`: first stage (0 to 4) at which the piece exists. A piece with stage N is present at
+  every stage >= N unless it has an `untilStage`. Without one nothing is ever removed, so a roof
+  that a later storey replaces has to be buried inside that storey (see the notes below).
+- `untilStage` (optional, a whole number >= the piece's `stage`): the last stage the piece is part
+  of. It is in stages `stage` to `untilStage` and gone from every later one, so a roof can be
+  retired when the next storeys cover it instead of staying buried in every later mesh (the
+  Metropolis towers do this to save triangles). Rules, all in `blueprint.py` (`pieces_at`), which
+  every tool asks -- the strips, `merge_stages.py`, the plot renders and the height measurement:
+  - the stage count does not change: it is still the highest `stage` + 1;
+  - an `untilStage` at or past the blueprint's last stage retires nothing, and a stage past the
+    last one looks like the last one;
+  - an `untilStage` before the piece's own `stage`, or one that is not a whole number, rejects the
+    blueprint;
+  - a piece that leaves at a stage where no piece joins draws a warning: that stage would only
+    lose geometry, a building that shrinks as the player levels it.
+  The strip log and the merge log say `N pieces (M retired)` at a stage that has retired pieces,
+  and the merge sidecar records `retired`.
 
 City-dressing props live under `blueprints/_props/<Era>/<PropName>.json` (same schema, usually one
 stage) and run through the same tools with `--props`. **Careful: `upload_models.py --props

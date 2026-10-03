@@ -7,6 +7,10 @@ Path convention: tools/testfit/blueprints/<Era>/<ModelName>.json, where the file
 era config's modelName and the blueprint's "id". City-dressing props (INTERFACES.md "M9 contracts")
 use the same schema under tools/testfit/blueprints/_props/<Era>/<PropName>.json; they are not slots,
 so their stage count is the blueprint's own (max stage + 1).
+
+Which pieces a stage has is decided in one place, Blueprint.pieces_at: a piece joins at its `stage`
+and, with the optional `untilStage`, leaves after that one (INTERFACES "Wave 3.2"). Every tool that
+draws, merges or measures a stage asks pieces_at, never the `stage` key itself.
 """
 
 from __future__ import annotations
@@ -36,6 +40,8 @@ class Piece:
     rot_y: float
     stage: int
     index: int
+    # `untilStage`: the last stage the piece is part of. None = it stays for good.
+    until: int | None = None
 
     @property
     def label(self) -> str:
@@ -65,8 +71,17 @@ class Blueprint:
         return sorted({p.kit for p in self.pieces})
 
     def pieces_at(self, stage: int) -> list[Piece]:
-        """Pieces visible at a stage; stages are additive."""
-        return [p for p in self.pieces if p.stage <= stage]
+        """Pieces present at a stage, in blueprint order: a piece joins at its `stage` and stays,
+        unless it has an `untilStage`, after which it is gone. A stage past the blueprint's last
+        looks like the last one (a 5-stage slot whose blueprint stops at 2 repeats stage 2), so an
+        `untilStage` at or past the last stage retires nothing."""
+        at = min(stage, self.max_stage)
+        return [p for p in self.pieces if p.stage <= at and (p.until is None or at <= p.until)]
+
+    def retired_at(self, stage: int) -> list[Piece]:
+        """Pieces that have joined by a stage and are gone from it again."""
+        at = min(stage, self.max_stage)
+        return [p for p in self.pieces if p.stage <= at and p.until is not None and at > p.until]
 
 
 def blueprint_path(era: str, model: str) -> str:
@@ -154,7 +169,23 @@ def parse_blueprint(data: object, path: str) -> Blueprint:
         if not (0 <= stage < STAGE_COUNT):
             warnings.append(f"piece {index} ({model}) has stage {stage}, clamped to 0..{STAGE_COUNT - 1}")
             stage = max(0, min(STAGE_COUNT - 1, stage))
-        pieces.append(Piece(kit, model, (pos[0], pos[1], pos[2]), rot_y, stage, index))
+        until_raw = raw.get("untilStage")
+        until = None
+        if until_raw is not None:
+            if isinstance(until_raw, bool) or not isinstance(until_raw, (int, float)) or until_raw != int(until_raw):
+                raise BlueprintError(f"piece {index} untilStage must be an integer, got {until_raw!r}")
+            until = int(until_raw)
+            if until < stage:
+                raise BlueprintError(f"piece {index} ({model}) has untilStage {until} before its stage {stage}: it would never exist")
+        pieces.append(Piece(kit, model, (pos[0], pos[1], pos[2]), rot_y, stage, index, until))
+
+    # A piece may only leave when another joins: a stage that just loses geometry is a building
+    # that shrinks when the player levels it.
+    last = max((p.stage for p in pieces), default=0)
+    joins = {p.stage for p in pieces}
+    for p in pieces:
+        if p.until is not None and p.until < last and p.until + 1 not in joins:
+            warnings.append(f"piece {p.index} ({p.model}) leaves after stage {p.until} but no piece joins at stage {p.until + 1}: that stage only loses geometry")
 
     return Blueprint(bid, era, scale, footprint, pieces, os.path.abspath(path), warnings)
 

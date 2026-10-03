@@ -74,7 +74,7 @@ Kits for this era: <palette from pre-flight>. Do not edit `testfit.py` or any ot
 ## Design rules
 - Each building must read as its name at every stage. Earlier slots in the era config must read humbler than later ones at the same stage. <tallest-silhouette note for this set>.
 - Measure with `--dump-bounds <kit>` before placing anything; no floating or clipping pieces; no footprint warning (the warning prints only at the stage a piece first appears, so check a full 5-stage run). ≤ 60 pieces at stage 4 (≤ 80 for the monument); aim lower.
-- Additive stages: a piece never disappears, so anything buried by a later storey must have no outward face on a cell boundary (see README: hips/points/slabs bury cleanly, open-ended gables do not; chimneys go inside the cell with only the cap showing).
+- Additive stages: a piece stays from its `stage` on unless it carries `untilStage` (M12 wave 3.2: it then leaves after that stage, e.g. a roof the next storeys cover). Anything left buried by a later storey must have no outward face on a cell boundary (see README: hips/points/slabs bury cleanly, open-ended gables do not; chimneys go inside the cell with only the cap showing).
 
 ## Process
 For each building: draft the JSON, render, Read the strip, fix, repeat until every stage looks intentional. Do them in slot order. Keep the JSON tidy (one piece per line, grouped by stage 0→4).

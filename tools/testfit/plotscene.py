@@ -268,9 +268,7 @@ def build_model(spec, cache, collection, blueprints, missing, materials):
     root.scale = (entry.scale * float(spec.get("scale", 1.0)),) * 3
     collection.objects.link(root)
     placed = 0
-    for piece in entry.pieces:
-        if piece.stage > stage:
-            continue
+    for piece in entry.pieces_at(stage):
         roots = cache.get(piece.kit, piece.model)
         if roots is None:
             continue

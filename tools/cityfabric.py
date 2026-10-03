@@ -1124,8 +1124,9 @@ class Heights:
         return (BLUEPRINTS_DIR / "_props" / self.era_name / f"{prop}.json").exists()
 
     def blueprint_heights(self, prop):
-        """Each stage's y-range in studs: the pieces up to that stage (stages are additive), turned
-        about Y only, so their y-extent is the kit GLB's, lifted by pos.y and scaled."""
+        """Each stage's y-range in studs: the pieces that stage has (`pieces_at`: joined by then and
+        not retired by an `untilStage`), turned about Y only, so their y-extent is the kit GLB's,
+        lifted by pos.y and scaled."""
         if not isinstance(prop, str):
             return []
         path = BLUEPRINTS_DIR / "_props" / self.era_name / f"{prop}.json"

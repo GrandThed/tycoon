@@ -6,8 +6,9 @@ Runs inside Blender (headless):
     blender -b -P tools/assets/merge_stages.py -- --props --era Village [--model TreeGrowing]
 
 For every blueprint in tools/testfit/blueprints/<Era>/ (or just --model) and every stage the slot
-has (5 for `building`, 1 otherwise; stages are additive), the pieces present at that stage are
-placed exactly as tools/testfit/testfit.py places them, joined into ONE mesh per kit, scaled by
+has (5 for `building`, 1 otherwise), the pieces present at that stage (Blueprint.pieces_at: joined
+by then and, with `untilStage`, not yet retired) are placed exactly as tools/testfit/testfit.py
+places them, joined into ONE mesh per kit, scaled by
 the blueprint's scale about the blueprint origin (bottom-centre of the footprint, front -Z) and
 exported to assets/build/stages/<Era>/<ModelName>_S<n>.glb with one node, one material and one
 embedded PNG per kit. A bounds sidecar assets/build/stages/<Era>/<ModelName>.json records
@@ -107,7 +108,7 @@ def stage_count_for(bp: Blueprint, slot_type: str | None) -> int:
         return STAGE_COUNT
     if slot_type in SINGLE_STAGE_TYPES:
         if bp.max_stage > 0:
-            warn(f"{bp.id}: {slot_type} slot has pieces at stage {bp.max_stage}; all pieces go into S0")
+            warn(f"{bp.id}: {slot_type} slot has pieces at stage {bp.max_stage}; its last stage goes into S0")
         return 1
     warn(f"{bp.id}: no slot of that modelName in the {bp.era} era config; guessing from the blueprint")
     return STAGE_COUNT if bp.max_stage > 0 else 1
@@ -435,9 +436,14 @@ def merge_blueprint(bp: Blueprint, slot_type: str | None, out_root: str) -> dict
     }
     hx, hz = bp.footprint[0] / 2, bp.footprint[1] / 2
     for stage in range(stage_count):
-        pieces = bp.pieces if stage_count == 1 else bp.pieces_at(stage)
+        # A single-stage slot shows the blueprint's last stage: every piece no `untilStage` retired.
+        at = bp.max_stage if stage_count == 1 else stage
+        pieces = bp.pieces_at(at)
+        retired = len(bp.retired_at(at))
         joined = build_stage(bp, stage, pieces, library, paints, stage_coll)
         entry = {"stage": stage, "pieces": len(pieces), "kits": {}, "glb": None}
+        if retired:
+            entry["retired"] = retired
         if not joined:
             warn(f"{bp.era}/{bp.id} S{stage}: nothing to export (no importable pieces)")
             report["stages"].append(entry)
@@ -487,7 +493,7 @@ def merge_blueprint(bp: Blueprint, slot_type: str | None, out_root: str) -> dict
             warn(f"{bp.era}/{bp.id} S{stage}: geometry {-lo_all.y:.2f} studs below ground")
         tris = sum(k["triangles"] for k in entry["kits"].values())
         log(
-            f"{bp.era}/{bp.id} S{stage}: {len(pieces)} pieces, {len(joined)} kit(s), "
+            f"{bp.era}/{bp.id} S{stage}: {len(pieces)} pieces{f' ({retired} retired)' if retired else ''}, {len(joined)} kit(s), "
             f"{entry['size'][0]:.2f} x {entry['size'][1]:.2f} x {entry['size'][2]:.2f} studs, "
             f"{tris} tris, {len(data) / 1024:.0f} KB -> {entry['glb']}"
         )
