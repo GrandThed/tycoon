@@ -948,20 +948,43 @@ def make_site_cabin() -> Part:
     return p
 
 
-def make_tower_crane() -> Part:
-    """A tower crane, 13.85 studs tall (mast 11.4), its jib reaching 9.2 studs along -X and its counter-jib 3.3
-    along +X: a concrete footing, a square lattice mast in the kit's yellow, the slewing deck with
-    the white cab facing along the jib, a triangular lattice jib with its trolley and hook, the
-    counter-jib with two concrete counterweights, and the cat-head with its ties. Origin at the
-    mast's foot."""
-    p = Part("tower-crane")
-    block(p, -0.65, 0.65, 0.0, 0.3, -0.65, 0.65, STONE_DARK, top=STONE)
-    m, foot, top = 0.42, 0.3, 11.4  # mast half-width, chord foot, mast top
-    chord = 0.13
+# The two tower cranes' dimensions, in studs. "tall" stands on SiteMedium; "slim" on the narrow
+# and small sites (site variants), whose lots are 4 and 6 studs wide, so its jib runs front to back
+# over its own lot and neighbouring jibs stay parallel. Members are never under MIN_MEMBER.
+CRANES = {
+    "tall": {
+        "footing": 0.65, "foot": 0.3, "mast": 0.42, "chord": 0.13, "top": 11.4, "sections": 10,
+        "deck": 0.6, "cab": (-1.25, -0.6, -0.62, -0.05, 0.7, 0.22),
+        "jib_h": 0.62, "jib_w": 0.28, "reach": -9.2, "bays": 9,
+        "trolley": -5.4, "hook": 7.4,
+        "counter": 3.3, "counter_w": 0.32, "weights": (2.15, 2.9), "weight": (0.33, 0.55, 0.36), "rail": 1.75,
+        "apex": 2.4, "cat": 0.35, "tie": (-4.8, 3.1),
+    },
+    "slim": {
+        "footing": 0.45, "foot": 0.25, "mast": 0.3, "chord": 0.12, "top": 9.8, "sections": 9,
+        "deck": 0.42, "cab": (-0.95, -0.42, -0.42, 0.0, 0.62, 0.18),
+        "jib_h": 0.5, "jib_w": 0.2, "reach": -7.2, "bays": 7,
+        "trolley": -4.2, "hook": 6.6,
+        "counter": 1.9, "counter_w": 0.25, "weights": (1.55,), "weight": (0.3, 0.45, 0.3), "rail": 1.2,
+        "apex": 1.9, "cat": 0.25, "tie": (-3.8, 1.75),
+    },
+}
+
+
+def tower_crane(name: str, c: dict) -> Part:
+    """A tower crane from one CRANES entry, its jib out along -X and its counter-jib along +X, origin
+    at the mast's foot: a concrete footing, a square lattice mast in the kit's yellow, the slewing
+    deck with the white cab facing along the jib, a triangular lattice jib with its trolley and hook,
+    the counter-jib with its concrete counterweights and a rail, and the cat-head with its ties."""
+    p = Part(name)
+    f = c["footing"]
+    block(p, -f, f, 0.0, c["foot"], -f, f, STONE_DARK, top=STONE)
+    m, foot, top = c["mast"], c["foot"], c["top"]
+    chord = c["chord"]
     corners = ((-m, -m), (m, -m), (m, m), (-m, m))
     for x, z in corners:
         block(p, x - chord / 2, x + chord / 2, foot, top, z - chord / 2, z + chord / 2, YELLOW, skip=("bottom", "top"))
-    sections = 10
+    sections = c["sections"]
     step = (top - foot) / sections
     for k in range(sections):
         y0, y1 = foot + k * step, foot + (k + 1) * step
@@ -971,21 +994,23 @@ def make_tower_crane() -> Part:
                 (xa, za), (xb, zb) = (xb, zb), (xa, za)
             rod(p, (xa, y0, za), (xb, y1, zb), MIN_MEMBER, YELLOW_DEEP, sides=3)
     # slewing deck and cab
-    block(p, -0.6, 0.6, top, top + 0.3, -0.6, 0.6, YELLOW, top=YELLOW_DEEP, skip=())
-    block(p, -1.25, -0.6, top - 0.7, top + 0.22, -0.62, -0.05, PALE, top=STONE)
-    on_wall(p, ("x", -1.25, -1), -0.55, -0.12, top - 0.6, top - 0.15, MIN_GAP, BLUE, edge=GREY)
-    on_wall(p, ("z", -0.62, -1), -1.15, -0.6, top - 0.6, top - 0.15, MIN_GAP, BLUE, edge=GREY)
+    d = c["deck"]
+    block(p, -d, d, top, top + 0.3, -d, d, YELLOW, top=YELLOW_DEEP, skip=())
+    cx0, cx1, cz0, cz1, below, above = c["cab"]
+    block(p, cx0, cx1, top - below, top + above, cz0, cz1, PALE, top=STONE)
+    on_wall(p, ("x", cx0, -1), cz0 + 0.07, cz1 - 0.07, top - below + 0.1, top - 0.15, MIN_GAP, BLUE, edge=GREY)
+    on_wall(p, ("z", cz0, -1), cx0 + 0.1, cx1, top - below + 0.1, top - 0.15, MIN_GAP, BLUE, edge=GREY)
     # jib: two bottom chords and a top chord, braced on both flanks, out along -X
-    jy, jh, jw, reach = top + 0.3, 0.62, 0.28, -9.2
-    rod(p, (0.6, jy + 0.05, -jw), (reach, jy + 0.05, -jw), MIN_MEMBER, YELLOW, caps=True)
-    rod(p, (0.6, jy + 0.05, jw), (reach, jy + 0.05, jw), MIN_MEMBER, YELLOW, caps=True)
+    jy, jh, jw, reach = top + 0.3, c["jib_h"], c["jib_w"], c["reach"]
+    rod(p, (d, jy + 0.05, -jw), (reach, jy + 0.05, -jw), MIN_MEMBER, YELLOW, caps=True)
+    rod(p, (d, jy + 0.05, jw), (reach, jy + 0.05, jw), MIN_MEMBER, YELLOW, caps=True)
     rod(p, (0.0, jy + jh, 0.0), (reach + 0.4, jy + jh * 0.35, 0.0), MIN_MEMBER, YELLOW, caps=True)
     tip = reach + 0.4
 
     def chord_y(x: float) -> float:
         return jy + jh - 0.65 * jh * (x / tip)
 
-    bays = 9
+    bays = c["bays"]
     for k in range(bays):
         xa = -0.1 + (tip + 0.1) * k / bays
         xb = -0.1 + (tip + 0.1) * (k + 1) / bays
@@ -996,23 +1021,40 @@ def make_tower_crane() -> Part:
                 a, b = (xa, jy + 0.05, side), (xb, chord_y(xb), 0.0)
             rod(p, a, b, MIN_MEMBER, YELLOW_DEEP, sides=3)
     # trolley, hoist rope and hook block
-    tx = -5.4
-    block(p, tx - 0.25, tx + 0.25, jy - 0.14, jy - 0.02, -0.34, 0.34, SLATE, skip=())
-    rod(p, (tx, jy - 0.14, 0.0), (tx, 7.4, 0.0), MIN_MEMBER, IRON)
-    block(p, tx - 0.17, tx + 0.17, 7.0, 7.4, -0.14, 0.14, RED, skip=(), top=YELLOW)
+    tx, hook = c["trolley"], c["hook"]
+    block(p, tx - 0.25, tx + 0.25, jy - 0.14, jy - 0.02, -jw - 0.06, jw + 0.06, SLATE, skip=())
+    rod(p, (tx, jy - 0.14, 0.0), (tx, hook, 0.0), MIN_MEMBER, IRON)
+    block(p, tx - 0.17, tx + 0.17, hook - 0.4, hook, -0.14, 0.14, RED, skip=(), top=YELLOW)
     # counter-jib with its counterweights and a rail
-    block(p, 0.6, 3.3, jy, jy + 0.16, -0.32, 0.32, YELLOW, skip=(), top=YELLOW_DEEP)
-    for x in (2.15, 2.9):
-        block(p, x - 0.33, x + 0.33, jy - 0.55, jy + 0.55, -0.36, 0.36, STONE, top=STONE_LIGHT)
-    rod(p, (0.6, jy + 0.6, 0.32), (1.75, jy + 0.6, 0.32), MIN_MEMBER, YELLOW, caps=True)
+    cw = c["counter_w"]
+    block(p, d, c["counter"], jy, jy + 0.16, -cw, cw, YELLOW, skip=(), top=YELLOW_DEEP)
+    wx, wy, wz = c["weight"]
+    for x in c["weights"]:
+        block(p, x - wx, x + wx, jy - wy, jy + wy, -wz, wz, STONE, top=STONE_LIGHT)
+    rod(p, (d, jy + 0.6, cw), (c["rail"], jy + 0.6, cw), MIN_MEMBER, YELLOW, caps=True)
     # cat-head and ties
-    apex = (0.0, top + 2.4, 0.0)
-    for x, z in ((-0.35, -0.35), (0.35, -0.35), (0.35, 0.35), (-0.35, 0.35)):
+    apex = (0.0, top + c["apex"], 0.0)
+    q = c["cat"]
+    for x, z in ((-q, -q), (q, -q), (q, q), (-q, q)):
         rod(p, (x, top + 0.3, z), apex, MIN_MEMBER, YELLOW, sides=3)
-    rod(p, apex, (-4.8, chord_y(-4.8), 0.0), MIN_MEMBER, IRON)
-    rod(p, apex, (3.1, jy + 0.16, 0.0), MIN_MEMBER, IRON)
+    front, back = c["tie"]
+    rod(p, apex, (front, chord_y(front), 0.0), MIN_MEMBER, IRON)
+    rod(p, apex, (back, jy + 0.16, 0.0), MIN_MEMBER, IRON)
     block(p, -0.08, 0.08, apex[1] - 0.05, apex[1] + 0.05, -0.08, 0.08, RED, skip=())
     return p
+
+
+def make_tower_crane() -> Part:
+    """SiteMedium's tower crane, 13.85 studs tall (mast 11.4), its jib reaching 9.2 studs along -X and
+    its counter-jib 3.3 along +X, with two counterweights."""
+    return tower_crane("tower-crane", CRANES["tall"])
+
+
+def make_tower_crane_slim() -> Part:
+    """The narrow and small sites' tower crane, 12.0 studs tall (mast 9.8), its jib reaching 7.2
+    studs along -X and its counter-jib 1.9 along +X, with one counterweight: the same build on a
+    0.6-stud mast, so it still reads as a crane from the tycoon camera at a third less mass."""
+    return tower_crane("tower-crane-slim", CRANES["slim"])
 
 
 def make_scaffold_ring() -> Part:
@@ -1101,6 +1143,7 @@ PIECES = {
     "mixer": make_mixer,
     "site-cabin": make_site_cabin,
     "tower-crane": make_tower_crane,
+    "tower-crane-slim": make_tower_crane_slim,
     "scaffold-ring": make_scaffold_ring,
     "lot-hoarding": make_lot_hoarding,
 }

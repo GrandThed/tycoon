@@ -1008,6 +1008,17 @@
           "medium": "SiteMedium",
           "narrow": "SiteNarrow"
         },
+        "siteVariants": {
+          "narrow": [
+            "SiteNarrow",
+            "SiteNarrowCrane",
+            "SiteNarrow"
+          ],
+          "small": [
+            "SiteSmall",
+            "SiteSmallCrane"
+          ]
+        },
         "wild": {
           "clumps": [
             "OldTownClumpA",

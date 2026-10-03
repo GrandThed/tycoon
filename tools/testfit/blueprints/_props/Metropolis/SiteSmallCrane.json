@@ -1,0 +1,18 @@
+{
+  "id": "SiteSmallCrane",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [6, 6],
+  "note": "SiteSmall with the slim tower crane (site variant) at its back-right corner, the mixer moved into the gate; the jib runs front to back and overhangs the front by 1.75, the counter-jib the back by 1.35, overhead. Mast 9.8, cat-head 11.75",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "site-ground-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "frame-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "scaffold", "pos": [1.45, 0, 0.72], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [-2.0, 0, -2.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [1.95, 0, -2.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "steel-stack", "pos": [2.4, 0, -0.35], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "mixer", "pos": [0.0, 0, -2.4], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "block-pallet", "pos": [0.0, 0.2, -0.3], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "tower-crane-slim", "pos": [2.45, 0, 2.45], "rotY": 270, "stage": 0}
+  ]
+}

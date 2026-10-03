@@ -47,7 +47,9 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     band's four rects and the ramp's cells (ring_rects, Highway.luau's ring, pitch and rampCells)
     join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2.
 
-`timeline --fabric <data.json>` reads data built with `fabric.py build --out` instead of the era's own.
+`timeline --fabric <data.json>` reads data built with `fabric.py build --out` instead of the era's own,
+and `--config <CityDressing.json>` a scratch config instead of the repo's. Wave 3.1 also mirrors
+`fabric.siteVariants` (site_look) and the proposed `fabric.swaps` (valid_swaps, swapped_look).
 
 Heights. A landmark's height at a stage comes from its Assets.json stage parts, measured exactly as
 the client measures it (no entry: 0). A fabric prop uses Assets.json when it has an entry there;
@@ -652,12 +654,60 @@ def stage_heights(model):
     return heights
 
 
-def site_look(config, size):
+def site_look(config, size, index=None):
+    """Fabric's level-1 look: (wave 3.1) `siteVariants[size]` when that is a non-empty list, parcel
+    `index` taking `list[((index - 1) % #list) + 1]` as the district props do -- a non-name entry
+    there spawns nothing -- else `sites[size]`."""
+    variants = config.get("siteVariants")
+    if index is not None and isinstance(variants, dict):
+        chosen = for_size(size, variants.get("small"), variants.get("medium"), variants.get("narrow"))
+        if isinstance(chosen, list) and len(chosen) > 0:
+            prop = chosen[(index - 1) % len(chosen)]
+            return {"kind": SITE, "prop": prop, "stage": 0} if isinstance(prop, str) else None
     sites = config.get("sites")
     if not isinstance(sites, dict):
         return None
     prop = for_size(size, sites.get("small"), sites.get("medium"), sites.get("narrow"))
     return {"kind": SITE, "prop": prop, "stage": 0} if isinstance(prop, str) else None
+
+
+def valid_swaps(value):
+    """`fabric.swaps` (wave 3.1 city-changer proposal, mirrored for the renders): the well-formed
+    entries in list order, as {requiresSlot, suffix, districts (a set, or None for every district)}.
+    An entry needs a name `requiresSlot` and a non-empty `suffix`; `districts`, when present, must be
+    a list of names. Anything else is skipped."""
+    if not isinstance(value, list):
+        return []
+    swaps = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            continue
+        slot, suffix, districts = entry.get("requiresSlot"), entry.get("suffix"), entry.get("districts")
+        if not (isinstance(slot, str) and isinstance(suffix, str) and suffix):
+            continue
+        if districts is not None and not (isinstance(districts, list) and all(isinstance(name, str) for name in districts)):
+            continue
+        swaps.append({"requiresSlot": slot, "suffix": suffix, "districts": set(districts) if districts is not None else None})
+    return swaps
+
+
+def swapped_look(look, district, swaps, owned, exists):
+    """A building look after the prop swaps: each swap whose slot is owned (and whose `districts`,
+    if any, hold the parcel's district) turns the prop into `<prop><suffix>` when `exists` says that
+    prop exists, in list order, each on the name the one before produced. The stage stays: a twin
+    shares its body. Sites and missing looks never swap. A swapped look remembers its original."""
+    if look is None or look["kind"] != BUILDING:
+        return look
+    prop = look["prop"]
+    for swap in swaps:
+        if swap["requiresSlot"] not in owned:
+            continue
+        if swap["districts"] is not None and district not in swap["districts"]:
+            continue
+        candidate = prop + swap["suffix"]
+        if exists(candidate):
+            prop = candidate
+    return look if prop == look["prop"] else {**look, "prop": prop, "swappedFrom": look["prop"]}
 
 
 def district_list(config, district, size):
@@ -702,7 +752,7 @@ def goal_for(config, index, parcel, state, prop_heights, landmark_height):
     if state is None or state["level"] <= 0:
         return None
     if state["level"] == 1:
-        return site_look(config, parcel["size"])
+        return site_look(config, parcel["size"], index)
     # Round 2: a district without props for this size lends `fallbackDistrict`'s.
     fallback = config.get("fallbackDistrict")
     chosen = district_list(config, state["district"], parcel["size"]) or district_list(
@@ -1061,6 +1111,16 @@ class Heights:
                 break
         self.glb_cache[key] = found
         return found
+
+    def exists(self, prop):
+        """Whether a prop can spawn: harvested stages in Assets.json, or (before its upload, for the
+        renders) a blueprint. Unlike `prop`, asking never marks a name as missing."""
+        if not isinstance(prop, str):
+            return False
+        props = ((self.assets or {}).get("props") or {}).get(self.era_name) or {}
+        if present_stages(props.get(prop)):
+            return True
+        return (BLUEPRINTS_DIR / "_props" / self.era_name / f"{prop}.json").exists()
 
     def blueprint_heights(self, prop):
         """Each stage's y-range in studs: the pieces up to that stage (stages are additive), turned
@@ -1801,6 +1861,7 @@ class FabricPlot:
         states = self.develop_states(owned, tier, stretches, joins, trace)
         config = self.config or {}
         parcels = []
+        swaps = valid_swaps(config.get("swaps"))
         for view, state in zip(self.parcel_views, states):
             look = goal_for(
                 config,
@@ -1810,6 +1871,8 @@ class FabricPlot:
                 self.heights.prop,
                 lambda slot_id: self.landmark_height(slot_id, stages),
             )
+            # Wave 3.1 proposal: an owned city-changer swaps a building for its twin.
+            look = swapped_look(look, state["district"], swaps, owned, self.heights.exists)
             shown = view["nearOk"] if near else view["farOk"]
             parcels.append({**view, "state": state, "look": look if shown else None})
         plazas = self.visible_plazas(tier)
@@ -2402,6 +2465,51 @@ def selftest():
         ("ring: an unknown direction adds no ramp cells", len(ring_rects(56, 7, {"cell": (-56, -28), "direction": "up"}, 3)) == 4),
         ("ring: no ring, no rects", ring_rects("a", 7) == [] and ring_rects(56, 0) == [] and ring_rects(-1, 7) == []),
     ]
+
+    # Wave 3.1 site variants: a level-1 parcel takes its size's list by index, else `sites[size]`.
+    site_config = {
+        "sites": {"small": "SiteSmall", "medium": "SiteMedium", "narrow": "SiteNarrow"},
+        "siteVariants": {"narrow": ["SiteNarrow", "SiteNarrowCrane", "SiteNarrow"], "small": ["SiteSmall", "SiteSmallCrane"]},
+    }
+
+    def site_at(config, size, index):
+        look = goal_for(config, index, {"size": size}, {"level": 1, "district": "office", "governor": "x"}, lambda _p: [], lambda _s: 0)
+        return look["prop"] if look is not None else None
+
+    validation += [
+        ("site variants: narrow by index", [site_at(site_config, "narrow", i) for i in (1, 2, 3, 4, 5)] == ["SiteNarrow", "SiteNarrowCrane", "SiteNarrow", "SiteNarrow", "SiteNarrowCrane"]),
+        ("site variants: small by index", [site_at(site_config, "small", i) for i in (1, 2, 3)] == ["SiteSmall", "SiteSmallCrane", "SiteSmall"]),
+        ("site variants: a size without a list takes sites[size]", site_at(site_config, "medium", 2) == "SiteMedium"),
+        ("site variants: absent is sites[size]", site_at({"sites": site_config["sites"]}, "narrow", 2) == "SiteNarrow"),
+        ("site variants: an empty list falls back", site_at(dict(site_config, siteVariants={"narrow": []}), "narrow", 2) == "SiteNarrow"),
+        ("site variants: a name in place of a list falls back", site_at(dict(site_config, siteVariants={"narrow": "SiteNarrowCrane"}), "narrow", 2) == "SiteNarrow"),
+        ("site variants: a non-name entry spawns nothing", site_at(dict(site_config, siteVariants={"narrow": ["SiteNarrow", 7]}), "narrow", 2) is None),
+    ]
+
+    # Wave 3.1 prop swaps: in list order, each on the name the one before produced, only if it exists.
+    known = {"TowerA", "TowerAGreen", "TowerAGreenCrown", "TowerACrown", "TowerB", "TowerBCrown"}
+    swap_config = [
+        {"requiresSlot": "rooftopGarden", "suffix": "Green", "districts": ["residential", "retail"]},
+        {"requiresSlot": "financeDistrict", "suffix": "Crown"},
+    ]
+    swaps = valid_swaps(swap_config + [{"requiresSlot": "x"}, {"requiresSlot": "y", "suffix": ""}, {"requiresSlot": "z", "suffix": "Q", "districts": "office"}, "bad"])
+
+    def swapped(prop, district, owned, kind=BUILDING):
+        look = swapped_look({"kind": kind, "prop": prop, "stage": 3}, district, swaps, set(owned), lambda name: name in known)
+        return (look["prop"], look["stage"], look.get("swappedFrom"))
+
+    both = ("rooftopGarden", "financeDistrict")
+    validation += [
+        ("swaps: malformed entries are skipped", [swap["suffix"] for swap in swaps] == ["Green", "Crown"]),
+        ("swaps: nothing owned, nothing swapped", swapped("TowerA", "residential", ()) == ("TowerA", 3, None)),
+        ("swaps: an owned slot swaps to the twin, stage kept", swapped("TowerA", "residential", ("rooftopGarden",)) == ("TowerAGreen", 3, "TowerA")),
+        ("swaps: chained in list order", swapped("TowerA", "residential", both) == ("TowerAGreenCrown", 3, "TowerA")),
+        ("swaps: outside its districts the first is skipped, the second still applies", swapped("TowerA", "office", both) == ("TowerACrown", 3, "TowerA")),
+        ("swaps: a twin that does not exist leaves the name for the next", swapped("TowerB", "residential", both) == ("TowerBCrown", 3, "TowerB")),
+        ("swaps: no twin at all, no swap", swapped("Plaza", "civic", both) == ("Plaza", 3, None)),
+        ("swaps: a site never swaps", swapped("TowerA", "residential", both, SITE) == ("TowerA", 3, None)),
+        ("swaps: not a list, none", valid_swaps({"requiresSlot": "x", "suffix": "Y"}) == []),
+    ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
         if not good:
@@ -2476,10 +2584,22 @@ def wild_counts(snap):
     return whole, partial, quarters, singles
 
 
-def timeline(era_name, data_path=None):
+def swap_counts(snap):
+    """Wave 3.1 prop swaps: how many drawn buildings show each twin suffix."""
+    counts = {}
+    for view in snap["parcels"]:
+        look = view["look"]
+        if look and look.get("swappedFrom"):
+            suffix = look["prop"][len(look["swappedFrom"]) :]
+            counts[suffix] = counts.get(suffix, 0) + 1
+    return counts
+
+
+def timeline(era_name, data_path=None, config_path=None):
     """`data_path` is `--fabric`: fabric data read instead of Config/Fabric/<Era>.json (a plan built
-    with `fabric.py build --out`)."""
-    city = load_json(CITY_CONFIG_PATH)
+    with `fabric.py build --out`); `config_path` is `--config`: a CityDressing.json read instead of
+    the repo's."""
+    city = load_json(config_path if config_path is not None else CITY_CONFIG_PATH)
     data = load_json(data_path) if data_path is not None else None
     plot = FabricPlot.load(era_name, city=city, data=data)
     if plot is None:
@@ -2568,6 +2688,9 @@ def timeline(era_name, data_path=None):
                 smoking[key] = smoking.get(key, 0) + 1
             print(f"         smoking: {', '.join(f'{key} x{n}' for key, n in sorted(smoking.items()))}")
         print(f"         placed: {'; '.join(layer_texts) or 'no layers'}")
+        swaps = swap_counts(near)
+        if swaps:
+            print(f"         swapped: {', '.join(f'{suffix} x{n}' for suffix, n in sorted(swaps.items()))}")
         print(
             f"         wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "
             f"far {far_whole} whole"
@@ -2606,10 +2729,11 @@ def main(argv):
     line = sub.add_parser("timeline", help="parcels by level and wild counts at tiers 1-5")
     line.add_argument("era")
     line.add_argument("--fabric", type=Path, help="fabric data to read instead of src/shared/Config/Fabric/<Era>.json")
+    line.add_argument("--config", type=Path, help="a CityDressing.json to read instead of src/shared/Config/CityDressing.json")
     args = parser.parse_args(argv)
     if args.command == "selftest":
         return selftest()
-    return timeline(args.era, args.fabric)
+    return timeline(args.era, args.fabric, args.config)
 
 
 if __name__ == "__main__":

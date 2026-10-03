@@ -1,0 +1,10 @@
+{
+  "id": "BusShelterM",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [3.6, 1.4],
+  "note": "draft for the busStop city-changer: a modern shelter on the pavement, open toward -Z (the kerb), at full size; the piece sits 0.045 along +X so it is centred on its origin",
+  "pieces": [
+    {"kit": "metro-transit-kit", "model": "bus-shelter", "pos": [0.045, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
