@@ -143,8 +143,12 @@ ZONE_SOLID_CLEARANCE = 3  # wave 2b: a rock zone circle's daylight to any footpr
 # `road.tiles.blocks.treeClearance`; this is only the fallback for a config that predates the key.
 STREET_TREE_CLEARANCE = 1
 STRAIGHT_ENOUGH = 0.9
-# An entrance stands on the pavement it faces: its front edge may come this close to the asphalt.
-SUBWAY_STREET_REACH = 1.5
+# Wave 3.1b (pavements of 2 cannot hold a 4.9 x 5.8 kiosk): an entrance stands at a street corner
+# beside the pavement it faces -- it may overlap that pavement, never a road cell -- its front no
+# farther than SUBWAY_FRONT_SLACK behind the pavement's outer edge, and within SUBWAY_CORNER_REACH of
+# a second street's hard surface, which is what makes the spot a corner.
+SUBWAY_FRONT_SLACK = 0.5
+SUBWAY_CORNER_REACH = 2.0
 
 # Wave 2c (INTERFACES "Wave 2c -- living city"). Contract caps and minimums again, not tunables.
 # A lot reserves its kind's cap, not the props' current size: the client sizes a lot from the
@@ -1566,10 +1570,12 @@ def highway_violations(era):
 
 
 def subway_violations(era, cells):
-    """Wave 2a entrances: on the pavement beside a street they face, off the asphalt, out of
-    everything else's way, and spread so the client has one to show in every quadrant."""
+    """Subway entrances (wave 2a, wave 3.1b): at a street corner beside the pavement of the street
+    they face (overlapping that pavement is fine, a road cell never is), out of everything else's
+    way, and spread so the client has one to show in every quadrant. Lots, markers and lanes keep
+    their 0.5 in tools/fabric.py, pads and footprints here."""
     messages = []
-    half_road = era.width / 2
+    surface = max(era.width, era.tile_studs) / 2 + era.pavement  # a tile street's hard surface
     if not SUBWAY_COUNT[0] <= len(era.subways) <= SUBWAY_COUNT[1]:
         messages.append(f"subwayEntrances: {len(era.subways)}, need {SUBWAY_COUNT[0]}-{SUBWAY_COUNT[1]}")
     quadrants = {(entry["position"][0] >= 0, entry["position"][1] >= 0) for entry in era.subways}
@@ -1600,9 +1606,9 @@ def subway_violations(era, cells):
         for other in era.subways[index + 1 :]:
             if polygon_polygon_distance(poly, other["poly"]) < SUBWAY_CLEARANCE - 1e-6:
                 messages.append(f"{label}: too close to another entrance")
-        # The kiosk stands on the pavement; the asphalt itself has to stay clear.
+        # It may cover the pavement; the road's own cells stay clear (touching one is fine).
         for cell in cells:
-            if polygon_polygon_distance(poly, era.cell_square(cell)) < 1e-6:
+            if rect_overlap(poly, era.cell_square(cell)) > 1e-6:
                 where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
                 messages.append(f"{label}: stands on the road cell {where}")
                 break
@@ -1613,17 +1619,30 @@ def subway_violations(era, cells):
             entry["position"][0] + face[0] * era.subway_size[1] / 2,
             entry["position"][1] + face[1] * era.subway_size[1] / 2,
         )
-        nearest = min(
-            (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
-            key=lambda hit: hit[0],
-            default=None,
-        )
-        if nearest is None:
+        hits = sorted(((point_segment_distance(front, a, b), a, b) for _, a, b in era.spine_segments()), key=lambda hit: hit[0][0])
+        if not hits:
             messages.append(f"{label}: there are no streets to face")
-        elif nearest[0] > half_road + SUBWAY_STREET_REACH:
-            messages.append(f"{label}: its front is {nearest[0]:.1f} studs from the nearest street, not on a pavement")
-        elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
+            continue
+        (distance, foot), faced_a, faced_b = hits[0]
+        if distance > surface + SUBWAY_FRONT_SLACK + 1e-6:
+            messages.append(
+                f"{label}: its front is {distance:.2f} from the nearest street, behind its pavement "
+                f"(the pavement ends at {surface:g}, the front may stand {SUBWAY_FRONT_SLACK:g} behind it)"
+            )
+        elif (foot[0] - front[0]) * face[0] + (foot[1] - front[1]) * face[1] < -1e-6:
             messages.append(f"{label}: faces away from the street it stands on")
+        # A corner: a second street (any leg not parallel to the one it faces) comes this close.
+        along = unit((faced_b[0] - faced_a[0], faced_b[1] - faced_a[1]))
+        corner = False
+        for _, a, b in era.spine_segments():
+            leg = unit((b[0] - a[0], b[1] - a[1]))
+            if along is None or leg is None or abs(along[0] * leg[1] - along[1] * leg[0]) < 0.5:
+                continue
+            if polygon_polygon_distance(poly, band(a, b, surface)) <= SUBWAY_CORNER_REACH + 1e-6:
+                corner = True
+                break
+        if not corner:
+            messages.append(f"{label}: not at a street corner (no crossing street's hard surface within {SUBWAY_CORNER_REACH:g})")
     return messages
 
 
@@ -2931,6 +2950,8 @@ def check(era, network, visible, unreachable):
         detail["walkClipKinds"] = clip_kinds
     for message in landmark_gap_violations(era):
         add(message)
+    for message in pad_landmark_violations(era):
+        add(message)
     if era.has_fabric:
         for message in fabric_module().check_document(era.name, load_fabric(era), city=era.city, era=era, network=network):
             add(f"fabric: {message}")
@@ -2953,6 +2974,24 @@ def landmark_extents(era):
         poly = fabric.extents_poly(slot["position"], slot["rotation"], extents) if extents else slot["footprint"]
         out.append((slot["id"], poly, extents is not None))
     return out
+
+
+def pad_landmark_violations(era):
+    """Wave 3.1b: a pad may stand on its own slot's footprint -- the pad goes when the building
+    comes, so a landmark's face can stand at the lot line -- but never on another landmark's ground
+    (its harvested extents, or its declared footprint before a harvest). Road cells, the deck band
+    and kiosks keep their own pad rules."""
+    messages = []
+    depth = fabric_module().overlap_depth
+    extents = landmark_extents(era)
+    for slot in era.slots:
+        for other_id, poly, _measured in extents:
+            if other_id == slot["id"]:
+                continue
+            d = depth(slot["pad_poly"], poly)
+            if d > 1e-6:
+                messages.append(f"{slot['id']} pad: stands {d:.2f} on the {other_id} extents")
+    return messages
 
 
 def landmark_gap_violations(era):
