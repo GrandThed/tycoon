@@ -923,6 +923,153 @@
           "WalkerC",
           "WalkerD"
         ]
+      },
+      "fabric": {
+        "sizes": {
+          "small": [
+            6,
+            6
+          ],
+          "medium": [
+            8,
+            8
+          ],
+          "narrow": [
+            5,
+            8
+          ]
+        },
+        "pull": {
+          "radius": 60,
+          "tierTerm": 0.25,
+          "thresholds": [
+            1.0,
+            1.6,
+            2.1,
+            2.6
+          ],
+          "reach": 20,
+          "levelsOverTier": 1,
+          "smallMaxLevel": 4,
+          "rowLag": 0
+        },
+        "heightFloor": 3.4,
+        "districts": {
+          "residential": {
+            "small": [
+              "FabricResSmallA",
+              "FabricResSmallB"
+            ],
+            "medium": [
+              "FabricResMediumA"
+            ],
+            "narrow": [
+              "FabricResNarrowA",
+              "FabricResNarrowB"
+            ]
+          },
+          "office": {
+            "small": [
+              "FabricOfficeSmallA",
+              "FabricOfficeSmallB"
+            ],
+            "medium": [
+              "FabricOfficeMediumA",
+              "FabricOfficeMediumB"
+            ],
+            "narrow": [
+              "FabricOfficeNarrowA"
+            ]
+          },
+          "retail": {
+            "small": [
+              "FabricShopSmallA"
+            ],
+            "medium": [
+              "FabricShopMediumA"
+            ],
+            "narrow": [
+              "FabricShopNarrowA",
+              "FabricShopNarrowB"
+            ]
+          },
+          "civic": {
+            "small": [
+              "FabricPlazaSmall"
+            ],
+            "medium": [
+              "FabricPlazaMedium"
+            ]
+          }
+        },
+        "sites": {
+          "small": "SiteSmall",
+          "medium": "SiteMedium",
+          "narrow": "SiteNarrow"
+        },
+        "wild": {
+          "clumps": [
+            "OldTownClumpA",
+            "OldTownClumpB",
+            "OldTownClumpC"
+          ],
+          "quarters": [
+            "OldTownQuarterA",
+            "OldTownQuarterB",
+            "OldTownQuarterC"
+          ],
+          "quarterRadius": 3.0,
+          "singleRadius": 1.0
+        },
+        "clear": {
+          "slot": 3,
+          "pad": 1.5,
+          "street": 8.0,
+          "parcel": 1.5
+        },
+        "construction": {
+          "minSeconds": 10,
+          "maxSeconds": 30,
+          "stagger": 0.4,
+          "stageSeconds": 1.2,
+          "riseSeconds": 0.6,
+          "revealSeconds": 1.5,
+          "maxPuffs": 4,
+          "spawnsPerFrame": 40
+        },
+        "marker": {
+          "prop": "LotHoarding",
+          "offset": [
+            5.3,
+            0,
+            -0.5
+          ],
+          "stakeColor": [
+            214,
+            140,
+            52
+          ],
+          "stringColor": [
+            240,
+            232,
+            210
+          ]
+        },
+        "padLook": {
+          "material": "Concrete",
+          "color": [
+            150,
+            154,
+            166
+          ]
+        },
+        "reveal": "RevealScaffold",
+        "fallbackDistrict": "residential",
+        "levelStages": [
+          1,
+          3,
+          4
+        ]
       }
     },
     "OrbitalColony": {

@@ -849,6 +849,9 @@ export type FabricConfig = {
 	reveal: string?,
 	upgrades: { [string]: FabricUpgradeLayerConfig }?,
 	lanes: FabricLanesConfig?,
+	-- Wave 3.1: the highest stage a level-2, -3 and -4 parcel may show before the height cap;
+	-- absent means { 0, 1, 2 }. Metropolis towers have five stages and add floors as the cap rises.
+	levelStages: { number }?,
 }
 
 export type CityEraDressingConfig = {

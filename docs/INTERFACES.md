@@ -6233,6 +6233,137 @@ driveway.
   missing) and 0 after the harvest; Village's stays 0 and its meshes byte-identical.
 - In Studio: lanes look like the streets and driveways from every distance, with no flicker.
 
+# M12 wave 3 — Metropolis (2026-10-02)
+
+Village and Boomtown are on `main`. Wave 3 is built in the worktree
+`C:\Users\benja\Desktop\tycoon-m12m` on branch `m12-metropolis`; `assets/` there is a junction to
+the main checkout's `assets/`. Everything in "M12 contracts" and "M12 wave 2" still holds, and the
+code stays era-generic.
+
+## Wave 3.1 — Metropolis growth-layout mock (a gate for Ben, not yet a contract)
+
+Metropolis today is a 4×4 lattice with one landmark per block. A tile street's band (7 road plus
+4 of pavement each side) leaves 2 studs of verge, so no lot fits beside a street
+(`docs/CITY_GROWTH.md` §3). As for Boomtown, this wave produces **two candidate layouts**, each a
+real layout run through the real generator and mirror, so the pick becomes wave 3.2's starting
+point with nothing thrown away.
+
+### Facts the candidates work within (measured 2026-10-02)
+
+- **Plot 120** (half 60). Every era shares it (`PlotService` sizes the world ring from Village's),
+  so it cannot grow. The ring deck spans 52.5 to 59.5 on every side, with a 4.8-stud pier at each
+  ring cell centre and a soffit of about 6.1 (`highway_kit.py`; older docs say 6.65). Ground
+  inside the deck: |x|, |z| ≤ 52.5.
+- **Tile streets:** 7-stud cells on the lattice (7i, 7j), axis-aligned. A street's hard surface
+  reaches 7.5 from its centreline. Parallel streets stand at least 16 apart, so at least 21 on
+  the lattice. The depth of a block between pavement edges is the pitch minus 15: 13 at pitch 28
+  (two 6-deep rows back to back), 20 at pitch 35 (two 8-deep rows).
+- **Entrance** (0, −49), on the outermost legal row; the Sign at (0, −60). The plot entrance
+  passes under the deck.
+- **Landmark heights** (harvested, stages 0 to 4; a storey is 1.6 studs):
+
+  | Purchases | Landmarks | Height |
+  |---|---|---|
+  | 1–5, 7 | FoodTruck, CoffeeShop, CornerShop, ApartmentBlockA, OfficeLowRise, Supermarket | 3.3–5.2 until level 50, then up to 6.8–11.5 |
+  | 6, 9–11, 13 | CityHall 12.3 (one stage), ApartmentBlockB, ParkingGarage, ShoppingMall, Hospital | 5.2–7.5 early, 11–13.9 at level 100 |
+  | 15, 16, 18, 19 | OfficeTowerA, HotelTower, Stadium (12 × 12), ConventionCenter | 5.2–6.8 early, 16.3 / 18.8 / 12.3 / 5.9 at level 100 |
+  | 21–24 | BankTower, BroadcastTower, OfficeTowerB 13.1 (one stage), SkyscraperA 35.6 (14 × 14, one stage) | 7.8–10 early, 21.5 / 28.6 at level 100 |
+
+### What both candidates share
+
+- **Untouched:** the 24 slot ids, their order, config and models (`Config/Eras/3_Metropolis.json`
+  is frozen); the server, remotes and the client code; the other eras.
+- **The growth rules of mock B** (CITY_GROWTH §2.5): one heart at the entrance; slot k roughly
+  k-th in street distance from the entrance; the street plan a **tree** within `budget.tileCells`
+  (180); landmark joins at most about 40 studs apart along a street, or the lots between them
+  never develop. Growth spreads outward from the entrance crossroads, not front row first.
+- **Every lot fronts a tile street.** No lanes and no infill: a block holds at most two rows back
+  to back, each facing its own street. A tiles era has no lane renderer; a candidate that needs one
+  reports it instead of building it.
+- **Landmarks stand in the frontage** like lots, turned to face their street (`marker.offset` 5.3
+  clears a pad at any rotation).
+- **Downtown rising:** the low early landmarks (purchases 1 to 5) stand near the entrance, the
+  tall ones (15 to 24) toward the back, so the skyline rises away from the camera and **peaks at
+  the Skyscraper**, which stands on the main vista.
+- **Keep:** the tiles; the highway ring (the ramp may move to any mid-side ring cell pointing
+  inward whose foot is a street end); 4 to 6 subway kiosks, one per quadrant, re-placed on
+  pavement; Ben's park strips in undrawn street cells; City Hall (`cityGrid`) near the entrance
+  crossroads, facing the entrance. `PlazaA` and `PlazaB` may stay as civic squares.
+- **Drop from the layout:** `lots`, `parking`, `treeZones` and `greeneryZones` (the fabric
+  replaces them), and `blocks`. A block slab paves a whole block at that block's first purchase,
+  which is a socket (CITY_GROWTH §2.4). Paving now arrives lot by lot: every fabric prop carries
+  its own paved forecourt. The street trees went with the slabs; they are a city-changer candidate.
+- **Districts** (lead's starting point; the layout owner may move a slot and says why):
+  - retail: `foodTruck`, `coffeeShop`, `cornerShop`, `supermarket`, `shoppingMall`;
+  - residential: `apartmentBlockA`, `apartmentBlockB`, `rooftopGarden`;
+  - office: `officeLowRise`, `parkingGarage`, `officeTowerA`, `hotelTower`, `bankTower`,
+    `broadcastTower`, `financeDistrict`, `skyscraper`;
+  - civic: `cityGrid`, `hospital`, `cityPark`, `stadium`, `conventionCenter`;
+  - none: `subwayLine` and `highwayRamp` (street-only: a pad beside a street on ground nothing
+    else uses, with a one-point spur), and `busStop`.
+- **City-changer candidates are not decided:** `busStop`, `cityPark`, `rooftopGarden` and
+  `financeDistrict` keep their models and get ordinary positions in the mock. Ben decides at the
+  gate, from before-and-after renders (step 3).
+- **Wild land is the old town** (generated `oldtown-kit`): surface car parks, fenced vacant lots,
+  old low brick buildings and billboards, on a grid aligned to the 7-stud lattice, covering the
+  plot at tier 0 and redeveloped as the city spreads. It keeps off every planned street cell and
+  its pavement band (where the park strips are), the deck band, the ramp cells and the kiosks.
+  The skirt past the plot edge is optional and low.
+- **Lot sizes:** narrow 5 × 8, small 6 × 6, medium 8 × 8.
+- **Targets:** at least **110 lots** at full build (floor 90; `budget.parcels` is 140), building
+  sites at every tier, and no tier 4 → full jump above 25 lots.
+- **Stand-in models:** this wave's draft props. `plotrender.py` draws blueprints, so nothing is
+  uploaded.
+
+### Candidates
+
+- **"boulevard":** one grand avenue on the entrance axis from the entrance to the Skyscraper,
+  which closes the vista at the back (as the Clock Tower closes Boomtown's Main Street). Cross
+  streets leave it east and west as dead ends, each end closed by a landmark where there is room.
+  City Hall faces the entrance at the first crossroads. The office towers gather along the back
+  half.
+- **"avenues":** a cross-town street just inside the entrance, with parallel avenues running from
+  it to the back. Each avenue is a dead end closed by a tall landmark (the Skyscraper on the
+  centre avenue), and each has its own character (residential, retail, office). Short side streets
+  may leave an avenue as dead ends. City Hall faces the entrance across the cross-town street.
+
+### Groundwork rulings (lead)
+
+- **`fabric.levelStages: [s2, s3, s4]`** (optional, new). A parcel at level L ≥ 2 starts from
+  stage `min(levelStages[L − 1], #stages − 1)` (Luau index) instead of `min(L − 2, #stages − 1)`;
+  the height cap then lowers it exactly as today. Absent means [0, 1, 2], today's rule, so Village
+  and Boomtown do not move. Metropolis: [1, 3, 4] with **five-stage towers**, so the towers add
+  floors as their governors' milestones lift the cap. The mirror implements it in this wave; the
+  client follows in wave 3.2.
+- **`fabric.clear.street` is 8.0 for Metropolis:** a tile street's hard surface reaches 7.5.
+- **Fabric towers:** storeys of 1.6 studs (the kit's at scale 4), five stages, stage 0 at or under
+  `heightFloor` 3.4. Filler never copies a landmark's silhouette and never reuses its signature
+  pieces.
+- `eras.Metropolis.fabric` (config applied) names the draft props. `pull` holds first values for
+  the layout owners to tune.
+
+### Gate renders (`assets/testfit/out/Metropolis/`)
+
+- `m12m_today_{tier1,tier3,full}.png`: today's Metropolis with the current renderer (true colours).
+- For each candidate `<c>`: `m12m_<c>_{tier1,tier3,full,full_entrance,streetplan}.png`.
+- `m12m_compare.png`: today and both candidates at tier 1, tier 3 and full.
+- Draft prop strips in `m12m_props/`.
+- Step 3: a before-and-after render for each city-changer candidate.
+
+### Ownership (wave 3.1)
+
+| Owner | Where | Files |
+|---|---|---|
+| lead | base (`tycoon-m12m`) | this section; `CityDressing.json` `eras.Metropolis.fabric` (schema and first values); `Types.luau` (`levelStages`); merges |
+| economy-designer "generator" | base | `tools/fabric.py`, `tools/streetplan.py`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py`, a new `tools/testfit/compare_sheet.py`; renders `m12m_today_*` |
+| prop-builder "towers" | base | `tools/assets/tower_kit.py` (new); new blueprints `tools/testfit/blueprints/_props/Metropolis/Fabric*.json` |
+| prop-builder "oldtown" | base | `tools/assets/oldtown_kit.py` (new); new blueprints `_props/Metropolis/{OldTown*,SiteSmall,SiteMedium,SiteNarrow,RevealScaffold,LotHoarding}.json` |
+| layout-designer "boulevard" | `tycoon-m12m-boulevard` | `src/shared/Layouts/Metropolis.luau`, `tools/fabric/Metropolis.plan.json`, `Config/Fabric/Metropolis.json`, `eras.Metropolis.fabric.pull`; renders `m12m_boulevard_*` |
+| layout-designer "avenues" | `tycoon-m12m-avenues` | the same files in its worktree; renders `m12m_avenues_*` |
+
+Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts and
+config blocks, and the client code.
+
 ---
 
 # M13 contracts — The Valley (wave 1: sky, ground, hub, roads)
