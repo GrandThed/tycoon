@@ -11,7 +11,9 @@
 -- CFrame into pre-allocated arrays and makes a single BulkMoveTo.
 --
 -- M12: a plot whose layout has no groves but whose city fabric has woods plans its flocks here
--- (PlanFlocks) and flies them over the clumps still standing (OverCentres).
+-- (PlanFlocks) and flies them over the clumps still standing (OverCentres). Wave 3.2: a flock's
+-- centre may stand above the ground -- the roof of a landmark, once a town has built over its last
+-- clump -- and the flock keeps its height above that, as it keeps it above the ground elsewhere.
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -53,9 +55,9 @@ type Bird = {
 	plotId: number,
 	model: Model,
 	plotFrame: CFrame,
-	center: Vector3, -- plot-local
+	center: Vector3, -- plot-local; only X and Z are read once `height` is worked out
 	radius: number,
-	height: number,
+	height: number, -- plot-local Y of its circle
 	angle: number, -- current angle on the circle
 	angularSpeed: number, -- signed radians per second
 	bobPhase: number,
@@ -271,7 +273,9 @@ function Ambient.SpawnFlocks(
 				plotFrame = plotFrame,
 				center = flock.center,
 				radius = birdRadius,
-				height = height + (draw.lift * 2 - 1) * FLOCK_HEIGHT_JITTER,
+				-- `birds.height` above whatever the flock circles: the ground (centre Y 0, every
+				-- grove and clump) or the roof its centre stands on.
+				height = flock.center.Y + height + (draw.lift * 2 - 1) * FLOCK_HEIGHT_JITTER,
 				-- Trailing the flock's lead bird, against the direction it flies.
 				angle = (flock.phase - direction * draw.lead * FLOCK_SPREAD) % FULL_TURN,
 				angularSpeed = if birdRadius >= MIN_RADIUS
@@ -344,8 +348,9 @@ function Ambient.PlanFlocks(
 	return planned
 end
 
--- Planned flocks over `centres` (plot-local, in order): flock i circles centre
--- ((i - 1) % #centres + 1), the rule zone flocks follow; none while nothing is left to circle.
+-- Planned flocks over `centres` (plot-local, in order; Y is how high the thing circled stands):
+-- flock i circles centre ((i - 1) % #centres + 1), the rule zone flocks follow; none while nothing
+-- is left to circle.
 function Ambient.OverCentres(flocks: { Scatter.Flock }, centres: { Vector3 }): { Scatter.Flock }
 	local placed: { Scatter.Flock } = {}
 	if #centres == 0 then

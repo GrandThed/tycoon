@@ -1491,21 +1491,23 @@ local function birdsConfig(config: Types.CityDressingConfig): Types.BirdsConfig?
 end
 
 -- The flocks a plot can show: its tree-zone flocks, or (M12) where the layout has no tree zones
--- but the fabric has wild land, the fabric's flocks over its first surviving clumps.
+-- but the fabric has wild land, the fabric's flocks over its first surviving clumps -- and, once
+-- the town has built over the last of them, over its tallest landmarks (Fabric.FlockCentres).
 local function flocksFor(build: Build): { Scatter.Flock }
 	local fabric = build.fabric
 	if fabric == nil or #build.fabricFlocks == 0 then
 		return build.plan.flocks
 	end
-	return Ambient.OverCentres(build.fabricFlocks, Fabric.SurvivingClumps(fabric))
+	return Ambient.OverCentres(build.fabricFlocks, Fabric.FlockCentres(fabric))
 end
 
--- The centres the first `count` flocks circle: a fabric flock moves on when its clump is cleared.
+-- The centres the first `count` flocks circle: a fabric flock moves on when its clump is cleared,
+-- and rises with the landmark it circles when that takes its next stage (the centre's height).
 local function flockKeyOf(flocks: { Scatter.Flock }, count: number): string
 	local centres: { string } = {}
 	for index = 1, math.min(count, #flocks) do
 		local center = flocks[index].center
-		table.insert(centres, string.format("%.2f,%.2f", center.X, center.Z))
+		table.insert(centres, string.format("%.2f,%.2f,%.2f", center.X, center.Y, center.Z))
 	end
 	return table.concat(centres, ";")
 end

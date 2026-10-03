@@ -144,7 +144,9 @@ export type ParkedSpot = {
 -- [0, 1); Ambient turns them into the flock's shape, which is look rather than plan.
 export type BirdDraw = { lead: number, radial: number, lift: number }
 export type Flock = {
-	center: Vector3, -- plot-local, Y 0
+	-- Plot-local. Y is how high the thing it circles stands: 0 for a tree zone or a clump, the
+	-- roof for a landmark (M12 wave 3.2); the flock flies `birds.height` above that.
+	center: Vector3,
 	phase: number, -- radians
 	clockwise: boolean,
 	birds: { BirdDraw },

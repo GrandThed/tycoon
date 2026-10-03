@@ -78,6 +78,8 @@ local MIN_LENGTH = 0.05
 local NODE_KEY_SCALE = 10
 -- Consecutive directions whose dot product reaches this are straight, not a bend.
 local STRAIGHT_DOT = 0.999
+-- And two whose dot product stays within this of 0 meet at a right angle (drawFootpath).
+local SQUARE_DOT = 0.001
 local UP = Vector3.yAxis
 local QUARTER_TURN = math.pi / 2
 local FULL_TURN = 2 * math.pi
@@ -725,28 +727,38 @@ local function spurDrawPoints(state: State, points: { Vector3 }): { Vector3 }
 	return trimmed
 end
 
--- A spur's straight Parts along `points`, whose last point is its join on the spine: one flat slab
--- to a leg, each running half its width past both its ends so the legs close their corners. A
--- footpath in its own look sits just under the kerb, under the tile surface, and stops at the
--- pavement's outer edge (spurDrawPoints); a spur that is the road itself keeps the road's live
--- material, colour and top. M12 wave 3.2: a tiles era's back lanes are laid by this too, which is
--- what makes a lane the same footpath as the one to a landmark's door.
-local function drawFootpath(state: State, into: { Instance }, name: string, points: { Vector3 }): ()
+-- A spur's straight Parts along `drawn`, the polyline as it is to be laid (spurDrawPoints has
+-- already stopped a footpath at the pavement's outer edge): one flat slab to a leg, each running
+-- half its width past both its ends so the legs close their corners. A footpath in its own look
+-- sits just under the kerb, under the tile surface; a spur that is the road itself keeps the
+-- road's live material, colour and top. M12 wave 3.2: a tiles era's back lanes are laid by this
+-- too, which is what makes a lane the same footpath as the one to a landmark's door.
+--
+-- Where two legs of a footpath meet at a right angle, the overrun of both made the corner a
+-- square of two coplanar Parts. There the leg laid first keeps its overrun and covers the corner,
+-- and the next starts half a width after it, so the two abut and nothing lies on anything. At any
+-- other angle that would open a wedge on the outside of the bend (0.5 studs wide at 18 degrees),
+-- so those bends keep the overlap, as does every spur that is not a footpath.
+local function drawFootpath(state: State, into: { Instance }, name: string, drawn: { Vector3 }): ()
 	local footpath = state.spurMaterial ~= nil
-	local drawn = spurDrawPoints(state, points)
+	local width = state.spurWidth
+	local material = state.spurMaterial or state.material
+	local color = state.spurColor or state.color
+	local centreY = if footpath then -SPUR_DROP else state.thickness / 2
+	local before: Vector3? = nil -- the heading of the leg laid before this one
 	for index = 2, #drawn do
-		slab(
-			state,
-			into,
-			name,
-			drawn[index - 1],
-			drawn[index],
-			state.spurWidth,
-			state.spurWidth,
-			state.spurMaterial or state.material,
-			state.spurColor or state.color,
-			if footpath then -SPUR_DROP else state.thickness / 2
-		)
+		local a, b = drawn[index - 1], drawn[index]
+		local heading = unitOrNil(b - a)
+		if heading == nil then
+			continue -- too short to lay, exactly as `slab` judges it
+		end
+		if footpath and before ~= nil and math.abs(before:Dot(heading)) < SQUARE_DOT then
+			local shift = heading * (width / 2)
+			slab(state, into, name, a + shift, b + shift, width, 0, material, color, centreY)
+		else
+			slab(state, into, name, a, b, width, width, material, color, centreY)
+		end
+		before = heading
 	end
 end
 
@@ -786,7 +798,7 @@ local function drawSpur(state: State, slotId: string): ()
 		end
 		return
 	end
-	drawFootpath(state, into, SPUR_PART_NAME, points)
+	drawFootpath(state, into, SPUR_PART_NAME, spurDrawPoints(state, points))
 end
 
 local function nodeSpineVisible(state: State, node: number): boolean
@@ -1966,8 +1978,10 @@ end
 -- M12 wave 3.2: in a tiles era every lane asked for is laid here and now as a footpath, whole,
 -- exactly as a landmark's path is (drawFootpath: the `tiles.spur` look, one slab a leg, the leg
 -- at the mouth stopping at the pavement's outer edge), and stays through every near/far flip. The
--- second result says so: such lanes are all shown here, with no dust of their own, and the caller
--- must lay none itself. A lane's count is the fabric data's, so no budget is spent on them.
+-- second result says so: the lanes shown are footpaths with no dust of their own, and the caller
+-- must lay none itself. A lane's count is the fabric data's, so no budget is spent on them. A
+-- tiles era whose config lacks the `tiles.spur` look has no footpath to lay a lane as: it shows
+-- none, rather than a slab as wide as the road.
 function RoadGraph.SetLanes(
 	state: State,
 	lanes: { LaneSpec },
@@ -1975,17 +1989,25 @@ function RoadGraph.SetLanes(
 ): ({ [number]: boolean }, boolean)
 	local shown: { [number]: boolean } = {}
 	if state.context.era.road.tiles ~= nil then
-		for _, lane in lanes do
-			shown[lane.index] = true
-			if state.laneParts[lane.index] == nil then
-				-- A lane runs mouth first; a footpath is clipped at its last point, its join.
-				local points: { Vector3 } = {}
-				for index = #lane.points, 1, -1 do
-					table.insert(points, flat(lane.points[index]))
+		if state.spurMaterial ~= nil then
+			for _, lane in lanes do
+				shown[lane.index] = true
+				if state.laneParts[lane.index] == nil then
+					-- A footpath is clipped at its last point and a lane's join is its first, the
+					-- mouth: turned round to be clipped, then back, so its legs are laid mouth first.
+					local points: { Vector3 } = {}
+					for index = #lane.points, 1, -1 do
+						table.insert(points, flat(lane.points[index]))
+					end
+					local clipped = spurDrawPoints(state, points)
+					local drawn: { Vector3 } = {}
+					for index = #clipped, 1, -1 do
+						table.insert(drawn, clipped[index])
+					end
+					local parts: { Instance } = {}
+					drawFootpath(state, parts, LANE_PART_NAME, drawn)
+					state.laneParts[lane.index] = parts
 				end
-				local parts: { Instance } = {}
-				drawFootpath(state, parts, LANE_PART_NAME, points)
-				state.laneParts[lane.index] = parts
 			end
 		end
 		for index, parts in state.laneParts do

@@ -7217,7 +7217,7 @@ trees stand up to 6 studs from its centre).
   in mesh mode; in every fallback there is no river and the woods stay). Until then it blocks
   nothing and caches nothing.
 - `Fabric.luau` changes only by the hook that asks it, for `skirt` entries only (`syncWild` and
-  `SurvivingClumps`). The wild budgets stay positional: a blocked entry keeps its place in them.
+  `SurvivingClumps`, renamed `FlockCentres` in M12 wave 3.2). The wild budgets stay positional: a blocked entry keeps its place in them.
   The file is being edited on `m12-boomtown`: keep the hunks minimal. After that merge, any new
   list that carries `skirt` entries needs the same gate.
 - Not mirrored in `tools/cityfabric.py` or `plotrender.py`: the rule depends on where a plot sits

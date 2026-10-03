@@ -232,13 +232,21 @@ function PropFactory.Spawn(
 			return nil
 		end
 	end
-	local clone = template:Clone()
-	if chosen ~= nil then
-		for index, stageModel in stageChildren(clone) do
-			if index ~= chosen then
-				stageModel:Destroy()
-			end
+	-- Only the stage shown is copied. Clone leaves out any descendant that is not Archivable, so
+	-- the template's other stages are switched off for the length of the call (nothing yields in
+	-- between, and a client's change to a template never leaves this client). The clone is the
+	-- one a whole copy stripped of its other stages would be, without building and destroying
+	-- four stages of a five-stage tower for every lot that shows one.
+	local skipped: { Model } = {}
+	for index, stageModel in stages do
+		if index ~= chosen and stageModel.Archivable then
+			stageModel.Archivable = false
+			table.insert(skipped, stageModel)
 		end
+	end
+	local clone = template:Clone()
+	for _, stageModel in skipped do
+		stageModel.Archivable = true
 	end
 	local base = clone:FindFirstChild(TEMPLATE_BASE_NAME)
 	if base ~= nil and base:IsA("BasePart") then

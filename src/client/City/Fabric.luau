@@ -3180,11 +3180,15 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	for _, view in handle.parcels do
 		refreshPlume(handle, view)
 	end
-	syncLanes(handle, input, rippling)
 	local ringSlot = handle.context.ringSlot
 	local ringBought = rippling and ringSlot ~= nil and table.find(fresh, ringSlot) ~= nil
 	syncWild(handle, input, previous, ringBought)
 	syncUpgrades(handle, input, rippling, fresh, triggers)
+	-- Last, because of its dust: the purchase that opens a lane also clears more wild land than
+	-- the plot may puff at once, and a puff past `maxPuffs` takes over the oldest one. Started
+	-- before the woods' puffs, the lane's burst was taken over in the frame it began; started after
+	-- everything else this pass puffs, it is the newest and runs its length.
+	syncLanes(handle, input, rippling)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
 	if rippling and #triggers > 0 then
 		handle.lastTrigger = triggers[1]
@@ -3220,28 +3224,62 @@ function Fabric.ParcelSolids(handle: Handle): { Scatter.Footprint }
 	return solids
 end
 
--- Plot-local centres of the clumps a near plot still draws something of, in data order: what the
--- birds circle when the layout has no tree zones.
-function Fabric.SurvivingClumps(handle: Handle): { Vector3 }
+-- What the birds circle when the layout has no tree zones, plot-local and in order: the centres of
+-- the clumps a near plot still draws something of, in data order, or once none stands the
+-- landmarks the plot owns. Y is how high the thing circled stands: 0 over wild land, the roof of a
+-- landmark.
+function Fabric.FlockCentres(handle: Handle): { Vector3 }
 	local centres: { Vector3 } = {}
 	-- The skirt past the plot edge is never cleared, so a flock over it would never move; birds
 	-- circle the town's own woods and fall back to the skirt only once every plot clump is felled.
 	local skirt: { Vector3 } = {}
-	if handle.wildConfig == nil then
-		return centres
-	end
-	for index, entry in handle.wildData do
-		if
-			handle.wildValid[index]
-			and entry.kind == CLUMP
-			and handle.wildNear[index]
-			and (handle.cleared[index] or 0) ~= ALL_QUARTERS
-			and not inRiver(handle, entry)
-		then
-			table.insert(if entry.skirt then skirt else centres, Vector3.new(entry.x, 0, entry.z))
+	if handle.wildConfig ~= nil then
+		for index, entry in handle.wildData do
+			if
+				handle.wildValid[index]
+				and entry.kind == CLUMP
+				and handle.wildNear[index]
+				and (handle.cleared[index] or 0) ~= ALL_QUARTERS
+				and not inRiver(handle, entry)
+			then
+				table.insert(
+					if entry.skirt then skirt else centres,
+					Vector3.new(entry.x, 0, entry.z)
+				)
+			end
 		end
 	end
-	return if #centres > 0 then centres else skirt
+	if #centres > 0 or #skirt > 0 then
+		return if #centres > 0 then centres else skirt
+	end
+	-- Wave 3.2: a town with no skirt builds over its last clump (Metropolis does, at its 21st
+	-- purchase), and its sky must not go empty for good. The flocks then circle the landmarks it
+	-- owns, over their roofs, the tallest first by harvested height at the stage each shows and
+	-- then in purchase order: an order the server's replicated state alone decides.
+	local ranked: { { position: Vector3, height: number, order: number } } = {}
+	for order, slotId in handle.slotOrder do
+		local frame: CFrame? = handle.slotFrames[slotId]
+		if handle.owned[slotId] and not handle.streetOnly[slotId] and frame ~= nil then
+			table.insert(ranked, {
+				position = frame.Position,
+				height = landmarkHeight(handle, slotId),
+				order = order,
+			})
+		end
+	end
+	table.sort(ranked, function(a, b): boolean
+		if a.height ~= b.height then
+			return a.height > b.height
+		end
+		return a.order < b.order
+	end)
+	for _, landmark in ranked do
+		table.insert(
+			centres,
+			Vector3.new(landmark.position.X, landmark.height, landmark.position.Z)
+		)
+	end
+	return centres
 end
 
 -- Cancels every timer, animation and puff and removes everything the fabric placed, giving any
