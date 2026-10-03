@@ -7,6 +7,7 @@ against.
     py tools/cityfabric.py selftest            # the contract's test vector, asserted
     py tools/cityfabric.py timeline Village    # parcels by level, plumes and wild counts at tiers 1-5;
                                                # exits 1 when a moment shows more plumes than budget.plumes
+    py tools/cityfabric.py props Metropolis    # every prop the fabric can show, and the listed ones it never does
 
 What is mirrored, and from where (nothing is re-derived; a divergence is a bug in one of them):
   * develop, rect_distance, segment_distance, is_cleared: src/shared/CityFabric.luau, line for line
@@ -1568,11 +1569,10 @@ class FabricPlot:
         stage = stages.get(slot_id) or 0
         return heights[stage] if 0 <= stage < len(heights) else 0
 
-    def develop_states(self, owned, tier, stretches, joins, trace=None):
-        """Fabric.develop: every parcel at level 0 without a valid pull block."""
-        parcels = self.parcel_data
-        if self.pull is None:
-            return [{"level": 0, "district": None, "governor": None} for _ in parcels]
+    def develop_input(self, owned, tier, stretches, joins):
+        """The FabricInput Fabric.develop hands CityFabric.Develop: the tier, the visible stretches,
+        every owned slot with a district and a join node, and the parcels. tools/check_mirror.py
+        gives the same table to the Luau module."""
         landmarks = []
         for slot_id in sorted(owned):
             slot = self.layout["slots"].get(slot_id)
@@ -1580,7 +1580,13 @@ class FabricPlot:
             node = joins.get(slot_id)
             if district is not None and node is not None:
                 landmarks.append({"slotId": slot_id, "node": node, "district": district})
-        return develop({"tier": tier, "stretches": stretches, "landmarks": landmarks, "parcels": parcels}, self.pull, trace)
+        return {"tier": tier, "stretches": stretches, "landmarks": landmarks, "parcels": self.parcel_data}
+
+    def develop_states(self, owned, tier, stretches, joins, trace=None):
+        """Fabric.develop: every parcel at level 0 without a valid pull block."""
+        if self.pull is None:
+            return [{"level": 0, "district": None, "governor": None} for _ in self.parcel_data]
+        return develop(self.develop_input(owned, tier, stretches, joins), self.pull, trace)
 
     def mask(self, owned, states, segments, plazas, reaches=None):
         """Fabric.buildMask: owned footprints (+clear.slot) and their pads (+clear.pad), every buyable
@@ -2722,6 +2728,142 @@ def timeline(era_name, data_path=None, config_path=None):
     return 0
 
 
+def growth_moments(plot, history):
+    """(label, owned, stages, GrowthTier) each time the greedy player's plot can look different: after
+    every purchase that adds a slot, lifts a landmark to a new visible stage or moves the tier; then
+    the finished plot at its final stages. Level-ups that change nothing visible are skipped."""
+    out, seen = [], None
+    for tick, kind, slot_id, levels in history["purchases"]:
+        owned = set(levels)
+        stages = {owned_id: plot.visible_stage(owned_id, levels.get(owned_id, 1)) for owned_id in owned}
+        tier = tier_at_tick(history["tier_times"], tick)
+        key = (frozenset(owned), tuple(sorted(stages.items())), tier)
+        if key != seen:
+            seen = key
+            out.append((f"t={tick}s {kind} {slot_id}", owned, stages, tier))
+    everything = {slot["id"] for slot in plot.era.config["slots"] if slot["id"] in plot.layout["slots"]}
+    out.append(("full build", everything, plot.final_stages(everything), len(plot.city["tier"]["thresholds"])))
+    return out
+
+
+def props_report(era_name, data_path=None, config_path=None):
+    """Every prop the era's fabric can show -- parcels (sites, buildings, swap twins), the wild, the
+    upgrade layers, the pad marker, the reveal scaffold, the unlock vehicles -- over every moment of
+    the greedy player's era (growth_moments, a near plot), with the stages each is seen at; then
+    every prop the config lists that never shows, and every fabric blueprint nothing refers to."""
+    city = load_json(config_path if config_path is not None else CITY_CONFIG_PATH)
+    data = load_json(data_path) if data_path is not None else None
+    plot = FabricPlot.load(era_name, city=city, data=data)
+    if plot is None:
+        print(f"{era_name}: no fabric (needs src/shared/Config/Fabric/{era_name}.json and a `fabric` config block)")
+        return 1
+    config = plot.config or {}
+    dressing = city["eras"][era_name]
+    moments = growth_moments(plot, greedy_history(era_name, city))
+    shown = {}  # prop -> {"kinds": set, "stages": set, "most": the most seen at one moment}
+
+    def note(counts, prop, kind, stage):
+        if not isinstance(prop, str):
+            return
+        entry = shown.setdefault(prop, {"kinds": set(), "stages": set(), "most": 0})
+        entry["kinds"].add(kind)
+        entry["stages"].add(stage)
+        counts[prop] = counts.get(prop, 0) + 1
+
+    unlocks = (dressing.get("vehicles") or {}).get("unlocks") or []
+    for _label, owned, stages, tier in moments:
+        snap = plot.snapshot(owned, stages, tier, near=True)
+        counts = {}
+        for view in snap["parcels"]:
+            look = view["look"]
+            if look is not None:
+                kind = "site" if look["kind"] == SITE else ("twin" if look.get("swappedFrom") else "building")
+                note(counts, look["prop"], kind, look["stage"])
+        for item in snap["wild"]:
+            note(counts, item["prop"], "wild " + item["kind"], 0)
+        for layer in snap["upgrades"].values():
+            for item in layer["drawn"]:
+                note(counts, item["prop"], "layer " + item["layer"], item["stage"])
+        for pad in snap["pads"]:
+            if pad["marker"] is not None:
+                note(counts, pad["marker"]["prop"], "pad marker", 0)
+        for unlock in unlocks:
+            if isinstance(unlock, dict) and unlock.get("slot") in owned:
+                for prop in unlock.get("props") or []:
+                    note(counts, prop, "vehicle", 0)
+        for prop, count in counts.items():
+            shown[prop]["most"] = max(shown[prop]["most"], count)
+    # The reveal scaffold plays at every animated purchase of a slot that spawns a model.
+    if isinstance(config.get("reveal"), str) and any(not plot.street_only.get(slot_id) for slot_id in plot.layout["slots"]):
+        shown.setdefault(config["reveal"], {"kinds": set(), "stages": set(), "most": 1})["kinds"].add("landmark reveal")
+        shown[config["reveal"]]["stages"].add(0)
+
+    listed = {}  # prop -> where the config names it
+
+    def name(prop, where):
+        if isinstance(prop, str):
+            listed.setdefault(prop, []).append(where)
+
+    for district, sizes in (config.get("districts") or {}).items():
+        for size, props in (sizes or {}).items():
+            for prop in props or []:
+                name(prop, f"districts.{district}.{size}")
+    for size, prop in (config.get("sites") or {}).items():
+        name(prop, f"sites.{size}")
+    for size, props in (config.get("siteVariants") or {}).items():
+        for prop in props or []:
+            name(prop, f"siteVariants.{size}")
+    wild = config.get("wild") or {}
+    for key in ("clumps", "quarters"):
+        for prop in wild.get(key) or []:
+            name(prop, f"wild.{key}")
+    name((config.get("marker") or {}).get("prop"), "marker.prop")
+    name(config.get("reveal"), "reveal")
+    for layer, block in (config.get("upgrades") or {}).items():
+        for prop in (block or {}).get("props") or []:
+            name(prop, f"upgrades.{layer}")
+    for unlock in unlocks:
+        for prop in (unlock or {}).get("props") or []:
+            name(prop, "vehicles.unlocks")
+    twins = {}
+    for swap in valid_swaps(config.get("swaps")):
+        for prop in sorted(listed):
+            if any(where.startswith("districts.") for where in listed[prop]) and plot.heights.exists(prop + swap["suffix"]):
+                twins[prop + swap["suffix"]] = f"swaps ({swap['requiresSlot']}) twin of {prop}"
+    for entry in plot.wild_data:
+        if entry.get("kind") != CLUMP:
+            name(entry.get("prop"), "wild single in the data")
+
+    print(f"{era_name}: props the fabric shows over {len(moments)} moments of the greedy player (near plot), {len(plot.parcel_data)} parcels")
+    for prop in sorted(shown):
+        entry = shown[prop]
+        stages = ",".join(str(stage) for stage in sorted(entry["stages"]))
+        print(f"  shown   {prop:28s} {'/'.join(sorted(entry['kinds'])):22s} stages {stages:10s} up to x{entry['most']}")
+    unused = [prop for prop in sorted(listed) if prop not in shown]
+    for prop in unused:
+        print(f"  NEVER   {prop:28s} listed in {', '.join(listed[prop])}")
+    for prop in sorted(twins):
+        if prop not in shown:
+            print(f"  NEVER   {prop:28s} {twins[prop]}")
+    unlisted = [prop for prop in sorted(shown) if prop not in listed and prop not in twins]
+    for prop in unlisted:
+        print(f"  note    {prop:28s} shown but named nowhere in the config (a missing name draws nothing in game)")
+    # Blueprints nothing refers to: not shown, not listed, not a twin, and not named anywhere in
+    # CityDressing.json (roads, vehicles, walkers, birds and the rest are other systems' props).
+    folder = BLUEPRINTS_DIR / "_props" / era_name
+    text = json.dumps(city)
+    orphans = [
+        path.stem
+        for path in sorted(folder.glob("*.json"))
+        if path.stem not in shown and path.stem not in listed and path.stem not in twins and f'"{path.stem}"' not in text
+    ]
+    never_twins = sum(1 for prop in twins if prop not in shown)
+    print(f"  {len(shown)} props shown; {len(unused) + never_twins} listed or implied by the config and never shown; {len(orphans)} blueprints nothing refers to")
+    for prop in orphans:
+        print(f"  ORPHAN  {prop}")
+    return 0
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -2730,9 +2872,15 @@ def main(argv):
     line.add_argument("era")
     line.add_argument("--fabric", type=Path, help="fabric data to read instead of src/shared/Config/Fabric/<Era>.json")
     line.add_argument("--config", type=Path, help="a CityDressing.json to read instead of src/shared/Config/CityDressing.json")
+    used = sub.add_parser("props", help="every prop the fabric can show, and the listed ones it never does")
+    used.add_argument("era")
+    used.add_argument("--fabric", type=Path, help="fabric data to read instead of src/shared/Config/Fabric/<Era>.json")
+    used.add_argument("--config", type=Path, help="a CityDressing.json to read instead of src/shared/Config/CityDressing.json")
     args = parser.parse_args(argv)
     if args.command == "selftest":
         return selftest()
+    if args.command == "props":
+        return props_report(args.era, args.fabric, args.config)
     return timeline(args.era, args.fabric, args.config)
 
 
