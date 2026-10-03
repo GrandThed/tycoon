@@ -164,6 +164,9 @@ CHECK_LANE_FRONT = 0.5  # a lane lot's front, from its lane's setback line
 CHECK_LANE_ALONG = 0.05  # a lane lot's `laneAlong`, from the foot of its front on the lane
 CHECK_LANE_LOTS = 2  # a lane with fewer lots is a road to nowhere
 CHECK_FACING = 0.02  # |sin| between where a kerb entry faces and where its layer says it must
+# An authored spot (INTERFACES "Wave 3.2", the Bus Line): its front stands within this of the
+# street's outer edge -- a tile street's pavement edge -- and faces that street.
+CHECK_SPOT_FRONT = 0.5
 # A tiles era (INTERFACES "Wave 3.1"): a lot keeps this much daylight from the ring deck's band, a
 # ramp cell and a subway kiosk; it may touch a street's hard surface but never overlap it.
 CHECK_TILE_SOLID = 0.5
@@ -1960,8 +1963,9 @@ class Ground:
                     if kerbside and lanes is self.streets and in_kerb_strip(site, a, b, body, slack):
                         continue
                     yield f"{segment_gap(a, b, body):.2f} from {what}, inside the walker reach (need {need:g})"
-        if kerbside:
-            # The road's own cells, square ends included: a kerb strip ends where its street does.
+        if kerbside or site.tiles:
+            # The road's own cells, square ends included: a kerb strip ends where its street does,
+            # and in a tiles era nothing laid ever stands on a road cell (wave 3.2).
             for what, a, b, _lane_box in self.streets:
                 road = streetplan.band(a, b, site.road_half)
                 if not boxes_apart(box, box_of(road), 0.0) and overlap_depth(body, road) > TOUCH + slack:
@@ -2567,7 +2571,32 @@ def layer_outlines(era_name, doc, city=None, era=None, network=None):
     return out
 
 
+def place_spots(build, placer):
+    """Authored spots (INTERFACES "Wave 3.2", the Bus Line): on a 2-stud pavement only the walkers
+    fit, so a shelter stands behind the pavement at the lot line, in a gap the plan holds back from
+    the lots (`parcels.keepClear`). Each of the placer's `spots` -- `{x, z, rotationY, variant?}` --
+    is written as it stands, anchored to the drawn stretch nearest its front: the street it faces,
+    so it arrives with that street. Nothing is judged here: a spot is the layout owner's choice,
+    and `check` says what is wrong with it (spot_messages and the layer's clearances)."""
+    site = build.site
+    default = placer_variants(placer)[0]
+    for number_, spot in enumerate(placer["spots"], start=1):
+        variant = spot.get("variant", default)
+        rotation = spot["rotationY"]
+        face = streetplan.facing(rotation)
+        probe = build.entry(placer, spot["x"], spot["z"], rotation, variant, {})
+        reach = build.toward(placer, variant, rotation, face)
+        stretch = site.nearest_drawn((probe["x"] + face[0] * reach, probe["z"] + face[1] * reach))
+        if stretch is None:
+            raise SystemExit(f"fabric: {build.name} spot {number_} has no drawn street to stand beside")
+        entry = build.entry(placer, spot["x"], spot["z"], rotation, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+        build.entries.append(entry)
+        build.own.setdefault(id(placer), []).append((entry["x"], entry["z"]))
+        build.ground.add(build.name, len(build.entries), entry)
+
+
 PLACERS = {
+    "spots": place_spots,
     "kerb": place_kerb,
     "lotFront": place_lot_front,
     "driveway": place_driveway,
@@ -3745,6 +3774,7 @@ def upgrade_messages(site, plan, doc):
             messages.append(f"{name}: {placed} placed with the whole era owned, need at least {need[name]}")
         if name in laid:
             messages += layer_rules(site, plan, name, entries, parcels)
+            messages += spot_messages(site, plan, name, entries, props)
             messages += unused_prop_messages(site, plan, name, props, entries, levels)
     trees = upgrades.get("trees", [])
     for i, tree in enumerate(trees):
@@ -3824,8 +3854,46 @@ def layer_clearance(site, plan, name, index, label, entry, props, ground, polys)
 
 
 def placer_variants(placer):
-    """The 1-based prop indices a placer lays."""
-    return list(placer["variants"]) if "variants" in placer else [placer["variant"]]
+    """The 1-based prop indices a placer lays; a `spots` placer without `variants` lays the variant
+    each spot names, else the first prop."""
+    if "variants" in placer:
+        return list(placer["variants"])
+    if "variant" in placer:
+        return [placer["variant"]]
+    return sorted({spot.get("variant", 1) for spot in placer.get("spots", ())}) or [1]
+
+
+def spot_messages(site, plan, name, entries, props):
+    """A layer laid from authored spots (any `spots` placer in its plan block): every
+    stretch-anchored entry stands with its front within CHECK_SPOT_FRONT of its street's outer edge
+    (`street_strip`: a tile street's pavement edge) and faces that street. Its clearances are the
+    layer's own (layer_clearance); the count is `require.<layer>`."""
+    if not any(placer.get("kind") == "spots" for placer in (plan.get(name) or {}).get("placers") or []):
+        return []
+    messages = []
+    for index, entry in enumerate(entries, start=1):
+        stretch = site.stretch_by_id.get(entry.get("stretch")) if entry.get("anchor") == "stretch" else None
+        variant = entry.get("variant")
+        if stretch is None or not (isinstance(variant, int) and 1 <= variant <= len(props)):
+            continue
+        found = prop_shapes(site, plan, props[variant - 1], entry)
+        if found is None:
+            continue
+        label = f"{name} {index} ({number(entry['x'])}, {number(entry['z'])})"
+        st = site.network.stretches[stretch]
+        front = min(segment_gap(st["a"], st["b"], shape) for shape in found[0])
+        if abs(front - site.street_strip) > CHECK_SPOT_FRONT + EPS:
+            messages.append(
+                f"{label}: its front is {front:.2f} from {entry['stretch']}, not within {CHECK_SPOT_FRONT} of the "
+                f"street's outer edge at {site.street_strip:g}"
+            )
+        point = (entry["x"], entry["z"])
+        _, foot = streetplan.point_segment_distance(point, st["a"], st["b"])
+        toward = streetplan.unit((foot[0] - point[0], foot[1] - point[1]))
+        face = streetplan.facing(entry["rotationY"])
+        if toward is None or abs(face[0] * toward[1] - face[1] * toward[0]) > CHECK_FACING or face[0] * toward[0] + face[1] * toward[1] < 0:
+            messages.append(f"{label}: does not face its street, {entry['stretch']}")
+    return messages
 
 
 def placer_messages(plan, laid):
