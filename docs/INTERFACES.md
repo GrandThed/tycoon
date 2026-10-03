@@ -6511,6 +6511,134 @@ candidate is the pick; the boulevard branch is kept as the record. The lead read
 - Renders: `m12m_avenues_{tier1,tier3,full,full_entrance,streetplan,lane}.png`,
   `m12m_avenues_denser.png` (67 against 85), `m12m_compare.png` (today against avenues).
 
+## Wave 3.2 — Metropolis in the game (Ben, 2026-10-03)
+
+Ben on the denser avenues: "yeah, i love it". On the city-changers: "lovely" (the lead's reading of
+his answer to the recommendations put to him). So:
+
+- **The layout is the 85-lot avenues plan.** The block slabs stay gone.
+- **`rooftopGarden` → "Green the Rooftops"** and **`busStop` → "Open the Bus Line"** become
+  city-changers. `cityPark` stays a park and `financeDistrict` stays its tower (the `…Crown` twins
+  are dropped). The Bus Line is placed to cost as few lots as it can; the lead reports the count.
+
+Everything stays client-only dressing except the era JSON. No remote, attribute or profile change.
+
+### Slots (lead, `Config/Eras/3_Metropolis.json`, applied)
+
+Both slots are `streetOnly` with a new name and description. Type, cost, income, multiplier and
+`requires` are unchanged (`sim_economy.py`: 16:20:04, legacy 887, as before).
+
+| Slot | Name | What buying it does |
+|---|---|---|
+| `busStop` (8) | Open the Bus Line | bus shelters beside the streets, city buses in the traffic |
+| `rooftopGarden` (20) | Green the Rooftops | every home and shop tower swaps to its roof-garden twin |
+
+In the layout each gets a pad beside a street on ground nothing else uses, a one-point spur and no
+`district` (the `subwayLine` pattern).
+
+### Config (lead applies the schema and first values)
+
+```json
+"fabric": {
+  "swaps": [ { "requiresSlot": "rooftopGarden", "suffix": "Green" } ],
+  "upgrades": { "busStops": { "requiresSlot": "busStop", "props": ["BusShelterM"], "tierOffset": 0, "stagger": 0.3, "budget": 8 } }
+},
+"vehicles": { "unlocks": [ { "slot": "busStop", "props": ["VehicleCityBus"], "share": 0.15 } ] }
+```
+
+District lists name only props that some lot can show. The layout has no medium lot, so a `medium`
+list repeats its district's `small` props.
+
+### Client rules (ui-engineer). The mirror is normative: `tools/cityfabric.py`
+
+The mirror implemented these first. The client copies them exactly. Each pure rule lives in
+`src/shared/CityFabric.luau` (numbers, strings and tables only), and the Luau and Python versions are
+cross-checked on the real Metropolis data under the Luau CLI.
+
+1. **`levelStages`** (`level_stage`, `valid_level_stages`). `CityFabric.LevelStage(levelStages,
+   level, stageCount): number`. Valid only as a non-empty array of whole numbers ≥ 0, else
+   [0, 1, 2]. Level L ≥ 2 starts from entry L − 1 (Luau index); past the end, one more stage per
+   level; then `min(…, stageCount − 1)`; then the height cap lowers it as today.
+2. **`siteVariants`** (`site_look`). A level-1 parcel `i` shows `list[((i − 1) % #list) + 1]` when
+   its size has a non-empty list of names; a non-name entry spawns nothing; otherwise `sites[size]`.
+3. **`swaps`** (`valid_swaps`, `swapped_look`). After the look is chosen: for each swap in list
+   order, while its `requiresSlot` is in the sticky owned set (and the parcel's district is in
+   `districts`, if given), a building look `<prop>` becomes `<prop><suffix>` if that prop has a
+   template. The stage is kept. Sites never swap. A malformed entry is skipped.
+   - Animation: buying the slot is a stage-swap pop on every swapped parcel, staggered by
+     `construction.stagger` per rank, rippling out from the slot's pad, with dust under `maxPuffs`.
+     Unanimated syncs and restores place the final state.
+4. **Ring clearing** (`ring_rects`). `CityFabric.RingRects(ring, tileStuds, ramp, rampCells)`: the
+   four deck-band rects (ring ± half a cell) and the ramp cells inward from the ramp cell. While
+   `highway.requiresSlot` is in the sticky owned set, they join the clearing mask grown by
+   `clear.parcel`. So old town under the future ring falls when the ramp is bought, before the deck
+   builds over it.
+5. **Tiles-era lanes.** In an era with `road.tiles` and `fabric.lanes`, a lane whose `LaneReach` is
+   above 0 is drawn whole, **as a footpath, by the code that draws a tiles-era spur**:
+   `road.tiles.spur` width, material and colour; one flat Part per leg; each slab overlapping half
+   its width past an interior end; top `SPUR_DROP` under the kerb; the first leg clipped `spurClip`
+   (road half + pavement + half the width) from the mouth, so it abuts the pavement's outer edge.
+   No rim, no disc, no `Texture`, no baked piece. Near and far plots both draw it. A near plot's
+   animated sync adds one dust burst. Lane legs join the mask with `clear.lane` as today. Lanes are
+   not walk solids and carry no walk or vehicle lanes.
+6. **`RoadGraph.FabricNetwork` in a tiles era** returns only stretches whose cells are inside
+   `budget.tileCells` (`tileStretchAllowed`), as `PieceVisible` already does.
+7. **The highway sign's `clearOf`** also keeps off developed parcel rects.
+8. **Config validation** stays in `Fabric.new`: a bad `levelStages`, `siteVariants` or `swaps` value
+   reads as absent and never raises an error.
+9. **`AssetPreloader`** loads what a fabric era can spawn: the site variants, the swap twins of
+   every listed district prop, the layer props and the unlock vehicles.
+10. **Types** (`Types.luau`): `FabricConfig.siteVariants: { [string]: { string } }?`,
+    `FabricConfig.swaps: { FabricSwapConfig }?` with
+    `FabricSwapConfig = { requiresSlot: string, suffix: string, districts: { string }? }`.
+
+Nothing else changes in the client. The generic upgrade layers and `vehicles.unlocks` already do the
+Bus Line. Subway kiosks follow the layout. Village and Boomtown must not move: without the new keys
+every rule above is today's behaviour.
+
+### Bus Line (layout owner and tools engineer)
+
+On a 2-stud pavement nothing but the walkers fits. A shelter stands **behind the pavement, at the
+lot line, in a gap the lots keep clear** (`parcels.keepClear`), facing its street, stretch-anchored.
+4 to 6 shelters on at least three streets, using the frontage the two street-only slots free.
+`check` enforces the count through `require.busStops`.
+
+### Props, final (strips to Ben before any upload)
+
+Only props some lot or entry shows are uploaded. The tools engineer lists them from the timeline.
+
+| Props | Lot | Stages |
+|---|---|---|
+| `FabricResNarrowA/B`, `FabricOfficeNarrowA/B`, `FabricShopNarrowA/B` | 4 × 8 | 5 |
+| `FabricResSmallA/B`, `FabricOfficeSmallA/B`, `FabricShopSmallA` | 6 × 6 | 5 |
+| the `…Green` twin of every Res and Shop prop above | same | 5 |
+| `SiteNarrow`, `SiteNarrowCrane`, `SiteSmall`, `SiteSmallCrane`, `RevealScaffold`, `LotHoarding` | | 1 |
+| `OldTownClumpA/B/C`, `OldTownQuarterA/B/C`, `OldTownBillboard`, `OldTownRubble`, `OldTownSkip` | clump, quarter, single | 1 |
+| `BusShelterM`, `VehicleCityBus` | layer, vehicle | 1 |
+
+Not uploaded, and their blueprints leave the tree: the medium towers, the plazas, `SiteMedium`,
+`OldTownWarehouse` and the `…Crown` twins.
+
+### Ownership (wave 3.2, disjoint)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `Config/Eras/3_Metropolis.json`; `CityDressing.json` schema and first values; `metropolis.project.json`; merges; the asset run |
+| ui-engineer | `src/shared/CityFabric.luau`, `src/shared/Types.luau`, `src/client/City/{Fabric,RoadGraph,Scatter,TileRenderer,Highway}.luau`, `src/client/Controllers/{CityDressingController,AssetPreloader}.luau` |
+| layout owner (economy-designer) | `src/shared/Layouts/Metropolis.luau`, `tools/fabric/Metropolis.plan.json`, `Config/Fabric/Metropolis.json`, `eras.Metropolis.fabric.pull`; renders |
+| tools engineer (economy-designer) | `tools/fabric.py`, `tools/streetplan.py`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py`; the Luau-against-Python cross-check |
+| prop-builders | `tools/assets/{tower_kit,oldtown_kit,metro_transit_kit}.py`, the blueprints under `_props/Metropolis/` |
+
+### Done when (wave 3.2, before the asset run)
+
+- `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village,
+  Boomtown and Metropolis; Village and Boomtown fabric data byte-identical.
+- The Luau `CityFabric` and the Python mirror agree on every Metropolis parcel at every tier.
+- stylua, selene, luau-lsp, `check_compile.py` and `rojo build` (default, combat, boomtown and
+  metropolis project files) clean.
+- A strip for every final prop, approved by Ben. Then the asset run: merge, upload, **one harvest
+  paste**, templates, the fabric data rebuilt from harvested extents, `build/metropolis.rbxl`.
+
 ---
 
 # M13 contracts — The Valley (wave 1: sky, ground, hub, roads)

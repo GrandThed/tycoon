@@ -864,7 +864,16 @@
         "perPlot": 32,
         "scale": 0.5,
         "speed": 12,
-        "followGap": 0.6
+        "followGap": 0.6,
+        "unlocks": [
+          {
+            "slot": "busStop",
+            "props": [
+              "VehicleCityBus"
+            ],
+            "share": 0.15
+          }
+        ]
       },
       "greenery": {
         "props": [
@@ -1087,6 +1096,23 @@
           "width": 3,
           "rim": 0,
           "fillHeight": 0.09
+        },
+        "swaps": [
+          {
+            "requiresSlot": "rooftopGarden",
+            "suffix": "Green"
+          }
+        ],
+        "upgrades": {
+          "busStops": {
+            "requiresSlot": "busStop",
+            "props": [
+              "BusShelterM"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.3,
+            "budget": 8
+          }
         }
       }
     },

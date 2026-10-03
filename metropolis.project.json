@@ -1,0 +1,78 @@
+{
+	"name": "EraCityTycoon",
+	"globIgnorePaths": [
+		"templates/_props",
+		"templates/_paths",
+		"templates/_enemies",
+		"templates/_world"
+	],
+	"tree": {
+		"$className": "DataModel",
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"Shared": {
+				"$path": "src/shared"
+			},
+			"Packages": {
+				"$path": "Packages"
+			},
+			"Assets": {
+				"$className": "Folder",
+				"Props": {
+					"$className": "Folder",
+					"$path": {
+						"optional": "templates/_props"
+					}
+				},
+				"Paths": {
+					"$className": "Folder",
+					"$path": {
+						"optional": "templates/_paths"
+					}
+				}
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"Server": {
+				"$path": "src/server"
+			},
+			"ServerPackages": {
+				"$path": "ServerPackages"
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"$ignoreUnknownInstances": true,
+			"Assets": {
+				"$className": "Folder",
+				"$path": {
+					"optional": "templates"
+				},
+				"World": {
+					"$className": "Folder",
+					"$path": {
+						"optional": "templates/_world"
+					}
+				}
+			}
+		},
+		"Workspace": {
+			"$className": "Workspace",
+			"$ignoreUnknownInstances": true,
+			"$attributes": {
+				"DebugStartEra": 3,
+				"GrantCash": 1000000000000000000
+			}
+		},
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"Client": {
+					"$path": "src/client"
+				}
+			}
+		}
+	}
+}
