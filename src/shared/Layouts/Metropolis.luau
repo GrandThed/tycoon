@@ -1,9 +1,10 @@
 --!strict
 -- Era 3 (Metropolis) plot layout: the M12 growth layout "avenues" (INTERFACES "M12 wave 3 --
--- Metropolis", "Wave 3.1b -- avenues, denser"). Positions are studs relative to the plot centre,
--- Y at ground level. rotationY is Roblox-native CFrame.Angles(0, rad(r), 0): 0 faces -Z (the
--- plot's front/hub edge), positive turns counterclockwise seen from above (90 faces -X, 270 faces
--- +X). Every pad is placed by padPosition, unrotated.
+-- Metropolis", "Wave 3.1b -- avenues, denser", "Wave 3.2 -- Metropolis in the game"). Positions
+-- are studs relative to the plot centre, Y at ground level. rotationY is Roblox-native
+-- CFrame.Angles(0, rad(r), 0): 0 faces -Z (the plot's front/hub edge), positive turns
+-- counterclockwise seen from above (90 faces -X, 270 faces +X). Every pad is placed by
+-- padPosition, unrotated.
 --
 -- Downtown on three avenues. The entrance runs one cell in to a cross-town street (z = -42), where
 -- City Hall and the shopping mall face the arriving player across it. Three parallel avenues leave
@@ -37,14 +38,20 @@
 --    lot behind it (corner shop, parking garage). Landmarks on the outer rows are the shallow
 --    ones, because the lane runs behind them.
 --  * A lot is as tall as the nearest landmark with a district allows, and a lane's lots follow
---    the street lot beside its mouth. So four low landmarks carry no district (bus stop, city
---    park, rooftop garden, convention centre): each would cap its neighbours at one or two
---    storeys, and the two bought last would cut down buildings already standing. They stand where
---    nothing is built in front of them instead: the park and the roof garden at the heads of the
---    inner rows beside the mall and City Hall, the bus stop first after a lane mouth, the
---    convention centre behind the food truck. Along each avenue the landmarks with a district
---    stand level or rise toward the back, so no lot is taller than a landmark it stands in front
---    of.
+--    the street lot beside its mouth. So the two low landmarks carry no district (city park,
+--    convention centre): each would cap its neighbours at one or two storeys, and the convention
+--    centre, bought last, would cut down buildings already standing. They stand where nothing is
+--    built in front of them instead: the park at the head of the east avenue's inner row beside
+--    the mall, the convention centre behind the food truck. Along each avenue the landmarks with
+--    a district stand level or rise toward the back, so no lot is taller than a landmark it stands
+--    in front of.
+--  * Four slots are street-only (subway, ramp, Bus Line, Green Rooftops): no building, a pad and
+--    a one-point path. Their pads stand in a row on the strip between the cross-town street and
+--    the deck, ground too shallow for a lot.
+--  * The Bus Line's five shelters are plan spots (`busStops` in the plan), each behind a pavement
+--    in a gap no lot could use: two on that same front strip, one behind the corner shop, one
+--    behind the parking garage (a deep landmark leaves the row behind it a gap a lot cannot fill),
+--    and one beside the kiosk at the T.
 --  * The hospital is in the `office` district, not `civic`: it governs the ten lots of the west
 --    back lane, and civic has no narrow prop and a 2.3-stud plaza for small lots.
 --  * Growth by tier: the centre avenue's foot and the east avenue as far as apartment block A
@@ -82,12 +89,13 @@ return {
 			district = "retail",
 		},
 		-- bought third: its path draws the centre avenue's foot. Too deep for a narrow lot behind
-		-- it, so the east avenue's inner row has a 6 x 6 lot there
+		-- it, so the east avenue's inner row has a 6 x 6 lot there. It stands a stud further back
+		-- than its row needs, which leaves 4.3 beside that lot: the east avenue's bus shelter
 		cornerShop = {
-			position = Vector3.new(9.82, 0, -3.03),
+			position = Vector3.new(9.82, 0, -2.03),
 			rotationY = 90,
-			padPosition = Vector3.new(6.5, 0, -1.63),
-			spur = { Vector3.new(9.82, 0, -3.03), Vector3.new(0, 0, -3.03) },
+			padPosition = Vector3.new(6.5, 0, -0.63),
+			spur = { Vector3.new(9.82, 0, -2.03), Vector3.new(0, 0, -2.03) },
 			district = "retail",
 		},
 		-- the only tier-1 landmark off the centre avenue, half way down the east avenue's outer row:
@@ -135,13 +143,13 @@ return {
 			spur = { Vector3.new(18.41, 0, -21.6), Vector3.new(28, 0, -21.6) },
 			district = "retail",
 		},
-		-- first on the east avenue's outer row, right after the front lane's mouth, so no lot stands
-		-- in front of a 4-stud shelter
+		-- streetOnly (Open the Bus Line): a pad on the front strip, east of the subway's and clear
+		-- of that pad's marker. The shelters are in the plan
 		busStop = {
-			position = Vector3.new(37.52, 0, -26.4),
-			rotationY = 90,
-			padPosition = Vector3.new(34.5, 0, -25),
-			spur = { Vector3.new(37.52, 0, -26.4), Vector3.new(28, 0, -26.4) },
+			position = Vector3.new(28, 0, -48.5),
+			rotationY = 0,
+			padPosition = Vector3.new(28, 0, -48.5),
+			spur = { Vector3.new(28, 0, -48.5) },
 		},
 		-- back to back with the convention centre; it governs the west avenue's front and the west
 		-- front lane (homes)
@@ -152,7 +160,8 @@ return {
 			spur = { Vector3.new(-18.08, 0, -13.85), Vector3.new(-28, 0, -13.85) },
 			district = "residential",
 		},
-		-- the deepest row landmark: the west avenue's inner row has a 6 x 6 lot behind it
+		-- the deepest row landmark: the west avenue's inner row has a 6 x 6 lot behind it and, in
+		-- the 4.5 left beside that lot, the west avenue's bus shelter
 		parkingGarage = {
 			position = Vector3.new(-10.01, 0, 1),
 			rotationY = 270,
@@ -160,13 +169,12 @@ return {
 			spur = { Vector3.new(-10.01, 0, 1), Vector3.new(0, 0, 1) },
 			district = "office",
 		},
-		-- City Hall's partner across the centre avenue's mouth. It stands 0.3 off the avenue's
-		-- pavement so the city park behind it keeps its daylight, and its pad sits west so the
-		-- marker clears the park
+		-- City Hall's partner across the centre avenue's mouth, its flank on the avenue's pavement
+		-- edge. The pad sits west so the marker clears the park
 		shoppingMall = {
-			position = Vector3.new(9.35, 0, -32.07),
+			position = Vector3.new(9.73, 0, -32.07),
 			rotationY = 0,
-			padPosition = Vector3.new(6.72, 0, -35.5),
+			padPosition = Vector3.new(7.1, 0, -35.5),
 			district = "retail",
 		},
 		-- streetOnly (Dig the Subway Line): no model and no path, a pad on the front strip between
@@ -188,12 +196,14 @@ return {
 			district = "office",
 		},
 		-- the head of the east avenue's inner row, on the cross-town's corner beside the mall: a
-		-- 3-stud garden with only the street in front of it
+		-- 3-stud garden with only the street in front of it. Mall and park together are a third of
+		-- a stud wider than the block, so the garden's edge stands 0.35 over the east avenue's
+		-- pavement and keeps a quarter stud of daylight behind the mall
 		cityPark = {
-			position = Vector3.new(18.16, 0, -32.16),
+			position = Vector3.new(18.53, 0, -32.16),
 			rotationY = 270,
 			padPosition = Vector3.new(21.5, 0, -33.48),
-			spur = { Vector3.new(18.16, 0, -32.16), Vector3.new(28, 0, -32.16) },
+			spur = { Vector3.new(18.53, 0, -32.16), Vector3.new(28, 0, -32.16) },
 		},
 		-- closes the east avenue. Bought in tier 3, it draws the avenue's whole back half then and
 		-- governs the east back lane; the pad sits a stud west so its marker leaves the lane its
@@ -219,12 +229,13 @@ return {
 			},
 			district = "office",
 		},
-		-- streetOnly (Build the Highway Ramp): the subway pad's twin on the front strip
+		-- streetOnly (Build the Highway Ramp): the subway pad's twin on the front strip, half a
+		-- stud nearer the entrance so the west bus shelter fits between it and the next pad
 		highwayRamp = {
-			position = Vector3.new(-18, 0, -48.5),
+			position = Vector3.new(-17.5, 0, -48.5),
 			rotationY = 0,
-			padPosition = Vector3.new(-18, 0, -48.5),
-			spur = { Vector3.new(-18, 0, -48.5) },
+			padPosition = Vector3.new(-17.5, 0, -48.5),
+			spur = { Vector3.new(-17.5, 0, -48.5) },
 		},
 		-- 12 x 12: closes the cross-town's east end from the corner ground past the bend, where no
 		-- lot can front a street
@@ -241,14 +252,13 @@ return {
 			padPosition = Vector3.new(-6.5, 0, -14.95),
 			spur = { Vector3.new(-9.95, 0, -13.85), Vector3.new(0, 0, -13.85) },
 		},
-		-- the head of the west avenue's inner row, beside City Hall. It stands 5.3 behind the
-		-- cross-town's pavement so its marker, on the street side of the pad, keeps 4.5 off the
-		-- cross-town's centreline
+		-- streetOnly (Green the Rooftops): the westmost pad on the front strip. Turned half round
+		-- so its marker stands west of it, off the ramp pad
 		rooftopGarden = {
-			position = Vector3.new(-19, 0, -31.2),
-			rotationY = 90,
-			padPosition = Vector3.new(-21.5, 0, -31.2),
-			spur = { Vector3.new(-19, 0, -31.2), Vector3.new(-28, 0, -31.2) },
+			position = Vector3.new(-28, 0, -48.5),
+			rotationY = 180,
+			padPosition = Vector3.new(-28, 0, -48.5),
+			spur = { Vector3.new(-28, 0, -48.5) },
 		},
 		-- closes the west avenue, 10 past its end with the pad on the end's pavement
 		bankTower = {
@@ -273,10 +283,10 @@ return {
 		-- far enough behind the corner shop for its marker to clear the shop's ground; shallow
 		-- enough for narrow lots behind it
 		financeDistrict = {
-			position = Vector3.new(9.62, 0, 7.3),
+			position = Vector3.new(9.62, 0, 8.3),
 			rotationY = 90,
-			padPosition = Vector3.new(6.5, 0, 8.3),
-			spur = { Vector3.new(9.62, 0, 7.3), Vector3.new(0, 0, 7.3) },
+			padPosition = Vector3.new(6.5, 0, 9.3),
+			spur = { Vector3.new(9.62, 0, 8.3), Vector3.new(0, 0, 8.3) },
 			district = "office",
 		},
 		-- Monument, 14 x 14: closes the centre avenue, the main vista from the entrance, behind the
@@ -320,12 +330,16 @@ return {
 		ramp = { cell = Vector3.new(-56, 0, -42), direction = "+X" },
 	},
 	-- Subway entrances. A kiosk no longer fits on a 2-stud pavement, so each stands at a street
-	-- corner beside it, in a gap the lots keep clear, its front to the street: two either side of
-	-- the entrance facing the cross-town, two at the T's corners facing the T. The first is the one
+	-- corner beside it, in a gap the lots keep clear, its front to the street. The first is the one
 	-- the client always shows once the slot is owned.
 	subwayEntrances = {
-		{ position = Vector3.new(-7.95, 0, -48.4), rotationY = 180 },
+		-- east of the entrance, facing the cross-town. The west side is left open, so the arriving
+		-- player sees City Hall
 		{ position = Vector3.new(7.95, 0, -48.4), rotationY = 180 },
+		-- the corner of the cross-town and the west avenue, beside City Hall. A lot here would be
+		-- governed by City Hall and stand taller than apartment block B behind it
+		{ position = Vector3.new(-20.05, 0, -33.6), rotationY = 0 },
+		-- the T's two corners, facing the T
 		{ position = Vector3.new(-7.95, 0, 21.59), rotationY = 180 },
 		{ position = Vector3.new(7.95, 0, 21.59), rotationY = 180 },
 	},

@@ -24,13 +24,20 @@
     "street": 5.5,
     "spur": 2.55,
     "tileSolid": 0.5,
+    "keepClear": [
+      { "x": 12.7, "z": -48.2, "size": [3.0, 1.4], "rotationY": 180 },
+      { "x": -22.75, "z": -48.2, "size": [3.0, 1.4], "rotationY": 180 },
+      { "x": -21.8, "z": 3.72, "size": [3.0, 1.4], "rotationY": 90 },
+      { "x": 21.8, "z": 0.75, "size": [3.0, 1.4], "rotationY": 270 },
+      { "x": -6.2, "z": 16.57, "size": [3.0, 1.4], "rotationY": 270 }
+    ],
     "lanes": {
       "setback": 1.6,
       "clear": 1.6,
       "street": 5.5,
       "gap": 0.05,
       "step": 0.05,
-      "overhang": 0.0,
+      "overhang": 0.9,
       "mediumShare": 0.0,
       "minLots": 2,
       "sizes": ["narrow", "small"],
@@ -42,8 +49,32 @@
       ]
     }
   },
-  "require": { "parcels": 80, "houses": 80 },
-  "footprints": { "OldTownBillboard": [2, 1], "OldTownRubble": [2, 2], "OldTownSkip": [2, 1.2] },
+  "require": { "parcels": 84, "houses": 84, "busStops": 5 },
+  "layers": ["busStops"],
+  "footprints": {
+    "OldTownBillboard": [2, 1],
+    "OldTownRubble": [2, 2],
+    "OldTownSkip": [2, 1.2],
+    "BusShelterM": [3.0, 1.4]
+  },
+  "busStops": {
+    "scale": 1.0,
+    "minStreets": 3,
+    "stretchFacing": "street",
+    "margins": { "lot": 0.55, "solid": 0.55, "lamp": 0.55, "tree": 0.55, "item": 0.55, "edge": 1.1, "wood": 0.1 },
+    "placers": [
+      {
+        "kind": "spots",
+        "spots": [
+          { "x": 12.7, "z": -48.2, "rotationY": 180 },
+          { "x": -22.75, "z": -48.2, "rotationY": 180 },
+          { "x": -21.8, "z": 3.72, "rotationY": 90 },
+          { "x": 21.8, "z": 0.75, "rotationY": 270 },
+          { "x": -6.2, "z": 16.57, "rotationY": 270 }
+        ]
+      }
+    ]
+  },
   "wild": {
     "pattern": "fields",
     "grid": { "pitch": 14, "origin": [7, 7], "angle": 0, "edge": 0.5, "shift": 7 },
