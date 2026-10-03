@@ -6629,6 +6629,32 @@ Not uploaded, and their blueprints leave the tree: the medium towers, the plazas
 | tools engineer (economy-designer) | `tools/fabric.py`, `tools/streetplan.py`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py`; the Luau-against-Python cross-check |
 | prop-builders | `tools/assets/{tower_kit,oldtown_kit,metro_transit_kit}.py`, the blueprints under `_props/Metropolis/` |
 
+### Rulings after the wave 3.2 reports (lead, 2026-10-03)
+
+- **The layout is 88 lots** (was 85): 52 on streets (50 narrow, 2 small) and 36 on the four lanes
+  (9 narrow, 27 small). Houses / sites at tiers 1–4 and full: 3/19, 27/8, 58/22, 71/12, 88/0.
+  `pull`: radius 119, tierTerm 0.4, thresholds [0.6, 3.09, 3.39, 4.75], reach 30.
+- **The Bus Line costs no lot:** 5 shelters on 4 streets (`require.busStops` 5), each in ground no
+  lot could use. `BusShelterM` is 3.0 × 1.4, so one fits a one-lot gap with 0.55 clear on each side.
+  The `spots` placer writes each plan-authored spot as an ordinary stretch-anchored entry; `check`
+  holds its front within 0.5 of the pavement's outer edge, facing its street, out of the walker
+  reach and off every solid.
+- **Street-only pads:** `busStop` (28, −48.5) and `rooftopGarden` (−28, −48.5), on the front strip
+  beside the subway and ramp pads.
+- **A Green twin may stand up to 1.2 above its original** (the garden's trees and pergola), so a
+  swapped lot can top its governor's cap by under a stud. Accepted: the cap governs the building,
+  and the swap keeps the stage.
+- **Final props:** 18 towers (11 and the 7 Green twins of the Res and Shop ones) and 17 others. The
+  kits were pruned so every remaining GLB is byte-identical to what Ben saw.
+  `py tools/cityfabric.py props Metropolis` lists what any lot can show and what nothing refers to.
+- **`py tools/check_mirror.py`** runs the real `CityFabric.luau` under the Luau CLI against
+  `cityfabric.py` on every fabric era at 30 moments each. It is a QA gate from this wave on
+  (`--strict` also fails on a helper that exists on one side only).
+- **One west kiosk moved** from the entrance to the corner of the cross-town street and the west
+  avenue, which costs one lot (89 was possible) and opens that side of the entrance view.
+- Open: far plots draw 60 of the 88 lots; the ring pier stands in the entrance view; the park's
+  edge stands 0.35 over the east avenue's pavement.
+
 ### Done when (wave 3.2, before the asset run)
 
 - `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village,
