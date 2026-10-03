@@ -1,4 +1,4 @@
-"""Fabric towers for the Metropolis growing city (M12 wave 3.1), generated as a Kenney-style kit.
+"""Fabric towers for the Metropolis growing city (M12 wave 3), generated as a Kenney-style kit.
 
 Runs inside Blender (headless):
 
@@ -7,7 +7,7 @@ Runs inside Blender (headless):
 Writes one GLB per piece into assets/kenney3d/tower-kit/Models/GLB format/, the folder convention
 every Kenney kit uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py discover the
 kit with no registration step. assets/ is gitignored, so this script is the committed artifact and
-the GLBs regenerate from it. `--write-blueprints` also (re)writes the 32 fabric blueprints under
+the GLBs regenerate from it. `--write-blueprints` also (re)writes the 18 fabric blueprints under
 tools/testfit/blueprints/_props/Metropolis/ from PROPS, so the pieces and the stages that use them
 cannot drift apart; leave it off to keep a hand-edited blueprint.
 
@@ -18,8 +18,13 @@ by floor**, so its pieces are generated: a street-level base (lobby, shopfront o
 run of floors per growth stage, and a crown. Filler never copies a landmark's silhouette or its
 signature pieces: no rounded glass corners, no vertical blue window strips, no green pyramid roof,
 no highway-sign gantries on roofs. Offices here read through horizontal ribbon windows, louvred
-plant screens and setback crowns; homes through warm walls, punched windows and balconies; shops
+plant screens and glass crowns; homes through warm walls, punched windows and balconies; shops
 through colourful awnings and signs at street level with flats above.
+
+**The final set** (2026-10-03) is the eleven props the approved 85-lot layout can show, on narrow
+4 x 8 and small 6 x 6 lots, and the seven Green twins of its homes and shops ("Green the
+Rooftops"). The medium towers, the pocket plazas and the finance-district Crown twins of the wave
+3.1 drafts are gone: the layout never draws them.
 
 **Units.** 1 glTF unit = 1 stud, like garage-kit and metro-kit; blueprints use `"scale": 1.0`, so
 every literal below is directly checkable in studs. A storey is S = 1.6 studs, the commercial
@@ -64,7 +69,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from garden_kit import REPO_ROOT, Part, build_object, export  # noqa: E402
-from village_extras_kit import beam, lathe, place, prism  # noqa: E402
+from village_extras_kit import beam, lathe, place  # noqa: E402
 
 import bpy  # noqa: E402
 
@@ -78,7 +83,6 @@ Rgb = tuple[int, int, int]
 WHITE = (255, 255, 255)
 WALL_SHADE = (220, 220, 233)  # industrial: the white ramp, halfway down
 TIN = (205, 205, 224)  # and lower still
-LAVENDER = (160, 168, 201)
 STONE = (142, 149, 179)
 SLATE_BLUE = (115, 126, 155)  # industrial
 SLATE_LIGHT = (102, 107, 128)
@@ -94,11 +98,8 @@ GREEN_DARK = (61, 167, 122)
 YELLOW = (255, 192, 68)
 ORANGE = (255, 126, 68)
 RED = (207, 83, 79)
-PINK = (243, 120, 240)
 PINK_PALE = (245, 200, 240)  # industrial
-PURPLE = (168, 120, 232)
 CREAM = (253, 228, 199)
-SAND = (242, 191, 153)
 PEACH = (250, 174, 138)
 WOOD = (241, 151, 108)
 TERRACOTTA = (207, 115, 91)
@@ -130,26 +131,23 @@ PARAPET_T = 0.16
 BURY_MARGIN = GAP  # what check demands between a buried piece and the walls around it
 HEIGHT_FLOOR = 3.4  # CityDressing.json eras.Metropolis.fabric.heightFloor
 TRI_BUDGET = 2000  # per stage, per prop (contract)
-LOW_PLANT = 0.36  # the tallest roof plant a three-storey stage 1 carries (an a/c unit is 0.28)
+LOW_PLANT = 0.36  # the tallest roof plant a stage 1 carries (an a/c unit is 0.28)
 
-LOTS = {"narrow": (4.0, 8.0), "small": (6.0, 6.0), "medium": (8.0, 8.0)}
+LOTS = {"narrow": (4.0, 8.0), "small": (6.0, 6.0)}  # the approved layout has no medium lot
 # The tower body (x0, x1, z0, z1) on each lot: storey lines (LINE_D proud) stay 0.01 inside the lot
 # line, so narrow lots stand shoulder to shoulder as a terrace, and the front leaves a forecourt.
 BODIES = {
     "narrow": (-1.83, 1.83, -2.90, 3.75),
     "small": (-2.60, 2.60, -1.90, 2.80),
-    "medium": (-3.50, 3.50, -2.90, 3.75),
 }
 # Floors at each stage. Stage 0 is two storeys (3.2 + parapet <= 3.4); the tops are measured
-# against the landmarks: narrow <= 14, small <= 17.5, medium <= 21, shops <= 11. Stage 1 is where a
-# level-2 parcel starts (levelStages [1, 3, 4]), so wherever it is three storeys (narrow, small,
-# shops) it carries only low roof plant (<= LOW_PLANT): three storeys stay at 5.16, under the early
-# landmarks' 5.17, and a parcel by one of them shows its stage 1 instead of being capped back to
-# stage 0.
+# against the landmarks: narrow <= 14, small <= 17.5, shops <= 11. Stage 1 is where a level-2
+# parcel starts (levelStages [1, 3, 4]) and is three storeys everywhere, so it carries only low
+# roof plant (<= LOW_PLANT): it stays at 5.16 or under, below the early landmarks' 5.17, and a
+# parcel by one of them shows its stage 1 instead of being capped back to stage 0.
 FLOORS = {
     "narrow": (2, 3, 4, 6, 8),
     "small": (2, 3, 5, 7, 10),
-    "medium": (2, 4, 6, 9, 12),
     "shop": (2, 3, 4, 5, 6),
 }
 
@@ -296,10 +294,9 @@ def interim_top(p: Part, b, y: float, st: Style) -> None:
     hollow(p, b, y, y + PARAPET_H, -PARAPET_IN, PARAPET_T, st.wall, st.cap, inner=st.get("inner", st.wall))
 
 
-def final_top(p: Part, b, y: float, st: Style, h: float = 0.3) -> float:
-    """The last stage's parapet: a cornice standing proud of everything below. Returns its top."""
+def final_top(p: Part, b, y: float, st: Style, h: float = 0.3) -> None:
+    """The last stage's parapet: a cornice standing proud of everything below."""
     hollow(p, b, y, y + h, BAND_D, BAND_D, st.cap, st.cap_top, inner=st.get("inner", st.wall), under=True)
-    return y + h
 
 
 # --- small furniture ----------------------------------------------------------------------------
@@ -342,7 +339,7 @@ def ac_unit(p: Part, x, z, y) -> None:
     cube(p, x - 0.16, x + 0.16, y + 0.22, y + 0.22 + 0.06, z - 0.16, z + 0.16, SLATE, skip=("bottom",))
 
 
-def mast(p: Part, x, z, y, h, tip=RED) -> None:
+def mast(p: Part, x, z, y, h) -> None:
     """A slim mast with cross-arms (one on a short mast) and a red tip. The arms stand GAP proud of
     the pole on both faces, so no arm face lies close in front of a pole face."""
     pole = MIN_MEMBER / 2
@@ -351,7 +348,7 @@ def mast(p: Part, x, z, y, h, tip=RED) -> None:
         yy = y + h * k - MIN_MEMBER / 2
         arm = 0.32 * (1.2 - k)
         cube(p, x - arm, x + arm, yy, yy + MIN_MEMBER, z - pole - GAP, z + pole + GAP, SLATE)
-    cube(p, x - 0.08, x + 0.08, y + h, y + h + 0.12, z - 0.08, z + 0.08, tip, skip=("bottom",))
+    cube(p, x - 0.08, x + 0.08, y + h, y + h + 0.12, z - 0.08, z + 0.08, RED, skip=("bottom",))
 
 
 def tree(p: Part, x, z, y, h=2.0, r=0.62, seed=0, leaf=GREEN, trunk=SLATE, seg: int = 6) -> None:
@@ -372,8 +369,8 @@ def shrub(p: Part, x, z, y, r=0.32, seed=0, leaf=GREEN_DARK) -> None:
     del p.faces[first]  # Part.blob lays the bottom cap first
 
 
-def bench(p: Part, x, z, y, length=1.1, rot=0) -> None:
-    """A park bench: seat and back on two slate feet. rot 0 faces -Z, 90 faces -X... (back on +Z)."""
+def bench(p: Part, x, z, y, length=1.1) -> None:
+    """A park bench facing -Z: seat and back on two slate feet."""
     hl = length / 2
     parts = [
         (-hl, hl, 0.22, 0.32, -0.18, 0.06, WOOD),  # seat
@@ -382,14 +379,7 @@ def bench(p: Part, x, z, y, length=1.1, rot=0) -> None:
         (hl - 0.16, hl - 0.06, 0.0, 0.22, -0.13, 0.01, SLATE),
     ]
     for ax0, ax1, ay0, ay1, az0, az1, c in parts:
-        if rot == 0:
-            cube(p, x + ax0, x + ax1, y + ay0, y + ay1, z + az0, z + az1, c, skip=("bottom",))
-        elif rot == 180:
-            cube(p, x - ax1, x - ax0, y + ay0, y + ay1, z - az1, z - az0, c, skip=("bottom",))
-        elif rot == 90:  # back toward +X, faces -X
-            cube(p, x + az0, x + az1, y + ay0, y + ay1, z - ax1, z - ax0, c, skip=("bottom",))
-        else:  # 270: back toward -X, faces +X
-            cube(p, x - az1, x - az0, y + ay0, y + ay1, z + ax0, z + ax1, c, skip=("bottom",))
+        cube(p, x + ax0, x + ax1, y + ay0, y + ay1, z + az0, z + az1, c, skip=("bottom",))
 
 
 def canopy(p: Part, b, u0, u1, head, depth, c=WHITE, edge=SLATE) -> None:
@@ -505,9 +495,8 @@ def tower(slug: str, lot: str, st: Style, floors_at, base, facade, crowns, final
     """Five stage pieces of one tower. `base(p)` draws the street level (stage 0), `facade(p, f0, f1)`
     whatever rises with each run of floors (balconies, bays, signs), `crowns[k](p, y)` the roof of
     stage k at roof height y (every crown but the last is buried by the next stage), and
-    `fixtures[k](p, y)` what stays on that roof whatever the roof variant (a false front). ROOF
-    swaps the crowns for a twin's roof: a garden on every stage, or a prestige top on stages
-    CROWN_FROM and up."""
+    `fixtures[k](p, y)` what stays on that roof under a garden too (a false front). While GARDEN
+    holds a style, every crown gives way to a roof garden: that is how a Green twin is built."""
     b = body or BODIES[lot]
     parts = []
     f_prev = 0
@@ -524,11 +513,8 @@ def tower(slug: str, lot: str, st: Style, floors_at, base, facade, crowns, final
             interim_top(p, b, y, st)
         else:
             final_top(p, b, y, st, final_h)
-        variant = ROOF["variant"]
-        if variant == "green":
-            green_roof(p, b, y, k, floors_at, ROOF["style"])
-        elif variant == "crown" and k >= CROWN_FROM:
-            prestige_roof(p, b, y, lot, ROOF["style"])
+        if GARDEN["style"]:
+            green_roof(p, b, y, k, len(floors_at) - 1, GARDEN["style"])
         else:
             crowns[k](p, y)
         if fixtures and k in fixtures:
@@ -547,18 +533,11 @@ def res_cols(lot: str):
             "left": [(-1.3, 0.95, 0), (1.9, 0.95, 0)],
             "right": [(-1.3, 0.95, 0), (1.9, 0.95, 0)],
         }
-    if lot == "small":
-        return {
-            "front": [(-1.55, 1.15, 0), (0.0, 0.8, 1), (1.55, 1.15, 0)],
-            "back": [(-1.3, 1.0, 0), (1.3, 1.0, 0)],
-            "left": [(-0.75, 1.0, 0), (1.55, 1.0, 0)],
-            "right": [(-0.75, 1.0, 0), (1.55, 1.0, 0)],
-        }
     return {
-        "front": [(-2.35, 1.3, 0), (0.0, 1.3, 1), (2.35, 1.3, 0)],
-        "back": [(-2.2, 1.2, 0), (0.0, 1.2, 0), (2.2, 1.2, 0)],
-        "left": [(-1.55, 1.1, 0), (1.95, 1.1, 0)],
-        "right": [(-1.55, 1.1, 0), (1.95, 1.1, 0)],
+        "front": [(-1.55, 1.15, 0), (0.0, 0.8, 1), (1.55, 1.15, 0)],
+        "back": [(-1.3, 1.0, 0), (1.3, 1.0, 0)],
+        "left": [(-0.75, 1.0, 0), (1.55, 1.0, 0)],
+        "right": [(-0.75, 1.0, 0), (1.55, 1.0, 0)],
     }
 
 
@@ -784,50 +763,6 @@ def res_small_b() -> list[Part]:
     return tower("res-small-b", lot, st, FLOORS[lot], base, facade, [crown(k) for k in range(5)])
 
 
-def res_medium_a() -> list[Part]:
-    """A medium apartment tower in sand with white storey lines, terracotta corner piers, two stacks of
-    balconies at the front corners, a canopied lobby door; the last stage crowns it with a roof
-    terrace (parasols), a lift overrun and a water tank."""
-    lot = "medium"
-    b = BODIES[lot]
-    x0, x1, z0, z1 = b
-    cols = res_cols(lot)
-    cols["back"] = [(-1.6, 1.4, 0), (1.6, 1.4, 0)]
-    st = Style(wall=SAND, band=SAND, line=WHITE, glass=BLUE, roof=SLATE_LIGHT, cap=TERRACOTTA, cap_top=WHITE,
-               sill=0.36, head=1.26, cols=cols, inner=SAND, corner=0.42, pier=TERRACOTTA)
-
-    def base(p):
-        floors(p, b, st, 0, FLOORS[lot][0])
-        door(p, b, "front", 0.0, 1.0, leaf=SLATE)
-        canopy(p, b, -0.9, 0.9, st.head, 0.75, c=WHITE, edge=TERRACOTTA)
-        step(p, b, 0.0, 1.3, depth=0.4)
-        for sx in (-1, 1):
-            planter(p, sx * 2.6 - 0.8, sx * 2.6 + 0.8, -3.75, -3.25, FC_TOP)
-            tree(p, sx * 2.6, -3.5, FC_TOP + 0.32, h=1.8, r=0.44, seed=60 + sx)
-
-    def facade(p, f0, f1):
-        for n in range(max(f0, 1), f1):
-            for u in (-2.35, 2.35):
-                balcony(p, b, "front", u, 1.5, n * S, 0.5)
-
-    def crown(k):
-        def draw(p, y):
-            if k == 0:
-                return
-            stair_hut(p, -2.2, 2.6, y, w=1.4, d=1.2, h=1.2 if k < 4 else 1.3, wall=SAND, cap=TERRACOTTA)
-            if k < 4:
-                return
-            water_tank(p, 2.3, 2.4, y, r=0.45, h=0.95, legs=0.45)
-            cube(p, -2.9, 1.4, y, y + 0.11, -2.3, 1.2, TIN, skip=("bottom",))  # terrace paving
-            for i, (x, z) in enumerate(((-1.8, -1.2), (0.4, -1.2), (-0.7, 0.4))):
-                parasol(p, x, z, y + 0.11, (YELLOW, WHITE, YELLOW)[i], r=0.55, h=1.3)
-            for x in (-2.6, 1.1):
-                planter(p, x - 0.25, x + 0.25, -2.25, 1.15, y + 0.11, h=0.3)
-        return draw
-
-    return tower("res-medium-a", lot, st, FLOORS[lot], base, facade, [crown(k) for k in range(5)], final_h=0.34)
-
-
 # --- offices ------------------------------------------------------------------------------------
 
 
@@ -1023,96 +958,6 @@ def office_small_b() -> list[Part]:
     return tower("office-small-b", lot, st, FLOORS[lot], base, None, [crown(k) for k in range(5)], final_h=0.12)
 
 
-def office_medium_a() -> list[Part]:
-    """A medium office in white spandrels and pale glass ribbons with slate corner piers and a
-    slate-framed lobby; the last stage sets a glazed penthouse back on the roof under a thin white
-    lid."""
-    lot = "medium"
-    b = BODIES[lot]
-    x0, x1, z0, z1 = b
-    cw = 0.45
-    st = Style(wall=WHITE, band=WHITE, glass=GLASS, roof=SLATE_LIGHT, cap=SLATE_LIGHT, cap_top=SLATE_LIGHT,
-               sill=0.34, head=1.3, cols=ribbon_cols(lot, cw), corner=cw, pier=SLATE_LIGHT, soffit=SLATE,
-               inner=WALL_SHADE)
-
-    def base(p):
-        lobby(p, b, st, inset=0.6, columns=(-2.6, -0.95, 0.95, 2.6), glass=BLUE_PALE, canopy_c=WHITE, frame=SLATE)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
-        for sx in (-1, 1):
-            planter(p, sx * 2.8 - 0.7, sx * 2.8 + 0.7, -3.75, -3.25, FC_TOP, edge=SLATE_LIGHT)
-            tree(p, sx * 2.8, -3.5, FC_TOP + 0.32, h=1.7, r=0.44, seed=100 + sx)
-
-    def crown(k):
-        def draw(p, y):
-            if k == 0:
-                return
-            if k < 4:
-                plant_box(p, -1.6, 1.6, 0.8, 2.8, y, 1.0, c=WALL_SHADE)
-                ac_unit(p, -2.4, -1.5, y)
-                return
-            px0, px1, pz0, pz1 = x0 + 0.85, x1 - 0.85, z0 + 0.85, z1 - 0.85
-            cube(p, px0, px1, y, y + 1.3 + GAP, pz0, pz1, BLUE_PALE, skip=("bottom",), top=SLATE)
-            for u in (-1.6, 0.0, 1.6):
-                panel(p, (px0, px1, pz0, pz1), "front", u - 0.05, u + 0.05, y, y + 1.3, GAP, WHITE)
-            pzc = (pz0 + pz1) / 2
-            for u in (pzc - 1.4, pzc, pzc + 1.4):
-                panel(p, (px0, px1, pz0, pz1), "right", u - 0.05, u + 0.05, y, y + 1.3, GAP, WHITE)
-            cube(p, px0 - 0.3, px1 + 0.3, y + 1.3, y + 1.4, pz0 - 0.3, pz1 + 0.3, WHITE)
-            mast(p, px1 - 0.5, pz1 - 0.5, y + 1.4, 0.28)
-        return draw
-
-    return tower("office-medium-a", lot, st, FLOORS[lot], base, None, [crown(k) for k in range(5)])
-
-
-def office_medium_b() -> list[Part]:
-    """A stone-framed office: a regular grid of square windows in stone with lavender floor bands,
-    an arcaded lobby; the last stage steps the top in twice, Art Deco fashion, to a flagpole."""
-    lot = "medium"
-    b = BODIES[lot]
-    x0, x1, z0, z1 = b
-    zc = (z0 + z1) / 2
-    cols = {
-        "front": [(u, 0.95, 1) for u in (-2.55, -1.28, 0.0, 1.28, 2.55)],
-        "back": [(u, 0.95, 0) for u in (-2.55, -1.28, 0.0, 1.28, 2.55)],
-        "left": [(zc + u, 0.95, 0) for u in (-2.4, -0.8, 0.8, 2.4)],
-        "right": [(zc + u, 0.95, 0) for u in (-2.4, -0.8, 0.8, 2.4)],
-    }
-    st = Style(wall=STONE, band=LAVENDER, glass=BLUE, roof=SLATE_LIGHT, cap=LAVENDER, cap_top=WHITE,
-               sill=0.36, head=1.3, cols=cols, soffit=SLATE, inner=STONE, pier=LAVENDER)
-
-    def base(p):
-        lobby(p, b, st, inset=0.55, columns=(-3.2, -1.9, -0.64, 0.64, 1.9, 3.2), glass=BLUE, canopy_c=LAVENDER,
-              frame=SLATE, canopy_w=0.42)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
-        for sx in (-1, 1):
-            planter(p, sx * 2.9 - 0.6, sx * 2.9 + 0.6, -3.85, -3.4, FC_TOP, edge=LAVENDER)
-            shrub(p, sx * 2.9 - 0.25, -3.62, FC_TOP + 0.3, 0.3, seed=110 + sx)
-            shrub(p, sx * 2.9 + 0.3, -3.62, FC_TOP + 0.3, 0.26, seed=112 + sx)
-
-    def crown(k):
-        def draw(p, y):
-            if k == 0:
-                return
-            if k < 4:
-                stair_hut(p, -2.3, 2.5, y, w=1.4, d=1.2, h=1.1, wall=STONE, cap=LAVENDER)
-                plant_box(p, 0.4, 2.6, 1.5, 3.1, y, 0.8, c=WALL_SHADE)
-                return
-            yb = y + 0.3
-            s1 = (x0 + 0.7, x1 - 0.7, z0 + 0.7, z1 - 0.7)
-            cube(p, s1[0], s1[1], y, yb + 0.75, s1[2], s1[3], STONE, skip=("bottom",), top=SLATE_LIGHT)
-            hollow(p, s1, yb + 0.75, yb + 0.9, 0.06, 0.18, LAVENDER, WHITE)
-            for u in (-1.6, 0.0, 1.6):
-                panel(p, s1, "front", u - 0.35, u + 0.35, yb + 0.15, yb + 0.6, GAP, BLUE)
-            for u in (zc - 1.4, zc + 1.4):
-                panel(p, s1, "right", u - 0.35, u + 0.35, yb + 0.15, yb + 0.6, GAP, BLUE)
-            s2 = (x0 + 1.9, x1 - 1.9, z0 + 1.9, z1 - 1.9)
-            cube(p, s2[0], s2[1], yb + 0.75, yb + 1.25, s2[2], s2[3], LAVENDER, skip=("bottom",), top=WHITE)
-            cube(p, -0.05, 0.05, yb + 1.25, yb + 1.5, zc - 0.05, zc + 0.05, WHITE, skip=("bottom",))
-        return draw
-
-    return tower("office-medium-b", lot, st, FLOORS[lot], base, None, [crown(k) for k in range(5)])
-
-
 # --- shops --------------------------------------------------------------------------------------
 
 
@@ -1124,9 +969,8 @@ def shop_tower(slug, lot, st, awning, sign, front_frame, crowns, extra_base=None
 
     def base(p):
         floors(p, b, st, 0, FLOORS["shop"][0])
-        # the shop window stands between the corner piers, if any, and well inside the awning ends
-        inset = st.corner + GAP if st.get("corner") else 0.18
-        shopfront(p, b, x0 + inset, x1 - inset, front_frame, door_u)
+        # the shop window stands well inside the awning ends
+        shopfront(p, b, x0 + 0.18, x1 - 0.18, front_frame, door_u)
         sign_board(p, b, x0 + 0.2, x1 - 0.2, st.head + GAP, SIGN_TOP, sign[0], sign[1])
         stripes = min(9, int((x1 - x0) / 0.62) | 1)
         striped_awning(p, x0 + 0.1, x1 - 0.1, 1.18, 0.92, awning_d, awning, stripes, at=(0.0, 0.0, z0))
@@ -1256,192 +1100,31 @@ def shop_small_a() -> list[Part]:
                       [crown(k) for k in range(5)], extra_base=side_shop, door_u=-0.5, body=b, awning_d=0.55)
 
 
-def shop_medium_a() -> list[Part]:
-    """A small department store: a two-storey podium (a glazed shop floor under a white first floor
-    with one long window) with a purple sign band and a purple-and-white awning, flats above in pale
-    pink, a pink blade sign at the corner from stage 2, and a roof terrace of parasols at the last
-    stage."""
-    lot = "medium"
-    b = BODIES[lot]
-    x0, x1, z0, z1 = b
-    zc = (z0 + z1) / 2
-    cols = {
-        "front": [(u, 1.2, 2) for u in (-2.4, -0.8, 0.8, 2.4)],
-        "back": [(-1.6, 1.4, 0), (1.6, 1.4, 0)],
-        "left": [(zc - 1.6, 1.2, 0), (zc + 1.6, 1.2, 0)],
-        "right": [(zc - 1.6, 1.2, 2), (zc + 1.6, 1.2, 2)],
-    }
-    st = Style(wall=PINK_PALE, band=PINK_PALE, line=WHITE, glass=BLUE, roof=SLATE_LIGHT, cap=PURPLE, cap_top=WHITE,
-               sill=0.36, head=1.26, cols=cols, inner=PINK_PALE, corner=0.4, pier=WHITE)
-
-    def podium(p):
-        # the store's first floor: white, with one long window on the front and on the right
-        # the long window sits between the two floor bands, never under one
-        ga, gb = S + st.sill + GAP, 2 * S - (S - st.head) - GAP
-        panel(p, b, "front", x0 + 0.4, x1 - 0.4, S, 2 * S, GAP, WHITE)
-        panel(p, b, "right", z0 + 0.4, z1 - 0.4, S, 2 * S, GAP, WHITE)
-        panel(p, b, "front", x0 + 0.7, x1 - 0.7, ga, gb, 2 * GAP, BLUE_PALE)
-        panel(p, b, "right", z0 + 0.7, z1 - 0.7, ga, gb, 2 * GAP, BLUE_PALE)
-        for u in (-1.75, 0.0, 1.75):
-            panel(p, b, "front", u - MIN_MEMBER / 2, u + MIN_MEMBER / 2, ga - GAP, gb + GAP, 3 * GAP, WHITE)
-        for sx in (-1, 1):
-            cube(p, sx * 3.0 - 0.5, sx * 3.0 + 0.5, 0.0, FC_TOP + 0.36, -3.92, -3.55, STONE, skip=("bottom",),
-                 top=SOIL)
-            shrub(p, sx * 3.0 - 0.2, -3.74, FC_TOP + 0.36, 0.22, seed=130 + sx)
-            shrub(p, sx * 3.0 + 0.25, -3.74, FC_TOP + 0.36, 0.2, seed=133 + sx)
-
-    def blade(p, f0, f1):
-        if f1 == 4:  # the stage-2 piece (floors 3 to 4): the sign hangs across floors 2 and 3
-            y0 = 2 * S + 0.3
-            zf, zb = z0 - 1.0, z0 - LINE_D - GAP  # the board hangs clear of the bands and lines
-            cube(p, x1 + 0.06, x1 + 0.2, y0, y0 + 2.5, zf, zb, PINK, top=WHITE, bottom=PURPLE)
-            for xa, xb in ((x1 + 0.06 - GAP, x1 + 0.06), (x1 + 0.2, x1 + 0.2 + GAP)):
-                cube(p, xa, xb, y0 + 0.3, y0 + 2.2, zf + 0.2, zb - 0.2, WHITE)
-            for yy in (y0 + 0.35, y0 + 2.05):
-                cube(p, x1 + 0.08, x1 + 0.18, yy, yy + 0.1, zb, z0, SLATE)
-
-    def crown(k):
-        def draw(p, y):
-            if k == 0:
-                return
-            if k == 1:  # three storeys, like a narrow stage 1: keep under the early landmarks
-                for x in (-0.6, 0.6):
-                    ac_unit(p, x, 2.4, y)
-                hatch(p, 2.2, 2.4, y)
-                return
-            if k < 4:
-                plant_box(p, -1.0, 1.4, 1.6, 3.1, y, 0.8, c=WALL_SHADE)
-                return
-            stair_hut(p, 2.3, 2.5, y, w=1.3, d=1.2, h=1.2, wall=PINK_PALE, cap=PURPLE)
-            cube(p, -3.0, 1.2, y, y + 0.11, -2.4, 1.6, TIN, skip=("bottom",))  # terrace paving
-            for i, (x, z) in enumerate(((-2.2, -1.5), (-0.2, -1.5), (-1.2, 0.5))):
-                parasol(p, x, z, y + 0.11, (PURPLE, PINK, PURPLE)[i], r=0.55, h=1.3)
-            planter(p, -3.0, 1.2, 1.7, 2.2, y + 0.11, h=0.3)
-        return draw
-
-    return shop_tower("shop-medium-a", lot, st, (PURPLE, WHITE), (PURPLE, WHITE), SLATE,
-                      [crown(k) for k in range(5)], extra_base=podium, extra_facade=blade, door_u=0.0)
-
-
-# --- civic plazas -------------------------------------------------------------------------------
-
-
-def paving(p: Part, lot: str, border: Rgb, field: Rgb, cross: Rgb, bw=0.55, cw=0.6) -> None:
-    """Paving laid as a mosaic of slabs that only meet edge to edge (never stacked): a border, a
-    cross through the middle and four fields."""
-    w, d = LOTS[lot]
-    hx, hz = w / 2, d / 2
-    t = FC_TOP
-    cube(p, -hx, hx, 0, t, -hz, -hz + bw, border, skip=("bottom",))
-    cube(p, -hx, hx, 0, t, hz - bw, hz, border, skip=("bottom",))
-    cube(p, -hx, -hx + bw, 0, t, -hz + bw, hz - bw, border, skip=("bottom",))
-    cube(p, hx - bw, hx, 0, t, -hz + bw, hz - bw, border, skip=("bottom",))
-    ix, iz = hx - bw, hz - bw
-    cube(p, -cw / 2, cw / 2, 0, t, -iz, iz, cross, skip=("bottom",))
-    cube(p, -ix, -cw / 2, 0, t, -cw / 2, cw / 2, cross, skip=("bottom",))
-    cube(p, cw / 2, ix, 0, t, -cw / 2, cw / 2, cross, skip=("bottom",))
-    for sx in (-1, 1):
-        for sz in (-1, 1):
-            xa, xb = sorted((sx * cw / 2, sx * ix))
-            za, zb = sorted((sz * cw / 2, sz * iz))
-            cube(p, xa, xb, 0, t, za, zb, field, skip=("bottom",))
-
-
-def tilted_block(p: Part, y0: float, size: float, h: float, ang: float, c: Rgb) -> None:
-    a = math.radians(ang)
-    ca, sa = math.cos(a), math.sin(a)
-    pts = []
-    for yy in (y0, y0 + h):
-        for lx, lz in ((-size / 2, -size / 2), (size / 2, -size / 2), (size / 2, size / 2), (-size / 2, size / 2)):
-            pts.append((lx * ca - lz * sa, yy, lx * sa + lz * ca))
-    p.hexa(pts, c)
-
-
-def plaza_small() -> list[Part]:
-    """A pocket square, 6 x 6: paving, two benches and two shrub planters; then trees in the four
-    corners; then a sculpture of three stacked, turned blocks on a plinth (the feature, 2.6 tall)."""
-    p0 = Part("plaza-small-0")
-    paving(p0, "small", STONE, PAVE, LAVENDER)
-    bench(p0, -1.45, 1.0, FC_TOP, 1.1, rot=180)
-    bench(p0, 1.45, -1.0, FC_TOP, 1.1, rot=0)
-    for sx in (-1, 1):
-        planter(p0, sx * 2.35 - 0.3, sx * 2.35 + 0.3, -0.85, 0.85, FC_TOP, h=0.3)
-        for i, z in enumerate((-0.45, 0.45)):
-            shrub(p0, sx * 2.35, z, FC_TOP + 0.3, 0.28, seed=140 + i + sx)
-    p1 = Part("plaza-small-1")
-    for i, (sx, sz) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
-        x, z = sx * 2.25, sz * 2.25
-        planter(p1, x - 0.45, x + 0.45, z - 0.45, z + 0.45, FC_TOP, h=0.34)
-        tree(p1, x, z, FC_TOP + 0.34, h=1.9, r=0.52, seed=150 + i)
-    p2 = Part("plaza-small-2")
-    cube(p2, -0.5, 0.5, FC_TOP, FC_TOP + 0.5, -0.5, 0.5, LAVENDER, skip=("bottom",), top=WHITE)
-    y = FC_TOP + 0.5
-    for ang, c, size, h in ((10, ORANGE, 0.62, 0.72), (-22, YELLOW, 0.52, 0.66), (34, RED, 0.42, 0.6)):
-        tilted_block(p2, y - 0.06, size, h, ang, c)
-        y += h - 0.06
-    return [p0, p1, p2]
-
-
-def plaza_medium() -> list[Part]:
-    """A civic square, 8 x 8: paving, four benches and low hedges; then four trees in planters;
-    then an octagonal fountain with a bowl and a jet at the centre (the feature, 2.65 tall)."""
-    p0 = Part("plaza-medium-0")
-    paving(p0, "medium", STONE, PAVE, LAVENDER, bw=0.6, cw=0.8)
-    for x, z, r in ((-2.2, -0.85, 0), (2.2, -0.85, 0), (-2.2, 0.85, 180), (2.2, 0.85, 180)):
-        bench(p0, x, z, FC_TOP, 1.2, rot=r)
-    for sz in (-1, 1):
-        for sx in (-1, 1):
-            xa, xb = sorted((sx * 0.9, sx * 2.9))
-            cube(p0, xa, xb, FC_TOP, FC_TOP + 0.36, sz * 3.0 - 0.2, sz * 3.0 + 0.2, GREEN_DARK, skip=("bottom",),
-                 top=GREEN)
-    p1 = Part("plaza-medium-1")
-    for i, (sx, sz) in enumerate(((-1, -1), (1, -1), (-1, 1), (1, 1))):
-        x, z = sx * 2.85, sz * 2.0
-        planter(p1, x - 0.42, x + 0.42, z - 0.42, z + 0.42, FC_TOP, h=0.34)
-        tree(p1, x, z, FC_TOP + 0.34, h=2.0, r=0.55, seed=160 + i)
-    p2 = Part("plaza-medium-2")
-    # basin: outer wall, rim, inner wall down to a floor that sits under the water
-    lathe(p2, [(1.35, FC_TOP), (1.35, FC_TOP + 0.36), (1.12, FC_TOP + 0.36), (1.12, FC_TOP + 0.12)],
-          [STONE, WHITE, STONE], seg=8, phase=math.pi / 8)
-    lathe(p2, [(1.14, FC_TOP + 0.26), (0.0, FC_TOP + 0.26)], [BLUE], seg=8, phase=math.pi / 8)
-    lathe(p2, [(0.4, FC_TOP + 0.12), (0.34, FC_TOP + 0.8), (0.62, FC_TOP + 0.86), (0.62, FC_TOP + 0.96),
-               (0.0, FC_TOP + 0.96)], [STONE, STONE, WHITE, BLUE], seg=8, phase=math.pi / 8)
-    lathe(p2, [(0.15, FC_TOP + 0.96), (0.05, FC_TOP + 2.5), (0.0, FC_TOP + 2.55)], [GLASS, GLASS], seg=6)
-    for k in range(6):
-        a = 2 * math.pi * (k + 0.5) / 6
-        beam(p2, (0.12 * math.cos(a), FC_TOP + 2.0, 0.12 * math.sin(a)),
-             (0.9 * math.cos(a), FC_TOP + 0.32, 0.9 * math.sin(a)), MIN_MEMBER, MIN_MEMBER, GLASS)
-    return [p0, p1, p2]
-
-
-# --- roof twins: city-changer candidates ---------------------------------------------------------
+# --- Green twins: the "Green the Rooftops" city-changer ------------------------------------------
 #
-# "Green the Rooftops" and "Open the Finance District" would change every tower in the city by a prop
-# swap: while the slot is owned, a parcel shows <prop>Green or <prop>Crown instead of <prop>. A twin is
-# built by the same builder with ROOF set, so its body is the original's face for face and only the
-# roofs differ. Its pieces are named <slug>-<variant>-<k>; stages a twin shares keep the original
-# piece, so the kit holds them once.
+# While rooftopGarden is owned, a home or shop parcel shows <prop>Green instead of <prop> (a prop
+# swap; Ben approved it 2026-10-02). A twin is built by the original's builder with GARDEN set, so
+# its body is the original's face for face and only the roofs differ. Its pieces are named
+# <slug>-green-<k>.
 
-ROOF: dict = {"variant": "", "style": {}}
-CROWN_FROM = 3  # the prestige top replaces the roofs of stages 3 and 4; stages 0 to 2 are unchanged
+GARDEN: dict = {"style": None}
 GARDEN_IN = 0.32  # a garden keeps this far inside the wall line: clear of every parapet and cornice
-GARDEN_H = 1.15  # the tallest thing in a roof garden, above the roof (lead: <= 1.2 over the original)
-GREEN_RISE, CROWN_RISE, CROWN_CEILING = 1.2, 2.5, 23.5  # the lead's limits, checked per stage
+GARDEN_H = 1.15  # the tallest thing in a roof garden, above the roof
+GREEN_RISE = 1.2  # a twin's stage may stand this much above the original's (lead), checked per stage
 
 
-def twin(make, variant: str, style: dict):
-    """The builder of a prop's twin: the original's builder run with another roof."""
+def green_twin(make, style: dict):
+    """The builder of a prop's Green twin: the original's builder run with a garden on every roof."""
 
     def build() -> list[Part]:
-        ROOF["variant"], ROOF["style"] = variant, style
+        GARDEN["style"] = style
         try:
             parts = make()
         finally:
-            ROOF["variant"], ROOF["style"] = "", {}
-        for k, part in enumerate(parts):
-            if variant == "green" or k >= CROWN_FROM:
-                slug, n = part.name.rsplit("-", 1)
-                part.name = f"{slug}-{variant}-{n}"
+            GARDEN["style"] = None
+        for part in parts:
+            slug, n = part.name.rsplit("-", 1)
+            part.name = f"{slug}-green-{n}"
         return parts
 
     return build
@@ -1466,22 +1149,22 @@ def pergola(p: Part, x0, x1, z0, z1, y, h=0.95) -> None:
         cube(p, x0 - 0.06, x1 + 0.06, y + h + m, y + h + 2 * m, z, z + m, WHITE)
 
 
-def green_roof(p: Part, b, y: float, k: int, floors_at, style: dict) -> None:
+def green_roof(p: Part, b, y: float, k: int, last_stage: int, style: dict) -> None:
     """A roof garden for stage k of a tower: two raised lawn beds with a paved path between them,
     and on them what the stage's height allows. Stage 0 (3.38 under the 3.4 floor) takes clipped
-    hedges; a three-storey stage 1 (kept under the early landmarks) takes low shrubs and a seat;
-    any other stage takes trees too, and the last stage adds the twin's feature (a pergola or
-    parasols) and a bench. Everything stands GARDEN_IN inside the wall line and below GARDEN_H, so
-    each stage's garden is buried by the floors of the next."""
+    hedges; stage 1 (kept under the early landmarks) takes low shrubs and a seat; any later stage
+    takes trees too, and the last stage adds the twin's feature (a pergola or parasols) and a
+    bench. Everything stands GARDEN_IN inside the wall line and below GARDEN_H, so each stage's
+    garden is buried by the floors of the next."""
     x0, x1, z0, z1 = b
     rx0, rx1, rz0, rz1 = x0 + GARDEN_IN, x1 - GARDEN_IN, z0 + GARDEN_IN, z1 - GARDEN_IN
     if k == 0:
         cap = HEIGHT_FLOOR - y - 0.02
-    elif k == 1 and floors_at[1] == 3:
+    elif k == 1:
         cap = LOW_PLANT
     else:
         cap = GARDEN_H
-    last = k == len(floors_at) - 1
+    last = k == last_stage
     seed = style["seed"] * 10 + k
     # Bed tops (roof + 0.16) clear by GAP both the next stage's storey line (roof + 0.05) and the
     # balcony slabs that reach into some bodies (floor + 0.10).
@@ -1530,140 +1213,44 @@ def green_roof(p: Part, b, y: float, k: int, floors_at, style: dict) -> None:
                 cube(p, px - 0.1, px + 0.1, y, y + 0.3, pzc + dz - 0.1, pzc + dz + 0.1, WOOD, skip=("bottom",))
 
 
-def beacon_mast(p: Part, x, z, y, h) -> None:
-    """An aviation mast: a slate pole with two cross-arms and a red beacon on top."""
-    mast(p, x, z, y, h, tip=SLATE)
-    cube(p, x - 0.13, x + 0.13, y + h + 0.12, y + h + 0.34, z - 0.13, z + 0.13, RED, skip=("bottom",))
-
-
-def annulus(p: Part, cx, cz, y0, y1, r_out, r_in, c: Rgb, seg: int = 8) -> None:
-    """A flat ring (a painted helipad circle with some body): top, outer and inner walls."""
-    ang = [math.pi / seg + 2 * math.pi * i / seg for i in range(seg)]
-    for i in range(seg):
-        a0, a1 = ang[i], ang[(i + 1) % seg]
-        o0 = (cx + r_out * math.cos(a0), cz + r_out * math.sin(a0))
-        o1 = (cx + r_out * math.cos(a1), cz + r_out * math.sin(a1))
-        i0 = (cx + r_in * math.cos(a0), cz + r_in * math.sin(a0))
-        i1 = (cx + r_in * math.cos(a1), cz + r_in * math.sin(a1))
-        mid = (cx + (r_out + r_in) / 2 * math.cos((a0 + a1) / 2), (y0 + y1) / 2,
-               cz + (r_out + r_in) / 2 * math.sin((a0 + a1) / 2))
-        p.face([(o0[0], y1, o0[1]), (o1[0], y1, o1[1]), (i1[0], y1, i1[1]), (i0[0], y1, i0[1])], c, mid)
-        p.face([(o0[0], y0, o0[1]), (o1[0], y0, o1[1]), (o1[0], y1, o1[1]), (o0[0], y1, o0[1])], c, mid)
-        p.face([(i0[0], y0, i0[1]), (i1[0], y0, i1[1]), (i1[0], y1, i1[1]), (i0[0], y1, i0[1])], c, mid)
-
-
-def helipad(p: Part, cx, cz, y, r) -> None:
-    """A rooftop helipad: a dark octagonal deck, a yellow circle on it and a white H inside, the
-    paint 0.06 proud of the deck so the two never share a plane. Plain shapes, no lettering."""
-    ang = [math.pi / 8 + 2 * math.pi * i / 8 for i in range(8)]
-    ring = [(cx + r * math.cos(a), cz + r * math.sin(a)) for a in ang]
-    prism(p, ring, y, y + 0.1, CHARCOAL)
-    deck = y + 0.1
-    annulus(p, cx, cz, deck, deck + 0.06, r * 0.84, r * 0.72, YELLOW)
-    hw, hl, bar = 0.42 * r / 2.0, 0.62 * r / 2.0, 0.2
-    for sx in (-1, 1):
-        cube(p, cx + sx * hw - bar / 2, cx + sx * hw + bar / 2, deck, deck + 0.06, cz - hl, cz + hl, WHITE,
-             skip=("bottom",))
-    cube(p, cx - hw + bar / 2, cx + hw - bar / 2, deck, deck + 0.06, cz - bar / 2, cz + bar / 2, WHITE,
-         skip=("bottom", "left", "right"))
-
-
-def prestige_roof(p: Part, b, y: float, lot: str, style: dict) -> None:
-    """The finance district's top for stages 3 and 4: a lit glass crown (pale glass under a bright
-    band and a slate cap), then a red-beacon mast on a narrow or small tower or a helipad on a
-    medium one. `taper` leans the glass in, `tiers` 2 sets a second, smaller lantern on the first.
-    Every layer sits on the one below and is GAP wider or narrower, so no faces share a plane."""
-    x0, x1, z0, z1 = b
-    inset = {"narrow": 0.45, "small": 0.6, "medium": 0.85}[lot]
-    height = {"narrow": 0.8, "small": 1.0, "medium": 1.1}[lot]
-    tiers = style.get("tiers", 1)
-    band = style.get("band", YELLOW)
-    cb = (x0 + inset, x1 - inset, z0 + inset, z1 - inset)
-    yy = y
-    for t in range(tiers):
-        h = height * (0.6 if tiers == 2 and t == 0 else 0.45 if tiers == 2 else 1.0)
-        ta = style.get("taper", 0.0) if t == tiers - 1 else 0.0
-        top = (cb[0] + ta, cb[1] - ta, cb[2] + ta, cb[3] - ta)
-        p.frustum(cb[0], cb[1], cb[2], cb[3], yy, top[0], top[1], top[2], top[3], yy + h, GLASS, top=SLATE)
-        if style.get("fins") and ta == 0.0:
-            xc, zc = (cb[0] + cb[1]) / 2, (cb[2] + cb[3]) / 2
-            for face, u in (("front", xc), ("back", xc), ("left", zc), ("right", zc)):
-                panel(p, cb, face, u - MIN_MEMBER / 2, u + MIN_MEMBER / 2, yy, yy + h, GAP, WHITE)
-        yy += h
-        out = 0.09  # the lit band stands well proud of the glass, so it reads from above
-        bb = (top[0] - out, top[1] + out, top[2] - out, top[3] + out)
-        cube(p, bb[0], bb[1], yy, yy + 0.16, bb[2], bb[3], band)
-        yy += 0.16
-        cb = (top[0] + 0.12, top[1] - 0.12, top[2] + 0.12, top[3] - 0.12)
-        cube(p, cb[0], cb[1], yy, yy + 0.1, cb[2], cb[3], SLATE, skip=("bottom",), top=SLATE_LIGHT)
-        yy += 0.1
-        cb = (cb[0] + 0.45, cb[1] - 0.45, cb[2] + 0.45, cb[3] - 0.45)  # the next tier, if any
-    cap = (cb[0] - 0.45, cb[1] + 0.45, cb[2] - 0.45, cb[3] + 0.45)
-    cx, cz = (cap[0] + cap[1]) / 2, (cap[2] + cap[3]) / 2
-    if lot == "medium":
-        r = min(cap[1] - cap[0], cap[3] - cap[2]) / 2 - 0.12
-        helipad(p, cx, cz, yy, r / math.cos(math.pi / 8))
-    else:
-        # the mast's top must clear the next stage's band tops: a two-tier crown takes a shorter one
-        h = {"narrow": 1.2, "small": 1.4}[lot] - (0.2 if tiers == 2 else 0.0)
-        beacon_mast(p, cx, cz + (cap[3] - cap[2]) * 0.2, yy, h)
-
-
 # --- the props and their checks -----------------------------------------------------------------
 
-# Blueprint id -> (lot, builder, uses the generic forecourt); BODY_OF names a non-standard body
+# Blueprint id -> (lot, builder): the final set, the eleven props the approved 85-lot layout can
+# show (56 narrow lots, 29 small) and the Green twins of its homes and shops. BODY_OF names a
+# non-standard body.
 PROPS = {
-    "FabricResNarrowA": ("narrow", res_narrow_a, True),
-    "FabricResNarrowB": ("narrow", res_narrow_b, True),
-    "FabricResSmallA": ("small", res_small_a, True),
-    "FabricResSmallB": ("small", res_small_b, True),
-    "FabricResMediumA": ("medium", res_medium_a, True),
-    "FabricOfficeNarrowA": ("narrow", office_narrow_a, True),
-    "FabricOfficeNarrowB": ("narrow", office_narrow_b, True),
-    "FabricOfficeSmallA": ("small", office_small_a, True),
-    "FabricOfficeSmallB": ("small", office_small_b, True),
-    "FabricOfficeMediumA": ("medium", office_medium_a, True),
-    "FabricOfficeMediumB": ("medium", office_medium_b, True),
-    "FabricShopNarrowA": ("narrow", shop_narrow_a, True),
-    "FabricShopNarrowB": ("narrow", shop_narrow_b, True),
-    "FabricShopSmallA": ("small", shop_small_a, True),
-    "FabricShopMediumA": ("medium", shop_medium_a, True),
-    "FabricPlazaSmall": ("small", plaza_small, False),
-    "FabricPlazaMedium": ("medium", plaza_medium, False),
+    "FabricResNarrowA": ("narrow", res_narrow_a),
+    "FabricResNarrowB": ("narrow", res_narrow_b),
+    "FabricResSmallA": ("small", res_small_a),
+    "FabricResSmallB": ("small", res_small_b),
+    "FabricOfficeNarrowA": ("narrow", office_narrow_a),
+    "FabricOfficeNarrowB": ("narrow", office_narrow_b),
+    "FabricOfficeSmallA": ("small", office_small_a),
+    "FabricOfficeSmallB": ("small", office_small_b),
+    "FabricShopNarrowA": ("narrow", shop_narrow_a),
+    "FabricShopNarrowB": ("narrow", shop_narrow_b),
+    "FabricShopSmallA": ("small", shop_small_a),
 }
-# Twin id -> (original, variant, roof style). Neighbours in a terrace get different features and
-# sides; "lean" keeps buried gardens down to beds and trees on towers near the triangle budget.
+# Twin id -> (original, garden style). Neighbours in a terrace get different features and sides;
+# "lean" keeps buried gardens down to beds and one tree on a tower near the triangle budget. The
+# seeds are the ones Ben saw: they place the trees and pick the parasol colours.
 TWINS = {
-    "FabricResNarrowAGreen": ("FabricResNarrowA", "green", {"seed": 1, "feature": "pergola", "trees": 2}),
-    "FabricResNarrowBGreen": ("FabricResNarrowB", "green", {"seed": 2, "feature": "parasols", "trees": 2}),
-    "FabricResSmallAGreen": ("FabricResSmallA", "green",
-                             {"seed": 3, "feature": "pergola", "trees": 3, "lean": True}),
-    "FabricResSmallBGreen": ("FabricResSmallB", "green", {"seed": 4, "feature": "parasols", "trees": 3}),
-    "FabricResMediumAGreen": ("FabricResMediumA", "green",
-                              {"seed": 5, "feature": "pergola", "trees": 3, "lean": True}),
-    "FabricShopNarrowAGreen": ("FabricShopNarrowA", "green", {"seed": 6, "feature": "parasols", "trees": 1}),
-    "FabricShopNarrowBGreen": ("FabricShopNarrowB", "green", {"seed": 7, "feature": "pergola", "trees": 1}),
-    "FabricShopSmallAGreen": ("FabricShopSmallA", "green", {"seed": 8, "feature": "parasols", "trees": 2}),
-    "FabricShopMediumAGreen": ("FabricShopMediumA", "green",
-                               {"seed": 9, "feature": "pergola", "trees": 3, "lean": True}),
-    "FabricOfficeNarrowACrown": ("FabricOfficeNarrowA", "crown", {}),
-    "FabricOfficeNarrowBCrown": ("FabricOfficeNarrowB", "crown", {"taper": 0.25}),
-    "FabricOfficeSmallACrown": ("FabricOfficeSmallA", "crown", {"fins": True}),
-    "FabricOfficeSmallBCrown": ("FabricOfficeSmallB", "crown", {"tiers": 2}),
-    "FabricOfficeMediumACrown": ("FabricOfficeMediumA", "crown", {"fins": True}),
-    "FabricOfficeMediumBCrown": ("FabricOfficeMediumB", "crown", {"taper": 0.3}),
+    "FabricResNarrowAGreen": ("FabricResNarrowA", {"seed": 1, "feature": "pergola", "trees": 2}),
+    "FabricResNarrowBGreen": ("FabricResNarrowB", {"seed": 2, "feature": "parasols", "trees": 2}),
+    "FabricResSmallAGreen": ("FabricResSmallA", {"seed": 3, "feature": "pergola", "trees": 3, "lean": True}),
+    "FabricResSmallBGreen": ("FabricResSmallB", {"seed": 4, "feature": "parasols", "trees": 3}),
+    "FabricShopNarrowAGreen": ("FabricShopNarrowA", {"seed": 6, "feature": "parasols", "trees": 1}),
+    "FabricShopNarrowBGreen": ("FabricShopNarrowB", {"seed": 7, "feature": "pergola", "trees": 1}),
+    "FabricShopSmallAGreen": ("FabricShopSmallA", {"seed": 8, "feature": "parasols", "trees": 2}),
 }
-for _twin, (_base, _variant, _style) in TWINS.items():
-    PROPS[_twin] = (PROPS[_base][0], twin(PROPS[_base][1], _variant, _style), True)
+for _twin, (_base, _style) in TWINS.items():
+    PROPS[_twin] = (PROPS[_base][0], green_twin(PROPS[_base][1], _style))
 BODY_OF = {"FabricShopSmallA": CAFE_BODY}
 FORECOURTS = {f"forecourt-{lot}": (lambda lot=lot: forecourt(f"forecourt-{lot}", lot)) for lot in LOTS}
 
 
-def stage_floors(prop: str) -> tuple[int, ...] | None:
-    lot, _, generic = PROPS[prop]
-    if not generic:
-        return None
-    return FLOORS["shop"] if prop.startswith("FabricShop") else FLOORS[lot]
+def stage_floors(prop: str) -> tuple[int, ...]:
+    return FLOORS["shop"] if prop.startswith("FabricShop") else FLOORS[PROPS[prop][0]]
 
 
 def flat_faces(parts: list[Part]) -> list[tuple]:
@@ -1735,11 +1322,12 @@ def face_fights(parts: list[Part]) -> list[str]:
 def check(prop: str, parts: list[Part], rods=()) -> list[str]:
     """The contract, the burial rule, the face-gap rule and the member rule (`rods`: what cube()
     flagged while the prop was built), per prop. Returns violations."""
-    lot, _, generic = PROPS[prop]
+    lot = PROPS[prop][0]
     w, d = LOTS[lot]
     bad = []
-    fc = forecourt("fc", lot) if generic else None
-    tris = fc.tris if fc else 0
+    fc = forecourt("fc", lot)
+    fl = stage_floors(prop)
+    tris = fc.tris
     top = 0.0
     for k, part in enumerate(parts):
         tris += part.tris
@@ -1752,44 +1340,37 @@ def check(prop: str, parts: list[Part], rods=()) -> list[str]:
                        f"x[{lo[0]:.2f}, {hi[0]:.2f}] z[{lo[2]:.2f}, {hi[2]:.2f}]")
         if k == 0 and top > HEIGHT_FLOOR + 1e-6:
             bad.append(f"stage 0 is {top:.2f} tall > heightFloor {HEIGHT_FLOOR}")
-        fl = stage_floors(prop)
-        if k == 1 and fl and fl[1] == 3 and top > fl[1] * S + LOW_PLANT + 1e-6:
+        if k == 1 and top > fl[1] * S + LOW_PLANT + 1e-6:
             bad.append(f"stage 1 is {top:.2f} tall: only roof plant <= {LOW_PLANT} may stand on it")
-        for fight in face_fights(([fc] if fc else []) + parts[: k + 1])[:3]:
+        for fight in face_fights([fc] + parts[: k + 1])[:3]:
             bad.append(f"stage {k}: {fight}")
     for rod in sorted(set(rods))[:5]:
         bad.append(f"a member {rod[0]:g} x {rod[1]:g} x {rod[2]:g} is thinner than {MIN_MEMBER} in two dimensions")
     if prop in TWINS:
-        base, variant, _ = TWINS[prop]
-        rise = GREEN_RISE if variant == "green" else CROWN_RISE
         b_top = t_top = 0.0
-        for k, (bp, tp) in enumerate(zip(PROPS[base][1](), parts)):
+        for k, (bp, tp) in enumerate(zip(PROPS[TWINS[prop][0]][1](), parts)):
             b_top, t_top = max(b_top, bp.bounds()[1][1]), max(t_top, tp.bounds()[1][1])
-            if t_top > b_top + rise + 1e-6 or (variant == "crown" and t_top > CROWN_CEILING):
+            if t_top > b_top + GREEN_RISE + 1e-6:
                 bad.append(f"stage {k}: {t_top:.2f} tall against the original's {b_top:.2f}")
-    fl = stage_floors(prop)
-    if fl:
-        x0, x1, z0, z1 = BODY_OF.get(TWINS.get(prop, (prop,))[0], BODIES[lot])
-        m = BURY_MARGIN
-        for k in range(len(parts) - 1):
-            roof, nxt = fl[k] * S, fl[k + 1] * S
-            for x, y, z in parts[k].verts:
-                if y <= roof + 1e-6:
-                    continue
-                if not (x0 + m <= x <= x1 - m and z0 + m <= z <= z1 - m and y <= nxt - m):
-                    bad.append(f"stage {k}: ({x:.2f}, {y:.2f}, {z:.2f}) above the roof {roof:.2f} "
-                               f"is not buried by stage {k + 1}")
-                    break
+    x0, x1, z0, z1 = BODY_OF.get(TWINS.get(prop, (prop,))[0], BODIES[lot])
+    m = BURY_MARGIN
+    for k in range(len(parts) - 1):
+        roof, nxt = fl[k] * S, fl[k + 1] * S
+        for x, y, z in parts[k].verts:
+            if y <= roof + 1e-6:
+                continue
+            if not (x0 + m <= x <= x1 - m and z0 + m <= z <= z1 - m and y <= nxt - m):
+                bad.append(f"stage {k}: ({x:.2f}, {y:.2f}, {z:.2f}) above the roof {roof:.2f} "
+                           f"is not buried by stage {k + 1}")
+                break
     return bad
 
 
 def write_blueprints() -> None:
     os.makedirs(BLUEPRINT_DIR, exist_ok=True)
-    for prop, (lot, make, generic) in PROPS.items():
+    for prop, (lot, make) in PROPS.items():
         parts = make()
-        pieces = []
-        if generic:
-            pieces.append({"kit": KIT, "model": f"forecourt-{lot}", "pos": [0, 0, 0], "rotY": 0, "stage": 0})
+        pieces = [{"kit": KIT, "model": f"forecourt-{lot}", "pos": [0, 0, 0], "rotY": 0, "stage": 0}]
         for k, part in enumerate(parts):
             pieces.append({"kit": KIT, "model": part.name, "pos": [0, 0, 0], "rotY": 0, "stage": k})
         w, d = LOTS[lot]
@@ -1813,7 +1394,7 @@ def write_blueprints() -> None:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate the tower-kit GLBs.")
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
-    parser.add_argument("--write-blueprints", action="store_true", help="also (re)write the 32 fabric blueprints")
+    parser.add_argument("--write-blueprints", action="store_true", help="also (re)write the 18 fabric blueprints")
     parser.add_argument("--summary", help="write per-stage heights, extents and triangles here (JSON)")
     args = parser.parse_args(argv)
     summary_out: dict = {}
@@ -1821,17 +1402,14 @@ def main(argv: list[str]) -> int:
     os.makedirs(args.out, exist_ok=True)
     failures = 0
     pieces: dict = dict(FORECOURTS)
-    for prop, (lot, make, generic) in PROPS.items():
+    for prop, (lot, make) in PROPS.items():
         RODS.clear()
         parts = make()
         problems = check(prop, parts, list(RODS))
-        fc = forecourt("fc", lot).tris if generic else 0
-        running = fc
+        running = forecourt("fc", lot).tris
         summary = []
-        lo_all, hi_all = [9e9] * 3, [-9e9] * 3
-        if generic:
-            w, d = LOTS[lot]
-            lo_all, hi_all = [-w / 2, 0.0, -d / 2], [w / 2, FC_TOP, d / 2]
+        w, d = LOTS[lot]
+        lo_all, hi_all = [-w / 2, 0.0, -d / 2], [w / 2, FC_TOP, d / 2]
         stages = []
         for part in parts:
             running += part.tris
