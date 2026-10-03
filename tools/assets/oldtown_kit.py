@@ -13,12 +13,12 @@ geometry helpers from village_extras_kit.py.
 
 Why a custom kit (INTERFACES "M12 wave 3 -- Metropolis", docs/CITY_GROWTH.md sections 2.1 and 4):
 - The old town. Metropolis's wild land is the low, worn city the towers replace: surface car parks,
-  fenced vacant lots, two- and three-storey brick blocks and billboards. city-kit-commercial is all
+  fenced vacant lots, one- and two-storey brick blocks and billboards. city-kit-commercial is all
   new white offices and glass, and the brick and industrial kits belong to Boomtown (each kit
   belongs to one era), so every old-town piece is generated here.
-- Building sites. No City Kit has a tower crane, a concrete frame, pipe scaffold or a site cabin,
-  and Boomtown's construction pieces are Boomtown's. Tower cranes on the skyline are the
-  Metropolis frontier's signature (CITY_GROWTH 2.3).
+- Building sites. No City Kit has a tower crane, a concrete frame or pipe scaffold, and Boomtown's
+  construction pieces are Boomtown's. Tower cranes on the skyline are the Metropolis frontier's
+  signature (CITY_GROWTH 2.3).
 - Parked cars. car-kit's cars are 2,000 to 2,500 triangles each (every wheel alone is 332), so a
   car park of a dozen would cost more than a whole district. The cars here are about 60 triangles,
   sized like the street's parked cars as the game shows them (ParkedA-C at scale 1.8, then
@@ -79,7 +79,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from garden_kit import REPO_ROOT, Part, build_object, export  # noqa: E402
-from village_extras_kit import beam, blotch, cross, extrude_x, face_out, lathe, place, sub, unit  # noqa: E402
+from village_extras_kit import blotch, cross, face_out, lathe, place, sub, unit  # noqa: E402
 
 import bpy  # noqa: E402
 
@@ -285,10 +285,8 @@ ROW_IN = KERB_IN - BAY_D  # 3.9: the aisle edge of both rows
 GAP = 0.8
 ISLAND = 4.1
 LINE_TOP = LOT_TOP + MIN_GAP
-# Bay centres in the quarter frame, for the blueprints: the +Z row's two bays (cars along Z) and the
-# +X row's two (cars along X).
-BAYS_Z = [(GAP + BAY_W * (k + 0.5), ROW_IN + BAY_D / 2) for k in range(2)]
-BAYS_X = [(ROW_IN + BAY_D / 2, GAP + BAY_W * (k + 0.5)) for k in range(2)]
+# A bay's centre is BAY_W * (k + 0.5) past GAP along its row and BAY_D / 2 in from ROW_IN: where the
+# quarter blueprint parks its cars (along Z in the +Z row, along X in the +X row).
 
 
 def make_carpark_quarter() -> Part:
@@ -677,67 +675,13 @@ def make_billboard() -> Part:
     return p
 
 
-def make_warehouse() -> Part:
-    """An old brick warehouse for the land past the plot edge, 10.0 x 8.0 studs with its concrete
-    apron and 4.95 tall at its chimney: a brick shed with pilasters, three saw-tooth roof bays
-    glazed toward +Z, a parapet with a faded painted sign over two roller doors and a loading dock
-    on -Z, high windows down the sides, and a round brick chimney at the back corner."""
-    p = Part("warehouse")
-    hx, z0, z1, wall = 4.5, -2.4, 2.9, 3.0
-    block(p, -5.0, 5.0, 0.0, 0.06, -4.0, 4.0, STONE_DARK, top=TRIM)
-    block(p, -hx, hx, 0.0, wall, z0, z1, BRICK, skip=("bottom", "top"))
-    # three saw-tooth bays: a slate slope rising to the back, glazing on the steep side
-    teeth = 3
-    depth = (z1 - z0) / teeth
-    for k in range(teeth):
-        a, b = z0 + k * depth, z0 + (k + 1) * depth
-        outline = [(a, wall), (b, wall), (b, wall + 1.2)]
-        extrude_x(p, outline, -hx, hx, SLATE, ends=BRICK_BROWN)
-        on_wall(p, ("z", b, 1), -hx + 0.3, hx - 0.3, wall + 0.12, wall + 1.0, MIN_GAP, BLUE_PALE, edge=GREY)
-    # the parapet and its sign
-    block(p, -hx - 0.05, hx + 0.05, wall, wall + 0.75, z0 - 0.1, z0 + 0.15, BRICK, top=CREAM, skip=("bottom",))
-    sign = ("z", z0 - 0.1, -1)
-    on_wall(p, sign, -3.6, 3.6, wall + 0.12, wall + 0.62, MIN_GAP, CREAM)
-    on_wall(p, sign, -3.2, -0.6, wall + 0.24, wall + 0.5, 2 * MIN_GAP, RED)
-    on_wall(p, sign, 0.0, 3.0, wall + 0.28, wall + 0.46, 2 * MIN_GAP, BLUE)
-    # pilasters on the front, doors and windows
-    front = ("z", z0, -1)
-    for x in (-4.45, -1.5, 1.5, 4.45):
-        on_wall(p, front, x - 0.18, x + 0.18, 0.0, wall, 0.12, BRICK_BROWN)
-    for x in (-3.0, 0.0):
-        on_wall(p, front, x - 0.95, x + 0.95, 0.0, 1.9, MIN_GAP, STONE_DARK, edge=SLATE)
-        for y in (0.45, 0.95, 1.45):
-            on_wall(p, front, x - 0.95, x + 0.95, y, y + MIN_MEMBER, 2 * MIN_GAP, TRIM)
-    on_wall(p, front, 2.6, 3.2, 0.0, 1.3, 0.05, MINT_DARK, edge=SLATE)
-    for x in (2.2, 3.6):
-        on_wall(p, front, x - 0.3, x + 0.3, 1.9, 2.6, MIN_GAP, DARK, edge=CREAM)
-    for sx in (-1, 1):
-        side = ("x", sx * hx, sx)
-        for z in (-1.2, 0.8, 2.8):
-            on_wall(p, side, z - 0.42, z + 0.42, 1.8, 2.55, MIN_GAP, DARK, edge=CREAM)
-    back = ("z", z1, 1)
-    for x in (-3.0, -1.0, 1.0):
-        on_wall(p, back, x - 0.4, x + 0.4, 1.8, 2.55, MIN_GAP, DARK, edge=CREAM)
-    # loading dock under the doors
-    block(p, -4.2, 1.2, 0.0, 0.45, z0 - 1.1, z0, STONE_DARK, top=STONE)
-    for x in (-3.9, -2.1, -0.9, 0.9):
-        block(p, x - 0.12, x + 0.12, 0.1, 0.4, z0 - 1.18, z0 - 1.1, IRON, skip=("bottom", "back"))
-    # pallets on the apron
-    for x, z in ((3.4, -3.3), (4.2, -3.1)):
-        block(p, x - 0.38, x + 0.38, 0.06, 0.2, z - 0.3, z + 0.3, TAN, top=APRICOT)
-    block(p, 3.0, 3.8, 0.2, 0.62, -3.6, -3.0, STONE, top=STONE_LIGHT)
-    # the chimney, a tapering round brick stack with a dark cap
-    lathe(p, [(0.5, 0.0), (0.42, 0.5), (0.3, 4.7), (0.36, 4.75), (0.36, 4.95)],
-          [BRICK_BROWN, BRICK, IRON, IRON], seg=8, at=(3.5, 0.0, 3.45), phase=math.pi / 8)
-    return p
-
-
 # --- building sites ------------------------------------------------------------------------------
 #
 # A Metropolis site is a concrete frame going up behind blue hoardings: a gravel pad, a slab with
 # columns and the next floor, a lift core rising highest, pipe scaffold on the street face, stacked
-# steel and blocks, a mixer; the medium lot adds the site cabin and the tower crane. Hoardings are
-# plain, painted, with no brands. Everything stays inside its lot except the crane's jibs.
+# steel and blocks, a mixer; the crane variants add a slim tower crane. Hoardings are plain,
+# painted, with no brands. Everything stays inside its lot except a crane's jibs. The approved
+# layout has narrow (4 x 8) and small (6 x 6) lots only, so there is no medium site.
 
 HOARD_H = 1.35
 
@@ -760,11 +704,6 @@ def make_site_ground_narrow() -> Part:
 def make_site_ground_small() -> Part:
     patches = ((-1.5, 1.6, 1.0, 0.9, STONE_DARK), (1.8, -1.5, 0.8, 0.9, EARTH))
     return site_ground("site-ground-small", 2.95, 2.95, 402, patches)
-
-
-def make_site_ground_medium() -> Part:
-    patches = ((-2.0, -2.4, 1.4, 0.9, STONE_DARK), (2.2, -0.6, 1.0, 1.2, EARTH), (-0.6, 3.0, 1.2, 0.6, STONE_DARK))
-    return site_ground("site-ground-medium", 3.95, 3.95, 403, patches)
 
 
 def concrete_frame(name: str, x0: float, x1: float, z0: float, z1: float, cols_x, cols_z, slab_from: float, upper,
@@ -820,15 +759,6 @@ def make_frame_small() -> Part:
     xs, zs = (-2.6, -0.85, 0.9), (-1.3, 0.75, 2.75)
     upper = [(-2.6, 2.75, 1.4), (-0.85, 2.75, 1.4), (0.9, 2.75, 1.0), (-2.6, 0.75, 1.4)]
     return concrete_frame("frame-small", -2.8, 1.1, -1.5, 2.95, xs, zs, 0.75, upper, (-2.2, -1.2, 1.2, 2.2, 3.5))
-
-
-def make_frame_medium() -> Part:
-    """SiteMedium's frame: a 5.35 x 4.8 slab on the left of the 8 x 8 lot with one storey of
-    columns, the first floor over the back two bays, a few columns of the next and the lift core at
-    3.2. The crane stands beside it."""
-    xs, zs = (-3.5, -1.85, -0.2, 1.45), (-1.25, 0.95, 3.15)
-    upper = [(-3.5, 3.15, 1.0), (-1.85, 3.15, 1.0), (-3.5, 0.95, 0.6)]
-    return concrete_frame("frame-medium", -3.7, 1.65, -1.45, 3.35, xs, zs, 0.95, upper, (0.1, 1.1, 1.6, 2.6, 3.2))
 
 
 def hoarding(name: str, half: float) -> Part:
@@ -930,61 +860,20 @@ def make_mixer() -> Part:
     return p
 
 
-def make_site_cabin() -> Part:
-    """A portable site office, 2.4 x 1.0 studs (1.32 with its step) and 1.25 tall, its door and windows on -Z: a white
-    box on blocks with a blue band, two windows, a door and a step."""
-    p = Part("site-cabin")
-    hx, hz = 1.2, 0.5
-    for x in (-0.95, 0.95):
-        block(p, x - 0.12, x + 0.12, 0.0, 0.14, -hz + 0.1, hz - 0.1, STONE_DARK)
-    block(p, -hx, hx, 0.14, 1.25, -hz, hz, PALE, top=STONE)
-    for wall in (("z", -hz, -1), ("z", hz, 1)):
-        on_wall(p, wall, -hx, hx, 0.88, 1.0, MIN_GAP, BLUE)
-    front = ("z", -hz, -1)
-    for x in (-0.65, 0.2):
-        on_wall(p, front, x - 0.27, x + 0.27, 0.45, 0.8, MIN_GAP, DARK, edge=GREY)
-    on_wall(p, front, 0.62, 1.0, 0.16, 0.86, MIN_GAP, SLATE)
-    block(p, 0.56, 1.06, 0.0, 0.12, -hz - 0.3, -hz, GREY, top=STONE)
-    return p
-
-
-# The two tower cranes' dimensions, in studs. "tall" stands on SiteMedium; "slim" on the narrow
-# and small sites (site variants), whose lots are 4 and 6 studs wide, so its jib runs front to back
-# over its own lot and neighbouring jibs stay parallel. Members are never under MIN_MEMBER.
-CRANES = {
-    "tall": {
-        "footing": 0.65, "foot": 0.3, "mast": 0.42, "chord": 0.13, "top": 11.4, "sections": 10,
-        "deck": 0.6, "cab": (-1.25, -0.6, -0.62, -0.05, 0.7, 0.22),
-        "jib_h": 0.62, "jib_w": 0.28, "reach": -9.2, "bays": 9,
-        "trolley": -5.4, "hook": 7.4,
-        "counter": 3.3, "counter_w": 0.32, "weights": (2.15, 2.9), "weight": (0.33, 0.55, 0.36), "rail": 1.75,
-        "apex": 2.4, "cat": 0.35, "tie": (-4.8, 3.1),
-    },
-    "slim": {
-        "footing": 0.45, "foot": 0.25, "mast": 0.3, "chord": 0.12, "top": 9.8, "sections": 9,
-        "deck": 0.42, "cab": (-0.95, -0.42, -0.42, 0.0, 0.62, 0.18),
-        "jib_h": 0.5, "jib_w": 0.2, "reach": -7.2, "bays": 7,
-        "trolley": -4.2, "hook": 6.6,
-        "counter": 1.9, "counter_w": 0.25, "weights": (1.55,), "weight": (0.3, 0.45, 0.3), "rail": 1.2,
-        "apex": 1.9, "cat": 0.25, "tie": (-3.8, 1.75),
-    },
-}
-
-
-def tower_crane(name: str, c: dict) -> Part:
-    """A tower crane from one CRANES entry, its jib out along -X and its counter-jib along +X, origin
-    at the mast's foot: a concrete footing, a square lattice mast in the kit's yellow, the slewing
-    deck with the white cab facing along the jib, a triangular lattice jib with its trolley and hook,
-    the counter-jib with its concrete counterweights and a rail, and the cat-head with its ties."""
-    p = Part(name)
-    f = c["footing"]
-    block(p, -f, f, 0.0, c["foot"], -f, f, STONE_DARK, top=STONE)
-    m, foot, top = c["mast"], c["foot"], c["top"]
-    chord = c["chord"]
+def make_tower_crane_slim() -> Part:
+    """The crane sites' tower crane, 11.75 studs tall (mast 9.8), its jib out 7.2 studs along -X and
+    its counter-jib 1.9 along +X, origin at the mast's foot: a concrete footing, a square lattice
+    mast 0.6 across in the kit's yellow, the slewing deck with the white cab facing along the jib, a
+    triangular lattice jib with its trolley and hook, the counter-jib with a concrete counterweight
+    and a rail, and the cat-head with its ties. Slim because the lots it stands on are 4 and 6 studs
+    wide: a blueprint turns it so the jib runs front to back over its own lot, and neighbouring
+    jibs stay parallel. Members are never under MIN_MEMBER."""
+    p = Part("tower-crane-slim")
+    footing, foot, m, chord, top, sections = 0.45, 0.25, 0.3, 0.12, 9.8, 9
+    block(p, -footing, footing, 0.0, foot, -footing, footing, STONE_DARK, top=STONE)
     corners = ((-m, -m), (m, -m), (m, m), (-m, m))
     for x, z in corners:
         block(p, x - chord / 2, x + chord / 2, foot, top, z - chord / 2, z + chord / 2, YELLOW, skip=("bottom", "top"))
-    sections = c["sections"]
     step = (top - foot) / sections
     for k in range(sections):
         y0, y1 = foot + k * step, foot + (k + 1) * step
@@ -994,14 +883,14 @@ def tower_crane(name: str, c: dict) -> Part:
                 (xa, za), (xb, zb) = (xb, zb), (xa, za)
             rod(p, (xa, y0, za), (xb, y1, zb), MIN_MEMBER, YELLOW_DEEP, sides=3)
     # slewing deck and cab
-    d = c["deck"]
+    d = 0.42
     block(p, -d, d, top, top + 0.3, -d, d, YELLOW, top=YELLOW_DEEP, skip=())
-    cx0, cx1, cz0, cz1, below, above = c["cab"]
+    cx0, cx1, cz0, cz1, below, above = -0.95, -0.42, -0.42, 0.0, 0.62, 0.18
     block(p, cx0, cx1, top - below, top + above, cz0, cz1, PALE, top=STONE)
     on_wall(p, ("x", cx0, -1), cz0 + 0.07, cz1 - 0.07, top - below + 0.1, top - 0.15, MIN_GAP, BLUE, edge=GREY)
     on_wall(p, ("z", cz0, -1), cx0 + 0.1, cx1, top - below + 0.1, top - 0.15, MIN_GAP, BLUE, edge=GREY)
     # jib: two bottom chords and a top chord, braced on both flanks, out along -X
-    jy, jh, jw, reach = top + 0.3, c["jib_h"], c["jib_w"], c["reach"]
+    jy, jh, jw, reach = top + 0.3, 0.5, 0.2, -7.2
     rod(p, (d, jy + 0.05, -jw), (reach, jy + 0.05, -jw), MIN_MEMBER, YELLOW, caps=True)
     rod(p, (d, jy + 0.05, jw), (reach, jy + 0.05, jw), MIN_MEMBER, YELLOW, caps=True)
     rod(p, (0.0, jy + jh, 0.0), (reach + 0.4, jy + jh * 0.35, 0.0), MIN_MEMBER, YELLOW, caps=True)
@@ -1010,7 +899,7 @@ def tower_crane(name: str, c: dict) -> Part:
     def chord_y(x: float) -> float:
         return jy + jh - 0.65 * jh * (x / tip)
 
-    bays = c["bays"]
+    bays = 7
     for k in range(bays):
         xa = -0.1 + (tip + 0.1) * k / bays
         xb = -0.1 + (tip + 0.1) * (k + 1) / bays
@@ -1021,40 +910,25 @@ def tower_crane(name: str, c: dict) -> Part:
                 a, b = (xa, jy + 0.05, side), (xb, chord_y(xb), 0.0)
             rod(p, a, b, MIN_MEMBER, YELLOW_DEEP, sides=3)
     # trolley, hoist rope and hook block
-    tx, hook = c["trolley"], c["hook"]
+    tx, hook = -4.2, 6.6
     block(p, tx - 0.25, tx + 0.25, jy - 0.14, jy - 0.02, -jw - 0.06, jw + 0.06, SLATE, skip=())
     rod(p, (tx, jy - 0.14, 0.0), (tx, hook, 0.0), MIN_MEMBER, IRON)
     block(p, tx - 0.17, tx + 0.17, hook - 0.4, hook, -0.14, 0.14, RED, skip=(), top=YELLOW)
-    # counter-jib with its counterweights and a rail
-    cw = c["counter_w"]
-    block(p, d, c["counter"], jy, jy + 0.16, -cw, cw, YELLOW, skip=(), top=YELLOW_DEEP)
-    wx, wy, wz = c["weight"]
-    for x in c["weights"]:
-        block(p, x - wx, x + wx, jy - wy, jy + wy, -wz, wz, STONE, top=STONE_LIGHT)
-    rod(p, (d, jy + 0.6, cw), (c["rail"], jy + 0.6, cw), MIN_MEMBER, YELLOW, caps=True)
+    # counter-jib with its counterweight and a rail
+    counter, cw = 1.9, 0.25
+    block(p, d, counter, jy, jy + 0.16, -cw, cw, YELLOW, skip=(), top=YELLOW_DEEP)
+    x, wx, wy, wz = 1.55, 0.3, 0.45, 0.3
+    block(p, x - wx, x + wx, jy - wy, jy + wy, -wz, wz, STONE, top=STONE_LIGHT)
+    rod(p, (d, jy + 0.6, cw), (1.2, jy + 0.6, cw), MIN_MEMBER, YELLOW, caps=True)
     # cat-head and ties
-    apex = (0.0, top + c["apex"], 0.0)
-    q = c["cat"]
+    apex = (0.0, top + 1.9, 0.0)
+    q = 0.25
     for x, z in ((-q, -q), (q, -q), (q, q), (-q, q)):
         rod(p, (x, top + 0.3, z), apex, MIN_MEMBER, YELLOW, sides=3)
-    front, back = c["tie"]
-    rod(p, apex, (front, chord_y(front), 0.0), MIN_MEMBER, IRON)
-    rod(p, apex, (back, jy + 0.16, 0.0), MIN_MEMBER, IRON)
+    rod(p, apex, (-3.8, chord_y(-3.8), 0.0), MIN_MEMBER, IRON)
+    rod(p, apex, (1.75, jy + 0.16, 0.0), MIN_MEMBER, IRON)
     block(p, -0.08, 0.08, apex[1] - 0.05, apex[1] + 0.05, -0.08, 0.08, RED, skip=())
     return p
-
-
-def make_tower_crane() -> Part:
-    """SiteMedium's tower crane, 13.85 studs tall (mast 11.4), its jib reaching 9.2 studs along -X and
-    its counter-jib 3.3 along +X, with two counterweights."""
-    return tower_crane("tower-crane", CRANES["tall"])
-
-
-def make_tower_crane_slim() -> Part:
-    """The narrow and small sites' tower crane, 12.0 studs tall (mast 9.8), its jib reaching 7.2
-    studs along -X and its counter-jib 1.9 along +X, with one counterweight: the same build on a
-    0.6-stud mast, so it still reads as a crane from the tycoon camera at a third less mass."""
-    return tower_crane("tower-crane-slim", CRANES["slim"])
 
 
 def make_scaffold_ring() -> Part:
@@ -1127,13 +1001,10 @@ PIECES = {
     "fire-escape": make_fire_escape,
     "water-tank": make_water_tank,
     "billboard": make_billboard,
-    "warehouse": make_warehouse,
     "site-ground-narrow": make_site_ground_narrow,
     "site-ground-small": make_site_ground_small,
-    "site-ground-medium": make_site_ground_medium,
     "frame-narrow": make_frame_narrow,
     "frame-small": make_frame_small,
-    "frame-medium": make_frame_medium,
     "hoarding": make_hoarding,
     "hoarding-half": make_hoarding_half,
     "scaffold": make_scaffold,
@@ -1141,8 +1012,6 @@ PIECES = {
     "steel-stack": make_steel_stack,
     "block-pallet": make_block_pallet,
     "mixer": make_mixer,
-    "site-cabin": make_site_cabin,
-    "tower-crane": make_tower_crane,
     "tower-crane-slim": make_tower_crane_slim,
     "scaffold-ring": make_scaffold_ring,
     "lot-hoarding": make_lot_hoarding,
