@@ -25,6 +25,10 @@ the 3-stud alleys barely show from the tycoon camera. Sheet: `assets/testfit/out
 empty space, specially what looks like sidewalk". Wave 3.1b: pavements 4 → 2 (walkers 4.5; a street band
 is now 11, so pitch-28 blocks hold two 8-deep rows), four tiles-era lanes where they add lots, landmarks
 brought to the street line, subway kiosks beside the (too narrow) pavement. Boulevard stays as a record.
+Result: **85 lots** (50 on streets, 35 on four lanes; avenues at x −28/0/28, cross-town z −42), merged into
+`m12-metropolis` (31d9d37); Ben has not judged the denser renders yet (`m12m_avenues_denser.png`).
+`busStop`, `cityPark`, `rooftopGarden` and `conventionCenter` carry no district there, so the first three
+cost no lots as city-changers; but a 2-stud pavement leaves no kerb room for shelters or street trees.
 
 **Rulings taken by the lead for the mock** (Ben has not judged them yet):
 - Block slabs dropped (a slab paved a whole block at its first purchase: a socket); every fabric prop

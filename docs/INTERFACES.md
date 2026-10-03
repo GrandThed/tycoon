@@ -6484,6 +6484,33 @@ candidate is the pick; the boulevard branch is kept as the record. The lead read
   landmark, City Hall facing the entrance, the skyline peaking at the Skyscraper).
 - Still open with Ben: the four city-changer proposals.
 
+### Result (2026-10-03; `m12-metropolis` fast-forwarded to the avenues branch, 31d9d37)
+
+- **85 lots** (was 67): 50 on streets (48 narrow, 2 small) and 35 on four lanes (8 narrow, 27 small).
+  Lanes: west front 7 lots, west back 10, east front 8, east back 10; 215 studs in all.
+- **Geometry:** avenues at x = −28, 0, 28 and the cross-town street at z = −42; each block is 17 deep
+  and holds two 8-deep rows back to back. Each outer band holds an 8-deep street row, a lane at
+  x = ±44, and 6 × 6 lots between the lane and the deck. Landmarks stand with their front on the
+  pavement's edge and their pad on their own ground. Kiosks: two flank the entrance, two stand at
+  the corners of the T.
+- **Houses / sites** at tiers 1–4 and full: 3/17, 24/8, 55/22, 68/12, 85/0. No FRAGILE entries.
+- **`pull`:** radius 118, tierTerm 0.4, thresholds [0.6, 3.06, 3.36, 4.75], reach 30.
+- **The layout owner's changes beyond the brief** (accepted by the lead; Ben sees them on the renders):
+  - Office Tower A closes the east avenue and the Broadcast Tower flanks the Skyscraper, so the east
+    avenue's back half is drawn in tier 3 instead of tier 5.
+  - `busStop`, `cityPark`, `rooftopGarden` and `conventionCenter` carry **no district**: each would
+    cap its neighbours at one or two storeys. So turning the first three into city-changers costs no
+    lots on this layout.
+  - `hospital` is `office`, not `civic`: civic gave six plazas in a row on the west back lane.
+  - `officeLowRise` stands at the ramp's foot so its path draws the ramp's landing cell; the stadium
+    closes the cross-town street's east end.
+- **Open:** on a 2-stud pavement the kerb strip beside the walkers is 0.4 wide, so a bus shelter
+  (1.4 deep) or a street tree fits only in a gap the lots keep clear; far plots draw 60 of the 85
+  lots (`budget.parcelsFar`); two kiosks and the ring pier crowd the entrance view; at tier 1 the
+  old town leaves the west half barer than before; a 9 × 7 bare patch by the ramp.
+- Renders: `m12m_avenues_{tier1,tier3,full,full_entrance,streetplan,lane}.png`,
+  `m12m_avenues_denser.png` (67 against 85), `m12m_compare.png` (today against avenues).
+
 ---
 
 # M13 contracts — The Valley (wave 1: sky, ground, hub, roads)
