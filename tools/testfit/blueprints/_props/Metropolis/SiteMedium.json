@@ -1,0 +1,20 @@
+{
+  "id": "SiteMedium",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [8, 8],
+  "note": "a concrete frame going up on an 8 x 8 lot with the tower crane at its back corner (mast 11.4, cat-head 13.85; only the jibs leave the lot, overhead), in the lot frame: scaffold, the site cabin, blue hoarding with a gate, steel, blocks and a mixer",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "site-ground-medium", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "frame-medium", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "tower-crane", "pos": [2.85, 0, 2.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "scaffold", "pos": [-1.0, 0, -1.8], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "site-cabin", "pos": [2.6, 0, -1.6], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [-2.95, 0, -3.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [-0.95, 0, -3.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [3.0, 0, -3.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "steel-stack", "pos": [-1.4, 0, -2.75], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "mixer", "pos": [1.1, 0, -2.6], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "block-pallet", "pos": [-3.2, 0, -2.65], "rotY": 0, "stage": 0}
+  ]
+}

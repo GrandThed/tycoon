@@ -1,0 +1,15 @@
+{
+  "id": "OldTownQuarterA",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "one quarter of a surface car park in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): asphalt to the clump axes, kerbs, four bays, the corner island with the pay booth and the light, three parked cars; oldtown-kit is 1 unit = 1 stud, so scale is 1.0",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "carpark-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "pay-booth", "pos": [4.65, 0.14, 5.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-light", "pos": [5.85, 0.14, 4.75], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-a", "pos": [1.575, 0.05, 5.1], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-b", "pos": [5.1, 0.05, 1.575], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-c", "pos": [5.1, 0.05, 3.125], "rotY": 270, "stage": 0}
+  ]
+}

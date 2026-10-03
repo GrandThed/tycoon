@@ -1,0 +1,10 @@
+{
+  "id": "RevealScaffold",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [10, 10],
+  "note": "one generated piece: a pipe-scaffold ring with blue netting and a hoarding skirt that stands wholly outside a 9 x 9 slot (nothing nearer the centre than 4.54, nothing beyond 4.97), so a landmark that fills its footprint touches none of it; the client still scales it by max(footprint) / 9",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "scaffold-ring", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

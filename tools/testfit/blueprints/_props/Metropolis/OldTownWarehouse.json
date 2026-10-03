@@ -1,0 +1,10 @@
+{
+  "id": "OldTownWarehouse",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [10, 8],
+  "note": "skirt only (outside the plot): an old brick warehouse on its concrete apron, loading doors on -Z",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "warehouse", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

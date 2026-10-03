@@ -1,0 +1,10 @@
+{
+  "id": "OldTownBillboard",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [2, 1],
+  "note": "an old billboard on a steel frame, facing -Z; colour blocks, no lettering; the piece sits 0.155 back so the frame and catwalk are centred on the origin",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "billboard", "pos": [0, 0, 0.155], "rotY": 0, "stage": 0}
+  ]
+}
