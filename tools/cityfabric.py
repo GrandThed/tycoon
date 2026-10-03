@@ -42,7 +42,10 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     spurs and lanes follow;
   * `fabric.levelStages` (M12 wave 3.1), the stage a level-2, -3 or -4 parcel starts from before
     the height cap (level_stage). Implemented here first: Fabric.luau follows in wave 3.2 and copies
-    level_stage and valid_level_stages exactly.
+    level_stage and valid_level_stages exactly;
+  * the ring's own clearing (M12 wave 3.1 rulings): once `highway.requiresSlot` is owned, the deck
+    band's four rects and the ramp's cells (ring_rects, Highway.luau's ring, pitch and rampCells)
+    join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2.
 
 `timeline --fabric <data.json>` reads data built with `fabric.py build --out` instead of the era's own.
 
@@ -945,6 +948,32 @@ def grown(rect, margin):
     return {**rect, "margin": margin}
 
 
+def ring_rects(ring, tile_studs, ramp=None, ramp_cells=0):
+    """The ring's ground as clearing rects (INTERFACES "Wave 3.1", rulings): the deck band -- `ring`
+    plus or minus half a cell on all four sides -- as four rects, then the ramp's cells: `ramp_cells`
+    whole cells from the ramp cell inward (`ramp` = {"cell": (x, z), "direction": "+X" | "-X" | "+Z" |
+    "-Z"}, Highway.luau's). Margin 0: the mask grows them by clear.parcel once the highway's slot is
+    owned. Empty for a ring or a pitch that is not a positive finite number; a ramp with an unknown
+    direction or no cell adds no cells."""
+    if not (finite(ring) and ring > 0 and finite(tile_studs) and tile_studs > 0):
+        return []
+    half = tile_studs / 2
+    reach = ring + half
+    rects = [
+        {"x": 0.0, "z": -ring, "hx": reach, "hz": half, "rotationY": 0, "margin": 0},
+        {"x": 0.0, "z": ring, "hx": reach, "hz": half, "rotationY": 0, "margin": 0},
+        {"x": -ring, "z": 0.0, "hx": half, "hz": reach, "rotationY": 0, "margin": 0},
+        {"x": ring, "z": 0.0, "hx": half, "hz": reach, "rotationY": 0, "margin": 0},
+    ]
+    step = streetplan.RAMP_DIRECTIONS.get(ramp.get("direction")) if isinstance(ramp, dict) else None
+    cell = ramp.get("cell") if isinstance(ramp, dict) else None
+    if step is not None and isinstance(cell, (list, tuple)) and len(cell) == 2 and all(finite(v) for v in cell):
+        for k in range(1, int(ramp_cells) + 1):
+            x, z = cell[0] + step[0] * tile_studs * k, cell[1] + step[1] * tile_studs * k
+            rects.append({"x": x, "z": z, "hx": half, "hz": half, "rotationY": 0, "margin": 0})
+    return rects
+
+
 def chord(a, b):
     """A mask segment from two plot-local (x, z) points."""
     return {"ax": a[0], "az": a[1], "bx": b[0], "bz": b[1]}
@@ -1262,6 +1291,17 @@ class FabricPlot:
             extents = model_extents(era_props.get(plaza["prop"])) or centred_extents(largest_x, largest_z)
             position = (plaza["position"][0], plaza["position"][2])
             self.plaza_rects[index] = footprint_rect(position, plaza["rotationY"], extents)
+        # Wave 3.1 (rulings): the ring's ground, cleared once `highway.requiresSlot` is owned; none
+        # without a layout highway, a tiles pitch and that config key.
+        highway = self.era.highway
+        config = self.era.dressing.get("highway")
+        slot = config.get("requiresSlot") if isinstance(config, dict) else None
+        self.ring_slot = slot if isinstance(slot, str) and isinstance(highway, dict) else None
+        self.ring_rects = []
+        if self.ring_slot is not None:
+            ramp = self.era.highway_ramp
+            ramp_view = {"cell": (ramp["cell"][0], ramp["cell"][2]), "direction": ramp.get("direction")} if isinstance(ramp, dict) else None
+            self.ring_rects = ring_rects(highway.get("ring"), self.era.tile_studs, ramp_view, self.era.ramp_cells)
 
     def _build_views(self):
         """Fabric.new: config and data validated once, the parcel views (a malformed parcel is a blank
@@ -1485,7 +1525,8 @@ class FabricPlot:
     def mask(self, owned, states, segments, plazas, reaches=None):
         """Fabric.buildMask: owned footprints (+clear.slot) and their pads (+clear.pad), every buyable
         slot's footprint and pad (+clear.pad), parcels at level 1 and up (+clear.parcel, budget or
-        not), visible plazas (+clear.parcel), the street segments (clear.street) and (wave 2.4)
+        not), visible plazas (+clear.parcel), the ring's ground once its highway slot is owned
+        (+clear.parcel, wave 3.1), the street segments (clear.street) and (wave 2.4)
         every lane leg as far as the lane's reach (clear.lane) -- the reach, not what a near plot
         draws, so near and far plots clear alike."""
         clear = self.clear
@@ -1517,6 +1558,9 @@ class FabricPlot:
             rect = self.plaza_rects.get(index)
             if rect is not None:
                 rects.append(grown(rect, parcel_margin))
+        # Wave 3.1 (rulings): the ring clears its own ground once its slot is owned.
+        if self.ring_slot is not None and self.ring_slot in owned:
+            rects += [grown(rect, parcel_margin) for rect in self.ring_rects]
         lane_margin = number_or(clear.get("lane"), 0)
         lane_segments = []
         for view in self.lane_views:
@@ -1873,9 +1917,11 @@ class FabricPlot:
                 if node is not None:
                     self._reveal(node, visible)
                 segments += [chord(self.network.stretches[i]["a"], self.network.stretches[i]["b"]) for i in visible]
-            # Fabric.buildMask keeps a bought slot's pad clearing too.
+            # Fabric.buildMask keeps a bought slot's pad clearing too; the highway's slot brings the
+            # ring's ground (wave 3.1).
+            ring = [grown(rect, number_or(clear.get("parcel"), 0)) for rect in self.ring_rects] if slot_id == self.ring_slot else []
             owned = {
-                "rects": [grown(footprint, slot_margin), grown(pad, pad_margin)],
+                "rects": [grown(footprint, slot_margin), grown(pad, pad_margin)] + ring,
                 "segments": segments,
                 "streetClear": street,
             }
@@ -2339,6 +2385,22 @@ def selftest():
         ("levelStages: a boolean reads as absent", level_stage({"levelStages": [True, 3, 4]}, 2) == 0),
         ("levelStages: an empty list reads as absent", level_stage({"levelStages": []}, 3) == 1),
         ("levelStages: an object reads as absent", level_stage({"levelStages": {"1": 1}}, 2) == 0),
+    ]
+
+    # Wave 3.1 rulings: the ring's ground (Metropolis: ring 56, pitch 7, ramp from (-56, -28) +X,
+    # three cells) joins the mask with clear.parcel 1.5 once the highway's slot is owned.
+    deck = ring_rects(56, 7)
+    ramped = ring_rects(56, 7, {"cell": (-56, -28), "direction": "+X"}, 3)
+    ring_mask = {"rects": [grown(rect, 1.5) for rect in ramped], "segments": [], "streetClear": 0}
+    validation += [
+        ("ring: four deck-band rects", [(r["x"], r["z"], r["hx"], r["hz"]) for r in deck] == [(0, -56, 59.5, 3.5), (0, 56, 59.5, 3.5), (-56, 0, 3.5, 59.5), (56, 0, 3.5, 59.5)]),
+        ("ring: the ramp's cells inward from the ramp cell", [(r["x"], r["z"]) for r in ramped[4:]] == [(-49, -28), (-42, -28), (-35, -28)]),
+        ("ring: a quarter reaching under the deck is cleared", is_cleared(0, -50.5, 3.3, ring_mask)),
+        ("ring: a quarter off the band stands", not is_cleared(0, -45, 3.3, ring_mask)),
+        ("ring: a single on a ramp cell is cleared", is_cleared(-42, -27, 1, ring_mask)),
+        ("ring: a single beside the ramp stands", not is_cleared(-42, -20, 1, ring_mask)),
+        ("ring: an unknown direction adds no ramp cells", len(ring_rects(56, 7, {"cell": (-56, -28), "direction": "up"}, 3)) == 4),
+        ("ring: no ring, no rects", ring_rects("a", 7) == [] and ring_rects(56, 0) == [] and ring_rects(-1, 7) == []),
     ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")

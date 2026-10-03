@@ -64,10 +64,13 @@ A tiles era (`road.tiles`, INTERFACES "Wave 3.1": Metropolis). A street is whole
 pavement either side and a U round its ends, so its hard surface is a square-ended band reaching
 road.width / 2 + pavement.width (7.5) from the centreline; no lot stands on it, and lots keep
 `parcels.tileSolid` (at least 0.5) from the ring deck's band, the ramp's cells and the subway kiosks.
-The wild keeps off every planned street's band (a park strip covers it until the street draws), the
-deck band, the ramp cells and the kiosks: a field that would stand there is moved `wild.grid.shift`
-studs (one lattice cell) if that fits, else dropped, and such a single is dropped. A single's ground
-is its harvested extents, else the plan's `footprints` entry, else a `singleRadius` square. Kerb layer
+The wild keeps off every planned street's band (a park strip covers it until the street draws) and
+the kiosks. It may stand on the ring's ground (deck band and ramp cells) until the highway is bought,
+when those rects join the clearing mask with `clear.parcel`; whatever stands there must be within
+their reach. A field that breaks either rule, or lies across the plot's edge, is moved
+`wild.grid.shift` studs (one lattice cell) if that fits, else dropped; such a single is dropped. A
+single's ground is its harvested extents, else the plan's `footprints` entry, else a `singleRadius`
+square. A fields plan may leave out `skirt` (nothing past the edge, and no landmarks). Kerb layer
 entries keep the walkers' reach (pedestrians.offset + clearance) as everywhere, which in a tiles era
 puts them on the pavement's outer edge, between the walkers and the lot fronts.
 
@@ -164,6 +167,8 @@ TOUCH = 1e-6
 # A wild cell that a tile street, the deck or a kiosk takes is moved this many grid steps when the
 # plan's `wild.grid.shift` asks for it: across, along, then diagonally (INTERFACES "Wave 3.1").
 SHIFTS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1))
+# A fields plan without `skirt` (Metropolis, rulings): nothing past the edge, no field across it.
+NO_SKIRT = {"depth": 0.0, "gap": math.inf, "sideFrom": 0.0, "fallow": 0.0}
 MARKER_SIZE = 2.0  # the marker prop's ground square, the contract's cap
 BUILT_LEVEL = 2  # a parcel's house stands from level 2 (a parcel-anchored tree needs it)
 MAX_ROW = 3
@@ -471,16 +476,29 @@ class Site:
         # the ramp's cells and the subway kiosks.
         self.street_bands = []
         self.tile_solids = []
+        kiosks = []
+        # The ring's ground (deck band and ramp cells) that the clearing mask takes once the
+        # highway's slot is owned (`highway_slot`), as (label, polygon, box); empty without a layout
+        # highway or a config `highway.requiresSlot`.
+        self.highway_rects = []
+        self.highway_slot = None
         if self.tiles:
             for polyline, segment, a, b in self.street_segments:
                 band = streetplan.band(a, b, self.street_half)
                 self.street_bands.append((f"street {polyline + 1}", polyline, segment, band, box_of(band)))
-            solids = [("the deck band", poly) for poly in deck_band(self.era)]
-            solids += [(f"the ramp cell {streetplan.fmt(shape_centre(poly))}", poly) for poly in streetplan.ramp_squares(self.era)]
-            solids += [(f"subway kiosk {index}", entry["poly"]) for index, entry in enumerate(self.era.subways, start=1)]
-            self.tile_solids = [(label, poly, box_of(poly)) for label, poly in solids]
-        # What the wild keeps off in a tiles era (INTERFACES "Wave 3.1"): all of the above.
-        self.wild_keepout = [(f"the hard surface of {label}", band, box) for label, _, _, band, box in self.street_bands] + self.tile_solids
+            ring = [("the deck band", poly) for poly in deck_band(self.era)]
+            ring += [(f"the ramp cell {streetplan.fmt(shape_centre(poly))}", poly) for poly in streetplan.ramp_squares(self.era)]
+            kiosks = [(f"subway kiosk {index}", entry["poly"]) for index, entry in enumerate(self.era.subways, start=1)]
+            self.tile_solids = [(label, poly, box_of(poly)) for label, poly in ring + kiosks]
+            slot = (self.era.dressing.get("highway") or {}).get("requiresSlot")
+            if isinstance(slot, str) and ring:
+                self.highway_slot = slot
+                self.highway_rects = [(label, poly, box_of(poly)) for label, poly in ring]
+        # What the wild keeps off in a tiles era (INTERFACES "Wave 3.1", rulings): every planned
+        # street's band and the kiosks. The ring's ground is not kept: the old town stands there
+        # until the highway is bought, and then the ring's own clearing takes it (wild_messages).
+        self.wild_keepout = [(f"the hard surface of {label}", band, box) for label, _, _, band, box in self.street_bands]
+        self.wild_keepout += [(label, poly, box_of(poly)) for label, poly in kiosks]
         self.entrance = self.era.streets[0][0] if self.era.streets and self.era.streets[0] else (0.0, -self.era.half_z)
         lamps = self.era.dressing.get("lamps") or {}
         post = streetplan.post_size(self.era, lamps.get("prop"))
@@ -2658,9 +2676,53 @@ def wild_shapes(site, plan, item):
     return [cart_body(extents, item)]
 
 
+def clearing_points(site, plan, item):
+    """What the clearing mask tests a wild entry by, as (label suffix, point, radius, ground): each
+    quarter of a clump -- its quad, `quarterRadius`, and the quarter's square (half the plan's field
+    `size`, else the clearing diameter, x scale, turned rotationY) -- or a single's point,
+    `singleRadius` and its ground (wild_shapes)."""
+    radii = site.config["wild"]
+    if item["kind"] != "clump":
+        return [("", (item["x"], item["z"]), radii["singleRadius"], wild_shapes(site, plan, item)[0])]
+    size = (plan["wild"].get("clumps") or {}).get("size")
+    side = (size / 2 if size is not None else 2 * radii["quarterRadius"]) * item.get("scale", 1.0)
+    return [
+        (f" quarter {q}", (quad[0], quad[1]), radii["quarterRadius"], streetplan.square((quad[0], quad[1]), side, side, item["rotationY"]))
+        for q, quad in enumerate(item["quads"], start=1)
+    ]
+
+
+def ring_misses(site, plan, item):
+    """(label suffix, what) of every part of a wild entry that stands on the ring's ground (the deck
+    band or a ramp cell) yet stays out of reach of the ring's own clearing -- those rects grown by
+    `clear.parcel`, IsCleared's test -- so it would stand under the deck once the highway's slot is
+    owned (INTERFACES "Wave 3.1", rulings). Empty without a highway to buy."""
+    if not site.highway_rects:
+        return []
+    margin = float(site.config["clear"].get("parcel", 0.0))
+    misses = []
+    for suffix, point, radius, ground in clearing_points(site, plan, item):
+        under = [label for label, poly, box in site.highway_rects if not boxes_apart(box_of(ground), box, 0.0) and overlap_depth(ground, poly) > TOUCH]
+        if not under:
+            continue
+        if any(point_gap(point, poly) - radius < margin for _, poly, _ in site.highway_rects):
+            continue
+        misses.append((suffix, under[0]))
+    return misses
+
+
 def kept_out(site, plan, item):
-    """Whether a wild entry stands on ground a tiles era keeps it off (never in another era)."""
-    return bool(site.wild_keepout) and bool(keepout_hits(site, wild_shapes(site, plan, item)))
+    """Whether a wild entry stands on ground a tiles era keeps it off, or on the ring's ground out
+    of the ring's clearing (never in another era)."""
+    if not site.wild_keepout and not site.highway_rects:
+        return False
+    return bool(keepout_hits(site, wild_shapes(site, plan, item))) or bool(ring_misses(site, plan, item))
+
+
+def field_entry(wild, centre, angle):
+    """A field cell as the clump it would be written as (its quarter turn does not move the quads)."""
+    quads = quad_centres(centre[0], centre[1], angle, 1.0, wild["clumps"]["quarterOffset"])
+    return {"kind": "clump", "x": centre[0], "z": centre[1], "rotationY": angle, "scale": 1.0, "quads": [[rounded(q[0]), rounded(q[1])] for q in quads]}
 
 
 def generate_wild(site, plan):
@@ -2846,9 +2908,15 @@ def generate_fields(site, plan):
     part of it fenced pasture, the rest open ground with hay, trees and a telegraph line across it;
     and the fields run on past the back and side edges into a landscape band with the plan's
     landmarks. A field stands wholly on the plot
-    or wholly off it: the ground past the edge is lower."""
+    or wholly off it: the ground past the edge is lower. A plan without `skirt` lays nothing past
+    the edge (Metropolis: the ring is the city's edge), and then no landmarks either."""
     wild = plan["wild"]
-    grid, clumps_cfg, skirt = wild["grid"], wild["clumps"], wild["skirt"]
+    grid, clumps_cfg = wild["grid"], wild["clumps"]
+    skirt = wild.get("skirt")
+    if skirt is None:
+        if wild.get("landmarks"):
+            raise SystemExit("fabric: wild.landmarks stand in the skirt, and the plan has no `skirt`")
+        skirt = NO_SKIRT
     seed = plan["seed"]
     rng = random.Random(f"{seed}:wild")
     landmarks = landmark_polys(wild)
@@ -2857,9 +2925,12 @@ def generate_fields(site, plan):
     plot = plot_rect(site)
     on, off = [], []
     # A tiles era (INTERFACES "Wave 3.1"): a field on a street's hard surface (or where a park strip
-    # covers it until the street draws), the deck band, a ramp cell or a kiosk waits here, to be moved
-    # by the plan's `grid.shift` or dropped; the runtime mask is never left to clear it.
+    # covers it until the street draws) or a kiosk, or on the ring's ground out of the ring's own
+    # clearing, waits here to be moved by the plan's `grid.shift` or dropped; so does a field across
+    # the plot's edge when the plan shifts. The runtime mask is never left to clear one.
     waiting = []
+    step = grid.get("shift")
+    tiles_rules = bool(site.wild_keepout or site.highway_rects)
     for j in range(-span, span + 1):
         for i in range(-span, span + 1):
             centre = grid_point(grid, i, j)
@@ -2869,7 +2940,7 @@ def generate_fields(site, plan):
             if any(gap(poly, rect) < skirt["gap"] for _, _, rect in landmarks):
                 continue
             if on_plot(site, poly, grid["edge"]):
-                if site.wild_keepout and keepout_hits(site, [poly]):
+                if tiles_rules and kept_out(site, plan, field_entry(wild, centre, grid["angle"])):
                     waiting.append(cell)
                 else:
                     on.append(cell)
@@ -2877,6 +2948,8 @@ def generate_fields(site, plan):
             past = beyond_plot(site, centre)
             beside = abs(centre[0]) > site.era.half_x and centre[1] <= site.era.half_z
             if past is None or past > skirt["depth"] or gap(poly, plot) < skirt["gap"]:
+                if past == 0.0 and step:
+                    waiting.append(cell)  # its centre is on the plot: a shift may bring it all on
                 continue
             # Beside the plot the band only runs from `sideFrom` back: it tapers out toward the hub.
             if beside and centre[1] < skirt["sideFrom"]:
@@ -2884,13 +2957,12 @@ def generate_fields(site, plan):
             off.append(cell)
     # A moved field keeps its cell's key (so its noise rank) and must clear everything a field in
     # place clears, and every field already kept; the first move that does wins, in SHIFTS order.
-    step = grid.get("shift")
     for cell in waiting if step else ():
         for di, dj in SHIFTS:
             dx, dz = rotate(di * step, dj * step, grid["angle"])
             centre = (rounded(cell["centre"][0] + dx), rounded(cell["centre"][1] + dz))
             poly = field_poly(wild, centre[0], centre[1], grid["angle"])
-            if not on_plot(site, poly, grid["edge"]) or keepout_hits(site, [poly]):
+            if not on_plot(site, poly, grid["edge"]) or (tiles_rules and kept_out(site, plan, field_entry(wild, centre, grid["angle"]))):
                 continue
             if any(gap(poly, rect) < skirt["gap"] for _, _, rect in landmarks):
                 continue
@@ -3834,12 +3906,21 @@ def wild_messages(site, plan, doc):
                 messages.append(f"{label}: quads do not match the contract's rotation of ({offset:g}, {offset:g}) x scale")
         elif item["prop"] not in singles_allowed:
             messages.append(f"{label}: single prop {item['prop']!r} is not in the plan's single pools")
-        # A tiles era (INTERFACES "Wave 3.1"): the wild never stands on a planned street's cells or
-        # pavement (a park strip covers them until the street draws), the deck band, a ramp cell or
-        # a kiosk. The runtime mask knows none of these, so the data must keep off them.
+        # A tiles era (INTERFACES "Wave 3.1", rulings): the wild never stands on a planned street's
+        # cells or pavement (a park strip covers them until the street draws) or a kiosk. The
+        # runtime mask knows neither, so the data must keep off them.
         if site.wild_keepout:
             for what, depth in keepout_hits(site, wild_shapes(site, plan, item)):
                 messages.append(f"{label}: stands {depth:.2f} into {what}")
+        # It may stand on the ring's ground until the highway is bought; then the deck band and the
+        # ramp cells join the mask (+clear.parcel), so whatever stands there must be cleared by them.
+        if site.highway_rects:
+            margin = site.config["clear"].get("parcel", 0.0)
+            for suffix, what in ring_misses(site, plan, item):
+                messages.append(
+                    f"{label}{suffix}: stands on {what}, but the ring's clearing (+clear.parcel {margin:g}) does not reach "
+                    f"its clearing point, so it would stand under the deck once {site.highway_slot} is owned"
+                )
     if plan["wild"].get("pattern") == FIELDS:
         messages += field_messages(site, plan, wild)
     return messages
@@ -3868,7 +3949,7 @@ def field_messages(site, plan, entries):
     landmarks = landmark_polys(wild)
     # A prop the plan lays past the edge and never on the plot is a skirt-only prop.
     plot_props = set((wild.get("singles") or {}).get("props", ())) | ({wild["poles"]["prop"]} if wild.get("poles") is not None else set())
-    skirt_only = (set(((wild["skirt"].get("singles") or {}).get("props", ()))) | {landmark["prop"] for landmark, _, _ in landmarks}) - plot_props
+    skirt_only = (set((((wild.get("skirt") or {}).get("singles") or {}).get("props", ()))) | {landmark["prop"] for landmark, _, _ in landmarks}) - plot_props
     fields, points = [], []
     for index, item in enumerate(entries, start=1):
         label = f"wild {index} ({number(item['x'])}, {number(item['z'])})"
