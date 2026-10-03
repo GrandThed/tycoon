@@ -6411,6 +6411,13 @@ look is a building shows `<prop><suffix>` in place of `<prop>`, if that prop exi
 `districts` if given. Stage rules, height cap and lot are unchanged. A twin shares its body with the
 original and changes only the roofs, so the swap plays as an ordinary stage-swap pop.
 
+**Site variants (lead, 2026-10-02; mirrored now, client in wave 3.2):** `fabric.siteVariants:
+{ [size]: { string } }?`. A level-1 parcel `i` shows `list[((i − 1) % #list) + 1]` for its size,
+the district prop rule, and falls back to `sites[size]` when the size has no list. Metropolis:
+narrow `[SiteNarrow, SiteNarrowCrane, SiteNarrow]`, small `[SiteSmall, SiteSmallCrane]` (config
+applied). The avenues candidate has only narrow lots, and only `SiteMedium` carried a crane, so it
+never showed the tower cranes CITY_GROWTH §2.3 promises for Metropolis.
+
 ### Gate renders (`assets/testfit/out/Metropolis/`)
 
 - `m12m_today_{tier1,tier3,full}.png`: today's Metropolis with the current renderer (true colours).
