@@ -13,7 +13,7 @@ Files live in `assets/audition/<sound>/`. Nothing is uploaded until this form is
 
 - [ ] Option A (suggested): [card-slide-4.ogg](../assets/audition/swing/PICK__card-slide-4.ogg)
 - [ ] Option B: [card-slide-2.ogg](../assets/audition/swing/alt1__card-slide-2.ogg)
-- [ ] Option C: [card-shove-3.ogg](../assets/audition/swing/alt2__card-shove-3.ogg)
+- [x] Option C: [card-shove-3.ogg](../assets/audition/swing/alt2__card-shove-3.ogg)
 - [ ] None (keep silent)
 - Notes: 
 
