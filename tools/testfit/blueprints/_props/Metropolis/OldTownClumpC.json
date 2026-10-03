@@ -1,0 +1,21 @@
+{
+  "id": "OldTownClumpC",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly OldTownQuarterC at rotY 0, 90, 180 and 270 about the origin: a old brick block (four quarters), 13 x 13 on the 14-stud grid",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "brick-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "water-tank", "pos": [1.5, 1.75, 4.45], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "fire-escape", "pos": [4.63, 0.0, 2.1], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "brick-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "water-tank", "pos": [4.45, 1.75, -1.5], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "fire-escape", "pos": [2.1, 0.0, -4.63], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "brick-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "water-tank", "pos": [-1.5, 1.75, -4.45], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "fire-escape", "pos": [-4.63, 0.0, -2.1], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "brick-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "water-tank", "pos": [-4.45, 1.75, 1.5], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "fire-escape", "pos": [-2.1, 0.0, 4.63], "rotY": 270, "stage": 0}
+  ]
+}

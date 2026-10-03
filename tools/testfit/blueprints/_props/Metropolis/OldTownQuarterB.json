@@ -1,0 +1,12 @@
+{
+  "id": "OldTownQuarterB",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "one quarter of a fenced vacant lot in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): earth, weeds and the corner of a demolished building's floor slab to the clump axes, chain-link on the two outer edges, fallen bricks and a skip; scale 1.0",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "lot-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "chainlink-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "skip", "pos": [4.95, 0.05, 2.4], "rotY": 90, "stage": 0}
+  ]
+}

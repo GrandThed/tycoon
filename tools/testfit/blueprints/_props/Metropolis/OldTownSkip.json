@@ -1,0 +1,10 @@
+{
+  "id": "OldTownSkip",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [2, 1.2],
+  "note": "an open builder's skip",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "skip", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

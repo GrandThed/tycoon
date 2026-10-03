@@ -1,0 +1,21 @@
+{
+  "id": "OldTownClumpB",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly OldTownQuarterB at rotY 0, 90, 180 and 270 about the origin: a fenced vacant lot (four quarters), 13 x 13 on the 14-stud grid",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "lot-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "chainlink-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "skip", "pos": [4.95, 0.05, 2.4], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "lot-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "chainlink-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "skip", "pos": [2.4, 0.05, -4.95], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "lot-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "chainlink-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "skip", "pos": [-4.95, 0.05, -2.4], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "lot-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "chainlink-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "skip", "pos": [-2.4, 0.05, 4.95], "rotY": 0, "stage": 0}
+  ]
+}

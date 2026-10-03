@@ -1,0 +1,17 @@
+{
+  "id": "SiteSmall",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [6, 6],
+  "note": "a concrete frame going up on a 6 x 6 lot, in the lot frame: scaffold on its +X face, blue hoarding with a gate, steel, blocks and a mixer",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "site-ground-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "frame-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "scaffold", "pos": [1.45, 0, 0.72], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [-2.0, 0, -2.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "hoarding", "pos": [1.95, 0, -2.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "steel-stack", "pos": [2.4, 0, -0.35], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "mixer", "pos": [2.35, 0, 2.2], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "block-pallet", "pos": [0.0, 0.2, -0.3], "rotY": 0, "stage": 0}
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "OldTownClumpA",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly OldTownQuarterA at rotY 0, 90, 180 and 270 about the origin: a surface car park (four quarters), 13 x 13 on the 14-stud grid",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "carpark-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "pay-booth", "pos": [4.65, 0.14, 5.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-light", "pos": [5.85, 0.14, 4.75], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-a", "pos": [1.575, 0.05, 5.1], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-b", "pos": [5.1, 0.05, 1.575], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-c", "pos": [5.1, 0.05, 3.125], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "pay-booth", "pos": [5.85, 0.14, -4.65], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-light", "pos": [4.75, 0.14, -5.85], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-a", "pos": [5.1, 0.05, -1.575], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-b", "pos": [1.575, 0.05, -5.1], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-c", "pos": [3.125, 0.05, -5.1], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "pay-booth", "pos": [-4.65, 0.14, -5.85], "rotY": 180, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-light", "pos": [-5.85, 0.14, -4.75], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-a", "pos": [-1.575, 0.05, -5.1], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-b", "pos": [-5.1, 0.05, -1.575], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-c", "pos": [-5.1, 0.05, -3.125], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "pay-booth", "pos": [-5.85, 0.14, 4.65], "rotY": 270, "stage": 0},
+    {"kit": "oldtown-kit", "model": "carpark-light", "pos": [-4.75, 0.14, 5.85], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-a", "pos": [-5.1, 0.05, 1.575], "rotY": 90, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-b", "pos": [-1.575, 0.05, 5.1], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "car-c", "pos": [-3.125, 0.05, 5.1], "rotY": 180, "stage": 0}
+  ]
+}

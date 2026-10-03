@@ -1,0 +1,12 @@
+{
+  "id": "OldTownQuarterC",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "one quarter of an old brick block in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): paved yard to the clump axes, a two-storey corner building and a one-storey shop on the +Z street (3.57 tall at most, under the first landmarks), a water tank on the shop's roof and a fire escape on the corner building's back; scale 1.0",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "brick-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "water-tank", "pos": [1.5, 1.75, 4.45], "rotY": 0, "stage": 0},
+    {"kit": "oldtown-kit", "model": "fire-escape", "pos": [4.63, 0, 2.1], "rotY": 0, "stage": 0}
+  ]
+}

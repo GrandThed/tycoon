@@ -1,0 +1,10 @@
+{
+  "id": "OldTownRubble",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "a heap of demolition rubble",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "rubble", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

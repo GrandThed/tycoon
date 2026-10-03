@@ -1,0 +1,10 @@
+{
+  "id": "LotHoarding",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "the next-pad marker: a development board on two posts, facing -Z, painted on both faces",
+  "pieces": [
+    {"kit": "oldtown-kit", "model": "lot-hoarding", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
