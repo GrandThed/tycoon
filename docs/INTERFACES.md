@@ -6392,6 +6392,25 @@ contract's 110 was set from Village and Boomtown without that arithmetic. So:
     at least the alley's width, clear of crossings and kiosks. Two alleys may meet end to end.
   - The mirror draws them now; the client follows in wave 3.2.
 
+### City-changer proposals (step 3; renders for Ben, not yet a contract)
+
+Metropolis's `highwayRamp` and `subwayLine` are already street upgrades, and `cityGrid` stays City
+Hall. Four more slots could "stop being a sole building". Each is shown to Ben as a before and after
+render; economy is untouched either way (type, cost, income, multiplier and `requires` stay).
+
+| Slot | Proposal | Mechanism |
+|---|---|---|
+| `busStop` (8) | **Open the Bus Line**: glass shelters on the pavements, city buses in the traffic | the generic upgrade layer (stretch-anchored `BusShelterM`) plus `vehicles.unlocks` (`VehicleCityBus`), as Boomtown's `busLine` |
+| `cityPark` (14) | **Plant Street Trees**: trees along every drawn street (they went with the block slabs) | the generic upgrade layer (stretch-anchored `TreeGrowing`, stage by tier) |
+| `rooftopGarden` (20) | **Green the Rooftops**: every home and shop tower gets a roof garden | a **prop swap** (below) to the `…Green` twins |
+| `financeDistrict` (23) | **Open the Finance District**: office towers get lit glass crowns, beacons and helipads at their tall stages | a prop swap to the `…Crown` twins; or it stays the OfficeTowerB building |
+
+**Prop swap (proposed, mirrored for the renders only):**
+`fabric.swaps: [{ requiresSlot, suffix, districts? }]`. While `requiresSlot` is owned, a parcel whose
+look is a building shows `<prop><suffix>` in place of `<prop>`, if that prop exists, limited to
+`districts` if given. Stage rules, height cap and lot are unchanged. A twin shares its body with the
+original and changes only the roofs, so the swap plays as an ordinary stage-swap pop.
+
 ### Gate renders (`assets/testfit/out/Metropolis/`)
 
 - `m12m_today_{tier1,tier3,full}.png`: today's Metropolis with the current renderer (true colours).
