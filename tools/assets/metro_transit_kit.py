@@ -18,8 +18,8 @@ line reads as one thing beside the metro's blue kiosks.
 
 **Units: 1 glTF unit = 1 stud**, blueprints at `"scale": 1.0`. The two pieces follow two size
 conventions:
-- `bus-shelter` stands at full size on the pavement, like the other street props. Its rules are
-  oldtown_kit's MIN_GAP (0.05) and MIN_MEMBER (0.1).
+- `bus-shelter` stands at full size at the lot line, in a gap one narrow lot wide, like the other
+  street props. Its rules are oldtown_kit's MIN_GAP (0.05) and MIN_MEMBER (0.1).
 - `city-bus` is built at blueprint size like the Metropolis VehicleA-D (car-kit at blueprint scale
   1.8: 2.7 wide, 2.3 to 3.0 tall, 4.95 to 5.85 long), because the client shrinks every vehicle by
   `vehicles.scale` 0.5. So its rules are doubled here, BUS_GAP 0.1 and BUS_MEMBER 0.2, which come
@@ -80,14 +80,18 @@ BUS_MEMBER = MIN_MEMBER / BUS_SCALE
 
 
 def make_bus_shelter() -> Part:
-    """A modern bus shelter, 3.6 studs long, 1.4 deep and 2.95 tall at its route sign, open toward
-    -Z (the kerb): a glass back wall and two half-depth glass end screens in slim steel frames, a flat
-    canopy in the line's mint with a white fascia, a bench along the back, and at the -X end a route
-    sign on a pole (a mint head over a white panel with dark bars and coloured route squares, no
-    lettering). The +X end screen carries an advert panel of colour blocks on its outer face."""
+    """A modern bus shelter, 3.0 studs long, 1.36 deep and 2.95 tall at its route sign, open toward
+    -Z (the street): a glass back wall and two half-depth glass end screens in slim steel frames, a
+    flat canopy in the line's mint with a white fascia, a bench along the back, and a route flag
+    standing on the canopy's -X front corner, across the pavement as a bus-stop flag hangs (a mint
+    band over yellow and red route squares on white, both faces, no lettering). The +X end screen
+    carries an advert panel of colour blocks on its outer face. It is 3.0 long because it stands in
+    a gap one narrow lot wide (4.1) with 0.55 clear each side (lead, 2026-10-03); nothing reaches
+    past the canopy's ends."""
     p = Part("bus-shelter")
     m = MIN_MEMBER
-    hx, zb, zf = 1.55, 0.5, -0.15  # frame half-length, back wall line, end screens' front
+    half = 1.5  # the canopy's ends: the shelter's whole length
+    hx, zb, zf = 1.3, 0.5, -0.15  # frame half-length, back wall line, end screens' front
     top = 2.45
     # steel posts: three along the back, one at the front of each end screen
     for x in (-hx, 0.0, hx):
@@ -106,22 +110,24 @@ def make_bus_shelter() -> Part:
     on_wall(p, side, zf + 0.12, zb - 0.12, 0.4, 2.2, MIN_GAP, CREAM)
     on_wall(p, side, zf + 0.22, zb - 0.22, 1.2, 1.95, 2 * MIN_GAP, RED)
     on_wall(p, side, zf + 0.22, zb - 0.22, 0.6, 0.85, 2 * MIN_GAP, TAN)
-    # the canopy: a mint slab over the whole shelter, reaching toward the kerb, white fascia front
-    block(p, -1.75, 1.75, top, top + 0.15, -0.68, 0.68, WHITE, skip=(), top=MINT_DARK, bottom=STONE_LIGHT)
+    assert hx + m / 2 + 2 * MIN_GAP <= half, "the advert would reach past the canopy's end"
+    # the canopy: a mint slab over the whole shelter, reaching toward the street, white fascia
+    canopy = top + 0.15
+    block(p, -half, half, top, canopy, -0.68, 0.68, WHITE, skip=(), top=MINT_DARK, bottom=STONE_LIGHT)
     # bench along the back on two legs
-    block(p, -1.1, 0.75, 0.42, 0.52, 0.12, 0.42, STONE, top=STONE_LIGHT)
-    for x in (-0.95, 0.6):
+    block(p, -0.95, 0.7, 0.42, 0.52, 0.12, 0.42, STONE, top=STONE_LIGHT)
+    for x in (-0.8, 0.55):
         block(p, x - 0.05, x + 0.05, 0.0, 0.42, 0.22, 0.32, IRON, skip=("bottom", "top"))
-    # route sign on a pole outside the -X end: a mint head over a white panel
-    px = -1.72
-    block(p, px - 0.06, px + 0.06, 0.0, 2.2, -0.45, -0.33, GREY, skip=("bottom",))
-    block(p, px - 0.07, px + 0.07, 2.2, 2.95, -0.62, -0.16, WHITE, top=MINT_DARK)
+    # the route flag on the canopy, over the -X front post: a white head with a mint band and two
+    # route squares on each face
+    fx = -hx
+    block(p, fx - 0.07, fx + 0.07, canopy, 2.95, -0.64, -0.16, WHITE, top=MINT_DARK)
+    assert fx - 0.07 - MIN_GAP >= -half, "the flag would reach past the canopy's end"
     for facing in (-1, 1):
-        wall = ("x", px + facing * 0.07, facing)
-        on_wall(p, wall, -0.6, -0.18, 2.62, 2.9, MIN_GAP, MINT)
-        on_wall(p, wall, -0.55, -0.23, 2.42, 2.52, MIN_GAP, DARK)
-        for z0, colour in ((-0.55, YELLOW), (-0.36, RED)):
-            on_wall(p, wall, z0, z0 + 0.13, 2.25, 2.36, MIN_GAP, colour)
+        wall = ("x", fx + facing * 0.07, facing)
+        on_wall(p, wall, -0.61, -0.19, 2.81, 2.93, MIN_GAP, MINT)
+        for z0, colour in ((-0.57, YELLOW), (-0.36, RED)):
+            on_wall(p, wall, z0, z0 + 0.13, 2.64, 2.77, MIN_GAP, colour)
     return p
 
 
