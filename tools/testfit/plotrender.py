@@ -15,7 +15,8 @@ coloured rectangles.
     py tools/testfit/plotrender.py Metropolis --tier 3 --fabric <data.json> --out <dir>/try_tier3.png
 
 Outputs land in assets/testfit/out/<Era>/plot_<camera>.png, or where an `--out` ending in .png says.
-`--fabric` draws fabric data built with `fabric.py build --out` instead of the era's own.
+`--fabric` draws fabric data built with `fabric.py build --out` instead of the era's own, and
+`--config` a scratch CityDressing.json (a city-changer proposal) instead of the repo's.
 
 This half runs under the system `py` because it imports tools/streetplan.py, which needs Pillow;
 the rendering half is tools/testfit/plotscene.py, which runs inside Blender (no Pillow, no PIL
@@ -1228,6 +1229,9 @@ class PlotScene:
         fabric = self.fabric
         counts = cityfabric.level_counts(view)
         houses, sites = cityfabric.look_counts(view)
+        swaps = cityfabric.swap_counts(view)
+        if swaps:
+            self.notes.append("fabric swaps: " + ", ".join(f"{suffix} x{n}" for suffix, n in sorted(swaps.items())))
         whole, partial, quarters, singles = cityfabric.wild_counts(view)
         drawable = sum(1 for parcel_view in view["parcels"] if cityfabric.drawable(view, parcel_view))
         self.notes.append(
@@ -2230,11 +2234,16 @@ def main():
         help="draw a far plot (past the near radius): the city fabric keeps its parcels and whole "
         "clumps only, and the pads their padLook without a marker or stakes. Default: a near plot",
     )
+    parser.add_argument(
+        "--config",
+        help="a CityDressing.json to read instead of src/shared/Config/CityDressing.json (a scratch copy "
+        "for a proposal render; the repo's file is never touched)",
+    )
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args()
 
     started = time.time()
-    city = json.loads(CITY_CONFIG_PATH.read_text(encoding="utf-8"))
+    city = json.loads((Path(args.config) if args.config else CITY_CONFIG_PATH).read_text(encoding="utf-8"))
     era = streetplan.Era(args.era, city)
     network = streetplan.Network(era)
     tier = args.tier
