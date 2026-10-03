@@ -21,6 +21,11 @@ and "boulevard" (axis to the Skyscraper, two cross streets, four pedestrian alle
 62 alley). Boulevard is denser but reads as uniform terrace superblocks (two narrow props per district);
 the 3-stud alleys barely show from the tycoon camera. Sheet: `assets/testfit/out/Metropolis/m12m_compare.png`.
 
+**Ben picked avenues (2026-10-03):** "i love avenues … but … more density … adding 4 lanes and removing some
+empty space, specially what looks like sidewalk". Wave 3.1b: pavements 4 → 2 (walkers 4.5; a street band
+is now 11, so pitch-28 blocks hold two 8-deep rows), four tiles-era lanes where they add lots, landmarks
+brought to the street line, subway kiosks beside the (too narrow) pavement. Boulevard stays as a record.
+
 **Rulings taken by the lead for the mock** (Ben has not judged them yet):
 - Block slabs dropped (a slab paved a whole block at its first purchase: a socket); every fabric prop
   carries its own paved forecourt. Street trees went with them → the `cityPark` changer proposal.

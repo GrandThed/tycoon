@@ -62,7 +62,7 @@ quarter's centre by the contract's rotation mapping.
 
 A tiles era (`road.tiles`, INTERFACES "Wave 3.1": Metropolis). A street is whole lattice cells with a
 pavement either side and a U round its ends, so its hard surface is a square-ended band reaching
-road.width / 2 + pavement.width (7.5) from the centreline; no lot stands on it, and lots keep
+road.width / 2 + pavement.width (5.5 since wave 3.1b) from the centreline; no lot stands on it, and lots keep
 `parcels.tileSolid` (at least 0.5) from the ring deck's band, the ramp's cells and the subway kiosks.
 The wild keeps off every planned street's band (a park strip covers it until the street draws) and
 the kiosks. It may stand on the ring's ground (deck band and ramp cells) until the highway is bought,
@@ -3264,6 +3264,8 @@ def marker_messages(site):
         for other_id, footprint in site.slot_polys.items():
             if other_id in site.street_only:
                 continue  # a nominal rect (INTERFACES "Review rulings", wave 1c)
+            if other_id == slot["id"]:
+                continue  # wave 3.1b: it stands only while its own pad does, so before the building
             d = gap(poly, footprint)
             if d < CHECK_MARKER_SLOT - EPS:
                 messages.append(f"{label}: {d:.2f} from the {other_id} footprint (need {CHECK_MARKER_SLOT})")
@@ -3275,8 +3277,14 @@ def marker_messages(site):
             d = segment_gap(a, b, poly)
             if d < site.road_strip - EPS:
                 messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {site.road_strip:g})")
-        # INTERFACES "Wave 3.1": nothing stands in the deck band, on a ramp cell or on a kiosk.
+        # INTERFACES "Wave 3.1": nothing stands in the deck band or on a ramp cell; wave 3.1b: a
+        # kiosk stands in ground every marker keeps CHECK_TILE_SOLID clear of.
         for what, solid, _ in site.tile_solids:
+            if what.startswith("subway kiosk"):
+                d = gap(poly, solid)
+                if d < CHECK_TILE_SOLID - EPS:
+                    messages.append(f"{label}: {d:.2f} from {what} (need {CHECK_TILE_SOLID})")
+                continue
             depth = overlap_depth(poly, solid)
             if depth > TOUCH:
                 messages.append(f"{label}: stands {depth:.2f} into {what}")
