@@ -1,6 +1,6 @@
 ---
 name: m12-growing-city-review
-description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.5) — recurring patterns (claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix, turned Parts under a planar texture, a retune that empties a mechanism, gates lowered to pass, a baked mesh wider than the polyline its clearances were tuned on), the scratch probes that settle them without Studio (replay, checker mutation, path GLB reader in plot coordinates), and the numbers found
+description: M12 "growing city" reviews (Village waves 1-1c, Boomtown waves 2.0-2.5, Metropolis wave 3.2) — recurring patterns (a last-leg-only footpath clip defeated by layout data, a governor change that shrinks standing towers, claim replays as a purchase, plot-frame offsets in rotated layouts, mixed-length lane hold, far wild prefix, turned Parts under a planar texture, a retune that empties a mechanism, gates lowered to pass, a baked mesh wider than the polyline its clearances were tuned on), the scratch probes that settle them without Studio (replay, checker mutation, path GLB reader in plot coordinates), and the numbers found
 metadata:
   type: project
 ---
@@ -199,6 +199,57 @@ green in scratch, three rojo builds byte-identical to the committed ones, 92 GLB
 - Replay facts (greedy): lanes appear at slot purchases 7 (LN_3), 9 (LN_4), 13 (LN_1, 2, 5),
   15 (LN_6, 8 together with L3_4 + L4_1), 16 (LN_7); a reach is never partial; triangles per near
   plot 31,520 -> 43,888.
+
+**Wave 3.2 (2026-10-03, branch `m12-metropolis`, worktree `tycoon-m12m`, main...7e63579, SHIP TO THE
+ASSET RUN WITH FIXES: 0 Critical / 2 Major / Minors):** Metropolis fabric in the client (pure
+`LevelStage`, `SiteProp`, `ValidSwaps`, `SwappedProp`, `RingRects`; tiles-era lanes laid by
+`RoadGraph.SetLanes` as footpath Parts; ring clearing; no car lanes on tiles-era footpaths), a full
+relayout (88 lots, 4 lanes, 2-stud pavements), `metropolis.project.json`. All gates green in scratch
+(stylua, selene, luau-lsp on all of src, check_compile [Fabric.luau 170 of 180], four rojo builds,
+fabric check x3, selftest, timeline, streetplan, check_mirror --strict at 7e63579, sim identical to
+main). Village, Boomtown and Orbital proven unchanged (streetplan text and Village/Boomtown timelines
+identical between a main archive and HEAD; per-function gate analysis). Fabric props were NOT yet
+uploaded: nothing of the fabric can be seen in Studio until the asset run.
+
+- **Recurring pattern (wave 2a's Major came back): a clip that trims only the LAST leg is defeated by
+  layout data.** `spurDrawPoints` drops a final leg <= `spurClip` (7.0) whole, so the path then runs
+  to the previous point, which can be ON the centreline. Two ways the relayout produced that: a pad
+  moved sideways by `padPosition` makes the default router end in a 1-3 stud jog along the street
+  (cityGrid, shoppingMall), and overrides that stop 2-4 studs short of their node (hotelTower,
+  broadcastTower, officeLowRise). The footpath then lies under the pavement (0.01 below, same look)
+  and ON the asphalt. Whenever a tiles layout moves, list every route whose last leg is <= spurClip.
+- **Kit road tiles are not flat at 0.14:** sampled from `assets/build/stages/_props/Metropolis/
+  Road*_S0.glb`, the asphalt is at 0.07 on 70-95% of a cell and only the kerb strips (0.93 wide) are
+  at 0.14. A footpath (top 0.09) is therefore 0.02 ABOVE the asphalt, visible and a flicker risk.
+- **Ground planes on a Metropolis plot (tops):** plot 0; site ground and old-town plates 0.05;
+  asphalt 0.07; park strips 0.08; footpaths (spurs, lanes) 0.09; pavement (near plots only) and
+  fabric forecourts 0.10; kerb strips 0.14; kiosk apron 0.22; pad 0.5. The lead's kit rule is 0.05
+  between parallel faces that overlap in plan.
+- **Recurring pattern (new): a governor change can shrink standing buildings.** Levels are
+  monotonic, looks are not: when a lower landmark becomes the nearest (Supermarket, 3.57 tall until
+  level 50, at purchase 7), 8 lots drop a stage and flip district prop. The replay only shows it
+  WITH real heights: run the probe in the worktree (read-only, `PYTHONDONTWRITEBYTECODE=1`), since
+  a `git archive` scratch tree has no kit GLBs, every prop height is empty and every stage reads 0.
+  Check per moment: stage drop, prop flip that is not a swap twin, level drop, wild regrowth.
+- **A puff queued before `syncWild` dies in its own frame** when the same pass clears >= `maxPuffs`
+  wild entries (the oldest handle is taken over): all four tiles-era lane bursts are lost that way.
+- Probe recipes that worked: (1) `plotrender.PlotScene(era, network, owned, tier, staged=True,
+  stages=..., fabric=FabricPlot, fabric_tier=tier, near=...).build()` in a scratch archive gives
+  every ground slab as `scene.boxes` (Pavement, ParkStrip, Spur_, Lane, Pad) and `fabric_view`
+  (parcels with looks, wild, lanes); treat Pavement as near-only (the client lays none on far
+  plots) and clip oriented slabs exactly (Sutherland-Hodgman) rather than by AABB. plotrender on
+  `main` did not mirror `spurClip`, so it cannot baseline the client there. (2) A Luau CLI fuzz of
+  the pure module: copy `CityFabric.luau` beside a `run.luau`, run `tools/bin/luau.exe` (copy
+  `tools/bin/*` from the worktree into the scratch tree; it is gitignored), pcall every export
+  over a list of malformed values (61,656 calls, 0 throws). (3) Decode `$attributes` of a built
+  place: `rojo build -o x.rbxlx`, base64 `AttributesSerialize` of the Workspace item.
+- The mirror does not apply the tile-budget filter of `FabricNetwork` (no effect at 46 of 180 cells).
+- Numbers: lanes arrive whole at purchases 4, 9, 13, 15 (never partial); full near plot 140 Parts
+  (108 pavement, 24 spur, 8 lane) + 238 models (88 parcels, 5 shelters, 46 tiles, 64 ring cells);
+  far plot 60 of 88 parcels (lots 61-88 are lane lots, so three lanes run past bare ground);
+  fabric about 110k triangles on a full near plot (towers 1,000-1,960 at stage 4); old town 24
+  clumps x about 1,700; birds have nothing to circle once the old town is gone (no skirt).
+- HEAD moved during the review again (a tools-only commit): `git log <start>..HEAD` before reporting.
 
 **How to apply:** at the next era wave, re-run the scratch replay against the final layout and the
 mirror (`tools/cityfabric.py`); check the claim fix and that the far prefix reaches the plot's own

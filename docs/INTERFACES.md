@@ -6682,6 +6682,39 @@ Not uploaded, and their blueprints leave the tree: the medium towers, the plazas
   pavement, so that walker lane dead-ends there; the highway sign finds no legal spot on this
   layout, as today.
 
+### Review rulings (2026-10-03, wave 3.2 review at 7e63579: 0 Critical, 2 Major, 9 Minor)
+
+The client conforms to the contract and leaves Village, Boomtown and Orbital untouched. Both Majors
+are layout data.
+
+- **Major, layout owner: no footpath on the road.** Five landmark spurs (cityGrid, shoppingMall,
+  hotelTower, broadcastTower, officeLowRise) ran under the pavement and onto the tiles, because the
+  client drops a final leg of `spurClip` or less whole. A tile's asphalt top is 0.07 and a footpath's
+  0.09, the separation that flickered on Boomtown's lanes. Each spur gets a final leg longer than
+  `spurClip` that meets its street square-on. **New `streetplan.py` gate:** in a tiles era no drawn
+  footpath slab, spur or lane, overlaps a planned tile cell or a pavement band.
+- **Major, layout owner: a purchase never shrinks a standing building.** Buying the Supermarket made
+  it the governor of eight lots Apartment Block A had grown to stage 1, and its 3.57 studs cut them
+  to stage 0 and re-skinned them. **New `cityfabric.py timeline` gate:** replaying every purchase, no
+  parcel showing a building drops a stage or changes prop to anything but its swap twin.
+- **Footpath bends** (client and mirror): a leg runs half a width past its far end when another leg
+  follows it, and starts half a width after its near end when a leg precedes it. The incoming leg
+  covers the corner square and the outgoing one abuts it, so no two coplanar Parts overlap.
+- **The lane's dust burst** is pushed after the wild's, so `maxPuffs` cannot take it over.
+- **`SetLanes` in a tiles era** lays nothing without the `tiles.spur` look.
+- **The mirror's network view** applies the tile-cell budget filter, as the client does.
+- **Lanes meet:** lanes 1 and 2, and 3 and 4, meet end to end (they stopped 0.5 and 1.6 short).
+- **Birds:** when a fabric plot has no surviving clump to circle, its flocks circle the owned
+  landmarks, tallest first.
+- **`untilStage`** (optional, on a blueprint piece): the piece is part of stages `stage … untilStage`
+  and absent from later ones. The towers retire each stage's roof when the next storeys cover it, so
+  a stage mesh no longer carries the buried roofs below it. Every existing blueprint merges
+  byte-identically.
+- **Open:** far plots draw 60 of the 88 lots and all four lanes, so three lanes run past bare ground
+  there (`budget.parcelsFar`, waiting on Ben's numbers); `Fabric.luau` has 170 top-level locals
+  against the gate's 180; the fabric is about 110k triangles on a full near plot before
+  `untilStage`, about 2.5 times Boomtown's whole plot.
+
 ### Done when (wave 3.2, before the asset run)
 
 - `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village,
