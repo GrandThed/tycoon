@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "seed": "Metropolis:fabric:avenues",
+  "parcels": {
+    "frontSetback": 7.8,
+    "gap": 0.6,
+    "terraceGap": 0.1,
+    "terraceStreets": [1, 2, 3, 4],
+    "terraceFill": ["narrow", "small"],
+    "mediumShare": 0.5,
+    "walkStep": 0.05,
+    "endMargin": 0.2,
+    "setbackJitter": 0.0,
+    "turnJitter": 0.0,
+    "minLevel": 2,
+    "rows": 1,
+    "edge": 1.0,
+    "landmark": 0.5,
+    "slot": 1.0,
+    "pad": 0.5,
+    "plaza": 1.0,
+    "sign": 1.0,
+    "marker": 0.5,
+    "street": 7.8,
+    "spur": 2.55,
+    "tileSolid": 0.5
+  },
+  "require": { "parcels": 60, "houses": 55 },
+  "footprints": { "OldTownBillboard": [2, 1], "OldTownRubble": [2, 2], "OldTownSkip": [2, 1.2] },
+  "wild": {
+    "pattern": "fields",
+    "grid": { "pitch": 14, "origin": [3.5, 7], "angle": 0, "edge": 0.5, "shift": 7 },
+    "clumps": { "size": 13, "quarterOffset": 3.25 },
+    "crops": {
+      "noise": { "waves": 3, "base": 0.05 },
+      "bands": [
+        { "variant": 1, "share": 0.4 },
+        { "variant": 3, "share": 0.35 },
+        { "variant": 2, "share": 0.25 }
+      ]
+    },
+    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.15 },
+    "singles": {
+      "props": ["OldTownRubble", "OldTownSkip", "OldTownBillboard"],
+      "perCell": [1, 2],
+      "inset": 2.5,
+      "spacing": 4.0,
+      "scale": [0.95, 1.05],
+      "count": 24
+    }
+  }
+}
