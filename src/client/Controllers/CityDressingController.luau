@@ -45,7 +45,10 @@
 -- Pads -- so the controller also watches those, but only a fabric plot re-syncs on them; every
 -- other era behaves exactly as before. Wave 2.0: the fabric's houses smoke under the same gates as
 -- the lot houses (`smokeFor`, near, `living`); the controller only passes the answer on with each
--- sync, and Fabric owns the plumes because it alone knows which house stands when.
+-- sync, and Fabric owns the plumes because it alone knows which house stands when. Wave 3.2
+-- (Metropolis): the fabric is handed the ground the highway ring stands on, which it clears once
+-- the ring's slot is owned -- in the same pass, before `syncHighway` lays the first deck cell --
+-- and the ring's sign keeps off the fabric's lots.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -54,6 +57,7 @@ local Workspace = game:GetService("Workspace")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CityFabric = require(sharedFolder:WaitForChild("CityFabric"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local AssetPreloader = require(script.Parent:WaitForChild("AssetPreloader"))
@@ -514,6 +518,8 @@ local function newBuild(
 	local highwayConfig = era.highway
 	local highwayLayout = layout.highway
 	local highway: Highway.Handle? = nil
+	-- M12: declared ahead of the ring so its sign can ask where the fabric's lots are; built below.
+	local fabric: Fabric.Handle? = nil
 	if highwayConfig ~= nil and highwayLayout ~= nil then
 		local tiles = era.road.tiles
 		local pavementWidth = if tiles ~= nil and tiles.pavement ~= nil
@@ -550,6 +556,15 @@ local function newBuild(
 				if not Scatter.Clear(solids :: { Scatter.Footprint }, position, halfExtent) then
 					return false
 				end
+				-- M12 wave 3.2: nor on a lot of the city fabric, developed or still to come (the
+				-- sign is placed once, and a tower may rise on any of them afterwards).
+				local lots = fabric
+				if
+					lots ~= nil
+					and not Scatter.Clear(Fabric.ParcelSolids(lots), position, halfExtent)
+				then
+					return false
+				end
 				local keepOff = roads.width / 2 + pavementWidth + halfExtent
 				for _, line in centrelines do
 					for index = 2, #line do
@@ -570,11 +585,25 @@ local function newBuild(
 	-- M12: the city fabric, only where the era has both its data and its config block.
 	local fabricConfig = era.fabric
 	local fabricData = Catalog.GetFabric(eraName)
-	local fabric: Fabric.Handle? = nil
 	local fabricFlocks: { Scatter.Flock } = {}
 	local ambient = config.ambient
 	-- A hand-edited config can hold a non-table here; that must turn the feature off, not error.
 	if type(fabricConfig) == "table" and type(fabricData) == "table" then
+		-- M12 wave 3.2: the ring clears the ground it stands on once its slot is owned. It needs
+		-- the era's highway config, the layout's ring and a tile pitch; without any of them the
+		-- fabric is handed no ring at all.
+		local ringSlot: string? = nil
+		local ringRects: { CityFabric.FabricRect } = {}
+		local ringTiles = era.road.tiles
+		if
+			highwayConfig ~= nil
+			and highwayLayout ~= nil
+			and ringTiles ~= nil
+			and type(highwayConfig.requiresSlot) == "string"
+		then
+			ringSlot = highwayConfig.requiresSlot
+			ringRects = Highway.Ground(eraName, highwayConfig, highwayLayout, ringTiles.tileStuds)
+		end
 		fabric = Fabric.new({
 			folder = entry.folder,
 			plotFrame = plotFrame,
@@ -596,6 +625,8 @@ local function newBuild(
 			padGraceSeconds = config.lod.refreshSeconds,
 			-- Wave 2.0: the fabric hangs the plumes on its own houses; the gates stay here.
 			smoke = if type(ambient) == "table" then ambient.smoke else nil,
+			ringSlot = ringSlot,
+			ringRects = ringRects,
 		})
 		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
 		local birds = if type(ambient) == "table" then ambient.birds else nil
@@ -1630,7 +1661,8 @@ local function syncFabric(
 		smoke = entry.near and policy.living and smokeFor(build, config, tier) ~= nil,
 		-- Wave 2.5: back lanes are baked path pieces. The fabric says which lanes it wants and
 		-- RoadGraph answers which the path renderer shows (cloned by the Flush that follows this);
-		-- the rest the fabric lays as Parts in the road's look as SetSurface just left it.
+		-- the rest the fabric lays as Parts in the road's look as SetSurface just left it. Wave
+		-- 3.2: in a tiles era RoadGraph lays them all itself, as footpaths, and says so.
 		surface = { material = build.roads.material, color = build.roads.color },
 		showLanes = function(lanes: { Fabric.LaneRequest }, animateLanes: boolean)
 			return RoadGraph.SetLanes(build.roads, lanes, animateLanes)

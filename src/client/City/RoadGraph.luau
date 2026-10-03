@@ -11,7 +11,7 @@
 --
 -- Wave 2a: eras with `road.tiles` hand the spine to TileRenderer, which rasterises the visible
 -- stretches onto the tile lattice and drops one kit prop per cell. Their spurs stay Parts here, in
--- the narrower `tiles.spur` look, and the lane graph is unchanged.
+-- the narrower `tiles.spur` look, and the lane graph of the streets is unchanged.
 --
 -- Wave 1d: eras with `road.paths` hand drawing to PathRenderer, which clones the baked path
 -- meshes and falls back to the Parts here silently. Those plots have no near/far road rebuild
@@ -23,6 +23,13 @@
 -- outside the street network: SetLanes takes the lanes the fabric wants shown, and the ones whose
 -- template exists (and that fit budget.pathPieces) are cloned, revealed, repainted and dropped by
 -- PathRenderer with every other piece. The fabric draws the rest itself.
+--
+-- M12 wave 3.2: a tiles era bakes nothing, so there SetLanes lays every lane the fabric wants as a
+-- footpath, with the code that lays a landmark's own path (the `tiles.spur` look, one slab a leg,
+-- clipped at the pavement's outer edge), on near and far plots alike. FabricNetwork also leaves
+-- out a stretch whose cells missed budget.tileCells, so nothing develops along a street that was
+-- never laid. And a tiles era's footpaths carry no vehicle lane any more: its cars keep to the
+-- streets, as they do in an era with driveways.
 --
 -- M12 wave 2.2 "narrow driveways": an era's `road.paths.spurWidth` makes every spur narrower than
 -- its streets. The network -- nodes, stretches, piece ids, routes, budgets -- never reads it; it
@@ -51,6 +58,8 @@ local TileRenderer = require(script.Parent:WaitForChild("TileRenderer"))
 
 local SPINE_PART_NAME = "Road"
 local SPUR_PART_NAME = "Spur"
+-- M12 wave 3.2: a tiles era's back lane, laid as a footpath.
+local LANE_PART_NAME = "Lane"
 -- Baked piece ids (docs/INTERFACES.md "Wave 1d — Pieces"); tools/paths/bake.py names the meshes
 -- from the same numbering, so a client and the bake agree without exchanging anything.
 local SPINE_PIECE_FORMAT = "L%d_%d"
@@ -248,6 +257,9 @@ export type State = {
 	laneIds: { string },
 	lanesKey: string,
 	laneSpecs: { [string]: LaneSpec },
+	-- M12 wave 3.2: a tiles era's lanes as footpath Parts, by lane index (empty in every other
+	-- era). A lane with nothing to draw still has an entry, so it is laid out only once.
+	laneParts: { [number]: { Instance } },
 	-- Tile plan (wave 2a): the stretches whose cells fit budget.tileCells.
 	tileStretchAllowed: { [number]: boolean },
 	pieceKeys: { string },
@@ -713,6 +725,31 @@ local function spurDrawPoints(state: State, points: { Vector3 }): { Vector3 }
 	return trimmed
 end
 
+-- A spur's straight Parts along `points`, whose last point is its join on the spine: one flat slab
+-- to a leg, each running half its width past both its ends so the legs close their corners. A
+-- footpath in its own look sits just under the kerb, under the tile surface, and stops at the
+-- pavement's outer edge (spurDrawPoints); a spur that is the road itself keeps the road's live
+-- material, colour and top. M12 wave 3.2: a tiles era's back lanes are laid by this too, which is
+-- what makes a lane the same footpath as the one to a landmark's door.
+local function drawFootpath(state: State, into: { Instance }, name: string, points: { Vector3 }): ()
+	local footpath = state.spurMaterial ~= nil
+	local drawn = spurDrawPoints(state, points)
+	for index = 2, #drawn do
+		slab(
+			state,
+			into,
+			name,
+			drawn[index - 1],
+			drawn[index],
+			state.spurWidth,
+			state.spurWidth,
+			state.spurMaterial or state.material,
+			state.spurColor or state.color,
+			if footpath then -SPUR_DROP else state.thickness / 2
+		)
+	end
+end
+
 local function drawSpur(state: State, slotId: string): ()
 	local parts = state.spurParts[slotId]
 	if parts == nil then
@@ -749,24 +786,7 @@ local function drawSpur(state: State, slotId: string): ()
 		end
 		return
 	end
-	-- A footpath in its own look sits just under the kerb, under the tile surface; a spur that is
-	-- the road itself keeps the road's live material, colour and top.
-	local footpath = state.spurMaterial ~= nil
-	local drawn = spurDrawPoints(state, points)
-	for index = 2, #drawn do
-		slab(
-			state,
-			into,
-			SPUR_PART_NAME,
-			drawn[index - 1],
-			drawn[index],
-			state.spurWidth,
-			state.spurWidth,
-			state.spurMaterial or state.material,
-			state.spurColor or state.color,
-			if footpath then -SPUR_DROP else state.thickness / 2
-		)
-	end
+	drawFootpath(state, into, SPUR_PART_NAME, points)
 end
 
 local function nodeSpineVisible(state: State, node: number): boolean
@@ -1781,6 +1801,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		laneIds = {},
 		lanesKey = "",
 		laneSpecs = {},
+		laneParts = {},
 		tileStretchAllowed = {},
 		pieceKeys = {},
 		pieceSpecs = {},
@@ -1941,12 +1962,40 @@ end
 -- spur, a lane is only handed to PathRenderer by the next Flush; `animate` gives one that is new
 -- the appear effect, and from then on it is a piece like any other: it loses its rim on a far
 -- plot and takes every surface variant with the streets.
+--
+-- M12 wave 3.2: in a tiles era every lane asked for is laid here and now as a footpath, whole,
+-- exactly as a landmark's path is (drawFootpath: the `tiles.spur` look, one slab a leg, the leg
+-- at the mouth stopping at the pavement's outer edge), and stays through every near/far flip. The
+-- second result says so: such lanes are all shown here, with no dust of their own, and the caller
+-- must lay none itself. A lane's count is the fabric data's, so no budget is spent on them.
 function RoadGraph.SetLanes(
 	state: State,
 	lanes: { LaneSpec },
 	animate: boolean?
-): { [number]: boolean }
+): ({ [number]: boolean }, boolean)
 	local shown: { [number]: boolean } = {}
+	if state.context.era.road.tiles ~= nil then
+		for _, lane in lanes do
+			shown[lane.index] = true
+			if state.laneParts[lane.index] == nil then
+				-- A lane runs mouth first; a footpath is clipped at its last point, its join.
+				local points: { Vector3 } = {}
+				for index = #lane.points, 1, -1 do
+					table.insert(points, flat(lane.points[index]))
+				end
+				local parts: { Instance } = {}
+				drawFootpath(state, parts, LANE_PART_NAME, points)
+				state.laneParts[lane.index] = parts
+			end
+		end
+		for index, parts in state.laneParts do
+			if not shown[index] then
+				destroyAll(parts)
+				state.laneParts[index] = nil
+			end
+		end
+		return shown, true
+	end
 	local paths = state.paths
 	local ids: { string } = {}
 	if paths ~= nil and paths.mode == "baked" then
@@ -1966,7 +2015,7 @@ function RoadGraph.SetLanes(
 		state.pathsDirty = true
 		state.pathsAnimate = state.pathsAnimate or animate == true
 	end
-	return shown
+	return shown, false
 end
 
 -- Reveals the shortest path from the entrance to `node`, returning the groups that changed. The
@@ -2355,10 +2404,14 @@ end
 -- only to within float noise.
 --
 -- M12 wave 2.2: where the era narrows its spurs below the road (`road.paths.spurWidth`), a spur is
--- a driveway and gets no vehicle lanes at all, so the traffic keeps to the streets. Every other
--- era's cars turn into its spurs as they always have (a tiles era's footpaths included).
+-- a driveway and gets no vehicle lanes at all, so the traffic keeps to the streets. M12 wave 3.2:
+-- nor does a tiles era's footpath, whatever its width. It is paving for walkers, and with the
+-- landmarks standing on the street line a car that turned onto one crossed the pavement and drove
+-- into the building. Every other era's cars turn into its spurs as they always have. The walkers'
+-- lanes are built apart from these (buildWalkLanes) and still follow every spur.
 local function buildLanes(state: State): Lanes
-	local spurLanes = not (state.driveways and state.spurWidth < state.width)
+	local footpath = state.spurMaterial ~= nil
+	local spurLanes = not (footpath or (state.driveways and state.spurWidth < state.width))
 	local lanes: Lanes = {
 		count = 0,
 		to = {},
@@ -2967,6 +3020,11 @@ end
 -- near and a far client of one plot develop the same parcels), every routable slot's join node,
 -- and the clearing mask's street segments: each visible stretch as its straight chord and each
 -- leg of every drawn spur, plot-local.
+--
+-- M12 wave 3.2: a tiles era lays only the stretches whose cells fit budget.tileCells (the plan is
+-- the layout's, so near and far clients still agree), and a visible stretch outside it is left out
+-- here as PieceVisible leaves it out: no lot develops, and no old town is cleared, along a street
+-- that was never laid.
 function RoadGraph.FabricNetwork(state: State): (
 	{ [string]: CityFabric.FabricStretch },
 	{ [string]: number },
@@ -2974,8 +3032,9 @@ function RoadGraph.FabricNetwork(state: State): (
 )
 	local stretches: { [string]: CityFabric.FabricStretch } = {}
 	local segments: { CityFabric.FabricSegment } = {}
+	local tiled = state.tiles ~= nil
 	for id, stretch in state.stretches do
-		if state.visible[id] then
+		if state.visible[id] and (not tiled or state.tileStretchAllowed[id] == true) then
 			stretches[stretch.pieceId] = {
 				from = stretch.fromNode,
 				to = stretch.toNode,
@@ -3058,12 +3117,16 @@ function RoadGraph.Destroy(state: State): ()
 	for _, parts in state.spurParts do
 		destroyAll(parts)
 	end
+	for _, parts in state.laneParts do
+		destroyAll(parts)
+	end
 	destroyAll(state.bendParts)
 	for _, piece in state.pieces do
 		piece:Destroy()
 	end
 	table.clear(state.groupParts)
 	table.clear(state.spurParts)
+	table.clear(state.laneParts)
 	table.clear(state.pieces)
 	table.clear(state.visible)
 	table.clear(state.revealedGroups)

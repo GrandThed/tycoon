@@ -6655,6 +6655,33 @@ Not uploaded, and their blueprints leave the tree: the medium towers, the plazas
 - Open: far plots draw 60 of the 88 lots; the ring pier stands in the entrance view; the park's
   edge stands 0.35 over the east avenue's pavement.
 
+### Client rulings (lead, 2026-10-03, after the ui-engineer's report)
+
+- **Pure exports** (`CityFabric.luau`, cross-checked by `check_mirror.py`):
+  `LevelStage(levelStages, level, stageCount)`, `RingRects(ring, tileStuds, ramp, rampCells)`,
+  `SiteProp(sites, siteVariants, size, index)` (nil spawns nothing), `ValidSwaps(value)` and
+  `SwappedProp(prop, district, swaps, owned, exists)`.
+- **Swaps are re-evaluated every sync**, not only on a develop, so a twin whose template replicates
+  late still swaps. The pop's delay is `stageSeconds + (rank − 1) × stagger`.
+- **Ring clearing order:** the fabric syncs before the highway in the same pass, and on the animated
+  pass that buys the ring slot the wild's spawns skip the queue, so a clump split by the deck band
+  is split before the first deck cell lands.
+- **`rampCells`** comes from the harvested `HighwayRamp` length (21 studs, 3 cells); 0 when it is not
+  harvested, a state in which no ramp is drawn either.
+- **The highway sign keeps off every lot the plot can draw**, developed or not: the sign is placed
+  once and lots develop later.
+- **Tiles-era lanes** spend no piece budget (at most 3 Parts a lane) and are drawn when the lanes are
+  set, as a tiles-era spur is drawn when it is added. `fabric.lanes.fillHeight` stays required by
+  validation, though a tiles era never reads it.
+- **No junction lamps on Metropolis** (`eras.Metropolis.lamps` is `{}`, config applied). The spots
+  were laid for 4-stud pavements; with landmarks at the street line, 14 of 20 fall inside a
+  landmark. The approved renders have none.
+- **A tiles-era footpath carries no vehicle lane**, as a narrow driveway already does in a
+  `spurWidth` era: cars keep to the streets. Orbital has no street vehicles.
+- Known: the east entrance kiosk's front stands 2 studs onto the cross-town street's south
+  pavement, so that walker lane dead-ends there; the highway sign finds no legal spot on this
+  layout, as today.
+
 ### Done when (wave 3.2, before the asset run)
 
 - `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village,

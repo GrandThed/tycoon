@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CityFabric = require(sharedFolder:WaitForChild("CityFabric"))
 
 local ASSET_PREFIX = "rbxassetid://"
 -- Sort-key prefixes keeping buildings and props (independent name spaces) apart in one pass.
@@ -132,10 +133,11 @@ end
 -- preloads every prop it has, as it always did. The fabric replaces the layout's lots, groves,
 -- greenery zones and parking, so the props those features draw from no longer appear and need no
 -- download. Nothing here lists a prop: the names are whatever the era's own config block says --
--- its fabric (districts, sites, woods, marker, scaffold, upgrade layers), roads, lamps, signals,
--- vehicles and their unlocks, walkers -- plus the plazas and wild singles its layout and fabric
--- data place and the birds, and a block is left out only while the layout lacks what it is
--- placed by. A new config key that names props is therefore picked up with no change here.
+-- its fabric (districts, sites and their variants, woods, marker, scaffold, upgrade layers), roads,
+-- lamps, signals, vehicles and their unlocks, walkers -- plus the plazas and wild singles its
+-- layout and fabric data place and the birds, and a block is left out only while the layout lacks
+-- what it is placed by. A new config key that names props is therefore picked up with no change
+-- here; only the swap twins (wave 3.2), whose names the config implies, are spelled out below.
 local function spawnableProps(eraName: string): { [string]: boolean }?
 	local dressing = Catalog.GetCityDressingConfig()
 	local eras = if dressing ~= nil then dressing.eras else nil
@@ -163,6 +165,24 @@ local function spawnableProps(eraName: string): { [string]: boolean }?
 	for key, block in era do
 		if placed[key] ~= false then
 			collectStrings(names, block)
+		end
+	end
+	-- M12 wave 3.2: the one kind of prop the config never spells out. A swap shows `<prop><suffix>`
+	-- in place of a district prop, each swap on the name the one before produced, so every such
+	-- name is taken; one that was never uploaded matches nothing in Assets.json.
+	local swaps = CityFabric.ValidSwaps(era.fabric.swaps)
+	if #swaps > 0 then
+		local listed: { [string]: boolean } = {}
+		collectStrings(listed, era.fabric.districts)
+		for prop in listed do
+			local chain: { string } = { prop }
+			for _, swap in swaps do
+				for index = 1, #chain do
+					local twin = chain[index] .. swap.suffix
+					names[twin] = true
+					table.insert(chain, twin)
+				end
+			end
 		end
 	end
 	if type(layout.plazas) == "table" then

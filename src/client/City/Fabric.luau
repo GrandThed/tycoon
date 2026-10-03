@@ -35,6 +35,13 @@
 -- the wild land as far as that reach. It is a baked path piece, shown by the path renderer like a
 -- landmark's driveway: the fabric only says which lanes it wants, through the controller, and
 -- lays flat Parts itself for a lane that renderer cannot show.
+--
+-- Wave 3.2 (docs/INTERFACES.md "Wave 3.2 — Metropolis in the game"), each rule off unless its
+-- config key is there: `levelStages` picks the stage a level starts from and `siteVariants` the
+-- building site a lot shows (both decided in CityFabric); `swaps` turns a building into its twin
+-- while a city-changer slot is owned, popping the twins in outward from the pad it was bought on;
+-- the highway ring clears the wild land under its deck and ramp once its slot is owned; and in a
+-- tiles era the road module lays every lane as a footpath, so the fabric only adds the dust.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -95,11 +102,10 @@ local REVEAL_DESIGN_STUDS = 9
 -- (Scatter) and the fabric's flocks take 7005 (Ambient).
 local CONSTRUCTION_SALT = 7006
 -- A staked-out site's look (the colours are config): surveyor's stakes at the footprint corners
--- and a taut string between them, sized to read from the tycoon camera rather than tuned.
-local STAKE_WIDTH = 0.3
-local STAKE_HEIGHT = 1.4
-local STRING_THICKNESS = 0.08
-local STRING_HEIGHT = 1.1
+-- and a taut string between them, sized to read from the tycoon camera rather than tuned. One
+-- table rather than four locals: the module's top level is one function to Studio's compiler,
+-- which gives it 200 registers (tools/check_compile.py).
+local STAKES = { width = 0.3, height = 1.4, stringThickness = 0.08, stringHeight = 1.1 }
 -- A puff's Dust handle is destroyed once its burst and the particles it left are gone (Dust's
 -- longest particle lives 0.7 s).
 local DUST_LINGER_SECONDS = 1
@@ -139,7 +145,10 @@ type ParcelView = {
 	-- (budget.parcelsFar); any other parcel never draws there.
 	nearOk: boolean,
 	farOk: boolean,
-	goal: Look?, -- what its level says it shows now
+	-- What its level says it shows, and (wave 3.2) what that becomes once the prop swaps of the
+	-- city-changer slots owned have had their say. Without swaps the two are the same look.
+	base: Look?,
+	goal: Look?,
 	-- The last develop moved the goal, so a ripple plays it. A goal that stood still but only now
 	-- draws (the plot came near, past the far budget) is placed at once.
 	changed: boolean,
@@ -282,6 +291,11 @@ export type Context = {
 	-- Wave 2.0: CityDressing.json `ambient.smoke` as it stands (Fabric.new validates the fabric
 	-- keys); nil means no chimney ever smokes.
 	smoke: Types.SmokeConfig?,
+	-- Wave 3.2: the slot that builds the era's highway ring and the ground the ring stands on
+	-- (CityFabric.RingRects, margin 0), which joins the clearing mask once that slot is owned. Nil
+	-- and empty in an era without a ring.
+	ringSlot: string?,
+	ringRects: { Rect },
 }
 
 export type SyncInput = {
@@ -302,11 +316,13 @@ export type SyncInput = {
 	-- Wave 2.0: every wave 2c smoke gate holds -- the device, a near plot, detailPolicy's `living`,
 	-- the era and the tier. The controller owns them, since lot smoke answers to the same ones.
 	smoke: boolean,
-	-- Wave 2.5: the road's look as of this pass, and the way to the baked path renderer: given
-	-- the lanes that should show (and whether one new among them is a purchase to animate), it
-	-- answers the indices it shows as path pieces. The fabric lays the others as Parts.
+	-- Wave 2.5: the road's look as of this pass, and the way to the road renderer: given the lanes
+	-- that should show (and whether one new among them is a purchase to animate), it answers the
+	-- indices it shows itself. Wave 3.2: its second answer is whether those are a tiles era's
+	-- footpaths, which the road module lays on near and far plots alike and which bring no dust
+	-- of their own; otherwise they are baked path pieces and the fabric lays the others as Parts.
 	surface: Surface,
-	showLanes: (lanes: { LaneRequest }, animate: boolean) -> { [number]: boolean },
+	showLanes: (lanes: { LaneRequest }, animate: boolean) -> ({ [number]: boolean }, boolean),
 }
 
 export type Handle = {
@@ -332,6 +348,8 @@ export type Handle = {
 	parcelBudget: number,
 	laneSizes: { [string]: { number } },
 	surface: Surface?,
+	-- Wave 3.2: the well-formed `fabric.swaps` entries in list order; empty without the key.
+	swaps: { CityFabric.FabricSwap },
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -784,6 +802,16 @@ local function grown(rect: Rect, margin: number): Rect
 	}
 end
 
+-- A clearing rect as the solid Scatter and the walk lanes test against: the same ground, about its
+-- own centre.
+local function rectFootprint(rect: Rect): Scatter.Footprint
+	return {
+		origin = Vector3.new(rect.x, 0, rect.z),
+		rotation = CFrame.Angles(0, math.rad(rect.rotationY), 0),
+		extents = { minX = -rect.hx, maxX = rect.hx, minZ = -rect.hz, maxZ = rect.hz },
+	}
+end
+
 -- The rect's corners, plot-local at Y 0, in order round it.
 local function rectCorners(rect: Rect): { Vector3 }
 	local rotation = CFrame.Angles(0, math.rad(rect.rotationY), 0)
@@ -882,8 +910,9 @@ end
 
 -- One dust burst along `points` (plot-local, in order). Low-end devices get none (spec section
 -- 10: particles go with the low-end signal, not with touch alone), and a plot plays at most
--- `maxPuffs` at once: past that, a new puff takes over the oldest one's handle.
-local function puff(handle: Handle, points: { Vector3 }): ()
+-- `maxPuffs` at once: past that, a new puff takes over the oldest one's handle. `width` sizes the
+-- puff for something narrower than the road (a lane); without it the road's own width does.
+local function puff(handle: Handle, points: { Vector3 }, width: number?): ()
 	local timing = handle.timing
 	local cap = handle.maxPuffs
 	if Theme.lowEndDevice or handle.destroyed or timing == nil or #points == 0 then
@@ -918,7 +947,13 @@ local function puff(handle: Handle, points: { Vector3 }): ()
 		}
 	end
 	-- A handle plays one burst at a time, so on a taken-over handle this cuts the old puff short.
-	Dust.Burst(record.dust, world, context.dustColor(), seconds)
+	Dust.Burst(
+		record.dust,
+		world,
+		context.dustColor(),
+		seconds,
+		if width ~= nil then table.create(#world, width) else nil
+	)
 	table.insert(handle.puffs, record)
 	record.cleanup = task.delay(seconds + DUST_LINGER_SECONDS, function()
 		record.cleanup = nil
@@ -1330,6 +1365,11 @@ end
 -- a landmark's driveway: revealed, repaved and thinned for distance with the streets, by their
 -- code. Any other lane is laid here as Parts, on near plots only: at once with a puff at its end
 -- when a purchase just brought it, through the spawn queue otherwise.
+--
+-- Wave 3.2: a tiles era bakes nothing. There the road module lays every wanted lane as a footpath
+-- (the look of a landmark's own path), on near and far plots, so no lane is ever laid here: the
+-- slabs, discs and `fillHeight` below belong to the paths eras. All the fabric adds is one dust
+-- burst along a lane that a purchase just opened.
 local function syncLanes(handle: Handle, input: SyncInput, rippling: boolean): ()
 	if handle.lanesConfig == nil or #handle.lanes == 0 then
 		return
@@ -1345,11 +1385,30 @@ local function syncLanes(handle: Handle, input: SyncInput, rippling: boolean): (
 			table.insert(wanted, view.request)
 		end
 	end
-	local baked = input.showLanes(wanted, rippling)
+	local shown, footpaths = input.showLanes(wanted, rippling)
 	for _, view in handle.lanes do
 		local appeared = view.appeared
 		view.appeared = false
-		if view.reach <= 0 or baked[view.index] or not input.near then
+		if footpaths then
+			if rippling and appeared and shown[view.index] then
+				-- Sampled a lane width apart, mouth first, so the burst keeps to one track.
+				local width = view.request.width
+				local track: { Vector3 } = {}
+				for _, leg in view.legs do
+					local samples = math.max(1, math.ceil(leg.length / width))
+					for sample = if #track == 0 then 0 else 1, samples do
+						local along = leg.length * sample / samples
+						table.insert(
+							track,
+							Vector3.new(leg.ax + leg.dx * along, 0, leg.az + leg.dz * along)
+						)
+					end
+				end
+				puff(handle, track, width)
+			end
+			continue
+		end
+		if view.reach <= 0 or shown[view.index] or not input.near then
 			clearLaneParts(view)
 			continue
 		end
@@ -1384,13 +1443,14 @@ local function sameLook(a: Look?, b: Look?): boolean
 	return a.kind == b.kind and a.prop == b.prop and a.stage == b.stage
 end
 
+-- The building site a level-1 parcel shows: `sites[size]`, or (wave 3.2) the parcel's pick from
+-- `siteVariants[size]` where that lists any. CityFabric reads both tables as config gives them
+-- and takes a malformed one for a missing one.
 local function siteLook(handle: Handle, view: ParcelView): Look?
-	local sites = handle.context.config.sites
-	if type(sites) ~= "table" then
-		return nil
-	end
-	local prop = forSize(view.parcel.size, sites.small, sites.medium, sites.narrow)
-	return if type(prop) == "string" then { kind = SITE, prop = prop, stage = 0 } else nil
+	local config = handle.context.config
+	local prop =
+		CityFabric.SiteProp(config.sites, config.siteVariants, view.parcel.size, view.index)
+	return if prop ~= nil then { kind = SITE, prop = prop, stage = 0 } else nil
 end
 
 -- A district's non-empty prop list for a parcel size, or nil when it has none.
@@ -1411,7 +1471,9 @@ end
 -- this parcel at the highest stage its level allows that stays under the governor's height (and
 -- never under the floor every stage 0 is built to). Round 2: a district without props for the
 -- parcel's size lends `fallbackDistrict`'s; without those either the parcel shows nothing, so no
--- rise ever comes and the upgrades anchored to it go in without waiting.
+-- rise ever comes and the upgrades anchored to it go in without waiting. Wave 3.2: the stage a
+-- level starts from is CityFabric.LevelStage's (`levelStages`; `level - 2` without the key, or
+-- with a malformed one). This is the look before any prop swap: see `resolveGoals`.
 local function goalFor(
 	handle: Handle,
 	view: ParcelView,
@@ -1436,12 +1498,58 @@ local function goalFor(
 		return nil
 	end
 	local heights = propHeights(handle, prop)
-	local stage = math.max(math.min(state.level - 2, #heights - 1), 0)
+	local stage = CityFabric.LevelStage(config.levelStages, state.level, #heights)
 	local cap = math.max(numberOr(config.heightFloor, 0), landmarkHeight(handle, state.governor))
 	while stage > 0 and heights[stage + 1] > cap do
 		stage -= 1
 	end
 	return { kind = BUILDING, prop = prop, stage = stage }
+end
+
+-- Every parcel's goal as of this pass, marked for the ripple where it moved. `developed` says the
+-- levels were just worked out again, so each parcel's base look is too. Wave 3.2: a building then
+-- becomes its twin while a city-changer slot that swaps it is owned and the twin has a template
+-- (CityFabric.SwappedProp; the stage stays, and a site never swaps). The swaps are asked on every
+-- pass, not only on a develop, because a template can replicate after its slot was seen owned;
+-- a plot without swaps only ever moves a goal on a develop, as it always did.
+local function resolveGoals(handle: Handle, developed: boolean): ()
+	local swaps = handle.swaps
+	if not developed and #swaps == 0 then
+		return
+	end
+	local eraName = handle.context.eraName
+	local known: { [string]: boolean } = {}
+	local function exists(prop: string): boolean
+		local answer = known[prop]
+		if answer == nil then
+			answer = PropFactory.Template(eraName, prop) ~= nil
+			known[prop] = answer
+		end
+		return answer
+	end
+	for _, view in handle.parcels do
+		local state = handle.states[view.index]
+		if developed then
+			view.base = goalFor(handle, view, state)
+		end
+		local goal = view.base
+		if goal ~= nil and goal.kind == BUILDING and #swaps > 0 then
+			local prop = CityFabric.SwappedProp(
+				goal.prop,
+				if state ~= nil then state.district else nil,
+				swaps,
+				handle.owned,
+				exists
+			)
+			if prop ~= goal.prop then
+				goal = { kind = BUILDING, prop = prop, stage = goal.stage }
+			end
+		end
+		if not sameLook(goal, view.goal) then
+			view.changed = true
+		end
+		view.goal = goal
+	end
 end
 
 -- A queued parcel spawn: the model for what the parcel shows now, replacing what stood. Without a
@@ -1619,11 +1727,14 @@ end
 -- A purchase, a stage swap or a new tier on a near plot: new sites go up one by one outward from
 -- the building that set them off, a site turns into its building after the parcel's seeded
 -- construction time, and a building takes its next stage after `stageSeconds`, one by one outward
--- too, so a tier-up never swaps every house in one frame.
+-- too, so a tier-up never swaps every house in one frame. Wave 3.2: a building turning into its
+-- twin is the same pop, and the pass that buys the city-changer slot sends the pops outward from
+-- the pad it was bought on (`swapOrigins`, empty in every other pass).
 local function rippleParcels(
 	handle: Handle,
 	timing: Types.FabricConstructionConfig,
-	triggers: { Vector3 }
+	triggers: { Vector3 },
+	swapOrigins: { Vector3 }
 ): ()
 	local starting: { ParcelView } = {}
 	local swapping: { ParcelView } = {}
@@ -1666,7 +1777,7 @@ local function rippleParcels(
 	local origins = rippleOrigins(handle, triggers)
 	local stagger = math.max(numberOr(timing.stagger, 0), 0)
 	local stageSeconds = numberOr(timing.stageSeconds, 0)
-	sortOutward(swapping, origins, parcelSpot)
+	sortOutward(swapping, if #swapOrigins > 0 then swapOrigins else origins, parcelSpot)
 	for rank, view in swapping do
 		startTimer(handle, view, TIMER_SWAP, stageSeconds + (rank - 1) * stagger)
 	end
@@ -1756,8 +1867,9 @@ local function maskKeyOf(handle: Handle, input: SyncInput): string
 end
 
 -- The clearing mask ("Clearing", with the review amendment's pads): owned slot footprints, the
--- footprint and pad of every buyable slot, developed parcels, visible plazas, the visible
--- stretches and drawn spurs, and (wave 2.4) the lanes as far as they reach.
+-- footprint and pad of every buyable slot, developed parcels, visible plazas, (wave 3.2) the
+-- highway ring's ground once its slot is owned, the visible stretches and drawn spurs, and (wave
+-- 2.4) the lanes as far as they reach.
 local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: SyncInput): Mask
 	local rects: { Rect } = {}
 	local slotMargin = numberOr(clear.slot, 0)
@@ -1794,6 +1906,14 @@ local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: 
 	for _, index in input.plazas do
 		local rect = handle.plazaRects[index]
 		if rect ~= nil then
+			table.insert(rects, grown(rect, parcelMargin))
+		end
+	end
+	-- Wave 3.2: the highway ring clears its own ground -- the deck band and the ramp's cells -- from
+	-- the moment its slot is owned, so what stood there is gone before the deck is built over it.
+	local ringSlot = handle.context.ringSlot
+	if ringSlot ~= nil and handle.owned[ringSlot] then
+		for _, rect in handle.context.ringRects do
 			table.insert(rects, grown(rect, parcelMargin))
 		end
 	end
@@ -1987,8 +2107,16 @@ end
 -- Near plots draw every uncleared clump, quarter and single among the first budget.wild entries;
 -- far plots only the whole clumps among the first budget.wildFar clumps. Detail off keeps an even
 -- share by index. A near purchase puffs dust where the woods just gave way; any other change
--- (detail, near/far, a restore, a late template) swaps silently.
-local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: number }): ()
+-- (detail, near/far, a restore, a late template) swaps silently. Wave 3.2: `atOnce` places what
+-- the pass wants without the spawn queue. The pass that buys the highway ring asks for it, so a
+-- clump the deck band cuts is down to its surviving quarters before the first deck cell lands on
+-- it, rather than a frame later.
+local function syncWild(
+	handle: Handle,
+	input: SyncInput,
+	previous: { [number]: number },
+	atOnce: boolean
+): ()
 	local wildConfig = handle.wildConfig
 	if wildConfig == nil then
 		return
@@ -2052,9 +2180,13 @@ local function syncWild(handle: Handle, input: SyncInput, previous: { [number]: 
 			end
 		end
 		if wildPending(current) then
-			enqueue(handle, current, entry.x, entry.z, function()
+			if atOnce then
 				applyWild(handle, index)
-			end)
+			else
+				enqueue(handle, current, entry.x, entry.z, function()
+					applyWild(handle, index)
+				end)
+			end
 		end
 
 		local newly = bit32.band(bits, bit32.bnot(previous[index] or 0))
@@ -2470,15 +2602,15 @@ local function placePadDetails(handle: Handle, slotId: string, view: PadView): (
 			sitePart(
 				handle,
 				"SiteStake",
-				Vector3.new(STAKE_WIDTH, STAKE_HEIGHT, STAKE_WIDTH),
-				CFrame.new(corner.X, STAKE_HEIGHT / 2, corner.Z) * turn,
+				Vector3.new(STAKES.width, STAKES.height, STAKES.width),
+				CFrame.new(corner.X, STAKES.height / 2, corner.Z) * turn,
 				Enum.Material.Wood,
 				stakeColor
 			)
 		)
 		local following = corners[index % #corners + 1]
-		local a = Vector3.new(corner.X, STRING_HEIGHT, corner.Z)
-		local b = Vector3.new(following.X, STRING_HEIGHT, following.Z)
+		local a = Vector3.new(corner.X, STAKES.stringHeight, corner.Z)
+		local b = Vector3.new(following.X, STAKES.stringHeight, following.Z)
 		local length = (b - a).Magnitude
 		if length > 0 then
 			table.insert(
@@ -2486,7 +2618,7 @@ local function placePadDetails(handle: Handle, slotId: string, view: PadView): (
 				sitePart(
 					handle,
 					"SiteString",
-					Vector3.new(STRING_THICKNESS, STRING_THICKNESS, length),
+					Vector3.new(STAKES.stringThickness, STAKES.stringThickness, length),
 					CFrame.lookAt((a + b) / 2, b),
 					Enum.Material.SmoothPlastic,
 					stringColor
@@ -2634,6 +2766,10 @@ function Fabric.new(context: Context): Handle
 		parcelBudget = 0,
 		laneSizes = {},
 		surface = nil,
+		-- Wave 3.2: a malformed entry is skipped and a malformed list is no swaps at all.
+		-- `levelStages` and `siteVariants` need no copy here: CityFabric reads each as it comes
+		-- and takes a bad value for an absent one.
+		swaps = CityFabric.ValidSwaps(config.swaps),
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
@@ -2840,6 +2976,7 @@ function Fabric.new(context: Context): Handle
 			frame = Scatter.PropFrame(Vector3.new(parcel.x, 0, parcel.z), parcel.rotationY),
 			nearOk = wellFormed and sized and index <= parcelBudget,
 			farOk = wellFormed and sized and index <= farParcelBudget,
+			base = nil,
 			goal = nil,
 			changed = false,
 			shown = nil,
@@ -2983,19 +3120,14 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	handle.stretches = input.stretches
 
 	local key = developKey(handle, input)
-	if key ~= handle.developKey then
+	local developed = key ~= handle.developKey
+	if developed then
 		handle.developKey = key
 		handle.states = develop(handle, input)
-		for _, view in handle.parcels do
-			local goal = goalFor(handle, view, handle.states[view.index])
-			if not sameLook(goal, view.goal) then
-				view.changed = true
-			end
-			view.goal = goal
-		end
 		-- Before the mask below, which the lanes' legs are part of.
 		updateLaneReaches(handle)
 	end
+	resolveGoals(handle, developed)
 
 	local previous = handle.cleared
 	local wildConfig = handle.wildConfig
@@ -3024,7 +3156,22 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	end
 	local timing = handle.timing
 	if timing ~= nil and rippling then
-		rippleParcels(handle, timing, triggers)
+		-- Wave 3.2: a city-changer slot bought in this pass sends its twins out from the pad it was
+		-- bought on (else from where the slot stands), as an upgrade layer's planting wave spreads.
+		local swapOrigins: { Vector3 } = {}
+		for _, swap in handle.swaps do
+			local slotId = swap.requiresSlot
+			if table.find(fresh, slotId) ~= nil then
+				local pad = handle.padRects[slotId]
+				local frame: CFrame? = handle.slotFrames[slotId]
+				if pad ~= nil then
+					table.insert(swapOrigins, Vector3.new(pad.x, 0, pad.z))
+				elseif frame ~= nil then
+					table.insert(swapOrigins, frame.Position)
+				end
+			end
+		end
+		rippleParcels(handle, timing, triggers, swapOrigins)
 	else
 		settleParcels(handle, input.near)
 	end
@@ -3034,7 +3181,9 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 		refreshPlume(handle, view)
 	end
 	syncLanes(handle, input, rippling)
-	syncWild(handle, input, previous)
+	local ringSlot = handle.context.ringSlot
+	local ringBought = rippling and ringSlot ~= nil and table.find(fresh, ringSlot) ~= nil
+	syncWild(handle, input, previous, ringBought)
 	syncUpgrades(handle, input, rippling, fresh, triggers)
 	-- A restore's slots are not purchases, so only a ripple moves the origin the next one starts at.
 	if rippling and #triggers > 0 then
@@ -3051,12 +3200,21 @@ function Fabric.WalkSolids(handle: Handle): { Scatter.Footprint }
 	for _, view in handle.parcels do
 		local street = handle.stretches[view.parcel.stretch]
 		if view.nearOk and view.parcel.row == 1 and street ~= nil then
-			local rect = view.rect
-			table.insert(solids, {
-				origin = Vector3.new(rect.x, 0, rect.z),
-				rotation = CFrame.Angles(0, math.rad(rect.rotationY), 0),
-				extents = { minX = -rect.hx, maxX = rect.hx, minZ = -rect.hz, maxZ = rect.hz },
-			})
+			table.insert(solids, rectFootprint(view.rect))
+		end
+	end
+	return solids
+end
+
+-- Wave 3.2: every lot this plot can ever draw a building on, developed or not, as solids. The
+-- highway sign keeps off them: it is placed once, when the ramp is bought, and a lot that develops
+-- afterwards must not find it standing where its tower goes. The lots developed at any moment are
+-- among these, and the set never changes, so every client answers alike whenever it asks.
+function Fabric.ParcelSolids(handle: Handle): { Scatter.Footprint }
+	local solids: { Scatter.Footprint } = {}
+	for _, view in handle.parcels do
+		if view.nearOk or view.farOk then
+			table.insert(solids, rectFootprint(view.rect))
 		end
 	end
 	return solids

@@ -851,9 +851,7 @@
           "PlazaB"
         ]
       },
-      "lamps": {
-        "prop": "LampPost"
-      },
+      "lamps": {},
       "vehicles": {
         "props": [
           "VehicleA",

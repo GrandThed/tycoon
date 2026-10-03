@@ -831,6 +831,10 @@ export type FabricUpgradeLayerConfig = {
 	stagger: number?,
 	budget: number,
 }
+-- Wave 3.2 "city-changers": while `requiresSlot` is owned, a parcel showing building `<prop>`
+-- shows `<prop><suffix>` instead where that prop exists, at the same stage -- in the districts
+-- listed, or in every district without the list.
+export type FabricSwapConfig = { requiresSlot: string, suffix: string, districts: { string }? }
 -- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `upgrades` are
 -- optional: absent means that feature is off.
 export type FabricConfig = {
@@ -852,6 +856,10 @@ export type FabricConfig = {
 	-- Wave 3.1: the highest stage a level-2, -3 and -4 parcel may show before the height cap;
 	-- absent means { 0, 1, 2 }. Metropolis towers have five stages and add floors as the cap rises.
 	levelStages: { number }?,
+	-- Wave 3.2: building sites by parcel size, parcel i taking list[((i - 1) % #list) + 1] as it
+	-- takes a district prop; a size without a list shows `sites[size]`.
+	siteVariants: { [string]: { string } }?,
+	swaps: { FabricSwapConfig }?,
 }
 
 export type CityEraDressingConfig = {

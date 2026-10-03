@@ -16,11 +16,17 @@
 -- and corner cells with no junction, ramp or sign. It reveals outward from the ring cell nearest
 -- the plot entrance, since there is no ramp to grow from, and its vehicles ride the centreline: a
 -- monorail is one beam, and the street lane offset would hang the train beside it.
+--
+-- M12 wave 3.2: `Highway.Ground` gives the ground the ring stands on -- the deck band and the
+-- cells the ramp comes down over -- as the rects the city fabric clears once the ring's slot is
+-- owned. It reads the layout and Assets.json only, so it is the same before any template exists.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
+local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CityFabric = require(sharedFolder:WaitForChild("CityFabric"))
 
 local PropFactory = require(script.Parent:WaitForChild("PropFactory"))
 local RoadGraph = require(script.Parent:WaitForChild("RoadGraph"))
@@ -342,9 +348,65 @@ local function arcedCorners(corners: { Vector3 }, tileStuds: number): { Vector3 
 	return points
 end
 
+-- How many whole cells the ramp prop covers along its run: the X extent of its harvested parts
+-- (a ramp descends along its own +X) in cells, at least one. Read from Assets.json, which every
+-- client has from the first frame, rather than from the template, which may not have replicated
+-- when the fabric is built. 0 while the prop is not harvested: no ramp is drawn then either.
+local function rampCells(eraName: string, propName: string?, tileStuds: number): number
+	local assets = Catalog.GetAssetsConfig()
+	local propsByEra = if assets ~= nil then assets.props else nil
+	local eraProps = if propsByEra ~= nil then propsByEra[eraName] else nil
+	local model: Types.AssetModel? = if eraProps ~= nil and propName ~= nil
+		then eraProps[propName]
+		else nil
+	local stage = if model ~= nil and type(model.stages) == "table" then model.stages[1] else nil
+	if stage == nil or type(stage.parts) ~= "table" or tileStuds < MIN_LENGTH then
+		return 0
+	end
+	local low, high = math.huge, -math.huge
+	for _, part in stage.parts do
+		local size, offset = part.size, part.offset
+		if
+			type(size) == "table"
+			and type(offset) == "table"
+			and type(size[1]) == "number"
+			and type(offset[1]) == "number"
+		then
+			low = math.min(low, offset[1] - size[1] / 2)
+			high = math.max(high, offset[1] + size[1] / 2)
+		end
+	end
+	if low > high then
+		return 0
+	end
+	return math.max(1, math.round((high - low) / tileStuds))
+end
+
 -- ------------------------------------------------------------------ public
 
 local Highway = {}
+
+-- M12 wave 3.2 (docs/INTERFACES.md "Wave 3.2", ring clearing): the ground the ring stands on, as
+-- CityFabric.RingRects answers it from the layout's ring and ramp, the lattice pitch and the
+-- ramp prop's length in cells. Empty without a pitch (an era without tiles) or a usable ring.
+function Highway.Ground(
+	eraName: string,
+	config: Types.CityEraHighwayConfig,
+	layout: Types.HighwayLayout,
+	tileStuds: number
+): { CityFabric.FabricRect }
+	local ramp: any = layout.ramp
+	local cell = if type(ramp) == "table" then ramp.cell else nil
+	local props = config.props
+	return CityFabric.RingRects(
+		layout.ring,
+		tileStuds,
+		if typeof(cell) == "Vector3"
+			then { cell = { cell.X, cell.Z }, direction = ramp.direction }
+			else nil,
+		rampCells(eraName, if type(props) == "table" then props.ramp else nil, tileStuds)
+	)
+end
 
 -- Nil when the layout cannot describe a ring (no `highway`, a ring inside one cell, a lattice of
 -- zero): a plot with no highway, silently, like every other missing dressing key.
