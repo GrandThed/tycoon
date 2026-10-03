@@ -1,0 +1,10 @@
+{
+  "id": "VehicleCityBus",
+  "era": "Metropolis",
+  "scale": 1.0,
+  "footprint": [3.2, 11.2],
+  "note": "draft for the busStop city-changer: a city bus at blueprint size like VehicleA-D (car-kit at scale 1.8), front -Z, doors on +X; vehicles.scale 0.5 makes it 1.5 x 5.45 x 1.85 on the street. The piece sits (-0.05, 0, 0.05) so it is centred on its origin",
+  "pieces": [
+    {"kit": "metro-transit-kit", "model": "city-bus", "pos": [-0.05, 0, 0.05], "rotY": 0, "stage": 0}
+  ]
+}
