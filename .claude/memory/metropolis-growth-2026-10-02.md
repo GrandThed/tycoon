@@ -30,7 +30,15 @@ Result: **85 lots** (50 on streets, 35 on four lanes; avenues at x −28/0/28, c
 `busStop`, `cityPark`, `rooftopGarden` and `conventionCenter` carry no district there, so the first three
 cost no lots as city-changers; but a 2-stud pavement leaves no kerb room for shelters or street trees.
 
-**Rulings taken by the lead for the mock** (Ben has not judged them yet):
+**Ben approved the 85-lot avenues on 2026-10-03** ("yeah, i love it") and answered the city-changer
+recommendations with "lovely", read as: `rooftopGarden` → Green the Rooftops (prop swap) and `busStop` →
+Open the Bus Line become street-only; `cityPark` stays a park (no street trees), `financeDistrict` stays
+its tower (Crown twins dropped). Wave 3.2 (contract in INTERFACES) puts it in the game: client copies the
+mirror-first rules, final props, then the asset run and `build/metropolis.rbxl` (`metropolis.project.json`,
+DebugStartEra 3, GrantCash 1e18). He also said "commit everything": the earlier sessions' memory notes
+are on `main` (2ed18af) and merged into `m12-metropolis`.
+
+**Rulings taken by the lead for the mock** (the renders carried them; Ben approved the result):
 - Block slabs dropped (a slab paved a whole block at its first purchase: a socket); every fabric prop
   carries its own paved forecourt. Street trees went with them → the `cityPark` changer proposal.
 - Old town (generated `oldtown-kit`) is the wild: 13 × 13 clumps on a 14 grid, ≤ 3.6 tall; it may stand
