@@ -970,7 +970,8 @@
               "FabricResSmallB"
             ],
             "medium": [
-              "FabricResMediumA"
+              "FabricResSmallA",
+              "FabricResSmallB"
             ],
             "narrow": [
               "FabricResNarrowA",
@@ -983,8 +984,8 @@
               "FabricOfficeSmallB"
             ],
             "medium": [
-              "FabricOfficeMediumA",
-              "FabricOfficeMediumB"
+              "FabricOfficeSmallA",
+              "FabricOfficeSmallB"
             ],
             "narrow": [
               "FabricOfficeNarrowA",
@@ -996,7 +997,7 @@
               "FabricShopSmallA"
             ],
             "medium": [
-              "FabricShopMediumA"
+              "FabricShopSmallA"
             ],
             "narrow": [
               "FabricShopNarrowA",
@@ -1005,16 +1006,22 @@
           },
           "civic": {
             "small": [
-              "FabricPlazaSmall"
+              "FabricResSmallA",
+              "FabricResSmallB"
             ],
             "medium": [
-              "FabricPlazaMedium"
+              "FabricResSmallA",
+              "FabricResSmallB"
+            ],
+            "narrow": [
+              "FabricResNarrowA",
+              "FabricResNarrowB"
             ]
           }
         },
         "sites": {
           "small": "SiteSmall",
-          "medium": "SiteMedium",
+          "medium": "SiteSmall",
           "narrow": "SiteNarrow"
         },
         "siteVariants": {
