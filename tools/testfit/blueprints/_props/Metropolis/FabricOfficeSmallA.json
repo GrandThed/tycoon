@@ -6,9 +6,14 @@
   "pieces": [
     {"kit": "tower-kit", "model": "forecourt-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
     {"kit": "tower-kit", "model": "office-small-a-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "tower-kit", "model": "office-small-a-0-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
     {"kit": "tower-kit", "model": "office-small-a-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "tower-kit", "model": "office-small-a-1-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
     {"kit": "tower-kit", "model": "office-small-a-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
+    {"kit": "tower-kit", "model": "office-small-a-2-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
     {"kit": "tower-kit", "model": "office-small-a-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
-    {"kit": "tower-kit", "model": "office-small-a-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
+    {"kit": "tower-kit", "model": "office-small-a-3-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
+    {"kit": "tower-kit", "model": "office-small-a-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4},
+    {"kit": "tower-kit", "model": "office-small-a-4-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
   ]
 }

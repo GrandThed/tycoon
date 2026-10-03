@@ -5,10 +5,15 @@
   "footprint": [4, 8],
   "pieces": [
     {"kit": "tower-kit", "model": "forecourt-narrow", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "tower-kit", "model": "res-narrow-a-green-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "tower-kit", "model": "res-narrow-a-green-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
-    {"kit": "tower-kit", "model": "res-narrow-a-green-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
-    {"kit": "tower-kit", "model": "res-narrow-a-green-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
-    {"kit": "tower-kit", "model": "res-narrow-a-green-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
+    {"kit": "tower-kit", "model": "res-narrow-a-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "tower-kit", "model": "res-narrow-a-green-0-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
+    {"kit": "tower-kit", "model": "res-narrow-a-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "tower-kit", "model": "res-narrow-a-green-1-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
+    {"kit": "tower-kit", "model": "res-narrow-a-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
+    {"kit": "tower-kit", "model": "res-narrow-a-green-2-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
+    {"kit": "tower-kit", "model": "res-narrow-a-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
+    {"kit": "tower-kit", "model": "res-narrow-a-green-3-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
+    {"kit": "tower-kit", "model": "res-narrow-a-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4},
+    {"kit": "tower-kit", "model": "res-narrow-a-green-4-roof", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
   ]
 }

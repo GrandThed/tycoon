@@ -33,15 +33,19 @@ kit's storey at scale 4, so filler floors line up with the landmarks' floors.
 **Frames.** Every stage piece is authored in the lot frame: origin at the lot's bottom-centre,
 front -Z (the street), so a blueprint places all of a prop's pieces at [0, 0, 0] and its stages
 register exactly (the boomtown-extras-kit shop pattern). Small furniture is built into the stage
-pieces too, so a prop is one forecourt piece plus one piece per stage.
+pieces too.
 
-**Stages are additive** (blueprint.py: a stage shows every piece with stage <= it; nothing is ever
-removed). So every stage below the last is designed to be swallowed by the next one: its parapet is
-set PARAPET_IN back from the wall line and everything on its roof stays inside the body and below
-the next stage's roof (`check` asserts both, per prop, at generation time). The floors of a new
-stage continue the walls below in the same plane (adjacent, never overlapping), its first floor band
-is laid across the old roof line so the joint reads like every other floor line, and a body's
-bottom face is dropped wherever it would lie on the roof below.
+**Storeys stay, roofs retire.** Each stage is two pieces: its storeys (`<slug>-<k>`), which stay
+for good, and its roof (`<slug>-<k>-roof`), which the blueprint gives `untilStage` k, so it leaves
+the mesh when stage k + 1 builds over it instead of staying buried in every later one (a stage-4
+tower used to carry the roofs of stages 0 to 3). The roof piece holds everything the next stage
+covers: the roof deck, the parapet, the plant or the garden, a false front, and the caps that only
+show while the stage is the top one (the tops of piers and bays, the heads of the top-floor
+windows). The floors of a new stage continue the walls below in the same plane (adjacent, never
+overlapping), and its first floor band is laid across the old roof line so the joint reads like
+every other floor line. `holes` asserts, per prop, that a retired roof leaves nothing open: the
+next storeys stand exactly on the old roof deck and every other cap lies inside a box they add. A
+Green twin differs from its original only in its roof pieces, so the two share their storeys.
 
 **Two rendering rules** (lead, 2026-10-02): parallel faces that overlap stand at least GAP (0.05)
 apart, or they flicker at distance in Roblox, and no member the camera sees is thinner than
@@ -125,10 +129,8 @@ LINE_H = 0.1
 SIGN_D = 0.22  # fascia signs, GAP in front of the storey line they cross
 SIGN_TOP = 1.6 + LINE_H / 2 + GAP + 0.02  # a fascia sign rises past the first storey line, not into it
 PARAPET_H = 0.18  # stage-0 total = 2 storeys + 0.18 = 3.38 <= heightFloor 3.4
-PARAPET_IN = 0.06  # an interim parapet stands this far inside the wall line, so the next stage's
-# walls bury it with a clear gap instead of sharing its plane
+PARAPET_IN = 0.06  # an interim parapet stands this far inside the wall line (the look Ben approved)
 PARAPET_T = 0.16
-BURY_MARGIN = GAP  # what check demands between a buried piece and the walls around it
 HEIGHT_FLOOR = 3.4  # CityDressing.json eras.Metropolis.fabric.heightFloor
 TRI_BUDGET = 2000  # per stage, per prop (contract)
 LOW_PLANT = 0.36  # the tallest roof plant a stage 1 carries (an a/c unit is 0.28)
@@ -162,6 +164,25 @@ def log(msg: str) -> None:
 RODS: list[tuple[float, float, float]] = []  # boxes thin in two dimensions; check() reads it per prop
 
 
+class Stage(Part):
+    """One piece of a tower stage: its storeys, or its roof. A storeys piece notes the closed boxes
+    it adds (`solids`: body, bands, a bay) and a roof piece the faces with which it closes what
+    stands under it (`caps`: the roof deck, the tops of piers, bays and top-floor windows). `holes`
+    reads both: when a roof retires, every cap must be covered by a solid of the next stage."""
+
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.solids: list[tuple[float, float, float, float, float, float]] = []  # x0, x1, y0, y1, z0, z1
+        self.caps: list[tuple[float, float, float, float, float]] = []  # x0, x1, y, z0, z1
+
+
+def cap(r: Stage, x0, x1, y, z0, z1, c: Rgb) -> None:
+    """A face looking up at height y that closes a box left open at the top: it belongs to the
+    stage's roof piece, because the next stage builds over it. Winding as cube()'s top."""
+    r.face([(x0, y, z1), (x1, y, z1), (x1, y, z0), (x0, y, z0)], c)
+    r.caps.append((x0, x1, y, z0, z1))
+
+
 def cube(p: Part, x0, x1, y0, y1, z0, z1, c: Rgb, skip=(), **sides) -> None:
     """Axis-aligned box with per-face colours (top, bottom, front = -Z, back, left = -X, right)
     and faces to leave out: a face that lies against a wall or on a roof below is never drawn,
@@ -184,25 +205,32 @@ def cube(p: Part, x0, x1, y0, y1, z0, z1, c: Rgb, skip=(), **sides) -> None:
         p.face([(x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1)], col["bottom"])
 
 
-def panel(p: Part, b, face: str, u0, u1, y0, y1, d, c: Rgb, skip=(), **sides) -> None:
-    """A slab d proud of one wall of body b, spanning u0..u1 along that wall (x on front and back,
-    z on the sides). Its back face lies on the wall and is left out, with any faces in `skip`."""
+def wall_box(b, face: str, u0, u1, d) -> tuple[float, float, float, float, str]:
+    """The plan (x0, x1, z0, z1) of a slab d proud of one wall of body b, spanning u0..u1 along it
+    (x on front and back, z on the sides), and the face of it that lies on the wall."""
     x0, x1, z0, z1 = b
-    under = tuple(skip) + (("bottom",) if y0 <= 0.0 else ())  # on the ground the underside is hidden
     if face == "front":
-        cube(p, u0, u1, y0, y1, z0 - d, z0, c, skip=("back",) + under, **sides)
-    elif face == "back":
-        cube(p, u0, u1, y0, y1, z1, z1 + d, c, skip=("front",) + under, **sides)
-    elif face == "left":
-        cube(p, x0 - d, x0, y0, y1, u0, u1, c, skip=("right",) + under, **sides)
-    else:
-        cube(p, x1, x1 + d, y0, y1, u0, u1, c, skip=("left",) + under, **sides)
+        return u0, u1, z0 - d, z0, "back"
+    if face == "back":
+        return u0, u1, z1, z1 + d, "front"
+    if face == "left":
+        return x0 - d, x0, u0, u1, "right"
+    return x1, x1 + d, u0, u1, "left"
 
 
-def ring(p: Part, b, y0, y1, d, c: Rgb, **sides) -> None:
+def panel(p: Part, b, face: str, u0, u1, y0, y1, d, c: Rgb, skip=(), **sides) -> None:
+    """A slab d proud of one wall of body b, spanning u0..u1 along that wall. Its back face lies
+    on the wall and is left out, with any faces in `skip`."""
+    xa, xb, za, zb, on_wall = wall_box(b, face, u0, u1, d)
+    under = ("bottom",) if y0 <= 0.0 else ()  # on the ground the underside is hidden
+    cube(p, xa, xb, y0, y1, za, zb, c, skip=(on_wall,) + tuple(skip) + under, **sides)
+
+
+def ring(p: Stage, b, y0, y1, d, c: Rgb) -> None:
     """A band d proud all round body b: one box, its top and bottom inside the body but the rim."""
     x0, x1, z0, z1 = b
-    cube(p, x0 - d, x1 + d, y0, y1, z0 - d, z1 + d, c, **sides)
+    cube(p, x0 - d, x1 + d, y0, y1, z0 - d, z1 + d, c)
+    p.solids.append((x0 - d, x1 + d, y0, y1, z0 - d, z1 + d))
 
 
 def hollow(p: Part, b, y0, y1, out, t, c: Rgb, top: Rgb, inner: Rgb | None = None, under: bool = False) -> None:
@@ -219,31 +247,38 @@ def hollow(p: Part, b, y0, y1, out, t, c: Rgb, top: Rgb, inner: Rgb | None = Non
     cube(p, X1 - t, X1, y0, y1, Z0 + t, Z1 - t, c, skip=sk + ("front", "back"), top=top, left=inner)
 
 
-def corner_piers(p: Part, b, y0, y1, w, c: Rgb, under: bool = False) -> None:
+def corner_piers(p: Stage, r: Stage, b, y0, y1, w, c: Rgb, under: bool = False) -> None:
     """A pier PIER_D proud at each corner, `w` along each face: one box per corner, its two inner
     faces left out (they lie inside the body). It stops GAP short of the roof, so its top never
     shares the roof's plane; the next stage's joint band, or the last stage's cornice, covers the
-    step. `under` draws the undersides, for piers that start above a recessed lobby."""
+    step, and the tops are caps on the roof piece r. `under` draws the undersides, for piers that
+    start above a recessed lobby."""
     x0, x1, z0, z1 = b
     d = PIER_D
     top = y1 - GAP
     if not under:
-        sk = ("bottom",)
-        cube(p, x0 - d, x0 + w, y0, top, z0 - d, z0 + w, c, skip=sk + ("back", "right"))
-        cube(p, x1 - w, x1 + d, y0, top, z0 - d, z0 + w, c, skip=sk + ("back", "left"))
-        cube(p, x0 - d, x0 + w, y0, top, z1 - w, z1 + d, c, skip=sk + ("front", "right"))
-        cube(p, x1 - w, x1 + d, y0, top, z1 - w, z1 + d, c, skip=sk + ("front", "left"))
-        return
-    # over a recessed lobby a box's underside would share the soffit's plane: two slabs per corner,
-    # both outside the body
-    cube(p, x0 - d, x0 + w, y0, top, z0 - d, z0, c, skip=("back",))
-    cube(p, x1 - w, x1 + d, y0, top, z0 - d, z0, c, skip=("back",))
-    cube(p, x0 - d, x0 + w, y0, top, z1, z1 + d, c, skip=("front",))
-    cube(p, x1 - w, x1 + d, y0, top, z1, z1 + d, c, skip=("front",))
-    cube(p, x0 - d, x0, y0, top, z0, z0 + w, c, skip=("right", "front"))
-    cube(p, x0 - d, x0, y0, top, z1 - w, z1, c, skip=("right", "back"))
-    cube(p, x1, x1 + d, y0, top, z0, z0 + w, c, skip=("left", "front"))
-    cube(p, x1, x1 + d, y0, top, z1 - w, z1, c, skip=("left", "back"))
+        boxes = [
+            (x0 - d, x0 + w, z0 - d, z0 + w, ("bottom", "back", "right")),
+            (x1 - w, x1 + d, z0 - d, z0 + w, ("bottom", "back", "left")),
+            (x0 - d, x0 + w, z1 - w, z1 + d, ("bottom", "front", "right")),
+            (x1 - w, x1 + d, z1 - w, z1 + d, ("bottom", "front", "left")),
+        ]
+    else:
+        # over a recessed lobby a box's underside would share the soffit's plane: two slabs per
+        # corner, both outside the body
+        boxes = [
+            (x0 - d, x0 + w, z0 - d, z0, ("back",)),
+            (x1 - w, x1 + d, z0 - d, z0, ("back",)),
+            (x0 - d, x0 + w, z1, z1 + d, ("front",)),
+            (x1 - w, x1 + d, z1, z1 + d, ("front",)),
+            (x0 - d, x0, z0, z0 + w, ("right", "front")),
+            (x0 - d, x0, z1 - w, z1, ("right", "back")),
+            (x1, x1 + d, z0, z0 + w, ("left", "front")),
+            (x1, x1 + d, z1 - w, z1, ("left", "back")),
+        ]
+    for xa, xb, za, zb, sk in boxes:
+        cube(p, xa, xb, y0, top, za, zb, c, skip=sk + ("top",))
+        cap(r, xa, xb, top, za, zb, c)
 
 
 def blob(p: Part, centre, radii, c: Rgb, seg: int = 6, rings: int = 2, seed: int = 0) -> None:
@@ -262,35 +297,43 @@ class Style(dict):
         return self[key]
 
 
-def floors(p: Part, b, st: Style, f0: int, f1: int, body_from: float | None = None) -> None:
-    """Floors f0 .. f1-1 of body b: the wall, the window panels and a band at every floor line
-    from f0 up (at f0 > 0 that band is laid across the roof line of the stage below, so the joint
-    reads as an ordinary floor line). `body_from` starts the wall higher, over a lobby."""
+def floors(p: Stage, r: Stage, b, st: Style, f0: int, f1: int, body_from: float | None = None) -> None:
+    """Floors f0 .. f1-1 of body b, on the storeys piece p: the wall, the window panels and a band
+    at every floor line from f0 up (at f0 > 0 that band is laid across the roof line of the stage
+    below, so the joint reads as an ordinary floor line). `body_from` starts the wall higher, over
+    a lobby. What only shows while these are the top floors goes on the roof piece r as caps: the
+    roof deck and the heads of the top-floor windows, which the next stage's first band covers."""
     x0, x1, z0, z1 = b
     y0, y1 = f0 * S, f1 * S
     ya = y0 if body_from is None else body_from
-    skip = ("bottom",) if (ya == 0.0 or f0 > 0) else ()
-    cube(p, x0, x1, ya, y1, z0, z1, st.wall, skip=skip, top=st.roof, bottom=st.get("soffit", st.wall))
+    skip = ("bottom", "top") if (ya == 0.0 or f0 > 0) else ("top",)
+    cube(p, x0, x1, ya, y1, z0, z1, st.wall, skip=skip, bottom=st.get("soffit", st.wall))
+    p.solids.append((x0, x1, ya, y1, z0, z1))
+    cap(r, x0, x1, y1, z0, z1, st.roof)  # the roof deck: always the first cap of a roof piece
     for face, cols in st.cols.items():
         for col in cols:
             u, w, first = col[:3]
             lo, hi = max(f0, first), min(f1, col[3] if len(col) > 3 else f1)
             if lo >= hi:
                 continue
-            # a panel's end that reaches into a floor band is hidden inside it, so it is left out
-            ends = (("bottom",) if lo >= 1 else ()) + (("top",) if hi < f1 else ())
-            panel(p, b, face, u - w / 2, u + w / 2, lo * S + st.sill - GAP, (hi - 1) * S + st.head + GAP,
-                  GLASS_D, st.glass, skip=ends)
+            # a panel's end that reaches into a floor band is hidden inside it, so it is left out;
+            # a head with no band over it yet is a cap
+            ends = (("bottom",) if lo >= 1 else ()) + ("top",)
+            head = (hi - 1) * S + st.head + GAP
+            panel(p, b, face, u - w / 2, u + w / 2, lo * S + st.sill - GAP, head, GLASS_D, st.glass, skip=ends)
+            if hi == f1:
+                xa, xb, za, zb, _ = wall_box(b, face, u - w / 2, u + w / 2, GLASS_D)
+                cap(r, xa, xb, head, za, zb, st.glass)
     for n in range(max(f0, 1), f1):
         ring(p, b, (n - 1) * S + st.head, n * S + st.sill, BAND_D, st.band)
         if st.get("line"):  # a thin storey line in the trim colour, in front of the band
             ring(p, b, n * S - LINE_H / 2, n * S + LINE_H / 2, LINE_D, st.line)
     if st.get("corner"):
-        corner_piers(p, b, ya if f0 == 0 else y0, y1, st.corner, st.pier, under=f0 == 0 and ya > 0)
+        corner_piers(p, r, b, ya if f0 == 0 else y0, y1, st.corner, st.pier, under=f0 == 0 and ya > 0)
 
 
 def interim_top(p: Part, b, y: float, st: Style) -> None:
-    """The parapet of a stage that a later stage will build over: set back, buried next stage."""
+    """The parapet of a stage that a later stage will build over: set back from the wall line."""
     hollow(p, b, y, y + PARAPET_H, -PARAPET_IN, PARAPET_T, st.wall, st.cap, inner=st.get("inner", st.wall))
 
 
@@ -491,37 +534,39 @@ def forecourt(name: str, lot: str) -> Part:
 
 
 def tower(slug: str, lot: str, st: Style, floors_at, base, facade, crowns, final_h: float = 0.3,
-          body=None, fixtures=None) -> list[Part]:
-    """Five stage pieces of one tower. `base(p)` draws the street level (stage 0), `facade(p, f0, f1)`
-    whatever rises with each run of floors (balconies, bays, signs), `crowns[k](p, y)` the roof of
-    stage k at roof height y (every crown but the last is buried by the next stage), and
-    `fixtures[k](p, y)` what stays on that roof under a garden too (a false front). While GARDEN
-    holds a style, every crown gives way to a roof garden: that is how a Green twin is built."""
+          body=None, fixtures=None) -> list[tuple[Stage, Stage]]:
+    """The stages of one tower, each as (storeys piece, roof piece). The storeys stay for good:
+    `base(p, r)` draws the street level and the first floors (stage 0) and `facade(p, r, f0, f1)`
+    whatever rises with each run of floors (balconies, bays, signs). The roof piece is everything
+    the next stage builds over, and the blueprint retires it at that stage: the caps the storeys
+    lay on r, the parapet, `crowns[k](r, y)` at roof height y, and `fixtures[k](r, y)`, which stay
+    on that roof under a garden too (a false front). While GARDEN holds a style, every crown gives
+    way to a roof garden: that is how a Green twin is built."""
     b = body or BODIES[lot]
-    parts = []
+    stages = []
     f_prev = 0
     for k, f in enumerate(floors_at):
-        p = Part(f"{slug}-{k}")
+        p, r = Stage(f"{slug}-{k}"), Stage(f"{slug}-{k}-roof")
         if k == 0:
-            base(p)
+            base(p, r)
         else:
-            floors(p, b, st, f_prev, f)
+            floors(p, r, b, st, f_prev, f)
         if facade:
-            facade(p, f_prev, f)
+            facade(p, r, f_prev, f)
         y = f * S
         if k < len(floors_at) - 1:
-            interim_top(p, b, y, st)
+            interim_top(r, b, y, st)
         else:
-            final_top(p, b, y, st, final_h)
+            final_top(r, b, y, st, final_h)
         if GARDEN["style"]:
-            green_roof(p, b, y, k, len(floors_at) - 1, GARDEN["style"])
+            green_roof(r, b, y, k, len(floors_at) - 1, GARDEN["style"])
         else:
-            crowns[k](p, y)
+            crowns[k](r, y)
         if fixtures and k in fixtures:
-            fixtures[k](p, y)
-        parts.append(p)
+            fixtures[k](r, y)
+        stages.append((p, r))
         f_prev = f
-    return parts
+    return stages
 
 
 def res_cols(lot: str):
@@ -551,8 +596,8 @@ def res_narrow_a() -> list[Part]:
     st = Style(wall=PEACH, band=PEACH, line=WHITE, glass=BLUE, roof=SLATE_LIGHT, cap=WHITE, cap_top=WHITE,
                sill=0.36, head=1.26, cols=cols, inner=PEACH)
 
-    def base(p):
-        floors(p, b, st, 0, FLOORS[lot][0])
+    def base(p, r):
+        floors(p, r, b, st, 0, FLOORS[lot][0])
         door(p, b, "front", 0.85, 0.8, leaf=SLATE)
         canopy(p, b, 0.45, 1.35, st.head, 0.5)
         step(p, b, 0.85, 1.0)
@@ -560,7 +605,7 @@ def res_narrow_a() -> list[Part]:
         for i, x in enumerate((-1.4, -0.95, -0.5)):
             shrub(p, x, -3.6, FC_TOP + 0.3, 0.26, seed=11 + i)
 
-    def facade(p, f0, f1):
+    def facade(p, r, f0, f1):
         for n in range(max(f0, 1), f1):
             balcony(p, b, "front", -0.85, 1.2, n * S, 0.5)
 
@@ -595,32 +640,34 @@ def res_narrow_b() -> list[Part]:
     bay = (-0.68, 0.68)
     bay_d = 0.42
 
-    def bay_run(p, f0, f1):
+    def bay_run(p, r, f0, f1):
         lo = max(f0, 1)
         if lo >= f1:
             return
         y0, y1 = lo * S, f1 * S
         bb = (bay[0], bay[1], z0 - bay_d, z0)
-        cube(p, bay[0], bay[1], y0, y1, z0 - bay_d, z0, CREAM, skip=("back",) + (("bottom",) if lo > 1 else ()),
-             top=CREAM, bottom=STONE)
+        cube(p, bay[0], bay[1], y0, y1, z0 - bay_d, z0, CREAM,
+             skip=("back", "top") + (("bottom",) if lo > 1 else ()), bottom=STONE)
+        p.solids.append((bay[0], bay[1], y0, y1, z0 - bay_d, z0))
+        cap(r, bay[0], bay[1], y1, z0 - bay_d, z0, CREAM)  # the bay's top, until the next run stands on it
         for n in range(lo, f1):
             panel(p, bb, "front", bay[0] + 0.14, bay[1] - 0.14, n * S + 0.38, n * S + 1.26, GLASS_D, BLUE)
             panel(p, bb, "left", z0 - bay_d + 0.1, z0 - 0.06, n * S + 0.38, n * S + 1.26, GLASS_D, BLUE)
             panel(p, bb, "right", z0 - bay_d + 0.1, z0 - 0.06, n * S + 0.38, n * S + 1.26, GLASS_D, BLUE)
 
-    def base(p):
-        floors(p, b, st, 0, FLOORS[lot][0])
+    def base(p, r):
+        floors(p, r, b, st, 0, FLOORS[lot][0])
         door(p, b, "front", 0.0, 0.8, leaf=CREAM, frame=CREAM)
         canopy(p, b, bay[0], bay[1], st.head, bay_d + 0.08, c=CREAM, edge=TERRACOTTA)
         step(p, b, 0.0, 1.1)
         for sx in (-1, 1):
             planter(p, sx * 1.35 - 0.4, sx * 1.35 + 0.4, -3.85, -3.4, FC_TOP, edge=TERRACOTTA)
             shrub(p, sx * 1.35, -3.62, FC_TOP + 0.3, 0.28, seed=21 + sx)
-        bay_run(p, 0, FLOORS[lot][0])
+        bay_run(p, r, 0, FLOORS[lot][0])
 
-    def facade(p, f0, f1):
+    def facade(p, r, f0, f1):
         if f0 > 0:
-            bay_run(p, f0, f1)
+            bay_run(p, r, f0, f1)
 
     def crown(k):
         def draw(p, y):
@@ -661,8 +708,8 @@ def res_small_a() -> list[Part]:
     st = Style(wall=CREAM, band=CREAM, line=TERRACOTTA, glass=BLUE, roof=SLATE_LIGHT, cap=TERRACOTTA, cap_top=CREAM,
                sill=0.36, head=1.26, cols=cols, inner=CREAM)
 
-    def base(p):
-        floors(p, b, st, 0, FLOORS[lot][0])
+    def base(p, r):
+        floors(p, r, b, st, 0, FLOORS[lot][0])
         door(p, b, "front", 0.0, 0.85)
         canopy(p, b, -0.6, 0.6, st.head, 0.6, c=TERRACOTTA, edge=CREAM)
         step(p, b, 0.0, 1.0)
@@ -671,7 +718,7 @@ def res_small_a() -> list[Part]:
             shrub(p, x, -2.62, FC_TOP + 0.3, 0.27, seed=31 + i)
         tree(p, -2.3, -2.45, FC_TOP, h=1.9, r=0.5, seed=3)
 
-    def facade(p, f0, f1):
+    def facade(p, r, f0, f1):
         for n in range(max(f0, 1), f1):
             y = n * S
             # front-right corner: one slab wrapping the corner, rail on both open sides
@@ -724,15 +771,15 @@ def res_small_b() -> list[Part]:
     st = Style(wall=ROSE, band=ROSE, line=WHITE, glass=BLUE, roof=STONE, cap=WHITE, cap_top=WHITE,
                sill=0.36, head=1.26, cols=cols, inner=ROSE)
 
-    def base(p):
-        floors(p, b, st, 0, FLOORS[lot][0])
+    def base(p, r):
+        floors(p, r, b, st, 0, FLOORS[lot][0])
         door(p, b, "front", 0.0, 0.7, leaf=SLATE)
         canopy(p, b, -0.55, 0.55, st.head, 0.5)
         step(p, b, 0.0, 0.8)
         for sx in (-1, 1):
             tree(p, sx * 2.45, -2.45, FC_TOP, h=1.4, r=0.42, seed=50 + sx)
 
-    def facade(p, f0, f1):
+    def facade(p, r, f0, f1):
         for n in range(max(f0, 1), f1):
             for u in (-1.45, 1.45):
                 balcony(p, b, "front", u, 1.6, n * S, 0.45, rail=WHITE)
@@ -807,9 +854,9 @@ def office_narrow_a() -> list[Part]:
                sill=0.34, head=1.3, cols=ribbon_cols(lot, cw), corner=cw, pier=WHITE, soffit=CHARCOAL,
                inner=SLATE_LIGHT)
 
-    def base(p):
+    def base(p, r):
         lobby(p, b, st, columns=(-1.3, 1.3), canopy_w=0.6)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
+        floors(p, r, b, st, 0, FLOORS[lot][0], body_from=S)
         for sx in (-1, 1):
             planter(p, sx * 1.35 - 0.45, sx * 1.35 + 0.45, -3.85, -3.45, FC_TOP, edge=SLATE_LIGHT)
             shrub(p, sx * 1.35, -3.65, FC_TOP + 0.3, 0.28, seed=70 + sx)
@@ -846,10 +893,10 @@ def office_narrow_b() -> list[Part]:
     st = Style(wall=WALL_SHADE, band=WALL_SHADE, line=STONE, glass=BLUE, roof=SLATE_LIGHT, cap=STONE,
                cap_top=WHITE, sill=0.36, head=1.34, cols=cols, soffit=SLATE, inner=WALL_SHADE)
 
-    def base(p):
+    def base(p, r):
         lobby(p, b, st, inset=0.4, columns=(-1.35, 1.35), glass=BLUE_PALE, canopy_c=STONE, frame=CHARCOAL,
               canopy_w=0.55)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
+        floors(p, r, b, st, 0, FLOORS[lot][0], body_from=S)
         planter(p, -1.75, -0.35, -3.85, -3.45, FC_TOP, edge=STONE)
         for i, x in enumerate((-1.45, -1.05, -0.65)):
             shrub(p, x, -3.65, FC_TOP + 0.3, 0.26, seed=76 + i)
@@ -892,9 +939,9 @@ def office_small_a() -> list[Part]:
                sill=0.34, head=1.3, cols=ribbon_cols(lot, cw), corner=cw, pier=STONE, soffit=STONE,
                inner=WALL_SHADE)
 
-    def base(p):
+    def base(p, r):
         lobby(p, b, st, columns=(-1.7, 1.7), glass=BLUE_PALE, canopy_c=STONE)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
+        floors(p, r, b, st, 0, FLOORS[lot][0], body_from=S)
         tree(p, -2.35, -2.42, FC_TOP, h=1.8, r=0.46, seed=80)
         tree(p, 2.35, -2.42, FC_TOP, h=1.6, r=0.44, seed=81)
 
@@ -929,9 +976,9 @@ def office_small_b() -> list[Part]:
     st = Style(wall=SLATE_BLUE, band=SLATE, glass=BLUE_PALE, roof=SLATE, cap=WHITE, cap_top=WHITE,
                sill=0.08, head=1.45, cols=cols, corner=cw, pier=WHITE, soffit=SLATE, inner=SLATE_BLUE)
 
-    def base(p):
+    def base(p, r):
         lobby(p, b, st, inset=0.5, columns=(-1.3, 1.3), glass=GLASS, canopy_c=WHITE, frame=SLATE)
-        floors(p, b, st, 0, FLOORS[lot][0], body_from=S)
+        floors(p, r, b, st, 0, FLOORS[lot][0], body_from=S)
         for sx in (-1, 1):
             planter(p, sx * 2.2 - 0.55, sx * 2.2 + 0.55, -2.85, -2.35, FC_TOP, edge=WHITE)
             shrub(p, sx * 2.2, -2.6, FC_TOP + 0.3, 0.3, seed=90 + sx)
@@ -967,8 +1014,8 @@ def shop_tower(slug, lot, st, awning, sign, front_frame, crowns, extra_base=None
     b = body or BODIES[lot]
     x0, x1, z0, z1 = b
 
-    def base(p):
-        floors(p, b, st, 0, FLOORS["shop"][0])
+    def base(p, r):
+        floors(p, r, b, st, 0, FLOORS["shop"][0])
         # the shop window stands well inside the awning ends
         shopfront(p, b, x0 + 0.18, x1 - 0.18, front_frame, door_u)
         sign_board(p, b, x0 + 0.2, x1 - 0.2, st.head + GAP, SIGN_TOP, sign[0], sign[1])
@@ -1019,7 +1066,7 @@ def shop_narrow_b() -> list[Part]:
     st = Style(wall=BLUE_PALE, band=BLUE_PALE, line=WHITE, glass=SLATE_BLUE, roof=SLATE, cap=NAVY, cap_top=WHITE,
                sill=0.36, head=1.26, cols=cols, inner=BLUE_PALE)
 
-    def flower_boxes(p, f0, f1):
+    def flower_boxes(p, r, f0, f1):
         for n in range(max(f0, 1), f1):
             for u in (-1.15, 0.0, 1.15):
                 panel(p, b, "front", u - 0.34, u + 0.34, n * S + 0.24, n * S + 0.5, LINE_D + 0.12, GREEN_DARK,
@@ -1104,8 +1151,8 @@ def shop_small_a() -> list[Part]:
 #
 # While rooftopGarden is owned, a home or shop parcel shows <prop>Green instead of <prop> (a prop
 # swap; Ben approved it 2026-10-02). A twin is built by the original's builder with GARDEN set, so
-# its body is the original's face for face and only the roofs differ. Its pieces are named
-# <slug>-green-<k>.
+# only the roofs differ: its blueprint uses the original's storeys pieces and its own roof pieces,
+# named <slug>-green-<k>-roof.
 
 GARDEN: dict = {"style": None}
 GARDEN_IN = 0.32  # a garden keeps this far inside the wall line: clear of every parapet and cornice
@@ -1116,16 +1163,16 @@ GREEN_RISE = 1.2  # a twin's stage may stand this much above the original's (lea
 def green_twin(make, style: dict):
     """The builder of a prop's Green twin: the original's builder run with a garden on every roof."""
 
-    def build() -> list[Part]:
+    def build() -> list[tuple[Stage, Stage]]:
         GARDEN["style"] = style
         try:
-            parts = make()
+            stages = make()
         finally:
             GARDEN["style"] = None
-        for part in parts:
-            slug, n = part.name.rsplit("-", 1)
-            part.name = f"{slug}-green-{n}"
-        return parts
+        for _, roof in stages:
+            slug, n, _ = roof.name.rsplit("-", 2)
+            roof.name = f"{slug}-green-{n}-roof"
+        return stages
 
     return build
 
@@ -1154,8 +1201,8 @@ def green_roof(p: Part, b, y: float, k: int, last_stage: int, style: dict) -> No
     and on them what the stage's height allows. Stage 0 (3.38 under the 3.4 floor) takes clipped
     hedges; stage 1 (kept under the early landmarks) takes low shrubs and a seat; any later stage
     takes trees too, and the last stage adds the twin's feature (a pergola or parasols) and a
-    bench. Everything stands GARDEN_IN inside the wall line and below GARDEN_H, so each stage's
-    garden is buried by the floors of the next."""
+    bench. Everything stands GARDEN_IN inside the wall line and below GARDEN_H. It is drawn on
+    the stage's roof piece, so it leaves when the next stage builds over that roof."""
     x0, x1, z0, z1 = b
     rx0, rx1, rz0, rz1 = x0 + GARDEN_IN, x1 - GARDEN_IN, z0 + GARDEN_IN, z1 - GARDEN_IN
     if k == 0:
@@ -1166,8 +1213,6 @@ def green_roof(p: Part, b, y: float, k: int, last_stage: int, style: dict) -> No
         cap = GARDEN_H
     last = k == last_stage
     seed = style["seed"] * 10 + k
-    # Bed tops (roof + 0.16) clear by GAP both the next stage's storey line (roof + 0.05) and the
-    # balcony slabs that reach into some bodies (floor + 0.10).
     bed_h = 0.16
     bed_d = min(1.2, (rz1 - rz0) * 0.36)
     hedge = 0.24 if cap < 0.25 else 0.0  # stage 0's hedges take the outer strip of each bed
@@ -1190,7 +1235,7 @@ def green_roof(p: Part, b, y: float, k: int, last_stage: int, style: dict) -> No
         if cap < 1.0:
             shrub(p, tree_x, bzc, soil, r=0.24, seed=seed + i)
             continue
-        lean = style.get("lean") and not last  # a buried garden on a tower near the budget
+        lean = style.get("lean") and not last
         if i < (1 if lean else style.get("trees", 2)):
             tree(p, tree_x, bzc, soil, h=0.98, r=0.42, seed=seed + i, seg=5)
         if not lean:
@@ -1216,8 +1261,7 @@ def green_roof(p: Part, b, y: float, k: int, last_stage: int, style: dict) -> No
 # --- the props and their checks -----------------------------------------------------------------
 
 # Blueprint id -> (lot, builder): the final set, the eleven props the approved 85-lot layout can
-# show (56 narrow lots, 29 small) and the Green twins of its homes and shops. BODY_OF names a
-# non-standard body.
+# show (56 narrow lots, 29 small) and the Green twins of its homes and shops.
 PROPS = {
     "FabricResNarrowA": ("narrow", res_narrow_a),
     "FabricResNarrowB": ("narrow", res_narrow_b),
@@ -1232,7 +1276,7 @@ PROPS = {
     "FabricShopSmallA": ("small", shop_small_a),
 }
 # Twin id -> (original, garden style). Neighbours in a terrace get different features and sides;
-# "lean" keeps buried gardens down to beds and one tree on a tower near the triangle budget. The
+# "lean" keeps the gardens below the last stage down to beds and one tree (what Ben saw). The
 # seeds are the ones Ben saw: they place the trees and pick the parasol colours.
 TWINS = {
     "FabricResNarrowAGreen": ("FabricResNarrowA", {"seed": 1, "feature": "pergola", "trees": 2}),
@@ -1245,7 +1289,6 @@ TWINS = {
 }
 for _twin, (_base, _style) in TWINS.items():
     PROPS[_twin] = (PROPS[_base][0], green_twin(PROPS[_base][1], _style))
-BODY_OF = {"FabricShopSmallA": CAFE_BODY}
 FORECOURTS = {f"forecourt-{lot}": (lambda lot=lot: forecourt(f"forecourt-{lot}", lot)) for lot in LOTS}
 
 
@@ -1319,60 +1362,83 @@ def face_fights(parts: list[Part]) -> list[str]:
     return found
 
 
-def check(prop: str, parts: list[Part], rods=()) -> list[str]:
-    """The contract, the burial rule, the face-gap rule and the member rule (`rods`: what cube()
+def present(stages, k: int) -> list[Stage]:
+    """The pieces stage k is made of: every storeys piece up to k and the roof piece of k alone
+    (the blueprint retires each roof when the next stage joins)."""
+    return [p for p, _ in stages[: k + 1]] + [stages[k][1]]
+
+
+def holes(stages) -> list[str]:
+    """What retiring a roof would open up. When stage k + 1 joins, the roof piece of stage k
+    leaves, and with it the caps that closed the storeys under it. So the next storeys must stand
+    exactly on the roof deck (same plan, same height: the walls run on with no step, gap or open
+    rim), and every other cap (a pier top, a window head, a bay top) must lie inside one of the
+    boxes the next storeys add, where it could not be seen anyway."""
+    bad = []
+    e = 1e-6
+    for k in range(len(stages) - 1):
+        roof, nxt = stages[k][1], stages[k + 1][0]
+        dx0, dx1, dy, dz0, dz1 = roof.caps[0]
+        bx0, bx1, by0, _, bz0, bz1 = nxt.solids[0]
+        if max(abs(dx0 - bx0), abs(dx1 - bx1), abs(dz0 - bz0), abs(dz1 - bz1), abs(dy - by0)) > e:
+            bad.append(f"stage {k + 1} does not stand on the roof deck of stage {k}: deck x[{dx0:.2f}, {dx1:.2f}] "
+                       f"z[{dz0:.2f}, {dz1:.2f}] at {dy:.2f}, body x[{bx0:.2f}, {bx1:.2f}] z[{bz0:.2f}, {bz1:.2f}] "
+                       f"from {by0:.2f}")
+        for x0, x1, y, z0, z1 in roof.caps:
+            if not any(sx0 - e <= x0 and x1 <= sx1 + e and sy0 - e <= y <= sy1 + e and sz0 - e <= z0 and z1 <= sz1 + e
+                       for sx0, sx1, sy0, sy1, sz0, sz1 in nxt.solids):
+                bad.append(f"retiring the roof of stage {k} leaves a hole at x[{x0:.2f}, {x1:.2f}] "
+                           f"z[{z0:.2f}, {z1:.2f}], height {y:.2f}: nothing of stage {k + 1} covers it")
+    return bad
+
+
+def stage_tops(stages) -> list[float]:
+    return [max(part.bounds()[1][1] for part in present(stages, k)) for k in range(len(stages))]
+
+
+def check(prop: str, stages, rods=()) -> list[str]:
+    """The contract, the no-hole rule, the face-gap rule and the member rule (`rods`: what cube()
     flagged while the prop was built), per prop. Returns violations."""
     lot = PROPS[prop][0]
     w, d = LOTS[lot]
     bad = []
     fc = forecourt("fc", lot)
-    fl = stage_floors(prop)
-    tris = fc.tris
-    top = 0.0
-    for k, part in enumerate(parts):
-        tris += part.tris
-        lo, hi = part.bounds()
-        top = max(top, hi[1])
+    tops = stage_tops(stages)
+    for k in range(len(stages)):
+        parts = present(stages, k)
+        tris = fc.tris + sum(part.tris for part in parts)
         if tris > TRI_BUDGET:
             bad.append(f"stage {k}: {tris} tris > {TRI_BUDGET}")
-        if lo[0] < -w / 2 - 0.01 or hi[0] > w / 2 + 0.01 or lo[2] < -d / 2 - 0.01 or hi[2] > d / 2 + 0.01:
-            bad.append(f"stage {k}: leaves the {w:g} x {d:g} lot: "
-                       f"x[{lo[0]:.2f}, {hi[0]:.2f}] z[{lo[2]:.2f}, {hi[2]:.2f}]")
-        if k == 0 and top > HEIGHT_FLOOR + 1e-6:
-            bad.append(f"stage 0 is {top:.2f} tall > heightFloor {HEIGHT_FLOOR}")
-        if k == 1 and top > fl[1] * S + LOW_PLANT + 1e-6:
-            bad.append(f"stage 1 is {top:.2f} tall: only roof plant <= {LOW_PLANT} may stand on it")
-        for fight in face_fights([fc] + parts[: k + 1])[:3]:
+        for part in stages[k]:
+            lo, hi = part.bounds()
+            if lo[0] < -w / 2 - 0.01 or hi[0] > w / 2 + 0.01 or lo[2] < -d / 2 - 0.01 or hi[2] > d / 2 + 0.01:
+                bad.append(f"stage {k}: {part.name} leaves the {w:g} x {d:g} lot: "
+                           f"x[{lo[0]:.2f}, {hi[0]:.2f}] z[{lo[2]:.2f}, {hi[2]:.2f}]")
+        if k == 0 and tops[0] > HEIGHT_FLOOR + 1e-6:
+            bad.append(f"stage 0 is {tops[0]:.2f} tall > heightFloor {HEIGHT_FLOOR}")
+        if k == 1 and tops[1] > stage_floors(prop)[1] * S + LOW_PLANT + 1e-6:
+            bad.append(f"stage 1 is {tops[1]:.2f} tall: only roof plant <= {LOW_PLANT} may stand on it")
+        for fight in face_fights([fc] + parts)[:3]:
             bad.append(f"stage {k}: {fight}")
     for rod in sorted(set(rods))[:5]:
         bad.append(f"a member {rod[0]:g} x {rod[1]:g} x {rod[2]:g} is thinner than {MIN_MEMBER} in two dimensions")
     if prop in TWINS:
-        b_top = t_top = 0.0
-        for k, (bp, tp) in enumerate(zip(PROPS[TWINS[prop][0]][1](), parts)):
-            b_top, t_top = max(b_top, bp.bounds()[1][1]), max(t_top, tp.bounds()[1][1])
+        for k, (b_top, t_top) in enumerate(zip(stage_tops(PROPS[TWINS[prop][0]][1]()), tops)):
             if t_top > b_top + GREEN_RISE + 1e-6:
                 bad.append(f"stage {k}: {t_top:.2f} tall against the original's {b_top:.2f}")
-    x0, x1, z0, z1 = BODY_OF.get(TWINS.get(prop, (prop,))[0], BODIES[lot])
-    m = BURY_MARGIN
-    for k in range(len(parts) - 1):
-        roof, nxt = fl[k] * S, fl[k + 1] * S
-        for x, y, z in parts[k].verts:
-            if y <= roof + 1e-6:
-                continue
-            if not (x0 + m <= x <= x1 - m and z0 + m <= z <= z1 - m and y <= nxt - m):
-                bad.append(f"stage {k}: ({x:.2f}, {y:.2f}, {z:.2f}) above the roof {roof:.2f} "
-                           f"is not buried by stage {k + 1}")
-                break
-    return bad
+    return bad + holes(stages)
 
 
 def write_blueprints() -> None:
     os.makedirs(BLUEPRINT_DIR, exist_ok=True)
     for prop, (lot, make) in PROPS.items():
-        parts = make()
+        stages = make()
         pieces = [{"kit": KIT, "model": f"forecourt-{lot}", "pos": [0, 0, 0], "rotY": 0, "stage": 0}]
-        for k, part in enumerate(parts):
-            pieces.append({"kit": KIT, "model": part.name, "pos": [0, 0, 0], "rotY": 0, "stage": k})
+        for k, (storeys, roof) in enumerate(stages):
+            pieces.append({"kit": KIT, "model": storeys.name, "pos": [0, 0, 0], "rotY": 0, "stage": k})
+            pieces.append({"kit": KIT, "model": roof.name, "pos": [0, 0, 0], "rotY": 0, "stage": k})
+            if k < len(stages) - 1:
+                pieces[-1]["untilStage"] = k  # the next stage builds over this roof
         w, d = LOTS[lot]
         lines = [
             "{",
@@ -1404,29 +1470,31 @@ def main(argv: list[str]) -> int:
     pieces: dict = dict(FORECOURTS)
     for prop, (lot, make) in PROPS.items():
         RODS.clear()
-        parts = make()
-        problems = check(prop, parts, list(RODS))
-        running = forecourt("fc", lot).tris
-        summary = []
+        stages = make()
+        problems = check(prop, stages, list(RODS))
+        fc_tris = forecourt("fc", lot).tris
+        tops = stage_tops(stages)
         w, d = LOTS[lot]
-        lo_all, hi_all = [-w / 2, 0.0, -d / 2], [w / 2, FC_TOP, d / 2]
-        stages = []
-        for part in parts:
-            running += part.tris
-            lo, hi = part.bounds()
-            lo_all = [min(a, b) for a, b in zip(lo_all, lo)]
-            hi_all = [max(a, b) for a, b in zip(hi_all, hi)]
-            summary.append(f"{part.bounds()[1][1]:.2f}/{running}")
-            stages.append({"height": round(hi_all[1] - min(0.0, lo_all[1]), 3), "tris": running,
-                           "x": [round(lo_all[0], 3), round(hi_all[0], 3)],
-                           "z": [round(lo_all[2], 3), round(hi_all[2], 3)]})
-        summary_out[prop] = {"lot": lot, "stages": stages,
-                             "colours": sorted({"%d,%d,%d" % c for part in parts for _, c in part.faces})}
-        log(f"{prop}: stage top/tris " + "  ".join(summary))
+        rows = []
+        for k in range(len(stages)):
+            parts = present(stages, k)
+            bounds = [part.bounds() for part in parts]
+            rows.append({"height": round(tops[k], 3), "tris": fc_tris + sum(part.tris for part in parts),
+                         "x": [round(min(-w / 2, *(lo[0] for lo, _ in bounds)), 3),
+                               round(max(w / 2, *(hi[0] for _, hi in bounds)), 3)],
+                         "z": [round(min(-d / 2, *(lo[2] for lo, _ in bounds)), 3),
+                               round(max(d / 2, *(hi[2] for _, hi in bounds)), 3)]})
+        every = [part for pair in stages for part in pair]
+        summary_out[prop] = {"lot": lot, "stages": rows,
+                             "colours": sorted({"%d,%d,%d" % c for part in every for _, c in part.faces})}
+        log(f"{prop}: stage top/tris " + "  ".join(f"{row['height']:.2f}/{row['tris']}" for row in rows))
         for msg in problems:
             log(f"  PROBLEM {prop}: {msg}")
         failures += len(problems)
-        for part in parts:
+        for part in every:
+            if part.name in pieces:  # a twin's storeys are its original's: one piece, one geometry
+                twin_of = pieces[part.name]()
+                assert (twin_of.verts, twin_of.faces) == (part.verts, part.faces), f"{part.name} differs in {prop}"
             pieces[part.name] = (lambda part=part: part)
 
     total = 0
