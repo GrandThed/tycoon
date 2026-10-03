@@ -2,9 +2,9 @@
   "version": 1,
   "seed": "Metropolis:fabric:avenues",
   "parcels": {
-    "frontSetback": 7.8,
+    "frontSetback": 5.5,
     "gap": 0.6,
-    "terraceGap": 0.1,
+    "terraceGap": 0.05,
     "terraceStreets": [1, 2, 3, 4],
     "terraceFill": ["narrow", "small"],
     "mediumShare": 0.5,
@@ -21,15 +21,32 @@
     "plaza": 1.0,
     "sign": 1.0,
     "marker": 0.5,
-    "street": 7.8,
+    "street": 5.5,
     "spur": 2.55,
-    "tileSolid": 0.5
+    "tileSolid": 0.5,
+    "lanes": {
+      "setback": 1.6,
+      "clear": 1.6,
+      "street": 5.5,
+      "gap": 0.05,
+      "step": 0.05,
+      "overhang": 0.0,
+      "mediumShare": 0.0,
+      "minLots": 2,
+      "sizes": ["narrow", "small"],
+      "lines": [
+        { "points": [[-28, -26.4], [-44, -26.4], [-44, 13.95]] },
+        { "points": [[-28, 17.45], [-44, 17.45], [-44, 50.4]] },
+        { "points": [[28, -33.4], [44, -33.4], [44, 13.95]] },
+        { "points": [[28, 17.45], [44, 17.45], [44, 50.4]] }
+      ]
+    }
   },
-  "require": { "parcels": 60, "houses": 55 },
+  "require": { "parcels": 80, "houses": 80 },
   "footprints": { "OldTownBillboard": [2, 1], "OldTownRubble": [2, 2], "OldTownSkip": [2, 1.2] },
   "wild": {
     "pattern": "fields",
-    "grid": { "pitch": 14, "origin": [3.5, 7], "angle": 0, "edge": 0.5, "shift": 7 },
+    "grid": { "pitch": 14, "origin": [7, 7], "angle": 0, "edge": 0.5, "shift": 7 },
     "clumps": { "size": 13, "quarterOffset": 3.25 },
     "crops": {
       "noise": { "waves": 3, "base": 0.05 },
