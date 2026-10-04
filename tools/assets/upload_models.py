@@ -40,6 +40,11 @@ VIP_DIR = os.path.join(cfg.REPO_ROOT, "assets", "build", "vip")
 POLL_ATTEMPTS = 90
 POLL_INTERVAL_SECONDS = 2.0
 UPLOAD_SPACING_SECONDS = 1.5
+# Open Cloud answers HTTP 400 INVALID_ARGUMENT "Asset name length is invalid" for a displayName
+# longer than this (upload_paths.py met it first). Metropolis's fabric towers are over it with the
+# full prefix, so a name that would not fit drops to the short prefix instead of losing the model
+# id and stage, which are the parts a human reads in the asset library.
+MAX_DISPLAY_NAME = 50
 
 
 def log(msg: str) -> None:
@@ -48,6 +53,15 @@ def log(msg: str) -> None:
 
 def warn(msg: str) -> None:
     print(f"[upload] WARNING: {msg}", flush=True)
+
+
+def model_display_name(tail: str) -> str:
+    name = f"EraCityTycoon_{tail}"
+    if len(name) > MAX_DISPLAY_NAME:
+        name = f"ECT_{tail}"
+    if len(name) > MAX_DISPLAY_NAME:
+        warn(f"asset name {name} is over {MAX_DISPLAY_NAME} characters even with the short prefix; truncated")
+    return name[:MAX_DISPLAY_NAME]
 
 
 def poll_operation(operation_path: str, api_key: str) -> int:
@@ -159,7 +173,7 @@ def main(argv: list[str]) -> int:
                 Job(
                     label,
                     glb,
-                    f"EraCityTycoon_{args.era}_{model}_S{index}",
+                    model_display_name(f"{args.era}_{model}_S{index}"),
                     f"Era City Tycoon growing building '{model}' ({args.era}) stage {index}. Kenney kit pieces, CC0.",
                     commit,
                 )
@@ -248,7 +262,7 @@ def upload_props(args) -> int:
                 Job(
                     label,
                     glb,
-                    f"EraCityTycoon_Prop_{args.era}_{prop}_S{index}",
+                    model_display_name(f"Prop_{args.era}_{prop}_S{index}"),
                     f"Era City Tycoon city prop '{prop}' ({args.era}) stage {index}. Kenney kit pieces, CC0.",
                     commit,
                 )

@@ -62,7 +62,7 @@
 			"$ignoreUnknownInstances": true,
 			"$attributes": {
 				"DebugStartEra": 3,
-				"GrantCash": 1000000000000000000
+				"GrantCash": 100000000000000000000
 			}
 		},
 		"StarterPlayer": {

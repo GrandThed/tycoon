@@ -6717,8 +6717,8 @@ are layout data.
 
 ### After the review round (lead, 2026-10-04; `m12-metropolis` at 1feb551)
 
-- **Still 88 lots**; no fix cost one. Houses / sites at tiers 1–4 and full: 7/14, 26/8, 60/20,
-  72/11, 88/0. `pull`: radius 119, tierTerm 0.3, thresholds [0.6, 2.58, 2.88, 4.25], reach 30.
+- **Still 88 lots**; no fix cost one (four lanes, 218 studs). Houses / sites at tiers 1–4 and
+  full: 7/14, 26/8, 60/20, 72/11, 88/0. `pull`: radius 119, tierTerm 0.3, thresholds [0.6, 2.58, 2.88, 4.25], reach 30.
 - **Footpaths:** `cityGrid` and `shoppingMall` have two-point spurs; `officeLowRise`, `hotelTower`
   and `broadcastTower` end in a leg longer than `spurClip` that meets its street square-on. The
   Skyscraper moved back 3.6 studs to (0, 43.6), pad (0, 39.1), to make room.
@@ -6735,6 +6735,11 @@ are layout data.
   original's storeys pieces. Stage-4 meshes are 31% lighter on average (the 18 props' stage-4 total
   went from 25,766 to 17,802 triangles); 86 of 90 stage renders are pixel-identical and the other
   four differ in at most 5 pixels.
+- **Before the asset run (found by the docs pass):** `upload_models.py` had no guard for Open
+  Cloud's 50-character asset name, and 55 of the 107 Metropolis stage names were over it. A name
+  that does not fit now drops from `EraCityTycoon_…` to `ECT_…` and keeps its model id and stage;
+  every existing name is unchanged. `metropolis.project.json` bakes `GrantCash` 1e20, enough to max
+  every building (1e18 left four towers at their first look).
 
 ### Done when (wave 3.2, before the asset run)
 
