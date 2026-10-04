@@ -6715,6 +6715,27 @@ are layout data.
   against the gate's 180; the fabric is about 110k triangles on a full near plot before
   `untilStage`, about 2.5 times Boomtown's whole plot.
 
+### After the review round (lead, 2026-10-04; `m12-metropolis` at 1feb551)
+
+- **Still 88 lots**; no fix cost one. Houses / sites at tiers 1–4 and full: 7/14, 26/8, 60/20,
+  72/11, 88/0. `pull`: radius 119, tierTerm 0.3, thresholds [0.6, 2.58, 2.88, 4.25], reach 30.
+- **Footpaths:** `cityGrid` and `shoppingMall` have two-point spurs; `officeLowRise`, `hotelTower`
+  and `broadcastTower` end in a leg longer than `spurClip` that meets its street square-on. The
+  Skyscraper moved back 3.6 studs to (0, 43.6), pad (0, 39.1), to make room.
+- **No shrink:** the Coffee Shop and the Supermarket swapped places across their block, and the
+  Supermarket carries no district (with `cityPark` and `conventionCenter`). Removing its district
+  alone would have let the Mall take the east front over at purchase 11.
+- **The spur-cut rule** judges a footpath era by the slabs the client lays (a 3-wide footpath, not
+  a road-wide spur). **The footpath gate** tests each slab against road width plus pavement either
+  side of every planned stretch, not the whole cell: Orbital's 3-wide walkways sit in 7-stud cells.
+- **Lane pairs stay 0.5 apart** (lanes 1 and 2, 3 and 4). `check` keeps two lanes 3.5 apart unless
+  their last points coincide, and a front lane's end faces the back lane's corner, not its end.
+  Closing the last half stud needs a rule in tools and client; it does not show in a close render.
+- **Towers:** each stage's roof is its own piece with `untilStage`, and a Green twin shares its
+  original's storeys pieces. Stage-4 meshes are 31% lighter on average (the 18 props' stage-4 total
+  went from 25,766 to 17,802 triangles); 86 of 90 stage renders are pixel-identical and the other
+  four differ in at most 5 pixels.
+
 ### Done when (wave 3.2, before the asset run)
 
 - `fabric.py check`, `streetplan.py`, `cityfabric.py selftest` and `timeline` green for Village,
