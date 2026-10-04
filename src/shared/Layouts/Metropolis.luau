@@ -22,8 +22,10 @@
 --  * Outside the side avenues 19 studs are left before the ring deck (52.5): an 8-deep street row,
 --    a lane at x = +-44 and a row of 6 x 6 lots between the lane and the deck. Each side has a
 --    front lane and a back lane (tools/fabric/Metropolis.plan.json, `parcels.lanes`); the back
---    lanes also fill the plot's back corners. The back mouths are at z = 17.45, the front ones at
---    z = -33.4 (east, behind the stadium) and z = -26.4 (west, behind the low-rise office).
+--    lanes also fill the plot's back corners. The front mouths are at z = -33.4 (east, behind the
+--    stadium) and z = -26.4 (west, behind the low-rise office). Each back mouth is 3.5 past the
+--    end of its front lane (z = 17.45 west, 16.35 east), the least the lane rule allows: half a
+--    stud of ground is left between the two alleys.
 --  * The plan is a tree (roads grow as shortest paths from the entrance, so a loop would lose one
 --    stretch for ever): the avenues meet only the cross-town street.
 --  * Landmarks stand on the street line like lots: a row landmark's harvested front is on the
@@ -38,13 +40,18 @@
 --    lot behind it (corner shop, parking garage). Landmarks on the outer rows are the shallow
 --    ones, because the lane runs behind them.
 --  * A lot is as tall as the nearest landmark with a district allows, and a lane's lots follow
---    the street lot beside its mouth. So the two low landmarks carry no district (city park,
---    convention centre): each would cap its neighbours at one or two storeys, and the convention
---    centre, bought last, would cut down buildings already standing. They stand where nothing is
---    built in front of them instead: the park at the head of the east avenue's inner row beside
---    the mall, the convention centre behind the food truck. Along each avenue the landmarks with
---    a district stand level or rise toward the back, so no lot is taller than a landmark it stands
---    in front of.
+--    the street lot beside its mouth. A landmark bought after its neighbours are built takes
+--    them over, so one that is low when bought would cut standing towers down and re-skin them.
+--    Three such landmarks carry no district (city park, supermarket, convention centre) and
+--    stand where nothing is built in front of them: the park beside the mall, the supermarket
+--    behind the mall, the convention centre behind the food truck. Along each avenue the
+--    landmarks with a district stand in the order they are bought, level or rising toward the
+--    back: a new one only ever governs lots its own street has just opened, and no lot is taller
+--    than a landmark it stands in front of.
+--  * A footpath is 3 wide and the client stops it 7 short of its join (road 3.5 + pavement 2 +
+--    half the path), or drops its last leg whole if that leg is no longer than 7. So every path
+--    ends in a leg over 7 long that meets its street square-on, and stops on the pavement's outer
+--    edge. A landmark set to one side of its pad gets an explicit two-point path for that reason.
 --  * Four slots are street-only (subway, ramp, Bus Line, Green Rooftops): no building, a pad and
 --    a one-point path. Their pads stand in a row on the strip between the cross-town street and
 --    the deck, ground too shallow for a lot.
@@ -54,6 +61,9 @@
 --    and one beside the kiosk at the T.
 --  * The hospital is in the `office` district, not `civic`: it governs the ten lots of the west
 --    back lane, and civic has no narrow prop and a 2.3-stud plaza for small lots.
+--  * The Skyscraper stands 3.8 behind the T's pavement: the two towers beside it reach the T's
+--    end nodes by a path along that pavement's edge and a last leg at x = +-7, which is the line
+--    of the Skyscraper's own 14-wide footprint, so the footprint has to start behind the paths.
 --  * Growth by tier: the centre avenue's foot and the east avenue as far as apartment block A
 --    (tier 1); the cross-town's west half and the west avenue as far as apartment block B (2);
 --    both side avenues to the back, drawn by the hospital and Office Tower A (3); the centre
@@ -80,12 +90,14 @@ return {
 			spur = { Vector3.new(-9.92, 0, -23.95), Vector3.new(0, 0, -23.95) },
 			district = "retail",
 		},
-		-- the centre avenue's east side, behind the mall; the supermarket stands at its back
+		-- the east avenue's inner row, behind the city park, back to back with the supermarket.
+		-- Bought second, it is the east avenue's first landmark with a district, so the east front
+		-- and its lane are shops from the first lot on and nothing bought later takes them over
 		coffeeShop = {
-			position = Vector3.new(9.92, 0, -21.83),
-			rotationY = 90,
-			padPosition = Vector3.new(6.5, 0, -20.53),
-			spur = { Vector3.new(9.92, 0, -21.83), Vector3.new(0, 0, -21.83) },
+			position = Vector3.new(18.08, 0, -22.1),
+			rotationY = 270,
+			padPosition = Vector3.new(21.5, 0, -22.87),
+			spur = { Vector3.new(18.08, 0, -22.1), Vector3.new(28, 0, -22.1) },
 			district = "retail",
 		},
 		-- bought third: its path draws the centre avenue's foot. Too deep for a narrow lot behind
@@ -100,48 +112,50 @@ return {
 		},
 		-- the only tier-1 landmark off the centre avenue, half way down the east avenue's outer row:
 		-- it draws the cross-town's east half and 47 studs of avenue, so tier 1 has building sites
-		-- on both rows and on the east front lane. It stays more than 13.9 from the back lane's
-		-- first lot, which Office Tower A then governs
+		-- on both rows and on the east front lane. Its join is further from the street lot at the
+		-- back lane's mouth than the avenue's end is, so Office Tower A governs that lane
 		apartmentBlockA = {
-			position = Vector3.new(37.32, 0, 5.5),
+			position = Vector3.new(37.32, 0, 4.6),
 			rotationY = 90,
-			padPosition = Vector3.new(34.5, 0, 6.72),
-			spur = { Vector3.new(37.32, 0, 5.5), Vector3.new(28, 0, 5.5) },
+			padPosition = Vector3.new(34.5, 0, 5.82),
+			spur = { Vector3.new(37.32, 0, 4.6), Vector3.new(28, 0, 4.6) },
 			district = "residential",
 		},
 		-- on the corner south of the cross-town's west end, facing it: the foot of the highway ramp.
 		-- Only this path uses the cross-town's last cell, so without it the ramp would land on a
 		-- park strip for ever; bought in tier 2, it draws that cell two tiers before the ramp comes.
 		-- The pad stands half a stud off the ramp's cells and a stud west, so the marker keeps 4.5
-		-- off the west avenue's centreline
+		-- off the west avenue's centreline. The path steps east under the building to x = -35 and
+		-- meets the cross-town's end node square-on
 		officeLowRise = {
 			position = Vector3.new(-37.75, 0, -32.25),
 			rotationY = 0,
 			padPosition = Vector3.new(-38.85, 0, -35),
 			spur = {
 				Vector3.new(-37.75, 0, -32.25),
-				Vector3.new(-36, 0, -38),
+				Vector3.new(-35, 0, -32.25),
 				Vector3.new(-35, 0, -42),
 			},
 			district = "office",
 		},
 		-- Found City Hall faces the entrance across the cross-town street, at the crossroads, its
 		-- front on the pavement's edge. The pad sits a stud west so the marker keeps 4.5 off the
-		-- centre avenue
+		-- centre avenue; the path is written out, or it would aim at the pad and jog along the road
 		cityGrid = {
 			position = Vector3.new(-10, 0, -31.98),
 			rotationY = 0,
 			padPosition = Vector3.new(-11, 0, -35.5),
+			spur = { Vector3.new(-10, 0, -31.98), Vector3.new(-10, 0, -42) },
 			district = "civic",
 		},
-		-- back to back with the coffee shop, behind the city park: the park is all that stands in
-		-- front of it, and it governs the east front lane (shops)
+		-- the centre avenue's east side, behind the mall, which is all that stands in front of it.
+		-- No district: bought seventh and 3.6 tall until its fourth stage, it would take standing
+		-- towers from the landmarks bought before it and cut them to one storey
 		supermarket = {
-			position = Vector3.new(18.41, 0, -21.6),
-			rotationY = 270,
-			padPosition = Vector3.new(21.5, 0, -22.9),
-			spur = { Vector3.new(18.41, 0, -21.6), Vector3.new(28, 0, -21.6) },
-			district = "retail",
+			position = Vector3.new(9.59, 0, -21.83),
+			rotationY = 90,
+			padPosition = Vector3.new(6.5, 0, -20.43),
+			spur = { Vector3.new(9.59, 0, -21.83), Vector3.new(0, 0, -21.83) },
 		},
 		-- streetOnly (Open the Bus Line): a pad on the front strip, east of the subway's and clear
 		-- of that pad's marker. The shelters are in the plan
@@ -170,11 +184,13 @@ return {
 			district = "office",
 		},
 		-- City Hall's partner across the centre avenue's mouth, its flank on the avenue's pavement
-		-- edge. The pad sits west so the marker clears the park
+		-- edge. The pad sits west so the marker clears the park; the path is written out, as City
+		-- Hall's is
 		shoppingMall = {
 			position = Vector3.new(9.73, 0, -32.07),
 			rotationY = 0,
 			padPosition = Vector3.new(7.1, 0, -35.5),
+			spur = { Vector3.new(9.73, 0, -32.07), Vector3.new(9.73, 0, -42) },
 			district = "retail",
 		},
 		-- streetOnly (Dig the Subway Line): no model and no path, a pad on the front strip between
@@ -186,8 +202,7 @@ return {
 			spur = { Vector3.new(18, 0, -48.5) },
 		},
 		-- opposite the T, where the block has no second row for its depth to take. The last tier-3
-		-- join on the west avenue: only the avenue's final block waits for the Bank Tower. Not
-		-- further back than 24.5, or the Hotel's path would pass too close
+		-- join on the west avenue: only the avenue's final block waits for the Bank Tower
 		hospital = {
 			position = Vector3.new(-18, 0, 24.02),
 			rotationY = 90,
@@ -214,18 +229,20 @@ return {
 			padPosition = Vector3.new(27, 0, 41.5),
 			district = "office",
 		},
-		-- the Hotel and the Broadcast Tower flank the Skyscraper on ground no street fronts. Their
-		-- paths come down to the T's ends; the Hotel's, in tier 4, draws the centre avenue to its
-		-- head. The Hotel's pad sits off centre so its marker clears the Skyscraper
+		-- the Hotel and the Broadcast Tower flank the Skyscraper on ground no street fronts. Each
+		-- path comes straight out, turns along the edge of the T's pavement and meets the T's end
+		-- node square-on from the north, its last leg 0.02 over the 7 the client cuts off, so the
+		-- band along the pavement lies flush. The Hotel's, in tier 4, draws the centre avenue to
+		-- its head. The Hotel's pad sits off centre so its marker clears the Skyscraper
 		hotelTower = {
 			position = Vector3.new(-11.25, 0, 42.5),
 			rotationY = 0,
 			padPosition = Vector3.new(-13.8, 0, 40.5),
 			spur = {
 				Vector3.new(-11.25, 0, 42.5),
-				Vector3.new(-11.25, 0, 35),
-				Vector3.new(-10, 0, 30.5),
-				Vector3.new(-9, 0, 28),
+				Vector3.new(-11.25, 0, 35.02),
+				Vector3.new(-7, 0, 35.02),
+				Vector3.new(-7, 0, 28),
 			},
 			district = "office",
 		},
@@ -238,7 +255,8 @@ return {
 			spur = { Vector3.new(-17.5, 0, -48.5) },
 		},
 		-- 12 x 12: closes the cross-town's east end from the corner ground past the bend, where no
-		-- lot can front a street
+		-- lot can front a street. The coffee shop's join is nearer to every east lot than its own,
+		-- so it governs none
 		stadium = {
 			position = Vector3.new(45.5, 0, -42),
 			rotationY = 90,
@@ -274,9 +292,9 @@ return {
 			padPosition = Vector3.new(10.5, 0, 39),
 			spur = {
 				Vector3.new(11.5, 0, 42.5),
-				Vector3.new(11.5, 0, 35),
-				Vector3.new(10, 0, 30.5),
-				Vector3.new(9, 0, 28),
+				Vector3.new(11.5, 0, 35.02),
+				Vector3.new(7, 0, 35.02),
+				Vector3.new(7, 0, 28),
 			},
 			district = "office",
 		},
@@ -290,11 +308,13 @@ return {
 			district = "office",
 		},
 		-- Monument, 14 x 14: closes the centre avenue, the main vista from the entrance, behind the
-		-- T. Its pad stands on the T's far pavement
+		-- T. Its declared front is 1.58 behind the flanking towers' paths, which run along its
+		-- footprint's side lines. The pad stands on its own ground, far enough back for its marker
+		-- to keep 2.5 off the Broadcast Tower's path
 		skyscraper = {
-			position = Vector3.new(0, 0, 40),
+			position = Vector3.new(0, 0, 43.6),
 			rotationY = 0,
-			padPosition = Vector3.new(0, 0, 36.5),
+			padPosition = Vector3.new(0, 0, 39.1),
 			district = "office",
 		},
 	},

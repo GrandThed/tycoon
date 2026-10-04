@@ -948,12 +948,12 @@
         },
         "pull": {
           "radius": 119,
-          "tierTerm": 0.4,
+          "tierTerm": 0.3,
           "thresholds": [
             0.6,
-            3.09,
-            3.39,
-            4.75
+            2.58,
+            2.88,
+            4.25
           ],
           "reach": 30,
           "levelsOverTier": 1,
