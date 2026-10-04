@@ -31,6 +31,12 @@ defaults 9x9 / monument 14x14 when a blueprint has none), pad and plot sizes fro
 the purchase order and tier times from tools/sim_economy.py's greedy player. The only tool-local
 numbers are the contract's own rule values and the preview's drawing constants, named below.
 
+M12 wave 3.2 adds the footpath rule for a tiles era with a `tiles.spur` look: no footpath slab --
+each slot's path and each fabric lane, laid as RoadGraph.spurDrawPoints and drawFootpath lay them
+(spur_draw_points, footpath_slabs) -- lies on a planned street's roadway or pavement
+(footpath_violations). Network.tile_plan is the one mirror of TileRenderer.Plan as RoadGraph calls
+it; tools/cityfabric.py and tools/testfit/plotrender.py read their planned streets from it.
+
 Usage:
   py tools/streetplan.py                # every era with a street plan (DEFAULT_ERAS)
   py tools/streetplan.py Metropolis     # any era(s) by name
@@ -101,6 +107,10 @@ MIN_LENGTH = 0.05
 # RoadGraph constants, mirrored so the tool's network is the client's network.
 NODE_KEY_SCALE = 10  # nodes merge on a 1/NODE_KEY_SCALE stud grid
 STRAIGHT_DOT = 0.999  # consecutive directions at least this aligned are straight, not a bend
+SQUARE_DOT = 0.001  # and two whose dot product stays within this of 0 meet at a right angle (drawFootpath)
+SAMPLES_PER_CELL = 4  # TileRenderer.rasterise: samples to a lattice cell along a stretch
+# A footpath slab may end flush on the outer edge of a pavement; this much onto it is on it.
+FOOTPATH_TOUCH = 1e-6
 FLOAT32_SLACK = 1e-4  # piece counts within this of a .5 rounding boundary count high (see piece_count)
 # city-kit-roads tile exits at rotY 0 (x, z): the T junction opens to -X, +X, +Z; the bend to -X, +Z.
 JUNCTION_EXITS = ((-1.0, 0.0), (1.0, 0.0), (0.0, 1.0))
@@ -1174,6 +1184,59 @@ class Network:
         a, b = self.distance.get(stretch["from"]), self.distance.get(stretch["to"])
         return None if a is None or b is None else min(a, b)
 
+    def path_stretch_order(self):
+        """RoadGraph.pathStretchOrder: the spine a plot can ever draw -- the union of the shortest
+        paths from the entrance to every routable spur's join node, less any stretch whose group
+        missed the straight budget -- ranked nearest the entrance first, ties by stretch id. It is
+        the order the baked plan and the tile plan spend their budgets in."""
+        groups_allowed, _ = self.straight_allocate()
+        order, seen = [], set()
+        for slot_id in self.spur_ids:
+            node = self.junction_nodes.get(slot_id)
+            if node is None or node not in self.distance:
+                continue
+            current = node
+            while current != self.entrance:
+                stretch_id = self.parent.get(current)
+                if stretch_id is None or stretch_id in seen:
+                    break  # the rest of the way back to the entrance is in the union already
+                seen.add(stretch_id)
+                stretch = self.stretches[stretch_id]
+                distance = self.near_distance(stretch_id)
+                if distance is not None and stretch["group"] in groups_allowed:
+                    order.append((distance, stretch_id))
+                current = stretch["to"] if stretch["from"] == current else stretch["from"]
+        order.sort()
+        return [stretch_id for _, stretch_id in order]
+
+    def tile_plan(self):
+        """TileRenderer.Plan as RoadGraph calls it: rasterise path_stretch_order() onto the lattice
+        and stop at the first stretch whose fresh cells do not fit `budget.tileCells` (a stale
+        config without the key falls back to `budget.roadPieces`, as the client does). Returns
+        (the stretch ids that made it in, in plan order -- RoadGraph's `tileStretchAllowed` --
+        and every planned cell (i, j) -> its stretch ids, in the client's cell order). Both are
+        empty in an era without `road.tiles`."""
+        era = self.era
+        if era.tiles is None:
+            return [], {}
+        budget = era.city.get("budget", {})
+        cells_budget = budget_value(budget.get("tileCells"), budget_value(budget.get("roadPieces"), 0))
+        remaining = math.inf if cells_budget == math.inf else max(math.floor(cells_budget), 0)
+        planned, cells = [], {}
+        for stretch_id in self.path_stretch_order():
+            stretch = self.stretches[stretch_id]
+            path = rasterise(era.tile_studs, stretch["a"], stretch["b"])
+            fresh = sum(1 for cell in path if cell not in cells)
+            if fresh > remaining:
+                break
+            remaining -= fresh
+            for cell in path:
+                ids = cells.setdefault(cell, [])
+                if not ids or ids[-1] != stretch_id:
+                    ids.append(stretch_id)
+            planned.append(stretch_id)
+        return planned, cells
+
     # -- kit tiles ----------------------------------------------------------
 
     def arms_at(self, node, slot_ids):
@@ -1813,6 +1876,211 @@ def block_violations(era, cells):
 # --------------------------------------------------------------------------
 # Wave 2c -- living city: lots by kind, parked bays, greenery zones
 # --------------------------------------------------------------------------
+
+
+def cell_at(step, point):
+    """TileRenderer.cellAt, with Luau's math.round."""
+    return (round_half(point[0] / step), round_half(point[1] / step))
+
+
+def rasterise(step, a, b):
+    """TileRenderer.rasterise: the lattice cells one stretch crosses, in order."""
+    path = [cell_at(step, a)]
+    length = math.dist(a, b)
+    steps = max(1, math.ceil(length / (step / SAMPLES_PER_CELL)))
+    for index in range(1, steps + 1):
+        cell = cell_at(step, lerp(a, b, index / steps))
+        if cell != path[-1]:
+            path.append(cell)
+    return path
+
+
+def overlap_depth(p, q):
+    """How far two convex polygons reach into each other along the axis that separates them best
+    (the separating-axis test): above 0 for a shared area, 0 when they only touch, below 0 for
+    daylight. `gap` is 0 both for touching and for overlapping, so it cannot tell a lot flush
+    against a pavement from one standing on it; this can."""
+    depth = math.inf
+    for poly in (p, q):
+        for i in range(len(poly)):
+            a, b = poly[i], poly[(i + 1) % len(poly)]
+            nx, nz = b[1] - a[1], a[0] - b[0]
+            length = math.sqrt(nx * nx + nz * nz)
+            if length < 1e-12:
+                continue
+            nx, nz = nx / length, nz / length
+            ps = [v[0] * nx + v[1] * nz for v in p]
+            qs = [v[0] * nx + v[1] * nz for v in q]
+            depth = min(depth, min(max(ps), max(qs)) - max(min(ps), min(qs)))
+    return depth
+
+
+def spur_clip(era):
+    """RoadGraph's state.spurClip: in a tiles era with a footpath look (`road.tiles.spur`) a
+    footpath stops this far short of the centreline it joins -- the road's half, the pavement and
+    half the footpath, so the slab, which runs half its width past its end, reaches the pavement's
+    outer edge and no further. None in every other era: a spur there is the road itself."""
+    spur = (era.tiles or {}).get("spur")
+    if spur is None:
+        return None
+    return era.width / 2 + max(era.pavement, 0.0) + max(float(spur["width"]), MIN_LENGTH) / 2
+
+
+def spur_draw_points(points, clip):
+    """RoadGraph.spurDrawPoints: the polyline a spur's footpath is laid along -- its last leg cut
+    `clip` studs short of the join, or dropped whole when it is no longer than that, so the path
+    then ends at the corner before it. Untouched without a clip or with fewer than two points."""
+    points = [tuple(point) for point in points]
+    if clip is None or len(points) < 2:
+        return points
+    last, before = points[-1], points[-2]
+    length = math.dist(last, before)
+    if length < MIN_LENGTH or length <= clip:
+        return points[:-1]
+    t = (length - clip) / length
+    return points[:-1] + [lerp(before, last, t)]
+
+
+def lane_draw_points(points, clip):
+    """RoadGraph.SetLanes in a tiles era: a lane's join is its first point, the mouth, so it is
+    turned round to be clipped and back again, and its legs are laid mouth first."""
+    return list(reversed(spur_draw_points(list(reversed([tuple(point) for point in points])), clip)))
+
+
+def footpath_slabs(drawn, width, footpath=True):
+    """RoadGraph.drawFootpath: the flat Parts laid along `drawn` (spur_draw_points has already
+    stopped it at the pavement), as (a, b, extension): a slab `width` wide whose length is
+    |a - b| + extension, centred on the middle of a-b. One to a leg, in order; a leg under
+    MIN_LENGTH lays nothing and does not count as the leg before.
+
+    A leg runs half a width past both its ends (extension = width), which is what closes a corner.
+    On a footpath (a tiles era's `tiles.spur` look) a leg that turns a right angle off the one laid
+    before it -- |dot| of the two headings under SQUARE_DOT -- starts half a width after the
+    corner instead: the leg laid first covers the corner square and this one abuts it, so no two
+    coplanar Parts overlap. Its far end is where it was. At any other angle, and on every spur that
+    is the road itself (`footpath` False), both legs keep the overlap."""
+    slabs = []
+    before = None
+    for a, b in polyline_segments(drawn):
+        heading = unit((b[0] - a[0], b[1] - a[1]))
+        if heading is None:
+            continue
+        if footpath and before is not None and abs(before[0] * heading[0] + before[1] * heading[1]) < SQUARE_DOT:
+            shift = (heading[0] * width / 2, heading[1] * width / 2)
+            slabs.append(((a[0] + shift[0], a[1] + shift[1]), (b[0] + shift[0], b[1] + shift[1]), 0.0))
+        else:
+            slabs.append((tuple(a), tuple(b), float(width)))
+        before = heading
+    return slabs
+
+
+def slab_poly(a, b, width, extension):
+    """The ground one footpath slab covers: `width` across a-b, half the extension past each end."""
+    length = math.dist(a, b)
+    ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+    nx, nz = -uz * width / 2, ux * width / 2
+    a2 = (a[0] - ux * extension / 2, a[1] - uz * extension / 2)
+    b2 = (b[0] + ux * extension / 2, b[1] + uz * extension / 2)
+    return [(a2[0] + nx, a2[1] + nz), (b2[0] + nx, b2[1] + nz), (b2[0] - nx, b2[1] - nz), (a2[0] - nx, a2[1] - nz)]
+
+
+def footpaths(era, lanes=None):
+    """Every footpath a tiles era with a `tiles.spur` look lays, as (label, the full polyline, the
+    polyline drawn, its slabs): each slot's spur, anchor to join, and each fabric lane (the data's
+    `lanes`), mouth first. Empty in any other era."""
+    clip = spur_clip(era)
+    if clip is None:
+        return []
+    width = spur_path_width(era)
+    out = []
+    for slot in era.slots:
+        points = era.spurs[slot["id"]]["points"]
+        if len(points) >= 2:
+            drawn = spur_draw_points(points, clip)
+            out.append((f"{slot['id']} path", list(points), drawn, footpath_slabs(drawn, width)))
+    for index, lane in enumerate(lanes or [], start=1):
+        points = [tuple(point) for point in lane.get("points") or []]
+        if len(points) >= 2:
+            drawn = lane_draw_points(points, clip)
+            out.append((f"lane {index}", points, drawn, footpath_slabs(drawn, width)))
+    return out
+
+
+def footpath_violations(era, network, lanes=None):
+    """Wave 3.2 review: no footpath slab lies on a street. In a tiles era the tile prop and the
+    pavement are the street's surface, and a footpath is laid just under the kerb, so a slab that
+    reaches onto either runs under them. The client stops a footpath `spur_clip` short of its join
+    -- but when the last leg is no longer than the clip it drops that leg whole, and the leg before
+    it, which runs along the street, is laid as it stands (five Metropolis landmarks, 2026-10).
+
+    Checked for every slab the client lays (footpaths: spurs and lanes, bends as drawFootpath lays
+    them) against every stretch the plot can ever draw (Network.tile_plan), each as the band its
+    roadway and pavement cover: `road.width` / 2 + the pavement either side of the centreline,
+    square ends that far past each end -- for a road as wide as its cell, exactly the planned tile
+    cells and every pavement band and corner. Flush against the outer edge is where a footpath
+    belongs; FOOTPATH_TOUCH onto it is on it. (Orbital's walkway is 3 wide in a 7 cell and has no
+    pavement: its footpaths end at the walkway's edge, inside the cell, as they were approved.)
+
+    Returns (violations, notes). A path of which nothing is laid lies on no street: it is a note."""
+    messages, notes = [], []
+    paths = footpaths(era, lanes)
+    if not paths:
+        return messages, notes
+    clip = spur_clip(era)
+    width = spur_path_width(era)
+    road_half = era.width / 2
+    half = road_half + max(era.pavement, 0.0)
+    planned, _cells = network.tile_plan()
+    streets = []
+    for stretch_id in planned:
+        stretch = network.stretches[stretch_id]
+        a, b = stretch["a"], stretch["b"]
+        streets.append((stretch["polyline"] + 1, (a, b), band(a, b, road_half), band(a, b, half)))
+    for label, points, drawn, slabs in paths:
+        full = polyline_segments(points)
+        # A lane is clipped at its first leg (the mouth), a spur at its last (the join).
+        lane = label.startswith("lane")
+        end_leg = full[0] if lane else full[-1]
+        end_length = math.dist(*end_leg)
+        dropped = len(drawn) < len(points)
+        if not slabs:
+            notes.append(f"{label}: nothing of it is laid -- its only leg is {end_length:.2f} long, no longer than the clip {clip:g}")
+            continue
+        for number, (a, b, extension) in enumerate(slabs, start=1):
+            poly = slab_poly(a, b, width, extension)
+            # A street is several stretches: the slab is judged against each, and reported once for
+            # the street it lies deepest on, with its nearest approach to that street's centreline.
+            by_street = {}  # street -> [depth onto the band, distance from the centreline, on the roadway?]
+            for street, centre, roadway, hard in streets:
+                depth = overlap_depth(poly, hard)
+                if depth <= FOOTPATH_TOUCH:
+                    continue
+                entry = by_street.setdefault(street, [depth, math.inf, False])
+                entry[0] = max(entry[0], depth)
+                entry[1] = min(entry[1], segment_polygon_distance(centre[0], centre[1], poly))
+                entry[2] = entry[2] or overlap_depth(poly, roadway) > FOOTPATH_TOUCH
+            if not by_street:
+                continue
+            street = max(by_street, key=lambda key: (round(by_street[key][0], 6), -by_street[key][1], -key))
+            depth, distance, on_road = by_street[street]
+            why = (
+                f" -- the leg at its {'mouth' if lane else 'join'} is {end_length:.2f} long, no longer than the clip {clip:g}, "
+                f"so the client drops it whole and lays the leg {'after' if lane else 'before'} it as it stands"
+                if dropped
+                else ""
+            )
+            messages.append(
+                f"{label}: slab {number} of {len(slabs)} {fmt(a)}->{fmt(b)} lies on street {street}'s {'tiles' if on_road else 'pavement'}: "
+                f"{depth:.2f} past the pavement's outer edge, {distance:.2f} from the centreline "
+                f"(the pavement starts {half:g} from it, the roadway {road_half:g}){why}"
+            )
+    square = sum(1 for _, _, _, slabs in paths for _, _, extension in slabs[1:] if extension == 0)
+    bends = sum(max(len(slabs) - 1, 0) for _, _, _, slabs in paths)
+    notes.append(
+        f"footpaths: {len(paths)} laid as {sum(len(slabs) for _, _, _, slabs in paths)} slabs, clipped {clip:g} short of the centreline; "
+        f"{square} right-angle bend(s) abut, {bends - square} keep the half-width overlap"
+    )
+    return messages, notes
 
 
 def band(a, b, half):
@@ -2908,6 +3176,10 @@ def check(era, network, visible, unreachable):
             add(message)
         for message in cell_violations(era, cells):
             add(message)
+        footpath_messages, footpath_notes = footpath_violations(era, network, (load_fabric(era) or {}).get("lanes"))
+        for message in footpath_messages:
+            add(message)
+        notes += footpath_notes
         tile_budget = budget_value(budget.get("tileCells"), math.inf)
         detail["tileCells"] = len(cells)
         if len(cells) > tile_budget:
@@ -3211,9 +3483,17 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
 
     # A driveway (wave 2.2) is drawn at its own width; every other era's preview is as it was.
     spur_width = spur_path_width(era) if driveway_width(era) is not None else era.width
+    # Wave 3.2: a tiles era's footpath is drawn as the slabs the client lays -- its own width, cut
+    # short of the street, a dropped last leg left out -- so a path that runs onto a street shows.
+    clip = spur_clip(era)
     for slot in sorted(era.slots, key=lambda s: s["id"]):
         spur = era.spurs[slot["id"]]
         colour = (170, 90, 170, 210) if spur["override"] else (130, 105, 80, 210)
+        if clip is not None:
+            width = spur_path_width(era)
+            for a, b, extension in footpath_slabs(spur_draw_points(spur["points"], clip), width):
+                poly(slab_poly(a, b, width, extension), fill=colour)
+            continue
         arc = 0.0
         phase = sum(map(ord, slot["id"])) * 0.37
         for a, b in polyline_segments(spur["points"]):

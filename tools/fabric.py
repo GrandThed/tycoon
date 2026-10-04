@@ -237,23 +237,9 @@ def segment_gap(a, b, poly):
 
 
 def overlap_depth(p, q):
-    """How far two convex polygons reach into each other along the axis that separates them best
-    (the separating-axis test): above 0 for a shared area, 0 when they only touch, below 0 for
-    daylight. `gap` is 0 both for touching and for overlapping, so it cannot tell a lot flush
-    against a pavement from one standing on it; this can."""
-    depth = math.inf
-    for poly in (p, q):
-        for i in range(len(poly)):
-            a, b = poly[i], poly[(i + 1) % len(poly)]
-            nx, nz = b[1] - a[1], a[0] - b[0]
-            length = math.sqrt(nx * nx + nz * nz)
-            if length < 1e-12:
-                continue
-            nx, nz = nx / length, nz / length
-            ps = [v[0] * nx + v[1] * nz for v in p]
-            qs = [v[0] * nx + v[1] * nz for v in q]
-            depth = min(depth, min(max(ps), max(qs)) - max(min(ps), min(qs)))
-    return depth
+    """How far two convex polygons reach into each other (above 0 for a shared area, 0 when they
+    only touch, below 0 for daylight): streetplan's, which its footpath gate uses too."""
+    return streetplan.overlap_depth(p, q)
 
 
 def front_centre(x, z, rotation, depth):

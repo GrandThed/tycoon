@@ -6,7 +6,8 @@ against.
 
     py tools/cityfabric.py selftest            # the contract's test vector, asserted
     py tools/cityfabric.py timeline Village    # parcels by level, plumes and wild counts at tiers 1-5;
-                                               # exits 1 when a moment shows more plumes than budget.plumes
+                                               # exits 1 when a moment shows more plumes than budget.plumes,
+                                               # or when a purchase shrinks or re-skins a standing building
     py tools/cityfabric.py props Metropolis    # every prop the fabric can show, and the listed ones it never does
 
 What is mirrored, and from where (nothing is re-derived; a divergence is a bug in one of them):
@@ -46,7 +47,14 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     level_stage and valid_level_stages exactly;
   * the ring's own clearing (M12 wave 3.1 rulings): once `highway.requiresSlot` is owned, the deck
     band's four rects and the ramp's cells (ring_rects, Highway.luau's ring, pitch and rampCells)
-    join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2.
+    join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2;
+  * the tile-cell budget (M12 wave 3.2): in a tiles era RoadGraph.FabricNetwork leaves out a visible
+    stretch whose cells missed budget.tileCells (streetplan.Network.tile_plan), so network_view does.
+
+The timeline is also a gate (M12 wave 3.2): it replays every purchase of the sim's greedy player
+(replay_moments) and fails when a parcel that shows a building then shows it lower, shows another
+prop (its swap twin excepted) or shows no building at all (shrink_violations) -- what a landmark
+does when it takes over lots another one has already grown.
 
 `timeline --fabric <data.json>` reads data built with `fabric.py build --out` instead of the era's own,
 and `--config <CityDressing.json>` a scratch config instead of the repo's. Wave 3.1 also mirrors
@@ -1301,6 +1309,9 @@ class FabricPlot:
         self.ids = piece_ids(self.network)
         self.groups_allowed, spurs_allowed = self.network.straight_allocate()
         self.spurs_allowed = set(spurs_allowed)
+        # RoadGraph's tileStretchAllowed: in a tiles era, the stretches whose cells fit
+        # budget.tileCells. None in every other era, which lays whatever is visible.
+        self.tile_allowed = set(self.network.tile_plan()[0]) if self.era.tiles is not None else None
         self._build_solids()
         self._build_views()
 
@@ -1496,7 +1507,13 @@ class FabricPlot:
 
     def network_view(self, owned):
         """RoadGraph.AddSpur for each owned slot in sorted order, then RoadGraph.FabricNetwork:
-        (stretches by piece id, join nodes, mask segments, visible stretch ids, drawn spur slots)."""
+        (stretches by piece id, join nodes, mask segments, visible stretch ids, drawn spur slots).
+
+        Wave 3.2: a tiles era lays only the stretches whose cells fit budget.tileCells, and
+        FabricNetwork leaves a visible stretch outside that plan out of the stretches and of the
+        mask's segments -- no lot develops, and no old town is cleared, along a street that was
+        never laid. The visible ids returned are RoadGraph's `state.visible`, which the plan does
+        not touch."""
         network, era = self.network, self.era
         visible, drawn = set(), []
         for slot_id in sorted(owned):
@@ -1508,6 +1525,8 @@ class FabricPlot:
                 self._reveal(node, visible)
         stretches, segments = {}, []
         for stretch_id in sorted(visible):
+            if self.tile_allowed is not None and stretch_id not in self.tile_allowed:
+                continue
             stretch = network.stretches[stretch_id]
             stretches[self.ids[stretch_id]] = {
                 "from": stretch["from"] + 1,
@@ -1857,18 +1876,12 @@ class FabricPlot:
             if view["nearOk"] and view["parcel"]["row"] == 1 and view["parcel"]["stretch"] in stretches
         ]
 
-    def snapshot(self, owned, stages, tier, near=True, share=1.0, upgrade_share=1.0, living=True):
-        """One settled Fabric.Sync: what a player who joins now sees on this plot.
-
-        `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier;
-        `share`, `upgrade_share` and `living` are City detail's wildShare, upgradeShare and living."""
-        owned = set(owned)
-        stretches, joins, segments, visible, drawn = self.network_view(owned)
-        trace = []
-        states = self.develop_states(owned, tier, stretches, joins, trace)
+    def parcel_looks(self, owned, stages, states):
+        """What every parcel shows for its state, budget or not (a near and a far plot draw a
+        subset of these): Fabric.goalFor, then the prop swaps of the city-changers owned."""
         config = self.config or {}
-        parcels = []
         swaps = valid_swaps(config.get("swaps"))
+        looks = []
         for view, state in zip(self.parcel_views, states):
             look = goal_for(
                 config,
@@ -1878,8 +1891,20 @@ class FabricPlot:
                 self.heights.prop,
                 lambda slot_id: self.landmark_height(slot_id, stages),
             )
-            # Wave 3.1 proposal: an owned city-changer swaps a building for its twin.
-            look = swapped_look(look, state["district"], swaps, owned, self.heights.exists)
+            looks.append(swapped_look(look, state["district"], swaps, owned, self.heights.exists))
+        return looks
+
+    def snapshot(self, owned, stages, tier, near=True, share=1.0, upgrade_share=1.0, living=True):
+        """One settled Fabric.Sync: what a player who joins now sees on this plot.
+
+        `owned` is the owned slot ids, `stages` each owned slot's visible stage, `tier` GrowthTier;
+        `share`, `upgrade_share` and `living` are City detail's wildShare, upgradeShare and living."""
+        owned = set(owned)
+        stretches, joins, segments, visible, drawn = self.network_view(owned)
+        trace = []
+        states = self.develop_states(owned, tier, stretches, joins, trace)
+        parcels = []
+        for view, state, look in zip(self.parcel_views, states, self.parcel_looks(owned, stages, states)):
             shown = view["nearOk"] if near else view["farOk"]
             parcels.append({**view, "state": state, "look": look if shown else None})
         plazas = self.visible_plazas(tier)
@@ -2517,6 +2542,90 @@ def selftest():
         ("swaps: a site never swaps", swapped("TowerA", "residential", both, SITE) == ("TowerA", 3, None)),
         ("swaps: not a list, none", valid_swaps({"requiresSlot": "x", "suffix": "Y"}) == []),
     ]
+    # Wave 3.2: the footpath a tiles era lays (streetplan's mirror of RoadGraph.spurDrawPoints and
+    # drawFootpath), 3 wide with a clip of 7: a slab is (a, b, extension).
+    draw, slabs_of, lane = streetplan.spur_draw_points, streetplan.footpath_slabs, streetplan.lane_draw_points
+
+    def near(got, wanted):
+        return len(got) == len(wanted) and all(
+            math.dist(g[0], w[0]) < 1e-9 and math.dist(g[1], w[1]) < 1e-9 and abs(g[2] - w[2]) < 1e-9 for g, w in zip(got, wanted)
+        )
+
+    elbow = [(0, 0), (0, 10), (20, 10)]
+    skew = [(0, 0), (0, 10), (10, 20), (30, 20)]
+    validation += [
+        ("footpath: the last leg stops a clip short of its join", draw(elbow, 7) == [(0, 0), (0, 10), (13, 10)]),
+        ("footpath: a last leg no longer than the clip is dropped whole", draw([(0, 0), (0, 10), (7, 10)], 7) == [(0, 0), (0, 10)]),
+        ("footpath: one a hair longer is kept", len(draw([(0, 0), (0, 10), (7.01, 10)], 7)) == 3),
+        ("footpath: no clip, the polyline as it stands", draw(elbow, None) == elbow),
+        (
+            "footpath: at a right angle the second leg starts half a width after the corner",
+            near(slabs_of(draw(elbow, 7), 3), [((0, 0), (0, 10), 3), ((1.5, 10), (14.5, 10), 0)]),
+        ),
+        (
+            "footpath: the two slabs abut and share no ground",
+            abs(streetplan.overlap_depth(*[streetplan.slab_poly(a, b, 3, e) for a, b, e in slabs_of(draw(elbow, 7), 3)])) < 1e-9,
+        ),
+        ("footpath: a spur that is the road keeps the overlap", near(slabs_of(elbow, 3, footpath=False), [((0, 0), (0, 10), 3), ((0, 10), (20, 10), 3)])),
+        (
+            "footpath: any other angle keeps the overlap",
+            near(slabs_of(skew, 3), [((0, 0), (0, 10), 3), ((0, 10), (10, 20), 3), ((10, 20), (30, 20), 3)]),
+        ),
+        (
+            "footpath: a leg under MIN_LENGTH lays nothing and is not the leg before",
+            near(slabs_of([(0, 0), (0, 10), (0.03, 10), (0.03, 30)], 3), [((0, 0), (0, 10), 3), ((0.03, 10), (0.03, 30), 3)]),
+        ),
+        (
+            "footpath: a bend half a thousandth off square still abuts, one well past a thousandth does not",
+            slabs_of([(0, 0), (0, 10), (20, 10.01)], 3)[1][2] == 0 and slabs_of([(0, 0), (0, 10), (20, 10.05)], 3)[1][2] == 3,
+        ),
+        (
+            "footpath: a lane is clipped at its mouth and laid mouth first",
+            near(slabs_of(lane([(28, 0), (44, 0), (44, 30)], 7), 3), [((35, 0), (44, 0), 3), ((44, 1.5), (44, 31.5), 0)]),
+        ),
+        ("footpath: a lane whose mouth leg is no longer than the clip loses it", lane([(28, 0), (34, 0), (34, 30)], 7) == [(34, 0), (34, 30)]),
+    ]
+
+    # Wave 3.2: no purchase shrinks or re-skins a standing building. A plot of five parcels over two
+    # moments; only what the gate reads is stood in for.
+    def building(prop, stage, original=None):
+        look = {"kind": BUILDING, "prop": prop, "stage": stage}
+        return {**look, "swappedFrom": original} if original is not None else look
+
+    site = {"kind": SITE, "prop": "SiteSmall", "stage": 0}
+
+    class Replay:
+        def __init__(self, before, after):
+            self.looks = {1: before, 2: after}
+
+        def network_view(self, owned):
+            return {}, {}, [], set(), []
+
+        def develop_states(self, owned, tier, stretches, joins):
+            return [{"level": 2, "district": "homes", "governor": "a" if tier == 1 else "b"} for _ in self.looks[tier]]
+
+        def parcel_looks(self, owned, stages, states):
+            return self.looks[len(owned)]
+
+    def shrinks(before, after):
+        found = shrink_violations(Replay(before, after), [("first", {"a"}, {}, 1), ("second", {"a", "b"}, {}, 2)])
+        return [index for _, hits in found for index, *_ in hits]
+
+    validation += [
+        ("shrink: a building that grows, or stands as it was, passes", shrinks([building("A", 1), building("A", 2)], [building("A", 2), building("A", 2)]) == []),
+        ("shrink: a lower stage is caught", shrinks([building("A", 2)], [building("A", 1)]) == [1]),
+        ("shrink: another prop is caught, even taller", shrinks([building("A", 1)], [building("B", 3)]) == [1]),
+        ("shrink: its swap twin is the same building", shrinks([building("A", 1)], [building("AGreen", 1, "A")]) == []),
+        ("shrink: a twin at a lower stage is caught", shrinks([building("A", 2)], [building("AGreen", 1, "A")]) == [1]),
+        ("shrink: another prop's twin is caught", shrinks([building("AGreen", 1, "A")], [building("BGreen", 1, "B")]) == [1]),
+        ("shrink: a building that turns into a site, or into nothing, is caught", shrinks([building("A", 0), building("A", 0)], [site, None]) == [1, 2]),
+        ("shrink: a site or bare ground may become anything", shrinks([site, None, site], [building("A", 0), site, None]) == []),
+        (
+            "shrink: the report names the parcel, both looks and the governors",
+            "parcel 1: A stage 2 -> B stage 0 (governor a -> b, level 2 -> 2)"
+            in "\n".join(shrink_lines(shrink_violations(Replay([building("A", 2)], [building("B", 0)]), [("first", {"a"}, {}, 1), ("second", {"a", "b"}, {}, 2)]))),
+        ),
+    ]
     for label, good in validation:
         print(f"  {'ok' if good else 'FAIL':4s} {label}")
         if not good:
@@ -2717,6 +2826,29 @@ def timeline(era_name, data_path=None, config_path=None):
     print(f"  woods that grow back when their pad's slot is bought (any purchase order): {len(risks)}")
     for risk in risks:
         print(f"    {risk}")
+    # Wave 3.2: no purchase shrinks or re-skins a standing building -- every purchase of the greedy
+    # player in order, and the tier ends the rows above show.
+    replayed = replay_moments(plot, history)
+    shrinks = shrink_violations(plot, replayed)
+    tier_shrinks = shrink_violations(plot, [(f"the end of {label}" if label != "full" else "the full build", owned, stages, tier) for label, _, owned, stages, tier in rows])
+    print(
+        f"  standing buildings that shrink or change prop: {sum(len(hits) for _, hits in shrinks)} over {len(replayed)} moments "
+        f"of the greedy player's purchases, {sum(len(hits) for _, hits in tier_shrinks)} between the tier ends"
+    )
+    failed = False
+    if shrinks or tier_shrinks:
+        failed = True
+        print(f"timeline FAILED: a purchase shrinks or re-skins a standing building at {len(shrinks)} moment(s)")
+        for line in shrink_lines(shrinks):
+            print(line)
+        if tier_shrinks:
+            print("   and from one tier end to the next:")
+            for line in shrink_lines(tier_shrinks):
+                print(line)
+        print(
+            "   a building a player has watched go up must never get lower or turn into another one: move the "
+            "landmark, or its lots, so it does not take over parcels another landmark has already grown"
+        )
     if over_cap:
         print(f"timeline FAILED: more chimney plumes than budget.plumes at {len(over_cap)} moment(s)")
         for note in over_cap:
@@ -2725,8 +2857,95 @@ def timeline(era_name, data_path=None, config_path=None):
             "   every plume is a ParticleEmitter and only ambient.smoke.every limits them in game: raise "
             "`every` (CityDressing.json) with the chimney change, or raise budget.plumes on purpose"
         )
-        return 1
-    return 0
+        failed = True
+    return 1 if failed else 0
+
+
+SHRINKS_SHOWN = 4  # parcels named for one purchase before the rest are only counted
+
+
+def replay_moments(plot, history):
+    """(label, owned, stages, GrowthTier) after every purchase of the greedy player that can change
+    what the plot shows -- a slot bought, a landmark lifted to a new visible stage, the tier moved --
+    in order, then the finished plot. A slot purchase is numbered as the player makes it."""
+    out, seen, bought = [], None, 0
+    for tick, kind, slot_id, levels in history["purchases"]:
+        owned = set(levels)
+        stages = {owned_id: plot.visible_stage(owned_id, levels.get(owned_id, 1)) for owned_id in owned}
+        tier = tier_at_tick(history["tier_times"], tick)
+        if kind == "slot":
+            bought += 1
+            label = f"purchase {bought}, {slot_id} (t={tick}s)"
+        else:
+            label = f"level-up of {slot_id} (t={tick}s)"
+        key = (frozenset(owned), tuple(sorted(stages.items())), tier)
+        if key != seen:
+            seen = key
+            out.append((label, owned, stages, tier))
+    everything = {slot["id"] for slot in plot.era.config["slots"] if slot["id"] in plot.layout["slots"]}
+    out.append(("the full build", everything, plot.final_stages(everything), len(plot.city["tier"]["thresholds"])))
+    return out
+
+
+def shrink_violations(plot, moments):
+    """Wave 3.2 review: a purchase never shrinks a standing building. Walking `moments` in order
+    (replay_moments, or the tier ends), a parcel that shows a building must at the next moment show
+    that building at the same stage or a higher one: never nothing, never a site, never a lower
+    stage, never another prop -- its swap twin excepted, which is the same body re-roofed. Budget or
+    not: every parcel is judged, since a near and a far plot each draw a subset of the same looks.
+
+    What breaks it is a governor change: a new landmark takes a parcel over, and its district gives
+    the parcel another prop list while its height, still that of a stage 0 landmark, caps the stage.
+    Returns one entry per moment with a shrink: (label, [(parcel index, was, now, was state, now
+    state)])."""
+    out, previous = [], None
+    for label, owned, stages, tier in moments:
+        stretches, joins, _segments, _visible, _drawn = plot.network_view(owned)
+        states = plot.develop_states(owned, tier, stretches, joins)
+        looks = plot.parcel_looks(owned, stages, states)
+        if previous is not None:
+            hits = []
+            for index, (was, now, was_state, now_state) in enumerate(zip(previous[0], looks, previous[1], states), start=1):
+                if was is None or was["kind"] != BUILDING:
+                    continue
+                same = now is not None and now["kind"] == BUILDING and now.get("swappedFrom", now["prop"]) == was.get("swappedFrom", was["prop"])
+                if not same or now["stage"] < was["stage"]:
+                    hits.append((index, was, now, was_state, now_state))
+            if hits:
+                out.append((label, hits))
+        previous = (looks, states)
+    return out
+
+
+def look_text(look):
+    if look is None:
+        return "nothing"
+    return f"{look['prop']} stage {look['stage']}" if look["kind"] == BUILDING else f"the site {look['prop']}"
+
+
+def shrink_lines(found):
+    """The gate's report: one line a moment, then the first few parcels with what changed and whose
+    governor took them over."""
+    lines = []
+    for label, hits in found:
+        dropped = sum(1 for _, was, now, _, _ in hits if now is not None and now["kind"] == BUILDING and now["stage"] < was["stage"])
+        reskinned = sum(
+            1 for _, was, now, _, _ in hits if now is not None and now["kind"] == BUILDING and now.get("swappedFrom", now["prop"]) != was.get("swappedFrom", was["prop"])
+        )
+        gone = sum(1 for _, _, now, _, _ in hits if now is None or now["kind"] != BUILDING)
+        lines.append(
+            f"   {label}: {len(hits)} standing building(s) change -- {dropped} drop a stage, {reskinned} change prop, {gone} stop being a building"
+        )
+        for index, was, now, was_state, now_state in hits[:SHRINKS_SHOWN]:
+            governor = (
+                f"governor {was_state['governor']} -> {now_state['governor']}"
+                if was_state["governor"] != now_state["governor"]
+                else f"governor {now_state['governor']}"
+            )
+            lines.append(f"      parcel {index}: {look_text(was)} -> {look_text(now)} ({governor}, level {was_state['level']} -> {now_state['level']})")
+        if len(hits) > SHRINKS_SHOWN:
+            lines.append(f"      ... and {len(hits) - SHRINKS_SHOWN} more: parcels {', '.join(str(hit[0]) for hit in hits[SHRINKS_SHOWN:])}")
+    return lines
 
 
 def growth_moments(plot, history):

@@ -74,7 +74,6 @@ SKY = [190, 206, 226]
 
 # TileRenderer.luau, mirrored: arm n is ARM_STEPS[n] on the (i, j) lattice, bit n-1 of a mask.
 ARM_STEPS = ((1, 0), (0, -1), (-1, 0), (0, 1))  # +X, -Z, -X, +Z
-SAMPLES_PER_CELL = 4
 CROSSING_MIN_RUN = 3
 # (kind, quarter turns) for every one of the 16 connectivity masks -- PIECE_BY_MASK, index = mask.
 PIECE_BY_MASK = (
@@ -181,20 +180,6 @@ def placeholder_for(role, scale=1.0):
     resizes at spawn (`vehicles.scale`) has its box sized here."""
     size, color = PLACEHOLDERS[role]
     return [placeholder_box([v * scale for v in size], color)]
-
-
-def trim_end(points, clip):
-    """RoadGraph.spurDrawPoints: a polyline's last leg cut `clip` studs short of its end, or dropped
-    when it is no longer than that."""
-    points = [tuple(point) for point in points]
-    if len(points) < 2:
-        return points
-    last, before = points[-1], points[-2]
-    length = math.dist(last, before)
-    if length < streetplan.MIN_LENGTH or length <= clip:
-        return points[:-1]
-    t = (length - clip) / length
-    return points[:-1] + [(before[0] + (last[0] - before[0]) * t, before[1] + (last[1] - before[1]) * t)]
 
 
 def blueprint_path(era_name, model_name, prop=False):
@@ -477,13 +462,18 @@ class PlotScene:
 
     def ribbon(self, name, a, b, width, top, color, cap=True):
         """A flat slab along a-b, overlapped by half a width at each end so corners close -- the
-        same trick TileRenderer's kerbs use, and the reason a footpath bend has no notch."""
+        same trick TileRenderer's kerbs use, and the reason a road's bend has no notch."""
+        self.slab(name, a, b, width, width if cap else 0.0, top, color)
+
+    def slab(self, name, a, b, width, extension, top, color):
+        """RoadGraph's `slab`: a flat Part `width` across a-b, its length |a - b| + extension,
+        centred on the middle of a-b. A leg under MIN_LENGTH lays nothing."""
         length = math.dist(a, b)
         if length < 0.05:
             return
         along = ((b[0] - a[0]) / length, (b[1] - a[1]) / length)
         mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-        run = length + (width if cap else 0.0)
+        run = length + extension
         self.box(
             name,
             (width, SLAB_THICKNESS, run),
@@ -610,33 +600,22 @@ class PlotScene:
 
     # -- streets ---------------------------------------------------------
 
-    def ranked_stretches(self):
-        """Stretches ranked nearest-the-entrance first, ties by id: the order the controller hands
-        TileRenderer.Plan, and therefore the order the cell budget is spent in."""
-        order = []
-        for stretch_id in range(len(self.network.stretches)):
-            distance = self.network.near_distance(stretch_id)
-            if distance is not None:
-                order.append((distance, stretch_id))
-        order.sort()
-        return [stretch_id for _, stretch_id in order]
-
     def plan_cells(self):
-        """TileRenderer.Plan: rasterise every plannable stretch onto the lattice, nearest first,
-        stopping at the first stretch whose fresh cells do not fit budget.tileCells."""
+        """TileRenderer.Plan: the stretches the plot can ever draw (RoadGraph.pathStretchOrder,
+        nearest the entrance first) rasterised onto the lattice, stopping at the first stretch
+        whose fresh cells do not fit budget.tileCells. Which stretches make it in is
+        streetplan.Network.tile_plan, the one mirror of that rule; this adds each cell's links."""
         era = self.era
         step = era.tile_studs
         cells = {}  # (i, j) -> {"stretches": set, "links": {arm: set}}
-        remaining = int(self.era.city.get("budget", {}).get("tileCells", 0))
-        planned = []
-        for stretch_id in self.ranked_stretches():
+        planned, _ = self.network.tile_plan()
+        wanted = self.network.path_stretch_order()
+        if len(planned) < len(wanted):
+            self.notes.append(f"tile budget exhausted at stretch {wanted[len(planned)]}; the plan is truncated")
+        planned = list(planned)
+        for stretch_id in planned:
             stretch = self.network.stretches[stretch_id]
             path = rasterise(step, stretch["a"], stretch["b"])
-            fresh = sum(1 for cell in path if cell not in cells)
-            if fresh > remaining:
-                self.notes.append(f"tile budget exhausted at stretch {stretch_id}; the plan is truncated")
-                break
-            remaining -= fresh
             for cell in path:
                 record = cells.setdefault(cell, {"stretches": set(), "links": {}})
                 record["stretches"].add(stretch_id)
@@ -647,7 +626,6 @@ class PlotScene:
                     continue
                 cells[path[index - 1]]["links"].setdefault(arm, set()).add(stretch_id)
                 cells[path[index]]["links"].setdefault(opposite_arm(arm), set()).add(stretch_id)
-            planned.append(stretch_id)
         return cells, planned
 
     def build_tile_streets(self):
@@ -811,41 +789,40 @@ class PlotScene:
         # the kerb and none of the four ground planes coincide. A non-tiles era draws baked meshes
         # in the client, so SPUR_TOP there is this tool's stand-in and mirrors nothing.
         top = self.thickness / 2 - SPUR_DROP if spur_cfg else SPUR_TOP
-        clip = self.footpath_clip()
+        # RoadGraph.spurDrawPoints and drawFootpath, through streetplan's mirror of both: a footpath
+        # stops at the pavement's outer edge, and where two of its legs meet at a right angle the
+        # second starts half a width after the corner the first covers (wave 3.2), so no two slabs
+        # overlap. A spur that is the road itself keeps the half-width overlap at both ends.
+        clip = streetplan.spur_clip(era)
         for slot in era.slots:
             spur = era.spurs[slot["id"]]
             if slot["id"] not in self.owned or not spur["points"]:
                 continue
-            points = trim_end(spur["points"], clip) if clip is not None else spur["points"]
-            for index, (a, b) in enumerate(streetplan.polyline_segments(points)):
-                self.ribbon(f"Spur_{slot['id']}_{index}", a, b, width, top, colour)
-
-    def footpath_clip(self):
-        """RoadGraph's state.spurClip: in a tiles era a footpath stops this far short of the
-        centreline it joins -- the road's half, the pavement and half the footpath, so the slab,
-        which overlaps half its width past each end, abuts the pavement's outer edge. None elsewhere."""
-        tiles = self.era.tiles
-        spur_cfg = (tiles or {}).get("spur")
-        if spur_cfg is None:
-            return None
-        return self.era.width / 2 + max(self.era.pavement, 0.0) + max(float(spur_cfg["width"]), streetplan.MIN_LENGTH) / 2
+            drawn = streetplan.spur_draw_points(spur["points"], clip)
+            for index, (a, b, extension) in enumerate(streetplan.footpath_slabs(drawn, width, footpath=spur_cfg is not None)):
+                self.slab(f"Spur_{slot['id']}_{index}", a, b, width, extension, top, colour)
 
     def build_tile_lanes(self, shown):
         """M12 wave 3.1 alleys: a tiles era draws each shown lane (whole, once its reach is above
         0) exactly as RoadGraph draws a tiles-era spur's footpath -- `road.tiles.spur` width and
-        colour, one flat slab per leg overlapping half its width past each end, its top SPUR_DROP
-        under the kerb -- from where it leaves the pavement: the first leg trimmed by the footpath
-        clip from the mouth (a first leg no longer than the clip is dropped, as spurDrawPoints
-        drops a last one). No rim, no discs, nothing baked."""
-        spur_cfg = self.era.tiles["spur"]
+        colour, one flat slab per leg, its top SPUR_DROP under the kerb -- from where it leaves the
+        pavement: the first leg trimmed by the footpath clip from the mouth (a first leg no longer
+        than the clip is dropped, as spurDrawPoints drops a last one), laid mouth first, so at a
+        right-angle bend the mouth leg covers the corner and the next abuts it (wave 3.2). No rim,
+        no discs, nothing baked. A tiles era without the `tiles.spur` look has no footpath to lay
+        a lane as, and lays none (RoadGraph.SetLanes)."""
+        spur_cfg = self.era.tiles.get("spur")
+        if spur_cfg is None:
+            self.notes.append("fabric lanes: no `road.tiles.spur` look, so no lane is laid")
+            return
         width = streetplan.spur_path_width(self.era)
         colour = [int(v) for v in spur_cfg["color"]]
         top = self.thickness / 2 - SPUR_DROP
-        clip = self.footpath_clip()
+        clip = streetplan.spur_clip(self.era)
         for lane in shown:
-            points = list(reversed(trim_end(list(reversed(lane["points"])), clip)))
-            for index, (a, b) in enumerate(streetplan.polyline_segments(points)):
-                self.ribbon(f"Lane{lane['index']}_{index}", a, b, width, top, colour)
+            drawn = streetplan.lane_draw_points(lane["points"], clip)
+            for index, (a, b, extension) in enumerate(streetplan.footpath_slabs(drawn, width)):
+                self.slab(f"Lane{lane['index']}_{index}", a, b, width, extension, top, colour)
 
     def build_lanes(self):
         """M12 wave 2.5 back lanes: every lane the settled fabric shows (any lot on it has a
@@ -1927,19 +1904,9 @@ class PlotScene:
 # --------------------------------------------------------------------------
 
 
-def cell_at(step, point):
-    return (streetplan.round_half(point[0] / step), streetplan.round_half(point[1] / step))
-
-
-def rasterise(step, a, b):
-    path = [cell_at(step, a)]
-    length = math.dist(a, b)
-    steps = max(1, math.ceil(length / (step / SAMPLES_PER_CELL)))
-    for index in range(1, steps + 1):
-        cell = cell_at(step, streetplan.lerp(a, b, index / steps))
-        if cell != path[-1]:
-            path.append(cell)
-    return path
+# TileRenderer.cellAt and rasterise: streetplan's mirror, which its tile plan uses too.
+cell_at = streetplan.cell_at
+rasterise = streetplan.rasterise
 
 
 def arm_for(delta):
