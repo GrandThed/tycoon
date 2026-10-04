@@ -2995,6 +2995,12 @@ def check(era, network, visible, unreachable):
     # A driveway (wave 2.2) is narrower than the road, so it cuts less; every other era's spurs keep
     # the rule they had.
     spur_cut = spur_half_width(era) if driveway_width(era) is not None else half_road
+    # Wave 3.2 (ruling): a tiles era that lays its spurs as footpaths (`road.tiles.spur`) is judged by
+    # the slabs the client lays -- the footpath's own width, stopped at the pavement, bends as
+    # drawFootpath lays them -- not by a road-wide band along the whole route. A slab may stand
+    # flush against a footprint; FOOTPATH_TOUCH onto it cuts it.
+    footpath_stop = spur_clip(era)
+    footpath_width = spur_path_width(era)
     longest = (0.0, None)
     for slot in era.slots:
         spur = era.spurs[slot["id"]]
@@ -3016,8 +3022,21 @@ def check(era, network, visible, unreachable):
             longest = (length, slot["id"])
         if length > LONG_SPUR:
             notes.append(f"{label}: {length:.0f} studs long")
+        if footpath_stop is not None:
+            slabs = footpath_slabs(spur_draw_points(points, footpath_stop), footpath_width)
+            for number, (a, b, extension) in enumerate(slabs, start=1):
+                body = slab_poly(a, b, footpath_width, extension)
+                for name, poly, owner in obstacles:
+                    if owner == slot["id"]:
+                        continue  # Wave 1b: a spur runs out from under its own building and pad
+                    depth = overlap_depth(body, poly)
+                    if depth > FOOTPATH_TOUCH:
+                        add(
+                            f"{label} slab {number} of {len(slabs)} {fmt(a)}->{fmt(b)}: cuts {name} by {depth:.2f} "
+                            f"(the footpath is {footpath_width:g} wide)"
+                        )
         for a, b in polyline_segments(points):
-            if math.dist(a, b) < MIN_LENGTH:
+            if footpath_stop is not None or math.dist(a, b) < MIN_LENGTH:
                 continue
             for name, poly, owner in obstacles:
                 if owner == slot["id"]:
