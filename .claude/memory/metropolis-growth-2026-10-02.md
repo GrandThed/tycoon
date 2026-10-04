@@ -38,6 +38,28 @@ mirror-first rules, final props, then the asset run and `build/metropolis.rbxl` 
 DebugStartEra 3, GrantCash 1e18). He also said "commit everything": the earlier sessions' memory notes
 are on `main` (2ed18af) and merged into `m12-metropolis`.
 
+**Wave 3.2 state, 2026-10-04:** code, review and QA are done on `m12-metropolis` (b6891e8); **88 lots**
+(52 street, 36 lane), Bus Line at no lot cost (5 shelters in ground no lot could use), 35 final props (18
+towers incl. 7 Green twins; old town, crane sites, shelter, bus). Waiting on Ben: his OK on the final prop
+sheets (`m12m_props/_contact_final_{towers,oldtown}.png`), then the asset run (merge, upload, **one harvest
+paste**, templates, fabric rebuilt from harvested extents), then his Studio look in `build/metropolis.rbxl`.
+Agents resume by id after a session limit or a restart (SendMessage "run git status and continue").
+
+Lessons from wave 3.2:
+- **The review caught what renders could not:** five landmark footpaths ran onto the road (the client drops
+  a last spur leg of `spurClip` or less), and buying the Supermarket shrank eight standing towers (a new,
+  shorter governor). Both are now gates: `streetplan.py` (no footpath slab on a tile or pavement band) and
+  `cityfabric.py timeline` (no standing building drops a stage or changes to a non-twin prop).
+- **Low landmarks must not govern lots** bought after taller neighbours: give them no district.
+- **2-stud pavements leave no kerb room**: shelters stand at the lot line in a `keepClear` gap (`spots`
+  placer); street trees were dropped. Junction lamps are off (they fell inside landmarks).
+- **`untilStage`** on a blueprint piece retires it after a stage: tower roofs leave when the next storeys
+  cover them (stage-4 meshes 31% lighter, same look). Use it for any stacking prop.
+- **`check_mirror.py --strict`** runs the real `CityFabric.luau` under a Luau CLI (fetched into `tools/bin/`)
+  against the Python mirror; put new pure rules in `CityFabric.luau` so they are covered.
+- The fabric is ~110k triangles on a full near plot before `untilStage` (2.5× Boomtown's plot); phone frame
+  time is unmeasured. Far plots draw 60 of 88 lots until Ben's step-37 numbers arrive.
+
 **Rulings taken by the lead for the mock** (the renders carried them; Ben approved the result):
 - Block slabs dropped (a slab paved a whole block at its first purchase: a socket); every fabric prop
   carries its own paved forecourt. Street trees went with them → the `cityPark` changer proposal.
