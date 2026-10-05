@@ -8404,8 +8404,8 @@
             "parts": [
               {
                 "kit": "metro-transit-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 104438236883469,
+                "imageId": 84394125067367,
                 "size": [3.0, 2.95, 1.36],
                 "offset": [0.0, 1.475, 0.0]
               }
@@ -8452,8 +8452,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 136254958726865,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8464,8 +8464,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 98923593910557,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8476,8 +8476,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135746795374859,
+                "imageId": 122333243440730,
                 "size": [4.0, 6.68, 8.0],
                 "offset": [0.0, 3.34, 0.0]
               }
@@ -8488,8 +8488,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 111340780157473,
+                "imageId": 122333243440730,
                 "size": [4.0, 9.88, 8.0],
                 "offset": [0.0, 4.94, 0.0]
               }
@@ -8500,8 +8500,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 107397838452754,
+                "imageId": 122333243440730,
                 "size": [4.0, 13.97, 8.0],
                 "offset": [0.0, 6.985, 0.0]
               }
@@ -8516,8 +8516,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 132263368360888,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8528,8 +8528,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 122331463687305,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8540,8 +8540,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 120241207368352,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.25, 8.0],
                 "offset": [0.0, 3.625, 0.0]
               }
@@ -8552,8 +8552,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100789135214485,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.45, 8.0],
                 "offset": [0.0, 5.225, 0.0]
               }
@@ -8564,10 +8564,10 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [4.0, 14.01, 8.0],
-                "offset": [0.0, 7.005, 0.0]
+                "meshId": 88381273884243,
+                "imageId": 122333243440730,
+                "size": [4.0, 14.0097, 8.0],
+                "offset": [0.0, 7.0049, 0.0]
               }
             ]
           }
@@ -8580,8 +8580,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 136247293980787,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8592,8 +8592,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 78667584010811,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.08, 6.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8604,8 +8604,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 123806064124166,
+                "imageId": 122333243440730,
                 "size": [6.0, 8.95, 6.0],
                 "offset": [0.0, 4.475, 0.0]
               }
@@ -8616,8 +8616,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 85142909625176,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.15, 6.0],
                 "offset": [0.0, 6.075, 0.0]
               }
@@ -8628,8 +8628,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 92703844390133,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.32, 6.0],
                 "offset": [0.0, 8.66, 0.0]
               }
@@ -8644,8 +8644,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 110610629180671,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8656,8 +8656,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 125213589418157,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.08, 6.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8668,8 +8668,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 117968775015586,
+                "imageId": 122333243440730,
                 "size": [6.0, 8.9, 6.0],
                 "offset": [0.0, 4.45, 0.0]
               }
@@ -8680,8 +8680,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 93661020450783,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.1, 6.0],
                 "offset": [0.0, 6.05, 0.0]
               }
@@ -8692,8 +8692,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 101686537179771,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.42, 6.0],
                 "offset": [0.0, 8.71, 0.0]
               }
@@ -8708,8 +8708,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 110967612458308,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8720,8 +8720,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 131553393689422,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8732,8 +8732,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 116096497176344,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.3, 8.0],
                 "offset": [0.0, 3.65, 0.0]
               }
@@ -8744,8 +8744,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 93967375298444,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.5, 8.0],
                 "offset": [0.0, 5.25, 0.0]
               }
@@ -8756,8 +8756,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 108011222431890,
+                "imageId": 122333243440730,
                 "size": [4.0, 13.97, 8.0],
                 "offset": [0.0, 6.985, 0.0]
               }
@@ -8772,8 +8772,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 86487959506818,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8784,8 +8784,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 98887762285200,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.152, 8.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -8796,8 +8796,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 73616769221661,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.54, 8.0],
                 "offset": [0.0, 3.77, 0.0]
               }
@@ -8808,8 +8808,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 122802890820685,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.74, 8.0],
                 "offset": [0.0, 5.37, 0.0]
               }
@@ -8820,8 +8820,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 71383623818406,
+                "imageId": 122333243440730,
                 "size": [4.0, 13.95, 8.0],
                 "offset": [0.0, 6.975, 0.0]
               }
@@ -8836,8 +8836,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 119342376499629,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8848,8 +8848,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 113892944614279,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8860,8 +8860,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 87930630947070,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.25, 8.0],
                 "offset": [0.0, 3.625, 0.0]
               }
@@ -8872,8 +8872,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 96245306185282,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.45, 8.0],
                 "offset": [0.0, 5.225, 0.0]
               }
@@ -8884,8 +8884,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 136504605884611,
+                "imageId": 122333243440730,
                 "size": [4.0, 14.07, 8.0],
                 "offset": [0.0, 7.035, 0.0]
               }
@@ -8900,8 +8900,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 111189918979923,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8912,8 +8912,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135960974230652,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.152, 8.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -8924,8 +8924,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 101778694063618,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.54, 8.0],
                 "offset": [0.0, 3.77, 0.0]
               }
@@ -8936,8 +8936,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135965928483656,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.74, 8.0],
                 "offset": [0.0, 5.37, 0.0]
               }
@@ -8948,8 +8948,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100177939541642,
+                "imageId": 122333243440730,
                 "size": [4.0, 13.94, 8.0],
                 "offset": [0.0, 6.97, 0.0]
               }
@@ -8964,8 +8964,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 106879160455980,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -8976,8 +8976,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 83085302303481,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.08, 6.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -8988,8 +8988,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 99879279483276,
+                "imageId": 122333243440730,
                 "size": [6.0, 8.9, 6.0],
                 "offset": [0.0, 4.45, 0.0]
               }
@@ -9000,8 +9000,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 77313118455092,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.1, 6.0],
                 "offset": [0.0, 6.05, 0.0]
               }
@@ -9012,8 +9012,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 93697296810103,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.45, 6.0],
                 "offset": [0.0, 8.725, 0.0]
               }
@@ -9028,8 +9028,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 122118613082264,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9040,8 +9040,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 121022508217758,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.152, 6.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -9052,8 +9052,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 118077082591487,
+                "imageId": 122333243440730,
                 "size": [6.0, 9.14, 6.0],
                 "offset": [0.0, 4.57, 0.0]
               }
@@ -9064,8 +9064,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 136724520262612,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.34, 6.0],
                 "offset": [0.0, 6.17, 0.0]
               }
@@ -9076,8 +9076,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 120666083702480,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.15, 6.0],
                 "offset": [0.0, 8.575, 0.0]
               }
@@ -9092,8 +9092,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 120845461554378,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9104,8 +9104,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 81864705176213,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.08, 6.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -9116,8 +9116,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 117607245908450,
+                "imageId": 122333243440730,
                 "size": [6.0, 8.9, 6.0],
                 "offset": [0.0, 4.45, 0.0]
               }
@@ -9128,8 +9128,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 129031243268451,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.1, 6.0],
                 "offset": [0.0, 6.05, 0.0]
               }
@@ -9140,8 +9140,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 130873850324757,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.5, 6.0],
                 "offset": [0.0, 8.75, 0.0]
               }
@@ -9156,8 +9156,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 122671187429002,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9168,8 +9168,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 130427506658081,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.152, 6.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -9180,8 +9180,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 88028736161488,
+                "imageId": 122333243440730,
                 "size": [6.0, 9.14, 6.0],
                 "offset": [0.0, 4.57, 0.0]
               }
@@ -9192,8 +9192,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 72764207875144,
+                "imageId": 122333243440730,
                 "size": [6.0, 12.34, 6.0],
                 "offset": [0.0, 6.17, 0.0]
               }
@@ -9204,8 +9204,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 77440805855424,
+                "imageId": 122333243440730,
                 "size": [6.0, 17.14, 6.0],
                 "offset": [0.0, 8.57, 0.0]
               }
@@ -9220,8 +9220,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 113293768084183,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9232,8 +9232,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 134484040921573,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -9244,8 +9244,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100579495309876,
+                "imageId": 122333243440730,
                 "size": [4.0, 6.68, 8.0],
                 "offset": [0.0, 3.34, 0.0]
               }
@@ -9256,8 +9256,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 113597850828762,
+                "imageId": 122333243440730,
                 "size": [4.0, 8.28, 8.0],
                 "offset": [0.0, 4.14, 0.0]
               }
@@ -9268,8 +9268,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 122369131674105,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.7, 8.0],
                 "offset": [0.0, 5.35, 0.0]
               }
@@ -9284,8 +9284,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 121664483439416,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9296,8 +9296,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 77946380840371,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.152, 8.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -9308,8 +9308,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 129827616152104,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.54, 8.0],
                 "offset": [0.0, 3.77, 0.0]
               }
@@ -9320,8 +9320,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 110413617935985,
+                "imageId": 122333243440730,
                 "size": [4.0, 9.14, 8.0],
                 "offset": [0.0, 4.57, 0.0]
               }
@@ -9332,8 +9332,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 82435072802382,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.74, 8.0],
                 "offset": [0.0, 5.37, 0.0]
               }
@@ -9348,8 +9348,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 81560379942437,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9360,8 +9360,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 101675177794158,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.08, 8.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -9372,8 +9372,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 98140737945755,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.3, 8.0],
                 "offset": [0.0, 3.65, 0.0]
               }
@@ -9384,8 +9384,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 71698024358066,
+                "imageId": 122333243440730,
                 "size": [4.0, 8.9, 8.0],
                 "offset": [0.0, 4.45, 0.0]
               }
@@ -9396,8 +9396,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 78877323963249,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.8, 8.0],
                 "offset": [0.0, 5.4, 0.0]
               }
@@ -9412,8 +9412,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100952258541369,
+                "imageId": 122333243440730,
                 "size": [4.0, 3.38, 8.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9424,8 +9424,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 93963275189690,
+                "imageId": 122333243440730,
                 "size": [4.0, 5.152, 8.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -9436,8 +9436,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 121280103270651,
+                "imageId": 122333243440730,
                 "size": [4.0, 7.54, 8.0],
                 "offset": [0.0, 3.77, 0.0]
               }
@@ -9448,8 +9448,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 91633501274654,
+                "imageId": 122333243440730,
                 "size": [4.0, 9.14, 8.0],
                 "offset": [0.0, 4.57, 0.0]
               }
@@ -9460,8 +9460,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 111940551273133,
+                "imageId": 122333243440730,
                 "size": [4.0, 10.8, 8.0],
                 "offset": [0.0, 5.4, 0.0]
               }
@@ -9476,8 +9476,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 79331016589248,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9488,8 +9488,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 127241460332421,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.08, 6.0],
                 "offset": [0.0, 2.54, 0.0]
               }
@@ -9500,8 +9500,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 112745249506881,
+                "imageId": 122333243440730,
                 "size": [6.0, 6.68, 6.0],
                 "offset": [0.0, 3.34, 0.0]
               }
@@ -9512,8 +9512,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 110265667070461,
+                "imageId": 122333243440730,
                 "size": [6.0, 8.28, 6.0],
                 "offset": [0.0, 4.14, 0.0]
               }
@@ -9524,8 +9524,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 95375974874469,
+                "imageId": 122333243440730,
                 "size": [6.0, 10.75, 6.0],
                 "offset": [0.0, 5.375, 0.0]
               }
@@ -9540,8 +9540,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 83932910007132,
+                "imageId": 122333243440730,
                 "size": [6.0, 3.38, 6.0],
                 "offset": [0.0, 1.69, 0.0]
               }
@@ -9552,8 +9552,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 127327361205651,
+                "imageId": 122333243440730,
                 "size": [6.0, 5.152, 6.0],
                 "offset": [0.0, 2.576, 0.0]
               }
@@ -9564,8 +9564,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 80727774339822,
+                "imageId": 122333243440730,
                 "size": [6.0, 7.54, 6.0],
                 "offset": [0.0, 3.77, 0.0]
               }
@@ -9576,8 +9576,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 83666104538190,
+                "imageId": 122333243440730,
                 "size": [6.0, 9.14, 6.0],
                 "offset": [0.0, 4.57, 0.0]
               }
@@ -9588,8 +9588,8 @@
             "parts": [
               {
                 "kit": "tower-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 103360785499872,
+                "imageId": 122333243440730,
                 "size": [6.0, 10.74, 6.0],
                 "offset": [0.0, 5.37, 0.0]
               }
@@ -9732,8 +9732,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 108983892129377,
+                "imageId": 88734473933883,
                 "size": [1.96, 2.7, 0.36],
                 "offset": [0.0, 1.35, 0.0]
               }
@@ -9764,10 +9764,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [1.96, 5.524, 0.8],
-                "offset": [0.0, 2.762, 0.005]
+                "meshId": 78493807161759,
+                "imageId": 88734473933883,
+                "size": [1.96, 5.5235, 0.8],
+                "offset": [0.0, 2.7618, -0.005]
               }
             ]
           }
@@ -9780,8 +9780,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 121431698660355,
+                "imageId": 88734473933883,
                 "size": [13.0, 3.56, 13.0],
                 "offset": [0.0, 1.78, 0.0]
               }
@@ -9796,8 +9796,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 100484899643466,
+                "imageId": 88734473933883,
                 "size": [12.98, 1.3, 12.98],
                 "offset": [0.0, 0.65, 0.0]
               }
@@ -9812,8 +9812,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 123470941272420,
+                "imageId": 88734473933883,
                 "size": [12.98, 3.57, 12.98],
                 "offset": [0.0, 1.785, 0.0]
               }
@@ -9828,10 +9828,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 84298068470107,
+                "imageId": 88734473933883,
                 "size": [6.5, 3.56, 6.5],
-                "offset": [3.25, 1.78, 3.25]
+                "offset": [-3.25, 1.78, -3.25]
               }
             ]
           }
@@ -9844,10 +9844,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 73809557626483,
+                "imageId": 88734473933883,
                 "size": [6.49, 1.3, 6.49],
-                "offset": [3.245, 0.65, 3.245]
+                "offset": [-3.245, 0.65, -3.245]
               }
             ]
           }
@@ -9860,10 +9860,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 88889182854641,
+                "imageId": 88734473933883,
                 "size": [6.49, 3.57, 6.49],
-                "offset": [3.245, 1.785, 3.245]
+                "offset": [-3.245, 1.785, -3.245]
               }
             ]
           }
@@ -9876,10 +9876,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [1.75, 0.97, 1.735],
-                "offset": [-0.015, 0.485, -0.03]
+                "meshId": 103627604985384,
+                "imageId": 88734473933883,
+                "size": [1.7499, 0.9701, 1.7355],
+                "offset": [0.0151, 0.4851, 0.0297]
               }
             ]
           }
@@ -9892,10 +9892,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
-                "size": [1.9, 0.851, 1.08],
-                "offset": [0.0, 0.425, 0.0]
+                "meshId": 107175896539459,
+                "imageId": 88734473933883,
+                "size": [1.9, 0.8508, 1.08],
+                "offset": [0.0, 0.4254, 0.0]
               }
             ]
           }
@@ -10032,8 +10032,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 135435343226002,
+                "imageId": 88734473933883,
                 "size": [9.94, 8.0, 9.94],
                 "offset": [0.0, 4.0, 0.0]
               }
@@ -10144,8 +10144,8 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 140069925417692,
+                "imageId": 88734473933883,
                 "size": [3.9, 3.6, 7.9],
                 "offset": [0.0, 1.8, 0.0]
               }
@@ -10160,10 +10160,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 138666280216284,
+                "imageId": 88734473933883,
                 "size": [3.9, 11.75, 9.3],
-                "offset": [0.0, 5.875, 0.7]
+                "offset": [0.0, 5.875, -0.7]
               }
             ]
           }
@@ -10176,10 +10176,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 121279100435383,
+                "imageId": 88734473933883,
                 "size": [5.95, 3.6, 5.92],
-                "offset": [-0.025, 1.8, 0.01]
+                "offset": [0.025, 1.8, -0.01]
               }
             ]
           }
@@ -10192,10 +10192,10 @@
             "parts": [
               {
                 "kit": "oldtown-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 113051624956033,
+                "imageId": 88734473933883,
                 "size": [5.95, 11.75, 9.1],
-                "offset": [-0.025, 5.875, -0.2]
+                "offset": [0.025, 5.875, 0.2]
               }
             ]
           }
@@ -10356,8 +10356,8 @@
             "parts": [
               {
                 "kit": "metro-transit-kit",
-                "meshId": 0,
-                "imageId": 0,
+                "meshId": 112988474039257,
+                "imageId": 84394125067367,
                 "size": [3.0, 3.7, 10.9],
                 "offset": [0.0, 1.85, 0.0]
               }
