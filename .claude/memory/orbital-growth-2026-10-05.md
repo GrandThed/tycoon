@@ -1,14 +1,31 @@
 ---
 name: orbital-growth-2026-10-05
-description: M12 wave 4 Orbital pre-mock study, lot ceiling arithmetic (about 105-115 realistic, cap 140), two proposed candidates, tool work found; nothing built yet
+description: M12 wave 4 Orbital, mock in progress in tycoon-m12o (docks and axis candidates), lot ceiling arithmetic (about 105-115 realistic, cap 140), the lead's shared rules, tool work found
 metadata:
   type: project
 ---
 
-M12 wave 4 (Orbital Colony growing city), pre-mock study of 2026-10-05. Ben pasted
-`docs/prompts/m12-orbital.md` with no words of his own; asked, he chose **"arithmetic and plan only"**:
-no worktree and no layout work until he says go. Nothing is built. He also said his three playtest
-measurements are "not measured yet", so `budget.parcelsFar` stays 60.
+M12 wave 4 (Orbital Colony growing city), started 2026-10-05. Ben pasted
+`docs/prompts/m12-orbital.md` with no words of his own; asked, he chose **"arithmetic and plan only"**
+first, then on the study's report said **"lets do it"**: the mock with the candidates "docks" and "axis".
+His three playtest measurements are "not measured yet", so `budget.parcelsFar` stays 60.
+
+**State (2026-10-05, wave 4.1, the mock gate; contract in INTERFACES "M12 wave 4"):**
+- Base worktree `C:\Users\benja\Desktop\tycoon-m12o` (branch `m12-orbital`, groundwork at 8c89aff);
+  candidates `tycoon-m12o-docks` and `tycoon-m12o-axis` (branches `m12-orbital-<c>`); all three have an
+  `assets\` junction (remove it before removing the worktree). Nothing is uploaded; `main` is untouched.
+- Groundwork done: the generator, mirror and renderer run Orbital (`m12o_groundwork_full.png`), 28 draft
+  props (`colony_kit.py` 12 fabric props × 5 stages, `regolith_kit.py` wild, sites, `LotBeacon`,
+  `RevealScaffold`), today's renders `m12o_today_*`.
+- Rules the lead set for both candidates (Ben has not judged them yet): **docking** (`road.tiles.dock`
+  1.75: lots and pads stand against the pipe on straight and end cells), **regolith stays under the
+  monorail** (`highway.clearBand` false), lot sizes 4 × 8, 6 × 6, 8 × 12, five-stage props with
+  `levelStages` [1, 3, 4] and `heightFloor` 3.4, wild as lattice-aligned clumps that may straddle a
+  planned tube, singles in the cells no clump covers, lots off deck rects.
+- Owed to Ben at the gate: `m12o_compare.png` with lot counts; then city-changer before-and-afters on
+  the layout he picks (step 3).
+- PowerShell trap met twice: variables are case-insensitive (`$c` and `$C` are one variable), and a
+  string piped to a native exe gets a BOM. Use Bash for pipes into git.
 
 **The ceiling** (a cross-section model by an Opus agent, no generator run: read ±10%; 4 × 6 pods):
 
