@@ -1563,7 +1563,7 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
 - **Wave 2 (Boomtown): signed off by Ben and merged to `main` on 2026-10-02** (`main` at
   `86d1d99`). §5–§11 below are wave 2.
 - **Wave 3 (Metropolis): signed off by Ben on a Studio look ("looks good!") and merged to `main`
-  on 2026-10-05** (`main` at `d0dd894`, not pushed). §12–§16 below are wave 3.
+  on 2026-10-05** (`main` at `d0dd894`, on `origin/main`). §12–§16 below are wave 3.
 - **All three waves are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run every
   command and open every build from there.
 - **The wave 2 worktrees are removed:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic`
@@ -2293,7 +2293,7 @@ plenty left.
 ### 16. M12 wave 3 — after sign-off (lead; **DONE 2026-10-05**, one leftover folder to delete)
 
 - [x] 67. **Merged `m12-metropolis` into `main`** (2026-10-05): a fast-forward to `d0dd894`, 62
-      commits. **Not pushed.**
+      commits. `origin/main` has it since 11:00 that day: the main checkout's editor sync pushed it, not the lead.
       - The four place files and both sourcemaps were rebuilt in the main checkout. They came
         out byte-identical to the committed ones.
       - Re-run in the main checkout, all passing: `py tools/fabric.py check Metropolis`,

@@ -62,3 +62,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/world-landscape-2026-10-01.md
 @.claude/memory/studio-compile-gate-2026-10-02.md
 @.claude/memory/metropolis-growth-2026-10-02.md
+@.claude/memory/main-auto-push-2026-10-05.md

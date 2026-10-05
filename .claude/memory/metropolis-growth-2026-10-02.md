@@ -6,7 +6,7 @@ metadata:
 ---
 
 **Signed off and merged 2026-10-05.** Ben on his Studio look at `build/metropolis.rbxl`: "looks good!". `main`
-is at d0dd894 (a fast-forward; not pushed). It was a look, not the 51-step checklist: phone, low graphics,
+is at d0dd894 (a fast-forward; on `origin/main` a minute later, see [[main-auto-push-2026-10-05]]). It was a look, not the 51-step checklist: phone, low graphics,
 two players and the measurement (PLAYTEST "M12 wave 3" step 49) are unreported, like Village step 37 and
 Boomtown step 59. Worktrees `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed; `tycoon-m12m`
 is unregistered but its folder was left half-deleted because Studio had `build\metropolis.rbxl` open from

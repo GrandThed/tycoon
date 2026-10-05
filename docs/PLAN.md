@@ -67,7 +67,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   lanes and the town ("looks really good! lets send it"), not a report of the 60-step checklist,
   so the phone, low-graphics, two-player and measurement steps stay watch items, and Ben's
   step-37 numbers are still owed; **wave 3 Metropolis signed off by Ben and merged to `main`
-  2026-10-05** (`d0dd894`, a fast-forward, not pushed): the "avenues" layout Ben picked on
+  2026-10-05** (`d0dd894`, a fast-forward; on `origin/main` the same day): the "avenues" layout Ben picked on
   2026-10-03 ("i love avenues"), 88 lots on three avenues and four lanes, an old town that is
   redeveloped, towers that grow floor by floor, two city-changer slots (Open the Bus Line, Green
   the Rooftops), 35 props (107 stages) uploaded and harvested in one paste; the sign-off was a
@@ -2382,7 +2382,7 @@ The code is shared; each era adds data, config and models.
 
 **Where:**
 - **The work lives on `main`**, in the main checkout `C:\Users\benja\Desktop\tycoon` (`main` at
-  `d0dd894`, a fast-forward: `m12-metropolis` was 62 commits ahead). **Not pushed.**
+  `d0dd894`, a fast-forward: `m12-metropolis` was 62 commits ahead). `origin/main` has it since 11:00 that day: the main checkout's editor sync pushed it, not the lead.
 - **The worktrees are gone:** `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed
   (junctions first), `tycoon-m12m` is no longer a git worktree, and the branch `m12-metropolis`
   is deleted. One leftover: the half-deleted folder `tycoon-m12m` (see the follow-ups).
@@ -2409,7 +2409,7 @@ The code is shared; each era adds data, config and models.
 - **The merge:** `main` fast-forwarded to `d0dd894`. The four place files and both sourcemaps
   were rebuilt in the main checkout, byte-identical to the committed ones. Re-run there, all
   passing: `fabric.py check Metropolis`, `check_mirror.py --strict`, `gen_templates.py --check`
-  (444 templates), `check_compile.py` (122 files). **Not pushed.**
+  (444 templates), `check_compile.py` (122 files). `origin/main` has it since 11:00 that day: the main checkout's editor sync pushed it, not the lead.
 - Metropolis is tested on `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl` (a fresh save
   starts in era 3, with 1e20 cash). **That file is for local Studio use only and must never be
   published.**
@@ -2672,7 +2672,7 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
   (`ApartmentA–C`, `TownhouseA/B`, `PlazaA/B`, `BushA/B`, `HedgeA`, `FlowerBedA`, `PlanterA`,
   `ParkedA–C`) and `LampPost` are still uploaded and templated. The `BusStop` and
   `RooftopGarden` building models are no longer spawned either.
-- **Done (lead, 2026-10-05):** `m12-metropolis` merged into `main` (`d0dd894`, not pushed); the
+- **Done (lead, 2026-10-05):** `m12-metropolis` merged into `main` (`d0dd894`, on `origin/main`); the
   two candidate worktrees removed (junctions first); the branch deleted; the two candidate
   branches kept as the record.
 - **lead (open):** delete the leftover folder `C:\Users\benja\Desktop\tycoon-m12m`. It is no
