@@ -11,6 +11,10 @@ Found 2026-10-05: `git reflog show origin/main` reads "update by push" at 11:00:
 Metropolis fast-forward, and the same after the commits of 2026-10-02 and 2026-10-04. Ben's editor (the
 VS Code git sync in that folder) is the likely source; worktrees on other branches are not pushed.
 
+**Not guaranteed (same day):** the three commits of 11:02–11:08 (2be638d, 91a66ac, de523bc) were still
+local at 11:54. `git ls-remote origin refs/heads/main` answered d0dd894 and `git status -sb` read
+"ahead 3". The sync is something Ben's editor does when it does; it is not a rule of the repo.
+
 **Why:** earlier notes and docs say "merged, not pushed" for Boomtown, the Valley and Metropolis. That was
 true when written and false minutes later, and the lead told Ben "nothing is pushed" when it already was.
 
