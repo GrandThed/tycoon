@@ -294,7 +294,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Metropolis/` -- templates: `templates/_props/Metropolis/` -- in game: `ReplicatedStorage/Assets/Props/Metropolis/`
 
-Summary: 74/74 blueprints, 39/74 uploaded, 39/74 harvested, 39/74 templated
+Summary: 74/74 blueprints, 74/74 uploaded, 74/74 harvested, 74/74 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -302,27 +302,27 @@ Summary: 74/74 blueprints, 39/74 uploaded, 39/74 harvested, 39/74 templated
 | 2 | `ApartmentB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 3 | `ApartmentC` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 4 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `BusShelterM` | — | prop | yes | metro-transit-kit | 1 | 0/1 | — | — | — |
+| 5 | `BusShelterM` | — | prop | yes | metro-transit-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 6 | `BushA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `BushB` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `FabricOfficeNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 9 | `FabricOfficeNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 10 | `FabricOfficeSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 11 | `FabricOfficeSmallB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 12 | `FabricResNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 13 | `FabricResNarrowAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 14 | `FabricResNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 15 | `FabricResNarrowBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 16 | `FabricResSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 17 | `FabricResSmallAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 18 | `FabricResSmallB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 19 | `FabricResSmallBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 20 | `FabricShopNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 21 | `FabricShopNarrowAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 22 | `FabricShopNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 23 | `FabricShopNarrowBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 24 | `FabricShopSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
-| 25 | `FabricShopSmallAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 8 | `FabricOfficeNarrowA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 9 | `FabricOfficeNarrowB` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 10 | `FabricOfficeSmallA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 11 | `FabricOfficeSmallB` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 12 | `FabricResNarrowA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 13 | `FabricResNarrowAGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 14 | `FabricResNarrowB` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 15 | `FabricResNarrowBGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 16 | `FabricResSmallA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 17 | `FabricResSmallAGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 18 | `FabricResSmallB` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 19 | `FabricResSmallBGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 20 | `FabricShopNarrowA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 21 | `FabricShopNarrowAGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 22 | `FabricShopNarrowB` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 23 | `FabricShopNarrowBGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 24 | `FabricShopSmallA` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
+| 25 | `FabricShopSmallAGreen` | — | prop | yes | tower-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 26 | `FlowerBedA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 27 | `HedgeA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 28 | `HighwayCorner` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -331,34 +331,34 @@ Summary: 74/74 blueprints, 39/74 uploaded, 39/74 harvested, 39/74 templated
 | 31 | `HighwayRamp` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 32 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 33 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 34 | `LotHoarding` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 34 | `LotHoarding` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 35 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 36 | `OldTownBillboard` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 37 | `OldTownClumpA` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 38 | `OldTownClumpB` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 39 | `OldTownClumpC` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 40 | `OldTownQuarterA` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 41 | `OldTownQuarterB` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 42 | `OldTownQuarterC` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 43 | `OldTownRubble` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 44 | `OldTownSkip` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 36 | `OldTownBillboard` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 37 | `OldTownClumpA` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 38 | `OldTownClumpB` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 39 | `OldTownClumpC` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 40 | `OldTownQuarterA` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 41 | `OldTownQuarterB` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 42 | `OldTownQuarterC` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 43 | `OldTownRubble` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 44 | `OldTownSkip` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 45 | `ParkedA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 46 | `ParkedB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 47 | `ParkedC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 48 | `PlanterA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 49 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 50 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 51 | `RevealScaffold` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 51 | `RevealScaffold` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 52 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 53 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 54 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 55 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 56 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 57 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 58 | `SiteNarrow` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 59 | `SiteNarrowCrane` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 60 | `SiteSmall` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
-| 61 | `SiteSmallCrane` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 58 | `SiteNarrow` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 59 | `SiteNarrowCrane` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 60 | `SiteSmall` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 61 | `SiteSmallCrane` | — | prop | yes | oldtown-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 62 | `TownhouseA` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 63 | `TownhouseB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 64 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -366,7 +366,7 @@ Summary: 74/74 blueprints, 39/74 uploaded, 39/74 harvested, 39/74 templated
 | 66 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 67 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 68 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 69 | `VehicleCityBus` | — | prop | yes | metro-transit-kit | 1 | 0/1 | — | — | — |
+| 69 | `VehicleCityBus` | — | prop | yes | metro-transit-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 70 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 71 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 72 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
