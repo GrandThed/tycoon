@@ -7340,3 +7340,192 @@ Rojo mapping were verified against the real templates and data. Taken:
 - With `templates/_world` or `Valley.json` removed: the wave 1 world, no Output error.
 - `valley.py check`, `worldplan.py selftest`, `gen_templates.py --check` and
   `gen_asset_manifest.py --check` are green; every existing gate is unchanged and green.
+
+# M12 wave 4 — Orbital Colony (2026-10-05)
+
+Village, Boomtown and Metropolis are on `main`. Wave 4 is built in the worktree
+`C:\Users\benja\Desktop\tycoon-m12o` on branch `m12-orbital`; `assets/` there is a junction to
+the main checkout's `assets/`. Everything in "M12 contracts", "M12 wave 2" and "M12 wave 3" still
+holds, and the code stays era-generic.
+
+## Wave 4.1 — Orbital growth-layout mock (a gate for Ben, not yet a contract)
+
+Orbital today is Metropolis's lattice with tubes for streets: 16 modules on a 4 × 4 grid, cluster
+decking, seven small domes and six rock zones. As for Boomtown and Metropolis, this wave produces
+**two candidate layouts**, each a real layout run through the real generator and mirror, so the
+pick becomes wave 4.2's starting point with nothing thrown away. Ben's go (2026-10-05): "lets do
+it", on the lead's proposal of the candidates "docks" and "axis".
+
+### Facts the candidates work within (measured 2026-10-05)
+
+- **Plot 120** (half 60), fixed. The monorail runs in loop mode on ring 56: its band spans 52.5 to
+  59.5 on every side, with no ramp. The beam is 1.6 wide with a soffit at 6.10; each ring cell has
+  one pier (foot 1.9 square, 2.5 along the beam from the cell centre). Lots keep 0.5 off the band,
+  so they use |x|, |z| ≤ 52. The monorail arrives at purchase 6 (`walkwayNetwork`).
+- **Tubes** are tile streets: 7-stud cells on the lattice (7i, 7j), axis-aligned. The pipe is 3.24
+  wide (half 1.62) and 1.9 to 2.0 tall. There is no pavement, no walker and no street vehicle. The
+  tile meshes: straight 7 × 3.24, end 6.62 × 3.32, bend 5.12 × 5.12, tee 7 × 5.12, cross 7 × 7.
+- **Entrance** (0, −49), forced to z ≤ −48.
+- **Landmarks** (harvested width × depth, and height by stage 0 to 4). Buy pad 6 × 6.
+
+  | # | Slot | Type | w × d | Height |
+  |---|---|---|---|---|
+  | 1 | landingPad | building | 8.8 × 8.6 | 1.8, 2.8, 5.8, 7.2, 7.2 |
+  | 2 | solarArray | building | 9.0 × 9.0 | 2.4, 2.4, 2.4, 5.9, 6.4 |
+  | 3 | habitatPod | building | 8.0 × 9.0 | 4.0 … 9.0 |
+  | 4 | hydroponicsDome | building | 8.9 × 8.9 | 3.8 … 8.2 |
+  | 5 | oxygenGenerator | building | 8.3 × 8.0 | 3.1, 3.1, 6.0, 8.4, 10.8 |
+  | 6 | walkwayNetwork | unlock, street-only | no model | the monorail |
+  | 7 | crewQuarters | building | 8.3 × 8.9 | 4.0 … 12.9 |
+  | 8 | colonyFlag | decor | 8.7 × 8.2 | 8.8 |
+  | 9 | researchLab | building | 8.2 × 8.1 | 4.5 … 12.2 |
+  | 10 | roverBay | building | 12.0 × 8.5 | 2.0, 4.0, 4.4, 6.8, 10.4 |
+  | 11 | commsArray | building | 8.3 × 8.2 | 7.8 … 21.2 |
+  | 12 | lifeSupport | unlock | 8.0 × 8.8 | 7.4 |
+  | 13 | mineralExtractor | building | 8.8 × 8.9 | 8.0 … 12.0 |
+  | 14 | rockGarden | decor | 9.0 × 9.0 | 3.15 |
+  | 15 | observationDome | building | 8.5 × 8.3 | 3.8 … 13.0 |
+  | 16 | fusionReactor | building | 11.8 × 11.6 | 4.3 … 16.9 |
+  | 17 | orbitalUplink | unlock | 8.1 × 8.0 | 9.7 |
+  | 18 | dockingBay | building | 8.8 × 8.8 | 4.7 … 13.4 |
+  | 19 | terraformStation | building | 11.8 × 11.6 | 4.9 … 23.0 |
+  | 20 | holoBeacon | decor | 8.6 × 8.4 | 8.8 |
+  | 21 | medicalBay | building | 8.4 × 8.9 | 4.0 … 13.4 |
+  | 22 | spaceportTerminal | building | 11.8 × 10.6 | 3.6 … 16.5 |
+  | 23 | planetaryDefense | unlock | 8.4 × 8.5 | 9.2 |
+  | 24 | launchTower | monument | 13.6 × 13.8 | 42.8 |
+
+- **The ceiling** (a cross-section model with 4-wide lots, before the docking rule below, ±10%):
+  the whole square in rows holds 250 lots with five tubes at pitch 21 and 200 with four at pitch
+  28. The 23 landmarks need 275 studs of frontage (harvested width + 2.67 each). At pitch 21
+  nothing fits behind a landmark, so each blocks two rows (106 left); at pitch 28 a landmark and a
+  lot row stand back to back (130 left). The same arithmetic gives Metropolis 97, and it shipped
+  88. **More tubes is not more lots.**
+
+### What both candidates share
+
+- **Untouched:** the 24 slot ids, their order, config and models
+  (`Config/Eras/4_OrbitalColony.json` is frozen); the server, remotes and every Luau file except
+  the candidate's own `Layouts/OrbitalColony.luau`; the other eras, whose generated fabric data
+  must stay byte-identical.
+- **The growth rules of mock B** (CITY_GROWTH §2.5): one heart at the entrance, where the Landing
+  Pad (purchase 1) is the seed; slot k roughly k-th in tube distance from the entrance; the tube
+  plan a **tree** within `budget.tileCells` (180); landmark joins at most about 40 studs apart
+  along a tube; every tube tip closed by a landmark, or its lots never develop.
+- **Every building on a tube**, or (axis only) on a lane off a tube.
+- **Docking** (new, groundwork rulings): lots, pads and markers stand `dock` (1.75) from a tube's
+  centreline along straight and end cells, so nothing bare is left beside a pipe. A landmark's pad
+  lies between the tube and the building with its front edge on the dock line, and the building
+  stands behind it (about 12.2 from the centreline to the centre of a 9 × 9).
+- **Decking arrives with development.** The cluster `blocks` go (a socket, CITY_GROWTH §2.4). Each
+  landmark gets one `blocks` rect of its own (one slot per rect) under its pad and building, and
+  every fabric prop carries its own deck plate.
+- **The skyline rises away from the entrance:** the low early landmarks near it, the Comms Array
+  (21.2) and Terraform Station (23.0) toward the back, and the **Launch Tower closing the main
+  vista** from the entrance. A candidate that cannot do that says so and shows what closes it.
+- **Keep:** the tubes, the monorail loop and its train, the pier off the entrance axis, the
+  lattice. Tubes are white half-pipes; only the train moves.
+- **Drop from the layout:** `lots`, `plazas`, `treeZones` and the cluster `blocks`. Config
+  `lamps: {}` (junction lamps fall inside lots, as on Metropolis); the keys `houses`, `trees`,
+  `plazas` and `vehicles` stay because `Scatter` reads them unguarded.
+- **Districts** (lead's starting point; the layout owner may move a slot and says why):
+  - port: `landingPad`, `roverBay`, `dockingBay`, `spaceportTerminal`, `launchTower`;
+  - habitat: `habitatPod`, `hydroponicsDome`, `crewQuarters`, `medicalBay`;
+  - industry: `solarArray`, `oxygenGenerator`, `mineralExtractor`, `fusionReactor`,
+    `terraformStation`;
+  - science: `researchLab`, `commsArray`, `observationDome`;
+  - none: `walkwayNetwork` (street-only: a pad on ground nothing else uses, with a one-point
+    spur), and the six city-changer candidates below. A low or one-stage slot must not govern lots.
+- **City-changer candidates are not decided:** `colonyFlag`, `rockGarden`, `holoBeacon`,
+  `lifeSupport`, `orbitalUplink` and `planetaryDefense` keep their models and get ordinary
+  positions in the mock. Their before-and-after renders are step 3, on the layout Ben picks.
+- **Wild land is raw regolith** (generated `regolith-kit` plus space-kit craters and rocks):
+  craters, boulder fields, dust and survey beacons, on a grid aligned to the lattice. It covers
+  the plot at tier 0, **including every planned tube cell and the ring band**, and clears as tubes
+  draw and lots develop (groundwork rulings). No skirt: the ring is the colony's edge.
+- **Lot sizes** (frontage × depth): narrow 4 × 8, small 6 × 6, medium 8 × 12. Two mediums back to
+  back fill a pitch-28 block between dock lines exactly (12 + 0.5 + 12 = 24.5). A layout owner who
+  needs another size asks the lead with the numbers.
+- **Fabric props** grow pod → pod cluster → dome: five stages, `levelStages` [1, 3, 4], stage 0
+  at or under `heightFloor` 3.4 (the seeds are the lowest landmarks in the game), final stage at
+  most 11 (narrow, small) or 12.5 (medium). The front (−Z) carries an airlock collar flush with
+  the lot front. The deck plate covers the lot in the decking colour (96, 98, 108).
+- **Targets:** at least **100 lots** at full build (floor 90; `budget.parcels` is 140), building
+  sites at every tier, and no tier 4 → full jump above 25 lots. The lot count is written on every
+  render.
+- **Stand-in models:** this wave's draft props. `plotrender.py` draws blueprints, so nothing is
+  uploaded, harvested or templated in this wave.
+
+### Candidates
+
+- **"docks":** a cross tube one cell in from the entrance, with **four avenues** (x = ±14, ±42)
+  running from it to the back. Every landmark and every lot docks on a tube; no lanes. A block
+  between two avenues holds a landmark and a lot row back to back, or two lot rows. There is no
+  tube on the entrance axis, so the owner finds the Launch Tower its strongest seat.
+- **"axis":** today's **three avenues** (x = 0, ±28) kept, the centre tube running from the
+  entrance to the Launch Tower. Landmarks move up to the dock line, lots fill between and behind
+  them, and open **decking lanes** (wave 3.1's tiles-era alleys) carry the back rows where a block
+  is deep enough.
+
+### Groundwork rulings (lead, 2026-10-05; mirrored in the tools now, the client follows in wave 4.2)
+
+- **`road.tiles.dock`** (number, optional; Orbital 1.75). In an era that sets it, a planned
+  **straight or end** tile cell is a solid only within `dock` of its centreline; lots, pads,
+  markers, landmark extents and deck rects may stand in the rest of the cell. Bend, tee and cross
+  cells stay whole (a round bend's pipe sweeps its inner corner). Absent means today's rule, the
+  whole cell plus pavement, so Metropolis does not move. `fabric.clear.street` is 2.0 for Orbital.
+- **Wild on planned tubes.** The rule "wild keeps off every planned street band" holds only in an
+  era with `road.tiles.parkStrips`. Without them the wild covers planned cells, laid there as one
+  quarter a cell so that a drawn cell clears only itself; a clump never overlaps a planned tube's
+  clearing band. `fabric.py check` proves that every wild entry on a planned band is cleared once
+  the stretch under it is drawn.
+- **`highway.clearBand`** (boolean, optional; Orbital `false`). `false` keeps the ring's band out
+  of the clearing mask when `highway.requiresSlot` is owned: the beam is 1.6 wide and the regolith
+  stays under it for good. Lots, pads, markers and landmark extents keep off the band as before.
+  Wild keeps off the entrance corridor (|x| ≤ 3.5 from the plot's front edge to the first tube
+  cell) and is at most 3.0 tall everywhere.
+- **Street polylines:** `streetplan.py` allows up to 6 in a tiles era (was 5).
+- **`eras.OrbitalColony.fabric`** (config applied by the generator owner from this section):
+  `sizes` as above; `heightFloor` 3.4; `levelStages` [1, 3, 4]; `fallbackDistrict` `habitat`;
+  `clear` `{ slot 3, pad 1.5, street 2.0, parcel 1.5, lane 2.0 }`; `lanes`
+  `{ width 3, rim 0, fillHeight 0.09 }`; `reveal` `RevealScaffold`; `marker` prop `LotBeacon`,
+  offset [5.3, 0, −0.5]; `padLook` Metal (170, 174, 184); `construction` as Metropolis; `pull`
+  Metropolis's values as first values for the layout owners to tune. Draft props:
+
+  | District | narrow | small | medium |
+  |---|---|---|---|
+  | habitat | `FabricHabNarrowA`, `FabricHabNarrowB` | `FabricHabSmallA` | `FabricHabMediumA` |
+  | industry | `FabricIndNarrowA` | `FabricIndSmallA` | `FabricIndMediumA` |
+  | science | `FabricSciNarrowA` | `FabricSciSmallA` | `FabricHabMediumA` |
+  | port | `FabricPortNarrowA` | `FabricPortSmallA` | `FabricPortMediumA` |
+
+  `sites` `SiteNarrow`, `SiteSmall`, `SiteMedium`; `siteVariants` narrow
+  `[SiteNarrow, SiteNarrowGantry, SiteNarrow]`, small `[SiteSmall, SiteSmallGantry]`; `wild.clumps`
+  `RegolithClumpA/B/C` (13 × 13), `wild.quarters` `RegolithQuarterA/B/C` (6.5 × 6.5, in the local
+  +X, +Z quadrant like the old-town quarters), `quarterRadius` 3.3, `singleRadius` 1.0; plan
+  singles `RegolithBoulder` [2, 2], `RegolithCrater` [3, 3], `SurveyBeacon` [1, 1].
+- **Not in this wave:** `Types.luau`, `CityFabric.luau`, the client and `check_mirror.py`'s era
+  list. Orbital joins the cross-check in wave 4.2, when the client copies these rules.
+
+### Gate renders (`assets/testfit/out/OrbitalColony/`)
+
+- `m12o_today_{tier1,tier3,full}.png`: today's Orbital with the current renderer (true colours),
+  rendered before any fabric file exists.
+- For each candidate `<c>`: `m12o_<c>_{tier1,tier3,full,full_entrance,streetplan}.png`.
+- `m12o_compare.png`: today and both candidates at tier 1, tier 3 and full, with lot counts.
+- Draft prop strips in `m12o_props/`, on the plot's base colour (56, 53, 60).
+
+### Ownership (wave 4.1)
+
+| Owner | Where | Files |
+|---|---|---|
+| lead | base (`tycoon-m12o`) | this section; rulings; commits and merges; memory |
+| economy-designer "generator" | base | `tools/fabric.py`, `tools/streetplan.py`, `tools/cityfabric.py`, `tools/testfit/plotrender.py`, `plotscene.py`, `compare_sheet.py`; `CityDressing.json` `eras.OrbitalColony`; groundwork versions of `Layouts/OrbitalColony.luau`, `tools/fabric/OrbitalColony.plan.json` and `Config/Fabric/OrbitalColony.json` (replaced by the candidates); renders `m12o_today_*` |
+| prop-builder "pods" | base | `tools/assets/colony_kit.py` (new); new blueprints `tools/testfit/blueprints/_props/OrbitalColony/Fabric*.json`; strips |
+| prop-builder "regolith" | base | `tools/assets/regolith_kit.py` (new); new blueprints `_props/OrbitalColony/{Regolith*,SurveyBeacon,Site*,LotBeacon,RevealScaffold}.json`; strips |
+| layout-designer "docks" | `tycoon-m12o-docks` | `src/shared/Layouts/OrbitalColony.luau`, `tools/fabric/OrbitalColony.plan.json`, `Config/Fabric/OrbitalColony.json`, `eras.OrbitalColony.fabric.pull`; renders `m12o_docks_*` |
+| layout-designer "axis" | `tycoon-m12o-axis` | the same files in its worktree; renders `m12o_axis_*` |
+
+Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts,
+config blocks and fabric data, and the client code. Agents on base do not run `git add`, `commit`,
+`stash` or `checkout`: the lead commits.
