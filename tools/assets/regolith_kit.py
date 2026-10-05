@@ -4,6 +4,7 @@ the reveal gantry for the growing city (M12 wave 4), generated as a Kenney-style
     py tools/assets/regolith_kit.py                  # the GLBs and the 16 blueprints, then the check
     py tools/assets/regolith_kit.py check            # the check alone: nothing is written
     py tools/assets/regolith_kit.py --only lander    # rebuild some GLBs (blueprints and check as usual)
+    py tools/assets/regolith_kit.py --out <dir> --blueprints <dir>   # a trial build that touches nothing shared
     blender -b -P tools/assets/regolith_kit.py -- [the same arguments]
 
 The geometry needs Blender's Python, so under the system `py` the script starts Blender on itself
@@ -30,13 +31,22 @@ Why a custom kit (INTERFACES "M12 wave 4 -- Orbital Colony", docs/CITY_GROWTH.md
 **Units: 1 glTF unit = 1 stud** (blueprints use `"scale": 1.0`), like oldtown-kit and tube-kit.
 
 **The clump contract** (INTERFACES "Fabric data" and "Wave 4.1"): a clump is four copies of one
-quarter design turned 0, 90, 180 and 270 degrees about the clump origin. A quarter is authored in
-the clump's frame with all of its content inside the local (+X, +Z) quadrant, x and z in 0 .. 6.5,
-so a clump is 13 x 13. Unlike the old town, a regolith quarter is not a tile of ground: nothing in
-it runs along its edges, its dust is a few lobed patches with the plot showing between and round
-them, and every feature is whole inside the quarter, because a quarter also stands alone on a
-single 7-stud cell (a planned tube line, the strip under the monorail). So the joins inside a
-clump look like the gaps between any two patches of dust.
+quarter design turned 0, 90, 180 and 270 degrees about the clump origin, because the game breaks a
+clump into its quarters. A quarter is authored in the clump's frame with all of its content inside
+the local (+X, +Z) quadrant, x and z in 0 .. 6.5, so a clump is 13 x 13.
+
+**The symmetry is the subject.** Four turns of anything is a rosette, so each quarter is one
+quadrant of a single round thing centred on the clump's centre, its own origin corner, and the
+clump reads as that one thing: a large crater, a ring of boulders round a dust basin, a low mound
+with a rover's track round it. (The first set scattered small features over each quarter; on open
+ground every clump then showed four craters in a square or a pinwheel of ruts.) Three rules follow:
+- What crosses a clump axis is the same on both of the quarter's inner edges (the rim's section,
+  the plates' radii, the ruts), so the four copies join with no step. `check` compares the edges.
+- Inside the quadrant nothing is even: the rim's height and radius wander, it has a slump, the
+  rocks stand off the circle, and the outline is a ragged round, never the 13 x 13 square.
+- A quarter can stand alone when its clump has broken up, so the solids that are cut by the axes
+  (the rim, the central peak, the mound) are capped there, and a lone quarter reads as an arc of
+  rim with its rubble or a crescent of boulders.
 
 Every other piece has its origin at its bottom centre and its front on -Z; the lot-sized site
 pieces (site-deck-*) are authored in the lot frame (origin at the lot centre on the ground, the
@@ -204,15 +214,11 @@ def rayed(seed: int, cx: float, cz: float, r_in: float, r_out: float, points: in
 
 
 def crater(p: Part, cx: float, cz: float, r_out: float, r_crest: float, r_floor: float, height: float,
-           floor_y: float, seed: int, seg: int = 7, crest_w: float = 0.0,
-           tones: tuple[Rgb, Rgb, Rgb] = (ROCK, ROCK_DARK, DUST)) -> None:
-    """A crater that sits on flat ground: a raised rim round a floor above the plot, never a hole
-    in it. The outer slope climbs from the ground at r_out to the crest at r_crest, the inner wall
-    drops to the floor at r_floor; with `crest_w` the crest is a flat band that wide in the lit
-    rock colour. `tones` are the slope, the wall and the floor: fresh rock by default, dust tones
-    for an old crater the dust has half buried. Every vertex of the ring wanders in angle, radius
-    and height, so no two craters are the same and a turned copy catches the light differently."""
-    slope, wall, floor = tones
+           floor_y: float, seed: int, seg: int = 7, crest_w: float = 0.0) -> None:
+    """A small crater that sits on flat ground: a raised rim round a floor above the plot, never a
+    hole in it. The outer slope climbs from the ground at r_out to the crest at r_crest, the inner
+    wall drops to the floor at r_floor; with `crest_w` the crest is a flat band that wide in the lit
+    rock colour. Every vertex of the ring wanders in angle, radius and height."""
     rng = random.Random(seed)
     phase = rng.uniform(0.0, 2 * math.pi)
     ring = [(phase + 2 * math.pi * (k + rng.uniform(-0.18, 0.18)) / seg, 1.0 + rng.uniform(-0.12, 0.12),
@@ -228,18 +234,17 @@ def crater(p: Part, cx: float, cz: float, r_out: float, r_crest: float, r_floor:
         a, b = pt(k, 1.0, 0.0), pt(n, 1.0, 0.0)
         out = (a[0] + b[0] - 2 * cx, 0.0, a[2] + b[2] - 2 * cz)
         lift = math.hypot(out[0], out[2])
-        face_out(p, [pt(k, r_out, 0.0), pt(n, r_out, 0.0), pt(n, r_crest), pt(k, r_crest)], slope,
+        face_out(p, [pt(k, r_out, 0.0), pt(n, r_out, 0.0), pt(n, r_crest), pt(k, r_crest)], ROCK,
                  (out[0], lift, out[2]))
         if crest_w > 0:
             face_out(p, [pt(k, r_crest), pt(n, r_crest), pt(n, r_in), pt(k, r_in)], ROCK_LIGHT, (0.0, 1.0, 0.0))
-        face_out(p, [pt(k, r_in), pt(n, r_in), pt(n, r_floor, floor_y), pt(k, r_floor, floor_y)], wall,
+        face_out(p, [pt(k, r_in), pt(n, r_in), pt(n, r_floor, floor_y), pt(k, r_floor, floor_y)], ROCK_DARK,
                  (-out[0], lift, -out[2]))
-    face_out(p, [pt(k, r_floor, floor_y) for k in range(seg)], floor, (0.0, 1.0, 0.0))
+    face_out(p, [pt(k, r_floor, floor_y) for k in range(seg)], DUST, (0.0, 1.0, 0.0))
 
 
 # A rock's profile: (radius, height) as shares of its size, from the ground up.
 BOULDER = ((1.0, 0.0), (1.07, 0.42), (0.62, 1.0))
-TALL_BOULDER = ((1.0, 0.0), (1.07, 0.4), (0.86, 0.8), (0.5, 1.0))
 STONE = ((1.0, 0.0), (1.12, 0.22), (1.0, 0.7), (0.68, 1.0))
 CHUNK = ((1.0, 0.0), (0.66, 1.0))
 
@@ -323,24 +328,64 @@ def outcrop(name: str, w: float, d: float, low: float, high: float, seed: int) -
     return p
 
 
-def ruts(p: Part, path, gauge: float, width: float, y: float, colour: Rgb) -> None:
-    """A rover's two wheel tracks along a centreline [(x, z)], `gauge` apart and `width` wide, as
-    decals mitred at the bends."""
-    if width < MIN_MEMBER - 1e-9:
-        THIN.append(f"{p.name}: a rut {width:.3f} wide")
-    normals = []
-    for i in range(len(path)):
-        a, b = path[max(i - 1, 0)], path[min(i + 1, len(path) - 1)]
-        dx, dz = b[0] - a[0], b[1] - a[1]
-        length = math.hypot(dx, dz)
-        normals.append((-dz / length, dx / length))
-    for side in (-1, 1):
-        for i in range(len(path) - 1):
-            quad = []
-            for k, off in ((i, -width / 2), (i + 1, -width / 2), (i + 1, width / 2), (i, width / 2)):
-                o = side * gauge / 2 + off
-                quad.append((path[k][0] + normals[k][0] * o, path[k][1] + normals[k][1] * o))
-            decal(p, quad, y, colour)
+def polar(r: float, degrees: float) -> tuple[float, float]:
+    """(x, z) at radius r from the clump's centre, `degrees` from +X toward +Z: 0 and 90 are the
+    quarter's two inner edges."""
+    a = math.radians(degrees)
+    return (r * math.cos(a), r * math.sin(a))
+
+
+def sector(p: Part, angles, inner, outer, y: float, colour: Rgb) -> None:
+    """A level plate round the clump's centre, as a decal: between the radii inner[k] and outer[k]
+    at angles[k], one flat piece from each station to the next, so both of its ends lie on radii.
+    `inner` None runs it from the centre itself."""
+    for k in range(len(angles) - 1):
+        a0, a1 = angles[k], angles[k + 1]
+        if inner is None:
+            outline = [(0.0, 0.0), polar(outer[k], a0), polar(outer[k + 1], a1)]
+        else:
+            outline = [polar(inner[k], a0), polar(outer[k], a0), polar(outer[k + 1], a1),
+                       polar(inner[k + 1], a1)]
+        decal(p, outline, y, colour)
+
+
+def ray(p: Part, degrees: float, r0: float, r1: float, w0: float, w1: float, y: float, colour: Rgb) -> None:
+    """A streak of dust thrown out from the clump's centre, as a decal: along the radius at
+    `degrees` from r0 to r1, w0 wide at its root and w1 at its blunt end."""
+    if min(w0, w1) < MIN_MEMBER - 1e-9:
+        THIN.append(f"{p.name}: a ray {min(w0, w1):.3f} wide")
+    a = math.radians(degrees)
+    dx, dz = math.cos(a), math.sin(a)
+    h0, h1 = w0 / 2, w1 / 2
+    decal(p, [(r0 * dx + h0 * dz, r0 * dz - h0 * dx), (r1 * dx + h1 * dz, r1 * dz - h1 * dx),
+              (r1 * dx - h1 * dz, r1 * dz + h1 * dx), (r0 * dx - h0 * dz, r0 * dz + h0 * dx)], y, colour)
+
+
+def lofted(p: Part, angles, profiles, colours, cap: Rgb) -> None:
+    """A solid swept round the clump's centre: profiles[k] is its section at angles[k], (radius,
+    height) points from its outer foot over its top to its inner foot (or to the centre, radius
+    0), and colours[j] paints the band from point j to point j + 1. Both ends are closed with the
+    section in `cap`, facing out of the sweep: inside a clump the next quarter's end lies against
+    it, and on a quarter that stands alone it is the cut face."""
+    def pt(k: int, j: int) -> Vec:
+        r, y = profiles[k][j]
+        x, z = polar(r, angles[k])
+        return (x, y, z)
+
+    for k in range(len(angles) - 1):
+        mid = math.radians((angles[k] + angles[k + 1]) / 2)
+        for j, colour in enumerate(colours):
+            (r0, y0), (r1, y1) = profiles[k][j], profiles[k][j + 1]
+            face = [pt(k, j), pt(k + 1, j), pt(k + 1, j + 1), pt(k, j + 1)]
+            if profiles[k][j + 1][0] <= 0 and profiles[k + 1][j + 1][0] <= 0:
+                face = face[:3]  # the band closes on the centre
+            face_out(p, face, colour, ((y1 - y0) * math.cos(mid), r0 - r1, (y1 - y0) * math.sin(mid)))
+    for k, sign in ((0, -1.0), (len(angles) - 1, 1.0)):
+        a = math.radians(angles[k])
+        section = [pt(k, j) for j in range(len(profiles[k]))]
+        if profiles[k][-1][1] > 0:
+            section.append((0.0, 0.0, 0.0))  # a section that ends on the centre line closes down it
+        face_out(p, section, cap, (-sign * math.sin(a), 0.0, sign * math.cos(a)))
 
 
 def drum(p: Part, profile, colours, seg: int = 8, at: Vec = (0.0, 0.0, 0.0), phase: float = 0.0,
@@ -382,59 +427,84 @@ def hoop(p: Part, r_in: float, r_out: float, y0: float, y1: float, colour: Rgb, 
             face_out(p, [pt(r_in, a0, y), pt(r_in, a1, y), pt(r_out, a1, y), pt(r_out, a0, y)], colour, (0.0, up, 0.0))
 
 
-# --- the wild: three quarters of regolith ---------------------------------------------------------
+# --- the wild: three quarters, each a quadrant of one round feature --------------------------------
 #
-# A crater in the wild is ground, not an object: the fresh rock colours are kept for the boulders
-# and for the one fresh crater a plan places as a single (a field of bright rims read as rows of
-# rings, not as terrain). WORN is a crater as old as the dust round it, its rim the kit's dark rock;
-# BURIED one the dust has half filled.
-WORN = (ROCK_DARK, DUST_LIGHT, DUST)
-BURIED = (DUST_LIGHT, DUST, DUST_LIGHT)
-
-# Each ground piece holds everything of its quarter that lies flat or is too small to be a piece:
-# the dust, the apron, the ruts, the craters and the pebbles. The boulders and slabs are pieces of
-# their own, placed by the blueprint. A (impact): a fresh crater with its apron, a pit, one
-# boulder. B (boulder field): rocks of three sizes on a drift of dust. C (flats): a wide patch of
-# dust a rover has crossed, an old filled crater, a slab of bedrock.
+# Each quarter piece holds what lies flat or is cut by the clump's axes: the plates of dust, the
+# rays, the ruts, and the rim, peak or mound swept round the centre. Stations are degrees from +X;
+# the first (0) and the last (90) are the quarter's inner edges, and every list has the same value
+# at both, so four copies meet. The boulders and slabs are pieces of their own, placed by the
+# blueprint. The rock colours are for the rocks: a rim is ground, in the dust tones with only its
+# crest in rock (a field of bright rims read as rings lying on the plot, not as terrain).
+WILD_LOW = 1.5  # a clump stays this low: the wild's tall accent is the RegolithBoulder single
 
 
-def make_ground_a() -> Part:
-    p = Part("ground-a")
-    decal(p, lobed(101, 3.85, 3.0, 2.3, 2.05, points=9, wobble=0.18, turn=20), DUST_Y, DUST)
-    decal(p, rayed(103, 3.95, 2.85, 1.8, 2.45, points=10), DRIFT_Y, DUST_LIGHT)
-    crater(p, 3.95, 2.85, 1.5, 1.08, 0.7, 0.5, FLOOR_Y, seed=105, seg=7, tones=WORN)
-    decal(p, lobed(107, 1.4, 5.25, 1.05, 0.9, points=7, wobble=0.16), DUST_Y, DUST)
-    crater(p, 1.35, 5.3, 0.62, 0.43, 0.27, 0.26, 2 * MIN_GAP + 0.02, seed=109, seg=5, tones=WORN)
-    for k, (x, z, r) in enumerate(((0.75, 3.2, 0.2), (2.2, 0.6, 0.26), (5.75, 5.6, 0.22))):
-        pebble(p, x, z, r, 111 + k)
+def make_crater_quarter() -> Part:
+    """A: a quadrant of one impact crater 10 studs across its rim's foot: the floor, the rim with
+    its lit crest wandering between 0.6 and 1.1 up and slumped once, the central peak, the apron
+    of ejecta with three rays thrown past its ragged edge, chips."""
+    p = Part("crater-quarter")
+    angles = (0.0, 13.0, 31.0, 44.0, 62.0, 76.0, 90.0)
+    foot = (5.0, 5.1, 4.92, 5.12, 5.02, 4.9, 5.0)
+    crest = (4.15, 4.2, 4.1, 4.22, 4.16, 4.08, 4.15)
+    height = (0.95, 1.1, 0.85, 0.62, 0.98, 1.12, 0.95)
+    floor = (3.3, 3.35, 3.2, 3.45, 3.3, 3.15, 3.3)
+    apron = (5.9, 6.3, 5.7, 6.4, 6.0, 5.6, 5.9)
+    # The plates run a little under the rim on both sides, so no ground shows along its feet.
+    sector(p, angles, None, [r + 0.2 for r in floor], DUST_Y, DUST)
+    sector(p, angles, [r - 0.45 for r in foot], apron, DUST_Y, DUST)
+    for degrees, reach, width in ((21.0, 6.4, 0.75), (52.0, 6.45, 0.6), (70.0, 6.2, 0.7)):
+        ray(p, degrees, 4.7, reach, width, 0.2, DRIFT_Y, DUST_LIGHT)
+    rim = [[(foot[k], 0.0), (crest[k], height[k]), (crest[k] - 0.4, height[k] * 0.94), (floor[k], 0.0)]
+           for k in range(len(angles))]
+    lofted(p, angles, rim, (ROCK_DARK, ROCK, DUST_LIGHT), cap=ROCK_DARK)
+    peak = [[(1.15, 0.0), (0.5, 0.46), (0.0, 0.6)], [(1.32, 0.0), (0.58, 0.4), (0.0, 0.6)],
+            [(1.15, 0.0), (0.5, 0.46), (0.0, 0.6)]]
+    lofted(p, (0.0, 48.0, 90.0), peak, (ROCK_DARK, DUST_LIGHT), cap=ROCK_DARK)
+    for k, (r, degrees, size) in enumerate(((5.75, 38.0, 0.22), (2.3, 25.0, 0.2), (6.0, 82.0, 0.18))):
+        pebble(p, *polar(r, degrees), size, 111 + k)
     return p
 
 
-def make_ground_b() -> Part:
-    p = Part("ground-b")
-    decal(p, lobed(201, 3.1, 3.5, 2.75, 1.7, points=9, wobble=0.2, turn=35), DUST_Y, DUST)
-    decal(p, lobed(203, 3.75, 4.25, 1.3, 0.75, points=7, wobble=0.2, turn=35), DRIFT_Y, DUST_LIGHT)
-    decal(p, lobed(205, 5.2, 1.3, 0.9, 0.75, points=6, wobble=0.18), DUST_Y, DUST)
-    for k, (x, z, r) in enumerate(((0.7, 1.2, 0.24), (3.7, 1.45, 0.2), (5.9, 3.3, 0.22), (0.9, 5.3, 0.26),
-                                   (2.7, 5.9, 0.18))):
-        pebble(p, x, z, r, 211 + k)
+def make_basin_quarter() -> Part:
+    """B: a quadrant of a dust basin 6.5 studs across inside a ring of boulders: the darker floor,
+    the paler dust the boulders stand on out to a ragged edge, chips."""
+    p = Part("basin-quarter")
+    angles = (0.0, 16.0, 33.0, 47.0, 63.0, 78.0, 90.0)
+    floor = (3.2, 3.4, 3.05, 3.3, 3.5, 3.1, 3.2)
+    edge = (5.6, 6.1, 5.3, 6.3, 5.8, 5.4, 5.6)
+    sector(p, angles, None, floor, DUST_Y, DUST)
+    sector(p, angles, floor, edge, DUST_Y, DUST_LIGHT)
+    for k, (r, degrees, size) in enumerate(((2.3, 28.0, 0.2), (1.3, 66.0, 0.18), (2.9, 80.0, 0.22),
+                                            (5.95, 52.0, 0.2))):
+        pebble(p, *polar(r, degrees), size, 211 + k)
     return p
 
 
-def make_ground_c() -> Part:
-    p = Part("ground-c")
-    decal(p, lobed(301, 3.0, 3.45, 2.6, 2.3, points=10, wobble=0.2, turn=-15), DUST_Y, DUST)
-    decal(p, lobed(303, 1.75, 4.4, 1.05, 0.8, points=7, wobble=0.2, turn=40), DRIFT_Y, DUST_LIGHT)
-    ruts(p, [(1.1, 1.85), (2.3, 2.75), (3.6, 3.15), (4.9, 4.15)], 0.95, 0.24, RUT_Y, RUT)
-    crater(p, 5.05, 1.5, 1.2, 0.92, 0.7, 0.22, 2 * MIN_GAP + 0.02, seed=305, seg=7, tones=BURIED)
-    for k, (x, z, r) in enumerate(((0.6, 0.7, 0.22), (5.95, 3.7, 0.2), (4.4, 5.9, 0.24))):
-        pebble(p, x, z, r, 311 + k)
+def make_mound_quarter() -> Part:
+    """C: a quadrant of a low mound 6 studs across and 0.72 tall on its apron of dust: two fans of
+    paler dust, one long and one short, and a rover's two ruts wandering round it, the track a full
+    loop in a clump."""
+    p = Part("mound-quarter")
+    angles = (0.0, 14.0, 30.0, 45.0, 61.0, 77.0, 90.0)
+    apron = (5.7, 6.3, 5.2, 6.4, 5.75, 5.1, 5.7)
+    sector(p, angles, [2.6] * len(angles), apron, DUST_Y, DUST)
+    for degrees, reach, root, tip in ((24.0, 6.4, 1.3, 0.3), (63.0, 5.3, 0.9, 0.45)):
+        ray(p, degrees, 2.8, reach, root, tip, DRIFT_Y, DUST_LIGHT)
+    track = (4.45, 4.7, 4.3, 4.2, 4.6, 4.8, 4.45)
+    for side in (-0.475, 0.475):  # half the rover's gauge
+        sector(p, angles, [r + side - 0.12 for r in track], [r + side + 0.12 for r in track], RUT_Y, RUT)
+    wide = (1.0, 1.07, 0.94, 1.06, 1.0)
+    high = (1.0, 1.12, 0.88, 1.08, 1.0)
+    mound = [[(3.0 * w, 0.0), (2.0 * w, 0.36 * h), (0.95 * w, 0.6 * h), (0.0, 0.72)] for w, h in zip(wide, high)]
+    lofted(p, (0.0, 24.0, 45.0, 68.0, 90.0), mound, (ROCK_DARK, DUST_LIGHT, ROCK_DARK), cap=ROCK_DARK)
+    for k, (r, degrees, size) in enumerate(((5.9, 9.0, 0.2), (3.55, 55.0, 0.18))):
+        pebble(p, *polar(r, degrees), size, 311 + k)
     return p
 
 
-def make_boulder_large() -> Part:
-    """1.9 x 1.7 studs, 1.5 tall."""
-    return rock("boulder-large", (0.9, 1.45, 0.78), 401, seg=7, profile=TALL_BOULDER)
+def make_boulder_broad() -> Part:
+    """2.0 x 1.7 studs, 1.15 tall."""
+    return rock("boulder-broad", (1.0, 1.1, 0.82), 409, seg=7)
 
 
 def make_boulder_medium() -> Part:
@@ -756,10 +826,10 @@ def make_gantry_ring() -> Part:
 
 
 PIECES = {
-    "ground-a": make_ground_a,
-    "ground-b": make_ground_b,
-    "ground-c": make_ground_c,
-    "boulder-large": make_boulder_large,
+    "crater-quarter": make_crater_quarter,
+    "basin-quarter": make_basin_quarter,
+    "mound-quarter": make_mound_quarter,
+    "boulder-broad": make_boulder_broad,
     "boulder-medium": make_boulder_medium,
     "boulder-small": make_boulder_small,
     "rock-slab": make_rock_slab,
@@ -794,6 +864,12 @@ def placed(model: str, pos: Vec, rot: float = 0) -> dict:
     return {"kit": KIT, "model": model, "pos": [round(v, 4) for v in pos], "rotY": rot, "stage": 0}
 
 
+def ringed(model: str, r: float, degrees: float, rot: float = 0) -> dict:
+    """A piece on the ground at radius r from the clump's centre, `degrees` from +X toward +Z."""
+    x, z = polar(r, degrees)
+    return placed(model, (x, 0, z), rot)
+
+
 def quarter_turned(piece: dict, turns: int) -> dict:
     """A quarter's piece as its clump shows it after `turns` quarter turns about the clump origin,
     by Roblox's CFrame.Angles(0, a, 0) mapping (INTERFACES "Fabric data"): (x, z) -> (x cos a +
@@ -815,36 +891,45 @@ CLUMP_TRIS, QUARTER_TRIS, SINGLE_TRIS, SITE_TRIS = 600, 250, 120, 500
 
 def blueprints() -> list[dict]:
     """Every blueprint this kit owns, in the schema of tools/testfit/blueprint.py."""
-    frame = "in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data')"
+    frame = ("in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'), the feature's centre at "
+             "the origin corner")
     quarters = {
         "A": (
-            f"one quarter of impact ground {frame}: a fresh crater on its apron, a pit, one boulder, dust; "
-            "regolith-kit is 1 unit = 1 stud, so scale is 1.0",
+            f"one quadrant of a large impact crater {frame}: a quarter of its floor, of its rim with the lit crest "
+            "and of its central peak, its share of the ejecta apron and rays, and the rubble: a boulder on the "
+            "apron, two blocks; regolith-kit is 1 unit = 1 stud, so scale is 1.0",
             [
-                placed("ground-a", (0, 0, 0)),
-                placed("boulder-medium", (1.3, 0, 1.75), 25),
+                placed("crater-quarter", (0, 0, 0)),
+                ringed("boulder-medium", 5.6, 60, 25),
+                ringed("boulder-small", 2.2, 68, 110),
+                ringed("boulder-small", 5.85, 12, 200),
             ],
-            "impact ground (four quarters)",
+            "one impact crater 10 studs across its rim, with its apron (four quadrants)",
         ),
         "B": (
-            f"one quarter of a boulder field {frame}: rocks of three sizes on a drift of dust; scale 1.0",
+            f"one quadrant of a boulder ring round a dust basin {frame}: four boulders of three sizes along a "
+            "rough circle of radius 4, one thrown outside it, a darker floor inside; scale 1.0",
             [
-                placed("ground-b", (0, 0, 0)),
-                placed("boulder-large", (4.55, 0, 4.4), 15),
-                placed("boulder-medium", (2.25, 0, 2.55), 200),
-                placed("boulder-small", (5.2, 0, 1.35), 40),
+                placed("basin-quarter", (0, 0, 0)),
+                ringed("boulder-medium", 4.0, 13, 25),
+                ringed("boulder-broad", 4.5, 40, 100),
+                ringed("boulder-small", 3.7, 63, 40),
+                ringed("boulder-small", 4.2, 82, 160),
+                ringed("boulder-small", 5.65, 26, 290),
             ],
-            "boulder field (four quarters)",
+            "one ring of boulders round a dust basin (four quadrants)",
         ),
         "C": (
-            f"one quarter of dust flats {frame}: a wide patch of dust a rover has crossed, an old filled "
-            "crater, a slab of bedrock; scale 1.0",
+            f"one quadrant of a low mound {frame}: a quarter of the mound, its apron with two fans of paler dust "
+            "and a rover's ruts wandering round it, a slab of bedrock tilted up toward it, two blocks; scale 1.0",
             [
-                placed("ground-c", (0, 0, 0)),
-                placed("rock-slab", (1.6, 0, 5.3), 160),
-                placed("boulder-small", (2.9, 0, 1.2), 80),
+                placed("mound-quarter", (0, 0, 0)),
+                # a slab's tall broken edge is its +Z: turned -(90 + its angle), that edge faces the mound
+                ringed("rock-slab", 3.0, 40, 230),
+                ringed("boulder-small", 3.3, 78, 15),
+                ringed("boulder-small", 5.75, 12, 70),
             ],
-            "dust flats (four quarters)",
+            "one low mound with a rover's track round it (four quadrants)",
         ),
     }
     out = []
@@ -856,8 +941,8 @@ def blueprints() -> list[dict]:
         add(f"RegolithQuarter{key}", [13, 13], note, pieces)
         clump = [quarter_turned(piece, turns) for turns in range(4) for piece in pieces]
         add(f"RegolithClump{key}", [13, 13],
-            f"exactly RegolithQuarter{key} at rotY 0, 90, 180 and 270 about the origin: {title}, 13 x 13 on the "
-            "14-stud grid", clump)
+            f"exactly RegolithQuarter{key} at rotY 0, 90, 180 and 270 about the origin: {title}, a ragged round "
+            "inside 13 x 13", clump)
 
     add("RegolithBoulder", [2, 2], "a standing stone over two smaller rocks: the wild's tall accent",
         [placed("boulder-pile", (0, 0, 0))])
@@ -936,13 +1021,22 @@ def blueprint_text(bp: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_blueprints() -> None:
-    os.makedirs(BLUEPRINT_DIR, exist_ok=True)
+def write_blueprints(blueprint_dir: str) -> None:
+    os.makedirs(blueprint_dir, exist_ok=True)
     for bp in blueprints():
-        path = os.path.join(BLUEPRINT_DIR, bp["id"] + ".json")
+        path = os.path.join(blueprint_dir, bp["id"] + ".json")
         with open(path, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(blueprint_text(bp))
         log(f"wrote {os.path.relpath(path, REPO_ROOT)}")
+
+
+def seams(faces) -> list[str]:
+    """Where a quarter's two inner edges differ. Turned a quarter turn, the edge on x = 0 lies on
+    the next copy's z = 0 edge, so what the quarter has at (0, y, t) it must have at (t, y, 0): the
+    same corners of the same rim, plates and ruts, or the clump shows a step along its axes."""
+    on_x = {(round(q[0], 4), round(q[1], 4)) for points, _ in faces for q in points if abs(q[2]) < 1e-6}
+    on_z = {(round(q[2], 4), round(q[1], 4)) for points, _ in faces for q in points if abs(q[0]) < 1e-6}
+    return [f"its inner edges differ at {t:g} out, {y:g} up" for t, y in sorted(on_x ^ on_z)[:4]]
 
 
 # --- the check -----------------------------------------------------------------------------------
@@ -1059,9 +1153,9 @@ def thin_faces(faces, limit: float = MIN_MEMBER) -> list[str]:
 def limits(bid: str):
     """(x0, x1, z0, z1, tallest, triangles) a prop must keep to."""
     if bid.startswith("RegolithClump"):
-        return (-EDGE, EDGE, -EDGE, EDGE, WILD_MAX, CLUMP_TRIS)
+        return (-EDGE, EDGE, -EDGE, EDGE, WILD_LOW, CLUMP_TRIS)
     if bid.startswith("RegolithQuarter"):
-        return (0.0, EDGE, 0.0, EDGE, WILD_MAX, QUARTER_TRIS)
+        return (0.0, EDGE, 0.0, EDGE, WILD_LOW, QUARTER_TRIS)
     if bid in ("RegolithBoulder", "RegolithCrater", "SurveyBeacon"):
         half = {"RegolithBoulder": 1.0, "RegolithCrater": 1.5, "SurveyBeacon": 0.5}[bid]
         return (-half, half, -half, half, WILD_MAX, SINGLE_TRIS)
@@ -1076,7 +1170,7 @@ def limits(bid: str):
     raise KeyError(bid)
 
 
-def check(out_dir: str) -> tuple[list[str], list[tuple]]:
+def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
     """The contract, prop by prop. Returns the problems and a row per prop: (id, width, depth,
     height, triangles)."""
     THIN.clear()
@@ -1118,13 +1212,15 @@ def check(out_dir: str) -> tuple[list[str], list[tuple]]:
             bad.append(f"{bid} has {tris} triangles, over {budget}")
         for fight in flat_fights(faces, ground=True)[:4]:
             bad.append(f"{bid}: {fight}")
+        if bid.startswith("RegolithQuarter"):
+            bad += [f"{bid}: {seam}" for seam in seams(faces)]
         if bid == "RevealScaffold":
             near = min(max(abs(q[0]), abs(q[2])) for q in verts)
             far = max(hi[0], hi[2], -lo[0], -lo[2])
             if near < RING_NEAR - e or far > RING_FAR + e:
                 bad.append(f"{bid} must stand between {RING_NEAR} and {RING_FAR} from the slot's centre: nearest "
                            f"{near:.3f}, farthest {far:.3f}")
-        path = os.path.join(BLUEPRINT_DIR, bid + ".json")
+        path = os.path.join(blueprint_dir, bid + ".json")
         try:
             with open(path, "r", encoding="utf-8", newline="") as fh:
                 on_disk = fh.read()
@@ -1167,11 +1263,12 @@ def main(argv: list[str]) -> int:
                         help="build (the default) writes the GLBs and the blueprints, then checks; check only checks")
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
     parser.add_argument("--only", default="", help="comma list of pieces to rebuild (default: all)")
+    parser.add_argument("--blueprints", default=BLUEPRINT_DIR, help="where the 16 blueprints are written and checked")
     args = parser.parse_args(argv)
     if args.command == "build":
         generate(args.out, {name for name in args.only.split(",") if name} or None)
-        write_blueprints()
-    problems, rows = check(args.out)
+        write_blueprints(args.blueprints)
+    problems, rows = check(args.out, args.blueprints)
     for bid, width, depth, height, tris in rows:
         log(f"{bid}: {width:.2f} x {depth:.2f} studs, {height:.2f} tall, {tris} tris")
     for problem in problems:

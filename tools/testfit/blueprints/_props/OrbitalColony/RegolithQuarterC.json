@@ -3,10 +3,11 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "one quarter of dust flats in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): a wide patch of dust a rover has crossed, an old filled crater, a slab of bedrock; scale 1.0",
+  "note": "one quadrant of a low mound in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'), the feature's centre at the origin corner: a quarter of the mound, its apron with two fans of paler dust and a rover's ruts wandering round it, a slab of bedrock tilted up toward it, two blocks; scale 1.0",
   "pieces": [
-    {"kit": "regolith-kit", "model": "ground-c", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "rock-slab", "pos": [1.6, 0, 5.3], "rotY": 160, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-small", "pos": [2.9, 0, 1.2], "rotY": 80, "stage": 0}
+    {"kit": "regolith-kit", "model": "mound-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "rock-slab", "pos": [2.2981, 0, 1.9284], "rotY": 230, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [0.6861, 0, 3.2279], "rotY": 15, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [5.6243, 0, 1.1955], "rotY": 70, "stage": 0}
   ]
 }
