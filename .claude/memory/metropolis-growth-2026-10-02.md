@@ -45,6 +45,15 @@ sheets (`m12m_props/_contact_final_{towers,oldtown}.png`), then the asset run (m
 paste**, templates, fabric rebuilt from harvested extents), then his Studio look in `build/metropolis.rbxl`.
 Agents resume by id after a session limit or a restart (SendMessage "run git status and continue").
 
+**Asset run done 2026-10-05** (`m12-metropolis` 18bdc0b): Ben approved the sheets ("looks good!", "upload
+them"); 107/107 stages uploaded first try, harvest 107 loaded / 0 failed, 35 templates (444 in all), fabric
+data unchanged on harvested sizes (88 lots), every gate green. **Waiting on Ben's Studio playtest** in
+`C:\Users\benja\Desktop\tycoon-m12m\build\metropolis.rbxl` (never publish; fresh save starts in Metropolis
+with $100ab), checklist in PLAYTEST "M12 wave 3". After sign-off: merge to `main`, remove the three
+`tycoon-m12m*` worktrees (junctions first). Orbital (wave 4) only when Ben says so.
+- Merge and upload only the new props with `--model` flags, so already-uploaded props are never touched.
+- `upload_models.py` now shortens names over Open Cloud's 50 characters to an `ECT_` prefix.
+
 Lessons from wave 3.2:
 - **The review caught what renders could not:** five landmark footpaths ran onto the road (the client drops
   a last spur leg of `spurClip` or less), and buying the Supermarket shrank eight standing towers (a new,
