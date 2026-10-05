@@ -2,7 +2,8 @@
 
 Runs inside Blender (headless):
 
-    blender -b -P tools/assets/tube_kit.py [-- --out <dir>]
+    blender -b -P tools/assets/tube_kit.py [-- --out <dir>] [--only name,name]
+    blender -b -P tools/assets/tube_kit.py -- check        # the round hub's check alone: writes nothing
 
 Writes one GLB per piece into assets/kenney3d/tube-kit/Models/GLB format/, the folder convention
 every Kenney kit already uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py discover
@@ -33,6 +34,15 @@ faces, and the ring at a cell edge is a half-ring, so two neighbours pair into o
 Geometry is authored in glTF space (Y up, front -Z); Blender is Z up, so every vertex converts with
 (x, y, z) -> (x, -z, y), a proper rotation. Faces are oriented by an explicit outward direction
 (`Part.face(..., out=...)`), so rotated arms stay correct.
+
+**The round hub** (`tube-hub`, M12 wave 4.1b, INTERFACES "Wave 4.1b -- organic Orbital"): when the
+tubes curve, each stretch is swept as its own mesh in this kit's section and a hub stands at every
+node where tubes branch or one ends. A stretch runs into the hub from any direction and ends inside
+it, so the hub is a plain round airlock drum, wider and taller than a pipe with its rings, the same
+from every side: nothing on it has a front. Its origin is its centre on the ground. `check` holds
+it to that, to the two Studio rules of 2026-10-02 (parallel faces 0.05 apart, nothing under 0.1
+across) and to its size; the five tile pieces predate those rules and are not checked. Adding the
+hub leaves their GLBs byte for byte as they were: every piece is built and exported on its own.
 """
 
 from __future__ import annotations
@@ -91,6 +101,29 @@ DOOR_H = 1.35
 LAMP_Y = (1.48, 1.62)
 LAMP_HALF = 0.22
 PROUD = 0.02  # door and lamp stand this far off the disc instead of z-fighting
+
+# --- the round hub, in studs -------------------------------------------------------------------
+HUB_SIDES = 12  # 30 degrees a facet: round from the tycoon camera, and a pipe may enter anywhere
+HUB_FLAT = 2.3  # half its width over the base ring's flats: 4.6 across (INTERFACES "Wave 4.1b")
+HUB_TOP = 2.6
+HUB_TRIS = 160  # "about 150"
+# Its profile from the ground up: (half-width over the flats, height, colour of the band above).
+# A grey base ring as tall as a pipe's sill and a bevel; the white drum, whose wall ends above the
+# top of a pipe's support rings (1.88), so a pipe always enters through plain wall; a grey collar
+# band; the white shoulder; the grey frame of the skylight, whose lit pane closes the top. The pane
+# is 1.24 across: at 1.8 the hubs read as a string of yellow lamps before they read as airlocks.
+HUB_WALL = HUB_FLAT - 0.18
+HUB_WALL_TOP = 2.0
+HUB_PROFILE = [
+    (HUB_FLAT, 0.0, "ring"),
+    (HUB_FLAT, 0.34, "ring"),
+    (HUB_WALL, 0.46, "shell"),
+    (HUB_WALL, HUB_WALL_TOP, "ring"),
+    (HUB_WALL, 2.18, "shell"),
+    (1.25, 2.5, "ring"),
+    (0.62, HUB_TOP, None),
+]
+HUB_PANE = "lit"
 
 
 def log(msg: str) -> None:
@@ -355,12 +388,38 @@ def make_cross() -> Part:
     return p
 
 
+def make_round_hub() -> Part:
+    """The round airlock hub of a curving tube network: a faceted drum on a base ring under a low
+    shoulder and a lit skylight, HUB_PROFILE turned HUB_SIDES times with its flats square to the
+    axes. No underside; no door, lamp or seam, because pipes enter it at any angle."""
+    p = Part("tube-hub")
+    corner = 1.0 / math.cos(math.pi / HUB_SIDES)  # corner radius over flat radius
+    step = 2.0 * math.pi / HUB_SIDES
+
+    def pt(i: int, flat: float, y: float) -> tuple[float, float, float]:
+        a = (i + 0.5) * step
+        return (flat * corner * math.cos(a), y, flat * corner * math.sin(a))
+
+    for (r0, y0, colour), (r1, y1, _) in zip(HUB_PROFILE, HUB_PROFILE[1:]):
+        for i in range(HUB_SIDES):
+            a = (i + 1) * step  # the facet's middle
+            p.face(
+                [pt(i, r0, y0), pt(i + 1, r0, y0), pt(i + 1, r1, y1), pt(i, r1, y1)],
+                colour,
+                (math.cos(a) * (y1 - y0), r0 - r1, math.sin(a) * (y1 - y0)),
+            )
+    r, y, _ = HUB_PROFILE[-1]
+    p.face([pt(i, r, y) for i in range(HUB_SIDES)], HUB_PANE, (0.0, 1.0, 0.0))
+    return p
+
+
 PIECES = {
     "tube-straight": make_straight,
     "tube-end": make_end,
     "tube-bend": make_bend,
     "tube-tee": make_tee,
     "tube-cross": make_cross,
+    "tube-hub": make_round_hub,
 }
 TRI_BUDGET = 400  # INTERFACES: <= 400 tris per piece
 
@@ -377,6 +436,41 @@ def ring_clearance() -> float:
             else:
                 worst = min(worst, abs(z) - R)
     return worst
+
+
+def check_hub() -> list[str]:
+    """The round hub against its contract; returns what is wrong with it."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    from regolith_kit import flat_fights, thin_faces  # the checks of the two Studio rules
+
+    part = make_round_hub()
+    lo, hi = part.bounds()
+    bad = []
+    for axis, name in ((0, "x"), (2, "z")):
+        if abs(lo[axis] + HUB_FLAT) > 0.01 or abs(hi[axis] - HUB_FLAT) > 0.01:
+            bad.append(
+                f"it spans {name} {lo[axis]:.3f}..{hi[axis]:.3f}, not {2 * HUB_FLAT:g} across its centre"
+            )
+    if lo[1] < -1e-9 or hi[1] > HUB_TOP + 1e-9:
+        bad.append(f"it spans y {lo[1]:.3f}..{hi[1]:.3f}, not 0..{HUB_TOP:g}")
+    if part.tris > HUB_TRIS:
+        bad.append(f"{part.tris} tris > {HUB_TRIS}")
+    # Wider and taller than a pipe with its rings, and plain wall wherever a pipe can enter.
+    pipe_top = max(y for _, y in ring_profile(RING_OUT))
+    if HUB_WALL <= RING_OUT or HUB_WALL_TOP <= pipe_top:
+        bad.append(
+            f"its wall ({HUB_WALL:.2f} out, {HUB_WALL_TOP:.2f} up) does not clear a pipe's rings "
+            f"({RING_OUT:.2f} out, {pipe_top:.2f} up)"
+        )
+    # The same from every side: a turn of one facet lays it on itself.
+    turn = rot_y(360.0 / HUB_SIDES)
+    here = {tuple(round(c, 5) + 0.0 for c in v) for v in part.verts}
+    there = {tuple(round(c, 5) + 0.0 for c in turn(v)) for v in part.verts}
+    if here != there:
+        bad.append(f"it is not the same after a turn of {360.0 / HUB_SIDES:g} degrees")
+    faces = [([part.verts[i] for i in idx], colour) for idx, colour in part.faces]
+    return bad + flat_fights(faces, ground=True)[:4] + thin_faces(faces)[:4]
 
 
 # --- Blender plumbing ---------------------------------------------------------------------------
@@ -447,29 +541,48 @@ def export(obj, out_dir: str) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate the tube-kit GLBs.")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("build", "check"),
+        default="build",
+        help="build (the default) writes the GLBs, then checks the round hub; check only checks",
+    )
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
+    parser.add_argument("--only", default="", help="comma list of pieces to build (default: all)")
     args = parser.parse_args(argv)
+    if args.command == "build":
+        generate(args.out, {name for name in args.only.split(",") if name})
+    problems = check_hub()
+    for problem in problems:
+        log(f"PROBLEM tube-hub: {problem}")
+    log(f"check: tube-hub has {len(problems)} problem(s)" if problems else "check: tube-hub passes")
+    return 1 if problems else 0
 
-    os.makedirs(args.out, exist_ok=True)
+
+def generate(out_dir: str, only: set[str]) -> None:
+    os.makedirs(out_dir, exist_ok=True)
     gap = ring_clearance()
     assert gap > 0.02, f"support rings cut into the shell (clearance {gap:.3f})"
     log(f"ring clearance over the shell: {gap:.3f} studs")
-    total = 0
+    total = built = 0
     for name, make in PIECES.items():
+        if only and name not in only:
+            continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
         part = make()
         assert part.name == name, f"{name}: Part is named {part.name!r}"
         assert part.tris <= TRI_BUDGET, f"{name}: {part.tris} tris > {TRI_BUDGET}"
         obj = build_object(part, {})
-        export(obj, args.out)
+        export(obj, out_dir)
         total += part.tris
+        built += 1
         lo, hi = part.bounds()
         log(
             f"{name}.glb: {part.tris} tris, "
             f"x {lo[0]:.2f}..{hi[0]:.2f}, y {lo[1]:.2f}..{hi[1]:.2f}, z {lo[2]:.2f}..{hi[2]:.2f}"
         )
-    log(f"{len(PIECES)} pieces, {total} tris total -> {os.path.relpath(args.out, REPO_ROOT)}")
-    return 0
+    log(f"{built} pieces, {total} tris total -> {os.path.relpath(out_dir, REPO_ROOT)}")
 
 
 if __name__ == "__main__":

@@ -365,6 +365,23 @@ def pop_face(p: Part):
     return points, colour
 
 
+def hoop(p: Part, r_in: float, r_out: float, y0: float, y1: float, colour: Rgb, seg: int = 8,
+         phase: float = 0.0) -> None:
+    """A level ring of square section about the vertical axis: `seg` sides, r_in and r_out to its
+    corners, closed all round."""
+    def pt(r: float, a: float, y: float) -> Vec:
+        return (r * math.cos(a), y, r * math.sin(a))
+
+    for k in range(seg):
+        a0, a1 = phase + 2 * math.pi * k / seg, phase + 2 * math.pi * (k + 1) / seg
+        out = (math.cos((a0 + a1) / 2), 0.0, math.sin((a0 + a1) / 2))
+        face_out(p, [pt(r_out, a0, y0), pt(r_out, a1, y0), pt(r_out, a1, y1), pt(r_out, a0, y1)], colour, out)
+        face_out(p, [pt(r_in, a0, y0), pt(r_in, a1, y0), pt(r_in, a1, y1), pt(r_in, a0, y1)], colour,
+                 (-out[0], 0.0, -out[2]))
+        for y, up in ((y1, 1.0), (y0, -1.0)):
+            face_out(p, [pt(r_in, a0, y), pt(r_in, a1, y), pt(r_out, a1, y), pt(r_out, a0, y)], colour, (0.0, up, 0.0))
+
+
 # --- the wild: three quarters of regolith ---------------------------------------------------------
 #
 # A crater in the wild is ground, not an object: the fresh rock colours are kept for the boulders
@@ -670,22 +687,34 @@ def make_lander() -> Part:
 # --- the next-pad marker and the landmark reveal -------------------------------------------------
 
 
+BEACON_TOP = 4.5
+
+
 def make_landing_beacon() -> Part:
-    """LotBeacon, the next-pad marker: a landing beacon 1.96 studs wide, 0.9 deep at its foot and
-    2.72 tall, the same from the front and the back: an eight-sided foot, a white mast, a crossbar
-    with a lit guide lamp at each end, and the lit beacon between two orange collars under an
-    orange cap."""
+    """LotBeacon, the next-pad marker: a landing beacon 1.9 studs across and 4.5 tall, the same
+    from every side: an eight-sided foot, a white mast with two orange bands, and its head, a level
+    ring of light 1.9 across on four orange spokes round a lit lamp under an orange cap. The ring
+    is what the tycoon camera sees: a halo over the next pad, lying flat to a view from above. (The
+    first beacon, 2.7 tall with a lamp on a crossbar, read as one more of the sites' work lights.)"""
     p = Part("landing-beacon")
     phase = math.radians(22.5)
-    drum(p, [(0.48, 0.0), (0.48, 0.12), (0.3, 0.2)], [PANEL, HULL], seg=8, phase=phase)
-    box(p, -0.12, 0.12, 0.18, 1.78, -0.12, 0.12, HULL, skip=("bottom", "top"))
-    box(p, -0.86, 0.86, 1.02, 1.18, -0.07, 0.07, TRIM, skip=("left", "right"))
-    for sx in (-1, 1):
-        box(p, sx * 0.86 - 0.12, sx * 0.86 + 0.12, 0.96, 1.24, -0.12, 0.12, LIT, skip=())
-    drum(p, [(0.3, 1.78), (0.3, 1.92)], [TRIM, TRIM], seg=8, phase=phase, bottom=True)
-    drum(p, [(0.23, 1.92), (0.23, 2.38)], [LIT, LIT], seg=8, phase=phase)
+    corner = 1.0 / math.cos(phase)  # an octagon's corner radius over its flat radius
+    drum(p, [(0.5, 0.0), (0.5, 0.14), (0.3, 0.24)], [PANEL, HULL], seg=8, phase=phase)
+    mast_top, head_top = 3.42, 3.76
+    box(p, -0.12, 0.12, 0.2, mast_top, -0.12, 0.12, HULL, skip=("bottom", "top"))
+    for y in (1.1, 2.2):
+        box(p, -0.17, 0.17, y, y + 0.3, -0.17, 0.17, TRIM, skip=())
+    # the head: a hub on the mast, four spokes, the ring of light, the lamp and its cap. The spokes
+    # stand MIN_GAP or more inside the hub's and the ring's top and bottom.
+    drum(p, [(0.36, mast_top), (0.36, head_top)], [TRIM, TRIM], seg=8, phase=phase, bottom=True)
+    for turn in (0, 90, 180, 270):
+        spoke = Part("spoke")
+        box(spoke, 0.3, 0.84, 3.53, 3.65, -0.07, 0.07, TRIM, skip=("left", "right"))
+        place(p, spoke, turn)
+    hoop(p, 0.76 * corner, 0.95 * corner, 3.46, 3.72, LIT, seg=8, phase=phase)
+    drum(p, [(0.25, head_top), (0.25, 4.2)], [LIT, LIT], seg=8, phase=phase)
     pop_face(p)  # the lamp's top is under the cap
-    drum(p, [(0.3, 2.38), (0.3, 2.5), (0.0, 2.72)], [TRIM, TRIM], seg=8, phase=phase, bottom=True)
+    drum(p, [(0.33, 4.2), (0.33, 4.3), (0.0, BEACON_TOP)], [TRIM, TRIM], seg=8, phase=phase, bottom=True)
     return p
 
 
@@ -885,7 +914,8 @@ def blueprints() -> list[dict]:
             placed("work-light", (3.55, DECK_TOP, -1.2)),
         ])
     add("LotBeacon", [2, 2],
-        "the next-pad marker: a landing beacon on a mast with two guide lamps, the same from the front and the back",
+        "the next-pad marker: a landing beacon 4.5 tall, a level ring of light 1.9 across round a lit lamp on a white "
+        "mast, the same from every side",
         [placed("landing-beacon", (0, 0, 0))])
     add("RevealScaffold", [10, 10],
         "one generated piece: an orange gantry frame with lit corner lamps and a white barrier on three sides that "
@@ -1001,6 +1031,31 @@ def flat_fights(faces, ground: bool) -> list[str]:
     return found
 
 
+def thin_faces(faces, limit: float = MIN_MEMBER) -> list[str]:
+    """Faces narrower than `limit`: the narrowest a face is across (the least, over its edges, of
+    how far its corners stand from that edge). A member thinner than the limit has such a face, and
+    so does a sliver. For pieces that are not built from box() and bar(), which note their own."""
+    found = []
+    for points, _ in faces:
+        width = math.inf
+        for i, a in enumerate(points):
+            b = points[(i + 1) % len(points)]
+            edge = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+            length = math.sqrt(edge[0] ** 2 + edge[1] ** 2 + edge[2] ** 2)
+            if length < 1e-9:
+                continue
+            reach = 0.0
+            for q in points:
+                d = (q[0] - a[0], q[1] - a[1], q[2] - a[2])
+                c = (d[1] * edge[2] - d[2] * edge[1], d[2] * edge[0] - d[0] * edge[2], d[0] * edge[1] - d[1] * edge[0])
+                reach = max(reach, math.sqrt(c[0] ** 2 + c[1] ** 2 + c[2] ** 2) / length)
+            width = min(width, reach)
+        if width < limit - 1e-6:
+            centre = tuple(sum(q[i] for q in points) / len(points) for i in range(3))
+            found.append(f"a face {width:.3f} across near ({centre[0]:.2f}, {centre[1]:.2f}, {centre[2]:.2f})")
+    return found
+
+
 def limits(bid: str):
     """(x0, x1, z0, z1, tallest, triangles) a prop must keep to."""
     if bid.startswith("RegolithClump"):
@@ -1014,8 +1069,8 @@ def limits(bid: str):
         lot = "narrow" if "Narrow" in bid else "small" if "Small" in bid else "medium"
         w, d = LOTS[lot]
         return (-w / 2, w / 2, -d / 2, d / 2, GANTRY_MAX if bid.endswith("Gantry") else SITE_MAX, SITE_TRIS)
-    if bid == "LotBeacon":  # Metropolis's LotHoarding: a 2 x 2 marker footprint, 2.7 tall
-        return (-1.0, 1.0, -1.0, 1.0, 2.75, None)
+    if bid == "LotBeacon":  # the marker's 2 x 2 footprint (`fabric.py check`); about 4.5 tall (wave 4.1b)
+        return (-1.0, 1.0, -1.0, 1.0, BEACON_TOP + 0.1, None)
     if bid == "RevealScaffold":  # Metropolis's RevealScaffold: inside 10 x 10, at most 8 tall
         return (-5.0, 5.0, -5.0, 5.0, REVEAL_MAX, None)
     raise KeyError(bid)

@@ -2,7 +2,8 @@
 
 Runs inside Blender (headless):
 
-    blender -b -P tools/assets/monorail_kit.py [-- --out <dir>]
+    blender -b -P tools/assets/monorail_kit.py [-- --out <dir>] [--only name,name]
+    blender -b -P tools/assets/monorail_kit.py -- check     # the round loop's check alone: writes nothing
 
 Writes one GLB per piece into assets/kenney3d/monorail-kit/Models/GLB format/, the folder convention
 every Kenney kit already uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py discover
@@ -30,6 +31,18 @@ own wheel plane, so the client places it at y = deckHeight with no offset. Blend
 vertex converts with (x, y, z) -> (x, -z, y), a proper rotation, so winding carries over. Faces are
 not hand-wound: `Part.face` takes an outward hint and orders the loop so its normal agrees, because
 Roblox MeshParts are single-sided and one flipped quad is a hole.
+
+**The round loop** (`track-arc`, M12 wave 4.1b, INTERFACES "Wave 4.1b -- organic Orbital"): with
+`highway.round` the track is a circle of radius 56 about the plot's centre in 48 segments of 7.5
+degrees, and `track-arc` is one of them: the straight's beam swept along the arc. Its origin is the
+segment's middle, on the circle, at ground level; the beam's tangent there is local X and the
+circle's centre lies at local (0, 0, +56), so the piece bows toward +Z and its outer face looks to
+-Z. Both ends are cut on the circle's radii, so 48 copies, each turned 7.5 degrees about the
+centre, close the loop with no gap and no overlap. MonorailArc.json stands one `pier` at the
+origin. `check` holds the arc to that and to the two Studio rules of 2026-10-02 (parallel faces
+0.05 apart, nothing under 0.1 across): its stripe, rail and joint stand 0.05 off the beam where the
+straight's stand 0.01, which predates the rule. Adding the arc leaves the four older GLBs byte for
+byte as they were: every piece is built and exported on its own.
 """
 
 from __future__ import annotations
@@ -74,6 +87,13 @@ JOINT_T = 0.16  # dark joint across the beam at the -X end of every cell: segmen
 # so it leaves the -X edge and the +Z edge exactly on a straight's centreline.
 CORNER_CENTRE = (-HALF, HALF)
 CORNER_STEPS = 8
+
+# The round loop: INTERFACES "Wave 4.1b" (`highway.round`, the circle of radius `ring`).
+LOOP_RADIUS = 56.0
+LOOP_SEGMENTS = 48  # 7.5 degrees each, joints on multiples of 7.5 degrees from +X
+ARC_HALF = math.pi / LOOP_SEGMENTS  # half a segment, in radians
+ARC_MARK = 0.05  # the arc's stripe, rail and joint stand this far off the beam (see the docstring)
+LOOP_CLOSES = 0.01  # how near a copy's end must meet the next copy's start
 
 # Pier: one slender column. The cap is long across the beam and short along it.
 PIER_FOOT_HALF = 0.95
@@ -302,6 +322,60 @@ def make_track_corner() -> Part:
     return p
 
 
+def centreline_arc():
+    """Stations for one segment of the round loop, in the frame the module docstring gives: both
+    ends, the end of the joint band at the -X end, and the middle, which is the origin. The normal
+    points away from the circle's centre, as the corner's does."""
+    out = []
+    for a in (-ARC_HALF, -ARC_HALF + JOINT_T / LOOP_RADIUS, 0.0, ARC_HALF):
+        nx, nz = math.sin(a), -math.cos(a)
+        out.append((LOOP_RADIUS * nx, LOOP_RADIUS * (1.0 + nz), nx, nz))
+    return out
+
+
+def arc_details(part: Part, line) -> None:
+    """The straight's markings, ARC_MARK off the beam: the dark joint band over the first stretch
+    (top and both faces), then the orange stripe on both faces and the dark guide rail on top. No
+    two of them overlap: the stripe and the rail start where the joint ends."""
+    for i in range(len(line) - 1):
+        a, b = line[i], line[i + 1]
+        # A mark runs between two stations along their normals, so it lies parallel to the beam's
+        # face there. To stand ARC_MARK off that face it stands this far out along the normals.
+        half_turn = math.acos(max(-1.0, min(1.0, a[2] * b[2] + a[3] * b[3]))) / 2.0
+        lat = BEAM_HALF + ARC_MARK / math.cos(half_turn)
+        top = WHEEL + ARC_MARK
+
+        def at(st, lateral, y):
+            return (st[0] + st[2] * lateral, y, st[1] + st[3] * lateral)
+
+        if i == 0:
+            part.face([at(a, -lat, top), at(b, -lat, top), at(b, lat, top), at(a, lat, top)], "slate", (0, 1, 0))
+        else:
+            part.face(
+                [at(a, -RAIL_HALF, top), at(b, -RAIL_HALF, top), at(b, RAIL_HALF, top), at(a, RAIL_HALF, top)],
+                "slate",
+                (0, 1, 0),
+            )
+        y0, y1, colour = (KEEL_TOP, top, "slate") if i == 0 else (STRIPE[0], STRIPE[1], "trim")
+        for sign in (1.0, -1.0):
+            out = (sign * (a[2] + b[2]), 0.0, sign * (a[3] + b[3]))
+            part.face(
+                [at(a, sign * lat, y0), at(b, sign * lat, y0), at(b, sign * lat, y1), at(a, sign * lat, y1)],
+                colour,
+                out,
+            )
+
+
+def make_track_arc() -> Part:
+    """One 7.5-degree segment of the round loop: the straight's beam on a 56-stud radius, 7.33
+    studs along its centreline. Top (wheel plane) 7.07, soffit 6.10; no pier (see `pier`)."""
+    p = Part("track-arc")
+    line = centreline_arc()
+    sweep(p, line, BEAM_STRIPS, caps=True)
+    arc_details(p, line)
+    return p
+
+
 def make_pier() -> Part:
     """One slender column: foot plinth, tapered shaft, orange collar, saddle up to the soffit.
 
@@ -387,8 +461,59 @@ PIECES = {
     "track-corner": make_track_corner,
     "pier": make_pier,
     "train": make_train,
+    "track-arc": make_track_arc,
 }
-TRI_BUDGET = {"track-straight": 400, "track-corner": 400, "pier": 400, "train": 1500}
+TRI_BUDGET = {"track-straight": 400, "track-corner": 400, "pier": 400, "train": 1500, "track-arc": 400}
+
+
+def check_arc() -> list[str]:
+    """The round loop's segment against its contract; returns what is wrong with it."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    from regolith_kit import flat_fights, thin_faces  # the checks of the two Studio rules
+
+    part = make_track_arc()
+    bad = []
+    lo, hi = part.bounds()
+    if abs(lo[1] - SOFFIT) > 1e-9 or hi[1] > WHEEL + ARC_MARK + 1e-9:
+        bad.append(f"it spans y {lo[1]:.3f}..{hi[1]:.3f}, not soffit {SOFFIT} to wheel plane {WHEEL} and its marks")
+    if part.tris > TRI_BUDGET["track-arc"]:
+        bad.append(f"{part.tris} tris > {TRI_BUDGET['track-arc']}")
+    centre = (0.0, LOOP_RADIUS)
+
+    def polar(v):
+        """A vertex about the circle's centre: (angle from the segment's middle, radius, height)."""
+        dx, dz = v[0] - centre[0], v[2] - centre[1]
+        return (math.atan2(dx, -dz), math.hypot(dx, dz), v[1])
+
+    # No overlap: every vertex lies inside the segment's own wedge of the circle.
+    worst = max(abs(polar(v)[0]) for v in part.verts)
+    if worst > ARC_HALF + 1e-9:
+        bad.append(f"it reaches {math.degrees(worst):.4f} degrees from its middle, past its {math.degrees(ARC_HALF)} share")
+    # No gap: 48 copies, each turned one segment about the centre. The end of copy k must be the
+    # start of copy k + 1, all the way round to copy 0. Only the beam is compared: the marks at a
+    # joint are a stripe's end on one side and the dark band's start on the other.
+    beam = Part("beam")
+    sweep(beam, centreline_arc(), BEAM_STRIPS, caps=True)
+    polars = [polar(v) for v in beam.verts]
+    start = sorted({(round(r, 6), round(y, 6)) for a, r, y in polars if abs(a + ARC_HALF) < 1e-9})
+    end = sorted({(round(r, 6), round(y, 6)) for a, r, y in polars if abs(a - ARC_HALF) < 1e-9})
+    if not start or len(start) != len(end):
+        bad.append(f"its ends differ: {len(start)} corners at the start, {len(end)} at the end")
+    else:
+        step = 2.0 * ARC_HALF
+        gap = 0.0
+        for k in range(LOOP_SEGMENTS):
+            a_end = ARC_HALF + k * step  # where copy k ends
+            a_start = -ARC_HALF + (k + 1) * step  # where copy k + 1 starts (copy 48 is copy 0)
+            for (r0, y0), (r1, y1) in zip(end, start):
+                p0 = (r0 * math.sin(a_end), y0, -r0 * math.cos(a_end))
+                p1 = (r1 * math.sin(a_start), y1, -r1 * math.cos(a_start))
+                gap = max(gap, math.dist(p0, p1))
+        if gap > LOOP_CLOSES:
+            bad.append(f"{LOOP_SEGMENTS} copies leave a gap of {gap:.4f} > {LOOP_CLOSES}")
+    faces = [([part.verts[i] for i in idx], colour) for idx, colour in part.faces]
+    return bad + flat_fights(faces, ground=False)[:4] + thin_faces(faces)[:4]
 
 
 # --- Blender plumbing ---------------------------------------------------------------------------
@@ -454,27 +579,46 @@ def export(obj, out_dir: str) -> None:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate the monorail-kit GLBs.")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=("build", "check"),
+        default="build",
+        help="build (the default) writes the GLBs, then checks the round loop's arc; check only checks",
+    )
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
+    parser.add_argument("--only", default="", help="comma list of pieces to build (default: all)")
     args = parser.parse_args(argv)
+    if args.command == "build":
+        generate(args.out, {name for name in args.only.split(",") if name})
+    problems = check_arc()
+    for problem in problems:
+        log(f"PROBLEM track-arc: {problem}")
+    log(f"check: track-arc has {len(problems)} problem(s)" if problems else "check: track-arc passes")
+    return 1 if problems else 0
 
-    os.makedirs(args.out, exist_ok=True)
-    total = 0
+
+def generate(out_dir: str, only: set[str]) -> None:
+    os.makedirs(out_dir, exist_ok=True)
+    total = built = 0
     for name, make in PIECES.items():
+        if only and name not in only:
+            continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
         part = make()
         assert part.name == name, f"{name}: Part is named {part.name!r}"
         if part.tris > TRI_BUDGET[name]:
             log(f"WARNING {name}: {part.tris} tris exceeds the {TRI_BUDGET[name]} budget")
-        export(build_object(part, {}), args.out)
+        export(build_object(part, {}), out_dir)
         total += part.tris
+        built += 1
         lo, hi = part.bounds()
         size = tuple(round(hi[i] - lo[i], 2) for i in range(3))
         log(
             f"{name}.glb: {part.tris} tris, {size[0]} x {size[1]} x {size[2]} studs, "
             f"x {lo[0]:.2f}..{hi[0]:.2f}, y {lo[1]:.2f}..{hi[1]:.2f}, z {lo[2]:.2f}..{hi[2]:.2f}"
         )
-    log(f"{len(PIECES)} pieces, {total} tris total -> {os.path.relpath(args.out, REPO_ROOT)}")
-    return 0
+    log(f"{built} pieces, {total} tris total -> {os.path.relpath(out_dir, REPO_ROOT)}")
 
 
 if __name__ == "__main__":
