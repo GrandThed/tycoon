@@ -23,6 +23,15 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   lanes), `highway.round`, wild as an irregular scatter, round fabric props; candidates "vine" and
   "bloom" in `tycoon-m12o-vine` and `tycoon-m12o-bloom`. `m12-orbital-docks` and `-axis` stay as the
   record. The docking rule and the tiles rulings below are withdrawn.
+- Organic groundwork done 2026-10-05 (base `m12-orbital` 429c7dc): `tools/paths/tubes.py` sweeps one
+  half-pipe mesh per stretch (butt joints, a hub only where a tube ends or branches, two tubes into a
+  hub 90° or more apart), aprons are automatic and lots keep off them, the round loop and the scatter
+  render (`m12o_groundwork_organic_full.png`). The fifteen fabric props were rebuilt from round forms
+  (the shared `colony-kit` folder now holds only those, so the Docks and Axis renders cannot be
+  re-made without regenerating the old kit from their branches). Vine and Bloom designers are
+  running; the gate sheet will be `m12o_compare_organic.png`.
+- The session was cut off once mid-groundwork; the agent resumed by id with nothing lost, as the
+  older notes say. A stopped agent's id comes back in its task notification.
 
 **State before the rejection (wave 4.1, the first mock gate; contract in INTERFACES "M12 wave 4"):**
 - Base worktree `C:\Users\benja\Desktop\tycoon-m12o` (branch `m12-orbital`, groundwork at 8c89aff);

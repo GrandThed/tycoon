@@ -7711,3 +7711,44 @@ the draft props, and "nothing uploaded in this wave".
 
 Frozen as in wave 4.1. The client, `CityFabric.luau` and `Types.luau` follow in wave 4.2, where
 Orbital moves from the tile renderer to the baked-path renderer.
+
+### Rulings after the organic groundwork (lead, 2026-10-05)
+
+The tools run Orbital as a path era end to end (`m12o_groundwork_organic_full.png`: four curving
+polylines, 232 studs of tube in 28 swept pieces, 8 hubs, 23 aprons, one lane, the round loop with
+its train, 14 lots), every gate green and the three shipped eras' fabric data byte-identical.
+
+- **Butt joints.** A tube is one mesh per stretch with the ids the baked paths use (`L…`), so it
+  grows with the buildings and the client clones it by id. Stretches end at every landmark join and
+  bend; where no hub stands, two pieces butt on one cross-section, and a closed disc caps a tube
+  that has not grown on. A hub stands only where a tube ends, branches, or two chains meet. The
+  sentence "two tube meshes never meet in the open" above is withdrawn.
+- **Two tubes into one hub leave it 90° or more apart** (closer, the pipes meet outside the 4.6-wide
+  hub). `tubes.py` checks it; a corner is rounded at radius 6.48 and a bend under radius 6 is
+  refused.
+- **Config as built:** `road.width` 3.24; `road.paths.spurWidth` 3, `road.paths.tube
+  { hub = "TubeHub", front = 1.75 }`, `road.paths.deck { material, color }`; `road.tiles` is gone
+  from Orbital; `highway.round` true, `highway.clearBand` false, `highway.props.arc`
+  `MonorailArc`; `fabric.clear.street` 3.5. Plan: `parcels.frontSetback` 1.75,
+  `parcels.lanes.lines[].front`, `wild.clumps.inset`, `wild.singles.between`.
+- **Aprons are automatic:** a landmark's path, pad rect and building rect, each grown 0.25, as one
+  flat decking mesh (`SP_<slotId>`). Lots keep off aprons, so apron-free frontage is the density
+  budget (the 23 landmarks take about 275 studs).
+- **The band:** only a tube crosses it, at 60° or more to the track and 2.0 from a pier foot measured
+  from the tube's centreline (feet at 3.75° + 7.5°·k). Everything else keeps 0.5 clear. Wild under
+  the beam is cleared by nothing (`ring_keeps`, on the annulus); a round loop has no ring rects.
+- **Street polylines stay at most 5**; a candidate that needs a sixth asks with numbers.
+- **Wild plates never overlap** (two clump plates over each other are coplanar faces and flicker in
+  game, as Boomtown's first lanes did), and **an entrance apron** runs from the plot's front edge
+  (0, −60) to the entrance hub between two piers. Both are being added to the generator.
+- **Props, as revised:** the fifteen fabric props are built from round forms and are lower (habitat
+  narrow tops out near 6.1, science near 7.9, industry near 10.4). `TubeHub` 4.6 × 4.6 × 2.6, no
+  facing. `MonorailArc` 7.44 × 1.92 × 7.12, origin at the segment's middle on the circle; a segment
+  whose middle is at angle t from +X sits at (56 cos t, 0, 56 sin t) with rotationY −(t + 90)°.
+  `LotBeacon` is 4.5 tall.
+- **For the client in wave 4.2** (replaces the wave 4.1 list): Orbital moves from `TileRenderer` to
+  the path renderer (a tube per `L…` id, decking per `SP_…` and `LN_…`, one mesh and no rim); a
+  `TubeHub` at each hub node once a tube there is drawn; the round loop (48 `MonorailArc`, the train
+  on the circle, no ramp); `CityFabric.luau` copies `ring_keeps` and "no ring rects on a round
+  loop"; the asset run uploads the swept and flat pieces (52 on the groundwork) through the palette
+  route, with one harvest paste and a `bake.py --list` gate for Orbital.
