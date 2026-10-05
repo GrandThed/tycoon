@@ -70,8 +70,10 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   branch `m12-metropolis`, not merged**: the "avenues" layout Ben picked on 2026-10-03 ("i love
   avenues"), 88 lots on three avenues and four lanes, an old town that is redeveloped, towers
   that grow floor by floor, two city-changer slots (Open the Bus Line, Green the Rooftops);
-  **its 35 props are not uploaded and it is not playtested**: the asset run waits for Ben's OK
-  on the prop sheets; then Orbital — see "M12" below)
+  **its asset run is done (2026-10-05)**: Ben approved the prop sheets ("looks good!"), 35 props
+  (107 stages) uploaded, harvested in one paste and templated, every gate green on the harvested
+  sizes; **Ben's Studio playtest in `build/metropolis.rbxl` is next**; then the merge, then
+  Orbital when Ben says so — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
   A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
   every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
@@ -1886,7 +1888,8 @@ Core gameplay is untouched.
     and branch are removed. See "Wave 2 — Boomtown" below.
   - **Wave 3 (Metropolis) is on branch `m12-metropolis`, in the worktree
     `C:\Users\benja\Desktop\tycoon-m12m`. Not merged.** Built, reviewed and QA-green
-    (2026-10-04); not uploaded, not playtested. See "Wave 3 — Metropolis" below.
+    (2026-10-04); models uploaded, harvested and templated (2026-10-05, `18bdc0b`); **not
+    playtested yet**. See "Wave 3 — Metropolis" below.
   - (M11 is the unmerged feature-unlocks milestone on branch `m11-unlocks`.)
 
 **Rulings (Ben):**
@@ -2337,8 +2340,8 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 
 **Next (updated 2026-10-04):**
 1. **Metropolis (wave 3): under way.** The lattice study, the mock, the contracts, the client,
-   the review and the QA are done. The asset run and the playtest are not. "Wave 3 — Metropolis"
-   below holds the current "Next" list.
+   the review, the QA and the asset run (2026-10-05) are done. The playtest is not. "Wave 3 —
+   Metropolis" below holds the current "Next" list.
 2. **Orbital (wave 4):** the same routine, after Metropolis.
 3. Alongside: the open follow-ups above, and Ben's numbers when they arrive.
 
@@ -2376,7 +2379,7 @@ The code is shared; each era adds data, config and models.
 - [x] lead: wave 3, Metropolis, opened 2026-10-02 (the lattice study came first); its checklist
   is under "Wave 3 — Metropolis"
 
-### Wave 3 — Metropolis (2026-10-02 → 2026-10-04; built, reviewed, QA green; **not uploaded, not playtested**)
+### Wave 3 — Metropolis (2026-10-02 → 2026-10-05; built, reviewed, QA green, models uploaded; **Studio playtest pending**)
 
 **Where:**
 - Branch `m12-metropolis`, in the worktree `C:\Users\benja\Desktop\tycoon-m12m`. **Not merged to
@@ -2384,6 +2387,8 @@ The code is shared; each era adds data, config and models.
 - Code, review and QA are done at `b6891e8` (QA ran at `1feb551`; `b6891e8` adds the place
   builds). After the QA run, `33261d4` adds the upload name guard and the larger baked cash, with
   `build/metropolis.rbxl` rebuilt.
+- The asset run is `0a2258b` (upload), `aede7e3` (harvest) and `18bdc0b` (templates, manifest,
+  place builds), all on 2026-10-05.
 - **Kept as the record of the two layout candidates:** the branches `m12-metropolis-avenues`
   (**chosen**; last commit `2dff602`, merged in by `882b7ab`; worktree `tycoon-m12m-avenues`) and
   `m12-metropolis-boulevard` (not chosen, `a732dd6`; worktree `tycoon-m12m-boulevard`).
@@ -2392,18 +2397,17 @@ The code is shared; each era adds data, config and models.
   blocks.
 - Memory: `.claude/memory/metropolis-growth-2026-10-02.md`.
 
-**Status (2026-10-04): built, reviewed and QA-green. Not uploaded. Not playtested.**
-- **The asset run has not happened.** 35 final props (107 stages) wait for Ben's OK on two
-  sheets in `assets/testfit/out/Metropolis/m12m_props/`: `_contact_final_towers.png` and
-  `_contact_final_oldtown.png`.
-- **Until the upload and Ben's harvest paste, Studio shows Metropolis's landmarks, tile streets,
-  lanes, highway and subway kiosks only:** no towers, old town, building sites, bus shelters or
-  buses.
-- **Ben has not seen this wave in Studio.** Everything he approved so far was a render.
-- Routine: `docs/MANUAL_STEPS.md` "M12" §12–§16. Checklist: `docs/PLAYTEST.md` "M12 wave 3 —
-  Metropolis growing city".
-- The counts below come from the tools as they stand today. Tower heights are still read from
-  the blueprints, so the lead re-checks the counts after the harvest.
+**Status (2026-10-05): built, reviewed, QA-green, and the asset run is done. Not playtested.**
+- **The asset run is done (2026-10-05, `18bdc0b`).** Ben approved the two prop sheets ("looks
+  good!"). 35 props (107 stages) are uploaded, harvested in one paste and templated. See "The
+  asset run" below.
+- **`build/metropolis.rbxl` (rebuilt 2026-10-05 10:42) shows the whole wave:** towers, old town,
+  building sites, bus shelters and buses.
+- **Ben has not seen this wave in Studio.** Everything he approved so far was a render. His
+  playtest is the next step.
+- Routine: `docs/MANUAL_STEPS.md` "M12" §12–§16 (§15 is Ben's next step). Checklist:
+  `docs/PLAYTEST.md` "M12 wave 3 — Metropolis growing city".
+- The counts below were re-checked on the harvested sizes on 2026-10-05: none moved.
 
 **Goal:** Metropolis grows as a downtown. An old town of car parks, vacant lots and brick blocks
 covers the plot at the start. As the landmarks arrive it is redeveloped, lot by lot, into
@@ -2502,7 +2506,7 @@ Avenues then grew to 85 lots (wave 3.1b, `9b5a138` … `6fb59e6`) and 88 (wave 3
   - `levelStages`, `siteVariants`, `swaps`, the ring's own clearing, tiles-era lanes;
   - birds circle the owned landmarks, tallest first, once no old-town block is left;
   - every new key is optional: without them Village and Boomtown behave as before.
-- **Props, final (not uploaded):** 35 blueprints, 107 stages, in
+- **Props, final (uploaded, harvested and templated 2026-10-05):** 35 blueprints, 107 stages, in
   `tools/testfit/blueprints/_props/Metropolis/`.
   - 18 towers of 5 stages: 11 and the 7 `…Green` twins of the home and shop ones;
   - 17 single-stage props: 9 old-town pieces, 4 sites (2 with cranes), `RevealScaffold`,
@@ -2580,29 +2584,63 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
   metropolis project files.
 - Note 1: one selene warning, older than this wave: `src/client/UI/LegacyPanel.luau:200` (a
   shadowed `header`).
-- Note 2: `docs/ASSET_MANIFEST.md` was stale. It is regenerated in this docs pass and `py
-  tools/gen_asset_manifest.py --check` passes. It lists the 35 new props as not uploaded.
+- Note 2: `docs/ASSET_MANIFEST.md` was stale. It was regenerated in the docs pass of 2026-10-04
+  and again by the lead after the asset run. It now reads 74/74 Metropolis props uploaded,
+  harvested and templated, and `py tools/gen_asset_manifest.py --check` passes.
 - Re-run in the docs pass (2026-10-04): `py tools/cityfabric.py timeline Metropolis` (0
   shrinking buildings over 63 moments), `py tools/cityfabric.py props Metropolis` (35 props
   shown, none unused) and `py tools/sim_economy.py` (16:20:04, legacy 887).
 
+**The asset run (2026-10-05, commits `0a2258b`, `aede7e3`, `18bdc0b`): done.**
+- **Ben approved the final prop sheets** ("looks good!") and said "upload them".
+- **Kits:** the cached `tower-kit` palette was deleted and the three kits were regenerated from
+  their committed scripts (`oldtown-kit` 28 pieces, `tower-kit` 147, `metro-transit-kit` 2). No
+  script had changed, so `--write-blueprints` was not run.
+- **Merge:** only the 35 new props, with `--model` flags, so the 39 Metropolis props that were
+  already uploaded were not touched. `done: 35 blueprint(s), 0 with problems`; 107 stage GLBs.
+  The only warnings were the two crane sites' jibs overhanging their lots, as designed.
+- **Upload** (`0a2258b`): the same 35 props, `uploaded 107/107`, no failure and no retry. 55 of
+  the stage names took the short `ECT_` prefix.
+- **Ben's one harvest paste:** `[HARVEST-DONE] 107 loaded, 0 failed`. He pasted the Output into
+  the chat; the clipboard still held it.
+- **Harvest** (`aede7e3`): 107 prop stages merged into `Assets.json`.
+- **Templates** (`18bdc0b`): 35 new ones; 74 in `templates/_props/Metropolis/`, 226 prop
+  templates and 444 templates in all; `gen_templates.py --check` passes.
+- **Fabric data:** `fabric.py build Metropolis` on the harvested sizes changed nothing. Still
+  88 lots (59 narrow, 29 small), 4 lanes of 218 studs, 5 bus shelters.
+- **Gates, all green on the harvested sizes:** `fabric.py check` for Village, Boomtown and
+  Metropolis; `cityfabric.py selftest`; `timeline` for all three (Metropolis no longer prints
+  "heights from blueprints", and shows 0 standing buildings that shrink or change prop over 63
+  moments); `props Metropolis` (35 shown, 0 never shown, 0 unreferenced); `check_mirror.py
+  --strict`; `streetplan.py` for all four eras (0 violations); `bake.py --list` for Village and
+  Boomtown; `valley.py check`; `sim_economy.py` (16:20:04, legacy 887); `check_compile.py`; the
+  manifest check; stylua; luau-lsp. selene still has its one old warning in
+  `LegacyPanel.luau:200`.
+- **Place files** (`18bdc0b`): all four rebuilt; `build/metropolis.rbxl` is dated 2026-10-05
+  10:42.
+- **No count in this section or in PLAYTEST moved.** The docs-keeper re-ran the tier table, the
+  Build-panel-order table, the two levelling counts and the kiosk timing on the harvested
+  sizes.
+
 **Known follow-ups (wave 3):**
-- **Ben (open):** look at the two prop sheets and say OK, or name the props to redo.
+- **Done (Ben, 2026-10-05):** the two prop sheets approved: "looks good!", then "upload them".
 - **Done (lead, 2026-10-04, `33261d4`; found in the docs pass):** the 50-character asset name
   guard in `tools/assets/upload_models.py` (`MAX_DISPLAY_NAME`, `model_display_name()`).
   - A stage name was `EraCityTycoon_Prop_Metropolis_<Prop>_S<n>`: 51 to 55 characters for 11 of
     the 18 towers (the four `FabricOffice…` towers and all seven `…Green` twins).
   - A name over 50 now takes the short prefix `ECT_`. 55 of the 107 Metropolis stages do; none
     is over 50; every name already uploaded is unchanged.
-- **lead (after Ben's OK):** the asset run (MANUAL_STEPS "M12" §14).
-- **Ben:** one harvest paste during that run; then the Studio playtest.
-- **lead (after the harvest):** re-run `timeline Metropolis` and correct the tables here and in
-  PLAYTEST if a count moved. Today's counts use blueprint heights.
+- **Done (lead and Ben, 2026-10-05):** the asset run and Ben's one harvest paste (MANUAL_STEPS
+  "M12" §14).
+- **Done (2026-10-05):** the counts here and in PLAYTEST re-checked on the harvested sizes.
+  None moved.
+- **Ben (open, next):** the Studio playtest in `build/metropolis.rbxl` (MANUAL_STEPS "M12" §15,
+  PLAYTEST "M12 wave 3 — Metropolis growing city").
 - **Done (lead, 2026-10-04, `33261d4`; found in the docs pass):** the baked cash is **1e20**
   (was 1e18). Maxing all 16 buildings costs about 5.9e18, and 1e18 only reached the Hotel Tower.
   Ben can now max every landmark and compare the full skyline with the render.
 - **Ben → lead (open since wave 1):** the numbers: Village step 37, Boomtown step 59, and now
-  step 49 of the Metropolis section.
+  the same measurement on a full Metropolis (step 49 of the Metropolis section).
 - **lead (after Ben's numbers):** `budget.parcelsFar`. A far plot draws 60 of the 88 lots and
   all four lanes, so three lanes run past bare ground there.
 - **lead (watch):** the fabric is about 110k triangles on a full near plot before `untilStage`,
@@ -2624,14 +2662,12 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - **lead (after sign-off):** merge `m12-metropolis` into `main`; remove the three `tycoon-m12m*`
   worktrees (the `assets` junction first); keep the two candidate branches as the record.
 
-**Next:**
-1. **Ben:** the two prop sheets.
-2. **lead:** the asset run; **Ben:** the one harvest paste.
-3. **Ben:** the Studio playtest in `build/metropolis.rbxl`.
-4. **lead:** fixes from the playtest, then the merge to `main`.
-5. **Orbital (wave 4):** the same routine. It has the same 7-stud lattice and a ring, so the
-   density arithmetic comes first, before any lot target.
-6. Alongside: the open follow-ups of waves 1 to 3, and Ben's numbers when they arrive.
+**Next (updated 2026-10-05):**
+1. **Ben:** the Studio playtest in `build/metropolis.rbxl`.
+2. **lead:** fixes from the playtest, then the merge to `main`.
+3. **Orbital (wave 4): only when Ben says so.** The same routine. It has the same 7-stud lattice
+   and a ring, so the density arithmetic comes first, before any lot target.
+4. Alongside: the open follow-ups of waves 1 to 3, and Ben's numbers when they arrive.
 
 - [x] Wave 3.1 mock built: lattice study, two candidates, gate renders (2026-10-02)
 - [x] Ben decided 1: avenues, with more density, four lanes and narrower pavements (2026-10-03)
@@ -2642,16 +2678,19 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - [x] Review: 0 Critical, 2 Major fixed, 9 Minor fixed or ruled (2026-10-04, `1feb551`)
 - [x] QA green at `1feb551`; place builds at `b6891e8` (2026-10-04)
 - [x] docs-keeper: PLAN, PLAYTEST, MANUAL_STEPS, asset manifest (2026-10-04)
-- [ ] Ben: OK on the final prop sheets (`_contact_final_towers.png`, `_contact_final_oldtown.png`)
+- [x] Ben: OK on the final prop sheets (`_contact_final_towers.png`, `_contact_final_oldtown.png`):
+  "looks good!" (2026-10-05)
 - [x] lead: the 50-character name guard in `upload_models.py`, and `GrantCash` 1e20 in the
   Metropolis build (2026-10-04, `33261d4`)
-- [ ] lead: kits, merge, upload of 35 props (107 stages)
-- [ ] Ben: the one harvest paste
-- [ ] lead: harvest, templates, fabric data from harvested extents, gates, manifest, builds
+- [x] lead: kits, merge, upload of 35 props (107 stages) (2026-10-05, `0a2258b`)
+- [x] Ben: the one harvest paste, 107 loaded, 0 failed (2026-10-05)
+- [x] lead: harvest, templates, fabric data from harvested extents, gates, manifest, builds
+  (2026-10-05, `aede7e3`, `18bdc0b`)
+- [x] docs-keeper: the docs after the asset run; counts re-checked, none moved (2026-10-05)
 - [ ] Ben: the Metropolis Studio playtest in `build/metropolis.rbxl`
 - [ ] Ben → lead: the numbers (Village, Boomtown, Metropolis)
 - [ ] lead: merge `m12-metropolis` into `main`; worktrees removed
-- [ ] lead: wave 4, Orbital (the density arithmetic first)
+- [ ] lead: wave 4, Orbital, only when Ben says so (the density arithmetic first)
 
 ## M13 — The Valley
 

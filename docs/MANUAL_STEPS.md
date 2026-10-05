@@ -1557,16 +1557,17 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
 
 ## M12 — Growing city
 
-**Where things are (2026-10-04):**
+**Where things are (2026-10-05):**
 - **Wave 1 (Village): merged to `main` on 2026-10-01** (Ben: "the village looks amazing"). Its
   branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
 - **Wave 2 (Boomtown): signed off by Ben and merged to `main` on 2026-10-02** (`main` at
   `86d1d99`). §5–§11 below are wave 2.
 - **Waves 1 and 2 are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run their
   commands and open their builds from there.
-- **Wave 3 (Metropolis): built and checked; not merged, not uploaded, not playtested.** It lives
-  in `C:\Users\benja\Desktop\tycoon-m12m` (branch `m12-metropolis`). §12–§16 below are wave 3.
-  Run its commands and open its builds from that folder.
+- **Wave 3 (Metropolis): built, checked, and its models uploaded (asset run done 2026-10-05).
+  Not merged, not playtested.** It lives in `C:\Users\benja\Desktop\tycoon-m12m` (branch
+  `m12-metropolis`). §12–§16 below are wave 3. Run its commands and open its builds from that
+  folder. **Ben's next step is §15:** open `build\metropolis.rbxl` and run the playtest.
 - **The wave 2 worktrees are removed:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic`
   no longer exist, and the branch `m12-boomtown` is deleted. The branches `m12-boomtown-grid` and
   `m12-boomtown-organic` are kept as the record of the two layout candidates.
@@ -2014,7 +2015,7 @@ section).
 - `build/test.rbxl` (Village) has no cash baked in. There the `GrantCash` attribute is still added
   by hand (PLAYTEST step 49).
 
-### 12. M12 wave 3 (Metropolis) — what is owed (2026-10-04)
+### 12. M12 wave 3 (Metropolis) — what is owed (2026-10-05)
 
 Wave 3 lives in its own folder: **`C:\Users\benja\Desktop\tycoon-m12m`** (branch
 `m12-metropolis`). **It is not merged.** Run every wave 3 command and open every wave 3 build
@@ -2023,33 +2024,35 @@ both paths show the same files.
 
 - **Creator Hub: nothing.** No passes, products or audio. No profile change, so nothing to
   republish.
-- **Done:** the code, the review and the checks.
-- **Not done: the asset run (§14).** The 35 new models are not uploaded. Until they are, Studio
-  shows Metropolis's landmarks, streets, lanes, highway and subway kiosks only: **no towers, no
-  old town, no building sites, no bus shelters, no buses.**
-- **From Ben, in this order:**
-  1. look at the two prop sheets and say OK, or name the props to redo (§13);
-  2. one harvest paste, when Claude asks for it (§14 step 58);
-  3. the Studio playtest (§15);
-  4. still owed from waves 1 and 2: the numbers (§5).
-- **From the lead:** §14 after Ben's OK, then §16 after the playtest.
+- **Done:** the code, the review, the checks, Ben's OK on the props, and **the asset run**
+  (§14, 2026-10-05). The towers, the old town, the building sites, the bus shelters and the bus
+  are in the build.
+- **From Ben, next:**
+  1. **the Studio playtest** (§15): open `build\metropolis.rbxl`, press Play, run the
+     checklist;
+  2. still owed from waves 1 and 2, and now for Metropolis too: the numbers (§5, and step 49 of
+     the Metropolis checklist).
+- **From the lead:** fixes from the playtest, then §16.
 
-### 13. M12 wave 3 — look at the prop sheets (Ben; **OPEN**: nothing is uploaded before your OK)
+### 13. M12 wave 3 — look at the prop sheets (Ben; **DONE 2026-10-05**: "looks good!")
 
-Open the PNGs in Windows. Folder:
-`C:\Users\benja\Desktop\tycoon\assets\testfit\out\Metropolis\`
+Ben approved both sheets ("looks good!") and said "upload them". The steps are kept as the
+record.
 
-- [ ] 50. Open **`m12m_props\_contact_final_towers.png`**: the 18 towers, one row each. Each row
+Folder: `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Metropolis\`
+
+- [x] 50. Open **`m12m_props\_contact_final_towers.png`**: the 18 towers, one row each. Each row
       shows the tower's five looks, growing floor by floor from left to right. The rows whose
       name ends in `Green` are the roof-garden versions that **Green the Rooftops** swaps in.
-- [ ] 51. Open **`m12m_props\_contact_final_oldtown.png`**: the other 17 models.
+- [x] 51. Open **`m12m_props\_contact_final_oldtown.png`**: the other 17 models.
       - the old town: car park, fenced vacant lot, brick buildings (each as a whole block and
         as a quarter), a billboard, rubble, a skip;
       - four building sites, two of them with a yellow tower crane;
       - the blue scaffold that stands around a new landmark, and the hoarding sign that marks
         the next pad;
       - the bus shelter and the city bus.
-- [ ] 52. Optional, the same models in the city (same folder, one level up):
+- 52. Optional, the same models in the city (same folder, one level up). Still useful beside
+      the playtest:
       - `m12m_avenues_full.png` and `m12m_avenues_full_entrance.png`: the finished city;
       - `m12m_avenues_tier1.png` and `m12m_avenues_tier3.png`: early and half-way;
       - `m12m_avenues_lane.png`: one lane with its second row of towers;
@@ -2057,8 +2060,7 @@ Open the PNGs in Windows. Folder:
       - `m12m_compare.png`: today's Metropolis against the new one;
       - `m12m_avenues_streetplan.png`: the plan from above (the top edge is the plot's front).
       Each model also has its own picture: `m12m_props\<Name>_strip.png`.
-- [ ] 53. Tell Claude **"props OK"**, or the names of the ones to redo (the name printed above
-      each picture).
+- [x] 53. Tell Claude **"props OK"**, or the names of the ones to redo. Done: "looks good!".
 
 **Reading the renders:**
 - The full-build renders show every landmark at its last look. In the game a tower near a low
@@ -2068,12 +2070,16 @@ Open the PNGs in Windows. Folder:
   is on the right, as when you look into the plot from its entrance. In the plan from above it
   is the other way round.
 
-### 14. M12 wave 3 — the asset run (lead, after Ben's OK; **NOT DONE**)
+### 14. M12 wave 3 — the asset run (**DONE 2026-10-05**; kept as the routine)
 
-Run everything from `C:\Users\benja\Desktop\tycoon-m12m`. The Blender lines need Git Bash.
-Python is `py`. `.env` is already in that folder.
+Everything ran from `C:\Users\benja\Desktop\tycoon-m12m`. The Blender lines need Git Bash.
+Python is `py`. `.env` is in that folder.
 
-**What it uploads: 35 props, 107 stages, all Metropolis.**
+**Result:** 35 props (107 stages) uploaded, harvested in **one paste** and templated. Every
+gate is green on the harvested sizes. Commits: `0a2258b` (upload), `aede7e3` (harvest),
+`18bdc0b` (templates, manifest, place builds).
+
+**What it uploaded: 35 props, 107 stages, all Metropolis.**
 - 18 towers × 5 stages = 90: `FabricResNarrowA/B`, `FabricResSmallA/B`, `FabricOfficeNarrowA/B`,
   `FabricOfficeSmallA/B`, `FabricShopNarrowA/B`, `FabricShopSmallA`, and the 7 `…Green` twins of
   the `Res` and `Shop` ones.
@@ -2081,14 +2087,16 @@ Python is `py`. `.env` is already in that folder.
   `OldTownRubble`, `OldTownSkip`, `SiteNarrow`, `SiteNarrowCrane`, `SiteSmall`,
   `SiteSmallCrane`, `RevealScaffold`, `LotHoarding`, `BusShelterM`, `VehicleCityBus`.
 - **No path bake and no path upload.** Metropolis streets are kit tiles and its lanes are flat
-  footpaths, so `tools/paths/bake.py` and `upload_paths.py` are not part of this run.
-- The 39 older Metropolis props are already uploaded. The uploader skips them.
+  footpaths, so `tools/paths/bake.py` and `upload_paths.py` were not part of this run.
+- The 39 older Metropolis props were already uploaded and were left alone (see `--model` below).
 
-**Rules for the lead:**
+**Rules for the lead (they held this time; keep them for the next era):**
 - Do not start before Ben's OK on the sheets (§13 step 53).
 - **Announce first.** If another Claude session is open, tell it before the upload and before
   the harvest, and wait for its answer. Never run an upload or a harvest while another session
   uploads or harvests.
+- **Merge and upload only the new props, with `--model`.** One `--model <Prop>` per new prop
+  on both lines. The props that are already uploaded are then not re-merged and not touched.
 - `upload_models.py --props --dry-run` **writes `Assets.json`**. It is not read-only.
 - **Commit `src/shared/Config/Assets.json` right after the upload, and again right after the
   harvest.**
@@ -2100,53 +2108,55 @@ Python is `py`. `.env` is already in that folder.
 - `assets\build` and `assets\testfit\out` are shared by every worktree. Give `streetplan.py` an
   `--out-dir` from this folder (step 59), or it overwrites pictures in the shared folder.
 
-- [x] 54. **The upload name guard is in place** (lead, 2026-10-04, commit `33261d4`). Nothing
-      to do; this is what to expect in the upload.
+- [x] 54. **The upload name guard is in place** (lead, 2026-10-04, commit `33261d4`).
       - Open Cloud refuses an asset name over 50 characters: HTTP 400 "Asset name length is
         invalid" (seen on 2026-09-17 with a path piece).
-      - `tools/assets/upload_models.py` now has `MAX_DISPLAY_NAME = 50` and
-        `model_display_name()`, like `upload_paths.py`. A name over 50 drops its prefix from
-        `EraCityTycoon_` to `ECT_` and keeps the prop name and `_S<n>`.
-      - **55 of the 107 stages take the short prefix:** the four `FabricOffice…` towers and the
+      - `tools/assets/upload_models.py` has `MAX_DISPLAY_NAME = 50` and `model_display_name()`,
+        like `upload_paths.py`. A name over 50 drops its prefix from `EraCityTycoon_` to `ECT_`
+        and keeps the prop name and `_S<n>`.
+      - **55 of the 107 stages took the short prefix:** the four `FabricOffice…` towers and the
         seven `…Green` twins. In the Creator Hub they read `ECT_Prop_Metropolis_<Prop>_S<n>`.
-      - The other 52 stages read `EraCityTycoon_Prop_Metropolis_<Prop>_S<n>` as before. No name
-        is over 50, and no name that is already uploaded changes.
-- [ ] 55. **Lead: regenerate the three kits** (Git Bash).
-      1. Delete the cached palettes of these kits in `assets/build/palettes/`. Today
-         (2026-10-04) `tower-kit.json` and `tower-kit.png` exist there (written 2026-10-03):
-         delete both, so the merge rebuilds them from the kit as it is now. No
-         `oldtown-kit.*` or `metro-transit-kit.*` exists yet; check again on the day.
+      - The other 52 stages read `EraCityTycoon_Prop_Metropolis_<Prop>_S<n>`. No name is over
+        50, and no name that was already uploaded changed.
+- [x] 55. **Lead: regenerate the three kits** (Git Bash; done 2026-10-05).
+      1. Delete the cached palettes of these kits in `assets/build/palettes/`. Done: the old
+         `tower-kit.json` and `tower-kit.png` (from 2026-10-03) were deleted. The merge wrote
+         fresh palettes for all three kits.
       2. Run:
          ```
          "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/oldtown_kit.py
          "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/tower_kit.py
          "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/metro_transit_kit.py
          ```
-      Each writes `assets/kenney3d/<kit>/Models/GLB format/` (`oldtown-kit`, `tower-kit`,
-      `metro-transit-kit`). `assets/` is gitignored, so the scripts are the committed artifact.
-      - Only if a kit script changed since Ben's OK: add ` -- --write-blueprints` to the first
-        two lines. That rewrites the blueprints in `tools/testfit/blueprints/_props/Metropolis/`
-        (15 from `oldtown_kit.py`, 18 from `tower_kit.py`). `git status` then shows what moved,
-        and a changed look needs a new sheet for Ben before the upload.
-- [ ] 56. **Lead: merge the props** (Git Bash):
+      Each writes `assets/kenney3d/<kit>/Models/GLB format/`. Result: `oldtown-kit` 28 pieces,
+      `tower-kit` 147, `metro-transit-kit` 2. `assets/` is gitignored, so the scripts are the
+      committed artifact.
+      - `--write-blueprints` was **not** run: no kit script had changed since Ben's OK. Use it
+        (` -- --write-blueprints` on the first two lines) only after a script change. It
+        rewrites the blueprints in `tools/testfit/blueprints/_props/Metropolis/` (15 from
+        `oldtown_kit.py`, 18 from `tower_kit.py`), and a changed look needs a new sheet for Ben
+        before any upload.
+- [x] 56. **Lead: merge the new props only** (Git Bash; done 2026-10-05). One `--model` per new
+      prop, 35 in all:
       ```
-      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Metropolis
+      "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era Metropolis --model BusShelterM --model FabricOfficeNarrowA …
       ```
-      - It merges all 74 Metropolis prop blueprints. The last line must read
-        `done: 74 blueprint(s), 0 with problems`.
-      - Expect 107 new files named `<Prop>_S<n>.glb` in
-        `assets/build/stages/_props/Metropolis/`.
-      - For one prop only, add `--model <Prop>` (repeatable).
-- [ ] 57. **Lead: upload** (107 stages):
+      - Result: `done: 35 blueprint(s), 0 with problems`, and 107 files named `<Prop>_S<n>.glb`
+        in `assets/build/stages/_props/Metropolis/`.
+      - The only warnings: the jibs of the two crane sites (`SiteNarrowCrane`,
+        `SiteSmallCrane`) overhang their lots. That is by design.
+      - Without `--model` the line merges all 74 Metropolis prop blueprints, the 39 uploaded
+        ones too. That is not needed.
+- [x] 57. **Lead: upload the same 35** (107 stages; done 2026-10-05, commit `0a2258b`):
       ```
-      py tools/assets/upload_models.py --props --era Metropolis
+      py tools/assets/upload_models.py --props --era Metropolis --model BusShelterM --model FabricOfficeNarrowA …
       ```
-      - The 39 older props print `already uploaded as …, skipped`. That is correct.
-      - An "Unknown Error" from Open Cloud is normal now and then: run the same line again.
-        Each id is saved as it arrives, so a stopped run resumes.
-      - Done when a run ends with nothing left to upload and no `failed` line.
-      - **Commit `Assets.json` now.**
-- [ ] 58. **Ben: the one harvest paste.** Studio in **Edit mode**:
+      - Result: `uploaded 107/107`. No failure and no retry was needed.
+      - If Open Cloud answers "Unknown Error" another time: run the same line again. Each id is
+        saved as it arrives, so a stopped run resumes.
+      - **`Assets.json` was committed right after** (`0a2258b`).
+- [x] 58. **Ben: the one harvest paste** (done 2026-10-05: `[HARVEST-DONE] 107 loaded, 0
+      failed`). Studio in **Edit mode**:
       1. Claude runs this, which puts the script on your clipboard:
          `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
       2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
@@ -2154,13 +2164,14 @@ Python is `py`. `.env` is already in that folder.
       3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
       4. Tell Claude "done". Do not copy anything else before Claude answers: your clipboard
          holds the result.
-      If you paste the Output into the chat instead, that is fine. The chat cuts it short, but
-      your clipboard still holds all of it, and the lead reads the clipboard anyway.
-- [ ] 59. **Lead: harvest, templates, fabric data, gates, manifest.**
+      This time Ben pasted the Output into the chat. That was fine: the chat cut it short, but
+      the clipboard still held all of it, and the lead read it from there.
+- [x] 59. **Lead: harvest, templates, fabric data, gates, manifest** (done 2026-10-05).
       ```
       py tools/assets/harvest.py --props
       ```
-      It must merge the 107 prop stages. **Commit `Assets.json` now.** Then:
+      It merged the 107 prop stages. **`Assets.json` was committed right after** (`aede7e3`).
+      Then:
       ```
       py tools/assets/gen_templates.py --props
       py tools/assets/gen_templates.py --check
@@ -2177,26 +2188,30 @@ Python is `py`. `.env` is already in that folder.
       py tools/streetplan.py --out-dir <a scratch folder>
       py tools/paths/bake.py --era Boomtown --list
       py tools/paths/bake.py --era Village --list
+      py tools/world/valley.py check
       py tools/sim_economy.py
       py tools/check_compile.py
       py tools/gen_asset_manifest.py
       py tools/gen_asset_manifest.py --check
       ```
-      - `fabric.py build Metropolis` is needed because the harvested sizes replace the plan's
-        `footprints` and the blueprint heights. Lot and layer counts can move. `check` holds at
-        least 84 lots and 5 bus shelters; today there are 88 and 5.
-      - `timeline Metropolis` must no longer print `heights from blueprints (not harvested
-        yet)`, and must end with 0 standing buildings that shrink or change prop.
-      - `props Metropolis` must end with `35 props shown; 0 listed or implied by the config and
-        never shown; 0 blueprints nothing refers to`.
-      - Both `--list` lines must exit 0: nothing in Village or Boomtown is re-baked.
-      - `sim_economy.py` must still total 16:20:04 with legacy 887.
-      - Expect 35 new templates in `templates/_props/Metropolis/` (74 in all).
-      - Then stylua, selene and luau-lsp. One selene warning is older than this wave
-        (`src/client/UI/LegacyPanel.luau:200`).
-      - **If a count moved**, tell the docs-keeper: the tables in `docs/PLAN.md` "Wave 3" and at
-        the top of PLAYTEST "M12 wave 3" were computed before the harvest.
-- [ ] 60. **Lead: rebuild the four place files** (from `tycoon-m12m`; PowerShell shown):
+      What came out:
+      - **Templates:** 35 new ones. `templates/_props/Metropolis/` now holds 74; there are 226
+        prop templates and 444 templates in all, and `--check` passes.
+      - **Fabric data:** `fabric.py build Metropolis` on the harvested sizes **changed
+        nothing**. Still 88 lots (59 narrow, 29 small), 4 lanes of 218 studs, 5 bus shelters.
+      - `timeline Metropolis` no longer prints `heights from blueprints (not harvested yet)`,
+        and shows 0 standing buildings that shrink or change prop over 63 moments.
+      - `props Metropolis`: 35 shown, 0 never shown, 0 blueprints nothing refers to.
+      - `streetplan.py`: 0 violations in all four eras. Both `--list` lines exit 0.
+      - `sim_economy.py`: 16:20:04, legacy 887.
+      - The other gates (`fabric.py check` for the three eras, `selftest`, `check_mirror.py
+        --strict`, `valley.py check`, `check_compile.py`, the manifest check, stylua, luau-lsp)
+        are green.
+      - selene still has its one old warning (`src/client/UI/LegacyPanel.luau:200`).
+      - **No count moved.** The docs-keeper re-ran the purchase table and the levelling counts
+        of PLAYTEST "M12 wave 3" on the harvested sizes: all the same.
+- [x] 60. **Lead: rebuild the four place files** (done 2026-10-05, commit `18bdc0b`;
+      `build/metropolis.rbxl` is dated 2026-10-05 10:42). From `tycoon-m12m`, PowerShell shown:
       ```
       cd C:\Users\benja\Desktop\tycoon-m12m
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
@@ -2205,12 +2220,11 @@ Python is `py`. `.env` is already in that folder.
       rojo build boomtown.project.json -o build/boomtown.rbxl
       rojo build metropolis.project.json -o build/metropolis.rbxl
       ```
-      Commit the templates, the fabric data, the manifest and the builds. Then tell Ben: "the
-      Metropolis asset run is done".
+      The templates, the manifest and the builds are committed.
 - 61. **If a record goes missing later:** re-run step 58 and the first line of step 59 only. Do
       **not** re-run the uploader.
 
-### 15. M12 wave 3 — `build/metropolis.rbxl`: open it, then playtest
+### 15. M12 wave 3 — `build/metropolis.rbxl`: open it, then playtest (**Ben's next step**)
 
 `build/metropolis.rbxl` is the same game as `build/test.rbxl`, with two switches baked in:
 - **`DebugStartEra` = 3:** a **fresh** save starts in **Metropolis**. No need to buy out Village
@@ -2227,8 +2241,8 @@ Press Play again and you get a fresh Metropolis and the cash again.
 - So: open it with File (*Archivo*) → Open (*Abrir*) only. Never use Publish to Roblox
   (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*) from it.
 
-**Wait for the asset run.** The file exists today (built 2026-10-04) and opens, but it shows no
-towers, old town, sites, shelters or buses yet. The playtest is for the file rebuilt in step 60.
+**The file is ready.** It was rebuilt after the asset run (2026-10-05 10:42) and has the
+towers, the old town, the building sites, the bus shelters and the bus in it.
 
 **What the cash covers:** everything. All 24 purchases and **Max** on every landmark, with
 plenty left.
@@ -2238,7 +2252,7 @@ plenty left.
   needs it, paste one line in the Server window (PLAYTEST "M12 wave 3" step 49). Nothing to
   type.
 
-- [ ] 62. **Lead:** the file is rebuilt after the asset run (step 60). Tick this then.
+- [x] 62. **Lead:** the file is rebuilt after the asset run (step 60; 2026-10-05, `18bdc0b`).
 - [ ] 63. Studio → File (*Archivo*) → Open (*Abrir*) →
       `C:\Users\benja\Desktop\tycoon-m12m\build\metropolis.rbxl`.
       There is no `metropolis.rbxl` in `C:\Users\benja\Desktop\tycoon\build\` until the merge.
@@ -2252,8 +2266,8 @@ plenty left.
       - you stand at a Metropolis plot **covered with old town** (car parks, brick buildings,
         fenced lots), with one free pad, the **Food Truck**.
       Stop and tell Claude if:
-      - the plot is bare grey ground with green strips and no old town: the file is from before
-        the asset run;
+      - the plot is bare grey ground with green strips and no old town: the file is an old
+        one, from before the asset run;
       - Output says `DebugStartEra lever skipped ... already has progress`: this session is on
         a real save. Stop (*Detener*) and close the file **without saving**;
       - you are in Village: you opened `test.rbxl`.

@@ -4823,11 +4823,10 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 
 ## M12 wave 3 — Metropolis growing city
 
-**Status 2026-10-04: NOT READY TO RUN.** The code is built, reviewed and checked, but the new
-models are **not uploaded yet**. Run this section only after Claude says **"the Metropolis asset
-run is done"** (`docs/MANUAL_STEPS.md` "M12" §14). Before that the file shows landmarks, streets,
-lanes, the highway and the subway kiosks only: no towers, no old town, no building sites, no bus
-shelters, no buses.
+**Status 2026-10-05: READY TO RUN. Not run yet.** The new models are uploaded and in the build:
+the Metropolis asset run is done (`docs/MANUAL_STEPS.md` "M12" §14), and
+`build/metropolis.rbxl` was rebuilt after it (2026-10-05 10:42). A file from before that date
+shows no towers, no old town, no building sites, no bus shelters and no buses.
 
 **Goal:** Metropolis grows as a downtown. An old town of car parks and brick buildings covers
 the plot. As you buy landmarks it is redeveloped: building sites with tower cranes, then towers
@@ -4853,8 +4852,8 @@ move a fresh real save to era 3.
   bus line and the roof gardens, before and after).
 
 What you should see if you buy in order and level nothing. Levelling moves `GrowthTier` up
-sooner, so your numbers can differ a little. These counts were worked out before the models were
-uploaded; the lead corrects them after the asset run if any moved.
+sooner, so your numbers can differ a little. These counts were worked out again on the uploaded
+models' real sizes (2026-10-05): none moved.
 
 | After purchase | `GrowthTier` | Towers | Sites | Lanes | New on screen |
 |---|---|---|---|---|---|
