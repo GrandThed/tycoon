@@ -1123,7 +1123,7 @@
     },
     "OrbitalColony": {
       "road": {
-        "width": 3,
+        "width": 3.24,
         "material": "Metal",
         "color": [
           214,
@@ -1132,35 +1132,20 @@
         ],
         "junctionProp": null,
         "bendProp": null,
-        "tiles": {
-          "tileStuds": 7,
-          "dock": 1.75,
-          "props": {
-            "straight": "TubeStraight",
-            "end": "TubeEnd",
-            "bend": "TubeBend",
-            "tee": "TubeTee",
-            "cross": "TubeCross"
+        "paths": {
+          "tileStuds": 11,
+          "spurWidth": 3,
+          "tube": {
+            "hub": "TubeHub",
+            "front": 1.75
           },
-          "spur": {
-            "width": 3,
+          "deck": {
             "material": "Metal",
             "color": [
               170,
               174,
               184
             ]
-          },
-          "blocks": {
-            "material": "Metal",
-            "color": [
-              96,
-              98,
-              108
-            ],
-            "treeSpacing": 0,
-            "treeInset": 0,
-            "treeClearance": 1
           }
         }
       },
@@ -1184,9 +1169,9 @@
       "highway": {
         "requiresSlot": "walkwayNetwork",
         "clearBand": false,
+        "round": true,
         "props": {
-          "deck": "MonorailTrack",
-          "corner": "MonorailCorner"
+          "arc": "MonorailArc"
         },
         "vehicleProps": [
           "MonorailTrain"
@@ -1316,7 +1301,7 @@
         "clear": {
           "slot": 3,
           "pad": 1.5,
-          "street": 2.0,
+          "street": 3.5,
           "parcel": 1.5,
           "lane": 2.0
         },

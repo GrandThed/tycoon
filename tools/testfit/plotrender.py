@@ -44,6 +44,14 @@ What is mirrored, and from where (never re-derived, never duplicated as a consta
     (`placeRamp` anchors the prop at `junction + direction * tileStuds`, the centre of the first
     whole cell inward, so its high end is flush with the junction cell's inward edge).
 
+M12 wave 4.1b (organic Orbital), mirror first -- the client lays none of this until wave 4.2:
+  * a tube era (`road.paths.tube`): each drawn stretch is its swept half-pipe, each owned landmark's
+    path its apron, each shown lane its decking -- the meshes tools/paths/tubes.py writes for the
+    layout, read back from its files -- and the era's hub prop stands on every hub node a drawn
+    stretch touches;
+  * a round loop (`highway.round`): `highway.props.arc` seated 48 times as its blueprint says, and
+    the train on the circle.
+
 Nothing here may quietly "follow the contract" where the client does something else: a divergence
 is a bug in one of them and belongs in a report, not in this file.
 """
@@ -135,6 +143,11 @@ SMALL_LOT = "small"  # Scatter.SMALL_LOT: the lot kind that draws from `houses.s
 BLOCK_DROP = 0.02  # a block slab's top, and a park strip's, sits this far under the kerb
 SPUR_DROP = 0.01  # RoadGraph.SPUR_DROP: a tiles-era footpath, half as far under the kerb
 KEY_SCALE = 10  # rectKey's rounding
+# A round loop's segment before `highway.props.arc` has a blueprint (INTERFACES "Wave 4.1b"): the
+# beam's soffit and top, its width, and a pier's side.
+ROUND_DECK = (6.10, 7.07)
+ROUND_BEAM = 1.6
+ROUND_PIER = 0.9
 # `--label`: the caption stamped on a finished render, in the gate sheets' face (compare_sheet.py).
 CAPTION_FONT = REPO_ROOT / "assets" / "marketing" / "fonts" / "TitanOne-Regular.ttf"
 CAPTION_HEIGHT_SHARE = 0.036  # text height per picture height
@@ -392,6 +405,7 @@ class PlotScene:
         self.block_rects = []
         self.strip_cells = set()
         self.missing = {}  # blueprint name -> how many placements fell back to a placeholder
+        self.meshes = []  # generated meshes drawn where they were written: {"name", "glb", "pos"}
         self.deck_vehicles = 0  # the highway's vehicles, which come off the plot's street share
 
     # -- helpers ---------------------------------------------------------
@@ -774,6 +788,99 @@ class PlotScene:
                     return True
         return False
 
+    def build_tubes(self):
+        """A tube era's streets, paths and lanes (INTERFACES "Wave 4.1b"): the meshes
+        tools/paths/tubes.py writes for this layout and this fabric data, drawn from its files. A
+        stretch's half-pipe shows once the stretch is drawn; a landmark's apron with the landmark;
+        a lane's decking when the lane is shown; and the hub prop stands on every hub node a drawn
+        stretch touches (a drum from the contract's numbers until it has a blueprint). The decking
+        lies at `paths.fillHeight`, as a baked fill does."""
+        era = self.era
+        data = self.fabric.data if self.fabric is not None else None
+        plan = streetplan.tube_plan(era, data)
+        listing = plan.write()
+        by_id = {piece["id"]: piece for piece in listing["pieces"]}
+        deck_top = float(era.city["paths"]["fillHeight"])
+        shown_lanes = {lane["index"] for lane in self.fabric_view["lanes"]} if self.fabric_view is not None else set()
+        drawn = {"Tube": 0, "Deck": 0}
+        for piece in plan.pieces():
+            if piece["kind"] == "stretch":
+                show = piece["stretch"] in self.visible
+            elif piece["kind"] == "spur":
+                show = piece["slot"] in self.owned
+            else:
+                show = piece["lane"] in shown_lanes
+            if not show:
+                continue
+            record = by_id[piece["id"]]
+            drawn[record["layer"]] += 1
+            self.meshes.append({"name": piece["id"], "glb": record["glb"], "pos": [0.0, deck_top if record["layer"] == "Deck" else 0.0, 0.0]})
+        hub_name = plan.config.get("hub")
+        hubs = [hub for hub in plan.hubs() if set(hub["stretches"]) & self.visible]
+        size = 2 * plan.hub_radius
+        for hub in hubs:
+            self.model(
+                f"Hub{hub['node']}",
+                blueprint_path(era.name, hub_name or "", prop=True),
+                (hub["point"][0], 0.0, hub["point"][1]),
+                placeholder=[placeholder_box((size, tubes_fallback_height(), size), list(plan.colours["shell"]))],
+                wanted=hub_name or "hub",
+            )
+        self.notes.append(
+            f"tubes: {drawn['Tube']} of {sum(1 for piece in plan.pieces() if piece['kind'] == 'stretch')} stretches swept, "
+            f"{drawn['Deck']} decking pieces, {len(hubs)} of {len(plan.hubs())} hubs ({plan.tube_length():.0f} studs of tube at full build); "
+            f"meshes in {listing['root']}"
+        )
+
+    def build_round_loop(self):
+        """A round loop (`highway.round`): `highway.props.arc` at the middle of each of the 48
+        segments, turned as its blueprint says -- position (ring cos t, 0, ring sin t), rotationY
+        -(t + 90) degrees -- and `vehicles.count` trains evenly round the circle from the entrance
+        side, at deckHeight, heading along the track. Before the arc has a blueprint a segment is
+        a beam and a pier from the contract's numbers."""
+        era = self.era
+        config = era.dressing.get("highway")
+        if config.get("requiresSlot") and config["requiresSlot"] not in self.owned:
+            return
+        ring = era.round_ring
+        name = (config.get("props") or {}).get("arc")
+        step = 360.0 / streetplan.ROUND_SEGMENTS
+        height = float(config.get("deckHeight") or ROUND_DECK[1])
+        chord = 2 * ring * math.sin(math.radians(step / 2))
+        for k in range(streetplan.ROUND_SEGMENTS):
+            angle = (k + 0.5) * step
+            x, z = ring * math.cos(math.radians(angle)), ring * math.sin(math.radians(angle))
+            self.model(
+                f"Arc{k}",
+                blueprint_path(era.name, name or "", prop=True),
+                (x, 0.0, z),
+                rot_y=-(angle + 90.0),
+                placeholder=[
+                    placeholder_box((chord, height - ROUND_DECK[0], ROUND_BEAM), PLACEHOLDER_HULL, (0.0, ROUND_DECK[0], 0.0)),
+                    placeholder_box((ROUND_PIER, ROUND_DECK[0], ROUND_PIER), PLACEHOLDER_HULL),
+                ],
+                wanted=name or "arc",
+            )
+        self.notes.append(f"highway: round loop, {streetplan.ROUND_SEGMENTS} segments at radius {ring:g}")
+        vehicles = config.get("vehicles") or {}
+        props = self.vehicle_props(config)
+        count = int(vehicles.get("count", 1)) if props else 0
+        self.deck_vehicles = count
+        for index in range(count):
+            # From the entrance side (-Z), running toward +X: the way the client's loop starts.
+            angle = math.radians(-90.0 + index * 360.0 / max(count, 1))
+            position = (ring * math.cos(angle), ring * math.sin(angle))
+            heading = (-math.sin(angle), math.cos(angle))
+            self.model(
+                f"Train{index}",
+                blueprint_path(era.name, props[index % len(props)], prop=True),
+                (position[0], height, position[1]),
+                rot_y=facing_rot(heading),
+                placeholder=placeholder_for("train"),
+                wanted=props[index % len(props)],
+                scale=self.vehicle_scale(),
+            )
+
     def build_plain_streets(self):
         """A non-tile era (Boomtown, Village): the spine as plain slabs of road.width. The shipped
         client draws baked mesh pieces there; this is deliberately the plain stand-in, because the
@@ -932,7 +1039,12 @@ class PlotScene:
         era = self.era
         highway = era.highway
         config = era.dressing.get("highway")
-        if highway is None or config is None or era.tile_studs <= 0:
+        if highway is None or config is None:
+            return
+        if era.round_ring is not None:
+            self.build_round_loop()
+            return
+        if era.tile_studs <= 0:
             return
         if config.get("requiresSlot") and config["requiresSlot"] not in self.owned:
             return
@@ -1884,15 +1996,19 @@ class PlotScene:
                 self.owned, self.fabric_stages, self.fabric_tier, near=self.near
             )
         self.build_ground()
+        tubes = streetplan.tube_plan(self.era) is not None
         if self.era.tiles is not None:
             self.build_tile_streets()
             self.build_pavements()
+        elif tubes:
+            self.build_tubes()
         else:
             self.build_plain_streets()
         self.build_blocks()
         self.build_park_strips()
-        self.build_spurs()
-        self.build_lanes()
+        if not tubes:
+            self.build_spurs()
+            self.build_lanes()
         self.build_pads()
         self.build_buildings()
         self.build_lots()
@@ -2193,6 +2309,11 @@ def stamp_caption(path, text):
     Image.alpha_composite(image, layer).convert("RGB").save(path)
 
 
+def tubes_fallback_height():
+    """A hub's height until its prop has a blueprint: tools/paths/tubes.py's contract number."""
+    return streetplan.tubes_module().HUB_FALLBACK[1]
+
+
 def run_blender(scene_spec, blender):
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
         json.dump(scene_spec, handle)
@@ -2326,6 +2447,7 @@ def main():
         "sky": SKY,
         "boxes": scene.boxes,
         "models": scene.models,
+        "meshes": scene.meshes,
         "discs": scene.discs,
         "spheres": scene.spheres,
         "camera": camera_for(camera_name, era, scene),

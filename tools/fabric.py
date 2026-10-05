@@ -79,41 +79,26 @@ alleys' lots theirs. Kerb layer
 entries keep the walkers' reach (pedestrians.offset + clearance) as everywhere, which in a tiles era
 puts them on the pavement's outer edge, between the walkers and the lot fronts.
 
-A docked tiles era (`road.tiles.dock`, INTERFACES "Wave 4.1": Orbital). A planned straight or end
-cell is a solid only within `dock` of its centreline; a bend, tee or cross cell stays whole. So a
-street's hard surface is a band `dock` either side of each leg, half a cell past its ends, plus
-those whole cells, and lots, pads and markers are judged against that: a plan's `frontSetback` is
-`dock`, and a row leaves a gap wherever a whole cell stands in it. An alley is laid as the client
-lays it, clipped `streetplan.spur_clip` from its mouth, and may not stand on a whole cell.
+A tube era (`road.paths.tube`, INTERFACES "Wave 4.1b": organic Orbital). Its streets are swept
+half-pipes along each polyline's smoothed centreline (tools/paths/tubes.py), so row 1 is laid along
+that curve and not along the polyline's straight legs: a lot's front stands `frontSetback` from
+the centreline, turned to the tube's tangent where it stands, pushed back on the inside of a bend
+until its whole front keeps that line, and stepped along until it clears the lot before it. Every
+lot of every row keeps `tube.front` from every centreline, HUB_GAP from every hub (the drum at a
+node where tubes branch, end or change chain), and off every landmark's apron -- the decking under
+its footpath, its pad and its building. A lot's address is still its stretch and the foot of its
+front on that stretch's chord, as the client's Develop reads it.
 
-Wild on planned streets (same section). Only an era with `road.tiles.parkStrips` keeps its wild off
-the planned streets. Without them the wild covers the planned cells, one quarter to a cell: a
-field's four quarters are the four lattice cells it lies on (grid pitch two cells, `origin` on a
-cell corner), so a drawn cell clears the one quarter on it and no other. `check` proves both
-halves: every part of a wild entry that stands on a planned cell's solid is cleared by each stretch
-that draws that cell, alone; a quarter that stands on one lies inside one cell; and no quarter that
-stands on none is within a planned stretch's clearing reach. A field that breaks one of them is
-moved by `wild.grid.shift` or dropped, a single dropped, as for any other keep-out.
-`highway.clearBand` false keeps the ring's band out of the clearing mask -- the wild
-under the beam stands for good, so it keeps off the entrance corridor and is at most
-WILD_UNDER_BEAM tall.
+A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
+either side of the circle of radius `ring`: no lot, marker, apron or lane stands in it, and the
+colony may use the plot's corners outside it. With `highway.clearBand` false the wild in the band
+is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off the way in and off a tube that
+crosses the band, a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop
+is taller than WILD_UNDER_BEAM.
 
-Rulings after the groundwork (same section). No lot overlaps a layout `blocks` rect -- a landmark's
-deck, one rect; flush is allowed -- so the generator cuts street lots and lane lots round them.
-Where the wild is laid on the lattice, a cell no clump quarter covers carries exactly one single
-(the plot is an odd number of cells across and a clump is two, so one ring column and one ring row
-have none; so have the cells a dropped clump leaves): a prop of `wild.singles.props`, placed and
-turned by its own seeded stream within `singles.inset` of the cell's middle. The plan's fallow
-cells are open ground by choice and keep their loose singles; the entrance corridor's cell carries
-nothing. Under a beam the wild never leaves, a single keeps CHECK_PIER_FOOT from each pier foot's
-centre; clumps are low relief and may stand round one.
-
-Same rulings, second round. In a docked era a lot keeps `parcels.spur` from a landmark's path only
-as far as that path is laid (`Site.lot_path_segments`): the slab stops `spur_clip` short of the
-centreline on the landmark's own side, so the row docked across the tube runs straight past a join.
-And a lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the
-lane as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its
-left); without the key it is the nearest, as before.
+A lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the lane
+as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its left);
+without the key it is the nearest, as before.
 
     py tools/fabric.py build Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
     py tools/fabric.py check Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
@@ -206,14 +191,18 @@ CHECK_SPOT_FRONT = 0.5
 # A tiles era (INTERFACES "Wave 3.1"): a lot keeps this much daylight from the ring deck's band, a
 # ramp cell and a subway kiosk; it may touch a street's hard surface but never overlap it.
 CHECK_TILE_SOLID = 0.5
-# INTERFACES "Wave 4.1": with `highway.clearBand` false the wild stands under the beam for good, so
-# no wild prop is taller than this at any stage (the monorail's soffit is at 6.10).
+# INTERFACES "Wave 4.1b": under a round loop whose band never clears (`highway.clearBand` false) no
+# wild prop is taller than this at any stage (the monorail's soffit is at 6.10), and a single's
+# centre keeps CHECK_PIER_FOOT from the centre of every pier foot (a foot is 1.9 square).
 WILD_UNDER_BEAM = 3.0
-# Rulings after the groundwork: a single's centre keeps this far from the centre of every pier foot
-# of a ring whose ground the wild never leaves (a foot is 1.9 square).
 CHECK_PIER_FOOT = 1.5
-# How many places a cell's one single is tried at before the cell's middle is taken as it stands.
-FILL_TRIES = 12
+# A tube era: how far back a lot may be pushed, in TUBE_BACK_STEP steps, to keep its front corners
+# off the pipe on the inside of a bend (a 4-wide front on a 6-stud bend needs about 0.3).
+TUBE_BACK_STEP = 0.05
+TUBE_BACK_MOST = 1.5
+# The wild keeps this far from the centreline of a tube that crosses a round loop's band, where
+# nothing would ever clear it: the pipe's own reach and a quarter stud.
+CROSSING_KEEP = 0.25
 # Two shapes that share no area deeper than this only touch (coordinates are written to 0.01).
 TOUCH = 1e-6
 # A lot laid exactly a street clearance away measures a hair under it in floating point (a plan
@@ -337,19 +326,6 @@ def deck_band(era):
     ]
 
 
-def dock_band(a, b, dock, past):
-    """A docked street leg's solid (INTERFACES "Wave 4.1"): `dock` either side of a-b and `past`
-    (half a cell) beyond each end, so it covers an end cell's whole length."""
-    length = math.dist(a, b)
-    if length < streetplan.MIN_LENGTH:
-        return streetplan.square(a, past * 2, dock * 2, 0)
-    ux, uz = (b[0] - a[0]) / length, (b[1] - a[1]) / length
-    nx, nz = -uz * dock, ux * dock
-    a2 = (a[0] - ux * past, a[1] - uz * past)
-    b2 = (b[0] + ux * past, b[1] + uz * past)
-    return [(a2[0] + nx, a2[1] + nz), (b2[0] + nx, b2[1] + nz), (b2[0] - nx, b2[1] - nz), (a2[0] - nx, a2[1] - nz)]
-
-
 def keepout_hits(site, shapes):
     """(label, depth) of every tiles-era keep-out (a street's hard surface, the deck band, a ramp
     cell, a kiosk) that any of `shapes` stands on; touching is not standing on."""
@@ -463,13 +439,7 @@ class Site:
         # with a pavement either side and a U round its ends: its hard surface reaches `street_half`
         # from the centreline and has square ends, so a lot is judged against that band.
         self.tiles = self.era.tiles is not None
-        # `cell_half`: a whole cell and its pavement. `street_half`: how far the hard surface reaches
-        # along a straight run -- the same, unless the era docks (`road.tiles.dock`, INTERFACES
-        # "Wave 4.1"): then a straight or end cell is a solid only within `dock` of its centreline,
-        # and only a bend, tee or cross cell is whole.
-        self.cell_half = max(self.width, self.era.tile_studs) / 2 + self.era.pavement if self.tiles else None
-        self.dock = self.era.dock if self.tiles else None
-        self.street_half = self.dock if self.dock is not None else self.cell_half
+        self.street_half = max(self.width, self.era.tile_studs) / 2 + self.era.pavement if self.tiles else None
         self.street_strip = self.street_half if self.tiles else self.road_strip
         self.spur_strip = self.spur_width / 2 + CHECK_STRIP_EXTRA
         self.ids = piece_ids(self.network)
@@ -529,25 +499,6 @@ class Site:
                     self.spur_segments.append((slot["id"], a, b))
         self.street_boxes = [(pl, seg, a, b, box_of((a, b))) for pl, seg, a, b in self.street_segments]
         self.spur_boxes = [(a, b, box_of((a, b))) for _, a, b in self.spur_segments]
-        # What of each landmark path is laid (slot id, a, b): a tiles era with a footpath look stops
-        # it `spur_clip` short of its join (RoadGraph.spurDrawPoints); anywhere else, all of it. An
-        # alley's ground is judged against this, as it is itself cut at its mouth: where the clip is
-        # shorter than a path's strip (a walkway narrower than its cell), a path that joins the
-        # street opposite an alley's mouth is the tube's width away from it, not on top of it.
-        footpath_clip = streetplan.spur_clip(self.era) if self.tiles else None
-        self.footpath_segments = []
-        for slot in self.era.slots:
-            points = self.era.spurs[slot["id"]]["points"]
-            if len(points) < 2:
-                continue
-            for a, b in streetplan.polyline_segments(streetplan.spur_draw_points(points, footpath_clip)):
-                if math.dist(a, b) >= streetplan.MIN_LENGTH:
-                    self.footpath_segments.append((slot["id"], a, b))
-        # What a lot keeps its path clearance from: every leg of every landmark path, or in a docked
-        # era only what is laid of it. There a lot stands 1.75 from the centreline and the path's
-        # last 3 studs are never drawn, so a join costs the row across the tube nothing.
-        self.lot_path_segments = self.footpath_segments if self.dock is not None else self.spur_segments
-        self.lot_path_boxes = [(a, b, box_of((a, b))) for _, a, b in self.lot_path_segments]
         # Tiles era only, empty elsewhere: every planned street's hard surface (label, polyline,
         # segment, band, box) -- planned, because a park strip covers an undrawn cell and its
         # pavement band until the street draws -- and the ground the tile renderer and the highway
@@ -561,84 +512,24 @@ class Site:
         # highway or a config `highway.requiresSlot`.
         self.highway_rects = []
         self.highway_slot = None
-        # `highway.clearBand` false (INTERFACES "Wave 4.1"): the ring's ground never joins the
-        # clearing mask, so the wild under the beam stands for good. Absent: it clears, as it did.
-        self.clear_band = (self.era.dressing.get("highway") or {}).get("clearBand") is not False
-        self.entrance = self.era.streets[0][0] if self.era.streets and self.era.streets[0] else (0.0, -self.era.half_z)
-        # Only an era with park strips (`road.tiles.parkStrips`) keeps its wild off the planned
-        # streets. Without them the wild covers the planned cells and each drawn cell clears its
-        # own (`tube_cells`, `tube_stretches`; wild_messages).
-        self.park_strips = self.tiles and self.era.tiles.get("parkStrips") is not None
-        self.street_clear = float((self.config.get("clear") or {}).get("street", 0.0))
-        # Every planned cell as (name, solid, box, the stretches that draw it, the whole cell's
-        # box), and the planned stretches; empty unless this is a tiles era whose wild may stand on
-        # its planned streets.
-        self.tube_cells = []
-        self.tube_stretches = []
-        corridor = []
         if self.tiles:
-            half_cell = self.era.tile_studs / 2
             for polyline, segment, a, b in self.street_segments:
-                # A docked leg's solid runs half a cell past both ends: an end cell's whole length,
-                # and into the whole cell of a bend or a junction.
-                band = dock_band(a, b, self.dock, half_cell) if self.dock is not None else streetplan.band(a, b, self.street_half)
+                band = streetplan.band(a, b, self.street_half)
                 self.street_bands.append((f"street {polyline + 1}", polyline, segment, band, box_of(band)))
-            if self.dock is not None:
-                # The cells that stay whole (a bend, a tee, a cross): no polyline, so nobody's own.
-                for cell in sorted(self.era.tile_masks()):
-                    if not self.era.cell_docked(cell):
-                        poly = self.era.cell_square(cell)
-                        self.street_bands.append((self.era.cell_name(cell), None, None, poly, box_of(poly)))
             ring = [("the deck band", poly) for poly in deck_band(self.era)]
             ring += [(f"the ramp cell {streetplan.fmt(shape_centre(poly))}", poly) for poly in streetplan.ramp_squares(self.era)]
             kiosks = [(f"subway kiosk {index}", entry["poly"]) for index, entry in enumerate(self.era.subways, start=1)]
             self.tile_solids = [(label, poly, box_of(poly)) for label, poly in ring + kiosks]
             slot = (self.era.dressing.get("highway") or {}).get("requiresSlot")
-            if isinstance(slot, str) and ring and self.clear_band:
+            if isinstance(slot, str) and ring:
                 self.highway_slot = slot
                 self.highway_rects = [(label, poly, box_of(poly)) for label, poly in ring]
-            if ring and not self.clear_band:
-                # The way in, under the ring: a cell wide, from the plot's front edge to the first
-                # street cell. Nothing ever clears it, so the wild keeps off it.
-                front, back = -self.era.half_z, self.entrance[1] - half_cell
-                if back - front > TOUCH:
-                    corridor = [("the entrance corridor", streetplan.square((self.entrance[0], (front + back) / 2), 2 * half_cell, back - front, 0))]
-            if not self.park_strips:
-                planned, cells = self.network.tile_plan()
-                self.tube_stretches = list(planned)
-                for cell, ids in cells.items():
-                    solid = self.era.cell_solid(cell)
-                    self.tube_cells.append((self.era.cell_name(cell), solid, box_of(solid), tuple(ids), box_of(self.era.cell_square(cell))))
         # What the wild keeps off in a tiles era (INTERFACES "Wave 3.1", rulings): every planned
-        # street's band where park strips cover it, and the kiosks. The ring's ground is not kept:
-        # the old town stands there until the highway is bought, and then the ring's own clearing
-        # takes it (wild_messages); with `clearBand` false it stays, off the entrance corridor.
-        self.wild_keepout = [(f"the hard surface of {label}", band, box) for label, _, _, band, box in self.street_bands] if self.park_strips else []
-        self.wild_keepout += [(label, poly, box_of(poly)) for label, poly in kiosks + corridor]
-        # The wild stands under the ring's beam for good (wild_height_messages).
-        self.under_beam = bool(deck_band(self.era)) and self.tiles and not self.clear_band
-        # The wild is laid on the lattice, one quarter to a cell, and may cover the planned streets:
-        # every cell no quarter covers then carries a single (fill_cells).
-        self.lattice_wild = self.tiles and not self.park_strips
-        # Every pier foot the wild stands round for good; a single keeps CHECK_PIER_FOOT from each.
-        self.pier_feet = streetplan.ring_pier_feet(self.era) if self.under_beam else []
-        # The layout's deck rects (`blocks`: one per landmark, under its pad and building) as
-        # (label, polygon, box): no lot overlaps one, flush allowed.
-        self.deck_rects = [
-            (f"deck rect {index} ({', '.join(block['slots']) or 'no slot'})", block["poly"], box_of(block["poly"]))
-            for index, block in enumerate(self.era.blocks, start=1)
-        ]
-        # What an alley's ground may not stand on (tile_lane_messages), as (label, band, box): each
-        # leg's roadway and pavement, as streetplan.footpath_violations judges every footpath -- a
-        # walkway narrower than its cell (Orbital's) leaves a footpath the rim of the cell -- and a
-        # docked era's whole cells. Where the road is as wide as its cell these are the street bands.
-        self.footpath_bands = []
-        if self.tiles:
-            walk = self.width / 2 + self.era.pavement
-            for polyline, _segment, a, b in self.street_segments:
-                band = streetplan.band(a, b, walk)
-                self.footpath_bands.append((f"street {polyline + 1}", band, box_of(band)))
-            self.footpath_bands += [(label, band, box) for label, polyline, _, band, box in self.street_bands if polyline is None]
+        # street's band and the kiosks. The ring's ground is not kept: the old town stands there
+        # until the highway is bought, and then the ring's own clearing takes it (wild_messages).
+        self.wild_keepout = [(f"the hard surface of {label}", band, box) for label, _, _, band, box in self.street_bands]
+        self.wild_keepout += [(label, poly, box_of(poly)) for label, poly in kiosks]
+        self.entrance = self.era.streets[0][0] if self.era.streets and self.era.streets[0] else (0.0, -self.era.half_z)
         lamps = self.era.dressing.get("lamps") or {}
         post = streetplan.post_size(self.era, lamps.get("prop"))
         self.lamps = [streetplan.square(p, post, post, 0) for p in streetplan.row_lamp_posts(self.era, self.network)]
@@ -660,6 +551,77 @@ class Site:
         # `walker_inner` (the walk lane less its clearance) -- instead of past the walkers' reach.
         self.walker_inner = offset - clearance
         self.road_half = max(self.width, self.era.tile_studs) / 2 if self.tiles else self.width / 2 + meander
+        self._organic()
+
+    def _organic(self):
+        """INTERFACES "Wave 4.1b": what a tube era and a round loop add to the site. Everything here
+        is empty or None in an era with neither, which then builds as it always did."""
+        # The swept tubes (tools/paths/tubes.TubePlan): lots are laid along and measured against
+        # its lines; `tube_front` is how near a centreline anything may stand.
+        self.tube = streetplan.tube_plan(self.era)
+        self.tube_front = self.tube.front if self.tube is not None else None
+        self.hubs = []  # (label, the drum as a polygon, box)
+        self.aprons = []  # (label, polygon, box): each landmark's decking, as its rects and its path's legs
+        if self.tube is not None:
+            self.street_strip = self.tube_front
+            for hub in self.tube.hubs():
+                poly = streetplan.disc_poly(hub["point"], self.tube.hub_radius)
+                where = streetplan.fmt((rounded(hub["point"][0]), rounded(hub["point"][1])))
+                self.hubs.append((f"the hub at {where}", poly, box_of(poly)))
+            for slot in self.era.slots:
+                shapes = [(f"the {slot['id']} apron ({part})", poly) for part, poly in self.tube.apron_rects(slot["id"])]
+                points = self.era.spurs[slot["id"]]["points"]
+                # The path as it lies: anchor to the tube's centreline, under the pipe. A lot docked
+                # across the tube stands a pipe's width from its end, so a join costs that row nothing.
+                shapes += [
+                    (f"the {slot['id']} apron (path)", streetplan.slab_poly(a, b, self.spur_width, 0.0))
+                    for a, b in streetplan.polyline_segments(points)
+                    if math.dist(a, b) >= streetplan.MIN_LENGTH
+                ]
+                self.aprons += [(label, poly, box_of(poly)) for label, poly in shapes]
+        # A round loop: its radius, and the band nothing stands in.
+        self.ring = self.era.round_ring
+        self.band_half = streetplan.ROUND_BAND_HALF
+        # `highway.clearBand` false: the band never joins the clearing mask and the wild in it is
+        # cleared by nothing, so there the wild answers to the rules of standing under the beam.
+        self.under_beam = self.ring is not None and (self.era.dressing.get("highway") or {}).get("clearBand") is False
+        self.pier_feet = streetplan.round_pier_feet(self.era) if self.under_beam else []
+        if self.under_beam:
+            # The way in, under the loop: from the plot's front edge to the first street point, as
+            # wide as a hub.
+            half = self.tube.hub_radius if self.tube is not None else self.width
+            front, back = -self.era.half_z, self.entrance[1]
+            if back - front > TOUCH:
+                corridor = streetplan.square((self.entrance[0], (front + back) / 2), 2 * half, back - front, 0)
+                self.wild_keepout.append(("the entrance corridor", corridor, box_of(corridor)))
+            # A tube that crosses the band: its own ground there, cut into short lengths.
+            reach = (self.tube_front or 0.0) + CROSSING_KEEP
+            for line in self.tube.lines if self.tube is not None else ():
+                stride = max(1, round(1.0 / (line.arcs[1] - line.arcs[0]))) if len(line.arcs) > 1 else 1
+                marks = list(range(0, len(line.points), stride))
+                if marks[-1] != len(line.points) - 1:
+                    marks.append(len(line.points) - 1)
+                for i, j in zip(marks, marks[1:]):
+                    a, b = line.points[i], line.points[j]
+                    if min(abs(math.hypot(*a) - self.ring), abs(math.hypot(*b) - self.ring)) > self.band_half + reach:
+                        continue
+                    poly = streetplan.band(a, b, reach)
+                    self.wild_keepout.append((f"{line.label}, where it crosses the loop's band", poly, box_of(poly)))
+
+    def tube_gap(self, poly, need, own=()):
+        """(daylight, line) for the tube line that comes nearest `poly` inside what it must keep:
+        `need` from every line, or `own[polyline]` from the lines named there. None when all clear."""
+        worst = None
+        for line in self.tube.lines:
+            want = own.get(line.polyline, need) if own else need
+            d = line.gap(poly, want)
+            if d < want - STREET_SLACK and (worst is None or d < worst[0]):
+                worst = (d, line, want)
+        return worst
+
+    def band_gap(self, poly):
+        """Daylight between a polygon and the round loop's band; `inf` without a round loop."""
+        return streetplan.band_gap(poly, self.ring, self.band_half) if self.ring is not None else math.inf
 
     def solid_boxes(self, rules):
         """(polygon, its bounding box, the daylight a parcel keeps from it) for every solid."""
@@ -721,12 +683,13 @@ def lot_gap(rules, size, other):
     return rules["terraceGap"] if size == other == "narrow" else rules["gap"]
 
 
-def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), gap_for=None):
+def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), gap_for=None, own_lines=()):
     """Every clearance the generator keeps (the plan's numbers, at least the contract's). A
     bounding-box test skips every obstacle too far away to matter before the exact one runs.
     `lanes` are the lane lines of the plan (wave 2.4): no lot comes within the plan's `lanes.clear`
     of one, which is what leaves each mouth open in the street frontage. `gap_for` overrides the
-    daylight kept from each lot already placed."""
+    daylight kept from each lot already placed. `own_lines` (a tube era) are the polylines whose
+    tube the lot fronts: it keeps the front line from those, the plan's `street` from the rest."""
     era = site.era
     edge = era.half_x - rules["edge"]
     if any(abs(v[0]) > edge or abs(v[1]) > era.half_z - rules["edge"] for v in poly):
@@ -735,27 +698,36 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
     for obstacle, obstacle_box, margin in site.solid_boxes(rules):
         if not boxes_apart(box, obstacle_box, margin) and gap(poly, obstacle) < margin:
             return False
-    for polyline, segment, a, b, segment_box in site.street_boxes:
+    if site.tube is not None:
+        # The swept tubes, the hubs on them, the landmarks' aprons and the round loop's band.
+        own = {polyline: rules["frontSetback"] - 0.05 for polyline in own_lines}
+        if site.tube_gap(poly, rules["street"], own) is not None:
+            return False
+        for _, hub, hub_box in site.hubs:
+            if not boxes_apart(box, hub_box, streetplan.HUB_GAP) and gap(poly, hub) < streetplan.HUB_GAP:
+                return False
+        for _, apron, apron_box in site.aprons:
+            if not boxes_apart(box, apron_box, 0.0) and overlap_depth(poly, apron) > TOUCH:
+                return False
+    if site.band_gap(poly) < rules.get("tileSolid", CHECK_TILE_SOLID):
+        return False
+    for polyline, segment, a, b, segment_box in site.street_boxes if site.tube is None else ():
         need = rules["frontSetback"] - 0.05 if (polyline, segment) in own_segments else rules["street"]
         if not boxes_apart(box, segment_box, need) and segment_gap(a, b, poly) < need - STREET_SLACK:
             return False
     # A tiles era: no lot on a street's hard surface, square ends and corners included; a lot
     # keeps the plan's `street` (from the centreline) off the surface of every other street leg.
     for _, polyline, segment, band, band_box in site.street_bands:
-        # A docked era's whole cells (no polyline) are nobody's own and ask only for no overlap:
-        # the plan's `street` is kept from the legs that run into them.
-        own = polyline is None or (polyline, segment) in own_segments
+        own = (polyline, segment) in own_segments
         need = 0.0 if own else max(rules["street"] - site.street_half, 0.0)
         if boxes_apart(box, band_box, need):
             continue
         if overlap_depth(poly, band) > TOUCH or (need > 0 and gap(poly, band) < need - STREET_SLACK):
             return False
-    for a, b, segment_box in site.lot_path_boxes:
+    # A tube era keeps its lots off each landmark's apron (above), path included, not a strip
+    # round the path's centreline: that strip reaches across the tube at every join.
+    for a, b, segment_box in site.spur_boxes if site.tube is None else ():
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
-            return False
-    # A landmark's deck is one rect: a lot may stand flush against it, never on it.
-    for _, deck, deck_box in site.deck_rects:
-        if not boxes_apart(box, deck_box, 0.0) and overlap_depth(poly, deck) > TOUCH:
             return False
     for points in lanes:
         need = rules["lanes"]["clear"]
@@ -886,6 +858,72 @@ def walk_run(site, rules, run, side, sizes_for, rng, jitter, placed, lanes=()):
             _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
             candidate["along"] = rounded(math.dist(st["a"], foot))
             if parcel_clear(site, candidate["poly"], rules, own, placed, size, lanes):
+                accepted = candidate
+                break
+        if accepted is None:
+            s += rules["walkStep"]
+            continue
+        placed.append(accepted)
+        s += site.sizes[accepted["size"]][0] + (rules["terraceGap"] if accepted["size"] == "narrow" else rules["gap"])
+
+
+def tube_address(site, line, parcel, depth):
+    """(stretch index, along) of a lot laid along a tube: the stretch whose run of the centreline
+    its front centre is nearest, and the foot of that front on the stretch's own chord, which is
+    how the contract addresses a lot whatever shape the street is drawn in."""
+    fc = front_centre(parcel["x"], parcel["z"], parcel["rotationY"], depth)
+    stretch = line.stretch_at(line.project(fc)[1])
+    if stretch is None:
+        return None
+    st = site.network.stretches[stretch]
+    _, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
+    return stretch, rounded(math.dist(st["a"], foot))
+
+
+def walk_tube(site, rules, line, side, sizes_for, rng, jitter, placed, lanes=()):
+    """Lay parcels along one side of a tube's drawn centreline, from its start (INTERFACES "Wave
+    4.1b"): each front `frontSetback` from the line and square to the tube's tangent where the lot
+    stands, so a row follows a curve. On the inside of a bend the pipe swings toward a front's
+    corners, so the lot stands back until its whole front keeps the line; and the next lot is
+    stepped along until it clears this one, which is what fans a row round the outside of a bend
+    and thins it round the inside."""
+    run = {"polyline": line.polyline}
+    front = rules["frontSetback"]
+    backs = [TUBE_BACK_STEP * k for k in range(int(round(TUBE_BACK_MOST / TUBE_BACK_STEP)) + 1)]
+    s = rules["endMargin"]
+    while s < line.length - rules["endMargin"]:
+        accepted = None
+        for size in sizes_for(rng, run):
+            if size not in site.sizes:
+                continue
+            w, depth = site.sizes[size]
+            mid = s + w / 2
+            back = jitter.uniform(0.0, rules["setbackJitter"])
+            turn = jitter.uniform(-rules["turnJitter"], rules["turnJitter"])
+            if size == "narrow":
+                back, turn = 0.0, 0.0
+            if mid > line.length:
+                continue
+            where = line.stretch_at(mid)
+            if where is None or where not in site.drawn:
+                continue
+            point, tangent = line.point(mid), line.tangent(mid)
+            n = (-tangent[1] * side, tangent[0] * side)
+            rotation = facing_rot((-n[0], -n[1])) + turn
+            candidate = None
+            for extra in backs:
+                reach = front + back + extra + depth / 2
+                trial = make_parcel(site, size, (point[0] + n[0] * reach, point[1] + n[1] * reach), rotation, where, 0.0, 1, 0, run, side)
+                if line.gap(trial["poly"], front) >= front - EPS / 2:
+                    candidate = trial
+                    break
+            if candidate is None:
+                continue
+            if not parcel_clear(site, candidate["poly"], rules, set(), placed, size, lanes, own_lines=(line.polyline,)):
+                continue
+            address = tube_address(site, line, candidate, depth)
+            if address is not None and address[0] in site.drawn:
+                candidate["stretch"], candidate["along"] = site.ids[address[0]], address[1]
                 accepted = candidate
                 break
         if accepted is None:
@@ -1029,13 +1067,19 @@ def generate_lots(site, plan):
     obstacles = [line["points"] for line in lines]
     side_sizes = street_side_sizes(rules)
     placed = []
+    # A tube era walks each street's drawn centreline; any other, the polyline's straight runs.
+    tube_lines = [line for line in site.tube.lines if line.polyline is not None] if site.tube is not None else None
     for sizes_for in (first_pass, fill_pass):
-        for run in street_runs(site):
+        for run in tube_lines if tube_lines is not None else street_runs(site):
+            polyline = run.polyline if tube_lines is not None else run["polyline"]
             for side in (1, -1):
                 # `sideSizes` (wave 3.1) gives one side of one street its own sizes, in both walks.
-                chosen = side_sizes.get((run["polyline"] + 1, side))
+                chosen = side_sizes.get((polyline + 1, side))
                 walker = (lambda _stream, _run, sizes=chosen: sizes) if chosen is not None else sizes_for
-                walk_run(site, rules, run, side, walker, rng, jitter, placed, obstacles)
+                if tube_lines is not None:
+                    walk_tube(site, rules, run, side, walker, rng, jitter, placed, obstacles)
+                else:
+                    walk_run(site, rules, run, side, walker, rng, jitter, placed, obstacles)
     min_level = rules["minLevel"]
     parcels = settle_first_row(site, placed, min_level)
     parcels.sort(key=lambda parcel: entrance_order(site, parcel))
@@ -2967,77 +3011,6 @@ def ring_misses(site, plan, item):
     return misses
 
 
-def street_clears(site, stretch, point, radius):
-    """CityFabric.IsCleared against one drawn stretch alone: its chord is a mask segment, and a
-    point with a radius is cleared when it comes within `clear.street` of it."""
-    st = site.network.stretches[stretch]
-    distance, _ = streetplan.point_segment_distance(point, st["a"], st["b"])
-    return distance - radius < site.street_clear
-
-
-def stands_on_tube(site, ground):
-    """The planned cells whose solid `ground` stands on, as (cell name, the stretches that draw it,
-    the whole cell's box)."""
-    box = box_of(ground)
-    return [
-        (name, ids, cell_box)
-        for name, solid, solid_box, ids, cell_box in site.tube_cells
-        if not boxes_apart(box, solid_box, 0.0) and overlap_depth(ground, solid) > TOUCH
-    ]
-
-
-def tube_misses(site, plan, item):
-    """(label suffix, cell name, piece id) of every part of a wild entry that stands on a planned
-    cell's solid and is still standing when a stretch that draws that cell is drawn, alone
-    (INTERFACES "Wave 4.1": the wild covers the planned cells, and a drawn cell clears its own).
-    Empty unless the era's wild may stand on its planned streets."""
-    misses = []
-    if not site.tube_cells:
-        return misses
-    for suffix, point, radius, ground in clearing_points(site, plan, item):
-        for name, ids, _cell_box in stands_on_tube(site, ground):
-            left = [stretch for stretch in ids if not street_clears(site, stretch, point, radius)]
-            if left:
-                misses.append((suffix, name, site.ids[left[0]]))
-    return misses
-
-
-def tube_spills(site, plan, item):
-    """(label suffix, cell name, how far) of every quarter of a clump that stands on a planned
-    cell's solid without lying inside one planned cell (same ruling: on a planned street the wild
-    is laid one quarter to a cell). A quarter that hangs out of its cell is cleared with that cell
-    and bares the ground beside the tube. A single is a rock, not a quarter: it may straddle."""
-    spills = []
-    if not site.tube_cells or item["kind"] != "clump":
-        return spills
-    for suffix, _point, _radius, ground in clearing_points(site, plan, item):
-        on = stands_on_tube(site, ground)
-        if not on:
-            continue
-        box = box_of(ground)
-        reach = [(max(cell[0] - box[0], box[1] - cell[1], cell[2] - box[2], box[3] - cell[3]), name) for name, _ids, cell in on]
-        out, name = min(reach)
-        if out > EPS:
-            spills.append((suffix, name, out))
-    return spills
-
-
-def tube_collateral(site, plan, item):
-    """(label suffix, piece id) of every quarter of a clump that stands on no planned cell's solid
-    and yet is within a planned stretch's clearing reach (same ruling: a drawn cell clears only
-    itself, so the tube would leave a bare swathe beside it). Singles are too small to matter."""
-    found = []
-    if not site.tube_cells or item["kind"] != "clump":
-        return found
-    for suffix, point, radius, ground in clearing_points(site, plan, item):
-        if stands_on_tube(site, ground):
-            continue
-        reached = [stretch for stretch in site.tube_stretches if street_clears(site, stretch, point, radius)]
-        if reached:
-            found.append((suffix, site.ids[reached[0]]))
-    return found
-
-
 def pier_hit(site, item):
     """(distance, foot) of the nearest pier foot a single stands within CHECK_PIER_FOOT of, centre to
     centre, else None. Clumps are low relief and stand round a foot; and there are no feet to keep
@@ -3048,70 +3021,13 @@ def pier_hit(site, item):
     return (distance, foot) if distance < CHECK_PIER_FOOT - EPS else None
 
 
-def lattice_cell(site, point):
-    """The lattice cell (i, j) a point lies in."""
-    return streetplan.cell_at(site.era.tile_studs, point)
-
-
-def fill_cells(site, clumps, open_cells):
-    """The cells that must each carry one single (rulings after the groundwork), sorted: every
-    lattice cell that lies on the plot, less the cells a clump's quarter covers (`clumps`: the
-    plot's own, each quad in its cell), the plan's open ground (`open_cells`: the fallow fields,
-    which keep their loose singles) and any cell that lies wholly inside one keep-out -- the
-    entrance corridor's. Empty unless the wild is laid on the lattice."""
-    if not site.lattice_wild:
-        return []
-    step = site.era.tile_studs
-    reach_i = int(math.floor((site.era.half_x - step / 2) / step + 1e-9))
-    reach_j = int(math.floor((site.era.half_z - step / 2) / step + 1e-9))
-    covered = {lattice_cell(site, quad) for clump in clumps if not clump["skirt"] for quad in clump["quads"]}
-    cells = []
-    for j in range(-reach_j, reach_j + 1):
-        for i in range(-reach_i, reach_i + 1):
-            if (i, j) in covered or (i, j) in open_cells:
-                continue
-            corners = site.era.cell_square((i, j))
-            if any(all(point_gap(corner, poly) <= TOUCH for corner in corners) for _, poly, _ in site.wild_keepout):
-                continue
-            cells.append((i, j))
-    return cells
-
-
-def fill_singles(site, plan, clumps, open_cells, make):
-    """One single for each of fill_cells, in that order: a prop of `wild.singles.props`, within
-    `singles.inset` of the cell's middle (so a 3-stud crater stays in its cell), any turn, a scale
-    in `singles.scale` -- all from the plan's own `fill` stream, so laying them moves nothing else.
-    A place that breaks a wild rule (a pier foot, the corridor, a planned street its stretch would
-    not clear it from) is drawn again; the last try is the cell's middle. A cell with no legal
-    place is left empty for `check` to name. `make` builds the entry."""
-    loose = plan["wild"]["singles"]
-    step = site.era.tile_studs
-    room = max(step / 2 - loose["inset"], 0.0)
-    rng = random.Random(f"{plan['seed']}:fill")
-    laid = []
-    for cell in fill_cells(site, clumps, open_cells):
-        centre = (cell[0] * step, cell[1] * step)
-        prop = loose["props"][rng.randrange(len(loose["props"]))]
-        for attempt in range(FILL_TRIES):
-            last = attempt == FILL_TRIES - 1
-            dx, dz = (0.0, 0.0) if last else (rng.uniform(-room, room), rng.uniform(-room, room))
-            candidate = make(prop, centre[0] + dx, centre[1] + dz, rng.uniform(0.0, 360.0), rng.uniform(*loose["scale"]), False)
-            if lattice_cell(site, (candidate["x"], candidate["z"])) == cell and not kept_out(site, plan, candidate):
-                laid.append(candidate)
-                break
-    laid.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
-    return laid
-
-
 def kept_out(site, plan, item):
-    """Whether a wild entry stands on ground a tiles era keeps it off, on the ring's ground out of
-    the ring's clearing, on a pier foot the wild never leaves, or across a planned street it may
-    cover in a way that street's own clearing does not fit (never in another era)."""
-    if not site.wild_keepout and not site.highway_rects and not site.tube_cells and not site.pier_feet:
+    """Whether a wild entry stands on ground it is kept off -- a tiles era's streets and kiosks, the
+    way in and a crossing tube under a round loop that never clears -- on the ring's ground out of
+    the ring's clearing, or on a pier foot of such a loop (never in another era)."""
+    if not site.wild_keepout and not site.highway_rects and not site.pier_feet:
         return False
-    if keepout_hits(site, wild_shapes(site, plan, item)) or ring_misses(site, plan, item) or pier_hit(site, item):
-        return True
-    return bool(tube_misses(site, plan, item)) or bool(tube_spills(site, plan, item)) or bool(tube_collateral(site, plan, item))
+    return bool(keepout_hits(site, wild_shapes(site, plan, item))) or bool(ring_misses(site, plan, item)) or pier_hit(site, item) is not None
 
 
 def field_entry(wild, centre, angle):
@@ -3120,11 +3036,10 @@ def field_entry(wild, centre, angle):
     return {"kind": "clump", "x": centre[0], "z": centre[1], "rotationY": angle, "scale": 1.0, "quads": [[rounded(q[0]), rounded(q[1])] for q in quads]}
 
 
-def generate_wild(site, plan, report=None):
-    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields.
-    `report`, when given, takes the fields pattern's bookkeeping (generate_fields)."""
+def generate_wild(site, plan):
+    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields."""
     if plan["wild"].get("pattern") == FIELDS:
-        return generate_fields(site, plan, report)
+        return generate_fields(site, plan)
     return generate_woods(site, plan)
 
 
@@ -3181,6 +3096,10 @@ def generate_woods(site, plan):
         # A clump sits wholly on the plot or wholly off it: the ground past the edge is lower.
         if any((abs(q[0]) <= half and abs(q[1]) <= half) != inside for q in quads):
             continue
+        # Optional `clumps.inset` (a plan with no skirt): a clump's middle keeps this far inside the
+        # plot's edge, so no part of a wide clump hangs over it.
+        if inside and max(abs(cx), abs(cz)) > half - clumps_cfg.get("inset", 0.0):
+            continue
         clump = {
             "kind": "clump",
             "variant": variant,
@@ -3203,9 +3122,13 @@ def generate_woods(site, plan):
     def single_spacing(x, z):
         return singles_cfg["spacing"] * (1.0 + singles_cfg["spacingVar"] * spread(x, z))
 
+    # Optional `singles.between`: singles also stand in the gaps the clumps leave in full woods,
+    # not only where the woods thin out.
+    between = bool(singles_cfg.get("between"))
+
     def edge_of_woods(x, z):
         value = woods(x, z)
-        if not singles_cfg["minDensity"] < value < clumps_cfg["minDensity"]:
+        if not singles_cfg["minDensity"] < value or not (between or value < clumps_cfg["minDensity"]):
             return False
         return all(math.dist((x, z), (c["x"], c["z"])) >= keep * c["scale"] for c in clumps)
 
@@ -3296,7 +3219,7 @@ def thinned(items, cap):
     return [item for index, item in enumerate(items, start=1) if (index * cap) // count != ((index - 1) * cap) // count]
 
 
-def generate_fields(site, plan, report=None):
+def generate_fields(site, plan):
     """Farmland (INTERFACES "Wave 2.1"): a fenced field per grid cell, each a clump of four
     quarter-fields that the town clears quarter by quarter. Three things keep it from reading as a
     quilt: a cell's crop comes from a low-frequency noise field, so neighbouring cells share a crop
@@ -3305,12 +3228,7 @@ def generate_fields(site, plan, report=None):
     and the fields run on past the back and side edges into a landscape band with the plan's
     landmarks. A field stands wholly on the plot
     or wholly off it: the ground past the edge is lower. A plan without `skirt` lays nothing past
-    the edge (Metropolis: the ring is the city's edge), and then no landmarks either.
-
-    Where the wild is laid on the lattice (Site.lattice_wild), every cell no field's quarter covers
-    and the plan did not leave open carries one single (fill_singles). `report`, a dict, takes
-    `open`: the lattice cells of the plan's open ground, which `check` needs to tell an open field
-    from a cell that lost its clump."""
+    the edge (Metropolis: the ring is the city's edge), and then no landmarks either."""
     wild = plan["wild"]
     grid, clumps_cfg = wild["grid"], wild["clumps"]
     skirt = wild.get("skirt")
@@ -3331,7 +3249,7 @@ def generate_fields(site, plan, report=None):
     # the plot's edge when the plan shifts. The runtime mask is never left to clear one.
     waiting = []
     step = grid.get("shift")
-    tiles_rules = bool(site.wild_keepout or site.highway_rects or site.tube_cells)
+    tiles_rules = bool(site.wild_keepout or site.highway_rects)
     for j in range(-span, span + 1):
         for i in range(-span, span + 1):
             centre = grid_point(grid, i, j)
@@ -3423,15 +3341,6 @@ def generate_fields(site, plan, report=None):
     def single(prop, x, z, rotation, scale, is_skirt):
         return {"kind": "single", "prop": prop, "x": rounded(x), "z": rounded(z), "rotationY": rounded(norm_degrees(rotation)), "scale": rounded(scale), "skirt": is_skirt}
 
-    # The plan's open ground on the plot, as lattice cells (a field is its four quarters' cells).
-    open_lattice = set()
-    if site.lattice_wild:
-        for cell in on:
-            if cell["key"] in open_ground:
-                open_lattice.update(lattice_cell(site, quad) for quad in quad_centres(cell["centre"][0], cell["centre"][1], grid["angle"], 1.0, clumps_cfg["quarterOffset"]))
-    if report is not None:
-        report["open"] = open_lattice
-
     # Singles lead with what the landscape cannot do without, in case a budget ever cuts the tail:
     # the landmarks, the skirt's shelterbelts, the telegraph line, then the pasture's hay and trees.
     singles = [single(landmark["prop"], x, z, landmark["rotationY"], 1.0, True) for landmark, (x, z), _ in landmarks]
@@ -3482,8 +3391,7 @@ def generate_fields(site, plan, report=None):
                     scattered.append(candidate)
         scattered = thinned(scattered, loose["count"])
         scattered.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
-        # The fill leads the loose singles: if a budget ever cuts the tail, a cell is not left bare.
-        singles += fill_singles(site, plan, clumps, open_lattice, single) + scattered
+        singles += scattered
     # The landmarks, shelterbelts and poles keep off a tiles era's streets, deck and kiosks too.
     singles = [entry for entry in singles if not kept_out(site, plan, entry)]
     return wild_order(site, clumps, singles)
@@ -3617,17 +3525,21 @@ def marker_messages(site):
             if gap(poly, pad) <= 0:
                 messages.append(f"{label}: overlaps the {other_id} pad")
         # The road's strip, not a tile street's whole hard surface: a pad may stand on a pavement.
-        # A docked era (INTERFACES "Wave 4.1") has no pavement to stand on and its markers dock
-        # like its pads, so there the rule is the street's solid itself: the dock band and the
-        # whole cells.
-        for polyline, _segment, a, b in site.street_segments if site.dock is None else ():
+        # A tube era measures to the swept tube instead, and keeps its markers off hubs and band.
+        for polyline, _segment, a, b in site.street_segments if site.tube is None else ():
             d = segment_gap(a, b, poly)
             if d < site.road_strip - EPS:
                 messages.append(f"{label}: {d:.2f} from street {polyline + 1} (strip {site.road_strip:g})")
-        for what, _polyline, _segment, band, _box in site.street_bands if site.dock is not None else ():
-            depth = overlap_depth(poly, band)
-            if depth > TOUCH:
-                messages.append(f"{label}: stands {depth:.2f} into the hard surface of {what} (dock {site.dock:g})")
+        if site.tube is not None:
+            near = site.tube_gap(poly, site.tube_front - EPS)
+            if near is not None:
+                messages.append(f"{label}: {near[0]:.2f} from the centreline of {near[1].label} (a tube keeps {site.tube_front:g})")
+            for what, hub, _ in site.hubs:
+                d = gap(poly, hub)
+                if d < streetplan.HUB_GAP - EPS:
+                    messages.append(f"{label}: {d:.2f} from {what} (need {streetplan.HUB_GAP})")
+        if site.band_gap(poly) < CHECK_TILE_SOLID - EPS:
+            messages.append(f"{label}: {site.band_gap(poly):.2f} from the round loop's band (need {CHECK_TILE_SOLID})")
         # INTERFACES "Wave 3.1": nothing stands in the deck band or on a ramp cell; wave 3.1b: a
         # kiosk stands in ground every marker keeps CHECK_TILE_SOLID clear of.
         for what, solid, _ in site.tile_solids:
@@ -3692,11 +3604,28 @@ def parcel_messages(site, plan, parcels):
         back_row = parcel["row"] != 1
         street_need = site.walker_street if back_row else site.street_strip
         spur_need = site.walker_spur if back_row else site.spur_strip
-        for polyline, _segment, a, b in site.street_segments:
+        for polyline, _segment, a, b in site.street_segments if site.tube is None else ():
             d = segment_gap(a, b, poly)
             if d < street_need - EPS:
                 messages.append(f"{label}: {d:.2f} from street {polyline + 1} {streetplan.fmt(a)}->{streetplan.fmt(b)} (need {street_need:g})")
-        for slot_id, a, b in site.lot_path_segments:
+        if site.tube is not None:
+            # INTERFACES "Wave 4.1b": every lot of every row keeps the front line from every swept
+            # tube, HUB_GAP from every hub, and stands on no landmark's apron.
+            near = site.tube_gap(poly, site.tube_front - EPS)
+            if near is not None:
+                messages.append(f"{label}: {near[0]:.2f} from the centreline of {near[1].label} (a tube keeps {site.tube_front:g})")
+            for what, hub, hub_box in site.hubs:
+                if not boxes_apart(box_of(poly), hub_box, streetplan.HUB_GAP) and gap(poly, hub) < streetplan.HUB_GAP - EPS:
+                    messages.append(f"{label}: {gap(poly, hub):.2f} from {what} (need {streetplan.HUB_GAP})")
+            for what, apron, apron_box in site.aprons:
+                if boxes_apart(box_of(poly), apron_box, 0.0):
+                    continue
+                depth = overlap_depth(poly, apron)
+                if depth > TOUCH:
+                    messages.append(f"{label}: stands {depth:.2f} on {what}; a lot keeps off a landmark's decking")
+        if site.band_gap(poly) < CHECK_TILE_SOLID - EPS:
+            messages.append(f"{label}: {site.band_gap(poly):.2f} from the round loop's band (need {CHECK_TILE_SOLID})")
+        for slot_id, a, b in site.spur_segments if site.tube is None else ():
             d = segment_gap(a, b, poly)
             if d < spur_need - EPS:
                 messages.append(f"{label}: {d:.2f} from the {slot_id} path (need {spur_need:g})")
@@ -3709,21 +3638,13 @@ def parcel_messages(site, plan, parcels):
                 continue
             depth = overlap_depth(poly, band)
             if depth > TOUCH:
-                reach = f"the dock band reaches {site.street_half:g} from a centreline; a bend, tee or cross cell is whole" if site.dock is not None else f"road and pavement reach {site.street_half:g} from its centreline"
-                messages.append(f"{label}: stands {depth:.2f} into the hard surface of {what} ({reach})")
+                messages.append(f"{label}: stands {depth:.2f} into the hard surface of {what} (road and pavement reach {site.street_half:g} from its centreline)")
         for what, solid, solid_box in site.tile_solids:
             if boxes_apart(box, solid_box, CHECK_TILE_SOLID):
                 continue
             d = gap(poly, solid)
             if d < CHECK_TILE_SOLID - EPS:
                 messages.append(f"{label}: {d:.2f} from {what} (need {CHECK_TILE_SOLID})")
-        # INTERFACES "Wave 4.1", rulings after the groundwork: no lot on a landmark's deck rect.
-        for what, deck, deck_box in site.deck_rects:
-            if boxes_apart(box, deck_box, 0.0):
-                continue
-            depth = overlap_depth(poly, deck)
-            if depth > TOUCH:
-                messages.append(f"{label}: stands {depth:.2f} on {what}; a lot may stand flush against a deck rect, not on it")
         stretch = site.stretch_by_id.get(parcel["stretch"])
         if stretch is None:
             messages.append(f"{label}: stretch {parcel['stretch']!r} is not a piece of this network")
@@ -3739,12 +3660,18 @@ def parcel_messages(site, plan, parcels):
                 messages.append(f"{label}: along {number(parcel['along'])} outside [0, {st['length']:.2f}] of {parcel['stretch']}")
             fc = front_centre(parcel["x"], parcel["z"], parcel["rotationY"], size[1])
             distance, foot = streetplan.point_segment_distance(fc, st["a"], st["b"])
+            toward_point = foot
+            if site.tube is not None:
+                # The front is measured to the tube as it is drawn: its stretch's own line.
+                line = site.tube.line_of_stretch[stretch]
+                distance, arc = line.project(fc)
+                toward_point = line.point(arc)
             if abs(distance - front_line) > CHECK_FRONT_SLACK + EPS:
                 messages.append(f"{label}: front {distance:.2f} from {parcel['stretch']}, not within {CHECK_FRONT_SLACK} of the setback line {front_line:g}")
             if abs(math.dist(st["a"], foot) - parcel["along"]) > 0.05:
                 messages.append(f"{label}: along {number(parcel['along'])} is not the foot of its front ({math.dist(st['a'], foot):.2f})")
             face = streetplan.facing(parcel["rotationY"])
-            toward = (foot[0] - fc[0], foot[1] - fc[1])
+            toward = (toward_point[0] - fc[0], toward_point[1] - fc[1])
             if face[0] * toward[0] + face[1] * toward[1] < -EPS:
                 messages.append(f"{label}: faces away from {parcel['stretch']}")
         elif isinstance(row, int) and 2 <= row <= MAX_ROW:
@@ -3845,13 +3772,14 @@ def lane_messages(site, plan, doc):
     solids += [(f"lamp {index}", poly) for index, poly in enumerate(site.lamps, start=1)]
     solids += [(f"signal {index}", poly) for index, poly in enumerate(site.signals, start=1)]
     solids.append(("the Sign", site.era.sign_poly))
+    solids += [(what, poly) for what, poly, _ in site.hubs]
     degree = {}
     for index in site.drawn:
         for node in (site.network.stretches[index]["from"], site.network.stretches[index]["to"]):
             degree[node] = degree.get(node, 0) + 1
     crossings = [site.network.nodes[node] for node, count in sorted(degree.items()) if count >= 3]
     # A tiles era measures from the street's hard surface (the band), not from its road.
-    crossing_need = (site.cell_half if site.tiles else site.width / 2) + half + CHECK_LANE_CROSSING
+    crossing_need = (site.street_half if site.tiles else site.width / 2) + half + CHECK_LANE_CROSSING
     street_need = site.street_strip + half
     spur_need = site.spur_strip + half
     sound = {}  # lane index -> (points, length) for every lane the lots can be judged against
@@ -3985,25 +3913,14 @@ def lane_messages(site, plan, doc):
     return messages
 
 
-def lane_clip(site, half):
-    """How far along its first leg, from the mouth, a tiles-era alley's footpath starts: where the
-    client stops a footpath short of the centreline it joins (RoadGraph.SetLanes clips a lane as it
-    clips a spur: streetplan.spur_clip, the road's half, the pavement and half the footpath), so
-    the slab, which runs half its width past its end, starts flush with the pavement's outer edge
-    -- or, on a walkway narrower than its cell, with the walkway's. Without a `tiles.spur` look no
-    lane is laid; the hard surface's reach stands in."""
-    clip = streetplan.spur_clip(site.era)
-    return clip if clip is not None else site.cell_half + half
-
-
 def lane_ground(site, points, half):
     """A tiles-era alley's ground (INTERFACES "Wave 3.1", density rulings) as (leg number, a, b):
-    its polyline from where it leaves its street's pavement -- `lane_clip` along the first leg from
-    the mouth, so a leg's body (half its width past each end, as the footpath slab it is drawn as)
-    starts flush with the pavement's outer edge -- then every later leg whole. Empty when the first
-    leg ends inside that reach."""
+    its polyline from where it leaves its street's pavement -- `street_half + half` along the first
+    leg from the mouth, so a leg's body (half its width past each end, as the footpath slab it is
+    drawn as) starts flush with the pavement's outer edge -- then every later leg whole. Empty when
+    the first leg ends inside that reach."""
     legs = polyline_legs(points)
-    clip = lane_clip(site, half)
+    clip = site.street_half + half
     a, b = legs[0]
     if math.dist(a, b) <= clip + streetplan.MIN_LENGTH:
         return []
@@ -4013,12 +3930,11 @@ def lane_ground(site, points, half):
 def tile_lane_messages(site, label, points, half, solids, polys, spur_need):
     """A tiles-era alley's body: its ground keeps CHECK_LANE from every landmark's extents, pad,
     marker, plaza, lamp, signal and the Sign, and from the deck band, the ramp cells and the kiosks;
-    stands on no street's roadway or pavement (its own included, past the mouth) and on no whole
-    cell of a docked era; keeps its strip off every landmark path as far as that path is laid;
-    stays CHECK_EDGE inside the plot. Its mouth, where it crosses its own street's pavement, holds
-    no kiosk; and no lot stands on it, mouth included."""
+    stands on no street's hard surface (its own included, past the mouth); keeps its strip off every
+    landmark path; stays CHECK_EDGE inside the plot. Its mouth, where it crosses its own street's
+    pavement, holds no kiosk; and no lot stands on it, mouth included."""
     messages = []
-    clip = lane_clip(site, half)
+    clip = site.street_half + half
     ground = lane_ground(site, points, half)
     if not ground:
         first = math.dist(*polyline_legs(points)[0])
@@ -4036,13 +3952,13 @@ def tile_lane_messages(site, label, points, half, solids, polys, spur_need):
         for what, poly in others:
             if not boxes_apart(box, box_of(poly), CHECK_LANE) and gap(body, poly) < CHECK_LANE - EPS:
                 messages.append(f"{label}: leg {leg} is {gap(body, poly):.2f} from {what} (need {CHECK_LANE})")
-        for what, band, band_box in site.footpath_bands:
+        for what, _polyline, _segment, band, band_box in site.street_bands:
             if boxes_apart(box, band_box, 0.0):
                 continue
             depth = overlap_depth(body, band)
             if depth > TOUCH:
                 messages.append(f"{label}: leg {leg} stands {depth:.2f} on the hard surface of {what}")
-        for slot_id, p, q in site.footpath_segments:
+        for slot_id, p, q in site.spur_segments:
             d = streetplan.segment_polygon_distance(p, q, [a, b])
             if d < spur_need - EPS:
                 messages.append(f"{label}: leg {leg} is {d:.2f} from the {slot_id} path (its strip and the lane's body need {spur_need:g})")
@@ -4459,7 +4375,11 @@ def wild_messages(site, plan, doc):
         # cells or pavement (a park strip covers them until the street draws) or a kiosk. The
         # runtime mask knows neither, so the data must keep off them.
         if site.wild_keepout:
+            # Once for each thing it stands on, at its deepest: a crossing tube is several lengths.
+            deepest = {}
             for what, depth in keepout_hits(site, wild_shapes(site, plan, item)):
+                deepest[what] = max(depth, deepest.get(what, 0.0))
+            for what, depth in deepest.items():
                 messages.append(f"{label}: stands {depth:.2f} into {what}")
         # It may stand on the ring's ground until the highway is bought; then the deck band and the
         # ramp cells join the mask (+clear.parcel), so whatever stands there must be cleared by them.
@@ -4470,65 +4390,22 @@ def wild_messages(site, plan, doc):
                     f"{label}{suffix}: stands on {what}, but the ring's clearing (+clear.parcel {margin:g}) does not reach "
                     f"its clearing point, so it would stand under the deck once {site.highway_slot} is owned"
                 )
-        # INTERFACES "Wave 4.1": without park strips the wild covers the planned cells, and a drawn
-        # cell clears what stands on it and nothing else.
-        for suffix, cell, piece in tube_misses(site, plan, item):
-            messages.append(
-                f"{label}{suffix}: stands on {cell}, but {piece} drawn alone does not clear it "
-                f"(its clearing point is not within clear.street {site.street_clear:g}), so it would stand on the street"
-            )
-        for suffix, cell, out in tube_spills(site, plan, item):
-            messages.append(
-                f"{label}{suffix}: stands on {cell} and reaches {out:.2f} outside that cell: on a planned street the wild "
-                "is laid one quarter to a cell, so a drawn cell clears only itself"
-            )
-        for suffix, piece in tube_collateral(site, plan, item):
-            messages.append(
-                f"{label}{suffix}: stands on no planned cell, yet {piece} clears it when it is drawn "
-                f"(within clear.street {site.street_clear:g}): a drawn cell clears only itself"
-            )
         hit = pier_hit(site, item)
         if hit is not None:
             messages.append(f"{label}: {hit[0]:.2f} from the pier foot at {streetplan.fmt((rounded(hit[1][0]), rounded(hit[1][1])))} (need {CHECK_PIER_FOOT})")
     if plan["wild"].get("pattern") == FIELDS:
         messages += field_messages(site, plan, wild)
-        messages += fill_messages(site, plan, wild)
     if site.under_beam:
         messages += wild_height_messages(site, plan)
     return messages
 
 
-def fill_messages(site, plan, entries):
-    """Rulings after the groundwork: where the wild is laid on the lattice, every cell the data's
-    clumps do not cover carries exactly one single -- but for the plan's open ground, which is the
-    generator's to name (its fallow fields; read back from a fresh run of the pattern), and the
-    entrance corridor's cell."""
-    if not site.lattice_wild:
-        return []
-    report = {}
-    generate_wild(site, plan, report)
-    step = site.era.tile_studs
-    standing = {}
-    for index, item in enumerate(entries, start=1):
-        if item["kind"] == "single" and not item["skirt"]:
-            standing.setdefault(lattice_cell(site, (item["x"], item["z"])), []).append(index)
-    messages = []
-    clumps = [item for item in entries if item["kind"] == "clump" and len(item.get("quads") or ()) == QUARTERS]
-    for cell in fill_cells(site, clumps, report.get("open", set())):
-        found = standing.get(cell, [])
-        if len(found) != 1:
-            where = streetplan.fmt((cell[0] * step, cell[1] * step))
-            what = "no single" if not found else f"{len(found)} singles (wild {', '.join(str(index) for index in found)})"
-            messages.append(f"wild: the cell {where} is covered by no clump and carries {what}; it carries exactly one")
-    return messages
-
-
 def wild_height_messages(site, plan):
-    """INTERFACES "Wave 4.1": with `highway.clearBand` false the wild stands under the ring's beam
-    for good, so no wild prop -- a clump, a quarter or any single the plan may lay -- is taller than
-    WILD_UNDER_BEAM at any stage. Heights are the client's (Assets.json), else the blueprint's
-    measured y-range until the prop is harvested (tools/cityfabric.Heights); a prop with neither
-    yet is not judged."""
+    """INTERFACES "Wave 4.1b": under a round loop whose band never clears, the wild stands under
+    the beam for good, so no wild prop -- a clump, a quarter or any single the plan may lay -- is
+    taller than WILD_UNDER_BEAM at any stage. Heights are the client's (Assets.json), else the
+    blueprint's measured y-range until the prop is harvested (tools/cityfabric.Heights); a prop
+    with neither yet is not judged."""
     import cityfabric  # tools/; imported late, as it reads its own inputs on import
 
     heights = cityfabric.Heights(site.name, load_assets())
@@ -4540,8 +4417,31 @@ def wild_height_messages(site, plan):
         if stages and max(stages) > WILD_UNDER_BEAM + EPS:
             messages.append(
                 f"wild: {name} is {max(stages):.2f} tall, over the {WILD_UNDER_BEAM:g} the wild may be while it stands "
-                "under the ring's beam for good (highway.clearBand is false)"
+                "under the loop's beam for good (highway.clearBand is false)"
             )
+    return messages
+
+
+def band_messages(site, doc):
+    """INTERFACES "Wave 4.1b": nothing but a crossing tube stands in a round loop's band. Lots
+    and markers answer in their own checks and pads, footprints and hubs in tools/streetplan.py;
+    this holds the aprons and the lanes."""
+    messages = []
+    if site.ring is None:
+        return messages
+    for what, apron, _ in site.aprons:
+        d = site.band_gap(apron)
+        if d < CHECK_TILE_SOLID - EPS:
+            messages.append(f"{what}: {d:.2f} from the round loop's band (need {CHECK_TILE_SOLID})")
+    half = lane_half(site)
+    for k, lane in enumerate(doc.get("lanes") or [], start=1):
+        points = lane.get("points") if isinstance(lane.get("points"), list) else []
+        for leg, (a, b) in enumerate(polyline_legs(points), start=1):
+            if math.dist(a, b) < streetplan.MIN_LENGTH:
+                continue
+            d = site.band_gap(streetplan.band(a, b, half))
+            if d < CHECK_TILE_SOLID - EPS:
+                messages.append(f"lane {k}: leg {leg} is {d:.2f} from the round loop's band (need {CHECK_TILE_SOLID})")
     return messages
 
 
@@ -4647,28 +4547,7 @@ def check_document(era_name, doc, compare_committed=True, city=None, era=None, n
         messages += marker_messages(site)
     messages += upgrade_messages(site, plan, doc)
     messages += wild_messages(site, plan, doc)
-    messages += band_messages(site)
-    return messages
-
-
-def band_messages(site):
-    """INTERFACES "Wave 4.1", rulings: where `highway.clearBand` is false the wild on the ring's
-    cells is cleared by nothing (tools/cityfabric.ring_keeps), which is only safe while nothing can
-    stand there. Lots, pads, markers, lanes and landmarks keep off the band by their own rules; this
-    holds the two things no other rule does -- a street's cell, drawn or not, and a deck rect."""
-    messages = []
-    if not site.under_beam:
-        return messages
-    band = [(poly, box_of(poly)) for poly in deck_band(site.era)]
-    for cell in sorted(site.era.tile_masks()):
-        square = site.era.cell_square(cell)
-        if any(not boxes_apart(box_of(square), box, 0.0) and overlap_depth(square, poly) > TOUCH for poly, box in band):
-            where = streetplan.fmt((cell[0] * site.era.tile_studs, cell[1] * site.era.tile_studs))
-            messages.append(f"the road cell {where} lies in the ring's band, where the wild never clears (highway.clearBand is false): a street keeps inside it")
-    for what, deck, deck_box in site.deck_rects:
-        depth = max((overlap_depth(deck, poly) for poly, box in band if not boxes_apart(deck_box, box, 0.0)), default=0.0)
-        if depth > TOUCH:
-            messages.append(f"{what}: stands {depth:.2f} into the ring's band, where the wild never clears (highway.clearBand is false)")
+    messages += band_messages(site, doc)
     return messages
 
 

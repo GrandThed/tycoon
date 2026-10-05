@@ -79,7 +79,7 @@ LANE_FILLET_WIDTHS = 1.0
 class Bake:
     """One era's network, chains and pieces."""
 
-    def __init__(self, era_name: str, city: dict):
+    def __init__(self, era_name: str, city: dict, fabric_data: dict | None = None):
         self.era_name = era_name
         self.era = streetplan.Era(era_name, city)
         paths_cfg = ((city["eras"][era_name].get("road") or {}).get("paths"))
@@ -101,7 +101,7 @@ class Bake:
         self.lane_width: float | None = None
         self._build_chains()
         self._prepare()
-        self._build_lanes(city)
+        self._build_lanes(city, fabric_data)
 
     # -- chains -------------------------------------------------------------
 
@@ -242,8 +242,10 @@ class Bake:
             s * 1.37, c["phase"] + 2.1, self.wavelength * 0.8
         ) * 0.5
 
-    def _build_lanes(self, city: dict) -> None:
+    def _build_lanes(self, city: dict, fabric_data: dict | None = None) -> None:
         """The back lanes of the era's fabric data as chains, after every other chain is finished.
+        `fabric_data` is the data to read them from instead of Config/Fabric/<Era>.json: a plan
+        built to another file, or one still being generated (tools/paths/tubes.py).
 
         A lane gets a chain when the client can show it: the era has a valid `fabric.lanes` block
         and the lane is well formed with at least one leg (Fabric.luau's rules, read through
@@ -251,7 +253,7 @@ class Bake:
         it a spur in every respect that matters to the ribbon: it joins at its end."""
         fabric = city["eras"][self.era_name].get("fabric") or {}
         config = cityfabric.valid_lane_config(fabric.get("lanes"))
-        data = cityfabric.load_fabric_data(self.era_name)
+        data = fabric_data if fabric_data is not None else cityfabric.load_fabric_data(self.era_name)
         lanes = data.get("lanes") if isinstance(data, dict) else None
         if config is None or not isinstance(lanes, list):
             return

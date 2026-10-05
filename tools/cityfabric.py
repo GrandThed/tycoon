@@ -49,10 +49,12 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     band's four rects and the ramp's cells (ring_rects, Highway.luau's ring, pitch and rampCells)
     join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2;
   * `highway.clearBand` (M12 wave 4.1, Orbital): the boolean false keeps the ring's ground out of
-    that clearing, so the wild under a monorail beam stands for good (ring_clears). And then
-    nothing else clears it either: a wild point whose lattice cell is one of the ring's (ring_keeps)
-    is left out of the clearing test, whatever lot, pad, landmark, lane or street stands beside the
-    band -- nothing can stand in it. Implemented here first: Fabric.luau follows in wave 4.2;
+    that clearing, so the wild under a monorail beam stands for good (ring_clears). And under a
+    round loop (`highway.round`, wave 4.1b) nothing else clears it either: a wild point in the
+    loop's band, the annulus `ring` plus or minus streetplan.ROUND_BAND_HALF (ring_keeps), is left
+    out of the clearing test, whatever lot, pad, landmark, lane or tube stands beside the band --
+    nothing but a crossing tube can stand in it, and the data keeps the wild off that. Implemented
+    here first: Fabric.luau follows in wave 4.2;
   * the tile-cell budget (M12 wave 3.2): in a tiles era RoadGraph.FabricNetwork leaves out a visible
     stretch whose cells missed budget.tileCells (streetplan.Network.tile_plan), so network_view does.
 
@@ -1045,16 +1047,15 @@ def ring_clears(config):
     return not (isinstance(config, dict) and config.get("clearBand") is False)
 
 
-def ring_keeps(px, pz, ring, tile_studs):
-    """Whether the lattice cell a wild entry's clearing point lies in is one of the ring's: wholly
-    inside its band, `ring` plus or minus half a cell (M12 wave 4.1; mirrored here first,
-    Fabric.clearedFlags copies it in wave 4.2). Where `highway.clearBand` is false such a point --
-    a clump's quarter, or a single -- is cleared by nothing. Cells by Luau's math.round, as
-    TileRenderer.cellAt; false for a ring or a pitch that is not a positive finite number."""
-    if not (finite(ring) and ring > 0 and finite(tile_studs) and tile_studs > 0 and finite(px) and finite(pz)):
+def ring_keeps(px, pz, ring, half):
+    """Whether a wild entry's clearing point lies in a round loop's band: within `half` of the
+    circle of radius `ring` about the plot's centre (M12 wave 4.1b; mirrored here first,
+    Fabric.clearedFlags copies it in wave 4.2). Where the loop is round and `highway.clearBand` is
+    false such a point -- a clump's quarter, or a single -- is cleared by nothing. False for a ring
+    or a half-width that is not a positive finite number."""
+    if not (finite(ring) and ring > 0 and finite(half) and half > 0 and finite(px) and finite(pz)):
         return False
-    cell = max(abs(streetplan.round_half(px / tile_studs)), abs(streetplan.round_half(pz / tile_studs)))
-    return cell == streetplan.round_half(ring / tile_studs)
+    return abs(math.sqrt(px * px + pz * pz) - ring) <= half
 
 
 def chord(a, b):
@@ -1396,17 +1397,18 @@ class FabricPlot:
         self.ring_slot = slot if isinstance(slot, str) and isinstance(highway, dict) else None
         self.ring_rects = []
         # Wave 4.1: `highway.clearBand` false leaves the ring no rects, so nothing under it clears.
-        if self.ring_slot is not None and ring_clears(config):
+        # A round loop (wave 4.1b) has no rects to give: its band is an annulus.
+        if self.ring_slot is not None and ring_clears(config) and self.era.round_ring is None:
             ramp = self.era.highway_ramp
             ramp_view = {"cell": (ramp["cell"][0], ramp["cell"][2]), "direction": ramp.get("direction")} if isinstance(ramp, dict) else None
             self.ring_rects = ring_rects(highway.get("ring"), self.era.tile_studs, ramp_view, self.era.ramp_cells)
-        # Wave 4.1: with `clearBand` false the wild on the ring's own cells is cleared by nothing
-        # (kept_in_band); None for every other era, where it clears as it always did.
-        self.band_ring = highway.get("ring") if isinstance(highway, dict) and not ring_clears(config) else None
+        # Wave 4.1b: under a round loop with `clearBand` false the wild in the band is cleared by
+        # nothing (kept_in_band); None for every other era, where it clears as it always did.
+        self.band_ring = self.era.round_ring if not ring_clears(config) else None
 
     def kept_in_band(self, px, pz):
-        """Fabric.clearedFlags' exemption: a point on a ring cell of an era whose band never clears."""
-        return self.band_ring is not None and ring_keeps(px, pz, self.band_ring, self.era.tile_studs)
+        """Fabric.clearedFlags' exemption: a point in the band of a round loop that never clears."""
+        return self.band_ring is not None and ring_keeps(px, pz, self.band_ring, streetplan.ROUND_BAND_HALF)
 
     def _build_views(self):
         """Fabric.new: config and data validated once, the parcel views (a malformed parcel is a blank
@@ -1717,8 +1719,8 @@ class FabricPlot:
 
     def cleared_flags(self, mask):
         """Fabric.clearedFlags: bit q-1 per cleared quarter of a clump, bit 0 for a single; a
-        malformed entry clears nothing. Wave 4.1: nor does a quarter or a single on a ring cell
-        whose band never clears (kept_in_band), whatever the mask holds beside it."""
+        malformed entry clears nothing. Wave 4.1b: nor does a quarter or a single
+        in a round loop's band that never clears (kept_in_band), whatever the mask holds beside it."""
         wild_config = self.wild_config or {}
         quarter_radius = number_or(wild_config.get("quarterRadius"), 0)
         single_radius = number_or(wild_config.get("singleRadius"), 0)
@@ -2535,14 +2537,14 @@ def selftest():
         ("ring: clearBand false keeps the band", not ring_clears({"requiresSlot": "walkwayNetwork", "clearBand": False})),
         ("ring: no clearBand clears", ring_clears({"requiresSlot": "highwayRamp"}) and ring_clears(None)),
         ("ring: clearBand true, 0 or a string clears", all(ring_clears({"clearBand": value}) for value in (True, 0, "false", None))),
-        # Wave 4.1: a point on a ring cell (ring 56, pitch 7: cell 8, 52.5 to 59.5) is kept; the mask
-        # would have cleared it from a lot whose back edge stands at 52.
-        ("band: a quarter on a ring cell is kept", ring_keeps(55.75, 3.25, 56, 7) and ring_keeps(-3.25, -55.75, 56, 7)),
+        # Wave 4.1b: a point in a round loop's band (ring 56, half 3.5: 52.5 to 59.5 from the
+        # centre) is kept; the mask would have cleared it from a lot whose back stands at 52.
+        ("band: a quarter in the annulus is kept", ring_keeps(55.75, 3.25, 56, 3.5) and ring_keeps(-39.6, -39.6, 56, 3.5)),
         ("band: the mask alone would clear it", is_cleared(55.75, 3.25, 3.3, {"rects": [{"x": 48, "z": 3, "hx": 4, "hz": 2, "rotationY": 0, "margin": 1.5}], "segments": [], "streetClear": 0})),
-        ("band: the quarter inside the band's inner edge is not kept", not ring_keeps(49.25, 3.25, 56, 7)),
-        ("band: the cell edge decides", ring_keeps(52.6, 0, 56, 7) and not ring_keeps(52.4, 0, 56, 7)),
-        ("band: a corner cell is kept", ring_keeps(56, -56, 56, 7)),
-        ("band: no ring, nothing kept", not ring_keeps(56, 0, None, 7) and not ring_keeps(56, 0, 56, 0) and not ring_keeps(56, 0, "56", 7)),
+        ("band: a point inside the loop is not kept", not ring_keeps(49.25, 3.25, 56, 3.5)),
+        ("band: the band's edges decide", ring_keeps(52.5, 0, 56, 3.5) and not ring_keeps(52.4, 0, 56, 3.5) and ring_keeps(0, 59.5, 56, 3.5) and not ring_keeps(0, 59.6, 56, 3.5)),
+        ("band: a corner of the plot outside the loop is not kept", not ring_keeps(46, 46, 56, 3.5)),
+        ("band: no ring, nothing kept", not ring_keeps(56, 0, None, 3.5) and not ring_keeps(56, 0, 56, 0) and not ring_keeps(56, 0, "56", 3.5)),
     ]
 
     # Wave 3.1 site variants: a level-1 parcel takes its size's list by index, else `sites[size]`.

@@ -1,14 +1,20 @@
 {
   "version": 1,
-  "seed": "OrbitalColony:fabric:groundwork",
+  "seed": "OrbitalColony:fabric:organic-groundwork",
   "parcels": {
     "frontSetback": 1.75,
     "gap": 0.6,
     "terraceGap": 0.05,
-    "terraceStreets": [1, 2, 3, 4],
-    "terraceFill": ["narrow", "small"],
+    "terraceStreets": [
+      1,
+      2
+    ],
+    "terraceFill": [
+      "narrow",
+      "small"
+    ],
     "mediumShare": 0.5,
-    "walkStep": 0.05,
+    "walkStep": 0.1,
     "endMargin": 0.2,
     "setbackJitter": 0.0,
     "turnJitter": 0.0,
@@ -24,15 +30,6 @@
     "street": 1.75,
     "spur": 2.55,
     "tileSolid": 0.5,
-    "sideSizes": {
-      "2": { "both": [] },
-      "4": { "both": [] }
-    },
-    "keepClear": [
-      { "x": 0, "z": -21.5, "size": [20, 6.5], "rotationY": 0 },
-      { "x": -22.25, "z": -12.7, "size": [8, 23.6], "rotationY": 0 },
-      { "x": -22.25, "z": 33, "size": [8, 9], "rotationY": 0 }
-    ],
     "lanes": {
       "setback": 1.6,
       "clear": 1.6,
@@ -42,39 +39,97 @@
       "overhang": 0.9,
       "mediumShare": 0.0,
       "minLots": 2,
-      "sizes": ["small", "narrow"],
+      "sizes": [
+        "small",
+        "narrow"
+      ],
       "lines": [
-        { "points": [[-28, 22], [-9, 22]] }
+        {
+          "points": [
+            [
+              -6,
+              -19.2
+            ],
+            [
+              -32,
+              -19.2
+            ]
+          ]
+        }
       ]
     }
   },
-  "require": { "parcels": 1 },
+  "require": {
+    "parcels": 1
+  },
   "layers": [],
   "footprints": {
-    "RegolithBoulder": [2, 2],
-    "RegolithCrater": [3, 3],
-    "SurveyBeacon": [1, 1]
+    "RegolithBoulder": [
+      2,
+      2
+    ],
+    "RegolithCrater": [
+      3,
+      3
+    ],
+    "SurveyBeacon": [
+      1,
+      1
+    ]
   },
   "wild": {
-    "pattern": "fields",
-    "grid": { "pitch": 14, "origin": [-3.5, 3.5], "angle": 0, "edge": 0.5 },
-    "clumps": { "size": 13, "quarterOffset": 3.25 },
-    "crops": {
-      "noise": { "waves": 3, "base": 0.05 },
-      "bands": [
-        { "variant": 1, "share": 0.4 },
-        { "variant": 3, "share": 0.35 },
-        { "variant": 2, "share": 0.25 }
-      ]
+    "woods": 0.95,
+    "noise": {
+      "waves": 5,
+      "base": 0.09
     },
-    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.15 },
+    "heart": {
+      "centre": [
+        0,
+        -50
+      ],
+      "clear": 5,
+      "fade": 5,
+      "wobble": 2
+    },
+    "clumps": {
+      "spacing": 14.5,
+      "spacingVar": 0.12,
+      "attempts": 6000,
+      "minDensity": 0.6,
+      "scale": [
+        0.86,
+        1.0
+      ],
+      "quarterOffset": 3.25,
+      "inset": 9
+    },
     "singles": {
-      "props": ["RegolithBoulder", "RegolithCrater", "SurveyBeacon"],
-      "perCell": [1, 2],
-      "inset": 2.5,
-      "spacing": 4.0,
-      "scale": [0.95, 1.05],
-      "count": 24
+      "spacing": 10.5,
+      "spacingVar": 0.3,
+      "attempts": 5000,
+      "minDensity": 0.05,
+      "treeDensity": 0.3,
+      "clumpKeep": 0.62,
+      "between": true,
+      "trees": [
+        "RegolithBoulder",
+        "SurveyBeacon",
+        "RegolithCrater",
+        "RegolithBoulder"
+      ],
+      "treeScale": [
+        0.85,
+        1.1
+      ],
+      "meadow": [
+        "RegolithCrater",
+        "RegolithBoulder"
+      ],
+      "meadowScale": [
+        0.8,
+        1.05
+      ]
     }
   }
 }

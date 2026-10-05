@@ -240,6 +240,21 @@ def build_placeholder(spec, collection, materials):
         obj.parent = root
 
 
+def build_mesh(spec, collection):
+    """A generated mesh, drawn where it was written: a GLB in plot-local studs (a swept tube, a
+    decking piece -- tools/paths/tubes.py), lifted by `pos`. Its colour factors are linear, as every
+    generated kit writes them, so they are used as they stand."""
+    root = bpy.data.objects.new(spec.get("name", "Mesh"), None)
+    root.location = to_blender(spec.get("pos", (0.0, 0.0, 0.0)))
+    collection.objects.link(root)
+    for obj in testfit.import_glb(spec["glb"]):
+        for child in testfit.all_descendants([obj]):
+            for owner in list(child.users_collection):
+                owner.objects.unlink(child)
+            collection.objects.link(child)
+        obj.parent = root
+
+
 def build_model(spec, cache, collection, blueprints, missing, materials):
     path = spec["blueprint"]
     if path is None:
@@ -379,6 +394,9 @@ def main():
     for model in scene_spec.get("models", []):
         pieces += build_model(model, cache, plot, blueprints, missing, materials)
 
+    for mesh in scene_spec.get("meshes", []):
+        build_mesh(mesh, plot)
+
     discs = Discs(materials)
     for disc in scene_spec.get("discs", []):
         discs.build(disc, plot)
@@ -393,7 +411,7 @@ def main():
 
     log(
         f"{len(scene_spec.get('boxes', []))} boxes, {len(scene_spec.get('models', []))} models, "
-        f"{pieces} kit pieces, {len(scene_spec.get('spheres', []))} smoke puffs"
+        f"{pieces} kit pieces, {len(scene_spec.get('meshes', []))} generated meshes, {len(scene_spec.get('spheres', []))} smoke puffs"
     )
     if missing:
         listed = ", ".join(f"{name} x{count}" for name, count in sorted(missing.items()))

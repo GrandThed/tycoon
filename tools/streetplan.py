@@ -37,11 +37,14 @@ each slot's path and each fabric lane, laid as RoadGraph.spurDrawPoints and draw
 (footpath_violations). Network.tile_plan is the one mirror of TileRenderer.Plan as RoadGraph calls
 it; tools/cityfabric.py and tools/testfit/plotrender.py read their planned streets from it.
 
-M12 wave 4.1 (Orbital): `road.tiles.dock` -- in an era that sets it, a planned straight or end
-tile cell is a solid only within `dock` of its centreline, so pads, footprints, landmark extents,
-lots, plazas and deck rects may stand in the rest of the cell (Era.cell_solid, which every cell
-rule here asks; a bend, tee or cross cell stays whole). Without the key a cell is the whole cell,
-as before. A tiles era may have up to six street polylines.
+M12 wave 4.1b (organic Orbital). A path era whose streets are swept tubes (`road.paths.tube`,
+tools/paths/tubes.py) is judged against the tubes as they are drawn: a pad or a footprint keeps
+`tube.front` from the smoothed centreline, off every hub (the drum at a node where tubes branch,
+end or change chain), and no bend is tighter than a 6-stud radius. A round loop (`highway.round`)
+is a circle of radius `ring`: its band is the annulus ROUND_BAND_HALF either side, nothing stands
+in it, a tube may cross it steeply and clear of the pier feet, and the colony may use the plot's
+corners outside it. The plot's way in passes under the loop, so the entrance is judged from the
+band's inner edge.
 
 Usage:
   py tools/streetplan.py                # every era with a street plan (DEFAULT_ERAS)
@@ -83,7 +86,6 @@ MONUMENT_FOOTPRINT_DEFAULT = 14
 SPINE_EXTRA_CLEARANCE = 1  # spine clear of slots/pads/Sign by width/2 (+ meander) + this
 LOT_SLOT_CLEARANCE = 6  # a "house" lot's centre from any slot footprint (M9 "Layouts")
 STREET_COUNT = (2, 5)
-STREET_COUNT_TILES = (2, 6)  # M12 wave 4.1: a tiles era's avenues and their cross tube
 # Wave 2b: the Orbital plot is a full 4x4 module grid with no pavement, so it takes 6-10 small domes.
 LOT_COUNT_BY_ERA = {"OrbitalColony": (6, 10)}
 PLAZA_COUNT = (1, 2)
@@ -116,23 +118,6 @@ NODE_KEY_SCALE = 10  # nodes merge on a 1/NODE_KEY_SCALE stud grid
 STRAIGHT_DOT = 0.999  # consecutive directions at least this aligned are straight, not a bend
 SQUARE_DOT = 0.001  # and two whose dot product stays within this of 0 meet at a right angle (drawFootpath)
 SAMPLES_PER_CELL = 4  # TileRenderer.rasterise: samples to a lattice cell along a stretch
-# TileRenderer.luau: arm n is TILE_ARM_STEPS[n - 1] on the (i, j) lattice and bit n - 1 of a cell's
-# connectivity mask; TILE_KIND_BY_MASK[mask] is the piece that mask draws (PIECE_BY_MASK's kinds).
-TILE_ARM_STEPS = ((1, 0), (0, -1), (-1, 0), (0, 1))  # +X, -Z, -X, +Z
-# PIECE_BY_MASK itself: (kind, quarter turns) for each of the 16 masks.
-TILE_PIECE_BY_MASK = (
-    ("end", 0), ("end", 0), ("end", 1), ("bend", 2),
-    ("end", 2), ("straight", 0), ("bend", 3), ("tee", 2),
-    ("end", 3), ("bend", 1), ("straight", 1), ("tee", 1),
-    ("bend", 0), ("tee", 0), ("tee", 3), ("cross", 0),
-)
-TILE_KIND_BY_MASK = tuple(kind for kind, _ in TILE_PIECE_BY_MASK)
-# The kit piece a ring prop's blueprint stands its pier on (monorail-kit's `pier`): where the wild
-# stays under the beam, a single keeps off each one's foot (ring_pier_feet, tools/fabric.py).
-PIER_MODEL = "pier"
-# M12 wave 4.1 (`road.tiles.dock`): the planned kinds whose cell is a solid only within `dock` of
-# its centreline. A bend's pipe sweeps its inner corner and a tee or cross fills the cell.
-DOCKED_KINDS = ("straight", "end")
 # A footpath slab may end flush on the outer edge of a pavement; this much onto it is on it.
 FOOTPATH_TOUCH = 1e-6
 FLOAT32_SLACK = 1e-4  # piece counts within this of a .5 rounding boundary count high (see piece_count)
@@ -146,6 +131,17 @@ BEND_EXITS = ((-1.0, 0.0), (0.0, 1.0))
 RAMP_CELLS_FALLBACK = 3
 RAMP_DIRECTIONS = {"+X": (1.0, 0.0), "-X": (-1.0, 0.0), "+Z": (0.0, 1.0), "-Z": (0.0, -1.0)}
 SUBWAY_COUNT = (4, 6)
+# A round loop (INTERFACES "Wave 4.1b", `highway.round`): the contract's numbers. The track is
+# ROUND_SEGMENTS arcs about the plot's centre, joints on multiples of the segment angle from +X, a
+# pier at each segment's middle; the band nothing stands in reaches ROUND_BAND_HALF either side.
+ROUND_SEGMENTS = 48
+ROUND_BAND_HALF = 3.5
+ROUND_PIER_FOOT = 1.9  # a pier foot's side (tools/assets/monorail_kit.py, PIER_FOOT_HALF)
+ROUND_CROSSING_DEGREES = 60.0  # a tube crosses the track at least this steeply...
+ROUND_CROSSING_PIER = 2.0  # ...its centreline this far from every pier foot
+ROUND_BAND_GAP = 0.5  # daylight a pad, a footprint or a hub keeps from the band
+HUB_GAP = 0.25  # daylight a pad or a footprint keeps from a tube hub
+HUB_SIDES = 16  # a hub's drum as a polygon
 # Measured bounds (x, z) of the built Metropolis/MetroEntrance prop at rotationY 0 -- front (stair
 # mouth) on -Z, origin bottom-centre. The blueprint's `footprint` key is only the envelope the
 # builder was briefed to fit inside, and the sidewalk an entrance stands on is exactly 6 studs
@@ -787,12 +783,6 @@ class Era:
         self.tile_studs = float(self.tiles["tileStuds"]) if self.tiles else 0.0
         pavement = (self.tiles or {}).get("pavement")
         self.pavement = float(pavement["width"]) if pavement else 0.0
-        # M12 wave 4.1: `road.tiles.dock`, a positive finite number or absent (None: the whole cell
-        # is the street, as it always was).
-        dock = (self.tiles or {}).get("dock")
-        valid_dock = not isinstance(dock, bool) and isinstance(dock, (int, float)) and 0 < dock < math.inf
-        self.dock = float(dock) if valid_dock else None
-        self._tile_masks = None
         plot = self.layout["plotSize"]
         self.half_x, self.half_z = plot[0] / 2, plot[2] / 2
         pad_size = self.layout["padSize"]
@@ -946,6 +936,9 @@ class Era:
                 }
             )
         self.spurs = {slot["id"]: self.spur_for(slot) for slot in self.slots}
+        # M12 wave 4.1b: a round loop's radius (`highway.round` on a layout highway), else None.
+        self.round_ring = float(self.highway["ring"]) if self.highway and (highway_cfg or {}).get("round") is True else None
+        self._tubes = False  # tools/paths/tubes.TubePlan, built on first use (tube_plan)
 
     def real_footprint(self, slot_id):
         """Whether a slot's footprint is ground a model stands on: not street furniture (the old plans'
@@ -974,55 +967,6 @@ class Era:
         step = self.tile_studs
         centre = (cell[0] * step, cell[1] * step)
         return square(centre, step, step, 0)
-
-    def tile_masks(self):
-        """(i, j) -> connectivity mask of every cell the streets rasterise to, with the whole plan
-        drawn: an arm wherever a polyline runs from the cell into its neighbour (TileRenderer links
-        consecutive cells of a stretch, and the stretches of a polyline tile it end to end). The
-        most arms a cell can ever show, so a kind read from it is the widest the cell ever is."""
-        if self._tile_masks is None:
-            masks = {}
-            if self.tiles:
-                for _, a, b in self.spine_segments():
-                    path = rasterise(self.tile_studs, a, b)
-                    for cell in path:
-                        masks.setdefault(cell, 0)
-                    for before, after in zip(path, path[1:]):
-                        delta = (after[0] - before[0], after[1] - before[1])
-                        if delta not in TILE_ARM_STEPS:
-                            continue
-                        arm = TILE_ARM_STEPS.index(delta)
-                        masks[before] |= 1 << arm
-                        masks[after] |= 1 << ((arm + 2) % 4)
-            self._tile_masks = masks
-        return self._tile_masks
-
-    def cell_kind(self, cell):
-        """The planned piece of a cell ("straight", "end", "bend", "tee", "cross"), None off the plan."""
-        mask = self.tile_masks().get(cell)
-        return TILE_KIND_BY_MASK[mask] if mask is not None else None
-
-    def cell_docked(self, cell):
-        """Whether `road.tiles.dock` narrows this cell's solid: the era sets it and the cell's planned
-        piece is a straight or an end with an arm to say which way it runs."""
-        return self.dock is not None and self.tile_masks().get(cell, 0) != 0 and self.cell_kind(cell) in DOCKED_KINDS
-
-    def cell_solid(self, cell):
-        """The ground of one planned cell that nothing may stand on (M12 wave 4.1): the whole cell,
-        or with `road.tiles.dock` -- along a planned straight or end -- only the band within `dock`
-        of the cell's centreline, the cell's full length (an end's cap reaches nearly to its far
-        edge)."""
-        if not self.cell_docked(cell):
-            return self.cell_square(cell)
-        step = self.tile_studs
-        centre = (cell[0] * step, cell[1] * step)
-        along_x = bool(self.tile_masks()[cell] & 0b0101)  # arms 1 and 3 are +X and -X
-        return square(centre, step if along_x else 2 * self.dock, 2 * self.dock if along_x else step, 0)
-
-    def cell_name(self, cell):
-        """How a message names a cell's solid."""
-        where = fmt((cell[0] * self.tile_studs, cell[1] * self.tile_studs))
-        return f"the dock band ({self.dock:g} either side of the centreline) of the road cell {where}" if self.cell_docked(cell) else f"the road cell {where}"
 
     def spine_segments(self):
         for index, street in enumerate(self.streets):
@@ -1584,12 +1528,7 @@ def rect_overlap(p, q):
 def cell_violations(era, cells):
     """Wave 2b: the whole lattice cell is the road, whatever width the tile draws inside it (a tube
     is 4 wide in a 7 cell), so pads, real footprints, lots and rock zones stay off every cell a
-    street rasterises to. Flush against a cell edge is fine -- that is where a pad belongs.
-
-    M12 wave 4.1: with `road.tiles.dock` a planned straight or end cell is a solid only within
-    `dock` of its centreline (Era.cell_solid), and a landmark's harvested extents are held to the
-    same solids as its declared footprint -- a docked landmark stands inside the cell, so the
-    measured building is what must stay off the pipe."""
+    street rasterises to. Flush against a cell edge is fine -- that is where a pad belongs."""
     messages = []
     solids = []
     for slot in era.slots:
@@ -1597,17 +1536,15 @@ def cell_violations(era, cells):
         if era.real_footprint(slot["id"]):
             solids.append((f"{slot['id']} footprint", slot["footprint"]))
     solids += [(f"lot {i + 1}", lot["poly"]) for i, lot in enumerate(era.lots)]
-    if era.dock is not None:
-        solids += [(f"{slot_id} extents", poly) for slot_id, poly, measured in landmark_extents(era) if measured]
     for cell in sorted(cells):
-        square_ = era.cell_solid(cell)
-        where = era.cell_name(cell)
+        square_ = era.cell_square(cell)
+        where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
         for name, poly in solids:
             if rect_overlap(poly, square_) > 1e-6:
-                messages.append(f"{name} stands on {where}")
+                messages.append(f"{name} stands on the road cell {where}")
         for i, zone in enumerate(era.zones):
             if point_polygon_distance(zone["center"], square_) < zone["radius"] - 1e-6 or point_in_polygon(zone["center"], square_):
-                messages.append(f"tree zone {i + 1} reaches onto {where}")
+                messages.append(f"tree zone {i + 1} reaches onto the road cell {where}")
     return messages
 
 
@@ -1757,8 +1694,9 @@ def subway_violations(era, cells):
                 messages.append(f"{label}: too close to another entrance")
         # It may cover the pavement; the road's own cells stay clear (touching one is fine).
         for cell in cells:
-            if rect_overlap(poly, era.cell_solid(cell)) > 1e-6:
-                messages.append(f"{label}: stands on {era.cell_name(cell)}")
+            if rect_overlap(poly, era.cell_square(cell)) > 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                messages.append(f"{label}: stands on the road cell {where}")
                 break
         if ring_reach(poly) > ring_inner - 1e-6:
             messages.append(f"{label}: reaches into the highway pillar band")
@@ -1924,15 +1862,9 @@ def block_violations(era, cells):
                 messages.append(f"{label}: {d:.2f} from street {fmt(a)}->{fmt(b)} (need {pavement_clear:g}, road + pavement)")
                 break
         for cell in cells:
-            # M12 wave 4.1: a deck rect of a docked era runs up to the dock line, under the pad that
-            # stands there, so flush against a cell's solid is where it belongs; without
-            # `road.tiles.dock` a slab keeps off the cell altogether, touching included.
-            if era.dock is not None:
-                covers = rect_overlap(block["poly"], era.cell_solid(cell)) > 1e-6
-            else:
-                covers = polygon_polygon_distance(block["poly"], era.cell_square(cell)) < 1e-6
-            if covers:
-                messages.append(f"{label}: covers {era.cell_name(cell)}")
+            if polygon_polygon_distance(block["poly"], era.cell_square(cell)) < 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                messages.append(f"{label}: covers the road cell {where}")
                 break
         for j, plaza in enumerate(era.plazas):
             if polygon_polygon_distance(block["poly"], plaza["poly"]) < 1e-6:
@@ -2211,83 +2143,119 @@ def spur_segments(era):
     return [seg for spur in era.spurs.values() for seg in polyline_segments(spur["points"]) if math.dist(*seg) >= MIN_LENGTH]
 
 
-def ring_cycle(half):
-    """Highway.ringCycle: the ring's cells as one cycle, counter-clockwise from (-half, -half)."""
-    cycle = [(i, -half) for i in range(-half, half)]
-    cycle += [(half, j) for j in range(-half, half)]
-    cycle += [(i, half) for i in range(half, -half, -1)]
-    cycle += [(-half, j) for j in range(half, -half, -1)]
-    return cycle
+def tubes_module():
+    """tools/paths/tubes.py, imported on first use: it imports this file."""
+    sys.path.insert(0, str(REPO_ROOT / "tools" / "paths"))
+    import tubes
+
+    return tubes
 
 
-def ring_pieces(era):
-    """Highway.luau's ring as (cell centre, role, quarter turns) per lattice cell, in cycle order:
-    the role is the `highway.props` key the cell draws -- "deck" on a straight, "corner" on a
-    turn, "junction" where a layout ramp leaves -- and the turn is the connectivity table's.
-    Empty without a layout highway or a tile pitch."""
-    if era.highway is None or era.tile_studs <= 0:
+def tube_plan(era, fabric_data=None):
+    """The era's swept-tube plan (tools/paths/tubes.TubePlan), or None when its streets are not
+    tubes. Cached on the era; `fabric_data` (the lanes to cut pieces for) builds a fresh one."""
+    paths = era.paths if isinstance(era.paths, dict) else {}
+    if not isinstance(paths.get("tube"), dict):
+        return None
+    if fabric_data is not None:
+        return tubes_module().TubePlan(era.name, era.city, fabric_data)
+    if era._tubes is False:
+        era._tubes = tubes_module().TubePlan(era.name, era.city)
+    return era._tubes
+
+
+def disc_poly(centre, radius, sides=HUB_SIDES):
+    """A disc as the regular polygon that holds it (flats at `radius`)."""
+    reach = radius / math.cos(math.pi / sides)
+    return [(centre[0] + reach * math.cos(2 * math.pi * k / sides), centre[1] + reach * math.sin(2 * math.pi * k / sides)) for k in range(sides)]
+
+
+def round_pier_feet(era):
+    """The centre of every pier foot of a round loop: one at the middle of each segment."""
+    if era.round_ring is None:
         return []
-    step = era.tile_studs
-    half = int(round_half(float(era.highway["ring"]) / step))
-    if half < 1:
-        return []
-    cycle = ring_cycle(half)
-    junction, ramp_arm = None, None
-    ramp = era.highway_ramp
-    if ramp is not None:
-        requested = xz(ramp["cell"])
-        junction = min(range(len(cycle)), key=lambda index: math.dist((cycle[index][0] * step, cycle[index][1] * step), requested))
-        direction = RAMP_DIRECTIONS.get(ramp["direction"])
-        if direction is None:
-            inward = (-cycle[junction][0], -cycle[junction][1])
-            direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
-        delta = (int(direction[0]), int(direction[1]))
-        ramp_arm = TILE_ARM_STEPS.index(delta) if delta in TILE_ARM_STEPS else None
-    pieces = []
-    for index, cell in enumerate(cycle):
-        mask = 0
-        for neighbour in (cycle[index - 1], cycle[(index + 1) % len(cycle)]):
-            delta = (neighbour[0] - cell[0], neighbour[1] - cell[1])
-            if delta in TILE_ARM_STEPS:
-                mask |= 1 << TILE_ARM_STEPS.index(delta)
-        if index == junction and ramp_arm is not None:
-            mask |= 1 << ramp_arm
-        kind, quarters = TILE_PIECE_BY_MASK[mask]
-        role = "deck" if kind == "straight" else "corner" if kind == "bend" else "junction"
-        pieces.append(((cell[0] * step, cell[1] * step), role, quarters))
-    return pieces
+    step = 2 * math.pi / ROUND_SEGMENTS
+    return [(era.round_ring * math.cos((k + 0.5) * step), era.round_ring * math.sin((k + 0.5) * step)) for k in range(ROUND_SEGMENTS)]
 
 
-def ring_pier_feet(era):
-    """The centre of every pier foot the ring stands on the plot, as (x, z): each ring cell's prop
-    (ring_pieces) placed as the client places it -- at the cell centre, turned by its quarter turns
-    -- and in it every piece of that prop's blueprint whose kit model is PIER_MODEL, at the
-    blueprint's scale. Orbital's monorail has one a cell: 2.5 along the beam under a straight, under
-    the arc's middle on a corner (MonorailTrack.json, MonorailCorner.json). Empty for a ring whose
-    props have no blueprint or no such piece."""
-    config = era.dressing.get("highway") or {}
-    props = config.get("props") or {}
-    local = {}
-    feet = []
-    for centre, role, quarters in ring_pieces(era):
-        name = props.get(role)
-        if name not in local:
-            local[name] = []
-            path = BLUEPRINTS_DIR / "_props" / era.name / f"{name}.json"
-            if isinstance(name, str) and path.exists():
-                try:
-                    blueprint = json.loads(path.read_text(encoding="utf-8"))
-                except ValueError:
-                    blueprint = {}
-                scale = float(blueprint.get("scale", 1.0))
-                for piece in blueprint.get("pieces") or []:
-                    if piece.get("model") == PIER_MODEL and isinstance(piece.get("pos"), list) and len(piece["pos"]) == 3:
-                        local[name].append((piece["pos"][0] * scale, piece["pos"][2] * scale))
-        angle = math.radians(quarters * 90.0)
-        for x, z in local[name]:
-            # CFrame.Angles(0, a, 0), the mapping every prop placement uses.
-            feet.append((centre[0] + x * math.cos(angle) + z * math.sin(angle), centre[1] - x * math.sin(angle) + z * math.cos(angle)))
-    return feet
+def band_gap(poly, ring, half=ROUND_BAND_HALF):
+    """Daylight between a convex polygon and a round loop's band (the annulus `ring` +- `half`
+    about the plot's centre); 0 when it stands in the band. A shape may lie inside the loop or
+    wholly outside it, in a corner of the plot."""
+    farthest = max(math.hypot(x, z) for x, z in poly)
+    if farthest <= ring - half:
+        return ring - half - farthest
+    nearest = 0.0 if point_in_polygon((0.0, 0.0), poly) else point_polygon_distance((0.0, 0.0), poly)
+    return max(nearest - (ring + half), 0.0)
+
+
+def round_violations(era):
+    """A round loop (INTERFACES "Wave 4.1b"): no pad, footprint, harvested extents or hub in the
+    band; a tube crosses it ROUND_CROSSING_DEGREES or more to the track, its centreline
+    ROUND_CROSSING_PIER or more from every pier foot."""
+    messages = []
+    ring = era.round_ring
+    if ring + ROUND_BAND_HALF > min(era.half_x, era.half_z) + 1e-6:
+        messages.append(f"highway ring {ring:g}: the band {ring - ROUND_BAND_HALF:g}..{ring + ROUND_BAND_HALF:g} leaves the plot")
+    shapes = []
+    for slot in era.slots:
+        shapes.append((f"{slot['id']} pad", slot["pad_poly"]))
+        if era.real_footprint(slot["id"]):
+            shapes.append((f"{slot['id']} footprint", slot["footprint"]))
+    shapes += [(f"{slot_id} extents", poly) for slot_id, poly, measured in landmark_extents(era) if measured]
+    plan = tube_plan(era)
+    hubs = plan.hubs() if plan is not None else []
+    shapes += [(f"the hub at {fmt((round(hub['point'][0], 1), round(hub['point'][1], 1)))}", disc_poly(hub["point"], plan.hub_radius)) for hub in hubs]
+    for name, poly in shapes:
+        d = band_gap(poly, ring)
+        if d < ROUND_BAND_GAP - 1e-6:
+            messages.append(f"round loop: {name} is {d:.2f} from the band {ring - ROUND_BAND_HALF:g}..{ring + ROUND_BAND_HALF:g} (need {ROUND_BAND_GAP})")
+    feet = [square(foot, ROUND_PIER_FOOT, ROUND_PIER_FOOT, 0) for foot in round_pier_feet(era)]
+    for line in plan.lines if plan is not None else ():
+        points = line.points
+        nearest = None  # (distance, where): the line's closest pass by a pier foot, inside the band
+        for a, b in zip(points, points[1:]):
+            ra, rb = math.hypot(*a), math.hypot(*b)
+            if (ra - ring) * (rb - ring) < 0:
+                tangent = unit((b[0] - a[0], b[1] - a[1]))
+                radial = unit(a)
+                steep = math.degrees(math.asin(min(1.0, abs(tangent[0] * radial[0] + tangent[1] * radial[1]))))
+                if steep < ROUND_CROSSING_DEGREES - 1e-6:
+                    messages.append(f"round loop: {line.label} crosses the track at {fmt((round(a[0], 1), round(a[1], 1)))} at {steep:.0f} degrees to it (need {ROUND_CROSSING_DEGREES:g})")
+            if abs(ra - ring) <= ROUND_BAND_HALF or abs(rb - ring) <= ROUND_BAND_HALF:
+                d = min(segment_polygon_distance(a, b, foot) for foot in feet)
+                if nearest is None or d < nearest[0]:
+                    nearest = (d, a)
+        if nearest is not None and nearest[0] < ROUND_CROSSING_PIER - 1e-6:
+            messages.append(f"round loop: {line.label} passes {nearest[0]:.2f} from a pier foot at {fmt((round(nearest[1][0], 1), round(nearest[1][1], 1)))} (need {ROUND_CROSSING_PIER:g})")
+    return messages
+
+
+def tube_violations(era):
+    """A tube era (INTERFACES "Wave 4.1b"): no bend tighter than the 6-stud radius; two tubes into
+    one hub at least 90 degrees apart; every pad,
+    footprint and harvested extent `tube.front` from the drawn centreline and HUB_GAP from every
+    hub (a landmark's own path runs from its anchor to the tube, so its own pad and building are
+    judged like anyone's)."""
+    plan = tube_plan(era)
+    messages = list(plan.radius_problems()) + plan.hub_problems()
+    shapes = []
+    for slot in era.slots:
+        shapes.append((f"{slot['id']} pad", slot["pad_poly"]))
+        if era.real_footprint(slot["id"]):
+            shapes.append((f"{slot['id']} footprint", slot["footprint"]))
+    shapes += [(f"{slot_id} extents", poly) for slot_id, poly, measured in landmark_extents(era) if measured]
+    hubs = [(hub, disc_poly(hub["point"], plan.hub_radius)) for hub in plan.hubs()]
+    for name, poly in shapes:
+        for line in plan.lines:
+            d = min((segment_polygon_distance(a, b, poly) for a, b in zip(line.points, line.points[1:])), default=math.inf)
+            if d < plan.front - 1e-6:
+                messages.append(f"{name}: {d:.2f} from the centreline of {line.label} (a tube keeps {plan.front:g})")
+        for hub, disc in hubs:
+            d = polygon_polygon_distance(poly, disc)
+            if d < HUB_GAP - 1e-6:
+                messages.append(f"{name}: {d:.2f} from the hub at {fmt((round(hub['point'][0], 1), round(hub['point'][1], 1)))} (need {HUB_GAP})")
+    return messages
 
 
 def pier_squares(era):
@@ -3093,18 +3061,13 @@ def check(era, network, visible, unreachable):
     # comes within width / 2 of the centreline -- and a smaller padOffset would put the pad inside
     # the building instead. It only has to stay off the asphalt.
     pad_clear = half_road if era.tiles is not None else spine_clear
-    # M12 wave 4.1: with `road.tiles.dock` a building may stand in the rest of a straight cell, so
-    # its footprint answers to the dock line, as its pad does to the cell solids (cell_violations
-    # holds both, and the harvested extents, off every solid, whole cells included).
-    footprint_clear = era.dock if era.dock is not None else spine_clear
     cells = era.road_cells()  # empty unless the era draws kit tiles
 
     def add(message):
         violations.append(message)
 
-    street_count = STREET_COUNT_TILES if era.tiles is not None else STREET_COUNT
-    if not street_count[0] <= len(era.streets) <= street_count[1]:
-        add(f"streets: {len(era.streets)} polylines, need {street_count[0]}-{street_count[1]}")
+    if not STREET_COUNT[0] <= len(era.streets) <= STREET_COUNT[1]:
+        add(f"streets: {len(era.streets)} polylines, need {STREET_COUNT[0]}-{STREET_COUNT[1]}")
     for index, ys in enumerate(era.street_y):
         if any(abs(y) > 1e-9 for y in ys):
             add(f"street {index + 1}: a point is not at Y 0")
@@ -3120,12 +3083,14 @@ def check(era, network, visible, unreachable):
             if abs(p[0]) > limit_x + 1e-9 or abs(p[1]) > limit_z + 1e-9:
                 add(f"street {index + 1}: point {fmt(p)} leaves the plot (limit +/-{limit_x:g})")
 
+    tubes = tube_plan(era)
     for index, a, b in era.spine_segments():
-        for slot in era.slots:
+        # A tube era measures its pads and footprints against the swept tube (tube_violations).
+        for slot in era.slots if tubes is None else ():
             if slot["id"] in era.furniture:
                 continue
             for what, poly, need in (
-                ("footprint", slot["footprint"], footprint_clear),
+                ("footprint", slot["footprint"], spine_clear),
                 ("pad", slot["pad_poly"], pad_clear),
             ):
                 if what == "footprint" and slot["id"] in era.nominal:
@@ -3145,6 +3110,9 @@ def check(era, network, visible, unreachable):
         front = -era.half_z
         if era.tiles is not None:
             front = -math.floor((era.half_z - edge_half) / era.tile_studs) * era.tile_studs
+        elif era.round_ring is not None:
+            # The way in passes under a round loop: the first street point stands inside its band.
+            front = -(era.round_ring - ROUND_BAND_HALF)
         if entrance[1] > front + ENTRANCE_EDGE_REACH or abs(entrance[0] - era.sign[0]) > ENTRANCE_SIGN_REACH:
             add(f"entrance {fmt(entrance)} is not on the front edge near the Sign")
     for slot_id, join in unreachable:
@@ -3278,8 +3246,9 @@ def check(era, network, visible, unreachable):
                 add(f"{label}: tree zone {j + 1} overlaps it")
         # Overlap, not touch: a plaza of a pavement-less era stands flush against the cell edge.
         for cell in cells:
-            if rect_overlap(plaza["poly"], era.cell_solid(cell)) > 1e-6:
-                add(f"{label}: covers {era.cell_name(cell)}")
+            if rect_overlap(plaza["poly"], era.cell_square(cell)) > 1e-6:
+                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+                add(f"{label}: covers the road cell {where}")
                 break
         if era.tiles is not None:
             face = plaza["facing"]
@@ -3287,9 +3256,8 @@ def check(era, network, visible, unreachable):
                 plaza["position"][0] + face[0] * plaza["size"][1] / 2,
                 plaza["position"][1] + face[1] * plaza["size"][1] / 2,
             )
-            # With no pavement the plaza fronts the tube cell itself (wave 2b), or with
-            # `road.tiles.dock` the dock line, as a lot does (wave 4.1).
-            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.dock if era.dock is not None else era.tile_studs / 2
+            # With no pavement the plaza fronts the tube cell itself (wave 2b).
+            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.tile_studs / 2
             nearest = min(
                 (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
                 key=lambda hit: hit[0],
@@ -3300,7 +3268,7 @@ def check(era, network, visible, unreachable):
             elif abs(nearest[0] - edge) > PLAZA_EDGE_SLACK:
                 add(
                     f"{label}: its front edge is {nearest[0]:.2f} from the nearest centreline, not flush "
-                    f"with the {'pavement edge' if era.pavement > 0 else 'dock line' if era.dock is not None else 'tube cell edge'} at {edge:g}"
+                    f"with the {'pavement' if era.pavement > 0 else 'tube cell'} edge at {edge:g}"
                 )
             elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
                 add(f"{label}: its back is turned to the street it fronts")
@@ -3378,15 +3346,18 @@ def check(era, network, visible, unreachable):
         detail["tileCells"] = len(cells)
         if len(cells) > tile_budget:
             add(f"tile cells {len(cells)} > budget.tileCells {tile_budget} -- the client would drop the tail")
+    if tubes is not None:
+        for message in tube_violations(era):
+            add(message)
     if era.highway is not None:
-        for message in highway_violations(era):
+        for message in round_violations(era) if era.round_ring is not None else highway_violations(era):
             add(message)
         # Highway.place counts props, not cells: ringCycle walks four arms of 2 * half cells
         # (corners counted once), the whole ramp is ONE prop however many cells it spans, and the
-        # optional sign at its foot is one more.
+        # optional sign at its foot is one more. A round loop is one prop a segment.
         half_cells = int(round_half(float(era.highway["ring"]) / era.tile_studs)) if era.tile_studs else 0
         ramp_props = (1 + (1 if era.highway_sign else 0)) if era.highway_ramp is not None else 0
-        highway_cells = 8 * half_cells + ramp_props
+        highway_cells = ROUND_SEGMENTS if era.round_ring is not None else 8 * half_cells + ramp_props
         detail["highwayCells"] = highway_cells
         highway_budget = budget_value(budget.get("highwayCells"), math.inf)
         if highway_cells > highway_budget:
@@ -3630,12 +3601,6 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
                 fill=pavement_rgb + (200,),
             )
         for cell in sorted(era.road_cells()):
-            if era.cell_docked(cell):
-                # Wave 4.1: the cell in outline, its solid (the dock band) filled -- lots, pads and
-                # landmarks may stand in the rest.
-                poly(era.cell_square(cell), outline=(120, 120, 128), width=1)
-                poly(era.cell_solid(cell), fill=road_rgb + (255,), outline=(20, 20, 24), width=1)
-                continue
             poly(era.cell_square(cell), fill=road_rgb + (255,), outline=(20, 20, 24), width=1)
 
     nodes = [p for street in era.streets for p in street]
@@ -3800,6 +3765,27 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
                 c = px(centre)
                 canvas.text((c[0] - 14, c[1] - 7), "ramp", font=small, fill=(90, 55, 0))
 
+    if era.round_ring is not None:
+        # The round loop: its band as a ring of segments, a square at every pier foot.
+        step = 2 * math.pi / ROUND_SEGMENTS
+        for k in range(ROUND_SEGMENTS):
+            a0, a1 = k * step, (k + 1) * step
+            inner, outer = era.round_ring - ROUND_BAND_HALF, era.round_ring + ROUND_BAND_HALF
+            poly(
+                [(inner * math.cos(a0), inner * math.sin(a0)), (outer * math.cos(a0), outer * math.sin(a0)), (outer * math.cos(a1), outer * math.sin(a1)), (inner * math.cos(a1), inner * math.sin(a1))],
+                fill=(150, 150, 160, 110),
+            )
+        for foot in round_pier_feet(era):
+            poly(square(foot, ROUND_PIER_FOOT, ROUND_PIER_FOOT, 0), fill=(70, 70, 82, 255))
+    tubes = tube_plan(era, fabric_doc)
+    if tubes is not None:
+        # The tubes as they are drawn: each centreline and the line a lot fronts either side of it,
+        # then the hubs.
+        for line in tubes.lines:
+            canvas.line([px(p) for p in line.points], fill=(250, 250, 255), width=3)
+        for hub in tubes.hubs():
+            poly(disc_poly(hub["point"], tubes.hub_radius), fill=(235, 238, 245, 255), outline=(60, 60, 70), width=2)
+
     s = px(era.sign)
     canvas.rectangle((s[0] - 5, s[1] - 5, s[0] + 5, s[1] + 5), fill=(200, 30, 30))
     canvas.text((s[0] + 8, s[1] - 16), "Sign", font=font, fill=(200, 30, 30))
@@ -3829,6 +3815,8 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
     ]
     if era.tiles is not None:
         entries.append((tuple(int(v) for v in era.dressing["road"]["color"]), "kit road tile (cell)"))
+    if tubes is not None:
+        entries.append(((235, 238, 245), "tube hub / drawn centreline"))
     if era.highway is not None:
         entries.append(((150, 150, 160), "elevated ring deck / pillar band"))
         if era.highway_ramp is not None:
