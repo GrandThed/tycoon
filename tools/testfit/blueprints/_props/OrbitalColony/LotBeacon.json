@@ -1,0 +1,10 @@
+{
+  "id": "LotBeacon",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "the next-pad marker: a landing beacon on a mast with two guide lamps, the same from the front and the back",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "landing-beacon", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

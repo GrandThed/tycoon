@@ -1,0 +1,15 @@
+{
+  "id": "SiteNarrow",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [4, 8],
+  "note": "a pod going up on a 4 x 8 lot, in the lot frame (the tube on -Z): two and a half rows of deck laid, the pod's floor, ribs and first panels on them, plates and crates waiting on the dust behind, a site light",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "site-deck-narrow", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "pod-frame", "pos": [0, 0.12, -2.05], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "plate-stack", "pos": [0.95, 0, 1.0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "crate", "pos": [-0.85, 0, 2.75], "rotY": 10, "stage": 0},
+    {"kit": "regolith-kit", "model": "crate-long", "pos": [0.75, 0, 3.3], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "work-light", "pos": [-1.6, 0, 3.6], "rotY": 0, "stage": 0}
+  ]
+}

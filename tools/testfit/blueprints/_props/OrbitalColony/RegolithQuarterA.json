@@ -1,0 +1,11 @@
+{
+  "id": "RegolithQuarterA",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "one quarter of impact ground in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): a fresh crater on its apron, a pit, one boulder, dust; regolith-kit is 1 unit = 1 stud, so scale is 1.0",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "ground-a", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [1.3, 0, 1.75], "rotY": 25, "stage": 0}
+  ]
+}

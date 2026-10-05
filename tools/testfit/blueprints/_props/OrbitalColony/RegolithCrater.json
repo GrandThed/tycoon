@@ -1,0 +1,10 @@
+{
+  "id": "RegolithCrater",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [3, 3],
+  "note": "a fresh crater with a lit crest, its apron and three blocks of ejecta",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "crater-fresh", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

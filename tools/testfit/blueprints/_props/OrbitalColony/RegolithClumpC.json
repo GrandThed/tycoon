@@ -1,0 +1,21 @@
+{
+  "id": "RegolithClumpC",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly RegolithQuarterC at rotY 0, 90, 180 and 270 about the origin: dust flats (four quarters), 13 x 13 on the 14-stud grid",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "ground-c", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "rock-slab", "pos": [1.6, 0.0, 5.3], "rotY": 160, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [2.9, 0.0, 1.2], "rotY": 80, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-c", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "regolith-kit", "model": "rock-slab", "pos": [5.3, 0.0, -1.6], "rotY": 250, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [1.2, 0.0, -2.9], "rotY": 170, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-c", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "regolith-kit", "model": "rock-slab", "pos": [-1.6, 0.0, -5.3], "rotY": 340, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-2.9, 0.0, -1.2], "rotY": 260, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-c", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "regolith-kit", "model": "rock-slab", "pos": [-5.3, 0.0, 1.6], "rotY": 70, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-1.2, 0.0, 2.9], "rotY": 350, "stage": 0}
+  ]
+}

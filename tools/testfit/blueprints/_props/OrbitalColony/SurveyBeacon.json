@@ -1,0 +1,10 @@
+{
+  "id": "SurveyBeacon",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [1, 1],
+  "note": "a surveyor's tripod with a lit lamp and an orange tag",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "survey-beacon", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

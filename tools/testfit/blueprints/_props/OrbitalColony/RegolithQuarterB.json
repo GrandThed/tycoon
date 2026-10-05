@@ -1,0 +1,13 @@
+{
+  "id": "RegolithQuarterB",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "one quarter of a boulder field in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): rocks of three sizes on a drift of dust; scale 1.0",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "ground-b", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-large", "pos": [4.55, 0, 4.4], "rotY": 15, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [2.25, 0, 2.55], "rotY": 200, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [5.2, 0, 1.35], "rotY": 40, "stage": 0}
+  ]
+}

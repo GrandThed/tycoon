@@ -1,0 +1,17 @@
+{
+  "id": "RegolithClumpA",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly RegolithQuarterA at rotY 0, 90, 180 and 270 about the origin: impact ground (four quarters), 13 x 13 on the 14-stud grid",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "ground-a", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [1.3, 0.0, 1.75], "rotY": 25, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-a", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [1.75, 0.0, -1.3], "rotY": 115, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-a", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [-1.3, 0.0, -1.75], "rotY": 205, "stage": 0},
+    {"kit": "regolith-kit", "model": "ground-a", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [-1.75, 0.0, 1.3], "rotY": 295, "stage": 0}
+  ]
+}

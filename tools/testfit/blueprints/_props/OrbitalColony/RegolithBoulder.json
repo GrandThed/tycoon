@@ -1,0 +1,10 @@
+{
+  "id": "RegolithBoulder",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "a standing stone over two smaller rocks: the wild's tall accent",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "boulder-pile", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
