@@ -22,8 +22,19 @@ His three playtest measurements are "not measured yet", so `budget.parcelsFar` s
   monorail** (`highway.clearBand` false), lot sizes 4 × 8, 6 × 6, 8 × 12, five-stage props with
   `levelStages` [1, 3, 4] and `heightFloor` 3.4, wild as lattice-aligned clumps that may straddle a
   planned tube, singles in the cells no clump covers, lots off deck rects.
-- Owed to Ben at the gate: `m12o_compare.png` with lot counts; then city-changer before-and-afters on
-  the layout he picks (step 3).
+- **At the gate, waiting for Ben's pick (2026-10-05):** sheet `assets/testfit/out/OrbitalColony/
+  m12o_compare.png`. **Docks** (`m12-orbital-docks` cf4050a): 108 lots, all on tubes, four avenues,
+  13% bare. **Axis** (`m12-orbital-axis` 3cb4123): 97 lots (57 tube, 40 on six lanes), centre tube to
+  the Launch Tower, 21% bare. Base `m12-orbital` holds the tools, props and groundwork data only; the
+  pick is merged into it taking the candidate's layout, plan, fabric data and `pull`. The lead
+  recommended Docks. Full state table and the held asks: INTERFACES "State at the gate".
+- Owed after the pick: city-changer before-and-afters on that layout (step 3), then wave 4.2 (client
+  rules, final props with strips, review, QA, docs, asset run, `orbital.project.json`).
+- The designers' layout generators are session scratch (`scratchpad\docks\gen2.py`, `final2.py`;
+  `scratchpad\axis\axis_gen.py`, `axis_plan.py`): the layout and plan files are the record.
+- What cost rounds: the generator kept lots 2.5 off a path's end on the centreline (now the laid
+  slab); every lot came back narrow until a size mix was required; a developed outer row cleared the
+  regolith under the beam (now band wild is cleared by nothing; `clear.parcel` cannot go under 1.3).
 - PowerShell trap met twice: variables are case-insensitive (`$c` and `$C` are one variable), and a
   string piped to a native exe gets a BOM. Use Bash for pipes into git.
 

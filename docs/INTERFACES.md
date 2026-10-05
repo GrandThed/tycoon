@@ -7570,3 +7570,57 @@ data byte-identical. 28 draft blueprints exist (`colony-kit`, `regolith-kit`).
 - **For the client in wave 4.2:** `Fabric.buildMask` skips the ring rects when
   `highway.clearBand == false`; types for `road.tiles.dock` and `highway.clearBand`; Orbital joins
   `check_mirror.py`. Docking is a tools rule and needs no client code.
+
+### Rulings after the first layouts (lead, 2026-10-05)
+
+- **Lots against a landmark's path:** in a docked era a tube lot keeps `parcels.spur` off the **laid**
+  footpath, not off the path's end on the centreline. A join no longer costs the far-side row 3.6
+  studs (axis measured 92 → 99 in a scratch run). Other eras do not move.
+- **`parcels.lanes.lines[].front`** (`"left"` | `"right"`, optional): fixes which side a lane's row
+  answers to; absent means the nearest lot, as before.
+- **Wild in the ring band is cleared by nothing** when `highway.clearBand` is false. A developed
+  outer row cleared the band's quarters (lot back at 52, quarter centre at 56, reach 4.8), and
+  `clear.parcel` cannot drop under 1.3 (`check`: margin + `quarterRadius` must cover a quarter's
+  half-diagonal, 4.60). `check` also refuses a street cell or a deck rect in the band.
+- **Sizes are mixed:** each candidate seats at least 12 small or medium lots, at least 4 medium, so
+  the glass domes appear. The mix costs one lot on either candidate.
+- **Second narrow props** `FabricIndNarrowB`, `FabricSciNarrowB`, `FabricPortNarrowB` (config
+  applied): a row of one district alternates two buildings.
+- **Growth is even:** both sides of the colony are growing by tier 3.
+
+### State at the gate (lead, 2026-10-05)
+
+| | Docks (`m12-orbital-docks`, cf4050a) | Axis (`m12-orbital-axis`, 3cb4123) |
+|---|---|---|
+| Lots at full build | **108**: 89 narrow, 15 small, 4 medium; all on tubes | **97**: 74 narrow, 19 small, 4 medium; 57 on tubes, 40 on six lanes |
+| Houses / sites by tier 1–4, full | 7/13, 31/23, 61/16, 86/6, 108/0 | 5/2, 34/8, 67/7, 86/4, 97/0 |
+| Tubes | cross tube z −42, four avenues x ±14, ±42; 64 tile cells, 6 polylines | cross tube z −42, three avenues x 0, ±28, a T under the Launch Tower; 50 tile cells |
+| Launch Tower | back of the centre block, on the entrance axis, no tube leading to it | closes the centre tube |
+| Bare ground inside the ring | 1,441 studs² (13%) | 2,300 studs² (21%) |
+| Wild entries | 96 of 110 | 103 of 110 |
+| `pull` | radius 52, tierTerm 0.2, thresholds [0.05, 1.62, 1.72, 1.79], reach 30 | radius 121, tierTerm 0.55, thresholds [1.2, 3.9, 4.3, 6.8], reach 30 |
+| Reads as | a comb of four white pipes, every row docked, long even rows | a town with a main street: domes at the corners, back lanes barely seen |
+
+Every gate is green on both branches: `fabric.py check` for all four eras, `streetplan.py`,
+`cityfabric.py selftest` and `timeline` (no FRAGILE, no shrink over 63 moments), stylua, selene,
+`check_compile.py`, a Rojo build. On base (`04b2d83`) `check_mirror.py --strict` agrees for its three
+eras and the three shipped eras' fabric data is byte-identical. Sheet: `assets/testfit/out/OrbitalColony/m12o_compare.png`.
+
+Known weak points:
+- Docks: the east outer avenue's last 12 lots wait for the Spaceport Terminal (purchase 22); the
+  west outer avenue is the least visible tube (about 28%); three street-side seats stay empty until
+  purchases 17, 20 and 23 (the city-changer candidates).
+- Axis: the head of the centre tube arrives only in tier 5; no glass dome stands on the axis; the
+  east avenue is half hidden by its outer row; 330 studs² behind the five head landmarks have no
+  frontage; a far plot draws 57 tube lots and 3 lane lots.
+- Both: about half the tube network shows from the tycoon camera at full build. The fresh plot is a
+  dense field of rust regolith, and the clumps' four-fold repeat shows.
+
+Asks held for after Ben's pick (not built): a 0.5 gap between back-to-back mediums (one more dome in
+Docks' heart); a per-run size list in `fabric.py` in place of `keepClear` slivers; a second small
+prop for industry, science and port; `wild.clumpQuarters`; a low front step on fabric props.
+
+For the client in wave 4.2, complete list: `Fabric.buildMask` skips the ring rects when
+`highway.clearBand == false`; `Fabric.clearedFlags` never clears a quarter or single on a ring cell
+then (`cityfabric.ring_keeps`); types for `road.tiles.dock` and `highway.clearBand`; Orbital joins
+`check_mirror.py` with `ring_clears` and `ring_keeps` vectors.
