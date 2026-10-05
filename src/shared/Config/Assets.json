@@ -8397,6 +8397,22 @@
           }
         ]
       },
+      "BusShelterM": {
+        "stages": [
+          {
+            "modelAssetId": 120691326749979,
+            "parts": [
+              {
+                "kit": "metro-transit-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.0, 2.95, 1.36],
+                "offset": [0.0, 1.475, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "BushA": {
         "stages": [
           {
@@ -8424,6 +8440,1158 @@
                 "imageId": 86687282637390,
                 "size": [1.1176, 0.972, 1.0243],
                 "offset": [-0.0005, 0.486, -0.0071]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricOfficeNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 70823039150099,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 140070984235640,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 119327055359079,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.68, 8.0],
+                "offset": [0.0, 3.34, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79200777670439,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 9.88, 8.0],
+                "offset": [0.0, 4.94, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 120407318927755,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 13.97, 8.0],
+                "offset": [0.0, 6.985, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricOfficeNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 113059319548826,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 132764252632896,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138411123320568,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.25, 8.0],
+                "offset": [0.0, 3.625, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 135711303224885,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.45, 8.0],
+                "offset": [0.0, 5.225, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 74957160850347,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 14.01, 8.0],
+                "offset": [0.0, 7.005, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricOfficeSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 103267915981485,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98243048587958,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.08, 6.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 82803033510372,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 8.95, 6.0],
+                "offset": [0.0, 4.475, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109900310106553,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.15, 6.0],
+                "offset": [0.0, 6.075, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 114283230525722,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.32, 6.0],
+                "offset": [0.0, 8.66, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricOfficeSmallB": {
+        "stages": [
+          {
+            "modelAssetId": 116514236493817,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 80327493374878,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.08, 6.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 136068818811480,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 8.9, 6.0],
+                "offset": [0.0, 4.45, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 84587243419547,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.1, 6.0],
+                "offset": [0.0, 6.05, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 126604795041785,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.42, 6.0],
+                "offset": [0.0, 8.71, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 101754848320119,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 90695649309776,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101847836751476,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.3, 8.0],
+                "offset": [0.0, 3.65, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137073793439598,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.5, 8.0],
+                "offset": [0.0, 5.25, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 135084679403951,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 13.97, 8.0],
+                "offset": [0.0, 6.985, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResNarrowAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 120112750830561,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 100755229880078,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.152, 8.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 81554896468061,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.54, 8.0],
+                "offset": [0.0, 3.77, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 119659703334435,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.74, 8.0],
+                "offset": [0.0, 5.37, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 133834972128411,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 13.95, 8.0],
+                "offset": [0.0, 6.975, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 128320141905213,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72443409506023,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 80203750426549,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.25, 8.0],
+                "offset": [0.0, 3.625, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 90416268764435,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.45, 8.0],
+                "offset": [0.0, 5.225, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 105309336203792,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 14.07, 8.0],
+                "offset": [0.0, 7.035, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResNarrowBGreen": {
+        "stages": [
+          {
+            "modelAssetId": 131631126263514,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 103733003532891,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.152, 8.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 136992298798362,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.54, 8.0],
+                "offset": [0.0, 3.77, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 113244587391395,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.74, 8.0],
+                "offset": [0.0, 5.37, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76845261263417,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 13.94, 8.0],
+                "offset": [0.0, 6.97, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 77889753038277,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89594938930459,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.08, 6.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121848158470552,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 8.9, 6.0],
+                "offset": [0.0, 4.45, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 78494945615403,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.1, 6.0],
+                "offset": [0.0, 6.05, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 77024181949195,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.45, 6.0],
+                "offset": [0.0, 8.725, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResSmallAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 130963657589248,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 126687876785363,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.152, 6.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138817316623032,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 9.14, 6.0],
+                "offset": [0.0, 4.57, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 133771877475476,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.34, 6.0],
+                "offset": [0.0, 6.17, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 94796627598132,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.15, 6.0],
+                "offset": [0.0, 8.575, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResSmallB": {
+        "stages": [
+          {
+            "modelAssetId": 89891609252470,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 129680608329781,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.08, 6.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 117726992481530,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 8.9, 6.0],
+                "offset": [0.0, 4.45, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121187896059456,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.1, 6.0],
+                "offset": [0.0, 6.05, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79047740426048,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.5, 6.0],
+                "offset": [0.0, 8.75, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricResSmallBGreen": {
+        "stages": [
+          {
+            "modelAssetId": 104370633552502,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 128957183984717,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.152, 6.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 119631688103241,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 9.14, 6.0],
+                "offset": [0.0, 4.57, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89765485474884,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 12.34, 6.0],
+                "offset": [0.0, 6.17, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87241432913268,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 17.14, 6.0],
+                "offset": [0.0, 8.57, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 75889705050368,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101656961500459,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87017243028170,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.68, 8.0],
+                "offset": [0.0, 3.34, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 138546900804036,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 8.28, 8.0],
+                "offset": [0.0, 4.14, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71896181408935,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.7, 8.0],
+                "offset": [0.0, 5.35, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 133987419730362,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 97967946631898,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.152, 8.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 79965798707337,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.54, 8.0],
+                "offset": [0.0, 3.77, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137114910721109,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 9.14, 8.0],
+                "offset": [0.0, 4.57, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 111633798636235,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.74, 8.0],
+                "offset": [0.0, 5.37, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 122796257984308,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 97465961112264,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.08, 8.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 74526287940731,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.3, 8.0],
+                "offset": [0.0, 3.65, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 72180032623772,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 8.9, 8.0],
+                "offset": [0.0, 4.45, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 129890478302551,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.8, 8.0],
+                "offset": [0.0, 5.4, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopNarrowBGreen": {
+        "stages": [
+          {
+            "modelAssetId": 101073764568867,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.38, 8.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 111168487589939,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.152, 8.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 103981983775983,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.54, 8.0],
+                "offset": [0.0, 3.77, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98768345715378,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 9.14, 8.0],
+                "offset": [0.0, 4.57, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 104859277500394,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.8, 8.0],
+                "offset": [0.0, 5.4, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 96358413983940,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 84346575954525,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.08, 6.0],
+                "offset": [0.0, 2.54, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 93279535012213,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 6.68, 6.0],
+                "offset": [0.0, 3.34, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 97507134411603,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 8.28, 6.0],
+                "offset": [0.0, 4.14, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101691327746063,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 10.75, 6.0],
+                "offset": [0.0, 5.375, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricShopSmallAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 76233129627531,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.38, 6.0],
+                "offset": [0.0, 1.69, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101138183289090,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.152, 6.0],
+                "offset": [0.0, 2.576, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89552419208087,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 7.54, 6.0],
+                "offset": [0.0, 3.77, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71422691231940,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 9.14, 6.0],
+                "offset": [0.0, 4.57, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109460640300317,
+            "parts": [
+              {
+                "kit": "tower-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 10.74, 6.0],
+                "offset": [0.0, 5.37, 0.0]
               }
             ]
           }
@@ -8557,6 +9725,22 @@
           }
         ]
       },
+      "LotHoarding": {
+        "stages": [
+          {
+            "modelAssetId": 119352120805072,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.96, 2.7, 0.36],
+                "offset": [0.0, 1.35, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "MetroEntrance": {
         "stages": [
           {
@@ -8568,6 +9752,150 @@
                 "imageId": 131612791169105,
                 "size": [4.9, 5.98, 5.79],
                 "offset": [0.0, 2.99, 0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownBillboard": {
+        "stages": [
+          {
+            "modelAssetId": 118948537990493,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.96, 5.524, 0.8],
+                "offset": [0.0, 2.762, 0.005]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownClumpA": {
+        "stages": [
+          {
+            "modelAssetId": 103331498525657,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [13.0, 3.56, 13.0],
+                "offset": [0.0, 1.78, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownClumpB": {
+        "stages": [
+          {
+            "modelAssetId": 138104715260766,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.98, 1.3, 12.98],
+                "offset": [0.0, 0.65, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownClumpC": {
+        "stages": [
+          {
+            "modelAssetId": 74646976435359,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.98, 3.57, 12.98],
+                "offset": [0.0, 1.785, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownQuarterA": {
+        "stages": [
+          {
+            "modelAssetId": 95418589733191,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.5, 3.56, 6.5],
+                "offset": [3.25, 1.78, 3.25]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownQuarterB": {
+        "stages": [
+          {
+            "modelAssetId": 87970872081389,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.49, 1.3, 6.49],
+                "offset": [3.245, 0.65, 3.245]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownQuarterC": {
+        "stages": [
+          {
+            "modelAssetId": 137042660985444,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.49, 3.57, 6.49],
+                "offset": [3.245, 1.785, 3.245]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownRubble": {
+        "stages": [
+          {
+            "modelAssetId": 104507979320397,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.75, 0.97, 1.735],
+                "offset": [-0.015, 0.485, -0.03]
+              }
+            ]
+          }
+        ]
+      },
+      "OldTownSkip": {
+        "stages": [
+          {
+            "modelAssetId": 121706980530813,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.9, 0.851, 1.08],
+                "offset": [0.0, 0.425, 0.0]
               }
             ]
           }
@@ -8697,6 +10025,22 @@
           }
         ]
       },
+      "RevealScaffold": {
+        "stages": [
+          {
+            "modelAssetId": 117250009144334,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.94, 8.0, 9.94],
+                "offset": [0.0, 4.0, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "RoadBend": {
         "stages": [
           {
@@ -8788,6 +10132,70 @@
                 "imageId": 130771765354100,
                 "size": [7.0, 0.14, 7.0],
                 "offset": [0.0, 0.07, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteNarrow": {
+        "stages": [
+          {
+            "modelAssetId": 109526196806287,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.9, 3.6, 7.9],
+                "offset": [0.0, 1.8, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteNarrowCrane": {
+        "stages": [
+          {
+            "modelAssetId": 136442156886434,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.9, 11.75, 9.3],
+                "offset": [0.0, 5.875, 0.7]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteSmall": {
+        "stages": [
+          {
+            "modelAssetId": 109877541327628,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.95, 3.6, 5.92],
+                "offset": [-0.025, 1.8, 0.01]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteSmallCrane": {
+        "stages": [
+          {
+            "modelAssetId": 87321446615206,
+            "parts": [
+              {
+                "kit": "oldtown-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.95, 11.75, 9.1],
+                "offset": [-0.025, 5.875, -0.2]
               }
             ]
           }
@@ -8936,6 +10344,22 @@
                 "imageId": 130972008306861,
                 "size": [2.7, 2.34, 5.13],
                 "offset": [0.0, 1.17, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "VehicleCityBus": {
+        "stages": [
+          {
+            "modelAssetId": 139551534265690,
+            "parts": [
+              {
+                "kit": "metro-transit-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.0, 3.7, 10.9],
+                "offset": [0.0, 1.85, 0.0]
               }
             ]
           }
