@@ -6,6 +6,7 @@
   "pieces": [
     {"kit": "colony-kit", "model": "deck-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
     {"kit": "colony-kit", "model": "port-small-a-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "port-small-a-0-u2", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 2},
     {"kit": "colony-kit", "model": "port-small-a-0-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 3},
     {"kit": "colony-kit", "model": "port-small-a-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
     {"kit": "colony-kit", "model": "port-small-a-1-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 3},

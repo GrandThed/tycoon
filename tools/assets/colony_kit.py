@@ -11,28 +11,35 @@ artifact and the GLBs regenerate from it. The geometry and every check are plain
 GLB export needs Blender, so under `py` the script shells out to Blender for that one step
 (`BLENDER=<path>` overrides the executable, as for plotrender.py).
 
-Why a custom kit (docs/CITY_GROWTH.md sections 3 and 4, INTERFACES "Wave 4.1"): the fabric is the
-small buildings the client draws on the lots around a player's landmarks, and they grow pod ->
-pod cluster -> dome as the colony develops. space-kit's modules are 4 studs to a unit at the
-landmarks' scale and every one of them is already a landmark's signature (the hex gate, the
-corridor-end module, the round hangar), and none can grow a floor. So the pieces are generated,
-one look per district, different in silhouette and not only in colour:
+Why a custom kit (docs/CITY_GROWTH.md sections 3 and 4, INTERFACES "Wave 4.1" and "Wave 4.1b"):
+the fabric is the small buildings the client draws on the lots around a player's landmarks, and
+they grow pod -> pod cluster -> dome as the colony develops. space-kit's modules are 4 studs to a
+unit at the landmarks' scale and every one of them is already a landmark's signature (the hex
+gate, the corridor-end module, the round hangar). So the pieces are generated.
 
-- habitat: white vaulted pods with blue stripes, then pods in a cluster, then glass domes that
-  replace each other as they grow (the smaller one leaves with `untilStage`);
-- industry: bullet tanks and silos, orange pipe runs, a refinery column and a flare stack;
-- science: lab modules under long lit strips and solar roofs, dishes, and one slim mast;
-- port: a gatehouse, a pale cargo pad, container stacks, a striped hangar, a gantry crane, a
-  control cab, and (small and medium lots) a parked space-kit cargo craft at the last stages.
+**Round forms only** (Ben at the first gate: box bodies with storey bands of windows read as
+Metropolis's towers, whatever stood on the roof). Every building is made of capsules, drums,
+spheres, domes and vaults, and it grows by adding a round volume, or by being rebuilt wider and
+taller with `untilStage` retiring the smaller one, never by adding floors. Windows are portholes,
+one glass band on a drum, or a glazed dome or vault. The only boxes are furniture: containers, a
+tug, solar trays, planters. One look per district, different in silhouette and not only in colour:
 
-A layout of narrow lots draws one district's props many times over, so each district has two
-narrow props, A and B, that differ in silhouette at every stage and keep the district's colours:
-where the tall part stands on the 8-deep lot, the roofline, and the signature piece (industry B:
-sphere tanks, a boiler house and a fat stack where A has bullet tanks, a column and a flare;
-science B: a stepped round tower under a radar reflector where A has a long lab, a dish and a
-mast; port B: a striped hangar with a cupola at the back and a fuel apron where A has a control
-cab in front, containers and a gantry). Their stage heights stay within about a stud of each
-other, so a row that alternates them grows evenly.
+- habitat: white pods and capsules with blue stripes and glass domes (a pea pod budding domes, a
+  rotunda with a greenhouse barrel, bubbles stacked on bubbles, a broad dome ringed by petal pods);
+- industry: bullet tanks, silos and spheres, orange pipe runs, refinery columns, stacks;
+- science: capsule labs under glazed spines, dishes on instrument drums, an observatory dome with
+  a cyan shutter, a radar reflector, slim masts;
+- port: a round gatehouse, a pale cargo pad, container stacks, vaulted hangars, a gantry crane, a
+  round control tower, and (small and medium lots) a parked space-kit cargo craft.
+
+A row of narrow lots draws one district's props many times over, so each district has two narrow
+props, A and B, that differ in silhouette at every stage and keep the district's colours: where
+the tall part stands on the 8-deep lot, and the signature piece (habitat A a pea pod with its big
+dome behind, B a rotunda in front of a greenhouse barrel; industry A bullet tanks, a column behind
+and a flare, B spheres, a fat stack in front and a sphere on a stalk; science A a capsule lab with
+its dish and mast behind, B an observatory dome in front; port A a control tower in front,
+containers and a gantry, B a vaulted hangar with a cupola behind a fuel apron). Their stage
+heights stay within about a stud of each other, so a row that alternates them grows evenly.
 
 **Units.** Blueprints use `"scale": 2.0`, so that a space-kit cargo craft comes out at half the
 landmarks' size (3.0 x 1.8 x 5.0 studs) and fits a lot. Every literal below is in **studs** in the
@@ -44,9 +51,9 @@ exactly (the tower-kit pattern). Only the space-kit craft carries a position, co
 its measured bounding box, because space-kit origins are offset.
 
 **Stages.** A piece is `<slug>-<stage>` when it stays for good and `<slug>-<stage>-u<last>` when
-the blueprint retires it after stage <last> (a roof the next storey covers, a dome a larger one
-replaces, crates a craft lands on). Staying pieces are closed boxes and lathes apart from faces on
-the deck or on the roof they stand on, so retiring a piece never opens a hole.
+the blueprint retires it after stage <last> (a pod a wider one replaces, a dome a larger one
+swallows, crates a craft lands on). Every piece is closed apart from faces on the deck or on the
+roof it stands on, so retiring one never opens a hole.
 
 **The contract, enforced by `check`** (a run with a problem exits 1): the prop fits its lot; an
 airlock collar stands flush with the lot front (it docks 0.13 from a tube's ring); a deck plate in
@@ -123,7 +130,7 @@ GAP = 0.05  # parallel faces that overlap stand at least this far apart
 MIN_MEMBER = 0.1  # nothing the camera sees is thinner than this in two dimensions
 MIN_RISE = 0.3  # a stage is at least this much taller than the one before
 D = 0.12  # deck top
-STOREY = 1.5
+POD = 1.5  # a ground pod's wall: the collar's opening (1.46 above the deck) closes against it
 PAD_H = 0.07  # a cargo pad's slab on the deck
 SEG = 8
 PHASE = math.pi / SEG  # vertices at 22.5 + 45k degrees: four of the eight flats face the axes
@@ -285,32 +292,7 @@ def lathe(p: Part, profile, colour, at=(0.0, 0.0, 0.0), top=None, bottom=None, f
         p.face(rings[-1], top, out=(0.0, sign, 0.0))
 
 
-def wall_box(b: Box, face: str, u0, u1, d):
-    """The plan (x0, x1, z0, z1) of a slab d proud of one wall of box b, spanning u0..u1 along it
-    (x on front and back, z on the sides), and the face of it that lies on the wall."""
-    x0, x1, z0, z1 = b
-    if face == "front":
-        return u0, u1, z0 - d, z0, "back"
-    if face == "back":
-        return u0, u1, z1, z1 + d, "front"
-    if face == "left":
-        return x0 - d, x0, u0, u1, "right"
-    return x1, x1 + d, u0, u1, "left"
-
-
-def panel(p: Part, b: Box, face: str, u0, u1, y0, y1, c: Rgb, d: float = GAP, **sides) -> None:
-    """A slab d proud of one wall of box b; the face on the wall is left out."""
-    xa, xb, za, zb, on_wall = wall_box(b, face, u0, u1, d)
-    cube(p, xa, xb, y0, y1, za, zb, c, skip=(on_wall,), **sides)
-
-
-# --- modules ------------------------------------------------------------------------------------
-
-
-def module(p: Part, b: Box, y0, y1, wall: Rgb = HULL, roof: Rgb = PANEL) -> None:
-    """A storey: a closed box standing on the deck or on the roof below."""
-    x0, x1, z0, z1 = b
-    cube(p, x0, x1, y0, y1, z0, z1, wall, skip=("bottom",), top=roof)
+# --- collars, pods and capsules ---------------------------------------------------------------------
 
 
 def band(p: Part, b: Box, y0, y1, c: Rgb, butt=()) -> None:
@@ -323,23 +305,6 @@ def band(p: Part, b: Box, y0, y1, c: Rgb, butt=()) -> None:
     za = z0 + GAP if "front" in butt else z0 - GAP
     zb = z1 - GAP if "back" in butt else z1 + GAP
     cube(p, xa, xb, y0, y1, za, zb, c, skip=tuple(butt))
-
-
-def lights(p: Part, b: Box, face: str, y0, y1, spans, c: Rgb = LIT) -> None:
-    for u0, u1 in spans:
-        panel(p, b, face, u0, u1, y0, y1, c)
-
-
-def storey(p: Part, b: Box, y0, y1, stripe: Rgb | None, front=(), back=(), left=(), right=(),
-           strip: bool = False, butt=()) -> None:
-    """A module with its district stripe under the roof line and lit windows on each wall (spans
-    along the wall). `strip` makes the windows one low band: the lab look."""
-    module(p, b, y0, y1)
-    if stripe:
-        band(p, b, y1 - 0.34, y1 - 0.16, stripe, butt)
-    wy = (y0 + 0.62, y0 + 0.9) if strip else (y0 + 0.5, y0 + 0.95)
-    for face, spans in (("front", front), ("back", back), ("left", left), ("right", right)):
-        lights(p, b, face, wy[0], wy[1], spans)
 
 
 def airlock(prop: "Prop", p: Part, cx: float) -> None:
@@ -365,31 +330,85 @@ def airlock(prop: "Prop", p: Part, cx: float) -> None:
     prop.airlocks.append((cx, z0))
 
 
-def vault_section(u0, u1, y0, rise):
-    hw, cu = (u1 - u0) / 2, (u0 + u1) / 2
-    return [(cu - hw, y0), (cu + hw, y0), (cu + hw * 0.8, y0 + rise * 0.62), (cu + hw * 0.42, y0 + rise),
-            (cu - hw * 0.42, y0 + rise), (cu - hw * 0.8, y0 + rise * 0.62)]
+DOCK = 0.25  # a docked pod's front stands this far behind the lot front: its stripes clear the collar's door
 
 
-def vault(p: Part, b: Box, y0, rise, c: Rgb = HULL, ridge: Rgb | None = PANEL, axis: str = "z") -> None:
-    """A pod's arched roof over box b: closed at both ends, open underneath (it stands on a roof)."""
-    x0, x1, z0, z1 = b
-    u0, u1, a0, a1 = (x0, x1, z0, z1) if axis == "z" else (z0, z1, x0, x1)
-    extrude(p, vault_section(u0, u1, y0, rise), axis, a0, a1, [c, c, c, ridge or c, c, c], cap0=c, cap1=c,
-            skip=(0,))
+def dock(prop: "Prop", w: float) -> float:
+    """The z centre of a drum w wide that carries the airlock collar: its front flat stands DOCK
+    behind the lot front, so the collar runs 0.35 into the drum and its opening closes against it."""
+    return -prop.d / 2 + DOCK + w / 2
 
 
-def glass_vault(p: Part, b: Box, y0, rise, bays: int) -> None:
-    """A greenhouse barrel along Z: glass bays in two blues between white end frames, a white spine."""
-    x0, x1, z0, z1 = b
-    sect = vault_section(x0, x1, y0, rise)
-    end = 0.3
-    cuts = [z0, z0 + end] + [z0 + end + (z1 - z0 - 2 * end) * i / bays for i in range(1, bays)] + [z1 - end, z1]
-    for i in range(len(cuts) - 1):
-        frame = i in (0, len(cuts) - 2)
-        g = HULL if frame else (GLASS, GLASS_DEEP)[i % 2]
-        extrude(p, sect, "z", cuts[i], cuts[i + 1], [g, g, g, HULL, g, g],
-                cap0=HULL if i == 0 else None, cap1=HULL if i == len(cuts) - 2 else None, skip=(0,))
+ARCH = (35.0, 65.0)  # a pod's arch in two bands; it closes with a flat ridge
+
+
+def pod_profile(hw, sill, rise):
+    """(half width, height) up one side of a pod: a straight wall `sill` tall, then an arch of
+    `rise` that stops at a flat ridge. The same profile is the pod's cross-section and, turned
+    about the vertical, its rounded end."""
+    top = math.sin(math.radians(ARCH[-1]))
+    wall = [(hw, 0.0), (hw, sill)] if sill > 0 else [(hw, 0.0)]
+    return wall + [(hw * math.cos(math.radians(a)), sill + rise * math.sin(math.radians(a)) / top) for a in ARCH]
+
+
+def half_dome(p: Part, axis: str, a, s, cu, y0, prof, c: Rgb, top: Rgb) -> None:
+    """The rounded end of a pod: half an 8-sided dome on profile `prof`, bulging toward s (-1 or
+    +1) along `axis` from the plane at a. Its two outer half-flats continue the pod's walls."""
+    k = 1.0 / math.cos(PHASE)
+    fan = [(0.0, 1.0)] + [(22.5 + 45.0 * j, k) for j in range(4)] + [(180.0, 1.0)]  # (angle, radius factor)
+
+    def pt(r, y, ang, f):
+        u = cu + r * f * math.cos(math.radians(ang))
+        v = a + s * r * f * math.sin(math.radians(ang))
+        return (u, y0 + y, v) if axis == "z" else (v, y0 + y, u)
+
+    centre = pt(prof[0][0] * 0.2, prof[-1][1] * 0.3, 90.0, 1.0)
+    for i in range(len(prof) - 1):
+        (r0, ya), (r1, yb) = prof[i], prof[i + 1]
+        for (g0, f0), (g1, f1) in zip(fan, fan[1:]):
+            p.face([pt(r0, ya, g0, f0), pt(r0, ya, g1, f1), pt(r1, yb, g1, f1), pt(r1, yb, g0, f0)], c, centre=centre)
+    r, y = prof[-1]
+    p.face([pt(r, y, g, f) for g, f in fan], top, out=(0.0, 1.0, 0.0))
+
+
+def capsule(p: Part, axis: str, a0, a1, cu, y0, w, sill, rise, c: Rgb = HULL, ridge: Rgb | None = None,
+            round0: bool = True, round1: bool = True, bays: int = 0) -> float:
+    """A pod lying along `axis` from a0 to a1, w wide: straight walls `sill` tall under an arch of
+    `rise`, each end rounded into a half dome (or cut flat, where it runs into something). `ridge`
+    colours the flat ridge (a glazed spine); `bays` glazes the arch of the straight part in that
+    many bays of two blues (a greenhouse). Open underneath: it stands on the deck. Returns the top."""
+    hw = w / 2
+    prof = pod_profile(hw, sill, rise)
+    m = len(prof) - 1
+    sect = [(cu + r, y0 + y) for r, y in prof] + [(cu - r, y0 + y) for r, y in reversed(prof)]
+    b0, b1 = a0 + (hw if round0 else 0.0), a1 - (hw if round1 else 0.0)
+    n = max(bays, 1)
+    cuts = [b0 + (b1 - b0) * i / n for i in range(n + 1)]
+    for i in range(n):
+        arch = (GLASS, GLASS_DEEP)[i % 2] if bays else c
+        side = ([c] if sill > 0 else []) + [arch] * len(ARCH)
+        extrude(p, sect, axis, cuts[i], cuts[i + 1], side + [ridge or c] + side[::-1] + [c],
+                cap0=c if i == 0 and not round0 else None, cap1=c if i == n - 1 and not round1 else None,
+                skip=(2 * m + 1,))
+    for a, s, on in ((b0, -1.0, round0), (b1, 1.0, round1)):
+        if on:
+            half_dome(p, axis, a, s, cu, y0, prof, c, ridge or c)
+    return y0 + sill + rise
+
+
+def belt(p: Part, axis: str, a, cu, y0, w, sill, rise, c: Rgb, width: float = 0.3) -> None:
+    """A stripe GAP proud round a capsule of these measures, `width` along it at a."""
+    prof = pod_profile(w / 2 + GAP, sill, rise + GAP)
+    sect = [(cu + r, y0 + y) for r, y in prof] + [(cu - r, y0 + y) for r, y in reversed(prof)]
+    extrude(p, sect, axis, a - width / 2, a + width / 2, c, cap0=c, cap1=c, skip=(len(sect) - 1,))
+
+
+def porthole(p: Part, axis: str, a, wall, side, y, r: float = 0.3, c: Rgb = LIT) -> None:
+    """A round window GAP proud of the straight wall of a capsule that runs along `axis`: the wall
+    stands at lateral `wall` and faces `side` (-1 or +1). A grey rim and a lit pane."""
+    lo, hi = sorted((wall, wall + side * GAP))
+    extrude(p, octagon(a, y, r), "x" if axis == "z" else "z", lo, hi, RING, cap0=c if side < 0 else None,
+            cap1=c if side > 0 else None)
 
 
 # --- round things -------------------------------------------------------------------------------
@@ -411,20 +430,14 @@ def hoop(p: Part, cx, cz, y0, y1, w, c: Rgb) -> None:
     lathe(p, [(r, 0.0), (r, y1 - y0)], c, at=(cx, y0, cz), top=c)
 
 
-def facet_panel(p: Part, cx, cz, w, y0, y1, turn: float, half: float, c: Rgb = LIT) -> None:
-    """A slab GAP proud of one flat of a drum of width w: `turn` 0 is the +X flat, 90 +Z, 270 -Z."""
-    sub = Part("")
-    cube(sub, w / 2, w / 2 + GAP, y0, y1, -half, half, c, skip=("left",))
-    p.add(sub, turn, (cx, 0.0, cz))
-
-
-def pod(p: Part, cx, cz, y0, w, h, stripe: Rgb | None, windows=(0, 90, 180, 270), half=None) -> None:
-    """A round pod: a white drum with its district stripe and a lit window on the named flats."""
+def pod(p: Part, cx, cz, y0, w, h, stripe: Rgb | None, glass=(0.5, 0.95)) -> None:
+    """A round pod: a white drum with one glass band (heights above y0) and its district stripe
+    under the roof line. Never rows of windows: a pod grows by being rebuilt wider, not by floors."""
     drum(p, cx, cz, y0, w, h)
+    if glass:
+        hoop(p, cx, cz, y0 + glass[0], y0 + glass[1], w, GLASS)
     if stripe:
         hoop(p, cx, cz, y0 + h - 0.36, y0 + h - 0.16, w, stripe)
-    for turn in windows:
-        facet_panel(p, cx, cz, w, y0 + 0.45, y0 + min(0.9, h - 0.42), turn, half or w * 0.14)
 
 
 def dome_profile(r, y0, y1, bands, a_max=70.0):
@@ -435,12 +448,15 @@ def dome_profile(r, y0, y1, bands, a_max=70.0):
             for i in range(bands + 1)]
 
 
-def dome(p: Part, cx, cz, y0, w, h, bands: int = 3, ring: float = 0.25, ribs: bool = True) -> None:
-    """A glass dome w across and h tall on a white base ring: panes in two blues, a white cap and
-    white ribs GAP proud of the eight meridians (0.14 wide, so they hold at the tycoon camera)."""
+def dome(p: Part, cx, cz, y0, w, h, bands: int = 3, ring: float = 0.25, ribs: bool = True,
+         panes=(GLASS, GLASS_DEEP), slit=None) -> None:
+    """A dome w across and h tall on a white base ring: panes in two colours (glass by default), a
+    white cap and white ribs GAP proud of the eight meridians (0.14 wide, so they hold at the tycoon
+    camera). `slit` = (facet, colour) paints one facet from rim to cap: an observatory's shutter
+    (facet 5 faces the lot front)."""
     lathe(p, [(rad(w), 0.0), (rad(w), ring)], HULL, at=(cx, y0, cz), top=HULL)
     prof = dome_profile(rad(w - 0.16), ring, h, bands)
-    lathe(p, prof, lambda k, i: (GLASS, GLASS_DEEP)[(k + i) % 2], at=(cx, y0, cz), top=HULL)
+    lathe(p, prof, lambda k, i: slit[1] if slit and k == slit[0] else panes[(k + i) % 2], at=(cx, y0, cz), top=HULL)
     if not ribs:
         return
     for k in range(SEG):
@@ -454,16 +470,6 @@ def dome(p: Part, cx, cz, y0, w, h, bands: int = 3, ring: float = 0.25, ribs: bo
             quad = [(cx + (r + nr) * ca - s * 0.07 * sa, y0 + yy + ny, cz + (r + nr) * sa + s * 0.07 * ca)
                     for r, yy, s in ((r0, ya, -1), (r0, ya, 1), (r1, yb, 1), (r1, yb, -1))]
             p.face(quad, HULL, out=(ca * nr, ny, sa * nr))
-
-
-def core(p: Part, cx, cz, y0, y1, w, rows, stripe: Rgb = HAB) -> None:
-    """The white tower that rises through a bubble: lit windows in rows, a stripe, a glass cap."""
-    drum(p, cx, cz, y0, w, y1 - y0)
-    hoop(p, cx, cz, y1 - 0.36, y1 - 0.16, w, stripe)
-    for yy in rows:
-        for turn in (0, 90, 180, 270):
-            facet_panel(p, cx, cz, w, yy, yy + 0.45, turn, w * 0.2)
-    dome(p, cx, cz, y1, w, w * 0.52, bands=2, ring=0.15, ribs=False)
 
 
 def tank_v(p: Part, cx, cz, y0, w, h, stripe: Rgb | None = TRIM, at: float = 0.45) -> None:
@@ -679,28 +685,31 @@ def end_slab(p: Part, axis: str, a, s, d0, d1, u0, u1, y0, y1, c: Rgb) -> None:
         cube(p, lo, hi, y0, y1, u0, u1, c, skip=("right" if s < 0 else "left",))
 
 
-def hangar(p: Part, b: Box, y0, hs, h, axis: str = "z", door_end: int = 0) -> None:
-    """A cargo hangar: white walls to hs, a grey roof that folds up to a flat top at h, and on one
-    end a grey roller door with two orange stripes under a lit strip. The upper stripe runs on
-    round the walls, and the far end has two lit windows."""
+def hangar(p: Part, b: Box, y0, sill, rise, axis: str = "z", door_end: int = 0) -> float:
+    """A vaulted cargo hangar over box b: white walls `sill` tall under a grey barrel vault of
+    `rise`, and on one end a grey roller door with two orange stripes under a lit strip. An orange
+    stripe runs round the foot of the walls, and the far end has two lit portholes. Returns the top."""
     x0, x1, z0, z1 = b
     u0, u1, a0, a1 = (x0, x1, z0, z1) if axis == "z" else (z0, z1, x0, x1)
-    ch = 0.26 * (u1 - u0)
-    sect = [(u0, y0), (u1, y0), (u1, y0 + hs), (u1 - ch, y0 + h), (u0 + ch, y0 + h), (u0, y0 + hs)]
-    extrude(p, sect, axis, a0, a1, [HULL, HULL, PANEL, PANEL, PANEL, HULL], cap0=HULL, cap1=HULL, skip=(0,))
+    hw, cu = (u1 - u0) / 2, (u0 + u1) / 2
+    crown = math.sin(math.radians(72))
+    arch = [(cu + hw * math.cos(math.radians(a)), y0 + sill + rise * min(1.0, math.sin(math.radians(a)) / crown))
+            for a in (0, 36, 72, 108, 144, 180)]
+    extrude(p, [(u0, y0), (u1, y0)] + arch, axis, a0, a1, [HULL, HULL] + [PANEL] * 5 + [HULL], cap0=HULL, cap1=HULL,
+            skip=(0,))
     a, s = (a0, -1) if door_end == 0 else (a1, 1)
-    cu, dw, dh = (u0 + u1) / 2, 0.3 * (u1 - u0), hs * 0.9
+    dw, dh = 0.3 * (u1 - u0), sill + 0.3 * rise
     end_slab(p, axis, a, s, 0.0, GAP, cu - dw, cu + dw, y0, y0 + dh, PANEL)
     for k in (0.22, 0.58):
         end_slab(p, axis, a, s, GAP, 2 * GAP, cu - dw, cu + dw, y0 + dh * k, y0 + dh * k + 0.22, TRIM)
     end_slab(p, axis, a, s, 0.0, GAP, cu - dw, cu + dw, y0 + dh + 0.12, y0 + dh + 0.36, LIT)
     door_side = {("z", 0): "front", ("z", 1): "back", ("x", 0): "left", ("x", 1): "right"}[(axis, door_end)]
-    band(p, b, y0 + dh * 0.58, y0 + dh * 0.58 + 0.22, TRIM, butt=(door_side,))
-    far = a1 if door_end == 0 else a0
-    drop = max(0.0, 0.95 + 0.08 - dh * 0.58)  # a low hangar's windows move down, clear of the stripe
-    for k in (-0.5, 0.5):
-        end_slab(p, axis, far, -s, 0.0, GAP, cu + k * dw * 2 - 0.4, cu + k * dw * 2 + 0.4, y0 + 0.5 - drop,
-                 y0 + 0.95 - drop, LIT)
+    band(p, b, y0 + 0.25, y0 + 0.47, TRIM, butt=(door_side,))
+    far, lo, hi = (a1, a1, a1 + GAP) if door_end == 0 else (a0, a0 - GAP, a0)
+    for k in (-1, 1):
+        extrude(p, octagon(cu + k * dw, y0 + 0.95, 0.28), axis, lo, hi, RING, cap0=LIT if far == a0 else None,
+                cap1=LIT if far == a1 else None)
+    return y0 + sill + rise
 
 
 def gantry(p: Part, x0, x1, zc, y0, yb, load_x, load: Rgb | None, drop: float = 1.3) -> float:
@@ -725,14 +734,13 @@ def tug(p: Part, x, z, y) -> None:
     extrude(p, octagon(x, y + 0.6, rad(0.6)), "z", z - 0.85, z + 0.2, HULL, cap0=PANEL, cap1=PANEL)
 
 
-def control_cab(p: Part, shaft: Box, cab: Box, y0, y1, y2) -> float:
-    """A control tower on a roof: a white shaft from y0 to y1, then a wider cab to y2 with a glass
+def tower(p: Part, cx, cz, y0, y1, y2, shaft: float = 1.2, cab: float = 2.2) -> float:
+    """A control tower: a round white shaft from y0 to y1, then a wider round cab to y2 with a glass
     band all round, a grey roof and a lit beacon. Returns the top."""
-    module(p, shaft, y0, y1)
-    x0, x1, z0, z1 = cab
-    cube(p, x0, x1, y1, y2, z0, z1, HULL, top=PANEL)
-    band(p, cab, y1 + 0.3, y2 - 0.25, GLASS)
-    return beacon(p, (x0 + x1) / 2, (z0 + z1) / 2, y2)
+    drum(p, cx, cz, y0, shaft, y1 - y0)
+    lathe(p, [(rad(cab), 0.0), (rad(cab), y2 - y1)], HULL, at=(cx, y1, cz), top=PANEL, bottom=PANEL)
+    hoop(p, cx, cz, y1 + 0.3, y2 - 0.25, cab, GLASS)
+    return beacon(p, cx, cz, y2)
 
 
 # --- props --------------------------------------------------------------------------------------
@@ -786,244 +794,230 @@ class Prop:
         return [c for c in self.kenney if c["stage"] <= k and (c["until"] is None or k <= c["until"])]
 
 
-def floors() -> list[float]:
-    """Floor lines from the deck up."""
-    return [D + STOREY * k for k in range(6)]
-
-
 def hab_narrow_a(P: Prop) -> None:
-    """A terrace pod under a vault; the back half gains a storey and a roof garden, then carries
-    a dome that is replaced by a larger one at each stage, and the low front keeps its garden."""
-    body = (-1.95, 1.95, -3.5, 3.6)
-    front = (-1.95, 1.95, -3.5, -0.6)
-    rear = (-1.95, 1.95, -0.6, 3.6)
-    y = floors()
-    fs, rs = [(-2.9, -1.9)], [(0.4, 1.4), (2.0, 3.0)]
-    p = P.part(0)
-    bk = [(-1.3, -0.3), (0.3, 1.3)]
-    storey(p, body, y[0], y[1], HAB, front=[(-1.7, -1.15), (1.15, 1.7)], left=fs + rs, right=fs + rs, back=bk)
-    airlock(P, p, 0.0)
-    vault(P.part(0, 0), body, y[1], 0.9)
-    storey(P.part(1), rear, y[1], y[2], HAB, front=[(-1.5, -0.4), (0.4, 1.5)], left=rs, right=rs, back=bk)
-    planter(P.part(1, 1), -1.5, 1.5, 0.2, 0.9, y[2])
-    tank_v(P.part(1, 1), 0.9, 2.6, y[2], 1.0, 0.6, None)
-    planter(P.part(1, 2), -1.6, 1.6, -3.2, -2.5, y[1])
-    dome(P.part(2, 2), 0.0, 1.5, y[2], 3.3, 1.7, bands=2)
-    p = P.part(3)
-    storey(p, rear, y[2], y[3], HAB, front=[(-1.5, -0.4), (0.4, 1.5)], left=rs, right=rs, back=bk)
-    storey(p, front, y[1], y[2], HAB, front=[(-1.5, -0.4), (0.4, 1.5)], left=fs, right=fs, butt=("back",))
-    dome(P.part(3, 3), 0.0, 1.5, y[3], 3.5, 1.85)
-    planter(P.part(3, 3), -1.6, 1.6, -3.2, -2.5, y[2])
+    """A white pea pod along the lot, then rebuilt at full length; glass domes bud through its
+    ridge like peas, the one at the back swallowed by a wider one at every stage until it stands on
+    its own drum under a lantern. Low in front, tall behind."""
+    zf = -P.d / 2
+    airlock(P, P.part(0), 0.0)
+    q = P.part(0, 0)
+    capsule(q, "z", zf + DOCK, 1.0, 0.0, D, 3.2, 0.9, 1.1)
+    belt(q, "z", -0.9, 0.0, D, 3.2, 0.9, 1.1, HAB)
+    for s in (-1, 1):
+        porthole(q, "z", -1.8, s * 1.6, s, D + 0.5)
+    planter(q, -1.4, 1.4, 1.9, 2.6, D)
+    p = P.part(1)
+    capsule(p, "z", zf + DOCK, 3.8, 0.0, D, 3.4, 1.0, 1.3)
+    for z in (-1.75, 1.75):
+        belt(p, "z", z, 0.0, D, 3.4, 1.0, 1.3, HAB)
+    for s in (-1, 1):
+        for z in (-0.9, 0.5):
+            porthole(p, "z", z, s * 1.7, s, D + 0.55)
+    dome(P.part(1, 1), 0.0, 1.5, 2.0, 2.2, 1.25, bands=2)
+    dome(P.part(2, 2), 0.0, 1.6, 1.9, 3.0, 1.9)
+    dome(P.part(2, 3), 0.0, -1.3, 2.05, 2.0, 1.1, bands=2)
+    dome(P.part(3, 3), 0.0, 1.7, 1.8, 3.4, 2.5)
     p = P.part(4)
-    storey(p, rear, y[3], y[4], HAB, front=[(-1.5, -0.4), (0.4, 1.5)], left=rs, right=rs, back=bk)
-    dome(p, 0.0, 1.5, y[4], 3.7, 1.9)
-    dome(p, 0.0, -2.05, y[2], 2.6, 1.35, bands=2)
+    pod(p, 0.0, 2.05, D, 3.6, 2.6, HAB, glass=(1.2, 1.7))
+    dome(p, 0.0, 2.05, D + 2.6, 3.6, 2.3)
+    drum(p, 0.0, 2.05, 4.85, 1.4, 0.5)
+    dome(p, 0.0, 2.05, 5.35, 1.4, 0.8, bands=2, ring=0.15, ribs=False)
+    dome(p, 0.0, -1.3, 2.0, 2.4, 1.4, bands=2)
 
 
 def hab_narrow_b(P: Prop) -> None:
-    """A terrace pod with a greenhouse behind it: the front climbs under a white vault and ends in
-    a small dome, the back grows from a store into a long glass barrel."""
-    front = (-1.95, 1.95, -3.5, -0.4)
-    rear = (-1.95, 1.95, -0.4, 3.6)
-    y = floors()
-    fs, rs = [(-2.9, -1.9), (-1.6, -0.7)], [(0.3, 1.3), (1.9, 2.9)]
-    win = [(-1.5, -0.4), (0.4, 1.5)]
-    p = P.part(0)
-    storey(p, front, y[0], y[1], HAB, front=[(-1.7, -1.15), (1.15, 1.7)], left=fs, right=fs)
-    airlock(P, p, 0.0)
-    module(p, rear, D, D + 1.0)
-    vault(P.part(0, 1), front, y[1], 0.9)
-    r = P.part(0, 0)
-    planter(r, -1.6, 0.2, 0.3, 1.1, D + 1.0)
-    tank_v(r, 1.0, 2.5, D + 1.0, 1.1, 1.15, HAB)
-    p = P.part(1)
-    module(p, rear, D + 1.0, y[1])
-    lights(p, rear, "left", D + 0.5, D + 0.95, rs)
-    lights(p, rear, "right", D + 0.5, D + 0.95, rs)
-    glass_vault(P.part(1, 2), rear, y[1], 1.5, 3)
-    storey(P.part(2), front, y[1], y[2], HAB, front=win, left=fs, right=fs)
-    vault(P.part(2, 2), front, y[2], 0.9)
-    p = P.part(3)
-    storey(p, front, y[2], y[3], HAB, front=win, left=fs, right=fs)
-    storey(p, rear, y[1], y[2], HAB, left=rs, right=rs, back=[(-1.3, -0.3), (0.3, 1.3)], butt=("front",))
-    glass_vault(p, rear, y[2], 1.5, 3)
-    vault(P.part(3, 3), front, y[3], 0.9)
+    """A round pod in front and a greenhouse barrel behind it; both are rebuilt wider and taller,
+    the pod under a glass dome that ends as a rotunda with a spire. Tall in front where A is tall
+    behind."""
+    airlock(P, P.part(0), 0.0)
+    z0 = dock(P, 3.0)
+    pod(P.part(0, 1), 0.0, z0, D, 3.0, POD, HAB)
+    q = P.part(0, 0)
+    cone(q, 0.0, z0, D + POD, 3.0, 0.5)
+    capsule(q, "z", -0.3, 3.8, 0.0, D, 2.6, 0.5, 0.9, bays=2)
+    dome(P.part(1, 1), 0.0, z0, D + POD, 3.0, 1.6, bands=2)
+    capsule(P.part(1, 2), "z", -0.5, 3.8, 0.0, D, 3.4, 0.8, 1.4, bays=2)
+    q = P.part(2, 2)
+    pod(q, 0.0, dock(P, 3.6), D, 3.6, 1.9, HAB, glass=(0.8, 1.3))
+    dome(q, 0.0, dock(P, 3.6), D + 1.9, 3.6, 1.9)
+    capsule(P.part(3), "z", -0.3, 3.8, 0.0, D, 3.8, 1.1, 1.6, round0=False, bays=2)
+    q = P.part(3, 3)
+    pod(q, 0.0, dock(P, 3.8), D, 3.8, 2.4, HAB, glass=(1.0, 1.5))
+    dome(q, 0.0, dock(P, 3.8), D + 2.4, 3.8, 2.1)
     p = P.part(4)
-    storey(p, front, y[3], y[4], HAB, front=win, left=fs, right=fs)
-    dome(p, 0.0, -1.95, y[4], 2.9, 1.45, bands=2)
+    pod(p, 0.0, dock(P, 3.8), D, 3.8, 3.1, HAB, glass=(1.3, 1.9))
+    dome(p, 0.0, dock(P, 3.8), D + 3.1, 3.8, 2.1)
+    mast(p, 0.0, dock(P, 3.8), D + 5.15, 0.55, arms=(), tip=HAB)
 
 
 def hab_small_a(P: Prop) -> None:
-    """A round pod, then a cluster of three with an upper pod, a first dome on it, and at last a
-    bubble over the whole cluster with a white core rising through it."""
-    cx, cz = 0.0, 0.55
-    vest = (-0.85, 0.85, -2.5, cz - 1.6)  # up to the pod's front flat
-    y1 = D + STOREY
+    """A round pod under a glass dome; two more bud beside it; the middle one is rebuilt wider under
+    a taller dome, and then domes stand on domes: a bubble on a bubble on a bubble."""
     p = P.part(0)
-    module(p, vest, D, y1)
-    band(p, vest, y1 - 0.34, y1 - 0.16, HAB, butt=("back",))
     airlock(P, p, 0.0)
     planter(p, 1.9, 2.9, -2.9, -2.3, D)
     planter(p, -2.9, -1.9, -2.9, -2.3, D)
-    pod(P.part(0, 2), cx, cz, D, 3.2, STOREY, HAB, windows=(0, 90, 180), half=0.45)
-    cone(P.part(0, 0), cx, cz, y1, 3.2, 0.6)
-    q = P.part(1, 3)
+    z0 = dock(P, 3.2)
+    pod(P.part(0, 1), 0.0, z0, D, 3.2, POD, HAB)
+    dome(P.part(0, 0), 0.0, z0, D + POD, 3.2, 1.3, bands=2)
+    p = P.part(1)
     for sx in (-1, 1):
-        pod(q, sx * 1.9, 1.9, D, 2.0, 1.2, HAB, windows=(90, 0 if sx > 0 else 180), half=0.3)
-        cone(q, sx * 1.9, 1.9, D + 1.2, 2.0, 0.4)
-    pod(P.part(1, 2), cx, cz, y1, 2.6, 1.3, HAB, half=0.35)
-    cone(P.part(1, 1), cx, cz, y1 + 1.3, 2.6, 0.55)
-    dome(P.part(2, 2), cx, cz, y1 + 1.3, 2.6, 1.45, bands=2)
-    b = P.part(3, 3)
-    dome(b, cx, cz, D, 4.8, 2.9, ring=0.6)
-    core(b, cx, cz, 2.5, 5.0, 1.5, rows=(3.4, 4.1))
+        pod(p, sx * 1.85, 1.75, D, 2.2, 1.2, HAB, glass=(0.4, 0.75))
+        dome(p, sx * 1.85, 1.75, D + 1.2, 2.2, 1.0, bands=2, ring=0.2)
+    dome(P.part(1, 1), 0.0, z0, D + POD, 3.2, 1.85)
+    q = P.part(2, 2)
+    pod(q, 0.0, dock(P, 4.2), D, 4.2, 1.5, HAB)
+    dome(q, 0.0, dock(P, 4.2), D + 1.5, 4.2, 2.6)
+    q = P.part(3, 3)
+    z3 = dock(P, 4.8)
+    pod(q, 0.0, z3, D, 4.8, 1.3, HAB, glass=(0.45, 0.85))
+    dome(q, 0.0, z3, D + 1.3, 4.8, 3.0)
+    dome(q, 0.0, z3, 4.0, 2.4, 1.5, bands=2, ring=0.3)
     p = P.part(4)
-    dome(p, 0.0, 0.15, D, 5.6, 3.5, ring=0.7)
-    core(p, 0.0, 0.15, 3.0, 6.4, 1.8, rows=(3.9, 4.6, 5.5))
-    platform(p, 0.0, 0.15, 5.2, 3.0, HAB)
+    z4 = dock(P, 5.6)
+    pod(p, 0.0, z4, D, 5.6, 1.3, HAB, glass=(0.45, 0.85))
+    dome(p, 0.0, z4, D + 1.3, 5.6, 3.3)
+    dome(p, 0.0, z4, 4.25, 3.0, 1.9, ring=0.35)
+    dome(p, 0.0, z4, 5.9, 1.5, 0.9, bands=2, ring=0.15, ribs=False)
 
 
 def hab_medium_a(P: Prop) -> None:
-    """A long entrance pod and a round pod behind it; pods gather round, a dome rises on the middle
-    one, then a bubble covers the cluster and grows to fill the lot, a white core through its top."""
-    fp = (-1.75, 1.75, -5.5, -1.7)
-    cx, cz = 0.0, 2.15
-    y = floors()
-    side = [(-5.0, -4.0), (-3.2, -2.2)]
+    """A long entrance pod with a glazed spine leads to a round pod under a dome; petal pods bud
+    round it, and the middle is rebuilt as one broad dome that widens at every stage. A flower,
+    spread across the lot, where the small lot stacks its bubbles."""
+    zf = -P.d / 2
+    cz = 1.7
+    petals = [(-2.85, 3.7), (2.85, 3.7), (-2.85, -0.2), (2.85, -0.2)]
+
+    def petal(part, x, z):
+        pod(part, x, z, D, 2.0, 1.2, HAB, glass=None)
+        dome(part, x, z, D + 1.2, 2.0, 0.95, bands=2, ring=0.2, ribs=False)
+
     p = P.part(0)
-    storey(p, fp, y[0], y[1], HAB, front=[(-1.55, -1.1), (1.1, 1.55)], left=side, right=side)
+    capsule(p, "z", zf + DOCK, 0.4, 0.0, D, 3.0, 0.9, 1.1, ridge=GLASS)
+    belt(p, "z", -1.6, 0.0, D, 3.0, 0.9, 1.1, HAB)
+    for s in (-1, 1):
+        porthole(p, "z", -2.9, s * 1.5, s, D + 0.5)
     airlock(P, p, 0.0)
     planter(p, -3.7, -2.3, -5.7, -5.0, D)
     planter(p, 2.3, 3.7, -5.7, -5.0, D)
-    vault(P.part(0, 3), fp, y[1], 0.9)
-    pod(P.part(0, 2), cx, cz, D, 3.6, STOREY, HAB, windows=(0, 90, 180), half=0.5)
-    r = P.part(0, 0)
-    cone(r, cx, cz, y[1], 3.6, 0.65)
-    pod(r, -2.75, 3.4, D, 1.9, 1.2, HAB, windows=(90, 180, 270), half=0.3)
-    cone(r, -2.75, 3.4, D + 1.2, 1.9, 0.4)
-    planter(r, 2.4, 3.2, 1.0, 4.4, D)
-    q = P.part(1, 3)
-    for sx in (-1, 1):
-        pod(q, sx * 2.75, 3.4, D, 2.4, 1.4, HAB, windows=(90, 0 if sx > 0 else 180, 270), half=0.35)
-        cone(q, sx * 2.75, 3.4, D + 1.4, 2.4, 0.45)
-    pod(q, 0.0, 4.95, D, 1.9, 1.3, HAB, windows=(90,), half=0.3)
-    cone(q, 0.0, 4.95, D + 1.3, 1.9, 0.4)
-    pod(P.part(1, 2), cx, cz, y[1], 3.0, 1.4, HAB, half=0.4)
-    cone(P.part(1, 1), cx, cz, y[1] + 1.4, 3.0, 0.6)
-    dome(P.part(2, 2), cx, cz, y[1] + 1.4, 3.0, 1.6, bands=2)
-    b = P.part(3, 3)
-    dome(b, cx, cz, D, 6.0, 3.5, ring=0.65)
-    core(b, cx, cz, 3.0, 6.0, 1.9, rows=(4.1, 4.9))
+    for x, z in petals[:2]:
+        petal(p, x, z)
+    pod(P.part(0, 1), 0.0, cz, D, 3.6, 1.4, HAB)
+    dome(P.part(0, 0), 0.0, cz, D + 1.4, 3.6, 1.5, bands=2)
+    p = P.part(1)
+    for x, z in petals[2:]:
+        petal(p, x, z)
+    dome(P.part(1, 1), 0.0, cz, D + 1.4, 3.6, 2.0)
+    q = P.part(2, 2)
+    pod(q, 0.0, cz, D, 4.6, 1.5, HAB)
+    dome(q, 0.0, cz, D + 1.5, 4.6, 3.0)
+    q = P.part(3, 3)
+    pod(q, 0.0, cz + 0.1, D, 5.6, 1.5, HAB)
+    dome(q, 0.0, cz + 0.1, D + 1.5, 5.6, 3.6)
     p = P.part(4)
-    dome(p, cx, cz, D, 7.6, 4.3, ring=0.75)
-    core(p, cx, cz, 3.7, 8.2, 2.3, rows=(4.9, 5.7, 6.9))
-    platform(p, cx, cz, 6.4, 3.6, HAB)
-    storey(p, fp, y[1], y[2], HAB, front=[(-1.4, -0.3), (0.3, 1.4)], left=side, right=side)
-    vault(p, fp, y[2], 0.9)
+    pod(p, 0.0, cz + 0.2, D, 6.4, 1.65, HAB, glass=(0.6, 1.1))
+    dome(p, 0.0, cz + 0.2, D + 1.65, 6.4, 4.1)
+    mast(p, 0.0, cz + 0.2, D + 5.7, 0.7, arms=(), tip=HAB)
 
 
 def ind_narrow_a(P: Prop) -> None:
-    """A control hut and bullet tanks across the lot; an orange manifold and a flue, a refinery
-    column at the back that grows a section, a third tank on a beam, and last a flare stack."""
-    hut = (-1.6, 1.6, -3.5, -1.5)
-    y1 = D + STOREY
+    """A round control pod and bullet tanks across the lot; an orange manifold, a refinery column
+    at the back that grows a section, a third tank on a beam, and last a flare stack by the pod."""
+    pz = dock(P, 2.6)
     p = P.part(0)
-    storey(p, hut, D, y1, IND, front=[(-1.45, -1.1), (1.1, 1.45)], left=[(-3.0, -2.0)], right=[(-3.0, -2.0)])
+    pod(p, 0.0, pz, D, 2.6, POD, IND)
+    cone(p, 0.0, pz, D + POD, 2.6, 0.45)
     airlock(P, p, 0.0)
-    tank_h(p, "x", -1.75, 1.75, -0.45, D, 1.5)
-    cube(p, -0.35, 0.35, y1, y1 + 0.5, -2.9, -2.2, PANEL, skip=("bottom",), top=TRIM)
+    tank_h(p, "x", -1.75, 1.75, -0.3, D, 1.5)
     p = P.part(1)
-    tank_h(p, "x", -1.75, 1.75, 1.35, D, 1.5)
-    pipe(p, [(0.9, 1.84, -0.45), (0.9, 2.6, -0.45), (0.9, 2.6, 1.35), (0.9, 1.84, 1.35)])
-    stack(p, -1.0, -2.5, y1, y1 + 1.75, 0.6, 0.45, tip=TRIM, tip_h=0.3)
-    column(P.part(2), 0.0, 3.05, D, 5.8, 1.3, stripes=(2.4, 4.7), decks=(3.5,), deck_w=1.85)
+    tank_h(p, "x", -1.75, 1.75, 1.5, D, 1.5)
+    pipe(p, [(0.9, 1.84, -0.3), (0.9, 3.2, -0.3), (0.9, 3.2, 1.5), (0.9, 1.84, 1.5)])
+    column(P.part(2), 0.0, 3.1, D, 5.8, 1.3, stripes=(2.4, 4.7), decks=(3.5,), deck_w=1.75)
     p = P.part(3)
-    column(p, 0.0, 3.05, 5.8, 7.8, 1.0, stripes=(7.1,), decks=(6.2,), deck_w=1.8)
+    column(p, 0.0, 3.1, 5.8, 7.8, 1.0, stripes=(7.1,), decks=(6.2,), deck_w=1.7)
     for x in (-1.95, 1.75):
-        cube(p, x, x + 0.2, D, 2.8, 0.35, 0.55, PANEL, skip=("bottom", "top"))
-    cube(p, -1.95, 1.95, 2.8, 3.0, 0.15, 0.75, PANEL)
-    tank_h(p, "x", -1.6, 1.6, 0.45, 3.0, 1.3, clear=0.0)
+        cube(p, x, x + 0.2, D, 2.8, 0.5, 0.7, PANEL, skip=("bottom", "top"))
+    cube(p, -1.95, 1.95, 2.8, 3.0, 0.3, 0.9, PANEL)
+    tank_h(p, "x", -1.6, 1.6, 0.6, 3.0, 1.3, clear=0.0)
     p = P.part(4)
-    stack(p, 1.0, -2.5, y1, 10.4, 0.8, 0.5)
-    hoop(p, 1.0, -2.5, 5.2, 5.45, 0.7, TRIM)
+    stack(p, 1.55, -3.4, D, 10.4, 0.8, 0.5)
+    hoop(p, 1.55, -3.4, 5.2, 5.45, 0.7, TRIM)
 
 
 def ind_narrow_b(P: Prop) -> None:
-    """A slim pump house to one side and a sphere tank at the back; a second sphere under an
-    orange manifold; the house climbs into a boiler house beside a fat stack that stands on the
-    deck; last, the back sphere is rebuilt on a tall stalk. Tall in front where A is tall behind,
-    then tall behind where A raises its flare in front."""
-    house = (-1.95, 0.25, -3.5, -1.5)
-    sx, sz = 1.15, -2.5  # the stack
+    """A round pump pod to one side and a sphere tank at the back; a second sphere under an orange
+    manifold; a fat stack on the deck beside the pod that grows a section; last, the back sphere is
+    rebuilt on a tall stalk. Tall in front where A is tall behind, then tall behind where A raises
+    its flare in front."""
+    px, pz = -0.8, dock(P, 2.3)
+    sx, sz = 1.2, -2.6  # the stack
     bx, bz = 0.0, 2.35  # the back sphere
-    y = floors()
-    side = [(-3.1, -1.9)]
     p = P.part(0)
-    storey(p, house, y[0], y[1], IND, left=side, right=side, back=[(-1.6, -0.1)])
-    airlock(P, p, -0.85)
+    pod(p, px, pz, D, 2.3, POD, IND)
+    cone(p, px, pz, D + POD, 2.3, 0.45)
+    airlock(P, p, px)
     pipe(p, [(-0.9, 0.45, -1.5), (-0.9, 0.45, bz), (-0.4, 0.45, bz)])
-    cube(P.part(0, 1), -1.5, -0.6, y[1], y[1] + 0.45, -3.0, -2.1, PANEL, skip=("bottom",), top=TRIM)
     sphere(P.part(0, 3), bx, bz, D, 2.4, slim=True)
     p = P.part(1)
-    sphere(p, 0.0, -0.15, D, 2.2, slim=True)
-    pipe(p, [(0.0, 2.45, -0.15), (0.0, 3.2, -0.15), (0.0, 3.2, bz), (0.0, 2.55, bz)])
+    sphere(p, 0.0, -0.2, D, 2.2, slim=True)
+    pipe(p, [(0.0, 2.45, -0.2), (0.0, 3.2, -0.2), (0.0, 3.2, bz), (0.0, 2.55, bz)])
     p = P.part(2)
-    for k in (1, 2):
-        storey(p, house, y[k], y[k + 1], IND, left=side, right=side, back=[(-1.6, -0.1)])
-        lights(p, house, "front", y[k] + 0.5, y[k] + 0.95, [(-1.6, -0.1)], WARN)
     stack(p, sx, sz, D, 5.6, 1.3, 1.15, tip=None)
     hoop(p, sx, sz, 2.4, 2.65, 1.3, TRIM)
     p = P.part(3)
     stack(p, sx, sz, 5.6, 7.6, 1.15, 1.0, tip_h=0.4)
     hoop(p, sx, sz, 5.45, 5.7, 1.15, TRIM)
-    pipe(p, [(-0.85, 3.35, -1.5), (-0.85, 3.35, -0.5), (-0.85, 1.9, -0.5)])
+    pipe(p, [(sx, 3.2, sz + 0.3), (sx, 3.2, -0.2), (0.11, 3.2, -0.2)])
     p = P.part(4)
     sphere(p, bx, bz, D, 2.8, stand=7.2, stalk=HULL, slim=True)
     hoop(p, bx, bz, 4.0, 4.25, 1.4, TRIM)
     hoop(p, bx, bz, 6.2, 6.45, 1.4, TRIM)
-    cube(p, -1.6, -0.1, y[3], y[3] + 0.5, -3.1, -1.9, PANEL, skip=("bottom",), top=TRIM)
 
 
 def ind_small_a(P: Prop) -> None:
-    """A control hut and a silo; a second, taller silo joined by an orange pipe, a column that
-    grows a section, a pipe run over the yard, and a flare stack on top of the column."""
-    hut = (-2.7, -0.5, -2.5, -0.9)
-    y1 = D + STOREY
+    """A round control pod and a silo; a second, taller silo joined by an orange pipe, a column
+    that grows a section, a pipe run over the yard, and a flare stack on top of the column."""
+    px, pz = -1.6, dock(P, 2.4)
     p = P.part(0)
-    storey(p, hut, D, y1, IND, left=[(-2.2, -1.2)], right=[(-2.2, -1.2)], back=[(-2.2, -1.0)])
-    airlock(P, p, -1.6)
+    pod(p, px, pz, D, 2.4, POD, IND)
+    cone(p, px, pz, D + POD, 2.4, 0.45)
+    airlock(P, p, px)
     tank_v(p, 1.45, 1.4, D, 2.4, 2.5, at=0.5)
     p = P.part(1)
-    tank_v(p, -1.5, 1.5, D, 2.2, 3.4)
-    pipe(p, [(0.4, 1.9, 1.45), (-0.5, 1.9, 1.45)])
+    tank_v(p, -1.5, 1.6, D, 2.2, 3.4)
+    pipe(p, [(0.4, 1.9, 1.5), (-0.5, 1.9, 1.5)])
     column(P.part(2), 1.6, -1.75, D, 5.9, 1.1, stripes=(2.0, 4.4), decks=(3.2,), deck_w=1.9)
     p = P.part(3)
     column(p, 1.6, -1.75, 5.9, 7.8, 0.9, stripes=(7.1,), decks=(6.3,), deck_w=1.7)
-    pipe(p, [(-1.5, 3.3, 1.5), (-1.5, 3.9, 1.5), (-1.5, 3.9, -1.75), (1.2, 3.9, -1.75)])
+    pipe(p, [(-1.5, 3.3, 1.6), (-1.5, 3.9, 1.6), (-1.5, 3.9, -1.75), (1.2, 3.9, -1.75)])
     p = P.part(4)
     stack(p, 1.6, -1.75, 7.8, 10.6, 0.7, 0.5)
-    tank_v(p, 0.3, -0.1, D, 1.3, 2.9, at=0.6)
+    tank_v(p, 0.4, 0.0, D, 1.3, 2.9, at=0.6)
 
 
 def ind_medium_a(P: Prop) -> None:
-    """A small refinery: a control hut, a bullet tank and a silo; a second silo and a pipe rack
-    down the yard; a column; a furnace with its stack; then the stack and the column grow and a
-    sphere tank arrives."""
-    hut = (-3.6, -0.8, -5.5, -3.3)
-    fur = (0.9, 3.7, 2.6, 5.7)
-    y1 = D + STOREY
+    """A small refinery that fills its yard from the start: a round control pod, two bullet tanks,
+    a silo, a day tank, a small sphere and ground pipes between them; then a second silo and a pipe
+    rack, a column, a round furnace with its stack where the day tank stood, and last the stack and
+    the column grow and the sphere is rebuilt large."""
+    px, pz = -2.2, dock(P, 2.6)
     p = P.part(0)
-    storey(p, hut, D, y1, IND, front=[(-1.15, -0.9)], left=[(-5.0, -4.0)], right=[(-5.0, -4.0)],
-           back=[(-3.2, -1.2)])
-    airlock(P, p, -2.2)
+    pod(p, px, pz, D, 2.6, POD, IND)
+    cone(p, px, pz, D + POD, 2.6, 0.45)
+    airlock(P, p, px)
     tank_h(p, "z", -5.5, -2.1, 2.5, D, 1.6)
-    tank_h(p, "z", -5.5, -2.1, 0.6, D, 1.6)
-    tank_v(p, -2.2, -1.2, D, 2.4, 2.6)
-    q = P.part(0, 2)
-    crates(q, 2.4, 3.4, D, [TRIM, HULL], along="z")
-    crates(q, 1.6, 4.9, D, [HULL])
+    tank_v(p, -2.2, -1.3, D, 2.4, 2.6)
+    pipe(p, [(-2.2, 0.5, -0.2), (-2.2, 0.5, 2.6), (2.3, 0.5, 2.6), (2.3, 0.5, 3.3)])
+    q = P.part(0, 1)
+    for x, z, c in ((0.3, -4.9, TRIM), (1.0, -4.9, HULL), (0.3, -4.2, HULL), (1.0, -4.2, TRIM), (0.65, -3.5, TRIM)):
+        drum(q, x, z, D, 0.6, 0.8, c, PANEL)
+    tank_v(P.part(0, 2), 2.3, 3.9, D, 2.2, 1.9)
+    q = P.part(0, 3)
+    sphere(q, -2.3, 4.3, D, 1.9, slim=True)
+    pipe(q, [(-2.2, 0.5, 2.71), (-2.2, 0.5, 3.9)])
     p = P.part(1)
-    tank_v(p, -2.3, 1.7, D, 2.2, 3.7)
+    tank_v(p, -2.3, 1.2, D, 2.2, 3.7)
     for z in (-1.4, 1.6, 4.6):
         for x in (-0.3, 0.52):
             cube(p, x, x + 0.18, D, 3.0, z - 0.09, z + 0.09, PANEL, skip=("bottom", "top"))
@@ -1032,130 +1026,116 @@ def ind_medium_a(P: Prop) -> None:
     cube(p, 0.38, 0.6, 3.2, 3.42, -1.7, 4.9, HULL)
     column(P.part(2), 2.3, 0.6, D, 6.8, 1.6, stripes=(2.2, 5.3), decks=(3.8,), deck_w=2.6)
     p = P.part(3)
-    module(p, fur, D, D + 3.0)
-    band(p, fur, D + 2.5, D + 2.75, TRIM)
-    lights(p, fur, "front", D + 0.4, D + 0.8, [(1.3, 2.0), (2.6, 3.3)], WARN)
-    lights(p, fur, "right", D + 0.4, D + 0.8, [(3.0, 3.7), (4.5, 5.2)], WARN)
-    stack(p, 2.3, 4.15, D + 3.0, 9.4, 1.3, 1.0, tip=None)
-    hoop(P.part(3, 3), 2.3, 4.15, 9.05, 9.3, 1.0, TRIM)
+    tank_h(p, "z", 2.4, 5.7, 2.3, D, 2.6)
+    extrude(p, octagon(2.3, D + 0.22 + 1.3, 0.55), "z", 2.4 - GAP, 2.4, RING, cap0=WARN)
+    stack(p, 2.3, 4.3, 2.8, 9.4, 1.3, 1.0, tip=None)
+    hoop(P.part(3, 3), 2.3, 4.3, 9.05, 9.3, 1.0, TRIM)
     p = P.part(4)
-    stack(p, 2.3, 4.15, 9.4, 12.2, 1.0, 0.75)
-    hoop(p, 2.3, 4.15, 9.2, 9.45, 1.0, TRIM)
-    column(p, 2.3, 0.6, 6.8, 8.6, 1.25, stripes=(7.9,), decks=(7.0,), deck_w=2.3)
+    stack(p, 2.3, 4.3, 9.4, 12.2, 1.0, 0.75)
+    hoop(p, 2.3, 4.3, 9.2, 9.45, 1.0, TRIM)
+    column(p, 2.3, 0.6, 6.8, 8.6, 1.25, decks=(7.0,), deck_w=2.3)
     sphere(p, -2.3, 4.4, D, 2.6)
 
 
 def sci_narrow_a(P: Prop) -> None:
-    """A lab under a long lit strip and a solar roof, a dish behind it; a rear module takes the
-    dish on its roof, the lab gains a floor and a glass cab, and the mast climbs at every stage."""
-    lab = (-1.95, 1.95, -3.5, 0.4)
-    rear = (-1.95, 1.95, 0.4, 3.6)
-    cab = (-1.5, 1.5, -3.1, -0.3)
-    y = floors()
-    long, short = [(-3.1, 0.0)], [(0.8, 3.2)]
-    p = P.part(0)
-    storey(p, lab, y[0], y[1], SCI, front=[(-1.7, -1.15), (1.15, 1.7)], left=long, right=long, strip=True)
-    airlock(P, p, 0.0)
-    solar(P.part(0, 1), -1.5, 1.5, -3.0, -0.2, y[1], 2, 2)
+    """A capsule lab under a glazed spine with a dish behind it; the dish climbs onto an instrument
+    drum and grows, the lab is rebuilt wider and gains an observation blister, and a mast rises in
+    the back corner. Long and low in front, its instruments behind."""
+    zf = -P.d / 2
+    mx, mz = -1.6, 3.6
+    dx, dz = 0.3, 2.45
+    airlock(P, P.part(0), 0.0)
+    q = P.part(0, 1)
+    capsule(q, "z", zf + DOCK, 0.9, 0.0, D, 3.2, 0.9, 1.1, ridge=GLASS)
+    belt(q, "z", -1.0, 0.0, D, 3.2, 0.9, 1.1, SCI)
+    for s in (-1, 1):
+        porthole(q, "z", -1.8, s * 1.6, s, D + 0.5)
     r = P.part(0, 0)
-    dish(r, 0.3, 2.0, D, 2.0)
-    mast(r, -1.3, 3.2, D, 2.3, arms=(0.7,))
+    dish(r, dx, dz, D, 2.0)
+    mast(r, mx, mz, D, 2.3, arms=(0.75,))
     p = P.part(1)
-    storey(p, rear, y[0], y[1], SCI, left=short, right=short, back=[(-1.4, 1.4)], strip=True, butt=("front",))
-    dish(P.part(1, 2), 0.3, 2.0, y[1], 2.2, stand=0.55)
-    mast(P.part(1, 1), -1.3, 3.2, y[1], 1.87, arms=(0.7,))
+    drum(p, dx, dz, D, 2.2, 1.3)
+    hoop(p, dx, dz, D + 0.85, D + 1.05, 2.2, SCI)
+    r = P.part(1, 1)
+    dish(r, dx, dz, D + 1.3, 2.2, stand=0.5)
+    mast(r, mx, mz, D, 3.37, arms=(0.75,))
     p = P.part(2)
-    storey(p, lab, y[1], y[2], SCI, front=[(-1.6, 1.6)], left=long, right=long, strip=True)
-    solar(P.part(2, 2), -1.5, 1.5, -3.0, -0.2, y[2], 2, 2)
-    mast(P.part(2, 2), -1.3, 3.2, y[1], 3.9)
+    capsule(p, "z", zf + DOCK, 1.1, 0.0, D, 3.8, 1.2, 1.5, ridge=GLASS)
+    belt(p, "z", -1.0, 0.0, D, 3.8, 1.2, 1.5, SCI)
+    for s in (-1, 1):
+        porthole(p, "z", -1.55, s * 1.9, s, D + 0.65, r=0.28)
+    drum(p, dx, dz, D + 1.3, 1.6, 1.0)
+    r = P.part(2, 2)
+    dish(r, dx, dz, D + 2.3, 2.6, stand=0.55)
+    mast(r, mx, mz, D, 4.92, arms=(0.72, 0.9))
     p = P.part(3)
-    cube(p, cab[0], cab[1], y[2], y[2] + 1.3, cab[2], cab[3], HULL, skip=("bottom",), top=PANEL)
-    band(p, cab, y[2] + 0.4, y[2] + 0.95, GLASS)
-    storey(p, rear, y[1], y[2], SCI, left=short, right=short, back=[(-1.4, 1.4)], strip=True, butt=("front",))
-    dish(p, 0.3, 2.0, y[2], 2.8, stand=0.6)
-    mast(P.part(3, 3), -1.3, 3.2, y[2], 4.0, foot=1.4)
-    p = P.part(4)
-    mast(p, -1.3, 3.2, y[2], 6.4, arms=(0.5, 0.72, 0.9), tip=HOLO, foot=2.4)
-    solar(p, -1.2, 1.2, -2.8, -0.6, y[2] + 1.3, 2, 1)
+    dome(p, 0.0, -1.35, 2.45, 2.2, 1.2, bands=2)
+    dish(p, dx, dz, D + 2.3, 2.9, stand=0.6)
+    mast(P.part(3, 3), mx, mz, D, 6.22, arms=(0.72, 0.9), foot=2.0)
+    mast(P.part(4), mx, mz, D, 7.52, arms=(0.72, 0.86, 0.95), tip=HOLO, foot=2.6)
 
 
 def sci_narrow_b(P: Prop) -> None:
-    """A round lab in front that climbs a narrower storey a stage into a stepped tower, a wide
-    radar reflector on its top throughout; a low annex under a solar roof behind it. Tall in
-    front and round where A is a long box with its dish and mast at the back."""
-    cx, cz = 0.0, -1.3
-    rz = cz + 0.2  # the reflector
-    vest = (-0.85, 0.85, -3.5, cz - 1.8)  # up to the lab's front flat
-    annex = (-1.95, 1.95, 1.0, 3.6)
-    y = floors()
-    p = P.part(0)
-    module(p, vest, D, y[1])
-    band(p, vest, y[1] - 0.34, y[1] - 0.16, SCI, butt=("back",))
-    airlock(P, p, 0.0)
-    pod(p, cx, cz, D, 3.6, STOREY, SCI, windows=(0, 90, 180), half=0.6)
+    """An observatory: a round drum under a white dome with a cyan shutter, rebuilt wider and
+    taller at every stage; a capsule annex behind it carries a radar reflector, and last a whip
+    mast. Tall and round in front where A is long and low with its dish and mast at the back."""
+    obs = [(3.2, 1.5, 1.4), (3.4, 1.95, 1.6), (3.6, 2.6, 2.0), (3.8, 3.4, 2.2), (3.8, 3.8, 2.2)]  # drum w, h; dome h
+    airlock(P, P.part(0), 0.0)
+    for k, (w, h, dh) in enumerate(obs):
+        q = P.part(k, k) if k < len(obs) - 1 else P.part(k)
+        g = min(0.4 * h, h - 0.91)
+        pod(q, 0.0, dock(P, w), D, w, h, SCI, glass=(g, g + 0.45))
+        dome(q, 0.0, dock(P, w), D + h, w, dh, bands=2 if k < 2 else 3, ribs=False, panes=(SHELL, HULL),
+             slit=(5, HOLO))
     r = P.part(0, 0)
-    reflector(r, cx, rz, y[1], 2.0, 1.0, 0.3)
-    cube(r, -1.5, 1.5, D, D + 0.35, 1.5, 3.3, PANEL, skip=("bottom",))
-    solar(r, -1.5, 1.5, 1.5, 3.3, D + 0.35, 2, 1)
+    cube(r, -1.5, 1.5, D, D + 0.35, 1.6, 3.4, PANEL, skip=("bottom",))
+    solar(r, -1.5, 1.5, 1.6, 3.4, D + 0.35, 2, 1)
     p = P.part(1)
-    storey(p, annex, D, y[1], SCI, front=[(-1.4, 1.4)], left=[(1.3, 3.3)], right=[(1.3, 3.3)], back=[(-1.4, 1.4)],
-           strip=True)
-    solar(p, -1.5, 1.5, 1.4, 3.2, y[1], 2, 1)
-    reflector(P.part(1, 1), cx, rz, y[1], 2.6, 1.6, 0.35)
-    pod(P.part(2), cx, cz, y[1], 3.0, STOREY, SCI, half=0.5)
-    reflector(P.part(2, 2), cx, rz, y[2], 3.0, 1.8, 0.4)
-    pod(P.part(3), cx, cz, y[2], 2.5, STOREY, SCI, half=0.42)
-    reflector(P.part(3, 3), cx, rz, y[3], 3.0, 1.8, 0.4)
-    p = P.part(4)
-    pod(p, cx, cz, y[3], 2.0, STOREY, SCI, half=0.34)
-    reflector(p, cx, rz, y[4], 3.2, 2.2, 0.45)
-    mast(p, cx, cz + 0.75, y[4], 3.3, arms=(), tip=HOLO)
+    capsule(p, "z", 0.4, 3.8, 0.0, D, 3.0, 0.8, 1.0, ridge=GLASS)
+    belt(p, "z", 2.1, 0.0, D, 3.0, 0.8, 1.0, SCI)
+    reflector(P.part(2), 0.0, 2.3, 1.85, 2.4, 1.3, 0.35)
+    mast(P.part(4), 1.75, 0.2, D, 6.82, arms=(), tip=HOLO, foot=2.4)
 
 
 def sci_small_a(P: Prop) -> None:
-    """A round lab with a dish on its roof and a solar array beside it; a wing with its own array,
-    a second and third floor that lift a larger dish, and a mast in the back corner."""
-    cx, cz = -0.8, 0.6
-    vest = (-1.6, 0.0, -2.5, cz - 1.7)  # up to the lab's front flat
-    wing = (1.1, 2.8, -1.2, 2.7)
-    y = floors()
-    mx, mz = -2.3, 2.6
+    """A round lab with a dish on its roof and a solar tray beside it; a capsule wing and a short
+    mast; the lab is rebuilt wider under a larger dish, the dish climbs onto an instrument drum and
+    grows again, and a taller mast stands in the back corner."""
+    lx = -0.8
+    mx, mz = -2.45, 2.6
     p = P.part(0)
-    module(p, vest, D, y[1])
-    band(p, vest, y[1] - 0.34, y[1] - 0.16, SCI, butt=("back",))
-    airlock(P, p, -0.8)
-    pod(p, cx, cz, D, 3.4, STOREY, SCI, windows=(0, 90, 180), half=0.6)
+    airlock(P, p, lx)
     cube(p, 1.2, 2.8, D, D + 0.35, -2.75, -1.55, PANEL, skip=("bottom",))
     solar(p, 1.2, 2.8, -2.75, -1.55, D + 0.35, 2, 1)
-    dish(P.part(0, 1), cx, cz, y[1], 1.8, stand=0.45)
+    q = P.part(0, 1)
+    pod(q, lx, dock(P, 3.2), D, 3.2, POD, SCI)
+    dish(q, lx, dock(P, 3.2), D + POD, 1.8, stand=0.45)
     p = P.part(1)
-    storey(p, wing, D, y[1], SCI, front=[(1.3, 2.6)], right=[(-0.9, 2.4)], back=[(1.4, 2.5)], strip=True)
-    solar(P.part(1, 2), 1.3, 2.6, -0.9, 2.4, y[1], 1, 2)
-    mast(P.part(1, 1), mx, mz, D, 3.35, foot=1.2)
-    p = P.part(2)
-    pod(p, cx, cz, y[1], 3.0, STOREY, SCI, half=0.5)
-    dish(P.part(2, 3), cx, cz, y[2], 3.0, stand=0.55)
-    mast(P.part(2, 2), mx, mz, D, 4.6, foot=1.6)
+    capsule(p, "z", -0.9, 2.8, 2.0, D, 1.8, 0.8, 0.8)
+    belt(p, "z", 0.95, 2.0, D, 1.8, 0.8, 0.8, SCI)
+    mast(P.part(1, 1), mx, mz, D, 3.35, arms=(0.75,), foot=1.2)
+    lz = dock(P, 3.6)
+    pod(P.part(2), lx, lz, D, 3.6, 2.2, SCI, glass=(0.9, 1.35))
+    dish(P.part(2, 2), lx, lz, D + 2.2, 3.0, stand=0.55)
     p = P.part(3)
-    storey(p, wing, y[1], y[2], SCI, front=[(1.3, 2.6)], right=[(-0.9, 2.4)], back=[(1.4, 2.5)], strip=True)
-    solar(p, 1.3, 2.6, -0.9, 2.4, y[2], 1, 2)
-    mast(P.part(3, 3), mx, mz, D, 7.0, foot=2.6)
+    drum(p, lx, lz, D + 2.2, 2.2, 1.4)
+    hoop(p, lx, lz, D + 3.1, D + 3.3, 2.2, SCI)
+    dish(p, 2.0, 1.9, 1.67, 1.4, stand=0.4)
+    dish(P.part(3, 3), lx, lz, D + 3.6, 3.0, stand=0.55)
     p = P.part(4)
-    pod(p, cx, cz, y[2], 2.6, STOREY, SCI, half=0.42)
-    dish(p, cx, cz, y[3], 3.0, stand=0.55)
-    mast(p, mx, mz, D, 9.4, arms=(0.5, 0.72, 0.9), tip=HOLO, foot=3.4)
+    dish(p, lx, lz, D + 3.6, 3.4, stand=0.6)
+    mast(p, mx, mz, D, 7.2, arms=(0.75, 0.9), tip=HOLO, foot=2.4)
 
 
 def port_narrow_a(P: Prop) -> None:
-    """A gatehouse and a cargo pad with a few containers; the stacks grow under a floodlight, a
-    control cab rises on the gatehouse, a gantry crane spans the pad, and a mast tops the cab."""
-    gate = (-1.5, 1.5, -3.5, -2.0)
-    y1 = D + STOREY
+    """A round gatehouse and a cargo pad with a few containers; the stacks grow under a floodlight,
+    a control tower rises from the gatehouse, a gantry crane spans the pad, and a mast tops the cab."""
+    gz = dock(P, 2.6)
     p = P.part(0)
-    storey(p, gate, D, y1, PORT, left=[(-3.2, -2.3)], right=[(-3.2, -2.3)], back=[(-1.2, 1.2)])
+    pod(p, 0.0, gz, D, 2.6, POD, PORT)
     airlock(P, p, 0.0)
-    top = pad(p, (-1.85, 1.85, -1.75, 3.8))
-    beacon(p, 0.85, -2.75, y1)
+    top = pad(p, (-1.85, 1.85, -0.9, 3.8))
+    beacon(P.part(0, 1), 0.0, gz, D + POD)
     q = P.part(0, 0)
     crates(q, -0.9, 3.0, top, [CRATES[0]])
     crates(q, 0.9, 3.0, top, [CRATES[1], CRATES[2]])
@@ -1164,59 +1144,56 @@ def port_narrow_a(P: Prop) -> None:
     crates(p, 0.9, 3.25, top, [CRATES[1], CRATES[3]])
     crates(p, -0.9, 2.3, top, [CRATES[3]])
     crates(p, 0.9, 2.3, top, [CRATES[2], CRATES[0]])
-    lamp_mast(p, 1.67, -1.0, top, 2.9)
-    control_cab(P.part(2), (-1.5, 0.1, -3.5, -2.0), (-1.75, 0.35, -3.75, -1.75), y1, 2.95, 3.9)
-    gantry(P.part(3), -1.85, 1.85, 0.75, top, 5.0, 0.2, CRATES[0], drop=1.5)
+    lamp_mast(p, 1.67, -0.3, top, 2.9)
+    tower(P.part(2), 0.0, gz, D + POD, 2.95, 3.9, 1.3, 2.4)
+    gantry(P.part(3), -1.85, 1.85, 0.9, top, 5.0, 0.2, CRATES[0], drop=1.5)
     p = P.part(4)
-    mast(p, -0.7, -3.2, 3.9, 2.8, arms=(0.55, 0.8))
+    mast(p, 0.65, gz, 3.9, 2.8, arms=(0.55, 0.8))
     crates(p, -0.9, 2.3, top + 0.75, [CRATES[1], CRATES[0]])
     crates(p, 0.9, 3.25, top + 1.5, [CRATES[2]])
 
 
 def port_narrow_b(P: Prop) -> None:
-    """A gate kiosk, a fuel apron with drums, and a striped hangar across the back; a fuel tank
-    and a floodlight, the hangar rebuilt taller, a glass cupola on its roof and a tug on the
-    apron, then a mast. Tall at the back under a folded roof where A is tall in front."""
-    kiosk = (-1.25, 1.25, -3.5, -2.5)
+    """A round gate kiosk, a fuel apron with drums and tanks, and a vaulted hangar across the back
+    that is rebuilt taller, then gains a round glass cupola and a mast. Tall at the back under a
+    vault where A is tall in front."""
+    kz = dock(P, 2.0)
     han = (-1.85, 1.85, 0.6, 3.8)
-    cup = (-0.8, 0.8, 1.4, 3.0)
-    y1 = D + STOREY
     p = P.part(0)
-    storey(p, kiosk, D, y1, PORT, left=[(-3.3, -2.7)], right=[(-3.3, -2.7)], back=[(-0.9, 0.9)])
+    pod(p, 0.0, kz, D, 2.0, POD, PORT)
     airlock(P, p, 0.0)
-    top = pad(p, (-1.85, 1.85, -2.3, 0.35))
-    beacon(p, 0.0, -3.0, y1)
-    drum(p, -1.3, -0.4, top, 0.6, 0.8, CRATES[0], PANEL)
-    drum(p, -0.55, -0.4, top, 0.6, 0.8, CRATES[2], PANEL)
-    hangar(P.part(0, 1), han, D, 1.7, 2.5, axis="z", door_end=0)
+    top = pad(p, (-1.85, 1.85, -1.55, 0.35))
+    beacon(p, 0.0, kz, D + POD)
+    drum(p, -1.3, -0.3, top, 0.6, 0.8, CRATES[0], PANEL)
+    drum(p, -0.55, -0.3, top, 0.6, 0.8, CRATES[2], PANEL)
+    hangar(P.part(0, 1), han, D, 1.0, 1.5)
     p = P.part(1)
-    tank_v(p, 1.2, -1.45, top, 1.1, 1.9, WARN)
-    drum(p, -1.3, -1.15, top, 0.6, 0.8, CRATES[1], PANEL)
-    lamp_mast(p, -1.6, -1.95, top, 2.9)
-    hangar(P.part(2), han, D, 2.5, 3.7, axis="z", door_end=0)
+    tank_v(p, 1.2, -0.75, top, 1.1, 1.9, WARN)
+    drum(p, -1.3, -1.05, top, 0.6, 0.8, CRATES[1], PANEL)
+    lamp_mast(p, 1.65, 0.1, top, 2.9)
+    hangar(P.part(2), han, D, 1.8, 1.9)
     beacon(P.part(2, 2), 0.0, 2.2, D + 3.7)
     p = P.part(3)
-    cube(p, cup[0], cup[1], D + 3.7, 4.9, cup[2], cup[3], HULL, skip=("bottom",), top=PANEL)
-    band(p, cup, 4.1, 4.6, GLASS)
-    beacon(p, -0.4, 1.85, 4.9)
-    tug(p, 0.1, -0.7, top)
+    drum(p, 0.0, 2.2, 3.4, 1.6, 1.5)
+    hoop(p, 0.0, 2.2, 4.05, 4.55, 1.6, GLASS)
+    beacon(p, 0.0, 2.2, 4.9)
     p = P.part(4)
-    mast(p, 0.35, 2.55, 4.9, 1.75, arms=(0.55, 0.8))
-    tank_v(p, 1.3, -0.2, top, 0.9, 1.5, WARN)
-    drum(p, -0.55, -1.15, top, 0.6, 0.8, CRATES[3], PANEL)
+    mast(p, 0.45, 2.2, 4.9, 1.75, arms=(0.55, 0.8))
+    tank_v(p, 0.15, -0.8, top, 0.9, 1.5, WARN)
+    drum(p, -0.55, -1.05, top, 0.6, 0.8, CRATES[3], PANEL)
 
 
 def port_small_a(P: Prop) -> None:
-    """A gatehouse and a cargo pad with containers; taller stacks and a floodlight, a striped
-    hangar facing the pad, a control cab, and last a cargo craft parked where the containers stood."""
-    gate = (-2.8, -0.75, -2.5, -1.0)
-    shed = (-2.85, -0.6, -0.35, 2.85)
-    y1 = D + STOREY
+    """A round gatehouse and a cargo pad with containers; taller stacks and a floodlight, a vaulted
+    hangar facing the pad, a control tower on the gatehouse, and last a cargo craft parked where the
+    containers stood."""
+    gx, gz = -1.75, dock(P, 2.4)
+    shed = (-2.85, -0.6, 0.0, 2.85)
     p = P.part(0)
-    storey(p, gate, D, y1, PORT, left=[(-2.2, -1.3)], right=[(-2.2, -1.3)], back=[(-2.5, -1.1)])
-    airlock(P, p, -1.775)
+    pod(p, gx, gz, D, 2.4, POD, PORT)
+    airlock(P, p, gx)
     top = pad(p, (-0.3, 2.85, -2.85, 2.85))
-    beacon(p, -1.2, -1.75, y1)
+    beacon(P.part(0, 2), gx, gz, D + POD)
     q = P.part(0, 3)
     crates(q, 0.35, 1.9, top, [CRATES[0]], along="z")
     crates(q, 1.3, 1.9, top, [CRATES[2], CRATES[1]], along="z")
@@ -1225,37 +1202,42 @@ def port_small_a(P: Prop) -> None:
     crates(q, 2.25, 1.9, top, [CRATES[3], CRATES[0]], along="z")
     crates(q, 0.35, 0.1, top, [CRATES[2]], along="z")
     crates(q, 1.3, 0.1, top, [CRATES[0], CRATES[1]], along="z")
-    lamp_mast(P.part(1), -2.55, -0.68, D, 3.0)
+    lamp_mast(P.part(1), 2.6, -2.65, top, 2.93)
     p = P.part(2)
-    hangar(p, shed, D, 2.0, 3.3, axis="x", door_end=1)
-    beacon(p, -1.7, 1.25, D + 3.3)
-    control_cab(P.part(3), (-2.8, -1.4, -2.5, -1.0), (-2.95, -1.15, -2.75, -0.85), y1, 3.5, 4.5)
+    hangar(p, shed, D, 1.9, 1.4, axis="x", door_end=1)
+    beacon(p, -1.7, 1.425, D + 3.3)
+    tower(P.part(3), gx, gz, D + POD, 3.5, 4.5, 1.2, 2.2)
     p = P.part(4)
-    mast(p, -2.4, -1.8, 4.5, 2.2, arms=(0.55, 0.8))
+    mast(p, gx + 0.55, gz, 4.5, 2.2, arms=(0.55, 0.8))
     P.craft("craft_cargoB", 1.35, 0.1, top, 0, 4)
-    crates(p, -0.9, -0.68, D, [CRATES[0], CRATES[2]], along="x", length=1.0, width=0.5, h=0.6)
 
 
 def port_medium_a(P: Prop) -> None:
-    """A small spaceport: a gatehouse, a wide pad and a container yard; floodlights, a hangar across
-    the back, a control tower and a parked cargo craft, then a gantry crane over the yard."""
-    gate = (-3.6, -1.4, -5.5, -3.9)
+    """A small spaceport with a working yard from the start: a round gatehouse, a wide pad with
+    containers and a tug, a container yard, and stores and a fuel tank where the hangar will stand;
+    floodlights and taller stacks, a vaulted hangar across the back, a control tower and a parked
+    cargo craft, then a gantry crane over the yard."""
+    gx, gz = -2.5, dock(P, 2.6)
     han = (-3.8, 3.8, 1.4, 5.8)
-    y1 = D + STOREY
     p = P.part(0)
-    storey(p, gate, D, y1, PORT, left=[(-5.2, -4.2)], right=[(-5.2, -4.2)], back=[(-3.3, -1.7)])
-    airlock(P, p, -2.5)
+    pod(p, gx, gz, D, 2.6, POD, PORT)
+    airlock(P, p, gx)
     top = pad(p, (-0.9, 3.85, -5.85, 0.5))
-    beacon(p, -1.85, -4.7, y1)
     crates(p, -2.5, 0.3, D, [CRATES[0], CRATES[1]])
     crates(p, -2.5, -0.65, D, [CRATES[2]])
     q = P.part(0, 2)
+    beacon(q, gx, gz, D + POD)
     crates(q, 0.0, -0.4, top, [CRATES[3], CRATES[0]])
     crates(q, 1.8, -0.4, top, [CRATES[1]])
+    crates(q, 0.4, -4.6, top, [CRATES[2], CRATES[1]], along="z")
+    tug(q, 2.9, -3.2, top)
     q = P.part(0, 1)
     crates(q, -1.6, 3.2, D, [CRATES[1], CRATES[3]])
     crates(q, 1.4, 4.4, D, [CRATES[2]], along="z")
     crates(q, 2.5, 2.6, D, [CRATES[0]])
+    tank_v(q, -2.9, 4.7, D, 1.3, 1.8, WARN)
+    for x, z, c in ((0.0, 2.4, 0), (0.7, 2.4, 2), (0.35, 3.0, 3)):
+        drum(q, x, z, D, 0.6, 0.8, CRATES[c], PANEL)
     p = P.part(1)
     crates(p, -2.5, -0.65, D + 0.75, [CRATES[3], CRATES[0]])
     crates(p, -2.5, -1.6, D, [CRATES[1], CRATES[2]])
@@ -1264,14 +1246,14 @@ def port_medium_a(P: Prop) -> None:
     lamp_mast(p, -3.7, -3.4, D, 3.0)
     crates(P.part(1, 2), 1.8, -0.4, top + 0.75, [CRATES[2], CRATES[3]])
     p = P.part(2)
-    hangar(p, han, D, 2.4, 3.8, axis="z", door_end=0)
-    beacon(p, -1.6, 3.6, D + 3.8)
-    beacon(p, 1.6, 3.6, D + 3.8)
-    control_cab(P.part(3), (-3.6, -2.2, -5.5, -3.9), (-3.85, -1.95, -5.75, -3.65), y1, 4.2, 5.25)
+    hangar(p, han, D, 1.7, 2.1)
+    beacon(p, -0.7, 3.6, D + 3.8)
+    beacon(p, 0.7, 3.6, D + 3.8)
+    tower(P.part(3), gx, gz, D + POD, 4.2, 5.25, 1.3, 2.4)
     P.craft("craft_cargoA", 1.5, -2.9, top, 0, 3)
     p = P.part(4)
     gantry(p, -3.8, -1.2, -1.15, D, 4.9, -2.5, CRATES[2], drop=1.0)
-    mast(p, -2.9, -4.7, 5.25, 3.2, arms=(0.5, 0.75))
+    mast(p, gx + 0.65, gz, 5.25, 3.2, arms=(0.5, 0.75))
     crates(p, -2.5, -2.55, D + 0.75, [CRATES[3], CRATES[1]])
 
 

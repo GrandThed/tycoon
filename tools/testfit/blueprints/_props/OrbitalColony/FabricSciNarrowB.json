@@ -11,7 +11,6 @@
     {"kit": "colony-kit", "model": "sci-narrow-b-1-u1", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
     {"kit": "colony-kit", "model": "sci-narrow-b-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
     {"kit": "colony-kit", "model": "sci-narrow-b-2-u2", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
-    {"kit": "colony-kit", "model": "sci-narrow-b-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
     {"kit": "colony-kit", "model": "sci-narrow-b-3-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
     {"kit": "colony-kit", "model": "sci-narrow-b-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
   ]
