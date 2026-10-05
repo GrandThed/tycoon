@@ -13,7 +13,8 @@ is unregistered but its folder was left half-deleted because Studio had `build\m
 it (delete the folder once Studio is closed; nothing in it is unique). Branches kept as the record:
 `m12-metropolis-avenues`, `m12-metropolis-boulevard`. The Studio build is `tycoon\build\metropolis.rbxl`
 (never publish). **Next: Orbital (wave 4), only when Ben says so**; it has the same 7-stud lattice and
-ring, so run the density arithmetic before setting any target.
+ring, so run the density arithmetic before setting any target. The session prompt is
+`docs/prompts/m12-orbital.md` (written 2026-10-05 at Ben's request).
 
 M12 wave 3, Metropolis, started 2026-10-02 from `docs/prompts/m12-metropolis.md`. Contract: `docs/INTERFACES.md`
 "M12 wave 3 — Metropolis" → "Wave 3.1" (a gate for Ben, not yet a contract). Base worktree

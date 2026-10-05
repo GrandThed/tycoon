@@ -2684,6 +2684,7 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 1. **Orbital (wave 4): only when Ben says so.** The same routine: a layout mock for Ben,
    contracts, props with sheets, one harvest paste, review, QA, playtest. Orbital has the same
    7-stud lattice and a ring, so the density arithmetic comes first, before any lot target.
+   The session prompt is `docs/prompts/m12-orbital.md`.
 2. Alongside: the open follow-ups of waves 1 to 3 (each listed above with its owner), and Ben's
    numbers when they arrive.
 
