@@ -4647,6 +4647,28 @@ def check_document(era_name, doc, compare_committed=True, city=None, era=None, n
         messages += marker_messages(site)
     messages += upgrade_messages(site, plan, doc)
     messages += wild_messages(site, plan, doc)
+    messages += band_messages(site)
+    return messages
+
+
+def band_messages(site):
+    """INTERFACES "Wave 4.1", rulings: where `highway.clearBand` is false the wild on the ring's
+    cells is cleared by nothing (tools/cityfabric.ring_keeps), which is only safe while nothing can
+    stand there. Lots, pads, markers, lanes and landmarks keep off the band by their own rules; this
+    holds the two things no other rule does -- a street's cell, drawn or not, and a deck rect."""
+    messages = []
+    if not site.under_beam:
+        return messages
+    band = [(poly, box_of(poly)) for poly in deck_band(site.era)]
+    for cell in sorted(site.era.tile_masks()):
+        square = site.era.cell_square(cell)
+        if any(not boxes_apart(box_of(square), box, 0.0) and overlap_depth(square, poly) > TOUCH for poly, box in band):
+            where = streetplan.fmt((cell[0] * site.era.tile_studs, cell[1] * site.era.tile_studs))
+            messages.append(f"the road cell {where} lies in the ring's band, where the wild never clears (highway.clearBand is false): a street keeps inside it")
+    for what, deck, deck_box in site.deck_rects:
+        depth = max((overlap_depth(deck, poly) for poly, box in band if not boxes_apart(deck_box, box, 0.0)), default=0.0)
+        if depth > TOUCH:
+            messages.append(f"{what}: stands {depth:.2f} into the ring's band, where the wild never clears (highway.clearBand is false)")
     return messages
 
 
