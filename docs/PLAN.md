@@ -66,8 +66,12 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   billboards, neon), chimneys on the narrow Village homes; the sign-off was a Studio look at the
   lanes and the town ("looks really good! lets send it"), not a report of the 60-step checklist,
   so the phone, low-graphics, two-player and measurement steps stay watch items, and Ben's
-  step-37 numbers are still owed; **next: Metropolis** (a lattice layout study first), then
-  Orbital — see "M12" below)
+  step-37 numbers are still owed; **wave 3 Metropolis built, reviewed and QA-green 2026-10-04 on
+  branch `m12-metropolis`, not merged**: the "avenues" layout Ben picked on 2026-10-03 ("i love
+  avenues"), 88 lots on three avenues and four lanes, an old town that is redeveloped, towers
+  that grow floor by floor, two city-changer slots (Open the Bus Line, Green the Rooftops);
+  **its 35 props are not uploaded and it is not playtested**: the asset run waits for Ben's OK
+  on the prop sheets; then Orbital — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
   A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
   every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
@@ -1872,13 +1876,17 @@ phones.** Plan of record: `docs/WEAPONS.md` §2; contracts: `docs/INTERFACES.md`
 Core gameplay is untouched.
 - Plan of record: `docs/CITY_GROWTH.md` (approved 2026-09-29).
 - Contracts: `docs/INTERFACES.md` "M12 contracts" (wave 1 through round 3 and every review
-  ruling) and "M12 wave 2 — Boomtown".
-- Memory: `.claude/memory/growing-city-2026-09-28.md`.
+  ruling), "M12 wave 2 — Boomtown" and "M12 wave 3 — Metropolis".
+- Memory: `.claude/memory/growing-city-2026-09-28.md`, and in the same folder
+  `boomtown-growth-2026-10-01.md` and `metropolis-growth-2026-10-02.md`.
 - Where:
   - Wave 1 (Village) is on `main` (`e5df035`). Its branch `m12-growing-city` and its worktree
     were merged and removed on 2026-10-01.
   - Wave 2 (Boomtown) is on `main` too, merged on 2026-10-02 (merge commit `86d1d99`). Its worktree
     and branch are removed. See "Wave 2 — Boomtown" below.
+  - **Wave 3 (Metropolis) is on branch `m12-metropolis`, in the worktree
+    `C:\Users\benja\Desktop\tycoon-m12m`. Not merged.** Built, reviewed and QA-green
+    (2026-10-04); not uploaded, not playtested. See "Wave 3 — Metropolis" below.
   - (M11 is the unmerged feature-unlocks milestone on branch `m11-unlocks`.)
 
 **Rulings (Ben):**
@@ -2327,11 +2335,11 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 - **Done (housekeeping, 2026-10-02):** the three `tycoon-m12*` worktrees are removed. The
   branches `m12-boomtown-grid` and `m12-boomtown-organic` are kept as the record.
 
-**Next:**
-1. **Metropolis (wave 3):** a lattice layout study first (`docs/CITY_GROWTH.md` §3), because every
-   block holds exactly one landmark today. Then the routine that Village and Boomtown followed:
-   a layout mock for Ben, contracts, props with strips, one harvest paste, review, QA, playtest.
-2. **Orbital (wave 4):** the same, after Metropolis.
+**Next (updated 2026-10-04):**
+1. **Metropolis (wave 3): under way.** The lattice study, the mock, the contracts, the client,
+   the review and the QA are done. The asset run and the playtest are not. "Wave 3 — Metropolis"
+   below holds the current "Next" list.
+2. **Orbital (wave 4):** the same routine, after Metropolis.
 3. Alongside: the open follow-ups above, and Ben's numbers when they arrive.
 
 The code is shared; each era adds data, config and models.
@@ -2365,7 +2373,285 @@ The code is shared; each era adds data, config and models.
 - [ ] Watch items: the unreported checklist steps (phone, low graphics, two players, measurement)
 - [ ] Ben: the Village carts and smoke on `build/test.rbxl` ("M12 wave 2.0 — Village smoke and
   carts", and steps 49–57 of the Boomtown section): not reported
-- [ ] lead: wave 3, Metropolis (a lattice layout study first)
+- [x] lead: wave 3, Metropolis, opened 2026-10-02 (the lattice study came first); its checklist
+  is under "Wave 3 — Metropolis"
+
+### Wave 3 — Metropolis (2026-10-02 → 2026-10-04; built, reviewed, QA green; **not uploaded, not playtested**)
+
+**Where:**
+- Branch `m12-metropolis`, in the worktree `C:\Users\benja\Desktop\tycoon-m12m`. **Not merged to
+  `main`.** `assets\` there is a junction to the main checkout's `assets\`.
+- Code, review and QA are done at `b6891e8` (QA ran at `1feb551`; `b6891e8` adds the place
+  builds). After the QA run, `33261d4` adds the upload name guard and the larger baked cash, with
+  `build/metropolis.rbxl` rebuilt.
+- **Kept as the record of the two layout candidates:** the branches `m12-metropolis-avenues`
+  (**chosen**; last commit `2dff602`, merged in by `882b7ab`; worktree `tycoon-m12m-avenues`) and
+  `m12-metropolis-boulevard` (not chosen, `a732dd6`; worktree `tycoon-m12m-boulevard`).
+- Contract: `docs/INTERFACES.md` "M12 wave 3 — Metropolis": "Wave 3.1" with its rulings blocks,
+  "Wave 3.1b — avenues, denser", and "Wave 3.2 — Metropolis in the game" with its four rulings
+  blocks.
+- Memory: `.claude/memory/metropolis-growth-2026-10-02.md`.
+
+**Status (2026-10-04): built, reviewed and QA-green. Not uploaded. Not playtested.**
+- **The asset run has not happened.** 35 final props (107 stages) wait for Ben's OK on two
+  sheets in `assets/testfit/out/Metropolis/m12m_props/`: `_contact_final_towers.png` and
+  `_contact_final_oldtown.png`.
+- **Until the upload and Ben's harvest paste, Studio shows Metropolis's landmarks, tile streets,
+  lanes, highway and subway kiosks only:** no towers, old town, building sites, bus shelters or
+  buses.
+- **Ben has not seen this wave in Studio.** Everything he approved so far was a render.
+- Routine: `docs/MANUAL_STEPS.md` "M12" §12–§16. Checklist: `docs/PLAYTEST.md` "M12 wave 3 —
+  Metropolis growing city".
+- The counts below come from the tools as they stand today. Tower heights are still read from
+  the blueprints, so the lead re-checks the counts after the harvest.
+
+**Goal:** Metropolis grows as a downtown. An old town of car parks, vacant lots and brick blocks
+covers the plot at the start. As the landmarks arrive it is redeveloped, lot by lot, into
+building sites with tower cranes and then into towers that add floors as the landmarks level
+up. Slots, order, prices, income and levels are unchanged.
+
+**Rulings (Ben):**
+1. 2026-10-03, the layout: "i love avenues, lets go with that, but i would love to add a little
+   bit more density to it, adding 4 lanes and removing some empty space, specially what looks
+   like sidewalk". Avenues is the pick. The boulevard candidate is kept as a record.
+2. 2026-10-03, the denser avenues (85 lots, four lanes, 2-stud pavements): "yeah, i love it".
+3. 2026-10-03, the city-changers: "lovely", his answer to the lead's recommendations. The lead
+   reads it as:
+   - `busStop` becomes **Open the Bus Line** and `rooftopGarden` becomes **Green the Rooftops**;
+   - `cityPark` stays a park (no street trees) and `financeDistrict` stays its tower.
+4. Still owed from waves 1 and 2: his step-37 numbers.
+
+**Rulings (lead; the renders Ben approved carry them):**
+- **The density ceiling is geometric.** With 4-stud pavements a street line cost about 31.6
+  studs of depth, so only three fit across the 105 studs inside the ring. The first target (110
+  lots) was set from Village and Boomtown and could not be reached: about 93 at most after the
+  landmarks. Orbital has the same lattice, so its arithmetic comes before its target.
+- **Block slabs are gone.** A slab paved a whole block at its first purchase. Every tower now
+  carries its own paved forecourt. The street trees went with the slabs.
+- **The old town is the wild land.** It may stand under the future highway and clears when the
+  Highway Ramp is bought. There is no skirt past the plot edge: the ring is the city's edge.
+- **Lanes in a tiles era are drawn as footpaths**, the look Ben approved in wave 2a. Nothing is
+  baked for Metropolis.
+- **Narrow lots are 4 × 8** (were 5 × 8).
+- **No junction lamps on Metropolis.** With landmarks at the street line, 14 of the 20 lamp
+  spots fell inside a landmark. The approved renders have none.
+- **Three low landmarks carry no district** (City Park, Supermarket, Convention Center), so a
+  late purchase never takes over towers that already stand.
+
+**The gate (wave 3.1, 2026-10-02, commits `46af0f1` … `390ce10`).** Two real layouts through the
+real generator, as for Boomtown:
+
+| | Avenues (**chosen**) | Boulevard |
+|---|---|---|
+| Streets | a cross-town street inside the entrance; three avenues to the back, each closed by a tall landmark | one grand avenue from the entrance to the Skyscraper; two cross streets; four pedestrian alleys |
+| Lots at the gate | 67, all on streets | 75: 13 on streets, 62 on alleys |
+| Reads as | three avenues of towers, open and varied | two massed alley superblocks and a tower row on the axis |
+
+Avenues then grew to 85 lots (wave 3.1b, `9b5a138` … `6fb59e6`) and 88 (wave 3.2).
+
+**Built (wave 3.2, 2026-10-03 → 2026-10-04, commits `bb34173` … `b6891e8`):**
+- **Client-only**, apart from two slot names in `Config/Eras/3_Metropolis.json`. No server,
+  remote, attribute or profile change.
+- **Economy unchanged:** `py tools/sim_economy.py` total 16:20:04, legacy 887; Metropolis
+  4:28:49.
+- **Layout** (`src/shared/Layouts/Metropolis.luau`, "avenues"):
+  - the entrance at (0, −49); a cross-town street at z −42; three avenues at x −28, 0 and 28;
+    a short T at the head of the centre avenue;
+  - the Skyscraper closes the centre avenue, the Bank Tower the west one, the Office Tower the
+    east one; the Hotel and the Broadcast Tower flank the Skyscraper;
+  - City Hall and the Shopping Mall face the entrance across the cross-town street;
+  - landmarks stand with their front on the pavement's edge and their pad on their own ground;
+  - 46 tile cells (`budget.tileCells` 180); the ring and the ramp are where they were (ring 56,
+    ramp onto the cross-town's west end);
+  - the layout has no `lots`, `parking`, `plazas`, `treeZones`, `greeneryZones` or `blocks` any
+    more.
+- **Pavements are 2 studs wide** (were 4); walkers walk 4.5 from the street's centre.
+- **Fabric** (`src/shared/Config/Fabric/Metropolis.json`, generated from
+  `tools/fabric/Metropolis.plan.json`): **88 lots**.
+  - 52 on streets (50 narrow, 2 small) and 36 on lanes (9 narrow, 27 small): 59 narrow 4 × 8 and
+    29 small 6 × 6 in all.
+  - `pull`: radius 119, `tierTerm` 0.3, thresholds [0.6, 2.58, 2.88, 4.25], reach 30.
+- **Four lanes**, 218 studs in all, 3 studs wide: a front and a back lane on each side, between
+  the side avenue's outer row and the ring.
+  - Each is drawn whole, as a flat footpath (at most 3 Parts), with one dust burst.
+  - The front and back lane on a side stop 0.5 studs apart.
+- **Old town:** 28 entries (24 blocks of 13 × 13 and 4 single items) on a 14-stud grid, at most
+  3.6 studs tall. Three kinds of block: car park, fenced vacant lot, brick buildings.
+- **Towers grow floor by floor:** five stages each (`fabric.levelStages` [1, 3, 4]), a storey is
+  1.6 studs. A tower is never taller than the landmark that governs it.
+- **Building sites with tower cranes** (`fabric.siteVariants`): about one narrow site in three
+  and one small site in two carries a crane.
+- **Next-pad marker:** a lot hoarding (`LotHoarding`) and stakes with string; a reveal scaffold
+  on each purchase.
+- **Two city-changer slots** (`streetOnly`; type, cost, income, multiplier and `requires`
+  unchanged):
+
+  | Slot | # in order | Name | At full build |
+  |---|---|---|---|
+  | `busStop` | 8 | Open the Bus Line | 5 bus shelters on 4 streets; city buses in the traffic (about 15%, at least one) |
+  | `rooftopGarden` | 20 | Green the Rooftops | 45 home and shop towers swap to their roof-garden twin |
+
+  - The Bus Line costs no lot: each shelter stands behind the pavement in ground no lot could
+    use.
+  - Green the Rooftops is a prop swap (`fabric.swaps`): the same tower with a garden roof.
+- **Subway kiosks:** 4, each at a street corner beside the pavement (a kiosk no longer fits on
+  one).
+- **Traffic:** cars keep to the streets; a landmark's footpath carries no car lane.
+- **Client rules** (`src/shared/CityFabric.luau`, `src/client/City/{Fabric,RoadGraph,Highway,
+  Scatter,PropFactory,Ambient}.luau`, `CityDressingController`, `AssetPreloader`):
+  - `levelStages`, `siteVariants`, `swaps`, the ring's own clearing, tiles-era lanes;
+  - birds circle the owned landmarks, tallest first, once no old-town block is left;
+  - every new key is optional: without them Village and Boomtown behave as before.
+- **Props, final (not uploaded):** 35 blueprints, 107 stages, in
+  `tools/testfit/blueprints/_props/Metropolis/`.
+  - 18 towers of 5 stages: 11 and the 7 `…Green` twins of the home and shop ones;
+  - 17 single-stage props: 9 old-town pieces, 4 sites (2 with cranes), `RevealScaffold`,
+    `LotHoarding`, `BusShelterM`, `VehicleCityBus`;
+  - three generated kits: `tower-kit` (`tools/assets/tower_kit.py`), `oldtown-kit`
+    (`oldtown_kit.py`), `metro-transit-kit` (`metro_transit_kit.py`);
+  - `untilStage` on a blueprint piece: a tower's roof leaves the mesh when the next storeys
+    cover it. The 18 towers' last stages went from 25,766 to 17,802 triangles in all.
+- **Tools and gates:**
+  - `py tools/check_mirror.py --strict`: the real `CityFabric.luau` under the Luau CLI against
+    the Python mirror, every fabric era;
+  - `py tools/cityfabric.py props <Era>`: what any lot can show, and what nothing refers to;
+  - `py tools/cityfabric.py timeline <Era>` now fails if a purchase shrinks or re-skins a
+    standing building;
+  - `py tools/streetplan.py`: no footpath on a road tile or a pavement; the landmark gap rule;
+  - `py tools/fabric.py`: tiles-era lanes, the `spots` placer for the bus shelters, the
+    tiles-era keep-outs;
+  - `py tools/testfit/compare_sheet.py` (comparison sheets); `--write-blueprints` on
+    `oldtown_kit.py` and `tower_kit.py`.
+- **Studio start file:** `metropolis.project.json` → `build/metropolis.rbxl`. It bakes in
+  `DebugStartEra` 3 and `GrantCash` 1e20: a fresh save starts in Metropolis with cash. **Never
+  publish that file.**
+- **Renders** in `assets/testfit/out/Metropolis/`:
+  - `m12m_compare.png`: today against avenues;
+  - `m12m_avenues_{tier1,tier3,full,full_entrance,lane,streetplan}.png`;
+  - `m12m_changers_final.png`: both city-changers, before and after;
+  - prop sheets and strips in `m12m_props/`.
+
+**Timeline** (`py tools/cityfabric.py timeline Metropolis`, the sim's greedy player at the end of
+each tier):
+
+| Tier | Towers | Sites | Lanes | Bus shelters | Green roofs | Old-town blocks left whole |
+|---|---|---|---|---|---|---|
+| 1 | 7 | 14 | 1 | 0 | 0 | 15 |
+| 2 | 26 | 8 | 2 | 3 | 0 | 10 |
+| 3 | 60 | 20 | 4 | 4 | 0 | 2 |
+| 4 | 72 | 11 | 4 | 5 | 0 | 0 |
+| full | 88 | 0 | 4 | 5 | 45 | 0 |
+
+No chimney smoke in Metropolis (`ambient.smoke.eras` names Village and Boomtown only). A far
+plot shows 60 of the 88 towers.
+
+**For a player buying in Build panel order and levelling nothing** (the same mirror):
+- the first building sites and the first lane come with the Coffee Shop (purchase 2), the first
+  towers with the Apartment Block (4);
+- lanes 2, 3 and 4 come with High-Rise Apartments (9), the Hospital (13) and the Office Tower
+  (15);
+- bus shelters: 3 at purchase 8, 4 after the Hospital (13), 5 after the Hotel Tower (16);
+- subway kiosks: 2 at purchase 12, 3 after the Hotel Tower (16), 4 after the Broadcast Tower
+  (22);
+- the last old town goes with the Bank Tower (21);
+- 75 towers and 13 sites after purchase 24 (`GrowthTier` 3); 88 towers once levelled to
+  `GrowthTier` 5.
+
+**Review (wave 3.2, at `7e63579`): 0 Critical, 2 Major, 9 Minor.** Both Majors were layout data
+and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Review rulings" and
+"After the review round").
+- **Major, fixed:** five landmark footpaths ran under the pavement and onto the road tiles
+  (City Hall, Shopping Mall, Hotel Tower, Broadcast Tower, Low-Rise Office). Each now ends in a
+  leg that meets its street square-on and stops at the pavement's edge. New `streetplan.py`
+  gate.
+- **Major, fixed:** buying the Supermarket cut eight standing towers down a storey and
+  re-skinned them. The Coffee Shop and the Supermarket swapped places, and the Supermarket
+  carries no district. New `timeline` gate. No fix cost a lot: still 88.
+- Minors applied: footpath bends abut (no two flat Parts overlap); the lane's dust burst is not
+  taken by the old town's; no lane without the footpath look; the mirror applies the tile-cell
+  budget; birds over landmarks when no block stands; `untilStage`.
+- Minor ruled: the lane pairs stay 0.5 studs apart.
+
+**QA (at `1feb551`, the lead's summary): everything green, with two notes.**
+- The gate list is INTERFACES "Done when (wave 3.2, before the asset run)": `fabric.py check`,
+  `streetplan.py`, `cityfabric.py selftest` and `timeline` for Village, Boomtown and
+  Metropolis; the Luau and Python fabric in agreement (`check_mirror.py --strict`); stylua,
+  selene, luau-lsp, `check_compile.py`; `rojo build` for the default, combat, boomtown and
+  metropolis project files.
+- Note 1: one selene warning, older than this wave: `src/client/UI/LegacyPanel.luau:200` (a
+  shadowed `header`).
+- Note 2: `docs/ASSET_MANIFEST.md` was stale. It is regenerated in this docs pass and `py
+  tools/gen_asset_manifest.py --check` passes. It lists the 35 new props as not uploaded.
+- Re-run in the docs pass (2026-10-04): `py tools/cityfabric.py timeline Metropolis` (0
+  shrinking buildings over 63 moments), `py tools/cityfabric.py props Metropolis` (35 props
+  shown, none unused) and `py tools/sim_economy.py` (16:20:04, legacy 887).
+
+**Known follow-ups (wave 3):**
+- **Ben (open):** look at the two prop sheets and say OK, or name the props to redo.
+- **Done (lead, 2026-10-04, `33261d4`; found in the docs pass):** the 50-character asset name
+  guard in `tools/assets/upload_models.py` (`MAX_DISPLAY_NAME`, `model_display_name()`).
+  - A stage name was `EraCityTycoon_Prop_Metropolis_<Prop>_S<n>`: 51 to 55 characters for 11 of
+    the 18 towers (the four `FabricOffice…` towers and all seven `…Green` twins).
+  - A name over 50 now takes the short prefix `ECT_`. 55 of the 107 Metropolis stages do; none
+    is over 50; every name already uploaded is unchanged.
+- **lead (after Ben's OK):** the asset run (MANUAL_STEPS "M12" §14).
+- **Ben:** one harvest paste during that run; then the Studio playtest.
+- **lead (after the harvest):** re-run `timeline Metropolis` and correct the tables here and in
+  PLAYTEST if a count moved. Today's counts use blueprint heights.
+- **Done (lead, 2026-10-04, `33261d4`; found in the docs pass):** the baked cash is **1e20**
+  (was 1e18). Maxing all 16 buildings costs about 5.9e18, and 1e18 only reached the Hotel Tower.
+  Ben can now max every landmark and compare the full skyline with the render.
+- **Ben → lead (open since wave 1):** the numbers: Village step 37, Boomtown step 59, and now
+  step 49 of the Metropolis section.
+- **lead (after Ben's numbers):** `budget.parcelsFar`. A far plot draws 60 of the 88 lots and
+  all four lanes, so three lanes run past bare ground there.
+- **lead (watch):** the fabric is about 110k triangles on a full near plot before `untilStage`,
+  about 2.5 times Boomtown's whole plot. The phone frame time is not measured.
+- **lead (watch):** `src/client/City/Fabric.luau` has 170 top-level locals; the compile gate
+  fails at about 180 and Studio at 200.
+- **lead (open):** closing the last half stud between the lane pairs needs a rule in the tools
+  and the client.
+- **lead (known, accepted):** the kiosk east of the entrance stands 2 studs onto the cross-town
+  street's south pavement, so that walker lane ends there; the highway sign finds no legal spot
+  (as before); a ring pier stands in the entrance view; the City Park's edge stands 0.35 over
+  the east avenue's pavement; a `…Green` twin may stand up to 1.2 studs above its original.
+- **lead (open; confirmed by the lead 2026-10-04):** Metropolis's `houses`, `plazas`, `greenery`
+  and `parked` config blocks and `road.tiles.blocks` place nothing on the new layout. Retire
+  them together with the other eras' unread blocks. Their props
+  (`ApartmentA–C`, `TownhouseA/B`, `PlazaA/B`, `BushA/B`, `HedgeA`, `FlowerBedA`, `PlanterA`,
+  `ParkedA–C`) and `LampPost` are still uploaded and templated. The `BusStop` and
+  `RooftopGarden` building models are no longer spawned either.
+- **lead (after sign-off):** merge `m12-metropolis` into `main`; remove the three `tycoon-m12m*`
+  worktrees (the `assets` junction first); keep the two candidate branches as the record.
+
+**Next:**
+1. **Ben:** the two prop sheets.
+2. **lead:** the asset run; **Ben:** the one harvest paste.
+3. **Ben:** the Studio playtest in `build/metropolis.rbxl`.
+4. **lead:** fixes from the playtest, then the merge to `main`.
+5. **Orbital (wave 4):** the same routine. It has the same 7-stud lattice and a ring, so the
+   density arithmetic comes first, before any lot target.
+6. Alongside: the open follow-ups of waves 1 to 3, and Ben's numbers when they arrive.
+
+- [x] Wave 3.1 mock built: lattice study, two candidates, gate renders (2026-10-02)
+- [x] Ben decided 1: avenues, with more density, four lanes and narrower pavements (2026-10-03)
+- [x] Wave 3.1b built: 85 lots on streets and four lanes (2026-10-03)
+- [x] Ben decided 2: the denser avenues approved, "yeah, i love it" (2026-10-03)
+- [x] Ben decided 3: the city-changer plan, "lovely" (2026-10-03)
+- [x] Wave 3.2 built: client, layout at 88 lots, final props, gates (2026-10-03)
+- [x] Review: 0 Critical, 2 Major fixed, 9 Minor fixed or ruled (2026-10-04, `1feb551`)
+- [x] QA green at `1feb551`; place builds at `b6891e8` (2026-10-04)
+- [x] docs-keeper: PLAN, PLAYTEST, MANUAL_STEPS, asset manifest (2026-10-04)
+- [ ] Ben: OK on the final prop sheets (`_contact_final_towers.png`, `_contact_final_oldtown.png`)
+- [x] lead: the 50-character name guard in `upload_models.py`, and `GrantCash` 1e20 in the
+  Metropolis build (2026-10-04, `33261d4`)
+- [ ] lead: kits, merge, upload of 35 props (107 stages)
+- [ ] Ben: the one harvest paste
+- [ ] lead: harvest, templates, fabric data from harvested extents, gates, manifest, builds
+- [ ] Ben: the Metropolis Studio playtest in `build/metropolis.rbxl`
+- [ ] Ben → lead: the numbers (Village, Boomtown, Metropolis)
+- [ ] lead: merge `m12-metropolis` into `main`; worktrees removed
+- [ ] lead: wave 4, Orbital (the density arithmetic first)
 
 ## M13 — The Valley
 

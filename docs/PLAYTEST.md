@@ -2146,6 +2146,11 @@ everywhere else.
 
 ### 4c. Wave 2a — Metropolis streets, highway, subway
 
+> **On the `tycoon-m12m` build (M12 wave 3, branch `m12-metropolis`):** Metropolis has a new
+> street plan. There, use "M12 wave 3 — Metropolis growing city" instead of the Metropolis steps
+> of 4c, 4d, 4e and 4h. The block paving, street trees, plazas, junction lamps, parked cars and
+> filler houses they describe are gone, and the streets, kiosk spots and counts differ.
+
 Metropolis is the only era with **kit tile streets**: 7-stud `city-kit-roads` tiles, four per
 28-stud block, instead of baked path meshes. Three slots changed meaning — **Found City Hall**
 (was "Lay the City Grid", same slot id, so an old save keeps its ownership), **Build the Highway
@@ -4495,7 +4500,7 @@ sooner, so your numbers can differ a little:
       - Output shows this **yellow** line (with your name):
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 2 (Boomtown)`;
       - about a second later, a second **yellow** line:
-        `[EconomyService] GrantCash lever: granted 1e+14 cash to 1 loaded player(s); attribute reset to 0`;
+        `[EconomyService] GrantCash lever: granted 100000000000000 cash to 1 loaded player(s); attribute reset to 0`;
       - your cash reads **100T**;
       - you stand at a Boomtown plot: crop fields, and one pad, the **Newsstand**, which is free.
       Stop and tell Claude if:
@@ -4815,6 +4820,425 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 ### Sign-off
 
 - [ ] 60. All boxes ticked → tell Claude "M12 Boomtown signed off".
+
+## M12 wave 3 — Metropolis growing city
+
+**Status 2026-10-04: NOT READY TO RUN.** The code is built, reviewed and checked, but the new
+models are **not uploaded yet**. Run this section only after Claude says **"the Metropolis asset
+run is done"** (`docs/MANUAL_STEPS.md` "M12" §14). Before that the file shows landmarks, streets,
+lanes, the highway and the subway kiosks only: no towers, no old town, no building sites, no bus
+shelters, no buses.
+
+**Goal:** Metropolis grows as a downtown. An old town of car parks and brick buildings covers
+the plot. As you buy landmarks it is redeveloped: building sites with tower cranes, then towers
+that add floors as you level the landmarks. Two purchases now change the whole city: **Open the
+Bus Line** and **Green the Rooftops**. Client-only: prices, order and income are unchanged.
+
+**NEVER PUBLISH `build/metropolis.rbxl`.** Open it from the disk only. Never use File (*Archivo*)
+→ Publish to Roblox (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*) from that
+file. It carries a switch that starts fresh saves in Metropolis; on a published place it would
+move a fresh real save to era 3.
+
+- Setup: `docs/MANUAL_STEPS.md` "M12" §15.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- **Every Play starts a fresh Metropolis plot with cash (it reads $100ab).** Press Play again
+  and you get a fresh Metropolis and the cash again. Nothing to add by hand. The cash covers
+  every purchase and Max on every landmark.
+- Buy in Build panel order. "Purchase 8" means the 8th slot in that list.
+- **Left and right:** stand at the plot's entrance and look into the plot. **Left** is the
+  Stadium's side (east). **Right** is the Highway Ramp's side (west).
+- Reference renders, in `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Metropolis\`:
+  `m12m_avenues_full.png`, `m12m_avenues_full_entrance.png`, `m12m_avenues_tier1.png`,
+  `m12m_avenues_tier3.png`, `m12m_avenues_lane.png` (one lane), `m12m_changers_final.png` (the
+  bus line and the roof gardens, before and after).
+
+What you should see if you buy in order and level nothing. Levelling moves `GrowthTier` up
+sooner, so your numbers can differ a little. These counts were worked out before the models were
+uploaded; the lead corrects them after the asset run if any moved.
+
+| After purchase | `GrowthTier` | Towers | Sites | Lanes | New on screen |
+|---|---|---|---|---|---|
+| 1 Food Truck | 1 | 0 | 0 | 0 | the first street and footpath |
+| 2 Coffee Shop | 1 | 0 | 10 | 1 | the first building sites, 4 with cranes; **the first lane** |
+| 4 Apartment Block | 1 | 7 | 14 | 1 | the first towers |
+| 7 Supermarket | 1 | 15 | 6 | 1 | |
+| 8 Open the Bus Line | 2 | 16 | 5 | 1 | 3 bus shelters; cars, a bus, walkers, birds |
+| 9 High-Rise Apartments | 2 | 24 | 10 | 2 | the second lane |
+| 12 Dig the Subway Line | 2 | 26 | 8 | 2 | 2 subway kiosks |
+| 13 Hospital | 2 | 40 | 17 | 3 | the third lane; a 4th shelter |
+| 15 Office Tower | 2 | 55 | 25 | 4 | the last lane |
+| 16 Hotel Tower | 2 | 58 | 25 | 4 | a 5th shelter; a 3rd kiosk |
+| 17 Build the Highway Ramp | 2 | 58 | 25 | 4 | the ring; the old town under it goes |
+| 19 Convention Center | 3 | 67 | 16 | 4 | |
+| 20 Green the Rooftops | 3 | 67 | 16 | 4 | about 42 roof gardens |
+| 21 Bank Tower | 3 | 75 | 13 | 4 | the last old town is gone |
+| 24 Skyscraper | 3 | 75 | 13 | 4 | the 4th kiosk came with the Broadcast Tower (22) |
+| Levelled to `GrowthTier` 5 | 5 | **88** | 0 | 4 | 45 roof gardens |
+
+### Setup
+
+- [ ] 1. Open `C:\Users\benja\Desktop\tycoon-m12m\build\metropolis.rbxl` with File (*Archivo*) →
+      Open (*Abrir*). **Never publish this file.**
+- [ ] 2. **Cash: nothing to set up.** The file pays you about a second after you join. Under
+      Workspace → Attributes (*Atributos*), `DebugStartEra` (3) and `GrantCash` are already
+      there. Leave both alone.
+- [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
+- [ ] 4. **Play** (*Jugar*). Check all four:
+      - Output shows this **yellow** line (with your name):
+        `[DataService] DebugStartEra lever: fresh save for <name> starts in era 3 (Metropolis)`;
+      - about a second later, a second **yellow** line:
+        `[EconomyService] GrantCash lever: granted 100000000000000000000 cash to 1 loaded player(s); attribute reset to 0`
+        (the number is a 1 and 20 zeros);
+      - your cash reads **$100ab** (it reads $99.9ab once you spend anything);
+      - you stand at a Metropolis plot **covered with old town**, with one pad, the **Food
+        Truck**, which is free.
+      Stop and tell Claude if:
+      - the plot is bare grey ground with green strips and no old town: the file is from before
+        the asset run;
+      - Output says `DebugStartEra lever skipped ... already has progress`: this session is on a
+        real save. Stop (*Detener*) and close the file without saving;
+      - there is no `DebugStartEra` line and you are in Village: you opened `test.rbxl`;
+      - there is no `GrantCash` line and no cash after 10 s.
+- [ ] 5. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Automatic**
+      (*Automático*).
+
+### 1. A fresh plot
+
+- [ ] 6. **Old town.** Walk the plot before you buy anything:
+      - square blocks cover it, about 23 of them: **car parks** with small parked cars, **fenced
+        vacant lots**, and low **brick buildings**;
+      - a billboard, a rubble heap and skips stand here and there;
+      - all of it is low, about one or two storeys.
+      Bug: an old-town block on a green strip or on the Food Truck's pad; a block floating or
+      sunk.
+- [ ] 7. **Green strips mark the future streets.** Grass strips with small trees run where the
+      streets will be: one across the plot just inside the entrance, three to the back, and a
+      short one across the far end of the middle one. There are no road tiles yet.
+- [ ] 8. **The next pad (Food Truck):**
+      - a blue **hoarding sign** on two posts stands beside it;
+      - four **stakes with string** mark where the Food Truck will stand;
+      - its name and price label still shows.
+      Bug: no sign; the sign standing on the pad; stakes away from the pad.
+
+### 2. The first purchases (1–7)
+
+- [ ] 9. Buy the **Food Truck** (free). Within about a second:
+      - a blue **scaffold** stands around it for about 1.5 s, then goes with dust;
+      - a street of **road tiles** runs from the entrance to it, with a narrow pavement on each
+        side; the green strip under it is gone;
+      - a narrow concrete **footpath** joins the truck to the street and **stops at the
+        pavement's edge**;
+      - old-town pieces under the new street vanish, each with a dust puff;
+      - the sign and stakes move to the **Coffee Shop** pad.
+      **No building sites yet.** That is correct.
+      Bug: the scaffold stays; the old sign is still there after 1 s; an old-town piece left on
+      the street.
+- [ ] 10. Buy the **Coffee Shop** (2):
+      - about **10 building sites** appear one after another, about 0.4 s apart: a concrete
+        frame behind a blue hoarding;
+      - about **4 of them carry a yellow tower crane**;
+      - a **lane** appears beside the Coffee Shop's avenue (section 3);
+      - they stay sites for now.
+      Bug: a site on a street, on a pad or inside a landmark.
+- [ ] 11. Buy the **Corner Shop** (3) and the **Apartment Block** (4). After the Apartment Block:
+      - each site stands for **10–30 s** (each for its own time), then a **low tower rises** out
+        of it with dust;
+      - about **7 towers**, and about 14 sites.
+      Bug: a tower appears with no site first; all towers rise in the same instant.
+- [ ] 12. Buy the **Low-Rise Office** (5), **Found City Hall** (6) and the **Supermarket** (7):
+      - City Hall faces the entrance across the first street;
+      - about **15 towers** and 6 sites after the Supermarket.
+      **Watch the towers that already stand when you buy the Supermarket.**
+      Bug: a standing tower loses floors or turns into a different building.
+
+### 3. The lanes
+
+The first lane came with the Coffee Shop. It leaves the Coffee Shop's avenue on the **far side
+from the shop**, a little nearer the plot's front, runs toward the plot's left edge, bends once
+and runs toward the back.
+
+- [ ] 13. Find it and walk it:
+      - a pale concrete path **3 studs wide**, the same look as the footpath from a landmark to
+        its street;
+      - it is there **whole**, bend and all;
+      - sites and towers stand **on both sides, facing it**: a second row behind the avenue's
+        row.
+      Bug: sites along bare ground with no lane; a lane with nothing on it after a minute.
+- [ ] 14. **Flicker.** Zoom **far out** over the lane and move the camera **slowly**, from
+      several angles. Look at the **mouth** (where the lane meets the avenue's pavement) and at
+      the **bend**.
+      - Good: the lane **sits still**. It starts at the pavement's outer edge. The bend is one
+        clean corner.
+      - Bad: the lane flickers or shimmers; a patch at the bend that flickers or is a different
+        shade; the lane lying on top of the pavement or the road.
+- [ ] 15. Three more lanes come later, each the same way, **whole and with one run of dust**:
+      - right side, front: with **High-Rise Apartments** (9);
+      - right side, back: with the **Hospital** (13);
+      - left side, back: with the **Office Tower** (15).
+      Stand near where each will appear and watch one of them arrive. Then check each as in
+      step 14.
+      Bug: a tower on the lane's surface; old town left on a lane; a lane running into a
+      landmark, a pad or a highway pier.
+
+### 4. Streets and pavements
+
+Do this any time after City Hall (6).
+
+- [ ] 16. **Pavements are narrow**: 2 studs, half of what they were. Towers and landmarks stand
+      right at the pavement's edge, with no empty strip in front.
+- [ ] 17. **No lamp posts at the junctions.** That is correct now.
+- [ ] 18. **Footpaths.** Look where the footpath of City Hall, of the Low-Rise Office and (after
+      purchase 11) of the Shopping Mall meets its street:
+      - Good: it meets the street **square-on** and stops at the pavement's outer edge.
+      - Bad: a footpath lying on the pavement or on the road; flicker where it ends.
+      Check the Hotel Tower's (16) and the Broadcast Tower's (22) the same way when you own
+      them.
+
+### 5. Open the Bus Line (purchase 8)
+
+- [ ] 19. After the Supermarket **two pads show at once**: **Open the Bus Line** and **High-Rise
+      Apartments**. Both get the hoarding sign. The Bus Line's pad gets **no stakes**: it builds
+      nothing. Its pad is at the very front of the plot, left of the entrance.
+- [ ] 20. Buy **Open the Bus Line**:
+      - **no scaffold and no building**;
+      - **3 bus shelters** appear in a quick wave: glass shelters with a mint-green roof;
+      - each stands **behind the pavement**, open side toward the street.
+      More come as the streets grow: a 4th after the Hospital (13), a 5th after the Hotel Tower
+      (16).
+      Bug: a shelter on the road, on the pavement, in a lane's mouth or inside a tower; a
+      shelter with its back to the street.
+- [ ] 21. If you levelled nothing, `GrowthTier` turns **2** at this purchase and the city comes
+      alive:
+      - about **13 vehicles** on the streets, at least **one of them a city bus** (white with a
+        green band, about twice as long as a car); about 1 vehicle in 7 is a bus;
+      - **walkers** on the pavements;
+      - one **flock of 3 birds**, circling over an old-town block.
+- [ ] 22. Watch the traffic for a minute:
+      - cars and buses drive nose first and **stay on the streets**;
+      - at the end of an avenue a car **turns round and comes back**;
+      - **no car turns onto a landmark's footpath or onto a lane**;
+      - a bus never rides **inside** the car ahead.
+- [ ] 23. Walkers keep to the pavements.
+      Bug: a walker walking through a tower, a kiosk or a shelter.
+
+### 6. Purchases 9 to 16
+
+- [ ] 24. Keep buying, and compare with the table at the top. The lanes come at purchases 9, 13
+      and 15 (step 15).
+- [ ] 25. **Dig the Subway Line** (12): no building. **2 kiosks** with an "M" sign appear:
+      - one just left of the entrance;
+      - one at the corner of the first street and the right-hand avenue, beside City Hall.
+      A 3rd comes with the Hotel Tower (16) and a 4th with the Broadcast Tower (22), at the far
+      end of the middle avenue. Each stands at a street corner **beside** the pavement, front to
+      the street.
+      Bug: a kiosk on the road; a tower or a site overlapping a kiosk.
+- [ ] 26. **No tower ever shrinks.** After each purchase, glance at the towers that already
+      stand.
+      Bug: a tower loses floors or turns into a different building right after a purchase. Say
+      which purchase.
+- [ ] 27. **Heights follow the landmarks.** Towers are low around low landmarks and taller around
+      tall ones.
+      Bug: a tower that stands well above every landmark on its avenue.
+      Not a bug: a tower taller than the City Park, the Supermarket or the Convention Center
+      beside it. Those three do not set heights.
+
+### 7. Build the Highway Ramp (purchase 17)
+
+- [ ] 28. Before you buy it, look along the plot's edges: a few **old-town pieces still stand
+      where the ring will go**. The ramp's pad is at the very front, right of the entrance.
+- [ ] 29. Stand back and buy it. In this order:
+      - the old town under the ring's line and under the ramp **vanishes with dust**;
+      - the **ring builds outward** from the ramp in both directions, in about 5 s;
+      - no building appears on the pad.
+      Then two cars loop on the deck, and you can still walk in through the entrance under it.
+      Bug: an old-town block left standing through the deck, a pier or the ramp; a block that
+      vanishes only after the deck has landed on it.
+
+### 8. Green the Rooftops (purchase 20)
+
+- [ ] 30. After the Convention Center (19) **two pads show at once**: **Green the Rooftops** and
+      the **Bank Tower**. The Rooftops pad gets the sign and no stakes. It is the pad furthest
+      right at the front of the plot.
+- [ ] 31. Stand where you can see many roofs, then buy it:
+      - **no scaffold and no building**;
+      - the roofs of the **home and shop towers** turn into **roof gardens** (grass, small
+        trees, a pergola), **one after another** with a pop, about 0.4 s apart;
+      - the wave **starts near the pad and spreads outward**; about **42 towers** change, in
+        about a quarter of a minute;
+      - each tower **keeps its floors**: only the roof changes;
+      - the **office towers** (white and blue glass) do not change.
+      Bug: all roofs change in the same instant; a tower loses floors or changes its walls.
+      Compare with `m12m_changers_final.png`.
+
+### 9. Towers grow floor by floor
+
+- [ ] 32. Buy the rest (21 to 24). After the Skyscraper: about **75 towers** and 13 sites. No old
+      town is left.
+- [ ] 33. **Level one landmark and watch its neighbours.** Level nothing else first.
+      - Press **×10 three times** on the **Coffee Shop** (level 31). Its model changes at 10
+        and 25. At 25, about **15 shop towers** on its avenue and on the lane behind gain
+        floors, one after another, with a pop.
+      - Press **×10 five times** on **High-Rise Apartments** (level 51). At 50, about **17 home
+        towers** on its avenue and its lane gain floors.
+      - Levelling the **Food Truck** changes no tower. That is correct.
+      Bug: nothing grows; a tower loses a floor.
+- [ ] 34. **Full build.** Press **Max** on **every landmark**, in Build panel order. The cash
+      covers all of them. `GrowthTier` reaches **5** after the first few. Expect:
+      - **88 towers** and no sites;
+      - 45 roof gardens, 4 lanes, 5 bus shelters, 4 kiosks;
+      - every landmark at its last look, and the towers around each one at their tallest;
+      - the skyline rises from the entrance to the back and **peaks at the Skyscraper**.
+- [ ] 35. Compare with `m12m_avenues_full.png` and `m12m_avenues_full_entrance.png`: the same
+      streets, lanes, rows **and heights**. With every landmark at Max this is the city the
+      render shows.
+      Bug: a row of towers clearly lower or taller than in the render.
+- [ ] 36. **Birds.** With no old town left, **two flocks of 3 birds** circle above the tallest
+      landmarks, the Skyscraper first.
+      Bug: no birds at all on a full city (with graphics on Automatic and City detail on).
+
+### 10. City detail, away and back
+
+- [ ] 37. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
+      - the bus shelters drop to about **half** (5 → 2 or 3);
+      - the **walkers and the birds are gone**;
+      - the towers, the sites and the lanes **stay**; nothing flickers or rebuilds.
+- [ ] 38. Turn it **ON**: the **same** shelters come back in the **same** spots.
+- [ ] 39. **A far plot.** Fly more than 290 studs away from the full city and look back:
+      - about **60 of the 88 towers** show, the ones nearest the entrance;
+      - **all four lanes stay**; some run past ground with no towers. That is **known**; it
+        waits on your numbers (step 49);
+      - the streets and the highway ring stay; no shelters, walkers or birds.
+      Fly back: everything returns in the same spots within about 1 s, with no scaffold and no
+      rising towers.
+      Bug: the lanes vanish or flicker from far away; a freeze of half a second or more on the
+      way back.
+
+### 11. Phone, low graphics, two players
+
+- [ ] 40. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Buy
+      through High-Rise Apartments (purchase 9):
+      - the sign and stakes read well at phone size;
+      - sites, cranes, towers and dust look right; towers rise without a bounce;
+      - the lanes do not flicker when you zoom far out (step 14 again);
+      - the frame rate looks fine;
+      - the Build panel is unchanged, and its 8th and 20th rows read **Open the Bus Line** and
+        **Green the Rooftops**;
+      - nothing red in Output.
+- [ ] 41. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
+      quality **1–3**. Stop (*Detener*), then Play. Buy through purchase 9:
+      - **no dust puffs** anywhere, and **no birds**;
+      - old town, sites, cranes, towers, lanes and shelters still appear;
+      - nothing red in Output.
+      Set it back to **Automatic** and Stop. If Studio does not keep the setting between Plays,
+      skip this step and say so.
+- [ ] 42. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). Both players start in Metropolis. The cash goes to whoever has
+      loaded when it pays out, often only one player. Use that player as Player 1.
+- [ ] 43. Player 1 buys through High-Rise Apartments (9). Player 2 stands by Player 1's plot:
+      - the **same old town, sites, cranes, towers, lanes and shelters** in the same spots;
+      - start times may differ by a moment; moving cars and walkers differ. That is fine.
+      Player 2's own plot is still untouched old town. Player 2 needs no cash for this.
+
+### 12. Missing pieces
+
+- [ ] 44. In Edit mode, rename `ReplicatedStorage/Assets/Props/Metropolis/BusShelterM` to
+      `BusShelterM_bak`. Play and buy through Open the Bus Line (8):
+      - no shelters; everything else normal;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+- [ ] 45. In Edit mode, rename `ReplicatedStorage/Shared/Config/Fabric/Metropolis` to
+      `Metropolis_bak`. Play and buy the first four:
+      - no old town, no sites, no towers, no lanes, no sign or stakes;
+      - landmarks, streets, pads and buying all still work;
+      - **Output: zero errors.**
+      Stop, then rename it back.
+
+### 13. Village and Boomtown (unchanged)
+
+- [ ] 46. Stop. Open `C:\Users\benja\Desktop\tycoon-m12m\build\test.rbxl` and Play: a fresh
+      **Village**, covered in woods. Buy the free **Campfire**:
+      - the timber scaffold ring, the trail and the trees clearing with puffs, as before;
+      - the notice board and stakes move to the Small Tent pad;
+      - nothing red in Output.
+- [ ] 47. Stop. Open `C:\Users\benja\Desktop\tycoon-m12m\build\boomtown.rbxl` (**never publish
+      this one either**) and Play: a fresh **Boomtown**, crop fields, 100T cash. Buy the free
+      **Newsstand**:
+      - it rises with its scaffold; its street and driveway appear, as before;
+      - nothing red in Output.
+      If you have five more minutes: buy through the Barber Shop (7) and check the first lane
+      still arrives kerb first, then surface, with no flicker.
+
+### 14. Output
+
+- [ ] 48. **Output** (*Salida*) through the whole run: no red errors, and no yellow warnings that
+      name CityDressing, Fabric, RoadGraph, TileRenderer, Highway, Traffic or Ambient. The two
+      yellow lines from step 4 (`DebugStartEra`, `GrantCash`) are expected. Studio's own
+      warnings are fine.
+
+### 15. Measure (report the numbers)
+
+- [ ] 49. **Metropolis:**
+      1. Open `build/metropolis.rbxl`. Start a Local Server with **3 players** (or 2 if 3 is too
+         slow) and build every plot to a full Metropolis (step 34). The cash may reach only the
+         first player. For the others, once everyone has joined: click the **Server** window,
+         View (*Vista*) → **Command Bar** (*Barra de comandos*), paste this line and press
+         Enter:
+         ```
+         workspace:SetAttribute("GrantCash", 1e20)
+         ```
+         It pays every player who has loaded, once. Nothing to type. One full plot is also a
+         useful number if this is too much.
+      2. In one **player** window (not the Server window), stand where all the plots are near
+         (within 250 studs).
+      3. View (*Vista*) → **Command Bar** (*Barra de comandos*), and run:
+         ```
+         print(#workspace.CityDressing:GetDescendants())
+         print(#workspace.CityDressing:FindFirstChild("Plot1"):GetDescendants())
+         ```
+         Replace `Plot1` with your plot's folder, `Plot<n>` (no underscore).
+      4. Press **Ctrl+F6** (MicroProfiler) and read the frame time in ms over several frames.
+      Report both counts, the frame time and how many plots were built.
+- [ ] 50. **Village and Boomtown**, if you have not sent them yet: step 37 of "M12 — Village
+      growing city" and step 59 of "M12 wave 2 — Boomtown growing city".
+
+### Not a bug (don't report these)
+
+- **88 towers.** That is what fits between the streets, the landmarks and the ring.
+- **No parked cars along the streets, no street trees, no paved block slabs, no plazas, no lamp
+  posts.** The new plan has none. The old town's car parks have their own small cars.
+- **No smoke** in Metropolis.
+- **Old town stands where the ring will go** until you buy the Highway Ramp.
+- **Each lane appears whole** in one purchase.
+- **The front and the back lane on one side stop half a stud apart.** Known.
+- **Two cranes can stand side by side.**
+- **A roof-garden tower can top its neighbour by about a stud**: the garden's trees and pergola.
+- **Towers near a low landmark stay low** until you level that landmark.
+- **Far plots** show about 60 of the 88 towers, all four lanes, and no shelters. Known; it waits
+  on your numbers.
+- **No highway sign** appears. As before.
+- **A highway pier stands in the middle of the entrance view.** As before.
+- **The kiosk left of the entrance stands partly on the pavement**, and walkers turn back there.
+- **The City Park's edge stands a little over the avenue's pavement.**
+- **The cash reads $100ab, then $99.9ab** from your first paid purchase on, and about $94ab
+  once every landmark is at Max. That is correct.
+- Buses in the render are not the same vehicles as in the game. Only the share is the same.
+- You walk through towers, sites, old town and shelters (the no-collision rule).
+- Construction times, and the positions of walkers and moving cars, differ between two players.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- **The lanes** (steps 13–15): flicker at a mouth or a bend? Do they read as lanes?
+- **Any tower that shrank or changed** on a purchase (steps 12 and 26): which purchase?
+- **The two city-changers** (steps 20 and 31): are they worth buying?
+- **Density:** are 88 towers enough? Is the old town right at the start?
+- Anything facing the wrong way: shelters, kiosks, landmarks, buses.
+- The numbers from steps 49 and 50.
+- Does it feel like a growing city?
+
+### Sign-off
+
+- [ ] 51. All boxes ticked → tell Claude "M12 Metropolis signed off".
 
 ## M13 wave 1 — The Valley: sky, ground, hub, roads
 

@@ -272,7 +272,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 5 | `OfficeLowRise` | Low-Rise Office | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 6 | `CityHall` | Found City Hall | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `Supermarket` | Supermarket | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 8 | `BusStop` | Bus Stop | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `BusStop` | Open the Bus Line | decor | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `ApartmentBlockB` | High-Rise Apartments | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 10 | `ParkingGarage` | Parking Garage | building | yes | garage-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 11 | `ShoppingMall` | Shopping Mall | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
@@ -284,7 +284,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 17 | `HighwayRamp` | Build the Highway Ramp | unlock | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 18 | `Stadium` | Stadium | building | yes | stadium-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 19 | `ConventionCenter` | Convention Center | building | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 20 | `RooftopGarden` | Rooftop Garden | decor | yes | city-kit-commercial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `RooftopGarden` | Green the Rooftops | decor | yes | city-kit-commercial, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 21 | `BankTower` | Bank Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 22 | `BroadcastTower` | Broadcast Tower | building | yes | city-kit-commercial, city-kit-roads | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 23 | `OfficeTowerB` | Open the Finance District | unlock | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -294,7 +294,7 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/Metropolis/` -- templates: `templates/_props/Metropolis/` -- in game: `ReplicatedStorage/Assets/Props/Metropolis/`
 
-Summary: 39/39 blueprints, 39/39 uploaded, 39/39 harvested, 39/39 templated
+Summary: 74/74 blueprints, 39/74 uploaded, 39/74 harvested, 39/74 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
@@ -302,41 +302,76 @@ Summary: 39/39 blueprints, 39/39 uploaded, 39/39 harvested, 39/39 templated
 | 2 | `ApartmentB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 3 | `ApartmentC` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 4 | `Bird` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `BushA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `BushB` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `FlowerBedA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `HedgeA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 9 | `HighwayCorner` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 10 | `HighwayDeck` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 11 | `HighwayJunction` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `HighwayRamp` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 13 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 14 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 15 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 16 | `ParkedA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 17 | `ParkedB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 18 | `ParkedC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 19 | `PlanterA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 20 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 21 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 22 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 23 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 24 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 25 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 26 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 27 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 28 | `TownhouseA` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 29 | `TownhouseB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 30 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 31 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 32 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 33 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 34 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 35 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 36 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 37 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 38 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 39 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 5 | `BusShelterM` | — | prop | yes | metro-transit-kit | 1 | 0/1 | — | — | — |
+| 6 | `BushA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 7 | `BushB` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `FabricOfficeNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 9 | `FabricOfficeNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 10 | `FabricOfficeSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 11 | `FabricOfficeSmallB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 12 | `FabricResNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 13 | `FabricResNarrowAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 14 | `FabricResNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 15 | `FabricResNarrowBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 16 | `FabricResSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 17 | `FabricResSmallAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 18 | `FabricResSmallB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 19 | `FabricResSmallBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 20 | `FabricShopNarrowA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 21 | `FabricShopNarrowAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 22 | `FabricShopNarrowB` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 23 | `FabricShopNarrowBGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 24 | `FabricShopSmallA` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 25 | `FabricShopSmallAGreen` | — | prop | yes | tower-kit | 5 | 0/5 | — | — | — |
+| 26 | `FlowerBedA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 27 | `HedgeA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 28 | `HighwayCorner` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 29 | `HighwayDeck` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 30 | `HighwayJunction` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 31 | `HighwayRamp` | — | prop | yes | highway-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 32 | `HighwaySign` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 33 | `LampPost` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 34 | `LotHoarding` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 35 | `MetroEntrance` | — | prop | yes | metro-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 36 | `OldTownBillboard` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 37 | `OldTownClumpA` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 38 | `OldTownClumpB` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 39 | `OldTownClumpC` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 40 | `OldTownQuarterA` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 41 | `OldTownQuarterB` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 42 | `OldTownQuarterC` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 43 | `OldTownRubble` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 44 | `OldTownSkip` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 45 | `ParkedA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 46 | `ParkedB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 47 | `ParkedC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 48 | `PlanterA` | — | prop | yes | garden-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 49 | `PlazaA` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 50 | `PlazaB` | — | prop | yes | city-kit-commercial, city-kit-roads, city-kit-suburban | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 51 | `RevealScaffold` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 52 | `RoadBend` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 53 | `RoadCross` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 54 | `RoadCrossing` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 55 | `RoadEnd` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 56 | `RoadStraight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 57 | `RoadTee` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 58 | `SiteNarrow` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 59 | `SiteNarrowCrane` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 60 | `SiteSmall` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 61 | `SiteSmallCrane` | — | prop | yes | oldtown-kit | 1 | 0/1 | — | — | — |
+| 62 | `TownhouseA` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 63 | `TownhouseB` | — | prop | yes | city-kit-commercial | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 64 | `TrafficLight` | — | prop | yes | city-kit-roads | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 65 | `TreeGrowing` | — | prop | yes | city-kit-suburban | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 66 | `VehicleA` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 67 | `VehicleB` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 68 | `VehicleC` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 69 | `VehicleCityBus` | — | prop | yes | metro-transit-kit | 1 | 0/1 | — | — | — |
+| 70 | `VehicleD` | — | prop | yes | car-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 71 | `WalkerA` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 72 | `WalkerB` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 73 | `WalkerC` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 74 | `WalkerD` | — | prop | yes | people-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Era 4 — Orbital Colony
 
