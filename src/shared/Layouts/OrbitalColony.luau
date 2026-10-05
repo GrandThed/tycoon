@@ -134,11 +134,10 @@ return {
 	},
 	-- Decking (INTERFACES "Paved blocks", "Wave 4.1"): one rect per module, shown once that module
 	-- is owned. Each covers the module's pad and its harvested extents and runs out to the dock
-	-- line (1.75 from the centreline) where the cell it faces is a straight or an end and no pod
-	-- docks in front of it; the installations beside the cross tube's tees stop at the cell edge,
-	-- because a tee cell is whole. The Research Lab's stops half a stud short on its north side,
-	-- where a pod docks in the notch beside its pad. Rects keep 0.5 apart, so no two slabs share
-	-- a plane.
+	-- line (1.75 from the centreline) where the cell it faces is a straight or an end; the
+	-- installations beside the cross tube's tees stop at the cell edge, because a tee cell is
+	-- whole. No pod stands on a rect (the generator cuts lots round them), and rects keep 0.5
+	-- apart, so no two slabs share a plane.
 	blocks = {
 		{
 			min = Vector3.new(-18.18, 0, -46.4),
@@ -176,8 +175,8 @@ return {
 			slots = { "colonyFlag" },
 		},
 		{
-			min = Vector3.new(3.5, 0, -18.2),
-			max = Vector3.new(18.43, 0, -10.5),
+			min = Vector3.new(1.75, 0, -18.2),
+			max = Vector3.new(18.43, 0, -10),
 			slots = { "researchLab" },
 		},
 		{
@@ -251,7 +250,7 @@ return {
 			slots = { "planetaryDefense" },
 		},
 		{
-			min = Vector3.new(-6.8, 0, 26.4),
+			min = Vector3.new(-6.8, 0, 25),
 			max = Vector3.new(6.8, 0, 48.89),
 			slots = { "launchTower" },
 		},

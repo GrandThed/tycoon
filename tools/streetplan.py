@@ -119,12 +119,17 @@ SAMPLES_PER_CELL = 4  # TileRenderer.rasterise: samples to a lattice cell along 
 # TileRenderer.luau: arm n is TILE_ARM_STEPS[n - 1] on the (i, j) lattice and bit n - 1 of a cell's
 # connectivity mask; TILE_KIND_BY_MASK[mask] is the piece that mask draws (PIECE_BY_MASK's kinds).
 TILE_ARM_STEPS = ((1, 0), (0, -1), (-1, 0), (0, 1))  # +X, -Z, -X, +Z
-TILE_KIND_BY_MASK = (
-    "end", "end", "end", "bend",
-    "end", "straight", "bend", "tee",
-    "end", "bend", "straight", "tee",
-    "bend", "tee", "tee", "cross",
+# PIECE_BY_MASK itself: (kind, quarter turns) for each of the 16 masks.
+TILE_PIECE_BY_MASK = (
+    ("end", 0), ("end", 0), ("end", 1), ("bend", 2),
+    ("end", 2), ("straight", 0), ("bend", 3), ("tee", 2),
+    ("end", 3), ("bend", 1), ("straight", 1), ("tee", 1),
+    ("bend", 0), ("tee", 0), ("tee", 3), ("cross", 0),
 )
+TILE_KIND_BY_MASK = tuple(kind for kind, _ in TILE_PIECE_BY_MASK)
+# The kit piece a ring prop's blueprint stands its pier on (monorail-kit's `pier`): where the wild
+# stays under the beam, a single keeps off each one's foot (ring_pier_feet, tools/fabric.py).
+PIER_MODEL = "pier"
 # M12 wave 4.1 (`road.tiles.dock`): the planned kinds whose cell is a solid only within `dock` of
 # its centreline. A bend's pipe sweeps its inner corner and a tee or cross fills the cell.
 DOCKED_KINDS = ("straight", "end")
@@ -2204,6 +2209,85 @@ def spur_half_width(era):
 
 def spur_segments(era):
     return [seg for spur in era.spurs.values() for seg in polyline_segments(spur["points"]) if math.dist(*seg) >= MIN_LENGTH]
+
+
+def ring_cycle(half):
+    """Highway.ringCycle: the ring's cells as one cycle, counter-clockwise from (-half, -half)."""
+    cycle = [(i, -half) for i in range(-half, half)]
+    cycle += [(half, j) for j in range(-half, half)]
+    cycle += [(i, half) for i in range(half, -half, -1)]
+    cycle += [(-half, j) for j in range(half, -half, -1)]
+    return cycle
+
+
+def ring_pieces(era):
+    """Highway.luau's ring as (cell centre, role, quarter turns) per lattice cell, in cycle order:
+    the role is the `highway.props` key the cell draws -- "deck" on a straight, "corner" on a
+    turn, "junction" where a layout ramp leaves -- and the turn is the connectivity table's.
+    Empty without a layout highway or a tile pitch."""
+    if era.highway is None or era.tile_studs <= 0:
+        return []
+    step = era.tile_studs
+    half = int(round_half(float(era.highway["ring"]) / step))
+    if half < 1:
+        return []
+    cycle = ring_cycle(half)
+    junction, ramp_arm = None, None
+    ramp = era.highway_ramp
+    if ramp is not None:
+        requested = xz(ramp["cell"])
+        junction = min(range(len(cycle)), key=lambda index: math.dist((cycle[index][0] * step, cycle[index][1] * step), requested))
+        direction = RAMP_DIRECTIONS.get(ramp["direction"])
+        if direction is None:
+            inward = (-cycle[junction][0], -cycle[junction][1])
+            direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
+        delta = (int(direction[0]), int(direction[1]))
+        ramp_arm = TILE_ARM_STEPS.index(delta) if delta in TILE_ARM_STEPS else None
+    pieces = []
+    for index, cell in enumerate(cycle):
+        mask = 0
+        for neighbour in (cycle[index - 1], cycle[(index + 1) % len(cycle)]):
+            delta = (neighbour[0] - cell[0], neighbour[1] - cell[1])
+            if delta in TILE_ARM_STEPS:
+                mask |= 1 << TILE_ARM_STEPS.index(delta)
+        if index == junction and ramp_arm is not None:
+            mask |= 1 << ramp_arm
+        kind, quarters = TILE_PIECE_BY_MASK[mask]
+        role = "deck" if kind == "straight" else "corner" if kind == "bend" else "junction"
+        pieces.append(((cell[0] * step, cell[1] * step), role, quarters))
+    return pieces
+
+
+def ring_pier_feet(era):
+    """The centre of every pier foot the ring stands on the plot, as (x, z): each ring cell's prop
+    (ring_pieces) placed as the client places it -- at the cell centre, turned by its quarter turns
+    -- and in it every piece of that prop's blueprint whose kit model is PIER_MODEL, at the
+    blueprint's scale. Orbital's monorail has one a cell: 2.5 along the beam under a straight, under
+    the arc's middle on a corner (MonorailTrack.json, MonorailCorner.json). Empty for a ring whose
+    props have no blueprint or no such piece."""
+    config = era.dressing.get("highway") or {}
+    props = config.get("props") or {}
+    local = {}
+    feet = []
+    for centre, role, quarters in ring_pieces(era):
+        name = props.get(role)
+        if name not in local:
+            local[name] = []
+            path = BLUEPRINTS_DIR / "_props" / era.name / f"{name}.json"
+            if isinstance(name, str) and path.exists():
+                try:
+                    blueprint = json.loads(path.read_text(encoding="utf-8"))
+                except ValueError:
+                    blueprint = {}
+                scale = float(blueprint.get("scale", 1.0))
+                for piece in blueprint.get("pieces") or []:
+                    if piece.get("model") == PIER_MODEL and isinstance(piece.get("pos"), list) and len(piece["pos"]) == 3:
+                        local[name].append((piece["pos"][0] * scale, piece["pos"][2] * scale))
+        angle = math.radians(quarters * 90.0)
+        for x, z in local[name]:
+            # CFrame.Angles(0, a, 0), the mapping every prop placement uses.
+            feet.append((centre[0] + x * math.cos(angle) + z * math.sin(angle), centre[1] - x * math.sin(angle) + z * math.cos(angle)))
+    return feet
 
 
 def pier_squares(era):

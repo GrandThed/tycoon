@@ -98,6 +98,16 @@ moved by `wild.grid.shift` or dropped, a single dropped, as for any other keep-o
 under the beam stands for good, so it keeps off the entrance corridor and is at most
 WILD_UNDER_BEAM tall.
 
+Rulings after the groundwork (same section). No lot overlaps a layout `blocks` rect -- a landmark's
+deck, one rect; flush is allowed -- so the generator cuts street lots and lane lots round them.
+Where the wild is laid on the lattice, a cell no clump quarter covers carries exactly one single
+(the plot is an odd number of cells across and a clump is two, so one ring column and one ring row
+have none; so have the cells a dropped clump leaves): a prop of `wild.singles.props`, placed and
+turned by its own seeded stream within `singles.inset` of the cell's middle. The plan's fallow
+cells are open ground by choice and keep their loose singles; the entrance corridor's cell carries
+nothing. Under a beam the wild never leaves, a single keeps CHECK_PIER_FOOT from each pier foot's
+centre; clumps are low relief and may stand round one.
+
     py tools/fabric.py build Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
     py tools/fabric.py check Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
 
@@ -192,6 +202,11 @@ CHECK_TILE_SOLID = 0.5
 # INTERFACES "Wave 4.1": with `highway.clearBand` false the wild stands under the beam for good, so
 # no wild prop is taller than this at any stage (the monorail's soffit is at 6.10).
 WILD_UNDER_BEAM = 3.0
+# Rulings after the groundwork: a single's centre keeps this far from the centre of every pier foot
+# of a ring whose ground the wild never leaves (a foot is 1.9 square).
+CHECK_PIER_FOOT = 1.5
+# How many places a cell's one single is tried at before the cell's middle is taken as it stands.
+FILL_TRIES = 12
 # Two shapes that share no area deeper than this only touch (coordinates are written to 0.01).
 TOUCH = 1e-6
 # A lot laid exactly a street clearance away measures a hair under it in floating point (a plan
@@ -590,6 +605,17 @@ class Site:
         self.wild_keepout += [(label, poly, box_of(poly)) for label, poly in kiosks + corridor]
         # The wild stands under the ring's beam for good (wild_height_messages).
         self.under_beam = bool(deck_band(self.era)) and self.tiles and not self.clear_band
+        # The wild is laid on the lattice, one quarter to a cell, and may cover the planned streets:
+        # every cell no quarter covers then carries a single (fill_cells).
+        self.lattice_wild = self.tiles and not self.park_strips
+        # Every pier foot the wild stands round for good; a single keeps CHECK_PIER_FOOT from each.
+        self.pier_feet = streetplan.ring_pier_feet(self.era) if self.under_beam else []
+        # The layout's deck rects (`blocks`: one per landmark, under its pad and building) as
+        # (label, polygon, box): no lot overlaps one, flush allowed.
+        self.deck_rects = [
+            (f"deck rect {index} ({', '.join(block['slots']) or 'no slot'})", block["poly"], box_of(block["poly"]))
+            for index, block in enumerate(self.era.blocks, start=1)
+        ]
         # What an alley's ground may not stand on (tile_lane_messages), as (label, band, box): each
         # leg's roadway and pavement, as streetplan.footpath_violations judges every footpath -- a
         # walkway narrower than its cell (Orbital's) leaves a footpath the rim of the cell -- and a
@@ -714,6 +740,10 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
             return False
     for a, b, segment_box in site.spur_boxes:
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
+            return False
+    # A landmark's deck is one rect: a lot may stand flush against it, never on it.
+    for _, deck, deck_box in site.deck_rects:
+        if not boxes_apart(box, deck_box, 0.0) and overlap_depth(poly, deck) > TOUCH:
             return False
     for points in lanes:
         need = rules["lanes"]["clear"]
@@ -2970,13 +3000,78 @@ def tube_collateral(site, plan, item):
     return found
 
 
+def pier_hit(site, item):
+    """(distance, foot) of the nearest pier foot a single stands within CHECK_PIER_FOOT of, centre to
+    centre, else None. Clumps are low relief and stand round a foot; and there are no feet to keep
+    off unless the wild stays under the beam for good."""
+    if item["kind"] == "clump" or not site.pier_feet:
+        return None
+    distance, foot = min((math.dist((item["x"], item["z"]), foot), foot) for foot in site.pier_feet)
+    return (distance, foot) if distance < CHECK_PIER_FOOT - EPS else None
+
+
+def lattice_cell(site, point):
+    """The lattice cell (i, j) a point lies in."""
+    return streetplan.cell_at(site.era.tile_studs, point)
+
+
+def fill_cells(site, clumps, open_cells):
+    """The cells that must each carry one single (rulings after the groundwork), sorted: every
+    lattice cell that lies on the plot, less the cells a clump's quarter covers (`clumps`: the
+    plot's own, each quad in its cell), the plan's open ground (`open_cells`: the fallow fields,
+    which keep their loose singles) and any cell that lies wholly inside one keep-out -- the
+    entrance corridor's. Empty unless the wild is laid on the lattice."""
+    if not site.lattice_wild:
+        return []
+    step = site.era.tile_studs
+    reach_i = int(math.floor((site.era.half_x - step / 2) / step + 1e-9))
+    reach_j = int(math.floor((site.era.half_z - step / 2) / step + 1e-9))
+    covered = {lattice_cell(site, quad) for clump in clumps if not clump["skirt"] for quad in clump["quads"]}
+    cells = []
+    for j in range(-reach_j, reach_j + 1):
+        for i in range(-reach_i, reach_i + 1):
+            if (i, j) in covered or (i, j) in open_cells:
+                continue
+            corners = site.era.cell_square((i, j))
+            if any(all(point_gap(corner, poly) <= TOUCH for corner in corners) for _, poly, _ in site.wild_keepout):
+                continue
+            cells.append((i, j))
+    return cells
+
+
+def fill_singles(site, plan, clumps, open_cells, make):
+    """One single for each of fill_cells, in that order: a prop of `wild.singles.props`, within
+    `singles.inset` of the cell's middle (so a 3-stud crater stays in its cell), any turn, a scale
+    in `singles.scale` -- all from the plan's own `fill` stream, so laying them moves nothing else.
+    A place that breaks a wild rule (a pier foot, the corridor, a planned street its stretch would
+    not clear it from) is drawn again; the last try is the cell's middle. A cell with no legal
+    place is left empty for `check` to name. `make` builds the entry."""
+    loose = plan["wild"]["singles"]
+    step = site.era.tile_studs
+    room = max(step / 2 - loose["inset"], 0.0)
+    rng = random.Random(f"{plan['seed']}:fill")
+    laid = []
+    for cell in fill_cells(site, clumps, open_cells):
+        centre = (cell[0] * step, cell[1] * step)
+        prop = loose["props"][rng.randrange(len(loose["props"]))]
+        for attempt in range(FILL_TRIES):
+            last = attempt == FILL_TRIES - 1
+            dx, dz = (0.0, 0.0) if last else (rng.uniform(-room, room), rng.uniform(-room, room))
+            candidate = make(prop, centre[0] + dx, centre[1] + dz, rng.uniform(0.0, 360.0), rng.uniform(*loose["scale"]), False)
+            if lattice_cell(site, (candidate["x"], candidate["z"])) == cell and not kept_out(site, plan, candidate):
+                laid.append(candidate)
+                break
+    laid.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
+    return laid
+
+
 def kept_out(site, plan, item):
     """Whether a wild entry stands on ground a tiles era keeps it off, on the ring's ground out of
-    the ring's clearing, or across a planned street it may cover in a way that street's own
-    clearing does not fit (never in another era)."""
-    if not site.wild_keepout and not site.highway_rects and not site.tube_cells:
+    the ring's clearing, on a pier foot the wild never leaves, or across a planned street it may
+    cover in a way that street's own clearing does not fit (never in another era)."""
+    if not site.wild_keepout and not site.highway_rects and not site.tube_cells and not site.pier_feet:
         return False
-    if keepout_hits(site, wild_shapes(site, plan, item)) or ring_misses(site, plan, item):
+    if keepout_hits(site, wild_shapes(site, plan, item)) or ring_misses(site, plan, item) or pier_hit(site, item):
         return True
     return bool(tube_misses(site, plan, item)) or bool(tube_spills(site, plan, item)) or bool(tube_collateral(site, plan, item))
 
@@ -2987,10 +3082,11 @@ def field_entry(wild, centre, angle):
     return {"kind": "clump", "x": centre[0], "z": centre[1], "rotationY": angle, "scale": 1.0, "quads": [[rounded(q[0]), rounded(q[1])] for q in quads]}
 
 
-def generate_wild(site, plan):
-    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields."""
+def generate_wild(site, plan, report=None):
+    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields.
+    `report`, when given, takes the fields pattern's bookkeeping (generate_fields)."""
     if plan["wild"].get("pattern") == FIELDS:
-        return generate_fields(site, plan)
+        return generate_fields(site, plan, report)
     return generate_woods(site, plan)
 
 
@@ -3162,7 +3258,7 @@ def thinned(items, cap):
     return [item for index, item in enumerate(items, start=1) if (index * cap) // count != ((index - 1) * cap) // count]
 
 
-def generate_fields(site, plan):
+def generate_fields(site, plan, report=None):
     """Farmland (INTERFACES "Wave 2.1"): a fenced field per grid cell, each a clump of four
     quarter-fields that the town clears quarter by quarter. Three things keep it from reading as a
     quilt: a cell's crop comes from a low-frequency noise field, so neighbouring cells share a crop
@@ -3171,7 +3267,12 @@ def generate_fields(site, plan):
     and the fields run on past the back and side edges into a landscape band with the plan's
     landmarks. A field stands wholly on the plot
     or wholly off it: the ground past the edge is lower. A plan without `skirt` lays nothing past
-    the edge (Metropolis: the ring is the city's edge), and then no landmarks either."""
+    the edge (Metropolis: the ring is the city's edge), and then no landmarks either.
+
+    Where the wild is laid on the lattice (Site.lattice_wild), every cell no field's quarter covers
+    and the plan did not leave open carries one single (fill_singles). `report`, a dict, takes
+    `open`: the lattice cells of the plan's open ground, which `check` needs to tell an open field
+    from a cell that lost its clump."""
     wild = plan["wild"]
     grid, clumps_cfg = wild["grid"], wild["clumps"]
     skirt = wild.get("skirt")
@@ -3284,6 +3385,15 @@ def generate_fields(site, plan):
     def single(prop, x, z, rotation, scale, is_skirt):
         return {"kind": "single", "prop": prop, "x": rounded(x), "z": rounded(z), "rotationY": rounded(norm_degrees(rotation)), "scale": rounded(scale), "skirt": is_skirt}
 
+    # The plan's open ground on the plot, as lattice cells (a field is its four quarters' cells).
+    open_lattice = set()
+    if site.lattice_wild:
+        for cell in on:
+            if cell["key"] in open_ground:
+                open_lattice.update(lattice_cell(site, quad) for quad in quad_centres(cell["centre"][0], cell["centre"][1], grid["angle"], 1.0, clumps_cfg["quarterOffset"]))
+    if report is not None:
+        report["open"] = open_lattice
+
     # Singles lead with what the landscape cannot do without, in case a budget ever cuts the tail:
     # the landmarks, the skirt's shelterbelts, the telegraph line, then the pasture's hay and trees.
     singles = [single(landmark["prop"], x, z, landmark["rotationY"], 1.0, True) for landmark, (x, z), _ in landmarks]
@@ -3334,7 +3444,8 @@ def generate_fields(site, plan):
                     scattered.append(candidate)
         scattered = thinned(scattered, loose["count"])
         scattered.sort(key=lambda entry: (-round(math.dist(site.entrance, (entry["x"], entry["z"])), DECIMALS), entry["z"], entry["x"]))
-        singles += scattered
+        # The fill leads the loose singles: if a budget ever cuts the tail, a cell is not left bare.
+        singles += fill_singles(site, plan, clumps, open_lattice, single) + scattered
     # The landmarks, shelterbelts and poles keep off a tiles era's streets, deck and kiosks too.
     singles = [entry for entry in singles if not kept_out(site, plan, entry)]
     return wild_order(site, clumps, singles)
@@ -3568,6 +3679,13 @@ def parcel_messages(site, plan, parcels):
             d = gap(poly, solid)
             if d < CHECK_TILE_SOLID - EPS:
                 messages.append(f"{label}: {d:.2f} from {what} (need {CHECK_TILE_SOLID})")
+        # INTERFACES "Wave 4.1", rulings after the groundwork: no lot on a landmark's deck rect.
+        for what, deck, deck_box in site.deck_rects:
+            if boxes_apart(box, deck_box, 0.0):
+                continue
+            depth = overlap_depth(poly, deck)
+            if depth > TOUCH:
+                messages.append(f"{label}: stands {depth:.2f} on {what}; a lot may stand flush against a deck rect, not on it")
         stretch = site.stretch_by_id.get(parcel["stretch"])
         if stretch is None:
             messages.append(f"{label}: stretch {parcel['stretch']!r} is not a piece of this network")
@@ -4328,10 +4446,39 @@ def wild_messages(site, plan, doc):
                 f"{label}{suffix}: stands on no planned cell, yet {piece} clears it when it is drawn "
                 f"(within clear.street {site.street_clear:g}): a drawn cell clears only itself"
             )
+        hit = pier_hit(site, item)
+        if hit is not None:
+            messages.append(f"{label}: {hit[0]:.2f} from the pier foot at {streetplan.fmt((rounded(hit[1][0]), rounded(hit[1][1])))} (need {CHECK_PIER_FOOT})")
     if plan["wild"].get("pattern") == FIELDS:
         messages += field_messages(site, plan, wild)
+        messages += fill_messages(site, plan, wild)
     if site.under_beam:
         messages += wild_height_messages(site, plan)
+    return messages
+
+
+def fill_messages(site, plan, entries):
+    """Rulings after the groundwork: where the wild is laid on the lattice, every cell the data's
+    clumps do not cover carries exactly one single -- but for the plan's open ground, which is the
+    generator's to name (its fallow fields; read back from a fresh run of the pattern), and the
+    entrance corridor's cell."""
+    if not site.lattice_wild:
+        return []
+    report = {}
+    generate_wild(site, plan, report)
+    step = site.era.tile_studs
+    standing = {}
+    for index, item in enumerate(entries, start=1):
+        if item["kind"] == "single" and not item["skirt"]:
+            standing.setdefault(lattice_cell(site, (item["x"], item["z"])), []).append(index)
+    messages = []
+    clumps = [item for item in entries if item["kind"] == "clump" and len(item.get("quads") or ()) == QUARTERS]
+    for cell in fill_cells(site, clumps, report.get("open", set())):
+        found = standing.get(cell, [])
+        if len(found) != 1:
+            where = streetplan.fmt((cell[0] * step, cell[1] * step))
+            what = "no single" if not found else f"{len(found)} singles (wild {', '.join(str(index) for index in found)})"
+            messages.append(f"wild: the cell {where} is covered by no clump and carries {what}; it carries exactly one")
     return messages
 
 
