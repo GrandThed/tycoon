@@ -1,0 +1,14 @@
+{
+  "id": "FabricIndNarrowA",
+  "era": "OrbitalColony",
+  "scale": 2.0,
+  "footprint": [4, 8],
+  "pieces": [
+    {"kit": "colony-kit", "model": "deck-narrow", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "ind-narrow-a-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "ind-narrow-a-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "colony-kit", "model": "ind-narrow-a-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
+    {"kit": "colony-kit", "model": "ind-narrow-a-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
+    {"kit": "colony-kit", "model": "ind-narrow-a-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
+  ]
+}

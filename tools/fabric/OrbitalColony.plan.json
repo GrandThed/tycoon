@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "seed": "OrbitalColony:fabric:groundwork",
+  "parcels": {
+    "frontSetback": 1.75,
+    "gap": 0.6,
+    "terraceGap": 0.05,
+    "terraceStreets": [1, 2, 3, 4],
+    "terraceFill": ["narrow", "small"],
+    "mediumShare": 0.5,
+    "walkStep": 0.05,
+    "endMargin": 0.2,
+    "setbackJitter": 0.0,
+    "turnJitter": 0.0,
+    "minLevel": 2,
+    "rows": 1,
+    "edge": 1.0,
+    "landmark": 0.5,
+    "slot": 1.0,
+    "pad": 0.5,
+    "plaza": 1.0,
+    "sign": 1.0,
+    "marker": 0.5,
+    "street": 1.75,
+    "spur": 2.55,
+    "tileSolid": 0.5,
+    "sideSizes": {
+      "2": { "both": [] },
+      "4": { "both": [] }
+    },
+    "keepClear": [
+      { "x": 0, "z": -21.5, "size": [20, 6.5], "rotationY": 0 },
+      { "x": -22.25, "z": -21.5, "size": [8, 6], "rotationY": 0 },
+      { "x": -22.25, "z": -5.4, "size": [8, 9], "rotationY": 0 },
+      { "x": -22.25, "z": 33, "size": [8, 9], "rotationY": 0 }
+    ],
+    "lanes": {
+      "setback": 1.6,
+      "clear": 1.6,
+      "street": 1.75,
+      "gap": 0.05,
+      "step": 0.05,
+      "overhang": 0.9,
+      "mediumShare": 0.0,
+      "minLots": 2,
+      "sizes": ["small"],
+      "lines": [
+        { "points": [[-28, 22], [-9, 22]] }
+      ]
+    }
+  },
+  "require": { "parcels": 1 },
+  "layers": [],
+  "footprints": {
+    "RegolithBoulder": [2, 2],
+    "RegolithCrater": [3, 3],
+    "SurveyBeacon": [1, 1]
+  },
+  "wild": {
+    "pattern": "fields",
+    "grid": { "pitch": 14, "origin": [-3.5, 3.5], "angle": 0, "edge": 0.5 },
+    "clumps": { "size": 13, "quarterOffset": 3.25 },
+    "crops": {
+      "noise": { "waves": 3, "base": 0.05 },
+      "bands": [
+        { "variant": 1, "share": 0.4 },
+        { "variant": 3, "share": 0.35 },
+        { "variant": 2, "share": 0.25 }
+      ]
+    },
+    "fallow": { "noise": { "waves": 3, "base": 0.1 }, "share": 0.15 },
+    "singles": {
+      "props": ["RegolithBoulder", "RegolithCrater", "SurveyBeacon"],
+      "perCell": [1, 2],
+      "inset": 2.5,
+      "spacing": 4.0,
+      "scale": [0.95, 1.05],
+      "count": 24
+    }
+  }
+}

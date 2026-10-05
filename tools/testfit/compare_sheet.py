@@ -9,14 +9,23 @@ column naming the rows, and every render scaled to one cell size.
         --row "Boulevard=m12m_boulevard_tier1.png,m12m_boulevard_tier3.png,m12m_boulevard_full.png" \
         --dir assets/testfit/out/Metropolis
 
+    py tools/testfit/compare_sheet.py --out assets/testfit/out/OrbitalColony/m12o_compare.png \
+        --cols "Tier 1,Tier 3,Full" --dir assets/testfit/out/OrbitalColony \
+        --row "Today=m12o_today_tier1.png|4 modules,m12o_today_tier3.png|15 modules,m12o_today_full.png|24 modules, 7 domes" \
+        --row "Docks=m12o_docks_tier1.png,m12o_docks_tier3.png,m12o_docks_full.png" \
+        --row "Axis=m12o_axis_tier1.png,m12o_axis_tier3.png,m12o_axis_full.png"
+
 A relative image path is read from `--dir` (default: the current directory). A missing image leaves
 its cell dark with the file name in it, so a sheet can be made while a render is still running.
+`image|caption` writes a caption on that cell, bottom left on a dark band -- the lot count of a
+render that does not carry one (plotrender.py `--label` stamps its own, and needs none here).
 Labels are set in Titan One (assets/marketing/fonts/) when it is there, else Pillow's default face.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +44,8 @@ HEAD_SHARE = 70 / 800  # column-title row height per cell width
 TITLE_SHARE = 60 / 800  # optional sheet-title band height per cell width
 LABEL_FONT_SHARE = 0.55  # of the head row's height
 TITLE_FONT_SHARE = 0.55
+CAPTION_SHARE = 0.036  # a cell caption's text height per cell height, as plotrender's `--label`
+CAPTION_BAND = (24, 24, 28, 200)
 
 
 def font(size):
@@ -48,11 +59,32 @@ def font(size):
 
 
 def parse_row(text):
-    """'Label=a.png,b.png' -> ('Label', ['a.png', 'b.png'])."""
+    """'Label=a.png,b.png|a caption' -> ('Label', ['a.png', 'b.png'], [None, 'a caption']). Cells are
+    cut at the commas that follow an image name, so a caption may hold commas of its own."""
     if "=" not in text:
         raise SystemExit(f"--row {text!r}: expected Label=image,image,...")
-    label, images = text.split("=", 1)
-    return label.strip(), [part.strip() for part in images.split(",")]
+    label, cells = text.split("=", 1)
+    images, captions = [], []
+    for part in re.split(r",(?=[^,|]*\.png)", cells, flags=re.IGNORECASE):
+        image, _, caption = part.partition("|")
+        images.append(image.strip())
+        captions.append(caption.strip() or None)
+    return label.strip(), images, captions
+
+
+def caption_cell(sheet, box, text):
+    """One cell's caption: bottom left of `box`, on a dark band, in the sheet's face."""
+    left, top, right, bottom = box
+    size = max(round((bottom - top) * CAPTION_SHARE), 10)
+    face = font(size)
+    layer = Image.new("RGBA", sheet.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    bounds = draw.textbbox((0, 0), text, font=face)
+    pad = size // 2
+    band_top = bottom - (bounds[3] - bounds[1]) - 2 * pad
+    draw.rectangle((left, band_top, min(left + bounds[2] - bounds[0] + 2 * pad, right), bottom), fill=CAPTION_BAND)
+    draw.text((left + pad - bounds[0], band_top + pad - bounds[1]), text, font=face, fill=INK)
+    sheet.paste(Image.alpha_composite(sheet.convert("RGBA"), layer).convert("RGB"))
 
 
 def centred_text(draw, box, text, face):
@@ -76,7 +108,7 @@ def wrapped(draw, text, face, width):
 
 
 def compose(out, columns, rows, base, cell_width, title=None):
-    paths = [[(base / image) if not Path(image).is_absolute() else Path(image) for image in images] for _, images in rows]
+    paths = [[(base / image) if not Path(image).is_absolute() else Path(image) for image in images] for _, images, _ in rows]
     first = next((path for row in paths for path in row if path.exists()), None)
     if first is None:
         raise SystemExit("compare_sheet: none of the images exists")
@@ -95,7 +127,7 @@ def compose(out, columns, rows, base, cell_width, title=None):
     for c, name in enumerate(columns):
         left = label_width + c * cell_width
         centred_text(draw, (left, title_height, left + cell_width, title_height + head_height), name, head_face)
-    for r, ((label, _), row_paths) in enumerate(zip(rows, paths)):
+    for r, ((label, _, captions), row_paths) in enumerate(zip(rows, paths)):
         top = title_height + head_height + r * cell_height
         lines = wrapped(draw, label, head_face, label_width - 16)
         line_height = round(head_height * LABEL_FONT_SHARE * 1.25)
@@ -108,6 +140,9 @@ def compose(out, columns, rows, base, cell_width, title=None):
             if path is not None and path.exists():
                 with Image.open(path) as image:
                     sheet.paste(image.convert("RGB").resize((cell_width, cell_height), Image.LANCZOS), (left, top))
+                if c < len(captions) and captions[c]:
+                    caption_cell(sheet, (left, top, left + cell_width, top + cell_height), captions[c])
+                    draw = ImageDraw.Draw(sheet)
             else:
                 draw.rectangle((left, top, left + cell_width - 1, top + cell_height - 1), fill=MISSING_FILL)
                 name = path.name if path is not None else "(no image)"
@@ -129,7 +164,7 @@ def main(argv):
     args = parser.parse_args(argv)
     columns = [part.strip() for part in args.cols.split(",")]
     rows = [parse_row(text) for text in args.row]
-    for label, images in rows:
+    for label, images, _ in rows:
         if len(images) != len(columns):
             raise SystemExit(f"row {label!r} has {len(images)} images for {len(columns)} columns")
     size = compose(args.out, columns, rows, args.dir, args.cell, args.title)

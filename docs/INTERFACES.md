@@ -7529,3 +7529,44 @@ it", on the lead's proposal of the candidates "docks" and "axis".
 Frozen: every server file, remotes, `Config/Eras/**`, `Economy.luau`, the other eras' layouts,
 config blocks and fabric data, and the client code. Agents on base do not run `git add`, `commit`,
 `stash` or `checkout`: the lead commits.
+
+### Rulings after the groundwork (lead, 2026-10-05)
+
+The generator, the mirror and the renderer run Orbital end to end (`m12o_groundwork_full.png`: today's
+tubes, 13 lots, 54 clumps, 23 deck rects), with every gate green and the three shipped eras' fabric
+data byte-identical. 28 draft blueprints exist (`colony-kit`, `regolith-kit`).
+
+- **Wild on planned tubes, as built:** the data has no lone quarter (an entry is a whole clump or a
+  single), so the wild is laid as **lattice-aligned clumps**: each quarter of a clump is one 7-stud
+  cell, a clump may straddle a planned tube, and a drawn cell clears only the quarter on it. The
+  sentence "a clump never overlaps a planned tube's clearing band" above is withdrawn. `fabric.py
+  check` holds the intent with three rules: a wild entry on a planned band is cleared by the stretch
+  under it; one quarter a cell; a drawn stretch clears nothing off its own cells.
+- **A clump is its quarter at four turns** (the client breaks a clump into its quarters), so the
+  four-fold repeat in the regolith clumps stays for the mock. A mixed mapping (`wild.clumpQuarters`)
+  is a wave 4.2 option if the repeat shows on the plot renders.
+- **Cells the clump grid cannot cover carry singles.** The plot is 17 cells across and a clump is
+  two, so one ring column and one ring row, and the cells beside the entrance corridor, get no
+  clump. Each such cell gets one single (boulder, crater or beacon by the seeded pattern), at least
+  1.5 from a pier foot's centre, inside `budget.wild`. No ring side is bare.
+- **Lots keep off deck rects.** No lot overlaps a landmark's `blocks` rect (flush is allowed); the
+  generator treats the rects as solids and `check` proves it. A landmark's deck stays one rect.
+- **Docked measurements, confirmed:** a footprint, harvested extents, a pad, a marker and a deck rect
+  are judged against the dock line (1.75) on straight and end cells and against the whole cell on
+  bend, tee and cross cells. A lane's slab reaches 1.5 from the centreline, as a spur footpath does,
+  and is judged against the 3-wide walkway and whole cells.
+- **Piers under the beam:** clumps are low relief and may stand around a pier foot; only singles keep
+  off it.
+- **Marker colours:** `stakeColor` (255, 160, 52), `stringColor` (214, 216, 222).
+- **Draft props, accepted for the mock** with these notes for the final set: `LotBeacon` is small
+  and close to the sites' work light; `FabricHabNarrowB` reads as an office block at stage 4;
+  `FabricHabSmallA` and `FabricHabMediumA` share one motif; `FabricSciSmallA` echoes the Comms
+  Array; the medium industry and port decks are half empty at stages 0 and 1. Fabric blueprints use
+  scale 2.0 so the space-kit cargo craft fit a lot. Masts and flare stacks count toward a prop's
+  height, so a low governor holds those props a stage back; kept for the mock.
+- **A tube walled by tall rows disappears from the tycoon camera** (rows of 7 to 10 studs over a
+  1.9-stud pipe, 3.5 apart). The layout owners report how much of the tube network shows at full
+  build; a low front step on every fabric prop is the lever in reserve.
+- **For the client in wave 4.2:** `Fabric.buildMask` skips the ring rects when
+  `highway.clearBand == false`; types for `road.tiles.dock` and `highway.clearBand`; Orbital joins
+  `check_mirror.py`. Docking is a tools rule and needs no client code.

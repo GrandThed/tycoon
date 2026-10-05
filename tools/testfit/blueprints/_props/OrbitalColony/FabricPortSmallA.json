@@ -1,0 +1,17 @@
+{
+  "id": "FabricPortSmallA",
+  "era": "OrbitalColony",
+  "scale": 2.0,
+  "footprint": [6, 6],
+  "pieces": [
+    {"kit": "colony-kit", "model": "deck-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "port-small-a-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "port-small-a-0-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 3},
+    {"kit": "colony-kit", "model": "port-small-a-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "colony-kit", "model": "port-small-a-1-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 3},
+    {"kit": "colony-kit", "model": "port-small-a-2", "pos": [0, 0, 0], "rotY": 0, "stage": 2},
+    {"kit": "colony-kit", "model": "port-small-a-3", "pos": [0, 0, 0], "rotY": 0, "stage": 3},
+    {"kit": "colony-kit", "model": "port-small-a-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4},
+    {"kit": "space-kit", "model": "craft_cargoB", "pos": [-1.325, 0.095, -1.45], "rotY": 0, "stage": 4}
+  ]
+}

@@ -1,26 +1,29 @@
 --!strict
--- Era 4 (OrbitalColony) plot layout. Positions are studs relative to plot center,
--- Y at ground level. rotationY is Roblox-native CFrame.Angles(0, rad(r), 0): 0
--- faces -Z (the plot's front/hub edge), positive turns counterclockwise seen from
--- above (90 faces -X, 270 faces +X). Pads spawn padOffset studs along that facing.
+-- Era 4 (OrbitalColony) plot layout: the GROUNDWORK of the M12 growth-layout mock (INTERFACES
+-- "M12 wave 4 -- Orbital Colony", "Wave 4.1"). It is today's colony with the fabric switched on, so
+-- the generator, the checks, the mirror and the renderer can be proved end to end; the candidate
+-- layouts "docks" and "axis" replace this file. Positions are studs relative to the plot centre, Y
+-- at ground level. rotationY is Roblox-native CFrame.Angles(0, rad(r), 0): 0 faces -Z (the plot's
+-- front/hub edge), positive turns counterclockwise seen from above (90 faces -X, 270 faces +X).
+-- Pads spawn padOffset studs along that facing unless a slot names its padPosition.
 --
--- Personality: a colony of modules on the Metropolis lattice (4x4 grid at x, z =
--- +/-14, +/-42), strung together by enclosed glass tubes and ringed by a monorail.
--- The low landing pads, solar racks and domes greet the hub; the tall science and
--- industry modules stand at the back; the Launch Tower closes the central tube from
--- the back of the plot, facing arriving players down it. Dark regolith base.
+-- What is kept from wave 2b: the tubes (kit tiles on the 7-stud lattice, a tree), the 4x4 grid of
+-- modules at x, z = +/-14, +/-42 with the low ones at the front and the Launch Tower closing the
+-- central tube, and the monorail loop. What is gone: `lots`, `plazas`, `treeZones` and the cluster
+-- decking, which the city fabric replaces (lots dock on the tubes, wild regolith covers the rest).
 --
--- Wave 2b geometry (INTERFACES "Wave 2b"), and why the numbers are what they are:
---  * Tubes are kit tiles on the 7-stud lattice, so every street point is a multiple of
---    7 and every segment is axis-aligned. A tube is 4 wide in a 7 cell and has no
---    pavement, so pads stand flush against the cell edge (centreline +/- 3.5) and
---    nothing but a spur ever sits on a cell.
---  * padOffset is 7.5 as in Metropolis: a 9x9 face is 4.5 from its anchor and the cell
---    edge 10.5, so a 6-deep pad exactly fills the gap.
---  * A 12x12 face is 6 from its anchor, which leaves only 4.5 to the cell edge -- too
---    little for a pad. The three 12x12 modules therefore sit 1.5 studs outboard of
---    their grid spot (x = +/-43.5; the outer face at 49.5 still clears the monorail
---    band at 52.5) and name their pad explicitly on the cell edge.
+-- What the new rules ask of it:
+--  * `road.tiles.dock` 1.75: a straight or end tube cell is a solid only 1.75 either side of its
+--    centreline, so a lot fronts the pipe there and a deck rect runs up to that line. The modules
+--    keep their wave 2b seats (pad flush with the cell edge, 3.5 out), which is legal and leaves
+--    1.75 of decking between pad and pipe. A bend, tee or cross cell stays whole.
+--  * One `blocks` rect per module (one slot each): the decking under its pad and building, from
+--    the dock line back. Decking arrives with the purchase; no slab paves a cluster ahead of it.
+--  * A next-pad marker stands 5.3 to a module's right of its pad, so the monorail's pad is
+--    turned: facing the tube its marker stood on the Solar Array's pad.
+--  * `district` is the fabric district a module pulls its neighbours toward
+--    (eras.OrbitalColony.fabric.districts); a slot without one pulls nothing. The six decor and
+--    unlock installations carry none: each is one low stage and would cap the pods beside it.
 return {
 	plotSize = Vector3.new(120, 1, 120),
 	baseColor = Color3.fromRGB(56, 53, 60),
@@ -28,29 +31,45 @@ return {
 	padOffset = 7.5,
 	placeholderSize = Vector3.new(8, 8, 8),
 	slots = {
-		-- Front row (z = -42): the lowest modules, all under 9.5 studs. The inner two face
-		-- the central tube, so the first purchase joins the entrance tube itself.
-		habitatPod = { position = Vector3.new(-42, 0, -42), rotationY = 270 },
-		landingPad = { position = Vector3.new(-14, 0, -42), rotationY = 270 },
-		solarArray = { position = Vector3.new(14, 0, -42), rotationY = 90 },
-		hydroponicsDome = { position = Vector3.new(42, 0, -42), rotationY = 90 },
+		-- Front row (z = -42): the lowest modules. The inner two face the central tube, so the
+		-- first purchase joins the entrance tube itself.
+		habitatPod = { position = Vector3.new(-42, 0, -42), rotationY = 270, district = "habitat" },
+		landingPad = { position = Vector3.new(-14, 0, -42), rotationY = 270, district = "port" },
+		solarArray = { position = Vector3.new(14, 0, -42), rotationY = 90, district = "industry" },
+		hydroponicsDome = {
+			position = Vector3.new(42, 0, -42),
+			rotationY = 90,
+			district = "habitat",
+		},
 
-		-- Second row (z = -14). The rover bay's 12-stud side runs along the tube, so its
-		-- 9-deep front keeps the standard pad.
-		roverBay = { position = Vector3.new(-42, 0, -14), rotationY = 270 },
-		oxygenGenerator = { position = Vector3.new(-14, 0, -14), rotationY = 270 },
-		researchLab = { position = Vector3.new(14, 0, -14), rotationY = 90 },
-		mineralExtractor = { position = Vector3.new(42, 0, -14), rotationY = 90 },
+		-- Second row (z = -14). The rover bay's 12-stud side runs along the tube.
+		roverBay = { position = Vector3.new(-42, 0, -14), rotationY = 270, district = "port" },
+		oxygenGenerator = {
+			position = Vector3.new(-14, 0, -14),
+			rotationY = 270,
+			district = "industry",
+		},
+		researchLab = { position = Vector3.new(14, 0, -14), rotationY = 90, district = "science" },
+		mineralExtractor = {
+			position = Vector3.new(42, 0, -14),
+			rotationY = 90,
+			district = "industry",
+		},
 
-		-- Third row (z = 14): the inner two face the central tube, so buying the Observation
-		-- Dome (tier 3) is what draws that tube past the platform and the domes beside it.
-		crewQuarters = { position = Vector3.new(-42, 0, 14), rotationY = 270 },
-		observationDome = { position = Vector3.new(-14, 0, 14), rotationY = 270 },
-		medicalBay = { position = Vector3.new(14, 0, 14), rotationY = 90 },
+		-- Third row (z = 14).
+		crewQuarters = { position = Vector3.new(-42, 0, 14), rotationY = 270, district = "habitat" },
+		observationDome = {
+			position = Vector3.new(-14, 0, 14),
+			rotationY = 270,
+			district = "science",
+		},
+		medicalBay = { position = Vector3.new(14, 0, 14), rotationY = 90, district = "habitat" },
+		-- 12x12: 1.5 outboard of its grid spot, pad named on the cell edge (as in wave 2b)
 		fusionReactor = {
 			position = Vector3.new(43.5, 0, 14),
 			rotationY = 90,
 			padPosition = Vector3.new(34.5, 0, 14),
+			district = "industry",
 		},
 
 		-- Back row (z = 42): the tallest modules, flanking the Launch Tower.
@@ -58,17 +77,18 @@ return {
 			position = Vector3.new(-43.5, 0, 42),
 			rotationY = 270,
 			padPosition = Vector3.new(-34.5, 0, 42),
+			district = "industry",
 		},
-		dockingBay = { position = Vector3.new(-14, 0, 42), rotationY = 90 },
-		commsArray = { position = Vector3.new(14, 0, 42), rotationY = 270 },
+		dockingBay = { position = Vector3.new(-14, 0, 42), rotationY = 90, district = "port" },
+		commsArray = { position = Vector3.new(14, 0, 42), rotationY = 270, district = "science" },
 		spaceportTerminal = {
 			position = Vector3.new(43.5, 0, 42),
 			rotationY = 90,
 			padPosition = Vector3.new(34.5, 0, 42),
+			district = "port",
 		},
 
-		-- Installations and decor in the outer corridor bays, each facing its side tube,
-		-- each beside the module it depends on or guards.
+		-- Installations and decor in the outer bays, each facing its side tube. No district.
 		planetaryDefense = { position = Vector3.new(-42, 0, -29), rotationY = 270 },
 		lifeSupport = { position = Vector3.new(42, 0, -28), rotationY = 90 },
 		colonyFlag = { position = Vector3.new(-42, 0, 1), rotationY = 270 },
@@ -76,30 +96,30 @@ return {
 		holoBeacon = { position = Vector3.new(-42, 0, 27), rotationY = 270 },
 		orbitalUplink = { position = Vector3.new(42, 0, 28), rotationY = 90 },
 
-		-- Build the Monorail is streetOnly (era JSON): no model spawns, so only the pad is
-		-- real. It stands in the corner where the entrance tube meets the cross tube,
-		-- flush with both cells, and a one-point spur draws no path (amendment P2).
+		-- Build the Monorail is streetOnly (era JSON): no model spawns, so only the pad is real.
+		-- It stands beside the entrance tube on ground nothing else uses, and a one-point spur
+		-- draws no path. Turned to face the front (it faced the tube in wave 2b), so its next-pad
+		-- marker stands east of it and not on the Solar Array's pad.
 		walkwayNetwork = {
 			position = Vector3.new(6.5, 0, -34.5),
-			rotationY = 90,
+			rotationY = 0,
 			padPosition = Vector3.new(6.5, 0, -34.5),
 			spur = { Vector3.new(6.5, 0, -34.5) },
 		},
 
 		-- Monument: 14x14 in the back band between the back-row modules, facing down the
-		-- central tube. The pad stands on the tower's front face and the auto spur is a
-		-- short decking strip from there to the airlock at the tube's end.
+		-- central tube. The pad stands on the tower's front face.
 		launchTower = {
 			position = Vector3.new(0, 0, 42),
 			rotationY = 0,
 			padPosition = Vector3.new(0, 0, 32),
+			district = "port",
 		},
 	},
 	-- Tube plan. Tubes grow with the modules (wave 1b): only the stretches from the entrance
 	-- (polyline 1's first point) to each owned module's join are drawn, and a junction exists
 	-- only where a polyline point sits on another polyline -- hence the mid-points at z = -28.
-	-- It is a tree on purpose: a closed loop would lose one stretch to the shortest-path tree
-	-- and leave a permanent gap in a tube.
+	-- It is a tree on purpose: a closed loop would lose one stretch to the shortest-path tree.
 	streets = {
 		-- 1: the central tube, from the outermost lattice row inside the monorail band
 		-- (z = -49) up the middle of the colony to the airlock in front of the Launch Tower.
@@ -112,124 +132,132 @@ return {
 		},
 		{ points = { Vector3.new(28, 0, -42), Vector3.new(28, 0, -28), Vector3.new(28, 0, 42) } },
 	},
-	-- Small domes (HouseA/B, 6x6) in the middle and back corridors, each facing a tube or the
-	-- Launch Tower's spur, 1.5 studs clear of the cell edge. Each appears at the tier the greedy
-	-- player first draws the tube it faces (sim buy order), so no dome fronts bare ground.
-	lots = {
-		{ position = Vector3.new(-21, 0, 0), rotationY = 90, tier = 2 },
-		{ position = Vector3.new(8, 0, 0), rotationY = 90, tier = 3 },
-		{ position = Vector3.new(20, 0, 0), rotationY = 270, tier = 3 },
-		{ position = Vector3.new(-20, 0, 28), rotationY = 90, tier = 4 },
-		{ position = Vector3.new(20, 0, 28), rotationY = 270, tier = 4 },
-		{ position = Vector3.new(-8, 0, 28), rotationY = 270, tier = 5 },
-		{ position = Vector3.new(8, 0, 28), rotationY = 90, tier = 5 },
-	},
-	-- Observation platform (12x12) in the middle corridor, its front flush with the central
-	-- tube's cell edge (x = -3.5) so it opens straight off the tube.
-	plazas = {
-		{ position = Vector3.new(-9.5, 0, 0), rotationY = 270, tier = 3, prop = "PlazaA" },
-	},
-	-- Rock fields on the bare regolith between the decking: the gaps past the side tubes' ends,
-	-- front and back, and the open middle and back corridors between the domes. Every circle
-	-- keeps 3 studs off any footprint and pad, stays off the tube cells and stops short of the
-	-- monorail band.
-	treeZones = {
-		{ center = Vector3.new(-26, 0, -49.5), radius = 2.5, count = 5 },
-		{ center = Vector3.new(26, 0, -49.5), radius = 2.5, count = 5 },
-		{ center = Vector3.new(14, 0, 0), radius = 2, count = 4 },
-		{ center = Vector3.new(-14, 0, 28), radius = 2, count = 4 },
-		{ center = Vector3.new(-26, 0, 50), radius = 2, count = 4 },
-		{ center = Vector3.new(26, 0, 50), radius = 2, count = 4 },
-	},
-	-- Decking (INTERFACES "Paved blocks"): one slab per module cluster, shown once any listed
-	-- slot is owned. Each rect covers its modules' footprints and pads plus about 2 studs, keeps
-	-- half a stud off every tube cell (centreline +/- 4), off the platform and off its
-	-- neighbours. The plot rim, the gaps between clusters and the middle corridor stay bare
-	-- regolith, which is where the rocks and the domes stand.
+	-- Decking (INTERFACES "Paved blocks", "Wave 4.1"): one rect per module, shown once that module
+	-- is owned. Each covers the module's pad and its harvested extents and runs out to the dock
+	-- line (1.75 from the centreline) where the cell it faces is a straight or an end and no pod
+	-- docks in front of it; the installations beside the cross tube's tees stop at the cell edge,
+	-- because a tee cell is whole. The Research Lab's stops half a stud short on its north side,
+	-- where a pod docks in the notch beside its pad. Rects keep 0.5 apart, so no two slabs share
+	-- a plane.
 	blocks = {
-		-- west outer column
 		{
-			min = Vector3.new(-48.5, 0, -48.5),
-			max = Vector3.new(-32, 0, -22.5),
-			slots = { "habitatPod", "planetaryDefense" },
-		},
-		{
-			min = Vector3.new(-48.5, 0, -22),
-			max = Vector3.new(-32, 0, 20.25),
-			slots = { "roverBay", "colonyFlag", "crewQuarters" },
-		},
-		{
-			min = Vector3.new(-51.5, 0, 20.75),
-			max = Vector3.new(-32, 0, 50),
-			slots = { "holoBeacon", "terraformStation" },
-		},
-
-		-- front row either side of the central tube; the east one takes the monorail pad
-		{
-			min = Vector3.new(-20.5, 0, -48.5),
-			max = Vector3.new(-4, 0, -35.5),
+			min = Vector3.new(-18.18, 0, -46.4),
+			max = Vector3.new(-1.75, 0, -37.64),
 			slots = { "landingPad" },
 		},
 		{
-			min = Vector3.new(4, 0, -48.5),
-			max = Vector3.new(20.5, 0, -32),
-			slots = { "solarArray", "walkwayNetwork" },
+			min = Vector3.new(1.75, 0, -46.48),
+			max = Vector3.new(18.48, 0, -37.52),
+			slots = { "solarArray" },
 		},
-
-		-- second and third rows either side of the central tube
 		{
-			min = Vector3.new(-20.5, 0, -20.5),
-			max = Vector3.new(-4, 0, -7.5),
+			min = Vector3.new(-46.5, 0, -46),
+			max = Vector3.new(-29.75, 0, -38),
+			slots = { "habitatPod" },
+		},
+		{
+			min = Vector3.new(29.75, 0, -46.48),
+			max = Vector3.new(46.46, 0, -37.56),
+			slots = { "hydroponicsDome" },
+		},
+		{
+			min = Vector3.new(-18.2, 0, -18.2),
+			max = Vector3.new(-1.75, 0, -9.94),
 			slots = { "oxygenGenerator" },
 		},
 		{
-			min = Vector3.new(4, 0, -20.5),
-			max = Vector3.new(20.5, 0, -7.5),
+			min = Vector3.new(-46.4, 0, 10),
+			max = Vector3.new(-29.75, 0, 18.28),
+			slots = { "crewQuarters" },
+		},
+		{
+			min = Vector3.new(-46, 0, -3.2),
+			max = Vector3.new(-29.75, 0, 5.5),
+			slots = { "colonyFlag" },
+		},
+		{
+			min = Vector3.new(3.5, 0, -18.2),
+			max = Vector3.new(18.43, 0, -10.5),
 			slots = { "researchLab" },
 		},
 		{
-			min = Vector3.new(-20.5, 0, 7.5),
-			max = Vector3.new(-4, 0, 20.5),
+			min = Vector3.new(-46.5, 0, -20),
+			max = Vector3.new(-29.75, 0, -8),
+			slots = { "roverBay" },
+		},
+		{
+			min = Vector3.new(9.7, 0, 38),
+			max = Vector3.new(26.25, 0, 46.26),
+			slots = { "commsArray" },
+		},
+		{
+			min = Vector3.new(31.5, 0, -32),
+			max = Vector3.new(46.4, 0, -23.98),
+			slots = { "lifeSupport" },
+		},
+		{
+			min = Vector3.new(29.75, 0, -18.4),
+			max = Vector3.new(46.48, 0, -9.6),
+			slots = { "mineralExtractor" },
+		},
+		{
+			min = Vector3.new(29.75, 0, -5.48),
+			max = Vector3.new(46.48, 0, 3.48),
+			slots = { "rockGarden" },
+		},
+		{
+			min = Vector3.new(-17.8, 0, 9.88),
+			max = Vector3.new(-1.75, 0, 18.37),
 			slots = { "observationDome" },
 		},
 		{
-			min = Vector3.new(4, 0, 7.5),
-			max = Vector3.new(20.5, 0, 20.5),
-			slots = { "medicalBay" },
+			min = Vector3.new(29.75, 0, 8.11),
+			max = Vector3.new(49.28, 0, 19.89),
+			slots = { "fusionReactor" },
 		},
-
-		-- back row: the Launch Tower and its pad, flanked by the two back modules
 		{
-			min = Vector3.new(-24, 0, 35.5),
-			max = Vector3.new(-9.5, 0, 48.5),
+			min = Vector3.new(29.75, 0, 23.92),
+			max = Vector3.new(46, 0, 32.02),
+			slots = { "orbitalUplink" },
+		},
+		{
+			min = Vector3.new(-26.25, 0, 37.6),
+			max = Vector3.new(-9.6, 0, 46.4),
 			slots = { "dockingBay" },
 		},
-		{ min = Vector3.new(-9, 0, 27), max = Vector3.new(9, 0, 51), slots = { "launchTower" } },
 		{
-			min = Vector3.new(9.5, 0, 35.5),
-			max = Vector3.new(24, 0, 48.5),
-			slots = { "commsArray" },
-		},
-
-		-- east outer column
-		{
-			min = Vector3.new(32, 0, -48.5),
-			max = Vector3.new(48.5, 0, -21.25),
-			slots = { "hydroponicsDome", "lifeSupport" },
+			min = Vector3.new(-49.28, 0, 36.11),
+			max = Vector3.new(-29.75, 0, 47.89),
+			slots = { "terraformStation" },
 		},
 		{
-			min = Vector3.new(32, 0, -20.75),
-			max = Vector3.new(51.5, 0, 21.5),
-			slots = { "mineralExtractor", "rockGarden", "fusionReactor" },
+			min = Vector3.new(-46.2, 0, 22.6),
+			max = Vector3.new(-29.75, 0, 31.2),
+			slots = { "holoBeacon" },
 		},
 		{
-			min = Vector3.new(32, 0, 22),
-			max = Vector3.new(51.5, 0, 50),
-			slots = { "orbitalUplink", "spaceportTerminal" },
+			min = Vector3.new(1.75, 0, 10),
+			max = Vector3.new(18.43, 0, 18.38),
+			slots = { "medicalBay" },
+		},
+		{
+			min = Vector3.new(29.75, 0, 36.06),
+			max = Vector3.new(48.72, 0, 47.87),
+			slots = { "spaceportTerminal" },
+		},
+		{
+			min = Vector3.new(-46.39, 0, -33.23),
+			max = Vector3.new(-31.5, 0, -24.84),
+			slots = { "planetaryDefense" },
+		},
+		{
+			min = Vector3.new(-6.8, 0, 26.4),
+			max = Vector3.new(6.8, 0, 48.89),
+			slots = { "launchTower" },
 		},
 	},
 	-- Monorail loop (loop mode: no ramp). ring = 56 puts the track on the outermost lattice
-	-- ring (cells 52.5..59.5), clear of every module (the 12x12s reach 49.5), inside the plot,
-	-- and over the plot entrance, which the 6-stud soffit lets players walk under.
+	-- ring (cells 52.5..59.5), over the plot entrance, which the 6-stud soffit lets players
+	-- walk under. `highway.clearBand` false: the regolith stays under the beam.
 	highway = { ring = 56 },
 }

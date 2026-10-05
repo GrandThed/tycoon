@@ -13,8 +13,11 @@ coloured rectangles.
     py tools/testfit/plotrender.py Boomtown --camera overview
     py tools/testfit/plotrender.py Village --tier 2 --far
     py tools/testfit/plotrender.py Metropolis --tier 3 --fabric <data.json> --out <dir>/try_tier3.png
+    py tools/testfit/plotrender.py OrbitalColony --tier 3 --label docks --out m12o_docks_tier3
 
 Outputs land in assets/testfit/out/<Era>/plot_<camera>.png, or where an `--out` ending in .png says.
+`--label` stamps the finished picture with that name, the tier and the fabric's lot count (INTERFACES
+"Wave 4.1": the lot count is written on every gate render); without it the picture is untouched.
 `--fabric` draws fabric data built with `fabric.py build --out` instead of the era's own, and
 `--config` a scratch CityDressing.json (a city-changer proposal) instead of the repo's.
 
@@ -132,6 +135,11 @@ SMALL_LOT = "small"  # Scatter.SMALL_LOT: the lot kind that draws from `houses.s
 BLOCK_DROP = 0.02  # a block slab's top, and a park strip's, sits this far under the kerb
 SPUR_DROP = 0.01  # RoadGraph.SPUR_DROP: a tiles-era footpath, half as far under the kerb
 KEY_SCALE = 10  # rectKey's rounding
+# `--label`: the caption stamped on a finished render, in the gate sheets' face (compare_sheet.py).
+CAPTION_FONT = REPO_ROOT / "assets" / "marketing" / "fonts" / "TitanOne-Regular.ttf"
+CAPTION_HEIGHT_SHARE = 0.036  # text height per picture height
+CAPTION_INK = (245, 245, 245)
+CAPTION_BAND = (24, 24, 28, 200)
 TOUCH_EPSILON = 1e-3  # rectangles that only touch are not an overlap
 # The corner squares of a cell's kerb, in the client's order: (x arm, z arm).
 CORNER_PAIRS = ((1, 2), (1, 4), (3, 2), (3, 4))
@@ -2148,6 +2156,43 @@ def resolve_owned(era, owned_arg, tier):
     return wanted
 
 
+def caption_text(label, tier, scene):
+    """What `--label` writes: the name, the moment, and what the fabric holds and shows then -- every
+    lot in the data, the lots that show a building and the ones that show a building site."""
+    moment = "full build" if tier is None else f"tier {tier}"
+    view = scene.fabric_view
+    if view is None:
+        return f"{label} -- {moment}"
+    built, sites = cityfabric.look_counts(view)
+    return f"{label} -- {moment}: {len(view['parcels'])} lots, {built} built, {sites} building sites"
+
+
+def stamp_caption(path, text):
+    """Write `text` on the picture at `path`, bottom left, on a dark band of its own."""
+    from PIL import Image, ImageDraw, ImageFont  # Pillow: this half runs under the system py
+
+    with Image.open(path) as source:
+        image = source.convert("RGBA")
+    size = max(round(image.height * CAPTION_HEIGHT_SHARE), 10)
+    try:
+        face = ImageFont.truetype(str(CAPTION_FONT), size)
+    except OSError:
+        try:
+            face = ImageFont.load_default(size)
+        except TypeError:
+            face = ImageFont.load_default()
+    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    bounds = draw.textbbox((0, 0), text, font=face)
+    pad = size // 2
+    height = bounds[3] - bounds[1] + 2 * pad
+    width = bounds[2] - bounds[0] + 2 * pad
+    top = image.height - height
+    draw.rectangle((0, top, width, image.height), fill=CAPTION_BAND)
+    draw.text((pad - bounds[0], top + pad - bounds[1]), text, font=face, fill=CAPTION_INK)
+    Image.alpha_composite(image, layer).convert("RGB").save(path)
+
+
 def run_blender(scene_spec, blender):
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
         json.dump(scene_spec, handle)
@@ -2214,6 +2259,11 @@ def main():
         default="",
         help="comma list of slot ids drawn as street upgrades (a city-changer proposal): no model, no "
         "district, no path. A what-if for renders only; pair it with --fabric data built the same way",
+    )
+    parser.add_argument(
+        "--label",
+        help="stamp the finished picture, bottom left, with this name, the tier and the fabric's lot count "
+        "(lots in the data, lots built, building sites): a gate render says how many lots it shows",
     )
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args()
@@ -2297,6 +2347,10 @@ def main():
     if scene.unreachable:
         print(f"   WARNING: no route from the entrance to {', '.join(sorted(scene.unreachable))}")
     run_blender(scene_spec, args.blender)
+    if args.label:
+        caption = caption_text(args.label, tier, scene)
+        stamp_caption(out_path, caption)
+        print(f"   caption: {caption}")
     print(f"   {out_path} in {time.time() - started:.1f}s")
 
 

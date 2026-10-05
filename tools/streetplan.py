@@ -37,6 +37,12 @@ each slot's path and each fabric lane, laid as RoadGraph.spurDrawPoints and draw
 (footpath_violations). Network.tile_plan is the one mirror of TileRenderer.Plan as RoadGraph calls
 it; tools/cityfabric.py and tools/testfit/plotrender.py read their planned streets from it.
 
+M12 wave 4.1 (Orbital): `road.tiles.dock` -- in an era that sets it, a planned straight or end
+tile cell is a solid only within `dock` of its centreline, so pads, footprints, landmark extents,
+lots, plazas and deck rects may stand in the rest of the cell (Era.cell_solid, which every cell
+rule here asks; a bend, tee or cross cell stays whole). Without the key a cell is the whole cell,
+as before. A tiles era may have up to six street polylines.
+
 Usage:
   py tools/streetplan.py                # every era with a street plan (DEFAULT_ERAS)
   py tools/streetplan.py Metropolis     # any era(s) by name
@@ -77,6 +83,7 @@ MONUMENT_FOOTPRINT_DEFAULT = 14
 SPINE_EXTRA_CLEARANCE = 1  # spine clear of slots/pads/Sign by width/2 (+ meander) + this
 LOT_SLOT_CLEARANCE = 6  # a "house" lot's centre from any slot footprint (M9 "Layouts")
 STREET_COUNT = (2, 5)
+STREET_COUNT_TILES = (2, 6)  # M12 wave 4.1: a tiles era's avenues and their cross tube
 # Wave 2b: the Orbital plot is a full 4x4 module grid with no pavement, so it takes 6-10 small domes.
 LOT_COUNT_BY_ERA = {"OrbitalColony": (6, 10)}
 PLAZA_COUNT = (1, 2)
@@ -109,6 +116,18 @@ NODE_KEY_SCALE = 10  # nodes merge on a 1/NODE_KEY_SCALE stud grid
 STRAIGHT_DOT = 0.999  # consecutive directions at least this aligned are straight, not a bend
 SQUARE_DOT = 0.001  # and two whose dot product stays within this of 0 meet at a right angle (drawFootpath)
 SAMPLES_PER_CELL = 4  # TileRenderer.rasterise: samples to a lattice cell along a stretch
+# TileRenderer.luau: arm n is TILE_ARM_STEPS[n - 1] on the (i, j) lattice and bit n - 1 of a cell's
+# connectivity mask; TILE_KIND_BY_MASK[mask] is the piece that mask draws (PIECE_BY_MASK's kinds).
+TILE_ARM_STEPS = ((1, 0), (0, -1), (-1, 0), (0, 1))  # +X, -Z, -X, +Z
+TILE_KIND_BY_MASK = (
+    "end", "end", "end", "bend",
+    "end", "straight", "bend", "tee",
+    "end", "bend", "straight", "tee",
+    "bend", "tee", "tee", "cross",
+)
+# M12 wave 4.1 (`road.tiles.dock`): the planned kinds whose cell is a solid only within `dock` of
+# its centreline. A bend's pipe sweeps its inner corner and a tee or cross fills the cell.
+DOCKED_KINDS = ("straight", "end")
 # A footpath slab may end flush on the outer edge of a pavement; this much onto it is on it.
 FOOTPATH_TOUCH = 1e-6
 FLOAT32_SLACK = 1e-4  # piece counts within this of a .5 rounding boundary count high (see piece_count)
@@ -763,6 +782,12 @@ class Era:
         self.tile_studs = float(self.tiles["tileStuds"]) if self.tiles else 0.0
         pavement = (self.tiles or {}).get("pavement")
         self.pavement = float(pavement["width"]) if pavement else 0.0
+        # M12 wave 4.1: `road.tiles.dock`, a positive finite number or absent (None: the whole cell
+        # is the street, as it always was).
+        dock = (self.tiles or {}).get("dock")
+        valid_dock = not isinstance(dock, bool) and isinstance(dock, (int, float)) and 0 < dock < math.inf
+        self.dock = float(dock) if valid_dock else None
+        self._tile_masks = None
         plot = self.layout["plotSize"]
         self.half_x, self.half_z = plot[0] / 2, plot[2] / 2
         pad_size = self.layout["padSize"]
@@ -944,6 +969,55 @@ class Era:
         step = self.tile_studs
         centre = (cell[0] * step, cell[1] * step)
         return square(centre, step, step, 0)
+
+    def tile_masks(self):
+        """(i, j) -> connectivity mask of every cell the streets rasterise to, with the whole plan
+        drawn: an arm wherever a polyline runs from the cell into its neighbour (TileRenderer links
+        consecutive cells of a stretch, and the stretches of a polyline tile it end to end). The
+        most arms a cell can ever show, so a kind read from it is the widest the cell ever is."""
+        if self._tile_masks is None:
+            masks = {}
+            if self.tiles:
+                for _, a, b in self.spine_segments():
+                    path = rasterise(self.tile_studs, a, b)
+                    for cell in path:
+                        masks.setdefault(cell, 0)
+                    for before, after in zip(path, path[1:]):
+                        delta = (after[0] - before[0], after[1] - before[1])
+                        if delta not in TILE_ARM_STEPS:
+                            continue
+                        arm = TILE_ARM_STEPS.index(delta)
+                        masks[before] |= 1 << arm
+                        masks[after] |= 1 << ((arm + 2) % 4)
+            self._tile_masks = masks
+        return self._tile_masks
+
+    def cell_kind(self, cell):
+        """The planned piece of a cell ("straight", "end", "bend", "tee", "cross"), None off the plan."""
+        mask = self.tile_masks().get(cell)
+        return TILE_KIND_BY_MASK[mask] if mask is not None else None
+
+    def cell_docked(self, cell):
+        """Whether `road.tiles.dock` narrows this cell's solid: the era sets it and the cell's planned
+        piece is a straight or an end with an arm to say which way it runs."""
+        return self.dock is not None and self.tile_masks().get(cell, 0) != 0 and self.cell_kind(cell) in DOCKED_KINDS
+
+    def cell_solid(self, cell):
+        """The ground of one planned cell that nothing may stand on (M12 wave 4.1): the whole cell,
+        or with `road.tiles.dock` -- along a planned straight or end -- only the band within `dock`
+        of the cell's centreline, the cell's full length (an end's cap reaches nearly to its far
+        edge)."""
+        if not self.cell_docked(cell):
+            return self.cell_square(cell)
+        step = self.tile_studs
+        centre = (cell[0] * step, cell[1] * step)
+        along_x = bool(self.tile_masks()[cell] & 0b0101)  # arms 1 and 3 are +X and -X
+        return square(centre, step if along_x else 2 * self.dock, 2 * self.dock if along_x else step, 0)
+
+    def cell_name(self, cell):
+        """How a message names a cell's solid."""
+        where = fmt((cell[0] * self.tile_studs, cell[1] * self.tile_studs))
+        return f"the dock band ({self.dock:g} either side of the centreline) of the road cell {where}" if self.cell_docked(cell) else f"the road cell {where}"
 
     def spine_segments(self):
         for index, street in enumerate(self.streets):
@@ -1505,7 +1579,12 @@ def rect_overlap(p, q):
 def cell_violations(era, cells):
     """Wave 2b: the whole lattice cell is the road, whatever width the tile draws inside it (a tube
     is 4 wide in a 7 cell), so pads, real footprints, lots and rock zones stay off every cell a
-    street rasterises to. Flush against a cell edge is fine -- that is where a pad belongs."""
+    street rasterises to. Flush against a cell edge is fine -- that is where a pad belongs.
+
+    M12 wave 4.1: with `road.tiles.dock` a planned straight or end cell is a solid only within
+    `dock` of its centreline (Era.cell_solid), and a landmark's harvested extents are held to the
+    same solids as its declared footprint -- a docked landmark stands inside the cell, so the
+    measured building is what must stay off the pipe."""
     messages = []
     solids = []
     for slot in era.slots:
@@ -1513,15 +1592,17 @@ def cell_violations(era, cells):
         if era.real_footprint(slot["id"]):
             solids.append((f"{slot['id']} footprint", slot["footprint"]))
     solids += [(f"lot {i + 1}", lot["poly"]) for i, lot in enumerate(era.lots)]
+    if era.dock is not None:
+        solids += [(f"{slot_id} extents", poly) for slot_id, poly, measured in landmark_extents(era) if measured]
     for cell in sorted(cells):
-        square_ = era.cell_square(cell)
-        where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
+        square_ = era.cell_solid(cell)
+        where = era.cell_name(cell)
         for name, poly in solids:
             if rect_overlap(poly, square_) > 1e-6:
-                messages.append(f"{name} stands on the road cell {where}")
+                messages.append(f"{name} stands on {where}")
         for i, zone in enumerate(era.zones):
             if point_polygon_distance(zone["center"], square_) < zone["radius"] - 1e-6 or point_in_polygon(zone["center"], square_):
-                messages.append(f"tree zone {i + 1} reaches onto the road cell {where}")
+                messages.append(f"tree zone {i + 1} reaches onto {where}")
     return messages
 
 
@@ -1671,9 +1752,8 @@ def subway_violations(era, cells):
                 messages.append(f"{label}: too close to another entrance")
         # It may cover the pavement; the road's own cells stay clear (touching one is fine).
         for cell in cells:
-            if rect_overlap(poly, era.cell_square(cell)) > 1e-6:
-                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
-                messages.append(f"{label}: stands on the road cell {where}")
+            if rect_overlap(poly, era.cell_solid(cell)) > 1e-6:
+                messages.append(f"{label}: stands on {era.cell_name(cell)}")
                 break
         if ring_reach(poly) > ring_inner - 1e-6:
             messages.append(f"{label}: reaches into the highway pillar band")
@@ -1839,9 +1919,15 @@ def block_violations(era, cells):
                 messages.append(f"{label}: {d:.2f} from street {fmt(a)}->{fmt(b)} (need {pavement_clear:g}, road + pavement)")
                 break
         for cell in cells:
-            if polygon_polygon_distance(block["poly"], era.cell_square(cell)) < 1e-6:
-                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
-                messages.append(f"{label}: covers the road cell {where}")
+            # M12 wave 4.1: a deck rect of a docked era runs up to the dock line, under the pad that
+            # stands there, so flush against a cell's solid is where it belongs; without
+            # `road.tiles.dock` a slab keeps off the cell altogether, touching included.
+            if era.dock is not None:
+                covers = rect_overlap(block["poly"], era.cell_solid(cell)) > 1e-6
+            else:
+                covers = polygon_polygon_distance(block["poly"], era.cell_square(cell)) < 1e-6
+            if covers:
+                messages.append(f"{label}: covers {era.cell_name(cell)}")
                 break
         for j, plaza in enumerate(era.plazas):
             if polygon_polygon_distance(block["poly"], plaza["poly"]) < 1e-6:
@@ -2923,13 +3009,18 @@ def check(era, network, visible, unreachable):
     # comes within width / 2 of the centreline -- and a smaller padOffset would put the pad inside
     # the building instead. It only has to stay off the asphalt.
     pad_clear = half_road if era.tiles is not None else spine_clear
+    # M12 wave 4.1: with `road.tiles.dock` a building may stand in the rest of a straight cell, so
+    # its footprint answers to the dock line, as its pad does to the cell solids (cell_violations
+    # holds both, and the harvested extents, off every solid, whole cells included).
+    footprint_clear = era.dock if era.dock is not None else spine_clear
     cells = era.road_cells()  # empty unless the era draws kit tiles
 
     def add(message):
         violations.append(message)
 
-    if not STREET_COUNT[0] <= len(era.streets) <= STREET_COUNT[1]:
-        add(f"streets: {len(era.streets)} polylines, need {STREET_COUNT[0]}-{STREET_COUNT[1]}")
+    street_count = STREET_COUNT_TILES if era.tiles is not None else STREET_COUNT
+    if not street_count[0] <= len(era.streets) <= street_count[1]:
+        add(f"streets: {len(era.streets)} polylines, need {street_count[0]}-{street_count[1]}")
     for index, ys in enumerate(era.street_y):
         if any(abs(y) > 1e-9 for y in ys):
             add(f"street {index + 1}: a point is not at Y 0")
@@ -2950,7 +3041,7 @@ def check(era, network, visible, unreachable):
             if slot["id"] in era.furniture:
                 continue
             for what, poly, need in (
-                ("footprint", slot["footprint"], spine_clear),
+                ("footprint", slot["footprint"], footprint_clear),
                 ("pad", slot["pad_poly"], pad_clear),
             ):
                 if what == "footprint" and slot["id"] in era.nominal:
@@ -3103,9 +3194,8 @@ def check(era, network, visible, unreachable):
                 add(f"{label}: tree zone {j + 1} overlaps it")
         # Overlap, not touch: a plaza of a pavement-less era stands flush against the cell edge.
         for cell in cells:
-            if rect_overlap(plaza["poly"], era.cell_square(cell)) > 1e-6:
-                where = fmt((cell[0] * era.tile_studs, cell[1] * era.tile_studs))
-                add(f"{label}: covers the road cell {where}")
+            if rect_overlap(plaza["poly"], era.cell_solid(cell)) > 1e-6:
+                add(f"{label}: covers {era.cell_name(cell)}")
                 break
         if era.tiles is not None:
             face = plaza["facing"]
@@ -3113,8 +3203,9 @@ def check(era, network, visible, unreachable):
                 plaza["position"][0] + face[0] * plaza["size"][1] / 2,
                 plaza["position"][1] + face[1] * plaza["size"][1] / 2,
             )
-            # With no pavement the plaza fronts the tube cell itself (wave 2b).
-            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.tile_studs / 2
+            # With no pavement the plaza fronts the tube cell itself (wave 2b), or with
+            # `road.tiles.dock` the dock line, as a lot does (wave 4.1).
+            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.dock if era.dock is not None else era.tile_studs / 2
             nearest = min(
                 (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
                 key=lambda hit: hit[0],
@@ -3125,7 +3216,7 @@ def check(era, network, visible, unreachable):
             elif abs(nearest[0] - edge) > PLAZA_EDGE_SLACK:
                 add(
                     f"{label}: its front edge is {nearest[0]:.2f} from the nearest centreline, not flush "
-                    f"with the {'pavement' if era.pavement > 0 else 'tube cell'} edge at {edge:g}"
+                    f"with the {'pavement edge' if era.pavement > 0 else 'dock line' if era.dock is not None else 'tube cell edge'} at {edge:g}"
                 )
             elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
                 add(f"{label}: its back is turned to the street it fronts")
@@ -3455,6 +3546,12 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
                 fill=pavement_rgb + (200,),
             )
         for cell in sorted(era.road_cells()):
+            if era.cell_docked(cell):
+                # Wave 4.1: the cell in outline, its solid (the dock band) filled -- lots, pads and
+                # landmarks may stand in the rest.
+                poly(era.cell_square(cell), outline=(120, 120, 128), width=1)
+                poly(era.cell_solid(cell), fill=road_rgb + (255,), outline=(20, 20, 24), width=1)
+                continue
             poly(era.cell_square(cell), fill=road_rgb + (255,), outline=(20, 20, 24), width=1)
 
     nodes = [p for street in era.streets for p in street]

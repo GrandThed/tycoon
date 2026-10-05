@@ -48,6 +48,9 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
   * the ring's own clearing (M12 wave 3.1 rulings): once `highway.requiresSlot` is owned, the deck
     band's four rects and the ramp's cells (ring_rects, Highway.luau's ring, pitch and rampCells)
     join the mask with clear.parcel. Also mirrored here first, for Fabric.luau in wave 3.2;
+  * `highway.clearBand` (M12 wave 4.1, Orbital): the boolean false keeps the ring's ground out of
+    that clearing, so the wild under a monorail beam stands for good (ring_clears). Implemented
+    here first: Fabric.luau follows in wave 4.2;
   * the tile-cell budget (M12 wave 3.2): in a tiles era RoadGraph.FabricNetwork leaves out a visible
     stretch whose cells missed budget.tileCells (streetplan.Network.tile_plan), so network_view does.
 
@@ -1033,6 +1036,13 @@ def ring_rects(ring, tile_studs, ramp=None, ramp_cells=0):
     return rects
 
 
+def ring_clears(config):
+    """Whether the ring's ground joins the clearing mask once `highway.requiresSlot` is owned (M12
+    wave 4.1; mirrored here first, Fabric.luau copies it in wave 4.2): always, unless the era's
+    `highway.clearBand` is the boolean false. Any other value, or none, clears as wave 3.1 ruled."""
+    return not (isinstance(config, dict) and config.get("clearBand") is False)
+
+
 def chord(a, b):
     """A mask segment from two plot-local (x, z) points."""
     return {"ax": a[0], "az": a[1], "bx": b[0], "bz": b[1]}
@@ -1371,7 +1381,8 @@ class FabricPlot:
         slot = config.get("requiresSlot") if isinstance(config, dict) else None
         self.ring_slot = slot if isinstance(slot, str) and isinstance(highway, dict) else None
         self.ring_rects = []
-        if self.ring_slot is not None:
+        # Wave 4.1: `highway.clearBand` false leaves the ring no rects, so nothing under it clears.
+        if self.ring_slot is not None and ring_clears(config):
             ramp = self.era.highway_ramp
             ramp_view = {"cell": (ramp["cell"][0], ramp["cell"][2]), "direction": ramp.get("direction")} if isinstance(ramp, dict) else None
             self.ring_rects = ring_rects(highway.get("ring"), self.era.tile_studs, ramp_view, self.era.ramp_cells)
@@ -2496,6 +2507,10 @@ def selftest():
         ("ring: a single beside the ramp stands", not is_cleared(-42, -20, 1, ring_mask)),
         ("ring: an unknown direction adds no ramp cells", len(ring_rects(56, 7, {"cell": (-56, -28), "direction": "up"}, 3)) == 4),
         ("ring: no ring, no rects", ring_rects("a", 7) == [] and ring_rects(56, 0) == [] and ring_rects(-1, 7) == []),
+        # Wave 4.1: only the boolean false keeps the band out of the mask.
+        ("ring: clearBand false keeps the band", not ring_clears({"requiresSlot": "walkwayNetwork", "clearBand": False})),
+        ("ring: no clearBand clears", ring_clears({"requiresSlot": "highwayRamp"}) and ring_clears(None)),
+        ("ring: clearBand true, 0 or a string clears", all(ring_clears({"clearBand": value}) for value in (True, 0, "false", None))),
     ]
 
     # Wave 3.1 site variants: a level-1 parcel takes its size's list by index, else `sites[size]`.
