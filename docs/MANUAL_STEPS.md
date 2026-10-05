@@ -1562,17 +1562,19 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
   branch `m12-growing-city` and its worktree were removed. §1–§4 below are wave 1.
 - **Wave 2 (Boomtown): signed off by Ben and merged to `main` on 2026-10-02** (`main` at
   `86d1d99`). §5–§11 below are wave 2.
-- **Waves 1 and 2 are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run their
-  commands and open their builds from there.
-- **Wave 3 (Metropolis): built, checked, and its models uploaded (asset run done 2026-10-05).
-  Not merged, not playtested.** It lives in `C:\Users\benja\Desktop\tycoon-m12m` (branch
-  `m12-metropolis`). §12–§16 below are wave 3. Run its commands and open its builds from that
-  folder. **Ben's next step is §15:** open `build\metropolis.rbxl` and run the playtest.
+- **Wave 3 (Metropolis): signed off by Ben on a Studio look ("looks good!") and merged to `main`
+  on 2026-10-05** (`main` at `d0dd894`, not pushed). §12–§16 below are wave 3.
+- **All three waves are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run every
+  command and open every build from there.
 - **The wave 2 worktrees are removed:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic`
   no longer exist, and the branch `m12-boomtown` is deleted. The branches `m12-boomtown-grid` and
   `m12-boomtown-organic` are kept as the record of the two layout candidates.
-- Where a done step below says something "ran from `tycoon-m12`", that is the record of where it
-  ran then.
+- **The wave 3 worktrees are removed too:** `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are
+  gone, and `tycoon-m12m` is no longer a git worktree (the lead still has to delete its leftover
+  folder, §16 step 68a). The branch `m12-metropolis` is deleted; `m12-metropolis-avenues` and
+  `m12-metropolis-boulevard` are kept as the record.
+- Where a done step below says something "ran from `tycoon-m12`" or "from `tycoon-m12m`", that
+  is the record of where it ran then.
 
 **Where wave 2 stands (2026-10-02): done. Signed off and merged.**
 - The asset run (§10) is **done**: two pastes from Ben on 2026-10-02 (the props and roads, then
@@ -2017,22 +2019,24 @@ section).
 
 ### 12. M12 wave 3 (Metropolis) — what is owed (2026-10-05)
 
-Wave 3 lives in its own folder: **`C:\Users\benja\Desktop\tycoon-m12m`** (branch
-`m12-metropolis`). **It is not merged.** Run every wave 3 command and open every wave 3 build
-from that folder. `assets\` in that folder is a link to `C:\Users\benja\Desktop\tycoon\assets`:
-both paths show the same files.
+**Wave 3 is signed off and merged.** Ben looked at it in Studio on 2026-10-05 and said "looks
+good!". It is on `main` (`d0dd894`). Everything is in the main checkout now:
+**`C:\Users\benja\Desktop\tycoon`**. The folder `tycoon-m12m` is not used any more.
 
 - **Creator Hub: nothing.** No passes, products or audio. No profile change, so nothing to
   republish.
-- **Done:** the code, the review, the checks, Ben's OK on the props, and **the asset run**
-  (§14, 2026-10-05). The towers, the old town, the building sites, the bus shelters and the bus
-  are in the build.
-- **From Ben, next:**
-  1. **the Studio playtest** (§15): open `build\metropolis.rbxl`, press Play, run the
-     checklist;
-  2. still owed from waves 1 and 2, and now for Metropolis too: the numbers (§5, and step 49 of
-     the Metropolis checklist).
-- **From the lead:** fixes from the playtest, then §16.
+- **Assets: nothing.** Everything is uploaded, harvested and templated (§14).
+- **The file to open from now on:** `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl`
+  (§15). Never publish it.
+- **From Ben: only the numbers.** None has been sent yet:
+  1. Village: step 37 of PLAYTEST "M12 — Village growing city";
+  2. Boomtown: step 59 of "M12 wave 2 — Boomtown growing city";
+  3. Metropolis: step 49 of "M12 wave 3 — Metropolis growing city".
+- **Watch items, no deadline.** The sign-off was a look in Studio, not a report of the 51-step
+  checklist. Not reported for Metropolis: the step results, the phone at 375×667 (step 40), low
+  graphics (41), two players (42–43) and the measurement (49). Run them when convenient.
+- **From the lead:** one leftover folder to delete (§16 step 68a). The open follow-ups are in
+  `docs/PLAN.md` "M12".
 
 ### 13. M12 wave 3 — look at the prop sheets (Ben; **DONE 2026-10-05**: "looks good!")
 
@@ -2072,8 +2076,9 @@ Folder: `C:\Users\benja\Desktop\tycoon\assets\testfit\out\Metropolis\`
 
 ### 14. M12 wave 3 — the asset run (**DONE 2026-10-05**; kept as the routine)
 
-Everything ran from `C:\Users\benja\Desktop\tycoon-m12m`. The Blender lines need Git Bash.
-Python is `py`. `.env` is in that folder.
+Everything ran from the worktree `tycoon-m12m`, which is not used any more. For the next era,
+run the same lines from that era's own folder (or from `C:\Users\benja\Desktop\tycoon`). The
+Blender lines need Git Bash. Python is `py`. `.env` must be in the folder.
 
 **Result:** 35 props (107 stages) uploaded, harvested in **one paste** and templated. Every
 gate is green on the harvested sizes. Commits: `0a2258b` (upload), `aede7e3` (harvest),
@@ -2210,10 +2215,11 @@ gate is green on the harvested sizes. Commits: `0a2258b` (upload), `aede7e3` (ha
       - selene still has its one old warning (`src/client/UI/LegacyPanel.luau:200`).
       - **No count moved.** The docs-keeper re-ran the purchase table and the levelling counts
         of PLAYTEST "M12 wave 3" on the harvested sizes: all the same.
-- [x] 60. **Lead: rebuild the four place files** (done 2026-10-05, commit `18bdc0b`;
-      `build/metropolis.rbxl` is dated 2026-10-05 10:42). From `tycoon-m12m`, PowerShell shown:
+- [x] 60. **Lead: rebuild the four place files** (done 2026-10-05 in the worktree, commit
+      `18bdc0b`; rebuilt again in the main checkout after the merge, 2026-10-05 10:53,
+      byte-identical). From the main checkout, PowerShell shown:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m12m
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build -o build/test.rbxl
       rojo build combat.project.json -o build/combat.rbxl
@@ -2224,7 +2230,7 @@ gate is green on the harvested sizes. Commits: `0a2258b` (upload), `aede7e3` (ha
 - 61. **If a record goes missing later:** re-run step 58 and the first line of step 59 only. Do
       **not** re-run the uploader.
 
-### 15. M12 wave 3 — `build/metropolis.rbxl`: open it, then playtest (**Ben's next step**)
+### 15. M12 wave 3 — `build/metropolis.rbxl`: open it, then playtest (**signed off on a Studio look, 2026-10-05**)
 
 `build/metropolis.rbxl` is the same game as `build/test.rbxl`, with two switches baked in:
 - **`DebugStartEra` = 3:** a **fresh** save starts in **Metropolis**. No need to buy out Village
@@ -2241,8 +2247,11 @@ Press Play again and you get a fresh Metropolis and the cash again.
 - So: open it with File (*Archivo*) → Open (*Abrir*) only. Never use Publish to Roblox
   (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*) from it.
 
-**The file is ready.** It was rebuilt after the asset run (2026-10-05 10:42) and has the
-towers, the old town, the building sites, the bus shelters and the bus in it.
+**Where the file is now:** `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl`. It was rebuilt
+in the main checkout after the merge (2026-10-05 10:53) and is the same build Ben looked at.
+- **Ben: close the old window first.** If Studio still has `metropolis.rbxl` open from the old
+  `tycoon-m12m` folder, close that window **without saving**. That file no longer exists on
+  the disk. From now on open the one in `tycoon\build`.
 
 **What the cash covers:** everything. All 24 purchases and **Max** on every landmark, with
 plenty left.
@@ -2252,11 +2261,12 @@ plenty left.
   needs it, paste one line in the Server window (PLAYTEST "M12 wave 3" step 49). Nothing to
   type.
 
-- [x] 62. **Lead:** the file is rebuilt after the asset run (step 60; 2026-10-05, `18bdc0b`).
-- [ ] 63. Studio → File (*Archivo*) → Open (*Abrir*) →
-      `C:\Users\benja\Desktop\tycoon-m12m\build\metropolis.rbxl`.
-      There is no `metropolis.rbxl` in `C:\Users\benja\Desktop\tycoon\build\` until the merge.
-- [ ] 64. Press **Play** (*Jugar*). Check the right build:
+- [x] 62. **Lead:** the file is rebuilt after the asset run (step 60; 2026-10-05, `18bdc0b`),
+      and again in the main checkout after the merge.
+- [x] 63. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl`.
+      For the sign-off look Ben opened the same build from the old `tycoon-m12m\build` folder.
+- [x] 64. Press **Play** (*Jugar*). Check the right build:
       - View (*Vista*) → **Output** (*Salida*) shows this **yellow** line:
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 3 (Metropolis)`;
       - about a second later, a second **yellow** line:
@@ -2271,27 +2281,45 @@ plenty left.
       - Output says `DebugStartEra lever skipped ... already has progress`: this session is on
         a real save. Stop (*Detener*) and close the file **without saving**;
       - you are in Village: you opened `test.rbxl`.
-- [ ] 65. Run `docs/PLAYTEST.md` "M12 wave 3 — Metropolis growing city".
-- [ ] 66. Send Claude the numbers from step 49 of that section.
+      Done for the sign-off look. Whether the two Output lines were compared was not reported.
+- [x] 65. Run `docs/PLAYTEST.md` "M12 wave 3 — Metropolis growing city". **Signed off on a
+      Studio look, 2026-10-05:** "looks good!". It was a look at the city, not a report of the
+      51 steps. Not reported: the step results, the phone (40), low graphics (41), two players
+      (42–43) and the measurement (49). They stay open as watch items.
+- [ ] 66. **Still owed:** send Claude the numbers from step 49 of that section.
 - When you close `metropolis.rbxl`, Studio may ask to save. Saving to the same file on the disk
   is fine. Rebuilding (step 60) overwrites the file, and the two switches are rebuilt with it.
 
-### 16. M12 wave 3 — after sign-off (lead)
+### 16. M12 wave 3 — after sign-off (lead; **DONE 2026-10-05**, one leftover folder to delete)
 
-- [ ] 67. Merge `m12-metropolis` into `main`. Rebuild the four place files and the sourcemaps in
-      the main checkout. Push only if Ben says so.
-- [ ] 68. Remove the worktrees `tycoon-m12m`, `tycoon-m12m-avenues` and `tycoon-m12m-boulevard`.
-      **Remove each `assets` junction first** (`cmd /c rmdir <worktree>\assets`), so nothing
-      follows it into the shared folder. Keep the branches `m12-metropolis-avenues` and
-      `m12-metropolis-boulevard` as the record of the two candidates.
-- [ ] 69. Docs: point §12–§15 and PLAYTEST "M12 wave 3" at `C:\Users\benja\Desktop\tycoon`.
+- [x] 67. **Merged `m12-metropolis` into `main`** (2026-10-05): a fast-forward to `d0dd894`, 62
+      commits. **Not pushed.**
+      - The four place files and both sourcemaps were rebuilt in the main checkout. They came
+        out byte-identical to the committed ones.
+      - Re-run in the main checkout, all passing: `py tools/fabric.py check Metropolis`,
+        `py tools/check_mirror.py --strict`, `py tools/assets/gen_templates.py --check` (444
+        templates) and `py tools/check_compile.py` (122 files).
+- [x] 68. **Worktrees and branches** (2026-10-05):
+      - `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed. Each `assets` junction
+        went first (`cmd /c rmdir <worktree>\assets`), so nothing followed it into the shared
+        folder.
+      - `tycoon-m12m` is no longer a git worktree.
+      - The branch `m12-metropolis` is deleted (merged). The branches `m12-metropolis-avenues`
+        and `m12-metropolis-boulevard` are kept as the record of the two candidates.
+- [ ] 68a. **Lead (open):** delete the leftover folder `C:\Users\benja\Desktop\tycoon-m12m`. It
+      was left half-deleted because Roblox Studio had `build\metropolis.rbxl` open from it.
+      Delete it once Ben has closed Studio. Its `assets` junction is already gone, and nothing
+      in it is unique.
+- [x] 69. Docs point at `C:\Users\benja\Desktop\tycoon` (docs pass of 2026-10-05): §12–§16 here,
+      PLAYTEST "M12 wave 3", and the older M13 and Village paths.
 
 ## M13 — The Valley (waves 1 and 2)
 
-Built in the worktree `C:\Users\benja\Desktop\tycoon-m13` (branch `m13-valley`), **not merged**.
-Run every command below **from that folder**, never from `C:\Users\benja\Desktop\tycoon` or
-`C:\Users\benja\Desktop\tycoon-m12`. `assets/` in the worktree is a junction to the main
-checkout's `assets/`.
+**Merged into `main` on 2026-10-02** (Ben in Studio: "approved!", with no checklist answers).
+The worktree `tycoon-m13` and the branch `m13-valley` were removed the same day. **Everything is
+in the main checkout now, `C:\Users\benja\Desktop\tycoon`:** run every command and open every
+build from there. Where a done step below says something ran "from `tycoon-m13`", that is the
+record of where it ran then.
 
 **Ben's part is §1 and §2 only: open the build and run the playtest.**
 - **Nothing on the Creator Hub.** There is no profile change, so nothing needs republishing.
@@ -2302,27 +2330,26 @@ checkout's `assets/`.
 Studio menus are written in English, with the Spanish in italics: File (*Archivo*), Open
 (*Abrir*).
 
-### 1. Open the M13 build
+### 1. Open the build
 
 Pick **one** of the two options. Option A is the simple one: it gives a fresh Village save on
 every Play and touches no real save.
 
 **Option A: open the file**
-- [x] 1. **Lead:** rebuild after the last code, config or template change, from `tycoon-m13`:
-      `rojo build -o build/test.rbxl`. Tick this once the wave 2 review fixes are in and the
-      checks are green. (The wave 1 rebuild was done on 2026-10-02; this box is for wave 2.) A
-      file built before wave 2 shows no mountains.
+- [x] 1. **Lead:** rebuild after the last code, config or template change, from the main
+      checkout: `rojo build -o build/test.rbxl`. (Done for wave 2 on 2026-10-02, then from
+      `tycoon-m13`; last rebuilt in the main checkout on 2026-10-05.) A file built before wave 2
+      shows no mountains.
 - [ ] 2. Studio → File (*Archivo*) → Open (*Abrir*) →
-      `C:\Users\benja\Desktop\tycoon-m13\build\test.rbxl`.
-      Do **not** open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`: that is `main`, which has
-      no landscape.
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl`.
+      The `tycoon-m13` folder is gone; there is no other Valley build to open by mistake.
 
 **Option B: live sync**
-- [ ] 3. Stop any other `rojo serve` first (the main checkout's, `tycoon-m12`'s, or a VS Code
-      "serve" task). They all use port 34872, and the plugin would sync the wrong folder.
+- [ ] 3. Stop any other `rojo serve` first (another worktree's, or a VS Code "serve" task). They
+      all use port 34872, and the plugin would sync the wrong folder.
 - [ ] 4. In PowerShell:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m13
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo serve
       ```
@@ -2331,13 +2358,13 @@ every Play and touches no real save.
 **Either option:**
 - [ ] 5. Press **Play** (*Jugar*) and look around from the hub. The ground is **green** and there
       are **mountains all around**.
-      - **Grey ground:** you opened `main` or a file from before M13.
+      - **Grey ground:** you opened a file from before M13.
       - **Green ground, straight roads, no mountains:** an old wave 1 file, or the Valley did not
         load. Look in Output (*Salida*) for a line that starts with `[Landscape]`, and copy it
         to Claude.
       For an old file: close Studio, rebuild in PowerShell, then do step 2 again:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m13
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo build -o build/test.rbxl
       ```
@@ -2389,7 +2416,8 @@ the generator writes the GLBs itself.
         largest box (1,444 studs).
       - All 28 meshes and the palette were accepted first try (commit `6f1c415`).
 - [x] 12. **Ben: the one harvest paste** (done 2026-10-02). Studio in **Edit mode**:
-      1. From `tycoon-m13`: `py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip`.
+      1. From the main checkout (then: from `tycoon-m13`):
+         `py tools/assets/harvest.py --emit && cat tools/assets/harvest.luau | clip`.
       2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → paste → Enter → wait for
          `[HARVEST-DONE]`.
       3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
@@ -2417,8 +2445,9 @@ the generator writes the GLBs itself.
 
 ### 6. Before any pipeline run on a merged tree (lead)
 
-- `tools/assets/assets_config.py` from this branch must be in place before any uploader or
-  harvest runs on a tree merged with `m12-boomtown`. An older copy erases the `world` block of
-  `Assets.json`.
-- After that merge, any new list that carries `skirt` entries needs the same river gate as the
+- **Settled on `main`:** the Valley, Boomtown and Metropolis are all merged, and `main`'s
+  `tools/assets/assets_config.py` keeps the `world` block of `Assets.json`. The hazard only
+  remains for a branch cut before 2026-10-02 (such as `m11-unlocks`): merge `main` into it
+  before running any uploader or harvest there, or its older copy erases the `world` block.
+- Still true: any new list that carries `skirt` entries needs the same river gate as the
   Village woods.

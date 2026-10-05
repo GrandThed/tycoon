@@ -2146,10 +2146,10 @@ everywhere else.
 
 ### 4c. Wave 2a — Metropolis streets, highway, subway
 
-> **On the `tycoon-m12m` build (M12 wave 3, branch `m12-metropolis`):** Metropolis has a new
-> street plan. There, use "M12 wave 3 — Metropolis growing city" instead of the Metropolis steps
-> of 4c, 4d, 4e and 4h. The block paving, street trees, plazas, junction lamps, parked cars and
-> filler houses they describe are gone, and the streets, kiosk spots and counts differ.
+> **Since M12 wave 3 (merged to `main` 2026-10-05):** Metropolis has a new street plan. Use
+> "M12 wave 3 — Metropolis growing city" instead of the Metropolis steps of 4c, 4d, 4e and 4h.
+> The block paving, street trees, plazas, junction lamps, parked cars and filler houses they
+> describe are gone, and the streets, kiosk spots and counts differ.
 
 Metropolis is the only era with **kit tile streets**: 7-stud `city-kit-roads` tiles, four per
 28-stud block, instead of baked path meshes. Three slots changed meaning — **Found City Hall**
@@ -4041,9 +4041,10 @@ look as before.
 - **Status 2026-10-01:** merged to `main` (Ben: "the village looks amazing"). Still owed: the
   numbers from step 37.
 - Setup: `docs/MANUAL_STEPS.md` "M12" §2. Since the merge, the main build has Village too.
-- **On the `tycoon-m12` build (branch `m12-boomtown`):** step 34's Boomtown line does not apply
-  (Boomtown is the new town there). See "M12 wave 2.0 — Village smoke and carts" for the carts
+- **Since the Boomtown merge (2026-10-02):** step 34's old Boomtown line no longer applies:
+  Boomtown is the new growing town. See "M12 wave 2.0 — Village smoke and carts" for the carts
   and "M12 wave 2 — Boomtown growing city" for Boomtown and the Village smoke.
+- The build is `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. The `tycoon-m12` folder is gone.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Houses only rise from **GrowthTier 2**. Buying without levelling stops the town at GrowthTier
   3, so **level landmarks (×10 / Max) as you go**.
@@ -4061,8 +4062,8 @@ differ a little:
 
 ### Setup
 
-- [ ] 1. Open the M12 build. In Edit mode, check in Explorer (*Explorador*) that both of these
-      exist:
+- [ ] 1. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. In Edit mode, check in Explorer
+      (*Explorador*) that both of these exist:
       - `ReplicatedStorage/Shared/Config/Fabric/Village`;
       - `ReplicatedStorage/Assets/Props/Village/NoticeBoard`.
       Bug: either is missing (a build from before the 2026-10-01 merge).
@@ -4195,7 +4196,8 @@ differ a little:
       - the woods are only a thin border, plus the band past the edge.
 - [ ] 23. Compare with the reference renders:
       - `assets/testfit/out/Village/m12e_full.png` and `m12e_full_entrance.png`;
-      - or render fresh from the `tycoon-m12` folder: `py tools/testfit/plotrender.py Village`
+      - or render fresh from `C:\Users\benja\Desktop\tycoon`:
+        `py tools/testfit/plotrender.py Village`
         writes `assets/testfit/out/Village/plot_overview.png`, and `--camera entrance` writes
         the entrance view.
       Expect the same streets, rows and woods edge. Heights can differ, because the render shows
@@ -4262,10 +4264,9 @@ differ a little:
 
 - [ ] 34. Buy out Village, then **Advance Era**:
       - all of it clears: woods, houses, flowers, banners, the board, the stakes and the dirt pad;
-      - Boomtown looks exactly as before M12 (houses, greenery, parked cars, walkers, smoke,
-        birds: PLAYTEST M9 4h). **Main build only.** On the `tycoon-m12` build (branch
-        `m12-boomtown`) Boomtown is the new growing town: judge it with "M12 wave 2 — Boomtown
-        growing city" instead.
+      - Boomtown is the new growing town (since the merge of 2026-10-02): judge it with "M12
+        wave 2 — Boomtown growing city". The old Boomtown look this step used to check (PLAYTEST
+        M9 4h) no longer exists.
 - [ ] 35. In Edit mode, rename `ReplicatedStorage/Assets/Props/Village/NoticeBoard` to
       `NoticeBoard_bak`. Play:
       - the pads are still dirt-brown with stakes, but there is no board;
@@ -4303,9 +4304,9 @@ differ a little:
 - The house count jumps near the end (about 54 at tier 4, 116 at full), because the last four
   landmarks open the back streets. This is known.
 - Far plots show bare cleared patches. This is known; it gets tuned from step 37.
-- On the main build, Village has no chimney smoke, parked carts, bushes or hedges. Moving carts,
-  walkers, lanterns and birds remain. Smoke and parked carts come back on the `tycoon-m12` build
-  (the next two sections); bushes and hedges do not (lead's call).
+- Village has no bushes or hedges (lead's call). Chimney smoke and parked carts are back since
+  the Boomtown merge of 2026-10-02 (the next two sections). Moving carts, walkers, lanterns and
+  birds remain.
 - You walk through houses, trees, banners and bunting (the no-collision rule).
 - Construction times, and the positions of walkers, carts and birds, differ between two players.
 - The three city-changer pads get a board and dirt, but no stakes, scaffold or building.
@@ -4823,10 +4824,14 @@ Each of the four pads gets the "lot for sale" sign and dirt, but **no stakes**. 
 
 ## M12 wave 3 — Metropolis growing city
 
-**Status 2026-10-05: READY TO RUN. Not run yet.** The new models are uploaded and in the build:
-the Metropolis asset run is done (`docs/MANUAL_STEPS.md` "M12" §14), and
-`build/metropolis.rbxl` was rebuilt after it (2026-10-05 10:42). A file from before that date
-shows no towers, no old town, no building sites, no bus shelters and no buses.
+**Status 2026-10-05: signed off on a Studio look ("looks good!") and merged to `main`.** Ben
+opened the build and looked at the city. It was not a report of the 51 steps. This checklist
+stays as the way to verify the rest, and as the regression list.
+- **Not reported:** the step results, the phone at 375×667 (step 40), low graphics (41), two
+  players (42–43) and the measurement (49).
+- **Still owed:** the numbers of step 49 (and of Village and Boomtown, step 50).
+- The file is now `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl`. The old `tycoon-m12m`
+  folder is not used any more.
 
 **Goal:** Metropolis grows as a downtown. An old town of car parks and brick buildings covers
 the plot. As you buy landmarks it is redeveloped: building sites with tower cranes, then towers
@@ -4876,7 +4881,7 @@ models' real sizes (2026-10-05): none moved.
 
 ### Setup
 
-- [ ] 1. Open `C:\Users\benja\Desktop\tycoon-m12m\build\metropolis.rbxl` with File (*Archivo*) →
+- [ ] 1. Open `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl` with File (*Archivo*) →
       Open (*Abrir*). **Never publish this file.**
 - [ ] 2. **Cash: nothing to set up.** The file pays you about a second after you join. Under
       Workspace → Attributes (*Atributos*), `DebugStartEra` (3) and `GrantCash` are already
@@ -5154,12 +5159,12 @@ Do this any time after City Hall (6).
 
 ### 13. Village and Boomtown (unchanged)
 
-- [ ] 46. Stop. Open `C:\Users\benja\Desktop\tycoon-m12m\build\test.rbxl` and Play: a fresh
+- [ ] 46. Stop. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl` and Play: a fresh
       **Village**, covered in woods. Buy the free **Campfire**:
       - the timber scaffold ring, the trail and the trees clearing with puffs, as before;
       - the notice board and stakes move to the Small Tent pad;
       - nothing red in Output.
-- [ ] 47. Stop. Open `C:\Users\benja\Desktop\tycoon-m12m\build\boomtown.rbxl` (**never publish
+- [ ] 47. Stop. Open `C:\Users\benja\Desktop\tycoon\build\boomtown.rbxl` (**never publish
       this one either**) and Play: a fresh **Boomtown**, crop fields, 100T cash. Buy the free
       **Newsstand**:
       - it rises with its scaffold; its street and driveway appear, as before;
@@ -5268,7 +5273,8 @@ ground to the horizon, a stone hub with an earth ring, and a dirt road from the 
 Mountains, forest, waterfall and river come in waves 2 and 3. Plots, buying, income and all city
 dressing are unchanged.
 
-- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open the **tycoon-m13** build, not the main one.
+- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`
+  (the Valley is on `main` since 2026-10-02; the `tycoon-m13` folder is gone).
 - Nothing to prepare in Studio: no attributes, no cash lever.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Reference pictures are in
@@ -5296,7 +5302,7 @@ What to expect, on `main`'s ring of 10 plots:
 
 ### Setup
 
-- [ ] 1. Open the M13 build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
+- [ ] 1. Open the build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
       and keep it open the whole time.
 - [ ] 2. **Play** (*Jugar*). You start on the hub. Look at the ground past the hub: it is
       **green**.
@@ -5450,7 +5456,8 @@ the plots. A river with a pond and a lake. Bridges, stepping stones, groves and 
 middle. A gravel apron and a fence at each plot. Plots, buying, income and city dressing are
 unchanged, except that no woods tree stands in the river.
 
-- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open the **tycoon-m13** build, not the main one.
+- Setup: `docs/MANUAL_STEPS.md` "M13" §1. Open `C:\Users\benja\Desktop\tycoon\build\test.rbxl`
+  (the Valley is on `main` since 2026-10-02; the `tycoon-m13` folder is gone).
 - Nothing to prepare in Studio: no attributes, no cash lever. Steps 9 and 18 are **optional**.
 - Menus are written in English, with the Spanish in italics: View (*Vista*).
 - Reference pictures are in
@@ -5497,7 +5504,7 @@ If your plot is not the first one, find the water from the hub. It is in plain s
 
 ### Setup
 
-- [ ] 1. Open the M13 build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
+- [ ] 1. Open the build (MANUAL_STEPS "M13" §1). Then View (*Vista*) → **Output** (*Salida*),
       and keep it open the whole time.
 - [ ] 2. **Play** (*Jugar*). You start on the hub. There are **mountains all around**.
       Bug: green ground but no mountains and straight roads (the Valley did not load: copy the

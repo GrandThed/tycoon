@@ -1,9 +1,19 @@
 ---
 name: metropolis-growth-2026-10-02
-description: M12 wave 3 (Metropolis growing city) — density ceiling, two candidates at Ben's gate, tiles-era alleys, prop swaps, site variants
+description: M12 wave 3 (Metropolis growing city), signed off and merged 2026-10-05 — avenues at 88 lots, density ceiling, tiles-era lanes, prop swaps, the gates it added
 metadata:
   type: project
 ---
+
+**Signed off and merged 2026-10-05.** Ben on his Studio look at `build/metropolis.rbxl`: "looks good!". `main`
+is at d0dd894 (a fast-forward; not pushed). It was a look, not the 51-step checklist: phone, low graphics,
+two players and the measurement (PLAYTEST "M12 wave 3" step 49) are unreported, like Village step 37 and
+Boomtown step 59. Worktrees `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed; `tycoon-m12m`
+is unregistered but its folder was left half-deleted because Studio had `build\metropolis.rbxl` open from
+it (delete the folder once Studio is closed; nothing in it is unique). Branches kept as the record:
+`m12-metropolis-avenues`, `m12-metropolis-boulevard`. The Studio build is `tycoon\build\metropolis.rbxl`
+(never publish). **Next: Orbital (wave 4), only when Ben says so**; it has the same 7-stud lattice and
+ring, so run the density arithmetic before setting any target.
 
 M12 wave 3, Metropolis, started 2026-10-02 from `docs/prompts/m12-metropolis.md`. Contract: `docs/INTERFACES.md`
 "M12 wave 3 — Metropolis" → "Wave 3.1" (a gate for Ben, not yet a contract). Base worktree

@@ -66,14 +66,15 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   billboards, neon), chimneys on the narrow Village homes; the sign-off was a Studio look at the
   lanes and the town ("looks really good! lets send it"), not a report of the 60-step checklist,
   so the phone, low-graphics, two-player and measurement steps stay watch items, and Ben's
-  step-37 numbers are still owed; **wave 3 Metropolis built, reviewed and QA-green 2026-10-04 on
-  branch `m12-metropolis`, not merged**: the "avenues" layout Ben picked on 2026-10-03 ("i love
-  avenues"), 88 lots on three avenues and four lanes, an old town that is redeveloped, towers
-  that grow floor by floor, two city-changer slots (Open the Bus Line, Green the Rooftops);
-  **its asset run is done (2026-10-05)**: Ben approved the prop sheets ("looks good!"), 35 props
-  (107 stages) uploaded, harvested in one paste and templated, every gate green on the harvested
-  sizes; **Ben's Studio playtest in `build/metropolis.rbxl` is next**; then the merge, then
-  Orbital when Ben says so — see "M12" below)
+  step-37 numbers are still owed; **wave 3 Metropolis signed off by Ben and merged to `main`
+  2026-10-05** (`d0dd894`, a fast-forward, not pushed): the "avenues" layout Ben picked on
+  2026-10-03 ("i love avenues"), 88 lots on three avenues and four lanes, an old town that is
+  redeveloped, towers that grow floor by floor, two city-changer slots (Open the Bus Line, Green
+  the Rooftops), 35 props (107 stages) uploaded and harvested in one paste; the sign-off was a
+  Studio look ("looks good!"), not a report of the 51-step checklist, so the step results, the
+  phone, low-graphics and two-player checks and the measurement stay watch items, and the
+  numbers for Village, Boomtown and Metropolis are owed; **next: Orbital (wave 4), only when
+  Ben says so** — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
   A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
   every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
@@ -1886,10 +1887,9 @@ Core gameplay is untouched.
     were merged and removed on 2026-10-01.
   - Wave 2 (Boomtown) is on `main` too, merged on 2026-10-02 (merge commit `86d1d99`). Its worktree
     and branch are removed. See "Wave 2 — Boomtown" below.
-  - **Wave 3 (Metropolis) is on branch `m12-metropolis`, in the worktree
-    `C:\Users\benja\Desktop\tycoon-m12m`. Not merged.** Built, reviewed and QA-green
-    (2026-10-04); models uploaded, harvested and templated (2026-10-05, `18bdc0b`); **not
-    playtested yet**. See "Wave 3 — Metropolis" below.
+  - Wave 3 (Metropolis) is on `main` too, merged on 2026-10-05 (a fast-forward to `d0dd894`).
+    Its branch `m12-metropolis` is deleted and its worktrees are removed. See "Wave 3 —
+    Metropolis" below.
   - (M11 is the unmerged feature-unlocks milestone on branch `m11-unlocks`.)
 
 **Rulings (Ben):**
@@ -2338,11 +2338,10 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 - **Done (housekeeping, 2026-10-02):** the three `tycoon-m12*` worktrees are removed. The
   branches `m12-boomtown-grid` and `m12-boomtown-organic` are kept as the record.
 
-**Next (updated 2026-10-04):**
-1. **Metropolis (wave 3): under way.** The lattice study, the mock, the contracts, the client,
-   the review, the QA and the asset run (2026-10-05) are done. The playtest is not. "Wave 3 —
-   Metropolis" below holds the current "Next" list.
-2. **Orbital (wave 4):** the same routine, after Metropolis.
+**Next (updated 2026-10-05):**
+1. **Metropolis (wave 3): done.** Signed off by Ben and merged to `main` on 2026-10-05. See
+   "Wave 3 — Metropolis" below, which holds the current "Next" list.
+2. **Orbital (wave 4):** the same routine, only when Ben says so.
 3. Alongside: the open follow-ups above, and Ben's numbers when they arrive.
 
 The code is shared; each era adds data, config and models.
@@ -2379,34 +2378,44 @@ The code is shared; each era adds data, config and models.
 - [x] lead: wave 3, Metropolis, opened 2026-10-02 (the lattice study came first); its checklist
   is under "Wave 3 — Metropolis"
 
-### Wave 3 — Metropolis (2026-10-02 → 2026-10-05; built, reviewed, QA green, models uploaded; **Studio playtest pending**)
+### Wave 3 — Metropolis (2026-10-02 → 2026-10-05; signed off and merged to `main` 2026-10-05, `d0dd894`)
 
 **Where:**
-- Branch `m12-metropolis`, in the worktree `C:\Users\benja\Desktop\tycoon-m12m`. **Not merged to
-  `main`.** `assets\` there is a junction to the main checkout's `assets\`.
+- **The work lives on `main`**, in the main checkout `C:\Users\benja\Desktop\tycoon` (`main` at
+  `d0dd894`, a fast-forward: `m12-metropolis` was 62 commits ahead). **Not pushed.**
+- **The worktrees are gone:** `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed
+  (junctions first), `tycoon-m12m` is no longer a git worktree, and the branch `m12-metropolis`
+  is deleted. One leftover: the half-deleted folder `tycoon-m12m` (see the follow-ups).
 - Code, review and QA are done at `b6891e8` (QA ran at `1feb551`; `b6891e8` adds the place
   builds). After the QA run, `33261d4` adds the upload name guard and the larger baked cash, with
   `build/metropolis.rbxl` rebuilt.
 - The asset run is `0a2258b` (upload), `aede7e3` (harvest) and `18bdc0b` (templates, manifest,
   place builds), all on 2026-10-05.
 - **Kept as the record of the two layout candidates:** the branches `m12-metropolis-avenues`
-  (**chosen**; last commit `2dff602`, merged in by `882b7ab`; worktree `tycoon-m12m-avenues`) and
-  `m12-metropolis-boulevard` (not chosen, `a732dd6`; worktree `tycoon-m12m-boulevard`).
+  (**chosen**; last commit `2dff602`, merged in by `882b7ab`) and `m12-metropolis-boulevard`
+  (not chosen, `a732dd6`).
 - Contract: `docs/INTERFACES.md` "M12 wave 3 — Metropolis": "Wave 3.1" with its rulings blocks,
   "Wave 3.1b — avenues, denser", and "Wave 3.2 — Metropolis in the game" with its four rulings
   blocks.
 - Memory: `.claude/memory/metropolis-growth-2026-10-02.md`.
 
-**Status (2026-10-05): built, reviewed, QA-green, and the asset run is done. Not playtested.**
-- **The asset run is done (2026-10-05, `18bdc0b`).** Ben approved the two prop sheets ("looks
-  good!"). 35 props (107 stages) are uploaded, harvested in one paste and templated. See "The
-  asset run" below.
-- **`build/metropolis.rbxl` (rebuilt 2026-10-05 10:42) shows the whole wave:** towers, old town,
-  building sites, bus shelters and buses.
-- **Ben has not seen this wave in Studio.** Everything he approved so far was a render. His
-  playtest is the next step.
-- Routine: `docs/MANUAL_STEPS.md` "M12" §12–§16 (§15 is Ben's next step). Checklist:
-  `docs/PLAYTEST.md` "M12 wave 3 — Metropolis growing city".
+**Status (2026-10-05): signed off by Ben and merged to `main`.**
+- **Ben's sign-off:** "looks good!", after opening `build/metropolis.rbxl` in Studio.
+- **What the sign-off was:** a look at the city in Studio. It was **not** a report of the
+  51-step checklist. Not reported, and open as watch items: the step results, the phone at
+  375×667, low graphics, two players, and the measurement (step 49).
+- **Still owed by Ben:** the numbers: Village step 37, Boomtown step 59, Metropolis step 49. He
+  has sent none of them.
+- **The merge:** `main` fast-forwarded to `d0dd894`. The four place files and both sourcemaps
+  were rebuilt in the main checkout, byte-identical to the committed ones. Re-run there, all
+  passing: `fabric.py check Metropolis`, `check_mirror.py --strict`, `gen_templates.py --check`
+  (444 templates), `check_compile.py` (122 files). **Not pushed.**
+- Metropolis is tested on `C:\Users\benja\Desktop\tycoon\build\metropolis.rbxl` (a fresh save
+  starts in era 3, with 1e20 cash). **That file is for local Studio use only and must never be
+  published.**
+- The asset run was done the same day (`18bdc0b`): see "The asset run" below.
+- Routine: `docs/MANUAL_STEPS.md` "M12" §12–§16. Checklist: `docs/PLAYTEST.md` "M12 wave 3 —
+  Metropolis growing city".
 - The counts below were re-checked on the harvested sizes on 2026-10-05: none moved.
 
 **Goal:** Metropolis grows as a downtown. An old town of car parks, vacant lots and brick blocks
@@ -2634,8 +2643,12 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
   "M12" §14).
 - **Done (2026-10-05):** the counts here and in PLAYTEST re-checked on the harvested sizes.
   None moved.
-- **Ben (open, next):** the Studio playtest in `build/metropolis.rbxl` (MANUAL_STEPS "M12" §15,
-  PLAYTEST "M12 wave 3 — Metropolis growing city").
+- **Done (Ben, 2026-10-05):** the Studio look at `build/metropolis.rbxl`: "looks good!". A look,
+  not a report of the checklist.
+- **Watch items (Ben, when convenient; lead to keep an eye):** the checklist steps the sign-off
+  did not cover: the step results in general, the phone at 375×667 (step 40), low graphics
+  (41), two players (42–43) and the measurement (49) of `docs/PLAYTEST.md` "M12 wave 3 —
+  Metropolis growing city".
 - **Done (lead, 2026-10-04, `33261d4`; found in the docs pass):** the baked cash is **1e20**
   (was 1e18). Maxing all 16 buildings costs about 5.9e18, and 1e18 only reached the Hotel Tower.
   Ben can now max every landmark and compare the full skyline with the render.
@@ -2659,15 +2672,20 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
   (`ApartmentA–C`, `TownhouseA/B`, `PlazaA/B`, `BushA/B`, `HedgeA`, `FlowerBedA`, `PlanterA`,
   `ParkedA–C`) and `LampPost` are still uploaded and templated. The `BusStop` and
   `RooftopGarden` building models are no longer spawned either.
-- **lead (after sign-off):** merge `m12-metropolis` into `main`; remove the three `tycoon-m12m*`
-  worktrees (the `assets` junction first); keep the two candidate branches as the record.
+- **Done (lead, 2026-10-05):** `m12-metropolis` merged into `main` (`d0dd894`, not pushed); the
+  two candidate worktrees removed (junctions first); the branch deleted; the two candidate
+  branches kept as the record.
+- **lead (open):** delete the leftover folder `C:\Users\benja\Desktop\tycoon-m12m`. It is no
+  longer a git worktree, but it was left half-deleted because Roblox Studio had
+  `build\metropolis.rbxl` open from it. Delete it once Ben has closed Studio. Nothing in it is
+  unique.
 
-**Next (updated 2026-10-05):**
-1. **Ben:** the Studio playtest in `build/metropolis.rbxl`.
-2. **lead:** fixes from the playtest, then the merge to `main`.
-3. **Orbital (wave 4): only when Ben says so.** The same routine. It has the same 7-stud lattice
-   and a ring, so the density arithmetic comes first, before any lot target.
-4. Alongside: the open follow-ups of waves 1 to 3, and Ben's numbers when they arrive.
+**Next (updated 2026-10-05, after the merge):**
+1. **Orbital (wave 4): only when Ben says so.** The same routine: a layout mock for Ben,
+   contracts, props with sheets, one harvest paste, review, QA, playtest. Orbital has the same
+   7-stud lattice and a ring, so the density arithmetic comes first, before any lot target.
+2. Alongside: the open follow-ups of waves 1 to 3 (each listed above with its owner), and Ben's
+   numbers when they arrive.
 
 - [x] Wave 3.1 mock built: lattice study, two candidates, gate renders (2026-10-02)
 - [x] Ben decided 1: avenues, with more density, four lanes and narrower pavements (2026-10-03)
@@ -2687,9 +2705,14 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - [x] lead: harvest, templates, fabric data from harvested extents, gates, manifest, builds
   (2026-10-05, `aede7e3`, `18bdc0b`)
 - [x] docs-keeper: the docs after the asset run; counts re-checked, none moved (2026-10-05)
-- [ ] Ben: the Metropolis Studio playtest in `build/metropolis.rbxl`
+- [x] Ben: the Metropolis Studio look in `build/metropolis.rbxl`: signed off, "looks good!"
+  (2026-10-05); not a report of all 51 steps
 - [ ] Ben → lead: the numbers (Village, Boomtown, Metropolis)
-- [ ] lead: merge `m12-metropolis` into `main`; worktrees removed
+- [x] lead: merged `m12-metropolis` into `main` (2026-10-05, fast-forward to `d0dd894`, not
+  pushed); candidate worktrees removed, branch deleted
+- [ ] lead: delete the leftover folder `tycoon-m12m` once Ben has closed Studio
+- [ ] Watch items: the unreported checklist steps (step results, phone, low graphics, two
+  players, measurement)
 - [ ] lead: wave 4, Orbital, only when Ben says so (the density arithmetic first)
 
 ## M13 — The Valley
@@ -2703,9 +2726,9 @@ untouched.
   2026-10-02)", through "Preview gate rulings" and "Done when (wave 2)".
 - Memory: `.claude/memory/world-landscape-2026-10-01.md` (in the main checkout).
 - Mock: `assets/research/2026-10-01-worldmock/` (gitignored), sheets in its `out/` folder.
-- Where: worktree `C:\Users\benja\Desktop\tycoon-m13`, branch `m13-valley`, off `main` `e5df035`.
-- The M12 Boomtown session works in `tycoon-m12` at the same time. Never touch it, and announce
-  every upload or harvest to it first.
+- Where: on `main` since 2026-10-02, in the main checkout `C:\Users\benja\Desktop\tycoon`. It
+  was built in the worktree `tycoon-m13` on branch `m13-valley` (off `main` `e5df035`), beside
+  the M12 Boomtown session in `tycoon-m12`. Both worktrees and both branches are removed.
 
 **Rulings (Ben):**
 1. 2026-10-01: three landscapes were rendered around the real plots: A Valley, B Island, C Lake.
@@ -2790,7 +2813,7 @@ INTERFACES):**
   `lift` and `hub.surround.height` together.
 
 **Status (wave 1):** built, **checks green** (2026-10-02), committed on `m13-valley` (`7389467`,
-`1d5cfcc`, `fef4b1c`), not merged.
+`1d5cfcc`, `fef4b1c`). Merged into `main` with wave 2 on 2026-10-02.
 - **Ben's Studio look, 2026-10-02:** one screenshot with the green ground, the roads and the haze
   all showing, and no complaint.
 - He gave **no haze letter** and did **not formally sign off** the wave 1 checklist. The wave 2
