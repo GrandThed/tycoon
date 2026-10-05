@@ -10,7 +10,21 @@ M12 wave 4 (Orbital Colony growing city), started 2026-10-05. Ben pasted
 first, then on the study's report said **"lets do it"**: the mock with the candidates "docks" and "axis".
 His three playtest measurements are "not measured yet", so `budget.parcelsFar` stays 60.
 
-**State (2026-10-05, wave 4.1, the mock gate; contract in INTERFACES "M12 wave 4"):**
+**Ben rejected both candidates at the gate (2026-10-05):** "i dont really love it, i was looking for
+something more organic looking for the orbital colony, it looks way to similar to metropolly". Asked,
+he chose **curving tubes** (like Village's trails and Boomtown's streets, pods turned to follow; over
+hubs-and-spokes and over clusters on the square pieces), **as dense as organic allows** (over open
+regolith between clusters) and a **round monorail loop** (over the square ring). He was told curving
+tubes need new tube meshes and one harvest paste later. Never bring back straight avenues, terrace
+rows of window-banded boxes or a square ring for Orbital: that is what read as Metropolis. He also
+chose organic for Boomtown, so offer an organic candidate first for any future layout.
+- Wave 4.1b (INTERFACES "Wave 4.1b — organic Orbital") is the second mock: Orbital leaves the tiles
+  family (swept half-pipe meshes per path piece, a `TubeHub` at every node, flat decking aprons and
+  lanes), `highway.round`, wild as an irregular scatter, round fabric props; candidates "vine" and
+  "bloom" in `tycoon-m12o-vine` and `tycoon-m12o-bloom`. `m12-orbital-docks` and `-axis` stay as the
+  record. The docking rule and the tiles rulings below are withdrawn.
+
+**State before the rejection (wave 4.1, the first mock gate; contract in INTERFACES "M12 wave 4"):**
 - Base worktree `C:\Users\benja\Desktop\tycoon-m12o` (branch `m12-orbital`, groundwork at 8c89aff);
   candidates `tycoon-m12o-docks` and `tycoon-m12o-axis` (branches `m12-orbital-<c>`); all three have an
   `assets\` junction (remove it before removing the worktree). Nothing is uploaded; `main` is untouched.

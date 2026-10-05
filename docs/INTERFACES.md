@@ -7624,3 +7624,90 @@ For the client in wave 4.2, complete list: `Fabric.buildMask` skips the ring rec
 `highway.clearBand == false`; `Fabric.clearedFlags` never clears a quarter or single on a ring cell
 then (`cityfabric.ring_keeps`); types for `road.tiles.dock` and `highway.clearBand`; Orbital joins
 `check_mirror.py` with `ring_clears` and `ring_keeps` vectors.
+
+### Ben at the gate (2026-10-05): both candidates rejected
+
+"i dont really love it, i was looking for something more organic looking for the orbital colony, it
+looks way to similar to metropolly". A comb of straight avenues lined with terrace rows inside a
+square ring is Metropolis's plan in white, whichever candidate is picked; the lead framed both that
+way. `m12-orbital-docks` and `m12-orbital-axis` stay as the record and are not built on.
+
+Asked what organic should mean, Ben chose:
+- **Curving tubes** (over hubs and spokes, and over clusters on today's square pieces): tubes bend
+  and wander like Village's trails and Boomtown's streets, and pods turn to follow them. He was told
+  it needs new tube meshes and one harvest paste later.
+- **As dense as organic allows** (over clusters with open regolith between them).
+- **A round monorail loop** (over the square ring).
+
+## Wave 4.1b — organic Orbital (a second mock gate for Ben, not yet a contract)
+
+Two new candidate layouts, again real layouts through the real generator. Everything in wave 4.1
+holds unless this section changes it: the frozen slots, the growth rules of mock B, districts, the
+lot sizes (4 × 8, 6 × 6, 8 × 12), five-stage props with `levelStages` [1, 3, 4] and `heightFloor`
+3.4, decking that arrives with development, lots off a landmark's decking, the regolith as wild,
+the draft props, and "nothing uploaded in this wave".
+
+### What changes
+
+- **Orbital leaves the tiles family.** Its tubes are curving streets like Village's and Boomtown's:
+  polylines in the layout, smoothed by the arcs those eras use, cut into the same pieces
+  (`tools/paths/network.py`), and each piece **swept as a half-pipe mesh** in today's profile
+  (radius 1.5 on a 0.3 sill, 3.24 wide, a grey ring every 1.4). In wave 4.2 the meshes go the
+  baked-paths route (one upload per layout, one harvest paste). A centreline never curves tighter
+  than a 6-stud radius.
+- **A hub at every node.** `TubeHub`, a round airlock hub wider than the pipe, stands where tubes
+  branch and where one ends. A swept piece runs from hub to hub and ends inside both, so two tube
+  meshes never meet in the open.
+- **Landmark connections and back lanes are flat decking**, never tubes (a buy pad must stay in
+  view): baked flat pieces in today's spur look, Metal (170, 174, 184), 3 wide. A landmark's piece
+  is its **apron**: the footpath from the tube widened under its pad and building. It replaces wave
+  4.1's `blocks` rect, which only a tiles era draws.
+- **Lots follow the tubes:** fronts 1.75 from the centreline (the pipe's half-width is 1.62), each
+  lot turned to the tube's tangent; narrow lots may terrace along a curve. The docking rule
+  (`road.tiles.dock`), the laid-footpath rule for docked eras and the 6-polyline allowance are
+  withdrawn with the tiles: no era uses them, so their code goes.
+- **Round monorail:** `highway.round` (boolean, loop mode only). The track is a circle of radius
+  `ring` (56) about the plot's centre, in 48 segments of 7.5° (`MonorailArc`, beam 1.6 wide, top
+  7.07, soffit 6.10), segment joints on multiples of 7.5° from +X, one pier at each segment's middle
+  (so the entrance axis falls between two piers). The band is the annulus 52.5 to 59.5 from the
+  centre: no lot, pad, marker, apron or landmark extents in it, nothing taller than 3.0 under it.
+  **The colony may spill past the loop** into the plot's corners: a tube may cross the band, at 60°
+  or more to the track and 2 or more from a pier foot. The train follows the circle.
+- **Wild is an irregular scatter**, never a visible grid: clumps, quarters and singles placed and
+  turned by the seeded pattern Village's woods use (or the fields pattern at an angle with jitter,
+  whichever reads as ground). It stays under the beam for good (`highway.clearBand` false, now the
+  annulus) and in every pocket the lots leave.
+- **Fabric props are round:** capsules, drums, spheres, domes and vaults. No box body with storey
+  bands of windows: those read as Metropolis's towers. Deck plates and airlock collars stay.
+- **Targets:** as dense as organic allows. At least **90 lots** at full build (floor 80; Village
+  holds 116, Boomtown 75), building sites at every tier, no tier 4 → full jump above 25 lots, the
+  lot count on every render.
+
+### Candidates
+
+- **"vine":** one main tube winds from the entrance to the Launch Tower in a long S, and side tubes
+  curl off it left and right like tendrils, each ending at a landmark. Back lanes fill the pockets
+  between tendrils.
+- **"bloom":** a short stem from the entrance to a heart of domes, with tubes curving around it in
+  widening arcs that echo the round monorail, and one tube breaking out past the loop to the Launch
+  Tower.
+
+### Gate renders (`assets/testfit/out/OrbitalColony/`)
+
+- For each candidate `<c>`: `m12o_<c>_{tier1,tier3,full,full_entrance,streetplan}.png`.
+- `m12o_compare_organic.png`: today and both candidates at tier 1, tier 3 and full, with lot counts.
+- Revised prop strips in `m12o_props/`.
+
+### Ownership (wave 4.1b)
+
+| Owner | Where | Files |
+|---|---|---|
+| lead | base (`tycoon-m12o`) | this section; rulings; commits and merges; memory |
+| economy-designer "generator" | base | `tools/fabric.py`, `tools/streetplan.py`, `tools/cityfabric.py`, `tools/paths/**`, `tools/testfit/plotrender.py`, `plotscene.py`, `compare_sheet.py`; `CityDressing.json` `eras.OrbitalColony`; groundwork versions of the layout, plan and fabric data |
+| prop-builder "pods" | base | `tools/assets/colony_kit.py`; `_props/OrbitalColony/Fabric*.json`; strips |
+| prop-builder "kits" | base | `tools/assets/tube_kit.py` (`tube-hub`), `tools/assets/monorail_kit.py` (`track-arc`), `tools/assets/regolith_kit.py`; `_props/OrbitalColony/{TubeHub,MonorailArc,LotBeacon}.json`; strips |
+| layout-designer "vine" | `tycoon-m12o-vine` | `src/shared/Layouts/OrbitalColony.luau`, `tools/fabric/OrbitalColony.plan.json`, `Config/Fabric/OrbitalColony.json`, `eras.OrbitalColony.fabric.pull`; renders `m12o_vine_*` |
+| layout-designer "bloom" | `tycoon-m12o-bloom` | the same files in its worktree; renders `m12o_bloom_*` |
+
+Frozen as in wave 4.1. The client, `CityFabric.luau` and `Types.luau` follow in wave 4.2, where
+Orbital moves from the tile renderer to the baked-path renderer.
