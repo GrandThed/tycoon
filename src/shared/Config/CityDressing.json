@@ -1254,7 +1254,8 @@
               "FabricIndMediumA"
             ],
             "narrow": [
-              "FabricIndNarrowA"
+              "FabricIndNarrowA",
+              "FabricIndNarrowB"
             ]
           },
           "science": {
@@ -1265,7 +1266,8 @@
               "FabricHabMediumA"
             ],
             "narrow": [
-              "FabricSciNarrowA"
+              "FabricSciNarrowA",
+              "FabricSciNarrowB"
             ]
           },
           "port": {
@@ -1276,7 +1278,8 @@
               "FabricPortMediumA"
             ],
             "narrow": [
-              "FabricPortNarrowA"
+              "FabricPortNarrowA",
+              "FabricPortNarrowB"
             ]
           }
         },

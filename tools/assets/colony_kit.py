@@ -1,6 +1,6 @@
 """Fabric buildings for the Orbital Colony growing city (M12 wave 4), generated as a Kenney-style kit.
 
-    py tools/assets/colony_kit.py            # regenerate the GLBs and the twelve blueprints, then check
+    py tools/assets/colony_kit.py            # regenerate the GLBs and the blueprints, then check
     py tools/assets/colony_kit.py check      # check only: the rules, the blueprints and GLBs on disk
     blender -b -P tools/assets/colony_kit.py [-- --out <dir>] [--write-blueprints]
 
@@ -24,6 +24,15 @@ one look per district, different in silhouette and not only in colour:
 - science: lab modules under long lit strips and solar roofs, dishes, and one slim mast;
 - port: a gatehouse, a pale cargo pad, container stacks, a striped hangar, a gantry crane, a
   control cab, and (small and medium lots) a parked space-kit cargo craft at the last stages.
+
+A layout of narrow lots draws one district's props many times over, so each district has two
+narrow props, A and B, that differ in silhouette at every stage and keep the district's colours:
+where the tall part stands on the 8-deep lot, the roofline, and the signature piece (industry B:
+sphere tanks, a boiler house and a fat stack where A has bullet tanks, a column and a flare;
+science B: a stepped round tower under a radar reflector where A has a long lab, a dish and a
+mast; port B: a striped hangar with a cupola at the back and a fuel apron where A has a control
+cab in front, containers and a gantry). Their stage heights stay within about a stud of each
+other, so a row that alternates them grows evenly.
 
 **Units.** Blueprints use `"scale": 2.0`, so that a space-kit cargo craft comes out at half the
 landmarks' size (3.0 x 1.8 x 5.0 studs) and fits a lot. Every literal below is in **studs** in the
@@ -507,14 +516,17 @@ def stack(p: Part, cx, cz, y0, y1, w0, w1, tip: Rgb | None = WARN, tip_h: float 
         lathe(p, [(r, 0.0), (r, tip_h)], tip, at=(cx, y0 + body, cz), top=PANEL, bottom=tip)
 
 
-def sphere(p: Part, cx, cz, y0, w, stand: float = 0.5) -> None:
-    """A sphere tank on a grey pedestal, with an orange equator."""
+def sphere(p: Part, cx, cz, y0, w, stand: float = 0.5, stalk: Rgb = PANEL, slim: bool = False) -> None:
+    """A sphere tank with an orange equator on a pedestal half its width; a long `stand` makes the
+    pedestal a stalk, and `slim` narrows the equator to a belt on a white ball. The top is
+    y0 + stand + 0.88 w."""
     r = w / 2 / math.cos(PHASE)
     cy = y0 + stand + w * 0.44
-    drum(p, cx, cz, y0, w * 0.5, stand + w * 0.1, PANEL, PANEL)
+    drum(p, cx, cz, y0, w * 0.5, stand + w * 0.1, stalk, PANEL)
     prof = [(r * math.cos(math.radians(a)), w * 0.44 / math.sin(math.radians(62)) * math.sin(math.radians(a)))
-            for a in (-62, -22, 22, 62)]
-    lathe(p, prof, [HULL, TRIM, HULL], at=(cx, cy, cz), top=PANEL, bottom=PANEL)
+            for a in ((-62, -22, -8, 8, 22, 62) if slim else (-62, -22, 22, 62))]
+    lathe(p, prof, [HULL, HULL, TRIM, HULL, HULL] if slim else [HULL, TRIM, HULL], at=(cx, cy, cz), top=PANEL,
+          bottom=PANEL)
 
 
 def pipe(p: Part, pts, c: Rgb = TRIM, r: float = 0.11) -> None:
@@ -565,6 +577,27 @@ def dish(p: Part, x, z, y0, w, turn: float = 270.0, tilt: float = 40.0, stand: f
     hub = y0 + stand + r * math.sin(t) - depth * math.cos(t) + 0.1  # the low rim clears the pedestal
     p.add(sub, turn - 90.0, (x, hub, z), tilt)
     return max(v[1] for v in p.verts)
+
+
+def reflector(p: Part, x, z, y0, w, h, stand: float = 0.4) -> float:
+    """A radar reflector looking toward the lot front: a white centre panel between two wings
+    folded 30 degrees forward (GAP shorter at top and bottom, so their ends never share a plane
+    with the centre's where they meet), grey behind, a cyan top edge, and a cyan feed on a boom.
+    About 0.97 w across. Returns the top."""
+    cube(p, x - 0.16, x + 0.16, y0, y0 + stand, z - 0.16, z + 0.16, PANEL, skip=("bottom",))
+    ya, yb = y0 + stand, y0 + stand + h
+    c, wing, t = 0.2 * w, 0.33 * w, 0.07
+    cube(p, x - c, x + c, ya, yb, z - t, z + t, HULL, front=SHELL, back=PANEL, top=HOLO)
+    # a wing is built along +X from the hinge and turned; its face toward the feed is its front on
+    # the right wing and its back on the left one
+    for side, turn, face, behind in ((1, -30.0, "front", "back"), (-1, 210.0, "back", "front")):
+        sub = Part("")
+        cube(sub, 0.0, wing, ya + GAP, yb - GAP, -t, t, HULL, skip=("left",), top=HOLO, **{face: SHELL, behind: PANEL})
+        p.add(sub, turn, (x + side * c, 0.0, z))
+    yf, zf = ya + h * 0.4, z - t - 0.4 * w
+    cube(p, x - 0.06, x + 0.06, yf, yf + 0.12, zf, z - t, PANEL, skip=("back",))
+    cube(p, x - 0.13, x + 0.13, yf - 0.07, yf + 0.19, zf - 0.26, zf, HOLO)
+    return yb
 
 
 def solar(p: Part, x0, x1, z0, z1, y, cols: int, rows: int) -> None:
@@ -664,8 +697,10 @@ def hangar(p: Part, b: Box, y0, hs, h, axis: str = "z", door_end: int = 0) -> No
     door_side = {("z", 0): "front", ("z", 1): "back", ("x", 0): "left", ("x", 1): "right"}[(axis, door_end)]
     band(p, b, y0 + dh * 0.58, y0 + dh * 0.58 + 0.22, TRIM, butt=(door_side,))
     far = a1 if door_end == 0 else a0
+    drop = max(0.0, 0.95 + 0.08 - dh * 0.58)  # a low hangar's windows move down, clear of the stripe
     for k in (-0.5, 0.5):
-        end_slab(p, axis, far, -s, 0.0, GAP, cu + k * dw * 2 - 0.4, cu + k * dw * 2 + 0.4, y0 + 0.5, y0 + 0.95, LIT)
+        end_slab(p, axis, far, -s, 0.0, GAP, cu + k * dw * 2 - 0.4, cu + k * dw * 2 + 0.4, y0 + 0.5 - drop,
+                 y0 + 0.95 - drop, LIT)
 
 
 def gantry(p: Part, x0, x1, zc, y0, yb, load_x, load: Rgb | None, drop: float = 1.3) -> float:
@@ -680,6 +715,14 @@ def gantry(p: Part, x0, x1, zc, y0, yb, load_x, load: Rgb | None, drop: float = 
         cube(p, load_x - 0.06, load_x + 0.06, yb - drop, yb, zc - 0.06, zc + 0.06, PANEL, skip=("top", "bottom"))
         cube(p, load_x - 0.7, load_x + 0.7, yb - drop - 0.7, yb - drop, zc - 0.4, zc + 0.4, load, top=PANEL)
     return yb + 0.6
+
+
+def tug(p: Part, x, z, y) -> None:
+    """A fuel tug parked nose to the hangar (+Z): a grey chassis, an orange cab with a glass
+    front, and a white tank behind it."""
+    cube(p, x - 0.5, x + 0.5, y, y + 0.3, z - 0.9, z + 0.9, PANEL, skip=("bottom",))
+    cube(p, x - 0.45, x + 0.45, y + 0.3, y + 0.85, z + 0.3, z + 0.85, WARN, skip=("bottom",), back=GLASS, top=PANEL)
+    extrude(p, octagon(x, y + 0.6, rad(0.6)), "z", z - 0.85, z + 0.2, HULL, cap0=PANEL, cap1=PANEL)
 
 
 def control_cab(p: Part, shaft: Box, cab: Box, y0, y1, y2) -> float:
@@ -905,6 +948,42 @@ def ind_narrow_a(P: Prop) -> None:
     hoop(p, 1.0, -2.5, 5.2, 5.45, 0.7, TRIM)
 
 
+def ind_narrow_b(P: Prop) -> None:
+    """A slim pump house to one side and a sphere tank at the back; a second sphere under an
+    orange manifold; the house climbs into a boiler house beside a fat stack that stands on the
+    deck; last, the back sphere is rebuilt on a tall stalk. Tall in front where A is tall behind,
+    then tall behind where A raises its flare in front."""
+    house = (-1.95, 0.25, -3.5, -1.5)
+    sx, sz = 1.15, -2.5  # the stack
+    bx, bz = 0.0, 2.35  # the back sphere
+    y = floors()
+    side = [(-3.1, -1.9)]
+    p = P.part(0)
+    storey(p, house, y[0], y[1], IND, left=side, right=side, back=[(-1.6, -0.1)])
+    airlock(P, p, -0.85)
+    pipe(p, [(-0.9, 0.45, -1.5), (-0.9, 0.45, bz), (-0.4, 0.45, bz)])
+    cube(P.part(0, 1), -1.5, -0.6, y[1], y[1] + 0.45, -3.0, -2.1, PANEL, skip=("bottom",), top=TRIM)
+    sphere(P.part(0, 3), bx, bz, D, 2.4, slim=True)
+    p = P.part(1)
+    sphere(p, 0.0, -0.15, D, 2.2, slim=True)
+    pipe(p, [(0.0, 2.45, -0.15), (0.0, 3.2, -0.15), (0.0, 3.2, bz), (0.0, 2.55, bz)])
+    p = P.part(2)
+    for k in (1, 2):
+        storey(p, house, y[k], y[k + 1], IND, left=side, right=side, back=[(-1.6, -0.1)])
+        lights(p, house, "front", y[k] + 0.5, y[k] + 0.95, [(-1.6, -0.1)], WARN)
+    stack(p, sx, sz, D, 5.6, 1.3, 1.15, tip=None)
+    hoop(p, sx, sz, 2.4, 2.65, 1.3, TRIM)
+    p = P.part(3)
+    stack(p, sx, sz, 5.6, 7.6, 1.15, 1.0, tip_h=0.4)
+    hoop(p, sx, sz, 5.45, 5.7, 1.15, TRIM)
+    pipe(p, [(-0.85, 3.35, -1.5), (-0.85, 3.35, -0.5), (-0.85, 1.9, -0.5)])
+    p = P.part(4)
+    sphere(p, bx, bz, D, 2.8, stand=7.2, stalk=HULL, slim=True)
+    hoop(p, bx, bz, 4.0, 4.25, 1.4, TRIM)
+    hoop(p, bx, bz, 6.2, 6.45, 1.4, TRIM)
+    cube(p, -1.6, -0.1, y[3], y[3] + 0.5, -3.1, -1.9, PANEL, skip=("bottom",), top=TRIM)
+
+
 def ind_small_a(P: Prop) -> None:
     """A control hut and a silo; a second, taller silo joined by an orange pipe, a column that
     grows a section, a pipe run over the yard, and a flare stack on top of the column."""
@@ -1000,6 +1079,39 @@ def sci_narrow_a(P: Prop) -> None:
     solar(p, -1.2, 1.2, -2.8, -0.6, y[2] + 1.3, 2, 1)
 
 
+def sci_narrow_b(P: Prop) -> None:
+    """A round lab in front that climbs a narrower storey a stage into a stepped tower, a wide
+    radar reflector on its top throughout; a low annex under a solar roof behind it. Tall in
+    front and round where A is a long box with its dish and mast at the back."""
+    cx, cz = 0.0, -1.3
+    rz = cz + 0.2  # the reflector
+    vest = (-0.85, 0.85, -3.5, cz - 1.8)  # up to the lab's front flat
+    annex = (-1.95, 1.95, 1.0, 3.6)
+    y = floors()
+    p = P.part(0)
+    module(p, vest, D, y[1])
+    band(p, vest, y[1] - 0.34, y[1] - 0.16, SCI, butt=("back",))
+    airlock(P, p, 0.0)
+    pod(p, cx, cz, D, 3.6, STOREY, SCI, windows=(0, 90, 180), half=0.6)
+    r = P.part(0, 0)
+    reflector(r, cx, rz, y[1], 2.0, 1.0, 0.3)
+    cube(r, -1.5, 1.5, D, D + 0.35, 1.5, 3.3, PANEL, skip=("bottom",))
+    solar(r, -1.5, 1.5, 1.5, 3.3, D + 0.35, 2, 1)
+    p = P.part(1)
+    storey(p, annex, D, y[1], SCI, front=[(-1.4, 1.4)], left=[(1.3, 3.3)], right=[(1.3, 3.3)], back=[(-1.4, 1.4)],
+           strip=True)
+    solar(p, -1.5, 1.5, 1.4, 3.2, y[1], 2, 1)
+    reflector(P.part(1, 1), cx, rz, y[1], 2.6, 1.6, 0.35)
+    pod(P.part(2), cx, cz, y[1], 3.0, STOREY, SCI, half=0.5)
+    reflector(P.part(2, 2), cx, rz, y[2], 3.0, 1.8, 0.4)
+    pod(P.part(3), cx, cz, y[2], 2.5, STOREY, SCI, half=0.42)
+    reflector(P.part(3, 3), cx, rz, y[3], 3.0, 1.8, 0.4)
+    p = P.part(4)
+    pod(p, cx, cz, y[3], 2.0, STOREY, SCI, half=0.34)
+    reflector(p, cx, rz, y[4], 3.2, 2.2, 0.45)
+    mast(p, cx, cz + 0.75, y[4], 3.3, arms=(), tip=HOLO)
+
+
 def sci_small_a(P: Prop) -> None:
     """A round lab with a dish on its roof and a solar array beside it; a wing with its own array,
     a second and third floor that lift a larger dish, and a mast in the back corner."""
@@ -1059,6 +1171,39 @@ def port_narrow_a(P: Prop) -> None:
     mast(p, -0.7, -3.2, 3.9, 2.8, arms=(0.55, 0.8))
     crates(p, -0.9, 2.3, top + 0.75, [CRATES[1], CRATES[0]])
     crates(p, 0.9, 3.25, top + 1.5, [CRATES[2]])
+
+
+def port_narrow_b(P: Prop) -> None:
+    """A gate kiosk, a fuel apron with drums, and a striped hangar across the back; a fuel tank
+    and a floodlight, the hangar rebuilt taller, a glass cupola on its roof and a tug on the
+    apron, then a mast. Tall at the back under a folded roof where A is tall in front."""
+    kiosk = (-1.25, 1.25, -3.5, -2.5)
+    han = (-1.85, 1.85, 0.6, 3.8)
+    cup = (-0.8, 0.8, 1.4, 3.0)
+    y1 = D + STOREY
+    p = P.part(0)
+    storey(p, kiosk, D, y1, PORT, left=[(-3.3, -2.7)], right=[(-3.3, -2.7)], back=[(-0.9, 0.9)])
+    airlock(P, p, 0.0)
+    top = pad(p, (-1.85, 1.85, -2.3, 0.35))
+    beacon(p, 0.0, -3.0, y1)
+    drum(p, -1.3, -0.4, top, 0.6, 0.8, CRATES[0], PANEL)
+    drum(p, -0.55, -0.4, top, 0.6, 0.8, CRATES[2], PANEL)
+    hangar(P.part(0, 1), han, D, 1.7, 2.5, axis="z", door_end=0)
+    p = P.part(1)
+    tank_v(p, 1.2, -1.45, top, 1.1, 1.9, WARN)
+    drum(p, -1.3, -1.15, top, 0.6, 0.8, CRATES[1], PANEL)
+    lamp_mast(p, -1.6, -1.95, top, 2.9)
+    hangar(P.part(2), han, D, 2.5, 3.7, axis="z", door_end=0)
+    beacon(P.part(2, 2), 0.0, 2.2, D + 3.7)
+    p = P.part(3)
+    cube(p, cup[0], cup[1], D + 3.7, 4.9, cup[2], cup[3], HULL, skip=("bottom",), top=PANEL)
+    band(p, cup, 4.1, 4.6, GLASS)
+    beacon(p, -0.4, 1.85, 4.9)
+    tug(p, 0.1, -0.7, top)
+    p = P.part(4)
+    mast(p, 0.35, 2.55, 4.9, 1.75, arms=(0.55, 0.8))
+    tank_v(p, 1.3, -0.2, top, 0.9, 1.5, WARN)
+    drum(p, -0.55, -1.15, top, 0.6, 0.8, CRATES[3], PANEL)
 
 
 def port_small_a(P: Prop) -> None:
@@ -1130,13 +1275,16 @@ def port_medium_a(P: Prop) -> None:
     crates(p, -2.5, -2.55, D + 0.75, [CRATES[3], CRATES[1]])
 
 
-# Blueprint id -> (lot, builder), in the order of INTERFACES "Wave 4.1".
+# Blueprint id -> (lot, builder): INTERFACES "Wave 4.1", and the B props of its narrow districts.
 PROPS = {
     "FabricHabNarrowA": ("narrow", hab_narrow_a),
     "FabricHabNarrowB": ("narrow", hab_narrow_b),
     "FabricIndNarrowA": ("narrow", ind_narrow_a),
+    "FabricIndNarrowB": ("narrow", ind_narrow_b),
     "FabricSciNarrowA": ("narrow", sci_narrow_a),
+    "FabricSciNarrowB": ("narrow", sci_narrow_b),
     "FabricPortNarrowA": ("narrow", port_narrow_a),
+    "FabricPortNarrowB": ("narrow", port_narrow_b),
     "FabricHabSmallA": ("small", hab_small_a),
     "FabricIndSmallA": ("small", ind_small_a),
     "FabricSciSmallA": ("small", sci_small_a),
@@ -1487,7 +1635,7 @@ def main(argv: list[str]) -> int:
     if failures:
         log(f"{failures} problem(s)")
         return 1
-    log("check passed: 12 props, every rule")
+    log(f"check passed: {len(PROPS)} props, every rule")
     return 0
 
 
