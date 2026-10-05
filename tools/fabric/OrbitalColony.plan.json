@@ -30,8 +30,7 @@
     },
     "keepClear": [
       { "x": 0, "z": -21.5, "size": [20, 6.5], "rotationY": 0 },
-      { "x": -22.25, "z": -21.5, "size": [8, 6], "rotationY": 0 },
-      { "x": -22.25, "z": -5.4, "size": [8, 9], "rotationY": 0 },
+      { "x": -22.25, "z": -12.7, "size": [8, 23.6], "rotationY": 0 },
       { "x": -22.25, "z": 33, "size": [8, 9], "rotationY": 0 }
     ],
     "lanes": {
@@ -43,7 +42,7 @@
       "overhang": 0.9,
       "mediumShare": 0.0,
       "minLots": 2,
-      "sizes": ["small"],
+      "sizes": ["small", "narrow"],
       "lines": [
         { "points": [[-28, 22], [-9, 22]] }
       ]

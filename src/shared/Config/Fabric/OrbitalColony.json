@@ -1,7 +1,7 @@
 {
   "version": 1,
   "lanes": [
-    { "points": [[-28, 22], [-12.2, 22]], "stretch": "L3_6", "along": 8 }
+    { "points": [[-28, 22], [-9, 22]], "stretch": "L3_6", "along": 8 }
   ],
   "parcels": [
     { "x": -22.25, "z": -35.1, "rotationY": 90, "size": "narrow", "stretch": "L3_1", "along": 6.9, "row": 1, "front": 0 },
@@ -12,10 +12,14 @@
     { "x": 5.75, "z": 0.1, "rotationY": 90, "size": "narrow", "stretch": "L1_4", "along": 14.1, "row": 1, "front": 0 },
     { "x": -5.75, "z": 2.95, "rotationY": 270, "size": "narrow", "stretch": "L1_4", "along": 16.95, "row": 1, "front": 0 },
     { "x": 5.75, "z": 4.15, "rotationY": 90, "size": "narrow", "stretch": "L1_4", "along": 18.15, "row": 1, "front": 0 },
+    { "x": -22.25, "z": 1.15, "rotationY": 90, "size": "narrow", "stretch": "L3_5", "along": 0.15, "row": 1, "front": 0 },
     { "x": -5.75, "z": 7, "rotationY": 270, "size": "narrow", "stretch": "L1_4", "along": 21, "row": 1, "front": 0 },
-    { "x": -22.25, "z": 4.9, "rotationY": 90, "size": "narrow", "stretch": "L3_5", "along": 3.9, "row": 1, "front": 0 },
-    { "x": -22.45, "z": 17.4, "rotationY": 180, "size": "small", "stretch": "L3_6", "along": 8, "row": 2, "front": 10, "lane": 1, "laneAlong": 5.55 },
-    { "x": -15.2, "z": 26.6, "rotationY": 0, "size": "small", "stretch": "L3_6", "along": 8, "row": 2, "front": 10, "lane": 1, "laneAlong": 12.8 }
+    { "x": -22.25, "z": 5.2, "rotationY": 90, "size": "narrow", "stretch": "L3_5", "along": 4.2, "row": 1, "front": 0 },
+    { "x": -23.25, "z": 10.8, "rotationY": 90, "size": "small", "stretch": "L3_5", "along": 9.8, "row": 1, "front": 0 },
+    { "x": -23.25, "z": 17.4, "rotationY": 90, "size": "small", "stretch": "L3_6", "along": 3.4, "row": 1, "front": 0 },
+    { "x": -22.25, "z": 25.6, "rotationY": 90, "size": "narrow", "stretch": "L3_6", "along": 11.6, "row": 1, "front": 0 },
+    { "x": -14.65, "z": 26.6, "rotationY": 0, "size": "small", "stretch": "L3_6", "along": 8, "row": 2, "front": 13, "lane": 1, "laneAlong": 13.35 },
+    { "x": -9.05, "z": 27.6, "rotationY": 0, "size": "narrow", "stretch": "L3_6", "along": 8, "row": 2, "front": 13, "lane": 1, "laneAlong": 18.95 }
   ],
   "upgrades": {
   },

@@ -108,6 +108,13 @@ cells are open ground by choice and keep their loose singles; the entrance corri
 nothing. Under a beam the wild never leaves, a single keeps CHECK_PIER_FOOT from each pier foot's
 centre; clumps are low relief and may stand round one.
 
+Same rulings, second round. In a docked era a lot keeps `parcels.spur` from a landmark's path only
+as far as that path is laid (`Site.lot_path_segments`): the slab stops `spur_clip` short of the
+centreline on the landmark's own side, so the row docked across the tube runs straight past a join.
+And a lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the
+lane as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its
+left); without the key it is the nearest, as before.
+
     py tools/fabric.py build Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
     py tools/fabric.py check Metropolis --plan <scratch>/try.plan.json --out <scratch>/try.json
 
@@ -536,6 +543,11 @@ class Site:
             for a, b in streetplan.polyline_segments(streetplan.spur_draw_points(points, footpath_clip)):
                 if math.dist(a, b) >= streetplan.MIN_LENGTH:
                     self.footpath_segments.append((slot["id"], a, b))
+        # What a lot keeps its path clearance from: every leg of every landmark path, or in a docked
+        # era only what is laid of it. There a lot stands 1.75 from the centreline and the path's
+        # last 3 studs are never drawn, so a join costs the row across the tube nothing.
+        self.lot_path_segments = self.footpath_segments if self.dock is not None else self.spur_segments
+        self.lot_path_boxes = [(a, b, box_of((a, b))) for _, a, b in self.lot_path_segments]
         # Tiles era only, empty elsewhere: every planned street's hard surface (label, polyline,
         # segment, band, box) -- planned, because a park strip covers an undrawn cell and its
         # pavement band until the street draws -- and the ground the tile renderer and the highway
@@ -738,7 +750,7 @@ def parcel_clear(site, poly, rules, own_segments, placed, size=None, lanes=(), g
             continue
         if overlap_depth(poly, band) > TOUCH or (need > 0 and gap(poly, band) < need - STREET_SLACK):
             return False
-    for a, b, segment_box in site.spur_boxes:
+    for a, b, segment_box in site.lot_path_boxes:
         if not boxes_apart(box, segment_box, rules["spur"]) and segment_gap(a, b, poly) < rules["spur"]:
             return False
     # A landmark's deck is one rect: a lot may stand flush against it, never on it.
@@ -1160,6 +1172,9 @@ def full_build_states(site, parcels):
 LANE_POINTS = (2, 4)  # the contract's bounds on a lane's polyline
 LANE_ROW = 2  # every lane lot is a row-2 lot whose front is the street lot beside its lane's mouth
 LANE_MOUTH_SNAP = 0.5  # how far off a centreline the plan may write a mouth and still mean "on it"
+# A lane line's optional `front`: which side of the lane, as it leaves its mouth, the street lot
+# its lots answer to stands on. The sign is street_side's, so the handedness is `sideSizes`'.
+LANE_FRONTS = {"left": 1, "right": -1}
 
 
 def lane_half(site):
@@ -1216,17 +1231,31 @@ def street_address(site, point, what):
 
 def plan_lanes(site, rules):
     """The plan's lane lines (`parcels.lanes.lines`), each mouth moved onto the centreline of the
-    street it leaves and every point rounded as it will be written: [{points, through}]. A `through`
-    line ends on a street too: it is laid as one road and written as two lanes that meet."""
+    street it leaves and every point rounded as it will be written: [{points, through, front}]. A
+    `through` line ends on a street too: it is laid as one road and written as two lanes that meet.
+    `front` is the line's optional side for mouth_front (LANE_FRONTS' sign), else None."""
     lines = []
     for index, line in enumerate(rules["lanes"]["lines"], start=1):
         points = [tuple(float(v) for v in point) for point in line["points"]]
         through = bool(line.get("through"))
+        front = line.get("front")
+        if front is not None and front not in LANE_FRONTS:
+            raise SystemExit(f"fabric: lane line {index}'s `front` must be one of {sorted(LANE_FRONTS)}, not {front!r}")
         points[0] = street_address(site, points[0], f"lane line {index}'s mouth")[0]
         if through:
             points[-1] = street_address(site, points[-1], f"lane line {index}'s far mouth")[0]
-        lines.append({"points": [(rounded(x), rounded(z)) for x, z in points], "through": through})
+        lines.append({"points": [(rounded(x), rounded(z)) for x, z in points], "through": through, "front": LANE_FRONTS.get(front)})
     return lines
+
+
+def lane_front_sides(plan, count):
+    """The plan's `front` side for each of the data's `count` lanes, in order -- a line is one lane, a
+    `through` line two, each judged from its own mouth -- or None where the plan names none. All
+    None when the data's lanes are not the plan's (the stale-data rule says so)."""
+    sides = []
+    for line in (plan["parcels"].get("lanes") or {}).get("lines") or []:
+        sides += [LANE_FRONTS.get(line.get("front"))] * (2 if line.get("through") else 1)
+    return sides if len(sides) == count else [None] * count
 
 
 def lane_lot(site, size, centre, rotation):
@@ -1364,15 +1393,23 @@ def trim_lane(site, points, lots):
     return kept
 
 
-def mouth_front(site, parcels, points, polyline):
+def mouth_front(site, parcels, points, polyline, prefer=None):
     """The street lot a lane's lots answer to: the row-1 parcel nearest the mouth on the side of
     its street the lane leaves by, or across the street when that side has none (1-based; the
-    lower index on a tie). None for a street without a lot."""
+    lower index on a tie). None for a street without a lot. `prefer` (the plan line's `front`:
+    1 left, -1 right of the lane's first leg, seen from its mouth) keeps only the lots on that
+    side of the lane, so which neighbour governs a lane's row is the plan's choice and not a
+    matter of which stands a hair nearer."""
     side = street_side(site, polyline, points[1])
+    mouth, ahead = points[0], points[1]
     best = {}
     for index, parcel in enumerate(parcels, start=1):
         if parcel["row"] != 1 or parcel_polyline(parcel) != polyline:
             continue
+        if prefer is not None:
+            turn = (ahead[0] - mouth[0]) * (parcel["z"] - mouth[1]) - (ahead[1] - mouth[1]) * (parcel["x"] - mouth[0])
+            if (1 if turn >= 0 else -1) != prefer:
+                continue
         same = street_side(site, polyline, (parcel["x"], parcel["z"])) == side
         d = math.dist(points[0], (parcel["x"], parcel["z"]))
         if same not in best or d < best[same][1] - 1e-9:
@@ -1413,9 +1450,10 @@ def lay_lanes(site, plan, parcels, lines):
             dressed = []
             for points, members in halves:
                 _, stretch, along, polyline = street_address(site, points[0], f"lane line {number}'s mouth")
-                front = mouth_front(site, parcels, points, polyline)
+                front = mouth_front(site, parcels, points, polyline, line["front"])
                 if front is None:
-                    raise SystemExit(f"fabric: lane line {number} leaves street {polyline + 1}, which has no street lot for its lots to answer to")
+                    where = "" if line["front"] is None else f" on the lane's {'left' if line['front'] > 0 else 'right'}, as its `front` asks"
+                    raise SystemExit(f"fabric: lane line {number} leaves street {polyline + 1}, which has no street lot{where} for its lots to answer to")
                 for lot in members:
                     lot.update(stretch=site.ids[stretch], along=rounded(along), front=front, laneAlong=rounded(lane_arc(site, points, lot)))
                 dressed.append((points, stretch, along, members))
@@ -3658,7 +3696,7 @@ def parcel_messages(site, plan, parcels):
             d = segment_gap(a, b, poly)
             if d < street_need - EPS:
                 messages.append(f"{label}: {d:.2f} from street {polyline + 1} {streetplan.fmt(a)}->{streetplan.fmt(b)} (need {street_need:g})")
-        for slot_id, a, b in site.spur_segments:
+        for slot_id, a, b in site.lot_path_segments:
             d = segment_gap(a, b, poly)
             if d < spur_need - EPS:
                 messages.append(f"{label}: {d:.2f} from the {slot_id} path (need {spur_need:g})")
@@ -3797,6 +3835,7 @@ def lane_messages(site, plan, doc):
     lanes = doc.get("lanes") or []
     parcels = doc.get("parcels", [])
     lane_rules = plan["parcels"].get("lanes")
+    fronts = lane_front_sides(plan, len(lanes))
     half = lane_half(site)
     polys = [rect((q["x"], q["z"]), site.sizes.get(q["size"], (0.0, 0.0)), q["rotationY"]) for q in parcels]
     solids = [(f"the {slot_id} extents", poly) for slot_id, (poly, _) in site.landmark_polys.items()]
@@ -3921,9 +3960,11 @@ def lane_messages(site, plan, doc):
         if parcel.get("stretch") != record.get("stretch") or not isinstance(parcel.get("along"), (int, float)) or abs(parcel["along"] - record.get("along", math.inf)) > EPS:
             messages.append(f"{label}: must repeat lane {lane}'s stretch and along")
         if record.get("stretch") in site.stretch_by_id:
-            expected = mouth_front(site, parcels, points, stretch_polyline(record["stretch"]))
+            prefer = fronts[lane - 1]
+            expected = mouth_front(site, parcels, points, stretch_polyline(record["stretch"]), prefer)
             if parcel.get("front") != expected:
-                messages.append(f"{label}: front {parcel.get('front')!r} is not the street lot nearest lane {lane}'s mouth (parcel {expected})")
+                asked = "" if prefer is None else f" on the lane's {'left' if prefer > 0 else 'right'} (the plan line's `front`)"
+                messages.append(f"{label}: front {parcel.get('front')!r} is not the street lot nearest lane {lane}'s mouth{asked} (parcel {expected})")
         size = site.sizes.get(parcel["size"])
         along = parcel.get("laneAlong")
         if size is None or not (isinstance(along, (int, float)) and math.isfinite(along)):
