@@ -792,9 +792,9 @@ class PlotScene:
         """A tube era's streets, paths and lanes (INTERFACES "Wave 4.1b"): the meshes
         tools/paths/tubes.py writes for this layout and this fabric data, drawn from its files. A
         stretch's half-pipe shows once the stretch is drawn; a landmark's apron with the landmark;
-        a lane's decking when the lane is shown; and the hub prop stands on every hub node a drawn
-        stretch touches (a drum from the contract's numbers until it has a blueprint). The decking
-        lies at `paths.fillHeight`, as a baked fill does."""
+        the entrance apron from the start; a lane's decking when the lane is shown; and the hub
+        prop stands on every hub node a drawn stretch touches (a drum from the contract's numbers
+        until it has a blueprint). The decking lies at `paths.fillHeight`, as a baked fill does."""
         era = self.era
         data = self.fabric.data if self.fabric is not None else None
         plan = streetplan.tube_plan(era, data)
@@ -808,6 +808,8 @@ class PlotScene:
                 show = piece["stretch"] in self.visible
             elif piece["kind"] == "spur":
                 show = piece["slot"] in self.owned
+            elif piece["kind"] == plan.entrance_kind:
+                show = True
             else:
                 show = piece["lane"] in shown_lanes
             if not show:

@@ -85,16 +85,23 @@ that curve and not along the polyline's straight legs: a lot's front stands `fro
 the centreline, turned to the tube's tangent where it stands, pushed back on the inside of a bend
 until its whole front keeps that line, and stepped along until it clears the lot before it. Every
 lot of every row keeps `tube.front` from every centreline, HUB_GAP from every hub (the drum at a
-node where tubes branch, end or change chain), and off every landmark's apron -- the decking under
-its footpath, its pad and its building. A lot's address is still its stretch and the foot of its
-front on that stretch's chord, as the client's Develop reads it.
+node where tubes branch, end or change chain), and off every apron -- the decking under a
+landmark's footpath, its pad and its building, and the entrance apron. A lot's address is still its
+stretch and the foot of its front on that stretch's chord, as the client's Develop reads it.
+
+A tube era's wild is regolith, flat ground plates, and two plates over each other flicker in game.
+So no two wild entries' grounds overlap there (a clump's is the square its quarters tile, a
+single's its footprint) and each keeps CHECK_WILD_APART from every other. The woods pattern lays a
+clump that would lie on another turned, then smaller, down to one quarter's size; a single stands
+on bare ground only. The plan's keys mean what they did. The wild also keeps off the entrance
+apron, which is laid from the start and which no clearing knows.
 
 A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
-either side of the circle of radius `ring`: no lot, marker, apron or lane stands in it, and the
-colony may use the plot's corners outside it. With `highway.clearBand` false the wild in the band
-is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off the way in and off a tube that
-crosses the band, a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop
-is taller than WILD_UNDER_BEAM.
+either side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it,
+and the colony may use the plot's corners outside it. With `highway.clearBand` false the wild in
+the band is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off a tube that crosses
+the band, a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop is taller
+than WILD_UNDER_BEAM.
 
 A lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the lane
 as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its left);
@@ -196,6 +203,16 @@ CHECK_TILE_SOLID = 0.5
 # centre keeps CHECK_PIER_FOOT from the centre of every pier foot (a foot is 1.9 square).
 WILD_UNDER_BEAM = 3.0
 CHECK_PIER_FOOT = 1.5
+# INTERFACES "Wave 4.1b", rulings: where the wild is flat ground plates (a tube era's regolith), two
+# entries lying over each other are coplanar faces and flicker in game, so every wild entry's
+# ground keeps this much daylight from every other's. A plate the pattern lays over another is
+# turned (PLATE_TURNS tries a size), then shrunk by PLATE_SHRINK a step, never under one quarter's
+# size (PLATE_LEAST), and dropped if it still lies on something.
+CHECK_WILD_APART = 0.1
+PLATE_TURNS = 8
+PLATE_SHRINK = 0.9
+PLATE_LEAST = 0.5
+ENTRANCE_APRON = "the entrance apron"  # tools/paths/tubes.TubePlan.entrance_apron, as the checks name it
 # A tube era: how far back a lot may be pushed, in TUBE_BACK_STEP steps, to keep its front corners
 # off the pipe on the inside of a bend (a 4-wide front on a 6-stud bend needs about 0.3).
 TUBE_BACK_STEP = 0.05
@@ -561,9 +578,18 @@ class Site:
         self.tube = streetplan.tube_plan(self.era)
         self.tube_front = self.tube.front if self.tube is not None else None
         self.hubs = []  # (label, the drum as a polygon, box)
-        self.aprons = []  # (label, polygon, box): each landmark's decking, as its rects and its path's legs
+        self.aprons = []  # (label, polygon, box): each landmark's decking, as its rects and its path's legs, and the entrance apron
+        # A tube era's wild is regolith: flat ground plates, which may not lie over each other
+        # (CHECK_WILD_APART). Woods and fields are not judged by it.
+        self.plates = self.tube is not None
         if self.tube is not None:
             self.street_strip = self.tube_front
+            # The entrance apron is laid from the start and no clearing knows it, so the wild is
+            # kept off it in the data. Lots keep off it as off a landmark's.
+            ground = self.tube.entrance_apron()
+            if ground is not None:
+                self.aprons.append((ENTRANCE_APRON, ground, box_of(ground)))
+                self.wild_keepout.append((ENTRANCE_APRON, ground, box_of(ground)))
             for hub in self.tube.hubs():
                 poly = streetplan.disc_poly(hub["point"], self.tube.hub_radius)
                 where = streetplan.fmt((rounded(hub["point"][0]), rounded(hub["point"][1])))
@@ -587,13 +613,6 @@ class Site:
         self.under_beam = self.ring is not None and (self.era.dressing.get("highway") or {}).get("clearBand") is False
         self.pier_feet = streetplan.round_pier_feet(self.era) if self.under_beam else []
         if self.under_beam:
-            # The way in, under the loop: from the plot's front edge to the first street point, as
-            # wide as a hub.
-            half = self.tube.hub_radius if self.tube is not None else self.width
-            front, back = -self.era.half_z, self.entrance[1]
-            if back - front > TOUCH:
-                corridor = streetplan.square((self.entrance[0], (front + back) / 2), 2 * half, back - front, 0)
-                self.wild_keepout.append(("the entrance corridor", corridor, box_of(corridor)))
             # A tube that crosses the band: its own ground there, cut into short lengths.
             reach = (self.tube_front or 0.0) + CROSSING_KEEP
             for line in self.tube.lines if self.tube is not None else ():
@@ -2976,6 +2995,34 @@ def wild_shapes(site, plan, item):
     return [cart_body(extents, item)]
 
 
+def plate_ground(site, plan, item):
+    """The ground a wild entry lies on where the wild is flat plates (Site.plates): a clump is the
+    square its four quarters tile -- a quarter reaches `quarterOffset` either side of its quad -- x
+    scale and turned rotationY; a single is its footprint (wild_shapes)."""
+    if item["kind"] != "clump":
+        return wild_shapes(site, plan, item)[0]
+    side = 4 * plan["wild"]["clumps"]["quarterOffset"] * item["scale"]
+    return streetplan.square((item["x"], item["z"]), side, side, item["rotationY"])
+
+
+class Plates:
+    """The grounds laid so far where no two may lie over each other."""
+
+    def __init__(self):
+        self.laid = []  # (polygon, box)
+
+    def fits(self, ground):
+        box = box_of(ground)
+        return all(boxes_apart(box, other_box, CHECK_WILD_APART) or gap(ground, other) >= CHECK_WILD_APART for other, other_box in self.laid)
+
+    def lay(self, ground):
+        self.laid.append((ground, box_of(ground)))
+
+    def bare(self, point, reach):
+        """Whether everything within `reach` of a point is bare ground."""
+        return all(point_box_apart(point, box, reach) or point_gap(point, ground) >= reach for ground, box in self.laid)
+
+
 def clearing_points(site, plan, item):
     """What the clearing mask tests a wild entry by, as (label suffix, point, radius, ground): each
     quarter of a clump -- its quad, `quarterRadius`, and the quarter's square (half the plan's field
@@ -3022,9 +3069,9 @@ def pier_hit(site, item):
 
 
 def kept_out(site, plan, item):
-    """Whether a wild entry stands on ground it is kept off -- a tiles era's streets and kiosks, the
-    way in and a crossing tube under a round loop that never clears -- on the ring's ground out of
-    the ring's clearing, or on a pier foot of such a loop (never in another era)."""
+    """Whether a wild entry stands on ground it is kept off -- a tiles era's streets and kiosks, a
+    tube era's entrance apron, a crossing tube under a round loop that never clears -- on the ring's
+    ground out of the ring's clearing, or on a pier foot of such a loop (never in another era)."""
     if not site.wild_keepout and not site.highway_rects and not site.pier_feet:
         return False
     return bool(keepout_hits(site, wild_shapes(site, plan, item))) or bool(ring_misses(site, plan, item)) or pier_hit(site, item) is not None
@@ -3084,22 +3131,18 @@ def generate_woods(site, plan):
         return clumps_cfg["spacing"] * scale * (1.0 + clumps_cfg["spacingVar"] * spread(x, z))
 
     darts = blue_noise(rng, limit, clumps_cfg["attempts"], clump_spacing, lambda x, z: woods(x, z) >= clumps_cfg["minDensity"])
-    clumps = []
-    for x, z, _spacing in darts:
-        variant = rng.randrange(len(names["clumps"])) + 1
-        # Rounded before the quarters are placed, so a reader recomputing them from the file lands
-        # on the same points.
-        cx, cz = rounded(x), rounded(z)
-        rotation, scale = rounded(norm_degrees(rng.uniform(0.0, 360.0))), rounded(scale_for[(x, z)])
+
+    def clump_at(cx, cz, variant, rotation, scale):
+        """The clump entry, or None where the pattern may not lay it."""
         inside = abs(cx) <= half and abs(cz) <= half
         quads = quad_centres(cx, cz, rotation, scale, clumps_cfg["quarterOffset"])
         # A clump sits wholly on the plot or wholly off it: the ground past the edge is lower.
         if any((abs(q[0]) <= half and abs(q[1]) <= half) != inside for q in quads):
-            continue
+            return None
         # Optional `clumps.inset` (a plan with no skirt): a clump's middle keeps this far inside the
         # plot's edge, so no part of a wide clump hangs over it.
         if inside and max(abs(cx), abs(cz)) > half - clumps_cfg.get("inset", 0.0):
-            continue
+            return None
         clump = {
             "kind": "clump",
             "variant": variant,
@@ -3110,8 +3153,36 @@ def generate_woods(site, plan):
             "skirt": not inside,
             "quads": [[rounded(q[0]), rounded(q[1])] for q in quads],
         }
-        if not kept_out(site, plan, clump):
+        return None if kept_out(site, plan, clump) else clump
+
+    # Plates (Site.plates): no ground lies over another. A clump that would is turned, then shrunk
+    # a step and turned again, down to one quarter's size, so the gaps the big plates leave fill
+    # with small ones; its own stream, so the pattern's draws are the same with or without it.
+    plates = Plates() if site.plates else None
+    refit = random.Random(f"{plan['seed']}:plates")
+
+    def fitted(cx, cz, variant, rotation, scale):
+        size = scale
+        while size >= PLATE_LEAST:
+            for turn in [rotation] + [rounded(norm_degrees(refit.uniform(0.0, 360.0))) for _ in range(PLATE_TURNS)]:
+                clump = clump_at(cx, cz, variant, turn, rounded(size))
+                if clump is not None and plates.fits(plate_ground(site, plan, clump)):
+                    return clump
+            size *= PLATE_SHRINK
+        return None
+
+    clumps = []
+    for x, z, _spacing in darts:
+        variant = rng.randrange(len(names["clumps"])) + 1
+        # Rounded before the quarters are placed, so a reader recomputing them from the file lands
+        # on the same points.
+        cx, cz = rounded(x), rounded(z)
+        rotation, scale = rounded(norm_degrees(rng.uniform(0.0, 360.0))), rounded(scale_for[(x, z)])
+        clump = clump_at(cx, cz, variant, rotation, scale) if plates is None else fitted(cx, cz, variant, rotation, scale)
+        if clump is not None:
             clumps.append(clump)
+            if plates is not None:
+                plates.lay(plate_ground(site, plan, clump))
     if singles_cfg is None:
         return wild_order(site, clumps, [])
     # Singles: where the woods thin out (their edge, the front band, the glades' rims), a finer blue
@@ -3126,9 +3197,20 @@ def generate_woods(site, plan):
     # not only where the woods thin out.
     between = bool(singles_cfg.get("between"))
 
+    # Plates: a single stands on bare ground only, so no dart is thrown where the widest single at
+    # its largest would reach a plate.
+    widest = 0.0
+    if plates is not None:
+        largest = max(singles_cfg["treeScale"][1], singles_cfg["meadowScale"][1])
+        for prop in sorted(set(singles_cfg["trees"]) | set(singles_cfg["meadow"])):
+            probe = {"kind": "single", "prop": prop, "x": 0.0, "z": 0.0, "rotationY": 0.0, "scale": largest}
+            widest = max(widest, max(math.hypot(*v) for v in plate_ground(site, plan, probe)))
+
     def edge_of_woods(x, z):
         value = woods(x, z)
         if not singles_cfg["minDensity"] < value or not (between or value < clumps_cfg["minDensity"]):
+            return False
+        if plates is not None and not plates.bare((x, z), widest + CHECK_WILD_APART):
             return False
         return all(math.dist((x, z), (c["x"], c["z"])) >= keep * c["scale"] for c in clumps)
 
@@ -3151,8 +3233,14 @@ def generate_woods(site, plan):
             "scale": rounded(scales[0] + (scales[1] - scales[0]) * grow),
             "skirt": not inside,
         }
-        if not kept_out(site, plan, entry):
-            singles.append(entry)
+        if kept_out(site, plan, entry):
+            continue
+        if plates is not None:
+            ground = plate_ground(site, plan, entry)
+            if not plates.fits(ground):
+                continue
+            plates.lay(ground)
+        singles.append(entry)
     singles.sort(key=lambda entry: (entry["z"], entry["x"]))
     return wild_order(site, clumps, singles)
 
@@ -3622,7 +3710,7 @@ def parcel_messages(site, plan, parcels):
                     continue
                 depth = overlap_depth(poly, apron)
                 if depth > TOUCH:
-                    messages.append(f"{label}: stands {depth:.2f} on {what}; a lot keeps off a landmark's decking")
+                    messages.append(f"{label}: stands {depth:.2f} on {what}; a lot keeps off every apron")
         if site.band_gap(poly) < CHECK_TILE_SOLID - EPS:
             messages.append(f"{label}: {site.band_gap(poly):.2f} from the round loop's band (need {CHECK_TILE_SOLID})")
         for slot_id, a, b in site.spur_segments if site.tube is None else ():
@@ -4397,6 +4485,29 @@ def wild_messages(site, plan, doc):
         messages += field_messages(site, plan, wild)
     if site.under_beam:
         messages += wild_height_messages(site, plan)
+    if site.plates:
+        messages += plate_messages(site, plan, wild)
+    return messages
+
+
+def plate_messages(site, plan, wild):
+    """INTERFACES "Wave 4.1b", rulings: where the wild is flat plates no two entries' grounds lie
+    over each other -- a clump's square, a single's footprint -- and each keeps CHECK_WILD_APART
+    from every other: two plates in one plane flicker, and a single stands on bare ground only."""
+    messages = []
+    grounds = [plate_ground(site, plan, item) if item["kind"] in KINDS else None for item in wild]
+    boxes = [box_of(ground) if ground is not None else None for ground in grounds]
+    for i, first in enumerate(wild):
+        for j in range(i + 1, len(wild)):
+            if grounds[i] is None or grounds[j] is None or boxes_apart(boxes[i], boxes[j], CHECK_WILD_APART):
+                continue
+            d = gap(grounds[i], grounds[j])
+            if d < CHECK_WILD_APART - EPS:
+                second = wild[j]
+                messages.append(
+                    f"wild {i + 1} ({number(first['x'])}, {number(first['z'])}): its ground is {d:.2f} from that of wild {j + 1} "
+                    f"({number(second['x'])}, {number(second['z'])}) (need {CHECK_WILD_APART}); two plates over each other flicker"
+                )
     return messages
 
 
@@ -4430,6 +4541,8 @@ def band_messages(site, doc):
     if site.ring is None:
         return messages
     for what, apron, _ in site.aprons:
+        if what == ENTRANCE_APRON:
+            continue  # the way in crosses the band; tools/streetplan.py holds it between two piers
         d = site.band_gap(apron)
         if d < CHECK_TILE_SOLID - EPS:
             messages.append(f"{what}: {d:.2f} from the round loop's band (need {CHECK_TILE_SOLID})")

@@ -1204,13 +1204,13 @@
           ]
         },
         "pull": {
-          "radius": 119,
+          "radius": 40,
           "tierTerm": 0.3,
           "thresholds": [
-            0.6,
-            2.58,
-            2.88,
-            4.25
+            0.3,
+            1.9,
+            2.1,
+            2.4
           ],
           "reach": 30,
           "levelsOverTier": 1,

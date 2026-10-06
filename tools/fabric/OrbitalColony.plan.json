@@ -1,19 +1,21 @@
 {
   "version": 1,
-  "seed": "OrbitalColony:fabric:organic-groundwork",
+  "seed": "OrbitalColony:fabric:bloom",
   "parcels": {
     "frontSetback": 1.75,
     "gap": 0.6,
     "terraceGap": 0.05,
     "terraceStreets": [
-      1,
-      2
+      2,
+      3,
+      4,
+      5
     ],
     "terraceFill": [
       "narrow",
       "small"
     ],
-    "mediumShare": 0.5,
+    "mediumShare": 0.0,
     "walkStep": 0.1,
     "endMargin": 0.2,
     "setbackJitter": 0.0,
@@ -30,37 +32,24 @@
     "street": 1.75,
     "spur": 2.55,
     "tileSolid": 0.5,
-    "lanes": {
-      "setback": 1.6,
-      "clear": 1.6,
-      "street": 1.75,
-      "gap": 0.05,
-      "step": 0.05,
-      "overhang": 0.9,
-      "mediumShare": 0.0,
-      "minLots": 2,
-      "sizes": [
-        "small",
-        "narrow"
-      ],
-      "lines": [
-        {
-          "points": [
-            [
-              -6,
-              -19.2
-            ],
-            [
-              -32,
-              -19.2
-            ]
-          ]
-        }
-      ]
+    "sideSizes": {
+      "1": {
+        "both": [
+          "medium"
+        ]
+      },
+      "2": {
+        "left": [
+          "small",
+          "narrow"
+        ]
+      }
     }
   },
   "require": {
-    "parcels": 1
+    "parcels": 80,
+    "houses": 80,
+    "medium": 4
   },
   "layers": [],
   "footprints": {

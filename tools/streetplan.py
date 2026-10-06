@@ -2192,7 +2192,8 @@ def band_gap(poly, ring, half=ROUND_BAND_HALF):
 def round_violations(era):
     """A round loop (INTERFACES "Wave 4.1b"): no pad, footprint, harvested extents or hub in the
     band; a tube crosses it ROUND_CROSSING_DEGREES or more to the track, its centreline
-    ROUND_CROSSING_PIER or more from every pier foot."""
+    ROUND_CROSSING_PIER or more from every pier foot; and the entrance apron, the one flat piece
+    that crosses it, keeps ROUND_BAND_GAP from every pier foot."""
     messages = []
     ring = era.round_ring
     if ring + ROUND_BAND_HALF > min(era.half_x, era.half_z) + 1e-6:
@@ -2211,6 +2212,15 @@ def round_violations(era):
         if d < ROUND_BAND_GAP - 1e-6:
             messages.append(f"round loop: {name} is {d:.2f} from the band {ring - ROUND_BAND_HALF:g}..{ring + ROUND_BAND_HALF:g} (need {ROUND_BAND_GAP})")
     feet = [square(foot, ROUND_PIER_FOOT, ROUND_PIER_FOOT, 0) for foot in round_pier_feet(era)]
+    apron = plan.entrance_apron() if plan is not None else None
+    if apron is not None:
+        d, foot = min(((gap(apron, foot), foot) for foot in feet), key=lambda found: found[0])
+        if d < ROUND_BAND_GAP - 1e-6:
+            centre = (sum(p[0] for p in foot) / 4, sum(p[1] for p in foot) / 4)
+            messages.append(
+                f"round loop: the entrance apron is {d:.2f} from the pier foot at {fmt((round(centre[0], 1), round(centre[1], 1)))} "
+                f"(need {ROUND_BAND_GAP}); the way in runs between two piers"
+            )
     for line in plan.lines if plan is not None else ():
         points = line.points
         nearest = None  # (distance, where): the line's closest pass by a pier foot, inside the band
@@ -3779,8 +3789,10 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
             poly(square(foot, ROUND_PIER_FOOT, ROUND_PIER_FOOT, 0), fill=(70, 70, 82, 255))
     tubes = tube_plan(era, fabric_doc)
     if tubes is not None:
-        # The tubes as they are drawn: each centreline and the line a lot fronts either side of it,
-        # then the hubs.
+        # The tubes as they are drawn: the entrance apron, each centreline, then the hubs.
+        apron = tubes.entrance_apron()
+        if apron is not None:
+            poly(apron, fill=(170, 174, 184, 255), outline=(60, 60, 70), width=1)
         for line in tubes.lines:
             canvas.line([px(p) for p in line.points], fill=(250, 250, 255), width=3)
         for hub in tubes.hubs():

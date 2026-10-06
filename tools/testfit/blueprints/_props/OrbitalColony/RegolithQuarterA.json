@@ -3,9 +3,11 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "one quarter of impact ground in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'): a fresh crater on its apron, a pit, one boulder, dust; regolith-kit is 1 unit = 1 stud, so scale is 1.0",
+  "note": "one quadrant of a large impact crater in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'), the feature's centre at the origin corner: a quarter of its floor, of its rim with the lit crest and of its central peak, its share of the ejecta apron and rays, and the rubble: a boulder on the apron, two blocks; regolith-kit is 1 unit = 1 stud, so scale is 1.0",
   "pieces": [
-    {"kit": "regolith-kit", "model": "ground-a", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [1.3, 0, 1.75], "rotY": 25, "stage": 0}
+    {"kit": "regolith-kit", "model": "crater-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [2.8, 0, 4.8497], "rotY": 25, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [0.8241, 0, 2.0398], "rotY": 110, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [5.7222, 0, 1.2163], "rotY": 200, "stage": 0}
   ]
 }

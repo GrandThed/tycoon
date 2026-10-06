@@ -21,7 +21,11 @@ client asks for a tube by the id it already asks a baked path by. What differs i
   * a landmark's piece is its APRON, flat decking: the footpath from the tube at
     `road.paths.spurWidth`, widened by a rect under the pad and one under the building's harvested
     extents, each grown APRON_MARGIN. tools/fabric.py keeps every lot off those shapes;
-  * a lane's piece is flat decking at `fabric.lanes.width`, round at its far end.
+  * a lane's piece is flat decking at `fabric.lanes.width`, round at its far end;
+  * the ENTRANCE APRON (`SP_entrance`) is flat decking as wide as a landmark's footpath, straight
+    in from the plot's front edge to the first point of street 1, where the entrance hub stands.
+    It belongs to no slot and is laid from the start: the world's road ends at the plot's front
+    face, and the first tube starts further in.
 
 A hub (`road.paths.tube.hub`, a round drum wider than the pipe) stands at every node where tubes
 branch, where one ends, and where two chains meet end to end; `hubs()` lists them. Two tubes into
@@ -70,6 +74,7 @@ HUB_FALLBACK = (4.6, 2.6)  # the drum's width and height until the hub prop has 
 HUB_ARM_DEGREES = 90.0
 HUB_ARM_SLACK = 1.0
 APRON_MARGIN = 0.25  # the decking shows this far round a pad and a building
+ENTRANCE = "entrance"  # the entrance apron's piece kind, and its id after `SP_`
 
 LINE_STEP = 0.25  # studs between the centreline samples tools/fabric.py measures against
 LINE_CHUNK = 16  # samples to a chunk: a shape is only measured against the chunks near it
@@ -298,6 +303,8 @@ class Line:
 class TubePlan:
     """One tube era's network as tools/paths/network.py cuts it, with what is new to tubes."""
 
+    entrance_kind = ENTRANCE  # a piece of this kind is the entrance apron, drawn from the start
+
     def __init__(self, era_name: str, city: dict, fabric_data=None):
         self.bake = network.Bake(era_name, city, fabric_data)
         self.era, self.net = self.bake.era, self.bake.network
@@ -310,7 +317,13 @@ class TubePlan:
         self.colours = {"shell": self.kit["SHELL"], "ring": self.kit["RING"], "hull": self.kit["HULL"], "deck": tuple(deck)}
         hub = streetplan.prop_footprint(era_name, [self.config.get("hub")] if self.config.get("hub") else [], (HUB_FALLBACK[0], HUB_FALLBACK[0]))
         self.hub_radius = max(hub) / 2
+        if any(slot["id"] == ENTRANCE for slot in self.era.slots):
+            raise ValueError(f"{era_name}: a slot named {ENTRANCE!r} would share the entrance apron's piece id")
         self._pieces = self.bake.pieces()
+        apron = self.entrance_apron()
+        if apron is not None:
+            self._pieces.append({"id": f"SP_{ENTRANCE}", "kind": ENTRANCE, "ground": apron})
+            self._pieces.sort(key=lambda piece: piece["id"])
         self._hubs = None
         self.lines: list[Line] = []
         self.line_of_stretch: dict[int, Line] = {}
@@ -413,6 +426,17 @@ class TubePlan:
                 width, depth = math.dist(poly[0], poly[1]), math.dist(poly[1], poly[2])
                 rects.append(("building", streetplan.square((cx, cz), width + 2 * APRON_MARGIN, depth + 2 * APRON_MARGIN, slot["rotation"])))
         return rects
+
+    def entrance_apron(self):
+        """The entrance apron's ground, front edge first, or None when street 1 starts on the plot's
+        front edge: `road.paths.spurWidth` wide, straight in to the first point of street 1."""
+        if not self.era.streets or not self.era.streets[0]:
+            return None
+        x, z = self.era.streets[0][0]
+        front = -self.era.half_z
+        if z - front < streetplan.MIN_LENGTH:
+            return None
+        return streetplan.slab_poly((x, front), (x, z), streetplan.spur_path_width(self.era), 0.0)
 
     def apron_path(self, slot_id: str):
         """A landmark footpath's centreline, anchor to join, as the bake smooths it, and its width."""
@@ -539,11 +563,16 @@ class TubePlan:
                 mesh.tri("deck", centre, a, b, up)
 
     def deck_mesh(self, piece: dict) -> Mesh:
-        """A landmark's apron or a lane: flat decking at y 0 (the template lifts it). The shapes of
-        an apron overlap in one plane and one colour, as two baked path pieces do at a node."""
+        """A landmark's apron, the entrance apron or a lane: flat decking at y 0 (the template lifts
+        it). The shapes of an apron overlap in one plane and one colour, as two baked path pieces do
+        at a node."""
+        mesh = Mesh(piece["id"])
+        if piece["kind"] == ENTRANCE:
+            a, b, c, d = [(p[0], 0.0, p[1]) for p in piece["ground"]]
+            mesh.quad("deck", a, b, c, d, (0.0, 1.0, 0.0))
+            return mesh
         chain = piece["_chain"]
         curve = chain["final"]
-        mesh = Mesh(piece["id"])
         lo, hi = chain["ext"][0], curve.total - chain["ext"][1]
         if piece["kind"] == "lane":
             # A lane chain runs from its far point (a round end) to its mouth on the tube.
