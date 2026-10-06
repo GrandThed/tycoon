@@ -47,6 +47,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "tools" / "assets"))
+import assets_config  # noqa: E402  (which layers an era's path pieces are baked in)
+
 ERAS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Eras"
 ASSETS_CONFIG_PATH = REPO_ROOT / "src" / "shared" / "Config" / "Assets.json"
 BLUEPRINTS_DIR = REPO_ROOT / "tools" / "testfit" / "blueprints"
@@ -532,7 +535,9 @@ def render_world(assets: dict | None) -> list[str]:
 def render_paths(assets: dict | None) -> list[str]:
     """One row per era with baked paths: how many pieces, what they cost, and where they are in
     the pipeline. Triangles come from Assets.json (written by the uploader from the bake record),
-    so this table needs nothing from the gitignored build tree."""
+    so this table needs nothing from the gitignored build tree. An era is counted on its own
+    layers (assets_config.path_layers): a tube era bakes the fill alone, so it has no rim to
+    wait for and its rim cell is empty."""
     block = assets.get("paths") if assets is not None else None
     lines = [
         "## Baked paths",
@@ -548,6 +553,12 @@ def render_paths(assets: dict | None) -> list[str]:
     ]
     if not isinstance(block, dict) or not block:
         return lines + ["No baked paths listed in `Assets.json`.", ""]
+    if any(isinstance(entry, dict) and assets_config.path_layers(entry) != assets_config.PATH_LAYERS for entry in block.values()):
+        lines += [
+            "A tube era (`layers` of `fill` alone: `tools/paths/bake.py` hands it to `tools/paths/tubes.py`, which"
+            " bakes one GLB per piece and the era's palette PNG) has no rim: it is counted on its fill alone.",
+            "",
+        ]
     lines += [
         "| Era | Pieces | Triangles | Fill asset/image | Rim asset/image | Uploaded | Harvested | Templates | Status |",
         "|-----|--------|-----------|------------------|-----------------|----------|-----------|-----------|--------|",
@@ -555,16 +566,22 @@ def render_paths(assets: dict | None) -> list[str]:
     for era in sorted(block):
         entry = block[era] if isinstance(block[era], dict) else {}
         pieces = entry.get("pieces") or {}
-        meshes = [(piece.get(layer) or {}) for piece in pieces.values() for layer in ("fill", "rim")]
+        layers = assets_config.path_layers(entry)
+        meshes = [(piece.get(layer) or {}) for piece in pieces.values() for layer in layers]
         uploaded = sum(1 for m in meshes if int(m.get("assetId") or 0) != 0)
         harvested = sum(1 for m in meshes if int(m.get("meshId") or 0) != 0)
-        images = [int(entry.get(f"{layer}ImageId") or 0) for layer in ("fill", "rim")]
+        images = [int(entry.get(f"{layer}ImageId") or 0) for layer in layers]
+        # A layer the era does not bake has an empty cell, not a pair of missing ids.
+        cells = [
+            f"{int(entry.get(f'{layer}AssetId') or 0) or NONE}/{int(entry.get(f'{layer}ImageId') or 0) or NONE}" if layer in layers else NONE
+            for layer in assets_config.PATH_LAYERS
+        ]
         templates = sum(
             1 for piece_id in pieces if (TEMPLATES_DIR / "_paths" / era / f"{piece_id}.rbxmx").is_file()
         )
         if not pieces:
             status = "not baked"
-        elif uploaded == 0 and not any(int(entry.get(f"{layer}AssetId") or 0) for layer in ("fill", "rim")):
+        elif uploaded == 0 and not any(int(entry.get(f"{layer}AssetId") or 0) for layer in layers):
             status = "baked, not uploaded"
         elif uploaded < len(meshes):
             status = "uploading"
@@ -576,8 +593,7 @@ def render_paths(assets: dict | None) -> list[str]:
             status = "in game"
         lines.append(
             f"| {md_cell(era)} | {len(pieces)} | {int(entry.get('triangles') or 0)} "
-            f"| {int(entry.get('fillAssetId') or 0) or NONE}/{images[0] or NONE} "
-            f"| {int(entry.get('rimAssetId') or 0) or NONE}/{images[1] or NONE} "
+            f"| {cells[0]} | {cells[1]} "
             f"| {uploaded}/{len(meshes)} | {harvested}/{len(meshes)} | {templates}/{len(pieces)} | {status} |"
         )
     return lines + [""]
