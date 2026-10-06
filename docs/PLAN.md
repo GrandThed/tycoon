@@ -1879,7 +1879,95 @@ phones.** Plan of record: `docs/WEAPONS.md` §2; contracts: `docs/INTERFACES.md`
   - re-measure refunds against chasing crowds.
 
 - [x] P3 built, reviewed and QA green (definition of done in INTERFACES "P3 contracts")
-- [ ] Ben's playtest (`docs/PLAYTEST.md` "P3 — Abilities + SMG / Beam / Chain Gun")
+- [x] Ben's playtest (2026-10-06): "i love all the wapons, we can find a way to integrate them
+  all". Read as: **all 13 weapon families stay.**
+  - **Not answered, still open for P4:**
+    - A or B for SMG, Beam and Chain Gun;
+    - cross-slot refunds (flag 1);
+    - SMG against armour (flag 2);
+    - favourite and weakest ability.
+  - His one request is the next section, P3.1.
+
+## P3.1 — A swing lands where you stand
+
+**Goal:** Ben's one request from the P3 playtest (2026-10-06): "make the melee weapons act
+instantly or at least make it following you, because if you are moving forward, the weapon
+hitbox stays behind and you dont hit the enemies in front of you". Still range-only
+(`build/proving.rbxl`); missions untouched. Contracts: `docs/INTERFACES.md` "P3.1 — a swing
+lands where you stand" (with its "Review round").
+
+**Where it is (2026-10-06): merged to `main`.**
+- Ben: "good! lets close it". Built on branch `p3-melee-follow` (worktree `tycoon-p3`) and
+  merged the same day. "Build all" in VS Code builds it now.
+- **His look at the fix running is not confirmed.** When he said it, the only Studio session of
+  the day had `tycoon\build\proving.rbxl` open, built at 15:07 from `main` before the fix;
+  Studio's log names no other range file. The playtest box below stays open until he has
+  played a build made after the merge.
+
+**Cause (two lags):**
+- The server swept a swing from its own copy of the character's position. That copy trails
+  the player's screen, so the arc sat behind a moving player.
+- The hitbox effect was drawn only when the server answered, then stayed fixed in the world.
+  A player walking at 20 studs/s had left it behind before it faded.
+
+**Shipped:**
+- **Server (`RangeService`):**
+  - A swing resolves at the position the player's client sends.
+  - That position is trusted within 4 studs plus what lag explains. Beyond that it is pulled
+    back to the limit, never refused.
+  - The slack is capped: fastest legal move 140 studs/s, lag 0.3 s. The same cap now covers
+    ranged shot origins.
+  - A swing just after take-off counts as airborne.
+  - A refusal names the attack it refuses.
+- **Client (`InputController`, `FeedbackController`):**
+  - The hitbox effect appears on the click's frame.
+  - It moves with the swinger, sideways and forward only. A jump does not lift it, and it
+    never turns.
+  - Other players' arcs follow them too.
+  - Numbers, reactions and the hit marker still come from the server.
+  - An early effect that turns out wrong (for example a Spinblade spin the server did not do)
+    is replaced by the server's.
+  - The combo step is predicted by the server's rule, and the server's step corrects it.
+  - The wireframe stays the server's shape, fixed in the world.
+- **Config (`src/shared/Config/ProvingGrounds.json`):** `controls.meleeOriginPad` 4,
+  `shooting.originLagMaxSeconds` 0.3.
+- No remote added or changed.
+
+**Review outcome:** 0 Critical, 2 Majors, 6 Minors. Both Majors and Minors 1–4 fixed.
+- Major 1: a swing just after take-off passed over the crowd. Fixed: airborne is judged where
+  the swing resolves.
+- Major 2: the slack had no ceiling (speed and ping are the client's word). Fixed with the cap
+  above. Extra reach, in studs: 4 standing, 7 walking at 100 ms ping, 46 at worst for a forged
+  client.
+- Minors fixed:
+  - a refusal names its attack (`RangeStats.refusedSeq`), so only that swing is taken back;
+  - an early effect that disagrees with the server's strike is replaced;
+  - the server restarts a combo only when the family or variant really changed;
+  - the `RangeService` header comment.
+- Minor 5, carried to P5: `FeedbackController` is at about 168 of 180 top-level locals.
+- Minor 6, waits for a phone measurement: the follow moves the effect's parts one by one.
+- qa-runner: ALL GREEN (2026-10-06). stylua; selene (only the old `LegacyPanel` warning); hub
+  and combat luau-lsp with fresh sourcemaps; `check_compile.py` (124 files); the hub, combat and
+  proving builds; `sim_economy.py --check`, `sim_combat.py --check` and `sim_range.py --check`.
+  Asset gates not run: no asset or template changed.
+
+**Not in this wave:**
+- Melee abilities (Whirlwind, Earthquake, Leap Smash, Impale Dash) still resolve at the
+  server's copy of the position.
+- Early effects for guns and bows (P5).
+- The phone auto-swing pads. An auto-swing can start up to 2 studs outside real reach, and
+  the early arc now shows that miss. Config-only if Ben sees it.
+
+**Carried (owner: lead, P5):**
+- Take the speed for the slack from the server's own position history, before this path
+  reaches missions.
+- Group `FeedbackController`'s state into tables before early ranged effects are added.
+- Measure the follow on a phone (with the first phone playtest). One `BulkMoveTo` per effect
+  is the fix if it asks for one.
+- Melee abilities at the server's position, if Ben feels it.
+
+- [x] P3.1 built and reviewed (definition of done in INTERFACES "P3.1")
+- [ ] Ben's playtest (`docs/PLAYTEST.md` "P3.1 — A swing lands where you stand")
 
 ## M12 — Growing city
 

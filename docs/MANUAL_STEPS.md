@@ -1536,6 +1536,24 @@ meshes. Only the combat place changed in play, but rebuild both (they share `src
 - [ ] 3. Press **Play**. Output shows `[RangeService] Proving Grounds ready`.
 - [ ] 4. Run `docs/PLAYTEST.md` "P3 — Abilities + SMG / Beam / Chain Gun".
 
+## P3.1 — A swing lands where you stand
+
+**Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
+(no audio step).
+
+**Merged to `main` on 2026-10-06.** The usual file has the fix, and "Build all" in VS Code is
+right again: `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. The lead rebuilt it at the
+merge. The `tycoon-p3` folder used while the fix was built is gone.
+
+**Steps:**
+
+- [ ] 1. If a `proving.rbxl` is open in Studio, close it (don't save). **A copy opened before
+      the merge is the old version, without the fix**, and saving it would write that old
+      version over the new file.
+- [ ] 2. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl` in Studio.
+- [ ] 3. Press **Play**. Output shows `[RangeService] Proving Grounds ready`.
+- [ ] 4. Run `docs/PLAYTEST.md` "P3.1 — A swing lands where you stand".
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the

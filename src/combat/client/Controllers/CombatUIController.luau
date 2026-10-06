@@ -95,6 +95,7 @@ local function isRangeStats(payload: any): boolean
 		and typeof(payload.alive) == "number"
 		and typeof(payload.serverFrameMs) == "number"
 		and (payload.refused == nil or typeof(payload.refused) == "boolean")
+		and (payload.refusedSeq == nil or typeof(payload.refusedSeq) == "number")
 		and (payload.ability == nil or typeof(payload.ability) == "string")
 		and (payload.abilityHits == nil or typeof(payload.abilityHits) == "number")
 		and (payload.abilityKills == nil or typeof(payload.abilityKills) == "number")
@@ -275,7 +276,8 @@ local function bootRange(): ()
 				local stats = payload :: Types.RangeStats
 				panel.SetStats(stats)
 				if stats.refused == true then
-					FeedbackController.OnRefused()
+					-- P3.1: the refusal names its attack, so only that swing is taken back.
+					FeedbackController.OnRefused(stats.refusedSeq)
 				end
 			end
 		end)

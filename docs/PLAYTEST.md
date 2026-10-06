@@ -4037,6 +4037,54 @@ Setup: `docs/MANUAL_STEPS.md` "P3". Keys: **Q** melee ability, **E** ranged abil
 - Should the SMG hurt armoured enemies (step 11)?
 - Anything wrong: step numbers, PC or phone. If you tuned: the **Export** output.
 
+## P3.1 — A swing lands where you stand
+
+**Goal:** check your one request from the P3 playtest: a melee swing lands where you stand, also
+while you run. Silent, placeholder bodies, dummies never attack. Judge feel.
+
+**Status 2026-10-06: merged to `main` (Ben: "good! lets close it").** The usual file has the fix
+now: `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`. The `tycoon-p3` folder is gone.
+- **A `proving.rbxl` that was already open in Studio before the merge is the old one.** Close it
+  without saving and open the file again, or you will be judging the version without the fix.
+
+Setup: `docs/MANUAL_STEPS.md` "P3.1". Keys: **1** melee, **2** ranged, **Space** jump, **P** panel,
+**Alt** frees the cursor. You start with Broadsword + Longbow.
+
+### Setup
+
+- [ ] 1. Close any open `proving.rbxl` (don't save), open the file above again → **Play** → 30 red dummies; bottom centre shows two tiles, **Q Whirlwind** and **E Arrow Rain**, as in P3. Bug: no tiles, or the Raider Woods lobby. The `main` file starts the same way: if step 2 shows the old behaviour, you opened the wrong file.
+
+### Swings on the move
+
+- [ ] 2. **1**, run straight at the crowd and **click while still running** → the arc appears on the click, in front of you, and stays in front while you keep running; the dummies inside it are the ones hit. Bug: the arc appears behind you, or is left behind.
+- [ ] 3. Stand still in the crowd and swing → looks exactly as it did in P3. Bug: two arcs for one swing.
+- [ ] 4. **P** → **Weapons** → **Melee** → **Spinblade** → hold **left mouse** → the full spin around you comes on the **third** swing. Stop for about a second, swing again → the combo restarts: two plain swings, then the spin. Bug: the spin on another swing.
+- [ ] 5. **Spear**, then **Warhammer**, each while running → the Spear's thrust and the Warhammer's shockwave ring travel with you in one piece. Bug: the shape tears, or part of it stays behind.
+
+### Jump
+
+- [ ] 6. Pick **Broadsword** again. In the crowd, **Space** and click right after leaving the ground → the dummies below you are hit. Then swing on the ground and jump right after → the arc stays at ground height. Bug: the jump swing hits nothing, or the ground arc rises with you.
+
+### Wireframe
+
+- [ ] 7. **P** → **Dummies & commands** → **Wire: off** → it reads **Wire: ON**. Run and swing → the cyan wire shape is the server's: it stays fixed where the swing started, while the bright arc moves on with you. Bug: the wire shape appears well behind where you clicked. Click **Wire: ON** again to turn it off.
+
+### Phone (Test (Prueba) → Device (Dispositivo) → 375×667)
+
+- [ ] 8. Play → walk at the crowd → the sword swings by itself in reach; the arcs appear in front of you and move with you. Still no attack button. Question: do you see swings that start a little too early and miss the nearest dummy?
+
+### Two players (optional)
+
+- [ ] 9. Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). Player 1 runs and swings → on player 2's screen the arcs move with player 1. Bug: player 1's arcs stay behind on player 2's screen.
+
+### What to tell Claude
+
+- Does melee feel instant now?
+- Is anything still left behind? Which weapon?
+- Do the melee abilities (Whirlwind, Earthquake, Leap Smash, Impale Dash) feel late in the same way? They were not changed here.
+- Phone (step 8): swings that start too early and miss the nearest dummy?
+- Anything wrong: step numbers, PC or phone.
+
 ## M12 — Village growing city
 
 **Goal:** Village grows as one town around your landmarks: woods first, then building sites, then

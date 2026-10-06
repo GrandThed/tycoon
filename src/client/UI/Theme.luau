@@ -625,6 +625,12 @@ local Theme = {
 	-- A refused attack greys the crosshair once, for this long.
 	COMBAT_RANGE_REFUSED_COLOR = Color3.fromRGB(128, 128, 128),
 	COMBAT_RANGE_REFUSED_SECONDS = 0.25,
+	-- P3.1: a swing drawn and predicted on the swinger's own client waits this long for the
+	-- strike or refusal that answers it; past that the server dropped it without a word.
+	COMBAT_RANGE_SWING_ANSWER_SECONDS = 2,
+	-- The server pulls back a swing origin that lag cannot explain. An early effect drawn
+	-- further than this (studs) from where the strike resolved is replaced by the strike's.
+	COMBAT_RANGE_SWING_ORIGIN_TOLERANCE = 0.5,
 	COMBAT_RANGE_TRAIL_MIN_STUDS = 3, -- a launcher trail is drawn only past this distance
 	-- P2 projectiles in flight (CombatFxShot) and the bow effects on their strikes.
 	COMBAT_RANGE_SHELL_SIZE = 0.9,

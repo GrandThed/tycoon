@@ -4721,6 +4721,134 @@ or kept as named module constants when they are purely visual.
   - Mag Dump fires by itself.
 - Local Server with 2 players: each sees the other's casts, zones, leaps and beams.
 
+## P3.1 — a swing lands where you stand (Ben, 2026-10-06)
+
+Ben at the P3 playtest: "if you are moving forward, the weapon hitbox stays behind and you
+don't hit the enemies in front of you"; he wants melee to "act instantly or at least follow
+you". Built on branch `p3-melee-follow` (worktree `tycoon-p3`); merged to `main` on 2026-10-06
+on his word ("good! lets close it"). His Studio look at the fix itself is not confirmed: see
+PLAN "P3.1".
+
+**Cause (measured in the code, two separate lags):**
+- `RangeService.resolveMelee` swept from `root.Position`, the server's copy of the character.
+  That copy trails the swinger's own screen by the replication delay, so the arc sat behind a
+  moving player. The client already sent its root position as `RequestRangeAttack` arg 3; the
+  server ignored it for melee (ranged has used it since P1, behind `aimAllowed`).
+- The hitbox effect was drawn only when the server's strike came back, at that origin, fixed
+  in the world. A player walking at 20 studs/s leaves it 3 studs behind in its 0.15 s
+  (`Theme.COMBAT_RANGE_HITBOX_SECONDS`), on top of the round trip before it appears.
+
+**Rulings (lead):**
+1. **A swing resolves at the origin the client sent**, trusted within
+   `controls.meleeOriginPad + |root velocity| × (ping + shooting.originLagSeconds)` of the
+   server's root. A claim further out is **clamped** onto that sphere toward the claim, never
+   refused: its only fault is lag, and a refusal would take the swing back.
+2. **Melee strikes carry `seq` and `step`** (the attack's seq; the combo step the server
+   used, 1-based). The server's step is the truth: the swinger's client sets its own step from
+   it, so a prediction that drifted corrects itself on the next swing.
+3. **The swinger's client draws the hitbox effect at once**, from the values it sends: the
+   origin, the flat camera heading, the variant's shape, `range`, `width`, `arcDegrees` (the
+   `finisherArcDegrees` on the chain's last step) and, airborne, the band down to
+   `origin − airSwingReachDown`. The strike that answers that seq draws no second hitbox
+   effect. Hits, numbers, reactions, hitstop, shake, counters and the hit marker still come
+   from the server's strike and are unchanged.
+4. **A weapon swing's hitbox effect follows its swinger** for its lifetime: the local
+   player's early effect, and other players' effects drawn from their strikes. It follows in
+   X and Z only (a jump does not lift a ground swing) and never turns (the hit was resolved
+   along one heading). Ability strikes, ranged strikes and tick strikes stay fixed in the world.
+5. **A refused swing** (`RangeStats.refused` → `FeedbackController.OnRefused`) removes the
+   **oldest** unanswered early effect at once and steps the predicted combo back. The server
+   answers attacks in order, so a refusal can only be for the oldest swing still waiting
+   (amended after the client work: "newest" took back the arc the player was looking at
+   whenever two swings were in flight). An unanswered swing is forgotten after
+   `Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS`.
+6. **The predicted combo step follows the server's rule:** per family; it returns to step 1
+   when more than `controls.comboResetSeconds` passed since the last accepted melee swing; it
+   advances `step % #chain + 1`. One step drives both the swing pose and the early effect.
+   The server's `step` is applied as a replay: set it, then predict the still-unanswered
+   swings again on top of it. A slot switch no longer resets the predicted step (the server
+   never did); a change of the melee family or its variant does.
+7. **The wireframe stays the server's truth**: drawn from the strike, at the strike's origin,
+   fixed in the world. It is how the resolved origin can be compared with the effect.
+8. **Not in this wave:** melee abilities (Whirlwind, Earthquake, Leap Smash, Impale Dash still
+   resolve at the server's root), early effects for ranged shots (P5), the auto-swing pads.
+
+**Types (applied by the lead):** `RangeControlsConfig.meleeOriginPad: number`;
+`CombatFxStrike.step: number?`; `CombatFxStrike.seq` now also set on melee strikes.
+
+**Config:** `ProvingGrounds.json` `controls.meleeOriginPad` = 4 (studs).
+
+**Remotes:** none added or changed. `RequestRangeAttack` keeps its six arguments.
+
+**Client APIs (added):**
+- `InputController.PredictedSwing = { seq, family, variant, origin, heading, step, airborne }`
+- `InputController.SetSwingHandler(handler: ((swing: PredictedSwing) -> ())?)`: called on the
+  swing's own frame with exactly what was sent. FeedbackController requires InputController,
+  so it registers `PredictSwing` here in `Start` instead of being called directly.
+- `InputController.ConfirmSwing(family, seq, step)`: the paired strike's server step.
+- `InputController.RefuseSwing(): number?`: takes the oldest waiting swing back, returns its seq.
+- `FeedbackController.PredictSwing(swing: InputController.PredictedSwing)`: draws the early
+  effect.
+
+**Ownership:**
+- lead: this section, `src/shared/Types.luau`, `src/shared/Config/ProvingGrounds.json`,
+  `src/combat/server/Services/RangeService.luau`.
+- ui-engineer: `src/combat/client/Controllers/InputController.luau`,
+  `FeedbackController.luau`, and `WeaponController.luau` or `src/client/UI/Theme.luau` if a
+  constant or hook is needed there.
+
+**Definition of done:** stylua, selene, luau-lsp, `py tools/check_compile.py`, the proving
+build and `py tools/sim_range.py --check` green. In `build/proving.rbxl`: running at a crowd
+and swinging, the arc appears on the same frame as the click, stays in front of the player
+while they keep running, and the dummies inside it are the ones hit; with the wireframe on,
+the server's shape is drawn where the effect first appeared; a second player sees the first
+player's arcs moving with them.
+
+### Review round (P3.1; lead, after roblox-reviewer: 0 Critical, 2 Major, 6 Minor)
+
+These amend the rulings above.
+
+- **Major 1, fixed — a jump-swing just after take-off whiffed.** The swing resolved at the
+  lifted claim while the airborne flag still read the server's copy on the ground, so the arc
+  passed over the crowd its client drew it through. A swing is now airborne when the tracked
+  flag says so **or** the resolved origin is more than `AIRBORNE_MARGIN_STUDS` above the
+  server's root. Rule for later work: a position the client claims and a state flag the
+  server tracks disagree at take-off; judge the state where the swing resolves.
+- **Major 2, fixed — the slack had no ceiling.** Both of its inputs are the client's word
+  (replicated velocity, ping). In `claimSlack` speed is now capped at the fastest legal move,
+  `max(walkSpeed, dashDistance / dashSeconds, slamFallSpeed)` (140 as shipped), and lag at
+  `shooting.originLagMaxSeconds` (0.3 s). The same cap now covers ranged origins (`aimAllowed`,
+  `CheckAim`). Extra melee reach, in studs: standing 4.0; walking at 100 ms ping 7.0; the
+  worst a forged client gets is 4 + 140 × 0.3 = 46 (was unbounded). **Before this path reaches
+  missions (P5, owner: lead):** take the speed from the server's own position history, as
+  `trackAir` does for falls, not from the replicated velocity.
+- **Minor 1, fixed — a refusal names its attack.** `RangeStats.refusedSeq` is set on every
+  refused attack, melee or ranged. The client takes back exactly that swing (a refused shot's
+  seq matches no swing); with no seq it falls back to the oldest. Replaces "oldest" in ruling 5.
+- **Minor 2, fixed — an early effect that disagrees with its strike is replaced.** The early
+  effect is released and the strike's is drawn, following the swinger, when the drawn shape
+  differs (`shape`, `size`, `arcDegrees` or `width`), when only one of the two has the
+  airborne band, or when the origins are more than `Theme.COMBAT_RANGE_SWING_ORIGIN_TOLERANCE`
+  (0.5) apart (a clamped claim). The **shape** is compared, not the step: four of the five
+  melee families draw the same arc at every step, and replacing an identical arc would only
+  redraw it a round trip late. `ConfirmSwing` corrects the step in every case. Amends ruling 3.
+- **Minor 3, fixed:** the server zeroes a family's combo only when the picked family or
+  variant really changed, as the client does.
+- **Minor 4, fixed:** `RangeService` header no longer says melee starts at the server's root.
+- **Minor 5, carried to P5 (owner: lead):** `FeedbackController` is at about 168 of 180
+  top-level locals. Group its state into tables before early ranged effects are added.
+- **Minor 6, ruled — the follow stays per part** (about 75 parts for a Broadsword arc, 150
+  for a Spinblade spin, each frame for 0.15 s; no allocation). One `BulkMoveTo` per effect is
+  the fix if a phone measurement asks for it (owner: lead, with the first phone playtest).
+- **For Ben's eyes, not changed (ruling 8):** on phones `autoSwingPad` 0.5 + `assistLagPad`
+  1.5 can start an auto-swing up to 2 studs outside real reach, and the early arc now shows
+  that miss. Config-only if he sees it.
+
+**Types and config added in the review round:** `RangeShootingConfig.originLagMaxSeconds`
+(`shooting.originLagMaxSeconds` = 0.3), `RangeStats.refusedSeq: number?`.
+`FeedbackController.OnRefused(seq: number?)` and `InputController.RefuseSwing(seq: number?)`
+take the seq.
+
 ---
 
 # M12 contracts — Growing city (wave 1: Village)

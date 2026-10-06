@@ -64,6 +64,17 @@
 --    while busy, a ready pulse) and the slot button (the other slot's family, closing the P2
 --    known limit) join the right-thumb cluster MovementController.ClusterRect lays out.
 --    Still no attack button. RangeTouchButtons builds and draws them; the rules stay here.
+--
+-- P3.1 (docs/INTERFACES.md "P3.1 — a swing lands where you stand"), range path only:
+--  * A swing is sent from the root position and the flat camera look of its own frame, and
+--    the server resolves it there. On that same frame the swing handler (FeedbackController)
+--    is handed exactly what was sent, so the hitbox effect appears where the swinger stands
+--    instead of a round trip behind them.
+--  * The combo step is predicted by the server's rule: per family, back to step 1 after
+--    controls.comboResetSeconds without an accepted swing, else the chain's next step. That
+--    one step picks the swing pose and the effect's arc. The strike that answers a swing
+--    carries the step the server used, which replaces the prediction (ConfirmSwing); a
+--    refusal takes back the swing it names, and nothing when it names a shot (RefuseSwing).
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -89,6 +100,18 @@ local RangeTouchButtons = require(script.Parent:WaitForChild("RangeTouchButtons"
 
 export type Stance = "melee" | "ranged"
 export type SlotTiers = { melee: number, ranged: number }
+-- P3.1: one melee swing exactly as it was sent to the server (seq, family, the root position
+-- and the flat camera look), with the variant it was swung with, the predicted combo step
+-- (1-based) that also picked its pose, and whether the swinger was in the air.
+export type PredictedSwing = {
+	seq: number,
+	family: string,
+	variant: Types.RangeWeaponVariant,
+	origin: Vector3,
+	heading: Vector3,
+	step: number,
+	airborne: boolean,
+}
 
 -- A module's top level is one Luau function, and Studio (debug level 2) gives it 200 local
 -- registers, constants included. So related constants and state live in a few tables here and
@@ -135,8 +158,6 @@ local RANGE_ACTIONS = {
 	ACTION.RANGE_ABILITY_RANGED,
 }
 local MIN_RATE = 0.05
--- The sword's pose index restarts after this many swing intervals without a swing.
-local SWING_RESET_INTERVALS = 2
 local FINISHER_POSE = 3
 -- Sustained fire sends one shot a frame, two only when the frame is longer than an interval.
 local MAX_SHOTS_PER_FRAME = 2
@@ -198,6 +219,9 @@ local missionState: MissionState = {
 -- pacing.
 -- drawing = a still hold that became a bow draw or a held beam (tapFire).
 type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
+-- P3.1: a swing the server has not answered yet. `length` is the chain it stepped through and
+-- `sentAt` the os.clock it left at, which is all it takes to predict it again.
+type PendingSwing = { seq: number, family: string, length: number, sentAt: number }
 type RangeState = {
 	rangeStarted: boolean,
 	activeSlot: Stance,
@@ -221,7 +245,16 @@ type RangeState = {
 	lastShotAt: number,
 	bloom: number,
 	rangeSeq: number,
-	swingStep: number,
+	-- P3.1 combo prediction. The server's side as last heard: the step each family's chain is
+	-- on, and when the last swing it accepted left this client. Then the swings it has not
+	-- answered yet, oldest first, and what they make of it: the steps and the clock the next
+	-- swing is predicted from.
+	confirmedSteps: { [string]: number },
+	confirmedAt: number,
+	pendingSwings: { PendingSwing },
+	swingSteps: { [string]: number },
+	lastSwingAt: number,
+	onSwing: ((swing: PredictedSwing) -> ())?,
 	-- Sustained-fire accumulator (see dueShots): when the next shot is due, the interval it
 	-- was scheduled at, and whether the previous frame wanted to fire (a stream in progress).
 	nextShotAt: number,
@@ -244,7 +277,11 @@ local rangeState: RangeState = {
 	lastShotAt = -math.huge,
 	bloom = 0,
 	rangeSeq = 0,
-	swingStep = 0,
+	confirmedSteps = {},
+	confirmedAt = -math.huge,
+	pendingSwings = {},
+	swingSteps = {},
+	lastSwingAt = -math.huge,
 	nextShotAt = -math.huge,
 	scheduledInterval = 0,
 	firingStream = false,
@@ -1174,6 +1211,52 @@ local function dueShots(interval: number, frameSeconds: number, fresh: boolean):
 	return count
 end
 
+-- P3.1 ruling 6, the server's combo rule for one swing (RangeService.OnAttack and
+-- resolveMelee): a family's chain restarts when more than controls.comboResetSeconds passed
+-- since the last accepted swing, then moves on one step and wraps after its last. The step is
+-- written into `steps` and returned.
+local function advanceCombo(
+	steps: { [string]: number },
+	family: string,
+	length: number,
+	sinceLast: number,
+	resetSeconds: number
+): number
+	local previous = if sinceLast > resetSeconds then 0 else steps[family] or 0
+	local step = previous % length + 1
+	steps[family] = step
+	return step
+end
+
+-- The prediction rebuilt from the server's word: its steps and its clock, then every swing it
+-- has not answered yet, in the order they left.
+local function replaySwings(): ()
+	local resetSeconds = Tuning.Get().controls.comboResetSeconds
+	local steps = table.clone(rangeState.confirmedSteps)
+	local at = rangeState.confirmedAt
+	for _, pending in rangeState.pendingSwings do
+		advanceCombo(steps, pending.family, pending.length, pending.sentAt - at, resetSeconds)
+		at = pending.sentAt
+	end
+	rangeState.swingSteps = steps
+	rangeState.lastSwingAt = at
+end
+
+-- The server answers every swing it takes, with a strike or a refusal. One still unanswered
+-- after COMBAT_RANGE_SWING_ANSWER_SECONDS was dropped without a word: it never moved the
+-- server's combo, so it leaves the prediction as well.
+local function forgetStaleSwings(now: number): ()
+	local pending = rangeState.pendingSwings
+	local forgot = false
+	while #pending > 0 and now - pending[1].sentAt > Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS do
+		table.remove(pending, 1)
+		forgot = true
+	end
+	if forgot then
+		replaySwings()
+	end
+end
+
 -- One attack now. `interval` paces the next one; `steady` = a Mag Dump shot, which leaves
 -- along the crosshair with no spread and adds no bloom.
 local function rangeAttack(
@@ -1190,7 +1273,6 @@ local function rangeAttack(
 		return
 	end
 	local now = os.clock()
-	local idle = now - rangeState.lastRangeAttackAt > interval * SWING_RESET_INTERVALS
 	rangeState.lastRangeAttackAt = now
 	rangeState.tapQueuedAt = nil
 	rangeState.rangeSeq += 1
@@ -1223,16 +1305,42 @@ local function rangeAttack(
 		end
 		return
 	end
+	-- P3.1: the server resolves the swing at this origin along this heading, so it lands where
+	-- the swinger's own screen has them.
+	local origin = rig.root.Position
 	local forward = flatCameraLook()
-	remote:FireServer(family, rangeState.rangeSeq, rig.root.Position, forward, false, charge)
+	remote:FireServer(family, rangeState.rangeSeq, origin, forward, false, charge)
+	forgetStaleSwings(now)
 	local chain = variant.chain
 	local length = if chain ~= nil and #chain > 0 then #chain else 1
-	rangeState.swingStep = if idle then 1 else rangeState.swingStep % length + 1
-	local pose = if length > 1 and rangeState.swingStep >= length
-		then FINISHER_POSE
-		else math.min(rangeState.swingStep, 2)
+	local step = advanceCombo(
+		rangeState.swingSteps,
+		family,
+		length,
+		now - rangeState.lastSwingAt,
+		cfg.controls.comboResetSeconds
+	)
+	rangeState.lastSwingAt = now
+	table.insert(
+		rangeState.pendingSwings,
+		{ seq = rangeState.rangeSeq, family = family, length = length, sentAt = now }
+	)
+	local pose = if length > 1 and step >= length then FINISHER_POSE else math.min(step, 2)
 	WeaponController.Swing(pose, interval)
-	if MovementController.IsAirborne() then
+	local airborne = MovementController.IsAirborne()
+	local handler = rangeState.onSwing
+	if handler ~= nil then
+		handler({
+			seq = rangeState.rangeSeq,
+			family = family,
+			variant = variant,
+			origin = origin,
+			heading = forward,
+			step = step,
+			airborne = airborne,
+		})
+	end
+	if airborne then
 		MovementController.AirHang(cfg.movement.airAttackHangSeconds)
 	end
 end
@@ -1332,7 +1440,6 @@ local function setActiveSlot(slot: Stance): ()
 	rangeState.activeSlot = slot
 	cancelDraw()
 	rangeState.adsToggled = false
-	rangeState.swingStep = 0
 	rangeState.tapQueuedAt = nil
 	-- The stance drives WeaponController's held model and the HUD's stance glyph.
 	setStance(slot)
@@ -2136,15 +2243,79 @@ function InputController.SetLoadout(nextLoadout: Types.RangeLoadout): ()
 		return
 	end
 	local cfg = Tuning.Get()
+	local held = rangeState.loadout
 	local meleeBefore = slotFamily(cfg, MELEE_SLOT)
 	local rangedBefore = slotFamily(cfg, RANGED_SLOT)
+	local variantBefore = if held ~= nil then held.variants[meleeBefore] else nil
 	rangeState.loadout = nextLoadout
-	if slotFamily(cfg, MELEE_SLOT) ~= meleeBefore then
+	local meleeNow = slotFamily(cfg, MELEE_SLOT)
+	if meleeNow ~= meleeBefore then
 		cancelLocalCast(MELEE_SLOT)
 	end
 	if slotFamily(cfg, RANGED_SLOT) ~= rangedBefore then
 		cancelLocalCast(RANGED_SLOT)
 	end
+	-- P3.1: the server restarts a family's combo when the family or its variant is picked, so
+	-- the prediction does too.
+	if meleeNow ~= meleeBefore or nextLoadout.variants[meleeNow] ~= variantBefore then
+		rangeState.confirmedSteps[meleeNow] = nil
+		replaySwings()
+	end
+end
+
+-- P3.1 ruling 3: `handler` is called on the frame a melee swing is sent, with exactly what was
+-- sent, so the hitbox effect can be drawn at once. FeedbackController registers here because
+-- it requires this module and not the other way round. One handler; nil clears it.
+function InputController.SetSwingHandler(handler: ((swing: PredictedSwing) -> ())?): ()
+	rangeState.onSwing = handler
+end
+
+-- P3.1 ruling 2: the server's strike for the local swing `seq` of `family`, with the combo
+-- step it used. That step is the truth; the swings still unanswered are predicted again on
+-- top of it, so a prediction that drifted is right again from the next swing.
+function InputController.ConfirmSwing(family: string, seq: number, step: number): ()
+	local pending = rangeState.pendingSwings
+	-- A swing this client no longer remembers was still accepted about now.
+	local acceptedAt = os.clock()
+	-- The server answers in order: a swing older than this one, still unanswered, was dropped.
+	while #pending > 0 and pending[1].seq <= seq do
+		local answered = table.remove(pending, 1) :: PendingSwing
+		if answered.seq == seq then
+			acceptedAt = answered.sentAt
+		end
+	end
+	rangeState.confirmedSteps[family] = step
+	rangeState.confirmedAt = acceptedAt
+	replaySwings()
+end
+
+-- P3.1 ruling 5: the server refused an attack. `seq` is the one RangeStats.refusedSeq names;
+-- swings and shots share one counter, so it names one attack. Exactly the unanswered swing
+-- with that seq is taken back, and a refused shot's seq matches none, so no swing is touched.
+-- With nil (an older server names nothing) it is the oldest swing still unanswered, since the
+-- server answers in order. A refused swing never moved the server's combo, so the prediction
+-- steps back with it. Returns the seq of the swing taken back, so the hitbox effect drawn for
+-- it can go; nil when none was.
+function InputController.RefuseSwing(seq: number?): number?
+	local pending = rangeState.pendingSwings
+	local index: number? = nil
+	if seq ~= nil then
+		for at, swing in pending do
+			if swing.seq == seq then
+				index = at
+				break
+			end
+		end
+	else
+		forgetStaleSwings(os.clock())
+		index = if #pending > 0 then 1 else nil
+	end
+	if index == nil then
+		return nil
+	end
+	local refused = table.remove(pending, index) :: PendingSwing
+	replaySwings()
+	return refused.seq
 end
 
 -- The slot 1 / 2 / gamepad Y last picked (range only; missions keep GetStance).
@@ -2220,6 +2391,11 @@ function InputController.Destroy(): ()
 	end
 	RangeTouchButtons.Destroy()
 	table.clear(rangeState.rangeTouches)
+	table.clear(rangeState.pendingSwings)
+	table.clear(rangeState.confirmedSteps)
+	table.clear(rangeState.swingSteps)
+	rangeState.confirmedAt = -math.huge
+	rangeState.lastSwingAt = -math.huge
 	table.clear(castState.pendingCasts)
 	castState.serverAbility = nil
 	castState.magDump = nil

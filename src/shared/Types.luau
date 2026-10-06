@@ -1819,6 +1819,9 @@ export type RangeShootingConfig = {
 	-- rootSpeed x (ping + originLagSeconds) to originPad.
 	bloomMovingSpeed: number,
 	originLagSeconds: number,
+	-- P3.1 review: the most lag (ping + originLagSeconds) a claimed position may be excused by.
+	-- Ping is the client's word, so without a ceiling a stalled client buys unlimited slack.
+	originLagMaxSeconds: number,
 	-- Projectile lifetime (server and client) and how far each split child is jittered, as a
 	-- share of the gap between children.
 	projectileMaxSeconds: number,
@@ -1840,6 +1843,9 @@ export type RangeControlsConfig = {
 	assistLagPad: number,
 	-- Melee combo resets on the server after this long without a swing.
 	comboResetSeconds: number,
+	-- P3.1: a swing resolves at the origin its client sent, so it lands where the swinger's
+	-- own screen had them. Studs of that claim the server accepts beyond what lag explains.
+	meleeOriginPad: number,
 }
 -- Each feedback layer's strength, 0 = off, 1 = default; values > 1 exaggerate.
 export type RangeFeedbackConfig = {
@@ -2036,7 +2042,12 @@ export type CombatFxStrike = {
 	endPoint: Vector3?,
 	hits: { StrikeHit },
 	-- Gun attacks: the attack seq, so clients can redraw the exact pellets with HitShapes.Pellets.
+	-- P3.1: weapon swings carry it too, so the swinger pairs the strike with the hitbox effect
+	-- it already drew.
 	seq: number?,
+	-- P3.1, weapon swings only: the combo step the server used (1-based). The swinger's client
+	-- takes its own step from it.
+	step: number?,
 	-- P3: the ability id when an ability dealt this strike (weapon = its family). tick = one
 	-- repeat of a lasting ability or a held beam: clients skip the generic hitbox flash (the
 	-- lasting visual already shows the area) and soften hitstop and shake. links = chain
@@ -2118,6 +2129,9 @@ export type RangeStats = {
 	-- True on the attacker's copy when the server refused the attack (origin/rate), so the client
 	-- drops the effects it already drew for it.
 	refused: boolean?,
+	-- P3.1 review: the seq of the refused attack, so the client takes back that swing and not
+	-- another one still waiting for its answer.
+	refusedSeq: number?,
 	-- P3: the latest ability cast's id and its running totals (every tick of a lasting ability
 	-- adds to them); nil until the first cast. Normal attacks never touch these.
 	ability: string?,

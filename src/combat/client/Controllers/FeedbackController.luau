@@ -56,6 +56,19 @@
 --    of an ability, or the shooter's hand for a weapon shot.
 --  * Ability projectiles (Volley, Cluster Shell) fly as their family's arrow or shell, with the
 --    ability's own count, spread and split distance.
+--
+-- P3.1 (INTERFACES "P3.1 — a swing lands where you stand"):
+--  * The local player's weapon swing is drawn on the frame it is sent (PredictSwing, called
+--    through InputController's swing handler) from exactly what is sent: the root position,
+--    the flat camera heading and the variant's shape, as RangeService.resolveMelee resolves
+--    it. The strike that answers that seq draws no second effect; its hits, numbers,
+--    reactions, screen layer, counters and wireframe are unchanged. An early effect the
+--    strike does not bear out (another arc, an origin the server pulled back, a band only one
+--    side has) is replaced by the strike's. A refused swing's effect is taken back at once.
+--  * A weapon swing's effect travels with its swinger for its lifetime, on the flat and
+--    without turning: the local early effect, and every other player's swing drawn from its
+--    strike. Ability, ranged and tick strikes stay fixed in the world. So does the wireframe:
+--    it is the shape the server resolved, there to check the effect against.
 
 local HapticService = game:GetService("HapticService")
 local Players = game:GetService("Players")
@@ -104,6 +117,7 @@ type Strike = {
 	width: number?,
 	endPoint: Vector3?,
 	seq: number?,
+	step: number?,
 	hits: { Types.StrikeHit },
 	ability: string?,
 	tick: boolean,
@@ -124,7 +138,21 @@ type FxPart = {
 	fromCFrame: CFrame?,
 	toCFrame: CFrame?,
 }
-type Effect = { parts: { FxPart }, started: number, seconds: number }
+-- P3.1: a weapon swing's effect follows its swinger. `follow` is that character's root (nil =
+-- fixed in the world), `followAt` where the root stood when the parts were last placed, and
+-- `offset` the flat travel so far, laid over the parts that replay their own motion.
+type Effect = {
+	parts: { FxPart },
+	started: number,
+	seconds: number,
+	follow: BasePart?,
+	followAt: Vector3,
+	offset: Vector3,
+}
+-- The local player's swing drawn before the server answered it, until the strike or refusal
+-- with that seq arrives. `strike` is what was drawn: what the client expects the server's
+-- strike to say.
+type EarlySwing = { seq: number, effect: Effect, strike: Strike }
 
 -- `started` is when the pop-arc-fall starts (in the future while a merged burst is held open);
 -- `popAt` when its last pop began; `token` changes every time the pool hands the burst out, so
@@ -716,11 +744,86 @@ local function lightFlash(position: Vector3, color: Color3, brightness: number, 
 	tween:Play()
 end
 
-local function play(list: { FxPart }, seconds: number): ()
+local function play(list: { FxPart }, seconds: number): Effect?
 	if #list == 0 then
+		return nil
+	end
+	local effect: Effect = {
+		parts = list,
+		started = os.clock(),
+		seconds = seconds,
+		followAt = Vector3.zero,
+		offset = Vector3.zero,
+	}
+	table.insert(effects, effect)
+	return effect
+end
+
+-- P3.1 swing effects. One table for the records and what handles them, because this module
+-- sits close to Studio's 200 top-level locals (tools/check_compile.py).
+local swings = {
+	-- The local player's swings drawn before the server answered them, oldest first.
+	early = {} :: { EarlySwing },
+}
+
+-- Ruling 4: from now on the effect travels with that player's character. Nothing changes
+-- when the character is not there.
+function swings.follow(effect: Effect, userId: number): ()
+	local player = Players:GetPlayerByUserId(userId)
+	local character = if player ~= nil then player.Character else nil
+	local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	if root ~= nil and root:IsA("BasePart") then
+		effect.follow = root
+		effect.followAt = root.Position
+	end
+end
+
+-- Takes an effect off the screen now. One that already ran out has nothing left to take: its
+-- parts are back in the pool.
+function swings.cancel(effect: Effect): ()
+	local index = table.find(effects, effect)
+	if index == nil then
 		return
 	end
-	table.insert(effects, { parts = list, started = os.clock(), seconds = seconds })
+	table.remove(effects, index)
+	for _, item in effect.parts do
+		release(item.part)
+	end
+end
+
+-- The record of the local swing `seq`, handed over as its strike or refusal arrives; nil when
+-- nothing was drawn for it (hitboxEffect at 0) or it waited too long.
+function swings.take(seq: number): EarlySwing?
+	for index, early in swings.early do
+		if early.seq == seq then
+			table.remove(swings.early, index)
+			return early
+		end
+	end
+	return nil
+end
+
+-- The strike that answers the local swing `seq`. True when the effect drawn early for it
+-- stands, so no second one is drawn. The step the server used shows in the arc, a claim it
+-- pulled back in the origin, and its view of airborne in the end point: an early effect the
+-- strike does not bear out in any of them is taken off, and the strike's shape wins.
+function swings.answer(strike: Strike, seq: number): boolean
+	local early = swings.take(seq)
+	if early == nil then
+		return false
+	end
+	local drawn = early.strike
+	local stands = strike.shape == drawn.shape
+		and strike.size == drawn.size
+		and strike.arcDegrees == drawn.arcDegrees
+		and strike.width == drawn.width
+		and (strike.endPoint ~= nil) == (drawn.endPoint ~= nil)
+		and (strike.origin - drawn.origin).Magnitude
+			<= Theme.COMBAT_RANGE_SWING_ORIGIN_TOLERANCE
+	if not stands then
+		swings.cancel(early.effect)
+	end
+	return stands
 end
 
 -- The shooter's hand, where a tracer starts. The camera origin is where the shot is aimed
@@ -1233,7 +1336,8 @@ local function hitboxSeconds(strength: number): number
 end
 
 -- `flight`: the strike resolves a projectile (its flight was drawn from the shot). `chain`: a
--- Chain Gun shot, drawn as lightning instead of a tracer.
+-- Chain Gun shot, drawn as lightning instead of a tracer. Returns the effect it started, nil
+-- when nothing was drawn.
 local function drawHitbox(
 	strike: Strike,
 	variant: Types.RangeWeaponVariant?,
@@ -1242,9 +1346,9 @@ local function drawHitbox(
 	crit: boolean,
 	flight: boolean,
 	chain: boolean
-): ()
+): Effect?
 	if strength <= 0 then
-		return
+		return nil
 	end
 	local list: { FxPart } = {}
 	local color = if crit
@@ -1299,7 +1403,7 @@ local function drawHitbox(
 			drawRay(list, strike, color)
 		end
 	end
-	play(list, hitboxSeconds(strength))
+	return play(list, hitboxSeconds(strength))
 end
 
 -- The lightning of an ability strike (Storm Coil ticks included): its links from the strike
@@ -2648,6 +2752,7 @@ local function parseStrike(fx: { [string]: any }): Strike?
 		width = if typeof(fx.width) == "number" then fx.width else nil,
 		endPoint = if typeof(fx.endPoint) == "Vector3" then fx.endPoint else nil,
 		seq = if typeof(fx.seq) == "number" then fx.seq else nil,
+		step = if typeof(fx.step) == "number" then fx.step else nil,
 		hits = hits :: { Types.StrikeHit },
 		ability = if typeof(fx.ability) == "string" and fx.ability ~= "" then fx.ability else nil,
 		tick = fx.tick == true,
@@ -2711,6 +2816,22 @@ local function onStrike(strike: Strike): ()
 	end
 	local hitCount = #strike.hits
 	local now = os.clock()
+	local mine = strike.userId == localUserId()
+
+	-- P3.1: a weapon swing, never an ability, a shot or a tick. The swinger's own client drew
+	-- its effect when the swing was sent, so the strike that answers that seq draws no second
+	-- one unless it disagrees with the first, and the step the server used corrects the
+	-- predicted combo.
+	local swing = ability == nil and not strike.tick and variant ~= nil and variant.kind == "melee"
+	local drawnEarly = false
+	local seq = strike.seq
+	if swing and mine and seq ~= nil then
+		drawnEarly = swings.answer(strike, seq)
+		local step = strike.step
+		if step ~= nil then
+			InputController.ConfirmSwing(strike.weapon, seq, step)
+		end
+	end
 
 	-- Every drawing reads the bodies before react() starts any death flight.
 	local hitboxStrength = feedbackStrength("hitboxEffect")
@@ -2725,19 +2846,24 @@ local function onStrike(strike: Strike): ()
 				beam.wiredAt = now
 			end
 		end
-	elseif not strike.tick then
-		drawHitbox(strike, variant, impactValues, hitboxStrength, crit, flight, chain)
+	elseif not strike.tick and not drawnEarly then
+		local effect =
+			drawHitbox(strike, variant, impactValues, hitboxStrength, crit, flight, chain)
+		if swing and effect ~= nil then
+			swings.follow(effect, strike.userId)
+		end
 	end
 	if ability ~= nil then
 		drawAbilityLinks(strike, hitboxStrength)
 	end
+	-- The wireframe stays where the server resolved the strike (P3.1 ruling 7).
 	if wire then
 		drawWireframe(strike, impactValues)
 	end
 	if hitCount > 0 then
 		react(strike, impactValues)
 	end
-	if strike.userId ~= localUserId() or hitCount == 0 then
+	if not mine or hitCount == 0 then
 		return
 	end
 
@@ -2888,6 +3014,25 @@ local function stepEffects(now: number): ()
 			end
 			table.remove(effects, index)
 		else
+			-- P3.1 ruling 4: a weapon swing's effect travels with its swinger, on the flat only
+			-- (a jump never lifts it) and without turning (the hit was resolved along one
+			-- heading). Once that character is gone the effect stays where it is.
+			local shift = Vector3.zero
+			local root = effect.follow
+			if root ~= nil then
+				if root.Parent == nil then
+					effect.follow = nil
+				else
+					local position = root.Position
+					local last = effect.followAt
+					shift = Vector3.new(position.X - last.X, 0, position.Z - last.Z)
+					effect.followAt = position
+					effect.offset += shift
+				end
+			end
+			local moved = shift ~= Vector3.zero
+			local offset = effect.offset
+			local travelled = offset ~= Vector3.zero
 			local hold = Theme.COMBAT_RANGE_HITBOX_HOLD_FRACTION
 			local grow = math.min(u / hold, 1)
 			local fade = if u <= hold then 0 else (u - hold) / (1 - hold)
@@ -2901,7 +3046,11 @@ local function stepEffects(now: number): ()
 				local fromFrame = item.fromCFrame
 				local toFrame = item.toCFrame
 				if fromFrame ~= nil and toFrame ~= nil then
-					item.part.CFrame = fromFrame:Lerp(toFrame, grow)
+					-- Replayed from its own fixed frames, so the whole travel is laid over it.
+					local frame = fromFrame:Lerp(toFrame, grow)
+					item.part.CFrame = if travelled then frame + offset else frame
+				elseif moved then
+					item.part.Position += shift
 				end
 			end
 		end
@@ -2944,6 +3093,12 @@ end
 local function onRenderStep(deltaTime: number): ()
 	local now = os.clock()
 	stepEffects(now)
+	-- An early swing nothing answered in time: the server dropped that swing without a word
+	-- (a strike may never arrive), so its record goes. One a frame keeps the list short.
+	local stale = swings.early[1]
+	if stale ~= nil and now - stale.effect.started > Theme.COMBAT_RANGE_SWING_ANSWER_SECONDS then
+		table.remove(swings.early, 1)
+	end
 	stepFlights(now)
 	stepBeams(now, deltaTime)
 	for _, burst in bursts do
@@ -3095,6 +3250,8 @@ function FeedbackController.Start(): ()
 	fxFolder =
 		Create("Folder", { Name = Theme.COMBAT_RANGE_FX_FOLDER, Parent = Workspace }) :: Folder
 	detectHaptics()
+	-- Input cannot require this module (this one requires it), so the swing reaches us here.
+	InputController.SetSwingHandler(FeedbackController.PredictSwing)
 	table.insert(connections, RunService.RenderStepped:Connect(onRenderStep))
 	-- A player who leaves mid-beam takes the beam along (no more strikes would end it on time).
 	table.insert(
@@ -3172,13 +3329,77 @@ function FeedbackController.SetTuneStateHandler(handler: () -> ()): ()
 	onTuneState = handler
 end
 
--- The server dropped the local player's last attack (RangeStats.refused): grey the crosshair
--- once. Nothing was drawn for it: flights start from the server's shot, strikes from its hits.
-function FeedbackController.OnRefused(): ()
+-- The server dropped an attack of the local player (RangeStats.refused): grey the crosshair
+-- once, whatever was refused. Flights start from the server's shot and strikes from its hits,
+-- so the one thing this module draws ahead of the server is a swing's early effect (P3.1
+-- ruling 5): when the refused attack was a swing, its effect goes at once and input steps the
+-- predicted combo back. `seq` is RangeStats.refusedSeq, the refused attack's seq; a refused
+-- shot's matches no swing, so none is touched. nil is an older server that names none.
+function FeedbackController.OnRefused(seq: number?): ()
 	local marker = crosshair
 	if marker ~= nil then
 		marker.Refused()
 	end
+	local refused = InputController.RefuseSwing(seq)
+	local early = if refused ~= nil then swings.take(refused) else nil
+	if early ~= nil then
+		swings.cancel(early.effect)
+	end
+end
+
+-- P3.1 ruling 3: the local player's swing, drawn on the frame it is sent (InputController's
+-- swing handler) from exactly what was sent, with the values RangeService.resolveMelee will
+-- resolve it with. The effect follows the swinger, and the strike that answers swing.seq
+-- draws no second one as long as it resolved the same shape at the same place.
+-- feedback.hitboxEffect applies as to any strike (0 = nothing drawn).
+function FeedbackController.PredictSwing(swing: InputController.PredictedSwing): ()
+	if fxFolder == nil then
+		return
+	end
+	local variant = swing.variant
+	local shape = variant.shape
+	local chain = variant.chain
+	-- The chain's last hit may sweep its own arc (360 = a spin).
+	local arcDegrees = variant.arcDegrees
+	if chain ~= nil and swing.step == #chain and variant.finisherArcDegrees ~= nil then
+		arcDegrees = variant.finisherArcDegrees
+	end
+	-- An airborne arc reaches down to the crowd below; its end point is the band's bottom.
+	local reachDown = if swing.airborne then math.max(config().movement.airSwingReachDown, 0) else 0
+	local strike: Strike = {
+		userId = localUserId(),
+		weapon = swing.family,
+		-- Only a strike from the network is looked up by its variant key; this one brings
+		-- the variant itself.
+		variant = "",
+		shape = shape,
+		origin = swing.origin,
+		direction = swing.heading,
+		size = variant.range,
+		arcDegrees = arcDegrees,
+		width = variant.width,
+		endPoint = if shape == "arc" and reachDown > 0
+			then swing.origin - Vector3.new(0, reachDown, 0)
+			else nil,
+		seq = swing.seq,
+		step = swing.step,
+		hits = {},
+		tick = false,
+	}
+	local effect = drawHitbox(
+		strike,
+		variant,
+		impactOf(strike, variant),
+		feedbackStrength("hitboxEffect"),
+		false,
+		false,
+		false
+	)
+	if effect == nil then
+		return
+	end
+	swings.follow(effect, strike.userId)
+	table.insert(swings.early, { seq = swing.seq, effect = effect, strike = strike })
 end
 
 function FeedbackController.Destroy(): ()
@@ -3186,6 +3407,7 @@ function FeedbackController.Destroy(): ()
 		connection:Disconnect()
 	end
 	table.clear(connections)
+	InputController.SetSwingHandler(nil)
 	releaseHitstop()
 	hapticToken += 1
 	setMotors(0)
@@ -3195,6 +3417,7 @@ function FeedbackController.Destroy(): ()
 		end
 	end
 	table.clear(effects)
+	table.clear(swings.early)
 	for _, flight in flights do
 		flight.part:Destroy()
 	end

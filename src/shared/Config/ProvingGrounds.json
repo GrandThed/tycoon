@@ -176,6 +176,7 @@
 		"critMult": 2.0,
 		"bloomMovingSpeed": 1.5,
 		"originLagSeconds": 0.05,
+		"originLagMaxSeconds": 0.3,
 		"projectileMaxSeconds": 3,
 		"fanJitterShare": 0.25,
 		"rateBurstShots": 1
@@ -188,7 +189,8 @@
 		"tapMaxPixels": 14,
 		"tapBufferSeconds": 0.25,
 		"assistLagPad": 1.5,
-		"comboResetSeconds": 0.9
+		"comboResetSeconds": 0.9,
+		"meleeOriginPad": 4
 	},
 	"feedback": {
 		"hitMarker": 1,

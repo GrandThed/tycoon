@@ -16,8 +16,9 @@
 -- Studio only and opt-in: Main calls Configure(true) when the DebugProving attribute is set at
 -- boot. Otherwise every entry point here returns at once, so missions never touch this file.
 --
--- The server resolves every shape itself (decision 2). Melee builds its shape from the
--- server-side root; ranged takes the camera ray only after checking it starts near the head.
+-- The server resolves every shape itself (decision 2). Melee builds its shape at the position
+-- its client claims, pulled back to what lag explains (P3.1); ranged takes the camera ray only
+-- after checking it starts near the head.
 -- Every number is read through Tuning.Get() at the moment it is used, so a slider applies to the
 -- very next swing. Nothing in the Heartbeat step yields.
 
@@ -183,8 +184,11 @@ type StrikeFx = {
 	arcDegrees: number?,
 	width: number?,
 	endPoint: Vector3?,
-	-- Gun strikes only: the attack's seq, which seeded HitShapes.Pellets.
+	-- The attack's seq: a gun strike seeded HitShapes.Pellets with it, and a swing's client
+	-- pairs the strike with the effect it already drew.
 	seq: number?,
+	-- Weapon swings only: the combo step used.
+	step: number?,
 	tick: boolean?,
 	links: { number }?,
 }
@@ -397,20 +401,64 @@ local function floorUnder(position: Vector3, params: RaycastParams): number?
 	return if result ~= nil then result.Position.Y else nil
 end
 
--- Fortnite aim: the ray starts at the camera, which must sit near this character's head. A
--- moving character's camera leads the server's view of it by the ping plus a margin.
+-- How far a position a client claims may sit from the server's copy of its character: a moving
+-- character leads the server's view of it by the ping plus a margin. Velocity and ping are
+-- both the client's word, so neither buys more slack than the fastest legal move over the
+-- longest lag the range excuses.
+local function claimSlack(
+	player: Player,
+	root: BasePart,
+	pad: number,
+	config: Types.ProvingGroundsConfig
+): number
+	local shooting = config.shooting
+	local movement = config.movement
+	local dashSpeed = if movement.dashSeconds > 0
+		then movement.dashDistance / movement.dashSeconds
+		else 0
+	local fastest = math.max(movement.walkSpeed, movement.slamFallSpeed, dashSpeed, 0)
+	local speed = root.AssemblyLinearVelocity.Magnitude
+	-- A NaN speed fails every comparison, math.min included.
+	speed = if speed == speed then math.min(speed, fastest) else 0
+	local lag = math.min(
+		math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0),
+		math.max(shooting.originLagMaxSeconds, 0)
+	)
+	return math.max(pad, 0) + speed * lag
+end
+
+-- Fortnite aim: the ray starts at the camera, which must sit near this character's head.
 local function aimAllowed(
 	player: Player,
 	root: BasePart,
 	origin: Vector3,
-	shooting: Types.RangeShootingConfig
+	config: Types.ProvingGroundsConfig
 ): boolean
 	local character = player.Character
 	local head = if character ~= nil then character:FindFirstChild("Head") else nil
 	local anchor = if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
-	local lag = math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0)
-	local allowed = shooting.originPad + root.AssemblyLinearVelocity.Magnitude * lag
-	return (origin - anchor).Magnitude <= allowed
+	return (origin - anchor).Magnitude
+		<= claimSlack(player, root, config.shooting.originPad, config)
+end
+
+-- P3.1: a swing lands where the swinger's own screen had them. Swept from the server's copy,
+-- the arc sat behind a player running into the crowd. A claim further out than lag explains is
+-- pulled back onto that limit, not refused: its only fault is lag, and a refusal would take
+-- the swing back.
+local function meleeOrigin(
+	player: Player,
+	root: BasePart,
+	claimed: Vector3,
+	config: Types.ProvingGroundsConfig
+): Vector3
+	local position = root.Position
+	local allowed = claimSlack(player, root, config.controls.meleeOriginPad, config)
+	local offset = claimed - position
+	local distance = offset.Magnitude
+	if distance <= allowed then
+		return claimed
+	end
+	return position + offset * (allowed / distance)
 end
 
 local function sendTo(player: Player, remoteName: string, ...: any): ()
@@ -432,7 +480,8 @@ local function tuneStateFor(shooter: Shooter): ()
 	)
 end
 
-local function statsFor(shooter: Shooter, now: number, refused: boolean?): Types.RangeStats
+-- `refusedSeq`: the attack this answer refuses; nil on an ordinary readout.
+local function statsFor(shooter: Shooter, now: number, refusedSeq: number?): Types.RangeStats
 	local log = shooter.damageLog
 	local cutoff = now - DPS_WINDOW_SECONDS
 	local firstLive = 1
@@ -457,7 +506,8 @@ local function statsFor(shooter: Shooter, now: number, refused: boolean?): Types
 		clearSeconds = clearSeconds,
 		alive = CrowdService.AliveCount(),
 		serverFrameMs = CrowdService.StepMs(),
-		refused = refused,
+		refused = if refusedSeq ~= nil then true else nil,
+		refusedSeq = refusedSeq,
 		ability = shooter.abilityId,
 		abilityHits = if hasAbility then shooter.abilityHits else nil,
 		abilityKills = if hasAbility then shooter.abilityKills else nil,
@@ -468,9 +518,10 @@ local function sendStats(shooter: Shooter): ()
 	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock(), nil))
 end
 
--- The attacker's client has already drawn the shot; this tells it to take it back.
-local function sendRefused(shooter: Shooter): ()
-	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock(), true))
+-- The attacker's client has already drawn the attack; this tells it to take that one back. It
+-- is named by its seq because a swing sent after it may also be waiting for its answer.
+local function sendRefused(shooter: Shooter, seq: number): ()
+	RemoteService.FireClient(shooter.player, "RangeStats", statsFor(shooter, os.clock(), seq))
 end
 
 -- The seed of a gun strike's cosmetic pellets. Deterministic per (seq, salt), so the strike
@@ -699,6 +750,7 @@ local function finish(
 		width = fx.width,
 		endPoint = fx.endPoint,
 		seq = fx.seq,
+		step = fx.step,
 		hits = tally.hits,
 		ability = if ability ~= nil then ability.id else nil,
 		tick = fx.tick,
@@ -967,9 +1019,11 @@ local function resolveMelee(
 	variantKey: string,
 	variant: Variant,
 	root: BasePart,
+	seq: number,
+	claimed: Vector3,
 	direction: Vector3
 ): ()
-	local origin = root.Position
+	local origin = meleeOrigin(shooter.player, root, claimed, config)
 	local heading = flatten(direction) or flatten(root.CFrame.LookVector) or Vector3.new(0, 0, -1)
 	local chain = variant.chain
 	local step = shooter.combo[weapon] or 0
@@ -985,7 +1039,13 @@ local function resolveMelee(
 	local range = variant.range
 	local shape: Types.HitShape = variant.shape
 	-- Lead ruling: an airborne swing's arc reaches down to the crowd below (HitShapes.Arc band).
-	local reachDown = if shooter.airborne then math.max(config.movement.airSwingReachDown, 0) else 0
+	-- The tracked flag reads the server's copy, which is still on the ground for a frame or two
+	-- after a take-off the claim already shows: a claim lifted above that copy is airborne too,
+	-- or the lifted arc would pass over the crowd its client drew it through.
+	local lifted = origin.Y - root.Position.Y > AIRBORNE_MARGIN_STUDS
+	local reachDown = if shooter.airborne or lifted
+		then math.max(config.movement.airSwingReachDown, 0)
+		else 0
 	local tally = newTally()
 
 	if shape == "sphere" then
@@ -1031,6 +1091,8 @@ local function resolveMelee(
 		endPoint = if shape == "arc" and reachDown > 0
 			then origin - Vector3.new(0, reachDown, 0)
 			else nil,
+		seq = seq,
+		step = step,
 	})
 end
 
@@ -1960,7 +2022,7 @@ function RangeService.OnAttack(
 	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
 	if slotFamily(shooter, slot) ~= weapon then
 		-- The client fired a family it does not hold (a stale switch): take its effects back.
-		sendRefused(shooter)
+		sendRefused(shooter, seq)
 		return
 	end
 	if seq <= (shooter.lastSeq[slot] or -1) then
@@ -1969,7 +2031,7 @@ function RangeService.OnAttack(
 	local now = os.clock()
 	if slotLocked(shooter, slot, now) then
 		-- A busy ability owns the caster (ruling 3): the client's early effects are taken back.
-		sendRefused(shooter)
+		sendRefused(shooter, seq)
 		return
 	end
 	local _character, root = rootOf(player)
@@ -1991,12 +2053,12 @@ function RangeService.OnAttack(
 	-- tolerance), kept in shots so a rate change applies from now on.
 	local credit = shotCredit(shooter, slot, rate, now, config.shooting)
 	if credit < timingTolerance() then
-		sendRefused(shooter)
+		sendRefused(shooter, seq)
 		return
 	end
 	if variant.kind == "ranged" then
-		if not aimAllowed(player, root, origin, config.shooting) then
-			sendRefused(shooter)
+		if not aimAllowed(player, root, origin, config) then
+			sendRefused(shooter, seq)
 			return
 		end
 		-- A split shot becomes splitCount arrows: the whole volley must fit, or the shot is refused.
@@ -2004,7 +2066,7 @@ function RangeService.OnAttack(
 			(variant.projectileSpeed or 0) > 0
 			and projectileCount() + volleySize(variant) > MAX_PROJECTILES
 		then
-			sendRefused(shooter)
+			sendRefused(shooter, seq)
 			return
 		end
 	elseif now - previousAttackAt > config.controls.comboResetSeconds then
@@ -2016,7 +2078,7 @@ function RangeService.OnAttack(
 	shooter.credit[slot] = credit - 1
 	shooter.creditAt[slot] = now
 	if variant.kind == "melee" then
-		resolveMelee(config, shooter, weapon, variantKey, variant, root, direction)
+		resolveMelee(config, shooter, weapon, variantKey, variant, root, seq, origin, direction)
 	else
 		local used, scale, full =
 			resolveCharge(shooter, weapon, variant, charge or 0, previousAttackAt, now)
@@ -2207,10 +2269,12 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 		else
 			shooter.loadout.ranged = argument
 		end
-		shooter.combo[argument] = 0
 		shooter.drawStartedAt = 0
 		tuneStateFor(shooter)
 		if previous ~= argument then
+			-- Picking the family already held keeps its combo: the client's predicted step
+			-- only restarts on a real change.
+			shooter.combo[argument] = 0
 			-- A buff belongs to the family whose ability granted it.
 			shooter.buffs[slot] = nil
 			for _, listener in table.clone(loadoutListeners) do
@@ -2225,8 +2289,10 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 			warn(`[RangeService] bad variant command "{argument}" (want: <family> <key>)`)
 			return
 		end
+		if (shooter.loadout.variants[family] or def.default) ~= key then
+			shooter.combo[family] = 0
+		end
 		shooter.loadout.variants[family] = key
-		shooter.combo[family] = 0
 		tuneStateFor(shooter)
 	elseif command == "export" then
 		print(`[RangeService] ProvingGrounds.json with the current tuning:\n{Tuning.Export()}`)
@@ -2266,7 +2332,7 @@ function RangeService.CheckAim(player: Player, origin: Vector3): boolean
 		return false
 	end
 	local _character, root = rootOf(player)
-	return root ~= nil and aimAllowed(player, root, origin, Tuning.Get().shooting)
+	return root ~= nil and aimAllowed(player, root, origin, Tuning.Get())
 end
 
 -- Ruling 4, which InputController mirrors on the client: where an aimed ability lands.
