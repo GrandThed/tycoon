@@ -561,16 +561,17 @@ def stack(p: Part, cx, cz, y0, y1, w0, w1, tip: Rgb | None = WARN, tip_h: float 
         lathe(p, [(r, 0.0), (r, tip_h)], tip, at=(cx, y0 + body, cz), top=PANEL, bottom=tip)
 
 
-def sphere(p: Part, cx, cz, y0, w, stand: float = 0.5, stalk: Rgb = PANEL, slim: bool = False) -> None:
-    """A sphere tank with an orange equator on a pedestal half its width; a long `stand` makes the
-    pedestal a stalk, and `slim` narrows the equator to a belt on a white ball. The top is
-    y0 + stand + 0.88 w."""
+def sphere(p: Part, cx, cz, y0, w, stand: float = 0.5, stalk: Rgb = PANEL, slim: bool = False,
+           belt: Rgb = TRIM) -> None:
+    """A sphere on a pedestal half its width, with an equator in `belt` (orange: a tank; cyan: a
+    radome). A long `stand` makes the pedestal a stalk, and `slim` narrows the equator to a belt on
+    a white ball. The top is y0 + stand + 0.88 w."""
     r = w / 2 / math.cos(PHASE)
     cy = y0 + stand + w * 0.44
     drum(p, cx, cz, y0, w * 0.5, stand + w * 0.1, stalk, PANEL)
     prof = [(r * math.cos(math.radians(a)), w * 0.44 / math.sin(math.radians(62)) * math.sin(math.radians(a)))
             for a in ((-62, -22, -8, 8, 22, 62) if slim else (-62, -22, 22, 62))]
-    lathe(p, prof, [HULL, HULL, TRIM, HULL, HULL] if slim else [HULL, TRIM, HULL], at=(cx, cy, cz), top=PANEL,
+    lathe(p, prof, [HULL, HULL, belt, HULL, HULL] if slim else [HULL, belt, HULL], at=(cx, cy, cz), top=PANEL,
           bottom=PANEL)
 
 
@@ -643,6 +644,18 @@ def reflector(p: Part, x, z, y0, w, h, stand: float = 0.4) -> float:
     cube(p, x - 0.06, x + 0.06, yf, yf + 0.12, zf, z - t, PANEL, skip=("back",))
     cube(p, x - 0.13, x + 0.13, yf - 0.07, yf + 0.19, zf - 0.26, zf, HOLO)
     return yb
+
+
+def scope(p: Part, cx, cz, y0, w, dh) -> None:
+    """A telescope barrel out through the shutter of an observatory dome w across and dh tall that
+    stands on y0: white, a cyan ring and a cyan lens, aimed 62 degrees up over the lot front. It
+    starts inside the dome and stands about 0.7 clear of the glass, half a stud above the dome's
+    top: aimed any lower it would either hide in the shutter or leave the lot."""
+    length = w * 0.5 + 0.6
+    sub = Part("")
+    lathe(sub, [(0.36, 0.6), (0.36, length)], HULL, top=HOLO)
+    lathe(sub, [(0.43, length - 0.45), (0.43, length - 0.2)], HOLO, top=HOLO, bottom=HOLO)
+    p.add(sub, 180.0, (cx, y0 + 0.15 * dh, cz), 28.0)
 
 
 def solar(p: Part, x0, x1, z0, z1, y, cols: int, rows: int) -> None:
@@ -903,8 +916,8 @@ def hab_narrow_a(P: Prop) -> None:
 
 def hab_narrow_b(P: Prop) -> None:
     """A round pod in front and a greenhouse barrel behind it; both are rebuilt wider and taller,
-    the pod under a glass dome that ends as a rotunda with a spire. Tall in front where A is tall
-    behind."""
+    the pod under a glass dome that ends as a rotunda with a spire, and last a dome buds through
+    the greenhouse's ridge. Tall in front where A is tall behind."""
     airlock(P, P.part(0), 0.0)
     z0 = dock(P, 3.0)
     pod(P.part(0, 1), 0.0, z0, D, 3.0, POD, HAB)
@@ -928,6 +941,7 @@ def hab_narrow_b(P: Prop) -> None:
     pod(p, 0.0, dock(P, 3.8), D, 3.8, 3.1, HAB, glass=(1.3, 1.9))
     dome(p, 0.0, dock(P, 3.8), D + 3.1, 3.8, 2.1)
     mast(p, 0.0, dock(P, 3.8), D + 5.15, 0.55, arms=(), tip=HAB)
+    dome(p, 0.0, 2.0, 2.45, 2.4, 1.5, bands=2)  # a bud through the greenhouse's ridge
 
 
 def hab_small_a(P: Prop) -> None:
@@ -1166,8 +1180,9 @@ def sci_narrow_a(P: Prop) -> None:
 
 def sci_narrow_b(P: Prop) -> None:
     """An observatory: a round drum under a white dome with a cyan shutter, rebuilt wider and
-    taller at every stage; a capsule annex behind it carries a radar reflector, and last a whip
-    mast. Tall and round in front where A is long and low with its dish and mast at the back."""
+    taller at every stage, its telescope out through the shutter from stage 2; a capsule annex
+    behind it carries a radar reflector, and last a whip mast. Tall and round in front where A is
+    long and low with its dish and mast at the back."""
     obs = [(3.2, 1.5, 1.4), (3.4, 1.95, 1.6), (3.6, 2.6, 2.0), (3.8, 3.4, 2.2), (3.8, 3.8, 2.2)]  # drum w, h; dome h
     airlock(P, P.part(0), 0.0)
     for k, (w, h, dh) in enumerate(obs):
@@ -1176,6 +1191,8 @@ def sci_narrow_b(P: Prop) -> None:
         pod(q, 0.0, dock(P, w), D, w, h, SCI, glass=(g, g + 0.45))
         dome(q, 0.0, dock(P, w), D + h, w, dh, bands=2 if k < 2 else 3, ribs=False, panes=(SHELL, HULL),
              slit=(5, HOLO))
+        if k >= 2:  # what the Observation Dome landmark does not have: the instrument shows
+            scope(q, 0.0, dock(P, w), D + h, w, dh)
     r = P.part(0, 0)
     cube(r, -1.5, 1.5, D, D + 0.35, 1.6, 3.4, PANEL, skip=("bottom",))
     solar(r, -1.5, 1.5, 1.6, 3.4, D + 0.35, 2, 1)
@@ -1187,11 +1204,10 @@ def sci_narrow_b(P: Prop) -> None:
 
 
 def sci_small_a(P: Prop) -> None:
-    """A round lab with a dish on its roof and a solar tray beside it; a capsule wing and a short
-    mast; the lab is rebuilt wider under a larger dish, the dish climbs onto an instrument drum and
-    grows again, and a taller mast stands in the back corner."""
+    """A round lab with a dish on its roof and a solar tray beside it; a capsule wing with a radome
+    on it; the lab is rebuilt wider under a larger dish, and the dish climbs onto an instrument
+    drum and grows again. No mast: the Comms Array landmark is the era's mast."""
     lx = -0.8
-    mx, mz = -2.45, 2.6
     p = P.part(0)
     airlock(P, p, lx)
     cube(p, 1.2, 2.8, D, D + 0.35, -2.75, -1.55, PANEL, skip=("bottom",))
@@ -1202,18 +1218,16 @@ def sci_small_a(P: Prop) -> None:
     p = P.part(1)
     capsule(p, "z", -0.9, 2.8, 2.0, D, 1.8, 0.8, 0.8)
     belt(p, "z", 0.95, 2.0, D, 1.8, 0.8, 0.8, SCI)
-    mast(P.part(1, 1), mx, mz, D, 3.35, arms=(0.75,), foot=1.2)
+    sphere(p, 2.0, 1.6, 1.5, 1.6, stand=1.0, stalk=HULL, slim=True, belt=SCI)  # the radome, on the wing
     lz = dock(P, 3.6)
     pod(P.part(2), lx, lz, D, 3.6, 2.2, SCI, glass=(0.9, 1.35))
     dish(P.part(2, 2), lx, lz, D + 2.2, 3.0, stand=0.55)
     p = P.part(3)
     drum(p, lx, lz, D + 2.2, 2.2, 1.4)
     hoop(p, lx, lz, D + 3.1, D + 3.3, 2.2, SCI)
-    dish(p, 2.0, 1.9, 1.67, 1.4, stand=0.4)
     dish(P.part(3, 3), lx, lz, D + 3.6, 3.0, stand=0.55)
     p = P.part(4)
-    dish(p, lx, lz, D + 3.6, 3.4, stand=0.6)
-    mast(p, mx, mz, D, 7.2, arms=(0.75, 0.9), tip=HOLO, foot=2.4)
+    dish(p, lx, lz, D + 3.6, 3.4, stand=0.8)
 
 
 def port_narrow_a(P: Prop) -> None:
@@ -1653,6 +1667,18 @@ def disk_problems(props: list[Prop], out_dir: str) -> list[str]:
             path = os.path.join(KITS_ROOT, k["kit"], "Models", sub, f"{model}.glb")
             if os.path.isfile(path) and glb_stats(path)[0] != k["tris"]:
                 bad.append(f"{k['kit']}/{model}.glb has {glb_stats(path)[0]} tris, KENNEY says {k['tris']}")
+    for prop in props:  # whatever a blueprint on disk names must be a GLB on disk, in any kit
+        try:
+            with open(os.path.join(BLUEPRINT_DIR, f"{prop.id}.json"), "r", encoding="utf-8") as fh:
+                named = {(pc["kit"], pc["model"]) for pc in json.load(fh)["pieces"]}
+        except (OSError, ValueError, KeyError):
+            continue
+        for kit, model in sorted(named):
+            folder = out_dir if kit == KIT else None
+            paths = [os.path.join(folder, f"{model}.glb")] if folder else [
+                os.path.join(KITS_ROOT, kit, "Models", sub, f"{model}.glb") for sub in ("GLB format", "GLTF format")]
+            if not any(os.path.isfile(p) for p in paths):
+                bad.append(f"{prop.id}.json names {kit}/{model}, which is not on disk")
     return bad
 
 
@@ -1686,7 +1712,17 @@ def write_blueprints(props: list[Prop]) -> None:
     log(f"wrote {len(props)} blueprints -> {os.path.relpath(BLUEPRINT_DIR, REPO_ROOT)}")
 
 
-def export_glbs(props: list[Prop], out_dir: str) -> None:
+def unused_glbs(props: list[Prop], out_dir: str) -> list[str]:
+    """GLBs in the kit folder that no prop uses any more: pieces of earlier designs. They are
+    harmless to the blueprints, but palette.py scans every GLB of a kit, so they are worth pruning
+    before a merge (`--prune`)."""
+    pieces = all_pieces(props)
+    if not os.path.isdir(out_dir):
+        return []
+    return [name for name in sorted(os.listdir(out_dir)) if name.lower().endswith(".glb") and name[:-4] not in pieces]
+
+
+def export_glbs(props: list[Prop], out_dir: str, prune: bool = False) -> None:
     """Blender only. Each piece is exported in kit units (studs / SCALE)."""
     import bpy  # noqa: PLC0415
 
@@ -1695,8 +1731,8 @@ def export_glbs(props: list[Prop], out_dir: str) -> None:
 
     os.makedirs(out_dir, exist_ok=True)
     pieces = all_pieces(props)
-    for name in sorted(os.listdir(out_dir)):  # the folder is this kit's own: a GLB no prop uses is stale
-        if name.lower().endswith(".glb") and name[:-4] not in pieces:
+    if prune:
+        for name in unused_glbs(props, out_dir):
             os.remove(os.path.join(out_dir, name))
     total = 0
     for name, part in pieces.items():
@@ -1725,6 +1761,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--write-blueprints", action="store_true",
                         help="under Blender: also (re)write the blueprints (`py` always does)")
     parser.add_argument("--summary", help="write per-stage heights, extents and triangles here (JSON)")
+    parser.add_argument("--prune", action="store_true", help="delete the kit folder's GLBs that no prop uses")
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args(argv)
 
@@ -1742,13 +1779,13 @@ def main(argv: list[str]) -> int:
             log(f"  PROBLEM {msg}")
         failures += len(stale)
     elif in_blender():
-        export_glbs(props, args.out)
+        export_glbs(props, args.out, args.prune)
         if args.write_blueprints:
             write_blueprints(props)
     else:
         write_blueprints(props)
-        done = subprocess.run([args.blender, "-b", "-P", os.path.abspath(__file__), "--", "--out", args.out],
-                              capture_output=True, text=True)
+        done = subprocess.run([args.blender, "-b", "-P", os.path.abspath(__file__), "--", "--out", args.out]
+                              + (["--prune"] if args.prune else []), capture_output=True, text=True)
         tail = [line for line in done.stdout.splitlines() if line.startswith(f"[{KIT}]") and "pieces," in line]
         if done.returncode not in (0, 1) or not tail:
             log(f"PROBLEM Blender export failed ({args.blender}): {done.stderr.strip()[-400:]}")
@@ -1760,6 +1797,9 @@ def main(argv: list[str]) -> int:
                 log(f"  PROBLEM {msg}")
             failures += len(stale)
 
+    stray = unused_glbs(props, args.out)
+    if stray:
+        log(f"note: {len(stray)} GLB(s) in the kit folder that no prop uses (--prune deletes them): {', '.join(stray)}")
     if failures:
         log(f"{failures} problem(s)")
         return 1
