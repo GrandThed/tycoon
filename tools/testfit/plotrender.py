@@ -1351,6 +1351,9 @@ class PlotScene:
             f"fabric wild: {whole} whole clumps, {partial} partly cleared ({quarters} quarters), "
             f"{singles} singles of {len(fabric.wild_data)} entries"
         )
+        wild_swaps = cityfabric.wild_swap_counts(view)
+        if wild_swaps:
+            self.notes.append("fabric wild swaps: " + ", ".join(f"{suffix} x{n}" for suffix, n in sorted(wild_swaps.items())))
         candidates = sum(1 for parcel_view in view["parcels"] if parcel_view["chimney"])
         self.notes.append(f"fabric smoke: {len(view['plumes'])} plumes of {candidates} candidate parcels")
         dressed = [pad for pad in view["pads"] if pad["marker"] is not None or pad["stakes"]]

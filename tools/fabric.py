@@ -96,16 +96,22 @@ clump that would lie on another turned, then smaller, down to one quarter's size
 on bare ground only. The plan's keys mean what they did. The wild also keeps off the entrance
 apron, which is laid from the start and which no clearing knows.
 
-A tube era's plan-laid layers (INTERFACES "Wave 4.1c": flags, rock gardens, hub beacons) use the
-generic machinery with four placers (TUBE_PLACERS). `kerb` follows each swept centreline in
-place of the straight runs, an entry turned to the tube's tangent with its tube-side edge the
-layer's `solid` margin off the pipe; `backs` (with `turn` 90 for a strip bed along a lot's back
-edge) and `driveway` stand behind and beside lots as elsewhere; `hubs` puts one entry on every
-hub's centre, anchored to the tube its hub arrives with. Ground judges a body against the pipes,
-hubs, aprons and the round loop's band instead of raw street and spur legs, lets it lean into
-no lot, lets two entries of one layer lie end to end, and holds it off every regolith plate
-that still stands when its anchor is developed (CHECK_TUBE_MARGINS; hub_messages for a layer
-laid on hubs). Entries are rounded to 0.01, so a placer's `gap` wants 0.02 over its margin.
+A tube era's plan-laid layers (INTERFACES "Wave 4.1c": flags, hub beacons) use the generic
+machinery with three placers (TUBE_PLACERS). `kerb` follows each swept centreline in place of the
+straight runs, an entry turned to the tube's tangent with its tube-side edge the layer's `solid`
+margin off the pipe. `hubs` puts one entry on every hub's centre, anchored to the tube its hub
+arrives with. `piers` puts one on every n-th pier foot of a round loop, facing outward, anchored
+to the highway (ANCHOR_HIGHWAY): it appears once the layer's slot and the highway's are both
+owned. Ground judges a body against the pipes, hubs, aprons and the round loop's band instead of
+raw street and spur legs, lets it lean into no lot, and holds it off every regolith plate that
+still stands when its anchor is developed (CHECK_TUBE_MARGINS). An entry on a hub or a pier
+stands on that, not on the ground, and answers to hub_messages or pier_messages instead: a pier
+entry is the one thing in the band besides a crossing tube.
+
+Wild swaps (`fabric.wildSwaps`, same section: "Tend the Rock Gardens"). While a swap's slot is
+owned every standing wild entry shows `<prop><suffix>` where that twin exists. The data does not
+change, so `check` holds the props to it (wild_swap_messages): a clump and its quarter have a twin
+together, a twin has its original's ground, and under a beam that never clears it is no taller.
 
 A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
 either side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it,
@@ -225,12 +231,11 @@ PLATE_SHRINK = 0.9
 PLATE_LEAST = 0.5
 ENTRANCE_APRON = "the entrance apron"  # tools/paths/tubes.TubePlan.entrance_apron, as the checks name it
 # A tube era's plan-laid layers (INTERFACES "Wave 4.1c"): a body keeps CHECK_TUBE_ITEM from every
-# lot (its own too: nothing leans into a pod), apron, hub, pad, marker, landmark and entry of
-# another layer, and that far off every pipe. Two entries of one layer may lie end to end (a
-# strip of garden beds) but never over each other. A body keeps off the round loop's band as a
-# lot does, and it never lies on regolith still standing when it appears: CHECK_WILD_APART from
-# every plate its own anchor does not clear and from every plate the band keeps for good. The
-# plot edge is the cart rule's.
+# lot (its own too: nothing leans into a pod), apron, hub, pad, marker, landmark and other entry,
+# and that far off every pipe. A body keeps off the round loop's band as a lot does, and it never
+# lies on regolith still standing when it appears: CHECK_WILD_APART from every plate its own
+# anchor does not clear and from every plate the band keeps for good. The plot edge is the cart
+# rule's.
 CHECK_TUBE_ITEM = 0.25
 CHECK_TUBE_MARGINS = {
     "lot": CHECK_TUBE_ITEM,
@@ -242,9 +247,16 @@ CHECK_TUBE_MARGINS = {
     "wood": CHECK_WILD_APART,
 }
 HUBS = "hubs"  # the placer kind of a layer that stands on the tube hubs
-# The placer kinds a tube era lays: on its hubs, beside its swept tubes, behind and beside its
-# lots. The others measure along straight street legs, which a tube era's streets are not.
-TUBE_PLACERS = (HUBS, "kerb", "backs", "driveway")
+PIERS = "piers"  # the placer kind that hangs an entry on a round loop's piers
+# The placer kinds a tube era lays: on its hubs, beside its swept tubes, on its loop's piers. The
+# others measure along straight street legs, which a tube era's streets are not, or lay beside
+# lots, which no tube era's layer does yet.
+TUBE_PLACERS = (HUBS, "kerb", PIERS)
+# An entry on a pier (INTERFACES "Wave 4.1c", the pier banners) is anchored to the highway: it
+# arrives with it. It is the one thing in a round loop's band besides a crossing tube: it stands
+# on a pier foot's centre, faces outward, stays within the band and off every pipe, and never
+# hangs on the two piers beside the entrance apron.
+ANCHOR_HIGHWAY = "highway"
 # A tube era: how far back a lot may be pushed, in TUBE_BACK_STEP steps, to keep its front corners
 # off the pipe on the inside of a bend (a 4-wide front on a 6-stud bend needs about 0.3).
 TUBE_BACK_STEP = 0.05
@@ -275,7 +287,7 @@ QUARTERS = 4
 SIZES = ("small", "medium", "narrow")
 KINDS = ("clump", "single")
 FIELDS = "fields"  # the plan's `wild.pattern` for farmland on a grid; absent means woods
-ANCHORS = ("stretch", "parcel")
+ANCHORS = ("stretch", "parcel", ANCHOR_HIGHWAY)
 
 
 # --------------------------------------------------------------------------------------------
@@ -2028,7 +2040,10 @@ def bunting_clear_of_trees(entry, posts, taken, rule):
 
 def placed_at_full(site, entry, levels):
     """INTERFACES "Wave 1c, round 3": an entry is placed once its layer's slot is owned and its
-    anchor developed (a stretch drawn, or a parcel at level 2 or more)."""
+    anchor developed (a stretch drawn, a parcel at level 2 or more, or the highway standing: at
+    full build, wherever the layout has one)."""
+    if entry.get("anchor") == ANCHOR_HIGHWAY:
+        return site.era.highway is not None
     if entry.get("anchor") == "stretch":
         index = site.stretch_by_id.get(entry.get("stretch"))
         return index is not None and index in site.drawn
@@ -2223,13 +2238,12 @@ class Ground:
         lx, lz = rotate(point[0] - x, point[1] - z, -rotation)
         return abs(lx) <= width / 2 + EPS and lz <= -lot_depth / 2 + depth + EPS
 
-    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None, kerbside=False, layer=None):
+    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None, kerbside=False):
         """What is wrong with an entry standing as `body`, one text per broken rule, lazily, so a
         search can stop at the first. `anchor_gap` and `clear` are cart_anchor's pair. `own` is the
         parcel a parcel-anchored entry belongs to: it may stand inside that lot's margin and lean
         `lean` into it, as a planter does. `front_lean` is how far a kerbside post may lean into the
-        front of the lot it stands before. `skip` is the entry's own tag, when it is in the ground.
-        `layer` is the entry's own layer: in a tube era it may touch another entry of that layer."""
+        front of the lot it stands before. `skip` is the entry's own tag, when it is in the ground."""
         site, margins, slack = self.site, self.margins, self.tolerance
         if site.tube is not None:
             own, front_lean = None, 0.0
@@ -2274,11 +2288,6 @@ class Ground:
                     if not leans_within(body, poly, allowed):
                         yield f"leans more than {allowed:g} into {what}"
                     continue
-            if site.tube is not None and tag is not None and tag[0] == layer:
-                depth = overlap_depth(body, poly)
-                if depth > TOUCH + slack:
-                    yield f"lies {depth:.2f} over {what}"
-                continue
             yield f"{gap(body, poly):.2f} from {what} (need {margin:g})"
         for what, point in self.trunks:
             if not point_box_apart(point, box, margins["tree"]) and point_gap(point, body) < margins["tree"] - slack:
@@ -2518,7 +2527,6 @@ class LayerBuild:
                 lean=placer.get("lean", 0.0),
                 front_lean=placer.get("frontLean", 0.0),
                 kerbside=bool(self.cfg.get("kerbside")),
-                layer=self.name,
             )
             if next(problems, None) is not None:
                 return False
@@ -2857,8 +2865,7 @@ def place_backs(build, placer):
     roof, `gap` behind the lot's back edge: wherever no back-row lot took the ground. `lateral`
     lists where along the back to try, as shares of the lot's width. Up to `count`, nearest the
     entrance first -- or, with `order` "hubFacing", the lots that face the hub most squarely first,
-    so the boards the hub sees from the front are the ones that get the spots. `turn` (optional,
-    degrees) turns the entry off the lot's facing: 90 lays a long prop along the back edge."""
+    so the boards the hub sees from the front are the ones that get the spots."""
     site = build.site
     variants = placer["variants"]
     count = placer.get("count", math.inf)
@@ -2872,12 +2879,11 @@ def place_backs(build, placer):
         variant = variants[placed % len(variants)]
         face = streetplan.facing(parcel["rotationY"])
         width, depth = site.sizes[parcel["size"]]
-        rotation = parcel["rotationY"] + placer["turn"] if "turn" in placer else parcel["rotationY"]
-        reach = depth / 2 + placer["gap"] + build.toward(placer, variant, rotation, face)
+        reach = depth / 2 + placer["gap"] + build.toward(placer, variant, parcel["rotationY"], face)
         for lateral in placer["lateral"]:
             x = parcel["x"] - face[0] * reach - face[1] * lateral * width
             z = parcel["z"] - face[1] * reach + face[0] * lateral * width
-            entry = build.entry(placer, x, z, rotation, variant, {"anchor": "parcel", "parcel": index})
+            entry = build.entry(placer, x, z, parcel["rotationY"], variant, {"anchor": "parcel", "parcel": index})
             if build.commit(placer, entry, own=index):
                 placed += 1
                 break
@@ -2956,13 +2962,55 @@ def place_hubs(build, placer):
     """One entry on the centre of every tube hub (INTERFACES "Wave 4.1c", the holo beacons),
     stretch-anchored to the tube the hub arrives with, so the entry appears with its hub. It stands
     on the drum, not on the ground, so no ground clearance is asked of it here: `check` holds it
-    to the hub (hub_messages)."""
+    to the hub (hub_messages). It is turned square to the plot's centre, and a hub where its
+    footprint would still come within the lots' daylight of a round loop's band is skipped: a
+    beacon reaches above the beam's soffit, so none stands under or near the track."""
     site = build.site
     variant = placer_variants(placer)[0]
     for point, stretch in hub_arrivals(site):
         if build.full():
             break
-        entry = build.entry(placer, point[0], point[1], 0.0, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+        rotation = facing_rot(point) if math.hypot(point[0], point[1]) > streetplan.MIN_LENGTH else 0.0
+        entry = build.entry(placer, point[0], point[1], rotation, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+        if any(site.band_gap(shape) < CHECK_TILE_SOLID for shape in build.shapes(entry)):
+            continue
+        build.entries.append(entry)
+        build.own.setdefault(id(placer), []).append((entry["x"], entry["z"]))
+        build.ground.add(build.name, len(build.entries), entry)
+
+
+def pier_ranks(site):
+    """(foot centre, rank) for every pier foot of a round loop: 0 for the pier beside the way in on
+    either side of it, 1 for the next one round, and so on, the two sides counted apart -- the
+    order someone walking in sees them. Empty without a round loop."""
+    if site.ring is None:
+        return []
+    toward = math.atan2(site.entrance[1], site.entrance[0])
+    sides = {1: [], -1: []}
+    for foot in streetplan.round_pier_feet(site.era):
+        off = (math.atan2(foot[1], foot[0]) - toward + math.pi) % (2 * math.pi) - math.pi
+        sides[1 if off >= 0 else -1].append((abs(off), foot))
+    return [(foot, rank) for side in sides.values() for rank, (_, foot) in enumerate(sorted(side))]
+
+
+def place_piers(build, placer):
+    """One entry on every `every`-th pier foot of a round loop (INTERFACES "Wave 4.1c", the pier
+    banners), counted from the way in on each side, never the pier beside it: facing outward,
+    anchored to the highway, so it arrives with the monorail. It hangs on the pier, not on the
+    ground, so no ground clearance is asked of it here (pier_messages holds it to the pier); it
+    keeps the layer's `spacing` from what is already laid, so list it before the layer's others."""
+    site = build.site
+    variant = placer_variants(placer)[0]
+    every = placer["every"]
+    spacing = build.cfg.get("spacing", 0.0)
+    feet = [foot for foot, rank in pier_ranks(site) if rank > 0 and (rank + 1) % every == 0]
+    feet.sort(key=lambda foot: entry_order(site, {"x": rounded(foot[0]), "z": rounded(foot[1])}))
+    for foot in feet:
+        if build.full():
+            break
+        entry = build.entry(placer, foot[0], foot[1], facing_rot(foot), variant, {"anchor": ANCHOR_HIGHWAY})
+        if any(math.dist((entry["x"], entry["z"]), (other["x"], other["z"])) < spacing for other in build.entries):
+            continue
         build.entries.append(entry)
         build.own.setdefault(id(placer), []).append((entry["x"], entry["z"]))
         build.ground.add(build.name, len(build.entries), entry)
@@ -2970,6 +3018,7 @@ def place_hubs(build, placer):
 
 PLACERS = {
     HUBS: place_hubs,
+    PIERS: place_piers,
     "spots": place_spots,
     "kerb": place_kerb,
     "lotFront": place_lot_front,
@@ -2989,7 +3038,7 @@ def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild,
     build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild, lanes)
     for placer in build.cfg["placers"]:
         if site.tube is not None and placer["kind"] not in TUBE_PLACERS:
-            raise SystemExit(f"fabric: {name} names a `{placer['kind']}` placer, which is laid along straight street legs; beside swept tubes a layer is laid by {', '.join(TUBE_PLACERS)}")
+            raise SystemExit(f"fabric: {name} names a `{placer['kind']}` placer; a tube era's layers are laid by {', '.join(TUBE_PLACERS)}")
         PLACERS[placer["kind"]](build, placer)
     build.entries.sort(key=lambda e: entry_order(site, e))
     return build.entries, [len(build.own.get(id(placer), ())) for placer in build.cfg["placers"]]
@@ -4281,6 +4330,7 @@ def upgrade_messages(site, plan, doc):
             messages += layer_rules(site, plan, name, entries, parcels)
             messages += spot_messages(site, plan, name, entries, props)
             messages += hub_messages(site, plan, name, entries, props)
+            messages += pier_messages(site, plan, name, entries, props)
             messages += unused_prop_messages(site, plan, name, props, entries, levels)
     trees = upgrades.get("trees", [])
     for i, tree in enumerate(trees):
@@ -4354,7 +4404,7 @@ def layer_clearance(site, plan, name, index, label, entry, props, ground, polys)
         post = max(math.dist(shape[0], shape[1]), math.dist(shape[1], shape[2])) <= CHECK_POST_SIZE + EPS
         front = CHECK_OWN_LOT if own is None and post else 0.0
         kerbside = bool((plan.get(name) or {}).get("kerbside"))
-        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index), kerbside=kerbside, layer=name)
+        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index), kerbside=kerbside)
         messages += [f"{label}: {problem}" for problem in problems]
     return messages
 
@@ -4404,8 +4454,10 @@ def spot_messages(site, plan, name, entries, props):
 
 def hub_messages(site, plan, name, entries, props):
     """A layer laid on the tube hubs (INTERFACES "Wave 4.1c": any `hubs` placer in its plan block,
-    and then no other kind): every entry stands on the centre of a hub a drawn tube reaches, its
-    footprint inside the drum, arrives with the tube its hub arrives with, and no hub carries two."""
+    and then no other kind): every entry stands on the centre of a hub a drawn tube reaches, no
+    wider than the drum, arrives with the tube its hub arrives with, and no hub carries two. Its
+    footprint keeps the lots' daylight from a round loop's band: it may reach above the beam's
+    soffit, so it never stands under or near the track."""
     if not hub_layer(plan, name):
         return []
     messages = []
@@ -4433,11 +4485,63 @@ def hub_messages(site, plan, name, entries, props):
         if found is None:
             messages.append(f"{label}: its prop has neither harvested extents in Assets.json nor a `footprints` entry in the plan, so it cannot be judged")
         else:
-            reach = max(math.dist(hub, v) for shape in found[0] for v in shape)
+            # Across its sides, not its corners: what stands on a round drum is round.
+            sides = [((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for shape in found[0] for a, b in zip(shape, shape[1:] + shape[:1])]
+            reach = max(math.dist(hub, middle) for middle in sides)
             if reach > radius + EPS:
                 messages.append(f"{label}: its footprint reaches {reach:.2f} from the hub's centre, past the drum's {radius:g}")
+            d = min(site.band_gap(shape) for shape in found[0])
+            if d < CHECK_TILE_SOLID - EPS:
+                messages.append(f"{label}: its footprint is {d:.2f} from the round loop's band (need {CHECK_TILE_SOLID}); it reaches above the beam, so it never stands under or near the track")
         if entry.get("anchor") != "stretch" or entry.get("stretch") != site.ids[stretch]:
             messages.append(f"{label}: arrives with {entry.get('stretch') or entry.get('anchor')!s}, not with {site.ids[stretch]}, the tube its hub arrives with")
+    return messages
+
+
+def pier_messages(site, plan, name, entries, props):
+    """An entry anchored to the highway (INTERFACES "Wave 4.1c", the pier banners) hangs on a pier
+    of a round loop: on a pier foot's centre, facing outward, never on the pier either side of the
+    entrance apron, one to a pier; its footprint stays within the band, where nothing else may
+    stand, and off every pipe that crosses it."""
+    mine = [(index, entry) for index, entry in enumerate(entries, start=1) if entry.get("anchor") == ANCHOR_HIGHWAY]
+    if not mine:
+        return []
+    ranks = pier_ranks(site)
+    if not ranks:
+        return [f"{name}: {len(mine)} entries are anchored to the highway, but this layout has no round loop with piers to hang them on"]
+    messages = []
+    taken = {}
+    for index, entry in mine:
+        label = f"{name} {index} ({number(entry['x'])}, {number(entry['z'])})"
+        point = (entry["x"], entry["z"])
+        at, (foot, rank) = min(enumerate(ranks), key=lambda found: math.dist(point, found[1][0]))
+        where = streetplan.fmt((rounded(foot[0]), rounded(foot[1])))
+        if math.dist(point, foot) > EPS:
+            messages.append(f"{label}: {math.dist(point, foot):.2f} from the nearest pier foot, at {where}; an entry that arrives with the monorail hangs on a pier")
+            continue
+        if rank == 0:
+            messages.append(f"{label}: hangs on the pier at {where}, beside the way in; the two piers either side of the entrance apron carry none")
+        if at in taken:
+            messages.append(f"{label}: the pier at {where} already carries {name} {taken[at]}")
+        taken.setdefault(at, index)
+        out = streetplan.unit(foot)
+        face = streetplan.facing(entry["rotationY"])
+        if abs(face[0] * out[1] - face[1] * out[0]) > CHECK_FACING or face[0] * out[0] + face[1] * out[1] < 0:
+            messages.append(f"{label}: does not face outward from the loop")
+        variant = entry.get("variant")
+        found = prop_shapes(site, plan, props[variant - 1], entry) if isinstance(variant, int) and 1 <= variant <= len(props) else None
+        if found is None:
+            messages.append(f"{label}: its prop has neither harvested extents in Assets.json nor a `footprints` entry in the plan, so it cannot be judged")
+            continue
+        for shape in found[0]:
+            reach = max(abs(math.hypot(v[0], v[1]) - site.ring) for v in shape)
+            if reach > site.band_half + EPS:
+                messages.append(f"{label}: its footprint reaches {reach:.2f} from the track's line, out of the band's {site.band_half:g}")
+            pipe = site.width / 2
+            for line in site.tube.lines if site.tube is not None else ():
+                d = line.gap(shape, pipe)
+                if d < pipe - EPS:
+                    messages.append(f"{label}: {d:.2f} from the centreline of {line.label}, on its pipe (need {pipe:g})")
     return messages
 
 
@@ -4517,6 +4621,11 @@ def anchor_messages(site, label, entry, props, parcels, levels, polys):
     anchor = entry.get("anchor")
     if anchor not in ANCHORS:
         messages.append(f"{label}: anchor {anchor!r} is not one of {ANCHORS}")
+    elif anchor == ANCHOR_HIGHWAY:
+        if "stretch" in entry or "parcel" in entry:
+            messages.append(f"{label}: a highway entry names a stretch or a parcel")
+        if site.era.highway is None:
+            messages.append(f"{label}: anchored to the highway, and this layout has none, so it is never placed")
     elif anchor == "stretch":
         if "parcel" in entry:
             messages.append(f"{label}: a stretch entry names a parcel")
@@ -4683,6 +4792,70 @@ def wild_messages(site, plan, doc):
         messages += wild_height_messages(site, plan)
     if site.plates:
         messages += plate_messages(site, plan, wild)
+    messages += wild_swap_messages(site, plan)
+    return messages
+
+
+def wild_twins(site, plan, heights):
+    """(original, twin, the swap's slot) for every wild prop the era may show -- its clumps, its
+    quarters and every single the plan may lay -- that a `fabric.wildSwaps` entry gives a twin
+    that exists, with the mirror's own reading of the config and of what exists."""
+    import cityfabric  # tools/; imported late, as it reads its own inputs on import
+
+    names = list(site.config["wild"].get("clumps") or []) + list(site.config["wild"].get("quarters") or [])
+    names += sorted(wild_single_props(plan["wild"]))
+    found = []
+    for swap in cityfabric.valid_wild_swaps(site.config.get("wildSwaps")):
+        for name in dict.fromkeys(names):
+            if isinstance(name, str) and heights.exists(name + swap["suffix"]):
+                found.append((name, name + swap["suffix"], swap["requiresSlot"]))
+    return found
+
+
+def prop_ground_size(site, prop):
+    """(what measured it, (x, z)) of a prop's ground: its harvested size once it is uploaded, else
+    its blueprint's declared footprint; None with neither."""
+    harvested = streetplan.harvested_extents(site.name, prop)
+    if harvested is not None:
+        return "harvested", (harvested[0], harvested[2])
+    declared = streetplan.declared_footprints(site.name, [prop])
+    return ("declared", declared[0][1]) if declared else None
+
+
+def wild_swap_messages(site, plan):
+    """INTERFACES "Wave 4.1c": `fabric.wildSwaps` changes what a standing wild entry shows and
+    nothing else, so the twins answer for it. A clump and its quarter have a twin together (a
+    clump half cleared is drawn as its quarters); a twin's ground is its original's, measured the
+    same way (the plates were laid apart by the originals'); and the slot it waits for exists."""
+    import cityfabric  # tools/; imported late, as it reads its own inputs on import
+
+    config = site.config.get("wildSwaps")
+    if config is None:
+        return []
+    messages = []
+    swaps = cityfabric.valid_wild_swaps(config)
+    if not isinstance(config, list) or len(swaps) != len(config):
+        messages.append("wildSwaps: every entry is { requiresSlot, suffix } with no `districts`; a malformed one is skipped in game")
+    slots = {slot["id"] for slot in site.era.slots}
+    heights = cityfabric.Heights(site.name, load_assets())
+    for swap in swaps:
+        if swap["requiresSlot"] not in slots:
+            messages.append(f"wildSwaps: {swap['requiresSlot']} is not a slot of {site.name}")
+        clumps, quarters = site.config["wild"].get("clumps") or [], site.config["wild"].get("quarters") or []
+        for clump, quarter in zip(clumps, quarters):
+            whole, part = heights.exists(clump + swap["suffix"]), heights.exists(quarter + swap["suffix"])
+            if whole != part:
+                have, lack = (clump, quarter) if whole else (quarter, clump)
+                messages.append(f"wildSwaps: {have}{swap['suffix']} exists and {lack}{swap['suffix']} does not; a clump and its quarter swap together")
+    for original, twin, _slot in wild_twins(site, plan, heights):
+        a, b = prop_ground_size(site, original), prop_ground_size(site, twin)
+        if a is None or b is None or a[0] != b[0]:
+            continue  # one is harvested and the other not yet: judged once both are
+        if math.dist(a[1], b[1]) > EPS:
+            messages.append(
+                f"wildSwaps: {twin}'s {a[0]} ground is {number(b[1][0])} x {number(b[1][1])}, its original {original}'s "
+                f"{number(a[1][0])} x {number(a[1][1])}; a twin has its original's footprint"
+            )
     return messages
 
 
@@ -4718,6 +4891,7 @@ def wild_height_messages(site, plan):
     heights = cityfabric.Heights(site.name, load_assets())
     names = list(site.config["wild"].get("clumps") or []) + list(site.config["wild"].get("quarters") or [])
     names += sorted(wild_single_props(plan["wild"]))
+    names += [twin for _original, twin, _slot in wild_twins(site, plan, heights)]  # they stand there too
     messages = []
     for name in dict.fromkeys(names):
         stages = heights.prop(name)
@@ -4911,7 +5085,8 @@ def summary(era_name, doc):
         )
         + "".join(
             f"; {name} {len(entries)} (stretch {sum(1 for e in entries if e.get('anchor') == 'stretch')}, "
-            f"parcel {sum(1 for e in entries if e.get('anchor') == 'parcel')})"
+            f"parcel {sum(1 for e in entries if e.get('anchor') == 'parcel')}"
+            + (f", highway {sum(1 for e in entries if e.get('anchor') == ANCHOR_HIGHWAY)})" if any(e.get("anchor") == ANCHOR_HIGHWAY for e in entries) else ")")
             for name, entries in upgrades.items()
             if name not in LAYERS
         )

@@ -55,6 +55,11 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
     out of the clearing test, whatever lot, pad, landmark, lane or tube stands beside the band --
     nothing but a crossing tube can stand in it, and the data keeps the wild off that. Implemented
     here first: Fabric.luau follows in wave 4.2;
+  * `fabric.wildSwaps` (M12 wave 4.1c, "Tend the Rock Gardens"): while a swap's slot is owned every
+    standing wild placement -- a whole clump, a quarter, a single -- shows `<prop><suffix>` where
+    that prop exists (valid_wild_swaps, swapped_wild). And an upgrade entry may be anchored to the
+    highway (ANCHOR_HIGHWAY: a banner on a monorail pier), developed while the highway stands
+    (highway_built). Both implemented here first: Fabric.luau follows in wave 4.2;
   * the tile-cell budget (M12 wave 3.2): in a tiles era RoadGraph.FabricNetwork leaves out a visible
     stretch whose cells missed budget.tileCells (streetplan.Network.tile_plan), so network_view does.
 
@@ -110,6 +115,8 @@ SINGLE = "single"
 # Wave 1c town trees: what a tree is anchored to, and the level at which a parcel's house stands.
 ANCHOR_STRETCH = "stretch"
 ANCHOR_PARCEL = "parcel"
+# Wave 4.1c: an entry that arrives with the highway (a banner on a monorail pier).
+ANCHOR_HIGHWAY = "highway"
 BUILT_LEVEL = 2
 DEFAULT_VARIANT = "default"  # RoadGraph.DEFAULT_VARIANT: the era's own road look
 # CityFabric.DEFAULT_ROW_LAG: an absent `pull.rowLag` holds a back row one level behind its front.
@@ -635,11 +642,14 @@ def valid_upgrade_layer(value):
 
 def valid_upgrade_item(entry):
     """Fabric.validUpgradeItem: a position, turn, variant and positive scale, anchored to a stretch by
-    piece id or to a parcel by index; anything else is skipped where it stands."""
+    piece id, to a parcel by index, or (wave 4.1c) to the highway; anything else is skipped where
+    it stands."""
     if not isinstance(entry, dict) or not all(finite(entry.get(key)) for key in ("x", "z", "rotationY")):
         return False
     if not (finite(entry.get("variant")) and finite(entry.get("scale")) and entry["scale"] > 0):
         return False
+    if entry.get("anchor") == ANCHOR_HIGHWAY:
+        return True
     if entry.get("anchor") == ANCHOR_STRETCH:
         return isinstance(entry.get("stretch"), str)
     return entry.get("anchor") == ANCHOR_PARCEL and finite(entry.get("parcel"))
@@ -724,6 +734,27 @@ def swapped_look(look, district, swaps, owned, exists):
         if exists(candidate):
             prop = candidate
     return look if prop == look["prop"] else {**look, "prop": prop, "swappedFrom": look["prop"]}
+
+
+def valid_wild_swaps(value):
+    """`fabric.wildSwaps` (wave 4.1c, "Tend the Rock Gardens"): the well-formed entries in list
+    order, as {requiresSlot, suffix}. The shape is `fabric.swaps`' without `districts`: the wild
+    has none, and an entry that names any is skipped."""
+    return [{"requiresSlot": swap["requiresSlot"], "suffix": swap["suffix"]} for swap in valid_swaps(value) if swap["districts"] is None]
+
+
+def swapped_wild(prop, swaps, owned, exists):
+    """The prop a standing wild entry shows -- a whole clump, one of its quarters or a single --
+    after the wild swaps: each swap whose slot is owned turns the name into `<prop><suffix>` when
+    `exists` says that prop exists, in list order, each on the name the one before produced. A
+    twin has its original's footprint and frame, so where the entry stands, how it is turned and
+    scaled and when it clears do not change."""
+    if not isinstance(prop, str):
+        return prop
+    for swap in swaps:
+        if swap["requiresSlot"] in owned and exists(prop + swap["suffix"]):
+            prop = prop + swap["suffix"]
+    return prop
 
 
 def district_list(config, district, size):
@@ -1406,6 +1437,16 @@ class FabricPlot:
         # nothing (kept_in_band); None for every other era, where it clears as it always did.
         self.band_ring = self.era.round_ring if not ring_clears(config) else None
 
+    def highway_built(self, owned):
+        """Whether the plot's highway stands: the layout has one and `highway.requiresSlot`, when
+        the config names one, is owned -- what Highway draws by, and what develops an upgrade
+        entry anchored to the highway (wave 4.1c)."""
+        config = self.era.dressing.get("highway")
+        if not isinstance(self.era.highway, dict) or not isinstance(config, dict):
+            return False
+        slot = config.get("requiresSlot")
+        return not isinstance(slot, str) or slot in owned
+
     def kept_in_band(self, px, pz):
         """Fabric.clearedFlags' exemption: a point in the band of a round loop that never clears."""
         return self.band_ring is not None and ring_keeps(px, pz, self.band_ring, streetplan.ROUND_BAND_HALF)
@@ -1743,15 +1784,23 @@ class FabricPlot:
             flags[index] = bits
         return flags
 
-    def wild_placements(self, cleared, near, share=1.0):
+    def wild_placements(self, cleared, near, share=1.0, owned=()):
         """Fabric.syncWild, settled: near plots draw every uncleared clump, quarter and single among
         the first budget.wild entries, far plots the whole clumps among the first budget.wildFar
-        clumps; detail off keeps an even share by index. A skirt entry stands on the world ground."""
+        clumps; detail off keeps an even share by index. A skirt entry stands on the world ground.
+        Wave 4.1c: each shows its twin under the wild swaps of the slots in `owned` (swapped_wild);
+        a swapped placement remembers its original as `swappedFrom`."""
         wild_config = self.wild_config
         if wild_config is None:
             return []
         clumps, quarters = wild_config["clumps"], wild_config["quarters"]
         share = min(max(number_or(share, 1), 0), 1)
+        swaps = valid_wild_swaps((self.config or {}).get("wildSwaps"))
+
+        def shown(prop):
+            twin = swapped_wild(prop, swaps, owned, self.heights.exists)
+            return {"prop": twin} if twin == prop else {"prop": twin, "swappedFrom": prop}
+
         placements = []
         for index, entry in enumerate(self.wild_data, start=1):
             if index not in self.wild_valid:
@@ -1769,11 +1818,11 @@ class FabricPlot:
             base = {"index": index, "x": entry["x"], "y": ground, "z": entry["z"], "scale": scale_of(entry.get("scale"))}
             if want_whole:
                 placements.append(
-                    {**base, "kind": "whole", "prop": luau_index(clumps, variant), "rotationY": entry["rotationY"]}
+                    {**base, "kind": "whole", **shown(luau_index(clumps, variant)), "rotationY": entry["rotationY"]}
                 )
             if want_single:
                 placements.append(
-                    {**base, "kind": "single", "prop": entry.get("prop"), "rotationY": entry["rotationY"]}
+                    {**base, "kind": "single", **shown(entry.get("prop")), "rotationY": entry["rotationY"]}
                 )
             if want_quarters:
                 for quarter in range(1, QUARTERS + 1):
@@ -1784,7 +1833,7 @@ class FabricPlot:
                             **base,
                             "kind": "quarter",
                             "quarter": quarter,
-                            "prop": luau_index(quarters, variant),
+                            **shown(luau_index(quarters, variant)),
                             "rotationY": entry["rotationY"] + QUARTER_TURN_DEGREES * (quarter - 1),
                         }
                     )
@@ -1861,7 +1910,8 @@ class FabricPlot:
     def upgrade_placements(self, owned, states, stretches, tier, near, share=1.0):
         """Fabric.syncLayer for every layer, settled, in name order. An entry is placed when the
         layer's `requiresSlot` is owned and its anchor is developed (a stretch entry: the stretch is
-        drawn; a parcel entry: the parcel is at level 2 or more, drawn or not); it stands at
+        drawn; a parcel entry: the parcel is at level 2 or more, drawn or not; wave 4.1c, a
+        highway entry: the highway stands, highway_built); it stands at
         clamp(tier - tierOffset, 0, #stages - 1), on near plots only, thinned by index to `share`.
         Returns {layer name: {"placed": count, "drawn": [placements]}}."""
         share = min(max(number_or(share, 1), 0), 1)
@@ -1872,7 +1922,9 @@ class FabricPlot:
             drawn, placed = [], 0
             for view in layer["views"]:
                 item = view["item"]
-                if item.get("anchor") == ANCHOR_STRETCH:
+                if item.get("anchor") == ANCHOR_HIGHWAY:
+                    developed = self.highway_built(owned)
+                elif item.get("anchor") == ANCHOR_STRETCH:
                     developed = item["stretch"] in stretches
                 else:
                     state = luau_index(states, item["parcel"])
@@ -1964,7 +2016,7 @@ class FabricPlot:
             "plazas": plazas,
             "mask": mask,
             "cleared": cleared,
-            "wild": self.wild_placements(cleared, near, share),
+            "wild": self.wild_placements(cleared, near, share, owned),
             "pads": self.pad_dressing(owned, near),
             "upgrades": upgrades,
             "plumes": plumes_for(parcels, self.chimneys, smoking),
@@ -2591,6 +2643,28 @@ def selftest():
         ("swaps: a site never swaps", swapped("TowerA", "residential", both, SITE) == ("TowerA", 3, None)),
         ("swaps: not a list, none", valid_swaps({"requiresSlot": "x", "suffix": "Y"}) == []),
     ]
+    # Wave 4.1c wild swaps: `fabric.swaps`' rule on a standing wild entry's prop, without districts.
+    rough = {"RegolithClumpA", "RegolithClumpAGarden", "RegolithQuarterA", "RegolithQuarterAGarden", "RegolithClumpAGardenLit", "SurveyBeacon"}
+    wild_swaps = valid_wild_swaps(
+        [{"requiresSlot": "rockGarden", "suffix": "Garden"}, {"requiresSlot": "holoBeacon", "suffix": "Lit"}, {"requiresSlot": "x", "suffix": "Q", "districts": ["habitat"]}, {"requiresSlot": "y"}, 7]
+    )
+
+    def wild(prop, owned):
+        return swapped_wild(prop, wild_swaps, set(owned), lambda name: name in rough)
+
+    validation += [
+        ("wild swaps: malformed entries and entries with districts are skipped", wild_swaps == [{"requiresSlot": "rockGarden", "suffix": "Garden"}, {"requiresSlot": "holoBeacon", "suffix": "Lit"}]),
+        ("wild swaps: nothing owned, nothing swapped", wild("RegolithClumpA", ()) == "RegolithClumpA"),
+        ("wild swaps: an owned slot swaps a clump to its twin", wild("RegolithClumpA", ("rockGarden",)) == "RegolithClumpAGarden"),
+        ("wild swaps: and its quarter", wild("RegolithQuarterA", ("rockGarden",)) == "RegolithQuarterAGarden"),
+        ("wild swaps: chained in list order", wild("RegolithClumpA", ("rockGarden", "holoBeacon")) == "RegolithClumpAGardenLit"),
+        ("wild swaps: a twin that does not exist leaves the name", wild("SurveyBeacon", ("rockGarden", "holoBeacon")) == "SurveyBeacon"),
+        ("wild swaps: the second alone finds no twin of the first's original", wild("RegolithClumpA", ("holoBeacon",)) == "RegolithClumpA"),
+        ("wild swaps: a variant with no name stays nameless", wild(None, ("rockGarden",)) is None),
+        ("wild swaps: not a list, none", valid_wild_swaps({"requiresSlot": "rockGarden", "suffix": "Garden"}) == []),
+        ("upgrade item: anchored to the highway", valid_upgrade_item({"x": 1, "z": 2, "rotationY": 0, "scale": 1, "variant": 2, "anchor": ANCHOR_HIGHWAY})),
+        ("upgrade item: an unknown anchor is skipped", not valid_upgrade_item({"x": 1, "z": 2, "rotationY": 0, "scale": 1, "variant": 2, "anchor": "pier"})),
+    ]
     # Wave 3.2: the footpath a tiles era lays (streetplan's mirror of RoadGraph.spurDrawPoints and
     # drawFootpath), 3 wide with a clip of 7: a slab is (a, b, extension).
     draw, slabs_of, lane = streetplan.spur_draw_points, streetplan.footpath_slabs, streetplan.lane_draw_points
@@ -2760,6 +2834,16 @@ def swap_counts(snap):
     return counts
 
 
+def wild_swap_counts(snap):
+    """Wave 4.1c wild swaps: how many standing wild placements show each twin suffix."""
+    counts = {}
+    for placement in snap["wild"]:
+        if placement.get("swappedFrom"):
+            suffix = placement["prop"][len(placement["swappedFrom"]) :]
+            counts[suffix] = counts.get(suffix, 0) + 1
+    return counts
+
+
 def timeline(era_name, data_path=None, config_path=None):
     """`data_path` is `--fabric`: fabric data read instead of Config/Fabric/<Era>.json (a plan built
     with `fabric.py build --out`); `config_path` is `--config`: a CityDressing.json read instead of
@@ -2856,6 +2940,9 @@ def timeline(era_name, data_path=None, config_path=None):
         swaps = swap_counts(near)
         if swaps:
             print(f"         swapped: {', '.join(f'{suffix} x{n}' for suffix, n in sorted(swaps.items()))}")
+        wild_swaps = wild_swap_counts(near)
+        if wild_swaps:
+            print(f"         wild swapped: {', '.join(f'{suffix} x{n}' for suffix, n in sorted(wild_swaps.items()))}")
         print(
             f"         wild near {whole} whole, {partial} partial ({quarters} quarters), {singles} singles; "
             f"far {far_whole} whole"
@@ -3102,6 +3189,10 @@ def props_report(era_name, data_path=None, config_path=None):
     for entry in plot.wild_data:
         if entry.get("kind") != CLUMP:
             name(entry.get("prop"), "wild single in the data")
+    for swap in valid_wild_swaps(config.get("wildSwaps")):
+        for prop in sorted(listed):
+            if any(where.startswith("wild") for where in listed[prop]) and plot.heights.exists(prop + swap["suffix"]):
+                twins[prop + swap["suffix"]] = f"wildSwaps ({swap['requiresSlot']}) twin of {prop}"
 
     print(f"{era_name}: props the fabric shows over {len(moments)} moments of the greedy player (near plot), {len(plot.parcel_data)} parcels")
     for prop in sorted(shown):
