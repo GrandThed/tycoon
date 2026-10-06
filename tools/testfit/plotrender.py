@@ -14,6 +14,7 @@ coloured rectangles.
     py tools/testfit/plotrender.py Village --tier 2 --far
     py tools/testfit/plotrender.py Metropolis --tier 3 --fabric <data.json> --out <dir>/try_tier3.png
     py tools/testfit/plotrender.py OrbitalColony --tier 3 --label docks --out m12o_docks_tier3
+    py tools/testfit/plotrender.py OrbitalColony --without rockGarden --out m12o_changer_gardens_before
 
 Outputs land in assets/testfit/out/<Era>/plot_<camera>.png, or where an `--out` ending in .png says.
 `--label` stamps the finished picture with that name, the tier and the fabric's lot count (INTERFACES
@@ -2257,21 +2258,23 @@ def camera_for(name, era, scene):
 # --------------------------------------------------------------------------
 
 
-def resolve_owned(era, owned_arg, tier):
+def resolve_owned(era, owned_arg, tier, without_arg=""):
     """Which slots the plot has bought. `--tier N` on its own means "whatever the sim's greedy
     player owns by tier N", which is the only ownership set that produces a street network the
-    client would really show partway through an era; an explicit `--owned` list wins over it."""
+    client would really show partway through an era; an explicit `--owned` list wins over it.
+    `--without` then takes its slots out: the same plot before a city-changer is bought."""
     ids = [slot["id"] for slot in era.slots]
-    if owned_arg == "all":
-        if tier is None:
-            return set(ids)
-        tiers = streetplan.greedy_buy_tiers(era.name, era.city)
-        return {slot_id for slot_id in ids if tiers.get(slot_id, 99) <= tier}
-    wanted = {part.strip() for part in owned_arg.split(",") if part.strip()}
-    unknown = wanted - set(ids)
+    without = {part.strip() for part in without_arg.split(",") if part.strip()}
+    wanted = {part.strip() for part in owned_arg.split(",") if part.strip()} if owned_arg != "all" else set()
+    unknown = (wanted | without) - set(ids)
     if unknown:
         raise SystemExit(f"unknown slot id(s): {', '.join(sorted(unknown))}")
-    return wanted
+    if owned_arg != "all":
+        return wanted - without
+    if tier is None:
+        return set(ids) - without
+    tiers = streetplan.greedy_buy_tiers(era.name, era.city)
+    return {slot_id for slot_id in ids if tiers.get(slot_id, 99) <= tier} - without
 
 
 def caption_text(label, tier, scene):
@@ -2349,6 +2352,12 @@ def main():
     )
     parser.add_argument("--owned", default="all", help="'all' (default) or a comma list of slot ids")
     parser.add_argument(
+        "--without",
+        default="",
+        help="comma list of slot ids left unowned whatever else is owned: with nothing else given, the "
+        "full build less those slots -- the 'before' of a city-changer, on the same layout and data",
+    )
+    parser.add_argument(
         "--camera",
         default="overview",
         help="overview | entrance | ramp | plaza | cityhall | x,z[,half[,elevation]]: a point camera on "
@@ -2398,7 +2407,7 @@ def main():
         streetplan.make_street_only(era, [slot.strip() for slot in args.street_only.split(",") if slot.strip()])
     network = streetplan.Network(era)
     tier = args.tier
-    owned = resolve_owned(era, args.owned, tier)
+    owned = resolve_owned(era, args.owned, tier, args.without)
     scene_tier = 5 if tier is None else tier
     # Landmark stages: the finished plot draws every blueprint at its last stage. At --tier N the sim's
     # greedy player is caught at the last moment of tier N -- the owned set above is exactly what it

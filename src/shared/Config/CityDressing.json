@@ -1352,6 +1352,42 @@
           "width": 3,
           "rim": 0,
           "fillHeight": 0.09
+        },
+        "swaps": [
+          {
+            "requiresSlot": "lifeSupport",
+            "suffix": "Green"
+          }
+        ],
+        "upgrades": {
+          "flags": {
+            "requiresSlot": "colonyFlag",
+            "props": [
+              "ColonyFlagMast"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.15,
+            "budget": 24
+          },
+          "gardens": {
+            "requiresSlot": "rockGarden",
+            "props": [
+              "RockGardenA",
+              "RockGardenB"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.08,
+            "budget": 40
+          },
+          "beacons": {
+            "requiresSlot": "holoBeacon",
+            "props": [
+              "HubBeacon"
+            ],
+            "tierOffset": 0,
+            "stagger": 0.3,
+            "budget": 12
+          }
         }
       }
     }

@@ -96,6 +96,17 @@ clump that would lie on another turned, then smaller, down to one quarter's size
 on bare ground only. The plan's keys mean what they did. The wild also keeps off the entrance
 apron, which is laid from the start and which no clearing knows.
 
+A tube era's plan-laid layers (INTERFACES "Wave 4.1c": flags, rock gardens, hub beacons) use the
+generic machinery with four placers (TUBE_PLACERS). `kerb` follows each swept centreline in
+place of the straight runs, an entry turned to the tube's tangent with its tube-side edge the
+layer's `solid` margin off the pipe; `backs` (with `turn` 90 for a strip bed along a lot's back
+edge) and `driveway` stand behind and beside lots as elsewhere; `hubs` puts one entry on every
+hub's centre, anchored to the tube its hub arrives with. Ground judges a body against the pipes,
+hubs, aprons and the round loop's band instead of raw street and spur legs, lets it lean into
+no lot, lets two entries of one layer lie end to end, and holds it off every regolith plate
+that still stands when its anchor is developed (CHECK_TUBE_MARGINS; hub_messages for a layer
+laid on hubs). Entries are rounded to 0.01, so a placer's `gap` wants 0.02 over its margin.
+
 A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
 either side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it,
 and the colony may use the plot's corners outside it. With `highway.clearBand` false the wild in
@@ -213,6 +224,27 @@ PLATE_TURNS = 8
 PLATE_SHRINK = 0.9
 PLATE_LEAST = 0.5
 ENTRANCE_APRON = "the entrance apron"  # tools/paths/tubes.TubePlan.entrance_apron, as the checks name it
+# A tube era's plan-laid layers (INTERFACES "Wave 4.1c"): a body keeps CHECK_TUBE_ITEM from every
+# lot (its own too: nothing leans into a pod), apron, hub, pad, marker, landmark and entry of
+# another layer, and that far off every pipe. Two entries of one layer may lie end to end (a
+# strip of garden beds) but never over each other. A body keeps off the round loop's band as a
+# lot does, and it never lies on regolith still standing when it appears: CHECK_WILD_APART from
+# every plate its own anchor does not clear and from every plate the band keeps for good. The
+# plot edge is the cart rule's.
+CHECK_TUBE_ITEM = 0.25
+CHECK_TUBE_MARGINS = {
+    "lot": CHECK_TUBE_ITEM,
+    "solid": CHECK_TUBE_ITEM,
+    "lamp": CHECK_TUBE_ITEM,
+    "tree": CHECK_TUBE_ITEM,
+    "item": CHECK_TUBE_ITEM,
+    "edge": CHECK_CART_EDGE,
+    "wood": CHECK_WILD_APART,
+}
+HUBS = "hubs"  # the placer kind of a layer that stands on the tube hubs
+# The placer kinds a tube era lays: on its hubs, beside its swept tubes, behind and beside its
+# lots. The others measure along straight street legs, which a tube era's streets are not.
+TUBE_PLACERS = (HUBS, "kerb", "backs", "driveway")
 # A tube era: how far back a lot may be pushed, in TUBE_BACK_STEP steps, to keep its front corners
 # off the pipe on the inside of a bend (a 4-wide front on a 6-stud bend needs about 0.3).
 TUBE_BACK_STEP = 0.05
@@ -641,6 +673,11 @@ class Site:
     def band_gap(self, poly):
         """Daylight between a polygon and the round loop's band; `inf` without a round loop."""
         return streetplan.band_gap(poly, self.ring, self.band_half) if self.ring is not None else math.inf
+
+    def band_keeps(self, point):
+        """Whether the wild at `point` is cleared by nothing: its clearing point lies in the band of
+        a round loop that never clears (tools/cityfabric.ring_keeps, the client's rule)."""
+        return self.under_beam and abs(math.hypot(point[0], point[1]) - self.ring) <= self.band_half
 
     def solid_boxes(self, rules):
         """(polygon, its bounding box, the daylight a parcel keeps from it) for every solid."""
@@ -2090,7 +2127,13 @@ class Ground:
     `item` from every other entry of every layer, and `edge` from the plot edge. And it never
     stands in the wild: it stands on land its own anchor clears, clear of every wood or field that
     anchor leaves. `leave_out` names layers whose entries are not solids here (the carts' own:
-    two carts answer to their spacing instead)."""
+    two carts answer to their spacing instead).
+
+    A tube era (INTERFACES "Wave 4.1c"): the swept pipes, the hubs and the aprons stand in for the
+    raw polylines and spur legs -- a body keeps `solid` off every pipe, hub and apron, the lots'
+    daylight off the round loop's band, and leans into no lot, its own included. Its wild is
+    plates: a body keeps `wood` from the ground of every plate its anchor leaves standing, and of
+    every plate the band keeps for good."""
 
     def __init__(self, site, plan, polys, upgrades, wild, margins, tolerance, leave_out=(), frames=None, lanes=()):
         self.site, self.plan, self.margins, self.tolerance = site, plan, margins, tolerance
@@ -2109,6 +2152,9 @@ class Ground:
         # A tiles era's deck band, ramp cells and kiosks (empty elsewhere). Its street bands are
         # not solids here: a kerb entry stands on the pavement, past the walkers' reach.
         solids += [(label, poly, margins["solid"], None) for label, poly, _ in site.tile_solids]
+        tubes = site.tube is not None
+        if tubes:
+            solids += [(label, poly, margins["solid"], None) for label, poly, _ in site.hubs + site.aprons]
         self.solids = [(label, poly, box_of(poly), margin, tag) for label, poly, margin, tag in solids]
         self.trunks = []  # (label, point): a layer the plan gives no footprints is a layer of trees
         self.strings = []  # (label, post, post, tag): what hangs between two posts, overhead
@@ -2117,12 +2163,22 @@ class Ground:
                 continue
             for index, entry in enumerate(upgrades.get(name, []), start=1):
                 self.add(name, index, entry)
-        self.streets = [(f"street {polyline + 1}", a, b, box) for polyline, _, a, b, box in site.street_boxes]
-        self.spurs = [(f"the {slot_id} path", a, b, box_of((a, b))) for slot_id, a, b in site.spur_segments]
+        self.streets = [] if tubes else [(f"street {polyline + 1}", a, b, box) for polyline, _, a, b, box in site.street_boxes]
+        self.spurs = [] if tubes else [(f"the {slot_id} path", a, b, box_of((a, b))) for slot_id, a, b in site.spur_segments]
         radii = site.config["wild"]
         self.woods = []  # (point, clearing radius): what Fabric tests against the mask
+        # A plates era: (clearing point, clearing radius, the plate's ground, its box, kept for good)
+        # for every quarter of every clump and every single.
+        self.regolith = []
         for item in wild:
-            if item["kind"] == "clump":
+            if site.plates:
+                if item["kind"] == "clump":
+                    side = 2 * plan["wild"]["clumps"]["quarterOffset"] * item["scale"]
+                    parts = [((quad[0], quad[1]), radii["quarterRadius"], streetplan.square((quad[0], quad[1]), side, side, item["rotationY"])) for quad in item["quads"]]
+                else:
+                    parts = [((item["x"], item["z"]), radii["singleRadius"], plate_ground(site, plan, item))]
+                self.regolith += [(point, radius, ground, box_of(ground), site.band_keeps(point)) for point, radius, ground in parts]
+            elif item["kind"] == "clump":
                 self.woods += [((quad[0], quad[1]), radii["quarterRadius"]) for quad in item["quads"]]
             else:
                 self.woods.append(((item["x"], item["z"]), radii["singleRadius"]))
@@ -2167,17 +2223,29 @@ class Ground:
         lx, lz = rotate(point[0] - x, point[1] - z, -rotation)
         return abs(lx) <= width / 2 + EPS and lz <= -lot_depth / 2 + depth + EPS
 
-    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None, kerbside=False):
+    def problems(self, body, centre, anchor_gap, clear, own=None, lean=0.0, front_lean=0.0, skip=None, kerbside=False, layer=None):
         """What is wrong with an entry standing as `body`, one text per broken rule, lazily, so a
         search can stop at the first. `anchor_gap` and `clear` are cart_anchor's pair. `own` is the
         parcel a parcel-anchored entry belongs to: it may stand inside that lot's margin and lean
         `lean` into it, as a planter does. `front_lean` is how far a kerbside post may lean into the
-        front of the lot it stands before. `skip` is the entry's own tag, when it is in the ground."""
+        front of the lot it stands before. `skip` is the entry's own tag, when it is in the ground.
+        `layer` is the entry's own layer: in a tube era it may touch another entry of that layer."""
         site, margins, slack = self.site, self.margins, self.tolerance
+        if site.tube is not None:
+            own, front_lean = None, 0.0
         edge = margins["edge"] - slack
         if any(abs(v[0]) > site.era.half_x - edge or abs(v[1]) > site.era.half_z - edge for v in body):
             yield f"within {margins['edge']:g} of the plot edge"
         box = box_of(body)
+        if site.tube is not None:
+            need = site.width / 2 + margins["solid"]
+            for line in site.tube.lines:
+                d = line.gap(body, need)
+                if d < need - slack:
+                    yield f"{d:.2f} from the centreline of {line.label} (need {need:g}: the pipe and {margins['solid']:g})"
+            d = site.band_gap(body)
+            if d < CHECK_TILE_SOLID - slack:
+                yield f"{d:.2f} from the round loop's band (need {CHECK_TILE_SOLID})"
         for lanes, need in ((self.streets, site.walker_street), (self.spurs, site.walker_spur)):
             for what, a, b, lane_box in lanes:
                 if not boxes_apart(box, lane_box, need) and segment_gap(a, b, body) < need - slack:
@@ -2206,6 +2274,11 @@ class Ground:
                     if not leans_within(body, poly, allowed):
                         yield f"leans more than {allowed:g} into {what}"
                     continue
+            if site.tube is not None and tag is not None and tag[0] == layer:
+                depth = overlap_depth(body, poly)
+                if depth > TOUCH + slack:
+                    yield f"lies {depth:.2f} over {what}"
+                continue
             yield f"{gap(body, poly):.2f} from {what} (need {margin:g})"
         for what, point in self.trunks:
             if not point_box_apart(point, box, margins["tree"]) and point_gap(point, body) < margins["tree"] - slack:
@@ -2225,6 +2298,13 @@ class Ground:
                 continue
             if point_gap(point, body) < reach - slack:
                 yield f"stands in the woods at ({number(point[0])}, {number(point[1])}), which its anchor does not clear"
+        for point, radius, plate, plate_box, kept in self.regolith:
+            if boxes_apart(box, plate_box, margins["wood"]) or (not kept and anchor_gap(point) - radius < clear - EPS):
+                continue
+            d = gap(body, plate)
+            if d < margins["wood"] - slack:
+                why = "the loop's band keeps for good" if kept else "its anchor does not clear"
+                yield f"{d:.2f} from the regolith at ({number(point[0])}, {number(point[1])}), which {why} (need {margins['wood']:g})"
 
 
 def generate_carts(site, plan, parcels, levels, districts, upgrades, wild):
@@ -2438,6 +2518,7 @@ class LayerBuild:
                 lean=placer.get("lean", 0.0),
                 front_lean=placer.get("frontLean", 0.0),
                 kerbside=bool(self.cfg.get("kerbside")),
+                layer=self.name,
             )
             if next(problems, None) is not None:
                 return False
@@ -2475,16 +2556,38 @@ class LayerBuild:
 
 
 def kerb_runs(site, placer):
+    """The runs a kerb placer sweeps: each straight run of the streets it names -- or, in a tube
+    era, each of those streets' swept centrelines, whole, as {polyline, line}."""
     streets = set(placer["streets"]) if "streets" in placer else None
+    if site.tube is not None:
+        return [{"polyline": line.polyline, "line": line} for line in site.tube.lines if line.polyline is not None and (streets is None or line.polyline + 1 in streets)]
     return [run for run in street_runs(site) if streets is None or run["polyline"] + 1 in streets]
+
+
+def run_length(run):
+    return run["line"].length if "line" in run else math.dist(run["a"], run["b"])
 
 
 def kerb_pose(build, placer, run, side, s, variant):
     """(x, z, rotationY, anchor) of a kerb entry `s` studs along a run on `side`, its street-side
     edge at the walkers' reach plus the placer's `slack`: the lamp line. None where the run's
     stretch is never drawn. `facing` turns it nose along its side's travel ("along", a parked car)
-    or front to the street ("street", a shelter, a hydrant, a roadside board)."""
+    or front to the street ("street", a shelter, a hydrant, a roadside board). Beside a swept tube
+    the run is the centreline and the entry is turned to its tangent there, its tube-side edge the
+    layer's `solid` margin off the pipe, plus `slack`."""
     site = build.site
+    if "line" in run:
+        line = run["line"]
+        stretch = line.stretch_at(s)
+        if stretch is None or stretch not in site.drawn:
+            return None
+        origin, d = line.point(s), line.tangent(s)
+        base = site.width / 2 + build.cfg["margins"]["solid"]
+        n = (-d[1] * side, d[0] * side)
+        heading = {"along": (d[0] * side, d[1] * side), "street": (-n[0], -n[1])}[placer["facing"]]
+        rotation = facing_rot(heading)
+        reach = base + placer["slack"] + build.toward(placer, variant, rotation, (-n[0], -n[1]))
+        return origin[0] + n[0] * reach, origin[1] + n[1] * reach, rotation, {"anchor": "stretch", "stretch": site.ids[stretch]}
     where = locate(site, run, s)
     if where is None or where[0] not in site.drawn:
         return None
@@ -2501,7 +2604,7 @@ def kerb_pose(build, placer, run, side, s, variant):
 
 def place_kerb(build, placer):
     """Kerb entries, stretch-anchored, beside the streets the placer names (all of them without
-    `streets`). Two ways to choose spots:
+    `streets`); in a tube era, beside their swept tubes (kerb_runs). Two ways to choose spots:
       * "gaps" (the cart rule): both sides of every straight run are swept, and each unbroken
         reach of frontage where the prop fits gives its middle -- or up to `perGap` spots `pitch`
         apart, a bay -- nearest the entrance first, up to `count`; with `spread` the streets take
@@ -2526,7 +2629,7 @@ def place_kerb(build, placer):
             # One prop proves a whole sweep: the props of a placer differ little, and a spot is
             # proved again for the prop that takes it.
             variant = variants[sweep_index % len(variants)]
-            length = math.dist(run["a"], run["b"])
+            length = run_length(run)
             sweep = []
             for index in range(int(length / step) + 1):
                 s = index * step
@@ -2555,7 +2658,7 @@ def place_kerb(build, placer):
         return
     side, polyline, s = 1, None, 0.0
     for run in runs:
-        length = math.dist(run["a"], run["b"])
+        length = run_length(run)
         # A street that bends is still one street: the spacing runs on round the bend.
         s = max(s, placer["endMargin"]) if run["polyline"] == polyline else placer["start"]
         polyline = run["polyline"]
@@ -2754,7 +2857,8 @@ def place_backs(build, placer):
     roof, `gap` behind the lot's back edge: wherever no back-row lot took the ground. `lateral`
     lists where along the back to try, as shares of the lot's width. Up to `count`, nearest the
     entrance first -- or, with `order` "hubFacing", the lots that face the hub most squarely first,
-    so the boards the hub sees from the front are the ones that get the spots."""
+    so the boards the hub sees from the front are the ones that get the spots. `turn` (optional,
+    degrees) turns the entry off the lot's facing: 90 lays a long prop along the back edge."""
     site = build.site
     variants = placer["variants"]
     count = placer.get("count", math.inf)
@@ -2768,11 +2872,12 @@ def place_backs(build, placer):
         variant = variants[placed % len(variants)]
         face = streetplan.facing(parcel["rotationY"])
         width, depth = site.sizes[parcel["size"]]
-        reach = depth / 2 + placer["gap"] + build.toward(placer, variant, parcel["rotationY"], face)
+        rotation = parcel["rotationY"] + placer["turn"] if "turn" in placer else parcel["rotationY"]
+        reach = depth / 2 + placer["gap"] + build.toward(placer, variant, rotation, face)
         for lateral in placer["lateral"]:
             x = parcel["x"] - face[0] * reach - face[1] * lateral * width
             z = parcel["z"] - face[1] * reach + face[0] * lateral * width
-            entry = build.entry(placer, x, z, parcel["rotationY"], variant, {"anchor": "parcel", "parcel": index})
+            entry = build.entry(placer, x, z, rotation, variant, {"anchor": "parcel", "parcel": index})
             if build.commit(placer, entry, own=index):
                 placed += 1
                 break
@@ -2818,7 +2923,53 @@ def place_spots(build, placer):
         build.ground.add(build.name, len(build.entries), entry)
 
 
+def hub_layer(plan, name):
+    """Whether a plan-laid layer stands on the tube hubs: any of its placers is of kind `hubs`."""
+    return any(placer.get("kind") == HUBS for placer in (plan.get(name) or {}).get("placers") or [])
+
+
+def hub_arrivals(site):
+    """(hub point, the stretch the hub arrives with) for every hub a drawn tube reaches, nearest
+    the entrance first. A hub stands once any tube at its node is drawn, and in a tree that is
+    always the one on the way in from the entrance: of its drawn stretches, the one whose far node
+    is nearest the entrance."""
+    if site.tube is None:
+        return []
+    stretches, distance = site.network.stretches, site.network.distance
+    out = []
+    for hub in site.tube.hubs():
+        drawn = [index for index in hub["stretches"] if index in site.drawn]
+        if not drawn:
+            continue
+
+        def far(index, node=hub["node"]):
+            st = stretches[index]
+            other = st["to"] if st["from"] == node else st["from"]
+            return (distance.get(other, math.inf), index)
+
+        out.append((hub["point"], min(drawn, key=far)))
+    out.sort(key=lambda found: entry_order(site, {"x": found[0][0], "z": found[0][1]}))
+    return out
+
+
+def place_hubs(build, placer):
+    """One entry on the centre of every tube hub (INTERFACES "Wave 4.1c", the holo beacons),
+    stretch-anchored to the tube the hub arrives with, so the entry appears with its hub. It stands
+    on the drum, not on the ground, so no ground clearance is asked of it here: `check` holds it
+    to the hub (hub_messages)."""
+    site = build.site
+    variant = placer_variants(placer)[0]
+    for point, stretch in hub_arrivals(site):
+        if build.full():
+            break
+        entry = build.entry(placer, point[0], point[1], 0.0, variant, {"anchor": "stretch", "stretch": site.ids[stretch]})
+        build.entries.append(entry)
+        build.own.setdefault(id(placer), []).append((entry["x"], entry["z"]))
+        build.ground.add(build.name, len(build.entries), entry)
+
+
 PLACERS = {
+    HUBS: place_hubs,
     "spots": place_spots,
     "kerb": place_kerb,
     "lotFront": place_lot_front,
@@ -2837,6 +2988,8 @@ def generate_layer(site, plan, name, parcels, levels, districts, upgrades, wild,
     says which placer an entry came from."""
     build = LayerBuild(site, plan, name, parcels, levels, districts, upgrades, wild, lanes)
     for placer in build.cfg["placers"]:
+        if site.tube is not None and placer["kind"] not in TUBE_PLACERS:
+            raise SystemExit(f"fabric: {name} names a `{placer['kind']}` placer, which is laid along straight street legs; beside swept tubes a layer is laid by {', '.join(TUBE_PLACERS)}")
         PLACERS[placer["kind"]](build, placer)
     build.entries.sort(key=lambda e: entry_order(site, e))
     return build.entries, [len(build.own.get(id(placer), ())) for placer in build.cfg["placers"]]
@@ -4080,7 +4233,8 @@ def upgrade_messages(site, plan, doc):
     laid_ground = None
     if any(upgrades.get(name) for name in laid):
         frames = [(q["x"], q["z"], q["rotationY"]) + tuple(site.sizes.get(q["size"], (0.0, 0.0))) for q in parcels]
-        laid_ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), CHECK_CART_MARGINS, EPS, frames=frames, lanes=doc.get("lanes") or ())
+        margins = CHECK_TUBE_MARGINS if site.tube is not None else CHECK_CART_MARGINS
+        laid_ground = Ground(site, plan, polys, upgrades, doc.get("wild", []), margins, EPS, frames=frames, lanes=doc.get("lanes") or ())
     carts = upgrades.get(CARTS, [])
     cart_size = cart_extents(site, plan) if carts else None
     ground = None
@@ -4108,7 +4262,9 @@ def upgrade_messages(site, plan, doc):
             point = (entry["x"], entry["z"])
             if abs(point[0]) > site.era.half_x - CHECK_TREE_EDGE + EPS or abs(point[1]) > site.era.half_z - CHECK_TREE_EDGE + EPS:
                 messages.append(f"{label}: within {CHECK_TREE_EDGE} of the plot edge")
-            if name in laid:
+            if name in laid and hub_layer(plan, name):
+                pass  # it stands on a hub, not on the ground: hub_messages below
+            elif name in laid:
                 messages += layer_clearance(site, plan, name, index, label, entry, props, laid_ground, polys)
             elif name == "trees":
                 messages += tree_clearance(site, label, entry, polys, streets + spurs)
@@ -4124,6 +4280,7 @@ def upgrade_messages(site, plan, doc):
         if name in laid:
             messages += layer_rules(site, plan, name, entries, parcels)
             messages += spot_messages(site, plan, name, entries, props)
+            messages += hub_messages(site, plan, name, entries, props)
             messages += unused_prop_messages(site, plan, name, props, entries, levels)
     trees = upgrades.get("trees", [])
     for i, tree in enumerate(trees):
@@ -4197,7 +4354,7 @@ def layer_clearance(site, plan, name, index, label, entry, props, ground, polys)
         post = max(math.dist(shape[0], shape[1]), math.dist(shape[1], shape[2])) <= CHECK_POST_SIZE + EPS
         front = CHECK_OWN_LOT if own is None and post else 0.0
         kerbside = bool((plan.get(name) or {}).get("kerbside"))
-        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index), kerbside=kerbside)
+        problems = ground.problems(shape, centre, *anchor, own=own, lean=CHECK_OWN_LOT, front_lean=front, skip=(name, index), kerbside=kerbside, layer=name)
         messages += [f"{label}: {problem}" for problem in problems]
     return messages
 
@@ -4242,6 +4399,45 @@ def spot_messages(site, plan, name, entries, props):
         face = streetplan.facing(entry["rotationY"])
         if toward is None or abs(face[0] * toward[1] - face[1] * toward[0]) > CHECK_FACING or face[0] * toward[0] + face[1] * toward[1] < 0:
             messages.append(f"{label}: does not face its street, {entry['stretch']}")
+    return messages
+
+
+def hub_messages(site, plan, name, entries, props):
+    """A layer laid on the tube hubs (INTERFACES "Wave 4.1c": any `hubs` placer in its plan block,
+    and then no other kind): every entry stands on the centre of a hub a drawn tube reaches, its
+    footprint inside the drum, arrives with the tube its hub arrives with, and no hub carries two."""
+    if not hub_layer(plan, name):
+        return []
+    messages = []
+    kinds = sorted({placer.get("kind") for placer in plan[name]["placers"]} - {HUBS})
+    if kinds:
+        messages.append(f"{name}: a layer laid on hubs has no other placer (the plan also names {', '.join(map(str, kinds))})")
+    arrivals = hub_arrivals(site)
+    if not arrivals:
+        return messages + ([f"{name}: {len(entries)} entries, but this layout has no drawn tube hub"] if entries else [])
+    radius = site.tube.hub_radius
+    taken = {}
+    for index, entry in enumerate(entries, start=1):
+        label = f"{name} {index} ({number(entry['x'])}, {number(entry['z'])})"
+        point = (entry["x"], entry["z"])
+        at, (hub, stretch) = min(enumerate(arrivals), key=lambda found: math.dist(point, found[1][0]))
+        where = streetplan.fmt((rounded(hub[0]), rounded(hub[1])))
+        if math.dist(point, hub) > EPS:
+            messages.append(f"{label}: {math.dist(point, hub):.2f} from the centre of the nearest hub, at {where}; a {name} entry stands on a hub")
+            continue
+        if at in taken:
+            messages.append(f"{label}: the hub at {where} already carries {name} {taken[at]}")
+        taken.setdefault(at, index)
+        variant = entry.get("variant")
+        found = prop_shapes(site, plan, props[variant - 1], entry) if isinstance(variant, int) and 1 <= variant <= len(props) else None
+        if found is None:
+            messages.append(f"{label}: its prop has neither harvested extents in Assets.json nor a `footprints` entry in the plan, so it cannot be judged")
+        else:
+            reach = max(math.dist(hub, v) for shape in found[0] for v in shape)
+            if reach > radius + EPS:
+                messages.append(f"{label}: its footprint reaches {reach:.2f} from the hub's centre, past the drum's {radius:g}")
+        if entry.get("anchor") != "stretch" or entry.get("stretch") != site.ids[stretch]:
+            messages.append(f"{label}: arrives with {entry.get('stretch') or entry.get('anchor')!s}, not with {site.ids[stretch]}, the tube its hub arrives with")
     return messages
 
 

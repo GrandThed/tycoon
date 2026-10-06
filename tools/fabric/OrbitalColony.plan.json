@@ -49,9 +49,16 @@
   "require": {
     "parcels": 80,
     "houses": 80,
-    "medium": 4
+    "medium": 4,
+    "beacons": 9,
+    "flags": 18,
+    "gardens": 32
   },
-  "layers": [],
+  "layers": [
+    "beacons",
+    "gardens",
+    "flags"
+  ],
   "footprints": {
     "RegolithBoulder": [
       2,
@@ -64,6 +71,162 @@
     "SurveyBeacon": [
       1,
       1
+    ],
+    "ColonyFlagMast": [
+      1,
+      1
+    ],
+    "RockGardenA": [
+      1.5,
+      4
+    ],
+    "RockGardenB": [
+      3,
+      3
+    ],
+    "HubBeacon": [
+      2.3,
+      2.3
+    ]
+  },
+  "beacons": {
+    "scale": 1.0,
+    "margins": {
+      "lot": 0.3,
+      "solid": 0.3,
+      "lamp": 0.3,
+      "tree": 0.3,
+      "item": 0.3,
+      "edge": 1.1,
+      "wood": 0.15
+    },
+    "placers": [
+      {
+        "kind": "hubs",
+        "variant": 1
+      }
+    ]
+  },
+  "flags": {
+    "scale": 1.0,
+    "spacing": 8.0,
+    "minStreets": 4,
+    "margins": {
+      "lot": 0.3,
+      "solid": 0.3,
+      "lamp": 0.3,
+      "tree": 0.3,
+      "item": 0.3,
+      "edge": 1.1,
+      "wood": 0.15
+    },
+    "placers": [
+      {
+        "kind": "kerb",
+        "mode": "spaced",
+        "variants": [
+          1
+        ],
+        "facing": "street",
+        "slack": 0.05,
+        "start": 3.0,
+        "endMargin": 2.5,
+        "every": [
+          14.0,
+          17.0
+        ],
+        "step": 0.5,
+        "shifts": [
+          0,
+          0.5,
+          -0.5,
+          1,
+          -1,
+          1.5,
+          -1.5,
+          2,
+          -2,
+          2.5,
+          -2.5,
+          3,
+          -3
+        ],
+        "eitherSide": true
+      }
+    ]
+  },
+  "gardens": {
+    "scale": 1.0,
+    "margins": {
+      "lot": 0.3,
+      "solid": 0.3,
+      "lamp": 0.3,
+      "tree": 0.3,
+      "item": 0.3,
+      "edge": 1.1,
+      "wood": 0.15
+    },
+    "placers": [
+      {
+        "kind": "kerb",
+        "mode": "gaps",
+        "variants": [
+          2
+        ],
+        "facing": "street",
+        "slack": 0.05,
+        "step": 0.25,
+        "spread": true,
+        "spacing": 9.0,
+        "count": 12
+      },
+      {
+        "kind": "backs",
+        "variants": [
+          1
+        ],
+        "turn": 90,
+        "streets": [
+          3
+        ],
+        "sizes": [
+          "narrow"
+        ],
+        "gap": 0.32,
+        "lateral": [
+          0.0
+        ],
+        "count": 21
+      },
+      {
+        "kind": "backs",
+        "variants": [
+          1
+        ],
+        "turn": 90,
+        "gap": 0.32,
+        "lateral": [
+          0.0,
+          0.25,
+          -0.25
+        ],
+        "spacing": 6.5
+      },
+      {
+        "kind": "driveway",
+        "variants": [
+          1
+        ],
+        "gap": 0.32,
+        "shifts": [
+          0.0,
+          0.25,
+          -0.25
+        ],
+        "share": 1.0,
+        "spacing": 6.5,
+        "optional": true
+      }
     ]
   },
   "wild": {

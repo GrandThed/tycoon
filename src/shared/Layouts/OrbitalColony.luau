@@ -111,7 +111,7 @@ return {
 			position = Vector3.new(-40.66, 0, -50.7),
 			rotationY = 135,
 			padPosition = Vector3.new(-40.84, 0, -50.52),
-			spur = { Vector3.new(-40.66, 0, -50.7), Vector3.new(-45.68, 0, -45.68) },
+			spur = { Vector3.new(-40.66, 0, -50.7) },
 		},
 		-- the heart's north-east, the next join up the heart ring's east arm
 		researchLab = {
@@ -142,7 +142,7 @@ return {
 			position = Vector3.new(50.7, 0, -40.66),
 			rotationY = 45,
 			padPosition = Vector3.new(50.52, 0, -40.84),
-			spur = { Vector3.new(50.7, 0, -40.66), Vector3.new(45.68, 0, -45.68) },
+			spur = { Vector3.new(50.7, 0, -40.66) },
 		},
 		-- where the west arm turns out toward the Launch Tower, on the outside of the bend; its
 		-- join draws the whole west arm
@@ -158,7 +158,7 @@ return {
 			position = Vector3.new(-51.97, 0, -41.93),
 			rotationY = 315,
 			padPosition = Vector3.new(-51.79, 0, -42.11),
-			spur = { Vector3.new(-51.97, 0, -41.93), Vector3.new(-46.95, 0, -46.95) },
+			spur = { Vector3.new(-51.97, 0, -41.93) },
 		},
 		-- the heart's north-west, the last dome before the heart ring unwinds
 		observationDome = {
@@ -210,7 +210,7 @@ return {
 			position = Vector3.new(54.4, 0, 40),
 			rotationY = 90,
 			padPosition = Vector3.new(51.4, 0, 40),
-			spur = { Vector3.new(54.4, 0, 40), Vector3.new(44.12, 0, 44.12) },
+			spur = { Vector3.new(54.4, 0, 40) },
 		},
 		-- outside the loop in the back-right corner, on the spaceport's west side
 		medicalBay = {
