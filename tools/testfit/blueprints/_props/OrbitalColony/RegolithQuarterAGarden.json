@@ -3,7 +3,7 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterA, in its frame: one quadrant of the crater as a raked bowl: a white kerb, sand, the rim as an even berm with a white crest, three raked rings, a quarter of the crystal at the centre, one placed stone",
+  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterA, in its frame: one quadrant of the crater as a raked bowl: a white kerb, sand, the rim as an even berm with a white crest, three raked rings, a quarter of the crystal at the centre, one placed stone, a white path along each inner edge",
   "pieces": [
     {"kit": "regolith-kit", "model": "garden-bowl-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "boulder-small", "pos": [4.8418, 0, 2.1557], "rotY": 40, "stage": 0}

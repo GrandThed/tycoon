@@ -3,13 +3,13 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "one quadrant of a boulder ring round a dust basin in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'), the feature's centre at the origin corner: four boulders of three sizes along a rough circle of radius 4, one thrown outside it, a darker floor inside; scale 1.0",
+  "note": "one quadrant of a boulder ring round a dust basin in the local (+X, +Z) quadrant, x and z in 0 .. 6.5 (INTERFACES 'Fabric data'), the feature's centre at the origin corner: four boulders of three sizes along a rough circle of radius 3.4, one thrown outside it, a darker floor inside; scale 1.0",
   "pieces": [
     {"kit": "regolith-kit", "model": "basin-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [3.8975, 0, 0.8998], "rotY": 25, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-broad", "pos": [3.4472, 0, 2.8925], "rotY": 100, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-small", "pos": [1.6798, 0, 3.2967], "rotY": 40, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-small", "pos": [0.5845, 0, 4.1591], "rotY": 160, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-small", "pos": [5.0782, 0, 2.4768], "rotY": 290, "stage": 0}
+    {"kit": "regolith-kit", "model": "boulder-medium", "pos": [3.1876, 0, 0.8541], "rotY": 25, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-broad", "pos": [2.8302, 0, 2.4602], "rotY": 100, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [1.337, 0, 2.7413], "rotY": 40, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [0.5991, 0, 3.3976], "rotY": 160, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [4.1877, 0, 2.1338], "rotY": 290, "stage": 0}
   ]
 }

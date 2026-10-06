@@ -3,17 +3,17 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [8, 12],
-  "note": "a pod going up on an 8 x 12 lot, in the lot frame: three and a half rows of deck laid, the pod's floor, ribs and first panels, and at the back the small lander that brought the cargo, on its scorch mark, with crates off it and plates waiting",
+  "note": "a pod going up on an 8 x 12 lot, in the lot frame: three and a half rows of deck laid, the pod's floor, ribs and first panels, its airlock frame set at the lot's front, plates and a crate on the deck beside it, and at the back the small lander that brought the cargo, on its scorch mark, with crates off it",
   "pieces": [
     {"kit": "regolith-kit", "model": "site-deck-medium", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "pod-frame-large", "pos": [-1.5, 0.12, -3.3], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "airlock-arch", "pos": [-1.5, 0.12, -5.7], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "blast-mark", "pos": [1.9, 0, 3.75], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "lander", "pos": [1.9, 0, 3.75], "rotY": 20, "stage": 0},
-    {"kit": "regolith-kit", "model": "plate-stack", "pos": [2.4, 0, 0.95], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "plate-stack", "pos": [2.35, 0.12, -2.9], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "crate", "pos": [-0.35, 0, 3.0], "rotY": 10, "stage": 0},
-    {"kit": "regolith-kit", "model": "crate", "pos": [-1.5, 0, 4.4], "rotY": 35, "stage": 0},
     {"kit": "regolith-kit", "model": "crate-long", "pos": [-2.7, 0, 2.95], "rotY": 90, "stage": 0},
-    {"kit": "regolith-kit", "model": "crate", "pos": [2.5, 0.12, -4.6], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "crate", "pos": [2.5, 0.12, -4.75], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "work-light", "pos": [3.55, 0.12, -1.2], "rotY": 0, "stage": 0}
   ]
 }

@@ -3,9 +3,8 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterC, in its frame: one quadrant of the mound as a moss garden: a white kerb, raked sand, the mound in moss with two crystals, five stepping stones where the rover's track ran, one placed stone",
+  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterC, in its frame: one quadrant of the mound as a moss garden: a white kerb, raked sand, the mound in moss with a crystal, four stepping stones where the rover's track ran, a small round bed with a crystal off the main one, a white path along each inner edge",
   "pieces": [
-    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "boulder-small", "pos": [1.8127, 0, 4.9804], "rotY": 200, "stage": 0}
+    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
   ]
 }

@@ -6,7 +6,7 @@
   "note": "SiteSmall with the robot gantry (site variant) behind the pod, its arm holding the next panel over it; 7.5 tall, all of it inside the lot",
   "pieces": [
     {"kit": "regolith-kit", "model": "site-deck-small", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "pod-frame", "pos": [-1.2, 0.12, -1.2], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "rib-cone", "pos": [-1.2, 0.12, -1.2], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "plate-stack", "pos": [2.05, 0, -0.05], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "robot-gantry", "pos": [-1.0, 0, 1.75], "rotY": 0, "stage": 0},
     {"kit": "regolith-kit", "model": "crate", "pos": [2.3, 0, 2.25], "rotY": 15, "stage": 0},

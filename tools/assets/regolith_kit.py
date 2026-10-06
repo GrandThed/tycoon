@@ -71,8 +71,11 @@ kit's own crystal green.
   stepping path where the rover's track ran; the singles become a standing stone on a raked disc,
   a raked ring round crystals, and a garden lantern. Every twin is pale sand inside a white kerb,
   so from the whole-plot camera the rust ground turns light and ordered. A twin keeps its
-  original's footprint and reach, a clump twin is its quarter twin at four turns, and a tended bed
-  is a true round: nothing in it wanders. `check` holds all three.
+  original's footprint and reach and a clump twin is its quarter twin at four turns; `check` holds
+  both. A tended bed is even where the wild wanders, but the three are not one shape: the bowl is
+  a round 12 across, the stone circle a square with cut corners 8.6 across, the moss garden a
+  round 10 across with a small bed off each quarter. White paths along a quarter's two inner edges
+  quarter each garden, so a quarter left alone is a kerbed corner bed, not a cut slice.
 - ColonyFlagMast stands beside a tube between two pods, and PierBanner hangs four banners round
   one pier of the monorail, clear of the pier's faces.
 - HubBeacon floats a hologram over a tube hub.
@@ -487,16 +490,17 @@ def make_crater_quarter() -> Part:
 
 
 def make_basin_quarter() -> Part:
-    """B: a quadrant of a dust basin 6.5 studs across inside a ring of boulders: the darker floor,
-    the paler dust the boulders stand on out to a ragged edge, chips."""
+    """B: a quadrant of a dust basin 5.3 studs across inside a ring of boulders: the darker floor,
+    the paler dust the boulders stand on out to a ragged edge, chips. The whole clump is about 10
+    across, the smallest of the three: a field of clumps all 12 across read as stamped discs."""
     p = Part("basin-quarter")
     angles = (0.0, 16.0, 33.0, 47.0, 63.0, 78.0, 90.0)
-    floor = (3.2, 3.4, 3.05, 3.3, 3.5, 3.1, 3.2)
-    edge = (5.6, 6.1, 5.3, 6.3, 5.8, 5.4, 5.6)
+    floor = (2.6, 2.8, 2.5, 2.7, 2.85, 2.55, 2.6)
+    edge = (4.6, 5.0, 4.35, 5.2, 4.75, 4.45, 4.6)
     sector(p, angles, None, floor, DUST_Y, DUST)
     sector(p, angles, floor, edge, DUST_Y, DUST_LIGHT)
-    for k, (r, degrees, size) in enumerate(((2.3, 28.0, 0.2), (1.3, 66.0, 0.18), (2.9, 80.0, 0.22),
-                                            (5.95, 52.0, 0.2))):
+    for k, (r, degrees, size) in enumerate(((1.9, 28.0, 0.2), (1.1, 66.0, 0.18), (2.35, 80.0, 0.22),
+                                            (4.8, 52.0, 0.2))):
         pebble(p, *polar(r, degrees), size, 211 + k)
     return p
 
@@ -708,6 +712,46 @@ def make_pod_frame_large() -> Part:
     return pod_frame("pod-frame-large", 2.2, 2.6, 2.3)
 
 
+def make_rib_cone() -> Part:
+    """The small site's pod, going up as a cone of ribs, 3.2 studs across and 2.3 tall, its
+    airlock side on -Z: the eight-sided white floor, five orange ribs leaning in to a white crown
+    (none on the airlock side) and the first two hull panels in the bays at the back. The narrow
+    site's pod stands on upright ribs; the two sites shared that frame and read as one."""
+    p = Part("rib-cone")
+    radius, floor_y, crown_y = 1.75, 0.28, 2.3
+    drum(p, [(radius, 0.0), (radius, floor_y)], [HULL, PANEL], seg=8, phase=math.radians(22.5))
+    ribs = (18.0, 90.0, 162.0, 234.0, 306.0)  # 270 is the airlock's bay
+    for degrees in ribs:
+        bar(p, polar_at(radius - 0.25, degrees, floor_y - 0.08), polar_at(0.18, degrees, crown_y - 0.12), 0.16, TRIM)
+    box(p, -0.28, 0.28, crown_y - 0.24, crown_y, -0.28, 0.28, HULL, skip=())
+    for d0, d1 in zip(ribs, ribs[1:3]):
+        outer = [polar_at(radius - 0.36, d0 + 9.0, floor_y), polar_at(radius - 0.36, d1 - 9.0, floor_y),
+                 polar_at(0.5, (d0 + d1) / 2, crown_y - 0.5)]
+        n = newell(outer)
+        length = math.sqrt(n[0] ** 2 + n[1] ** 2 + n[2] ** 2)
+        if n[1] < 0:
+            length = -length  # the panel's outer face looks up and out
+        back = tuple(c / length * MIN_MEMBER for c in n)  # the panel's thickness, into the cone
+        inner = [(q[0] - back[0], q[1] - back[1], q[2] - back[2]) for q in outer]
+        middle = tuple(sum(q[i] for q in outer + inner) / 6 for i in range(3))
+        p.face(outer, HULL, middle)
+        p.face(inner, PANEL, middle)
+        for k in range(3):
+            j = (k + 1) % 3
+            p.face([outer[k], outer[j], inner[j], inner[k]], PANEL, middle)
+    return p
+
+
+def make_airlock_arch() -> Part:
+    """The medium site's airlock frame, set at the lot's front before the pod reaches it: two
+    orange posts and a lintel, 2 studs wide and 2.16 tall."""
+    p = Part("airlock-arch")
+    for sx in (-1, 1):
+        box(p, sx * 0.9 - 0.11, sx * 0.9 + 0.11, 0.0, 1.9, -0.11, 0.11, TRIM, skip=("bottom", "top"))
+    box(p, -1.01, 1.01, 1.9, 2.16, -0.14, 0.14, TRIM, skip=())
+    return p
+
+
 def make_work_light() -> Part:
     """A site light, 1.8 studs tall: an orange post on a grey foot with a lit head."""
     p = Part("work-light")
@@ -890,28 +934,41 @@ def centre_crystal(p: Part, r: float, shoulder: float, tip: float) -> None:
 #
 # A garden is the wild feature raked and edged: pale sand inside a white kerb, with rings a rake
 # left round its centre. Its layers are the wild's: sand at the dust's height, raked rings and
-# stepping stones at the drift's. Its stations are even (a 20-sided round for a clump, 8 for a
-# single), and every list is constant: tended ground does not wander.
+# stepping stones at the drift's, the white paths at the ruts'. Its stations are even (20 sides
+# round a clump, 8 round a single) and nothing in it wanders; the three clumps differ in outline
+# instead (a round, a square with cut corners, a smaller round with a bed off each quarter).
 
 GARDEN_R = 6.1  # a garden clump's kerb, to its outer face: inside every wild clump's reach
 GARDEN_STATIONS = (0.0, 18.0, 36.0, 54.0, 72.0, 90.0)
 WHOLE_ROUND = tuple(45.0 * k for k in range(9))  # a single's stations, all the way round
 SAND_Y = DUST_Y
 RAKE_Y = DRIFT_Y
+PATH_Y = RUT_Y
 RAKE_WIDE = 0.14
+PATH_WIDE = 0.22  # half a path: the next quarter lays the other half
 
 
-def kerb(p: Part, radius: float, angles=GARDEN_STATIONS, wide: float = 0.34, tall: float = 0.22,
+def kerb(p: Part, radius, angles=GARDEN_STATIONS, wide: float = 0.34, tall: float = 0.22,
          cap: Rgb | None = HULL) -> None:
-    """A garden's white kerb: an outer wall `tall` high at `radius` and a top that slopes down
-    inward over `wide` to just above the sand, so it needs no inner wall."""
-    section = [(radius, 0.0), (radius, tall), (radius - wide, SAND_Y + 0.01)]
-    lofted(p, angles, [section] * len(angles), (HULL, HULL), cap=cap)
+    """A garden's white kerb: an outer wall `tall` high at `radius` (one radius, or one a station)
+    and a top that slopes down inward over `wide` to just above the sand, so it needs no inner
+    wall."""
+    radii = [radius] * len(angles) if isinstance(radius, (int, float)) else radius
+    lofted(p, angles, [[(r, 0.0), (r, tall), (r - wide, SAND_Y + 0.01)] for r in radii], (HULL, HULL), cap=cap)
 
 
-def sand(p: Part, inner: float | None, outer: float, angles=GARDEN_STATIONS) -> None:
-    """Raked sand from `inner` (None: from the centre) out to `outer`."""
-    sector(p, angles, None if inner is None else [inner] * len(angles), [outer] * len(angles), SAND_Y, SAND)
+def sand(p: Part, inner: float | None, outer, angles=GARDEN_STATIONS) -> None:
+    """Raked sand from `inner` (None: from the centre) out to `outer` (one radius, or one a station)."""
+    reach = [outer] * len(angles) if isinstance(outer, (int, float)) else outer
+    sector(p, angles, None if inner is None else [inner] * len(angles), reach, SAND_Y, SAND)
+
+
+def paths(p: Part, r0: float, r1: float) -> None:
+    """The white paths along a garden quarter's two inner edges, from r0 out to r1: in a clump the
+    four pairs make a cross that quarters the garden, and a quarter that stands alone is edged on
+    every side."""
+    decal(p, [(r0, 0.0), (r1, 0.0), (r1, PATH_WIDE), (r0, PATH_WIDE)], PATH_Y, HULL)
+    decal(p, [(0.0, r0), (PATH_WIDE, r0), (PATH_WIDE, r1), (0.0, r1)], PATH_Y, HULL)
 
 
 def rake_ring(p: Part, radius: float, angles=GARDEN_STATIONS) -> None:
@@ -939,41 +996,54 @@ def make_garden_bowl_quarter() -> Part:
         rake_ring(p, radius)
     centre_crystal(p, 0.42, 1.0, 1.4)
     crystal(p, *polar_at(5.35, 63.0), 0.16, 0.62, 10.0, 63.0)
+    paths(p, 0.45, GARDEN_R - 0.2)
     return p
 
 
 def make_garden_stones_quarter() -> Part:
-    """B's twin: a quadrant of the boulder ring as a stone circle: the kerb, sand to it, three
-    raked rings, a quarter of the low island stone at the centre and a crystal by the circle. The
-    standing stones are pieces of their own."""
+    """B's twin: a quadrant of the boulder ring as a stone circle in a square bed with cut
+    corners, 8.6 across its sides: the kerb, sand to it, two raked rings, a quarter of the low
+    island stone at the centre and a crystal in the corner. The standing stones are pieces of
+    their own."""
     p = Part("garden-stones-quarter")
-    kerb(p, GARDEN_R)
-    sand(p, None, GARDEN_R - 0.2)
-    for radius in (1.7, 2.7, 5.15):
+    side, corner = 4.3, 5.0  # the kerb at a side's middle and at the cut corner
+    turn = side / math.cos(math.radians(GARDEN_STATIONS[1]))  # where the straight side ends
+    outline = (side, turn, corner, corner, turn, side)
+    kerb(p, outline)
+    sand(p, None, [r - 0.2 for r in outline])
+    for radius in (1.4, 2.2):
         rake_ring(p, radius)
     island = [(0.75, 0.0), (0.62, 0.26), (0.0, 0.34)]
     lofted(p, (0.0, 45.0, 90.0), [island] * 3, (ROCK, ROCK_LIGHT), cap=ROCK_DARK)
-    crystal(p, *polar_at(4.55, 58.0), 0.15, 0.6, 12.0, 58.0)
+    crystal(p, *polar_at(4.0, 45.0), 0.15, 0.6, 12.0, 45.0)
+    paths(p, 0.85, side - 0.2)
     return p
 
 
 def make_garden_moss_quarter() -> Part:
-    """C's twin: a quadrant of the mound as a moss garden: the kerb, sand round the mound, the
-    mound itself even and green, two raked rings, five stepping stones where the rover's track
-    ran (evenly spaced, so a clump's twenty make one path) and two crystals on the moss."""
+    """C's twin: a quadrant of the mound as a moss garden in a round bed 10 across: the kerb, sand
+    round the mound, the mound itself even and green with a crystal on it, a raked ring, four
+    stepping stones where the rover's track ran (evenly spaced, so a clump's sixteen make one
+    path), and off the bed, on the quarter's diagonal, a small round bed of its own with a crystal."""
     p = Part("garden-moss-quarter")
-    kerb(p, GARDEN_R)
-    sand(p, 2.8, GARDEN_R - 0.2)
+    radius = 5.0
+    kerb(p, radius)
+    sand(p, 2.8, radius - 0.2)
     mound = [(3.0, 0.0), (2.1, 0.4), (1.0, 0.64), (0.0, 0.75)]
     lofted(p, (0.0, 22.5, 45.0, 67.5, 90.0), [mound] * 5, (MOSS_DARK, MOSS, MOSS), cap=MOSS_DARK)
-    for radius in (3.45, 5.35):
-        rake_ring(p, radius)
-    for degrees in (9.0, 27.0, 45.0, 63.0, 81.0):
-        x, z = polar(4.4, degrees)
+    rake_ring(p, 3.4)
+    for degrees in (11.25, 33.75, 56.25, 78.75):
+        x, z = polar(4.15, degrees)
         corners = [math.radians(60.0 * k + degrees) for k in range(6)]
-        decal(p, [(x + 0.34 * math.cos(a), z + 0.34 * math.sin(a)) for a in corners], RAKE_Y, PANEL)
+        decal(p, [(x + 0.3 * math.cos(a), z + 0.3 * math.sin(a)) for a in corners], RAKE_Y, PANEL)
     crystal(p, *polar_at(1.7, 35.0, 0.3), 0.2, 0.95, 8.0, 35.0)
-    crystal(p, *polar_at(2.05, 60.0, 0.25), 0.14, 0.55, 15.0, 110.0)
+    bed = Part("bed")
+    six = tuple(60.0 * k for k in range(7))
+    kerb(bed, 0.62, six, wide=0.18, tall=0.18, cap=None)
+    sand(bed, None, 0.5, six)
+    crystal(bed, 0.0, 0.0, 0.0, 0.13, 0.55, 8.0, 45.0)
+    place(p, bed, 0.0, polar_at(5.72, 45.0))
+    paths(p, 2.95, radius - 0.2)
     return p
 
 
@@ -1136,6 +1206,8 @@ PIECES = {
     "crate-long": make_crate_long,
     "pod-frame": make_pod_frame,
     "pod-frame-large": make_pod_frame_large,
+    "rib-cone": make_rib_cone,
+    "airlock-arch": make_airlock_arch,
     "work-light": make_work_light,
     "robot-gantry": make_robot_gantry,
     "lander": make_lander,
@@ -1218,14 +1290,14 @@ def blueprints() -> list[dict]:
         ),
         "B": (
             f"one quadrant of a boulder ring round a dust basin {frame}: four boulders of three sizes along a "
-            "rough circle of radius 4, one thrown outside it, a darker floor inside; scale 1.0",
+            "rough circle of radius 3.4, one thrown outside it, a darker floor inside; scale 1.0",
             [
                 placed("basin-quarter", (0, 0, 0)),
-                ringed("boulder-medium", 4.0, 13, 25),
-                ringed("boulder-broad", 4.5, 40, 100),
-                ringed("boulder-small", 3.7, 63, 40),
-                ringed("boulder-small", 4.2, 82, 160),
-                ringed("boulder-small", 5.65, 26, 290),
+                ringed("boulder-medium", 3.3, 15, 25),
+                ringed("boulder-broad", 3.75, 41, 100),
+                ringed("boulder-small", 3.05, 64, 40),
+                ringed("boulder-small", 3.45, 80, 160),
+                ringed("boulder-small", 4.7, 27, 290),
             ],
             "one ring of boulders round a dust basin (four quadrants)",
         ),
@@ -1247,34 +1319,34 @@ def blueprints() -> list[dict]:
         "A": (
             f"{twin} RegolithQuarterA, in its frame: one quadrant of the crater as a raked bowl: a white kerb, sand, "
             "the rim as an even berm with a white crest, three raked rings, a quarter of the crystal at the centre, "
-            "one placed stone",
+            "one placed stone, a white path along each inner edge",
             [
                 placed("garden-bowl-quarter", (0, 0, 0)),
                 ringed("boulder-small", 5.3, 24, 40),
             ],
-            "a raked bowl round a crystal",
+            "a raked bowl round a crystal in a round bed 12.2 across",
         ),
         "B": (
-            f"{twin} RegolithQuarterB, in its frame: one quadrant of the boulder ring as a stone circle: a white "
-            "kerb, raked sand, three standing stones on the circle of radius 4 (twelve round a clump, evenly), a "
-            "quarter of the island stone at the centre, a crystal",
+            f"{twin} RegolithQuarterB, in its frame: one quadrant of the boulder ring as a stone circle in a square "
+            "bed with cut corners: a white kerb, raked sand, three standing stones on the circle of radius 3 (twelve "
+            "round a clump, evenly), a quarter of the island stone at the centre, a crystal, a white path along each "
+            "inner edge",
             [
                 placed("garden-stones-quarter", (0, 0, 0)),
-                ringed("standing-stone-low", 4.0, 15, 20),
-                ringed("standing-stone", 4.0, 45, 135),
-                ringed("standing-stone-low", 4.0, 75, 250),
+                ringed("standing-stone-low", 3.0, 15, 20),
+                ringed("standing-stone", 3.0, 45, 135),
+                ringed("standing-stone-low", 3.0, 75, 250),
             ],
-            "a circle of standing stones on raked sand",
+            "a circle of standing stones on raked sand, in a square bed with cut corners 8.6 across",
         ),
         "C": (
             f"{twin} RegolithQuarterC, in its frame: one quadrant of the mound as a moss garden: a white kerb, "
-            "raked sand, the mound in moss with two crystals, five stepping stones where the rover's track ran, one "
-            "placed stone",
+            "raked sand, the mound in moss with a crystal, four stepping stones where the rover's track ran, a small "
+            "round bed with a crystal off the main one, a white path along each inner edge",
             [
                 placed("garden-moss-quarter", (0, 0, 0)),
-                ringed("boulder-small", 5.3, 70, 200),
             ],
-            "a moss mound with a stepping path round it",
+            "a moss mound with a stepping path round it in a round bed 10 across, a small bed off each quarter",
         ),
     }
     out = []
@@ -1282,7 +1354,7 @@ def blueprints() -> list[dict]:
     def add(bid: str, footprint: list, note: str, pieces: list[dict]) -> None:
         out.append({"id": bid, "era": ERA, "scale": 1.0, "footprint": footprint, "note": note, "pieces": pieces})
 
-    for suffix, designs, outline in (("", quarters, "a ragged round"), (TWIN, gardens, "a true round")):
+    for suffix, designs, outline in (("", quarters, "a ragged round"), (TWIN, gardens, "quartered by white paths,")):
         for key, (note, pieces, title) in designs.items():
             add(f"RegolithQuarter{key}{suffix}", [13, 13], note, pieces)
             add(f"RegolithClump{key}{suffix}", [13, 13],
@@ -1320,12 +1392,12 @@ def blueprints() -> list[dict]:
                   placed("crate-long", (0.85, 0, 3.5), 0)])
     small = [
         placed("site-deck-small", (0, 0, 0)),
-        placed("pod-frame", (-1.2, DECK_TOP, -1.2)),
+        placed("rib-cone", (-1.2, DECK_TOP, -1.2)),
         placed("plate-stack", (2.05, 0, -0.05), 0),
     ]
     add("SiteSmall", [6, 6],
-        "a pod going up on a 6 x 6 lot, in the lot frame: a row and a half of deck laid, the pod's floor, ribs and "
-        "first panels, plates and crates waiting on the dust, two site lights",
+        "a round pod going up on a 6 x 6 lot, in the lot frame: a row and a half of deck laid, the pod's floor, a "
+        "cone of ribs and its first panels, plates and crates waiting on the dust, two site lights",
         small + [placed("crate", (2.2, 0, 2.1), 15), placed("crate-long", (0.5, 0, 2.3), 0),
                  placed("crate", (1.3, DECK_TOP, -2.3), 0), placed("work-light", (-2.6, 0, 2.6)),
                  placed("work-light", (2.65, DECK_TOP, -2.65))])
@@ -1336,18 +1408,18 @@ def blueprints() -> list[dict]:
                  placed("crate", (1.3, DECK_TOP, -2.3), 0), placed("crate-long", (1.9, 0, 1.2), 0)])
     add("SiteMedium", [8, 12],
         "a pod going up on an 8 x 12 lot, in the lot frame: three and a half rows of deck laid, the pod's floor, "
-        "ribs and first panels, and at the back the small lander that brought the cargo, on its scorch mark, with "
-        "crates off it and plates waiting",
+        "ribs and first panels, its airlock frame set at the lot's front, plates and a crate on the deck beside "
+        "it, and at the back the small lander that brought the cargo, on its scorch mark, with crates off it",
         [
             placed("site-deck-medium", (0, 0, 0)),
             placed("pod-frame-large", (-1.5, DECK_TOP, -3.3)),
+            placed("airlock-arch", (-1.5, DECK_TOP, -5.7)),
             placed("blast-mark", (1.9, 0, 3.75)),
             placed("lander", (1.9, 0, 3.75), 20),
-            placed("plate-stack", (2.4, 0, 0.95), 0),
+            placed("plate-stack", (2.35, DECK_TOP, -2.9), 0),
             placed("crate", (-0.35, 0, 3.0), 10),
-            placed("crate", (-1.5, 0, 4.4), 35),
             placed("crate-long", (-2.7, 0, 2.95), 90),
-            placed("crate", (2.5, DECK_TOP, -4.6), 0),
+            placed("crate", (2.5, DECK_TOP, -4.75), 0),
             placed("work-light", (3.55, DECK_TOP, -1.2)),
         ])
     add("LotBeacon", [2, 2],

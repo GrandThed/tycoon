@@ -373,6 +373,16 @@ def make_track_arc() -> Part:
     line = centreline_arc()
     sweep(p, line, BEAM_STRIPS, caps=True)
     arc_details(p, line)
+    # The pier's saddle is open at its top and wider than the keel that sits in it, so from above
+    # a single-sided mesh shows a slot into the saddle on each side of the beam. The arc carries
+    # the seat that closes it: the saddle's top, at the soffit. (`pier` is in the live game and
+    # stays as it is.)
+    p.face(
+        [(-PIER_CAP_HALF_X, SOFFIT, -PIER_CAP_HALF_Z), (PIER_CAP_HALF_X, SOFFIT, -PIER_CAP_HALF_Z),
+         (PIER_CAP_HALF_X, SOFFIT, PIER_CAP_HALF_Z), (-PIER_CAP_HALF_X, SOFFIT, PIER_CAP_HALF_Z)],
+        "hull",
+        (0, 1, 0),
+    )
     return p
 
 
@@ -489,7 +499,9 @@ def check_arc() -> list[str]:
     # No overlap: every vertex lies inside the segment's own wedge of the circle.
     worst = max(abs(polar(v)[0]) for v in part.verts)
     if worst > ARC_HALF + 1e-9:
-        bad.append(f"it reaches {math.degrees(worst):.4f} degrees from its middle, past its {math.degrees(ARC_HALF)} share")
+        bad.append(
+            f"it reaches {math.degrees(worst):.4f} degrees from its middle, past its {math.degrees(ARC_HALF):.2f} share"
+        )
     # No gap: 48 copies, each turned one segment about the centre. The end of copy k must be the
     # start of copy k + 1, all the way round to copy 0. Only the beam is compared: the marks at a
     # joint are a stripe's end on one side and the dark band's start on the other.

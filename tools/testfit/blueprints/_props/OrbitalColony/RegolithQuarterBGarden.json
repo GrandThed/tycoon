@@ -3,11 +3,11 @@
   "era": "OrbitalColony",
   "scale": 1.0,
   "footprint": [13, 13],
-  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterB, in its frame: one quadrant of the boulder ring as a stone circle: a white kerb, raked sand, three standing stones on the circle of radius 4 (twelve round a clump, evenly), a quarter of the island stone at the centre, a crystal",
+  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithQuarterB, in its frame: one quadrant of the boulder ring as a stone circle in a square bed with cut corners: a white kerb, raked sand, three standing stones on the circle of radius 3 (twelve round a clump, evenly), a quarter of the island stone at the centre, a crystal, a white path along each inner edge",
   "pieces": [
     {"kit": "regolith-kit", "model": "garden-stones-quarter", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
-    {"kit": "regolith-kit", "model": "standing-stone-low", "pos": [3.8637, 0, 1.0353], "rotY": 20, "stage": 0},
-    {"kit": "regolith-kit", "model": "standing-stone", "pos": [2.8284, 0, 2.8284], "rotY": 135, "stage": 0},
-    {"kit": "regolith-kit", "model": "standing-stone-low", "pos": [1.0353, 0, 3.8637], "rotY": 250, "stage": 0}
+    {"kit": "regolith-kit", "model": "standing-stone-low", "pos": [2.8978, 0, 0.7765], "rotY": 20, "stage": 0},
+    {"kit": "regolith-kit", "model": "standing-stone", "pos": [2.1213, 0, 2.1213], "rotY": 135, "stage": 0},
+    {"kit": "regolith-kit", "model": "standing-stone-low", "pos": [0.7765, 0, 2.8978], "rotY": 250, "stage": 0}
   ]
 }
