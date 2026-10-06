@@ -37,6 +37,15 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   before-and-afters on Bloom (`colonyFlag` flags, `lifeSupport` green domes, `rockGarden` gardens in
   the strips, `holoBeacon` on the hubs; Uplink and Defense stay buildings by the lead's
   recommendation), then wave 4.2 (client, final props with strips, review, QA, docs, asset run).
+- **At the third gate, waiting for Ben (2026-10-06):** city-changers on Bloom, sheet
+  `assets/testfit/out/OrbitalColony/m12o_changers.png` (and `m12o_bloom_reseat.png`). Bloom was
+  reseated for four street-only slots: **89 lots** (was 82), habitat 25. Proposals: `colonyFlag` =
+  flag masts plus banners on every other monorail pier; `lifeSupport` = Green twins of the habitat
+  props; `rockGarden` = `fabric.wildSwaps`, the standing regolith turns into raked gardens (strongest
+  at tier 3, when it is bought); `holoBeacon` = a big hologram over every hub. Uplink and Defense
+  stay buildings unless Ben says otherwise. `m12-orbital` and `m12-orbital-bloom` are at one commit.
+  Lesson: a changer that does not show from the whole-plot camera is not worth showing him; the
+  first versions (thin masts, beds in hidden strips, small holograms) were rebuilt before the gate.
 - State at the second gate, for the record (2026-10-05): sheet `assets/testfit/out/OrbitalColony/
   m12o_compare_organic.png`. **Bloom** (`m12-orbital-bloom` 4b2713f): 82 lots, concentric rings round
   a heart, Launch Tower outside the round loop; it curves but does not wander. **Vine**

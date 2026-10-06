@@ -7836,3 +7836,59 @@ way (type, cost, income, multiplier and `requires` stay).
 | prop-builder "pods" | base | `tools/assets/colony_kit.py`; `_props/OrbitalColony/Fabric{HabNarrowA,HabNarrowB,HabSmallA,HabMediumA}Green.json`; strips |
 | prop-builder "kits" | base | `tools/assets/regolith_kit.py`; `_props/OrbitalColony/{ColonyFlagMast,RockGardenA,RockGardenB,HubBeacon}.json`; strips |
 | layout-designer "bloom" | `tycoon-m12o-bloom` | `Layouts/OrbitalColony.luau`, `tools/fabric/OrbitalColony.plan.json`, `Config/Fabric/OrbitalColony.json`, `fabric.pull`; renders `m12o_changer_*`, `m12o_changers.png` |
+
+### Rulings during the step (lead, 2026-10-06)
+
+The first before-and-afters on Bloom as it stood barely showed from the whole-plot camera (22 thin
+masts, 40 beds hidden in strips, small holograms, 10 green lots), and Ben dropped Metropolis's one
+subtle changer. So, before the gate:
+
+- **"Tend the Rock Gardens" is a swap of the wild** (`fabric.wildSwaps: [{ requiresSlot, suffix }]`,
+  Orbital `rockGarden` / `Garden`): while the slot is owned, every standing clump, quarter and single
+  shows its `…Garden` twin (same footprint and frame; a clump twin is its quarter twin at four turns).
+  The bed layer and `RockGardenA/B` are removed.
+- **Flags also hang on the monorail's piers:** a `piers` placer seats `PierBanner` on every other
+  pier foot of a round loop (never the two beside the entrance apron), the one thing allowed in the
+  band; the item's anchor is the highway. With the masts the `flags` layer has a budget of 48.
+- **`HubBeacon` is 3.6 across and reaches 8.1 up**, so a beacon never stands on a hub whose footprint
+  comes within 0.5 of the band.
+- **Habitat is at least 20 lots**, so "Green the Domes" changes a visible share of the colony.
+
+### State at the third gate (lead, 2026-10-06)
+
+Bloom reseated for the four street-only slots (`m12-orbital` and `m12-orbital-bloom` at the same
+commit; every gate green, the three shipped eras' fabric data byte-identical, `sim_economy.py`
+unchanged at 16:20:04 and legacy 887):
+
+| | As picked | Reseated |
+|---|---|---|
+| Lots at full build | 82: 67 narrow, 11 small, 4 medium | **89**: 71 narrow, 14 small, 4 medium |
+| By district | habitat 10, industry 37, port 19, science 16 | habitat 25, industry 31, port 19, science 14 |
+| Houses / sites by tier 1–4, full | 4/1, 24/5, 34/16, 68/8, 82/0 | 4/2, 28/3, 47/22, 73/10, 89/0 |
+| Tubes | 458 studs, 47 pieces, 11 hubs | 450 studs, 45 pieces, 20 decking pieces, 11 hubs |
+| `pull` | radius 40, tierTerm 0.3, thresholds [0.3, 1.9, 2.1, 2.4] | radius 85, tierTerm 0.1, thresholds [0.3, 1.6, 1.84, 2.3] |
+
+- Moved out of the outer ring's inner row to corner seats past the loop: Oxygen Generator and Fusion
+  Reactor (front-left), Rover Bay and Planetary Defense (front-right), Mineral Extractor (by the
+  Launch Tower's hub). In the heart, Crew Quarters moved north-west, the Orbital Uplink took the
+  south-west seat, and the Observation Dome closes the back arc. Landing Pad and Solar Array carry no
+  district, so the stem and the gate are habitat.
+- The four pads stand past the loop: Colony Flags (56, −55), Green the Domes (−54, −39), Rock Gardens
+  (−56, 36), Holo Beacons (53, 40); the monorail pad at (49, −55).
+- Layers on the reseated layout: 24 masts, 24 pier banners, 11 beacons; 25 lots swap to Green; the
+  wild swap changes 56 entries at the end of tier 3, 39 at tier 4 and 32 at full build.
+- Reads worse than the Bloom Ben approved: the Fusion Reactor (16.9) stands front-left outside the
+  loop; the heart's south-west seat is an empty pad until purchase 17; the west arm shows 22 building
+  sites at tier 3 (16 before); no changer pad is near the entrance; uncovered ground inside the loop
+  is 37%.
+
+Sheets: `assets/testfit/out/OrbitalColony/m12o_changers.png` (each changer without and with; the
+gardens also at tier 3, where they are bought) and `m12o_bloom_reseat.png` (as picked against
+reseated at tier 1, tier 3 and full).
+
+For the client in wave 4.2, added by this step: `fabric.wildSwaps` in `syncWild` (each standing
+clump, quarter and single shows `<prop><suffix>` for every owned swap, in list order, where that
+template exists; re-sync when the slot is bought); an upgrade item with `anchor = "highway"` (valid
+without `stretch` or `parcel`, developed while the highway stands); types for both and
+`check_mirror.py` vectors. The shipped layer and swap code covers the rest. Sixteen new props join
+the asset run: four Green twins, nine Garden twins, `ColonyFlagMast`, `PierBanner` and `HubBeacon`.
