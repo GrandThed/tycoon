@@ -45,6 +45,16 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   pure rules, the client (Orbital moves to the baked-path renderer, round loop, wild swaps), the
   asset pipeline for swept tubes, final props, `orbital.project.json`. Then review, QA, docs, the
   final prop sheets to Ben, and only after his OK the upload and one harvest paste.
+- **Wave 4.2 built and reviewed 2026-10-06** (`m12-orbital` f0f0167 plus docs): shared rules, the
+  client (Orbital on the baked-path renderer, round loop, wild swaps), the asset route for swept
+  tubes, `orbital.project.json`, final props. Review: 0 Critical, 1 Major, 4 Minor, all fixed or
+  ruled (INTERFACES "Review rulings … wave 4.2"). The Major one is the lesson: regolith kept under
+  the monorail reached into lots; mirror and client agreed, so the cross-check could not see it, and
+  only the generator's check on the data can. **Nothing is uploaded.** Waiting on Ben's OK of three
+  sheets in `assets/testfit/out/OrbitalColony/m12o_props/` (`_contact_final_fabric.png`,
+  `_contact_final_ground.png`, `_contact_final_colony.png`); then the asset run (65 street pieces, 49
+  props in 125 stages, 191 uploads, one harvest paste; the commands are in MANUAL_STEPS M12 Orbital),
+  then his Studio look in `build/orbital.rbxl`. The branch must not reach `main` before that.
 - The third gate, for the record (2026-10-06): city-changers on Bloom, sheet
   `assets/testfit/out/OrbitalColony/m12o_changers.png` (and `m12o_bloom_reseat.png`). Bloom was
   reseated for four street-only slots: **89 lots** (was 82), habitat 25. Proposals: `colonyFlag` =

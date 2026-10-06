@@ -7983,3 +7983,53 @@ Boomtown and Orbital, `world/valley.py check`, `sim_economy.py`, `check_compile.
 `gen_templates.py --check`, `gen_asset_manifest.py --check`, stylua, selene, luau-lsp, and a Rojo
 build of every project file including `orbital.project.json`. Then roblox-reviewer, qa-runner,
 docs-keeper, and the final prop sheets to Ben.
+
+### Rulings after the wave 4.2 reports (lead, 2026-10-06)
+
+- **Shared API (`CityFabric.luau`):** `RoundLoop(highway, layoutHighway)` (round means
+  `round == true` and no layout ramp), `RingBand(highway, layoutHighway): FabricBand?` (the band is
+  `ring` ± `highway.bandHalf`; bad or absent config means no band), `KeptInBand(px, pz, band)`,
+  `RingGround(highway, layoutHighway, tileStuds, ramp, rampCells)` (empty without `requiresSlot`, with
+  `clearBand == false`, or on a round loop), `ValidWildSwaps`, `SwappedWild(prop, swaps, owned,
+  exists)`, `ValidUpgradeItem`, `HighwayBuilt`, `UpgradeDeveloped(item, stretches, states,
+  highwayBuilt)`. Which wild placements stand, their base names and `exists` stay the client's.
+- **Client:** `Tubes.luau` (pure: the hub rule and the entrance apron, copied from `tubes.py`) and
+  `FabricValidation.luau` are new; `Fabric.luau` went from 170 to 130 top-level locals. A template
+  for piece id `L…` or `SP_…` lives at `ReplicatedStorage.Assets.Paths.OrbitalColony.<pieceId>`: a
+  Model with an identity pivot and one MeshPart `Fill`, no `Rim`; the client clones it and never
+  turns it. Hubs spend no budget and show on far plots; `SP_entrance` is always shown and is not
+  counted against `pathPieces` in the client; a missing hub, arc or prop draws nothing, with one
+  warning per era and kind; no train runs until an arc stands.
+- **The Rock Garden swap plays as a wave** from the slot's pad at the building-swap pace (about 20
+  seconds for the 56 entries standing when it is bought). Kept for Ben's Studio look.
+- **Assets:** `Assets.json` `paths.OrbitalColony` has `layers = {"fill"}`, `look = "palette"` and per
+  piece `kind = "tube" | "deck"` with a `fill` entry only; `AssetPathPiece.rim` and
+  `AssetPathsEra.rimImageId` are optional in `Types.luau`. Budgets were not raised: path pieces 65 of
+  120, road pieces 56 of 60, track 48 of 72, lots 89 of 140, wild 92 of 110, flags 48 of 48, beacons
+  11 of 12. `GrantCash` for `orbital.project.json` is 3e21 (24 slots 2.346e15 plus 16 buildings to
+  level 100 2.1584e21).
+
+### Review rulings (2026-10-06, wave 4.2 review at 87de142: 0 Critical, 1 Major, 4 Minor)
+
+- **Major, fixed (0f526ae):** regolith kept under the monorail reached into lots. `KeptInBand` keeps a
+  quarter by its quad point, but a quarter is a quadrant of a round feature anchored at the clump's
+  centre and reaches up to 4.6 studs past that point. Five cases on the shipped data (a mound in a
+  science pod, a boulder ring in two pods, one more lot, the Rover Bay's pad and apron). The
+  generator and `check` now keep a band-kept quarter's or single's ground off every lot, pad, apron
+  and landmark's extents; the data is rebuilt (89 lots, 92 wild); no standing wild lies on a shown
+  lot at any of the timeline's 63 moments. Mirror and client agreed, so the cross-check could not
+  see it: a rule both sides copy is only as good as the generator's check on the data.
+- **Minor, fixed:** `Tubes.luau` joined `check_mirror.py --strict` (hubs and entrance apron against
+  `TubePlan`, for every tube era; six mutants fail). `highway.segments` (48) and `highway.bandHalf`
+  (3.5) are config, read by the client, `CityFabric.luau` and the tools, with a check that
+  `360 / segments` equals the `MonorailArc` piece's span. One shared `RoundLoop` predicate.
+- **Minor, accepted:** the fabric's missing-prop warning now applies in every era, once per kind; it
+  cannot fire while templates exist.
+- **Left open:** the mirror (`streetplan.py`) reads a round loop with a ramp as round while the
+  shared rule reads it as a square ring (no config does it); `LANE.thickness` 0.2 in `Fabric.luau`
+  is an older code constant.
+- **Not judged without Studio:** that nothing errors while Orbital has no templates; the arc's
+  curvature after the import turn, hub and tube heights, the train over 48 chords; the wave's pace;
+  phone cost (tubes are 23,206 triangles a plot with no far level of detail).
+- **This branch must not reach `main` before the asset run:** until then an Orbital plot shows flat
+  slabs, decking Parts and landmarks.
