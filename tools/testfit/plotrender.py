@@ -1036,9 +1036,8 @@ class PlotScene:
 
     def build_highway(self):
         """Highway.luau's ring: one prop per lattice cell at half-extent `ring`, its kind and turn
-        from the connectivity table. With a `ramp` in the layout one mid-side cell is the deck T and
-        the ramp prop descends into the city (wave 2a); without one it is the plain loop -- deck and
-        corner only -- that Orbital's monorail runs on (wave 2b)."""
+        from the connectivity table; one mid-side cell is the deck T and the ramp prop descends
+        into the city from it (wave 2a). A round loop (`highway.round`) is build_round_loop's."""
         era = self.era
         highway = era.highway
         config = era.dressing.get("highway")
@@ -1058,19 +1057,19 @@ class PlotScene:
         cycle = ring_cycle(half)
         props = config["props"]
         ramp = highway.get("ramp")
-        loop = ramp is None
-        junction_index, direction = None, None
-        if not loop:
-            requested = streetplan.xz(ramp["cell"])
-            junction_index = min(
-                range(len(cycle)),
-                key=lambda i: math.dist((cycle[i][0] * step, cycle[i][1] * step), requested),
-            )
-            direction = RAMP_DIRECTIONS.get(ramp["direction"])
-            junction = cycle[junction_index]
-            if direction is None:
-                inward = (-junction[0], -junction[1])
-                direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
+        if ramp is None:
+            self.notes.append("highway: a square ring without a ramp is not drawn (the plain loop went with Orbital's tiles)")
+            return
+        requested = streetplan.xz(ramp["cell"])
+        junction_index = min(
+            range(len(cycle)),
+            key=lambda i: math.dist((cycle[i][0] * step, cycle[i][1] * step), requested),
+        )
+        direction = RAMP_DIRECTIONS.get(ramp["direction"])
+        junction = cycle[junction_index]
+        if direction is None:
+            inward = (-junction[0], -junction[1])
+            direction = max(RAMP_DIRECTIONS.values(), key=lambda d: d[0] * inward[0] + d[1] * inward[1])
         deck_height = config.get("deckHeight")
         count = len(cycle)
         for index, cell in enumerate(cycle):
@@ -1096,10 +1095,7 @@ class PlotScene:
                 placeholder=ring_placeholder(kind, step, deck_height, PLACEHOLDER_HULL),
                 wanted=name or role,
             )
-        self.notes.append(f"highway: {'loop' if loop else 'ring + ramp'}, {count} cells")
-        if loop:
-            self.build_loop_vehicles(half * step, config)
-            return
+        self.notes.append(f"highway: ring + ramp, {count} cells")
 
         # Highway.placeRamp: the prop is anchored at the centre of the first whole cell inward of
         # the junction, so its high end is flush with the junction cell's inward edge, its three
@@ -1128,31 +1124,6 @@ class PlotScene:
         if props is None:
             props = self.era.dressing.get("vehicles", {}).get("props") or []
         return list(props)
-
-    def build_loop_vehicles(self, ring, config):
-        """Highway.Lanes in loop mode: the train rides the ring's centreline (lane offset 0 -- a
-        monorail is one beam) at deckHeight. Where on the loop is a moment in Traffic's clock, so
-        the render spaces `vehicles.count` trains evenly from the middle of the -Z (entrance) leg."""
-        vehicles = config.get("vehicles") or {}
-        height = config.get("deckHeight")
-        props = self.vehicle_props(config)
-        if height is None or not props:
-            return
-        count = int(vehicles.get("count", 1))
-        self.deck_vehicles = count
-        perimeter = 8 * ring
-        for index in range(count):
-            position, heading = loop_point(ring, index * perimeter / max(count, 1))
-            name = props[index % len(props)]
-            self.model(
-                f"Train{index}",
-                blueprint_path(self.era.name, name, prop=True),
-                (position[0], float(height), position[1]),
-                rot_y=facing_rot(heading),
-                placeholder=placeholder_for("train"),
-                wanted=name,
-                scale=self.vehicle_scale(),
-            )
 
     def build_deck_cars(self, ring, config):
         era = self.era
@@ -2116,22 +2087,6 @@ def ring_placeholder(kind, step, deck_height, color):
             )
         )
     return boxes
-
-
-def loop_point(ring, distance):
-    """The point `distance` studs round the square loop of half-extent `ring`, counter-clockwise
-    (+X along the -Z leg first) from the middle of the -Z leg, and the heading there."""
-    legs = (
-        ((0.0, -ring), (1.0, 0.0)),
-        ((ring, 0.0), (0.0, 1.0)),
-        ((0.0, ring), (-1.0, 0.0)),
-        ((-ring, 0.0), (0.0, -1.0)),
-    )
-    distance = distance % (8 * ring) + ring  # measured from the -Z leg's middle
-    leg = int(distance // (2 * ring)) % 4
-    along = distance % (2 * ring) - ring
-    centre, heading = legs[leg]
-    return (centre[0] + heading[0] * along, centre[1] + heading[1] * along), heading
 
 
 def ring_cycle(half):

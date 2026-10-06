@@ -3103,10 +3103,13 @@ def growth_moments(plot, history):
 
 
 def props_report(era_name, data_path=None, config_path=None):
-    """Every prop the era's fabric can show -- parcels (sites, buildings, swap twins), the wild, the
-    upgrade layers, the pad marker, the reveal scaffold, the unlock vehicles -- over every moment of
-    the greedy player's era (growth_moments, a near plot), with the stages each is seen at; then
-    every prop the config lists that never shows, and every fabric blueprint nothing refers to."""
+    """Every prop the era's fabric can show -- parcels (sites, buildings, swap twins), the wild
+    and its swap twins, the upgrade layers, the pad marker, the reveal scaffold, the unlock
+    vehicles -- and what stands on its streets and its highway (a tube era's hub, the track's
+    props, the train), over every moment of the greedy player's era (growth_moments, a near plot),
+    with the stages each is seen at; then every prop the config lists that never shows, every
+    blueprint nothing refers to, and every uploaded prop of the era nothing refers to any more.
+    The first list is what an asset run merges and uploads; the last is what it may leave behind."""
     city = load_json(config_path if config_path is not None else CITY_CONFIG_PATH)
     data = load_json(data_path) if data_path is not None else None
     plot = FabricPlot.load(era_name, city=city, data=data)
@@ -3127,9 +3130,29 @@ def props_report(era_name, data_path=None, config_path=None):
         counts[prop] = counts.get(prop, 0) + 1
 
     unlocks = (dressing.get("vehicles") or {}).get("unlocks") or []
+    # A tube era's hubs (tools/paths/tubes.py: one where a drawn tube ends, branches or changes
+    # chain) and the highway's props: a round loop seats `props.arc` once a segment, and the train
+    # is `vehicleProps`. A square ring's cells are tools/streetplan.py's to count, not this report's.
+    tube = streetplan.tube_plan(plot.era)
+    hub_prop = tube.config.get("hub") if tube is not None else None
+    highway = dressing.get("highway") if isinstance(dressing.get("highway"), dict) else {}
+    track = highway.get("props") if isinstance(highway.get("props"), dict) else {}
     for _label, owned, stages, tier in moments:
         snap = plot.snapshot(owned, stages, tier, near=True)
         counts = {}
+        if tube is not None:
+            for hub in tube.hubs():
+                if any(index in snap["visible"] for index in hub["stretches"]):
+                    note(counts, hub_prop, "tube hub", 0)
+        if plot.highway_built(owned):
+            if plot.era.round_ring is not None:
+                for _ in range(streetplan.ROUND_SEGMENTS):
+                    note(counts, track.get("arc"), "track", 0)
+            else:
+                for role, prop in sorted(track.items()):
+                    note(counts, prop, "track " + role, 0)
+            for index in range(int((highway.get("vehicles") or {}).get("count", 0)) if highway.get("vehicleProps") else 0):
+                note(counts, highway["vehicleProps"][index % len(highway["vehicleProps"])], "train", 0)
         for view in snap["parcels"]:
             look = view["look"]
             if look is not None:
@@ -3181,6 +3204,11 @@ def props_report(era_name, data_path=None, config_path=None):
     for unlock in unlocks:
         for prop in (unlock or {}).get("props") or []:
             name(prop, "vehicles.unlocks")
+    name(hub_prop, "road.paths.tube.hub")
+    for role, prop in sorted(track.items()):
+        name(prop, f"highway.props.{role}")
+    for prop in highway.get("vehicleProps") or []:
+        name(prop, "highway.vehicleProps")
     twins = {}
     for swap in valid_swaps(config.get("swaps")):
         for prop in sorted(listed):
@@ -3209,18 +3237,28 @@ def props_report(era_name, data_path=None, config_path=None):
     for prop in unlisted:
         print(f"  note    {prop:28s} shown but named nowhere in the config (a missing name draws nothing in game)")
     # Blueprints nothing refers to: not shown, not listed, not a twin, and not named anywhere in
-    # CityDressing.json (roads, vehicles, walkers, birds and the rest are other systems' props).
+    # this era's own dressing or in the config every era shares (roads, vehicles, walkers, birds
+    # and the rest are other systems' props). Another era's prop of the same name is not a use.
     folder = BLUEPRINTS_DIR / "_props" / era_name
-    text = json.dumps(city)
-    orphans = [
-        path.stem
-        for path in sorted(folder.glob("*.json"))
-        if path.stem not in shown and path.stem not in listed and path.stem not in twins and f'"{path.stem}"' not in text
-    ]
+    text = json.dumps(dressing) + json.dumps({key: value for key, value in city.items() if key != "eras"})
+
+    def unreferenced(prop):
+        return prop not in shown and prop not in listed and prop not in twins and f'"{prop}"' not in text
+
+    orphans = [path.stem for path in sorted(folder.glob("*.json")) if unreferenced(path.stem)]
+    # And the same question of what is already uploaded for this era (Assets.json `props`): a prop
+    # the era stopped drawing still has its ids and its template, and an asset run should say so.
+    uploaded = ((plot.heights.assets or {}).get("props") or {}).get(era_name) or {}
+    retired = [prop for prop in sorted(uploaded) if unreferenced(prop)]
     never_twins = sum(1 for prop in twins if prop not in shown)
-    print(f"  {len(shown)} props shown; {len(unused) + never_twins} listed or implied by the config and never shown; {len(orphans)} blueprints nothing refers to")
+    print(
+        f"  {len(shown)} props shown; {len(unused) + never_twins} listed or implied by the config and never shown; "
+        f"{len(orphans)} blueprints nothing refers to; {len(retired)} uploaded props nothing refers to any more"
+    )
     for prop in orphans:
         print(f"  ORPHAN  {prop}")
+    for prop in retired:
+        print(f"  RETIRED {prop:28s} uploaded ({len(uploaded[prop].get('stages') or [])} stage(s)), and nothing in the era refers to it any more")
     return 0
 
 

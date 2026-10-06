@@ -86,8 +86,6 @@ MONUMENT_FOOTPRINT_DEFAULT = 14
 SPINE_EXTRA_CLEARANCE = 1  # spine clear of slots/pads/Sign by width/2 (+ meander) + this
 LOT_SLOT_CLEARANCE = 6  # a "house" lot's centre from any slot footprint (M9 "Layouts")
 STREET_COUNT = (2, 5)
-# Wave 2b: the Orbital plot is a full 4x4 module grid with no pavement, so it takes 6-10 small domes.
-LOT_COUNT_BY_ERA = {"OrbitalColony": (6, 10)}
 PLAZA_COUNT = (1, 2)
 PLAZA_TIERS = (3, 5)
 ZONE_COUNT = (3, 6)
@@ -103,8 +101,6 @@ STREET_FURNITURE = {
     # their nominal 9x9 footprint is fiction -- only the pad is real, and it is meant to stand on
     # the street furniture it names (the ramp foot, the kerb beside a metro entrance).
     "Metropolis": ("subwayLine", "highwayRamp"),
-    # Wave 2b: Build the Monorail is streetOnly the same way; its pad stands in a tube corner.
-    "OrbitalColony": ("walkwayNetwork",),
 }
 # A lot "faces the road" when a spine centreline lies within this many studs of its front edge.
 LOT_FRONT_REACH = 10
@@ -160,14 +156,9 @@ PLAZA_MIN_SIZE = (14.0, 14.0)
 # path re-bake and a harvest paste for no visible gain.
 LANDMARK_GAP = 0.25
 PLAZA_EDGE_SLACK = 0.5  # how far the front edge may sit from the pavement's outer edge
-# Wave 2b: a tiles era without pavement (Orbital tubes) has no apron to build in, so its plaza is
-# the prop's own blueprint footprint (this fallback when the blueprint declares none) and its front
-# is flush with the tube cell edge instead.
-PLAZA_BARE_SIZE = (12.0, 12.0)
 # Paved blocks (INTERFACES "Paved blocks"): slabs are Parts, so two of them meeting edge to edge
 # would share a plane and z-fight; the contract asks for daylight between neighbours instead.
 BLOCK_GAP = 0.5
-ZONE_SOLID_CLEARANCE = 3  # wave 2b: a rock zone circle's daylight to any footprint or pad
 # Scatter.luau mirrors: an edge counts as fronting a street within `reach` of it and aligned to
 # better than STRAIGHT_ENOUGH. The clearance a street tree keeps off spurs and solids comes from
 # `road.tiles.blocks.treeClearance`; this is only the fallback for a config that predates the key.
@@ -188,9 +179,6 @@ SMALL_LOT_MAX_HEIGHT = 6.0  # a "small" lot may stand under the ring deck
 LOT_MINIMUM = {"Village": 18, "Boomtown": 18, "Metropolis": 10}
 LOT_TIERS = (1, 5)
 LOT_PER_TIER = 2  # every tier step adds visible houses
-# Eras outside wave 2c (OrbitalColony, wave 2b) keep the M9 rule unchanged.
-LEGACY_LOT_COUNT = (8, 12)
-LEGACY_LOT_TIERS = (2, 5)
 # A small lot tucks in behind a block or beside a slot, so it only keeps daylight from a slot's
 # footprint (a house keeps LOT_SLOT_CLEARANCE from its centre, as before). Pads keep 1 stud either way.
 SMALL_LOT_SLOT_GAP = 0.5
@@ -827,18 +815,11 @@ class Era:
         # its kind's contract cap, whatever the props measure today.
         houses = self.dressing.get("houses", {})
         self.lot_props = {"house": list(houses.get("props", [])), "small": list(houses.get("smallProps", []))}
-        # Eras outside wave 2c (OrbitalColony's small domes) keep the wave 2b rule: the house props'
-        # own footprint, not the 9x9 contract cap.
-        legacy_size = (
-            None
-            if name in LOT_MINIMUM
-            else prop_footprint(name, self.lot_props["house"], (SLOT_FOOTPRINT_DEFAULT, SLOT_FOOTPRINT_DEFAULT))
-        )
         self.lots = []
         for lot in self.layout.get("lots", []):
             position = xz(lot["position"])
             kind = lot.get("kind", "house")
-            size = legacy_size or LOT_KINDS.get(kind, LOT_KINDS["house"])
+            size = LOT_KINDS.get(kind, LOT_KINDS["house"])
             self.lots.append(
                 {
                     "position": position,
@@ -878,8 +859,8 @@ class Era:
         self.plazas = []
         for plaza in self.layout.get("plazas", []):
             position = xz(plaza["position"])
-            paved = self.tiles is not None and self.pavement > 0
-            size = prop_footprint(name, [plaza["prop"]], PLAZA_MIN_SIZE if paved else PLAZA_BARE_SIZE if self.tiles else (12, 12))
+            paved = self.tiles is not None
+            size = prop_footprint(name, [plaza["prop"]], PLAZA_MIN_SIZE if paved else (12, 12))
             if paved:
                 size = (max(size[0], PLAZA_MIN_SIZE[0]), max(size[1], PLAZA_MIN_SIZE[1]))
             self.plazas.append(
@@ -910,7 +891,7 @@ class Era:
             )
         self.highway = self.layout.get("highway")
         highway_cfg = self.dressing.get("highway")
-        # Wave 2b: `junction` and `ramp` are optional (loop mode), in the config and the layout.
+        # `junction` and `ramp` are optional, in the config and the layout: a round loop has neither.
         ramp_prop = highway_cfg["props"].get("ramp") if highway_cfg else None
         self.highway_ramp = self.highway.get("ramp") if self.highway else None
         self.ramp_cells = (
@@ -1548,28 +1529,6 @@ def cell_violations(era, cells):
     return messages
 
 
-def bare_zone_violations(era):
-    """Wave 2b (Ben's look): in an era whose decking carries no trees (`treeSpacing` 0) the decking
-    sits only under module clusters and the rocks belong on the bare regolith between them, so no
-    zone centre may fall inside a block rect, and every zone circle keeps ZONE_SOLID_CLEARANCE off
-    each footprint and pad -- a rock field crowding a module reads as rubble against its wall."""
-    messages = []
-    for i, zone in enumerate(era.zones):
-        label = f"tree zone {i + 1} {fmt(zone['center'])}"
-        for j, block in enumerate(era.blocks):
-            if point_in_polygon(zone["center"], block["poly"]):
-                messages.append(f"{label}: centre is on decking block {j + 1}, not bare regolith")
-        for slot in era.slots:
-            checks = [("pad", slot["pad_poly"])]
-            if slot["id"] not in era.furniture:
-                checks.append(("footprint", slot["footprint"]))
-            for what, poly in checks:
-                gap = point_polygon_distance(zone["center"], poly) - zone["radius"]
-                if point_in_polygon(zone["center"], poly) or gap < ZONE_SOLID_CLEARANCE - 1e-6:
-                    messages.append(f"{label}: {gap:.2f} from {slot['id']} {what} (need {ZONE_SOLID_CLEARANCE})")
-    return messages
-
-
 def ring_reach(poly):
     """How far a footprint reaches from the plot centre along the worse axis -- the number the
     square ring deck cares about."""
@@ -1617,7 +1576,7 @@ def highway_violations(era):
 
     ramp = era.highway_ramp
     if ramp is None:
-        return messages  # loop mode (wave 2b): no deck T, no ramp, no foot to land
+        return messages  # a ring without a ramp: no deck T and no foot to land
     cell = xz(ramp["cell"])
     direction = RAMP_DIRECTIONS.get(ramp["direction"])
     if direction is None:
@@ -2283,7 +2242,7 @@ def pier_squares(era):
 
 
 def ramp_squares(era):
-    # Wave 2b loop mode (the Orbital monorail) has no ramp.
+    # A loop (Orbital's round monorail) has no ramp.
     ramp = era.highway_ramp
     if ramp is None or era.tile_studs <= 0:
         return []
@@ -2634,11 +2593,6 @@ def lot_count_violations(era):
                 messages.append(f"houses: {name} harvests {extents[1]:.2f} tall, over the small cap {SMALL_LOT_MAX_HEIGHT}")
     if not any(era.lot_props.values()) or era.has_fabric:
         return messages
-    if era.name not in LOT_MINIMUM:
-        low, high = LOT_COUNT_BY_ERA.get(era.name, LEGACY_LOT_COUNT)
-        if not low <= len(era.lots) <= high:
-            messages.append(f"lots: {len(era.lots)}, need {low}-{high}")
-        return messages
     minimum = LOT_MINIMUM[era.name]
     if len(era.lots) < minimum:
         messages.append(f"lots: {len(era.lots)}, need at least {minimum}")
@@ -2666,9 +2620,8 @@ def lot_violations(era, index, lot, drawn, cells):
     label = f"lot {index + 1} {fmt(lot['position'])} {lot['kind']}"
     poly = lot["poly"]
     small = lot["kind"] == "small"
-    tiers = LOT_TIERS if era.name in LOT_MINIMUM else LEGACY_LOT_TIERS
-    if not tiers[0] <= lot["tier"] <= tiers[1]:
-        messages.append(f"{label}: tier {lot['tier']:g} outside {tiers}")
+    if not LOT_TIERS[0] <= lot["tier"] <= LOT_TIERS[1]:
+        messages.append(f"{label}: tier {lot['tier']:g} outside {LOT_TIERS}")
     for slot in era.slots:
         furniture = slot["id"] in era.furniture and era.tiles is not None  # streetOnly: no model spawns
         if not furniture:
@@ -3266,8 +3219,7 @@ def check(era, network, visible, unreachable):
                 plaza["position"][0] + face[0] * plaza["size"][1] / 2,
                 plaza["position"][1] + face[1] * plaza["size"][1] / 2,
             )
-            # With no pavement the plaza fronts the tube cell itself (wave 2b).
-            edge = era.width / 2 + era.pavement if era.pavement > 0 else era.tile_studs / 2
+            edge = era.width / 2 + era.pavement
             nearest = min(
                 (point_segment_distance(front, a, b) for _, a, b in era.spine_segments()),
                 key=lambda hit: hit[0],
@@ -3278,7 +3230,7 @@ def check(era, network, visible, unreachable):
             elif abs(nearest[0] - edge) > PLAZA_EDGE_SLACK:
                 add(
                     f"{label}: its front edge is {nearest[0]:.2f} from the nearest centreline, not flush "
-                    f"with the {'pavement' if era.pavement > 0 else 'tube cell'} edge at {edge:g}"
+                    f"with the pavement edge at {edge:g}"
                 )
             elif (nearest[1][0] - front[0]) * face[0] + (nearest[1][1] - front[1]) * face[1] < -1e-6:
                 add(f"{label}: its back is turned to the street it fronts")
@@ -3374,10 +3326,6 @@ def check(era, network, visible, unreachable):
             add(f"highway cells {highway_cells} > budget.highwayCells {highway_budget}")
     if era.subways or era.dressing.get("subway") is not None:
         for message in subway_violations(era, cells):
-            add(message)
-    blocks_cfg = (era.tiles or {}).get("blocks")
-    if era.blocks and blocks_cfg is not None and not blocks_cfg.get("treeSpacing"):
-        for message in bare_zone_violations(era):
             add(message)
     if era.blocks:
         block_messages, block_notes = block_violations(era, cells)

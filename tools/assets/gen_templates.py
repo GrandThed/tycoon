@@ -37,6 +37,10 @@ under templates/_paths/ -> ReplicatedStorage.Assets.Paths:
       MeshPart "Rim"             at paths.rimHeight above the plot top, rim texture
       MeshPart "Fill"            at paths.fillHeight, fill texture
 
+A tube era's piece (INTERFACES "Wave 4.2 - Assets"; `layers` ["fill"]) is the same Model with the
+one MeshPart "Fill", wearing the era's palette: a `tube` stands on the plot top and casts a shadow,
+a `deck` lies at paths.fillHeight like any fill.
+
 Both are sealed (anchored, no collide/query/touch, no shadow, Box collision) and placed by the same
 `harvested_cframe` as buildings and props. A piece is written only when both its meshes are
 harvested and its era has both harvested image ids; otherwise the client falls back to the Parts
@@ -238,10 +242,11 @@ def path_heights() -> tuple[float, float]:
     return float(paths.get("rimHeight", 0)), float(paths.get("fillHeight", 0))
 
 
-def path_mesh_xml(name: str, mesh: dict, image_id: int, height: float, refs: Referents, indent: str) -> list[str]:
+def path_mesh_xml(name: str, mesh: dict, image_id: int, height: float, refs: Referents, indent: str, shadow: bool = False) -> list[str]:
     """One sealed, textured path MeshPart, placed by `harvested_cframe` like every other harvested
     mesh: undoing the importer's turn puts the piece exactly where it was baked, in plot-local
-    studs, which is what keeps the world-planar UVs aligned between overlapping pieces."""
+    studs, which is what keeps the world-planar UVs aligned between overlapping pieces. `shadow`
+    is for a piece that stands up from the ground (a swept tube); what lies flat casts none."""
     p = indent + "    "
     lines = [f'{indent}<Item class="MeshPart" referent="{refs.next()}">', f"{indent}  <Properties>"]
     lines.append(f'{p}<string name="Name">{name}</string>')
@@ -250,7 +255,7 @@ def path_mesh_xml(name: str, mesh: dict, image_id: int, height: float, refs: Ref
     lines.append(f'{p}<bool name="CanCollide">false</bool>')
     lines.append(f'{p}<bool name="CanQuery">false</bool>')
     lines.append(f'{p}<bool name="CanTouch">false</bool>')
-    lines.append(f'{p}<bool name="CastShadow">false</bool>')
+    lines.append(f'{p}<bool name="CastShadow">{"true" if shadow else "false"}</bool>')
     lines.append(f'{p}<token name="CollisionFidelity">{COLLISION_FIDELITY_BOX}</token>')
     lines.append(f'{p}<Color3uint8 name="Color3uint8">{COLOR_WHITE}</Color3uint8>')
     lines += vector3("InitialSize", mesh["size"], p)
@@ -266,7 +271,7 @@ def path_mesh_xml(name: str, mesh: dict, image_id: int, height: float, refs: Ref
     return lines
 
 
-def path_template_xml(piece_id: str, piece: dict, images: dict, heights: tuple[float, float]) -> str:
+def path_template_xml(piece_id: str, piece: dict, images: dict, heights: tuple[float, float], layers: tuple[str, ...] = cfg.PATH_LAYERS) -> str:
     refs = Referents()
     lines = [
         '<roblox version="4">',
@@ -279,8 +284,10 @@ def path_template_xml(piece_id: str, piece: dict, images: dict, heights: tuple[f
     # plot frame: the MeshPart CFrames are already plot-local.
     lines += coordinate_frame("WorldPivot", (0, 0, 0), "      ")
     lines.append("    </Properties>")
+    tube = piece.get(cfg.PATH_KIND_KEY) == cfg.PATH_KIND_TUBE
     for name, layer, height in (("Rim", "rim", heights[0]), ("Fill", "fill", heights[1])):
-        lines += path_mesh_xml(name, piece[layer], images[layer], height, refs, "    ")
+        if layer in layers:
+            lines += path_mesh_xml(name, piece[layer], images[layer], 0.0 if tube else height, refs, "    ", tube)
     lines += ["  </Item>", "</roblox>"]
     return "\n".join(lines) + "\n"
 
@@ -290,16 +297,17 @@ def generate_paths(assets: dict) -> tuple[dict[str, str], list[str]]:
     out: dict[str, str] = {}
     notes: list[str] = []
     for era, entry in (assets.get(cfg.PATHS_KEY) or {}).items():
-        images = {layer: int(entry.get(f"{layer}ImageId", 0)) for layer in cfg.PATH_LAYERS}
+        layers = cfg.path_layers(entry)
+        images = {layer: int(entry.get(f"{layer}ImageId", 0)) for layer in layers}
         missing = [layer for layer, image_id in images.items() if image_id == 0]
         if missing:
             notes.append(f"paths/{era}: no harvested {', '.join(missing)} image id; no templates (the plot uses the Parts renderer)")
             continue
         for piece_id, piece in sorted((entry.get("pieces") or {}).items()):
-            if not cfg.path_piece_harvested(piece):
+            if not cfg.path_piece_harvested(piece, layers):
                 notes.append(f"paths/{era}/{piece_id}: uploaded but not harvested; piece left out")
                 continue
-            out[f"{era}/{piece_id}.rbxmx"] = path_template_xml(piece_id, piece, images, heights)
+            out[f"{era}/{piece_id}.rbxmx"] = path_template_xml(piece_id, piece, images, heights, layers)
     return out, notes
 
 

@@ -296,7 +296,9 @@ export type AssetPathMesh = {
 	size: { number },
 	offset: { number },
 }
-export type AssetPathPiece = { fill: AssetPathMesh, rim: AssetPathMesh }
+-- A tube era (Orbital) bakes one mesh a piece, so it has no rim; `kind` tells its swept tubes from
+-- its flat decking.
+export type AssetPathPiece = { fill: AssetPathMesh, rim: AssetPathMesh?, kind: string? }
 -- The *AssetId / *Sha256 keys are the uploader's bookkeeping (Decal id, idempotency hash).
 export type AssetPathVariant = {
 	fillAssetId: number,
@@ -309,7 +311,9 @@ export type AssetPathVariant = {
 export type AssetPathsEra = {
 	tileStuds: number,
 	fillImageId: number,
-	rimImageId: number,
+	-- Absent in an era whose `layers` name only "fill".
+	rimImageId: number?,
+	layers: { string }?,
 	pieces: { [string]: AssetPathPiece },
 	-- Wave 1e: extra surface textures by variant name; ids of 0 mean "not yet" (default look).
 	variants: { [string]: AssetPathVariant }?,

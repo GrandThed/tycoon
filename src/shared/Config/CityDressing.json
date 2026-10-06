@@ -1150,20 +1150,14 @@
         }
       },
       "trees": {
-        "maxCount": 30,
-        "clearance": 5,
-        "prop": "Rocks"
+        "maxCount": 0,
+        "clearance": 5
       },
       "houses": {
-        "props": [
-          "HouseA",
-          "HouseB"
-        ]
+        "props": []
       },
       "plazas": {
-        "props": [
-          "PlazaA"
-        ]
+        "props": []
       },
       "lamps": {},
       "highway": {

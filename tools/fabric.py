@@ -111,7 +111,8 @@ entry is the one thing in the band besides a crossing tube.
 Wild swaps (`fabric.wildSwaps`, same section: "Tend the Rock Gardens"). While a swap's slot is
 owned every standing wild entry shows `<prop><suffix>` where that twin exists. The data does not
 change, so `check` holds the props to it (wild_swap_messages): a clump and its quarter have a twin
-together, a twin has its original's ground, and under a beam that never clears it is no taller.
+together, a twin lies inside its original's ground in its original's frame, and under a beam that
+never clears it is no taller.
 
 A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
 either side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it,
@@ -4812,21 +4813,26 @@ def wild_twins(site, plan, heights):
     return found
 
 
-def prop_ground_size(site, prop):
-    """(what measured it, (x, z)) of a prop's ground: its harvested size once it is uploaded, else
-    its blueprint's declared footprint; None with neither."""
-    harvested = streetplan.harvested_extents(site.name, prop)
+def prop_ground_box(site, prop):
+    """(what measured it, (x0, x1, z0, z1)) of a prop's ground in its own frame: its harvested
+    parts once it is uploaded, else its blueprint's declared footprint about its origin; None
+    with neither."""
+    harvested = site.prop_extents(prop)
     if harvested is not None:
-        return "harvested", (harvested[0], harvested[2])
+        return "harvested", harvested
     declared = streetplan.declared_footprints(site.name, [prop])
-    return ("declared", declared[0][1]) if declared else None
+    if not declared:
+        return None
+    width, depth = declared[0][1]
+    return "declared", (-width / 2, width / 2, -depth / 2, depth / 2)
 
 
 def wild_swap_messages(site, plan):
     """INTERFACES "Wave 4.1c": `fabric.wildSwaps` changes what a standing wild entry shows and
     nothing else, so the twins answer for it. A clump and its quarter have a twin together (a
-    clump half cleared is drawn as its quarters); a twin's ground is its original's, measured the
-    same way (the plates were laid apart by the originals'); and the slot it waits for exists."""
+    clump half cleared is drawn as its quarters); a twin's ground lies inside its original's, in
+    the same frame and measured the same way (the plates were laid apart by the originals', so a
+    twin that reaches no further lies on nothing either); and the slot it waits for exists."""
     import cityfabric  # tools/; imported late, as it reads its own inputs on import
 
     config = site.config.get("wildSwaps")
@@ -4848,13 +4854,16 @@ def wild_swap_messages(site, plan):
                 have, lack = (clump, quarter) if whole else (quarter, clump)
                 messages.append(f"wildSwaps: {have}{swap['suffix']} exists and {lack}{swap['suffix']} does not; a clump and its quarter swap together")
     for original, twin, _slot in wild_twins(site, plan, heights):
-        a, b = prop_ground_size(site, original), prop_ground_size(site, twin)
+        a, b = prop_ground_box(site, original), prop_ground_box(site, twin)
         if a is None or b is None or a[0] != b[0]:
             continue  # one is harvested and the other not yet: judged once both are
-        if math.dist(a[1], b[1]) > EPS:
+        (ax0, ax1, az0, az1), (bx0, bx1, bz0, bz1) = a[1], b[1]
+        over = max(ax0 - bx0, bx1 - ax1, az0 - bz0, bz1 - az1)
+        if over > EPS:
             messages.append(
-                f"wildSwaps: {twin}'s {a[0]} ground is {number(b[1][0])} x {number(b[1][1])}, its original {original}'s "
-                f"{number(a[1][0])} x {number(a[1][1])}; a twin has its original's footprint"
+                f"wildSwaps: {twin}'s {a[0]} ground reaches {over:.2f} past its original {original}'s "
+                f"({number(bx1 - bx0)} x {number(bz1 - bz0)} against {number(ax1 - ax0)} x {number(az1 - az0)}); "
+                "a twin lies inside its original's footprint, in its frame"
             )
     return messages
 

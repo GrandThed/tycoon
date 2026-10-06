@@ -35,6 +35,17 @@ PATH_LAYERS = ("fill", "rim")
 # Surface variants (INTERFACES "Wave 1e"): extra fill/rim image pairs the client swaps onto the
 # same baked meshes, so they live beside the era's default pair and never touch the piece list.
 PATH_VARIANTS_KEY = "variants"
+# A tube era (INTERFACES "Wave 4.2 - Assets"; tools/paths/tubes.py) bakes one mesh to a piece and
+# colours it from a palette image. Its block says so -- `layers` ["fill"], `look` "palette" -- and
+# each piece says what it is to the template (`kind`: a tube stands on the plot, the decking lies
+# at the fill's height). An era without the keys is a ribbon era and keeps its bytes.
+PATH_LAYERS_KEY = "layers"
+PATH_LOOK_KEY = "look"
+PATH_LOOK_PALETTE = "palette"
+PATH_KIND_KEY = "kind"
+PATH_KIND_TUBE = "tube"
+PATH_KIND_DECK = "deck"
+PATH_KINDS = (PATH_KIND_TUBE, PATH_KIND_DECK)
 # A file only becomes v4 once it carries landscape meshes, so every earlier run keeps its bytes.
 WORLD_SCHEMA_VERSION = 4
 WORLD_KEY = "world"
@@ -153,8 +164,20 @@ def empty_path_mesh() -> dict:
     return {"assetId": 0, "meshId": 0, "size": [0, 0, 0], "offset": [0, 0, 0], "sha256": ""}
 
 
-def ensure_path_era(assets: dict, era: str, tile_studs: float, layout_hash: str, triangles: int = 0) -> dict:
-    """Pre-list an era's path block without touching ids; marks the file v3.
+def path_layers(entry: dict | None) -> tuple[str, ...]:
+    """The layers an era's pieces are baked in: its own `layers` (a tube era: the fill alone),
+    else a ribbon's two."""
+    layers = (entry or {}).get(PATH_LAYERS_KEY)
+    if isinstance(layers, list) and layers and all(layer in PATH_LAYERS for layer in layers):
+        return tuple(layer for layer in PATH_LAYERS if layer in layers)
+    return PATH_LAYERS
+
+
+def ensure_path_era(
+    assets: dict, era: str, tile_studs: float, layout_hash: str, triangles: int = 0, layers: list | None = None, look: str | None = None
+) -> dict:
+    """Pre-list an era's path block without touching ids; marks the file v3. `layers` and `look`
+    are the bake record's (a tube era's); a record without them leaves the block a ribbon era's.
 
     `sha256` per mesh and per texture is what makes a re-upload possible at all: a regenerated GLB
     or PNG must go up again, and its harvested ids must be cleared, or Studio would show the old
@@ -166,7 +189,12 @@ def ensure_path_era(assets: dict, era: str, tile_studs: float, layout_hash: str,
     # Derived from the bake, but committed: assets/build is gitignored, and the manifest and any
     # reviewer should be able to see what a plot's paths cost without re-running Blender.
     entry["triangles"] = int(triangles or entry.get("triangles", 0))
-    for layer in PATH_LAYERS:
+    for key, value in ((PATH_LAYERS_KEY, layers), (PATH_LOOK_KEY, look)):
+        if value:
+            entry[key] = value
+        else:
+            entry.pop(key, None)
+    for layer in path_layers(entry):
         entry.setdefault(f"{layer}AssetId", 0)
         entry.setdefault(f"{layer}ImageId", 0)
         entry.setdefault(f"{layer}Sha256", "")
@@ -193,17 +221,24 @@ def ensure_path_variant(assets: dict, era: str, variant: str) -> dict:
     return entry
 
 
-def ensure_path_piece(assets: dict, era: str, piece_id: str) -> dict:
-    entry = assets[PATHS_KEY][era]["pieces"].setdefault(piece_id, {})
-    for layer in PATH_LAYERS:
+def ensure_path_piece(assets: dict, era: str, piece_id: str, kind: str | None = None) -> dict:
+    """Pre-list one piece in its era's layers without touching ids. `kind` is the bake record's (a
+    tube era's piece) and is refreshed on every run: it is how the template is drawn."""
+    era_entry = assets[PATHS_KEY][era]
+    entry = era_entry["pieces"].setdefault(piece_id, {})
+    if kind in PATH_KINDS:
+        entry[PATH_KIND_KEY] = kind
+    else:
+        entry.pop(PATH_KIND_KEY, None)
+    for layer in path_layers(era_entry):
         mesh = entry.setdefault(layer, empty_path_mesh())
         for key, default in empty_path_mesh().items():
             mesh.setdefault(key, default)
     return entry
 
 
-def path_piece_harvested(piece: dict) -> bool:
-    return all(int((piece.get(layer) or {}).get("meshId", 0)) != 0 for layer in PATH_LAYERS)
+def path_piece_harvested(piece: dict, layers: tuple[str, ...] = PATH_LAYERS) -> bool:
+    return all(int((piece.get(layer) or {}).get("meshId", 0)) != 0 for layer in layers)
 
 
 def ensure_world_set(assets: dict, set_name: str, plot_count: int, plan_hash: str, triangles: int = 0) -> dict:
@@ -305,13 +340,20 @@ def render_assets(assets: dict) -> str:
 
 
 def render_path_era(entry: dict) -> dict:
-    """Fixed key order for one era's paths block (INTERFACES "Wave 1d - Pipeline")."""
+    """Fixed key order for one era's paths block (INTERFACES "Wave 1d - Pipeline"). A tube era
+    (INTERFACES "Wave 4.2 - Assets") adds `look` and `layers` and, on each piece, `kind`; its rim
+    keys do not exist."""
+    layers = path_layers(entry)
     out: dict = {
         "tileStuds": entry.get("tileStuds", 0),
         "layoutHash": entry.get("layoutHash", ""),
         "triangles": int(entry.get("triangles", 0)),
     }
-    for layer in PATH_LAYERS:
+    if entry.get(PATH_LOOK_KEY):
+        out[PATH_LOOK_KEY] = str(entry[PATH_LOOK_KEY])
+    if layers != PATH_LAYERS:
+        out[PATH_LAYERS_KEY] = list(layers)
+    for layer in layers:
         for suffix in ("AssetId", "ImageId", "Sha256"):
             out[f"{layer}{suffix}"] = entry.get(f"{layer}{suffix}", 0 if suffix != "Sha256" else "")
     variants = entry.get(PATH_VARIANTS_KEY) or {}
@@ -321,19 +363,21 @@ def render_path_era(entry: dict) -> dict:
             for name in sorted(variants)
         }
     pieces = entry.get("pieces") or {}
-    out["pieces"] = {
-        piece_id: {
-            layer: {
-                "assetId": int((pieces[piece_id].get(layer) or {}).get("assetId", 0)),
-                "meshId": int((pieces[piece_id].get(layer) or {}).get("meshId", 0)),
-                "size": list((pieces[piece_id].get(layer) or {}).get("size") or [0, 0, 0]),
-                "offset": list((pieces[piece_id].get(layer) or {}).get("offset") or [0, 0, 0]),
-                "sha256": str((pieces[piece_id].get(layer) or {}).get("sha256", "")),
+    out["pieces"] = {}
+    for piece_id in sorted(pieces):
+        row: dict = {}
+        if pieces[piece_id].get(PATH_KIND_KEY) in PATH_KINDS:
+            row[PATH_KIND_KEY] = pieces[piece_id][PATH_KIND_KEY]
+        for layer in layers:
+            mesh = pieces[piece_id].get(layer) or {}
+            row[layer] = {
+                "assetId": int(mesh.get("assetId", 0)),
+                "meshId": int(mesh.get("meshId", 0)),
+                "size": list(mesh.get("size") or [0, 0, 0]),
+                "offset": list(mesh.get("offset") or [0, 0, 0]),
+                "sha256": str(mesh.get("sha256", "")),
             }
-            for layer in PATH_LAYERS
-        }
-        for piece_id in sorted(pieces)
-    }
+        out["pieces"][piece_id] = row
     return out
 
 

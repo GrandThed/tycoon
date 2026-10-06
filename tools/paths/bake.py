@@ -31,6 +31,11 @@ but meshes on disk were baked from another layout or width, or are missing (bake
 M12 wave 2.5: the era's back lanes (Config/Fabric/<Era>.json `lanes`) bake as `LN_<k>` pieces
 with the streets and spurs, and `--list` checks them against the fabric data -- ids, count, each
 polyline, the width, the mouth's address -- since the client reads no arc for a lane.
+
+M12 wave 4.2: an era whose streets are swept tubes (`road.paths.tube`: Orbital Colony) has the
+same pieces and ids but other meshes -- a half-pipe to a stretch, flat decking to a spur, no rim --
+so this command hands it whole to tools/paths/tubes.py: the bake, `--list` and its exit codes,
+`--piece`, `--dry-run`, and `--build-root` as its `--out-root`.
 """
 
 from __future__ import annotations
@@ -332,7 +337,17 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--assets-json", help="check piece ids against this Assets.json instead of the real one")
     args = parser.parse_args(argv)
     cfg.use_assets_path(args.assets_json)
+    import tubes  # tools/paths/tubes.py; late, as its bake reads check_ids from this module
+
     try:
+        if tubes.tube_config(net.streetplan.Era(args.era, net.load_city())) is not None:
+            handed = [args.era] + [flag for flag, on in (("--list", args.list), ("--dry-run", args.dry_run)) if on]
+            for piece_id in args.piece:
+                handed += ["--piece", piece_id]
+            for flag, value in (("--out-root", args.build_root), ("--assets-json", args.assets_json)):
+                if value:
+                    handed += [flag, value]
+            return tubes.main(handed)
         if args.list:
             return listing(args.era)
         code, _ = build(args.era, args.piece, args.dry_run, os.path.abspath(args.build_root) if args.build_root else BUILD_DIR)

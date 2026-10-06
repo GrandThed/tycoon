@@ -224,7 +224,7 @@ def pending_path_textures(assets: dict, include_all: bool = False) -> list[tuple
         entry = assets[cfg.PATHS_KEY][era]
         variants = entry.get(cfg.PATH_VARIANTS_KEY) or {}
         for variant, block in [(None, entry)] + [(name, variants[name]) for name in sorted(variants)]:
-            for layer in cfg.PATH_LAYERS:
+            for layer in cfg.path_layers(entry):
                 asset_id = int(block.get(f"{layer}AssetId", 0))
                 if asset_id != 0 and (include_all or int(block.get(f"{layer}ImageId", 0)) == 0):
                     out.append((era, variant, layer, asset_id))
@@ -236,7 +236,7 @@ def pending_path_pieces(assets: dict, include_all: bool = False) -> list[tuple[s
     for era in sorted(assets.get(cfg.PATHS_KEY, {})):
         pieces = assets[cfg.PATHS_KEY][era].get("pieces") or {}
         for piece_id in sorted(pieces):
-            for layer in cfg.PATH_LAYERS:
+            for layer in cfg.path_layers(assets[cfg.PATHS_KEY][era]):
                 mesh = pieces[piece_id].get(layer) or {}
                 asset_id = int(mesh.get("assetId", 0))
                 if asset_id != 0 and (include_all or int(mesh.get("meshId", 0)) == 0):

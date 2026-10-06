@@ -2,9 +2,13 @@
 """Swept tubes, flat decking and hub nodes for an era whose streets are tubes (docs/INTERFACES.md
 "Wave 4.1b -- organic Orbital").
 
-    py tools/paths/tubes.py OrbitalColony              # write every mesh, print the listing
-    py tools/paths/tubes.py OrbitalColony --list       # the listing only, nothing written
-    py tools/paths/tubes.py OrbitalColony --out-root DIR
+    py tools/paths/tubes.py OrbitalColony              # bake every piece for upload
+    py tools/paths/tubes.py OrbitalColony --list       # the piece table and the client/bake gate; writes nothing
+    py tools/paths/tubes.py OrbitalColony --dry-run    # what would be baked; writes nothing
+    py tools/paths/tubes.py OrbitalColony --piece L1_1 # one piece (repeatable)
+    py tools/paths/tubes.py OrbitalColony --out-root DIR   # bake under DIR, not assets/
+
+`py tools/paths/bake.py --era OrbitalColony ...` is the same command: bake.py hands a tube era here.
 
 A tube era is a path era (`road.paths`) with a `road.paths.tube` block. Its streets are the same
 chains and the same pieces tools/paths/network.py cuts for Village and Boomtown -- one per stretch,
@@ -36,16 +40,32 @@ A centreline never curves tighter than MIN_RADIUS: the chains are smoothed by fi
 polyline corner at two road widths, and a corner on legs too short for that is filleted tighter,
 so `radius_problems()` names it and the generator refuses the layout.
 
-For now the meshes are only rendered (tools/testfit/plotrender.py draws them): they are written
-under the system temp folder, in a folder named after this checkout, so two worktrees never share
-them and nothing lands in the shared assets/build. Colours are plain glTF colour factors, as every
-generated kit writes them; the upload route (wave 4.2) bakes them into a palette texture.
+The bake (INTERFACES "Wave 4.2 -- Assets") is the baked-paths route's, one mesh to a piece:
+
+  * `assets/build/paths/<Era>/Fill_<pieceId>.glb`, the name tools/paths/bake.py gives a ribbon's
+    fill: one node, one primitive, no material, so Roblox builds exactly one untextured MeshPart.
+    Its UVs put every vertex on its material's swatch of the era's palette;
+  * `assets/paths/<Era>_fill.png`, that palette (PALETTE's swatches in a row): where
+    tools/assets/upload_paths.py looks for an era's fill texture. A tube era has no rim layer;
+  * `assets/build/paths/<Era>.json`, the bake record upload_paths.py reads: bake.py's shape, with
+    `layers` ["fill"], `look` "palette", each piece's `kind` and each mesh's sha256.
+
+`--list` is the era's list gate, bake.py's exit codes: 1 when the pieces the client will ask for
+(tools/paths/clientarcs.py's reading of RoadGraph, plus the entrance apron) and the pieces baked
+disagree in ids, count, chain or arcs, when they overrun `budget.pathPieces`, or when the layout
+breaks the radius or the hub rule; 2 when they agree but the files on disk are missing or are not
+today's bytes (bake, upload, harvest); 0 otherwise.
+
+tools/testfit/plotrender.py draws the same meshes from its own copies (`write`): the same
+triangles with plain glTF colour factors, which Blender shows and Roblox would drop, in a folder
+under the system temp folder named after this checkout, so a render never writes into assets/.
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import math
 import os
@@ -59,8 +79,10 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "assets"))
 sys.path.insert(0, os.path.join(REPO_ROOT, "tools", "pathmock"))
 sys.path.insert(0, HERE)
+import assets_config as cfg  # noqa: E402
 import glbtools  # noqa: E402
 import network  # noqa: E402
+import palette as palette_png  # noqa: E402
 import pathgeom as pg  # noqa: E402
 import streetplan  # noqa: E402
 
@@ -84,6 +106,21 @@ DECK_STEP = 1.0
 CAP_SEGMENTS = 6  # a lane's round far end
 GRID = 0.05  # the candidate spacing the two rules above pick from
 ROUGHNESS = 0.9
+# Flat decking is crowned along its middle, as a baked ribbon is, so no piece's box is flat.
+DECK_CROWN = 0.005
+
+# The bake: where tools/assets/upload_paths.py reads an era's record, meshes and textures.
+BUILD_DIR = os.path.join(REPO_ROOT, "assets", "build", "paths")
+PATHS_DIR = os.path.join(REPO_ROOT, "assets", "paths")
+LAYER = "Fill"  # a tube era bakes this layer alone: bake.py's fill, no rim
+LOOK = "palette"
+# The swatches of the era's palette image, left to right. The order is part of every baked UV:
+# changing it re-bakes every piece.
+PALETTE = ("shell", "ring", "hull", "deck")
+SWATCH = 16  # pixels a swatch; a vertex's UV is its swatch's middle
+# What a piece is to the template (tools/assets/gen_templates.py): a tube stands on the plot, the
+# decking lies at `paths.fillHeight`.
+TUBE, DECK = "tube", "deck"
 
 
 def tube_config(era):
@@ -94,8 +131,16 @@ def tube_config(era):
 
 
 def default_root() -> str:
-    """Where this checkout's meshes go: outside every repo, and not shared between worktrees."""
+    """Where this checkout's render meshes go: outside every repo, not shared between worktrees."""
     return os.path.join(tempfile.gettempdir(), "EraCityTycoon", "tubes", os.path.basename(REPO_ROOT))
+
+
+def log(msg: str) -> None:
+    print(f"[tubes] {msg}", flush=True)
+
+
+def warn(msg: str) -> None:
+    print(f"[tubes] WARNING: {msg}", flush=True)
 
 
 def kit_numbers(path: str = TUBE_KIT) -> dict:
@@ -198,6 +243,84 @@ def write_glb(path: str, mesh: Mesh, colours: dict) -> int:
     with open(path, "wb") as handle:
         handle.write(data)
     return len(data)
+
+
+def swatch_uv(material: str) -> tuple[float, float]:
+    return ((PALETTE.index(material) + 0.5) / len(PALETTE), 0.5)
+
+
+def upload_glb(mesh: Mesh) -> bytes:
+    """The piece as it is uploaded: one node, one mesh, one primitive and no material -- what
+    tools/paths/planargeom.py writes for a ribbon -- with positions, flat normals and, for every
+    vertex, the UV of its material's swatch. The same triangles `write_glb` colours by factor."""
+    positions, normals, uvs = [], [], []
+    for material in PALETTE:
+        uv = swatch_uv(material)
+        for a, b, c, normal in mesh.groups.get(material, ()):
+            positions += [a, b, c]
+            normals += [normal] * 3
+            uvs += [uv] * 3
+    unknown = sorted(set(mesh.groups) - set(PALETTE))
+    if unknown or not positions:
+        raise SystemExit(f"tubes: {mesh.name}: no triangles to bake" if not positions else f"tubes: {mesh.name}: no palette swatch for {unknown}")
+    binary = bytearray()
+    views = []
+
+    def view(blob: bytes, target: int, stride: int | None = None) -> int:
+        while len(binary) % 4:
+            binary.append(0)
+        views.append({"buffer": 0, "byteOffset": len(binary), "byteLength": len(blob), "target": target, **({"byteStride": stride} if stride else {})})
+        binary.extend(blob)
+        return len(views) - 1
+
+    count = len(positions)
+    pos = view(b"".join(struct.pack("<fff", *p) for p in positions), 34962, 12)
+    nrm = view(b"".join(struct.pack("<fff", *n) for n in normals), 34962, 12)
+    tex = view(b"".join(struct.pack("<ff", *t) for t in uvs), 34962, 8)
+    idx = view(struct.pack(f"<{count}I", *range(count)), 34963)
+    while len(binary) % 4:
+        binary.append(0)
+    lo, hi = bounds(positions)
+    doc = {
+        "asset": {"version": "2.0", "generator": "EraCityTycoon tubes"},
+        "scene": 0,
+        "scenes": [{"nodes": [0]}],
+        "nodes": [{"name": mesh.name, "mesh": 0}],
+        "meshes": [{"name": mesh.name, "primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3}]}],
+        "bufferViews": views,
+        "accessors": [
+            {"bufferView": pos, "componentType": glbtools.FLOAT, "count": count, "type": "VEC3", "min": lo, "max": hi},
+            {"bufferView": nrm, "componentType": glbtools.FLOAT, "count": count, "type": "VEC3"},
+            {"bufferView": tex, "componentType": glbtools.FLOAT, "count": count, "type": "VEC2"},
+            {"bufferView": idx, "componentType": glbtools.UNSIGNED_INT, "count": count, "type": "SCALAR"},
+        ],
+        "buffers": [{"byteLength": len(binary)}],
+    }
+    data = glbtools.write_glb(doc, bytes(binary))
+    problems = glbtools.roblox_problems(data)
+    if problems:
+        raise SystemExit(f"tubes: {mesh.name}: not importable: {problems}")
+    return data
+
+
+def bounds(points) -> tuple[list[float], list[float]]:
+    return [min(p[i] for p in points) for i in range(3)], [max(p[i] for p in points) for i in range(3)]
+
+
+def palette_image(colours: dict) -> bytes:
+    """The era's palette as PNG bytes: PALETTE's colours, a SWATCH-wide swatch each, in a row.
+    tools/assets/palette.py writes it (the one PNG writer the kits' palettes use), so the bytes
+    are a fixed function of the colours."""
+    row = [tuple(int(v) for v in colours[material]) for material in PALETTE for _ in range(SWATCH)]
+    with tempfile.TemporaryDirectory() as folder:
+        target = os.path.join(folder, "palette.png")
+        palette_png.write_png(target, len(row), SWATCH, [row] * SWATCH)
+        with open(target, "rb") as handle:
+            return handle.read()
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 # ---------------------------------------------------------------------------------------------
@@ -547,9 +670,16 @@ class TubePlan:
         edges = []
         for s in stations:
             point, _, normal = self._frame(curve, s)
-            edges.append(((point[0] + normal[0] * half, 0.0, point[1] + normal[1] * half), (point[0] - normal[0] * half, 0.0, point[1] - normal[1] * half)))
-        for (l0, r0), (l1, r1) in zip(edges, edges[1:]):
-            mesh.quad("deck", l0, l1, r1, r0, up)
+            edges.append(
+                (
+                    (point[0] + normal[0] * half, 0.0, point[1] + normal[1] * half),
+                    (point[0], DECK_CROWN, point[1]),
+                    (point[0] - normal[0] * half, 0.0, point[1] - normal[1] * half),
+                )
+            )
+        for (l0, m0, r0), (l1, m1, r1) in zip(edges, edges[1:]):
+            mesh.quad("deck", l0, l1, m1, m0, up)
+            mesh.quad("deck", m0, m1, r1, r0, up)
         if round_start:
             point, tangent, normal = self._frame(curve, lo)
             fan = []
@@ -558,18 +688,25 @@ class TubePlan:
                 x = point[0] + half * (normal[0] * math.cos(angle) - tangent[0] * math.sin(angle))
                 z = point[1] + half * (normal[1] * math.cos(angle) - tangent[1] * math.sin(angle))
                 fan.append((x, 0.0, z))
-            centre = (point[0], 0.0, point[1])
+            centre = (point[0], DECK_CROWN, point[1])
             for a, b in zip(fan, fan[1:]):
                 mesh.tri("deck", centre, a, b, up)
 
+    @staticmethod
+    def _slab(mesh: Mesh, poly) -> None:
+        """A flat shape of decking, crowned at its middle."""
+        corners = [(p[0], 0.0, p[1]) for p in poly]
+        middle = (sum(p[0] for p in poly) / len(poly), DECK_CROWN, sum(p[1] for p in poly) / len(poly))
+        for a, b in zip(corners, corners[1:] + corners[:1]):
+            mesh.tri("deck", middle, a, b, (0.0, 1.0, 0.0))
+
     def deck_mesh(self, piece: dict) -> Mesh:
         """A landmark's apron, the entrance apron or a lane: flat decking at y 0 (the template lifts
-        it). The shapes of an apron overlap in one plane and one colour, as two baked path pieces do
-        at a node."""
+        it), crowned by DECK_CROWN. The shapes of an apron overlap in one colour within that crown,
+        as two baked path pieces do at a node."""
         mesh = Mesh(piece["id"])
         if piece["kind"] == ENTRANCE:
-            a, b, c, d = [(p[0], 0.0, p[1]) for p in piece["ground"]]
-            mesh.quad("deck", a, b, c, d, (0.0, 1.0, 0.0))
+            self._slab(mesh, piece["ground"])
             return mesh
         chain = piece["_chain"]
         curve = chain["final"]
@@ -579,10 +716,8 @@ class TubePlan:
             self._ribbon(mesh, curve, lo, hi, chain["width"] / 2, True)
             return mesh
         self._ribbon(mesh, curve, lo, hi, chain["width"] / 2, False)
-        up = (0.0, 1.0, 0.0)
         for _, poly in self.apron_rects(piece["slot"]):
-            a, b, c, d = [(p[0], 0.0, p[1]) for p in poly]
-            mesh.quad("deck", a, b, c, d, up)
+            self._slab(mesh, poly)
         return mesh
 
     def mesh_for(self, piece: dict) -> tuple[str, Mesh]:
@@ -591,8 +726,10 @@ class TubePlan:
         return "Deck", self.deck_mesh(piece)
 
     def write(self, root: str | None = None) -> dict:
-        """Every piece as `<root>/<Era>/{Tube,Deck}/<id>.glb`, and `<root>/<Era>/<Era>.json` listing
-        them with the hubs. Refuses a layout with a bend under MIN_RADIUS. Returns the listing."""
+        """The render copies (tools/testfit/plotrender.py): every piece as
+        `<root>/<Era>/{Tube,Deck}/<id>.glb`, coloured by glTF colour factors, and
+        `<root>/<Era>/<Era>.json` listing them with the hubs. Refuses a layout with a bend under
+        MIN_RADIUS. Returns the listing."""
         problems = self.radius_problems()
         if problems:
             raise SystemExit("\n".join(f"tubes: {problem}" for problem in problems))
@@ -614,38 +751,266 @@ class TubePlan:
         return sum(abs(piece["nodeArcs"][1] - piece["nodeArcs"][0]) for piece in self._pieces if piece["kind"] == "stretch")
 
 
+# ---------------------------------------------------------------------------------------------
+# The bake: upload-ready pieces, the record tools/assets/upload_paths.py reads, and the list gate
+# ---------------------------------------------------------------------------------------------
+
+
+def piece_kind(piece: dict) -> str:
+    return TUBE if piece["kind"] == "stretch" else DECK
+
+
+def bake_paths(era: str, out_root: str | None) -> tuple[str, str, str]:
+    """(the record, the era's mesh folder, its palette) of a bake: bake.py's and upload_paths.py's
+    places under assets/, or everything under `out_root` (a scratch bake)."""
+    if out_root is None:
+        return os.path.join(BUILD_DIR, f"{era}.json"), os.path.join(BUILD_DIR, era), os.path.join(PATHS_DIR, f"{era}_fill.png")
+    return os.path.join(out_root, f"{era}.json"), os.path.join(out_root, era), os.path.join(out_root, f"{era}_fill.png")
+
+
+def recorded(path: str) -> str:
+    """A file as a bake record names it: from the repo root when it lies in the repo (what
+    upload_paths.py joins onto the root), else whole."""
+    inside = os.path.relpath(path, REPO_ROOT)
+    return (path if inside.startswith("..") or os.path.isabs(inside) else inside).replace(os.sep, "/")
+
+
+def baked_mesh(plan: TubePlan, piece: dict) -> tuple[dict, bytes]:
+    """One piece's record entry and its upload bytes."""
+    _, mesh = plan.mesh_for(piece)
+    data = upload_glb(mesh)
+    points = [p for group in mesh.groups.values() for tri in group for p in tri[:3]]
+    lo, hi = bounds(points)
+    info = {
+        "triangles": mesh.tris,
+        "vertices": 3 * mesh.tris,
+        "centre": [round((a + b) / 2, 4) for a, b in zip(lo, hi)],
+        "size": [round(b - a, 4) for a, b in zip(lo, hi)],
+        "bytes": len(data),
+        "sha256": sha256(data),
+    }
+    return info, data
+
+
+def bake_record(plan: TubePlan, out_root: str | None) -> tuple[dict, dict[str, bytes], bytes]:
+    """The whole era as it bakes today: (the record, each piece's GLB bytes, the palette's)."""
+    era = plan.era.name
+    _, mesh_dir, palette_path = bake_paths(era, out_root)
+    image = palette_image(plan.colours)
+    record = {
+        "era": era,
+        "tileStuds": plan.bake.tile_studs,
+        "width": plan.era.width,
+        "spurWidth": plan.bake.spur_width,
+        "layoutHash": plan.bake.layout_hash(),
+        "look": LOOK,
+        "layers": [LAYER.lower()],
+        "palette": {"file": recorded(palette_path), "sha256": sha256(image), "size": [SWATCH * len(PALETTE), SWATCH], "swatches": list(PALETTE)},
+        "hubs": [{"node": hub["node"], "point": [round(hub["point"][0], 3), round(hub["point"][1], 3)], "why": hub["why"]} for hub in plan.hubs()],
+        "pieces": {},
+    }
+    blobs: dict[str, bytes] = {}
+    for piece in plan.pieces():
+        info, data = baked_mesh(plan, piece)
+        info["glb"] = recorded(os.path.join(mesh_dir, f"{LAYER}_{piece['id']}.glb"))
+        entry = {"kind": piece_kind(piece), "piece": piece["kind"], "meshes": {LAYER: info}}
+        if "nodeArcs" in piece:
+            entry["chain"] = piece["chain"]
+            entry["nodeArcs"] = [round(v, 4) for v in piece["nodeArcs"]]
+        for key in ("slot", "lane", "stretch"):
+            if key in piece:
+                entry[key] = piece[key]
+        record["pieces"][piece["id"]] = entry
+        blobs[piece["id"]] = data
+    meshes = [(piece_id, entry["meshes"][LAYER]) for piece_id, entry in record["pieces"].items()]
+    largest = max(meshes, key=lambda item: item[1]["triangles"], default=("-", {"triangles": 0}))
+    record["totals"] = {
+        "pieces": len(meshes),
+        "meshes": len(meshes),
+        "triangles": sum(info["triangles"] for _, info in meshes),
+        "vertices": sum(info["vertices"] for _, info in meshes),
+        "tubes": sum(1 for entry in record["pieces"].values() if entry["kind"] == TUBE),
+        "decking": sum(1 for entry in record["pieces"].values() if entry["kind"] == DECK),
+        "largest": {"piece": largest[0], "layer": LAYER, "triangles": largest[1]["triangles"]},
+    }
+    return record, blobs, image
+
+
+def layout_problems(plan: TubePlan) -> list[str]:
+    return plan.radius_problems() + plan.hub_problems()
+
+
+def bake(plan: TubePlan, only: list[str], dry_run: bool, out_root: str | None) -> int:
+    """Write the era's upload-ready pieces, its palette and its record. Refuses a layout that
+    breaks the radius or the hub rule, and -- as bake.py does -- a piece id set that moved under
+    an unchanged layout hash."""
+    import bake as ribbons  # tools/paths/bake.py; late, as it hands a tube era to this module
+
+    era = plan.era.name
+    problems = layout_problems(plan) + ribbons.check_ids(era, plan.bake.layout_hash(), [piece["id"] for piece in plan.pieces()])
+    for line in problems:
+        warn(line)
+    if problems:
+        warn("refusing to bake; fix the layout, or clear the era's pieces in Assets.json first")
+        return 1
+    record, blobs, image = bake_record(plan, out_root)
+    unknown = [piece_id for piece_id in only if piece_id not in blobs]
+    if unknown:
+        warn(f"no such piece(s) in {era}: {', '.join(unknown)}")
+        return 1
+    record_path, mesh_dir, palette_path = bake_paths(era, out_root)
+    chosen = [piece_id for piece_id in sorted(blobs) if not only or piece_id in only]
+    totals = record["totals"]
+    if dry_run:
+        log(f"{era}: would write {len(chosen)} GLB(s) into {recorded(mesh_dir)}, {recorded(palette_path)} and {recorded(record_path)}")
+        log(f"{era}: {totals['pieces']} pieces = {totals['tubes']} tube + {totals['decking']} decking, {totals['triangles']} triangles; nothing written")
+        return 0
+    os.makedirs(mesh_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(palette_path), exist_ok=True)
+    for piece_id in chosen:
+        with open(os.path.join(mesh_dir, f"{LAYER}_{piece_id}.glb"), "wb") as handle:
+            handle.write(blobs[piece_id])
+    with open(palette_path, "wb") as handle:
+        handle.write(image)
+    with open(record_path, "w", encoding="utf-8", newline="\n") as handle:
+        json.dump(record, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    largest = totals["largest"]
+    log(f"{era}: wrote {len(chosen)} GLB(s), {recorded(palette_path)} and {recorded(record_path)}")
+    log(
+        f"{era}: {totals['pieces']} pieces = {totals['tubes']} tube + {totals['decking']} decking, {totals['triangles']} triangles total, "
+        f"largest {LAYER}_{largest['piece']} at {largest['triangles']}"
+    )
+    return 0
+
+
+def client_pieces(plan: TubePlan) -> dict[str, dict]:
+    """Every piece id the client can ask for on this era: tools/paths/clientarcs.py's reading of
+    RoadGraph (the reveal rule and both budgets) and, where the first tube starts inside the plot's
+    front edge, the entrance apron, which is laid from the start and belongs to no slot."""
+    import clientarcs  # tools/paths; late: it imports tools/cityfabric.py, which imports this module's users
+
+    asked = dict(clientarcs.requested(plan.bake))
+    streets = plan.era.streets
+    if streets and streets[0] and streets[0][0][1] + plan.era.half_z >= streetplan.MIN_LENGTH:
+        asked[f"SP_{ENTRANCE}"] = {"id": f"SP_{ENTRANCE}"}
+    return asked
+
+
+def gate_problems(plan: TubePlan) -> list[str]:
+    """What the client will ask for against what is baked: ids, count, chain and arcs, and the
+    piece budget the client spends them from."""
+    import clientarcs
+
+    pieces = plan.pieces()
+    asked = client_pieces(plan)
+    cut = [piece for piece in pieces if "nodeArcs" in piece]
+    problems = clientarcs.verify(plan.bake, cut)
+    special = f"SP_{ENTRANCE}"
+    baked = {piece["id"] for piece in pieces}
+    if (special in asked) != (special in baked):
+        problems.append(f"{special}: the client {'asks for' if special in asked else 'never asks for'} it and the bake {'has' if special in baked else 'has not'} it")
+    budget = streetplan.budget_value(plan.era.city.get("budget", {}).get("pathPieces"), 0)
+    if len(asked) > budget:
+        problems.append(f"{len(asked)} pieces asked for, more than budget.pathPieces {budget:g}: the client drops the last ones")
+    return problems
+
+
+def stale_problems(record: dict, blobs: dict[str, bytes], image: bytes, on_disk: dict | None) -> tuple[list[str], str]:
+    """Today's bake against the files on disk: a piece is fresh when its GLB is there with today's
+    bytes. Returns one line per difference and a tally."""
+    known = (on_disk or {}).get("pieces") or {}
+    fresh, missing, changed = [], [], []
+    for piece_id in sorted(blobs):
+        rel = ((known.get(piece_id) or {}).get("meshes") or {}).get(LAYER, {}).get("glb")
+        file = os.path.join(REPO_ROOT, rel) if rel else None
+        if file is None or not os.path.isfile(file):
+            missing.append(piece_id)
+            continue
+        with open(file, "rb") as handle:
+            (fresh if sha256(handle.read()) == sha256(blobs[piece_id]) else changed).append(piece_id)
+    retired = sorted(set(known) - set(blobs))
+    problems = []
+    if missing:
+        problems.append(f"{len(missing)} piece(s) have no mesh on disk yet: {', '.join(missing)}")
+    if changed:
+        problems.append(f"{len(changed)} piece(s) on disk are not today's mesh: {', '.join(changed)}")
+    if retired:
+        problems.append(f"{len(retired)} piece(s) on disk are no longer baked: {', '.join(retired)}")
+    palette_file = ((on_disk or {}).get("palette") or {}).get("file")
+    palette_path = os.path.join(REPO_ROOT, palette_file) if palette_file else None
+    if palette_path is None or not os.path.isfile(palette_path):
+        problems.append("the palette image is not on disk yet")
+    else:
+        with open(palette_path, "rb") as handle:
+            if sha256(handle.read()) != sha256(image):
+                problems.append(f"the palette image on disk is not today's: {palette_file}")
+    return problems, f"{len(fresh)} piece(s) fresh, {len(missing)} missing, {len(changed)} changed, {len(retired)} retired"
+
+
+def listing(plan: TubePlan, out_root: str | None) -> int:
+    """The piece table and the era's list gate (bake.py's exit codes: 1 a disagreement or a layout
+    fault, 2 stale or missing files, 0 neither)."""
+    era = plan.era.name
+    faults = layout_problems(plan)
+    for line in faults:
+        warn(line)
+    if faults:
+        return 1
+    record, blobs, image = bake_record(plan, out_root)
+    asked = client_pieces(plan)
+    log(f"{era}: layout hash {record['layoutHash']}, pipe {plan.era.width:g} wide, decking {plan.bake.spur_width:g}")
+    for piece in plan.pieces():
+        entry = record["pieces"][piece["id"]]
+        seen = asked.get(piece["id"])
+        cut = "arc %8.3f-%8.3f" % tuple(piece["nodeArcs"]) if "nodeArcs" in piece else "laid from the start"
+        client = "   (never asked for)" if seen is None else "client %8.3f-%8.3f" % tuple(seen["arcs"]) if "arcs" in seen else "client asks"
+        log(f"  {piece['id']:<24} {entry['kind']:<5} {entry['meshes'][LAYER]['triangles']:>5} triangles  {cut}  {client}")
+    hubs = plan.hubs()
+    log(f"  hubs: {len(hubs)} -- " + ", ".join(f"{hub['why']} {streetplan.fmt((round(hub['point'][0], 1), round(hub['point'][1], 1)))}" for hub in hubs))
+    totals = record["totals"]
+    tube_tris = sum(e["meshes"][LAYER]["triangles"] for e in record["pieces"].values() if e["kind"] == TUBE)
+    log(
+        f"{era}: {totals['tubes']} tube pieces ({plan.tube_length():.0f} studs, {tube_tris} triangles), "
+        f"{totals['decking']} decking pieces ({totals['triangles'] - tube_tris} triangles)"
+    )
+    problems = gate_problems(plan)
+    for line in problems:
+        warn(line)
+    if problems:
+        warn("client/bake disagreement: fix the mirror or the layout, then re-bake and re-upload the pieces named")
+        return 1
+    log(f"{era}: client/bake check OK -- {len(asked)} piece(s) asked for, ids, count and arcs all agree")
+    record_path, _, _ = bake_paths(era, out_root)
+    on_disk = None
+    if os.path.isfile(record_path):
+        with open(record_path, "r", encoding="utf-8") as handle:
+            on_disk = json.load(handle)
+    stale, tally = stale_problems(record, blobs, image, on_disk)
+    for line in stale:
+        warn(f"stale mesh: {line}")
+    if stale:
+        warn(f"{era}: the meshes on disk are STALE or missing ({tally}): bake, upload and harvest before this era is judged in Studio")
+        return 2
+    log(f"{era}: the meshes on disk are today's ({tally})")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("era")
-    parser.add_argument("--list", action="store_true", help="print the listing, write nothing")
-    parser.add_argument("--out-root", help=f"where <Era>/ is written (default {default_root()})")
+    parser.add_argument("--list", action="store_true", help="print the piece table and run the client/bake gate; write nothing")
+    parser.add_argument("--dry-run", action="store_true", help="report what would be baked; write nothing")
+    parser.add_argument("--piece", action="append", default=[], help="only this piece id (repeatable)")
+    parser.add_argument("--out-root", help="bake under this folder (record, meshes and palette) instead of assets/build/paths and assets/paths")
+    parser.add_argument("--assets-json", help="check piece ids against this Assets.json instead of the real one")
     args = parser.parse_args(argv)
+    cfg.use_assets_path(args.assets_json)
+    out_root = os.path.abspath(args.out_root) if args.out_root else None
     plan = TubePlan(args.era, network.load_city())
-    problems = plan.radius_problems()
-    for problem in problems:
-        print(f"   VIOLATION: {problem}")
-    if problems:
-        return 1
-    rows = []
     if args.list:
-        for piece in plan.pieces():
-            layer, mesh = plan.mesh_for(piece)
-            rows.append((piece["id"], layer, mesh.tris))
-        root = "(not written)"
-    else:
-        listing = plan.write(args.out_root)
-        rows = [(piece["id"], piece["layer"], piece["tris"]) for piece in listing["pieces"]]
-        root = listing["root"]
-    for piece_id, layer, tris in rows:
-        print(f"   {layer:<5} {piece_id:<24} {tris:>5} triangles")
-    hubs = plan.hubs()
-    print(f"   hubs: {len(hubs)} -- " + ", ".join(f"{hub['why']} {streetplan.fmt((round(hub['point'][0], 1), round(hub['point'][1], 1)))}" for hub in hubs))
-    tubes = [row for row in rows if row[1] == "Tube"]
-    print(
-        f"{args.era}: {len(tubes)} tube pieces ({plan.tube_length():.0f} studs, {sum(row[2] for row in tubes)} triangles), "
-        f"{len(rows) - len(tubes)} decking pieces ({sum(row[2] for row in rows if row[1] == 'Deck')} triangles) -> {root}"
-    )
-    return 0
+        return listing(plan, out_root)
+    return bake(plan, args.piece, args.dry_run, out_root)
 
 
 if __name__ == "__main__":

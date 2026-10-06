@@ -12,6 +12,14 @@ assets/paths (INTERFACES "Wave 1e - street upgrades"), recorded under `paths.<Er
     py tools/assets/harvest.py --emit    # then paste tools/assets/harvest.luau in Studio, then
     py tools/assets/harvest.py           # merge: writes meshId / size / offset and the image ids
 
+A tube era (INTERFACES "Wave 4.2 - Assets": tools/paths/tubes.py bakes it, and its record says
+`layers` ["fill"] and `look` "palette") goes the same way with one mesh to a piece and one
+texture, the era's palette: `<Era>_fill.png`, small and opaque, which `bake.py --era <Era>` writes
+with the meshes. Such an era has no surface variants.
+
+    py tools/paths/bake.py --era OrbitalColony            # the GLBs, the palette, the record
+    py tools/assets/upload_paths.py --era OrbitalColony
+
 Each mesh goes up as a Model (Open Cloud returns the Model id; the MeshId, Size and offset of the
 MeshPart Roblox builds inside it can only be read in Studio) and each texture as a Decal (whose
 inner Image asset is likewise Studio-only). That is why the harvest step exists.
@@ -78,14 +86,15 @@ def sha256(path: str) -> str:
         return hashlib.sha256(fh.read()).hexdigest()
 
 
-def png_problems(data: bytes) -> list[str]:
+def png_problems(data: bytes, palette: bool = False) -> list[str]:
     """Catch a stale or wrong file before it spends an upload: the size is load-bearing and an
-    alpha channel would mean the opaque-texture rule was broken somewhere upstream."""
+    alpha channel would mean the opaque-texture rule was broken somewhere upstream. A palette (a
+    tube era's texture) is a row of swatches of whatever size: only the opaque rule holds."""
     if not data.startswith(PNG_SIGNATURE) or data[12:16] != b"IHDR":
         return ["not a PNG"]
     width, height, _depth, colour_type = struct.unpack(">IIBB", data[16:26])
     problems = []
-    if (width, height) != EXPECTED_SIZE:
+    if not palette and (width, height) != EXPECTED_SIZE:
         problems.append(f"is {width}x{height}, expected {EXPECTED_SIZE[0]}x{EXPECTED_SIZE[1]}")
     if colour_type == RGBA_COLOUR_TYPE:
         problems.append("has an alpha channel; baked paths must be fully opaque")
@@ -147,21 +156,25 @@ def discover_variants(era: str, paths_dir: str, entry: dict) -> list[str]:
     return sorted(found)
 
 
-def layer_jobs(era: str, entry: dict, paths_dir: str, variant: str | None = None) -> tuple[list[Job], list[str]]:
+def layer_jobs(era: str, entry: dict, paths_dir: str, variant: str | None = None, era_entry: dict | None = None) -> tuple[list[Job], list[str]]:
     """The fill and rim of one surface: the era's default pair, or one variant's pair. A variant
     records the same six keys in its own block, so the idempotency and the hash check are the
-    default's, unchanged."""
+    default's, unchanged. `era_entry` is the era's own block (a variant's parent): its layers and
+    look say which textures there are -- a tube era has the fill alone, its palette."""
     jobs, problems = [], []
+    era_entry = entry if era_entry is None else era_entry
+    palette = era_entry.get(cfg.PATH_LOOK_KEY) == cfg.PATH_LOOK_PALETTE
     stem = era if variant is None else f"{era}_{variant}"
-    what = "baked path" if variant is None else f"baked path {variant} surface"
-    for layer in cfg.PATH_LAYERS:
+    what = ("baked path palette" if palette else "baked path") if variant is None else f"baked path {variant} surface"
+    for layer in cfg.path_layers(era_entry):
         png = os.path.join(paths_dir, f"{stem}_{layer}.png")
         label = f"{stem} {layer} texture"
         if not os.path.isfile(png):
-            problems.append(f"{label}: missing {os.path.relpath(png, cfg.REPO_ROOT)}; generate it first: {TEXTURE_CMD.format(era=era)}")
+            make = (BAKE_CMD if palette else TEXTURE_CMD).format(era=era)
+            problems.append(f"{label}: missing {os.path.relpath(png, cfg.REPO_ROOT)}; generate it first: {make}")
             continue
         with open(png, "rb") as fh:
-            bad = png_problems(fh.read())
+            bad = png_problems(fh.read(), palette)
         if bad:
             problems += [f"{label}: {os.path.basename(png)} {p}" for p in bad]
             continue
@@ -183,7 +196,7 @@ def layer_jobs(era: str, entry: dict, paths_dir: str, variant: str | None = None
                 label,
                 png,
                 display_name(era, layer, variant=variant),
-                f"Era City Tycoon {era} {what} {layer} texture. Procedurally generated (tools/paths/texture.py).",
+                f"Era City Tycoon {era} {what} {layer} texture. Procedurally generated (tools/paths/{'tubes' if palette else 'texture'}.py).",
                 "decal",
                 commit,
             )
@@ -194,7 +207,7 @@ def layer_jobs(era: str, entry: dict, paths_dir: str, variant: str | None = None
 def texture_jobs(assets: dict, era: str, entry: dict, paths_dir: str) -> tuple[list[Job], list[str]]:
     jobs, problems = layer_jobs(era, entry, paths_dir)
     for variant in discover_variants(era, paths_dir, entry):
-        variant_jobs, variant_problems = layer_jobs(era, cfg.ensure_path_variant(assets, era, variant), paths_dir, variant)
+        variant_jobs, variant_problems = layer_jobs(era, cfg.ensure_path_variant(assets, era, variant), paths_dir, variant, entry)
         jobs += variant_jobs
         problems += variant_problems
     return jobs, problems
@@ -202,11 +215,13 @@ def texture_jobs(assets: dict, era: str, entry: dict, paths_dir: str) -> tuple[l
 
 def mesh_jobs(assets: dict, era: str, bake: dict, only: list[str]) -> tuple[list[Job], list[str]]:
     jobs, problems = [], []
+    layers = cfg.path_layers(assets[cfg.PATHS_KEY][era])
+    made_by = "tubes" if bake.get(cfg.PATH_LOOK_KEY) == cfg.PATH_LOOK_PALETTE else "bake"
     for piece_id in sorted(bake.get("pieces") or {}):
         if only and piece_id not in only:
             continue
-        piece = cfg.ensure_path_piece(assets, era, piece_id)
-        for layer in cfg.PATH_LAYERS:
+        piece = cfg.ensure_path_piece(assets, era, piece_id, bake["pieces"][piece_id].get(cfg.PATH_KIND_KEY))
+        for layer in layers:
             mesh = piece[layer]
             baked = (bake["pieces"][piece_id].get("meshes") or {}).get(layer.capitalize()) or {}
             rel = baked.get("glb")
@@ -233,7 +248,7 @@ def mesh_jobs(assets: dict, era: str, bake: dict, only: list[str]) -> tuple[list
                     label,
                     glb,
                     display_name(era, layer, piece_id),
-                    f"Era City Tycoon {era} baked path piece {piece_id} ({layer}). Generated (tools/paths/bake.py).",
+                    f"Era City Tycoon {era} baked path piece {piece_id} ({layer}). Generated (tools/paths/{made_by}.py).",
                     "model",
                     commit,
                 )
@@ -265,7 +280,13 @@ def main(argv: list[str]) -> int:
 
     assets = cfg.load_assets()
     entry = cfg.ensure_path_era(
-        assets, args.era, bake["tileStuds"], bake["layoutHash"], (bake.get("totals") or {}).get("triangles", 0)
+        assets,
+        args.era,
+        bake["tileStuds"],
+        bake["layoutHash"],
+        (bake.get("totals") or {}).get("triangles", 0),
+        bake.get(cfg.PATH_LAYERS_KEY),
+        bake.get(cfg.PATH_LOOK_KEY),
     )
     jobs, problems = texture_jobs(assets, args.era, entry, paths_dir)
     mesh, mesh_problems = mesh_jobs(assets, args.era, bake, args.piece)
