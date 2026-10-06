@@ -10447,6 +10447,989 @@
       }
     },
     "OrbitalColony": {
+      "ColonyFlagMast": {
+        "stages": [
+          {
+            "modelAssetId": 136770716201521,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.0, 5.0, 1.0],
+                "offset": [0.0, 2.5, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabMediumA": {
+        "stages": [
+          {
+            "modelAssetId": 107693998428910,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.064, 12.0],
+                "offset": [0.0, 1.532, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 106994188853064,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.563, 12.0],
+                "offset": [0.0, 1.781, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 93808752600767,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.66, 12.0],
+                "offset": [0.0, 2.33, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 75401429283851,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.26, 12.0],
+                "offset": [0.0, 2.63, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 128354728796769,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.78, 12.0],
+                "offset": [0.0, 3.39, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabMediumAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 104524302644822,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.064, 12.0],
+                "offset": [0.0, 1.532, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 125492961701075,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 3.563, 12.0],
+                "offset": [0.0, 1.781, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 86957564456035,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 4.66, 12.0],
+                "offset": [0.0, 2.33, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 111955638992873,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 5.26, 12.0],
+                "offset": [0.0, 2.63, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 100914205968739,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.0, 6.78, 12.0],
+                "offset": [0.0, 3.39, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 95300787742016,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.17, 8.0],
+                "offset": [0.0, 1.085, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89387502248583,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.29, 8.0],
+                "offset": [0.0, 1.645, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 122072677091133,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.841, 8.0],
+                "offset": [0.0, 1.92, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 140537763415209,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.338, 8.0],
+                "offset": [0.0, 2.169, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 123480829373198,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.15, 8.0],
+                "offset": [0.0, 3.075, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabNarrowAGreen": {
+        "stages": [
+          {
+            "modelAssetId": 77987976896433,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.17, 8.0],
+                "offset": [0.0, 1.085, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 70968728430603,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.29, 8.0],
+                "offset": [0.0, 1.645, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 128884487652352,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.841, 8.0],
+                "offset": [0.0, 1.92, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87442318169521,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.338, 8.0],
+                "offset": [0.0, 2.169, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71864427777132,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.15, 8.0],
+                "offset": [0.0, 3.075, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 135604288954689,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.12, 8.0],
+                "offset": [0.0, 1.06, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 103058860236571,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.261, 8.0],
+                "offset": [0.0, 1.63, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 85364431192174,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.963, 8.0],
+                "offset": [0.0, 1.982, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 123768918636547,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.663, 8.0],
+                "offset": [0.0, 2.331, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 115471570464739,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.08, 8.0],
+                "offset": [0.0, 3.04, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricHabNarrowBGreen": {
+        "stages": [
+          {
+            "modelAssetId": 134679273637394,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.12, 8.0],
+                "offset": [0.0, 1.06, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 103850489637596,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.261, 8.0],
+                "offset": [0.0, 1.63, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 114788819994604,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.963, 8.0],
+                "offset": [0.0, 1.982, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87816674310621,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.663, 8.0],
+                "offset": [0.0, 2.331, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87412868780115,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.08, 8.0],
+                "offset": [0.0, 3.04, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricIndNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 82529123351214,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.07, 8.0],
+                "offset": [0.0, 1.035, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 110487150153065,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.31, 8.0],
+                "offset": [0.0, 1.655, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 124111466829788,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.8, 8.0],
+                "offset": [0.0, 2.9, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 105151525891521,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.8, 8.0],
+                "offset": [0.0, 3.9, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 109976757440755,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 10.4, 8.0],
+                "offset": [0.0, 5.2, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricIndNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 132096531805569,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.732, 8.0],
+                "offset": [0.0, 1.366, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 83394279382362,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.31, 8.0],
+                "offset": [0.0, 1.655, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 71062120144458,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.6, 8.0],
+                "offset": [0.0, 2.8, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 99220377090396,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.6, 8.0],
+                "offset": [0.0, 3.8, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 121401201286720,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 9.784, 8.0],
+                "offset": [0.0, 4.892, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricIndSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 123913519560321,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 2.62, 6.0],
+                "offset": [0.0, 1.31, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 101909216314950,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.52, 6.0],
+                "offset": [0.0, 1.76, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 85022363907991,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 5.9, 6.0],
+                "offset": [0.0, 2.95, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89745422153390,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 7.8, 6.0],
+                "offset": [0.0, 3.9, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 107658631740487,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 10.6, 6.0],
+                "offset": [0.0, 5.3, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricPortNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 118043385479822,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.04, 8.0],
+                "offset": [0.0, 1.02, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 81692925542018,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.33, 8.0],
+                "offset": [0.0, 1.665, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 133877618347853,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.32, 8.0],
+                "offset": [0.0, 2.16, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 77677828689263,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.6, 8.0],
+                "offset": [0.0, 2.8, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 73434598061889,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.96, 8.0],
+                "offset": [0.0, 3.48, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricPortNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 122115407577571,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.62, 8.0],
+                "offset": [0.0, 1.31, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 76521292407864,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.33, 8.0],
+                "offset": [0.0, 1.665, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 105158337579952,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 4.24, 8.0],
+                "offset": [0.0, 2.12, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 73763857294503,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.32, 8.0],
+                "offset": [0.0, 2.66, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87738146836468,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.91, 8.0],
+                "offset": [0.0, 3.455, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricPortSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 113538106676002,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 2.04, 6.0],
+                "offset": [0.0, 1.02, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98047219998352,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.36, 6.0],
+                "offset": [0.0, 1.68, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 140509903210170,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.84, 6.0],
+                "offset": [0.0, 1.92, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137748964143284,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 4.92, 6.0],
+                "offset": [0.0, 2.46, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 77729294278659,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 6.96, 6.0],
+                "offset": [0.0, 3.48, 0.0]
+              },
+              {
+                "kit": "space-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.0, 1.8, 5.0],
+                "offset": [1.35, 1.09, 0.1]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricSciNarrowA": {
+        "stages": [
+          {
+            "modelAssetId": 77037469524163,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 2.68, 8.0],
+                "offset": [0.0, 1.34, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 129559905328211,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.75, 8.0],
+                "offset": [0.0, 1.875, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 78874606199263,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.3, 8.0],
+                "offset": [0.0, 2.65, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 139661004500940,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.6, 8.0],
+                "offset": [0.0, 3.3, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 133513052466805,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.9, 8.0],
+                "offset": [0.0, 3.95, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricSciNarrowB": {
+        "stages": [
+          {
+            "modelAssetId": 96916994064467,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.02, 8.0],
+                "offset": [0.0, 1.51, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 112991009116019,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 3.67, 8.0],
+                "offset": [0.0, 1.835, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 102875796490037,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 5.295, 8.0],
+                "offset": [0.0, 2.648, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 98834603221212,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 6.214, 8.0],
+                "offset": [0.0, 3.107, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 137368061346955,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.0, 7.2, 8.0],
+                "offset": [0.0, 3.6, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "FabricSciSmallA": {
+        "stages": [
+          {
+            "modelAssetId": 77962795908676,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.283, 6.0],
+                "offset": [0.0, 1.641, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 89658890212771,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 3.908, 6.0],
+                "offset": [0.0, 1.954, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 116910407377674,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 4.825, 6.0],
+                "offset": [0.0, 2.412, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 87917688936475,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 6.225, 6.0],
+                "offset": [0.0, 3.112, 0.0]
+              }
+            ]
+          },
+          {
+            "modelAssetId": 132656304234519,
+            "parts": [
+              {
+                "kit": "colony-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.0, 6.722, 6.0],
+                "offset": [0.0, 3.361, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "HouseA": {
         "stages": [
           {
@@ -10493,6 +11476,22 @@
           }
         ]
       },
+      "HubBeacon": {
+        "stages": [
+          {
+            "modelAssetId": 94541422457168,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.599, 5.45, 3.599],
+                "offset": [0.0, 5.375, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "LampPost": {
         "stages": [
           {
@@ -10504,6 +11503,38 @@
                 "imageId": 101025632384804,
                 "size": [3.2, 6.4, 2.4],
                 "offset": [0.0, 3.2, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "LotBeacon": {
+        "stages": [
+          {
+            "modelAssetId": 94556569074799,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.9, 4.5, 1.9],
+                "offset": [0.0, 2.25, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "MonorailArc": {
+        "stages": [
+          {
+            "modelAssetId": 88577390796808,
+            "parts": [
+              {
+                "kit": "monorail-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.436, 7.12, 1.918],
+                "offset": [0.0, 3.56, 0.009]
               }
             ]
           }
@@ -10557,6 +11588,22 @@
           }
         ]
       },
+      "PierBanner": {
+        "stages": [
+          {
+            "modelAssetId": 80865116250864,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.08, 3.76, 1.72],
+                "offset": [0.0, 2.98, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "PlazaA": {
         "stages": [
           {
@@ -10575,6 +11622,278 @@
                 "imageId": 117016605432909,
                 "size": [12.0, 8.4851, 12.0],
                 "offset": [0.0, 4.2426, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithBoulder": {
+        "stages": [
+          {
+            "modelAssetId": 108970769573357,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.737, 2.751, 1.594],
+                "offset": [-0.007, 1.375, 0.045]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithBoulderGarden": {
+        "stages": [
+          {
+            "modelAssetId": 84844722879957,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.96, 2.676, 1.96],
+                "offset": [0.0, 1.338, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpA": {
+        "stages": [
+          {
+            "modelAssetId": 130677469007585,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.277, 1.12, 12.277],
+                "offset": [0.0, 0.56, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpAGarden": {
+        "stages": [
+          {
+            "modelAssetId": 122210801097461,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.2, 1.4, 12.2],
+                "offset": [0.0, 0.7, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpB": {
+        "stages": [
+          {
+            "modelAssetId": 102406232334497,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.613, 1.154, 9.613],
+                "offset": [0.0, 0.577, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpBGarden": {
+        "stages": [
+          {
+            "modelAssetId": 72993981567560,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [8.6, 1.302, 8.6],
+                "offset": [0.0, 0.651, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpC": {
+        "stages": [
+          {
+            "modelAssetId": 102257136054764,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [12.226, 0.844, 12.226],
+                "offset": [0.0, 0.422, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithClumpCGarden": {
+        "stages": [
+          {
+            "modelAssetId": 115433390713559,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [10.0, 1.25, 10.0],
+                "offset": [0.0, 0.625, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithCrater": {
+        "stages": [
+          {
+            "modelAssetId": 76761293047194,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.843, 0.494, 2.725],
+                "offset": [0.025, 0.247, 0.033]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithCraterGarden": {
+        "stages": [
+          {
+            "modelAssetId": 89216002105776,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [2.9, 1.15, 2.9],
+                "offset": [0.0, 0.575, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterA": {
+        "stages": [
+          {
+            "modelAssetId": 129720363987600,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.139, 1.12, 6.132],
+                "offset": [3.069, 0.56, 3.066]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterAGarden": {
+        "stages": [
+          {
+            "modelAssetId": 137321079735873,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.1, 1.4, 6.1],
+                "offset": [3.05, 0.7, 3.05]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterB": {
+        "stages": [
+          {
+            "modelAssetId": 98494379106956,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.806, 1.154, 4.6],
+                "offset": [2.403, 0.577, 2.3]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterBGarden": {
+        "stages": [
+          {
+            "modelAssetId": 136423694703008,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.3, 1.302, 4.3],
+                "offset": [2.15, 0.651, 2.15]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterC": {
+        "stages": [
+          {
+            "modelAssetId": 120622362374753,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [6.113, 0.844, 5.7],
+                "offset": [3.056, 0.422, 2.85]
+              }
+            ]
+          }
+        ]
+      },
+      "RegolithQuarterCGarden": {
+        "stages": [
+          {
+            "modelAssetId": 77581089535951,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.0, 1.25, 5.0],
+                "offset": [2.5, 0.625, 2.5]
+              }
+            ]
+          }
+        ]
+      },
+      "RevealScaffold": {
+        "stages": [
+          {
+            "modelAssetId": 107504802162370,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [9.87, 8.0, 9.87],
+                "offset": [0.0, 4.0, 0.0]
               }
             ]
           }
@@ -10632,6 +11951,118 @@
           }
         ]
       },
+      "SiteMedium": {
+        "stages": [
+          {
+            "modelAssetId": 129138279625938,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [7.9, 2.72, 11.553],
+                "offset": [0.0, 1.36, -0.173]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteNarrow": {
+        "stages": [
+          {
+            "modelAssetId": 139802754133774,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.9, 2.07, 7.71],
+                "offset": [0.0, 1.035, -0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteNarrowGantry": {
+        "stages": [
+          {
+            "modelAssetId": 72993888092974,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [3.9, 7.5, 7.906],
+                "offset": [0.0, 3.75, 0.003]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteSmall": {
+        "stages": [
+          {
+            "modelAssetId": 88992821062401,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 2.42, 5.71],
+                "offset": [0.0, 1.21, -0.095]
+              }
+            ]
+          }
+        ]
+      },
+      "SiteSmallGantry": {
+        "stages": [
+          {
+            "modelAssetId": 83829069313670,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [5.9, 7.5, 5.788],
+                "offset": [0.0, 3.75, -0.056]
+              }
+            ]
+          }
+        ]
+      },
+      "SurveyBeacon": {
+        "stages": [
+          {
+            "modelAssetId": 86942357760271,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [0.877, 2.443, 0.758],
+                "offset": [0.002, 1.229, 0.094]
+              }
+            ]
+          }
+        ]
+      },
+      "SurveyBeaconGarden": {
+        "stages": [
+          {
+            "modelAssetId": 105246536583374,
+            "parts": [
+              {
+                "kit": "regolith-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [1.0, 2.1, 1.0],
+                "offset": [0.0, 1.05, 0.0]
+              }
+            ]
+          }
+        ]
+      },
       "TubeBend": {
         "stages": [
           {
@@ -10675,6 +12106,22 @@
                 "imageId": 127722554741114,
                 "size": [6.62, 1.96, 3.32],
                 "offset": [-0.19, 0.98, 0.0]
+              }
+            ]
+          }
+        ]
+      },
+      "TubeHub": {
+        "stages": [
+          {
+            "modelAssetId": 131480998171361,
+            "parts": [
+              {
+                "kit": "tube-kit",
+                "meshId": 0,
+                "imageId": 0,
+                "size": [4.6, 2.6, 4.6],
+                "offset": [0.0, 1.3, 0.0]
               }
             ]
           }
@@ -13432,6 +14879,670 @@
             "size": [9.062, 0.005, 17.8725],
             "offset": [-52.7582, 0.0025, -39.545],
             "sha256": "6a761a366c3666cad61c344072752a8a57814f2d53d705abbac5679b316c5097"
+          }
+        }
+      }
+    },
+    "OrbitalColony": {
+      "tileStuds": 11.0,
+      "layoutHash": "e98b2f228f98fae6",
+      "triangles": 24102,
+      "look": "palette",
+      "layers": [
+        "fill"
+      ],
+      "fillAssetId": 119850607479014,
+      "fillImageId": 0,
+      "fillSha256": "f0a58e159e1f3ef227b5bb8de7112a32c6e3a4b696b64322f25e870daffb16c6",
+      "pieces": {
+        "L1_1": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 108569157144676,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "30fda16e64a227d50a7e1ea3adcda46810c0187899a14fd8ea0cfa523a4172d8"
+          }
+        },
+        "L1_2": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 134808221620198,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "c0efdbc12af0d03cef902271a1691e34144e9d1863de556469aba32c186875e5"
+          }
+        },
+        "L2_1": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 71234022281066,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "a2e01e18d88d0ef4c6595922639d0080ce4379f65905c77e8a3c23e71c1645ba"
+          }
+        },
+        "L2_10": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 77267130459842,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "89943c1ee7381c4c80938e1f4778a77affad73b2f6b34677215d743a645a1803"
+          }
+        },
+        "L2_11": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 93985044526253,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "59e15c31016af19ea2be4c7a293ef1a108c48c2edf571bea95039631324938e7"
+          }
+        },
+        "L2_12": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 133966358386321,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "771c2ae28cfdb6deaa1dc5e85e2346300b7a67cf4252497ba1e379861b3b50d2"
+          }
+        },
+        "L2_13": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 103425107936877,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "3f9ac4c7b8c7f4c8d3ca0dcc6e30de59504d4c71a5b824b3c595b86917eaa091"
+          }
+        },
+        "L2_14": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 125016783014044,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "2267f90ac382c6c42021a0edc0b003ba2533c47adb467ef5749adbc912839de2"
+          }
+        },
+        "L2_15": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 87799352495932,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "664fb56680ed1493827b94a8d2fbb46ef29450cc6cc6d862be91202a23f6f75e"
+          }
+        },
+        "L2_16": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 139657450172420,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "54341529a5e6a4cc0a506c543ec6cd57ccd0a258b4d516a35c10b007530fdba3"
+          }
+        },
+        "L2_17": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 79793474996271,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "aa979532a97c2c1a5010caf2d1b69f90afa8b5644f830777c88b04700532de7a"
+          }
+        },
+        "L2_18": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 78642811615069,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "19dc7eef0b1ca06c1bf3599dfa854fe78f127f9974888eb5146d100597c3b7f7"
+          }
+        },
+        "L2_19": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 73350748577575,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "c640cff666bdcd6222426bd9c8109ff9ea350870a78396435f3c2c9da0589f47"
+          }
+        },
+        "L2_2": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 119541448042966,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "465ada9a5cab83226559129fa953eab88632e83404cfbc0d6d8f33e65242ff62"
+          }
+        },
+        "L2_20": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 119873292656540,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0c493e20863181a322f8ffbc05a97c83a4b7f12918acf78ed5b73109adf8d05c"
+          }
+        },
+        "L2_21": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 93983259998913,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "b5040d67d70c0f97c5355bfa284212faf6c44439557ff8fcfcdfa06fc4b97f86"
+          }
+        },
+        "L2_3": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 92230128201626,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "636de039901c64a05275f82fc55b60b0f42b2dcb72d241ac2a0ffebdb937b4de"
+          }
+        },
+        "L2_4": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 98627029908716,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "125e99987688b5de274349f5db88f4e651d74739714b2ec62dc64c8e921836b8"
+          }
+        },
+        "L2_5": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 79921282295052,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "37d1fe388e5d89a9589d8d2ecea742a6384007bbe3758177eb7089343b872ded"
+          }
+        },
+        "L2_6": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 78089760391476,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "1221bdbe4d8324d2014d63f5862e3b037431faaf770b032f0309ff7f12214bc8"
+          }
+        },
+        "L2_7": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 129571642694386,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "1729d0dab76e2b38a6342eb47886aee889c8f50470f488c12380ebac1662aa72"
+          }
+        },
+        "L2_8": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 136165534489840,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "7511a2411d1f70754425e879494138a56458a3a48f32501cb90b4f0e6aea1018"
+          }
+        },
+        "L2_9": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 75182081000953,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "8af15e020d1c5056d2fa9e0a0aeaf81faab859f87337831944d8763caca12560"
+          }
+        },
+        "L3_1": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 98948304627500,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "23ec9f6bc4286ef241ac184c6f8d0debcf9f13d0aa06e2369d2c0592d24d5c98"
+          }
+        },
+        "L3_10": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 105017736530403,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "010c11264427329035606b215f78bf7224d5bab382f656361bf0953bd0673305"
+          }
+        },
+        "L3_11": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 127897785362434,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "29fb1e60e0aead4bb416ca868bb313aa4bce38af13eb40eaaed088acccfb9f7b"
+          }
+        },
+        "L3_12": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 130193585305167,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "1c4f8a4d645975123b21b30d970e1f5da0f9acabb403fc406c4966fd5f1cbdf7"
+          }
+        },
+        "L3_13": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 96501032477839,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "40174f00739df8ad4fb8ef5a1234b258c173f31e3b6fbcb1bf911b0dfb486cc8"
+          }
+        },
+        "L3_14": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 78317783706251,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "3dbf2cda887b017b4738dc29b35059490bde57a6bf3face28acaae4806cd90f5"
+          }
+        },
+        "L3_15": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 121125144476848,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0b3e9c6100501826830bed75703022a5e12a0942e215cfced3b22c1dd91ae9cc"
+          }
+        },
+        "L3_16": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 71553336881966,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "6260c431acd0ccea46e26af32d8a27f495cb5bfdc5bdf6b8a1cc68161502ea9a"
+          }
+        },
+        "L3_17": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 116164647379859,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "11a2806a9e23bc0c0d40bcb04d548e80e34f6009ef6ea2e3cbdbf93cf4f81a2b"
+          }
+        },
+        "L3_18": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 138665940796319,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "ca918033b1f2513084d3950149c613d8e38ffb9cd8ec810d30e49ea191f05478"
+          }
+        },
+        "L3_19": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 111524337612753,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "fc153f6362c6db0f5d509a70940271f292c57dcea5a75e04b212426780503913"
+          }
+        },
+        "L3_2": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 91593359818021,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "ef5a1c71e17ed39e0f995f816dc63983789fa8d14c848a032159592da3b2d43d"
+          }
+        },
+        "L3_20": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 111703887812145,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0d2c731e2a416c9ea61d7449a19afcd6150a7bd1b8bdaa18cc9688938d95a3c4"
+          }
+        },
+        "L3_3": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 136240049158657,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "63a38d9d345b2bbcee021367e6666bfea859b76bfee4eef28fadb5f49f18fddb"
+          }
+        },
+        "L3_4": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 110318600644328,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "7c8cb8583985b9c4fdef1eee180cd901c1771795261d59228effbd15ffd231e3"
+          }
+        },
+        "L3_5": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 118460356669555,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "8b462393e40a2e5435980bcd1209caaa095bd72436c4abc42579b7b8ffb8868c"
+          }
+        },
+        "L3_6": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 116325985935786,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "f626ecb91a8925478f7e8ccabbe9428eecd1bb6b362f5abb2197d513be500a8d"
+          }
+        },
+        "L3_7": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 71231387986532,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "aeefa23d5c38b6c65ae38bfd7c3918531756c98e551eb55460e6a5f0ccb5c2b9"
+          }
+        },
+        "L3_8": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 107477525412386,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "db62d4740b7c73898b118571d6998e33bb1329cd8bad49bf1958ad29e6a3fff4"
+          }
+        },
+        "L3_9": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 83031067690780,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "5b2ab04355c0c88657079b55e72ba67e94779173328eaef003e5ec0361174a83"
+          }
+        },
+        "L4_1": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 135367613925337,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "da66952093cc9d8b17ef96bf8211efa63410eee525203920dbb221c246334669"
+          }
+        },
+        "L5_1": {
+          "kind": "tube",
+          "fill": {
+            "assetId": 96591746175078,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "fbea5b35baea90fa4a35ef3217773c3419990d371fcfeb9707bcf4c08e8f39b8"
+          }
+        },
+        "SP_commsArray": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 101372942372784,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "32bcd28d16dde2d166be2cce30cb08f006bdc21ff1446574cabd74551988f10a"
+          }
+        },
+        "SP_crewQuarters": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 100925332083480,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "7b6820050ddeaaa3550ac205d4d6a28737b15d270fe7b751268c1940dff18cf1"
+          }
+        },
+        "SP_dockingBay": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 119614311499985,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "282b2bc408d083c2d36b500d85058e9a1892a2c3bd478abb8b7349913e79c212"
+          }
+        },
+        "SP_entrance": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 120947632253320,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "16b68a4403982ecf1613417eeba2ebc76035cd897dc6d59fef214d0eb2270357"
+          }
+        },
+        "SP_fusionReactor": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 75571119255545,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "99508c2c38039311bc547af53f21c04746d7d94b0d859202d9ad864a604fbc96"
+          }
+        },
+        "SP_habitatPod": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 92452388642548,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "8d8b57966954d62b909b58a0b6ad1a8e2b0ee697866398bcd49283651c5ebfd1"
+          }
+        },
+        "SP_hydroponicsDome": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 72243899738317,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "d74ddddda7a45fda1172f9cf70844e54be94448226410a3c59d9ecd342398af3"
+          }
+        },
+        "SP_landingPad": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 88708496133041,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "796821e510129e09c615dfb7cf795fc87611f0d180e3719c442a56c6ba2b7d5d"
+          }
+        },
+        "SP_launchTower": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 132423854391588,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0fabb5aa23fb5a812984bb7eea4e0c3372168f1dc2576b5d1d1a1405fde920d1"
+          }
+        },
+        "SP_medicalBay": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 79191586892541,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "9586d74400c7e91091d46f35eb370a61576de9e3abad56d3b29fef4ded597b75"
+          }
+        },
+        "SP_mineralExtractor": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 91728445329875,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "12bd40c6a46e0f399a217d736e79ece6d9da6f43f754be686f96b256bd7aa63f"
+          }
+        },
+        "SP_observationDome": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 103937759991896,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "bd4947d749d06d9d455b3ff009968e54ef1539b74ff9733512eacb4cabbd435c"
+          }
+        },
+        "SP_orbitalUplink": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 109518019339208,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "ed7b3d0e2918200217288454875f8580b1da8eb403ce13ae965a686c658ce6e1"
+          }
+        },
+        "SP_oxygenGenerator": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 93753454696018,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "6ccef6f984349bcf0b489e4cb95f141c116e9c54ca2ad818521179a45abd47f8"
+          }
+        },
+        "SP_planetaryDefense": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 103113206211441,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "eb911b99218a1761daecf802af60ea7f626247473f211d1500eea0971cf7cb25"
+          }
+        },
+        "SP_researchLab": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 80878213328084,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "dd19809c3cbd58a0acb1130147d38b160cce1f606d4bb1694134f1b619f089f9"
+          }
+        },
+        "SP_roverBay": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 100034045434494,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "8c37ee8e437cabcc4268778051e8c1a0a063e2d9bd535beb44688d2f1b915d4d"
+          }
+        },
+        "SP_solarArray": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 97169514349607,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "a0323e6f80050e512c6bf87f7a1b2af823c1fc7d19be77187e6a8ed162fefa54"
+          }
+        },
+        "SP_spaceportTerminal": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 127111871161629,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "0660f5891eae4c24395b095286bf53fba776fbff05e1c328b6215c99189c1b08"
+          }
+        },
+        "SP_terraformStation": {
+          "kind": "deck",
+          "fill": {
+            "assetId": 129723154636983,
+            "meshId": 0,
+            "size": [0, 0, 0],
+            "offset": [0, 0, 0],
+            "sha256": "c089b0cc7c2e89296f16376cdf7f2cdca370f7c83f9378fb99ea8c581d2d744c"
           }
         }
       }
