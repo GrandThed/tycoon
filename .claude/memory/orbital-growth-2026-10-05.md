@@ -37,7 +37,15 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   before-and-afters on Bloom (`colonyFlag` flags, `lifeSupport` green domes, `rockGarden` gardens in
   the strips, `holoBeacon` on the hubs; Uplink and Defense stay buildings by the lead's
   recommendation), then wave 4.2 (client, final props with strips, review, QA, docs, asset run).
-- **At the third gate, waiting for Ben (2026-10-06):** city-changers on Bloom, sheet
+- **Ben kept all four changers on 2026-10-06: "looks good! lets keep all four"** (read as: flags,
+  green domes, rock gardens and hub beacons stay; Uplink and Defense stay buildings; the reseated
+  Bloom, 89 lots, is the layout). The slots are renamed "Raise the Colony Flags", "Green the Domes",
+  "Tend the Rock Gardens", "Light the Holo Beacons". **Wave 4.2 (INTERFACES "Wave 4.2 — Orbital in
+  the game") is running on `m12-orbital` in `tycoon-m12o`, the only Orbital worktree left**: shared
+  pure rules, the client (Orbital moves to the baked-path renderer, round loop, wild swaps), the
+  asset pipeline for swept tubes, final props, `orbital.project.json`. Then review, QA, docs, the
+  final prop sheets to Ben, and only after his OK the upload and one harvest paste.
+- The third gate, for the record (2026-10-06): city-changers on Bloom, sheet
   `assets/testfit/out/OrbitalColony/m12o_changers.png` (and `m12o_bloom_reseat.png`). Bloom was
   reseated for four street-only slots: **89 lots** (was 82), habitat 25. Proposals: `colonyFlag` =
   flag masts plus banners on every other monorail pier; `lifeSupport` = Green twins of the habitat

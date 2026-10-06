@@ -7892,3 +7892,94 @@ template exists; re-sync when the slot is bought); an upgrade item with `anchor 
 without `stretch` or `parcel`, developed while the highway stands); types for both and
 `check_mirror.py` vectors. The shipped layer and swap code covers the rest. Sixteen new props join
 the asset run: four Green twins, nine Garden twins, `ColonyFlagMast`, `PierBanner` and `HubBeacon`.
+
+### Ben at the third gate (2026-10-06): all four
+
+"looks good! lets keep all four". Read as: the four city-changers stay (flags, green domes, rock
+gardens, hub beacons), `orbitalUplink` and `planetaryDefense` stay buildings, and the reseated Bloom
+(89 lots) is the layout. The Bloom worktree is removed; everything is on `m12-orbital` in
+`C:\Users\benja\Desktop\tycoon-m12o`.
+
+## Wave 4.2 — Orbital in the game (Ben, 2026-10-06)
+
+The mock becomes the game. The layout, the plan, the fabric data, the config and the Python tools
+are done and green; this wave makes the game draw what the mirror draws, finishes the props, and
+prepares the asset run. Nothing is uploaded until Ben approves the final prop sheets.
+
+### Slots (lead, `Config/Eras/4_OrbitalColony.json`, applied)
+
+`colonyFlag` "Raise the Colony Flags", `lifeSupport` "Green the Domes", `rockGarden` "Tend the Rock
+Gardens" and `holoBeacon` "Light the Holo Beacons" are `streetOnly`, as `walkwayNetwork` "Build the
+Monorail" already is. Order, type, cost, income, multiplier and `requires` are untouched
+(`sim_economy.py`: 16:20:04, legacy 887).
+
+### What the game must draw (the mirror is normative: `tools/cityfabric.py`, `tools/paths/tubes.py`, `tools/fabric.py`, `tools/testfit/plotrender.py`)
+
+- **Orbital is a path era.** `eras.OrbitalColony.road` has no `tiles`; it has `width` 3.24,
+  `paths.spurWidth` 3, `paths.tube { hub = "TubeHub", front = 1.75 }` and `paths.deck { material,
+  color }`. The client lays it with the baked-path renderer, not `TileRenderer`:
+  - a **tube** per street piece id (`L…`, the ids `tools/paths/network.py` yields): one swept
+    half-pipe mesh, no rim, growing with the buildings as Village's and Boomtown's paths do;
+  - **decking** per `SP_<slotId>` (a landmark's apron: its path, pad and building rects as one flat
+    mesh), per `LN_…` (none on Bloom) and `SP_entrance` (laid from the start, tied to no slot);
+  - a **`TubeHub`** at every hub node (where a tube ends, branches, or two chains meet) once a tube
+    at that node is drawn. The hub rule is `tubes.py`'s; copy it, do not re-derive it.
+  - Before the asset run there are no templates: every piece degrades to a placeholder Part or to
+    nothing, never to an error.
+- **Round monorail.** `highway.round` true (loop mode, no ramp): 48 `highway.props.arc`
+  (`MonorailArc`) seats on the circle of radius `layout.highway.ring` (56); the seat whose middle is
+  at angle t = 3.75° + 7.5°·k from +X stands at (56 cos t, 0, 56 sin t) with rotationY −(t + 90)°;
+  the train rides the circle at `deckHeight`; the reveal runs round the loop from the entrance.
+- **Pure rules, in `src/shared/CityFabric.luau`** (so `check_mirror.py --strict` covers them; Orbital
+  joins its era list): `ring_keeps` (with `highway.clearBand == false` a wild quarter or single whose
+  point lies on the ring band is cleared by nothing), no ring rects on a round loop, `fabric.wildSwaps`
+  (each standing clump, quarter and single shows `<prop><suffix>` for every owned swap, in list
+  order, where that template exists), and an upgrade item with `anchor = "highway"` (valid without
+  `stretch` or `parcel`; developed while the highway stands).
+- **Client `Fabric.luau`:** `syncWild` applies the wild swaps and re-syncs when the slot is bought;
+  the `flags` layer's pier banners use the highway anchor; the ring rules come from `CityFabric`.
+  The file stands at 170 of 180 top-level locals: fold its constants into tables and move its
+  validation block to its own module **before** adding anything (`py tools/check_compile.py` is the
+  gate).
+- **Nothing else moves:** the server, remotes, the economy, the other eras' config, layouts and
+  fabric data (byte-identical), and Metropolis's tile renderer.
+
+### Assets (pipeline; nothing is uploaded in this wave)
+
+- The swept tubes and the flat decking go the baked-paths route: `tubes.py` writes the pieces for
+  upload, `upload_paths.py` uploads them (colour-only meshes through the palette route),
+  `harvest.py` and `gen_templates.py` template them, the client clones them by id. A list gate
+  fails when the client's piece ids and the baked pieces disagree, as `bake.py --list` does for
+  Village and Boomtown.
+- `cityfabric.py props OrbitalColony` names every prop a lot, a site, the wild, a layer or a swap can
+  show; nothing else is merged or uploaded. Orbital's tile props (`TubeStraight` …, `MonorailTrack`,
+  `MonorailCorner`), `HouseA/B`, `PlazaA`, `Rocks` and `LampPost` are no longer drawn: their config
+  goes, the keys `Scatter` reads unguarded stay (empty).
+- `orbital.project.json`: `default.project.json` plus `DebugStartEra` 4 and a `GrantCash` computed
+  from `sim_economy.py` to max every building (Metropolis's first guess was six times short).
+
+### Props, final (strips to Ben before any upload)
+
+The mock's drafts with their known weak points fixed, as one set: 15 fabric props and 4 Green twins
+(five stages), 6 regolith clumps and quarters, 3 singles and their 9 Garden twins, 5 sites,
+`LotBeacon`, `RevealScaffold`, `TubeHub`, `MonorailArc`, `ColonyFlagMast`, `PierBanner`, `HubBeacon`.
+
+### Ownership (wave 4.2, disjoint; all on base, no agent writes git)
+
+| Owner | Files |
+|---|---|
+| lead | this section; `Config/Eras/4_OrbitalColony.json`; rulings; commits; memory |
+| luau-engineer | `src/shared/CityFabric.luau`, `src/shared/Types.luau`, `tools/check_mirror.py` |
+| ui-engineer | `src/client/City/**`, `src/client/Controllers/CityDressingController.luau`, `AssetPreloader.luau` |
+| economy-designer "pipeline" | `tools/paths/**`, `tools/assets/{upload_paths,harvest,gen_templates,assets_config}.py`, `tools/fabric.py`, `tools/cityfabric.py`, `tools/streetplan.py`, `tools/testfit/plotrender.py`; `CityDressing.json`; `orbital.project.json`; the layout, plan and fabric data if a rule forces a rebuild |
+| prop-builder "pods" | `tools/assets/colony_kit.py`; `_props/OrbitalColony/Fabric*.json` |
+| prop-builder "kits" | `tools/assets/{regolith,tube,monorail}_kit.py`; the other `_props/OrbitalColony/*.json` |
+
+### Done when (wave 4.2, before the asset run)
+
+Every gate green: `fabric.py check` for four eras, `cityfabric.py selftest`, `timeline` and `props`,
+`check_mirror.py --strict` with Orbital in it, `streetplan.py`, the path list gates for Village,
+Boomtown and Orbital, `world/valley.py check`, `sim_economy.py`, `check_compile.py`,
+`gen_templates.py --check`, `gen_asset_manifest.py --check`, stylua, selene, luau-lsp, and a Rojo
+build of every project file including `orbital.project.json`. Then roblox-reviewer, qa-runner,
+docs-keeper, and the final prop sheets to Ben.

@@ -78,7 +78,7 @@
 		{
 			"id": "colonyFlag",
 			"type": "decor",
-			"name": "Colony Flag",
+			"name": "Raise the Colony Flags",
 			"modelName": "ColonyFlag",
 			"streetOnly": true,
 			"description": "flag on a pole with a small plaque",
@@ -122,7 +122,7 @@
 		{
 			"id": "lifeSupport",
 			"type": "unlock",
-			"name": "Bring Life Support Online",
+			"name": "Green the Domes",
 			"modelName": "OxygenTanks",
 			"streetOnly": true,
 			"description": "bank of white oxygen tanks with pipes",
@@ -144,7 +144,7 @@
 		{
 			"id": "rockGarden",
 			"type": "decor",
-			"name": "Rock Garden",
+			"name": "Tend the Rock Gardens",
 			"modelName": "RocksLarge",
 			"streetOnly": true,
 			"description": "arranged regolith boulders with ground lights",
@@ -209,7 +209,7 @@
 		{
 			"id": "holoBeacon",
 			"type": "decor",
-			"name": "Holo Beacon",
+			"name": "Light the Holo Beacons",
 			"modelName": "HoloBeacon",
 			"streetOnly": true,
 			"description": "small pylon projecting a hologram ring",
