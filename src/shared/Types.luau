@@ -529,6 +529,16 @@ export type CityPathsConfig = {
 export type CitySurfaceUpgrade = { slot: string, variant: string }
 export type CitySurfaceConfig = { base: string, upgrades: { CitySurfaceUpgrade } }
 export type CitySurfaceVariantLook = { material: string, color: { number } }
+-- M12 wave 4.2 (docs/INTERFACES.md "Wave 4.2"): a path era whose streets are swept tubes. Each
+-- street piece (`L…`) is one half-pipe mesh with no rim, and `hub` is the prop that stands at
+-- every node where a tube ends, branches or two chains meet, once a tube there is drawn; absent
+-- means no hubs. `front` is the studs from a tube's centreline to a lot's front, which only the
+-- tools lay out by.
+export type CityTubeConfig = { hub: string?, front: number }
+-- M12 wave 4.2: the flat decking of a tube era, which is a landmark's apron (`SP_<slotId>`), the
+-- entrance apron and every lane (`LN_<k>`): the look baked into those pieces, and what one laid
+-- as a Part wears. `material` is an Enum.Material name; `color` is RGB 0-255.
+export type CityDeckLook = { material: string, color: { number } }
 export type CityEraPathsConfig = {
 	tileStuds: number,
 	surface: CitySurfaceConfig?,
@@ -536,6 +546,9 @@ export type CityEraPathsConfig = {
 	-- M12 wave 2.2 "narrow driveways": the width in studs of every spur (a landmark's path from
 	-- its join to its slot), baked pieces and parts fallback alike. Absent = `road.width`.
 	spurWidth: number?,
+	-- M12 wave 4.2; absent = an era of flat baked paths (Village, Boomtown).
+	tube: CityTubeConfig?,
+	deck: CityDeckLook?,
 }
 -- Wave 2a: kit road tiles on a `tileStuds` lattice, one prop per cell chosen by the cell's
 -- visible connectivity. Excludes `paths` and `meander`. Spurs stay plain footpath Parts.
@@ -574,12 +587,16 @@ export type CityEraTilesConfig = {
 }
 -- Wave 2a: an elevated ring drawn while `requiresSlot` is owned; its cars never take the ramp.
 -- Wave 2b: junction and ramp are absent in loop mode (Orbital monorail) — a plain closed ring.
+-- M12 wave 4.2: a round loop (`round`) is made of `arc` alone, one segment of the circle with its
+-- origin at the segment's middle, so its block carries no `deck` and no `corner`; a square ring
+-- never reads `arc`.
 export type CityHighwayPropsConfig = {
-	deck: string,
-	corner: string,
+	deck: string?,
+	corner: string?,
 	junction: string?,
 	ramp: string?,
 	sign: string?,
+	arc: string?,
 }
 export type CityEraHighwayConfig = {
 	requiresSlot: string,
@@ -591,6 +608,13 @@ export type CityEraHighwayConfig = {
 	-- Road-surface height of the deck props in studs. Merged props are one MeshPart, so the deck
 	-- cannot be measured apart from its rails; absent = no deck cars.
 	deckHeight: number?,
+	-- M12 wave 4.2: true makes the ring a circle of radius `layout.highway.ring` about the plot's
+	-- centre (loop mode only, no ramp), which the train follows. Absent = the square ring.
+	round: boolean?,
+	-- M12 wave 4.2: the boolean false keeps the ring's ground out of the fabric's clearing, and on
+	-- a round loop the wild in the band is then cleared by nothing (CityFabric.BandRing). Absent =
+	-- the ring clears its ground once `requiresSlot` is owned.
+	clearBand: boolean?,
 }
 -- Wave 2a: street-corner entrances from the layout, shown while `requiresSlot` is owned.
 export type CityEraSubwayConfig = { requiresSlot: string, prop: string, maxPerPlot: number }
@@ -741,8 +765,9 @@ export type FabricWild = {
 -- Wave 1c round 3: an entry of a city upgrade layer (trees, flowers, banners), placed once the
 -- layer's `requiresSlot` is owned and the anchor is developed: a "stretch" entry needs `stretch`
 -- drawn, a "parcel" entry needs parcel `parcel` at level 2 or more (its house built). `variant`
--- is 1-based into the layer's `props`.
-export type FabricUpgradeAnchor = "stretch" | "parcel"
+-- is 1-based into the layer's `props`. M12 wave 4.2: a "highway" entry (a banner on a monorail
+-- pier) carries neither and needs the highway standing (CityFabric.HighwayBuilt).
+export type FabricUpgradeAnchor = "stretch" | "parcel" | "highway"
 export type FabricUpgradeItem = {
 	x: number,
 	z: number,
@@ -835,6 +860,10 @@ export type FabricUpgradeLayerConfig = {
 -- shows `<prop><suffix>` instead where that prop exists, at the same stage -- in the districts
 -- listed, or in every district without the list.
 export type FabricSwapConfig = { requiresSlot: string, suffix: string, districts: { string }? }
+-- M12 wave 4.2 "Tend the Rock Gardens": while `requiresSlot` is owned, every standing wild
+-- placement (a whole clump, a quarter, a single) showing `<prop>` shows `<prop><suffix>` instead
+-- where that prop exists. The wild has no districts.
+export type FabricWildSwapConfig = { requiresSlot: string, suffix: string }
 -- `sizes` are footprints [x, z] in studs. `marker`, `padLook`, `reveal` and `upgrades` are
 -- optional: absent means that feature is off.
 export type FabricConfig = {
@@ -860,6 +889,7 @@ export type FabricConfig = {
 	-- takes a district prop; a size without a list shows `sites[size]`.
 	siteVariants: { [string]: { string } }?,
 	swaps: { FabricSwapConfig }?,
+	wildSwaps: { FabricWildSwapConfig }?,
 }
 
 export type CityEraDressingConfig = {

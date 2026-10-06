@@ -3,15 +3,17 @@
 -- each parcel has developed, and the distance tests that clear the wild layer around the town.
 -- Wave 3.2 adds the rules a tiles era brought: the stage a level starts from, which building site
 -- a lot shows, the prop swaps of a city-changer slot, and the ground the highway ring clears.
+-- Wave 4.2 adds Orbital's (docs/INTERFACES.md "Wave 4.2"): the band of a round loop, where the
+-- wild is cleared by nothing, the swaps of the wild, and the upgrade entry anchored to the highway.
 --
 -- Pure: numbers, strings and tables only, with no Vector3 and no Roblox globals or services. This
 -- lets tools/cityfabric.py mirror it one to one and every client derive the same town from the
 -- same owned slots, tier and visible stretches. Every tunable arrives as an argument.
 
--- Structural copies of Types.FabricParcel, Types.FabricLane and Types.FabricPullConfig: requiring
--- Types would need `script`, which purity forbids. The old solver compares nested tables
--- invariantly, so these must stay field for field in lockstep with Types.luau, or callers passing
--- Types.* tables stop typechecking.
+-- Structural copies of Types.FabricParcel, Types.FabricLane, Types.FabricPullConfig and
+-- Types.FabricUpgradeItem: requiring Types would need `script`, which purity forbids. The old
+-- solver compares nested tables invariantly, so these must stay field for field in lockstep with
+-- Types.luau, or callers passing Types.* tables stop typechecking.
 type FabricParcel = {
 	x: number,
 	z: number,
@@ -33,6 +35,16 @@ type FabricPullConfig = {
 	levelsOverTier: number,
 	smallMaxLevel: number,
 	rowLag: number?,
+}
+type FabricUpgradeItem = {
+	x: number,
+	z: number,
+	rotationY: number,
+	scale: number,
+	variant: number,
+	anchor: "stretch" | "parcel" | "highway",
+	stretch: string?,
+	parcel: number?,
 }
 
 export type FabricStretch = { from: number, to: number, length: number } -- visible stretches only
@@ -72,6 +84,8 @@ export type FabricSwap = {
 -- Wave 3.2: the highway ramp as RingRects reads it: the ring cell it leaves as { x, z } and the
 -- way it runs into the city ("+X" | "-X" | "+Z" | "-Z").
 export type RingRamp = { cell: { number }, direction: string }
+-- Wave 4.2: one `fabric.wildSwaps` entry as ValidWildSwaps keeps it. The wild has no districts.
+export type FabricWildSwap = { requiresSlot: string, suffix: string }
 
 type Edge = { node: number, length: number }
 -- `nodes` is sorted ascending so the search settles tied nodes in the same order everywhere.
@@ -95,6 +109,15 @@ local RAMP_STEPS: { [string]: { number } } = {
 	["+Z"] = { 0, 1 },
 	["-Z"] = { 0, -1 },
 }
+-- The contract's number for a round loop (INTERFACES "Wave 4.1b"): the band nothing stands in
+-- reaches this far either side of the track's circle, 52.5 to 59.5 on a ring of 56. It is
+-- tools/streetplan.py's ROUND_BAND_HALF, which lays the data out by it, so it is no tunable.
+local ROUND_BAND_HALF = 3.5
+-- What an upgrade entry is anchored to, and the level from which a parcel's building stands.
+local ANCHOR_STRETCH = "stretch"
+local ANCHOR_PARCEL = "parcel"
+local ANCHOR_HIGHWAY = "highway"
+local BUILT_LEVEL = 2
 
 local CityFabric = {}
 
@@ -579,6 +602,159 @@ function CityFabric.RingRects(
 		end
 	end
 	return rects
+end
+
+-- Wave 4.1 `highway.clearBand`: whether the ring's ground joins the clearing mask once the slot
+-- that builds the highway is owned. Always, unless the key is the boolean false: any other value,
+-- or no `highway` block at all, clears as wave 3.1 ruled.
+function CityFabric.RingClears(highway: any): boolean
+	return not (type(highway) == "table" and highway.clearBand == false)
+end
+
+-- Wave 4.2: the rects the ring hands the clearing mask, margin 0 as RingRects makes them. None
+-- without a slot that builds the highway, none where `highway.clearBand` keeps the band, and none
+-- on a round loop (`highway.round`): its band is an annulus, which has no rects to give.
+-- `highway` is the era's config block and the other four are RingRects' own arguments.
+function CityFabric.RingGround(
+	highway: any,
+	ring: any,
+	tileStuds: any,
+	ramp: RingRamp?,
+	rampCells: any
+): { FabricRect }
+	if
+		type(highway) ~= "table"
+		or type(highway.requiresSlot) ~= "string"
+		or highway.round == true
+		or not CityFabric.RingClears(highway)
+	then
+		return {}
+	end
+	return CityFabric.RingRects(ring, tileStuds, ramp, rampCells)
+end
+
+-- Wave 4.1b: whether a point lies in a round loop's band, within `half` of the circle of radius
+-- `ring` about the plot's centre. False for a ring or a half-width that is not a positive finite
+-- number.
+function CityFabric.RingKeeps(px: number, pz: number, ring: any, half: any): boolean
+	if
+		not (finite(ring) and ring > 0 and finite(half) and half > 0 and finite(px) and finite(pz))
+	then
+		return false
+	end
+	return math.abs(math.sqrt(px * px + pz * pz) - ring) <= half
+end
+
+-- Wave 4.1b: the radius of the loop whose band never clears, nil under every other highway: the
+-- layout's `ring` where the era's `highway.round` is true and its `highway.clearBand` false.
+function CityFabric.BandRing(highway: any, ring: any): number?
+	if type(highway) ~= "table" or highway.round ~= true or CityFabric.RingClears(highway) then
+		return nil
+	end
+	return if finite(ring) then ring else nil
+end
+
+-- Wave 4.1b: a wild entry's clearing point (a clump's quarter, or a single) in that band is
+-- cleared by nothing, whatever lot, pad, landmark, lane or tube stands beside the band: only a
+-- crossing tube can stand in it, and the data keeps the wild off that. The caller asks this before
+-- IsCleared and leaves a kept point standing. `bandRing` is BandRing's answer.
+function CityFabric.KeptInBand(px: number, pz: number, bandRing: number?): boolean
+	return bandRing ~= nil and CityFabric.RingKeeps(px, pz, bandRing, ROUND_BAND_HALF)
+end
+
+-- Wave 4.1c `fabric.wildSwaps` ("Tend the Rock Gardens"): the well-formed entries in list order.
+-- The shape is `fabric.swaps`' without `districts`: the wild has none, so an entry that names any
+-- is skipped, with everything ValidSwaps skips.
+function CityFabric.ValidWildSwaps(value: any): { FabricWildSwap }
+	local swaps: { FabricWildSwap } = {}
+	for _, swap in CityFabric.ValidSwaps(value) do
+		if swap.districts == nil then
+			table.insert(swaps, { requiresSlot = swap.requiresSlot, suffix = swap.suffix })
+		end
+	end
+	return swaps
+end
+
+-- Wave 4.1c: the prop a standing wild placement shows (a whole clump, one of its quarters, or a
+-- single) once the wild swaps have had their say. Each swap whose slot is in `owned` turns the
+-- name into `<prop><suffix>` when `exists` says that prop can be spawned, in list order, each on
+-- the name the one before produced. A twin has its original's footprint and frame, so where the
+-- placement stands, how it is turned and scaled and when it clears do not change. A variant
+-- without a name stays without one.
+function CityFabric.SwappedWild(
+	prop: string?,
+	swaps: { FabricWildSwap },
+	owned: { [string]: boolean },
+	exists: (prop: string) -> boolean
+): string?
+	if type(prop) ~= "string" then
+		return prop
+	end
+	local shown = prop
+	for _, swap in swaps do
+		if owned[swap.requiresSlot] then
+			local twin = shown .. swap.suffix
+			if exists(twin) then
+				shown = twin
+			end
+		end
+	end
+	return shown
+end
+
+-- Wave 4.1c: an upgrade entry the renderer can place: a position, a turn, a variant and a positive
+-- scale, anchored to a stretch by piece id, to a parcel by index, or to the highway, which needs
+-- neither. Any other entry is skipped where it stands.
+function CityFabric.ValidUpgradeItem(entry: any): boolean
+	if
+		type(entry) ~= "table"
+		or not (finite(entry.x) and finite(entry.z) and finite(entry.rotationY))
+		or not (finite(entry.variant) and finite(entry.scale) and entry.scale > 0)
+	then
+		return false
+	end
+	if entry.anchor == ANCHOR_HIGHWAY then
+		return true
+	elseif entry.anchor == ANCHOR_STRETCH then
+		return type(entry.stretch) == "string"
+	end
+	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
+end
+
+-- Wave 4.1c: whether the plot's highway stands, which is what the highway itself is drawn by: the
+-- layout has one (`layoutHighway`, only asked whether it is there), the era has a `highway` block,
+-- and the slot that block names is in `owned`. A block that names no slot stands from the start.
+function CityFabric.HighwayBuilt(
+	highway: any,
+	layoutHighway: any,
+	owned: { [string]: boolean }
+): boolean
+	if type(highway) ~= "table" or type(layoutHighway) ~= "table" then
+		return false
+	end
+	local slot = highway.requiresSlot
+	return type(slot) ~= "string" or owned[slot] == true
+end
+
+-- Wave 4.1c: whether the anchor of a valid upgrade entry has developed, so that the entry is
+-- placed once its layer's own slot is owned as well. A stretch entry needs its stretch drawn, a
+-- parcel entry its parcel's building (level 2 or more, drawn or not), and a highway entry the
+-- highway standing: `highwayBuilt` is HighwayBuilt's answer.
+function CityFabric.UpgradeDeveloped(
+	item: FabricUpgradeItem,
+	stretches: { [string]: FabricStretch },
+	states: { FabricParcelState },
+	highwayBuilt: boolean
+): boolean
+	if item.anchor == ANCHOR_HIGHWAY then
+		return highwayBuilt
+	elseif item.anchor == ANCHOR_STRETCH then
+		local stretch = item.stretch
+		return stretch ~= nil and stretches[stretch] ~= nil
+	end
+	local parcel = item.parcel
+	local state = if parcel ~= nil then states[parcel] else nil
+	return state ~= nil and state.level >= BUILT_LEVEL
 end
 
 return CityFabric
