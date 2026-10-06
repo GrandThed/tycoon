@@ -86,6 +86,13 @@ export type FabricSwap = {
 export type RingRamp = { cell: { number }, direction: string }
 -- Wave 4.2: one `fabric.wildSwaps` entry as ValidWildSwaps keeps it. The wild has no districts.
 export type FabricWildSwap = { requiresSlot: string, suffix: string }
+-- Wave 4.2 review: the layout's highway as the ring rules read it. It is Types.HighwayLayout with
+-- the ramp left untyped: a ramp's cell is a Vector3 there, and all these rules ask of a ramp is
+-- whether there is one.
+export type RingLayout = { ring: number, ramp: any }
+-- Wave 4.2 review: the band of a round loop that keeps its wild, as RingBand answers it: the
+-- annulus `ring` plus or minus `half` about the plot's centre.
+export type FabricBand = { ring: number, half: number }
 
 type Edge = { node: number, length: number }
 -- `nodes` is sorted ascending so the search settles tied nodes in the same order everywhere.
@@ -109,10 +116,6 @@ local RAMP_STEPS: { [string]: { number } } = {
 	["+Z"] = { 0, 1 },
 	["-Z"] = { 0, -1 },
 }
--- The contract's number for a round loop (INTERFACES "Wave 4.1b"): the band nothing stands in
--- reaches this far either side of the track's circle, 52.5 to 59.5 on a ring of 56. It is
--- tools/streetplan.py's ROUND_BAND_HALF, which lays the data out by it, so it is no tunable.
-local ROUND_BAND_HALF = 3.5
 -- What an upgrade entry is anchored to, and the level from which a parcel's building stands.
 local ANCHOR_STRETCH = "stretch"
 local ANCHOR_PARCEL = "parcel"
@@ -611,13 +614,24 @@ function CityFabric.RingClears(highway: any): boolean
 	return not (type(highway) == "table" and highway.clearBand == false)
 end
 
+-- Wave 4.2 review: whether the era's highway is a round loop, the one answer for the fabric here
+-- and for Highway.luau, which draws by it: `highway.round` is true and the layout's highway has
+-- no ramp. A ring with a ramp is the square ring whatever `round` says.
+function CityFabric.RoundLoop(highway: any, layoutHighway: RingLayout?): boolean
+	return type(highway) == "table"
+		and highway.round == true
+		and type(layoutHighway) == "table"
+		and layoutHighway.ramp == nil
+end
+
 -- Wave 4.2: the rects the ring hands the clearing mask, margin 0 as RingRects makes them. None
--- without a slot that builds the highway, none where `highway.clearBand` keeps the band, and none
--- on a round loop (`highway.round`): its band is an annulus, which has no rects to give.
--- `highway` is the era's config block and the other four are RingRects' own arguments.
+-- without a slot that builds the highway or a highway in the layout, none where
+-- `highway.clearBand` keeps the band, and none on a round loop (RoundLoop): its band is an
+-- annulus, which has no rects to give. `highway` is the era's config block, `layoutHighway` the
+-- layout's highway, whose `ring` RingRects reads, and the last three are RingRects' own arguments.
 function CityFabric.RingGround(
 	highway: any,
-	ring: any,
+	layoutHighway: RingLayout?,
 	tileStuds: any,
 	ramp: RingRamp?,
 	rampCells: any
@@ -625,12 +639,13 @@ function CityFabric.RingGround(
 	if
 		type(highway) ~= "table"
 		or type(highway.requiresSlot) ~= "string"
-		or highway.round == true
+		or type(layoutHighway) ~= "table"
+		or CityFabric.RoundLoop(highway, layoutHighway)
 		or not CityFabric.RingClears(highway)
 	then
 		return {}
 	end
-	return CityFabric.RingRects(ring, tileStuds, ramp, rampCells)
+	return CityFabric.RingRects(layoutHighway.ring, tileStuds, ramp, rampCells)
 end
 
 -- Wave 4.1b: whether a point lies in a round loop's band, within `half` of the circle of radius
@@ -645,21 +660,32 @@ function CityFabric.RingKeeps(px: number, pz: number, ring: any, half: any): boo
 	return math.abs(math.sqrt(px * px + pz * pz) - ring) <= half
 end
 
--- Wave 4.1b: the radius of the loop whose band never clears, nil under every other highway: the
--- layout's `ring` where the era's `highway.round` is true and its `highway.clearBand` false.
-function CityFabric.BandRing(highway: any, ring: any): number?
-	if type(highway) ~= "table" or highway.round ~= true or CityFabric.RingClears(highway) then
+-- Wave 4.1b: the band of the loop that never clears, nil under every other highway: a round loop
+-- (RoundLoop) whose `highway.clearBand` is false, as the layout's `ring` plus or minus the era's
+-- `highway.bandHalf` (wave 4.2 review: the half-width is config). A ring or a half-width that is
+-- not a positive finite number reads as no band, as a bad value reads as an absent one everywhere
+-- here. The tools refuse such a block, so only a hand-edited file can bring one.
+function CityFabric.RingBand(highway: any, layoutHighway: RingLayout?): FabricBand?
+	if
+		type(layoutHighway) ~= "table"
+		or not CityFabric.RoundLoop(highway, layoutHighway)
+		or CityFabric.RingClears(highway)
+	then
 		return nil
 	end
-	return if finite(ring) then ring else nil
+	local ring, half = layoutHighway.ring, highway.bandHalf
+	if not (finite(ring) and ring > 0 and finite(half) and half > 0) then
+		return nil
+	end
+	return { ring = ring, half = half }
 end
 
 -- Wave 4.1b: a wild entry's clearing point (a clump's quarter, or a single) in that band is
 -- cleared by nothing, whatever lot, pad, landmark, lane or tube stands beside the band: only a
 -- crossing tube can stand in it, and the data keeps the wild off that. The caller asks this before
--- IsCleared and leaves a kept point standing. `bandRing` is BandRing's answer.
-function CityFabric.KeptInBand(px: number, pz: number, bandRing: number?): boolean
-	return bandRing ~= nil and CityFabric.RingKeeps(px, pz, bandRing, ROUND_BAND_HALF)
+-- IsCleared and leaves a kept point standing. `band` is RingBand's answer.
+function CityFabric.KeptInBand(px: number, pz: number, band: FabricBand?): boolean
+	return band ~= nil and CityFabric.RingKeeps(px, pz, band.ring, band.half)
 end
 
 -- Wave 4.1c `fabric.wildSwaps` ("Tend the Rock Gardens"): the well-formed entries in list order.

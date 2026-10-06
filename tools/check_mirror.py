@@ -17,18 +17,28 @@ compares what they answer:
     `SwappedProp`), from the era's real config; and all three on synthetic vectors, malformed
     configs included;
   * `LevelStage` and `RingRects` on synthetic vectors;
-  * the highway's ring (INTERFACES "Wave 4.2"): the rects it hands the mask (`RingGround`), the
-    loop whose band never clears (`BandRing`) and, at every moment, every wild clearing point with
-    that band kept (`KeptInBand`, then `IsCleared`) against the mirror's cleared flags. The same
-    again on the finished plot under other `highway` blocks (HIGHWAY_VARIANTS: round or not,
-    `clearBand` false or not), which is where a ring that has rects loses them for being round;
+  * the highway's ring (INTERFACES "Wave 4.2"): whether it is a round loop (`RoundLoop`), the rects
+    it hands the mask (`RingGround`), the band that never clears (`RingBand`: the layout's ring
+    and the era's `highway.bandHalf`) and, at every moment, every wild clearing point with that
+    band kept (`KeptInBand`, then `IsCleared`) against the mirror's cleared flags. The same again
+    on the finished plot under other `highway` blocks (HIGHWAY_VARIANTS: round or not, `clearBand`
+    false or not, another `bandHalf`, Metropolis's ring with and without its ramp), which is where
+    a ring that has rects loses them for being round. And under the blocks the tools refuse or
+    have no reading for (HIGHWAY_RULED), where the review ruled what the game makes of each;
   * the wild swaps: at every moment, the prop every standing wild placement shows
     (`ValidWildSwaps`, `SwappedWild`) against the mirror's placements;
   * the upgrade layers: at every moment, which entries of every layer are placed
     (`ValidUpgradeItem`, `HighwayBuilt`, `UpgradeDeveloped` and the layer's own slot) against the
     mirror's placements;
-  * `RingClears`, `RingKeeps`, `KeptInBand`, `ValidWildSwaps`, `SwappedWild`, `ValidUpgradeItem`
-    and `HighwayBuilt` on synthetic vectors, malformed configs included.
+  * `RingClears`, `RingKeeps`, `ValidWildSwaps`, `SwappedWild`, `ValidUpgradeItem` and
+    `HighwayBuilt` on synthetic vectors, malformed configs included.
+
+And `src/client/City/Tubes.luau`, the client's copy of tools/paths/tubes.py, which is pure as well:
+for every era, whether its streets are tubes and the hub's prop (`Tubes.Config`); for every tube
+era, the nodes a hub stands on, why and with which stretches (`Tubes.HubNodes` against
+`TubePlan.hubs`) and the entrance apron (`Tubes.EntranceApron` against `TubePlan.entrance_apron`).
+Where a hub stands on the drawn centreline (`TubePlan.node_point`) is RoadGraph's to compute, with
+Roblox types, and is not run here.
 
 Sines and cosines. The two interpreters take them from different C libraries, and those may round
 the last bit differently (the cosine of Orbital's 300.03 degree landmark, on the machine this was
@@ -45,6 +55,7 @@ yet, are listed; with `--strict` either one fails the run. Any difference exits 
     py tools/check_mirror.py Metropolis     # one era
     py tools/check_mirror.py --keep <dir>   # leave the generated Luau files there
     py tools/check_mirror.py --module <f>   # run another copy of the module (a deliberately broken one)
+    py tools/check_mirror.py --tubes <f>    # likewise for Tubes.luau
 
 The interpreter comes from the same pinned release tools/check_compile.py takes luau-compile from,
 downloaded into tools/bin/ (gitignored) on first use: Rokit installs neither here.
@@ -73,8 +84,20 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import check_compile  # noqa: E402
 import cityfabric  # noqa: E402
+import streetplan  # noqa: E402
 
 MODULE = ROOT / "src" / "shared" / "CityFabric.luau"
+TUBES = ROOT / "src" / "client" / "City" / "Tubes.luau"
+TUBES_COMPARED = ("Config", "HubNodes", "EntranceApron")  # the functions of Tubes.luau compared here
+# A network for Tubes.HubNodes with every kind of node, as (from, to, chain) a stretch: an end (0,
+# 4, 6, 7), two stretches of one chain (1, 5: no hub), two chains meeting end to end (2: a joint,
+# which no shipped tube era has), a branch of four (3), a stretch that ends where it starts (8: no
+# hub) and a node no stretch reaches (9).
+HUB_NET = ((0, 1, "a"), (1, 2, "a"), (2, 3, "b"), (3, 4, "b"), (3, 5, "c"), (5, 6, "c"), (3, 7, "d"), (8, 8, "e"))
+HUB_NET_NODES = 10
+# First tubes that leave no entrance apron, as (street 1's first z, the plot's depth): on the front
+# edge and inside streetplan.MIN_LENGTH of it.
+APRON_EDGES = ((-60.0, 120.0), (-59.96, 120.0))
 DEFAULT_ERAS = ("Village", "Boomtown", "Metropolis", "OrbitalColony")
 # How many clearing points and mask rects of the finished plot are compared number for number.
 DISTANCE_POINTS = 60
@@ -169,7 +192,8 @@ RING_CLEAR_BLOCKS = (
     7,
 )
 # Points for RingKeeps and KeptInBand: the mirror's selftest points round a ring of 56 with a half
-# of 3.5 (the band's two edges from each side), the centre, a diagonal and points no number places.
+# of 3.5 (the band's two edges from each side), the edges of a half of 2, the centre, diagonals and
+# points no number places.
 BAND_POINTS = (
     (55.75, 3.25),
     (-39.6, -39.6),
@@ -178,6 +202,10 @@ BAND_POINTS = (
     (52.4, 0),
     (0, 59.5),
     (0, 59.6),
+    (54, 0),
+    (53.9, 0),
+    (0, -58),
+    (0, -58.1),
     (46, 46),
     (0, 0),
     (-56, 0.0),
@@ -189,27 +217,51 @@ BAND_POINTS = (
 )
 BAND_RINGS = (56, 56.0, 42, 59.5, 0, -56, None, "56", True, math.inf, math.nan)
 BAND_HALVES = (3.5, 0.25, 0, -1, None, "3.5", math.inf)
-BAND_KEPT_RINGS = (None, 56, 56.0, 42, 59.5, 0, -56)
 # `highway` blocks laid over an era's own (None takes the key out), each run through the mirror's
-# own FabricPlot on the finished plot: what the ring hands the mask and which band is kept when the
-# loop is round or not and `clearBand` false or not, on a ring with rects and on one without.
+# own FabricPlot on the finished plot: whether the loop is round, what the ring hands the mask and
+# which band is kept. The third entry is whether the layout keeps its ramp: Metropolis's ring
+# without it is the one ring that has rects to lose for being round.
+ROUND = {"round": True, "segments": 48, "bandHalf": 3.5}
 HIGHWAY_VARIANTS = (
-    ("Metropolis", {"clearBand": False}),
-    ("Metropolis", {"clearBand": True}),
-    ("Metropolis", {"clearBand": 0}),
-    ("Metropolis", {"clearBand": "false"}),
-    ("Metropolis", {"round": True}),
-    ("Metropolis", {"round": True, "clearBand": True}),
-    ("Metropolis", {"round": True, "clearBand": False}),
-    ("Metropolis", {"round": "true", "clearBand": False}),
-    ("Metropolis", {"round": 1, "clearBand": False}),
-    ("OrbitalColony", {"clearBand": True}),
-    ("OrbitalColony", {"clearBand": 0}),
-    ("OrbitalColony", {"clearBand": None}),
-    ("OrbitalColony", {"round": False}),
-    ("OrbitalColony", {"round": 1}),
-    ("OrbitalColony", {"round": None}),
-    ("OrbitalColony", {"round": None, "clearBand": None}),
+    ("Metropolis", {"clearBand": False}, True),
+    ("Metropolis", {"clearBand": True}, True),
+    ("Metropolis", {"clearBand": 0}, True),
+    ("Metropolis", {"clearBand": "false"}, True),
+    ("Metropolis", {}, False),
+    ("Metropolis", {"clearBand": False}, False),
+    ("Metropolis", ROUND, False),
+    ("Metropolis", {**ROUND, "clearBand": True}, False),
+    ("Metropolis", {**ROUND, "clearBand": False}, False),
+    ("Metropolis", {**ROUND, "clearBand": False, "bandHalf": 6}, False),
+    ("Metropolis", {"round": "true", "clearBand": False}, False),
+    ("Metropolis", {"round": 1, "clearBand": False}, False),
+    ("OrbitalColony", {"clearBand": True}, True),
+    ("OrbitalColony", {"clearBand": 0}, True),
+    ("OrbitalColony", {"clearBand": None}, True),
+    ("OrbitalColony", {"bandHalf": 2}, True),
+    ("OrbitalColony", {"bandHalf": 5.25}, True),
+    ("OrbitalColony", {"round": False}, True),
+    ("OrbitalColony", {"round": 1}, True),
+    ("OrbitalColony", {"round": None}, True),
+    ("OrbitalColony", {"round": None, "clearBand": None}, True),
+)
+# Blocks the tools refuse (a round loop without a usable `bandHalf`) or have no reading of their
+# own for (`round` on a ring with a ramp). The wave 4.2 review ruled what each is in the game, and
+# each ruling names a block the mirror does read: Luau is handed the first block, the mirror the
+# second, and their answers must be the same.
+HIGHWAY_RULED = (
+    # `round` on a layout highway with a ramp is the square ring (CityFabric.RoundLoop).
+    ("Metropolis", ROUND, {}),
+    ("Metropolis", {**ROUND, "clearBand": True}, {"clearBand": True}),
+    ("Metropolis", {**ROUND, "clearBand": False}, {"clearBand": False}),
+    # A bad or absent `bandHalf` is no band: the same loop with `clearBand` true.
+    ("OrbitalColony", {"bandHalf": None}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": 0}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": -3.5}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": "3.5"}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": True}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": math.inf}, {"clearBand": True}),
+    ("OrbitalColony", {"bandHalf": math.nan}, {"clearBand": True}),
 )
 
 # Wild swaps (wave 4.2): `fabric.swaps`' shape without districts, so SWAP_LISTS and SWAP_ONLY_LISTS
@@ -269,7 +321,8 @@ BUILT_OWNED = ([], ["walkwayNetwork"], ["highwayRamp"], ["highwayRamp", "walkway
 # with the exports each needs: a comparison runs only when the module has them all.
 REAL_GROUPS = (
     ("LOOK", ("SiteProp", "ValidSwaps", "SwappedProp")),
-    ("KEPT", ("BandRing", "KeptInBand")),
+    ("ROUND", ("RoundLoop",)),
+    ("KEPT", ("RingBand", "KeptInBand")),
     ("GROUND", ("RingGround",)),
     ("WILD", ("ValidWildSwaps", "SwappedWild")),
     ("UPG", ("ValidUpgradeItem", "HighwayBuilt", "UpgradeDeveloped")),
@@ -312,8 +365,9 @@ print("EXPORTS " .. table.concat(exported, " "))
 local siteProp = (CityFabric :: any).SiteProp
 local validSwaps = (CityFabric :: any).ValidSwaps
 local swappedProp = (CityFabric :: any).SwappedProp
+local roundLoop = (CityFabric :: any).RoundLoop
 local ringGround = (CityFabric :: any).RingGround
-local bandRing = (CityFabric :: any).BandRing
+local ringBand = (CityFabric :: any).RingBand
 local keptInBand = (CityFabric :: any).KeptInBand
 local validWildSwaps = (CityFabric :: any).ValidWildSwaps
 local swappedWild = (CityFabric :: any).SwappedWild
@@ -326,18 +380,30 @@ for e, era in data.eras do
 		return era.exists[name] == true
 	end
 	-- Wave 4.2: the highway as the client hands it over -- the era's `highway` block, the layout's
-	-- ring, the tile pitch, the ramp and its length in cells.
+	-- highway (its ring, and its ramp where it has one), the tile pitch, the ramp as RingRects
+	-- reads it and its length in cells.
+	if roundLoop ~= nil then
+		print(string.format("ROUND %d %s", e, answer(pcall(roundLoop, era.highway, era.layoutHighway))))
+	end
 	if ringGround ~= nil then
 		local out = {}
-		for r, rect in ringGround(era.highway, era.ring, era.tileStuds, era.ramp, era.rampCells) do
+		for r, rect in ringGround(era.highway, era.layoutHighway, era.tileStuds, era.ramp, era.rampCells) do
 			out[r] = rectText(rect)
 		end
 		print(string.format("GROUND %d %s", e, table.concat(out, " ")))
 	end
 	local band = nil
-	if bandRing ~= nil then
-		band = bandRing(era.highway, era.ring)
-		print(string.format("BAND %d %s", e, if band ~= nil then num(band) else "-"))
+	if ringBand ~= nil then
+		band = ringBand(era.highway, era.layoutHighway)
+		print(string.format("BAND %d %s", e, if band ~= nil then num(band.ring) .. " " .. num(band.half) else "-"))
+	end
+	-- The band alone, on points round its edges.
+	if ringBand ~= nil and keptInBand ~= nil then
+		local inside = {}
+		for index, point in data.bandPoints do
+			inside[index] = if keptInBand(point[1], point[2], band) then "1" else "0"
+		end
+		print(string.format("BPTS %d %s", e, table.concat(inside)))
 	end
 	for c, case in era.cases do
 		local states = CityFabric.Develop({
@@ -363,7 +429,7 @@ for e, era in data.eras do
 		end
 		print(string.format("CLR %d %d %s", e, c, table.concat(bits)))
 		-- Wave 4.2: the same points as Fabric.clearedFlags asks them, the band's kept ones first.
-		if bandRing ~= nil and keptInBand ~= nil then
+		if ringBand ~= nil and keptInBand ~= nil then
 			local kept = {}
 			for index, point in era.points do
 				local cleared = not keptInBand(point[1], point[2], band)
@@ -537,12 +603,6 @@ if ringKeeps ~= nil then
 	end
 end
 
-if keptInBand ~= nil then
-	for index, vector in data.bandKept do
-		print(string.format("KBAND %d %s", index, answer(pcall(keptInBand, vector.px, vector.pz, vector.band))))
-	end
-end
-
 if validWildSwaps ~= nil then
 	for index, vector in data.wildLists do
 		local ok, swaps = pcall(validWildSwaps, vector.swaps)
@@ -572,6 +632,42 @@ end
 if highwayBuilt ~= nil then
 	for index, vector in data.builtVectors do
 		print(string.format("HBUILT %d %s", index, answer(pcall(highwayBuilt, vector.highway, vector.layout, setOf(vector.owned)))))
+	end
+end
+
+-- src/client/City/Tubes.luau, the client's copy of tools/paths/tubes.py: whether an era's streets
+-- are tubes and, where they are, its hub nodes and its entrance apron from the network Python
+-- hands over as RoadGraph hands it over.
+if #data.tubes > 0 then
+	local Tubes = require("./Tubes")
+	local functions = {}
+	for name, value in Tubes do
+		if type(value) == "function" then
+			table.insert(functions, name)
+		end
+	end
+	table.sort(functions)
+	print("TEXPORTS " .. table.concat(functions, " "))
+	print("TENTR " .. tostring(Tubes.ENTRANCE))
+	for t, era in data.tubes do
+		local config = Tubes.Config(era.paths)
+		print(string.format("TCONF %d %s", t, if config ~= nil then "tube:" .. (config.hub or "-") else "-"))
+		if era.nodeStretches ~= nil then
+			local hubs = {}
+			local function chainOf(stretch)
+				return era.chains[stretch]
+			end
+			for _, hub in Tubes.HubNodes(era.nodeStretches, chainOf) do
+				table.insert(hubs, string.format("%d:%s:%s", hub.node, hub.why, table.concat(hub.stretches, ",")))
+			end
+			print(string.format("HUBS %d %s", t, table.concat(hubs, " ")))
+			-- Without a first street point RoadGraph asks for no apron at all.
+			local apron = if era.firstX ~= nil
+				then Tubes.EntranceApron(era.firstX, era.firstZ, era.plotDepth, era.entranceSlot)
+				else nil
+			local ends = if apron ~= nil then { num(apron.ax), num(apron.az), num(apron.bx), num(apron.bz) } else { "-" }
+			print(string.format("APRON %d %s", t, table.concat(ends, " ")))
+		end
 	end
 end
 """
@@ -674,17 +770,18 @@ def moments(plot, city):
 
 def highway_view(plot):
     """What the client hands CityFabric about the plot's highway, from where the mirror reads it:
-    the era's `highway` block, the layout's highway and its ring, the tile pitch, the ramp as
-    Highway.Ground views it and its length in cells."""
+    the era's `highway` block, the layout's highway (its ring, and its ramp when it has one), the
+    tile pitch, the ramp as Highway.Ground views it and its length in cells."""
     era = plot.era
     layout = era.highway if isinstance(era.highway, dict) else None
     ramp = era.highway_ramp
+    view = {"cell": [ramp["cell"][0], ramp["cell"][2]], "direction": ramp.get("direction")} if isinstance(ramp, dict) else None
     return {
         "highway": era.dressing.get("highway"),
-        "layoutHighway": {"ring": layout.get("ring")} if layout is not None else None,
-        "ring": layout.get("ring") if layout is not None else None,
+        # A ramp the view cannot show is a ramp all the same: the rules only ask whether one is there.
+        "layoutHighway": {"ring": layout.get("ring"), "ramp": view if view is not None or ramp is None else True} if layout is not None else None,
         "tileStuds": era.tile_studs,
-        "ramp": {"cell": [ramp["cell"][0], ramp["cell"][2]], "direction": ramp.get("direction")} if isinstance(ramp, dict) else None,
+        "ramp": view,
         "rampCells": era.ramp_cells,
     }
 
@@ -693,10 +790,11 @@ def rect_text(rect) -> str:
     return ",".join(g17(rect[key]) for key in ("x", "z", "hx", "hz", "rotationY", "margin"))
 
 
-def era_cases(era_name, city, label=None, history=True):
+def era_cases(era_name, city, label=None, history=True, luau_highway=None):
     """(the table handed to Luau, what Python answers) for one era, or None without fabric data.
     `label` names it in the report (the era's own name without one); `history` False keeps the
-    finished plot's moments only."""
+    finished plot's moments only; `luau_highway` is the `highway` block Luau is handed where that
+    is not the one in `city` (HIGHWAY_RULED)."""
     plot = cityfabric.FabricPlot.load(era_name, city=city)
     if plot is None or plot.pull is None:
         return None
@@ -828,6 +926,8 @@ def era_cases(era_name, city, label=None, history=True):
         "exists": {name: True for name, can in asked.items() if can},
         **highway_view(plot),
     }
+    if luau_highway is not None:
+        table["highway"] = luau_highway
     sites = sum(1 for case in expected for look in case["looks"] if look.startswith("S:"))
     swapped = sum(1 for case, given in zip(expected, cases) for index, look in enumerate(case["looks"], start=1) if look.startswith("B:") and look[2:] != given["base"].get(str(index)))
     return table, {
@@ -837,7 +937,9 @@ def era_cases(era_name, city, label=None, history=True):
         "points": len(points),
         "sites": sites,
         "swapped": swapped,
-        "band": g17(plot.band_ring) if plot.band_ring is not None else "-",
+        "round": truth(plot.era.round_ring is not None),
+        "band": f"{g17(plot.band_ring)} {g17(plot.era.band_half)}" if plot.band_ring is not None else "-",
+        "bandPoints": "".join("1" if plot.kept_in_band(px, pz) else "0" for px, pz in BAND_POINTS),
         "ground": [rect_text(rect) for rect in plot.ring_rects],
         "banded": sum(banded),
         "held": held,
@@ -862,6 +964,107 @@ def highway_variant(city, era_name, keys):
         else:
             block[key] = value
     return varied
+
+
+@contextlib.contextmanager
+def layout_ramp(keep):
+    """While open with `keep` false, the tools read every layout's highway without its ramp: the
+    ring Metropolis would have as a plain loop, which no shipped layout is."""
+    real = streetplan.parse_layout
+
+    def rampless(path):
+        layout = dict(real(path))
+        if isinstance(layout.get("highway"), dict):
+            layout["highway"] = {key: value for key, value in layout["highway"].items() if key != "ramp"}
+        return layout
+
+    streetplan.parse_layout = real if keep else rampless
+    try:
+        yield
+    finally:
+        streetplan.parse_layout = real
+
+
+def hub_inputs(stretches, nodes, chain_of):
+    """What RoadGraph hands Tubes.HubNodes, from a network as the mirror has it: every node's
+    stretches in stretch order (1-based, as Luau counts) and each stretch's chain."""
+    at_node = [[] for _ in range(nodes)]
+    for index, stretch in enumerate(stretches, start=1):
+        for node in (stretch["from"], stretch["to"]):
+            at_node[node].append(index)
+    return {"nodeStretches": at_node, "chains": [str(chain_of(index)) for index in range(len(stretches))]}
+
+
+def hub_text(hubs):
+    return [f"{hub['node'] + 1}:{hub['why']}:{','.join(str(index + 1) for index in hub['stretches'])}" for hub in hubs]
+
+
+def tube_cases(era_name, city):
+    """(what Tubes.luau is handed, what tools/paths/tubes.py answers) for one era: its `road.paths`
+    for Tubes.Config and, where its streets are tubes, the network for Tubes.HubNodes and what
+    RoadGraph hands Tubes.EntranceApron (street 1's first point, the plot's depth, whether a slot
+    is named like the apron). The apron the mirror answers is the ground it bakes, so Luau's
+    centreline is compared as the slab the same tools make of it."""
+    era = streetplan.Era(era_name, city)
+    plan = streetplan.tube_plan(era)
+    given = {"name": era_name, "paths": era.paths if isinstance(era.paths, dict) else None}
+    if plan is None:
+        return given, {"config": "-", "hubs": None}
+    given.update(hub_inputs(plan.net.stretches, len(plan.net.nodes), lambda index: plan.bake.chain_for_stretch(index)["id"]))
+    first = era.streets[0][0] if era.streets and era.streets[0] else None
+    given["firstX"], given["firstZ"] = first if first is not None else (None, None)
+    given["plotDepth"] = 2 * era.half_z
+    given["entranceSlot"] = any(slot["id"] == plan.entrance_kind for slot in era.slots)
+    hub = plan.config.get("hub")
+    apron = plan.entrance_apron()
+    return given, {
+        "config": f"tube:{hub if isinstance(hub, str) and hub else '-'}",
+        "hubs": hub_text(plan.hubs()),
+        "apron": [g17(value) for corner in apron for value in corner] if apron is not None else ["-"],
+        "width": streetplan.spur_path_width(era),
+    }
+
+
+def tube_synthetic():
+    """[(what Tubes.luau is handed, what tools/paths/tubes.py answers)] for what no shipped tube era
+    shows: a network with a node where two chains meet end to end (HUB_NET), and a first tube that
+    starts on the plot's front edge or within a hair of it (APRON_EDGES), which leaves no apron.
+    TubePlan answers both as methods of a whole plan, so each is asked of a stand-in that has only
+    what the method reads; a method that has come to read more raises here, and the caller says so."""
+    tubes = streetplan.tubes_module()
+    stretches = [{"from": a, "to": b} for a, b, _chain in HUB_NET]
+    plan = types.SimpleNamespace(
+        _hubs=None,
+        net=types.SimpleNamespace(stretches=stretches),
+        bake=types.SimpleNamespace(chain_for_stretch=lambda index: {"id": HUB_NET[index][2]}),
+        node_point=lambda node: (0.0, 0.0),  # where the hub stands: not Tubes.luau's to answer
+    )
+    cases = [
+        (
+            {"name": "a network with a joint", **hub_inputs(stretches, HUB_NET_NODES, lambda index: HUB_NET[index][2])},
+            {"config": "-", "hubs": hub_text(tubes.TubePlan.hubs(plan)), "apron": ["-"], "width": 0.0},
+        )
+    ]
+    for z, depth in APRON_EDGES:
+        era = types.SimpleNamespace(streets=[[(0.0, z)]], half_z=depth / 2)
+        if tubes.TubePlan.entrance_apron(types.SimpleNamespace(era=era)) is not None:
+            raise ValueError(f"APRON_EDGES: a tube from z {z:g} on a plot {depth:g} deep has an apron after all")
+        cases.append(({"name": f"a first tube at z {z:g}", "nodeStretches": [], "chains": [], "firstX": 0.0, "firstZ": z, "plotDepth": depth, "entranceSlot": False}, {"config": "-", "hubs": [], "apron": ["-"], "width": 0.0}))
+    return cases
+
+
+def tube_differences(given, want, lines, t):
+    """The differences between Tubes.luau and tools/paths/tubes.py for one era."""
+    name = given["name"]
+    found = differences("Tubes.Config", name, [want["config"]], [lines["TCONF"].get(t, "")])
+    if want["hubs"] is None:
+        return found
+    found += differences("Tubes.HubNodes", name, want["hubs"], lines["HUBS"].get(t, "").split())
+    ends = lines["APRON"].get(t, "").split()
+    if len(ends) == 4:
+        slab = streetplan.slab_poly((float(ends[0]), float(ends[1])), (float(ends[2]), float(ends[3])), want["width"], 0.0)
+        ends = [g17(value) for corner in slab for value in corner]
+    return found + differences("Tubes.EntranceApron", name, want["apron"], ends)
 
 
 def final_distances(table):
@@ -958,9 +1161,8 @@ def ring_vectors():
 
 
 def band_vectors():
-    """(RingClears, RingKeeps, KeptInBand) vectors. The mirror keeps the last as a method of its
-    plot, which reads nothing of the plot but its band: it is asked of a stand-in that has only
-    that, so the half-width compared is the mirror's own."""
+    """(RingClears, RingKeeps) vectors. KeptInBand has none of its own: the mirror's is a method of
+    its plot, so every era and every highway variant is asked about BAND_POINTS instead."""
     clears = [({"highway": block}, truth(cityfabric.ring_clears(block))) for block in RING_CLEAR_BLOCKS]
     keeps = [
         ({"px": px, "pz": pz, "ring": ring, "half": half}, truth(cityfabric.ring_keeps(px, pz, ring, half)))
@@ -968,12 +1170,7 @@ def band_vectors():
         for ring in BAND_RINGS
         for half in BAND_HALVES
     ]
-    kept = [
-        ({"px": px, "pz": pz, "band": band}, truth(cityfabric.FabricPlot.kept_in_band(types.SimpleNamespace(band_ring=band), px, pz)))
-        for band in BAND_KEPT_RINGS
-        for px, pz in BAND_POINTS
-    ]
-    return clears, keeps, kept
+    return clears, keeps
 
 
 def wild_vectors(city):
@@ -1039,7 +1236,35 @@ def upgrade_differences(label, case, text):
     return found
 
 
-def run(eras, keep=None, strict=False, module=MODULE):
+def variant_cases(city):
+    """(tables, what Python answers, the variants the tools refuse) for HIGHWAY_VARIANTS, where both
+    sides read one block, and HIGHWAY_RULED, where the mirror reads the block the ruling names."""
+    variants = [(era_name, keys, keys, ramp, False) for era_name, keys, ramp in HIGHWAY_VARIANTS]
+    variants += [(era_name, keys, ruled, True, True) for era_name, keys, ruled in HIGHWAY_RULED]
+    tables, expected, refused = [], [], []
+    for era_name, luau_keys, mirror_keys, ramp, ruled in variants:
+        label = f"{era_name} with highway {json.dumps(luau_keys)}" + ("" if ramp else " and no ramp") + (f", ruled to be {json.dumps(mirror_keys)}" if ruled else "")
+        mirror_city, luau_city = highway_variant(city, era_name, mirror_keys), highway_variant(city, era_name, luau_keys)
+        if mirror_city is None:
+            print(f"{label}: no `highway` block; skipped")
+            continue
+        with layout_ramp(ramp):
+            try:
+                streetplan.Era(era_name, mirror_city)
+            except ValueError as refusal:
+                refused.append(f"{label}: {refusal}")
+                continue
+            built = era_cases(era_name, mirror_city, label=label, history=False, luau_highway=luau_city["eras"][era_name]["highway"])
+        if built is None:
+            print(f"{label}: no fabric data or no valid `pull`; skipped")
+            continue
+        built[1]["ruled"] = ruled
+        tables.append(built[0])
+        expected.append(built[1])
+    return tables, expected, refused
+
+
+def run(eras, keep=None, strict=False, module=MODULE, tubes=TUBES):
     city = cityfabric.load_json(cityfabric.CITY_CONFIG_PATH)
     tables, expected = [], []
     for era_name in eras:
@@ -1050,17 +1275,27 @@ def run(eras, keep=None, strict=False, module=MODULE):
         tables.append(built[0])
         expected.append(built[1])
     real = len(tables)
-    for era_name, keys in HIGHWAY_VARIANTS:
-        varied = highway_variant(city, era_name, keys)
-        built = era_cases(era_name, varied, label=f"{era_name} with highway {json.dumps(keys)}", history=False) if varied is not None else None
-        if built is None:
-            print(f"{era_name} with highway {json.dumps(keys)}: no fabric data, no `highway` block or no valid `pull`; skipped")
-            continue
-        tables.append(built[0])
-        expected.append(built[1])
+    varied_tables, varied_expected, refused = variant_cases(city)
+    tables += varied_tables
+    expected += varied_expected
+    # Tubes.luau: every era asked for that the city config dresses, when the file is there.
+    tube_given, tube_want, tube_eras, tube_stale = [], [], 0, None
+    if Path(tubes).exists():
+        for era_name in eras:
+            if isinstance(city.get("eras", {}).get(era_name), dict):
+                given, want = tube_cases(era_name, city)
+                tube_given.append(given)
+                tube_want.append(want)
+        tube_eras = len(tube_given)
+        try:
+            synthetic = tube_synthetic()
+        except (AttributeError, KeyError, TypeError, ValueError) as changed:
+            synthetic, tube_stale = [], f"{type(changed).__name__}: {changed}"
+        tube_given += [given for given, _ in synthetic]
+        tube_want += [want for _, want in synthetic]
     stage_vectors, rings = level_stage_vectors(), ring_vectors()
     site_vectors, valid_vectors, swap_vectors = look_vectors(city)
-    clear_vectors, keep_vectors, kept_vectors = band_vectors()
+    clear_vectors, keep_vectors = band_vectors()
     wild_valid_vectors, wild_swap_vectors, wild_existing = wild_vectors(city)
     item_vectors, built_vectors = upgrade_vectors()
     lane_lots = [
@@ -1082,17 +1317,20 @@ def run(eras, keep=None, strict=False, module=MODULE):
         "rings": [vector for vector, _ in rings],
         "ringClears": [vector for vector, _ in clear_vectors],
         "ringKeeps": [vector for vector, _ in keep_vectors],
-        "bandKept": [vector for vector, _ in kept_vectors],
+        "bandPoints": [list(point) for point in BAND_POINTS],
         "wildLists": [vector for vector, _ in wild_valid_vectors],
         "wildVectors": [vector for vector, _ in wild_swap_vectors],
         "wildExisting": {name: True for name in sorted(wild_existing)},
         "upgradeItems": [vector for vector, _ in item_vectors],
         "builtVectors": [vector for vector, _ in built_vectors],
+        "tubes": tube_given,
     }
     work = Path(keep) if keep else Path(tempfile.mkdtemp(prefix="check_mirror_"))
     work.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copyfile(module, work / "CityFabric.luau")  # the game's own file, byte for byte
+        if tube_given:
+            shutil.copyfile(tubes, work / "Tubes.luau")  # and the client's, likewise
         (work / "cases.luau").write_text("return " + luau(data) + "\n", encoding="utf-8")
         (work / "run.luau").write_text(HARNESS, encoding="utf-8")
         result = subprocess.run([str(ensure_interpreter()), "run.luau"], cwd=work, capture_output=True, text=True)
@@ -1114,9 +1352,12 @@ def run(eras, keep=None, strict=False, module=MODULE):
         kind: {tuple(int(v) for v in rest.split(" ", 2)[:2]): rest.split(" ", 2)[2] if rest.count(" ") >= 2 else "" for rest in lines.get(kind, [])}
         for kind in ("DEV", "LANE", "CLR", "LOOK", "KEPT", "WILD", "UPG")
     }
-    by_era = {kind: {int(rest.split(" ", 1)[0]): rest.partition(" ")[2] for rest in lines.get(kind, [])} for kind in ("DIST", "TRIG", "GROUND", "BAND")}
+    by_era = {
+        kind: {int(rest.split(" ", 1)[0]): rest.partition(" ")[2] for rest in lines.get(kind, [])}
+        for kind in ("DIST", "TRIG", "ROUND", "GROUND", "BAND", "BPTS", "TCONF", "HUBS", "APRON")
+    }
     runs = {kind: all(name in exports for name in names) for kind, names in REAL_GROUPS}
-    variants = {"count": 0, "moments": 0, "banded": 0, "held": 0, "ground": 0, "found": 0}
+    variants = {"count": 0, "ruled": 0, "moments": 0, "round": 0, "banded": 0, "held": 0, "ground": 0, "found": 0}
     for e, (table, want) in enumerate(zip(tables, expected), start=1):
         found = []
         for c, case in enumerate(want["cases"], start=1):
@@ -1132,8 +1373,11 @@ def run(eras, keep=None, strict=False, module=MODULE):
                 found += differences("SwappedWild", label, case["wild"], by_case["WILD"].get((e, c), "").split())
             if runs["UPG"]:
                 found += upgrade_differences(label, case, by_case["UPG"].get((e, c), ""))
+        if runs["ROUND"]:
+            found += differences("RoundLoop", table["name"], [want["round"]], [by_era["ROUND"].get(e, "")])
         if runs["KEPT"]:
-            found += differences("BandRing", table["name"], [want["band"]], [by_era["BAND"].get(e, "")])
+            found += differences("RingBand", table["name"], [want["band"]], [by_era["BAND"].get(e, "")])
+            found += differences("KeptInBand", f"{table['name']} (BAND_POINTS)", list(want["bandPoints"]), list(by_era["BPTS"].get(e, "")))
         if runs["GROUND"]:
             found += differences("RingGround", table["name"], want["ground"], by_era["GROUND"].get(e, "").split())
         # The distances, with the mirror on the Luau run's cos and sin (see "Sines and cosines").
@@ -1145,7 +1389,9 @@ def run(eras, keep=None, strict=False, module=MODULE):
         problems += found
         if e > real:
             variants["count"] += 1
+            variants["ruled"] += 1 if want["ruled"] else 0
             variants["moments"] += len(want["cases"])
+            variants["round"] += 1 if want["round"] == truth(True) else 0
             variants["banded"] += 1 if want["band"] != "-" else 0
             variants["held"] += want["held"]
             variants["ground"] += 1 if want["ground"] else 0
@@ -1165,11 +1411,36 @@ def run(eras, keep=None, strict=False, module=MODULE):
         )
     if variants["count"]:
         print(
-            f"highway variants: {variants['count']} `highway` blocks x {variants['moments'] // variants['count']} moments"
-            + (f" ({variants['ground']} with ring rects, {variants['banded']} with a band, held {variants['held']} times against the mask)" if runs["KEPT"] and runs["GROUND"] else "")
+            f"highway variants: {variants['count']} `highway` blocks ({variants['ruled']} of them by the review's rulings), {variants['moments']} moments"
+            + (
+                f" ({variants['round']} round, {variants['ground']} with ring rects, {variants['banded']} with a band, held {variants['held']} times against the mask)"
+                if runs["ROUND"] and runs["KEPT"] and runs["GROUND"]
+                else ""
+            )
             + ": "
             + ("identical" if not variants["found"] else f"{variants['found']} DIFFERENCES")
         )
+    for message in refused:
+        print(f"the tools refuse a highway variant, so it is not compared (HIGHWAY_VARIANTS needs a block they read): {message}")
+    # Tubes.luau against tools/paths/tubes.py.
+    tube_unchecked = [name for name in (lines.get("TEXPORTS") or [""])[0].split() if name not in TUBES_COMPARED]
+    if tube_given:
+        found = differences("Tubes.ENTRANCE", "", [streetplan.tubes_module().ENTRANCE], lines.get("TENTR") or [""])
+        for t, (given, want) in enumerate(zip(tube_given, tube_want), start=1):
+            found += tube_differences(given, want, by_era, t)
+        hubs = sum(len(want["hubs"]) for want in tube_want[:tube_eras] if want["hubs"] is not None)
+        tubed = [given["name"] for given, want in zip(tube_given[:tube_eras], tube_want) if want["hubs"] is not None]
+        print(
+            f"Tubes.luau: {tube_eras} eras' `road.paths`, {len(tubed)} tube era{'' if len(tubed) == 1 else 's'}"
+            + (f" ({', '.join(tubed)}: {hubs} hubs and the entrance apron)" if tubed else "")
+            + f", {len(tube_given) - tube_eras} synthetic cases: "
+            + ("identical" if not found else f"{len(found)} DIFFERENCES")
+        )
+        problems += found
+    else:
+        print(f"Tubes.luau: {tubes} is not there or no era was asked for, so it is not compared")
+    if tube_stale is not None:
+        print(f"Tubes.luau: tools/paths/tubes.py no longer answers the stand-in plans of tube_synthetic ({tube_stale}), so the synthetic cases are not compared")
     want = [g17(cityfabric.lane_reach(LANE_DOGLEG, 1, lane_lots, levels, sizes, budget)) for levels, sizes, budget in LANE_CASES]
     got = [rest.split(" ", 1)[1] for rest in sorted(lines.get("LANEV", []), key=lambda rest: int(rest.split(" ", 1)[0]))]
     found = differences("LaneReach", "(synthetic dogleg)", want, got)
@@ -1185,7 +1456,6 @@ def run(eras, keep=None, strict=False, module=MODULE):
         ("SwappedProp", "SWAP", swap_vectors, ("ValidSwaps",)),
         ("RingClears", "RCLR", clear_vectors, ()),
         ("RingKeeps", "RKEEP", keep_vectors, ()),
-        ("KeptInBand", "KBAND", kept_vectors, ()),
         ("ValidWildSwaps", "WVALID", wild_valid_vectors, ()),
         ("SwappedWild", "WSWAP", wild_swap_vectors, ("ValidWildSwaps",)),
         ("ValidUpgradeItem", "UITEM", item_vectors, ()),
@@ -1215,11 +1485,13 @@ def run(eras, keep=None, strict=False, module=MODULE):
         print("not exported by CityFabric.luau yet, so not compared: " + ", ".join(waiting))
     if unchecked:
         print("exported by CityFabric.luau with no comparison here (add one): " + ", ".join(unchecked))
+    if tube_unchecked:
+        print("exported by Tubes.luau with no comparison here (add one): " + ", ".join(tube_unchecked))
     for message in problems[:SHOWN]:
         print(f"   DIFFERENCE: {message}")
     if len(problems) > SHOWN:
         print(f"   ... and {len(problems) - SHOWN} more")
-    failed = bool(problems) or (strict and bool(waiting or unchecked))
+    failed = bool(problems) or (strict and bool(waiting or unchecked or tube_unchecked or refused or tube_stale or not tube_given))
     print("check_mirror: " + ("FAILED" if failed else "Luau and Python agree"))
     return 1 if failed else 0
 
@@ -1230,8 +1502,9 @@ def main(argv):
     parser.add_argument("--keep", help="write the generated Luau files to this folder and leave them there")
     parser.add_argument("--strict", action="store_true", help="also fail when a helper is missing on either side")
     parser.add_argument("--module", type=Path, default=MODULE, help="a CityFabric.luau to run instead of src/shared's (to prove the check bites)")
+    parser.add_argument("--tubes", type=Path, default=TUBES, help="a Tubes.luau to run instead of src/client/City's (likewise)")
     args = parser.parse_args(argv)
-    return run(args.eras, args.keep, args.strict, args.module)
+    return run(args.eras, args.keep, args.strict, args.module, args.tubes)
 
 
 if __name__ == "__main__":

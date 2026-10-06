@@ -614,12 +614,20 @@ export type CityEraHighwayConfig = {
 	-- cannot be measured apart from its rails; absent = no deck cars.
 	deckHeight: number?,
 	-- M12 wave 4.2: true makes the ring a circle of radius `layout.highway.ring` about the plot's
-	-- centre (loop mode only, no ramp), which the train follows. Absent = the square ring.
+	-- centre (loop mode only, no ramp), which the train follows. Absent = the square ring, and so
+	-- is a layout highway with a ramp whatever this says (CityFabric.RoundLoop).
 	round: boolean?,
 	-- M12 wave 4.2: the boolean false keeps the ring's ground out of the fabric's clearing, and on
-	-- a round loop the wild in the band is then cleared by nothing (CityFabric.BandRing). Absent =
+	-- a round loop the wild in the band is then cleared by nothing (CityFabric.RingBand). Absent =
 	-- the ring clears its ground once `requiresSlot` is owned.
 	clearBand: boolean?,
+	-- M12 wave 4.2 review, a round loop's two numbers. `segments` is how many equal arcs the circle
+	-- is cut into, each one `props.arc` with a pier at its middle: a whole number, 3 or more, and
+	-- the count the kit's arc was cut for, which the tools hold it to. `bandHalf` is the studs the
+	-- band nothing stands in reaches either side of the circle, so the band is `ring` plus or
+	-- minus it. The tools refuse a round loop without both; in game a bad `bandHalf` is no band.
+	segments: number?,
+	bandHalf: number?,
 }
 -- Wave 2a: street-corner entrances from the layout, shown while `requiresSlot` is owned.
 export type CityEraSubwayConfig = { requiresSlot: string, prop: string, maxPerPlot: number }
