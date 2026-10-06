@@ -1,0 +1,17 @@
+{
+  "id": "FabricHabMediumAGreen",
+  "era": "OrbitalColony",
+  "scale": 2.0,
+  "footprint": [8, 12],
+  "pieces": [
+    {"kit": "colony-kit", "model": "deck-medium", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-0", "pos": [0, 0, 0], "rotY": 0, "stage": 0},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-0-u0", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 0},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-0-u1", "pos": [0, 0, 0], "rotY": 0, "stage": 0, "untilStage": 1},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-1", "pos": [0, 0, 0], "rotY": 0, "stage": 1},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-1-u1", "pos": [0, 0, 0], "rotY": 0, "stage": 1, "untilStage": 1},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-2-u2", "pos": [0, 0, 0], "rotY": 0, "stage": 2, "untilStage": 2},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-3-u3", "pos": [0, 0, 0], "rotY": 0, "stage": 3, "untilStage": 3},
+    {"kit": "colony-kit", "model": "hab-medium-a-green-4", "pos": [0, 0, 0], "rotY": 0, "stage": 4}
+  ]
+}

@@ -41,6 +41,18 @@ its dish and mast behind, B an observatory dome in front; port A a control tower
 containers and a gantry, B a vaulted hangar with a cupola behind a fuel apron). Their stage
 heights stay within about a stud of each other, so a row that alternates them grows evenly.
 
+**Green twins** ("Green the Domes", INTERFACES "Wave 4.1c"): while Life Support is owned, a lot
+showing a habitat prop shows `<prop>Green` at the same stage. A twin is the original's builder run
+with GREEN set, so its body is the original's, vertex for vertex: only colours change (the lower
+panes of every dome and of the greenhouse barrel turn to two greens, a pod's glass band shows
+plants at alternate windows, a glazed spine, the pea pod's ridge and the planters' shrubs turn
+green), and a few
+low garden pieces join on deck the original leaves bare. The glazing is opaque in this art style
+(flat palette colours, like every kit here), so "a garden under the glass" is drawn on the panes
+themselves. A piece the flag does not touch is shared with the original by name; `check` proves
+that a twin's body has its original's shape at every stage, that nothing it adds stands taller
+than GARDEN_MAX, and that it shows more green than the original at every stage.
+
 **Units.** Blueprints use `"scale": 2.0`, so that a space-kit cargo craft comes out at half the
 landmarks' size (3.0 x 1.8 x 5.0 studs) and fits a lot. Every literal below is in **studs** in the
 lot frame and is divided by SCALE once, at export; `check` works in studs too.
@@ -106,6 +118,7 @@ SOLAR = (40, 90, 200)
 SOLAR_LINE = (112, 160, 235)
 HOLO = (90, 255, 245)
 PLANT = (97, 203, 139)
+LEAF = (168, 232, 112)  # not a kit colour: a brighter leaf tone beside PLANT, for the Green twins' gardens
 LIT = (255, 225, 140)
 WARN = (232, 120, 74)
 # tube-kit's shell and ring, so a collar reads as part of the tube it docks to:
@@ -114,6 +127,7 @@ RING = (190, 196, 206)
 # CityDressing.json eras.OrbitalColony.road.tiles.blocks.color: the decking (contract).
 DECK = (96, 98, 108)
 DARK = {SLATE}
+GREENS = {PLANT, LEAF}
 
 HAB = GLASS_DEEP  # the stripe a district's modules wear
 IND = TRIM
@@ -130,6 +144,7 @@ GAP = 0.05  # parallel faces that overlap stand at least this far apart
 MIN_MEMBER = 0.1  # nothing the camera sees is thinner than this in two dimensions
 MIN_RISE = 0.3  # a stage is at least this much taller than the one before
 D = 0.12  # deck top
+GARDEN_MAX = 1.3  # nothing a Green twin adds stands taller: its outline above that is its original's
 POD = 1.5  # a ground pod's wall: the collar's opening (1.46 above the deck) closes against it
 PAD_H = 0.07  # a cargo pad's slab on the deck
 SEG = 8
@@ -149,6 +164,10 @@ KENNEY = {
     "craft_cargoA": {"kit": "space-kit", "lo": (1.20, 0.0, 0.27), "hi": (2.80, 0.80, 2.72), "tris": 264},
     "craft_cargoB": {"kit": "space-kit", "lo": (1.25, 0.0, 0.25), "hi": (2.75, 0.90, 2.75), "tris": 380},
 }
+
+
+GREEN = {"on": False}  # set while a Green twin is built: the same builder, a garden under every glass
+CROWNS = {1: LEAF, 4: PLANT, 6: LEAF}  # dome facet -> the tree crown a twin shows in its middle band
 
 
 def log(msg: str) -> None:
@@ -384,15 +403,18 @@ def capsule(p: Part, axis: str, a0, a1, cu, y0, w, sill, rise, c: Rgb = HULL, ri
     b0, b1 = a0 + (hw if round0 else 0.0), a1 - (hw if round1 else 0.0)
     n = max(bays, 1)
     cuts = [b0 + (b1 - b0) * i / n for i in range(n + 1)]
+    spine = LEAF if GREEN["on"] and ridge == GLASS else ridge or c  # a twin plants its glazed spine
     for i in range(n):
-        arch = (GLASS, GLASS_DEEP)[i % 2] if bays else c
-        side = ([c] if sill > 0 else []) + [arch] * len(ARCH)
-        extrude(p, sect, axis, cuts[i], cuts[i + 1], side + [ridge or c] + side[::-1] + [c],
+        tones = [(GLASS, GLASS_DEEP)[i % 2] if bays else c] * len(ARCH)
+        if bays and GREEN["on"]:
+            tones[0] = (PLANT, LEAF)[i % 2]  # a twin's crops stand against the lower panes
+        side = ([c] if sill > 0 else []) + tones
+        extrude(p, sect, axis, cuts[i], cuts[i + 1], side + [spine] + side[::-1] + [c],
                 cap0=c if i == 0 and not round0 else None, cap1=c if i == n - 1 and not round1 else None,
                 skip=(2 * m + 1,))
     for a, s, on in ((b0, -1.0, round0), (b1, 1.0, round1)):
         if on:
-            half_dome(p, axis, a, s, cu, y0, prof, c, ridge or c)
+            half_dome(p, axis, a, s, cu, y0, prof, c, spine)
     return y0 + sill + rise
 
 
@@ -423,18 +445,21 @@ def cone(p: Part, cx, cz, y0, w, h, c: Rgb = PANEL) -> None:
     lathe(p, [(rad(w), 0.0), (rad(w) * 0.4, h)], c, at=(cx, y0, cz), top=c)
 
 
-def hoop(p: Part, cx, cz, y0, y1, w, c: Rgb) -> None:
-    """A stripe GAP proud of a drum of width w. Its top is closed; its underside is a 0.05 rim that
-    only shows from straight below, and is left out."""
+def hoop(p: Part, cx, cz, y0, y1, w, c, rim: Rgb | None = None) -> None:
+    """A stripe GAP proud of a drum of width w: one colour, or f(facet, band) with `rim` for its
+    top. Its top is closed; its underside is a 0.05 rim that only shows from straight below, and is
+    left out."""
     r = rad(w + 2 * GAP)
-    lathe(p, [(r, 0.0), (r, y1 - y0)], c, at=(cx, y0, cz), top=c)
+    lathe(p, [(r, 0.0), (r, y1 - y0)], c, at=(cx, y0, cz), top=rim or c)
 
 
 def pod(p: Part, cx, cz, y0, w, h, stripe: Rgb | None, glass=(0.5, 0.95)) -> None:
     """A round pod: a white drum with one glass band (heights above y0) and its district stripe
     under the roof line. Never rows of windows: a pod grows by being rebuilt wider, not by floors."""
     drum(p, cx, cz, y0, w, h)
-    if glass:
+    if glass and GREEN["on"]:  # a twin's plants show at alternate windows
+        hoop(p, cx, cz, y0 + glass[0], y0 + glass[1], w, lambda k, i: (GLASS, PLANT, GLASS, LEAF)[k % 4], rim=GLASS)
+    elif glass:
         hoop(p, cx, cz, y0 + glass[0], y0 + glass[1], w, GLASS)
     if stripe:
         hoop(p, cx, cz, y0 + h - 0.36, y0 + h - 0.16, w, stripe)
@@ -456,7 +481,21 @@ def dome(p: Part, cx, cz, y0, w, h, bands: int = 3, ring: float = 0.25, ribs: bo
     (facet 5 faces the lot front)."""
     lathe(p, [(rad(w), 0.0), (rad(w), ring)], HULL, at=(cx, y0, cz), top=HULL)
     prof = dome_profile(rad(w - 0.16), ring, h, bands)
-    lathe(p, prof, lambda k, i: slit[1] if slit and k == slit[0] else panes[(k + i) % 2], at=(cx, y0, cz), top=HULL)
+    garden = GREEN["on"] and slit is None and panes == (GLASS, GLASS_DEEP)
+
+    def pane(k, i):
+        """A twin's garden stands against the glass: the lowest band in two greens, and in a
+        three-band dome three tree crowns reach up the middle one (unevenly spaced, one of them
+        on the side the tycoon camera sees), under glass that stays blue."""
+        if slit and k == slit[0]:
+            return slit[1]
+        if garden and i == 0:
+            return (PLANT, LEAF)[k % 2]
+        if garden and i == 1 and bands >= 3 and k in CROWNS:
+            return CROWNS[k]
+        return panes[(k + i) % 2]
+
+    lathe(p, prof, pane, at=(cx, y0, cz), top=HULL)
     if not ribs:
         return
     for k in range(SEG):
@@ -620,8 +659,9 @@ def solar(p: Part, x0, x1, z0, z1, y, cols: int, rows: int) -> None:
 
 
 def planter(p: Part, x0, x1, z0, z1, y) -> None:
-    """A habitat's garden tray: white walls, a green bed, a row of shrubs."""
+    """A habitat's garden tray: white walls, a green bed, a row of shrubs (leaf green on a twin)."""
     cube(p, x0, x1, y, y + 0.28, z0, z1, HULL, skip=("bottom",), top=PLANT)
+    shrub = LEAF if GREEN["on"] else PLANT
     along_x = (x1 - x0) >= (z1 - z0)
     n = max(1, min(4, int(max(x1 - x0, z1 - z0) / 0.48)))
     s = 0.17
@@ -629,7 +669,13 @@ def planter(p: Part, x0, x1, z0, z1, y) -> None:
         k = (i + 0.5) / n
         cx = x0 + (x1 - x0) * k if along_x else (x0 + x1) / 2
         cz = (z0 + z1) / 2 if along_x else z0 + (z1 - z0) * k
-        cube(p, cx - s, cx + s, y + 0.28, y + 0.28 + 2 * s, cz - s, cz + s, PLANT, skip=("bottom",))
+        cube(p, cx - s, cx + s, y + 0.28, y + 0.28 + 2 * s, cz - s, cz + s, shrub, skip=("bottom",))
+
+
+def mound(p: Part, cx, cz, y, w, h, c: Rgb = LEAF) -> None:
+    """A clipped shrub: one faceted green mass, the size a garden needs to read at the tycoon camera."""
+    r = rad(w)
+    lathe(p, [(r * 0.8, 0.0), (r, h * 0.45), (r * 0.5, h)], c, at=(cx, y, cz), top=c)
 
 
 def beacon(p: Part, x, z, y, c: Rgb = LIT) -> float:
@@ -747,11 +793,15 @@ def tower(p: Part, cx, cz, y0, y1, y2, shaft: float = 1.2, cab: float = 2.2) -> 
 
 
 class Prop:
-    """One fabric building: its pieces by (stage, last stage or None) and its space-kit pieces."""
+    """One fabric building: its pieces by (stage, last stage or None) and its space-kit pieces. A
+    Green twin also has garden pieces, which only it draws, and knows its original."""
 
-    def __init__(self, pid: str, lot: str):
+    def __init__(self, pid: str, lot: str, green: bool = False):
         self.id = pid
         self.lot = lot
+        self.green = green
+        self.original: Prop | None = None
+        self.gardens: dict[tuple[int, int | None], Part] = {}
         self.w, self.d = LOTS[lot]
         name = pid[len("Fabric"):]
         self.slug = "".join(("-" + ch.lower()) if ch.isupper() else ch for ch in name).lstrip("-")
@@ -764,6 +814,23 @@ class Prop:
         if key not in self.parts:
             self.parts[key] = Part(f"{self.slug}-{stage}" + ("" if until is None else f"-u{until}"))
         return self.parts[key]
+
+    def garden(self, stage: int, until: int | None = None) -> Part | None:
+        """The piece a Green twin's garden furniture goes on, or None while the original is built."""
+        if not self.green:
+            return None
+        key = (stage, until)
+        if key not in self.gardens:
+            self.gardens[key] = Part(f"{self.slug}-{stage}" + ("" if until is None else f"-u{until}") + "-garden")
+        return self.gardens[key]
+
+    def share(self, original: "Prop") -> None:
+        """Name every piece the flag left untouched after the original's: one GLB serves both."""
+        self.original = original
+        for key, part in self.parts.items():
+            same = original.parts.get(key)
+            if same is not None and (same.verts, same.faces) == (part.verts, part.faces):
+                part.name = same.name
 
     def craft(self, model: str, x, z, y, turn: int, stage: int, until: int | None = None) -> None:
         """Park a space-kit craft with its bounding box centred on (x, z), standing on y, nose
@@ -784,8 +851,11 @@ class Prop:
         })
 
     def pieces(self):
-        """Own pieces in blueprint order: by stage, the staying piece first."""
-        return sorted(self.parts.items(), key=lambda kv: (kv[0][0], -1 if kv[0][1] is None else kv[0][1]))
+        """Own pieces in blueprint order: by stage, the staying piece first, a garden after its body."""
+        both = [(key, 0, part) for key, part in self.parts.items()]
+        both += [(key, 1, part) for key, part in self.gardens.items()]
+        both.sort(key=lambda t: (t[0][0], t[1], -1 if t[0][1] is None else t[0][1]))
+        return [(key, part) for key, _, part in both]
 
     def present(self, k: int) -> list[Part]:
         return [part for (stage, until), part in self.pieces() if stage <= k and (until is None or k <= until)]
@@ -799,15 +869,21 @@ def hab_narrow_a(P: Prop) -> None:
     ridge like peas, the one at the back swallowed by a wider one at every stage until it stands on
     its own drum under a lantern. Low in front, tall behind."""
     zf = -P.d / 2
+    bed = PLANT if GREEN["on"] else None  # a twin plants the pod's ridge between its domes
     airlock(P, P.part(0), 0.0)
     q = P.part(0, 0)
-    capsule(q, "z", zf + DOCK, 1.0, 0.0, D, 3.2, 0.9, 1.1)
+    capsule(q, "z", zf + DOCK, 1.0, 0.0, D, 3.2, 0.9, 1.1, ridge=bed)
     belt(q, "z", -0.9, 0.0, D, 3.2, 0.9, 1.1, HAB)
     for s in (-1, 1):
         porthole(q, "z", -1.8, s * 1.6, s, D + 0.5)
     planter(q, -1.4, 1.4, 1.9, 2.6, D)
+    g = P.garden(0, 0)
+    if g:  # the yard behind the first pod, until the long pod covers it
+        planter(g, -1.4, 1.4, 3.0, 3.7, D)
+        for sx in (-1, 1):
+            mound(g, sx * 1.5, 1.45, D, 0.8, 0.9)
     p = P.part(1)
-    capsule(p, "z", zf + DOCK, 3.8, 0.0, D, 3.4, 1.0, 1.3)
+    capsule(p, "z", zf + DOCK, 3.8, 0.0, D, 3.4, 1.0, 1.3, ridge=bed)
     for z in (-1.75, 1.75):
         belt(p, "z", z, 0.0, D, 3.4, 1.0, 1.3, HAB)
     for s in (-1, 1):
@@ -835,6 +911,10 @@ def hab_narrow_b(P: Prop) -> None:
     q = P.part(0, 0)
     cone(q, 0.0, z0, D + POD, 3.0, 0.5)
     capsule(q, "z", -0.3, 3.8, 0.0, D, 2.6, 0.5, 0.9, bays=2)
+    g = P.garden(0, 0)
+    if g:  # beds beside the first greenhouse, until the wider one covers them
+        for sx in (-1, 1):
+            planter(g, sx * 1.7 - 0.25, sx * 1.7 + 0.25, 0.9, 3.3, D)
     dome(P.part(1, 1), 0.0, z0, D + POD, 3.0, 1.6, bands=2)
     capsule(P.part(1, 2), "z", -0.5, 3.8, 0.0, D, 3.4, 0.8, 1.4, bays=2)
     q = P.part(2, 2)
@@ -860,10 +940,19 @@ def hab_small_a(P: Prop) -> None:
     z0 = dock(P, 3.2)
     pod(P.part(0, 1), 0.0, z0, D, 3.2, POD, HAB)
     dome(P.part(0, 0), 0.0, z0, D + POD, 3.2, 1.3, bands=2)
+    g = P.garden(0, 0)
+    if g:  # the back of the lot, until the side pods stand there
+        for sx in (-1, 1):
+            planter(g, sx * 1.55 - 1.05, sx * 1.55 + 1.05, 1.6, 2.3, D)
+            mound(g, sx * 2.3, 0.2, D, 0.9, 1.0)
+        mound(g, 0.0, 1.95, D, 0.9, 1.0, PLANT)
     p = P.part(1)
     for sx in (-1, 1):
         pod(p, sx * 1.85, 1.75, D, 2.2, 1.2, HAB, glass=(0.4, 0.75))
         dome(p, sx * 1.85, 1.75, D + 1.2, 2.2, 1.0, bands=2, ring=0.2)
+    g = P.garden(1, 3)
+    if g:  # a bed between the side pods, until the largest bubble covers it
+        planter(g, -0.6, 0.6, 2.2, 2.85, D)
     dome(P.part(1, 1), 0.0, z0, D + POD, 3.2, 1.85)
     q = P.part(2, 2)
     pod(q, 0.0, dock(P, 4.2), D, 4.2, 1.5, HAB)
@@ -1275,6 +1364,14 @@ PROPS = {
     "FabricIndMediumA": ("medium", ind_medium_a),
     "FabricPortMediumA": ("medium", port_medium_a),
 }
+# Green twin -> its original ("Green the Domes"): the original's builder, run with GREEN set.
+TWINS = {
+    "FabricHabNarrowAGreen": "FabricHabNarrowA",
+    "FabricHabNarrowBGreen": "FabricHabNarrowB",
+    "FabricHabSmallAGreen": "FabricHabSmallA",
+    "FabricHabMediumAGreen": "FabricHabMediumA",
+}
+EVERY = list(PROPS) + list(TWINS)
 STAGES = 5
 
 
@@ -1287,11 +1384,18 @@ def deck(lot: str) -> Part:
 
 
 def build(pid: str) -> tuple[Prop, list[tuple[float, float, float]]]:
-    lot, make = PROPS[pid]
+    lot, make = PROPS[TWINS.get(pid, pid)]
     RODS.clear()
-    prop = Prop(pid, lot)
-    make(prop)
-    return prop, list(RODS)
+    prop = Prop(pid, lot, green=pid in TWINS)
+    GREEN["on"] = prop.green
+    try:
+        make(prop)
+    finally:
+        GREEN["on"] = False
+    rods = list(RODS)
+    if prop.green:
+        prop.share(build(TWINS[pid])[0])
+    return prop, rods
 
 
 # --- checks -------------------------------------------------------------------------------------
@@ -1381,6 +1485,45 @@ def dark_outline(parts: list[Part], lo, hi) -> list[str]:
     return found
 
 
+def green_area(parts: list[Part]) -> float:
+    """The area of the faces in a garden green."""
+    total = 0.0
+    for part in parts:
+        for idx, colour in part.faces:
+            if colour in GREENS:
+                n = newell([part.verts[i] for i in idx])
+                total += math.sqrt(sum(c * c for c in n)) / 2
+    return total
+
+
+def twin_problems(prop: Prop) -> list[str]:
+    """A Green twin against its original: the same body, piece for piece and vertex for vertex,
+    whatever its colours; nothing added above GARDEN_MAX, so the outline is the original's and
+    the heights agree at every stage; and more green on show than the original at every stage."""
+    orig = prop.original
+    bad = []
+    if set(prop.parts) != set(orig.parts) or prop.kenney != orig.kenney:
+        bad.append(f"its body pieces are not {orig.id}'s: {sorted(set(prop.parts) ^ set(orig.parts), key=str)}")
+    for key, part in prop.parts.items():
+        same = orig.parts.get(key)
+        if same is None:
+            continue
+        if (part.verts, [idx for idx, _ in part.faces]) != (same.verts, [idx for idx, _ in same.faces]):
+            bad.append(f"{part.name} does not have the shape of {same.name}")
+    for part in prop.gardens.values():
+        top = part.bounds()[1][1]
+        if top > GARDEN_MAX + 1e-6:
+            bad.append(f"{part.name} stands {top:.2f} tall > {GARDEN_MAX}: a twin adds only low garden pieces")
+    for k in range(STAGES):
+        mine, theirs = stage_box(prop, k)[1][1], stage_box(orig, k)[1][1]
+        if abs(mine - theirs) > GAP:
+            bad.append(f"stage {k} is {mine:.2f} tall, {orig.id}'s {theirs:.2f}")
+        more = green_area(prop.present(k)) - green_area(orig.present(k))
+        if more < 1.0:
+            bad.append(f"stage {k} shows {more:.2f} studs2 more green than {orig.id}: the swap would not show")
+    return bad
+
+
 def check(prop: Prop, rods) -> list[str]:
     """The contract for one prop. Returns violations."""
     w, d = prop.w, prop.d
@@ -1431,6 +1574,8 @@ def check(prop: Prop, rods) -> list[str]:
             bad.append(f"stage {k}: {msg}")
     for rod in sorted(set(rods))[:5]:
         bad.append(f"a member {rod[0]:g} x {rod[1]:g} x {rod[2]:g} is thinner than {MIN_MEMBER} in two dimensions")
+    if prop.original:
+        bad += twin_problems(prop)
     return bad
 
 
@@ -1460,7 +1605,8 @@ def all_pieces(props: list[Prop]) -> dict[str, Part]:
     pieces = {f"deck-{lot}": deck(lot) for lot in LOTS}
     for prop in props:
         for _, part in prop.pieces():
-            assert part.name not in pieces, f"two pieces are named {part.name}"
+            shared = pieces.get(part.name)  # a twin's untouched piece is its original's
+            assert shared is None or (shared.verts, shared.faces) == (part.verts, part.faces), f"{part.name} differs"
             pieces[part.name] = part
     return pieces
 
@@ -1582,7 +1728,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--blender", default=os.environ.get("BLENDER", DEFAULT_BLENDER))
     args = parser.parse_args(argv)
 
-    built = [build(pid) for pid in PROPS]
+    built = [build(pid) for pid in EVERY]
     props = [prop for prop, _ in built]
     summary, failures = report(built)
     if args.summary:
@@ -1617,7 +1763,7 @@ def main(argv: list[str]) -> int:
     if failures:
         log(f"{failures} problem(s)")
         return 1
-    log(f"check passed: {len(PROPS)} props, every rule")
+    log(f"check passed: {len(PROPS)} props and {len(TWINS)} Green twins, every rule")
     return 0
 
 
