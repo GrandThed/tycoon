@@ -747,8 +747,9 @@ def swapped_wild(prop, swaps, owned, exists):
     """The prop a standing wild entry shows -- a whole clump, one of its quarters or a single --
     after the wild swaps: each swap whose slot is owned turns the name into `<prop><suffix>` when
     `exists` says that prop exists, in list order, each on the name the one before produced. A
-    twin has its original's footprint and frame, so where the entry stands, how it is turned and
-    scaled and when it clears do not change."""
+    twin lies inside the ground the generator reserved for its entry, in the entry's frame
+    (tools/fabric.py: Site.single_ground, wild_swap_messages), so where the entry stands, how it
+    is turned and scaled and when it clears do not change."""
     if not isinstance(prop, str):
         return prop
     for swap in swaps:

@@ -2726,7 +2726,7 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - [x] lead: wave 4, Orbital, started on Ben's go (2026-10-05; the density arithmetic first).
   See "Wave 4 — Orbital Colony"
 
-### Wave 4 — Orbital Colony (2026-10-05 → 2026-10-06; built, reviewed and QA green on `m12-orbital`; the asset run and Ben's Studio look are ahead)
+### Wave 4 — Orbital Colony (2026-10-05 → 2026-10-06; built, reviewed and QA green on `m12-orbital`; the asset run is done; Ben's Studio look is ahead)
 
 **Where:**
 - **The work lives on the branch `m12-orbital`**, in the worktree
@@ -2868,7 +2868,7 @@ Bloom was then reseated for the four street-only slots (wave 4.1c): **89 lots**.
   |---|---|---|---|
   | `colonyFlag` | 8 | Raise the Colony Flags | 24 flag masts beside the tubes and 24 banners on every other monorail pier |
   | `lifeSupport` | 12 | Green the Domes | 25 habitat pods and domes swap to their Green twin |
-  | `rockGarden` | 14 | Tend the Rock Gardens | every standing piece of regolith becomes a raked garden (`fabric.wildSwaps`): 44 at the end of tier 3, 25 at full build |
+  | `rockGarden` | 14 | Tend the Rock Gardens | every standing piece of regolith becomes a raked garden (`fabric.wildSwaps`): 42 at the end of tier 3, 23 at full build |
   | `holoBeacon` | 20 | Light the Holo Beacons | a hologram over each of the 11 hubs |
 
   - `walkwayNetwork` "Build the Monorail" (6) was street-only already. `orbitalUplink` (17)

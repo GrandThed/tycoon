@@ -1974,8 +1974,8 @@ end
 --
 -- Wave 4.2 (`fabric.wildSwaps`, "Tend the Rock Gardens"): every piece that stands shows the twin
 -- of its prop while a slot that swaps the wild is owned and that twin has a template
--- (CityFabric.SwappedWild; a twin shares its original's footprint and frame, so nothing else about
--- the entry changes). The props are asked on every pass, like the building swaps, because a
+-- (CityFabric.SwappedWild; a twin lies inside the ground reserved for its original, in its frame,
+-- so nothing else about the entry changes). The props are asked on every pass, like the building swaps, because a
 -- template can replicate after its slot was seen owned. A piece standing in the wrong prop is
 -- re-skinned where it stands: through the spawn queue, silently, in any pass but the one that
 -- buys the slot on a near plot. That pass names where the wave starts (`swapOrigins`, the pad it

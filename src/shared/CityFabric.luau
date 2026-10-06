@@ -704,9 +704,9 @@ end
 -- Wave 4.1c: the prop a standing wild placement shows (a whole clump, one of its quarters, or a
 -- single) once the wild swaps have had their say. Each swap whose slot is in `owned` turns the
 -- name into `<prop><suffix>` when `exists` says that prop can be spawned, in list order, each on
--- the name the one before produced. A twin has its original's footprint and frame, so where the
--- placement stands, how it is turned and scaled and when it clears do not change. A variant
--- without a name stays without one.
+-- the name the one before produced. A twin lies inside the ground the generator reserved for its
+-- original, in the same frame, so where the placement stands, how it is turned and scaled and
+-- when it clears do not change. A variant without a name stays without one.
 function CityFabric.SwappedWild(
 	prop: string?,
 	swaps: { FabricWildSwap },

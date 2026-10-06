@@ -70,7 +70,8 @@ when those rects join the clearing mask with `clear.parcel`; whatever stands the
 their reach. A field that breaks either rule, or lies across the plot's edge, is moved
 `wild.grid.shift` studs (one lattice cell) if that fits, else dropped; such a single is dropped. A
 single's ground is its harvested extents, else the plan's `footprints` entry, else a `singleRadius`
-square. A fields plan may leave out `skirt` (nothing past the edge, and no landmarks). Alleys (wave
+square (grown to hold its twins where the era has wild swaps: see below). A fields plan may leave
+out `skirt` (nothing past the edge, and no landmarks). Alleys (wave
 2.4 lanes in a tiles era, "density" rulings) keep their mouth on the street centreline; their ground
 is the polyline from the pavement's outer edge on, at `fabric.lanes` half-width, and it stands on no
 street's band and keeps CHECK_LANE from landmarks, pads, markers, kiosks, the deck band and the ramp
@@ -110,19 +111,26 @@ entry is the one thing in the band besides a crossing tube.
 
 Wild swaps (`fabric.wildSwaps`, same section: "Tend the Rock Gardens"). While a swap's slot is
 owned every standing wild entry shows `<prop><suffix>` where that twin exists. The data does not
-change, so `check` holds the props to it (wild_swap_messages): a clump and its quarter have a twin
-together, a twin lies inside its original's ground in its original's frame, and under a beam that
-never clears it is no taller.
+change, so the ground an entry reserves is the ground of whatever it can show. A single's is the
+larger, axis by axis in its own frame, of its prop's and of every twin's it can swap to
+(Site.single_ground), and every rule that places or clears a single reads that one ground
+(wild_shapes): no two plates over each other, singles on bare ground, band-kept wild off lots,
+pads, aprons and landmarks, the entrance apron and the crossing tubes, the pier feet, and the
+layers' own clearance from standing regolith. A clump reserves the square its quarters tile and a
+quarter its quadrant of it, whatever they show. `check` then holds every prop the wild can show
+inside the ground reserved for it (wild_swap_messages), a clump and its quarter to a twin
+together, and under a beam that never clears no twin taller than the wild may be.
 
 A round loop (`highway.round`, same section). The band is the annulus `highway.bandHalf` either
 side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it, and the
 colony may use the plot's corners outside it. With `highway.clearBand` false the wild in the band
 is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off a tube that crosses the band,
-a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop is taller than
-WILD_UNDER_BEAM. And what is kept is kept by its clearing point alone -- a quarter's quad, a
-single's own point -- while its ground reaches further: a quarter is a quadrant of a feature up to
-its `quarterOffset` square. So the ground of every kept part lies on no lot, pad, apron or
-landmark's extents (kept_ground_hits), or a mound would stand inside a pod for good.
+a single keeps CHECK_PIER_FOOT from every pier foot's centre and its ground off the foot itself
+(pier_ground_hit), and no wild prop is taller than WILD_UNDER_BEAM. And what is kept is kept by its
+clearing point alone -- a quarter's quad, a single's own point -- while its ground reaches
+further: a quarter is a quadrant of a feature up to its `quarterOffset` square. So the ground of
+every kept part lies on no lot, pad, apron or landmark's extents (kept_ground_hits), or a mound
+would stand inside a pod for good.
 
 A lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the lane
 as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its left);
@@ -221,7 +229,9 @@ CHECK_SPOT_FRONT = 0.5
 CHECK_TILE_SOLID = 0.5
 # INTERFACES "Wave 4.1b": under a round loop whose band never clears (`highway.clearBand` false) no
 # wild prop is taller than this at any stage (the monorail's soffit is at 6.10), and a single's
-# centre keeps CHECK_PIER_FOOT from the centre of every pier foot (a foot is 1.9 square).
+# centre keeps CHECK_PIER_FOOT from the centre of every pier foot (a foot is 1.9 square) while the
+# ground it reserves lies on no foot (pier_ground_hit): the centre rule alone lets a wide single,
+# or one that swaps to a wide twin, lie across a foot's corner.
 WILD_UNDER_BEAM = 3.0
 CHECK_PIER_FOOT = 1.5
 # INTERFACES "Wave 4.1b", rulings: where the wild is flat ground plates (a tube era's regolith), two
@@ -536,6 +546,8 @@ class Site:
         assets = load_assets()
         harvested = (assets.get("eras") or {}).get(era_name) or {}
         self.props = (assets.get("props") or {}).get(era_name) or {}
+        self._heights = None  # tools/cityfabric.Heights, on first use: which twins exist (wild_twins)
+        self._single_grounds = {}  # prop -> the ground a wild single of it reserves (single_ground)
         for slot in self.era.slots:
             if slot["id"] in self.street_only:
                 continue
@@ -720,6 +732,54 @@ class Site:
     def prop_extents(self, prop):
         """A dressing prop's harvested ground extents in its own frame, or None before its harvest."""
         return model_extents(self.props.get(prop))
+
+    def wild_twins(self, prop):
+        """Every other name a wild prop can show under the era's `fabric.wildSwaps`: the swaps
+        applied in list order, each or not, wherever the name it would give exists (the mirror's
+        own reading, tools/cityfabric.swapped_wild). Empty without swaps."""
+        if not self.config.get("wildSwaps") or not isinstance(prop, str):
+            return []
+        import cityfabric  # tools/; imported late, as it reads its own inputs on import
+
+        if self._heights is None:
+            self._heights = cityfabric.Heights(self.name, load_assets())
+        names = [prop]
+        for entry in cityfabric.valid_wild_swaps(self.config.get("wildSwaps")):
+            names += [name + entry["suffix"] for name in list(names) if self._heights.exists(name + entry["suffix"])]
+        return names[1:]
+
+    def shown_extents(self, plan, prop, twin=False):
+        """One prop's own ground in its frame as (what measured it, (x0, x1, z0, z1)): its harvested
+        extents, else the plan's `footprints` entry about its origin, else (a twin only: an
+        original needs the plan's word, as it always did) its blueprint's declared footprint; None
+        with none of them."""
+        harvested = self.prop_extents(prop)
+        if harvested is not None:
+            return "harvested", harvested
+        declared = (plan.get("footprints") or {}).get(prop)
+        if not (isinstance(declared, list) and len(declared) == 2) and twin:
+            found = streetplan.declared_footprints(self.name, [prop])
+            declared = list(found[0][1]) if found else None
+        if isinstance(declared, list) and len(declared) == 2:
+            return "declared", (-declared[0] / 2, declared[0] / 2, -declared[1] / 2, declared[1] / 2)
+        return None
+
+    def single_ground(self, plan, prop):
+        """The ground a wild single of `prop` reserves, in its own frame: its prop's (a
+        `singleRadius` square when nothing measures it) grown, axis by axis, to hold every twin it
+        can swap to -- so what stands there after a swap reaches nowhere the generator did not
+        keep for it. Without swaps it is the prop's own ground, as it always was."""
+        cached = self._single_grounds.get(prop)
+        if cached is None:
+            own = self.shown_extents(plan, prop)
+            radius = self.config["wild"]["singleRadius"]
+            box = own[1] if own is not None else (-radius, radius, -radius, radius)
+            for name in self.wild_twins(prop):
+                other = self.shown_extents(plan, name, twin=True)
+                if other is not None:
+                    box = (min(box[0], other[1][0]), max(box[1], other[1][1]), min(box[2], other[1][2]), max(box[3], other[1][3]))
+            cached = self._single_grounds[prop] = box
+        return cached
 
     def stretch_at(self, polyline, segment, t):
         """The stretch of `polyline`'s `segment` holding parameter t (a node shared by two
@@ -3175,9 +3235,10 @@ def pick_glades(plan, noise, half):
 def wild_shapes(site, plan, item):
     """The ground a wild entry covers, for the tiles-era keep-outs: a clump of a plan with a field
     `clumps.size` is that square (x scale, turned rotationY); any other clump is its four quarters,
-    each a square of the clearing test's diameter (`quarterRadius`); a single is its prop's
-    harvested extents, else the plan's `footprints` entry (width x depth, centred), else a square of
-    the clearing test's diameter (`singleRadius`), x scale and turned rotationY."""
+    each a square of the clearing test's diameter (`quarterRadius`); a single is the ground it
+    reserves (Site.single_ground) -- its prop's harvested extents, else the plan's `footprints`
+    entry (width x depth, centred), else a square of the clearing test's diameter (`singleRadius`),
+    grown to hold every twin a wild swap can show in its place -- x scale and turned rotationY."""
     radii = site.config["wild"]
     scale = item.get("scale", 1.0)
     if item["kind"] == "clump":
@@ -3186,14 +3247,7 @@ def wild_shapes(site, plan, item):
             return [streetplan.square((item["x"], item["z"]), size * scale, size * scale, item["rotationY"])]
         side = 2 * radii["quarterRadius"] * scale
         return [streetplan.square((q[0], q[1]), side, side, item["rotationY"]) for q in item["quads"]]
-    extents = site.prop_extents(item.get("prop"))
-    declared = (plan.get("footprints") or {}).get(item.get("prop"))
-    if extents is None and isinstance(declared, list) and len(declared) == 2:
-        extents = (-declared[0] / 2, declared[0] / 2, -declared[1] / 2, declared[1] / 2)
-    if extents is None:
-        r = radii["singleRadius"]
-        extents = (-r, r, -r, r)
-    return [cart_body(extents, item)]
+    return [cart_body(site.single_ground(plan, item.get("prop")), item)]
 
 
 def plate_ground(site, plan, item):
@@ -3314,13 +3368,38 @@ def pier_hit(site, item):
     return (distance, foot) if distance < CHECK_PIER_FOOT - EPS else None
 
 
+def pier_ground_hit(site, plan, item):
+    """(depth, foot) of the pier foot a single's reserved ground lies deepest on, else None: the
+    foot as the kit makes it, a square turned with its segment of the loop. The centre rule
+    (pier_hit) keeps a small single clear; a wide one, or one that can swap to a wide twin, needs
+    its whole ground off the foot. Clumps are low relief and stand round a foot, as there."""
+    if item["kind"] == "clump" or not site.pier_feet:
+        return None
+    ground = wild_shapes(site, plan, item)[0]
+    box = box_of(ground)
+    side = streetplan.ROUND_PIER_FOOT
+    worst = None
+    for foot in site.pier_feet:
+        if point_box_apart(foot, box, side):
+            continue
+        depth = overlap_depth(ground, streetplan.square(foot, side, side, facing_rot(foot)))
+        if depth > TOUCH and (worst is None or depth > worst[0]):
+            worst = (depth, foot)
+    return worst
+
+
 def kept_out(site, plan, item):
     """Whether a wild entry stands on ground it is kept off -- a tiles era's streets and kiosks, a
     tube era's entrance apron, a crossing tube under a round loop that never clears -- on the ring's
     ground out of the ring's clearing, or on a pier foot of such a loop (never in another era)."""
     if not site.wild_keepout and not site.highway_rects and not site.pier_feet:
         return False
-    return bool(keepout_hits(site, wild_shapes(site, plan, item))) or bool(ring_misses(site, plan, item)) or pier_hit(site, item) is not None
+    return (
+        bool(keepout_hits(site, wild_shapes(site, plan, item)))
+        or bool(ring_misses(site, plan, item))
+        or pier_hit(site, item) is not None
+        or pier_ground_hit(site, plan, item) is not None
+    )
 
 
 def field_entry(wild, centre, angle):
@@ -4833,6 +4912,9 @@ def wild_messages(site, plan, doc):
         hit = pier_hit(site, item)
         if hit is not None:
             messages.append(f"{label}: {hit[0]:.2f} from the pier foot at {streetplan.fmt((rounded(hit[1][0]), rounded(hit[1][1])))} (need {CHECK_PIER_FOOT})")
+        hit = pier_ground_hit(site, plan, item)
+        if hit is not None:
+            messages.append(f"{label}: its ground lies {hit[0]:.2f} on the pier foot at {streetplan.fmt((rounded(hit[1][0]), rounded(hit[1][1])))}")
         for suffix, what, depth in kept_ground_hits(site, plan, item, kept_off) if item["kind"] in KINDS else ():
             messages.append(f"{label}{suffix}: the loop's band keeps it for good, and its ground lies {depth:.2f} on {what}; nothing would ever clear it from there")
     if plan["wild"].get("pattern") == FIELDS:
@@ -4845,42 +4927,27 @@ def wild_messages(site, plan, doc):
     return messages
 
 
-def wild_twins(site, plan, heights):
-    """(original, twin, the swap's slot) for every wild prop the era may show -- its clumps, its
-    quarters and every single the plan may lay -- that a `fabric.wildSwaps` entry gives a twin
-    that exists, with the mirror's own reading of the config and of what exists."""
-    import cityfabric  # tools/; imported late, as it reads its own inputs on import
-
-    names = list(site.config["wild"].get("clumps") or []) + list(site.config["wild"].get("quarters") or [])
-    names += sorted(wild_single_props(plan["wild"]))
-    found = []
-    for swap in cityfabric.valid_wild_swaps(site.config.get("wildSwaps")):
-        for name in dict.fromkeys(names):
-            if isinstance(name, str) and heights.exists(name + swap["suffix"]):
-                found.append((name, name + swap["suffix"], swap["requiresSlot"]))
-    return found
-
-
-def prop_ground_box(site, prop):
-    """(what measured it, (x0, x1, z0, z1)) of a prop's ground in its own frame: its harvested
-    parts once it is uploaded, else its blueprint's declared footprint about its origin; None
-    with neither."""
-    harvested = site.prop_extents(prop)
-    if harvested is not None:
-        return "harvested", harvested
-    declared = streetplan.declared_footprints(site.name, [prop])
-    if not declared:
-        return None
-    width, depth = declared[0][1]
-    return "declared", (-width / 2, width / 2, -depth / 2, depth / 2)
+def reserved_grounds(site, plan):
+    """(prop, what it is, the ground reserved for an entry of it in the prop's own frame) for every
+    prop the era's wild is laid in: a clump's is the square its quarters tile, a quarter's its
+    quadrant of that square (INTERFACES "Fabric data": its design lies in the local +X, +Z
+    quadrant), a single's is Site.single_ground."""
+    reach = 2 * plan["wild"]["clumps"]["quarterOffset"]
+    found = [(prop, "clump", (-reach, reach, -reach, reach)) for prop in site.config["wild"].get("clumps") or []]
+    found += [(prop, "quarter", (0.0, reach, 0.0, reach)) for prop in site.config["wild"].get("quarters") or []]
+    found += [(prop, "single", site.single_ground(plan, prop)) for prop in sorted(wild_single_props(plan["wild"]))]
+    return [(prop, what, box) for prop, what, box in found if isinstance(prop, str)]
 
 
 def wild_swap_messages(site, plan):
     """INTERFACES "Wave 4.1c": `fabric.wildSwaps` changes what a standing wild entry shows and
-    nothing else, so the twins answer for it. A clump and its quarter have a twin together (a
-    clump half cleared is drawn as its quarters); a twin's ground lies inside its original's, in
-    the same frame and measured the same way (the plates were laid apart by the originals', so a
-    twin that reaches no further lies on nothing either); and the slot it waits for exists."""
+    nothing else, so the props answer for it. A clump and its quarter have a twin together (a
+    clump half cleared is drawn as its quarters); the slot a swap waits for exists; and every prop
+    an entry can show -- its own and each twin -- lies inside the ground reserved for the entry
+    (reserved_grounds), measured in the entry's frame. A single's reservation is grown to its
+    twins, so there the rule holds by construction; a clump's and a quarter's are the plan's, so a
+    prop that outgrows them fails here. A quarter is judged once harvested: its blueprint declares
+    the whole clump's footprint."""
     import cityfabric  # tools/; imported late, as it reads its own inputs on import
 
     config = site.config.get("wildSwaps")
@@ -4891,28 +4958,27 @@ def wild_swap_messages(site, plan):
     if not isinstance(config, list) or len(swaps) != len(config):
         messages.append("wildSwaps: every entry is { requiresSlot, suffix } with no `districts`; a malformed one is skipped in game")
     slots = {slot["id"] for slot in site.era.slots}
-    heights = cityfabric.Heights(site.name, load_assets())
-    for swap in swaps:
-        if swap["requiresSlot"] not in slots:
-            messages.append(f"wildSwaps: {swap['requiresSlot']} is not a slot of {site.name}")
+    for entry in swaps:
+        if entry["requiresSlot"] not in slots:
+            messages.append(f"wildSwaps: {entry['requiresSlot']} is not a slot of {site.name}")
         clumps, quarters = site.config["wild"].get("clumps") or [], site.config["wild"].get("quarters") or []
         for clump, quarter in zip(clumps, quarters):
-            whole, part = heights.exists(clump + swap["suffix"]), heights.exists(quarter + swap["suffix"])
+            whole, part = clump + entry["suffix"] in site.wild_twins(clump), quarter + entry["suffix"] in site.wild_twins(quarter)
             if whole != part:
                 have, lack = (clump, quarter) if whole else (quarter, clump)
-                messages.append(f"wildSwaps: {have}{swap['suffix']} exists and {lack}{swap['suffix']} does not; a clump and its quarter swap together")
-    for original, twin, _slot in wild_twins(site, plan, heights):
-        a, b = prop_ground_box(site, original), prop_ground_box(site, twin)
-        if a is None or b is None or a[0] != b[0]:
-            continue  # one is harvested and the other not yet: judged once both are
-        (ax0, ax1, az0, az1), (bx0, bx1, bz0, bz1) = a[1], b[1]
-        over = max(ax0 - bx0, bx1 - ax1, az0 - bz0, bz1 - az1)
-        if over > EPS:
-            messages.append(
-                f"wildSwaps: {twin}'s {a[0]} ground reaches {over:.2f} past its original {original}'s "
-                f"({number(bx1 - bx0)} x {number(bz1 - bz0)} against {number(ax1 - ax0)} x {number(az1 - az0)}); "
-                "a twin lies inside its original's footprint, in its frame"
-            )
+                messages.append(f"wildSwaps: {have}{entry['suffix']} exists and {lack}{entry['suffix']} does not; a clump and its quarter swap together")
+    for prop, what, (x0, x1, z0, z1) in reserved_grounds(site, plan):
+        for name in [prop] + site.wild_twins(prop):
+            own = site.shown_extents(plan, name, twin=name != prop)
+            if own is None or (what == "quarter" and own[0] != "harvested"):
+                continue
+            bx0, bx1, bz0, bz1 = own[1]
+            over = max(x0 - bx0, bx1 - x1, z0 - bz0, bz1 - z1)
+            if over > EPS:
+                messages.append(
+                    f"wildSwaps: {name}'s {own[0]} ground ({number(bx1 - bx0)} x {number(bz1 - bz0)}) reaches {over:.2f} past the ground "
+                    f"reserved for a {what} of {prop} ({number(x1 - x0)} x {number(z1 - z0)}); what an entry can show lies inside its reservation"
+                )
     return messages
 
 
@@ -4948,7 +5014,7 @@ def wild_height_messages(site, plan):
     heights = cityfabric.Heights(site.name, load_assets())
     names = list(site.config["wild"].get("clumps") or []) + list(site.config["wild"].get("quarters") or [])
     names += sorted(wild_single_props(plan["wild"]))
-    names += [twin for _original, twin, _slot in wild_twins(site, plan, heights)]  # they stand there too
+    names += [twin for name in list(names) for twin in site.wild_twins(name)]  # they stand there too
     messages = []
     for name in dict.fromkeys(names):
         stages = heights.prop(name)

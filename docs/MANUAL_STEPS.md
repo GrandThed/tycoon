@@ -2386,6 +2386,12 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\m12
 
 ### 19. M12 wave 4 — the asset run (lead, with one paste from Ben)
 
+**Done 2026-10-06, steps 75 to 83.** 171 uploads on the first try, the harvest read 171 loaded and
+0 failed, 554 templates, every gate green, the five place files rebuilt. On the harvested sizes
+the wild came to 90 entries (34 clumps, 56 singles) and the garden swap to 42 entries at the end
+of tier 3 and 23 at full build; the counts below were written before the run. What is left is
+§20: Ben opens `build\orbital.rbxl`.
+
 Run from `C:\Users\benja\Desktop\tycoon-m12o`. The Blender lines need Git Bash. Python is `py`.
 `.env` is in the folder, and `assets\` is a junction to the main checkout's.
 

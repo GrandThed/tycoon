@@ -60,6 +60,22 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   QA (qa-runner) is green and the docs are written (PLAN wave 4, MANUAL_STEPS §17–§21, PLAYTEST "M12
   wave 4", 54 steps). qa-runner hit its 15-turn limit with no report; resumed by id and told to batch
   the remaining commands into one call, it reported at once.
+- **Asset run done 2026-10-06** after Ben's OK of the sheets ("lets do it"): 171 uploads first try,
+  one harvest paste (171 loaded, 0 failed), 554 templates, every gate green, `build/orbital.rbxl`
+  built (never publish). **Waiting on Ben's Studio look** (PLAYTEST "M12 wave 4", MANUAL_STEPS §20).
+  After his sign-off: merge `m12-orbital` to `main`, remove the worktree (junction first), clean
+  the unused GLBs (MANUAL_STEPS §21). Lessons of the run:
+  - Ben pasted the harvest Output into the chat twice; the first time his clipboard no longer
+    held it (he had copied a code). **Save the clipboard to a file the moment it is right**
+    (`Get-Clipboard -Raw` to scratch) and count the `[HARVEST] {` records before running
+    `harvest.py`; the string `[HARVEST-FAIL]` appears once in a good Output (the echoed script).
+  - He ran the paste in the **live experience's place** (a live editing session; Studio saved to
+    Roblox mid-run), not in `build/test.rbxl`. The script leaves nothing behind, but say plainly
+    next time which file to open and why.
+  - **A check that compares declared sizes before the harvest compares measured ones after it.**
+    Three single Garden twins were 0.12 to 0.23 wider than their originals' meshes and the twin
+    rule went red only after the upload. The generator now reserves the union of an entry's
+    original and twins. Run such rules against the merged GLB sizes before uploading.
 - The third gate, for the record (2026-10-06): city-changers on Bloom, sheet
   `assets/testfit/out/OrbitalColony/m12o_changers.png` (and `m12o_bloom_reseat.png`). Bloom was
   reseated for four street-only slots: **89 lots** (was 82), habitat 25. Proposals: `colonyFlag` =

@@ -8052,3 +8052,28 @@ docs-keeper, and the final prop sheets to Ben.
 - `streetplan.py` counts 64 Orbital path pieces where the list gate counts 65 (it leaves out
   `SP_entrance`); the two final prop sheets for the ground and the colony are titled "1 of 2" and
   "2 of 2" although the fabric sheet makes three.
+
+### After the asset run (lead, 2026-10-06)
+
+Ben approved the three final prop sheets ("lets do it"). The asset run: 65 street pieces baked
+(the Orbital list gate exits 0), 66 path uploads and 105 prop stages uploaded on the first try, one
+harvest paste (`[HARVEST-DONE] 171 loaded, 0 failed`), 554 templates, the manifest regenerated.
+
+- **The harvest paste took two tries.** Ben pasted the Output into the chat, which cut it at 50,000
+  characters, and by then his clipboard held something else. The second time the clipboard held all
+  of it. The lead now saves the clipboard to a file before running `harvest.py` (`--file` reads it).
+- **Studio saved to the live experience during the paste** ("Se guardaron nuevos cambios en \"Era
+  Tycoon: Pueblo al Espacio (BETA)\" en Roblox"): the script was run in the live game's place in a
+  live editing session, not in the local `build/test.rbxl`. The harvest script parents nothing and
+  destroys each container, so it left nothing in the place.
+- **A twin lies inside the ground reserved for its original**, which replaces "a twin has its
+  original's footprint" everywhere above. On the harvested sizes the three single Garden twins
+  measure 0.12 to 0.23 wider than their originals' meshes (inside the declared footprints), and the
+  check, which had compared declared footprints before the harvest, failed. The generator now
+  reserves the per-axis union of an entry's original and its twins (`Site.single_ground`) for every
+  rule that places or clears a single, and a single's ground lies on no pier foot. The props did not
+  change and nothing was re-uploaded.
+- **Data on harvested sizes:** 89 lots, unchanged positions; two flag masts moved 0.5; wild 90
+  (34 clumps, 56 singles; it was 92 before the harvest). The wild swap changes 42 entries at the end
+  of tier 3 and 23 at full build. Every gate is green and the three shipped eras' fabric data is
+  byte-identical.
