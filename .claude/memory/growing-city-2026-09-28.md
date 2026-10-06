@@ -77,7 +77,7 @@ See [[living-city-2026-09-23]], [[city-dressing-2026-09-16]], [[metropolis-stree
 - Branch `m12-growing-city`, not merged; PLAYTEST has the "M12 — Village growing city" checklist.
 - **Known regression:** Village lost its wave 2c chimney smoke, parked carts, bushes and hedges. They hung off the old `lots`, `greeneryZones` and `parking`, which the fabric replaced. Smoke must be re-wired to fabric house props (per-stage chimney offsets) before or with the next wave.
 - **Pipeline lessons:**
-  - Ben may paste the harvest Output into the chat instead of saying "done". It gets truncated there, but his clipboard still holds the full Output, so run `harvest.py --props` anyway.
+  - Ben may paste the harvest Output into the chat instead of saying "done". It gets truncated there. His clipboard usually still holds the full Output, but not always (2026-10-06: he had copied something else, and the paste had to be repeated): check the clipboard for the `[HARVEST-DONE]` line, save it to a file, then run `harvest.py --props`.
   - A killed `upload_paths.py` resumes cleanly; it records each id as it goes.
 
 **Merged to main 2026-10-01.**

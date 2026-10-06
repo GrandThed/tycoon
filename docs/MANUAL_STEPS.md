@@ -2528,7 +2528,7 @@ is over 50 characters.
 - [x] 82. **Lead: harvest, templates, fabric data, gates, manifest** (done 2026-10-06).
       **First save the clipboard to a file**, then merge from the file (PowerShell):
       ```
-      Get-Clipboard -Raw | Out-File -Encoding utf8 <a scratch file>
+      powershell -NoProfile -Command "[IO.File]::WriteAllText('<a scratch file>', (Get-Clipboard -Raw), (New-Object Text.UTF8Encoding $false))"
       py tools/assets/harvest.py --props --file <that scratch file>
       ```
       It merged 105 prop stages, 65 path pieces and 1 path texture. **`Assets.json` was

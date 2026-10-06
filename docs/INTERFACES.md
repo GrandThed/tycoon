@@ -8077,3 +8077,16 @@ harvest paste (`[HARVEST-DONE] 171 loaded, 0 failed`), 554 templates, the manife
   (34 clumps, 56 singles; it was 92 before the harvest). The wild swap changes 42 entries at the end
   of tier 3 and 23 at full build. Every gate is green and the three shipped eras' fabric data is
   byte-identical.
+
+### Signed off and merged (lead, 2026-10-06)
+
+Ben on his Studio look at `orbital.rbxl`: "looks good! lets ship it". `main` was fast-forwarded to
+`c01ccfd`; the worktree `tycoon-m12o` is removed and the branch `m12-orbital` deleted, so the
+sentence at the top of this chapter that places wave 4 in that worktree is history. Everything is
+in the main checkout, `C:\Users\benja\Desktop\tycoon`. `m12-orbital-docks`, `-axis`, `-vine` and
+`-bloom` are kept as the record of the four candidates. M12 is complete for all four eras.
+
+His sign-off was a look, not the checklist: the lettered questions (the garden wave's pace among
+them), phone, low graphics, two players and the measurement are unanswered. Open after the merge:
+`docs/MANUAL_STEPS.md` §21 step 92 (the 12 uploaded Orbital props nothing draws, the unused GLBs in
+the shared kit folders) and the follow-ups in `docs/PLAN.md` wave 4.
