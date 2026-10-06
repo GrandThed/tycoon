@@ -16,6 +16,13 @@
 -- Wave 1e: the whole plot wears one surface variant, which RoadGraph resolves from the owned
 -- slots and pushes through SetSurface. Because the UVs are world-planar, a variant is only a
 -- different image on the same meshes, so it costs two writes per live piece and nothing else.
+--
+-- M12 wave 4.2: a tube era's piece (tools/assets/gen_templates.py, a `layers` ["fill"] era) is the
+-- same Model holding one MeshPart, `Fill`, and no `Rim`: a swept half-pipe standing on the plot, or
+-- flat decking at the fill's height, wearing the era's palette image. Nothing here is special to
+-- it. With no rim there is nothing to lead and nothing to drop on a far plot, so such a piece
+-- appears whole with the dust burst running along it; and its era configures no surface variant,
+-- so the palette it was templated with is never painted over.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -61,8 +68,9 @@ export type Options = {
 type Record = {
 	template: Model,
 	model: Model,
-	-- Parented under `model` while shown; `rim` is nil on a far plot with paths.rimNearOnly, and
-	-- `fill` is detached for paths.rimLeadSeconds while a piece appears.
+	-- Parented under `model` while shown; `rim` is nil on a far plot with paths.rimNearOnly and
+	-- for a piece baked without one (a tube era's), and `fill` is detached for
+	-- paths.rimLeadSeconds while a piece that has a rim appears.
 	rim: BasePart?,
 	fill: BasePart?,
 }

@@ -314,6 +314,7 @@ export type AssetPathsEra = {
 	-- Absent in an era whose `layers` name only "fill".
 	rimImageId: number?,
 	layers: { string }?,
+	look: string?,
 	pieces: { [string]: AssetPathPiece },
 	-- Wave 1e: extra surface textures by variant name; ids of 0 mean "not yet" (default look).
 	variants: { [string]: AssetPathVariant }?,

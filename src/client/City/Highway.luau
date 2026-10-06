@@ -20,6 +20,16 @@
 -- M12 wave 3.2: `Highway.Ground` gives the ground the ring stands on -- the deck band and the
 -- cells the ramp comes down over -- as the rects the city fabric clears once the ring's slot is
 -- owned. It reads the layout and Assets.json only, so it is the same before any template exists.
+--
+-- M12 wave 4.2 round loop (docs/INTERFACES.md "Wave 4.1b -- organic Orbital", "Wave 4.2"): with
+-- `highway.round` in loop mode the track is a circle of radius `layout.highway.ring` about the
+-- plot's centre, and nothing of it is on a lattice. It is ROUND_SEGMENTS copies of one prop,
+-- `highway.props.arc`: the seat whose middle is at angle t from +X stands at (ring cos t, 0,
+-- ring sin t) turned -(t + 90) degrees, as the prop's blueprint says and tools/testfit/
+-- plotrender.py `build_round_loop` draws it. It reveals round the circle both ways from the seat
+-- nearest the plot entrance, and the train rides the circle's chords from joint to joint, which
+-- is the beam each seat carries. A round loop hands the fabric no ground to clear: its band is an
+-- annulus, and CityFabric keeps the wild under it for good.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -45,6 +55,15 @@ local ARM_VECTORS: { Vector3 } = {
 local ARM_NAMES: { string } = { "+X", "-Z", "-X", "+Z" }
 local KIND_STRAIGHT = "straight"
 local KIND_BEND = "bend"
+-- M12 wave 4.2: a seat of the round loop, and the segments its circle is cut into: equal ones,
+-- their joints on whole multiples of the segment angle from +X. That count is the shape of the
+-- arc prop itself (tools/assets/monorail_kit.py LOOP_SEGMENTS: one segment is 360 / 48 degrees
+-- of beam) and tools/streetplan.py's ROUND_SEGMENTS, which laid the layout out by it, so it is no
+-- tunable. MISSING_ARC is what PropFactory.NoteMissing calls an arc prop that is not uploaded yet.
+local KIND_ARC = "arc"
+local ROUND_SEGMENTS = 48
+local FULL_TURN = 2 * math.pi
+local MISSING_ARC = "monorail arc"
 -- A reveal slower than this would take minutes to close the ring; a config of 0 means "instant".
 -- Interior samples of a loop-mode corner arc: enough that a train never cuts visibly across it.
 local CORNER_ARC_SAMPLES = 3
@@ -72,7 +91,9 @@ export type Options = {
 	onReady: (() -> ())?,
 }
 
-type RingCell = { position: Vector3, kind: string, quarters: number }
+-- `turn` is the prop's rotation about Y in radians: whole quarter turns on the lattice, and on a
+-- round loop whatever lines the arc up with the circle.
+type RingCell = { position: Vector3, kind: string, turn: number }
 
 export type Handle = {
 	options: Options,
@@ -82,7 +103,11 @@ export type Handle = {
 	-- Bumped by every clear and every near/far flip, so a reveal started earlier stops quietly.
 	generation: number,
 	cells: { RingCell }, -- reveal order: the start cell first, then outward both ways
-	corners: { Vector3 }, -- plot-local ring corners, the lane graph's loop
+	-- Plot-local, the lane graph's loop: the ring's corners, or on a round loop the joints
+	-- between its segments, from the one on the plot's front (-Z) side on toward +X.
+	corners: { Vector3 },
+	-- M12 wave 4.2: a circle of `arc` seats instead of a square of lattice cells (loop mode only).
+	round: boolean,
 	-- False in loop mode: no junction, no ramp, no sign, and vehicles on the centreline.
 	hasRamp: boolean,
 	direction: Vector3, -- from the junction cell into the city (unused in loop mode)
@@ -176,6 +201,8 @@ local function kindFor(handle: Handle, kind: string): string?
 		return props.deck
 	elseif kind == KIND_BEND then
 		return props.corner
+	elseif kind == KIND_ARC then
+		return props.arc
 	end
 	return props.junction
 end
@@ -190,6 +217,10 @@ local function place(handle: Handle, propName: string?, cframe: CFrame): ()
 		PropFactory.Spawn(handle.options.eraName, propName, 0, cframe, handle.options.folder)
 	if model ~= nil then
 		table.insert(handle.placed, model)
+	elseif handle.round then
+		-- The whole track is this one prop: without its template there is no loop to see, and
+		-- (see Lanes) no train either.
+		PropFactory.NoteMissing(handle.options.eraName, MISSING_ARC)
 	end
 end
 
@@ -201,7 +232,7 @@ local function placeCell(handle: Handle, index: number): ()
 		kindFor(handle, cell.kind),
 		options.plotFrame
 			* CFrame.new(cell.position.X, 0, cell.position.Z)
-			* CFrame.Angles(0, cell.quarters * QUARTER_TURN, 0)
+			* CFrame.Angles(0, cell.turn, 0)
 	)
 end
 
@@ -382,13 +413,66 @@ local function rampCells(eraName: string, propName: string?, tileStuds: number):
 	return math.max(1, math.round((high - low) / tileStuds))
 end
 
+-- Reveal order round a closed loop of `count` places: `start`, then one place each way at a time,
+-- so a purchase reads as the ring growing out of where it began and closing on the far side.
+local function outwardOrder(start: number, count: number): { number }
+	local order: { number } = { start }
+	local seen: { [number]: boolean } = { [start] = true }
+	for offset = 1, count do
+		local ahead = (start - 1 + offset) % count + 1
+		local behind = (start - 1 - offset) % count + 1
+		for _, index in { ahead, behind } do
+			if not seen[index] then
+				seen[index] = true
+				table.insert(order, index)
+			end
+		end
+	end
+	return order
+end
+
+-- M12 wave 4.2: the round loop's seats in reveal order, and the joints between its segments.
+-- Seat k (0-based) has its middle (k + 1/2) segments round from +X, the contract's
+-- t = 3.75 + 7.5 k degrees, so the plot's entrance axis falls on a joint, between two piers. The
+-- reveal starts at the seat nearest `entrance` (a tie keeps the lower k, so every client starts on
+-- the same seat). The joints run from the one on the front (-Z) side on toward +X, the way the
+-- square loop's corners do, so either loop sends its train round the same way.
+local function roundPlan(radius: number, entrance: Vector3): ({ RingCell }, { Vector3 })
+	local step = FULL_TURN / ROUND_SEGMENTS
+	local seats: { RingCell } = {}
+	local startIndex, bestDistance = 1, math.huge
+	for index = 1, ROUND_SEGMENTS do
+		local angle = (index - 0.5) * step
+		local position = Vector3.new(radius * math.cos(angle), 0, radius * math.sin(angle))
+		seats[index] = { position = position, kind = KIND_ARC, turn = -(angle + QUARTER_TURN) }
+		local distance = (position - Vector3.new(entrance.X, 0, entrance.Z)).Magnitude
+		-- Nearer by more than float noise: the entrance axis runs between two seats, whose
+		-- distances are equal on paper and a rounding apart in practice.
+		if distance < bestDistance - MIN_LENGTH then
+			startIndex, bestDistance = index, distance
+		end
+	end
+	local cells: { RingCell } = {}
+	for _, index in outwardOrder(startIndex, ROUND_SEGMENTS) do
+		table.insert(cells, seats[index])
+	end
+	local joints: { Vector3 } = {}
+	for index = 1, ROUND_SEGMENTS do
+		local angle = (index - 1) * step - QUARTER_TURN
+		joints[index] = Vector3.new(radius * math.cos(angle), 0, radius * math.sin(angle))
+	end
+	return cells, joints
+end
+
 -- ------------------------------------------------------------------ public
 
 local Highway = {}
 
 -- M12 wave 3.2 (docs/INTERFACES.md "Wave 3.2", ring clearing): the ground the ring stands on, as
--- CityFabric.RingRects answers it from the layout's ring and ramp, the lattice pitch and the
--- ramp prop's length in cells. Empty without a pitch (an era without tiles) or a usable ring.
+-- CityFabric answers it from the layout's ring and ramp, the lattice pitch and the ramp prop's
+-- length in cells. Empty without a pitch (an era without tiles) or a usable ring. M12 wave 4.2:
+-- CityFabric.RingGround also reads the era's block, and hands back nothing where
+-- `highway.clearBand` keeps the band and nothing on a round loop, whose band is no rect at all.
 function Highway.Ground(
 	eraName: string,
 	config: Types.CityEraHighwayConfig,
@@ -398,7 +482,8 @@ function Highway.Ground(
 	local ramp: any = layout.ramp
 	local cell = if type(ramp) == "table" then ramp.cell else nil
 	local props = config.props
-	return CityFabric.RingRects(
+	return CityFabric.RingGround(
+		config,
 		layout.ring,
 		tileStuds,
 		if typeof(cell) == "Vector3"
@@ -411,6 +496,35 @@ end
 -- Nil when the layout cannot describe a ring (no `highway`, a ring inside one cell, a lattice of
 -- zero): a plot with no highway, silently, like every other missing dressing key.
 function Highway.Create(options: Options): Handle?
+	local ramp = options.layout.ramp
+	-- M12 wave 4.2: a round loop is loop mode on a circle. It has no lattice, so the pitch the
+	-- square ring is cut by plays no part, and a layout that also names a ramp is a square ring.
+	if options.config.round == true and ramp == nil then
+		local radius = numberOr(options.layout.ring, 0)
+		if radius < MIN_LENGTH then
+			return nil
+		end
+		local entrance = options.entrance
+		local cells, joints =
+			roundPlan(radius, if entrance ~= nil then entrance else Vector3.new(0, 0, -radius))
+		return {
+			options = options,
+			destroyed = false,
+			owned = false,
+			ready = false,
+			generation = 0,
+			cells = cells,
+			corners = joints,
+			round = true,
+			hasRamp = false,
+			-- Unused without a ramp: nothing leaves the loop.
+			direction = Vector3.zero,
+			junction = cells[1].position,
+			near = options.near,
+			placed = {},
+			lanes = nil,
+		}
+	end
 	local tileStuds = options.tileStuds
 	if tileStuds < MIN_LENGTH then
 		return nil
@@ -419,7 +533,6 @@ function Highway.Create(options: Options): Handle?
 	if half < 1 then
 		return nil
 	end
-	local ramp = options.layout.ramp
 	local hasRamp = ramp ~= nil
 	local requested: Vector3
 	if ramp ~= nil then
@@ -457,22 +570,9 @@ function Highway.Create(options: Options): Handle?
 		else ARM_VECTORS[armIndexOf(-junctionCentre)]
 
 	-- Reveal order: the junction, then one cell each way around the cycle at a time.
-	local order: { number } = { junctionIndex }
 	local count = #cycle
-	local seen: { [number]: boolean } = { [junctionIndex] = true }
-	for offset = 1, count do
-		local ahead = (junctionIndex - 1 + offset) % count + 1
-		local behind = (junctionIndex - 1 - offset) % count + 1
-		for _, index in { ahead, behind } do
-			if not seen[index] then
-				seen[index] = true
-				table.insert(order, index)
-			end
-		end
-	end
-
 	local cells: { RingCell } = {}
-	for _, index in order do
+	for _, index in outwardOrder(junctionIndex, count) do
 		local cell = cycle[index]
 		local previous = cycle[(index - 2) % count + 1]
 		local following = cycle[index % count + 1]
@@ -492,7 +592,7 @@ function Highway.Create(options: Options): Handle?
 		table.insert(cells, {
 			position = Vector3.new(cell.X * tileStuds, 0, cell.Y * tileStuds),
 			kind = kind,
-			quarters = quarters,
+			turn = quarters * QUARTER_TURN,
 		})
 	end
 
@@ -504,6 +604,7 @@ function Highway.Create(options: Options): Handle?
 		generation = 0,
 		cells = cells,
 		corners = corners,
+		round = false,
 		hasRamp = hasRamp,
 		direction = direction,
 		junction = junctionCentre,
@@ -568,20 +669,34 @@ function Highway.Lanes(handle: Handle): RoadGraph.Lanes?
 	if surface == nil or surface <= 0 then
 		return nil
 	end
-	-- Cars on the wide Metropolis deck keep the corner-centre loop they always drove.
-	local lanes = if handle.hasRamp
-		then RoadGraph.LoopLanes(
+	local lanes: RoadGraph.Lanes
+	if handle.hasRamp then
+		-- Cars on the wide Metropolis deck keep the corner-centre loop they always drove.
+		lanes = RoadGraph.LoopLanes(
 			handle.options.plotFrame,
 			handle.corners,
 			surface,
 			handle.options.laneOffset
 		)
-		else RoadGraph.LoopLanes(
+	elseif handle.round then
+		-- M12 wave 4.2: nothing rides a track that is not there. The whole loop is one prop, and
+		-- before its asset run the train's template can exist while the arc's does not.
+		if #handle.placed == 0 then
+			return nil
+		end
+		-- One lane to a seat, joint to joint: the chord of the beam that seat carries, never more
+		-- than its sagitta (0.12 studs on a ring of 56) off the 1.6-wide beam. A finer polygon
+		-- would hug the circle closer but turn the train later: Traffic eases every hop's heading
+		-- over vehicles.turnSeconds, and at one hop a seat that easing is done as the next begins.
+		lanes = RoadGraph.LoopLanes(handle.options.plotFrame, handle.corners, surface, 0)
+	else
+		lanes = RoadGraph.LoopLanes(
 			handle.options.plotFrame,
 			arcedCorners(handle.corners, handle.options.tileStuds),
 			surface,
 			0
 		)
+	end
 	handle.lanes = lanes
 	return lanes
 end

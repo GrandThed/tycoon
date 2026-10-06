@@ -21,6 +21,9 @@ local ASSET_PREFIX = "rbxassetid://"
 -- Sort-key prefixes keeping buildings and props (independent name spaces) apart in one pass.
 local BUILDING_KEY_PREFIX = "b:"
 local PROP_KEY_PREFIX = "p:"
+-- The meshes a baked path piece can carry in Assets.json, in the order they are warmed. A ribbon
+-- era's piece has both; a tube era's (M12 wave 4.2: `layers` ["fill"]) has the fill alone.
+local PATH_LAYERS = { "fill", "rim" }
 
 -- Content strings already handed to ContentProvider this session. ContentProvider dedups on
 -- its own, but skipping here keeps repeat PreloadEra calls (every era/VIP change) free.
@@ -129,6 +132,26 @@ local function present(value: any): boolean
 	return type(value) == "table" and next(value) ~= nil
 end
 
+-- The names a list of swaps can turn `listed` props into: each swap shows `<prop><suffix>` in
+-- place of a prop, each on the name the one before produced, so every such name is taken. One
+-- that was never uploaded matches nothing in Assets.json and costs nothing.
+local function collectTwins(
+	into: { [string]: boolean },
+	listed: { [string]: boolean },
+	suffixes: { string }
+): ()
+	for prop in listed do
+		local chain: { string } = { prop }
+		for _, suffix in suffixes do
+			for index = 1, #chain do
+				local twin = chain[index] .. suffix
+				into[twin] = true
+				table.insert(chain, twin)
+			end
+		end
+	end
+end
+
 -- The props an era with a city fabric can still spawn, or nil for an era without one, which
 -- preloads every prop it has, as it always did. The fabric replaces the layout's lots, groves,
 -- greenery zones and parking, so the props those features draw from no longer appear and need no
@@ -137,7 +160,8 @@ end
 -- lamps, signals, vehicles and their unlocks, walkers -- plus the plazas and wild singles its
 -- layout and fabric data place and the birds, and a block is left out only while the layout lacks
 -- what it is placed by. A new config key that names props is therefore picked up with no change
--- here; only the swap twins (wave 3.2), whose names the config implies, are spelled out below.
+-- here (wave 4.2's tube hub and monorail arc came in that way); only the swap twins (wave 3.2) and
+-- the wild's (wave 4.2), whose names the config implies, are spelled out below.
 local function spawnableProps(eraName: string): { [string]: boolean }?
 	local dressing = Catalog.GetCityDressingConfig()
 	local eras = if dressing ~= nil then dressing.eras else nil
@@ -167,33 +191,43 @@ local function spawnableProps(eraName: string): { [string]: boolean }?
 			collectStrings(names, block)
 		end
 	end
-	-- M12 wave 3.2: the one kind of prop the config never spells out. A swap shows `<prop><suffix>`
-	-- in place of a district prop, each swap on the name the one before produced, so every such
-	-- name is taken; one that was never uploaded matches nothing in Assets.json.
+	-- M12 wave 3.2: the one kind of prop the config never spells out, the twin a swap shows in
+	-- place of a district prop.
 	local swaps = CityFabric.ValidSwaps(era.fabric.swaps)
 	if #swaps > 0 then
 		local listed: { [string]: boolean } = {}
+		local suffixes: { string } = {}
 		collectStrings(listed, era.fabric.districts)
-		for prop in listed do
-			local chain: { string } = { prop }
-			for _, swap in swaps do
-				for index = 1, #chain do
-					local twin = chain[index] .. swap.suffix
-					names[twin] = true
-					table.insert(chain, twin)
-				end
-			end
+		for _, swap in swaps do
+			table.insert(suffixes, swap.suffix)
 		end
+		collectTwins(names, listed, suffixes)
 	end
 	if type(layout.plazas) == "table" then
 		for _, plaza in layout.plazas do
 			collectStrings(names, if type(plaza) == "table" then plaza.prop else nil)
 		end
 	end
+	-- The wild's own props: the config's clumps and quarters (already taken with the `fabric`
+	-- block above) and the singles the data places.
+	local wildProps: { [string]: boolean } = {}
+	collectStrings(wildProps, era.fabric.wild)
 	if type(data.wild) == "table" then
 		for _, entry in data.wild do
-			collectStrings(names, if type(entry) == "table" then entry.prop else nil)
+			collectStrings(wildProps, if type(entry) == "table" then entry.prop else nil)
 		end
+	end
+	for prop in wildProps do
+		names[prop] = true
+	end
+	-- M12 wave 4.2: and the twin a wild swap shows in place of each of them.
+	local wildSwaps = CityFabric.ValidWildSwaps(era.fabric.wildSwaps)
+	if #wildSwaps > 0 then
+		local suffixes: { string } = {}
+		for _, swap in wildSwaps do
+			table.insert(suffixes, swap.suffix)
+		end
+		collectTwins(names, wildProps, suffixes)
 	end
 	local ambient: any = if dressing ~= nil then dressing.ambient else nil
 	local birds = if type(ambient) == "table" then ambient.birds else nil
@@ -206,7 +240,9 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 	if config == nil then
 		return
 	end
-	-- Path pieces (v3) are two meshes and two shared images per era; a v1/v2 file has none.
+	-- Path pieces (v3) are two meshes and two shared images per era; a v1/v2 file has none. M12
+	-- wave 4.2: a tube era's are one mesh a piece and one shared image, its palette, under the
+	-- same `fill` keys, and it has no rim keys at all.
 	local pathsByEra = config.paths
 	local eraPaths: Types.AssetPathsEra? = if pathsByEra ~= nil then pathsByEra[eraName] else nil
 	-- Buildings and (Assets.json v2) city-dressing props share one pass; a v1 file has no
@@ -279,9 +315,14 @@ function AssetPreloader.PreloadEra(eraName: string, includeVip: boolean): ()
 		end
 		table.sort(pieceIds)
 		for _, pieceId in pieceIds do
-			local piece = eraPaths.pieces[pieceId]
-			queue(content, piece.fill.meshId)
-			queue(content, piece.rim.meshId)
+			-- Read loosely: a layer the era does not bake is simply absent from the generated file,
+			-- and a missing mesh must cost nothing, never stop the plot that asked from building.
+			local piece: any = eraPaths.pieces[pieceId]
+			for _, layer in PATH_LAYERS do
+				local mesh = if type(piece) == "table" then piece[layer] else nil
+				local meshId = if type(mesh) == "table" then mesh.meshId else nil
+				queue(content, if type(meshId) == "number" then meshId else nil)
+			end
 		end
 	end
 	-- Meshes by stage: every stage 0 (what a fresh plot shows) before any later growth stage.

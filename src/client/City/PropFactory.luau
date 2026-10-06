@@ -5,7 +5,8 @@
 --
 -- Templates are read from ReplicatedStorage/Assets/Props/<Era>/<PropName> and share the
 -- building template shape (invisible `Base` at the bottom-centre anchor, `Stage<n>` Models).
--- Any missing link in that path is "feature off": Spawn returns nil and nothing is logged.
+-- Any missing link in that path is "feature off": Spawn returns nil and nothing is logged. A
+-- caller that wants the Output to say a whole kind of template is missing asks NoteMissing.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -28,6 +29,8 @@ type StageMap = { [number]: Model }
 local loadedTemplates: { [Model]: boolean } = {}
 -- Parts hidden while their template loads, released together by one waiter per template.
 local waitingParts: { [Model]: { BasePart } } = {}
+-- The "<era>/<kind>" pairs NoteMissing has already written a line for this session.
+local notedMissing: { [string]: boolean } = {}
 
 local function sealPart(part: BasePart): ()
 	part.Anchored = true
@@ -121,6 +124,25 @@ function PropFactory.ScaleOf(value: any): number
 		return 1
 	end
 	return value
+end
+
+-- M12 wave 4.2: one Output line per era and kind for the session, for a caller that has just drawn
+-- a placeholder (or nothing) because a whole kind of template is not there yet -- an era built
+-- before its asset run. Spawn itself stays silent: a single missing prop is "feature off", and a
+-- line for each of a few hundred lots would bury the one that says why the plot looks bare.
+function PropFactory.NoteMissing(eraName: string, kind: string): ()
+	local key = eraName .. "/" .. kind
+	if notedMissing[key] then
+		return
+	end
+	notedMissing[key] = true
+	warn(
+		string.format(
+			"[CityDressing] %s has no %s templates yet: drawn as placeholder Parts or left out until its assets are uploaded and harvested",
+			eraName,
+			kind
+		)
+	)
 end
 
 -- Applied to fresh Parts and to every clone: a stale template may still carry collision flags.

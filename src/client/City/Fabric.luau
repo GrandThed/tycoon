@@ -14,7 +14,8 @@
 -- syncs it right after the roads in every pass, and destroys it with the build, which cancels every
 -- pending timer, animation and puff. Config and data are validated once, in Fabric.new: a missing
 -- or malformed block, prop list, entry or template is an absent item or feature and never an
--- Output line, and every sync retries the spawns a late template skipped.
+-- error (see wave 4.2 below for the one Output line a missing template can write), and every sync
+-- retries the spawns a late template skipped.
 --
 -- Review ruling (2026-09-30): a join or a far-to-near switch places a few hundred clones, so every
 -- unanimated spawn goes through the plot's spawn queue, at most construction.spawnsPerFrame per
@@ -42,6 +43,16 @@
 -- while a city-changer slot is owned, popping the twins in outward from the pad it was bought on;
 -- the highway ring clears the wild land under its deck and ramp once its slot is owned; and in a
 -- tiles era the road module lays every lane as a footpath, so the fabric only adds the dust.
+--
+-- Wave 4.2 (docs/INTERFACES.md "Wave 4.2 — Orbital in the game"), again each off without its key,
+-- and each rule CityFabric's, so tools/check_mirror.py holds the game to the mirror: under a round
+-- loop that keeps its ground (`highway.round`, `highway.clearBand` false) the wild in the loop's
+-- band is cleared by nothing; `wildSwaps` turns every standing clump, quarter and single into its
+-- twin while a city-changer slot is owned, rippling out from the pad it was bought on; and an
+-- upgrade entry may be anchored to the highway, placed while that stands (a banner on a pier).
+-- The config and data checks live in FabricValidation.luau. A prop with no template is still an
+-- absent item and never an error, but an era's first one now writes one Output line
+-- (PropFactory.NoteMissing), so a plot bare for want of an asset run says why.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -60,71 +71,63 @@ local Scatter = require(script.Parent:WaitForChild("Scatter"))
 local Dust = require(script.Parent:WaitForChild("Dust"))
 local Ambient = require(script.Parent:WaitForChild("Ambient"))
 local WorldBlock = require(script.Parent:WaitForChild("WorldBlock"))
+local FabricValidation = require(script.Parent:WaitForChild("FabricValidation"))
 
--- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data").
-local SMALL = "small"
-local MEDIUM = "medium"
-local NARROW = "narrow" -- round 2: 4-stud terraced frontage
-local CLUMP = "clump"
-local SINGLE = "single"
--- The numeric fields `pull` must carry, finite, before the pure CityFabric may read it.
-local PULL_NUMBERS = { "radius", "tierTerm", "reach", "levelsOverTier", "smallMaxLevel" }
+-- Contract vocabulary (docs/INTERFACES.md "M12 contracts — Data"), kept with the checks that read
+-- it. Every group of constants below is one table rather than a local each: the module's top level
+-- is one function to Studio's compiler, which gives it 200 registers (tools/check_compile.py).
+local SIZE = FabricValidation.SIZE -- small, medium and (round 2) narrow: 4-stud terraced frontage
+-- A wild entry's kind. A clump is four turned copies of its quarter prop; one cleared bit per
+-- quarter.
+local WILD = FabricValidation.WILD
+local finite = FabricValidation.Finite
+local numberOr = FabricValidation.NumberOr
 -- What a parcel shows at level 1, and at level 2 and up.
-local SITE = "site"
-local BUILDING = "building"
+local LOOK = { site = "site", building = "building" }
 -- The waits a parcel on a near plot can be in; see `fire`.
-local TIMER_SITE = "site"
-local TIMER_BUILD = "build"
-local TIMER_SWAP = "swap"
--- Wave 1c upgrade layers (town trees, flowers, banners): what an entry is anchored to, the level
--- at which a parcel's house stands (an entry on a parcel waits for it), and the waits an entry on a
--- near plot can be in (see `fireUpgrade`).
-local ANCHOR_STRETCH = "stretch"
-local ANCHOR_PARCEL = "parcel"
-local BUILT_LEVEL = 2
-local UPGRADE_APPEAR = "appear"
-local UPGRADE_GROW = "grow"
+local TIMER = { site = "site", build = "build", swap = "swap" }
+-- Wave 1c upgrade layers (town trees, flowers, banners): the anchor of an entry that goes in with
+-- a parcel's house (which entry is valid and when its anchor has developed are CityFabric's to
+-- say), and the waits an entry on a near plot can be in (see `fireUpgrade`).
+local UPGRADE = { parcelAnchor = "parcel", appear = "appear", grow = "grow" }
+-- What PropFactory.NoteMissing calls a fabric prop that has no template (an era before its asset
+-- run).
+local MISSING_PROP = "city fabric prop"
 -- How a placement shows itself.
-local EFFECT_NONE = "none"
-local EFFECT_DUST = "dust"
-local EFFECT_RISE = "rise"
-local EFFECT_POP = "pop"
--- A clump is four turned copies of its quarter prop; one cleared bit per quarter.
-local QUARTERS = 4
-local ALL_QUARTERS = 15
-local QUARTER_TURN_DEGREES = 90
+local EFFECT = { none = "none", dust = "dust", rise = "rise", pop = "pop" }
 -- A rect's corners in order round it, as signs on its half extents.
 local CORNER_SIGNS = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } }
--- The reveal scaffold is authored at 9x9 studs, the standard building footprint, and the contract
--- scales it by footprint / 9.
-local REVEAL_DESIGN_STUDS = 9
--- Seeded construction times draw from a stream of their own: wave 2c's salts are 7001-7004
--- (Scatter) and the fabric's flocks take 7005 (Ambient).
-local CONSTRUCTION_SALT = 7006
+local FX = {
+	-- The reveal scaffold is authored at 9x9 studs, the standard building footprint, and the
+	-- contract scales it by footprint / 9.
+	revealDesignStuds = 9,
+	-- Seeded construction times draw from a stream of their own: wave 2c's salts are 7001-7004
+	-- (Scatter) and the fabric's flocks take 7005 (Ambient).
+	constructionSalt = 7006,
+	-- A puff's Dust handle is destroyed once its burst and the particles it left are gone (Dust's
+	-- longest particle lives 0.7 s).
+	dustLingerSeconds = 1,
+	-- Enum.EasingStyle.Back's standard overshoot, for a new building growing out of its site.
+	backOvershoot = 1.70158,
+}
 -- A staked-out site's look (the colours are config): surveyor's stakes at the footprint corners
--- and a taut string between them, sized to read from the tycoon camera rather than tuned. One
--- table rather than four locals: the module's top level is one function to Studio's compiler,
--- which gives it 200 registers (tools/check_compile.py).
+-- and a taut string between them, sized to read from the tycoon camera rather than tuned.
 local STAKES = { width = 0.3, height = 1.4, stringThickness = 0.08, stringHeight = 1.1 }
--- A puff's Dust handle is destroyed once its burst and the particles it left are gone (Dust's
--- longest particle lives 0.7 s).
-local DUST_LINGER_SECONDS = 1
--- Enum.EasingStyle.Back's standard overshoot, for a new building growing out of its site.
-local BACK_OVERSHOOT = 1.70158
 -- Clearing tests bucket the mask on a grid of this pitch, so a wild item is only measured against
 -- the rects and segments near it. A lookup aid, not a tunable: any pitch gives the same answer.
-local GRID_CELL = 16
-local GRID_BIAS = 1024 -- keeps cell indices positive anywhere on the map
-local GRID_ROW = 4096
+-- `bias` keeps cell indices positive anywhere on the map.
+local GRID = { cell = 16, bias = 1024, row = 4096 }
 -- Back lanes drawn as Parts (the fallback, wave 2.5): slabs sunk into the plot base, so only
--- their tops show.
-local LANE_PART_NAME = "Lane"
-local LANE_THICKNESS = 0.2
--- A leg shorter than this draws nothing.
-local LANE_MIN = 0.01
--- Two legs this nearly in line (the dot of their headings) leave no wedge for a disc to fill.
-local LANE_STRAIGHT_DOT = 0.999
-local QUARTER_TURN = math.pi / 2
+-- their tops show. A leg shorter than `min` draws nothing; two legs as nearly in line as
+-- `straightDot` (the dot of their headings) leave no wedge for a disc to fill; `discTurn` stands
+-- a Cylinder on end.
+local LANE = {
+	partName = "Lane",
+	thickness = 0.2,
+	min = FabricValidation.LANE_MIN,
+	straightDot = 0.999,
+	discTurn = math.pi / 2,
+}
 
 type Rect = CityFabric.FabricRect
 type Segment = CityFabric.FabricSegment
@@ -167,12 +170,23 @@ type ParcelView = {
 -- One wild entry: the pieces that stand, and (review ruling) the ones the last sync wants, which
 -- the spawn queue brings up. A whole clump that splits stands until its quarters are placed.
 type WildView = {
+	index: number, -- its index in the wild data
 	whole: Model?,
 	quarters: { [number]: Model },
 	single: Model?,
 	wantWhole: boolean,
 	wantSingle: boolean,
 	wantQuarters: number, -- bit q - 1 per wanted quarter
+	-- Wave 4.2 (`fabric.wildSwaps`): the prop each kind of piece of this entry should wear as of
+	-- the last sync -- the config's own, or its twin while a slot that swaps the wild is owned
+	-- (CityFabric.SwappedWild) -- and the prop each standing piece was spawned from. A piece that
+	-- stands in another prop than it should wear is re-skinned where it stands.
+	wholeProp: string?,
+	quarterProp: string?,
+	singleProp: string?,
+	worn: { [Model]: string },
+	-- Its turn in the wave of a swap bought on a near plot; it shows the newest props when it fires.
+	timer: thread?,
 }
 
 -- Wave 1c: one entry of an upgrade layer (a town tree, a flower bed, a banner). `planted` follows
@@ -257,7 +271,7 @@ type Animation = {
 	parts: { BasePart },
 	sizes: { Vector3 },
 	offsets: { CFrame }, -- each part relative to `pivot` at full size
-	kind: string, -- EFFECT_RISE | EFFECT_POP
+	kind: string, -- EFFECT.rise | EFFECT.pop
 	seconds: number,
 	elapsed: number,
 	-- The parcel whose house this is (nil for an upgrade entry): its chimney smokes from the moment
@@ -292,10 +306,16 @@ export type Context = {
 	-- keys); nil means no chimney ever smokes.
 	smoke: Types.SmokeConfig?,
 	-- Wave 3.2: the slot that builds the era's highway ring and the ground the ring stands on
-	-- (CityFabric.RingRects, margin 0), which joins the clearing mask once that slot is owned. Nil
-	-- and empty in an era without a ring.
+	-- (CityFabric.RingGround, margin 0), which joins the clearing mask once that slot is owned. Nil
+	-- and empty in an era without a ring, and under a ring that clears nothing (wave 4.2).
 	ringSlot: string?,
 	ringRects: { Rect },
+	-- Wave 4.2: the era's `highway` config block and the layout's `highway` table, each as it
+	-- stands or nil. CityFabric reads them for what only a highway decides: the band of a round
+	-- loop, where the wild is cleared by nothing (BandRing), and whether the highway stands
+	-- (HighwayBuilt), which is what develops an upgrade entry anchored to it.
+	highway: Types.CityEraHighwayConfig?,
+	highwayLayout: Types.HighwayLayout?,
 }
 
 export type SyncInput = {
@@ -350,6 +370,10 @@ export type Handle = {
 	surface: Surface?,
 	-- Wave 3.2: the well-formed `fabric.swaps` entries in list order; empty without the key.
 	swaps: { CityFabric.FabricSwap },
+	-- Wave 4.2: the well-formed `fabric.wildSwaps` entries likewise; and the radius of the round
+	-- loop whose band keeps its wild for good (CityFabric.BandRing), nil under any other highway.
+	wildSwaps: { CityFabric.FabricWildSwap },
+	bandRing: number?,
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -381,6 +405,8 @@ export type Handle = {
 	owned: { [string]: boolean },
 	ownedList: { string }, -- sorted
 	stages: { [string]: number },
+	-- Wave 4.2: whether the plot's highway stands as of the last sync (CityFabric.HighwayBuilt).
+	highwayBuilt: boolean,
 	developKey: string,
 	maskKey: string,
 	cleared: { [number]: number }, -- wild entry -> cleared quarters (bit q - 1); a single is bit 0
@@ -400,34 +426,33 @@ export type Handle = {
 	destroyed: boolean,
 }
 
-local animations: { Animation } = {}
-local heartbeat: RBXScriptConnection? = nil
--- The plots whose spawn queue is not empty, and the one Heartbeat draining them, alive only then.
-local queuedHandles: { [Handle]: boolean } = {}
-local queueHeartbeat: RBXScriptConnection? = nil
+-- The module's two Heartbeat loops, each alive only while it has work: `animating` steps the
+-- rises and pops in `animations`; `draining` empties the spawn queues of the plots in `queued`.
+local loops: {
+	animations: { Animation },
+	animating: RBXScriptConnection?,
+	queued: { [Handle]: boolean },
+	draining: RBXScriptConnection?,
+} =
+	{ animations = {}, animating = nil, queued = {}, draining = nil }
 -- Reused by every clearing lookup (none of them yields): the candidates near one wild item.
-local scratchRects: { Rect } = {}
-local scratchSegments: { Segment } = {}
-local scratchSeen: { [number]: number } = {}
-local scratchStamp = 0
+local scratch: {
+	rects: { Rect },
+	segments: { Segment },
+	seen: { [number]: number },
+	stamp: number,
+} =
+	{ rects = {}, segments = {}, seen = {}, stamp = 0 }
 local materialsByName: { [string]: Enum.Material }? = nil
-
-local function finite(value: any): boolean
-	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
-end
-
-local function numberOr(value: any, fallback: number): number
-	return if finite(value) then value else fallback
-end
 
 -- A config entry by parcel size: sizes, sites and district prop lists all key small, medium and
 -- (round 2, optional) narrow. Nil for a size the entry leaves out.
 local function forSize<T>(size: string, small: T, medium: T, narrow: T?): T?
-	if size == SMALL then
+	if size == SIZE.small then
 		return small
-	elseif size == MEDIUM then
+	elseif size == SIZE.medium then
 		return medium
-	elseif size == NARROW then
+	elseif size == SIZE.narrow then
 		return narrow
 	end
 	return nil
@@ -464,248 +489,6 @@ local function isTriple(value: any): boolean
 		and type(value[1]) == "number"
 		and type(value[2]) == "number"
 		and type(value[3]) == "number"
-end
-
--- ------------------------------------------------------------------ validation
-
--- `pull` as CityFabric may use it -- five finite numbers and an array of finite thresholds, copied
--- so no stray key reaches the trusting pure module -- or nil, which keeps every parcel at level 0.
-local function validPull(pull: any): Types.FabricPullConfig?
-	if type(pull) ~= "table" then
-		return nil
-	end
-	for _, key in PULL_NUMBERS do
-		if not finite(pull[key]) then
-			return nil
-		end
-	end
-	local thresholds = pull.thresholds
-	if type(thresholds) ~= "table" then
-		return nil
-	end
-	local count = 0
-	for key, value in thresholds do
-		if type(key) ~= "number" or not finite(value) then
-			return nil
-		end
-		count += 1
-	end
-	-- Holes or fractional keys leave the count and the length apart.
-	if count ~= #thresholds then
-		return nil
-	end
-	-- Wave 1c: `rowLag` may be left out (CityFabric then holds a back row 1 level behind the one in
-	-- front), but one that is there must be a whole number of levels, 0 or more.
-	local rowLag = pull.rowLag
-	if rowLag ~= nil and not (finite(rowLag) and rowLag >= 0 and rowLag == math.floor(rowLag)) then
-		return nil
-	end
-	return {
-		radius = pull.radius,
-		tierTerm = pull.tierTerm,
-		thresholds = table.clone(thresholds),
-		reach = pull.reach,
-		levelsOverTier = pull.levelsOverTier,
-		smallMaxLevel = pull.smallMaxLevel,
-		rowLag = rowLag,
-	}
-end
-
--- A list of prop names kept by position, since a clump's variant is an index into it. Anything that
--- is not a name reads as a missing prop, and a missing list as an empty one.
-local function propList(value: any): { string }
-	local list: { string } = {}
-	if type(value) == "table" then
-		for index, name in value do
-			if type(index) == "number" and type(name) == "string" then
-				list[index] = name
-			end
-		end
-	end
-	return list
-end
-
-local function validWildConfig(wild: any): Types.FabricWildConfig?
-	if type(wild) ~= "table" then
-		return nil
-	end
-	return {
-		clumps = propList(wild.clumps),
-		quarters = propList(wild.quarters),
-		quarterRadius = numberOr(wild.quarterRadius, 0),
-		singleRadius = numberOr(wild.singleRadius, 0),
-	}
-end
-
--- Every field CityFabric reads and Fabric.new places by. Wave 1c: rows 1 to 3 only (a back row
--- repeats its front parcel's stretch and along).
-local function validParcel(parcel: any): boolean
-	return type(parcel) == "table"
-		and finite(parcel.x)
-		and finite(parcel.z)
-		and finite(parcel.rotationY)
-		and finite(parcel.along)
-		and (parcel.row == 1 or parcel.row == 2 or parcel.row == 3)
-		and finite(parcel.front)
-		and type(parcel.stretch) == "string"
-		and (parcel.size == SMALL or parcel.size == MEDIUM or parcel.size == NARROW)
-end
-
--- Stands in for a malformed parcel: on no street, so it never develops, and later parcels keep
--- their indices (a row-2 parcel names its front parcel by index).
-local function blankParcel(): Types.FabricParcel
-	return {
-		x = 0,
-		z = 0,
-		rotationY = 0,
-		size = "small",
-		stretch = "",
-		along = 0,
-		row = 1,
-		front = 0,
-	}
-end
-
-local function validWildEntry(entry: any): boolean
-	if
-		type(entry) ~= "table"
-		or not (finite(entry.x) and finite(entry.z) and finite(entry.rotationY))
-	then
-		return false
-	end
-	return entry.kind == CLUMP or (entry.kind == SINGLE and type(entry.prop) == "string")
-end
-
--- Wave 1c round 3: one upgrade layer's config, or nil (that layer off) when a field is missing or
--- bad: a slot to buy, a prop list, a whole `tierOffset` (so a stage is always whole), a whole
--- `budget` of 0 or more, and an optional `stagger` of 0 or more.
-local function validUpgradeLayer(value: any): Types.FabricUpgradeLayerConfig?
-	if
-		type(value) ~= "table"
-		or type(value.requiresSlot) ~= "string"
-		or type(value.props) ~= "table"
-	then
-		return nil
-	end
-	local tierOffset, budget, stagger = value.tierOffset, value.budget, value.stagger
-	if not finite(tierOffset) or tierOffset ~= math.floor(tierOffset) then
-		return nil
-	end
-	if not finite(budget) or budget < 0 or budget ~= math.floor(budget) then
-		return nil
-	end
-	if stagger ~= nil and not (finite(stagger) and stagger >= 0) then
-		return nil
-	end
-	return {
-		requiresSlot = value.requiresSlot,
-		props = propList(value.props),
-		tierOffset = tierOffset,
-		stagger = stagger,
-		budget = budget,
-	}
-end
-
--- An upgrade entry the renderer can place: a position, turn, variant and a positive scale,
--- anchored to a stretch by piece id or to a parcel by index. Any other entry is skipped where it
--- stands.
-local function validUpgradeItem(entry: any): boolean
-	if
-		type(entry) ~= "table"
-		or not (finite(entry.x) and finite(entry.z) and finite(entry.rotationY))
-		or not (finite(entry.variant) and finite(entry.scale) and entry.scale > 0)
-	then
-		return false
-	end
-	if entry.anchor == ANCHOR_STRETCH then
-		return type(entry.stretch) == "string"
-	end
-	return entry.anchor == ANCHOR_PARCEL and finite(entry.parcel)
-end
-
--- Wave 2.4: a lane the renderer can lay -- a polyline of 2 to 4 [x, z] points of finite numbers,
--- at least one leg of which is long enough to draw, and its mouth's address on the street it
--- leaves. Any other entry is not drawn, and its lots are blanks: a lane whose points all coincide
--- must not let houses rise beside a road that never comes.
-local function validLane(lane: any): boolean
-	if type(lane) ~= "table" or type(lane.stretch) ~= "string" or not finite(lane.along) then
-		return false
-	end
-	local points = lane.points
-	if type(points) ~= "table" or #points < 2 or #points > 4 then
-		return false
-	end
-	for index = 1, #points do
-		local point = points[index]
-		if type(point) ~= "table" or not finite(point[1]) or not finite(point[2]) then
-			return false
-		end
-	end
-	for index = 2, #points do
-		local dx = points[index][1] - points[index - 1][1]
-		local dz = points[index][2] - points[index - 1][2]
-		if math.sqrt(dx * dx + dz * dz) >= LANE_MIN then
-			return true
-		end
-	end
-	return false
-end
-
--- `fabric.lanes` as far as the client reads it: a width above 0 (the dust along a baked lane, the
--- slabs of one laid as Parts) and the height of those slabs' tops. Nil draws no lane and clears
--- nothing for one; their lots still develop.
-local function validLanesConfig(lanes: any): Types.FabricLanesConfig?
-	if
-		type(lanes) ~= "table"
-		or not (finite(lanes.width) and lanes.width > 0)
-		or not finite(lanes.fillHeight)
-	then
-		return nil
-	end
-	return { width = lanes.width, fillHeight = lanes.fillHeight }
-end
-
--- Wave 2.0: the fabric keys of `ambient.smoke`. `every` must be a whole number of 1 or more and
--- `fabricProps` a table, or fabric smoke is off (nil). A chimney top is exactly three finite
--- numbers; any other entry -- [] by convention -- is a stage without a chimney, as is a stage past
--- the end of its list. Only this era's "<Era>/<Prop>" keys are kept, by prop name.
-local function validChimneys(
-	smoke: any,
-	eraName: string
-): ({ [string]: { [number]: CFrame } }?, number?)
-	if type(smoke) ~= "table" then
-		return nil, nil
-	end
-	local every, props = smoke.every, smoke.fabricProps
-	if type(props) ~= "table" or not finite(every) or every < 1 or every ~= math.floor(every) then
-		return nil, nil
-	end
-	local prefix = eraName .. "/"
-	local chimneys: { [string]: { [number]: CFrame } } = {}
-	for key, stages in props do
-		if
-			type(key) ~= "string"
-			or type(stages) ~= "table"
-			or string.sub(key, 1, #prefix) ~= prefix
-		then
-			continue
-		end
-		local tops: { [number]: CFrame } = {}
-		for index, top in stages do
-			if
-				type(index) == "number"
-				and type(top) == "table"
-				and #top == 3
-				and finite(top[1])
-				and finite(top[2])
-				and finite(top[3])
-			then
-				tops[index] = CFrame.new(top[1], top[2], top[3])
-			end
-		end
-		chimneys[string.sub(key, #prefix + 1)] = tops
-	end
-	return chimneys, every
 end
 
 -- ------------------------------------------------------------------ heights
@@ -828,7 +611,7 @@ local function rectCorners(rect: Rect): { Vector3 }
 end
 
 local function cellOf(value: number): number
-	return math.floor(value / GRID_CELL) + GRID_BIAS
+	return math.floor(value / GRID.cell) + GRID.bias
 end
 
 -- Buckets every rect by its bounding square (centre +- half diagonal + margin) and every segment by
@@ -840,7 +623,7 @@ local function buildGrid(mask: Mask): Grid
 	local function insert(id: number, x0: number, x1: number, z0: number, z1: number): ()
 		for ix = cellOf(x0), cellOf(x1) do
 			for iz = cellOf(z0), cellOf(z1) do
-				local key = ix * GRID_ROW + iz
+				local key = ix * GRID.row + iz
 				local ids = cells[key]
 				if ids == nil then
 					ids = {}
@@ -874,34 +657,34 @@ local function clearedAt(grid: Grid, x: number, z: number, radius: number): bool
 	local reach = math.max(radius, 0)
 	local mask = grid.mask
 	local rectCount = #mask.rects
-	scratchStamp += 1
-	table.clear(scratchRects)
-	table.clear(scratchSegments)
+	scratch.stamp += 1
+	table.clear(scratch.rects)
+	table.clear(scratch.segments)
 	for ix = cellOf(x - reach), cellOf(x + reach) do
 		for iz = cellOf(z - reach), cellOf(z + reach) do
-			local ids = grid.cells[ix * GRID_ROW + iz]
+			local ids = grid.cells[ix * GRID.row + iz]
 			if ids == nil then
 				continue
 			end
 			for _, id in ids do
-				if scratchSeen[id] == scratchStamp then
+				if scratch.seen[id] == scratch.stamp then
 					continue
 				end
-				scratchSeen[id] = scratchStamp
+				scratch.seen[id] = scratch.stamp
 				if id <= rectCount then
-					table.insert(scratchRects, mask.rects[id])
+					table.insert(scratch.rects, mask.rects[id])
 				else
-					table.insert(scratchSegments, mask.segments[id - rectCount])
+					table.insert(scratch.segments, mask.segments[id - rectCount])
 				end
 			end
 		end
 	end
-	if #scratchRects == 0 and #scratchSegments == 0 then
+	if #scratch.rects == 0 and #scratch.segments == 0 then
 		return false
 	end
 	return CityFabric.IsCleared(x, z, radius, {
-		rects = scratchRects,
-		segments = scratchSegments,
+		rects = scratch.rects,
+		segments = scratch.segments,
 		streetClear = mask.streetClear,
 	})
 end
@@ -955,7 +738,7 @@ local function puff(handle: Handle, points: { Vector3 }, width: number?): ()
 		if width ~= nil then table.create(#world, width) else nil
 	)
 	table.insert(handle.puffs, record)
-	record.cleanup = task.delay(seconds + DUST_LINGER_SECONDS, function()
+	record.cleanup = task.delay(seconds + FX.dustLingerSeconds, function()
 		record.cleanup = nil
 		local index = table.find(handle.puffs, record)
 		if index ~= nil then
@@ -985,7 +768,7 @@ end
 
 local function backOut(t: number): number
 	local u = t - 1
-	return 1 + (BACK_OVERSHOOT + 1) * u * u * u + BACK_OVERSHOOT * u * u
+	return 1 + (FX.backOvershoot + 1) * u * u * u + FX.backOvershoot * u * u
 end
 
 local function quadOut(t: number): number
@@ -996,7 +779,7 @@ end
 -- reveal's overshoot; a pop dips and overshoots like a landmark's stage pop (both looks from
 -- Theme, so filler and landmarks move alike). Reduced motion runs both straight to full size.
 local function scaleAt(kind: string, t: number): number
-	if kind == EFFECT_RISE then
+	if kind == EFFECT.rise then
 		local start = Theme.REVEAL_START_SCALE
 		return start + (1 - start) * (if Theme.reducedMotion then t else backOut(t))
 	end
@@ -1040,7 +823,7 @@ local function refreshPlume(handle: Handle, view: ParcelView): ()
 		and not view.moving
 		and model ~= nil
 		and look ~= nil
-		and look.kind == BUILDING
+		and look.kind == LOOK.building
 	local plume = view.plume
 	if plume ~= nil and (not lit or model == nil or not plume:IsDescendantOf(model)) then
 		plume:Destroy()
@@ -1065,12 +848,12 @@ local function refreshPlume(handle: Handle, view: ParcelView): ()
 end
 
 local function step(dt: number): ()
-	for index = #animations, 1, -1 do
-		local animation = animations[index]
+	for index = #loops.animations, 1, -1 do
+		local animation = loops.animations[index]
 		animation.elapsed += dt
 		if animation.elapsed >= animation.seconds then
 			applyScale(animation, 1)
-			table.remove(animations, index)
+			table.remove(loops.animations, index)
 			-- The house stands at full size: its chimney may smoke now.
 			local view = animation.view
 			if view ~= nil and view.model == animation.model then
@@ -1081,10 +864,10 @@ local function step(dt: number): ()
 			applyScale(animation, scaleAt(animation.kind, animation.elapsed / animation.seconds))
 		end
 	end
-	local connection = heartbeat
-	if #animations == 0 and connection ~= nil then
+	local connection = loops.animating
+	if #loops.animations == 0 and connection ~= nil then
 		connection:Disconnect()
-		heartbeat = nil
+		loops.animating = nil
 	end
 end
 
@@ -1126,19 +909,19 @@ local function startAnimation(
 		end
 	end
 	applyScale(animation, scaleAt(kind, 0))
-	table.insert(animations, animation)
-	if heartbeat == nil then
-		heartbeat = RunService.Heartbeat:Connect(step)
+	table.insert(loops.animations, animation)
+	if loops.animating == nil then
+		loops.animating = RunService.Heartbeat:Connect(step)
 	end
 	return true
 end
 
 -- Drops the animations of one model (about to be destroyed) or of a whole handle.
 local function stopAnimations(model: Model?, owner: Handle?): ()
-	for index = #animations, 1, -1 do
-		local animation = animations[index]
+	for index = #loops.animations, 1, -1 do
+		local animation = loops.animations[index]
 		if animation.model == model or animation.owner == owner then
-			table.remove(animations, index)
+			table.remove(loops.animations, index)
 		end
 	end
 end
@@ -1151,7 +934,7 @@ local function spawnAt(
 	scale: number?
 ): Model?
 	local context = handle.context
-	return PropFactory.Spawn(
+	local model = PropFactory.Spawn(
 		context.eraName,
 		prop,
 		stage,
@@ -1159,6 +942,12 @@ local function spawnAt(
 		context.folder,
 		scale
 	)
+	if model == nil and prop ~= nil then
+		-- A named prop with no template stays an absent item, as ever; the era's first one also
+		-- says so once in the Output, so a plot bare for want of an asset run explains itself.
+		PropFactory.NoteMissing(context.eraName, MISSING_PROP)
+	end
+	return model
 end
 
 -- ------------------------------------------------------------------ the spawn queue
@@ -1188,10 +977,10 @@ end
 local function drainQueues(): ()
 	local plots: { Handle } = {}
 	local budget = math.huge
-	for handle in queuedHandles do
+	for handle in loops.queued do
 		local cap = handle.spawnsPerFrame
 		if handle.destroyed or #handle.spawnQueue == 0 or cap == nil then
-			queuedHandles[handle] = nil
+			loops.queued[handle] = nil
 			continue
 		end
 		budget = math.min(budget, cap)
@@ -1225,13 +1014,13 @@ local function drainQueues(): ()
 			job.run()
 		end
 		if #queue == 0 then
-			queuedHandles[handle] = nil
+			loops.queued[handle] = nil
 		end
 	end
-	local connection = queueHeartbeat
-	if next(queuedHandles) == nil and connection ~= nil then
+	local connection = loops.draining
+	if next(loops.queued) == nil and connection ~= nil then
 		connection:Disconnect()
-		queueHeartbeat = nil
+		loops.draining = nil
 	end
 end
 
@@ -1248,9 +1037,9 @@ local function enqueue(handle: Handle, key: any, x: number, z: number, run: () -
 	handle.queued[key] = true
 	table.insert(handle.spawnQueue, { key = key, x = x, z = z, run = run })
 	handle.queueSorted = false
-	queuedHandles[handle] = true
-	if queueHeartbeat == nil then
-		queueHeartbeat = RunService.Heartbeat:Connect(drainQueues)
+	loops.queued[handle] = true
+	if loops.draining == nil then
+		loops.draining = RunService.Heartbeat:Connect(drainQueues)
 	end
 end
 
@@ -1260,7 +1049,7 @@ local function clearQueue(handle: Handle): ()
 	table.clear(handle.spawnQueue)
 	table.clear(handle.queued)
 	handle.queueSorted = true
-	queuedHandles[handle] = nil
+	loops.queued[handle] = nil
 end
 
 -- ------------------------------------------------------------------ back lanes (waves 2.4, 2.5)
@@ -1290,10 +1079,10 @@ local function layLaneParts(handle: Handle, view: LaneView): ()
 		return
 	end
 	local context = handle.context
-	local y = config.fillHeight - LANE_THICKNESS / 2
+	local y = config.fillHeight - LANE.thickness / 2
 	local function lay(disc: boolean, size: Vector3, cframe: CFrame): ()
 		local part = Instance.new("Part")
-		part.Name = LANE_PART_NAME
+		part.Name = LANE.partName
 		if disc then
 			part.Shape = Enum.PartType.Cylinder
 		end
@@ -1311,21 +1100,21 @@ local function layLaneParts(handle: Handle, view: LaneView): ()
 	local function disc(x: number, z: number): ()
 		lay(
 			true,
-			Vector3.new(LANE_THICKNESS, config.width, config.width),
-			CFrame.new(x, y, z) * CFrame.Angles(0, 0, QUARTER_TURN)
+			Vector3.new(LANE.thickness, config.width, config.width),
+			CFrame.new(x, y, z) * CFrame.Angles(0, 0, LANE.discTurn)
 		)
 	end
 	for index, leg in view.legs do
 		local cx, cz = leg.ax + leg.dx * leg.length / 2, leg.az + leg.dz * leg.length / 2
 		lay(
 			false,
-			Vector3.new(config.width, LANE_THICKNESS, leg.length),
+			Vector3.new(config.width, LANE.thickness, leg.length),
 			CFrame.lookAt(Vector3.new(cx, y, cz), Vector3.new(cx + leg.dx, y, cz + leg.dz))
 		)
 		-- The slabs butt at the point between them; a bend leaves a wedge open on its outside,
 		-- which the disc fills. Two legs in line leave none.
 		local before = view.legs[index - 1]
-		if before ~= nil and before.dx * leg.dx + before.dz * leg.dz < LANE_STRAIGHT_DOT then
+		if before ~= nil and before.dx * leg.dx + before.dz * leg.dz < LANE.straightDot then
 			disc(leg.ax, leg.az)
 		end
 	end
@@ -1450,7 +1239,7 @@ local function siteLook(handle: Handle, view: ParcelView): Look?
 	local config = handle.context.config
 	local prop =
 		CityFabric.SiteProp(config.sites, config.siteVariants, view.parcel.size, view.index)
-	return if prop ~= nil then { kind = SITE, prop = prop, stage = 0 } else nil
+	return if prop ~= nil then { kind = LOOK.site, prop = prop, stage = 0 } else nil
 end
 
 -- A district's non-empty prop list for a parcel size, or nil when it has none.
@@ -1503,7 +1292,7 @@ local function goalFor(
 	while stage > 0 and heights[stage + 1] > cap do
 		stage -= 1
 	end
-	return { kind = BUILDING, prop = prop, stage = stage }
+	return { kind = LOOK.building, prop = prop, stage = stage }
 end
 
 -- Every parcel's goal as of this pass, marked for the ripple where it moved. `developed` says the
@@ -1533,7 +1322,7 @@ local function resolveGoals(handle: Handle, developed: boolean): ()
 			view.base = goalFor(handle, view, state)
 		end
 		local goal = view.base
-		if goal ~= nil and goal.kind == BUILDING and #swaps > 0 then
+		if goal ~= nil and goal.kind == LOOK.building and #swaps > 0 then
 			local prop = CityFabric.SwappedProp(
 				goal.prop,
 				if state ~= nil then state.district else nil,
@@ -1542,7 +1331,7 @@ local function resolveGoals(handle: Handle, developed: boolean): ()
 				exists
 			)
 			if prop ~= goal.prop then
-				goal = { kind = BUILDING, prop = prop, stage = goal.stage }
+				goal = { kind = LOOK.building, prop = prop, stage = goal.stage }
 			end
 		end
 		if not sameLook(goal, view.goal) then
@@ -1591,7 +1380,7 @@ end
 -- when the movement ends (`step`).
 local function place(handle: Handle, view: ParcelView, look: Look?, effect: string): ()
 	view.shown = look
-	if effect == EFFECT_NONE and look ~= nil then
+	if effect == EFFECT.none and look ~= nil then
 		ensureModel(handle, view)
 		return
 	end
@@ -1608,8 +1397,8 @@ local function place(handle: Handle, view: ParcelView, look: Look?, effect: stri
 		else nil
 	view.model = model
 	view.modelLook = if model ~= nil then look else nil
-	if effect ~= EFFECT_NONE and (model ~= nil or old ~= nil) then
-		if model ~= nil and (effect == EFFECT_RISE or effect == EFFECT_POP) then
+	if effect ~= EFFECT.none and (model ~= nil or old ~= nil) then
+		if model ~= nil and (effect == EFFECT.rise or effect == EFFECT.pop) then
 			view.moving =
 				startAnimation(handle, model, handle.context.plotFrame * view.frame, effect, view)
 		end
@@ -1648,23 +1437,23 @@ fire = function(handle: Handle, view: ParcelView, kind: string): ()
 	local goal = view.goal
 	if goal == nil then
 		-- Back to wild land while it waited; never within an era, but it must not leave a site.
-		place(handle, view, nil, EFFECT_DUST)
+		place(handle, view, nil, EFFECT.dust)
 		return
 	end
-	if kind == TIMER_SITE then
+	if kind == TIMER.site then
 		local site = siteLook(handle, view)
 		if not sameLook(view.shown, site) then
-			place(handle, view, site, EFFECT_DUST)
+			place(handle, view, site, EFFECT.dust)
 		end
-		if goal.kind == BUILDING then
-			startTimer(handle, view, TIMER_BUILD, handle.durations[view.index] or 0)
+		if goal.kind == LOOK.building then
+			startTimer(handle, view, TIMER.build, handle.durations[view.index] or 0)
 		end
 		return
 	end
 	if not sameLook(view.shown, goal) then
-		place(handle, view, goal, if kind == TIMER_BUILD then EFFECT_RISE else EFFECT_POP)
+		place(handle, view, goal, if kind == TIMER.build then EFFECT.rise else EFFECT.pop)
 	end
-	if kind == TIMER_BUILD then
+	if kind == TIMER.build then
 		releaseParcelUpgrades(handle, view.index)
 	end
 end
@@ -1719,7 +1508,7 @@ local function settleParcels(handle: Handle, near: boolean): ()
 		if sameLook(view.shown, target) then
 			ensureModel(handle, view)
 		else
-			place(handle, view, target, EFFECT_NONE)
+			place(handle, view, target, EFFECT.none)
 		end
 	end
 end
@@ -1745,7 +1534,7 @@ local function rippleParcels(
 			-- Past the near budget: nothing draws here, even if a far budget let it stand.
 			if view.shown ~= nil then
 				cancelTimer(view)
-				place(handle, view, nil, EFFECT_NONE)
+				place(handle, view, nil, EFFECT.none)
 			end
 			continue
 		end
@@ -1761,15 +1550,15 @@ local function rippleParcels(
 		elseif not changed then
 			-- Its goal stood still and it only now draws: the plot came near, and a far plot leaves
 			-- the back rows out. Placed as it is, since nothing happened to it.
-			place(handle, view, goal, EFFECT_NONE)
+			place(handle, view, goal, EFFECT.none)
 		elseif goal == nil then
-			place(handle, view, nil, EFFECT_DUST)
+			place(handle, view, nil, EFFECT.dust)
 		elseif shown == nil then
 			table.insert(starting, view)
-		elseif goal.kind == SITE then
-			place(handle, view, goal, EFFECT_DUST)
-		elseif shown.kind == SITE then
-			startTimer(handle, view, TIMER_BUILD, handle.durations[view.index] or 0)
+		elseif goal.kind == LOOK.site then
+			place(handle, view, goal, EFFECT.dust)
+		elseif shown.kind == LOOK.site then
+			startTimer(handle, view, TIMER.build, handle.durations[view.index] or 0)
 		else
 			table.insert(swapping, view)
 		end
@@ -1779,11 +1568,11 @@ local function rippleParcels(
 	local stageSeconds = numberOr(timing.stageSeconds, 0)
 	sortOutward(swapping, if #swapOrigins > 0 then swapOrigins else origins, parcelSpot)
 	for rank, view in swapping do
-		startTimer(handle, view, TIMER_SWAP, stageSeconds + (rank - 1) * stagger)
+		startTimer(handle, view, TIMER.swap, stageSeconds + (rank - 1) * stagger)
 	end
 	sortOutward(starting, origins, parcelSpot)
 	for rank, view in starting do
-		startTimer(handle, view, TIMER_SITE, (rank - 1) * stagger)
+		startTimer(handle, view, TIMER.site, (rank - 1) * stagger)
 	end
 end
 
@@ -1943,7 +1732,9 @@ local function buildMask(handle: Handle, clear: Types.FabricClearConfig, input: 
 end
 
 -- Which quarters of each wild entry the mask clears: a clump's four `quads` at quarterRadius, a
--- single's point at singleRadius.
+-- single's point at singleRadius. Wave 4.2: a point in the band of a round loop that keeps its
+-- ground (CityFabric.KeptInBand) is cleared by nothing, whatever the mask holds beside it, so the
+-- regolith under the monorail stays for good.
 local function clearedFlags(
 	handle: Handle,
 	wildConfig: Types.FabricWildConfig,
@@ -1952,6 +1743,7 @@ local function clearedFlags(
 	local grid = buildGrid(mask)
 	local quarterRadius = numberOr(wildConfig.quarterRadius, 0)
 	local singleRadius = numberOr(wildConfig.singleRadius, 0)
+	local bandRing = handle.bandRing
 	local flags: { [number]: number } = {}
 	for index, entry in handle.wildData do
 		local bits = 0
@@ -1959,18 +1751,24 @@ local function clearedFlags(
 			flags[index] = bits
 			continue
 		end
-		if entry.kind == CLUMP then
+		if entry.kind == WILD.clump then
 			local quads = entry.quads
-			for quarter = 1, QUARTERS do
+			for quarter = 1, WILD.quarters do
 				-- A clump written without its quads is tested at its centre, all or nothing.
 				local point = if type(quads) == "table" then quads[quarter] else nil
 				local x = if type(point) == "table" then numberOr(point[1], entry.x) else entry.x
 				local z = if type(point) == "table" then numberOr(point[2], entry.z) else entry.z
-				if clearedAt(grid, x, z, quarterRadius) then
+				if
+					not CityFabric.KeptInBand(x, z, bandRing)
+					and clearedAt(grid, x, z, quarterRadius)
+				then
 					bits = bit32.bor(bits, bit32.lshift(1, quarter - 1))
 				end
 			end
-		elseif clearedAt(grid, entry.x, entry.z, singleRadius) then
+		elseif
+			not CityFabric.KeptInBand(entry.x, entry.z, bandRing)
+			and clearedAt(grid, entry.x, entry.z, singleRadius)
+		then
 			bits = 1
 		end
 		flags[index] = bits
@@ -1998,8 +1796,13 @@ local function inRiver(handle: Handle, entry: Types.FabricWild): boolean
 	local blocked = WorldBlock.Blocked(world.X, world.Z)
 	local quads = entry.quads
 	local wildConfig = handle.wildConfig
-	if not blocked and entry.kind == CLUMP and type(quads) == "table" and wildConfig ~= nil then
-		for quarter = 1, QUARTERS do
+	if
+		not blocked
+		and entry.kind == WILD.clump
+		and type(quads) == "table"
+		and wildConfig ~= nil
+	then
+		for quarter = 1, WILD.quarters do
 			local point = quads[quarter]
 			if type(point) == "table" and finite(point[1]) and finite(point[2]) then
 				world = frame:PointToWorldSpace(Vector3.new(point[1], 0, point[2]))
@@ -2018,11 +1821,11 @@ end
 -- Where the dust goes when part of an entry is cleared: the middle of the quarters that just went.
 local function clearedCentre(entry: Types.FabricWild, newly: number): (number, number)
 	local quads = entry.quads
-	if entry.kind ~= CLUMP or type(quads) ~= "table" then
+	if entry.kind ~= WILD.clump or type(quads) ~= "table" then
 		return entry.x, entry.z
 	end
 	local sumX, sumZ, count = 0, 0, 0
-	for quarter = 1, QUARTERS do
+	for quarter = 1, WILD.quarters do
 		local point = quads[quarter]
 		if bit32.btest(newly, bit32.lshift(1, quarter - 1)) and type(point) == "table" then
 			sumX += numberOr(point[1], entry.x)
@@ -2036,38 +1839,81 @@ local function clearedCentre(entry: Types.FabricWild, newly: number): (number, n
 	return sumX / count, sumZ / count
 end
 
--- A queued wild spawn: the pieces entry `index` wants now, then the whole clump it split from.
-local function applyWild(handle: Handle, index: number): ()
+-- Takes one standing piece of a wild entry down, mid-pop or not.
+local function dropWild(view: WildView, model: Model): ()
+	view.worn[model] = nil
+	stopAnimations(model, nil)
+	model:Destroy()
+end
+
+-- One piece of a wild entry as it should stand: `standing` itself where it already wears `prop`,
+-- else a fresh spawn in `prop` that takes its place (wave 4.2: a re-skin, once a slot that swaps
+-- the wild is owned), popping in when `pop` asks. Without a template for `prop` whatever stood
+-- stays. Returns the piece and whether a new one was placed.
+local function wildPiece(
+	handle: Handle,
+	view: WildView,
+	standing: Model?,
+	prop: string?,
+	frame: CFrame,
+	scale: number?,
+	pop: boolean
+): (Model?, boolean)
+	if standing ~= nil and view.worn[standing] == prop then
+		return standing, false
+	end
+	local model = spawnAt(handle, prop, 0, frame, scale)
+	if model == nil or prop == nil then
+		return standing, false
+	end
+	view.worn[model] = prop
+	if standing ~= nil then
+		dropWild(view, standing)
+	end
+	if pop then
+		startAnimation(handle, model, handle.context.plotFrame * frame, EFFECT.pop, nil)
+	end
+	return model, true
+end
+
+-- A queued wild spawn: the pieces entry `index` wants now, each in the prop it should wear, then
+-- the whole clump it split from. Wave 4.2: `pop` is the entry's turn in the wave of a wild swap
+-- bought on a near plot, where what it places pops in with a puff.
+local function applyWild(handle: Handle, index: number, pop: boolean): ()
 	local view = handle.wild[index]
 	local entry = handle.wildData[index]
-	local wildConfig = handle.wildConfig
-	if view == nil or entry == nil or wildConfig == nil then
+	if view == nil or entry == nil or handle.wildConfig == nil then
 		return
 	end
-	-- Validated lists: a variant with no name in them is a missing prop, never an error.
-	local variant = entry.variant
-	if view.wantWhole and view.whole == nil then
-		local prop = if variant ~= nil then wildConfig.clumps[variant] else nil
-		view.whole = spawnAt(handle, prop, 0, wildFrame(handle, entry, 0), entry.scale)
+	local changed = false
+	local function piece(standing: Model?, prop: string?, turn: number): Model?
+		local model, placed = wildPiece(
+			handle,
+			view,
+			standing,
+			prop,
+			wildFrame(handle, entry, turn),
+			entry.scale,
+			pop
+		)
+		changed = changed or placed
+		return model
 	end
-	if view.wantSingle and view.single == nil then
-		view.single = spawnAt(handle, entry.prop, 0, wildFrame(handle, entry, 0), entry.scale)
+	if view.wantWhole then
+		view.whole = piece(view.whole, view.wholeProp, 0)
+	end
+	if view.wantSingle then
+		view.single = piece(view.single, view.singleProp, 0)
 	end
 	if view.wantQuarters ~= 0 then
-		local prop = if variant ~= nil then wildConfig.quarters[variant] else nil
-		for quarter = 1, QUARTERS do
-			local existing: Model? = view.quarters[quarter]
-			if
-				existing ~= nil or not bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1))
-			then
+		for quarter = 1, WILD.quarters do
+			if not bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1)) then
 				continue
 			end
-			local model = spawnAt(
-				handle,
-				prop,
-				0,
-				wildFrame(handle, entry, QUARTER_TURN_DEGREES * (quarter - 1)),
-				entry.scale
+			local model = piece(
+				view.quarters[quarter],
+				view.quarterProp,
+				WILD.quarterTurnDegrees * (quarter - 1)
 			)
 			if model ~= nil then
 				view.quarters[quarter] = model
@@ -2076,32 +1922,46 @@ local function applyWild(handle: Handle, index: number): ()
 	end
 	local whole = view.whole
 	if whole ~= nil and not view.wantWhole then
-		whole:Destroy()
+		dropWild(view, whole)
 		view.whole = nil
+	end
+	if pop and changed then
+		puffAt(handle, entry.x, wildGround(handle, entry), entry.z)
 	end
 end
 
--- Whether entry `view` still has a wanted piece to place, or a split whole to take down.
-local function wildPending(view: WildView): boolean
+-- What entry `view` still lacks: a wanted piece that does not stand, or a split whole still to
+-- take down (`missing`); and (wave 4.2) a wanted piece that stands in another prop than it should
+-- wear (`reskin`).
+local function wildNeeds(view: WildView): (boolean, boolean)
+	local missing, reskin = false, false
 	local whole: Model? = view.whole
 	local single: Model? = view.single
 	if whole == nil then
-		if view.wantWhole then
-			return true
-		end
+		missing = view.wantWhole
 	elseif not view.wantWhole then
-		return true
+		missing = true
+	elseif view.worn[whole] ~= view.wholeProp then
+		reskin = true
 	end
-	if view.wantSingle and single == nil then
-		return true
-	end
-	for quarter = 1, QUARTERS do
-		local placed: Model? = view.quarters[quarter]
-		if placed == nil and bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1)) then
-			return true
+	if view.wantSingle then
+		if single == nil then
+			missing = true
+		elseif view.worn[single] ~= view.singleProp then
+			reskin = true
 		end
 	end
-	return false
+	for quarter = 1, WILD.quarters do
+		if bit32.btest(view.wantQuarters, bit32.lshift(1, quarter - 1)) then
+			local placed: Model? = view.quarters[quarter]
+			if placed == nil then
+				missing = true
+			elseif view.worn[placed] ~= view.quarterProp then
+				reskin = true
+			end
+		end
+	end
+	return missing, reskin
 end
 
 -- Near plots draw every uncleared clump, quarter and single among the first budget.wild entries;
@@ -2111,11 +1971,22 @@ end
 -- the pass wants without the spawn queue. The pass that buys the highway ring asks for it, so a
 -- clump the deck band cuts is down to its surviving quarters before the first deck cell lands on
 -- it, rather than a frame later.
+--
+-- Wave 4.2 (`fabric.wildSwaps`, "Tend the Rock Gardens"): every piece that stands shows the twin
+-- of its prop while a slot that swaps the wild is owned and that twin has a template
+-- (CityFabric.SwappedWild; a twin shares its original's footprint and frame, so nothing else about
+-- the entry changes). The props are asked on every pass, like the building swaps, because a
+-- template can replicate after its slot was seen owned. A piece standing in the wrong prop is
+-- re-skinned where it stands: through the spawn queue, silently, in any pass but the one that
+-- buys the slot on a near plot. That pass names where the wave starts (`swapOrigins`, the pad it
+-- was bought on; empty in every other pass), and the pieces then turn one entry at a time outward
+-- from there at the pace of the building swaps, each with a pop and a puff.
 local function syncWild(
 	handle: Handle,
 	input: SyncInput,
 	previous: { [number]: number },
-	atOnce: boolean
+	atOnce: boolean,
+	swapOrigins: { Vector3 }
 ): ()
 	local wildConfig = handle.wildConfig
 	if wildConfig == nil then
@@ -2124,6 +1995,26 @@ local function syncWild(
 	local cleared = handle.cleared
 	local share = math.clamp(numberOr(input.wildShare, 1), 0, 1)
 	local puffs = input.animate and input.near
+	local swaps = handle.wildSwaps
+	local eraName = handle.context.eraName
+	local known: { [string]: boolean } = {}
+	local function exists(prop: string): boolean
+		local answer = known[prop]
+		if answer == nil then
+			answer = PropFactory.Template(eraName, prop) ~= nil
+			known[prop] = answer
+		end
+		return answer
+	end
+	-- Validated lists: a variant with no name in them is a missing prop, never an error.
+	local function shownProp(prop: string?): string?
+		return if #swaps > 0
+			then CityFabric.SwappedWild(prop, swaps, handle.owned, exists)
+			else prop
+	end
+	local timing = handle.timing
+	local waving = puffs and timing ~= nil and #swapOrigins > 0
+	local wave: { WildView } = {}
 	for index, entry in handle.wildData do
 		if not handle.wildValid[index] then
 			continue
@@ -2134,23 +2025,35 @@ local function syncWild(
 			then handle.wildNear[index] == true
 			else handle.wildFar[index] == true
 		local show = kept and inBudget and not inRiver(handle, entry)
-		local clump = entry.kind == CLUMP
+		local clump = entry.kind == WILD.clump
 		local wantWhole = clump and show and bits == 0
-		local wantQuarters = clump and show and input.near and bits ~= 0 and bits ~= ALL_QUARTERS
+		local wantQuarters = clump
+			and show
+			and input.near
+			and bits ~= 0
+			and bits ~= WILD.allQuarters
 		local wantSingle = not clump and show and input.near and bits == 0
-		local quarterBits = if wantQuarters then bit32.band(bit32.bnot(bits), ALL_QUARTERS) else 0
+		local quarterBits = if wantQuarters
+			then bit32.band(bit32.bnot(bits), WILD.allQuarters)
+			else 0
 		local view = handle.wild[index]
 		if view == nil then
 			if not (wantWhole or quarterBits ~= 0 or wantSingle) then
 				continue
 			end
 			view = {
+				index = index,
 				whole = nil,
 				quarters = {},
 				single = nil,
 				wantWhole = false,
 				wantSingle = false,
 				wantQuarters = 0,
+				wholeProp = nil,
+				quarterProp = nil,
+				singleProp = nil,
+				worn = {},
+				timer = nil,
 			}
 			handle.wild[index] = view
 		end
@@ -2159,34 +2062,55 @@ local function syncWild(
 		current.wantWhole = wantWhole
 		current.wantSingle = wantSingle
 		current.wantQuarters = quarterBits
+		local variant = entry.variant
+		if clump then
+			current.wholeProp =
+				shownProp(if variant ~= nil then wildConfig.clumps[variant] else nil)
+			current.quarterProp =
+				shownProp(if variant ~= nil then wildConfig.quarters[variant] else nil)
+		else
+			current.singleProp = shownProp(entry.prop)
+		end
 
 		-- Removals are immediate. A whole clump that splits into quarters stands until they are
 		-- placed, so the woods never blink out round a clearing.
 		local whole = current.whole
 		if whole ~= nil and not wantWhole and quarterBits == 0 then
-			whole:Destroy()
+			dropWild(current, whole)
 			current.whole = nil
 		end
 		local single = current.single
 		if single ~= nil and not wantSingle then
-			single:Destroy()
+			dropWild(current, single)
 			current.single = nil
 		end
-		for quarter = 1, QUARTERS do
+		for quarter = 1, WILD.quarters do
 			local placed: Model? = current.quarters[quarter]
 			if placed ~= nil and not bit32.btest(quarterBits, bit32.lshift(1, quarter - 1)) then
-				placed:Destroy()
+				dropWild(current, placed)
 				current.quarters[quarter] = nil
 			end
 		end
-		if wildPending(current) then
+		local missing, reskin = wildNeeds(current)
+		-- A turn in a swap's wave stands only while the wave can still play and a re-skin is all
+		-- the entry needs: a far plot or a restore plays nothing, and an entry that also has a
+		-- piece to place gets everything from the queue at once.
+		local timer = current.timer
+		if timer ~= nil and (not puffs or missing or not reskin) then
+			current.timer = nil
+			task.cancel(timer)
+			timer = nil
+		end
+		if missing or (reskin and not waving and timer == nil) then
 			if atOnce then
-				applyWild(handle, index)
+				applyWild(handle, index, false)
 			else
 				enqueue(handle, current, entry.x, entry.z, function()
-					applyWild(handle, index)
+					applyWild(handle, index, false)
 				end)
 			end
+		elseif reskin and timer == nil then
+			table.insert(wave, current)
 		end
 
 		local newly = bit32.band(bits, bit32.bnot(previous[index] or 0))
@@ -2194,6 +2118,23 @@ local function syncWild(
 			local x, z = clearedCentre(entry, newly)
 			puffAt(handle, x, wildGround(handle, entry), z)
 		end
+	end
+	if #wave == 0 or timing == nil then
+		return
+	end
+	local stagger = math.max(numberOr(timing.stagger, 0), 0)
+	local stageSeconds = math.max(numberOr(timing.stageSeconds, 0), 0)
+	sortOutward(wave, swapOrigins, function(view: WildView): (number, number, number)
+		local entry = handle.wildData[view.index]
+		return entry.x, entry.z, view.index
+	end)
+	for rank, view in wave do
+		view.timer = task.delay(stageSeconds + (rank - 1) * stagger, function()
+			view.timer = nil
+			if not handle.destroyed then
+				applyWild(handle, view.index, true)
+			end
+		end)
 	end
 end
 
@@ -2210,19 +2151,6 @@ local function upgradeStage(
 	local prop = view.prop
 	local count = if prop ~= nil then #propHeights(handle, prop) else 0
 	return math.max(math.min(tier - tierOffset, count - 1), 0)
-end
-
--- Whether the anchor has developed: a street entry's stretch is drawn, a parcel entry's house is
--- built.
-local function anchorDeveloped(handle: Handle, view: UpgradeView): boolean
-	local item = view.item
-	if item.anchor == ANCHOR_STRETCH then
-		local stretch = item.stretch
-		return stretch ~= nil and handle.stretches[stretch] ~= nil
-	end
-	local parcel = item.parcel
-	local state = if parcel ~= nil then handle.states[parcel] else nil
-	return state ~= nil and state.level >= BUILT_LEVEL
 end
 
 -- A queued entry spawn: the model for the stage the entry shows now, replacing what stood.
@@ -2254,7 +2182,7 @@ end
 
 -- Puts the entry at `stage` (nil takes it away). Without an effect or a puff the spawn waits in the
 -- queue and what stood stays up until then; a removal and an animated placement are immediate.
--- EFFECT_POP scales it in; a puff at its base marks only an entry that actually appeared, so a
+-- EFFECT.pop scales it in; a puff at its base marks only an entry that actually appeared, so a
 -- missing template stays silent.
 local function placeUpgrade(
 	handle: Handle,
@@ -2264,7 +2192,7 @@ local function placeUpgrade(
 	dust: boolean
 ): ()
 	view.shown = stage
-	if stage ~= nil and effect == EFFECT_NONE and not dust then
+	if stage ~= nil and effect == EFFECT.none and not dust then
 		ensureUpgrade(handle, view)
 		return
 	end
@@ -2284,8 +2212,8 @@ local function placeUpgrade(
 	if model == nil then
 		return
 	end
-	if effect == EFFECT_POP then
-		startAnimation(handle, model, handle.context.plotFrame * view.frame, EFFECT_POP, nil)
+	if effect == EFFECT.pop then
+		startAnimation(handle, model, handle.context.plotFrame * view.frame, EFFECT.pop, nil)
 	end
 	if dust then
 		puffAt(handle, view.item.x, 0, view.item.z)
@@ -2307,7 +2235,7 @@ end
 -- once.
 local function waitsForHouse(handle: Handle, view: UpgradeView): boolean
 	local parcel = view.item.parcel
-	if view.item.anchor ~= ANCHOR_PARCEL or parcel == nil then
+	if view.item.anchor ~= UPGRADE.parcelAnchor or parcel == nil then
 		return false
 	end
 	local house = handle.parcels[parcel]
@@ -2316,7 +2244,9 @@ local function waitsForHouse(handle: Handle, view: UpgradeView): boolean
 	end
 	local goal = house.goal
 	local shown = house.shown
-	return goal ~= nil and goal.kind == BUILDING and (shown == nil or shown.kind ~= BUILDING)
+	return goal ~= nil
+		and goal.kind == LOOK.building
+		and (shown == nil or shown.kind ~= LOOK.building)
 end
 
 local function upgradeSpot(view: UpgradeView): (number, number, number)
@@ -2347,20 +2277,20 @@ end
 fireUpgrade = function(handle: Handle, view: UpgradeView, kind: string): ()
 	local goal = view.goal
 	if goal == nil then
-		placeUpgrade(handle, view, nil, EFFECT_NONE, false)
+		placeUpgrade(handle, view, nil, EFFECT.none, false)
 		return
 	end
-	if kind == UPGRADE_APPEAR then
-		placeUpgrade(handle, view, 0, EFFECT_NONE, true)
+	if kind == UPGRADE.appear then
+		placeUpgrade(handle, view, 0, EFFECT.none, true)
 		local timing = handle.timing
 		if goal > 0 then
 			local seconds = if timing ~= nil then numberOr(timing.stageSeconds, 0) else 0
-			startUpgradeTimer(handle, view, UPGRADE_GROW, seconds)
+			startUpgradeTimer(handle, view, UPGRADE.grow, seconds)
 		end
 		return
 	end
 	if view.shown ~= goal then
-		placeUpgrade(handle, view, goal, EFFECT_POP, false)
+		placeUpgrade(handle, view, goal, EFFECT.pop, false)
 	end
 end
 
@@ -2381,7 +2311,7 @@ releaseParcelUpgrades = function(handle: Handle, parcel: number): ()
 			and view.shown == nil
 			and view.timer == nil
 		then
-			placeUpgrade(handle, view, goal, EFFECT_POP, false)
+			placeUpgrade(handle, view, goal, EFFECT.pop, false)
 		end
 	end
 end
@@ -2394,6 +2324,10 @@ end
 -- Growth steps pop after stageSeconds, one by one outward from the last trigger at the layer's
 -- pace, so a tier-up never pops a whole layer in one frame. Anything else -- an unanimated sync, a
 -- restore, a plot coming near, detail turned back on -- shows the final state at once.
+--
+-- Whether an entry's anchor has developed is CityFabric.UpgradeDeveloped's to say: its stretch is
+-- drawn, its parcel's house is built, or (wave 4.2: a banner on a monorail pier) the highway
+-- stands.
 local function syncLayer(
 	handle: Handle,
 	layer: UpgradeLayer,
@@ -2416,7 +2350,13 @@ local function syncLayer(
 	local growing: { UpgradeView } = {}
 	for _, view in layer.views do
 		local wasPlanted = view.planted
-		view.planted = slotOwned and anchorDeveloped(handle, view)
+		view.planted = slotOwned
+			and CityFabric.UpgradeDeveloped(
+				view.item,
+				handle.stretches,
+				handle.states,
+				handle.highwayBuilt
+			)
 		local goal = if view.planted
 			then upgradeStage(handle, view, config.tierOffset, input.tier)
 			else nil
@@ -2429,7 +2369,7 @@ local function syncLayer(
 			if view.shown == target then
 				ensureUpgrade(handle, view)
 			else
-				placeUpgrade(handle, view, target, EFFECT_NONE, false)
+				placeUpgrade(handle, view, target, EFFECT.none, false)
 			end
 			continue
 		end
@@ -2442,25 +2382,25 @@ local function syncLayer(
 		if shown == goal then
 			continue
 		elseif goal == nil then
-			placeUpgrade(handle, view, nil, EFFECT_NONE, false)
+			placeUpgrade(handle, view, nil, EFFECT.none, false)
 		elseif shown == nil and waitsForHouse(handle, view) then
 			continue -- releaseParcelUpgrades brings it with its house
 		elseif not wasPlanted then
 			if bought then
 				table.insert(wave, view)
 			else
-				placeUpgrade(handle, view, goal, EFFECT_POP, true)
+				placeUpgrade(handle, view, goal, EFFECT.pop, true)
 			end
 		elseif shown == nil then
 			-- Placed while the plot was far, or its template came late: nothing to play.
-			placeUpgrade(handle, view, goal, EFFECT_NONE, false)
+			placeUpgrade(handle, view, goal, EFFECT.none, false)
 		else
 			table.insert(growing, view)
 		end
 	end
 	sortOutward(growing, rippleOrigins(handle, triggers), upgradeSpot)
 	for rank, view in growing do
-		startUpgradeTimer(handle, view, UPGRADE_GROW, stageSeconds + (rank - 1) * stagger)
+		startUpgradeTimer(handle, view, UPGRADE.grow, stageSeconds + (rank - 1) * stagger)
 	end
 	if #wave == 0 then
 		return
@@ -2476,7 +2416,7 @@ local function syncLayer(
 	end
 	sortOutward(wave, { Vector3.new(originX, 0, originZ) }, upgradeSpot)
 	for rank, view in wave do
-		startUpgradeTimer(handle, view, UPGRADE_APPEAR, (rank - 1) * stagger)
+		startUpgradeTimer(handle, view, UPGRADE.appear, (rank - 1) * stagger)
 	end
 end
 
@@ -2720,7 +2660,7 @@ local function startReveals(handle: Handle, fresh: { string }): ()
 			continue
 		end
 		local footprint = 2 * math.max(math.abs(rect.hx), math.abs(rect.hz))
-		local model = spawnAt(handle, prop, 0, frame, footprint / REVEAL_DESIGN_STUDS)
+		local model = spawnAt(handle, prop, 0, frame, footprint / FX.revealDesignStuds)
 		if model == nil then
 			continue
 		end
@@ -2747,12 +2687,13 @@ function Fabric.new(context: Context): Handle
 	local timing = if type(config.construction) == "table" then config.construction else nil
 	local maxPuffs = if timing ~= nil then timing.maxPuffs else nil
 	local spawnsPerFrame = if timing ~= nil then timing.spawnsPerFrame else nil
-	local chimneys, smokeEvery = validChimneys(context.smoke, context.eraName)
+	local chimneys, smokeEvery = FabricValidation.Chimneys(context.smoke, context.eraName)
+	local highwayLayout: any = context.highwayLayout
 	local handle: Handle = {
 		context = context,
-		pull = validPull(config.pull),
+		pull = FabricValidation.Pull(config.pull),
 		clear = if type(config.clear) == "table" then config.clear else nil,
-		wildConfig = validWildConfig(config.wild),
+		wildConfig = FabricValidation.WildConfig(config.wild),
 		timing = timing,
 		maxPuffs = if finite(maxPuffs) then math.floor(maxPuffs :: number) else nil,
 		-- Fewer than one per frame would never place anything, so it counts as no cap.
@@ -2761,7 +2702,7 @@ function Fabric.new(context: Context): Handle
 			else nil,
 		smoke = if chimneys ~= nil then context.smoke else nil,
 		chimneys = chimneys or {},
-		lanesConfig = validLanesConfig(config.lanes),
+		lanesConfig = FabricValidation.LanesConfig(config.lanes),
 		lanes = {},
 		parcelBudget = 0,
 		laneSizes = {},
@@ -2770,6 +2711,12 @@ function Fabric.new(context: Context): Handle
 		-- `levelStages` and `siteVariants` need no copy here: CityFabric reads each as it comes
 		-- and takes a bad value for an absent one.
 		swaps = CityFabric.ValidSwaps(config.swaps),
+		-- Wave 4.2: read the same way; and the band only a round loop that keeps its ground has.
+		wildSwaps = CityFabric.ValidWildSwaps(config.wildSwaps),
+		bandRing = CityFabric.BandRing(
+			context.highway,
+			if type(highwayLayout) == "table" then highwayLayout.ring else nil
+		),
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
@@ -2794,6 +2741,7 @@ function Fabric.new(context: Context): Handle
 		owned = {},
 		ownedList = {},
 		stages = {},
+		highwayBuilt = false,
 		developKey = "",
 		maskKey = "",
 		cleared = {},
@@ -2890,7 +2838,7 @@ function Fabric.new(context: Context): Handle
 	local laneValid: { [number]: boolean } = {}
 	for index = 1, #rawLanes do
 		local lane = rawLanes[index]
-		laneValid[index] = validLane(lane)
+		laneValid[index] = FabricValidation.Lane(lane)
 		local lanesConfig = handle.lanesConfig
 		if not laneValid[index] or lanesConfig == nil then
 			continue
@@ -2908,8 +2856,8 @@ function Fabric.new(context: Context): Handle
 			local dx, dz = b[1] - a[1], b[2] - a[2]
 			local legLength = math.sqrt(dx * dx + dz * dz)
 			-- Two points on one spot make no leg; the arc simply carries on from the next
-			-- (validLane has made sure at least one leg is left).
-			if legLength >= LANE_MIN then
+			-- (FabricValidation.Lane has made sure at least one leg is left).
+			if legLength >= LANE.min then
 				table.insert(legs, {
 					ax = a[1],
 					az = a[2],
@@ -2933,7 +2881,7 @@ function Fabric.new(context: Context): Handle
 	end
 	for index = 1, #rawParcels do
 		local raw = rawParcels[index]
-		local wellFormed = validParcel(raw)
+		local wellFormed = FabricValidation.Parcel(raw)
 		-- Wave 2.4: a lot on a lane names a lane that can be laid and says how far along it stands.
 		if wellFormed and raw.lane ~= nil then
 			local laneAlong = raw.laneAlong
@@ -2952,7 +2900,7 @@ function Fabric.new(context: Context): Handle
 				else nil
 			wellFormed = ahead ~= nil and ahead.row == raw.row - 1
 		end
-		local parcel = if wellFormed then raw else blankParcel()
+		local parcel = if wellFormed then raw else FabricValidation.BlankParcel()
 		handle.parcelData[index] = parcel
 		if type(sizes) ~= "table" then
 			continue
@@ -2994,7 +2942,7 @@ function Fabric.new(context: Context): Handle
 	local longest = if timing ~= nil
 		then math.max(numberOr(timing.maxSeconds, shortest), shortest)
 		else shortest
-	local rng = Random.new(context.seed + CONSTRUCTION_SALT)
+	local rng = Random.new(context.seed + FX.constructionSalt)
 	for index = 1, #handle.parcelData do
 		handle.durations[index] = shortest + (longest - shortest) * rng:NextNumber()
 	end
@@ -3015,10 +2963,10 @@ function Fabric.new(context: Context): Handle
 	local clumps = 0
 	for index = 1, #handle.wildData do
 		local entry = handle.wildData[index]
-		local wellFormed = validWildEntry(entry)
+		local wellFormed = FabricValidation.WildEntry(entry)
 		handle.wildValid[index] = wellFormed
 		handle.wildNear[index] = index <= nearBudget
-		if wellFormed and entry.kind == CLUMP then
+		if wellFormed and entry.kind == WILD.clump then
 			clumps += 1
 			handle.wildFar[index] = clumps <= farBudget
 		end
@@ -3038,7 +2986,7 @@ function Fabric.new(context: Context): Handle
 		end
 		table.sort(names)
 		for _, name in names do
-			local layerConfig = validUpgradeLayer(layerConfigs[name])
+			local layerConfig = FabricValidation.UpgradeLayer(layerConfigs[name])
 			local items = layerData[name]
 			if layerConfig == nil or type(items) ~= "table" then
 				continue
@@ -3046,7 +2994,9 @@ function Fabric.new(context: Context): Handle
 			local layer: UpgradeLayer = { name = name, config = layerConfig, views = {} }
 			for index = 1, math.min(#items, layerConfig.budget) do
 				local item = items[index]
-				if not validUpgradeItem(item) then
+				-- Wave 4.2: an entry may also be anchored to the highway, and CityFabric says what
+				-- a valid entry is, so the mirror gate covers the rule.
+				if not CityFabric.ValidUpgradeItem(item) then
 					continue
 				end
 				local view: UpgradeView = {
@@ -3065,7 +3015,7 @@ function Fabric.new(context: Context): Handle
 				}
 				table.insert(layer.views, view)
 				local parcel = item.parcel
-				if item.anchor == ANCHOR_PARCEL and parcel ~= nil then
+				if item.anchor == UPGRADE.parcelAnchor and parcel ~= nil then
 					local onParcel = handle.parcelUpgrades[parcel]
 					if onParcel == nil then
 						onParcel = {}
@@ -3118,6 +3068,9 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 		table.sort(handle.ownedList)
 	end
 	handle.stretches = input.stretches
+	-- Wave 4.2: from the owned set, like everything the upgrade layers below are placed by.
+	handle.highwayBuilt =
+		CityFabric.HighwayBuilt(handle.context.highway, handle.context.highwayLayout, handle.owned)
 
 	local key = developKey(handle, input)
 	local developed = key ~= handle.developKey
@@ -3155,21 +3108,25 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 		stopPuffs(handle)
 	end
 	local timing = handle.timing
+	-- Wave 3.2: a city-changer slot bought in this pass sends its twins out from the pad it was
+	-- bought on (else from where the slot stands), as an upgrade layer's planting wave spreads.
+	-- Wave 4.2: so does a slot that swaps the wild. Nothing on any other pass.
+	local function addOrigin(origins: { Vector3 }, slotId: string): ()
+		if not rippling or table.find(fresh, slotId) == nil then
+			return
+		end
+		local pad = handle.padRects[slotId]
+		local frame: CFrame? = handle.slotFrames[slotId]
+		if pad ~= nil then
+			table.insert(origins, Vector3.new(pad.x, 0, pad.z))
+		elseif frame ~= nil then
+			table.insert(origins, frame.Position)
+		end
+	end
 	if timing ~= nil and rippling then
-		-- Wave 3.2: a city-changer slot bought in this pass sends its twins out from the pad it was
-		-- bought on (else from where the slot stands), as an upgrade layer's planting wave spreads.
 		local swapOrigins: { Vector3 } = {}
 		for _, swap in handle.swaps do
-			local slotId = swap.requiresSlot
-			if table.find(fresh, slotId) ~= nil then
-				local pad = handle.padRects[slotId]
-				local frame: CFrame? = handle.slotFrames[slotId]
-				if pad ~= nil then
-					table.insert(swapOrigins, Vector3.new(pad.x, 0, pad.z))
-				elseif frame ~= nil then
-					table.insert(swapOrigins, frame.Position)
-				end
-			end
+			addOrigin(swapOrigins, swap.requiresSlot)
 		end
 		rippleParcels(handle, timing, triggers, swapOrigins)
 	else
@@ -3182,7 +3139,11 @@ function Fabric.Sync(handle: Handle, input: SyncInput): ()
 	end
 	local ringSlot = handle.context.ringSlot
 	local ringBought = rippling and ringSlot ~= nil and table.find(fresh, ringSlot) ~= nil
-	syncWild(handle, input, previous, ringBought)
+	local wildOrigins: { Vector3 } = {}
+	for _, swap in handle.wildSwaps do
+		addOrigin(wildOrigins, swap.requiresSlot)
+	end
+	syncWild(handle, input, previous, ringBought, wildOrigins)
 	syncUpgrades(handle, input, rippling, fresh, triggers)
 	-- Last, because of its dust: the purchase that opens a lane also clears more wild land than
 	-- the plot may puff at once, and a puff past `maxPuffs` takes over the oldest one. Started
@@ -3237,9 +3198,9 @@ function Fabric.FlockCentres(handle: Handle): { Vector3 }
 		for index, entry in handle.wildData do
 			if
 				handle.wildValid[index]
-				and entry.kind == CLUMP
+				and entry.kind == WILD.clump
 				and handle.wildNear[index]
-				and (handle.cleared[index] or 0) ~= ALL_QUARTERS
+				and (handle.cleared[index] or 0) ~= WILD.allQuarters
 				and not inRiver(handle, entry)
 			then
 				table.insert(
@@ -3308,6 +3269,12 @@ function Fabric.Destroy(handle: Handle): ()
 		clearLaneParts(view)
 	end
 	for _, view in handle.wild do
+		-- Wave 4.2: its turn in a wild swap's wave, if one was under way.
+		local timer = view.timer
+		if timer ~= nil then
+			view.timer = nil
+			task.cancel(timer)
+		end
 		local whole = view.whole
 		if whole ~= nil then
 			whole:Destroy()
@@ -3319,6 +3286,7 @@ function Fabric.Destroy(handle: Handle): ()
 		for _, quarter in view.quarters do
 			quarter:Destroy()
 		end
+		table.clear(view.worn)
 	end
 	table.clear(handle.wild)
 	for _, layer in handle.layers do

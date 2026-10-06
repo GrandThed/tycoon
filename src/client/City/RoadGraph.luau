@@ -37,6 +37,14 @@
 -- vehicles keep off a spur narrower than the road, and walkers keep the distance from a spur's
 -- edge that they keep from a street's. An era without the key is exactly as it was.
 --
+-- M12 wave 4.2 "Orbital in the game": a path era may be a tube era (`road.paths.tube`). Its
+-- network, piece ids and budgets are exactly a path era's -- the renderer clones a swept half-pipe
+-- where Village clones a ribbon -- and three things are added. Its spurs and lanes are flat
+-- decking in a look of their own (`road.paths.deck`), which only the Parts fallback has to know.
+-- An entrance apron (`SP_entrance`) lies from the plot's front edge to the first tube from the
+-- start, tied to no slot. And a hub prop stands on every hub node once a tube there is drawn. The
+-- hub rule and the apron are tools/paths/tubes.py's, copied in Tubes.luau.
+--
 -- Everything is computed in plot-local studs (origin at the plot's top-centre, front -Z, Y 0) and
 -- placed through the plot frame, so every client derives identical geometry from the layout.
 -- The network, the shortest-path tree and every budget decision are fixed once per plot/era
@@ -55,9 +63,14 @@ local Noise = require(script.Parent:WaitForChild("Noise"))
 local PathRibbon = require(script.Parent:WaitForChild("PathRibbon"))
 local PathRenderer = require(script.Parent:WaitForChild("PathRenderer"))
 local TileRenderer = require(script.Parent:WaitForChild("TileRenderer"))
+local Tubes = require(script.Parent:WaitForChild("Tubes"))
 
 local SPINE_PART_NAME = "Road"
 local SPUR_PART_NAME = "Spur"
+-- M12 wave 4.2: a tube era's entrance apron laid as a Part, and what PropFactory.NoteMissing calls
+-- each kind of template such an era can be without before its asset run.
+local APRON_PART_NAME = "Apron"
+local MISSING = { tube = "tube", decking = "decking", hub = "tube hub" }
 -- M12 wave 3.2: a tiles era's back lane, laid as a footpath.
 local LANE_PART_NAME = "Lane"
 -- Baked piece ids (docs/INTERFACES.md "Wave 1d — Pieces"); tools/paths/bake.py names the meshes
@@ -67,6 +80,9 @@ local SPUR_PIECE_PREFIX = "SP_"
 local SPUR_PIECE_PATTERN = "^SP_(.+)$"
 -- M12 wave 2.5: lane k of the era's fabric data (docs/INTERFACES.md "Wave 2.5 — Pieces").
 local LANE_PIECE_FORMAT = "LN_%d"
+-- M12 wave 4.2: a tube era's entrance apron, which tools/paths/tubes.py bakes under a spur's
+-- prefix though no slot owns it.
+local APRON_PIECE_ID = SPUR_PIECE_PREFIX .. Tubes.ENTRANCE
 local BEND_PART_NAME = "RoadBend"
 -- A tiles-era footpath is dropped this far under the kerb it runs off (TileRenderer keeps the
 -- block and park slabs twice as far down), so none of the four ground planes coincide: a spur
@@ -205,6 +221,24 @@ type PieceSpec = {
 	slotIds: { string },
 }
 
+-- M12 wave 4.2: a hub of a tube era -- the node it stands on, where the drawn centreline passes
+-- that node (plot-local), and the stretches that meet there: it appears with the first of them.
+type HubSpec = { node: number, position: Vector3, stretches: { number } }
+
+-- M12 wave 4.2: what a tube era adds to its plot's roads.
+type TubeState = {
+	hubProp: string?, -- `road.paths.tube.hub`; nil plans no hub
+	hubs: { HubSpec }, -- in node order
+	hubModels: { [number]: Model }, -- node -> the hub standing there
+	-- The entrance apron's two ends, front edge first; nil when the first tube starts on the edge.
+	apronFrom: Vector3?,
+	apronTo: Vector3?,
+	-- Whether the baked renderer shows the apron (its `SP_entrance` piece) as of the last Flush,
+	-- and the Part that stands in for it while it does not.
+	apronBaked: boolean,
+	apronParts: { Instance },
+}
+
 export type State = {
 	context: Context,
 	width: number,
@@ -222,6 +256,9 @@ export type State = {
 	-- a snapshot taken at build time would leave a Village spur dirt on a cobbled plot.
 	spurMaterial: Enum.Material?,
 	spurColor: Color3?,
+	-- M12 wave 4.2: that look is a path era's decking (`road.paths.deck`), not a tiles era's
+	-- footpath. The decking is its own surface too, so no street variant ever repaints it.
+	decked: boolean,
 	-- Studs from the spine centreline at which a tiles-era footpath stops: the outer edge of the
 	-- pavement, so the strip never runs onto (and floats over) a tile. Nil elsewhere.
 	spurClip: number?,
@@ -289,6 +326,7 @@ export type State = {
 	pathData: PathData?, -- eras with road.paths
 	paths: PathRenderer.Handle?, -- nil: Parts from the start
 	tiles: TileRenderer.Handle?, -- eras with road.tiles
+	tube: TubeState?, -- eras with road.paths.tube (wave 4.2)
 	-- Stretches revealed since the last Flush while TileRenderer draws, and whether any of them
 	-- should appear with the dust puff.
 	tilesDirty: boolean,
@@ -838,8 +876,99 @@ local function drawBends(state: State): ()
 	end
 end
 
+-- M12 wave 4.2: a tube era whose plot draws Parts has no tube or decking templates to clone (an
+-- era before its asset run): its streets are flat slabs and its aprons flat Parts until it does.
+local function noteTubeParts(state: State): ()
+	if state.tube ~= nil then
+		PropFactory.NoteMissing(state.context.eraName, MISSING.tube)
+		PropFactory.NoteMissing(state.context.eraName, MISSING.decking)
+	end
+end
+
+-- M12 wave 4.2: a hub appears with the first tube drawn at its node (tools/testfit/plotrender.py:
+-- "on every hub node a drawn stretch touches") and stays, since within a build the network only
+-- grows. Retried on every refresh, like the kit tiles below, so a template that replicates late
+-- still appears; a hub prop that is not uploaded yet is simply not there. Near and far plots
+-- alike: a tube that stops in the open reads as broken from any distance.
+local function refreshHubs(state: State): ()
+	local tube = state.tube
+	local hubProp = if tube ~= nil then tube.hubProp else nil
+	if tube == nil or hubProp == nil then
+		return
+	end
+	local context = state.context
+	for _, hub in tube.hubs do
+		local standing: Model? = tube.hubModels[hub.node]
+		if standing ~= nil then
+			continue
+		end
+		local due = false
+		for _, id in hub.stretches do
+			if state.visible[id] then
+				due = true
+				break
+			end
+		end
+		if not due then
+			continue
+		end
+		-- A drum with no front, so it stands unturned on the node.
+		local model = PropFactory.Spawn(
+			context.eraName,
+			hubProp,
+			0,
+			context.plotFrame * CFrame.new(hub.position.X, 0, hub.position.Z),
+			context.folder
+		)
+		if model ~= nil then
+			tube.hubModels[hub.node] = model
+		else
+			PropFactory.NoteMissing(context.eraName, MISSING.hub)
+		end
+	end
+end
+
+-- M12 wave 4.2: the entrance apron is the baked renderer's while that holds its piece, and one
+-- flat Part of decking otherwise (the Parts renderer, a piece not uploaded yet) -- the same ground
+-- either way, from the first sync on, so the way in is never bare. Asked on every Flush, so a
+-- template that replicates late takes the Part's place. Returns whether what the baked renderer
+-- is to show changed.
+local function refreshApron(state: State): boolean
+	local tube = state.tube
+	local from = if tube ~= nil then tube.apronFrom else nil
+	local to = if tube ~= nil then tube.apronTo else nil
+	if tube == nil or from == nil or to == nil then
+		return false
+	end
+	local paths = state.paths
+	local baked = paths ~= nil and paths.mode == "baked" and PathRenderer.Has(paths, APRON_PIECE_ID)
+	local changed = baked ~= tube.apronBaked
+	tube.apronBaked = baked
+	if baked then
+		destroyAll(tube.apronParts)
+	elseif #tube.apronParts == 0 then
+		-- Laid exactly as a spur's Parts are (drawFootpath): in the decking's look just under the
+		-- kerb where the era has one, else as road.
+		slab(
+			state,
+			tube.apronParts,
+			APRON_PART_NAME,
+			from,
+			to,
+			state.spurWidth,
+			0,
+			state.spurMaterial or state.material,
+			state.spurColor or state.color,
+			if state.spurMaterial ~= nil then -SPUR_DROP else state.thickness / 2
+		)
+		PropFactory.NoteMissing(state.context.eraName, MISSING.decking)
+	end
+	return changed
+end
+
 local function refreshPieces(state: State): ()
 	local context = state.context
+	refreshHubs(state)
 	for _, key in state.pieceKeys do
 		local placed: Model? = state.pieces[key]
 		if placed ~= nil then
@@ -1422,6 +1551,12 @@ pathPieceIds = function(state: State): { string }
 	if data == nil then
 		return ids
 	end
+	-- M12 wave 4.2: the entrance apron first. It is the way in, there from the start, and a burst
+	-- over a purchase's pieces never runs along it (PathRenderer only puffs what is new).
+	local tube = state.tube
+	if tube ~= nil and tube.apronBaked then
+		table.insert(ids, APRON_PIECE_ID)
+	end
 	local ranked: { Ranked } = {}
 	for id in state.stretches do
 		if state.visible[id] and state.pathStretchAllowed[id] then
@@ -1478,6 +1613,23 @@ local function pieceCentreline(state: State, pieceId: string): { Vector3 }?
 			for step = if index == 2 then 0 else 1, steps do
 				table.insert(track, a:Lerp(b, step / steps))
 			end
+		end
+		data.pieceCentrelines[pieceId] = track
+		return track
+	end
+	local tube = state.tube
+	local apronFrom = if tube ~= nil then tube.apronFrom else nil
+	local apronTo = if tube ~= nil then tube.apronTo else nil
+	if pieceId == APRON_PIECE_ID and apronFrom ~= nil and apronTo ~= nil then
+		-- M12 wave 4.2: no chain was smoothed for the entrance apron; it is one straight run in
+		-- from the plot's front edge, the same on every plot of the layout.
+		local track: { Vector3 } = {}
+		local steps = math.max(
+			1,
+			math.ceil((apronTo - apronFrom).Magnitude / math.max(state.spurWidth, MIN_LENGTH))
+		)
+		for step = 0, steps do
+			table.insert(track, apronFrom:Lerp(apronTo, step / steps))
 		end
 		data.pieceCentrelines[pieceId] = track
 		return track
@@ -1613,6 +1765,74 @@ local function pathDataFor(state: State): PathData
 	return data
 end
 
+-- ------------------------------------------------------------------ tubes (wave 4.2)
+
+-- Where the drawn centreline passes a network node: on the chain of the first stretch at that
+-- node, which is tools/paths/tubes.py `node_point`. A filleted corner cuts inside the layout's
+-- point, so this and not the node is where a hub stands for the pipes to run into it.
+local function nodeOnCentreline(state: State, node: number): Vector3
+	local data = state.pathData
+	if data ~= nil then
+		for id, stretch in state.stretches do
+			local arcs = data.stretchArcs[id]
+			local chain = data.stretchChains[id]
+			if arcs == nil or chain == nil then
+				continue
+			end
+			local arc: number? = if stretch.fromNode == node
+				then arcs[1]
+				elseif stretch.toNode == node then arcs[2]
+				else nil
+			if arc ~= nil then
+				local x, z = PathRibbon.CurvePoint(data.network.chains[chain].final, arc)
+				return Vector3.new(x, 0, z)
+			end
+		end
+	end
+	return state.nodes[node]
+end
+
+-- A tube era's hubs and entrance apron, planned once from the layout like every other budget
+-- decision here. Tubes.luau holds both rules, copied from tools/paths/tubes.py; this only hands
+-- them the network. Neither spends budget.pathPieces: the hubs are at most one prop a network
+-- node, and the tools count the apron among the era's pieces (`tubes.py --list`).
+local function planTube(state: State, config: Tubes.Config): TubeState
+	local segmentGroups = 0
+	for _, points in state.polylines do
+		segmentGroups += #points - 1
+	end
+	-- The chain a stretch is swept along: its polyline's, or the connector it is.
+	local function chainOf(id: number): string
+		local stretch = state.stretches[id]
+		return if stretch.group > segmentGroups then `c{id}` else `p{stretch.polyline}`
+	end
+	local hubs: { HubSpec } = {}
+	if config.hub ~= nil then
+		for _, hub in Tubes.HubNodes(state.nodeStretches, chainOf) do
+			table.insert(hubs, {
+				node = hub.node,
+				position = nodeOnCentreline(state, hub.node),
+				stretches = hub.stretches,
+			})
+		end
+	end
+	local layout = state.context.layout
+	local first = if #state.polylines > 0 then state.polylines[1][1] else nil
+	local plotSize: any = layout.plotSize
+	local apron = if first ~= nil and typeof(plotSize) == "Vector3"
+		then Tubes.EntranceApron(first.X, first.Z, plotSize.Z, layout.slots[Tubes.ENTRANCE] ~= nil)
+		else nil
+	return {
+		hubProp = config.hub,
+		hubs = hubs,
+		hubModels = {},
+		apronFrom = if apron ~= nil then Vector3.new(apron.ax, 0, apron.az) else nil,
+		apronTo = if apron ~= nil then Vector3.new(apron.bx, 0, apron.bz) else nil,
+		apronBaked = false,
+		apronParts = {},
+	}
+end
+
 -- ------------------------------------------------------------------ surface (wave 1e)
 
 -- The uploaded images per variant name for this era, or nil while none are uploaded.
@@ -1674,8 +1894,9 @@ local function repaintParts(state: State): ()
 	for _, parts in state.groupParts do
 		paint(parts)
 	end
-	-- A tiles era's spurs are footpaths in their own look, not road in the plot's surface.
-	if state.tiles == nil then
+	-- A tiles era's spurs are footpaths in their own look, not road in the plot's surface, and so
+	-- is a path era's decking (wave 4.2).
+	if state.tiles == nil and not state.decked then
 		for _, parts in state.spurParts do
 			paint(parts)
 		end
@@ -1737,6 +1958,9 @@ local function redrawParts(state: State): ()
 		drawSpur(state, slotId)
 	end
 	drawBends(state)
+	-- M12 wave 4.2: the entrance apron went with the baked pieces; it is a Part from here on.
+	refreshApron(state)
+	noteTubeParts(state)
 	local callback = state.context.onRoadsRedrawn
 	if callback ~= nil then
 		callback()
@@ -1767,6 +1991,11 @@ function RoadGraph.new(context: Context, near: boolean): State
 			and ownSpurWidth < math.huge
 		then math.max(ownSpurWidth, MIN_LENGTH)
 		else nil
+	-- M12 wave 4.2: a paths era may lay its spurs, lanes and entrance apron as decking in a look of
+	-- its own. The baked pieces carry it; here it is what the Parts fallback wears, kept under the
+	-- street's slab like a tiles era's footpath so the two looks never share a plane.
+	local deck: any = if type(pathsConfig) == "table" then pathsConfig.deck else nil
+	local decked = type(deck) == "table" and type(deck.material) == "string"
 	local state: State = {
 		context = context,
 		width = width,
@@ -1777,8 +2006,15 @@ function RoadGraph.new(context: Context, near: boolean): State
 			then math.max(spurLook.width, MIN_LENGTH)
 			else driveway or width,
 		driveways = driveway ~= nil,
-		spurMaterial = if spurLook ~= nil then materialFor(spurLook.material) else nil,
-		spurColor = if spurLook ~= nil then colorFor(spurLook.color) else nil,
+		spurMaterial = if spurLook ~= nil
+			then materialFor(spurLook.material)
+			elseif decked then materialFor(deck.material)
+			else nil,
+		spurColor = if spurLook ~= nil
+			then colorFor(spurLook.color)
+			elseif decked then colorFor(deck.color)
+			else nil,
+		decked = decked,
 		spurClip = if spurLook ~= nil
 			then width / 2
 				+ (if tilePavement ~= nil then math.max(tilePavement.width, 0) else 0)
@@ -1833,6 +2069,7 @@ function RoadGraph.new(context: Context, near: boolean): State
 		pathData = nil,
 		paths = nil,
 		tiles = nil,
+		tube = nil,
 		tilesDirty = false,
 		tilesAnimate = false,
 		pathsDirty = false,
@@ -1921,11 +2158,29 @@ function RoadGraph.new(context: Context, near: boolean): State
 				redrawParts(state)
 			end,
 		})
+		-- M12 wave 4.2: a tube era also plans its hubs and its entrance apron. The apron is there
+		-- from the first Flush, which hands it to the baked renderer or lays it as a Part.
+		local tubeConfig = Tubes.Config(road.paths)
+		if tubeConfig ~= nil then
+			state.tube = planTube(state, tubeConfig)
+			if state.paths == nil then
+				noteTubeParts(state)
+			end
+		end
 	end
 	-- The base surface before a single piece is cloned: a Boomtown plot must never flash asphalt
 	-- on its way to gravel.
 	setVariant(state, NO_SLOTS_OWNED, false, true)
 	return state
+end
+
+-- M12 wave 4.2: the look a back lane laid as Parts takes: the decking's in an era that has one
+-- (`road.paths.deck`), and in every other the road's live look, as a lane always took.
+function RoadGraph.LaneLook(state: State): (Enum.Material, Color3)
+	if state.decked then
+		return state.spurMaterial or state.material, state.spurColor or state.color
+	end
+	return state.material, state.color
 end
 
 -- The plot-wide surface variant for the slots owned right now (docs/INTERFACES.md "Wave 1e").
@@ -2154,6 +2409,11 @@ function RoadGraph.Flush(state: State): ()
 		state.tilesAnimate = false
 		TileRenderer.Update(tiles, state.visible, animate)
 		return
+	end
+	-- M12 wave 4.2: a tube era's entrance apron is no spur and no lane, so nothing else marks it:
+	-- every Flush asks who shows it, the baked renderer below or a Part.
+	if refreshApron(state) then
+		state.pathsDirty = true
 	end
 	if not state.pathsDirty then
 		return
@@ -3145,6 +3405,14 @@ function RoadGraph.Destroy(state: State): ()
 	destroyAll(state.bendParts)
 	for _, piece in state.pieces do
 		piece:Destroy()
+	end
+	local tube = state.tube
+	if tube ~= nil then
+		for _, hub in tube.hubModels do
+			hub:Destroy()
+		end
+		table.clear(tube.hubModels)
+		destroyAll(tube.apronParts)
 	end
 	table.clear(state.groupParts)
 	table.clear(state.spurParts)

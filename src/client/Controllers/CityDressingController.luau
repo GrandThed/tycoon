@@ -49,6 +49,13 @@
 -- (Metropolis): the fabric is handed the ground the highway ring stands on, which it clears once
 -- the ring's slot is owned -- in the same pass, before `syncHighway` lays the first deck cell --
 -- and the ring's sign keeps off the fabric's lots.
+--
+-- M12 wave 4.2 (Orbital Colony): the last era joins the path eras. Its tubes, decking, hubs and
+-- entrance apron are RoadGraph's and its round monorail is Highway's, each from the era's own
+-- config keys, so nothing here names an era: this controller only hands the fabric the highway's
+-- config and layout (the wild under a round loop is never cleared, and the pier banners stand
+-- while the highway does) and the decking's look for a lane laid as Parts. City detail off and a
+-- low-end device keep all of it but what `detailPolicy` and the particle gates already drop.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -591,7 +598,8 @@ local function newBuild(
 	if type(fabricConfig) == "table" and type(fabricData) == "table" then
 		-- M12 wave 3.2: the ring clears the ground it stands on once its slot is owned. It needs
 		-- the era's highway config, the layout's ring and a tile pitch; without any of them the
-		-- fabric is handed no ring at all.
+		-- fabric is handed no ring at all. Wave 4.2: a round loop has no pitch and no ground to
+		-- clear (CityFabric.RingGround), so it is handed none either.
 		local ringSlot: string? = nil
 		local ringRects: { CityFabric.FabricRect } = {}
 		local ringTiles = era.road.tiles
@@ -627,6 +635,9 @@ local function newBuild(
 			smoke = if type(ambient) == "table" then ambient.smoke else nil,
 			ringSlot = ringSlot,
 			ringRects = ringRects,
+			-- Wave 4.2: as config and layout give them; CityFabric reads what a highway decides.
+			highway = highwayConfig,
+			highwayLayout = highwayLayout,
 		})
 		-- With no tree zones in the layout, the birds circle the fabric's woods instead.
 		local birds = if type(ambient) == "table" then ambient.birds else nil
@@ -1635,6 +1646,7 @@ local function syncFabric(
 	config: Types.CityDressingConfig
 ): ()
 	local stretches, joins, segments = RoadGraph.FabricNetwork(build.roads)
+	local laneMaterial, laneColor = RoadGraph.LaneLook(build.roads)
 	-- Plazas by the rule syncFiller places them by, not by what has spawned, so the woods clear the
 	-- same ground whether or not a plaza's template has arrived.
 	local plazas: { number } = {}
@@ -1664,8 +1676,9 @@ local function syncFabric(
 		-- Wave 2.5: back lanes are baked path pieces. The fabric says which lanes it wants and
 		-- RoadGraph answers which the path renderer shows (cloned by the Flush that follows this);
 		-- the rest the fabric lays as Parts in the road's look as SetSurface just left it. Wave
-		-- 3.2: in a tiles era RoadGraph lays them all itself, as footpaths, and says so.
-		surface = { material = build.roads.material, color = build.roads.color },
+		-- 3.2: in a tiles era RoadGraph lays them all itself, as footpaths, and says so. Wave
+		-- 4.2: where the era's lanes are decking, those Parts wear the decking's look.
+		surface = { material = laneMaterial, color = laneColor },
 		showLanes = function(lanes: { Fabric.LaneRequest }, animateLanes: boolean)
 			return RoadGraph.SetLanes(build.roads, lanes, animateLanes)
 		end,
