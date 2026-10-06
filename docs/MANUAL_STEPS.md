@@ -1564,11 +1564,13 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
   `86d1d99`). §5–§11 below are wave 2.
 - **Wave 3 (Metropolis): signed off by Ben on a Studio look ("looks good!") and merged to `main`
   on 2026-10-05** (`main` at `d0dd894`, on `origin/main`). §12–§16 below are wave 3.
-- **Waves 1 to 3 are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run their
-  commands and open their builds from there.
-- **Wave 4 (Orbital Colony) is NOT on `main` yet.** It is built on the branch `m12-orbital`, in
-  the folder **`C:\Users\benja\Desktop\tycoon-m12o`**. Nothing of it is uploaded. §17–§21 below
-  are wave 4, and everything in them runs from that folder until the merge (§21).
+- **Wave 4 (Orbital Colony): signed off by Ben on a Studio look ("looks good! lets ship it")
+  and merged to `main` on 2026-10-06** (`main` at `c01ccfd`). §17–§21 below are wave 4.
+- **All four waves are in the main checkout, `C:\Users\benja\Desktop\tycoon`.** Run every
+  command and open every build from there. **M12 is complete.**
+- **The wave 4 worktree is removed:** `tycoon-m12o` no longer exists, and the branch
+  `m12-orbital` is deleted. The branches `m12-orbital-docks`, `-axis`, `-vine` and `-bloom` are
+  kept as the record of the four layout candidates.
 - **The wave 2 worktrees are removed:** `tycoon-m12`, `tycoon-m12-grid` and `tycoon-m12-organic`
   no longer exist, and the branch `m12-boomtown` is deleted. The branches `m12-boomtown-grid` and
   `m12-boomtown-organic` are kept as the record of the two layout candidates.
@@ -1576,8 +1578,8 @@ gitignored `assets/marketing/final/` (rerun commands in `docs/INTERFACES.md` "M1
   `tycoon-m12m` are gone (the last folder was deleted on 2026-10-05, §16 step 68a). The branch
   `m12-metropolis` is deleted; `m12-metropolis-avenues` and `m12-metropolis-boulevard` are kept
   as the record.
-- Where a done step below says something "ran from `tycoon-m12`" or "from `tycoon-m12m`", that
-  is the record of where it ran then.
+- Where a done step below says something "ran from `tycoon-m12`", "from `tycoon-m12m`" or
+  "from `tycoon-m12o`", that is the record of where it ran then.
 
 **Where wave 2 stands (2026-10-02): done. Signed off and merged.**
 - The asset run (§10) is **done**: two pastes from Ben on 2026-10-02 (the props and roads, then
@@ -1595,8 +1597,9 @@ are for local Studio use only.
   Boomtown, and `GrantCash` = 100T, which pays that cash on joining.
 - `metropolis.rbxl` (wave 3, §15) carries the same two: `DebugStartEra` = 3, which starts a
   **fresh** save in Metropolis, and `GrantCash` = 1e20.
-- `orbital.rbxl` (wave 4, §20; not built yet) carries the same two: `DebugStartEra` = 4, which
-  starts a **fresh** save in the Orbital Colony, and `GrantCash` = 3e21.
+- `orbital.rbxl` (wave 4, §20) carries the same two: `DebugStartEra` = 4, which starts a
+  **fresh** save in the Orbital Colony, and `GrantCash` = 3e21. The file is
+  `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl`.
 - Opened from the disk they are harmless: every Play is a throwaway save.
 - On a published place, with API access on, the switch would move a fresh **real** save to
   era 2, 3 or 4.
@@ -2042,7 +2045,7 @@ good!". It is on `main` (`d0dd894`). Everything is in the main checkout now:
   graphics (41), two players (42–43) and the measurement (49). Run them when convenient.
 - **From the lead:** nothing for wave 3 (the leftover folder is deleted, §16 step 68a). The
   open follow-ups are in `docs/PLAN.md` "M12".
-- **Wave 4 (Orbital) is next:** §17.
+- **Wave 4 (Orbital) is done too:** §17.
 
 ### 13. M12 wave 3 — look at the prop sheets (Ben; **DONE 2026-10-05**: "looks good!")
 
@@ -2319,32 +2322,36 @@ plenty left.
 
 ### 17. M12 wave 4 (Orbital Colony) — what is owed (2026-10-06)
 
-**Wave 4 is built, reviewed and checked, on the branch `m12-orbital`.** It is **not** on `main`.
-Everything below runs from **`C:\Users\benja\Desktop\tycoon-m12o`** until the merge (§21).
+**Wave 4 is signed off and merged.** Ben looked at it in Studio on 2026-10-06 and said "looks
+good! lets ship it". It is on `main` (`c01ccfd`). Everything is in the main checkout now:
+**`C:\Users\benja\Desktop\tycoon`**. The folder `tycoon-m12o` no longer exists.
 
 - **Creator Hub: nothing.** No passes, products or audio. No profile change, so nothing to
   republish.
-- **Nothing is uploaded yet.** There is no `build\orbital.rbxl` yet either: Claude builds it
-  after your paste (§19 step 83).
-- **From Ben, in this order:**
-  1. look at three pictures and say "props OK" (§18);
-  2. one paste in Studio, when Claude says the upload is done (§19 step 81);
-  3. open `build\orbital.rbxl` and play the checklist (§20).
-- **From the lead:** the asset run (§19), then the merge and the cleanup (§21).
-- **Still owed from before:** the numbers of Village (step 37), Boomtown (step 59) and
-  Metropolis (step 49). Orbital adds its own (PLAYTEST "M12 wave 4" step 52).
-- **Do not judge Orbital on this branch before §19 is done.** Without the uploads the plot
-  shows flat slabs where the tubes go, grey decking, the landmarks, and up to five yellow lines
-  in Output like
-  `[CityDressing] OrbitalColony has no tube templates yet: drawn as placeholder Parts or left out until its assets are uploaded and harvested`.
-  That is expected, and it is why the branch stays off `main`.
+- **Assets: nothing.** Everything is uploaded, harvested and templated (§19).
+- **The file to open from now on:** `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl` (§20).
+  Never publish it.
+- **From Ben: only the numbers.** None has been sent yet:
+  1. Village: step 37 of PLAYTEST "M12 — Village growing city";
+  2. Boomtown: step 59 of "M12 wave 2 — Boomtown growing city";
+  3. Metropolis: step 49 of "M12 wave 3 — Metropolis growing city";
+  4. Orbital: step 52 of "M12 wave 4 — Orbital growing city".
+- **Watch items, no deadline.** The sign-off was a look in Studio, not a report of the 54-step
+  checklist. Not reported for Orbital: the four lettered questions (steps 28, 31, 35, 42), the
+  step results, the phone at 375×667 (step 40), low graphics (41–42), two players (43–45) and
+  the measurement (52). Run them when convenient.
+- **From the lead:** the cleanup (§21 step 92). The open follow-ups are in `docs/PLAN.md`
+  "M12".
+- **Whether `main` is on GitHub:** run `git status -sb` in the main checkout. Do not trust a
+  note.
 
-### 18. M12 wave 4 — look at the prop sheets (Ben)
+### 18. M12 wave 4 — look at the prop sheets (Ben; **DONE 2026-10-06**: "lets do it")
 
-Folder: `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\m12o_props\`
-(the same pictures are under `C:\Users\benja\Desktop\tycoon\assets\...`: the folder is shared).
+Ben approved the three sheets ("lets do it"). The steps are kept as the record.
 
-- [ ] 70. Open **`_contact_final_fabric.png`**: the 19 pods and domes that grow on the lots.
+Folder: `C:\Users\benja\Desktop\tycoon\assets\testfit\out\OrbitalColony\m12o_props\`
+
+- [x] 70. Open **`_contact_final_fabric.png`**: the 19 pods and domes that grow on the lots.
       - Four groups: habitat (white pods, blue glass domes), industry (tanks, spheres, tall
         stacks), science (dishes, an observatory dome), port (cargo pads, hangars, a tower).
       - Each one is shown at three of its five looks, small to large.
@@ -2353,13 +2360,13 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\m12
       - **Four of the 19 do not appear on this layout** (no lot of that size falls in that
         district): `FabricHabSmallA`, its green twin, `FabricIndMediumA` and
         `FabricPortMediumA`. They are not uploaded. Judge them or skip them.
-- [ ] 71. Open **`_contact_final_ground.png`**: the ground.
+- [x] 71. Open **`_contact_final_ground.png`**: the ground.
       - Nine pairs. Left of each pair: wild regolith (a crater, a ring of boulders, a mound, a
         standing stone, a small crater, a survey tripod). Right: the garden that **Tend the
         Rock Gardens** turns it into.
       - The two big pictures on the right show a patch of ground before and after that
         purchase.
-- [ ] 72. Open **`_contact_final_colony.png`**: the other 12 models.
+- [x] 72. Open **`_contact_final_colony.png`**: the other 12 models.
       - five building sites, two with an orange robot gantry;
       - the beacon that marks the next pad, and the orange frame that stands around a new
         landmark for a moment;
@@ -2368,13 +2375,13 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\m12
         on its piers;
       - the **flag mast** between pods, and the cyan **hologram** over a hub.
 - 73. Optional, the same models in the colony (one folder up,
-      `...\assets\testfit\out\OrbitalColony\`):
+      `...\assets\testfit\out\OrbitalColony\`). Still useful beside the playtest:
       - `m12o_bloom2_full.png` and `m12o_bloom2_full_entrance.png`: the finished colony;
       - `m12o_bloom2_tier1.png` and `m12o_bloom2_tier3.png`: early and half-way;
       - `m12o_changers.png`: the four city-changers, before and after;
       - `m12o_bloom2_streetplan.png`: the plan from above (the top edge is the plot's front).
       Each model also has its own picture: `m12o_props\<Name>_strip.png`.
-- [ ] 74. Tell Claude **"props OK"**, or the names of the ones to redo.
+- [x] 74. Tell Claude **"props OK"**, or the names of the ones to redo. Done: "lets do it".
 
 **Reading the renders:**
 - In the 3D pictures the entrance is at the bottom, right of the middle, and the Launch Tower
@@ -2384,18 +2391,23 @@ Folder: `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\m12
 - The two sheets `_contact_final_ground.png` and `_contact_final_colony.png` still say "1 of
   2" and "2 of 2" in their titles. There are three sheets.
 
-### 19. M12 wave 4 — the asset run (lead, with one paste from Ben)
+### 19. M12 wave 4 — the asset run (**DONE 2026-10-06**; kept as the routine)
 
-**Done 2026-10-06, steps 75 to 83.** 171 uploads on the first try, the harvest read 171 loaded and
-0 failed, 554 templates, every gate green, the five place files rebuilt. On the harvested sizes
-the wild came to 90 entries (34 clumps, 56 singles) and the garden swap to 42 entries at the end
-of tier 3 and 23 at full build; the counts below were written before the run. What is left is
-§20: Ben opens `build\orbital.rbxl`.
+Everything ran from the worktree `tycoon-m12o`, which no longer exists. For a later run, use the
+same lines from `C:\Users\benja\Desktop\tycoon`. The Blender lines need Git Bash. Python is
+`py`. `.env` must be in the folder.
 
-Run from `C:\Users\benja\Desktop\tycoon-m12o`. The Blender lines need Git Bash. Python is `py`.
-`.env` is in the folder, and `assets\` is a junction to the main checkout's.
+**Result:** 65 street pieces, their palette and 45 props (105 stages): **171 uploads on the
+first try**, harvested in **one paste** (171 loaded, 0 failed; it took two tries, step 81) and
+templated (554 templates). Every gate is green on the harvested sizes. Commits: `88073d1`
+(upload), `89a8f99` (harvest), `e566676` (templates, manifest), `c01ccfd` (the twin rule,
+fabric data, sourcemaps, place files).
 
-**What it uploads: 171 assets, all Orbital.** The counts come from `py tools/cityfabric.py props
+**What the harvested sizes changed** (step 82): the wild came to 90 entries (34 clumps, 56
+singles; it was 92), and the garden swap to 42 entries at the end of tier 3 and 23 at full
+build. 89 lots, positions unchanged. Nothing was re-uploaded.
+
+**What it uploaded: 171 assets, all Orbital.** The counts come from `py tools/cityfabric.py props
 OrbitalColony` (46 shown, 4 never shown) and from the list gate.
 - **65 street pieces and 1 palette = 66:** 45 swept tubes and 20 flat decking pieces (19
   landmark aprons and `SP_entrance`). 24,102 triangles.
@@ -2414,7 +2426,11 @@ OrbitalColony` (46 shown, 4 never shown) and from the list gate.
 - **Left alone:** `MonorailTrain` (uploaded on 2026-09-23) and the 12 older Orbital props that
   nothing draws any more (§21 step 92).
 
-**Rules for the lead** (as for Metropolis, §14):
+**Rules for the lead** (as for Metropolis, §14; they held, plus two new ones from this run):
+- **New: save the clipboard to a file before `harvest.py`** (step 82). The harvest Output
+  lives only on Ben's clipboard, and one more copy loses it.
+- **New: a check that reads declared sizes before the harvest reads measured ones after it.**
+  Run every size rule again after the harvest (step 82), and expect one to move.
 - Do not start before Ben's OK on the sheets (step 74).
 - **Announce first.** Tell any other open Claude session before the upload and before the
   harvest, and wait for its answer.
@@ -2428,13 +2444,13 @@ OrbitalColony` (46 shown, 4 never shown) and from the list gate.
 - Give `streetplan.py` an `--out-dir` (step 82), or it overwrites pictures in the shared folder.
 - If a harvest tool or Blender hangs, stop only your own process, by its id. Never by name.
 
-**The command lines were checked against the tools on 2026-10-06** (docs pass): every flag
-exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asset name is over
-50 characters.
+**The command lines were checked against the tools on 2026-10-06** (docs pass, before the run):
+every flag exists; all 45 blueprints existed; none of the 45 was in `Assets.json`; no asset name
+is over 50 characters.
 
-- [ ] 75. **Lead: announce**, and check `git status` is clean in `tycoon-m12o`.
-- [ ] 76. **Lead: the kits. Skip this step unless a kit script changed after Ben's OK.**
-      The pieces on disk are the ones on the sheets.
+- [x] 75. **Lead: announce**, and check `git status` is clean in the folder you run from.
+- [x] 76. **Lead: the kits. Skip this step unless a kit script changed after Ben's OK.**
+      Skipped this time: the pieces on disk were the ones on the sheets.
       - Checked 2026-10-06: `colony-kit` and `regolith-kit` have no cached palette, so the
         merge builds fresh ones. `tube-kit` and `monorail-kit` have palettes from 2026-09-23;
         they already hold every colour of today's pieces.
@@ -2448,18 +2464,18 @@ exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asse
         "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/monorail_kit.py
         ```
         `regolith_kit.py` also rewrites its 28 blueprints: `git status` shows whether any moved.
-- [ ] 77. **Lead: bake the street pieces, then the list gate.**
+- [x] 77. **Lead: bake the street pieces, then the list gate** (done 2026-10-06).
       ```
       py tools/paths/bake.py --era OrbitalColony
       py tools/paths/bake.py --era OrbitalColony --list
       ```
       - The first line writes 65 files `assets/build/paths/OrbitalColony/Fill_<id>.glb`, the
         record `assets/build/paths/OrbitalColony.json` and the palette
-        `assets/paths/OrbitalColony_fill.png`. Expect
+        `assets/paths/OrbitalColony_fill.png`:
         `65 pieces = 45 tube + 20 decking, 24102 triangles total`.
-      - The second line must **exit 0** now and end `the meshes on disk are today's`. (It
-        exits 2 before the bake. That is the one gate that is red today.)
-- [ ] 78. **Lead: upload the street pieces.**
+      - The second line exits 0 since the bake and ends `the meshes on disk are today's`. (It
+        exited 2 before the bake.)
+- [x] 78. **Lead: upload the street pieces** (done 2026-10-06: `uploaded 66/66`, no retry).
       ```
       py tools/assets/upload_paths.py --era OrbitalColony --dry-run
       py tools/assets/upload_paths.py --era OrbitalColony
@@ -2470,14 +2486,15 @@ exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asse
       - Names: 18 of the 20 decking pieces read `ECT_Path_OrbitalColony_Fill_SP_<slot>`; the
         tubes, `SP_entrance` and `SP_roverBay` keep `EraCityTycoon_Path_...`. The longest is 49
         characters.
-- [ ] 79. **Lead: merge the 45 props** (Git Bash, one line):
+- [x] 79. **Lead: merge the 45 props** (Git Bash, one line; done 2026-10-06):
       ```
       "/c/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b -P tools/assets/merge_stages.py -- --props --era OrbitalColony --model ColonyFlagMast --model FabricHabMediumA --model FabricHabMediumAGreen --model FabricHabNarrowA --model FabricHabNarrowAGreen --model FabricHabNarrowB --model FabricHabNarrowBGreen --model FabricIndNarrowA --model FabricIndNarrowB --model FabricIndSmallA --model FabricPortNarrowA --model FabricPortNarrowB --model FabricPortSmallA --model FabricSciNarrowA --model FabricSciNarrowB --model FabricSciSmallA --model HubBeacon --model LotBeacon --model MonorailArc --model PierBanner --model RegolithBoulder --model RegolithBoulderGarden --model RegolithClumpA --model RegolithClumpAGarden --model RegolithClumpB --model RegolithClumpBGarden --model RegolithClumpC --model RegolithClumpCGarden --model RegolithCrater --model RegolithCraterGarden --model RegolithQuarterA --model RegolithQuarterAGarden --model RegolithQuarterB --model RegolithQuarterBGarden --model RegolithQuarterC --model RegolithQuarterCGarden --model RevealScaffold --model SiteMedium --model SiteNarrow --model SiteNarrowGantry --model SiteSmall --model SiteSmallGantry --model SurveyBeacon --model SurveyBeaconGarden --model TubeHub
       ```
       - Expect `done: 45 blueprint(s), 0 with problems`, and 105 files `<Prop>_S<n>.glb` in
         `assets/build/stages/_props/OrbitalColony/` (beside the older props' files).
       - Without `--model` the line merges all 62 Orbital prop blueprints. That is not wanted.
-- [ ] 80. **Lead: upload the same 45** (105 stages):
+- [x] 80. **Lead: upload the same 45** (105 stages; done 2026-10-06: `uploaded 105/105`, no
+      retry, commit `88073d1`):
       ```
       py tools/assets/upload_models.py --props --era OrbitalColony --model ColonyFlagMast --model FabricHabMediumA --model FabricHabMediumAGreen --model FabricHabNarrowA --model FabricHabNarrowAGreen --model FabricHabNarrowB --model FabricHabNarrowBGreen --model FabricIndNarrowA --model FabricIndNarrowB --model FabricIndSmallA --model FabricPortNarrowA --model FabricPortNarrowB --model FabricPortSmallA --model FabricSciNarrowA --model FabricSciNarrowB --model FabricSciSmallA --model HubBeacon --model LotBeacon --model MonorailArc --model PierBanner --model RegolithBoulder --model RegolithBoulderGarden --model RegolithClumpA --model RegolithClumpAGarden --model RegolithClumpB --model RegolithClumpBGarden --model RegolithClumpC --model RegolithClumpCGarden --model RegolithCrater --model RegolithCraterGarden --model RegolithQuarterA --model RegolithQuarterAGarden --model RegolithQuarterB --model RegolithQuarterBGarden --model RegolithQuarterC --model RegolithQuarterCGarden --model RevealScaffold --model SiteMedium --model SiteNarrow --model SiteNarrowGantry --model SiteSmall --model SiteSmallGantry --model SurveyBeacon --model SurveyBeaconGarden --model TubeHub
       ```
@@ -2486,26 +2503,36 @@ exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asse
         domes and 15 others. The other 15 keep `EraCityTycoon_Prop_...`. The longest is 50
         characters; none is cut.
       - **Commit `Assets.json` right after.**
-- [ ] 81. **Ben: the one harvest paste.** Open any of the game's files in Studio, for example
-      `C:\Users\benja\Desktop\tycoon\build\test.rbxl`. **Do not press Play.**
+- [x] 81. **Ben: the one harvest paste** (done 2026-10-06: `[HARVEST-DONE] 171 loaded, 0
+      failed`, on the second try). Open the **local** file
+      `C:\Users\benja\Desktop\tycoon\build\test.rbxl` in Studio, with File (*Archivo*) → Open
+      (*Abrir*). **Not the published game. Do not press Play.**
       1. Claude runs this, which puts the script on your clipboard:
          `py tools/assets/harvest.py --emit --props && cat tools/assets/harvest.luau | clip`
       2. View (*Vista*) → **Command Bar** (*Barra de comandos*) → click in it → **Ctrl+V** →
          Enter → wait for `[HARVEST-DONE] 171 loaded, 0 failed` in Output (*Salida*). It takes
          a few minutes.
       3. **Output** (*Salida*) → right-click → **Select All** → **Ctrl+C**.
-      4. Tell Claude "done". Do not copy anything else before Claude answers: your clipboard
-         holds the result.
-      - If you paste the Output into the chat instead: fine. The chat cuts it short, but your
-        clipboard still holds all of it, and Claude reads it from there.
+      4. Tell Claude **"done"**, and nothing else. **Do not paste the Output into the chat, and
+         do not copy anything else** before Claude answers: your clipboard holds the result.
       - If the number is not 171 or "failed" is not 0: tell Claude the line as it reads.
       - The props, the 65 street pieces and the palette all ride in this one paste.
-- [ ] 82. **Lead: harvest, templates, fabric data, gates, manifest.**
+      What happened this time:
+      - **Two tries.** The first time Ben pasted the Output into the chat. The chat cut it at
+        50,000 characters, and by then his clipboard held something else. He ran steps 2 to 4
+        again, and the second time the clipboard held all of it. (For Metropolis, §14 step 58,
+        the clipboard still held it after a paste into the chat. That was luck.)
+      - **The script ran in the published game's place**, in a live editing session, not in a
+        local file, and Studio saved to the live experience. The script parents nothing and
+        destroys what it loads, so it left nothing in the place. Next time: the local file.
+- [x] 82. **Lead: harvest, templates, fabric data, gates, manifest** (done 2026-10-06).
+      **First save the clipboard to a file**, then merge from the file (PowerShell):
       ```
-      py tools/assets/harvest.py --props
+      Get-Clipboard -Raw | Out-File -Encoding utf8 <a scratch file>
+      py tools/assets/harvest.py --props --file <that scratch file>
       ```
-      It merges 105 prop stages, 65 path pieces and 1 path texture. **Commit `Assets.json`
-      right after.** Then:
+      It merged 105 prop stages, 65 path pieces and 1 path texture. **`Assets.json` was
+      committed right after** (`89a8f99`). Then:
       ```
       py tools/assets/gen_templates.py --props
       py tools/assets/gen_templates.py --paths
@@ -2538,26 +2565,37 @@ exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asse
       ```
       and luau-lsp both ways: `src` outside `src/combat` with `sourcemap.json`, and
       `src/combat` with `sourcemap.combat.json`.
-      What to expect:
-      - **Templates:** 45 new in `templates/_props/OrbitalColony/` (58 there) and 65 in a new
-        `templates/_paths/OrbitalColony/`; 554 templates in all (444 today); `--check` passes.
-      - **Fabric data:** `fabric.py build OrbitalColony` now reads the harvested sizes. Look
-        at `git diff --stat src/shared/Config/Fabric/OrbitalColony.json`. No change is the
-        good case (as for Metropolis). If it changed: 89 lots must still stand, and the
-        docs-keeper re-checks every count.
+      What came out:
+      - **Templates** (`e566676`): 45 new in `templates/_props/OrbitalColony/` (58 there) and
+        65 in a new `templates/_paths/OrbitalColony/`; 554 templates in all (444 before);
+        `--check` passes.
+      - **One gate failed on the harvested sizes: `fabric.py check OrbitalColony`** (3
+        violations; `streetplan.py` repeats that check and failed with it). The three single
+        Garden twins measure 0.12 to 0.23 wider than their originals' meshes. Before the
+        harvest the check compared the declared footprints, and passed.
+        - The fix was in the generator (`c01ccfd`): the rule is now "a twin lies inside the
+          ground reserved for its original", and the generator reserves the union of an
+          entry's original and its twins. A single's ground also keeps off every pier foot.
+        - The props did not change. **Nothing was re-uploaded.**
+      - **Fabric data on the harvested sizes:** 89 lots, positions unchanged; two flag masts
+        moved 0.5; wild 90 (34 clumps, 56 singles; it was 92); the garden swap changes 42
+        entries at the end of tier 3 and 23 at full build.
       - `timeline OrbitalColony` no longer prints `heights from blueprints (not harvested
-        yet)`, and shows 0 standing buildings that shrink or change prop.
+        yet)`, and shows 0 standing buildings that shrink or change prop over 63 moments.
       - `props OrbitalColony`: 46 shown, 4 never shown (the four that were not uploaded), 12
         uploaded props nothing refers to.
-      - `check_mirror.py --strict` now covers Orbital and the client's `Tubes.luau`.
+      - `check_mirror.py --strict` covers Orbital and the client's `Tubes.luau`: agrees.
       - All three `--list` lines exit 0. `streetplan.py`: 0 violations.
       - `sim_economy.py`: 16:20:04, legacy 887 (Orbital 9:25:10).
       - The manifest: Orbital props 58/62 uploaded, harvested and templated; a new baked-paths
-        row for OrbitalColony with 65 pieces.
+        row for OrbitalColony with 65 pieces, "in game".
+      - The other three eras' fabric data is byte-identical.
       - selene keeps its one old warning (`src/client/UI/LegacyPanel.luau:200`).
-- [ ] 83. **Lead: sourcemaps and the five place files** (PowerShell shown):
+- [x] 83. **Lead: sourcemaps and the five place files** (done 2026-10-06 in the worktree,
+      commit `c01ccfd`; done again in the main checkout after the merge, byte-identical).
+      From the main checkout, PowerShell shown:
       ```
-      cd C:\Users\benja\Desktop\tycoon-m12o
+      cd C:\Users\benja\Desktop\tycoon
       $env:PATH = "$HOME\.rokit\bin;$env:PATH"
       rojo sourcemap default.project.json -o sourcemap.json
       rojo sourcemap combat.project.json -o sourcemap.combat.json
@@ -2567,12 +2605,12 @@ exists; all 45 blueprints exist; none of the 45 is in `Assets.json` yet; no asse
       rojo build metropolis.project.json -o build/metropolis.rbxl
       rojo build orbital.project.json -o build/orbital.rbxl
       ```
-      The committed sourcemaps and place files in this folder are from 2026-10-05, older than
-      wave 4's code. Commit the templates, the manifest, the sourcemaps and the builds.
-- 84. **If a record goes missing later:** re-run step 81 and the first line of step 82 only.
-      Do **not** re-run the uploaders.
+      The templates, the manifest, the sourcemaps and the builds are committed.
+      `build/orbital.rbxl` is new with this run.
+- 84. **If a record goes missing later:** re-run step 81 and the harvest lines of step 82
+      only. Do **not** re-run the uploaders.
 
-### 20. M12 wave 4 — `build/orbital.rbxl`: open it, then playtest (after §19)
+### 20. M12 wave 4 — `build/orbital.rbxl`: open it, then playtest (**signed off on a Studio look, 2026-10-06**)
 
 `build/orbital.rbxl` is the same game as `build/test.rbxl`, with two switches baked in:
 - **`DebugStartEra` = 4:** a **fresh** save starts in the **Orbital Colony**. No need to buy out
@@ -2596,11 +2634,18 @@ about $840ab left.
   often only one player. When every player needs it, paste one line in the Server window
   (PLAYTEST "M12 wave 4" step 52). Nothing to type.
 
-- [ ] 85. **Lead:** `build/orbital.rbxl` is built after the asset run (step 83). Tell Ben it
-      is ready.
-- [ ] 86. Studio → File (*Archivo*) → Open (*Abrir*) →
-      `C:\Users\benja\Desktop\tycoon-m12o\build\orbital.rbxl`.
-- [ ] 87. Press **Play** (*Jugar*). Check the right build:
+**Where the file is now:** `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl`. It was rebuilt in
+the main checkout after the merge and is the same build Ben looked at.
+- **Ben: close the old window first.** If Studio still has `orbital.rbxl` open from the old
+  `tycoon-m12o` folder, close that window **without saving**. That file no longer exists on
+  the disk. From now on open the one in `tycoon\build`.
+
+- [x] 85. **Lead:** `build/orbital.rbxl` is built after the asset run (step 83; 2026-10-06,
+      `c01ccfd`), and again in the main checkout after the merge.
+- [x] 86. Studio → File (*Archivo*) → Open (*Abrir*) →
+      `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl`.
+      For the sign-off look Ben opened the same build from the old `tycoon-m12o\build` folder.
+- [x] 87. Press **Play** (*Jugar*). Check the right build:
       - View (*Vista*) → **Output** (*Salida*) shows this **yellow** line:
         `[DataService] DebugStartEra lever: fresh save for <name> starts in era 4 (OrbitalColony)`;
       - about a second later, a second **yellow** line:
@@ -2614,28 +2659,37 @@ about $840ab left.
       - Output says `DebugStartEra lever skipped ... already has progress`: this session is on
         a real save. Stop (*Detener*) and close the file **without saving**;
       - you are in Village: you opened `test.rbxl`.
-- [ ] 88. Run `docs/PLAYTEST.md` "M12 wave 4 — Orbital growing city".
-- [ ] 89. Send Claude the numbers from step 52 of that section.
+      Done for the sign-off look. Whether the two Output lines were compared was not reported.
+- [x] 88. Run `docs/PLAYTEST.md` "M12 wave 4 — Orbital growing city". **Signed off on a Studio
+      look, 2026-10-06:** "looks good! lets ship it". It was a look at the colony, not a
+      report of the 54 steps. Not reported: the four lettered questions (28, 31, 35, 42), the
+      step results, the phone (40), low graphics (41–42), two players (43–45) and the
+      measurement (52). They stay open as watch items.
+- [ ] 89. **Still owed:** send Claude the numbers from step 52 of that section.
 - When you close `orbital.rbxl`, Studio may ask to save. Saving to the same file on the disk is
   fine. Rebuilding (step 83) overwrites the file, and the two switches are rebuilt with it.
 
-### 21. M12 wave 4 — after sign-off (lead)
+### 21. M12 wave 4 — after sign-off (lead; **DONE 2026-10-06**, except the cleanup in step 92)
 
-- [ ] 90. **Merge `m12-orbital` into `main`**, only after the asset run and Ben's sign-off.
-      - `main` is published within a minute by the editor sync in the main checkout. Run
-        `git status -sb` before saying whether it is pushed.
-      - In the main checkout, regenerate both sourcemaps and the five place files (step 83,
-        from `C:\Users\benja\Desktop\tycoon`), and re-run `py tools/fabric.py check
-        OrbitalColony`, `py tools/check_mirror.py --strict`, `py tools/paths/bake.py --era
-        OrbitalColony --list`, `py tools/assets/gen_templates.py --check` and
-        `py tools/check_compile.py`.
-- [ ] 91. **Worktree and branches.**
-      - Ask Ben to close Studio first if `orbital.rbxl` is open from `tycoon-m12o`.
-      - Remove the `assets` junction first (`cmd /c rmdir C:\Users\benja\Desktop\tycoon-m12o\assets`),
-        then the worktree `tycoon-m12o`.
-      - Delete the branch `m12-orbital` once merged. Keep `m12-orbital-docks`, `-axis`, `-vine`
-        and `-bloom` as the record of the four candidates.
-- [ ] 92. **Cleanup after the merge.**
+- [x] 90. **Merged `m12-orbital` into `main`** (2026-10-06): a fast-forward to `c01ccfd`, 46
+      commits.
+      - **Whether it is on GitHub: run `git status -sb`.** Right after the merge `main` was 49
+        commits ahead of `origin/main`. The editor sync in the main checkout usually
+        publishes `main` within a minute, but check, do not assume.
+      - Both sourcemaps and the five place files were regenerated in the main checkout. They
+        came out byte-identical to the committed ones.
+      - Re-run in the main checkout, all passing: `py tools/fabric.py check OrbitalColony`,
+        `py tools/check_mirror.py --strict`, `py tools/paths/bake.py --era OrbitalColony
+        --list`, `py tools/assets/gen_templates.py --check` (554 templates),
+        `py tools/check_compile.py`, `py tools/gen_asset_manifest.py --check`,
+        `py tools/sim_economy.py` (16:20:04, legacy 887), stylua, and selene with its one old
+        warning.
+- [x] 91. **Worktree and branches** (2026-10-06):
+      - `tycoon-m12o` is removed. Its `assets` junction went first
+        (`cmd /c rmdir <worktree>\assets`), so nothing followed it into the shared folder.
+      - The branch `m12-orbital` is deleted (merged). The branches `m12-orbital-docks`,
+        `-axis`, `-vine` and `-bloom` are kept as the record of the four candidates.
+- [ ] 92. **Cleanup after the merge (lead; open, left undone on purpose).**
       - The 12 uploaded Orbital props nothing draws: `HouseA`, `HouseB`, `LampPost`,
         `MonorailCorner`, `MonorailTrack`, `PlazaA`, `Rocks`, `TubeBend`, `TubeCross`,
         `TubeEnd`, `TubeStraight`, `TubeTee`. Retire their ids, templates and blueprints
@@ -2645,8 +2699,8 @@ about $840ab left.
         `regolith-kit/ground-a`, `ground-b`, `ground-c`, `boulder-large`, `rock-garden-a`,
         `rock-garden-b`, `hub-beacon`; the old tile pieces of `tube-kit` and `monorail-kit`.
         Delete the cached palette of any kit whose folder changes.
-- [ ] 93. **Docs:** point §17–§20 and PLAYTEST "M12 wave 4" at `C:\Users\benja\Desktop\tycoon`
-      (docs-keeper).
+- [x] 93. Docs point at `C:\Users\benja\Desktop\tycoon` (docs pass of 2026-10-06): §17–§21
+      here and PLAYTEST "M12 wave 4".
 
 ## M13 — The Valley (waves 1 and 2)
 

@@ -1,9 +1,27 @@
 ---
 name: orbital-growth-2026-10-05
-description: M12 wave 4 Orbital, mock in progress in tycoon-m12o (docks and axis candidates), lot ceiling arithmetic (about 105-115 realistic, cap 140), the lead's shared rules, tool work found
+description: M12 wave 4 Orbital, shipped and merged 2026-10-06 (organic Bloom layout, curving swept tubes, round monorail, four city-changers); Ben's rulings, what each rejected mock taught, lessons of the asset run
 metadata:
   type: project
 ---
+
+**Shipped and merged 2026-10-06.** Ben on his Studio look at `orbital.rbxl`: "looks good! lets ship it".
+`main` fast-forwarded to c01ccfd (46 commits); the worktree `tycoon-m12o` is removed and `m12-orbital`
+deleted; `m12-orbital-docks`, `-axis`, `-vine`, `-bloom` are kept as the record. M12 is complete for all
+four eras. It was a look, not the 54-step checklist: no lettered question answered (the garden wave's
+pace), and phone, low graphics, two players and the measurement are unreported, as for the other eras.
+The Studio build is `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl` (never publish). Open: MANUAL_STEPS
+§21 step 92 (retire 12 uploaded Orbital props nothing draws; delete unused GLBs in the shared kit
+folders), and the follow-ups in PLAN wave 4. Push status: run `git status -sb` (49 ahead right after the
+merge).
+
+**What Ben wants, learned over three gates (apply to any future layout or era):**
+- He rejects a plan that resembles another era, however dense: "way too similar to metropolis". Give
+  each era its own street geometry and building forms, and offer an organic candidate first.
+- Asked with pictures (ASCII plan sketches in the question tool), he decides in one click; asked in
+  prose he answers "lovely" or "looks good". Say back how you read it every time.
+- A city-changer must show from the whole-plot camera or it is not worth showing him.
+- He pastes the harvest Output into the chat; save the clipboard to a file before anything else.
 
 M12 wave 4 (Orbital Colony growing city), started 2026-10-05. Ben pasted
 `docs/prompts/m12-orbital.md` with no words of his own; asked, he chose **"arithmetic and plan only"**

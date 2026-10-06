@@ -2410,11 +2410,11 @@ should look like those.
 
 ### 4f. Wave 2b — Orbital Colony dressing (tubes, monorail, decking, rocks)
 
-> **Since M12 wave 4 (branch `m12-orbital`, 2026-10-06; not on `main` yet):** Orbital has a new
-> tube plan. On that branch, and on `main` once it is merged, use "M12 wave 4 — Orbital growing
-> city" instead of 4f. The straight glass tubes, the cluster decking, the rock zones, the small
-> domes, the lamps and the square monorail it describes are gone. 4g (the City detail setting)
-> still holds for the other eras; for Orbital use steps 37 and 38 of the new section.
+> **Since M12 wave 4 (merged to `main` 2026-10-06):** Orbital has a new tube plan. Use "M12
+> wave 4 — Orbital growing city" instead of 4f. The straight glass tubes, the cluster decking,
+> the rock zones, the small domes, the lamps and the square monorail it describes are gone.
+> 4g (the City detail setting) still holds for the other eras; for Orbital use steps 37 and 38
+> of the new section.
 
 Orbital only. Do `docs/MANUAL_STEPS.md` "M9" §11 (one props paste) first, then
 `rojo build -o build/test.rbxl`.
@@ -5252,11 +5252,17 @@ Do this any time after City Hall (6).
 
 ## M12 wave 4 — Orbital growing city
 
-**Status 2026-10-06: not ready to run yet.** The game code is done, but the new models are not
-uploaded. Run this section only after Claude says **"`orbital.rbxl` is ready"**
-(`docs/MANUAL_STEPS.md` "M12" §19 and §20). Before that the colony shows flat slabs for tubes.
-- The counts here come from the tools before the upload. Claude re-checks them after it, and
-  adds an "after purchase N" table like Metropolis's.
+**Status 2026-10-06: signed off on a Studio look ("looks good! lets ship it") and merged to
+`main`.** Ben opened the build and looked at the colony. It was not a report of the 54 steps.
+This checklist stays as the way to verify the rest, and as the regression list.
+- **Not reported:** the four lettered questions (steps 28, 31, 35, 42; the garden wave's pace
+  among them), the step results, the phone at 375×667 (40), low graphics (41–42), two players
+  (43–45) and the measurement (52).
+- **Still owed:** the numbers of step 52 (and of the other three eras, step 53).
+- The file is now `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl`. The old `tycoon-m12o`
+  folder no longer exists.
+- The models are uploaded. The tier counts below are on the uploaded models' real sizes
+  (2026-10-06). An "after purchase N" table like Metropolis's is still to come.
 
 **Goal:** the Orbital Colony grows out of raw regolith. Craters and boulders cover the plot. As
 you buy landmarks, **curving white tubes** grow in from the entrance, pods and domes rise along
@@ -5278,7 +5284,7 @@ it would move a fresh real save to era 4.
 - **Left and right:** stand at the plot's entrance and look into the plot. **Left** is the
   Rover Bay's side. **Right** is the Launch Tower's side. "Corner" means one of the four
   corners of the plot, outside the monorail.
-- Reference renders, in `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\`:
+- Reference renders, in `C:\Users\benja\Desktop\tycoon\assets\testfit\out\OrbitalColony\`:
   `m12o_bloom2_full.png`, `m12o_bloom2_full_entrance.png`, `m12o_bloom2_tier1.png`,
   `m12o_bloom2_tier3.png`, `m12o_changers.png` (the four city-changers, before and after).
 
@@ -5319,16 +5325,17 @@ you level (steps 32 and 33):
 |---|---|---|---|---|---|---|
 | 1 | 4 | 2 | 0 | 0 | 0 | 0 |
 | 2 | 28 | 3 | 36 | 0 | 0 | 0 |
-| 3 | 47 | 22 | 43 | 24 | 44 | 0 |
-| 4 | 73 | 10 | 46 | 24 | 36 | 0 |
-| 5, everything at Max | **89** | 0 | 48 | 25 | 25 | 11 |
+| 3 | 47 | 22 | 43 | 24 | 42 | 0 |
+| 4 | 73 | 10 | 46 | 24 | 34 | 0 |
+| 5, everything at Max | **89** | 0 | 48 | 25 | 23 | 11 |
 
-"Flags" counts masts and banners together.
+"Flags" counts masts and banners together. A fresh plot holds 90 pieces of regolith (34 big
+ones, 56 small ones).
 
 ### Before you start
 
-- [ ] 1. Claude has said **"`orbital.rbxl` is ready"**. If not, stop here.
-- [ ] 2. Open `C:\Users\benja\Desktop\tycoon-m12o\build\orbital.rbxl` with File (*Archivo*) →
+- [ ] 1. The build is ready: the models were uploaded on 2026-10-06.
+- [ ] 2. Open `C:\Users\benja\Desktop\tycoon\build\orbital.rbxl` with File (*Archivo*) →
       Open (*Abrir*). **Never publish this file.**
 - [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
 - [ ] 4. **Play** (*Jugar*). Check all four:
@@ -5516,7 +5523,7 @@ pads are in the corners, outside the monorail.
       covers all of them. Expect:
       - **89 pods and domes** and no sites;
       - 25 green domes, 24 masts and 24 banners, 11 hubs with 11 holograms;
-      - about 25 garden pieces left, most of them under the monorail;
+      - about 23 garden pieces left, most of them under the monorail;
       - every landmark at its last look.
 - [ ] 34. Compare with `m12o_bloom2_full.png` and `m12o_bloom2_full_entrance.png`: the same
       tubes, rings of pods and heights.
@@ -5598,7 +5605,7 @@ pads are in the corners, outside the monorail.
 
 ### 11. The other eras (unchanged)
 
-All three files are in the same folder, `C:\Users\benja\Desktop\tycoon-m12o\build\`.
+All three files are in the same folder, `C:\Users\benja\Desktop\tycoon\build\`.
 
 - [ ] 48. Open `test.rbxl` and Play: a fresh **Village**, covered in woods. Buy the free
       **Campfire**:
