@@ -41,7 +41,7 @@ M12 wave 4.1b (organic Orbital). A path era whose streets are swept tubes (`road
 tools/paths/tubes.py) is judged against the tubes as they are drawn: a pad or a footprint keeps
 `tube.front` from the smoothed centreline, off every hub (the drum at a node where tubes branch,
 end or change chain), and no bend is tighter than a 6-stud radius. A round loop (`highway.round`)
-is a circle of radius `ring`: its band is the annulus ROUND_BAND_HALF either side, nothing stands
+is a circle of radius `ring`: its band is the annulus `highway.bandHalf` either side, nothing stands
 in it, a tube may cross it steeply and clear of the pier feet, and the colony may use the plot's
 corners outside it. The plot's way in passes under the loop, so the entrance is judged from the
 band's inner edge.
@@ -128,10 +128,11 @@ RAMP_CELLS_FALLBACK = 3
 RAMP_DIRECTIONS = {"+X": (1.0, 0.0), "-X": (-1.0, 0.0), "+Z": (0.0, 1.0), "-Z": (0.0, -1.0)}
 SUBWAY_COUNT = (4, 6)
 # A round loop (INTERFACES "Wave 4.1b", `highway.round`): the contract's numbers. The track is
-# ROUND_SEGMENTS arcs about the plot's centre, joints on multiples of the segment angle from +X, a
-# pier at each segment's middle; the band nothing stands in reaches ROUND_BAND_HALF either side.
-ROUND_SEGMENTS = 48
-ROUND_BAND_HALF = 3.5
+# `highway.segments` arcs about the plot's centre, joints on multiples of the segment angle from +X,
+# a pier at each segment's middle; the band nothing stands in reaches `highway.bandHalf` either
+# side. Both are the era's config (Era.round_segments, Era.band_half); the kit's arc piece is cut
+# for one segment count, which round_violations holds the config to.
+MONORAIL_KIT = REPO_ROOT / "tools" / "assets" / "monorail_kit.py"
 ROUND_PIER_FOOT = 1.9  # a pier foot's side (tools/assets/monorail_kit.py, PIER_FOOT_HALF)
 ROUND_CROSSING_DEGREES = 60.0  # a tube crosses the track at least this steeply...
 ROUND_CROSSING_PIER = 2.0  # ...its centreline this far from every pier foot
@@ -919,6 +920,15 @@ class Era:
         self.spurs = {slot["id"]: self.spur_for(slot) for slot in self.slots}
         # M12 wave 4.1b: a round loop's radius (`highway.round` on a layout highway), else None.
         self.round_ring = float(self.highway["ring"]) if self.highway and (highway_cfg or {}).get("round") is True else None
+        # Its segment count and its band's half-width are config (`highway.segments`,
+        # `highway.bandHalf`): the client seats the track by one and keeps the wild by the other.
+        self.round_segments, self.band_half = None, None
+        if self.round_ring is not None:
+            segments, half = highway_cfg.get("segments"), highway_cfg.get("bandHalf")
+            whole = isinstance(segments, int) and not isinstance(segments, bool) and segments >= 3
+            if not whole or isinstance(half, bool) or not isinstance(half, (int, float)) or not half > 0:
+                raise ValueError(f"eras.{name}.highway: a round loop needs `segments` (a whole number, 3 or more) and `bandHalf` (studs, above 0)")
+            self.round_segments, self.band_half = segments, float(half)
         self._tubes = False  # tools/paths/tubes.TubePlan, built on first use (tube_plan)
 
     def real_footprint(self, slot_id):
@@ -2133,11 +2143,11 @@ def round_pier_feet(era):
     """The centre of every pier foot of a round loop: one at the middle of each segment."""
     if era.round_ring is None:
         return []
-    step = 2 * math.pi / ROUND_SEGMENTS
-    return [(era.round_ring * math.cos((k + 0.5) * step), era.round_ring * math.sin((k + 0.5) * step)) for k in range(ROUND_SEGMENTS)]
+    step = 2 * math.pi / era.round_segments
+    return [(era.round_ring * math.cos((k + 0.5) * step), era.round_ring * math.sin((k + 0.5) * step)) for k in range(era.round_segments)]
 
 
-def band_gap(poly, ring, half=ROUND_BAND_HALF):
+def band_gap(poly, ring, half):
     """Daylight between a convex polygon and a round loop's band (the annulus `ring` +- `half`
     about the plot's centre); 0 when it stands in the band. A shape may lie inside the loop or
     wholly outside it, in a corner of the plot."""
@@ -2154,9 +2164,17 @@ def round_violations(era):
     ROUND_CROSSING_PIER or more from every pier foot; and the entrance apron, the one flat piece
     that crosses it, keeps ROUND_BAND_GAP from every pier foot."""
     messages = []
-    ring = era.round_ring
-    if ring + ROUND_BAND_HALF > min(era.half_x, era.half_z) + 1e-6:
-        messages.append(f"highway ring {ring:g}: the band {ring - ROUND_BAND_HALF:g}..{ring + ROUND_BAND_HALF:g} leaves the plot")
+    ring, half = era.round_ring, era.band_half
+    # The kit's arc piece is one segment of the loop it was cut for (tools/assets/monorail_kit.py):
+    # with another count in config the seats would overlap or gap, and nothing in game would say so.
+    cut_for = tubes_module().kit_numbers(str(MONORAIL_KIT)).get("LOOP_SEGMENTS")
+    if cut_for != era.round_segments:
+        messages.append(
+            f"round loop: highway.segments {era.round_segments} is {360 / era.round_segments:g} degrees a segment, and the kit's arc piece "
+            f"spans {360 / cut_for:g} (monorail_kit.py LOOP_SEGMENTS {cut_for})"
+        )
+    if ring + half > min(era.half_x, era.half_z) + 1e-6:
+        messages.append(f"highway ring {ring:g}: the band {ring - half:g}..{ring + half:g} leaves the plot")
     shapes = []
     for slot in era.slots:
         shapes.append((f"{slot['id']} pad", slot["pad_poly"]))
@@ -2167,9 +2185,9 @@ def round_violations(era):
     hubs = plan.hubs() if plan is not None else []
     shapes += [(f"the hub at {fmt((round(hub['point'][0], 1), round(hub['point'][1], 1)))}", disc_poly(hub["point"], plan.hub_radius)) for hub in hubs]
     for name, poly in shapes:
-        d = band_gap(poly, ring)
+        d = band_gap(poly, ring, half)
         if d < ROUND_BAND_GAP - 1e-6:
-            messages.append(f"round loop: {name} is {d:.2f} from the band {ring - ROUND_BAND_HALF:g}..{ring + ROUND_BAND_HALF:g} (need {ROUND_BAND_GAP})")
+            messages.append(f"round loop: {name} is {d:.2f} from the band {ring - half:g}..{ring + half:g} (need {ROUND_BAND_GAP})")
     feet = [square(foot, ROUND_PIER_FOOT, ROUND_PIER_FOOT, 0) for foot in round_pier_feet(era)]
     apron = plan.entrance_apron() if plan is not None else None
     if apron is not None:
@@ -2191,7 +2209,7 @@ def round_violations(era):
                 steep = math.degrees(math.asin(min(1.0, abs(tangent[0] * radial[0] + tangent[1] * radial[1]))))
                 if steep < ROUND_CROSSING_DEGREES - 1e-6:
                     messages.append(f"round loop: {line.label} crosses the track at {fmt((round(a[0], 1), round(a[1], 1)))} at {steep:.0f} degrees to it (need {ROUND_CROSSING_DEGREES:g})")
-            if abs(ra - ring) <= ROUND_BAND_HALF or abs(rb - ring) <= ROUND_BAND_HALF:
+            if abs(ra - ring) <= half or abs(rb - ring) <= half:
                 d = min(segment_polygon_distance(a, b, foot) for foot in feet)
                 if nearest is None or d < nearest[0]:
                     nearest = (d, a)
@@ -3075,7 +3093,7 @@ def check(era, network, visible, unreachable):
             front = -math.floor((era.half_z - edge_half) / era.tile_studs) * era.tile_studs
         elif era.round_ring is not None:
             # The way in passes under a round loop: the first street point stands inside its band.
-            front = -(era.round_ring - ROUND_BAND_HALF)
+            front = -(era.round_ring - era.band_half)
         if entrance[1] > front + ENTRANCE_EDGE_REACH or abs(entrance[0] - era.sign[0]) > ENTRANCE_SIGN_REACH:
             add(f"entrance {fmt(entrance)} is not on the front edge near the Sign")
     for slot_id, join in unreachable:
@@ -3319,7 +3337,7 @@ def check(era, network, visible, unreachable):
         # optional sign at its foot is one more. A round loop is one prop a segment.
         half_cells = int(round_half(float(era.highway["ring"]) / era.tile_studs)) if era.tile_studs else 0
         ramp_props = (1 + (1 if era.highway_sign else 0)) if era.highway_ramp is not None else 0
-        highway_cells = ROUND_SEGMENTS if era.round_ring is not None else 8 * half_cells + ramp_props
+        highway_cells = era.round_segments if era.round_ring is not None else 8 * half_cells + ramp_props
         detail["highwayCells"] = highway_cells
         highway_budget = budget_value(budget.get("highwayCells"), math.inf)
         if highway_cells > highway_budget:
@@ -3725,10 +3743,10 @@ def draw(era, network, visible, violations, trees, greenery, near, far, path):
 
     if era.round_ring is not None:
         # The round loop: its band as a ring of segments, a square at every pier foot.
-        step = 2 * math.pi / ROUND_SEGMENTS
-        for k in range(ROUND_SEGMENTS):
+        step = 2 * math.pi / era.round_segments
+        for k in range(era.round_segments):
             a0, a1 = k * step, (k + 1) * step
-            inner, outer = era.round_ring - ROUND_BAND_HALF, era.round_ring + ROUND_BAND_HALF
+            inner, outer = era.round_ring - era.band_half, era.round_ring + era.band_half
             poly(
                 [(inner * math.cos(a0), inner * math.sin(a0)), (outer * math.cos(a0), outer * math.sin(a0)), (outer * math.cos(a1), outer * math.sin(a1)), (inner * math.cos(a1), inner * math.sin(a1))],
                 fill=(150, 150, 160, 110),

@@ -114,12 +114,15 @@ change, so `check` holds the props to it (wild_swap_messages): a clump and its q
 together, a twin lies inside its original's ground in its original's frame, and under a beam that
 never clears it is no taller.
 
-A round loop (`highway.round`, same section). The band is the annulus streetplan.ROUND_BAND_HALF
-either side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it,
-and the colony may use the plot's corners outside it. With `highway.clearBand` false the wild in
-the band is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off a tube that crosses
-the band, a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop is taller
-than WILD_UNDER_BEAM.
+A round loop (`highway.round`, same section). The band is the annulus `highway.bandHalf` either
+side of the circle of radius `ring`: no lot, marker, landmark's apron or lane stands in it, and the
+colony may use the plot's corners outside it. With `highway.clearBand` false the wild in the band
+is cleared by nothing (tools/cityfabric.ring_keeps), so it keeps off a tube that crosses the band,
+a single keeps CHECK_PIER_FOOT from every pier foot's centre, and no wild prop is taller than
+WILD_UNDER_BEAM. And what is kept is kept by its clearing point alone -- a quarter's quad, a
+single's own point -- while its ground reaches further: a quarter is a quadrant of a feature up to
+its `quarterOffset` square. So the ground of every kept part lies on no lot, pad, apron or
+landmark's extents (kept_ground_hits), or a mound would stand inside a pod for good.
 
 A lane line may name the street lot its lots answer to: `"front": "left"` or `"right"` of the lane
 as it leaves its mouth, with `sideSizes`' handedness (a lane leaving toward +X has +Z on its left);
@@ -652,7 +655,7 @@ class Site:
                 self.aprons += [(label, poly, box_of(poly)) for label, poly in shapes]
         # A round loop: its radius, and the band nothing stands in.
         self.ring = self.era.round_ring
-        self.band_half = streetplan.ROUND_BAND_HALF
+        self.band_half = self.era.band_half
         # `highway.clearBand` false: the band never joins the clearing mask and the wild in it is
         # cleared by nothing, so there the wild answers to the rules of standing under the beam.
         self.under_beam = self.ring is not None and (self.era.dressing.get("highway") or {}).get("clearBand") is False
@@ -2188,12 +2191,7 @@ class Ground:
         self.regolith = []
         for item in wild:
             if site.plates:
-                if item["kind"] == "clump":
-                    side = 2 * plan["wild"]["clumps"]["quarterOffset"] * item["scale"]
-                    parts = [((quad[0], quad[1]), radii["quarterRadius"], streetplan.square((quad[0], quad[1]), side, side, item["rotationY"])) for quad in item["quads"]]
-                else:
-                    parts = [((item["x"], item["z"]), radii["singleRadius"], plate_ground(site, plan, item))]
-                self.regolith += [(point, radius, ground, box_of(ground), site.band_keeps(point)) for point, radius, ground in parts]
+                self.regolith += [(point, radius, ground, box_of(ground), site.band_keeps(point)) for _, point, radius, ground in plate_parts(site, plan, item)]
             elif item["kind"] == "clump":
                 self.woods += [((quad[0], quad[1]), radii["quarterRadius"]) for quad in item["quads"]]
             else:
@@ -3208,6 +3206,51 @@ def plate_ground(site, plan, item):
     return streetplan.square((item["x"], item["z"]), side, side, item["rotationY"])
 
 
+def plate_parts(site, plan, item):
+    """A plates era's wild entry as the parts the client clears one by one, each as (label suffix,
+    clearing point, clearing radius, ground): a clump's four quarters -- its quad, `quarterRadius`
+    and the `quarterOffset` square about the quad, x scale, turned rotationY -- or a single's point,
+    `singleRadius` and footprint (plate_ground)."""
+    radii = site.config["wild"]
+    if item["kind"] != "clump":
+        return [("", (item["x"], item["z"]), radii["singleRadius"], plate_ground(site, plan, item))]
+    side = 2 * plan["wild"]["clumps"]["quarterOffset"] * item["scale"]
+    return [
+        (f" quarter {q}", (quad[0], quad[1]), radii["quarterRadius"], streetplan.square((quad[0], quad[1]), side, side, item["rotationY"]))
+        for q, quad in enumerate(item["quads"], start=1)
+    ]
+
+
+def kept_solids(site, lot_polys):
+    """What the ground of band-kept wild keeps off (kept_ground_hits), as (label, polygon, box):
+    every lot, pad, apron and landmark's extents. Empty unless the era's band never clears."""
+    if not site.under_beam:
+        return []
+    solids = [(f"parcel {index}", poly) for index, poly in enumerate(lot_polys, start=1)]
+    solids += [(f"the {slot_id} pad", poly) for slot_id, poly in site.pad_polys.items()]
+    solids += [(label, poly) for label, poly, _ in site.aprons]
+    solids += [(f"the {slot_id} extents", poly) for slot_id, (poly, _) in site.landmark_polys.items()]
+    return [(label, poly, box_of(poly)) for label, poly in solids]
+
+
+def kept_ground_hits(site, plan, item, solids):
+    """(part's label suffix, what its ground lies on, how deep) for every part of a wild entry that
+    a round loop's band keeps for good (Site.band_keeps: by its clearing point) and whose ground
+    reaches one of `solids`. Nothing ever clears such a part, so it would stand there for good."""
+    hits = []
+    for suffix, point, _radius, ground in plate_parts(site, plan, item) if solids else ():
+        if not site.band_keeps(point):
+            continue
+        box = box_of(ground)
+        for label, poly, poly_box in solids:
+            if boxes_apart(box, poly_box, 0.0):
+                continue
+            depth = overlap_depth(ground, poly)
+            if depth > TOUCH:
+                hits.append((suffix, label, depth))
+    return hits
+
+
 class Plates:
     """The grounds laid so far where no two may lie over each other."""
 
@@ -3286,11 +3329,13 @@ def field_entry(wild, centre, angle):
     return {"kind": "clump", "x": centre[0], "z": centre[1], "rotationY": angle, "scale": 1.0, "quads": [[rounded(q[0]), rounded(q[1])] for q in quads]}
 
 
-def generate_wild(site, plan):
-    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields."""
+def generate_wild(site, plan, parcels):
+    """The era's wild land in data order, by the plan's `wild.pattern`: woods (the default) or fields.
+    `parcels` are the lots already laid: under a round loop whose band never clears, the woods
+    pattern keeps the ground of what the band keeps off them (kept_ground_hits)."""
     if plan["wild"].get("pattern") == FIELDS:
         return generate_fields(site, plan)
-    return generate_woods(site, plan)
+    return generate_woods(site, plan, kept_solids(site, [parcel["poly"] for parcel in parcels]))
 
 
 def wild_order(site, clumps, singles):
@@ -3309,7 +3354,7 @@ def wild_order(site, clumps, singles):
     return sorted(clumps, key=order) + singles
 
 
-def generate_woods(site, plan):
+def generate_woods(site, plan, kept_off=()):
     wild = plan["wild"]
     names = site.config["wild"]
     half = site.era.half_x
@@ -3356,7 +3401,7 @@ def generate_woods(site, plan):
             "skirt": not inside,
             "quads": [[rounded(q[0]), rounded(q[1])] for q in quads],
         }
-        return None if kept_out(site, plan, clump) else clump
+        return None if kept_out(site, plan, clump) or kept_ground_hits(site, plan, clump, kept_off) else clump
 
     # Plates (Site.plates): no ground lies over another. A clump that would is turned, then shrunk
     # a step and turned again, down to one quarter's size, so the gaps the big plates leave fill
@@ -3436,7 +3481,7 @@ def generate_woods(site, plan):
             "scale": rounded(scales[0] + (scales[1] - scales[0]) * grow),
             "skirt": not inside,
         }
-        if kept_out(site, plan, entry):
+        if kept_out(site, plan, entry) or kept_ground_hits(site, plan, entry, kept_off):
             continue
         if plates is not None:
             ground = plate_ground(site, plan, entry)
@@ -3705,7 +3750,7 @@ def build(era_name, city=None, era=None, network=None, plan_file=None):
     parcels, lanes = generate_lots(site, plan)
     levels, districts = full_build_states(site, parcels)
     upgrades = generate_upgrades(site, plan, parcels, levels)
-    wild = generate_wild(site, plan)
+    wild = generate_wild(site, plan, parcels)
     # Last, in what every other list left: nothing above may depend on the carts.
     if upgrade_config(site, CARTS) and plan.get(CARTS):
         upgrades[CARTS] = generate_carts(site, plan, parcels, levels, districts, upgrades, wild)
@@ -4749,6 +4794,7 @@ def wild_messages(site, plan, doc):
     singles_allowed = wild_single_props(plan["wild"])
     half = site.era.half_x
     offset = plan["wild"]["clumps"]["quarterOffset"]
+    kept_off = kept_solids(site, [rect((p["x"], p["z"]), site.sizes.get(p["size"], (0, 0)), p["rotationY"]) for p in doc.get("parcels", [])])
     for index, item in enumerate(wild, start=1):
         label = f"wild {index} ({number(item['x'])}, {number(item['z'])})"
         if item["kind"] not in KINDS:
@@ -4787,6 +4833,8 @@ def wild_messages(site, plan, doc):
         hit = pier_hit(site, item)
         if hit is not None:
             messages.append(f"{label}: {hit[0]:.2f} from the pier foot at {streetplan.fmt((rounded(hit[1][0]), rounded(hit[1][1])))} (need {CHECK_PIER_FOOT})")
+        for suffix, what, depth in kept_ground_hits(site, plan, item, kept_off) if item["kind"] in KINDS else ():
+            messages.append(f"{label}{suffix}: the loop's band keeps it for good, and its ground lies {depth:.2f} on {what}; nothing would ever clear it from there")
     if plan["wild"].get("pattern") == FIELDS:
         messages += field_messages(site, plan, wild)
     if site.under_beam:

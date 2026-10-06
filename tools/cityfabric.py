@@ -51,7 +51,7 @@ What is mirrored, and from where (nothing is re-derived; a divergence is a bug i
   * `highway.clearBand` (M12 wave 4.1, Orbital): the boolean false keeps the ring's ground out of
     that clearing, so the wild under a monorail beam stands for good (ring_clears). And under a
     round loop (`highway.round`, wave 4.1b) nothing else clears it either: a wild point in the
-    loop's band, the annulus `ring` plus or minus streetplan.ROUND_BAND_HALF (ring_keeps), is left
+    loop's band, the annulus `ring` plus or minus `highway.bandHalf` (ring_keeps), is left
     out of the clearing test, whatever lot, pad, landmark, lane or tube stands beside the band --
     nothing but a crossing tube can stand in it, and the data keeps the wild off that. Implemented
     here first: Fabric.luau follows in wave 4.2;
@@ -1449,7 +1449,7 @@ class FabricPlot:
 
     def kept_in_band(self, px, pz):
         """Fabric.clearedFlags' exemption: a point in the band of a round loop that never clears."""
-        return self.band_ring is not None and ring_keeps(px, pz, self.band_ring, streetplan.ROUND_BAND_HALF)
+        return self.band_ring is not None and ring_keeps(px, pz, self.band_ring, self.era.band_half)
 
     def _build_views(self):
         """Fabric.new: config and data validated once, the parcel views (a malformed parcel is a blank
@@ -3146,7 +3146,7 @@ def props_report(era_name, data_path=None, config_path=None):
                     note(counts, hub_prop, "tube hub", 0)
         if plot.highway_built(owned):
             if plot.era.round_ring is not None:
-                for _ in range(streetplan.ROUND_SEGMENTS):
+                for _ in range(plot.era.round_segments):
                     note(counts, track.get("arc"), "track", 0)
             else:
                 for role, prop in sorted(track.items()):

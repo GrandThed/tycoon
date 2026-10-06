@@ -1164,6 +1164,8 @@
         "requiresSlot": "walkwayNetwork",
         "clearBand": false,
         "round": true,
+        "segments": 48,
+        "bandHalf": 3.5,
         "props": {
           "arc": "MonorailArc"
         },

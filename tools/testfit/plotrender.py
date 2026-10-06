@@ -50,7 +50,7 @@ M12 wave 4.1b (organic Orbital), mirror first -- the client lays none of this un
     path its apron, each shown lane its decking -- the meshes tools/paths/tubes.py writes for the
     layout, read back from its files -- and the era's hub prop stands on every hub node a drawn
     stretch touches;
-  * a round loop (`highway.round`): `highway.props.arc` seated 48 times as its blueprint says, and
+  * a round loop (`highway.round`): `highway.props.arc` seated `highway.segments` times as its blueprint says, and
     the train on the circle.
 
 Nothing here may quietly "follow the contract" where the client does something else: a divergence
@@ -836,7 +836,7 @@ class PlotScene:
         )
 
     def build_round_loop(self):
-        """A round loop (`highway.round`): `highway.props.arc` at the middle of each of the 48
+        """A round loop (`highway.round`): `highway.props.arc` at the middle of each of the loop's
         segments, turned as its blueprint says -- position (ring cos t, 0, ring sin t), rotationY
         -(t + 90) degrees -- and `vehicles.count` trains evenly round the circle from the entrance
         side, at deckHeight, heading along the track. Before the arc has a blueprint a segment is
@@ -847,10 +847,10 @@ class PlotScene:
             return
         ring = era.round_ring
         name = (config.get("props") or {}).get("arc")
-        step = 360.0 / streetplan.ROUND_SEGMENTS
+        step = 360.0 / era.round_segments
         height = float(config.get("deckHeight") or ROUND_DECK[1])
         chord = 2 * ring * math.sin(math.radians(step / 2))
-        for k in range(streetplan.ROUND_SEGMENTS):
+        for k in range(era.round_segments):
             angle = (k + 0.5) * step
             x, z = ring * math.cos(math.radians(angle)), ring * math.sin(math.radians(angle))
             self.model(
@@ -864,7 +864,7 @@ class PlotScene:
                 ],
                 wanted=name or "arc",
             )
-        self.notes.append(f"highway: round loop, {streetplan.ROUND_SEGMENTS} segments at radius {ring:g}")
+        self.notes.append(f"highway: round loop, {era.round_segments} segments at radius {ring:g}")
         vehicles = config.get("vehicles") or {}
         props = self.vehicle_props(config)
         count = int(vehicles.get("count", 1)) if props else 0
