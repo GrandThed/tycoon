@@ -2410,6 +2410,12 @@ should look like those.
 
 ### 4f. Wave 2b — Orbital Colony dressing (tubes, monorail, decking, rocks)
 
+> **Since M12 wave 4 (branch `m12-orbital`, 2026-10-06; not on `main` yet):** Orbital has a new
+> tube plan. On that branch, and on `main` once it is merged, use "M12 wave 4 — Orbital growing
+> city" instead of 4f. The straight glass tubes, the cluster decking, the rock zones, the small
+> domes, the lamps and the square monorail it describes are gone. 4g (the City detail setting)
+> still holds for the other eras; for Orbital use steps 37 and 38 of the new section.
+
 Orbital only. Do `docs/MANUAL_STEPS.md` "M9" §11 (one props paste) first, then
 `rojo build -o build/test.rbxl`.
 
@@ -5243,6 +5249,441 @@ Do this any time after City Hall (6).
 ### Sign-off
 
 - [ ] 51. All boxes ticked → tell Claude "M12 Metropolis signed off".
+
+## M12 wave 4 — Orbital growing city
+
+**Status 2026-10-06: not ready to run yet.** The game code is done, but the new models are not
+uploaded. Run this section only after Claude says **"`orbital.rbxl` is ready"**
+(`docs/MANUAL_STEPS.md` "M12" §19 and §20). Before that the colony shows flat slabs for tubes.
+- The counts here come from the tools before the upload. Claude re-checks them after it, and
+  adds an "after purchase N" table like Metropolis's.
+
+**Goal:** the Orbital Colony grows out of raw regolith. Craters and boulders cover the plot. As
+you buy landmarks, **curving white tubes** grow in from the entrance, pods and domes rise along
+them, and the regolith recedes. A **round** monorail circles the colony. Four purchases now
+change the whole colony: **Raise the Colony Flags**, **Green the Domes**, **Tend the Rock
+Gardens** and **Light the Holo Beacons**. Client-only: prices, order and income are unchanged.
+
+**NEVER PUBLISH `build/orbital.rbxl`.** Open it from the disk only. Never use File (*Archivo*)
+→ Publish to Roblox (*Publicar en Roblox*) or Save to Roblox (*Guardar en Roblox*) from that
+file. It carries a switch that starts fresh saves in the Orbital Colony; on a published place
+it would move a fresh real save to era 4.
+
+- Setup: `docs/MANUAL_STEPS.md` "M12" §20.
+- Menus are written in English, with the Spanish in italics: View (*Vista*).
+- **Every Play starts a fresh colony with cash (it reads $3ac).** Press Play again and you get
+  a fresh colony and the cash again. The cash covers every purchase and Max on every building.
+- Buy in Build panel order. "Purchase 8" means the 8th slot in that list.
+- **Where a step asks a question, answer with its letter** (for example "31 b").
+- **Left and right:** stand at the plot's entrance and look into the plot. **Left** is the
+  Rover Bay's side. **Right** is the Launch Tower's side. "Corner" means one of the four
+  corners of the plot, outside the monorail.
+- Reference renders, in `C:\Users\benja\Desktop\tycoon-m12o\assets\testfit\out\OrbitalColony\`:
+  `m12o_bloom2_full.png`, `m12o_bloom2_full_entrance.png`, `m12o_bloom2_tier1.png`,
+  `m12o_bloom2_tier3.png`, `m12o_changers.png` (the four city-changers, before and after).
+
+The 24 purchases, and where each one is:
+
+| # | Purchase | Where, seen from the entrance |
+|---|---|---|
+| 1 | Landing Pad | just right of the way in |
+| 2 | Solar Array | just left of the way in |
+| 3 | Habitat Pod | straight ahead, at the end of the first tube |
+| 4 | Hydroponics Dome | in the heart, near left |
+| 5 | Oxygen Generator | front-right corner |
+| 6 | **Build the Monorail** (no building) | pad: front-left corner |
+| 7 | Crew Quarters | in the heart, far right |
+| 8 | **Raise the Colony Flags** (no building) | pad: front-left corner, beside the monorail's |
+| 9 | Research Lab | in the heart, far left |
+| 10 | Rover Bay | front-left corner |
+| 11 | Comms Array | the far side of the heart (the tall one) |
+| 12 | **Green the Domes** (no building) | pad: front-right corner, by the side edge |
+| 13 | Mineral Extractor | back-right corner |
+| 14 | **Tend the Rock Gardens** (no building) | pad: back-right corner |
+| 15 | Observation Dome | at the back, a little left of the middle |
+| 16 | Fusion Reactor | front-right corner |
+| 17 | Establish the Orbital Uplink | in the heart, near right |
+| 18 | Docking Bay | left side, half-way back |
+| 19 | Terraform Station | left side, further back |
+| 20 | **Light the Holo Beacons** (no building) | pad: back-left corner |
+| 21 | Medical Bay | back-left corner |
+| 22 | Spaceport Terminal | back-left corner |
+| 23 | Raise Planetary Defense | front-left corner |
+| 24 | Launch Tower | back-right corner, outside the monorail |
+
+What the tools expect at the end of each `GrowthTier`, for a player who levels as he goes.
+With the baked cash you buy faster than you level, so expect fewer pods and more sites until
+you level (steps 32 and 33):
+
+| `GrowthTier` | Pods and domes | Sites | Flags | Green domes | Gardens | Hub holograms |
+|---|---|---|---|---|---|---|
+| 1 | 4 | 2 | 0 | 0 | 0 | 0 |
+| 2 | 28 | 3 | 36 | 0 | 0 | 0 |
+| 3 | 47 | 22 | 43 | 24 | 44 | 0 |
+| 4 | 73 | 10 | 46 | 24 | 36 | 0 |
+| 5, everything at Max | **89** | 0 | 48 | 25 | 25 | 11 |
+
+"Flags" counts masts and banners together.
+
+### Before you start
+
+- [ ] 1. Claude has said **"`orbital.rbxl` is ready"**. If not, stop here.
+- [ ] 2. Open `C:\Users\benja\Desktop\tycoon-m12o\build\orbital.rbxl` with File (*Archivo*) →
+      Open (*Abrir*). **Never publish this file.**
+- [ ] 3. View (*Vista*) → **Output** (*Salida*). Keep it open the whole time.
+- [ ] 4. **Play** (*Jugar*). Check all four:
+      - Output shows this **yellow** line (with your name):
+        `[DataService] DebugStartEra lever: fresh save for <name> starts in era 4 (OrbitalColony)`;
+      - about a second later, a second **yellow** line:
+        `[EconomyService] GrantCash lever: granted 3e+21 cash to 1 loaded player(s); attribute reset to 0`;
+      - your cash reads **$3ac** (it reads $2.9ac once you spend anything);
+      - you stand at a dark plot **scattered with rust-coloured craters and boulders**, with
+        one pad, the **Landing Pad**, which is free.
+      Stop and tell Claude if:
+      - Output has a yellow line `[CityDressing] OrbitalColony has no ... templates yet`: the
+        file is from before the asset run;
+      - Output says `DebugStartEra lever skipped ... already has progress`: this session is on a
+        real save. Stop (*Detener*) and close the file without saving;
+      - there is no `DebugStartEra` line and you are in Village: you opened `test.rbxl`;
+      - there is no `GrantCash` line and no cash after 10 s.
+- [ ] 5. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Automatic**
+      (*Automático*).
+
+### 1. First look
+
+- [ ] 6. **Regolith.** Walk the plot before you buy anything:
+      - craters, rings of boulders, low mounds, standing stones and small survey tripods cover
+        it, all rust-coloured and low (up to about 3 studs);
+      - they lie **scattered**, not in rows or on a grid.
+      Bug: a piece on the Landing Pad's pad or on the grey path at the entrance; a piece
+      floating or sunk; two pieces lying over each other and flickering.
+- [ ] 7. **The way in.** A flat grey metal path runs from the plot's front edge straight in,
+      about 11 studs. There is **no tube, no hub and no monorail yet**. That is correct.
+      Bug: no grey path; the path flickers.
+- [ ] 8. **The next pad (Landing Pad), just right of the way in:**
+      - a **beacon** stands beside it: a white mast with a ring of light;
+      - four orange **stakes with string** mark where the Landing Pad will stand;
+      - the pad is grey metal, and its name and price label still shows.
+      Bug: no beacon; the beacon standing on the pad; stakes away from the pad.
+
+### 2. The first tubes (purchases 1–5)
+
+- [ ] 9. Buy the **Landing Pad** (free). Within about a second:
+      - an orange **frame** stands around it for about 1.5 s, then goes with dust;
+      - a **white tube** runs in from the entrance and on to the Landing Pad's side;
+      - **two round hubs** appear with it: one at the entrance, one where the tube forks;
+      - grey **decking** lies under the Landing Pad and its pad, and joins the tube;
+      - the regolith under the new tube and decking vanishes, each piece with a dust puff;
+      - the beacon and stakes move to the **Solar Array** pad.
+      **No building sites yet.** That is correct.
+      Bug: the frame stays; no hub at the entrance; regolith left inside a tube.
+- [ ] 10. **Look at the tube closely.**
+      - It is a white half-pipe with grey rings, and it **curves smoothly**.
+      - Each end goes **into** a hub. No gap between tube and hub; no tube end sticking out of
+        a hub's far side.
+      - Where two lengths meet between hubs, you see no gap and no step.
+      - A tube that will grow later ends in a flat closed disc.
+      - The grey path at the entrance now runs from the plot's edge **to the entrance hub**.
+      Bug: a gap or a step; an open pipe end you can see into; two tubes crossing outside a
+      hub.
+- [ ] 11. **Flicker.** Zoom **far out** and move the camera **slowly**, from several angles.
+      Look where the decking meets the tube, where the entrance path meets the hub, and at
+      the regolith.
+      - Good: everything **sits still**.
+      - Bad: a surface that flickers or shimmers. Say where.
+- [ ] 12. Buy the **Solar Array** (2) and the **Habitat Pod** (3):
+      - the tube grows straight on to the heart, with a hub where it ends at the Habitat Pod;
+      - **building sites** appear beside the first tube, one after another, about 0.4 s apart:
+        a deck going down, pod ribs, crates; some carry an orange **robot gantry**;
+      - each site stands for **10–30 s** (each for its own time), then a **pod rises** out of
+        it with dust.
+      If no site has appeared a minute after the Habitat Pod, say so, and go on.
+      Bug: a pod appears with no site first; all pods rise in the same instant; a site on a
+      tube, on a pad or on a landmark's decking.
+- [ ] 13. Buy the **Hydroponics Dome** (4) and the **Oxygen Generator** (5):
+      - the Oxygen Generator stands far off, in the **front-right corner**;
+      - a long **curve** of tube grows round the front right to reach it, and a short tube
+        runs out to the corner, with a hub at its end;
+      - more sites, then pods, along the new tubes.
+- [ ] 14. **Which way things face.** Look at five pods and three landmarks:
+      - each pod stands **turned to its tube**, with its airlock (the door) **against** it;
+      - along a curve, each pod is turned a little more than the one before;
+      - each landmark faces its decking and tube.
+      Bug: a pod with its back or its side to the tube; a pod standing on a tube.
+
+### 3. The monorail (purchase 6)
+
+- [ ] 15. The pad of **Build the Monorail** is in the **front-left corner**. It gets the
+      beacon and **no stakes**: it builds nothing on the pad.
+- [ ] 16. Stand back so you see the whole plot, then buy it:
+      - **no frame and no building**;
+      - the track builds **both ways round from the entrance** and closes at the back, in a
+        few seconds;
+      - it is a **circle**, on piers;
+      - then **one train** rides round it, **on top of the beam**.
+      Bug: a square track or square corners; a gap in the circle; the train beside or under
+      the beam, or swinging off it; the train going backwards.
+- [ ] 17. **Piers.** Walk once round under the track:
+      - **no pier stands on the way in**: the entrance path passes between two piers;
+      - where the tube to the Oxygen Generator's corner runs **under** the track, it passes
+        between two piers.
+      Three more tubes cross under the track later, one toward each other corner. Check each
+      when it arrives: the Rover Bay (10), the Mineral Extractor (13), the Medical Bay (21).
+      Bug: a pier on the entrance path; a pier standing in a tube.
+- [ ] 18. **The regolith under the track stays.** The craters and rocks under the beam did
+      **not** vanish when the track arrived. They stay there for the whole game. That is
+      correct.
+      Bug: the ground under the track is bare right after the purchase.
+
+### 4. Growing the colony (purchases 7–24)
+
+The four purchases of section 5 come up on the way. Do each one when its pad shows.
+
+- [ ] 19. Keep buying in order. **Every time a tube reaches a fork or an end, a hub appears
+      with it.**
+      Bug: a hub standing alone with no tube; a fork or a tube end with no hub.
+- [ ] 20. **Sites come before buildings.** Watch a few lots: bare ground or regolith → site →
+      pod.
+      Bug: a pod with no site first.
+- [ ] 21. **No pod ever shrinks.** After each purchase, glance at the pods that already stand.
+      Bug: a pod gets smaller or turns into a different building right after a purchase. Say
+      which purchase. (Turning green at purchase 12 is not this.)
+- [ ] 22. **Nothing from the ground stands inside a building.** Walk the outer ring of tube,
+      next to the monorail, and look at the pods there:
+      - Good: craters, boulders and mounds stop at the pods, the pads and the decking.
+      - Bad: a boulder, a crater rim or a mound sticking into a pod, a pad or a landmark's
+        decking. Say which landmark is nearest.
+- [ ] 23. **Heights follow the landmarks.** Pods are low near low landmarks and taller near tall
+      ones.
+      Not a bug: a pod taller than the Landing Pad, the Solar Array, the Orbital Uplink or
+      Planetary Defense beside it. Those four do not set heights.
+- [ ] 24. After the **Launch Tower** (24): it stands in the **back-right corner, outside the
+      monorail**, and is by far the tallest thing on the plot. A tube runs under the track to
+      a hub at its foot.
+
+### 5. The four city-changers (purchases 8, 12, 14, 20)
+
+None of the four builds anything on its pad. Each pad gets the beacon and no stakes. All four
+pads are in the corners, outside the monorail.
+
+- [ ] 25. **Raise the Colony Flags** (8). After Crew Quarters (7) **two pads show at once**:
+      this one (front-left corner, beside the monorail's pad) and the Research Lab. Buy it:
+      - orange **banners** appear on **every other pier** of the monorail, in a quick wave:
+        24 in all, none on the two piers beside the way in;
+      - **flag masts** appear beside the tubes, in the gaps between pods.
+      More masts come as the tubes grow: 24 at full build.
+      Bug: a banner on every pier; a banner on a pier beside the way in; a mast inside a pod
+      or on a tube.
+- [ ] 26. **Green the Domes** (12). Its pad is in the **front-right corner, by the side edge**.
+      Stand where you see the white pods with blue glass by the first tube and the heart,
+      then buy it:
+      - those **habitat** pods and domes turn **green under the glass**, one after another
+        with a pop, about 0.4 s apart;
+      - each keeps its shape and size: only the glass and a few plants change;
+      - industry (tanks, stacks), science (dishes) and port (cargo) buildings do not change;
+      - habitat pods that rise later come up green. 25 at full build.
+      Bug: all change in the same instant; a pod changes shape or shrinks.
+- [ ] 27. **Tend the Rock Gardens** (14). After the Mineral Extractor (13) **two pads show at
+      once**: this one (back-right corner) and the Observation Dome. Stand where you see a
+      lot of regolith, then buy it:
+      - **every piece of regolith still standing** turns into a small **garden**: a white
+        kerb, raked sand, a crystal or moss;
+      - they change **one after another**, starting near the pad, about 0.4 s apart;
+      - the whole wave takes **about 20 seconds**;
+      - the pieces under the monorail change too.
+      Bug: all change in the same instant; a piece still rust-coloured a minute later; a
+      garden sticking into a pod.
+- [ ] 28. **The wave's pace** (step 27). Answer: **(a)** right, **(b)** too slow, **(c)** too
+      fast.
+- [ ] 29. **Light the Holo Beacons** (20). After the Terraform Station (19) **two pads show at
+      once**: this one (back-left corner) and the Medical Bay. Buy it:
+      - a cyan **hologram** (a ringed planet on a short mast) floats over **every hub**, one
+        after another;
+      - hubs that arrive later get theirs with them. 11 at full build.
+      Bug: a hologram with no hub under it; a hologram touching the monorail.
+- [ ] 30. **Compare** with `m12o_changers.png`.
+- [ ] 31. **Which of the four is the weakest?** Answer: **(a)** flags, **(b)** green domes,
+      **(c)** rock gardens, **(d)** holograms, **(e)** all four are worth buying.
+
+### 6. Full build
+
+- [ ] 32. **Level one landmark and watch its neighbours.** Level nothing else first. Press
+      **×10 five times** on the **Habitat Pod** (level 51). Its model changes at 10, 25 and
+      50, and the pods beside the first tube and round the heart **grow**, one after another,
+      with a pop.
+      Bug: nothing grows; a pod shrinks.
+- [ ] 33. **Full build.** Press **Max** on **every building**, in Build panel order. The cash
+      covers all of them. Expect:
+      - **89 pods and domes** and no sites;
+      - 25 green domes, 24 masts and 24 banners, 11 hubs with 11 holograms;
+      - about 25 garden pieces left, most of them under the monorail;
+      - every landmark at its last look.
+- [ ] 34. Compare with `m12o_bloom2_full.png` and `m12o_bloom2_full_entrance.png`: the same
+      tubes, rings of pods and heights.
+      Bug: a row of pods clearly lower or taller than in the render; a tube that is in the
+      render and not in the game.
+- [ ] 35. **Does it read as a colony, and not as Metropolis in white?** Answer: **(a)** yes,
+      **(b)** partly, **(c)** no.
+- [ ] 36. **Flicker, again**, on the full colony (step 11). Look at the gardens under the
+      track and at the decking round the landmarks.
+
+### 7. City detail, away and back
+
+- [ ] 37. Settings (⚙ in the bottom bar) → **City detail OFF**. Within a second:
+      - the gardens (or the regolith), the flags and the holograms drop to about **half**;
+      - the pods, the tubes, the hubs, the decking and the track **stay**;
+      - the train still runs **on your plot**;
+      - nothing flickers or rebuilds.
+- [ ] 38. Turn it **ON**: the **same** pieces come back in the **same** spots.
+- [ ] 39. **A far plot.** Fly more than 290 studs away from the full colony and look back:
+      - about **60 of the 89 pods** show, the ones nearest the entrance. That is **known**; it
+        waits on your numbers (step 52);
+      - the tubes, the hubs, the decking and the track stay; no flags and no holograms.
+      Fly back: everything returns in the same spots within about 1 s, with no frames and no
+      rising pods.
+      Bug: tubes or track vanish or flicker from far away; a freeze of half a second or more
+      on the way back.
+
+### 8. Phone and low graphics
+
+- [ ] 40. Test (*Prueba*) → **Device** (*Dispositivo*) → a phone at **375×667** → Play. Buy
+      through Crew Quarters (purchase 7):
+      - the beacon and stakes read well at phone size;
+      - the tubes, the hubs, the decking, the track and the train are all there;
+      - nothing flickers when you zoom far out (step 11 again);
+      - the frame rate looks fine;
+      - the Build panel's rows 6, 8, 12, 14 and 20 read **Build the Monorail**, **Raise the
+        Colony Flags**, **Green the Domes**, **Tend the Rock Gardens**, **Light the Holo
+        Beacons**;
+      - nothing red in Output.
+- [ ] 41. Esc → Settings (*Configuración*) → Graphics Mode (*Modo de gráficos*) → **Manual**,
+      quality **3**. Stop (*Detener*), then Play. Buy through Crew Quarters (7):
+      - **no dust puffs** anywhere;
+      - the tubes, the hubs, the decking, the track, the train, the regolith, the sites and
+        the pods **are all still there**;
+      - nothing red in Output.
+      If Studio does not keep the setting between Plays, skip this step and say so.
+- [ ] 42. Same at quality **1**. From the entrance, are the far tubes and the far side of the
+      track still drawn? Answer: **(a)** yes, **(b)** they are missing. Then set the mode back
+      to **Automatic** and Stop.
+
+### 9. Two players
+
+- [ ] 43. Test (*Prueba*) → **Local Server** (*Servidor local*) → **2** players (*jugadores*) →
+      **Start** (*Iniciar*). Both players start in the Orbital Colony. The cash goes to
+      whoever has loaded when it pays out, often only one player. Use that player as
+      Player 1.
+- [ ] 44. Player 1 buys through Raise the Colony Flags (8). Player 2 stands by Player 1's
+      plot:
+      - the **same tubes, hubs, sites, pods, track, banners and masts** in the same spots;
+      - start times may differ by a moment. That is fine.
+      Player 2's own plot is still untouched regolith. Player 2 needs no cash for this.
+- [ ] 45. In Player 2's window, turn **City detail OFF**: the train on Player 1's plot is no
+      longer drawn (a train shows on your own plot only). Turn it **ON** again: it is back.
+
+### 10. Missing pieces
+
+- [ ] 46. In Edit mode, rename `ReplicatedStorage/Assets/Props/OrbitalColony/TubeHub` to
+      `TubeHub_bak`. Play and buy the Landing Pad:
+      - no hubs; the tube and everything else normal;
+      - Output: **zero red errors**. One yellow line
+        `[CityDressing] OrbitalColony has no tube hub templates yet ...` is expected.
+      Stop, then rename it back.
+- [ ] 47. In Edit mode, rename `ReplicatedStorage/Shared/Config/Fabric/OrbitalColony` to
+      `OrbitalColony_bak`. Play and buy the first four:
+      - no regolith, no sites, no pods, no beacon or stakes;
+      - landmarks, tubes, pads and buying all still work;
+      - Output: **zero red errors.**
+      Stop, then rename it back.
+
+### 11. The other eras (unchanged)
+
+All three files are in the same folder, `C:\Users\benja\Desktop\tycoon-m12o\build\`.
+
+- [ ] 48. Open `test.rbxl` and Play: a fresh **Village**, covered in woods. Buy the free
+      **Campfire**:
+      - the timber scaffold ring, the trail and the trees clearing with puffs, as before;
+      - nothing red in Output.
+- [ ] 49. Open `boomtown.rbxl` (**never publish it**) and Play: a fresh **Boomtown**, crop
+      fields. Buy the free **Newsstand**:
+      - it rises with its scaffold; its street and driveway appear, as before;
+      - nothing red in Output.
+- [ ] 50. Open `metropolis.rbxl` (**never publish it**) and Play: a fresh **Metropolis**, old
+      town, $100ab. Buy in order through **Build the Highway Ramp** (17):
+      - the highway is a **square ring** with a **ramp**, as before, and two cars loop on it;
+      - the old town under it vanishes with dust before the deck lands;
+      - nothing red in Output.
+      This one matters: the monorail work touched the highway code.
+
+### 12. Output
+
+- [ ] 51. **Output** (*Salida*) through the whole run: no red errors, and no yellow warnings that
+      name CityDressing, Fabric, RoadGraph, PathRenderer, Tubes, Highway or Ambient (apart
+      from step 46's). The two yellow lines from step 4 (`DebugStartEra`, `GrantCash`) are
+      expected. Studio's own warnings are fine.
+
+### 13. Measure (report the numbers)
+
+- [ ] 52. **Orbital:**
+      1. Open `build/orbital.rbxl`. Start a Local Server with **3 players** (or 2 if 3 is too
+         slow) and build every plot to a full colony (step 33). The cash may reach only the
+         first player. For the others, once everyone has joined: click the **Server** window,
+         View (*Vista*) → **Command Bar** (*Barra de comandos*), paste this line and press
+         Enter:
+         ```
+         workspace:SetAttribute("GrantCash", 3e21)
+         ```
+         It pays every player who has loaded, once. Nothing to type. One full plot is also a
+         useful number if this is too much.
+      2. In one **player** window (not the Server window), stand where all the plots are near
+         (within 250 studs).
+      3. View (*Vista*) → **Command Bar** (*Barra de comandos*), and run:
+         ```
+         print(#workspace.CityDressing:GetDescendants())
+         print(#workspace.CityDressing:FindFirstChild("Plot1"):GetDescendants())
+         ```
+         Replace `Plot1` with your plot's folder, `Plot<n>` (no underscore).
+      4. Press **Ctrl+F6** (MicroProfiler) and read the frame time in ms over several frames.
+      Report both counts, the frame time and how many plots were built.
+- [ ] 53. **Village, Boomtown and Metropolis**, if you have not sent them yet: step 37 of "M12 —
+      Village growing city", step 59 of "M12 wave 2 — Boomtown growing city" and step 49 of
+      "M12 wave 3 — Metropolis growing city".
+
+### Not a bug (don't report these)
+
+- **89 pods and domes.** That is what fits between the curving tubes, the landmarks and the
+  monorail.
+- **No cars, no walkers, no birds, no smoke.** Only the monorail train moves.
+- **Regolith stays under the monorail** for the whole game, and stands close round the piers.
+- **Strips of bare dark ground** between the rings of pods.
+- **The corners outside the monorail** hold two landmarks each and little else.
+- **A pad stands empty in the heart** (near right) until the Orbital Uplink, purchase 17.
+- **The Fusion Reactor stands in a front corner**, outside the monorail.
+- **Many building sites at once** on the right side around purchases 13 to 16.
+- **Pods near a low landmark stay low** until you level that landmark.
+- **Far plots** show about 60 of the 89 pods, and no flags or holograms. Known; it waits on
+  your numbers.
+- **Tubes cast shadows.** Say so if you would rather they did not.
+- **The cash reads $3ac, then $2.9ac** from your first paid purchase on, and about $840ab once
+  every building is at Max. That is correct.
+- You walk through pods, sites, hubs, tubes and regolith (the no-collision rule).
+- Construction times differ between two players.
+
+### What to tell Claude
+
+- Any failed step numbers, with the Output line.
+- Your letters for steps **28**, **31**, **35** and **42**.
+- **The tubes** (steps 10–11): any gap at a hub, any flicker? Do they read as tubes?
+- **The monorail** (steps 16–18): is it a clean circle, with the train on the beam?
+- **Any pod that shrank or changed** on a purchase (step 21): which purchase?
+- **Anything from the ground inside a building** (step 22): where?
+- Anything facing the wrong way: pods, landmarks, banners, the train.
+- The numbers from steps 52 and 53.
+- Does it feel like a growing colony?
+
+### Sign-off
+
+- [ ] 54. All boxes ticked → tell Claude "M12 Orbital signed off".
 
 ## M13 wave 1 — The Valley: sky, ground, hub, roads
 

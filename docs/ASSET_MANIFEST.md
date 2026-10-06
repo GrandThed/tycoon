@@ -388,19 +388,19 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 | 5 | `OxygenGenerator` | Oxygen Generator | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 6 | `WalkwayTube` | Build the Monorail | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 7 | `CrewQuarters` | Crew Quarters | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 8 | `ColonyFlag` | Colony Flag | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 8 | `ColonyFlag` | Raise the Colony Flags | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 9 | `ResearchLab` | Research Lab | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 10 | `RoverBay` | Rover Bay | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 11 | `CommsArray` | Comms Array | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 12 | `OxygenTanks` | Bring Life Support Online | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 12 | `OxygenTanks` | Green the Domes | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 13 | `MineralExtractor` | Mineral Extractor | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 14 | `RocksLarge` | Rock Garden | decor | yes | space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 14 | `RocksLarge` | Tend the Rock Gardens | decor | yes | space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 15 | `ObservationDome` | Observation Dome | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 16 | `FusionReactor` | Fusion Reactor | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 17 | `SatelliteDish` | Establish the Orbital Uplink | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 18 | `DockingBay` | Docking Bay | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 19 | `TerraformStation` | Terraform Station | building | yes | orbital-kit, space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
-| 20 | `HoloBeacon` | Holo Beacon | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 20 | `HoloBeacon` | Light the Holo Beacons | decor | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 | 21 | `MedicalBay` | Medical Bay | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 22 | `SpaceportTerminal` | Spaceport Terminal | building | yes | space-kit | 5 | 5/5 | 5/5 | 5/5 | yes |
 | 23 | `TurretBase` | Raise Planetary Defense | unlock | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
@@ -410,23 +410,72 @@ Summary: 24/24 blueprints, 24/24 uploaded, 24/24 harvested, 24/24 templated
 
 Blueprints: `tools/testfit/blueprints/_props/OrbitalColony/` -- templates: `templates/_props/OrbitalColony/` -- in game: `ReplicatedStorage/Assets/Props/OrbitalColony/`
 
-Summary: 13/13 blueprints, 13/13 uploaded, 13/13 harvested, 13/13 templated
+Summary: 62/62 blueprints, 13/62 uploaded, 13/62 harvested, 13/62 templated
 
 | # | modelName | Slot | Type | Blueprint | Kits | Stages | GLBs | Uploaded | Harvested | Template |
 |---|-----------|------|------|-----------|------|--------|------|----------|-----------|----------|
-| 1 | `HouseA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 2 | `HouseB` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 3 | `LampPost` | — | prop | yes | orbital-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 4 | `MonorailCorner` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 5 | `MonorailTrack` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 6 | `MonorailTrain` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 7 | `PlazaA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 8 | `Rocks` | — | prop | yes | space-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
-| 9 | `TubeBend` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 10 | `TubeCross` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 11 | `TubeEnd` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 12 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
-| 13 | `TubeTee` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 1 | `ColonyFlagMast` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 2 | `FabricHabMediumA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 3 | `FabricHabMediumAGreen` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 4 | `FabricHabNarrowA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 5 | `FabricHabNarrowAGreen` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 6 | `FabricHabNarrowB` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 7 | `FabricHabNarrowBGreen` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 8 | `FabricHabSmallA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 9 | `FabricHabSmallAGreen` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 10 | `FabricIndMediumA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 11 | `FabricIndNarrowA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 12 | `FabricIndNarrowB` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 13 | `FabricIndSmallA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 14 | `FabricPortMediumA` | — | prop | yes | colony-kit, space-kit | 5 | 0/5 | — | — | — |
+| 15 | `FabricPortNarrowA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 16 | `FabricPortNarrowB` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 17 | `FabricPortSmallA` | — | prop | yes | colony-kit, space-kit | 5 | 0/5 | — | — | — |
+| 18 | `FabricSciNarrowA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 19 | `FabricSciNarrowB` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 20 | `FabricSciSmallA` | — | prop | yes | colony-kit | 5 | 0/5 | — | — | — |
+| 21 | `HouseA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 22 | `HouseB` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 23 | `HubBeacon` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 24 | `LampPost` | — | prop | yes | orbital-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 25 | `LotBeacon` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 26 | `MonorailArc` | — | prop | yes | monorail-kit | 1 | 0/1 | — | — | — |
+| 27 | `MonorailCorner` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 28 | `MonorailTrack` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 29 | `MonorailTrain` | — | prop | yes | monorail-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 30 | `PierBanner` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 31 | `PlazaA` | — | prop | yes | orbital-kit, space-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 32 | `RegolithBoulder` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 33 | `RegolithBoulderGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 34 | `RegolithClumpA` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 35 | `RegolithClumpAGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 36 | `RegolithClumpB` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 37 | `RegolithClumpBGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 38 | `RegolithClumpC` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 39 | `RegolithClumpCGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 40 | `RegolithCrater` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 41 | `RegolithCraterGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 42 | `RegolithQuarterA` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 43 | `RegolithQuarterAGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 44 | `RegolithQuarterB` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 45 | `RegolithQuarterBGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 46 | `RegolithQuarterC` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 47 | `RegolithQuarterCGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 48 | `RevealScaffold` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 49 | `Rocks` | — | prop | yes | space-kit | 4 | 4/4 | 4/4 | 4/4 | yes |
+| 50 | `SiteMedium` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 51 | `SiteNarrow` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 52 | `SiteNarrowGantry` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 53 | `SiteSmall` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 54 | `SiteSmallGantry` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 55 | `SurveyBeacon` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 56 | `SurveyBeaconGarden` | — | prop | yes | regolith-kit | 1 | 0/1 | — | — | — |
+| 57 | `TubeBend` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 58 | `TubeCross` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 59 | `TubeEnd` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 60 | `TubeHub` | — | prop | yes | tube-kit | 1 | 0/1 | — | — | — |
+| 61 | `TubeStraight` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
+| 62 | `TubeTee` | — | prop | yes | tube-kit | 1 | 1/1 | 1/1 | 1/1 | yes |
 
 ## Baked paths
 

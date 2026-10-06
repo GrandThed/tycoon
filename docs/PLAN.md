@@ -73,8 +73,14 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done & playtested
   the Rooftops), 35 props (107 stages) uploaded and harvested in one paste; the sign-off was a
   Studio look ("looks good!"), not a report of the 51-step checklist, so the step results, the
   phone, low-graphics and two-player checks and the measurement stay watch items, and the
-  numbers for Village, Boomtown and Metropolis are owed; **next: Orbital (wave 4), only when
-  Ben says so** — see "M12" below)
+  numbers for Village, Boomtown and Metropolis are owed; **wave 4 Orbital Colony built, reviewed
+  and QA green 2026-10-06 on the branch `m12-orbital`, not merged**: Ben rejected two
+  straight-avenue layouts as too close to Metropolis and picked the organic "Bloom" ("lovely,
+  lets go with bloom"): 89 lots on curving swept tubes with round hubs, a round monorail loop,
+  regolith that recedes, four city-changer slots (Raise the Colony Flags, Green the Domes, Tend
+  the Rock Gardens, Light the Holo Beacons; "looks good! lets keep all four"); nothing is
+  uploaded yet; **M12 is complete only pending the asset run (171 uploads, one harvest paste)
+  and Ben's Studio look** — see "M12" below)
 - [~] M13 — The Valley (the landscape outside the plots; Ben chose mock A on 2026-10-01, "i love
   A valley"; **wave 1 built 2026-10-02**: hazed sky, green ground, stone hub, a dirt road to
   every plot, Parts and Lighting only, checks green; **Ben saw it in Studio 2026-10-02** (one
@@ -1879,9 +1885,11 @@ phones.** Plan of record: `docs/WEAPONS.md` §2; contracts: `docs/INTERFACES.md`
 Core gameplay is untouched.
 - Plan of record: `docs/CITY_GROWTH.md` (approved 2026-09-29).
 - Contracts: `docs/INTERFACES.md` "M12 contracts" (wave 1 through round 3 and every review
-  ruling), "M12 wave 2 — Boomtown" and "M12 wave 3 — Metropolis".
+  ruling), "M12 wave 2 — Boomtown", "M12 wave 3 — Metropolis" and "M12 wave 4 — Orbital
+  Colony".
 - Memory: `.claude/memory/growing-city-2026-09-28.md`, and in the same folder
-  `boomtown-growth-2026-10-01.md` and `metropolis-growth-2026-10-02.md`.
+  `boomtown-growth-2026-10-01.md`, `metropolis-growth-2026-10-02.md` and
+  `orbital-growth-2026-10-05.md`.
 - Where:
   - Wave 1 (Village) is on `main` (`e5df035`). Its branch `m12-growing-city` and its worktree
     were merged and removed on 2026-10-01.
@@ -1890,6 +1898,9 @@ Core gameplay is untouched.
   - Wave 3 (Metropolis) is on `main` too, merged on 2026-10-05 (a fast-forward to `d0dd894`).
     Its branch `m12-metropolis` is deleted and its worktrees are removed. See "Wave 3 —
     Metropolis" below.
+  - Wave 4 (Orbital Colony) is **not on `main`**. It is built, reviewed and QA green on the
+    branch `m12-orbital`, in the worktree `C:\Users\benja\Desktop\tycoon-m12o`. It merges only
+    after the asset run and Ben's Studio look. See "Wave 4 — Orbital Colony" below.
   - (M11 is the unmerged feature-unlocks milestone on branch `m11-unlocks`.)
 
 **Rulings (Ben):**
@@ -2341,7 +2352,7 @@ pieces, 8 lane pieces match the fabric data); `gen_asset_manifest.py --check` pa
 **Next (updated 2026-10-05):**
 1. **Metropolis (wave 3): done.** Signed off by Ben and merged to `main` on 2026-10-05. See
    "Wave 3 — Metropolis" below, which holds the current "Next" list.
-2. **Orbital (wave 4):** the same routine, only when Ben says so.
+2. **Orbital (wave 4): started 2026-10-05**, on Ben's go. See "Wave 4 — Orbital Colony" below.
 3. Alongside: the open follow-ups above, and Ben's numbers when they arrive.
 
 The code is shared; each era adds data, config and models.
@@ -2384,8 +2395,8 @@ The code is shared; each era adds data, config and models.
 - **The work lives on `main`**, in the main checkout `C:\Users\benja\Desktop\tycoon` (`main` at
   `d0dd894`, a fast-forward: `m12-metropolis` was 62 commits ahead). `origin/main` has it since 11:00 that day: the main checkout's editor sync pushed it, not the lead.
 - **The worktrees are gone:** `tycoon-m12m-avenues` and `tycoon-m12m-boulevard` are removed
-  (junctions first), `tycoon-m12m` is no longer a git worktree, and the branch `m12-metropolis`
-  is deleted. One leftover: the half-deleted folder `tycoon-m12m` (see the follow-ups).
+  (junctions first), and the branch `m12-metropolis` is deleted. The leftover folder
+  `tycoon-m12m` was deleted on 2026-10-05, after every file in it matched `d0dd894`.
 - Code, review and QA are done at `b6891e8` (QA ran at `1feb551`; `b6891e8` adds the place
   builds). After the QA run, `33261d4` adds the upload name guard and the larger baked cash, with
   `build/metropolis.rbxl` rebuilt.
@@ -2658,8 +2669,9 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
   all four lanes, so three lanes run past bare ground there.
 - **lead (watch):** the fabric is about 110k triangles on a full near plot before `untilStage`,
   about 2.5 times Boomtown's whole plot. The phone frame time is not measured.
-- **lead (watch):** `src/client/City/Fabric.luau` has 170 top-level locals; the compile gate
-  fails at about 180 and Studio at 200.
+- **Done (wave 4.2, 2026-10-06, on `m12-orbital`):** `src/client/City/Fabric.luau` had 170
+  top-level locals (the compile gate fails at about 180 and Studio at 200). Its constants are
+  folded into tables and its validation moved to `FabricValidation.luau`: 130 now.
 - **lead (open):** closing the last half stud between the lane pairs needs a rule in the tools
   and the client.
 - **lead (known, accepted):** the kiosk east of the entrance stands 2 studs onto the cross-town
@@ -2675,16 +2687,13 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - **Done (lead, 2026-10-05):** `m12-metropolis` merged into `main` (`d0dd894`, on `origin/main`); the
   two candidate worktrees removed (junctions first); the branch deleted; the two candidate
   branches kept as the record.
-- **lead (open):** delete the leftover folder `C:\Users\benja\Desktop\tycoon-m12m`. It is no
-  longer a git worktree, but it was left half-deleted because Roblox Studio had
-  `build\metropolis.rbxl` open from it. Delete it once Ben has closed Studio. Nothing in it is
-  unique.
+- **Done (lead, 2026-10-05):** the leftover folder `C:\Users\benja\Desktop\tycoon-m12m` is
+  deleted. Every file in it matched `d0dd894` byte for byte first.
 
-**Next (updated 2026-10-05, after the merge):**
-1. **Orbital (wave 4): only when Ben says so.** The same routine: a layout mock for Ben,
-   contracts, props with sheets, one harvest paste, review, QA, playtest. Orbital has the same
-   7-stud lattice and a ring, so the density arithmetic comes first, before any lot target.
-   The session prompt is `docs/prompts/m12-orbital.md`.
+**Next (updated 2026-10-06):**
+1. **Orbital (wave 4): started 2026-10-05, on Ben's go**, from the session prompt
+   `docs/prompts/m12-orbital.md`. The density arithmetic came first. It is built on the branch
+   `m12-orbital`; see "Wave 4 — Orbital Colony" below, which holds the current "Next" list.
 2. Alongside: the open follow-ups of waves 1 to 3 (each listed above with its owner), and Ben's
    numbers when they arrive.
 
@@ -2709,12 +2718,347 @@ and are fixed (`1feb551`); the Minors are fixed or ruled (text in INTERFACES "Re
 - [x] Ben: the Metropolis Studio look in `build/metropolis.rbxl`: signed off, "looks good!"
   (2026-10-05); not a report of all 51 steps
 - [ ] Ben → lead: the numbers (Village, Boomtown, Metropolis)
-- [x] lead: merged `m12-metropolis` into `main` (2026-10-05, fast-forward to `d0dd894`, not
-  pushed); candidate worktrees removed, branch deleted
-- [ ] lead: delete the leftover folder `tycoon-m12m` once Ben has closed Studio
+- [x] lead: merged `m12-metropolis` into `main` (2026-10-05, fast-forward to `d0dd894`; on
+  `origin/main` the same day); candidate worktrees removed, branch deleted
+- [x] lead: the leftover folder `tycoon-m12m` deleted (2026-10-05)
 - [ ] Watch items: the unreported checklist steps (step results, phone, low graphics, two
   players, measurement)
-- [ ] lead: wave 4, Orbital, only when Ben says so (the density arithmetic first)
+- [x] lead: wave 4, Orbital, started on Ben's go (2026-10-05; the density arithmetic first).
+  See "Wave 4 — Orbital Colony"
+
+### Wave 4 — Orbital Colony (2026-10-05 → 2026-10-06; built, reviewed and QA green on `m12-orbital`; the asset run and Ben's Studio look are ahead)
+
+**Where:**
+- **The work lives on the branch `m12-orbital`**, in the worktree
+  `C:\Users\benja\Desktop\tycoon-m12o` (`ccfae33`: the code is `f0f0167`, plus the rulings in
+  INTERFACES and a memory note). `assets\` there is a junction to the main checkout's
+  `assets\`, so renders and bakes are shared.
+- **It is not on `main`, and it must not get there before the asset run and Ben's Studio
+  look.** Until the uploads exist, an Orbital plot on this branch shows flat slabs where the
+  tubes go, grey decking Parts, the landmarks, and at most five yellow warning lines.
+- `main` is untouched by this wave (`de523bc`). At the last check (2026-10-06) it was 3 docs
+  commits ahead of `origin/main`.
+- **Kept as the record of the four layout candidates:** the branches `m12-orbital-docks`
+  (`cf4050a`) and `m12-orbital-axis` (`3cb4123`), both rejected; `m12-orbital-vine`
+  (`8b37a7e`), not chosen; `m12-orbital-bloom` (**chosen**; merged in by `954e286`, then
+  reseated). Their worktrees are removed.
+- Commits: wave 4.1 `cc49f77` … `39766db`; wave 4.1b `64a5fec` … `7a5fd85`; wave 4.1c
+  `1e83f18` … `fd13907`; wave 4.2 `a9fba4f` … `f0f0167`; the review fixes are `0f526ae`,
+  `e0f0ab4` and `f0f0167`.
+- Contract: `docs/INTERFACES.md` "M12 wave 4 — Orbital Colony": "Wave 4.1" (the rejected
+  mock), "Wave 4.1b — organic Orbital", "Wave 4.1c — city-changers on Bloom", and "Wave 4.2 —
+  Orbital in the game" with "Rulings after the wave 4.2 reports" and "Review rulings".
+- Memory: `.claude/memory/orbital-growth-2026-10-05.md`.
+
+**Status (2026-10-06): built, reviewed, QA green. Nothing is uploaded. Waiting on Ben.**
+- **M12 is complete only pending the asset run and Ben's Studio look.**
+- Review at `87de142`: 0 Critical, 1 Major, 4 Minor, all fixed or ruled. QA at `ccfae33`: green,
+  with two expected exceptions (see "QA" below).
+- Nothing of wave 4 is uploaded, harvested or templated. `build/orbital.rbxl` is not built
+  yet: the asset run builds it.
+- **Waiting on Ben:** his OK on three prop sheets (MANUAL_STEPS "M12" §18).
+- Routine: `docs/MANUAL_STEPS.md` "M12" §17–§21. Checklist: `docs/PLAYTEST.md` "M12 wave 4 —
+  Orbital growing city".
+- The counts below come from the tools on 2026-10-06. The timeline still reads the heights of
+  15 props from their blueprints; every count is re-checked after the harvest.
+
+**Goal:** Orbital grows as a colony. Raw regolith (craters, boulder rings, mounds, survey
+beacons) covers the plot at the start. As the landmarks arrive, curving white tubes grow in
+from the entrance, pods and domes rise along them, and the regolith recedes. Slots, order,
+prices, income and levels are unchanged.
+
+**Rulings (Ben):**
+1. 2026-10-05, the start: asked how to begin, he chose "arithmetic and plan only"; on the
+   study's report he said "lets do it" (a mock with two candidates, "Docks" and "Axis").
+2. 2026-10-05, the first gate: **both rejected.** "i dont really love it, i was looking for
+   something more organic looking for the orbital colony, it looks way to similar to
+   metropolly". Asked what organic should mean, he chose:
+   - **curving tubes** (over hubs and spokes, and over clusters on the square pieces);
+   - **as dense as organic allows** (over open regolith between clusters);
+   - **a round monorail loop** (over the square ring).
+3. 2026-10-06, the second gate: "lovely, lets go with bloom". Bloom (82 lots) over Vine (63).
+4. 2026-10-06, the third gate, the city-changers: "looks good! lets keep all four". The lead
+   reads it as: flags, green domes, rock gardens and hub beacons stay; `orbitalUplink` and
+   `planetaryDefense` stay buildings; the reseated Bloom (89 lots) is the layout.
+5. Still owed from waves 1 to 3: his numbers ("not measured yet").
+
+**Rulings (lead; the renders Ben approved carry them):**
+- **Never again for Orbital:** straight avenues, terrace rows of window-banded boxes, a square
+  ring. That is what read as Metropolis.
+- **Orbital leaves the tiles family.** A tube is one swept half-pipe mesh per stretch, with the
+  ids the baked paths use, so it grows with the buildings. Two pieces butt on one
+  cross-section; a round hub stands only where a tube ends or branches.
+- **Landmark connections are flat decking, never tubes** (a buy pad must stay in view). Each
+  landmark's piece is its apron: footpath, pad and building ground as one mesh.
+- **Geometry rules:** a tube never curves tighter than a 6-stud radius; two tubes into one hub
+  leave it 90° or more apart; a tube crosses the monorail's band at 60° or more to the track
+  and 2 studs or more from a pier foot.
+- **The regolith stays under the monorail for good** (`highway.clearBand` false). The beam is
+  1.6 wide, and clearing the band left a fifth of the plot bare.
+- **The colony spills past the loop:** eight landmarks stand in the plot's corners.
+- **Dense and wandering pull against each other on this plot.** A third of the ground lies
+  within 10 studs of the loop, and only a tube that follows the loop can front it. Drafts that
+  wandered held 48 to 58 lots.
+- **Four landmarks carry no district:** the Landing Pad and the Solar Array (the lowest
+  landmarks in the game), the Orbital Uplink and Planetary Defense. They govern no pods.
+- **City-changers must show from the whole-plot camera.** So the rock gardens became a swap of
+  the standing regolith, the flags also hang on the monorail's piers, and habitat holds at
+  least 20 lots.
+- **Only what a lot can show is uploaded.** Four of the 19 pod and dome props are shown by no
+  lot on this layout and stay out of the asset run (see "The asset run").
+
+**The gates.** Four real layouts through the real generator, two at a time:
+
+| | Docks | Axis | Vine | Bloom (**chosen**) |
+|---|---|---|---|---|
+| Gate | first, 2026-10-05: rejected | first: rejected | second, 2026-10-05 | second |
+| Tubes | a cross tube and four straight avenues | three straight avenues, six decking lanes | an S trunk inside two runners, spurs and curls | a stem, a heart ring, an open outer ring, a spiral |
+| Lots at the gate | 108 | 97 | 63 | 82 |
+| Reads as | a comb of four white pipes | a town with a main street | an S in a horseshoe, close to Bloom | rings round a heart of landmarks |
+
+Bloom was then reseated for the four street-only slots (wave 4.1c): **89 lots**.
+
+**Built (wave 4.2, 2026-10-06, commits `a9fba4f` … `f0f0167`):**
+- **Client-only**, apart from four slot names and `streetOnly` flags in
+  `Config/Eras/4_OrbitalColony.json`. No server, remote, attribute or profile change.
+- **Economy unchanged:** `py tools/sim_economy.py` total 16:20:04, legacy 887; Orbital
+  9:25:10.
+- **Layout** (`src/shared/Layouts/OrbitalColony.luau`, "bloom", reseated):
+  - the entrance hub at (0, −49), and a short **stem** from it to the heart;
+  - a **heart ring** of tube with six landmarks inside it; the Comms Array is its spire;
+  - an **open outer ring** at twice the distance, which echoes the monorail; its two ends
+    pass under the track to the two back corners;
+  - a **spiral**: the heart ring unwinds into a back arc that the Observation Dome closes;
+  - two short tubes cross under the track to the two front corners;
+  - eight landmarks stand past the loop, two in each corner; the **Launch Tower** stands in a
+    back corner, outside the loop;
+  - the Landing Pad and the Solar Array stand at the gate, either side of the stem;
+  - five tube polylines, a tree (every ring is open);
+  - the layout has no `lots`, `plazas`, `treeZones` or `blocks` any more.
+- **Orbital is a path era now** (it was a tiles era):
+  - **45 swept tube pieces**, 450 studs, 23,206 triangles: white half-pipes with grey rings;
+  - **20 flat decking pieces**, 896 triangles: 19 landmark aprons and the entrance apron
+    `SP_entrance` (from the plot's front edge to the first hub, laid from the start);
+  - **11 round tube hubs** (`TubeHub`), one where a tube ends or branches; a hub appears with
+    the first tube at its node;
+  - 65 pieces and 24,102 triangles in all; one mesh per piece, no rim, one palette texture.
+- **Round monorail** (`highway.round`): 48 `MonorailArc` segments on a circle of radius 56,
+  one pier at each segment's middle; the train rides the circle.
+  - The entrance passes between two piers. Tubes cross under the track at four places, one
+    toward each corner, each halfway between two piers.
+  - `highway.segments` (48) and `highway.bandHalf` (3.5) are config.
+- **Fabric** (`src/shared/Config/Fabric/OrbitalColony.json`, generated from
+  `tools/fabric/OrbitalColony.plan.json`): **89 lots**.
+  - 71 narrow 4 × 8, 14 small 6 × 6, 4 medium 8 × 12; no lanes.
+  - By district: habitat 25, industry 31, port 19, science 14.
+  - `pull`: radius 85, `tierTerm` 0.1, thresholds [0.3, 1.6, 1.84, 2.3], reach 30.
+- **Wild regolith:** 92 entries (34 clumps, 58 single pieces) as an irregular scatter, at most
+  3 studs tall: craters, boulder rings, mounds, boulders, survey beacons. No skirt past the
+  plot edge.
+- **Pods and domes grow in five stages** (`fabric.levelStages` [1, 3, 4]); round forms only
+  (capsules, drums, spheres, domes, vaults). A pod is never taller than the landmark that
+  governs it.
+- **Building sites with robot gantries** (`fabric.siteVariants`).
+- **Next-pad marker:** a lot beacon (`LotBeacon`) and stakes with string; a reveal scaffold on
+  each purchase.
+- **Four city-changer slots** (`streetOnly`; type, cost, income, multiplier and `requires`
+  unchanged):
+
+  | Slot | # in order | Name | At full build |
+  |---|---|---|---|
+  | `colonyFlag` | 8 | Raise the Colony Flags | 24 flag masts beside the tubes and 24 banners on every other monorail pier |
+  | `lifeSupport` | 12 | Green the Domes | 25 habitat pods and domes swap to their Green twin |
+  | `rockGarden` | 14 | Tend the Rock Gardens | every standing piece of regolith becomes a raked garden (`fabric.wildSwaps`): 44 at the end of tier 3, 25 at full build |
+  | `holoBeacon` | 20 | Light the Holo Beacons | a hologram over each of the 11 hubs |
+
+  - `walkwayNetwork` "Build the Monorail" (6) was street-only already. `orbitalUplink` (17)
+    and `planetaryDefense` (23) stay buildings.
+  - The pads of the four stand in the corners past the loop, on ground no pod can front.
+- **Client rules:**
+  - `src/shared/CityFabric.luau`: `RoundLoop`, `RingBand`, `KeptInBand`, `RingGround`,
+    `SwappedWild`, `UpgradeDeveloped` and their validators;
+  - new `src/client/City/Tubes.luau` (pure: the hub rule and the entrance apron) and
+    `FabricValidation.luau`; `Fabric.luau` went from 170 to 130 top-level locals;
+  - `RoadGraph`, `PathRenderer`, `Highway`, `PropFactory`, `CityDressingController`,
+    `AssetPreloader`;
+  - every new key is optional: without them the other three eras behave as before;
+  - a missing template draws a placeholder Part or nothing, with one warning per era and
+    kind, never an error.
+- **Props, final (none uploaded):** 49 new blueprints in
+  `tools/testfit/blueprints/_props/OrbitalColony/` (62 with the 13 older ones).
+  - 19 of 5 stages: 15 pods and domes and the 4 `…Green` twins of the habitat ones;
+  - 30 single-stage props: 6 regolith clumps and quarters, 3 single pieces, their 9
+    `…Garden` twins, 5 sites (2 with gantries), `LotBeacon`, `RevealScaffold`, `TubeHub`,
+    `MonorailArc`, `ColonyFlagMast`, `PierBanner`, `HubBeacon`;
+  - two new generated kits, `colony-kit` (`tools/assets/colony_kit.py`) and `regolith-kit`
+    (`regolith_kit.py`), and new pieces in `tube-kit` and `monorail-kit`.
+- **Asset route for the tubes** (`tools/paths/tubes.py`; `py tools/paths/bake.py --era
+  OrbitalColony` hands the era to it): the baked-paths route, with one mesh per piece and a
+  palette. `upload_paths.py`, `harvest.py`, `gen_templates.py --paths` and the manifest follow
+  an era's own layers.
+- **Tools and gates:**
+  - `py tools/check_mirror.py --strict` now covers Orbital, and `Tubes.luau` against
+    `tubes.py`;
+  - `py tools/paths/bake.py --era OrbitalColony --list`: the list gate for tubes and decking;
+  - `py tools/cityfabric.py props OrbitalColony` also names the hub, the track, the train and
+    the uploads nothing refers to;
+  - `py tools/fabric.py check`: regolith kept under the track keeps its ground off every lot,
+    pad, apron and landmark.
+- **Studio start file:** `orbital.project.json` → `build/orbital.rbxl`. It bakes in
+  `DebugStartEra` 4 and `GrantCash` 3e21: a fresh save starts in Orbital with cash for every
+  purchase and Max on every building (24 slots cost 2.346e15; 16 buildings to level 100 cost
+  2.1584e21). **Never publish that file.**
+- **Renders** in `assets/testfit/out/OrbitalColony/`:
+  - `m12o_compare.png` (the rejected first gate) and `m12o_compare_organic.png` (Vine against
+    Bloom);
+  - `m12o_bloom2_{tier1,tier3,full,full_entrance,streetplan}.png`: the reseated Bloom;
+  - `m12o_bloom_reseat.png`: Bloom as picked against reseated;
+  - `m12o_changers.png`: the four city-changers, before and after;
+  - prop sheets and strips in `m12o_props/`.
+
+**Timeline** (`py tools/cityfabric.py timeline OrbitalColony`, the sim's greedy player at the end
+of each tier; QA run of 2026-10-06):
+
+| Tier | Pods and domes | Sites | Tube stretches | Flags | Hub holograms | Green domes | Gardens | Regolith clumps left whole |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 4 | 2 | 7 | 0 | 0 | 0 | 0 | 25 |
+| 2 | 28 | 3 | 26 | 36 | 0 | 0 | 0 | 14 |
+| 3 | 47 | 22 | 37 | 43 | 0 | 24 | 44 | 5 |
+| 4 | 73 | 10 | 40 | 46 | 0 | 24 | 36 | 3 |
+| full | 89 | 0 | 45 | 48 | 11 | 25 | 25 | 1 |
+
+- "Flags" counts masts and pier banners together. "Gardens" counts the regolith pieces that
+  stand and show their garden twin.
+- No smoke, cars, walkers or birds in Orbital. Only the monorail train moves.
+- A far plot shows 60 of the 89 pods.
+- 0 standing buildings shrink or change prop over 63 moments.
+
+**Review (wave 4.2, at `87de142`): 0 Critical, 1 Major, 4 Minor.** All fixed or ruled; the text
+is in INTERFACES "Review rulings (2026-10-06 …)".
+- **Major, fixed (`0f526ae`):** regolith kept under the monorail reached into lots, a pad and
+  an apron (five cases). The generator and its check now keep that ground off every lot, pad,
+  apron and landmark; the data is rebuilt (still 89 lots, 92 wild). No standing regolith lies
+  on a lot at any of the timeline's 63 moments.
+- **Minor, fixed:** the client's hub rule and entrance apron (`Tubes.luau`) joined
+  `check_mirror.py --strict`; `highway.segments` and `highway.bandHalf` moved from code to
+  config; one shared `CityFabric.RoundLoop` predicate.
+- **Minor, accepted:** the one-time missing-prop warning now applies in every era. It cannot
+  fire while templates exist.
+- **Not judged without Studio:** that nothing errors while Orbital has no templates; the
+  arc's curve after the import turn; hub and tube heights; the train over 48 chords; the
+  garden wave's pace; phone cost.
+
+**QA (at `ccfae33`): green, with two expected exceptions.**
+- `py tools/paths/bake.py --era OrbitalColony --list` exits 2 until the asset run: the client
+  and the plan agree on 65 pieces, and 0 are baked.
+- `py tools/gen_asset_manifest.py --check` was stale until this docs pass regenerated the
+  manifest. It passes now. Orbital reads: 24/24 buildings; props 62/62 blueprints, 13/62
+  uploaded, harvested and templated; no baked-paths row yet.
+- Green: `fabric.py check` for the four eras; `cityfabric.py selftest`, `timeline` and
+  `props`; `check_mirror.py --strict`; `streetplan.py`; the list gates for Village and
+  Boomtown; `valley.py check`; `sim_economy.py`; `check_compile.py` (124 files);
+  `gen_templates.py --check`; stylua; a Rojo build of all five project files.
+- luau-lsp is clean both ways: `src` outside `src/combat` with `sourcemap.json`, and
+  `src/combat` with `sourcemap.combat.json`.
+- selene still has its one old warning (`src/client/UI/LegacyPanel.luau:200`).
+
+**The asset run (ahead; MANUAL_STEPS "M12" §19).** Counts from `py tools/cityfabric.py props
+OrbitalColony` and the list gate:
+- **65 street pieces** (45 tubes, 20 decking) and 1 palette: 66 uploads.
+- **45 props, 105 stages:** 15 of 5 stages (12 pods and domes, 3 Green twins) and 30
+  single-stage props.
+- **171 uploads in all, and one harvest paste** (171 loaded).
+- **Four props are not uploaded:** `FabricHabSmallA`, `FabricHabSmallAGreen`,
+  `FabricIndMediumA`, `FabricPortMediumA`. No lot of that size falls in that district on
+  Bloom. They stay in the repo as blueprints.
+- `MonorailTrain` is uploaded already and is left alone.
+- Names: 30 props (90 stages) and 18 decking pieces take the short `ECT_` form. No name is
+  over 50 characters.
+- Twelve uploaded Orbital props are no longer drawn: `HouseA`, `HouseB`, `LampPost`,
+  `MonorailCorner`, `MonorailTrack`, `PlazaA`, `Rocks`, `TubeBend`, `TubeCross`, `TubeEnd`,
+  `TubeStraight`, `TubeTee`.
+
+**Known follow-ups (wave 4):**
+- **Ben (next):** the OK on the three prop sheets (MANUAL_STEPS "M12" §18).
+- **lead, then Ben, then lead:** the asset run, the one harvest paste, then harvest,
+  templates, fabric data from harvested sizes, gates, sourcemaps and the five place files
+  (§19). The committed place files and sourcemaps in the worktree are older than wave 4's
+  code.
+- **docs-keeper (after the asset run):** re-check every count here and in PLAYTEST on the
+  harvested sizes, and add the "after purchase N" table to PLAYTEST "M12 wave 4".
+- **Ben (after the asset run):** the Studio look in `build\orbital.rbxl` and the checklist.
+- **lead (after Ben's sign-off):** merge `m12-orbital` into `main`, then the cleanup (§21).
+- **Ben → lead (open since wave 1):** the numbers, instance count and frame time on a full
+  plot: Village step 37, Boomtown step 59, Metropolis step 49, and now Orbital step 52.
+- **lead (after Ben's numbers):** the far-plot budgets. `budget.parcelsFar` draws 60 of the 89
+  pods, and `budget.wildFar` only whole clumps.
+- **Watch items (Ben, when convenient):** the phone at 375×667, low graphics and two players
+  have never been reported for Boomtown, Metropolis or Orbital.
+- **lead (watch):** the tubes are 23,206 triangles a plot with no far level of detail, and
+  the cost of the fabric props is not measured.
+- **Ben → lead:** the pace of the garden wave (about 20 seconds). Kept for his Studio look
+  (PLAYTEST step 28).
+- **Ben → lead (open, from the pipeline owner):** the tubes cast shadows. Change it only if Ben
+  says so.
+- **lead (not confirmed by a tool run):** four PLAYTEST steps are read from the rules, not
+  from the mirror: the first sites after the Habitat Pod with nothing levelled (step 12), pods
+  growing when the Habitat Pod is levelled to 51 (32), the train hidden on another player's
+  plot with City detail off (45), and the missing-hub line (46). Confirm them with the
+  purchase table after the asset run.
+- **lead (open):** four fabric props no lot shows on this layout (`FabricHabSmallA`,
+  `FabricHabSmallAGreen`, `FabricIndMediumA`, `FabricPortMediumA`). They upload if a later
+  layout or size rule uses them.
+- **lead (held design asks, not built):** a marker offset mirrored per slot (about 6 lots); a
+  per-run lot size list in `fabric.py`; a second small prop for industry, science and port;
+  `wild.clumpQuarters`; a lone mound quarter reads as a cut wedge.
+- **lead (known, accepted; from the third gate):** the reseated Bloom reads a little worse
+  than the one Ben picked. The Fusion Reactor stands in a front corner outside the loop; the
+  heart's south-west seat is an empty pad until purchase 17; the west arm shows 22 building
+  sites at tier 3; no changer pad is near the entrance.
+- **lead → ui-engineer (open):** `LANE.thickness` 0.2 in `src/client/City/Fabric.luau` is an
+  older code constant. It belongs in config.
+- **lead → economy-designer (open):** `tools/streetplan.py` reads a round loop with a ramp as
+  round, and the shared rule reads it as a square ring. No config does it today.
+- **lead → economy-designer (open):** `tools/streetplan.py` counts 64 Orbital path pieces
+  where the list gate counts 65. It leaves out `SP_entrance`.
+- **lead (after the merge):** retire the 12 uploaded props nothing draws (ids, templates,
+  blueprints), and the unused GLBs in the shared kit folders: `colony-kit/sci-small-a-1-u1`;
+  `regolith-kit/ground-a`, `ground-b`, `ground-c`, `boulder-large`, `rock-garden-a`,
+  `rock-garden-b`, `hub-beacon`; the old tile pieces of `tube-kit` and `monorail-kit`.
+- **lead (record):** the branches `m12-orbital-docks`, `-axis`, `-vine` and `-bloom` are kept.
+- **lead (open, listed under M13):** the Valley's re-bake for 6 plots when `m11-unlocks`
+  merges.
+
+**Next (2026-10-06):**
+1. **Ben:** look at the three sheets in `assets\testfit\out\OrbitalColony\m12o_props\` and say
+   "props OK".
+2. **lead:** the asset run (bake, upload).
+3. **Ben:** the one harvest paste.
+4. **lead:** harvest, templates, fabric data, gates, `build\orbital.rbxl`.
+5. **Ben:** open `build\orbital.rbxl` and run the checklist.
+6. **lead:** merge to `main`, cleanup.
+
+- [x] Density study: the lot ceiling for the lattice (2026-10-05)
+- [x] Wave 4.1 mock: Docks (108 lots) and Axis (97), gate renders (2026-10-05)
+- [x] Ben decided 1: both rejected, "more organic"; curving tubes, dense, round loop
+  (2026-10-05)
+- [x] Wave 4.1b mock: Orbital as a path era, Vine (63) and Bloom (82) (2026-10-05)
+- [x] Ben decided 2: Bloom, "lovely, lets go with bloom" (2026-10-06)
+- [x] Wave 4.1c: four city-changers on Bloom, reseated to 89 lots (2026-10-06)
+- [x] Ben decided 3: "looks good! lets keep all four" (2026-10-06)
+- [x] Wave 4.2 built: shared rules, client, asset route, final props, `orbital.project.json`
+  (2026-10-06, `f0f0167`)
+- [x] Review: 0 Critical, 1 Major fixed, 4 Minor fixed or ruled (2026-10-06)
+- [x] QA green at `ccfae33`, two expected exceptions (2026-10-06)
+- [x] docs-keeper: PLAN, PLAYTEST, MANUAL_STEPS, CITY_GROWTH §3, asset manifest (2026-10-06)
+- [ ] Ben: OK on the three final prop sheets
+- [ ] lead: bake and upload (66 path uploads, 45 props in 105 stages)
+- [ ] Ben: the one harvest paste (171 loaded)
+- [ ] lead: harvest, templates, fabric data from harvested sizes, gates, sourcemaps, builds
+- [ ] docs-keeper: the docs after the asset run; counts re-checked; the purchase table
+- [ ] Ben: the Orbital Studio look in `build\orbital.rbxl`
+- [ ] Ben → lead: the numbers (Village, Boomtown, Metropolis, Orbital)
+- [ ] lead: merge `m12-orbital` into `main`; worktree removed (junction first); cleanup
 
 ## M13 — The Valley
 

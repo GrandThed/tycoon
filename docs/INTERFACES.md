@@ -8033,3 +8033,22 @@ docs-keeper, and the final prop sheets to Ben.
   phone cost (tubes are 23,206 triangles a plot with no far level of detail).
 - **This branch must not reach `main` before the asset run:** until then an Orbital plot shows flat
   slabs, decking Parts and landmarks.
+
+### After QA and the docs pass (lead, 2026-10-06)
+
+- **QA green** on `ccfae33` (qa-runner): every gate, with two expected exceptions before the asset run
+  (`bake.py --era OrbitalColony --list` exits 2: 65 pieces agree, none is baked; the manifest was
+  stale until the docs pass regenerated it). luau-lsp is run twice: `src` without `src/combat` on the
+  default sourcemap, `src/combat` on the combat sourcemap.
+- **Four fabric props are never shown on the shipped layout and are not uploaded:**
+  `FabricHabSmallA`, `FabricHabSmallAGreen`, `FabricIndMediumA`, `FabricPortMediumA` (no lot of that
+  size falls in that district). They stay as blueprints. The asset run is therefore **45 props in
+  105 stages and 66 path uploads (65 pieces and the palette), 171 uploads, one harvest paste**; the
+  "sixteen new props" above reads fifteen, and only three Green twins upload.
+- **The wild swap changes 44 entries at the end of tier 3 and 25 at full build** on the data as
+  rebuilt after the review (the earlier 56 and 32 were measured before the reseat and the fix).
+- The asset run also regenerates the tracked `sourcemap*.json` and `build/*.rbxl`, which predate
+  `Tubes.luau` and `FabricValidation.luau`. The commands are in `docs/MANUAL_STEPS.md` M12 §19.
+- `streetplan.py` counts 64 Orbital path pieces where the list gate counts 65 (it leaves out
+  `SP_entrance`); the two final prop sheets for the ground and the colony are titled "1 of 2" and
+  "2 of 2" although the fabric sheet makes three.

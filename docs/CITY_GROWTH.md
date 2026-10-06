@@ -251,15 +251,25 @@ Slot positions are not saved in player data, so nothing migrates. The costs:
 
 ### Orbital Colony: an outpost that becomes a colony
 
-- **Wild:** regolith: craters, boulders, dust, survey beacons (today's Rocks zones).
-- **Growth:** the landing pad by the entrance is the seed. Pods and module clusters spread along
-  the tubes, decking grows under them, and domes and towers take the dense heart. The monorail
-  ring stays.
-- **Districts:** habitat (pod → pod cluster → dome), industry (tanks, drills, refinery), science
-  (dishes, labs), port (cargo pads, crates).
-- **Sites:** robot gantries, cargo crates, a lander.
-- Same lattice limits as Metropolis, so it gets the same kind of layout mock first. The "decking
-  under clusters" ruling becomes "decking under development".
+As approved by Ben on 2026-10-06 (the "Bloom" layout; `docs/INTERFACES.md` "M12 wave 4").
+
+- **Wild:** raw regolith in an irregular scatter: craters, boulder rings, mounds, boulders and
+  survey beacons. It stays under the monorail for good.
+- **Growth:** the gate at the entrance is the seed. **Curving tubes** (white half-pipes that
+  meet in round hubs) grow in from it: a short stem to a heart ring of landmarks, an open outer
+  ring that echoes the **round monorail loop**, and a spiral behind the heart. Pods and domes
+  rise along the tubes, turned to follow them. Eight landmarks stand past the loop in the
+  plot's corners, the Launch Tower among them.
+- **Districts:** habitat (pod → pod cluster → glass dome), industry (tanks, spheres, stacks),
+  science (capsule labs, dishes, an observatory dome), port (cargo pads, hangars, a control
+  tower). **Round forms only:** box bodies with rows of windows read as Metropolis.
+- **Sites:** a deck going down, pod ribs, robot gantries, crates, a lander.
+- **City-changers:** Raise the Colony Flags (masts by the tubes, banners on the monorail's
+  piers), Green the Domes, Tend the Rock Gardens (the standing regolith becomes raked gardens),
+  Light the Holo Beacons (a hologram over every hub).
+- Two straight-avenue mocks on the Metropolis lattice were rejected first ("it looks way to
+  similar to metropolly"), so Orbital left the lattice: 89 lots, as dense as an organic plan
+  allows on this plot.
 
 ## 4. New models
 
@@ -282,7 +292,7 @@ Where the pieces come from (from an inventory of the kits on disk, 2026-09-28):
 | Village | fantasy-town-kit wall and roof panels; storeys stack, so a cottage can grow in place | kit broken walls, timber poles, planks, log stacks; **generated** crates, ladder, hoist, stone pile | nature-kit trees, stumps, rocks, fences and crops (already in growth stages); **generated** haystacks |
 | Boomtown | **generated** porches, garages and extra storeys around suburban and industrial bodies: every unused house type is already a landmark or a filler house, and kit houses cannot grow in place (their roofs leave a lip) | **generated** scaffold, timber, cement mixer, hoarding (the roads-kit cones are under 1 stud at scale 4) | **generated** farmland (crops, hay, logs, rocks, dirt) in the City Kit palette; suburban trees and fences |
 | Metropolis | **generated** modular towers (base, floors, crown) in the commercial palette, so a tower grows floor by floor; kit low-detail blocks for the far skyline | **generated** tower crane, scaffold, hoarding | **generated** old town (car parks, vacant lots, chain-link, rubble, old low-rise). It may not borrow Boomtown's kits: each kit belongs to one era |
-| Orbital Colony | space-kit corridors and hangars; domes nest small → medium → large | kit gantries, platforms, barrels; **generated** jib crane, cones, crates | space-kit craters, rocks and terrain (the Rocks prop already grows in stages) |
+| Orbital Colony | **generated** round pods, capsules, drums and glass domes (`colony-kit`): every space-kit module is already a landmark's signature, and box bodies read as Metropolis; a space-kit cargo craft on the port lots | **generated** deck rows, pod ribs, robot gantries, crates and a small lander (`regolith-kit`) | **generated** regolith (`regolith-kit`): craters, boulder rings, mounds, boulders and survey beacons, each with a raked-garden twin for Tend the Rock Gardens |
 
 Generated kits are the project's normal answer when a Kenney kit lacks a piece (stadium, highway,
 garage, metro, tube, monorail, garden and people kits); colours are sampled from the era kit's own
@@ -337,8 +347,9 @@ caps above are tuned from that measurement.
 Slots and their order, prices, income, levels and milestones, the requires chain, pads and the
 Build panel, landmark models and their growth stages, Advance Era, Rebirth, Legacy, data, remotes,
 monetization, the rule that streets grow with your buildings, the approved baked-path look, the
-Metropolis tiles, highway and subway, the Orbital tubes and monorail, cars, walkers and birds.
-The street plans themselves are redrawn with each growth layout.
+Metropolis tiles, highway and subway, cars, walkers and birds.
+The street plans themselves are redrawn with each growth layout. Orbital is the exception Ben asked
+for on 2026-10-05: its tubes became curving swept meshes and its monorail a round loop (§3).
 
 ## 7. Decisions for Ben (answered 2026-09-29)
 
