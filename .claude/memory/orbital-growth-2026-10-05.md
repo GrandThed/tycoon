@@ -30,7 +30,14 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   (the shared `colony-kit` folder now holds only those, so the Docks and Axis renders cannot be
   re-made without regenerating the old kit from their branches). Vine and Bloom designers are
   running; the gate sheet will be `m12o_compare_organic.png`.
-- **At the second gate, waiting for Ben (2026-10-05):** sheet `assets/testfit/out/OrbitalColony/
+- **Ben picked Bloom on 2026-10-06: "lovely, lets go with bloom"** (read as Bloom as shown: not the
+  loosened variant the lead offered, not more wandering). `m12-orbital-bloom` is merged into
+  `m12-orbital` (954e286); the worktrees `tycoon-m12o-docks`, `-axis` and `-vine` are removed, their
+  branches kept; `tycoon-m12o-bloom` stays for the layout owner. Next: wave 4.1c, city-changer
+  before-and-afters on Bloom (`colonyFlag` flags, `lifeSupport` green domes, `rockGarden` gardens in
+  the strips, `holoBeacon` on the hubs; Uplink and Defense stay buildings by the lead's
+  recommendation), then wave 4.2 (client, final props with strips, review, QA, docs, asset run).
+- State at the second gate, for the record (2026-10-05): sheet `assets/testfit/out/OrbitalColony/
   m12o_compare_organic.png`. **Bloom** (`m12-orbital-bloom` 4b2713f): 82 lots, concentric rings round
   a heart, Launch Tower outside the round loop; it curves but does not wander. **Vine**
   (`m12-orbital-vine` 8b37a7e): 63 lots, under the floor of 80, and it reads close to Bloom. The lead

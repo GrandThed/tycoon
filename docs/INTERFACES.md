@@ -7787,3 +7787,52 @@ Bloom's outer ring); the marker offset mirrored per slot (about 6 lots on Bloom)
 size list in `fabric.py` (mediums without the inner-row loss). Rulings taken as built: the Launch
 Tower and the Solar Array carry no district on Vine; the Comms Array is the spire of Bloom's heart,
 not at the back; the monorail pad stands outside the loop on Vine.
+
+### Ben at the second gate (2026-10-06): Bloom
+
+"lovely, lets go with bloom". Read as: the organic direction is right and Bloom is the layout as
+shown, not the loosened variant the lead offered and not more wandering. `m12-orbital-bloom` is
+merged into `m12-orbital` (954e286, every gate green). `m12-orbital-vine`, `-docks` and `-axis` stay
+as branches; their worktrees are removed.
+
+## Wave 4.1c — city-changers on Bloom (step 3; renders for Ben, not yet a contract)
+
+Orbital's `walkwayNetwork` is already a street upgrade (the monorail). Six more slots could "stop
+being a sole building": a slot that does becomes `streetOnly` and drives an upgrade layer or a prop
+swap. Each proposal is shown to Ben as a before and after render; the economy is untouched either
+way (type, cost, income, multiplier and `requires` stay).
+
+| Slot | Proposal | Mechanism |
+|---|---|---|
+| `colonyFlag` (8) | **Raise the Colony Flags**: flag masts along the tubes | the generic upgrade layer (`ColonyFlagMast` beside the tubes, between lots) |
+| `lifeSupport` (12) | **Green the Domes**: every habitat pod and dome gets a garden under its glass | a prop swap (`fabric.swaps`, suffix `Green`) to twins of the four habitat props |
+| `rockGarden` (14) | **Tend the Rock Gardens**: raked rock-and-crystal gardens fill the strips between rows and beside aprons | the generic upgrade layer (`RockGardenA`, `RockGardenB` in the gaps the lots leave) |
+| `holoBeacon` (20) | **Light the Holo Beacons**: a hologram over every tube hub | the generic upgrade layer, placed at the hubs (`HubBeacon`) |
+| `orbitalUplink` (17), `planetaryDefense` (23) | stay buildings (lead's recommendation): the corners past the loop want landmarks, and the last purchases read better as buildings | none |
+
+- **Layout:** the four slots keep their order and economy and become street-only on the branch for
+  the mock (a pad on ground nothing else uses, with a one-point spur). The Bloom owner reseats so no
+  tube tip is left without a landmark and uses the freed seats; the lot count is reported before and
+  after, per changer and for all four.
+- **Rock gardens answer Bloom's weak point:** 36% of the ground inside the loop is uncovered, as
+  1.5 to 4-stud strips. A garden is low (at most 1.2), keeps 0.25 off lots, aprons and tubes, and is a
+  mesh at least 0.05 above the plot.
+- **Twins share the body** and change only what is under the glass, so the swap plays as a stage
+  swap. A twin exists for every stage of its original.
+- **Budgets:** flags at most 24, gardens at most 40, beacons one per hub (11).
+
+### Gate renders (`assets/testfit/out/OrbitalColony/`)
+
+- `m12o_changers.png`: one row per changer, full build, the same camera: left without the slot
+  owned, right with it; and a first row with Bloom as picked beside Bloom with all four.
+- Prop strips for the new props in `m12o_props/`.
+
+### Ownership (wave 4.1c)
+
+| Owner | Where | Files |
+|---|---|---|
+| lead | base (`tycoon-m12o`) | this section; rulings; commits and merges; memory |
+| economy-designer "generator" | base | the tools; `CityDressing.json` `eras.OrbitalColony.fabric.swaps` and `.upgrades`; `Config/Eras/4_OrbitalColony.json` (`streetOnly` on the four slots, for the mock) |
+| prop-builder "pods" | base | `tools/assets/colony_kit.py`; `_props/OrbitalColony/Fabric{HabNarrowA,HabNarrowB,HabSmallA,HabMediumA}Green.json`; strips |
+| prop-builder "kits" | base | `tools/assets/regolith_kit.py`; `_props/OrbitalColony/{ColonyFlagMast,RockGardenA,RockGardenB,HubBeacon}.json`; strips |
+| layout-designer "bloom" | `tycoon-m12o-bloom` | `Layouts/OrbitalColony.luau`, `tools/fabric/OrbitalColony.plan.json`, `Config/Fabric/OrbitalColony.json`, `fabric.pull`; renders `m12o_changer_*`, `m12o_changers.png` |
