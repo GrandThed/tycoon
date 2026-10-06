@@ -47,8 +47,8 @@
     }
   },
   "require": {
-    "parcels": 80,
-    "houses": 80,
+    "parcels": 86,
+    "houses": 86,
     "medium": 4,
     "beacons": 9,
     "flags": 18,
