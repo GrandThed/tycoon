@@ -1,7 +1,8 @@
-"""Raw regolith (Orbital Colony's wild land), the colony's building sites, the landing beacon and
-the reveal gantry for the growing city (M12 wave 4), generated as a Kenney-style kit.
+"""Raw regolith (Orbital Colony's wild land), the colony's building sites, the landing beacon, the
+reveal gantry and the city-changer props for the growing city (M12 wave 4), generated as a
+Kenney-style kit.
 
-    py tools/assets/regolith_kit.py                  # the GLBs and the 16 blueprints, then the check
+    py tools/assets/regolith_kit.py                  # the GLBs and the 20 blueprints, then the check
     py tools/assets/regolith_kit.py check            # the check alone: nothing is written
     py tools/assets/regolith_kit.py --only lander    # rebuild some GLBs (blueprints and check as usual)
     py tools/assets/regolith_kit.py --out <dir> --blueprints <dir>   # a trial build that touches nothing shared
@@ -14,7 +15,7 @@ overrides the executable.
 Writes one GLB per piece into assets/kenney3d/regolith-kit/Models/GLB format/, the folder
 convention every Kenney kit uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py
 discover the kit with no registration step. assets/ is gitignored, so this script is the committed
-artifact and the GLBs regenerate from it. The 16 blueprints under
+artifact and the GLBs regenerate from it. The 20 blueprints under
 tools/testfit/blueprints/_props/OrbitalColony/ are written from blueprints() below: never edit one
 by hand, and never edit a clump at all (it is its quarter turned four times). Same pattern as
 oldtown_kit.py, whose box, rod and decal helpers this file uses.
@@ -58,7 +59,14 @@ bytes: regolith-kit must NOT join palette.SRGB_FACTOR_KITS. The rocks are the ki
 colours. DUST, DUST_LIGHT and RUT are not kit colours: the kit has no ground tone at all, and its
 rock salmon laid flat over half the plot would drown the white colony. They are the plot base
 (56, 53, 60) mixed toward the kit's dark rock, so dust reads as the same rock, weathered and lying
-in shadow. DECK is the contract's decking colour.
+in shadow. DECK is the contract's decking colour. SAND and RAKE, the tended beds of the rock gardens,
+are the kit's rock mixed toward its hull white: the same ground, raked clean. HOLO is orbital-kit's
+hologram cyan and CRYSTAL the kit's own crystal green.
+
+**The city-changers** (INTERFACES "Wave 4.1c"): props an upgrade layer scatters over the whole
+colony when one slot is bought. ColonyFlagMast stands beside a tube between two pods; RockGardenA
+and RockGardenB fill the strips of ground the lots leave; HubBeacon floats over every tube hub.
+None has a front: a layer turns them any way, and the tycoon camera sees them from every side.
 
 Art rules, matching the kits: flat shading, faceted solids, chunky toy proportions.
 
@@ -134,12 +142,19 @@ HULL = (215, 222, 232)  # "metal"
 PANEL = (172, 181, 197)  # "metalDark"
 TRIM = (255, 160, 52)  # "metalRed": the orange trim
 LIT = (255, 225, 140)  # orbital-kit's lit strip
+CRYSTAL = (47, 224, 151)  # "crystal"
+HOLO = (90, 255, 245)  # orbital-kit's hologram
 DECK = (96, 98, 108)  # the decking colour (`road.tiles.blocks`, INTERFACES "Wave 4.1")
 # Not kit colours (see the module docstring): the plot base mixed 40% and 72% toward ROCK_DARK,
 # and 16% for ground a wheel has pressed bare.
 DUST = (105, 70, 63)
 DUST_LIGHT = (144, 83, 65)
 RUT = (76, 60, 61)
+# Not kit colours either: ROCK mixed 60% toward HULL, and ROCK_DARK mixed 45% toward it for the
+# lines a rake leaves; HOLO mixed half toward white, so a hologram's ring parts from its planet.
+SAND = (222, 186, 179)
+RAKE = (195, 152, 141)
+HOLO_PALE = (172, 255, 250)
 
 MIN_GAP = 0.05  # parallel faces that overlap stand at least this far apart
 MIN_MEMBER = 0.1  # nothing is thinner
@@ -788,6 +803,156 @@ def make_landing_beacon() -> Part:
     return p
 
 
+# --- the city-changers ---------------------------------------------------------------------------
+
+FLAG_TOP = 5.0
+FLAG_MAX = 5.2  # "about 5 tall" (INTERFACES "Wave 4.1c")
+
+
+def banner(p: Part, turn: float, half: float, top: float, shoulder: float, tip: float, colour: Rgb) -> None:
+    """A banner hanging from a yard arm: a cloth MIN_MEMBER thick and 2 * half wide, square down to
+    `shoulder` and cut to a point at `tip`, 0.38 to 0.48 out from the mast on the side `turn`
+    degrees round it. Its top edge is against the yard, so it has no top face."""
+    cloth = Part("banner")
+    x0, x1 = 0.38, 0.38 + MIN_MEMBER
+    outline = [(-half, top), (half, top), (half, shoulder), (0.0, tip), (-half, shoulder)]  # (z, y)
+    face_out(cloth, [(x1, y, z) for z, y in outline], colour, (1.0, 0.0, 0.0))
+    face_out(cloth, [(x0, y, z) for z, y in outline], colour, (-1.0, 0.0, 0.0))
+    for (za, ya), (zb, yb) in zip(outline[1:], outline[2:] + outline[:1]):
+        face_out(cloth, [(x0, ya, za), (x1, ya, za), (x1, yb, zb), (x0, yb, zb)], colour,
+                 (0.0, (ya + yb) / 2 - (top + shoulder) / 2, (za + zb) / 2))
+    place(p, cloth, turn)
+
+
+def make_flag_mast() -> Part:
+    """ColonyFlagMast: a standard 1 stud across and 5 tall, the same from every side: a white mast
+    on a grey foot, two orange yards crossed near its top, and four banners hanging from their
+    ends, two long orange ones and, a little higher, two shorter white ones, each cut to a point.
+    Hanging banners on crossed yards, not one flag flying: whichever way a layer turns the mast,
+    two cloths face the camera, and it cannot be taken for the Colony Flag landmark's flag."""
+    p = Part("flag-mast")
+    box(p, -0.2, 0.2, 0.0, 0.16, -0.2, 0.2, PANEL)
+    box(p, -0.07, 0.07, 0.16, 4.72, -0.07, 0.07, HULL, skip=("bottom", "top"))
+    # The yards: flat bars MIN_GAP wider than the mast on each side, the higher one MIN_GAP over
+    # the lower where they cross.
+    low, high = 4.4, 4.55
+    box(p, -0.5, 0.5, low, low + MIN_MEMBER, -0.12, 0.12, TRIM, skip=())
+    box(p, -0.12, 0.12, high, high + MIN_MEMBER, -0.5, 0.5, TRIM, skip=())
+    for turn in (0, 180):
+        banner(p, turn, 0.28, low, 2.95, 2.55, TRIM)
+    for turn in (90, 270):
+        banner(p, turn, 0.28, high, 3.6, 3.25, HULL)
+    drum(p, [(0.13, 4.72), (0.0, FLAG_TOP)], [TRIM, TRIM], seg=4, bottom=True)
+    return p
+
+
+GARDEN_MAX = 1.2
+KERB_TOP = 0.22
+KERB_WIDE = 0.16
+SAND_Y = KERB_TOP + MIN_GAP
+RAKE_Y = SAND_Y + MIN_GAP
+RAKE_WIDE = 0.12
+
+
+def garden_bed(p: Part, hx: float, hz: float) -> None:
+    """A rock garden's bed, 2 hx by 2 hz: a white kerb stone 0.22 tall, and inside its 0.16 edge
+    the raked sand, a plate MIN_GAP above it."""
+    box(p, -hx, hx, 0.0, KERB_TOP, -hz, hz, HULL)
+    ix, iz = hx - KERB_WIDE, hz - KERB_WIDE
+    decal(p, [(-ix, -iz), (ix, -iz), (ix, iz), (-ix, iz)], SAND_Y, SAND)
+
+
+def rake(p: Part, x0: float, x1: float, z0: float, z1: float) -> None:
+    """One line a rake left in the sand, between two points, RAKE_WIDE across."""
+    dx, dz = x1 - x0, z1 - z0
+    length = math.hypot(dx, dz)
+    nx, nz = -dz / length * RAKE_WIDE / 2, dx / length * RAKE_WIDE / 2
+    decal(p, [(x0 - nx, z0 - nz), (x1 - nx, z1 - nz), (x1 + nx, z1 + nz), (x0 + nx, z0 + nz)], RAKE_Y, RAKE)
+
+
+def crystal(p: Part, x: float, y: float, z: float, r: float, h: float, lean: float, turn: float) -> None:
+    """A crystal standing at (x, y, z): a four-sided shard r to its corners and h tall, leaning
+    `lean` degrees toward `turn` (degrees from +X toward +Z), cut to a point over its last quarter."""
+    a = math.radians(turn)
+    slope = math.tan(math.radians(lean))
+
+    def at(k: int, radius: float, up: float) -> Vec:
+        corner = a + math.pi / 4 + k * math.pi / 2
+        return (x + radius * math.cos(corner) + up * slope * math.cos(a), y + up,
+                z + radius * math.sin(corner) + up * slope * math.sin(a))
+
+    tip = at(0, 0.0, h)
+    for k in range(4):
+        mid = a + math.pi / 4 + (k + 0.5) * math.pi / 2
+        out = (math.cos(mid), 0.0, math.sin(mid))
+        face_out(p, [at(k, r, 0.0), at(k + 1, r, 0.0), at(k + 1, r, 0.74 * h), at(k, r, 0.74 * h)], CRYSTAL, out)
+        face_out(p, [at(k, r, 0.74 * h), at(k + 1, r, 0.74 * h), tip], CRYSTAL, (out[0], 0.8, out[2]))
+
+
+def make_rock_garden_a() -> Part:
+    """RockGardenA: a strip bed 1.5 x 4 and 1.0 tall: three raked lines down its length, a stone
+    near one end, a smaller one off the middle and two crystals at the other end. The lines run
+    kerb to kerb, so beds laid end to end read as one raked strip."""
+    p = Part("rock-garden-a")
+    hx, hz = 0.75, 2.0
+    garden_bed(p, hx, hz)
+    for x in (-0.34, 0.0, 0.34):
+        rake(p, x, x, -hz + KERB_WIDE + 0.06, hz - KERB_WIDE - 0.06)
+    place(p, rock("stone", (0.36, 0.5, 0.3), 601, seg=5), 20.0, (0.1, KERB_TOP, -1.05))
+    place(p, rock("stone", (0.2, 0.26, 0.17), 603, seg=5, profile=CHUNK), 70.0, (-0.28, KERB_TOP, 0.25))
+    crystal(p, 0.12, KERB_TOP, 1.2, 0.17, 0.78, 8.0, 200.0)
+    crystal(p, -0.2, KERB_TOP, 1.42, 0.13, 0.48, 14.0, 80.0)
+    return p
+
+
+def make_rock_garden_b() -> Part:
+    """RockGardenB: a pocket bed 3 x 3 and 1.15 tall: one large stone with a ring raked round it,
+    two long raked lines along one side, a small stone by them and a cluster of three crystals in
+    the corner across from the stone."""
+    p = Part("rock-garden-b")
+    half = 1.5
+    garden_bed(p, half, half)
+    sx, sz = -0.42, 0.42
+    place(p, rock("stone", (0.48, 0.66, 0.4), 611, seg=6), 35.0, (sx, KERB_TOP, sz))
+    inner, outer = 0.74, 0.74 + RAKE_WIDE
+    for k in range(8):
+        (c0, s0), (c1, s1) = [(math.cos(math.radians(45.0 * j + 22.5)), math.sin(math.radians(45.0 * j + 22.5)))
+                              for j in (k, k + 1)]
+        decal(p, [(sx + inner * c0, sz + inner * s0), (sx + outer * c0, sz + outer * s0),
+                  (sx + outer * c1, sz + outer * s1), (sx + inner * c1, sz + inner * s1)], RAKE_Y, RAKE)
+    for z in (-1.08, -0.74):
+        rake(p, -1.2, 1.2, z, z)
+    place(p, rock("stone", (0.22, 0.28, 0.18), 613, seg=5, profile=CHUNK), 120.0, (0.55, KERB_TOP, -0.9))
+    crystal(p, 0.82, KERB_TOP, 0.72, 0.19, 0.9, 7.0, 30.0)
+    crystal(p, 0.56, KERB_TOP, 1.0, 0.14, 0.56, 16.0, 150.0)
+    crystal(p, 1.06, KERB_TOP, 0.96, 0.12, 0.4, 20.0, 330.0)
+    return p
+
+
+HUB_CAP = 2.65  # a TubeHub's top is 2.6: all of a hub beacon is at this height or above
+BEACON_MAX = 5.8
+
+
+def make_hub_beacon() -> Part:
+    """HubBeacon: a hologram over a tube hub, 2.3 across, from 2.65 to 5.75 up, the same from every
+    side. Its origin is the hub's centre on the ground and nothing of it is lower than the hub's
+    cap, where its foot rests: a short white mast with an orange emitter, and floating clear of it
+    a ringed planet in holo cyan, its ring level and paler. A planet, not the Holo Beacon
+    landmark's diamond in two rings on a beam."""
+    p = Part("hub-beacon")
+    phase = math.radians(22.5)
+    drum(p, [(0.5, HUB_CAP), (0.36, HUB_CAP + 0.2)], [PANEL, HULL], seg=8, phase=phase, bottom=True)
+    box(p, -0.1, 0.1, HUB_CAP + 0.2, 3.75, -0.1, 0.1, HULL, skip=("bottom", "top"))
+    box(p, -0.22, 0.22, 3.75, 3.87, -0.22, 0.22, TRIM, skip=())
+    centre = 5.05
+    planet = [(0.0, centre - 0.7), (0.5, centre - 0.42), (0.7, centre), (0.5, centre + 0.42), (0.0, centre + 0.7)]
+    lathe(p, planet, [HOLO] * 4, seg=8, phase=phase)
+    # The ring lies level: a tilted one is edge-on from one side, and the tycoon camera looks at
+    # every hub from the same side.
+    hoop(p, 0.98, 1.24, centre - MIN_MEMBER / 2, centre + MIN_MEMBER / 2, HOLO_PALE, seg=8, phase=phase)
+    return p
+
+
 RING_E = 4.755  # the reveal ring's post centres: wholly outside a 9 x 9 slot
 RING_POST = 0.18  # half a post
 RING_H = 8.0  # to the top of its lamps
@@ -850,6 +1015,10 @@ PIECES = {
     "lander": make_lander,
     "landing-beacon": make_landing_beacon,
     "gantry-ring": make_gantry_ring,
+    "flag-mast": make_flag_mast,
+    "rock-garden-a": make_rock_garden_a,
+    "rock-garden-b": make_rock_garden_b,
+    "hub-beacon": make_hub_beacon,
 }
 
 
@@ -1008,6 +1177,23 @@ def blueprints() -> list[dict]:
         "street, so a landmark that fills its footprint touches none of it; the client still scales it by "
         "max(footprint) / 9",
         [placed("gantry-ring", (0, 0, 0))])
+    add("ColonyFlagMast", [1, 1],
+        "city-changer 'Raise the Colony Flags': a standard beside a tube between two pods, 5 tall, four pointed "
+        "banners (two long orange, two shorter white) hanging from crossed yards; no front",
+        [placed("flag-mast", (0, 0, 0))])
+    add("RockGardenA", [1.5, 4],
+        "city-changer 'Tend the Rock Gardens': a strip bed, long along Z: a white kerb, raked sand, two stones and "
+        "two crystals; laid end to end its raked lines run on; no front",
+        [placed("rock-garden-a", (0, 0, 0))])
+    add("RockGardenB", [3, 3],
+        "city-changer 'Tend the Rock Gardens': a pocket bed: a white kerb, raked sand, a stone in a raked ring, a "
+        "small stone and three crystals; no front",
+        [placed("rock-garden-b", (0, 0, 0))])
+    add("HubBeacon", [2.3, 2.3],
+        "city-changer 'Light the Holo Beacons': origin = a TubeHub's centre on the ground; everything is at 2.65 or "
+        "higher, so it stands on the hub's cap (2.6) without touching it: a short mast and a ringed planet in holo "
+        "cyan floating over it, 5.75 at its top; no front",
+        [placed("hub-beacon", (0, 0, 0))])
     return out
 
 
@@ -1167,6 +1353,15 @@ def limits(bid: str):
         return (-1.0, 1.0, -1.0, 1.0, BEACON_TOP + 0.1, None)
     if bid == "RevealScaffold":  # Metropolis's RevealScaffold: inside 10 x 10, at most 8 tall
         return (-5.0, 5.0, -5.0, 5.0, REVEAL_MAX, None)
+    # The city-changers: INTERFACES "Wave 4.1c" and the builder's brief.
+    if bid == "ColonyFlagMast":
+        return (-0.5, 0.5, -0.5, 0.5, FLAG_MAX, 120)
+    if bid == "RockGardenA":
+        return (-0.75, 0.75, -2.0, 2.0, GARDEN_MAX, 150)
+    if bid == "RockGardenB":
+        return (-1.5, 1.5, -1.5, 1.5, GARDEN_MAX, 150)
+    if bid == "HubBeacon":  # well inside a hub's 4.6
+        return (-1.15, 1.15, -1.15, 1.15, BEACON_MAX, 200)
     raise KeyError(bid)
 
 
@@ -1188,9 +1383,10 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
     names = [bp["id"] for bp in bps]
     wanted = [f"Regolith{kind}{key}" for kind in ("Clump", "Quarter") for key in "ABC"] + [
         "RegolithBoulder", "RegolithCrater", "SurveyBeacon", "SiteNarrow", "SiteNarrowGantry", "SiteSmall",
-        "SiteSmallGantry", "SiteMedium", "LotBeacon", "RevealScaffold"]
+        "SiteSmallGantry", "SiteMedium", "LotBeacon", "RevealScaffold", "ColonyFlagMast", "RockGardenA",
+        "RockGardenB", "HubBeacon"]
     if sorted(names) != sorted(wanted):
-        bad.append(f"the blueprints are {sorted(names)}, not the sixteen of the contract")
+        bad.append(f"the blueprints are {sorted(names)}, not the twenty of the contract")
     for bp in bps:
         bid = bp["id"]
         faces = assembled(bp, parts)
@@ -1206,6 +1402,8 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
                        f"z[{lo[2]:.2f}, {hi[2]:.2f}]")
         if lo[1] < -e:
             bad.append(f"{bid} goes {-lo[1]:.2f} under the plot base")
+        if bid == "HubBeacon" and lo[1] < HUB_CAP - e:
+            bad.append(f"{bid} starts at {lo[1]:.2f}: under {HUB_CAP}, it would stand in the hub it rests on")
         if hi[1] > tallest + e:
             bad.append(f"{bid} is {hi[1]:.2f} tall, over {tallest:g}")
         if budget is not None and tris > budget:
@@ -1258,12 +1456,12 @@ def generate(out_dir: str, only: set[str] | None) -> None:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Generate the regolith-kit GLBs and the 16 blueprints; check them.")
+    parser = argparse.ArgumentParser(description="Generate the regolith-kit GLBs and the 20 blueprints; check them.")
     parser.add_argument("command", nargs="?", choices=("build", "check"), default="build",
                         help="build (the default) writes the GLBs and the blueprints, then checks; check only checks")
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
     parser.add_argument("--only", default="", help="comma list of pieces to rebuild (default: all)")
-    parser.add_argument("--blueprints", default=BLUEPRINT_DIR, help="where the 16 blueprints are written and checked")
+    parser.add_argument("--blueprints", default=BLUEPRINT_DIR, help="where the 20 blueprints are written and checked")
     args = parser.parse_args(argv)
     if args.command == "build":
         generate(args.out, {name for name in args.only.split(",") if name} or None)

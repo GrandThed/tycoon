@@ -1,0 +1,10 @@
+{
+  "id": "ColonyFlagMast",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [1, 1],
+  "note": "city-changer 'Raise the Colony Flags': a standard beside a tube between two pods, 5 tall, four pointed banners (two long orange, two shorter white) hanging from crossed yards; no front",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "flag-mast", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

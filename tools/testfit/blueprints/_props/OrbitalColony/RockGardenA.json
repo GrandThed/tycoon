@@ -1,0 +1,10 @@
+{
+  "id": "RockGardenA",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [1.5, 4],
+  "note": "city-changer 'Tend the Rock Gardens': a strip bed, long along Z: a white kerb, raked sand, two stones and two crystals; laid end to end its raked lines run on; no front",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "rock-garden-a", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
