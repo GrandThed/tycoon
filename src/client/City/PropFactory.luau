@@ -29,8 +29,8 @@ type StageMap = { [number]: Model }
 local loadedTemplates: { [Model]: boolean } = {}
 -- Parts hidden while their template loads, released together by one waiter per template.
 local waitingParts: { [Model]: { BasePart } } = {}
--- The "<era>/<kind>" pairs NoteMissing has already written a line for this session.
-local notedMissing: { [string]: boolean } = {}
+-- The keys NoteOnce (and NoteMissing through it) has already written a line for this session.
+local noted: { [string]: boolean } = {}
 
 local function sealPart(part: BasePart): ()
 	part.Anchored = true
@@ -126,17 +126,24 @@ function PropFactory.ScaleOf(value: any): number
 	return value
 end
 
--- M12 wave 4.2: one Output line per era and kind for the session, for a caller that has just drawn
--- a placeholder (or nothing) because a whole kind of template is not there yet -- an era built
--- before its asset run. Spawn itself stays silent: a single missing prop is "feature off", and a
--- line for each of a few hundred lots would bury the one that says why the plot looks bare.
-function PropFactory.NoteMissing(eraName: string, kind: string): ()
-	local key = eraName .. "/" .. kind
-	if notedMissing[key] then
+-- M12 wave 4.2: one Output line per `key` for the session, for a caller with something to say
+-- once about a plot it could not draw as asked (a kind of template that is not there yet, a
+-- config key it cannot draw by) and nothing to say on the hundredth plot or sync after.
+function PropFactory.NoteOnce(key: string, message: string): ()
+	if noted[key] then
 		return
 	end
-	notedMissing[key] = true
-	warn(
+	noted[key] = true
+	warn(message)
+end
+
+-- M12 wave 4.2: one such line per era and kind, for a caller that has just drawn a placeholder
+-- (or nothing) because a whole kind of template is not there yet -- an era built before its asset
+-- run. Spawn itself stays silent: a single missing prop is "feature off", and a line for each of
+-- a few hundred lots would bury the one that says why the plot looks bare.
+function PropFactory.NoteMissing(eraName: string, kind: string): ()
+	PropFactory.NoteOnce(
+		"missing:" .. eraName .. "/" .. kind,
 		string.format(
 			"[CityDressing] %s has no %s templates yet: drawn as placeholder Parts or left out until its assets are uploaded and harvested",
 			eraName,

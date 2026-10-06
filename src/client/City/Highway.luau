@@ -22,14 +22,16 @@
 -- owned. It reads the layout and Assets.json only, so it is the same before any template exists.
 --
 -- M12 wave 4.2 round loop (docs/INTERFACES.md "Wave 4.1b -- organic Orbital", "Wave 4.2"): with
--- `highway.round` in loop mode the track is a circle of radius `layout.highway.ring` about the
--- plot's centre, and nothing of it is on a lattice. It is ROUND_SEGMENTS copies of one prop,
+-- `highway.round` in loop mode (CityFabric.RoundLoop, so the fabric's rules and this module mean
+-- the same loop) the track is a circle of radius `layout.highway.ring` about the plot's centre,
+-- and nothing of it is on a lattice. It is `highway.segments` copies of one prop,
 -- `highway.props.arc`: the seat whose middle is at angle t from +X stands at (ring cos t, 0,
 -- ring sin t) turned -(t + 90) degrees, as the prop's blueprint says and tools/testfit/
 -- plotrender.py `build_round_loop` draws it. It reveals round the circle both ways from the seat
 -- nearest the plot entrance, and the train rides the circle's chords from joint to joint, which
 -- is the beam each seat carries. A round loop hands the fabric no ground to clear: its band is an
--- annulus, and CityFabric keeps the wild under it for good.
+-- annulus, and CityFabric keeps the wild under it for good. Without a usable `segments` there is
+-- no circle to cut: the plot has no track and no train, and the Output says so once.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -55,13 +57,12 @@ local ARM_VECTORS: { Vector3 } = {
 local ARM_NAMES: { string } = { "+X", "-Z", "-X", "+Z" }
 local KIND_STRAIGHT = "straight"
 local KIND_BEND = "bend"
--- M12 wave 4.2: a seat of the round loop, and the segments its circle is cut into: equal ones,
--- their joints on whole multiples of the segment angle from +X. That count is the shape of the
--- arc prop itself (tools/assets/monorail_kit.py LOOP_SEGMENTS: one segment is 360 / 48 degrees
--- of beam) and tools/streetplan.py's ROUND_SEGMENTS, which laid the layout out by it, so it is no
--- tunable. MISSING_ARC is what PropFactory.NoteMissing calls an arc prop that is not uploaded yet.
+-- M12 wave 4.2: a seat of the round loop. Its circle is cut into `highway.segments` equal ones,
+-- their joints on whole multiples of the segment angle from +X; a polygon needs MIN_SEGMENTS of
+-- them, which is tools/streetplan.py's rule for the key too. MISSING_ARC is what
+-- PropFactory.NoteMissing calls an arc prop that is not uploaded yet.
 local KIND_ARC = "arc"
-local ROUND_SEGMENTS = 48
+local MIN_SEGMENTS = 3
 local FULL_TURN = 2 * math.pi
 local MISSING_ARC = "monorail arc"
 -- A reveal slower than this would take minutes to close the ring; a config of 0 means "instant".
@@ -431,17 +432,40 @@ local function outwardOrder(start: number, count: number): { number }
 	return order
 end
 
+-- M12 wave 4.2 review: `highway.segments` as a circle can be cut by it, a whole number of
+-- MIN_SEGMENTS or more, or nil for anything else. The count is the era's config because it is the
+-- shape of the era's own arc prop (48 for Orbital's: the kit cuts one segment as 7.5 degrees of
+-- beam, and the tools hold the key to the kit).
+local function roundSegments(config: Types.CityEraHighwayConfig): number?
+	local segments: any = config.segments
+	if
+		type(segments) ~= "number"
+		or segments ~= segments
+		or segments < MIN_SEGMENTS
+		or segments == math.huge
+		or segments ~= math.floor(segments)
+	then
+		return nil
+	end
+	return segments
+end
+
 -- M12 wave 4.2: the round loop's seats in reveal order, and the joints between its segments.
--- Seat k (0-based) has its middle (k + 1/2) segments round from +X, the contract's
--- t = 3.75 + 7.5 k degrees, so the plot's entrance axis falls on a joint, between two piers. The
--- reveal starts at the seat nearest `entrance` (a tie keeps the lower k, so every client starts on
--- the same seat). The joints run from the one on the front (-Z) side on toward +X, the way the
--- square loop's corners do, so either loop sends its train round the same way.
-local function roundPlan(radius: number, entrance: Vector3): ({ RingCell }, { Vector3 })
-	local step = FULL_TURN / ROUND_SEGMENTS
+-- Seat k (0-based) has its middle (k + 1/2) segments round from +X -- the contract's
+-- t = 3.75 + 7.5 k degrees at Orbital's 48 -- so with a count that is a multiple of four the
+-- plot's entrance axis falls on a joint, between two piers. The reveal starts at the seat nearest
+-- `entrance` (a tie keeps the lower k, so every client starts on the same seat). The joints run
+-- from the front (-Z) side on toward +X, the way the square loop's corners do, so either loop
+-- sends its train round the same way.
+local function roundPlan(
+	radius: number,
+	entrance: Vector3,
+	segments: number
+): ({ RingCell }, { Vector3 })
+	local step = FULL_TURN / segments
 	local seats: { RingCell } = {}
 	local startIndex, bestDistance = 1, math.huge
-	for index = 1, ROUND_SEGMENTS do
+	for index = 1, segments do
 		local angle = (index - 0.5) * step
 		local position = Vector3.new(radius * math.cos(angle), 0, radius * math.sin(angle))
 		seats[index] = { position = position, kind = KIND_ARC, turn = -(angle + QUARTER_TURN) }
@@ -453,11 +477,11 @@ local function roundPlan(radius: number, entrance: Vector3): ({ RingCell }, { Ve
 		end
 	end
 	local cells: { RingCell } = {}
-	for _, index in outwardOrder(startIndex, ROUND_SEGMENTS) do
+	for _, index in outwardOrder(startIndex, segments) do
 		table.insert(cells, seats[index])
 	end
 	local joints: { Vector3 } = {}
-	for index = 1, ROUND_SEGMENTS do
+	for index = 1, segments do
 		local angle = (index - 1) * step - QUARTER_TURN
 		joints[index] = Vector3.new(radius * math.cos(angle), 0, radius * math.sin(angle))
 	end
@@ -482,9 +506,11 @@ function Highway.Ground(
 	local ramp: any = layout.ramp
 	local cell = if type(ramp) == "table" then ramp.cell else nil
 	local props = config.props
+	-- The layout's whole highway table: CityFabric asks it whether the loop is round as well as
+	-- how wide.
 	return CityFabric.RingGround(
 		config,
-		layout.ring,
+		layout,
 		tileStuds,
 		if typeof(cell) == "Vector3"
 			then { cell = { cell.X, cell.Z }, direction = ramp.direction }
@@ -499,14 +525,33 @@ function Highway.Create(options: Options): Handle?
 	local ramp = options.layout.ramp
 	-- M12 wave 4.2: a round loop is loop mode on a circle. It has no lattice, so the pitch the
 	-- square ring is cut by plays no part, and a layout that also names a ramp is a square ring.
-	if options.config.round == true and ramp == nil then
+	-- CityFabric says which it is, so the track drawn here and the ground the fabric keeps or
+	-- clears can never be two different loops.
+	if CityFabric.RoundLoop(options.config, options.layout) then
 		local radius = numberOr(options.layout.ring, 0)
 		if radius < MIN_LENGTH then
 			return nil
 		end
+		local segments = roundSegments(options.config)
+		if segments == nil then
+			-- A config fault, not a missing asset: no track is drawn (and so no train runs), and
+			-- the Output names the key once rather than staying silent about an empty sky.
+			PropFactory.NoteOnce(
+				options.eraName .. "/highway.segments",
+				string.format(
+					"[CityDressing] %s: highway.segments must be a whole number of %d or more for a round loop; no track is drawn",
+					options.eraName,
+					MIN_SEGMENTS
+				)
+			)
+			return nil
+		end
 		local entrance = options.entrance
-		local cells, joints =
-			roundPlan(radius, if entrance ~= nil then entrance else Vector3.new(0, 0, -radius))
+		local cells, joints = roundPlan(
+			radius,
+			if entrance ~= nil then entrance else Vector3.new(0, 0, -radius),
+			segments
+		)
 		return {
 			options = options,
 			destroyed = false,
@@ -685,9 +730,10 @@ function Highway.Lanes(handle: Handle): RoadGraph.Lanes?
 			return nil
 		end
 		-- One lane to a seat, joint to joint: the chord of the beam that seat carries, never more
-		-- than its sagitta (0.12 studs on a ring of 56) off the 1.6-wide beam. A finer polygon
-		-- would hug the circle closer but turn the train later: Traffic eases every hop's heading
-		-- over vehicles.turnSeconds, and at one hop a seat that easing is done as the next begins.
+		-- than its sagitta off the beam (0.12 studs for Orbital's 48 seats on a ring of 56, under
+		-- a 1.6-wide beam). A finer polygon would hug the circle closer but turn the train later:
+		-- Traffic eases every hop's heading over vehicles.turnSeconds, and at one hop a seat that
+		-- easing is done as the next begins.
 		lanes = RoadGraph.LoopLanes(handle.options.plotFrame, handle.corners, surface, 0)
 	else
 		lanes = RoadGraph.LoopLanes(

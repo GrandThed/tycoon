@@ -312,7 +312,7 @@ export type Context = {
 	ringRects: { Rect },
 	-- Wave 4.2: the era's `highway` config block and the layout's `highway` table, each as it
 	-- stands or nil. CityFabric reads them for what only a highway decides: the band of a round
-	-- loop, where the wild is cleared by nothing (BandRing), and whether the highway stands
+	-- loop, where the wild is cleared by nothing (RingBand), and whether the highway stands
 	-- (HighwayBuilt), which is what develops an upgrade entry anchored to it.
 	highway: Types.CityEraHighwayConfig?,
 	highwayLayout: Types.HighwayLayout?,
@@ -370,10 +370,11 @@ export type Handle = {
 	surface: Surface?,
 	-- Wave 3.2: the well-formed `fabric.swaps` entries in list order; empty without the key.
 	swaps: { CityFabric.FabricSwap },
-	-- Wave 4.2: the well-formed `fabric.wildSwaps` entries likewise; and the radius of the round
-	-- loop whose band keeps its wild for good (CityFabric.BandRing), nil under any other highway.
+	-- Wave 4.2: the well-formed `fabric.wildSwaps` entries likewise; and the band of the round loop
+	-- that keeps its wild for good (CityFabric.RingBand: the loop's radius and the band's half-width,
+	-- `highway.bandHalf`), nil under any other highway.
 	wildSwaps: { CityFabric.FabricWildSwap },
-	bandRing: number?,
+	band: CityFabric.FabricBand?,
 	-- The data as validated: a malformed parcel is a blank that never develops (keeping every index),
 	-- a malformed wild entry is skipped where it stands.
 	parcelData: { Types.FabricParcel },
@@ -1743,7 +1744,7 @@ local function clearedFlags(
 	local grid = buildGrid(mask)
 	local quarterRadius = numberOr(wildConfig.quarterRadius, 0)
 	local singleRadius = numberOr(wildConfig.singleRadius, 0)
-	local bandRing = handle.bandRing
+	local band = handle.band
 	local flags: { [number]: number } = {}
 	for index, entry in handle.wildData do
 		local bits = 0
@@ -1759,14 +1760,13 @@ local function clearedFlags(
 				local x = if type(point) == "table" then numberOr(point[1], entry.x) else entry.x
 				local z = if type(point) == "table" then numberOr(point[2], entry.z) else entry.z
 				if
-					not CityFabric.KeptInBand(x, z, bandRing)
-					and clearedAt(grid, x, z, quarterRadius)
+					not CityFabric.KeptInBand(x, z, band) and clearedAt(grid, x, z, quarterRadius)
 				then
 					bits = bit32.bor(bits, bit32.lshift(1, quarter - 1))
 				end
 			end
 		elseif
-			not CityFabric.KeptInBand(entry.x, entry.z, bandRing)
+			not CityFabric.KeptInBand(entry.x, entry.z, band)
 			and clearedAt(grid, entry.x, entry.z, singleRadius)
 		then
 			bits = 1
@@ -2688,7 +2688,6 @@ function Fabric.new(context: Context): Handle
 	local maxPuffs = if timing ~= nil then timing.maxPuffs else nil
 	local spawnsPerFrame = if timing ~= nil then timing.spawnsPerFrame else nil
 	local chimneys, smokeEvery = FabricValidation.Chimneys(context.smoke, context.eraName)
-	local highwayLayout: any = context.highwayLayout
 	local handle: Handle = {
 		context = context,
 		pull = FabricValidation.Pull(config.pull),
@@ -2713,10 +2712,9 @@ function Fabric.new(context: Context): Handle
 		swaps = CityFabric.ValidSwaps(config.swaps),
 		-- Wave 4.2: read the same way; and the band only a round loop that keeps its ground has.
 		wildSwaps = CityFabric.ValidWildSwaps(config.wildSwaps),
-		bandRing = CityFabric.BandRing(
-			context.highway,
-			if type(highwayLayout) == "table" then highwayLayout.ring else nil
-		),
+		-- The layout's whole highway table, never its `ring` alone: CityFabric asks it whether the
+		-- loop is round as well as how wide.
+		band = CityFabric.RingBand(context.highway, context.highwayLayout),
 		parcelData = {},
 		wildData = if type(data) == "table" and type(data.wild) == "table" then data.wild else {},
 		wildValid = {},
