@@ -2,9 +2,9 @@
   "id": "HubBeacon",
   "era": "OrbitalColony",
   "scale": 1.0,
-  "footprint": [2.3, 2.3],
-  "note": "city-changer 'Light the Holo Beacons': origin = a TubeHub's centre on the ground; everything is at 2.65 or higher, so it stands on the hub's cap (2.6) without touching it: a short mast and a ringed planet in holo cyan floating over it, 5.75 at its top; no front",
+  "footprint": [3.6, 3.6],
+  "note": "city-changer 'Light the Holo Beacons': origin = a TubeHub's centre on the ground; everything is at 2.65 or higher, so it stands on the hub's cap (2.6) without touching it: a mast with a lit dish and a ringed planet in holo cyan floating over it, 3.6 across its ring, 8.1 at its top; no front",
   "pieces": [
-    {"kit": "regolith-kit", "model": "hub-beacon", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+    {"kit": "regolith-kit", "model": "hub-hologram", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
   ]
 }

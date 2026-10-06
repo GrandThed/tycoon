@@ -1,0 +1,17 @@
+{
+  "id": "RegolithClumpCGarden",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly RegolithQuarterCGarden at rotY 0, 90, 180 and 270 about the origin: a moss mound with a stepping path round it, a true round inside 13 x 13",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [1.8127, 0.0, 4.9804], "rotY": 200, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [4.9804, 0.0, -1.8127], "rotY": 290, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-1.8127, 0.0, -4.9804], "rotY": 20, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-moss-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-4.9804, 0.0, 1.8127], "rotY": 110, "stage": 0}
+  ]
+}

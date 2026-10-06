@@ -1,0 +1,10 @@
+{
+  "id": "SurveyBeaconGarden",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [1, 1],
+  "note": "the twin 'Tend the Rock Gardens' swaps in for SurveyBeacon: a stone garden lantern on a pad of sand",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "garden-lantern", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

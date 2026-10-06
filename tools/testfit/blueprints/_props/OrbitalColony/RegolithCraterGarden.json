@@ -1,0 +1,10 @@
+{
+  "id": "RegolithCraterGarden",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [3, 3],
+  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithCrater: a raked ring inside a kerb, two crystals at its centre",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "ring-garden", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

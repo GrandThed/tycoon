@@ -1,0 +1,17 @@
+{
+  "id": "RegolithClumpAGarden",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [13, 13],
+  "note": "exactly RegolithQuarterAGarden at rotY 0, 90, 180 and 270 about the origin: a raked bowl round a crystal, a true round inside 13 x 13",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "garden-bowl-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 0, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [4.8418, 0.0, 2.1557], "rotY": 40, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-bowl-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 90, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [2.1557, 0.0, -4.8418], "rotY": 130, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-bowl-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 180, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-4.8418, 0.0, -2.1557], "rotY": 220, "stage": 0},
+    {"kit": "regolith-kit", "model": "garden-bowl-quarter", "pos": [0.0, 0.0, 0.0], "rotY": 270, "stage": 0},
+    {"kit": "regolith-kit", "model": "boulder-small", "pos": [-2.1557, 0.0, 4.8418], "rotY": 310, "stage": 0}
+  ]
+}
