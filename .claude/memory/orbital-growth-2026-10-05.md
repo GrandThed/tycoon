@@ -30,6 +30,15 @@ chose organic for Boomtown, so offer an organic candidate first for any future l
   (the shared `colony-kit` folder now holds only those, so the Docks and Axis renders cannot be
   re-made without regenerating the old kit from their branches). Vine and Bloom designers are
   running; the gate sheet will be `m12o_compare_organic.png`.
+- **At the second gate, waiting for Ben (2026-10-05):** sheet `assets/testfit/out/OrbitalColony/
+  m12o_compare_organic.png`. **Bloom** (`m12-orbital-bloom` 4b2713f): 82 lots, concentric rings round
+  a heart, Launch Tower outside the round loop; it curves but does not wander. **Vine**
+  (`m12-orbital-vine` 8b37a7e): 63 lots, under the floor of 80, and it reads close to Bloom. The lead
+  recommended Bloom. Lesson of the round: **dense and wandering pull against each other here**: a
+  third of the colony's ground lies within 10 studs of the loop and only a tube that follows the loop
+  can front it; drafts that wandered held 48 to 58 lots. Held asks are in INTERFACES "State at the
+  second gate". The regolith clumps were redrawn as one round feature each (crater, boulder ring,
+  mound), which is how to live with "a clump is its quarter at four turns".
 - The session was cut off once mid-groundwork; the agent resumed by id with nothing lost, as the
   older notes say. A stopped agent's id comes back in its task notification.
 

@@ -7752,3 +7752,38 @@ its train, 14 lots), every gate green and the three shipped eras' fabric data by
   on the circle, no ramp); `CityFabric.luau` copies `ring_keeps` and "no ring rects on a round
   loop"; the asset run uploads the swept and flat pieces (52 on the groundwork) through the palette
   route, with one harvest paste and a `bake.py --list` gate for Orbital.
+
+### State at the second gate (lead, 2026-10-05)
+
+| | Bloom (`m12-orbital-bloom`, 4b2713f) | Vine (`m12-orbital-vine`, 8b37a7e) |
+|---|---|---|
+| Lots at full build | **82**: 67 narrow, 11 small, 4 medium; no lanes | **63**: 48 narrow, 11 small, 4 medium; 2 on one lane |
+| Houses / sites by tier 1–4, full | 4/1, 24/5, 34/16, 68/8, 82/0 | 2/3, 25/4, 41/3, 54/3, 63/0 |
+| Tubes | a 32-stud stem, a heart ring (radius 20), an open outer ring (radius 42), a spiral; 458 studs, 47 pieces, 11 hubs, 5 polylines | an S trunk (94 studs) inside two runners at radius 41, spurs and two curls; 446 studs, 50 pieces, 14 hubs, 5 polylines |
+| Launch Tower | outside the loop in the back-left corner, reached by a tube under the track | closes the trunk at (11, 40), inside the loop |
+| Outside the loop | nine landmarks in the four corners | four landmarks, a pod or two each |
+| Uncovered ground inside the loop | 36%, as 1.5 to 4-stud strips | 36%, as slivers; the corners 74% |
+| Wild entries | 92 of 110 | 93 of 110 |
+| `pull` | radius 40, tierTerm 0.3, thresholds [0.3, 1.9, 2.1, 2.4], reach 30 | radius 45, tierTerm 0.45, thresholds [0.05, 2.23, 2.43, 3.03], reach 30 |
+| Reads as | concentric rings round a heart of landmarks; nearly mirror-symmetric: it curves, it does not wander | an S inside a horseshoe; the runners follow the loop, so it reads close to Bloom |
+
+Every gate is green on both branches (`fabric.py check` for all four eras, `streetplan.py`,
+`tubes.py --list`, `selftest`, `timeline` with no FRAGILE and no shrink over 63 moments, stylua,
+selene, `check_compile.py`, a Rojo build). Sheet: `assets/testfit/out/OrbitalColony/
+m12o_compare_organic.png`.
+
+What the two layouts proved:
+- **Dense and wandering pull against each other on this plot.** The ground within 10 studs of the
+  round loop is a third of the colony, and only a tube that follows the loop about 41 studs out can
+  front it. Vine's drafts that wandered to the corners instead held 48 to 58 lots. Every radian a
+  tube turns costs about 8 studs of its inside row.
+- **Mediums cost lots on curves** (Bloom 95 all narrow, 82 with the mix; Vine 69 without mediums),
+  and **lanes barely work**: pockets between curving tubes are under 15 wide.
+- A landmark inside a ring blanks 16 to 20 studs of frontage (pad, marker, pinch).
+
+Asks held for after Ben's answer (not built): `STREET_COUNT` 5 → 7 and `budget.roadPieces`
+60 → 68 or 76 (two more curls, about 8 lots each by the vine owner's estimate; 15° corners on
+Bloom's outer ring); the marker offset mirrored per slot (about 6 lots on Bloom); a per-stretch
+size list in `fabric.py` (mediums without the inner-row loss). Rulings taken as built: the Launch
+Tower and the Solar Array carry no district on Vine; the Comms Array is the spire of Bloom's heart,
+not at the back; the monorail pad stands outside the loop on Vine.
