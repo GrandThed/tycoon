@@ -2,7 +2,7 @@
 reveal gantry and the city-changer props for the growing city (M12 wave 4), generated as a
 Kenney-style kit.
 
-    py tools/assets/regolith_kit.py                  # the GLBs and the 20 blueprints, then the check
+    py tools/assets/regolith_kit.py                  # the GLBs and the 28 blueprints, then the check
     py tools/assets/regolith_kit.py check            # the check alone: nothing is written
     py tools/assets/regolith_kit.py --only lander    # rebuild some GLBs (blueprints and check as usual)
     py tools/assets/regolith_kit.py --out <dir> --blueprints <dir>   # a trial build that touches nothing shared
@@ -15,7 +15,7 @@ overrides the executable.
 Writes one GLB per piece into assets/kenney3d/regolith-kit/Models/GLB format/, the folder
 convention every Kenney kit uses, so tools/testfit/testfit.py and tools/assets/merge_stages.py
 discover the kit with no registration step. assets/ is gitignored, so this script is the committed
-artifact and the GLBs regenerate from it. The 20 blueprints under
+artifact and the GLBs regenerate from it. The 28 blueprints under
 tools/testfit/blueprints/_props/OrbitalColony/ are written from blueprints() below: never edit one
 by hand, and never edit a clump at all (it is its quarter turned four times). Same pattern as
 oldtown_kit.py, whose box, rod and decal helpers this file uses.
@@ -59,27 +59,25 @@ bytes: regolith-kit must NOT join palette.SRGB_FACTOR_KITS. The rocks are the ki
 colours. DUST, DUST_LIGHT and RUT are not kit colours: the kit has no ground tone at all, and its
 rock salmon laid flat over half the plot would drown the white colony. They are the plot base
 (56, 53, 60) mixed toward the kit's dark rock, so dust reads as the same rock, weathered and lying
-in shadow. DECK is the contract's decking colour. SAND and RAKE, the tended beds of the rock gardens,
-are the kit's rock mixed toward its hull white: the same ground, raked clean. HOLO is orbital-kit's
-hologram cyan and CRYSTAL the kit's own crystal green.
+in shadow. DECK is the contract's decking colour. SAND and RAKE, the tended ground of the gardens,
+are the kit's rock mixed toward its hull white: the same ground, raked clean. MOSS is orbital-kit's
+plant green and MOSS_DARK a step under it; HOLO is orbital-kit's hologram cyan and CRYSTAL the
+kit's own crystal green.
 
-**The city-changers** (INTERFACES "Wave 4.1c"): props an upgrade layer scatters over the whole
-colony when one slot is bought. ColonyFlagMast stands beside a tube between two pods; RockGardenA
-and RockGardenB fill the strips of ground the lots leave; HubBeacon floats over every tube hub.
-None has a front: a layer turns them any way, and the tycoon camera sees them from every side.
-
-Art rules, matching the kits: flat shading, faceted solids, chunky toy proportions.
-
-**Every face belongs to a solid.** Roblox culls back faces, so nothing is a lone sheet. A solid is
-closed, or open only where it rests on the ground or on another solid. The one exception is a
-ground decal (dust, an ejecta apron, a rut, a scorch mark): a top face only, lifted MIN_GAP above
-what it lies on, where nothing can look at it from underneath.
-
-**Two rules from Studio (lead, 2026-10-02), both checked here:**
-- Any two parallel faces that face the same way and overlap stand at least 0.05 studs apart
-  (MIN_GAP), and so does any flat face over the plot base. So the flat layers have fixed heights:
-  dust 0.05, drift and aprons 0.10, ruts 0.15, crater floors 0.20.
-- Nothing is thinner than 0.1 studs (MIN_MEMBER).
+**The city-changers** (INTERFACES "Wave 4.1c"): what one purchase does to the whole colony.
+- "Tend the Rock Gardens" swaps every piece of regolith still standing for its **Garden twin**:
+  the same round feature in the same frame, tended. The crater is a raked bowl round a crystal,
+  the boulder ring a circle of standing stones on raked sand, the mound a moss mound with a
+  stepping path where the rover's track ran; the singles become a standing stone on a raked disc,
+  a raked ring round crystals, and a garden lantern. Every twin is pale sand inside a white kerb,
+  so from the whole-plot camera the rust ground turns light and ordered. A twin keeps its
+  original's footprint and reach, a clump twin is its quarter twin at four turns, and a tended bed
+  is a true round: nothing in it wanders. `check` holds all three.
+- ColonyFlagMast stands beside a tube between two pods, and PierBanner hangs four banners round
+  one pier of the monorail, clear of the pier's faces.
+- HubBeacon floats a hologram over a tube hub.
+None but the pier banner has a front: a layer turns them any way, and the tycoon camera sees them
+from every side.
 """
 
 from __future__ import annotations
@@ -155,6 +153,8 @@ RUT = (76, 60, 61)
 SAND = (222, 186, 179)
 RAKE = (195, 152, 141)
 HOLO_PALE = (172, 255, 250)
+MOSS = (97, 203, 139)  # orbital-kit's "plant"
+MOSS_DARK = (72, 168, 118)  # not a kit colour: MOSS a step darker, for a mound's foot
 
 MIN_GAP = 0.05  # parallel faces that overlap stand at least this far apart
 MIN_MEMBER = 0.1  # nothing is thinner
@@ -376,12 +376,14 @@ def ray(p: Part, degrees: float, r0: float, r1: float, w0: float, w1: float, y: 
               (r1 * dx - h1 * dz, r1 * dz + h1 * dx), (r0 * dx - h0 * dz, r0 * dz + h0 * dx)], y, colour)
 
 
-def lofted(p: Part, angles, profiles, colours, cap: Rgb) -> None:
+def lofted(p: Part, angles, profiles, colours, cap: Rgb | None) -> None:
     """A solid swept round the clump's centre: profiles[k] is its section at angles[k], (radius,
     height) points from its outer foot over its top to its inner foot (or to the centre, radius
     0), and colours[j] paints the band from point j to point j + 1. Both ends are closed with the
     section in `cap`, facing out of the sweep: inside a clump the next quarter's end lies against
-    it, and on a quarter that stands alone it is the cut face."""
+    it, and on a quarter that stands alone it is the cut face. A section that ends above the
+    ground closes straight down from its last point. `cap` None leaves the ends open, for a sweep
+    that runs the whole way round and meets itself."""
     def pt(k: int, j: int) -> Vec:
         r, y = profiles[k][j]
         x, z = polar(r, angles[k])
@@ -395,11 +397,15 @@ def lofted(p: Part, angles, profiles, colours, cap: Rgb) -> None:
             if profiles[k][j + 1][0] <= 0 and profiles[k + 1][j + 1][0] <= 0:
                 face = face[:3]  # the band closes on the centre
             face_out(p, face, colour, ((y1 - y0) * math.cos(mid), r0 - r1, (y1 - y0) * math.sin(mid)))
+    if cap is None:
+        return
     for k, sign in ((0, -1.0), (len(angles) - 1, 1.0)):
         a = math.radians(angles[k])
         section = [pt(k, j) for j in range(len(profiles[k]))]
-        if profiles[k][-1][1] > 0:
-            section.append((0.0, 0.0, 0.0))  # a section that ends on the centre line closes down it
+        last_r, last_y = profiles[k][-1]
+        if last_y > 0:
+            foot = polar(last_r, angles[k]) if last_r > 0 else (0.0, 0.0)  # on the centre line: down it
+            section.append((foot[0], 0.0, foot[1]))
         face_out(p, section, cap, (-sign * math.sin(a), 0.0, sign * math.cos(a)))
 
 
@@ -809,12 +815,18 @@ FLAG_TOP = 5.0
 FLAG_MAX = 5.2  # "about 5 tall" (INTERFACES "Wave 4.1c")
 
 
-def banner(p: Part, turn: float, half: float, top: float, shoulder: float, tip: float, colour: Rgb) -> None:
+def banner(p: Part, turn: float, half: float, top: float, shoulder: float, tip: float, colour: Rgb,
+           out: float = 0.38, band: tuple[float, float, Rgb] | None = None) -> None:
     """A banner hanging from a yard arm: a cloth MIN_MEMBER thick and 2 * half wide, square down to
-    `shoulder` and cut to a point at `tip`, 0.38 to 0.48 out from the mast on the side `turn`
-    degrees round it. Its top edge is against the yard, so it has no top face."""
+    `shoulder` and cut to a point at `tip`, from `out` to out + MIN_MEMBER from the mast or pier on
+    the side `turn` degrees round it. Its top edge is against the yard, so it has no top face.
+    `band` = (y0, y1, colour) paints a stripe across both of its faces, MIN_GAP off the cloth."""
     cloth = Part("banner")
-    x0, x1 = 0.38, 0.38 + MIN_MEMBER
+    x0, x1 = out, out + MIN_MEMBER
+    if band is not None:
+        for x, facing in ((x1 + MIN_GAP, 1.0), (x0 - MIN_GAP, -1.0)):
+            face_out(cloth, [(x, band[0], -half), (x, band[0], half), (x, band[1], half), (x, band[1], -half)], band[2],
+                     (facing, 0.0, 0.0))
     outline = [(-half, top), (half, top), (half, shoulder), (0.0, tip), (-half, shoulder)]  # (z, y)
     face_out(cloth, [(x1, y, z) for z, y in outline], colour, (1.0, 0.0, 0.0))
     face_out(cloth, [(x0, y, z) for z, y in outline], colour, (-1.0, 0.0, 0.0))
@@ -846,30 +858,6 @@ def make_flag_mast() -> Part:
     return p
 
 
-GARDEN_MAX = 1.2
-KERB_TOP = 0.22
-KERB_WIDE = 0.16
-SAND_Y = KERB_TOP + MIN_GAP
-RAKE_Y = SAND_Y + MIN_GAP
-RAKE_WIDE = 0.12
-
-
-def garden_bed(p: Part, hx: float, hz: float) -> None:
-    """A rock garden's bed, 2 hx by 2 hz: a white kerb stone 0.22 tall, and inside its 0.16 edge
-    the raked sand, a plate MIN_GAP above it."""
-    box(p, -hx, hx, 0.0, KERB_TOP, -hz, hz, HULL)
-    ix, iz = hx - KERB_WIDE, hz - KERB_WIDE
-    decal(p, [(-ix, -iz), (ix, -iz), (ix, iz), (-ix, iz)], SAND_Y, SAND)
-
-
-def rake(p: Part, x0: float, x1: float, z0: float, z1: float) -> None:
-    """One line a rake left in the sand, between two points, RAKE_WIDE across."""
-    dx, dz = x1 - x0, z1 - z0
-    length = math.hypot(dx, dz)
-    nx, nz = -dz / length * RAKE_WIDE / 2, dx / length * RAKE_WIDE / 2
-    decal(p, [(x0 - nx, z0 - nz), (x1 - nx, z1 - nz), (x1 + nx, z1 + nz), (x0 + nx, z0 + nz)], RAKE_Y, RAKE)
-
-
 def crystal(p: Part, x: float, y: float, z: float, r: float, h: float, lean: float, turn: float) -> None:
     """A crystal standing at (x, y, z): a four-sided shard r to its corners and h tall, leaning
     `lean` degrees toward `turn` (degrees from +X toward +Z), cut to a point over its last quarter."""
@@ -889,67 +877,205 @@ def crystal(p: Part, x: float, y: float, z: float, r: float, h: float, lean: flo
         face_out(p, [at(k, r, 0.74 * h), at(k + 1, r, 0.74 * h), tip], CRYSTAL, (out[0], 0.8, out[2]))
 
 
-def make_rock_garden_a() -> Part:
-    """RockGardenA: a strip bed 1.5 x 4 and 1.0 tall: three raked lines down its length, a stone
-    near one end, a smaller one off the middle and two crystals at the other end. The lines run
-    kerb to kerb, so beds laid end to end read as one raked strip."""
-    p = Part("rock-garden-a")
-    hx, hz = 0.75, 2.0
-    garden_bed(p, hx, hz)
-    for x in (-0.34, 0.0, 0.34):
-        rake(p, x, x, -hz + KERB_WIDE + 0.06, hz - KERB_WIDE - 0.06)
-    place(p, rock("stone", (0.36, 0.5, 0.3), 601, seg=5), 20.0, (0.1, KERB_TOP, -1.05))
-    place(p, rock("stone", (0.2, 0.26, 0.17), 603, seg=5, profile=CHUNK), 70.0, (-0.28, KERB_TOP, 0.25))
-    crystal(p, 0.12, KERB_TOP, 1.2, 0.17, 0.78, 8.0, 200.0)
-    crystal(p, -0.2, KERB_TOP, 1.42, 0.13, 0.48, 14.0, 80.0)
+def centre_crystal(p: Part, r: float, shoulder: float, tip: float) -> None:
+    """A quadrant of the crystal at a clump's centre: a four-sided shard r to its corners, square
+    to `shoulder` and cut to a point at `tip`, its corners on the clump's diagonals. Four copies
+    make the whole crystal; one alone is a shard with two cut faces."""
+    flat = r * math.cos(math.pi / 4)
+    lofted(p, (0.0, 45.0, 90.0), [[(flat, 0.0), (flat, shoulder), (0.0, tip)], [(r, 0.0), (r, shoulder), (0.0, tip)],
+                                  [(flat, 0.0), (flat, shoulder), (0.0, tip)]], (CRYSTAL, CRYSTAL), cap=CRYSTAL)
+
+
+# --- the tended twins: "Tend the Rock Gardens" ------------------------------------------------------
+#
+# A garden is the wild feature raked and edged: pale sand inside a white kerb, with rings a rake
+# left round its centre. Its layers are the wild's: sand at the dust's height, raked rings and
+# stepping stones at the drift's. Its stations are even (a 20-sided round for a clump, 8 for a
+# single), and every list is constant: tended ground does not wander.
+
+GARDEN_R = 6.1  # a garden clump's kerb, to its outer face: inside every wild clump's reach
+GARDEN_STATIONS = (0.0, 18.0, 36.0, 54.0, 72.0, 90.0)
+WHOLE_ROUND = tuple(45.0 * k for k in range(9))  # a single's stations, all the way round
+SAND_Y = DUST_Y
+RAKE_Y = DRIFT_Y
+RAKE_WIDE = 0.14
+
+
+def kerb(p: Part, radius: float, angles=GARDEN_STATIONS, wide: float = 0.34, tall: float = 0.22,
+         cap: Rgb | None = HULL) -> None:
+    """A garden's white kerb: an outer wall `tall` high at `radius` and a top that slopes down
+    inward over `wide` to just above the sand, so it needs no inner wall."""
+    section = [(radius, 0.0), (radius, tall), (radius - wide, SAND_Y + 0.01)]
+    lofted(p, angles, [section] * len(angles), (HULL, HULL), cap=cap)
+
+
+def sand(p: Part, inner: float | None, outer: float, angles=GARDEN_STATIONS) -> None:
+    """Raked sand from `inner` (None: from the centre) out to `outer`."""
+    sector(p, angles, None if inner is None else [inner] * len(angles), [outer] * len(angles), SAND_Y, SAND)
+
+
+def rake_ring(p: Part, radius: float, angles=GARDEN_STATIONS) -> None:
+    """One ring a rake left round the centre."""
+    sector(p, angles, [radius - RAKE_WIDE / 2] * len(angles), [radius + RAKE_WIDE / 2] * len(angles), RAKE_Y, RAKE)
+
+
+def polar_at(r: float, degrees: float, y: float = 0.0) -> Vec:
+    """polar() as a point at height y."""
+    x, z = polar(r, degrees)
+    return (x, y, z)
+
+
+def make_garden_bowl_quarter() -> Part:
+    """A's twin: a quadrant of the crater as a raked bowl: the kerb, sand on the apron and the
+    floor, the rim rebuilt as an even berm with a white crest, three raked rings, a quarter of the
+    tall crystal at the centre and a small one on the apron."""
+    p = Part("garden-bowl-quarter")
+    kerb(p, GARDEN_R)
+    sand(p, None, 3.5)
+    sand(p, 4.6, GARDEN_R - 0.2)
+    berm = [(4.9, 0.0), (4.25, 0.7), (3.95, 0.7), (3.3, 0.0)]
+    lofted(p, GARDEN_STATIONS, [berm] * len(GARDEN_STATIONS), (SAND, HULL, SAND), cap=SAND)
+    for radius in (1.5, 2.5, 5.3):
+        rake_ring(p, radius)
+    centre_crystal(p, 0.42, 1.0, 1.4)
+    crystal(p, *polar_at(5.35, 63.0), 0.16, 0.62, 10.0, 63.0)
     return p
 
 
-def make_rock_garden_b() -> Part:
-    """RockGardenB: a pocket bed 3 x 3 and 1.15 tall: one large stone with a ring raked round it,
-    two long raked lines along one side, a small stone by them and a cluster of three crystals in
-    the corner across from the stone."""
-    p = Part("rock-garden-b")
-    half = 1.5
-    garden_bed(p, half, half)
-    sx, sz = -0.42, 0.42
-    place(p, rock("stone", (0.48, 0.66, 0.4), 611, seg=6), 35.0, (sx, KERB_TOP, sz))
-    inner, outer = 0.74, 0.74 + RAKE_WIDE
-    for k in range(8):
-        (c0, s0), (c1, s1) = [(math.cos(math.radians(45.0 * j + 22.5)), math.sin(math.radians(45.0 * j + 22.5)))
-                              for j in (k, k + 1)]
-        decal(p, [(sx + inner * c0, sz + inner * s0), (sx + outer * c0, sz + outer * s0),
-                  (sx + outer * c1, sz + outer * s1), (sx + inner * c1, sz + inner * s1)], RAKE_Y, RAKE)
-    for z in (-1.08, -0.74):
-        rake(p, -1.2, 1.2, z, z)
-    place(p, rock("stone", (0.22, 0.28, 0.18), 613, seg=5, profile=CHUNK), 120.0, (0.55, KERB_TOP, -0.9))
-    crystal(p, 0.82, KERB_TOP, 0.72, 0.19, 0.9, 7.0, 30.0)
-    crystal(p, 0.56, KERB_TOP, 1.0, 0.14, 0.56, 16.0, 150.0)
-    crystal(p, 1.06, KERB_TOP, 0.96, 0.12, 0.4, 20.0, 330.0)
+def make_garden_stones_quarter() -> Part:
+    """B's twin: a quadrant of the boulder ring as a stone circle: the kerb, sand to it, three
+    raked rings, a quarter of the low island stone at the centre and a crystal by the circle. The
+    standing stones are pieces of their own."""
+    p = Part("garden-stones-quarter")
+    kerb(p, GARDEN_R)
+    sand(p, None, GARDEN_R - 0.2)
+    for radius in (1.7, 2.7, 5.15):
+        rake_ring(p, radius)
+    island = [(0.75, 0.0), (0.62, 0.26), (0.0, 0.34)]
+    lofted(p, (0.0, 45.0, 90.0), [island] * 3, (ROCK, ROCK_LIGHT), cap=ROCK_DARK)
+    crystal(p, *polar_at(4.55, 58.0), 0.15, 0.6, 12.0, 58.0)
     return p
 
+
+def make_garden_moss_quarter() -> Part:
+    """C's twin: a quadrant of the mound as a moss garden: the kerb, sand round the mound, the
+    mound itself even and green, two raked rings, five stepping stones where the rover's track
+    ran (evenly spaced, so a clump's twenty make one path) and two crystals on the moss."""
+    p = Part("garden-moss-quarter")
+    kerb(p, GARDEN_R)
+    sand(p, 2.8, GARDEN_R - 0.2)
+    mound = [(3.0, 0.0), (2.1, 0.4), (1.0, 0.64), (0.0, 0.75)]
+    lofted(p, (0.0, 22.5, 45.0, 67.5, 90.0), [mound] * 5, (MOSS_DARK, MOSS, MOSS), cap=MOSS_DARK)
+    for radius in (3.45, 5.35):
+        rake_ring(p, radius)
+    for degrees in (9.0, 27.0, 45.0, 63.0, 81.0):
+        x, z = polar(4.4, degrees)
+        corners = [math.radians(60.0 * k + degrees) for k in range(6)]
+        decal(p, [(x + 0.34 * math.cos(a), z + 0.34 * math.sin(a)) for a in corners], RAKE_Y, PANEL)
+    crystal(p, *polar_at(1.7, 35.0, 0.3), 0.2, 0.95, 8.0, 35.0)
+    crystal(p, *polar_at(2.05, 60.0, 0.25), 0.14, 0.55, 15.0, 110.0)
+    return p
+
+
+def make_standing_stone() -> Part:
+    """0.8 x 0.7 studs, 1.4 tall: the tall stone of a stone circle."""
+    return rock("standing-stone", (0.4, 1.22, 0.32), 701, seg=4, profile=STONE, jitter=0.1, lean=(0.03, 0.0), slant=0.1)
+
+
+def make_standing_stone_low() -> Part:
+    """0.75 x 0.6 studs, 0.85 tall."""
+    return rock("standing-stone-low", (0.38, 0.8, 0.3), 703, seg=4, jitter=0.1)
+
+
+def make_stone_garden() -> Part:
+    """RegolithBoulder's twin: a standing stone 2.7 tall on a raked disc 1.96 across inside a low
+    white kerb, a small crystal at its foot."""
+    p = rock("stone-garden", (0.36, 2.3, 0.3), 711, seg=5, profile=STONE, jitter=0.1, lean=(0.04, -0.02), slant=0.12)
+    kerb(p, 0.98, WHOLE_ROUND, wide=0.2, tall=0.18, cap=None)
+    sand(p, None, 0.86, WHOLE_ROUND)
+    rake_ring(p, 0.62, WHOLE_ROUND)
+    crystal(p, 0.42, 0.0, 0.38, 0.11, 0.42, 12.0, 40.0)
+    return p
+
+
+def make_ring_garden() -> Part:
+    """RegolithCrater's twin: a raked ring 2.9 across: a low white kerb, sand, two raked rings and
+    two crystals at the centre, the taller 1.15."""
+    p = Part("ring-garden")
+    kerb(p, 1.45, WHOLE_ROUND, wide=0.24, tall=0.2, cap=None)
+    sand(p, None, 1.3, WHOLE_ROUND)
+    for radius in (0.72, 1.05):
+        rake_ring(p, radius, WHOLE_ROUND)
+    crystal(p, -0.05, 0.0, 0.03, 0.2, 1.15, 5.0, 40.0)
+    crystal(p, 0.27, 0.0, -0.14, 0.13, 0.6, 16.0, 320.0)
+    return p
+
+
+def make_garden_lantern() -> Part:
+    """SurveyBeacon's twin: a stone lantern 2.1 tall on a pad of sand: a grey foot, a white post
+    and shelf, the lit box, a white roof with an orange finial."""
+    p = Part("garden-lantern")
+    sand(p, None, 0.5, WHOLE_ROUND)
+    box(p, -0.3, 0.3, 0.0, 0.16, -0.3, 0.3, PANEL)
+    box(p, -0.11, 0.11, 0.16, 1.0, -0.11, 0.11, HULL, skip=("bottom", "top"))
+    box(p, -0.3, 0.3, 1.0, 1.12, -0.3, 0.3, HULL, skip=())
+    box(p, -0.19, 0.19, 1.12, 1.5, -0.19, 0.19, LIT, skip=("bottom", "top"))
+    drum(p, [(0.5, 1.5), (0.0, 1.95)], [HULL, HULL], seg=4, phase=math.pi / 4, bottom=True)
+    box(p, -0.07, 0.07, 1.86, 2.1, -0.07, 0.07, TRIM)
+    return p
+
+
+# --- the pier banner: "Raise the Colony Flags" on the monorail ------------------------------------
+
+PIER_BANNER_MAX = 6.0  # under the beam's soffit (6.10)
+PIER_BANNER_HALF = 1.2  # at most 2.4 across
+
+
+def make_pier_banner() -> Part:
+    """PierBanner: four banners round one pier of the monorail, 2.1 x 1.7 across, from 1.1 to 4.86
+    up. Its origin is the pier foot's centre and its front is -Z, outward from the loop. A square
+    orange collar round the shaft under the pier's own collar, a yard on each of its faces, and a
+    banner hanging from each: orange with a white band to the front and the back, 2 studs wide,
+    and white with an orange band along the track, 1 wide. Nothing touches the pier: the collar
+    stands 0.09 off the shaft and the cloths 0.3 or more."""
+    p = Part("pier-banner")
+    low, high = 4.72, 4.86
+    square = 1.0 / math.cos(math.pi / 4)  # a square's corner radius over its flat radius
+    hoop(p, 0.42 * square, 0.56 * square, low, high, TRIM, seg=4, phase=math.pi / 4)
+    for turn, half, shoulder, tip, colour, stripe in ((90, 1.0, 1.6, 1.1, TRIM, HULL), (270, 1.0, 1.6, 1.1, TRIM, HULL),
+                                                      (0, 0.5, 2.5, 2.1, HULL, TRIM), (180, 0.5, 2.5, 2.1, HULL, TRIM)):
+        yard = Part("yard")
+        box(yard, 0.56, 0.86, low, high, -half - 0.04, half + 0.04, TRIM, skip=("left",))
+        place(p, yard, turn)
+        banner(p, turn, half, low, shoulder, tip, colour, out=0.66, band=(3.7, 4.2, stripe))
+    return p
+
+
+# --- the hub beacon: "Light the Holo Beacons" ----------------------------------------------------
 
 HUB_CAP = 2.65  # a TubeHub's top is 2.6: all of a hub beacon is at this height or above
-BEACON_MAX = 5.8
+BEACON_MAX = 8.6  # "between about 5 and 8.5 up"
+BEACON_HALF = 1.85  # "about 3.6 across", well inside a hub's 4.6
 
 
-def make_hub_beacon() -> Part:
-    """HubBeacon: a hologram over a tube hub, 2.3 across, from 2.65 to 5.75 up, the same from every
+def make_hub_hologram() -> Part:
+    """HubBeacon: a hologram over a tube hub, 3.6 across, from 2.65 to 8.1 up, the same from every
     side. Its origin is the hub's centre on the ground and nothing of it is lower than the hub's
-    cap, where its foot rests: a short white mast with an orange emitter, and floating clear of it
-    a ringed planet in holo cyan, its ring level and paler. A planet, not the Holo Beacon
-    landmark's diamond in two rings on a beam."""
-    p = Part("hub-beacon")
+    cap, where its foot rests: a white mast 2 studs tall with a lit orange dish, and floating clear
+    of it a ringed planet in holo cyan 2.5 across, its ring level and paler. A planet, not the Holo
+    Beacon landmark's diamond in two rings on a beam. (The first, 2.3 across and 5.75 at its top,
+    could not be seen from the whole-plot camera.)"""
+    p = Part("hub-hologram")
     phase = math.radians(22.5)
-    drum(p, [(0.5, HUB_CAP), (0.36, HUB_CAP + 0.2)], [PANEL, HULL], seg=8, phase=phase, bottom=True)
-    box(p, -0.1, 0.1, HUB_CAP + 0.2, 3.75, -0.1, 0.1, HULL, skip=("bottom", "top"))
-    box(p, -0.22, 0.22, 3.75, 3.87, -0.22, 0.22, TRIM, skip=())
-    centre = 5.05
-    planet = [(0.0, centre - 0.7), (0.5, centre - 0.42), (0.7, centre), (0.5, centre + 0.42), (0.0, centre + 0.7)]
+    drum(p, [(0.62, HUB_CAP), (0.4, HUB_CAP + 0.25)], [PANEL, HULL], seg=8, phase=phase, bottom=True)
+    box(p, -0.12, 0.12, HUB_CAP + 0.25, 4.6, -0.12, 0.12, HULL, skip=("bottom", "top"))
+    drum(p, [(0.2, 4.6), (0.5, 4.85)], [TRIM, LIT], seg=8, phase=phase, bottom=True)
+    centre = 6.85
+    planet = [(0.0, centre - 1.25), (0.9, centre - 0.75), (1.25, centre), (0.9, centre + 0.75), (0.0, centre + 1.25)]
     lathe(p, planet, [HOLO] * 4, seg=8, phase=phase)
     # The ring lies level: a tilted one is edge-on from one side, and the tycoon camera looks at
     # every hub from the same side.
-    hoop(p, 0.98, 1.24, centre - MIN_MEMBER / 2, centre + MIN_MEMBER / 2, HOLO_PALE, seg=8, phase=phase)
+    hoop(p, 1.5, 1.948, centre - 0.06, centre + 0.06, HOLO_PALE, seg=8, phase=phase)
     return p
 
 
@@ -1016,9 +1142,16 @@ PIECES = {
     "landing-beacon": make_landing_beacon,
     "gantry-ring": make_gantry_ring,
     "flag-mast": make_flag_mast,
-    "rock-garden-a": make_rock_garden_a,
-    "rock-garden-b": make_rock_garden_b,
-    "hub-beacon": make_hub_beacon,
+    "garden-bowl-quarter": make_garden_bowl_quarter,
+    "garden-stones-quarter": make_garden_stones_quarter,
+    "garden-moss-quarter": make_garden_moss_quarter,
+    "standing-stone": make_standing_stone,
+    "standing-stone-low": make_standing_stone_low,
+    "stone-garden": make_stone_garden,
+    "ring-garden": make_ring_garden,
+    "garden-lantern": make_garden_lantern,
+    "pier-banner": make_pier_banner,
+    "hub-hologram": make_hub_hologram,
 }
 
 
@@ -1037,6 +1170,14 @@ def ringed(model: str, r: float, degrees: float, rot: float = 0) -> dict:
     """A piece on the ground at radius r from the clump's centre, `degrees` from +X toward +Z."""
     x, z = polar(r, degrees)
     return placed(model, (x, 0, z), rot)
+
+
+TWIN = "Garden"  # a tended twin's name is its original's with this added
+
+
+def four_turns(pieces: list[dict]) -> list[dict]:
+    """A clump's pieces: its quarter's at four quarter turns."""
+    return [quarter_turned(piece, turns) for turns in range(4) for piece in pieces]
 
 
 def quarter_turned(piece: dict, turns: int) -> dict:
@@ -1101,17 +1242,52 @@ def blueprints() -> list[dict]:
             "one low mound with a rover's track round it (four quadrants)",
         ),
     }
+    twin = "the twin 'Tend the Rock Gardens' swaps in for"
+    gardens = {
+        "A": (
+            f"{twin} RegolithQuarterA, in its frame: one quadrant of the crater as a raked bowl: a white kerb, sand, "
+            "the rim as an even berm with a white crest, three raked rings, a quarter of the crystal at the centre, "
+            "one placed stone",
+            [
+                placed("garden-bowl-quarter", (0, 0, 0)),
+                ringed("boulder-small", 5.3, 24, 40),
+            ],
+            "a raked bowl round a crystal",
+        ),
+        "B": (
+            f"{twin} RegolithQuarterB, in its frame: one quadrant of the boulder ring as a stone circle: a white "
+            "kerb, raked sand, three standing stones on the circle of radius 4 (twelve round a clump, evenly), a "
+            "quarter of the island stone at the centre, a crystal",
+            [
+                placed("garden-stones-quarter", (0, 0, 0)),
+                ringed("standing-stone-low", 4.0, 15, 20),
+                ringed("standing-stone", 4.0, 45, 135),
+                ringed("standing-stone-low", 4.0, 75, 250),
+            ],
+            "a circle of standing stones on raked sand",
+        ),
+        "C": (
+            f"{twin} RegolithQuarterC, in its frame: one quadrant of the mound as a moss garden: a white kerb, "
+            "raked sand, the mound in moss with two crystals, five stepping stones where the rover's track ran, one "
+            "placed stone",
+            [
+                placed("garden-moss-quarter", (0, 0, 0)),
+                ringed("boulder-small", 5.3, 70, 200),
+            ],
+            "a moss mound with a stepping path round it",
+        ),
+    }
     out = []
 
     def add(bid: str, footprint: list, note: str, pieces: list[dict]) -> None:
         out.append({"id": bid, "era": ERA, "scale": 1.0, "footprint": footprint, "note": note, "pieces": pieces})
 
-    for key, (note, pieces, title) in quarters.items():
-        add(f"RegolithQuarter{key}", [13, 13], note, pieces)
-        clump = [quarter_turned(piece, turns) for turns in range(4) for piece in pieces]
-        add(f"RegolithClump{key}", [13, 13],
-            f"exactly RegolithQuarter{key} at rotY 0, 90, 180 and 270 about the origin: {title}, a ragged round "
-            "inside 13 x 13", clump)
+    for suffix, designs, outline in (("", quarters, "a ragged round"), (TWIN, gardens, "a true round")):
+        for key, (note, pieces, title) in designs.items():
+            add(f"RegolithQuarter{key}{suffix}", [13, 13], note, pieces)
+            add(f"RegolithClump{key}{suffix}", [13, 13],
+                f"exactly RegolithQuarter{key}{suffix} at rotY 0, 90, 180 and 270 about the origin: {title}, {outline} "
+                "inside 13 x 13", four_turns(pieces))
 
     add("RegolithBoulder", [2, 2], "a standing stone over two smaller rocks: the wild's tall accent",
         [placed("boulder-pile", (0, 0, 0))])
@@ -1119,6 +1295,13 @@ def blueprints() -> list[dict]:
         [placed("crater-fresh", (0, 0, 0))])
     add("SurveyBeacon", [1, 1], "a surveyor's tripod with a lit lamp and an orange tag",
         [placed("survey-beacon", (0, 0, 0))])
+    add("RegolithBoulder" + TWIN, [2, 2], f"{twin} RegolithBoulder: a standing stone on a raked disc inside a kerb",
+        [placed("stone-garden", (0, 0, 0))])
+    add("RegolithCrater" + TWIN, [3, 3],
+        f"{twin} RegolithCrater: a raked ring inside a kerb, two crystals at its centre",
+        [placed("ring-garden", (0, 0, 0))])
+    add("SurveyBeacon" + TWIN, [1, 1], f"{twin} SurveyBeacon: a stone garden lantern on a pad of sand",
+        [placed("garden-lantern", (0, 0, 0))])
 
     narrow = [
         placed("site-deck-narrow", (0, 0, 0)),
@@ -1181,19 +1364,17 @@ def blueprints() -> list[dict]:
         "city-changer 'Raise the Colony Flags': a standard beside a tube between two pods, 5 tall, four pointed "
         "banners (two long orange, two shorter white) hanging from crossed yards; no front",
         [placed("flag-mast", (0, 0, 0))])
-    add("RockGardenA", [1.5, 4],
-        "city-changer 'Tend the Rock Gardens': a strip bed, long along Z: a white kerb, raked sand, two stones and "
-        "two crystals; laid end to end its raked lines run on; no front",
-        [placed("rock-garden-a", (0, 0, 0))])
-    add("RockGardenB", [3, 3],
-        "city-changer 'Tend the Rock Gardens': a pocket bed: a white kerb, raked sand, a stone in a raked ring, a "
-        "small stone and three crystals; no front",
-        [placed("rock-garden-b", (0, 0, 0))])
-    add("HubBeacon", [2.3, 2.3],
+    add("PierBanner", [2.4, 2.4],
+        "city-changer 'Raise the Colony Flags' on the monorail: origin = a pier foot's centre on the ground, front -Z "
+        "(outward from the loop), the kit's pier (monorail-kit) inside it untouched: an orange collar round the shaft "
+        "at 4.72 to 4.86 and four banners hanging from it, orange with a white band to the front and back, white "
+        "with an orange band along the track",
+        [placed("pier-banner", (0, 0, 0))])
+    add("HubBeacon", [3.6, 3.6],
         "city-changer 'Light the Holo Beacons': origin = a TubeHub's centre on the ground; everything is at 2.65 or "
-        "higher, so it stands on the hub's cap (2.6) without touching it: a short mast and a ringed planet in holo "
-        "cyan floating over it, 5.75 at its top; no front",
-        [placed("hub-beacon", (0, 0, 0))])
+        "higher, so it stands on the hub's cap (2.6) without touching it: a mast with a lit dish and a ringed planet "
+        "in holo cyan floating over it, 3.6 across its ring, 8.1 at its top; no front",
+        [placed("hub-hologram", (0, 0, 0))])
     return out
 
 
@@ -1337,7 +1518,9 @@ def thin_faces(faces, limit: float = MIN_MEMBER) -> list[str]:
 
 
 def limits(bid: str):
-    """(x0, x1, z0, z1, tallest, triangles) a prop must keep to."""
+    """(x0, x1, z0, z1, tallest, triangles) a prop must keep to. A twin keeps to its original's."""
+    if bid.endswith(TWIN):
+        return limits(bid[:-len(TWIN)])
     if bid.startswith("RegolithClump"):
         return (-EDGE, EDGE, -EDGE, EDGE, WILD_LOW, CLUMP_TRIS)
     if bid.startswith("RegolithQuarter"):
@@ -1356,13 +1539,28 @@ def limits(bid: str):
     # The city-changers: INTERFACES "Wave 4.1c" and the builder's brief.
     if bid == "ColonyFlagMast":
         return (-0.5, 0.5, -0.5, 0.5, FLAG_MAX, 120)
-    if bid == "RockGardenA":
-        return (-0.75, 0.75, -2.0, 2.0, GARDEN_MAX, 150)
-    if bid == "RockGardenB":
-        return (-1.5, 1.5, -1.5, 1.5, GARDEN_MAX, 150)
-    if bid == "HubBeacon":  # well inside a hub's 4.6
-        return (-1.15, 1.15, -1.15, 1.15, BEACON_MAX, 200)
+    if bid == "PierBanner":
+        return (-PIER_BANNER_HALF, PIER_BANNER_HALF, -PIER_BANNER_HALF, PIER_BANNER_HALF, PIER_BANNER_MAX, 200)
+    if bid == "HubBeacon":
+        return (-BEACON_HALF, BEACON_HALF, -BEACON_HALF, BEACON_HALF, BEACON_MAX, 200)
     raise KeyError(bid)
+
+
+def pier_half(y: float) -> float:
+    """How far a face of monorail-kit's pier stands from its axis at height y, at most: the foot,
+    the tapering shaft, its collar, the saddle."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import monorail_kit as mk
+
+    if y <= mk.PIER_FOOT_H:
+        return mk.PIER_FOOT_HALF
+    if y <= mk.PIER_COLLAR[0]:
+        share = (y - mk.PIER_FOOT_H) / (mk.PIER_COLLAR[0] - mk.PIER_FOOT_H)
+        return mk.PIER_BASE_HALF + (mk.PIER_NECK_HALF - mk.PIER_BASE_HALF) * share
+    if y <= mk.PIER_COLLAR[1]:
+        return mk.PIER_NECK_HALF + 0.06
+    return mk.PIER_CAP_HALF_Z
 
 
 def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
@@ -1383,10 +1581,13 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
     names = [bp["id"] for bp in bps]
     wanted = [f"Regolith{kind}{key}" for kind in ("Clump", "Quarter") for key in "ABC"] + [
         "RegolithBoulder", "RegolithCrater", "SurveyBeacon", "SiteNarrow", "SiteNarrowGantry", "SiteSmall",
-        "SiteSmallGantry", "SiteMedium", "LotBeacon", "RevealScaffold", "ColonyFlagMast", "RockGardenA",
-        "RockGardenB", "HubBeacon"]
+        "SiteSmallGantry", "SiteMedium", "LotBeacon", "RevealScaffold", "ColonyFlagMast", "PierBanner", "HubBeacon"]
+    wild = wanted[:9]
+    wanted += [name + TWIN for name in wild]
     if sorted(names) != sorted(wanted):
-        bad.append(f"the blueprints are {sorted(names)}, not the twenty of the contract")
+        bad.append(f"the blueprints are {sorted(names)}, not the {len(wanted)} of the contract")
+    by_id = {bp["id"]: bp for bp in bps}
+    reach = {}
     for bp in bps:
         bid = bp["id"]
         faces = assembled(bp, parts)
@@ -1395,6 +1596,7 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
         hi = [max(q[i] for q in verts) for i in range(3)]
         tris = sum(len(points) - 2 for points, _ in faces)
         rows.append((bid, hi[0] - lo[0], hi[2] - lo[2], hi[1], tris))
+        reach[bid] = max(math.hypot(q[0], q[2]) for q in verts)
         x0, x1, z0, z1, tallest, budget = limits(bid)
         e = 1e-6
         if lo[0] < x0 - e or hi[0] > x1 + e or lo[2] < z0 - e or hi[2] > z1 + e:
@@ -1412,6 +1614,10 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
             bad.append(f"{bid}: {fight}")
         if bid.startswith("RegolithQuarter"):
             bad += [f"{bid}: {seam}" for seam in seams(faces)]
+        if bid == "PierBanner":
+            tight = min(max(abs(q[0]), abs(q[2])) - pier_half(q[1]) for q in verts)
+            if tight < MIN_GAP - e:
+                bad.append(f"{bid} comes {tight:.3f} from the pier's faces, under {MIN_GAP}")
         if bid == "RevealScaffold":
             near = min(max(abs(q[0]), abs(q[2])) for q in verts)
             far = max(hi[0], hi[2], -lo[0], -lo[2])
@@ -1427,11 +1633,28 @@ def check(out_dir: str, blueprint_dir: str) -> tuple[list[str], list[tuple]]:
         if on_disk != blueprint_text(bp):
             state = "is missing" if on_disk is None else "differs from a fresh build"
             bad.append(f"{os.path.relpath(path, REPO_ROOT)} {state}: run without `check`")
-    # A clump is its quarter turned four times, so a quarter must leave room for three more.
-    for key in "ABC":
-        quarter = next(row for row in rows if row[0] == f"RegolithQuarter{key}")
-        if 4 * quarter[4] > CLUMP_TRIS:
-            bad.append(f"RegolithQuarter{key} has {quarter[4]} triangles: four of them are over {CLUMP_TRIS}")
+    for suffix in ("", TWIN):
+        for key in "ABC":
+            quarter, clump = f"RegolithQuarter{key}{suffix}", f"RegolithClump{key}{suffix}"
+            if quarter not in by_id or clump not in by_id:
+                continue
+            # A clump is its quarter turned four times: the game breaks it into them.
+            if by_id[clump]["pieces"] != four_turns(by_id[quarter]["pieces"]):
+                bad.append(f"{clump} is not {quarter} at four quarter turns")
+            # So a quarter must leave room for three more.
+            tris = next(row[4] for row in rows if row[0] == quarter)
+            if 4 * tris > CLUMP_TRIS:
+                bad.append(f"{quarter} has {tris} triangles: four of them are over {CLUMP_TRIS}")
+    # A twin stands in its original's place: the same footprint, and for a clump or a quarter no
+    # farther from its origin, so the swap moves no plate onto a neighbour's.
+    for name in wild:
+        twin = name + TWIN
+        if name not in by_id or twin not in by_id:
+            continue
+        if by_id[twin]["footprint"] != by_id[name]["footprint"]:
+            bad.append(f"{twin} has footprint {by_id[twin]['footprint']}, {name} {by_id[name]['footprint']}")
+        if name.startswith(("RegolithClump", "RegolithQuarter")) and reach[twin] > reach[name] + 1e-6:
+            bad.append(f"{twin} reaches {reach[twin]:.3f} from its origin, past {name}'s {reach[name]:.3f}")
     return bad, rows
 
 
@@ -1456,12 +1679,12 @@ def generate(out_dir: str, only: set[str] | None) -> None:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Generate the regolith-kit GLBs and the 20 blueprints; check them.")
+    parser = argparse.ArgumentParser(description="Generate the regolith-kit GLBs and the 28 blueprints; check them.")
     parser.add_argument("command", nargs="?", choices=("build", "check"), default="build",
                         help="build (the default) writes the GLBs and the blueprints, then checks; check only checks")
     parser.add_argument("--out", default=DEFAULT_OUT, help="target Models/GLB format directory")
     parser.add_argument("--only", default="", help="comma list of pieces to rebuild (default: all)")
-    parser.add_argument("--blueprints", default=BLUEPRINT_DIR, help="where the 20 blueprints are written and checked")
+    parser.add_argument("--blueprints", default=BLUEPRINT_DIR, help="where the 28 blueprints are written and checked")
     args = parser.parse_args(argv)
     if args.command == "build":
         generate(args.out, {name for name in args.only.split(",") if name} or None)

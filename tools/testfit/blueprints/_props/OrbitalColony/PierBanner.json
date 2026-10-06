@@ -1,0 +1,10 @@
+{
+  "id": "PierBanner",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [2.4, 2.4],
+  "note": "city-changer 'Raise the Colony Flags' on the monorail: origin = a pier foot's centre on the ground, front -Z (outward from the loop), the kit's pier (monorail-kit) inside it untouched: an orange collar round the shaft at 4.72 to 4.86 and four banners hanging from it, orange with a white band to the front and back, white with an orange band along the track",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "pier-banner", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}

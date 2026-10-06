@@ -1,0 +1,10 @@
+{
+  "id": "RegolithBoulderGarden",
+  "era": "OrbitalColony",
+  "scale": 1.0,
+  "footprint": [2, 2],
+  "note": "the twin 'Tend the Rock Gardens' swaps in for RegolithBoulder: a standing stone on a raked disc inside a kerb",
+  "pieces": [
+    {"kit": "regolith-kit", "model": "stone-garden", "pos": [0, 0, 0], "rotY": 0, "stage": 0}
+  ]
+}
