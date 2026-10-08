@@ -54,8 +54,16 @@ local STRUCTURAL_PATHS = {
 -- without end, and an ability shot at speed 0 could never leave the caster.
 local POSITIVE_ABILITY_FIELDS = { "tickSeconds", "speed" }
 -- Numbers that may reach 0 but never go below it: a negative burst would shrink the attack
--- credit under one shot and refuse every attack at its own rate.
-local NON_NEGATIVE_PATHS = { "^shooting%.rateBurstShots$" }
+-- credit under one shot and refuse every attack at its own rate. P4: a threat timer, a health
+-- rate or an enemy attack's number below 0 means nothing, and the client times its tells from
+-- the same values the server judges by, so the floor has to be the same on both sides.
+local NON_NEGATIVE_PATHS = {
+	"^shooting%.rateBurstShots$",
+	"^crowd%.heavyHit$",
+	"^crowd%.threat%.[^.]+$",
+	"^crowd%.kinds%.[^.]+%.attacks%.%d+%.[^.]+$",
+	"^player%.[^.]+$",
+}
 local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", check = oneOf(SLOTS) },
 	{
@@ -80,7 +88,17 @@ local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	},
 	{
 		pattern = "^dummySets%.[^.]+%.%d+%.behaviour$",
-		check = oneOf({ "idle", "walk", "strafe", "jump", "chase" }),
+		check = oneOf({ "idle", "walk", "strafe", "jump", "chase", "fight" }),
+	},
+	-- P4: what a fighting kind does and how each of its attacks resolves.
+	{ pattern = "^crowd%.kinds%.[^.]+%.brain$", check = oneOf({ "rush", "keepAway" }) },
+	{
+		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.shape$",
+		check = oneOf({ "lunge", "arc", "lane", "line", "shot", "lob" }),
+	},
+	{
+		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.interrupt$",
+		check = oneOf({ "stagger", "heavy", "none" }),
 	},
 	{
 		pattern = "^defaultSet$",
@@ -180,7 +198,10 @@ end
 -- True when `value` may replace the base leaf at `path`: the path exists in the base config,
 -- ends at a scalar, and the value keeps its type (finite numbers; enum strings stay in their
 -- set; free strings stay short). That covers P3's nested ability blocks as they stand: every
--- numeric weapons.<family>.ability.<field> and every abilities.* leaf is tunable.
+-- numeric weapons.<family>.ability.<field> and every abilities.* leaf is tunable. P4's keys
+-- tune the same way, an enemy attack's numbers by its 1-based place in the list
+-- (crowd.kinds.<kind>.attacks.<n>.<field>). Only a field the base config writes can be tuned:
+-- an optional one the kind leaves out (a fodder lunge's knockback) has no path.
 function Tuning.Validate(path: string, value: any): boolean
 	local current = baseLeaf(path)
 	if current == nil or typeof(value) ~= typeof(current) then

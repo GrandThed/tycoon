@@ -1554,6 +1554,30 @@ merge. The `tycoon-p3` folder used while the fix was built is gone.
 - [ ] 3. Press **Play**. Output shows `[RangeService] Proving Grounds ready`.
 - [ ] 4. Run `docs/PLAYTEST.md` "P3.1 — A swing lands where you stand".
 
+## P4 wave 1 — They hurt you (quick look)
+
+**Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
+(no audio step). **Optional:** wave 2 is built whether or not you take this look.
+
+<!-- FILE TO OPEN: start. Lead: if wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. The lead merges this wave to
+  `main` before asking for the look, so "Build all" builds it.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one**: no health bar,
+  no enemies that fight.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. Build as the block above says.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save). Saving would write the
+      old version over the new file.
+- [ ] 3. Open the file named in the block above.
+- [ ] 4. Press **Play**. Output shows `[RangeService] Proving Grounds ready`, and a green health
+      bar reading **130 / 130** sits above the two ability tiles. No bar: it is the old file,
+      go back to step 2.
+- [ ] 5. Run `docs/PLAYTEST.md` "P4 wave 1 — They hurt you (quick look)".
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the

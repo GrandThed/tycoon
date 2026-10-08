@@ -1969,6 +1969,175 @@ lands where you stand" (with its "Review round").
 - [x] P3.1 built and reviewed (definition of done in INTERFACES "P3.1")
 - [ ] Ben's playtest (`docs/PLAYTEST.md` "P3.1 — A swing lands where you stand")
 
+## P4 — Enemies that fight back
+
+**Goal:** the range's enemies attack and the player can be hurt. Fodder, three shooters, a brute
+and a plated elite each fight their own way; then the boss. Still range-only
+(`build/proving.rbxl`); missions return at P5. **No sound. Phones must work.** Plan of record:
+`docs/COMBAT_DESIGN.md` §7 and §10 step 5; contracts: `docs/INTERFACES.md` "P4 contracts"
+(rulings 1–25); values: `docs/BALANCE.md` "P4".
+
+**Ben's rulings (2026-10-07):**
+- Go for P4: "feels good, lets start".
+- **Armoured elites carry a breakable plate.** Only heavy hits damage it; once it breaks, every
+  weapon hurts the elite in full. This settles P3's flag 2 (SMG against armour). Built in wave 2.
+- **Three shooter enemies** ("lets make all of these"), one attack each. Built in wave 2.
+  - Slinger: slow glowing shots you dodge.
+  - Marksman: a warning line, then an instant hit.
+  - Lobber: an arcing shot that lands in a ground circle.
+- Still open from P3: A or B for SMG, Beam and Chain Gun; cross-slot refunds; favourite and
+  weakest ability.
+
+**Stops and waves:**
+- **Stop 1:** the player can be hurt; fodder, the three shooters, the brute and the plated elite
+  fight. Built in two waves, then Ben's playtest.
+  - **Wave 1, "they hurt you":** fodder lunge, elite arc, health, down and up, hurt feedback.
+    Ben gets an **optional quick look, not a stop**: wave 2 continues whatever he says.
+  - **Wave 2, "roles":** slinger, marksman, lobber, brute, the plate; sets `shooters`, `brutes`,
+    `plated`, `fight`.
+- **Stop 2:** the boss, under its own contract after Ben's verdict on Stop 1.
+
+**Where it is (2026-10-07):** wave 1 is built and reviewed on branch `p4-enemy-roles` (worktree
+`tycoon-p4`).
+- "Build all" builds `main`, and Ben opens `tycoon\build\proving.rbxl` by habit (P3.1). So the
+  lead merges a wave to `main` before Ben looks at it, once review and QA are green.
+- The code is inert outside Studio's range.
+
+**Wave 1 shipped (2026-10-07):**
+- **What the player meets:**
+  - **Fodder** close in and lunge: a 0.6 s windup shown on the body (it rears back and turns
+    red), a thrust for 8, then 1.5 s spent. At most **2** attack one player at once; the rest
+    crowd and wait.
+  - **The armoured elite** swings a 120° arc: a 0.8 s windup with a red wedge on the ground
+    that fills, 30 damage, a knock back of about 6 studs.
+  - **Health:** 130, fixed in the range. Regen 10 a second after 4 s unhurt.
+  - **Being hit** shows a red flash at the screen edges, a pointer to where the hit came from
+    and the number lost.
+  - **Avoiding:** a hit the dash's protection voids shows "DODGED"; a jump clears ground
+    attacks; walking out of the shape works too.
+  - **At zero:** down for 2 s, then up in place at full health with 1.5 s of protection. No
+    respawn.
+  - **Interrupts:** any hit cancels a fodder's attack; only a heavy hit (40 or more) cancels
+    the elite's.
+  - **God mode** (panel button): enemy hits miss and show as "DODGED".
+  - Two new dummy sets: `fodderRush` (30 fodder that fight) and `elites` (3 armoured that
+    fight). The P1–P3 sets are unchanged: their dummies never attack.
+- **Server:**
+  - New `CrowdBrain.luau`: the `rush` brain; an attack as a fixed timeline (windup, impact,
+    strike, recover) for `lunge` and `arc`; the attacker cap; interrupts.
+  - New `VitalsService.luau`: health, regen, dodges, down and up, `god`, the `hurt` effects,
+    and the commit rule (a hit is judged a moment after its impact, against where the player's
+    own screen had them).
+  - `CrowdService`: a group whose behaviour is `fight` runs its kind's brain; a body in windup
+    or attack is planted; impacts are queued and handed over after the step. The passive
+    behaviours are untouched.
+  - `RangeService`: drives `VitalsService`; the `god` range command; no attack, dash or slam
+    while down; a fight slot does not respawn while a player stands on it; the range's
+    invisible ForceField is gone.
+  - `CrowdCodec` v2: the snapshot names the attack an enemy is in. Still 11 bytes an entry.
+  - No new remote. `hurt` rides the existing `CombatFx` event; health replicates as
+    `Humanoid.Health`.
+- **Client:**
+  - New `VitalsController.luau` and `UI/VitalsHud.luau`: the health bar, the edge flash, the
+    pointer, the number lost, "DODGED", the "DOWN · up in …" banner, the green get-up shimmer.
+    Another player's hit flashes their character.
+  - New `Haptics.luau`: the motor pulse, shared with `FeedbackController`, whose own copy is
+    gone (fewer top-level locals there, not more).
+  - `CrowdRenderer`: codec v2; the fodder's tell on its body; the elite's ground wedge. Tells
+    are timed on server time and never thinned on `reducedMotion` or `lowEndDevice`.
+  - `MovementController`: `ApplyKnock`, `SetDown`. `InputController`: nothing is sent while
+    down.
+  - `RangePanel`: a **God mode** button at the top of "Dummies & commands"; a fifth readout
+    line, "Taken N · Downs N".
+- **Config (`src/shared/Config/ProvingGrounds.json`):** attacks for `fodder` and `armoured`;
+  `crowd.heavyHit` 40; `crowd.threat`; `player`; the two sets.
+- **Balance tools:** `tools/sim_range.py` has a threat section, the first where the crowd
+  moves. `--check` guards its bands.
+
+**Rulings the lead added during the wave (16–25):**
+- **Numbers (16, 19):**
+  - The fodder cap is 2, not 4. At 4 a still player is down in about 5 s. Ben was told 4 first
+    and has been told 2.
+  - The lunge's windup is 0.6 s, not 0.5. At 0.5 a phone thumb had 0.01 s to step out.
+- **Health pinned at 130 in the range (17):** the tier-1 body against tier-1 weapon numbers,
+  whatever the Studio profile holds. P5 returns to the profile.
+- **Hits decided together do not stack through a knock (18):** when a knocking hit lands, the
+  other hits waiting on that player are voided and shown as "DODGED". Without it three elites
+  landed as one hit of 60 or 90.
+- **Flat for now (20):** enemy damage, regen and `crowd.heavyHit` do not scale with weapon tier.
+- **A hopping player (21):** the Major below.
+- **Timing (22, 23):**
+  - A due impact is never lost when its enemy is hit or killed just after its impact time.
+  - `hurt` leaves in the frame it is decided, so the bar and the flash move together.
+- **Fixed as found (24):** a player down at an impact's time is skipped; the i-frame window
+  before the current one is tested too; no bow draw while down; the bar shows full from the
+  get-up.
+- **Accepted (25):**
+  - About a quarter of impacts test the player up to 33 ms late at Studio's ping.
+  - Ability zones placed before going down keep resolving.
+  - A player who joins mid-fight may see one blow late.
+  - The pointer ring crosses the combo counters at some bearings on a 375-wide screen (for
+    Ben's look).
+
+**Review outcome:** 2 Critical, 1 Major, 10 Minor.
+- Both Criticals were rulings 17 and 18: added while the review ran, not yet in the code.
+  Implemented.
+- Major, ruled (21): holding jump voided about five fodder hits in six.
+  - `reach` is now measured on the flat, so enemies gather and wind up under a player in the
+    air and a landing is not free.
+  - The answer to a player who stays in the air is wave 2's shooters, which aim at the body.
+  - Ground shapes are still jumped over.
+- Minors: fixed or accepted as rulings 22–25.
+- qa-runner: ALL GREEN (2026-10-07). stylua; selene (only the old `LegacyPanel` warning); hub
+  and combat luau-lsp with fresh sourcemaps; `check_compile.py` (129 files; highest top-level
+  counts FeedbackController 159, InputController 144, EnemyService 140); the hub, combat and
+  proving builds; `sim_economy.py --check`, `sim_combat.py --check`, `sim_range.py --check`
+  (105 checks). Asset gates not run: no asset or template changed.
+- After QA: ruling 26 (a dash away from an attack aimed at you reads as "DODGED"), server only,
+  re-verified by the lead.
+
+**Balance (`docs/BALANCE.md` "P4"; tier 1, from `sim_range.py`):**
+- A player standing still goes down in **8.7 s** in `fodderRush` (target 6–12 s) and in
+  **11.9 s** in `elites`.
+- No single hit takes more than 25% of health: lunge 8 (6%), arc 30 (23%).
+- Walking away takes no damage in either set. Both enemies are slower than the walk.
+- A player who keeps swinging takes no hit in either set (all five melee families, 60 s).
+- Nothing was tuned in real play. Every number is a starting value.
+
+**Known limits at wave 1:**
+- Health only drops while the player is not attacking: a sword outreaches a lunge and any hit
+  cancels it. Wave 2's shooters and brute are what reach a busy player.
+- Jumping again and again still avoids most fodder hits. The shooters are the answer (wave 2).
+- The elite is soft until it has its plate (wave 2): a still player loses less to three elites
+  than to the fodder.
+- The 8-stud step is safe ground: both attacks pass under it and the crowd stays on the floor.
+  Wave 2's shooters and lobber reach it.
+- Enemies walk through cover (since P1).
+- Placeholder bodies. No sound.
+- **Unmeasured:** the server step time with `fodderRush` running. Only Ben can read it, off
+  the panel in Studio. Budget 2 ms.
+
+**Carried:**
+- **To P5 (owner: lead):**
+  - Enemy damage, regen and `heavyHit` are flat while health grows ×17 over the tiers
+    (ruling 20; table in BALANCE "What scales with weapon tier").
+  - Health comes from the profile again (ruling 17).
+  - Server-measured speed for the melee slack (from P3.1).
+- **To wave 2 (owner: economy-designer):** `sim_range.py` gains a hopping player (ruling 21).
+
+**Next:**
+- **Wave 2, "roles"** (same owners; the client adds `Controllers/ThreatFx/`): the keepAway
+  brain, `shot`, `line`, `lob`, `lane`, the plate.
+- Then **Ben's Stop 1 playtest**, with the server step time read in `fight`.
+- Then **Stop 2, the boss**, under its own contract.
+
+- [x] Wave 1 built and reviewed (INTERFACES "P4 contracts", rulings 1–25)
+- [ ] Wave 1 quick look by Ben, **optional** (`docs/PLAYTEST.md` "P4 wave 1 — They hurt you
+  (quick look)"). Its step 1 is the P3.1 melee check, which ticks the open P3.1 box above.
+- [ ] Wave 2, "roles"
+- [ ] Stop 1 playtest (Ben)
+- [ ] Stop 2, the boss
+
 ## M12 — Growing city
 
 **Goal:** the city should feel "alive and like a growing city, not a grid being filled" (Ben,

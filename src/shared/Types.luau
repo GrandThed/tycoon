@@ -1569,6 +1569,10 @@ export type CombatFx =
 	| CombatFxPartyEffect
 	| CombatFxMentor
 	| CombatFxStrike
+	| CombatFxHurt
+	| CombatFxEnemyShot
+	| CombatFxEnemyShotEnd
+	| CombatFxArea
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
@@ -1764,12 +1768,59 @@ export type CrowdKindDef = {
 	knockbackMult: number,
 	-- Flat damage removed from every hit: dealt = max(amount - armor, amount * crowd.armorFloor).
 	armor: number,
+	-- P4 (docs/INTERFACES.md "P4 contracts"). How the kind moves when its group fights: rush =
+	-- closes on its target until an attack's reach; keepAway = holds bandMin..bandMax studs from
+	-- it. nil = a dummy kind: it never attacks, whatever its group's behaviour.
+	brain: ("rush" | "keepAway")?,
+	bandMin: number?,
+	bandMax: number?,
+	-- At most 7 (the snapshot carries the attack's index in 3 bits; 0 = none).
+	attacks: { CrowdAttackDef }?,
+	-- Plate HP. While it lasts, only a hit of crowd.heavyHit or more touches the enemy, and that
+	-- hit goes to the plate; when the plate is gone every hit lands in full.
+	plate: number?,
+}
+-- One enemy attack: windup (the tell, facing locked) -> impact -> recover (exposed).
+-- shape: lunge = a short thrust from the body; arc = a sweep round the body; lane = the enemy
+-- charges down a lane and hits each player on it once; line = an instant shot along a warning
+-- line; shot = a slow visible projectile; lob = an arcing shot that lands in a ground circle.
+export type CrowdAttackDef = {
+	shape: "lunge" | "arc" | "lane" | "line" | "shot" | "lob",
+	-- The windup starts when the target is within this many studs on the flat (X and Z), so
+	-- enemies wind up under a player in the air and a landing is not free.
+	reach: number,
+	windup: number,
+	recover: number,
+	damage: number,
+	knockback: number?,
+	launch: number?,
+	-- lunge/arc: how far the hit reaches from the body centre; lane: the charge's length; line:
+	-- the shot's length.
+	range: number?,
+	-- lunge, lane, line: the shape's full width.
+	width: number?,
+	arcDegrees: number?,
+	-- shot: the projectile's radius; lob: the blast radius.
+	radius: number?,
+	-- shot: studs per second; lane: the charge's speed.
+	speed: number?,
+	-- shot: lifetime; lob: flight time from fire to landing.
+	seconds: number?,
+	-- line only: the aim follows its target until this long before the impact. Every other
+	-- shape locks its facing when the windup starts.
+	lockSeconds: number?,
+	-- Ground shapes reach this many studs above the floor: a player whose feet are higher is
+	-- missed (a jump dodges). Unused by shot, which is tested as a sphere.
+	height: number?,
+	-- What cancels the windup: stagger = any hit that staggers; heavy = only a hit of
+	-- crowd.heavyHit or more; none = nothing.
+	interrupt: "stagger" | "heavy" | "none",
 }
 -- behaviour: idle = stands; walk = paces a line; strafe = side to side; jump = hops; chase = runs
--- at the nearest player (the stress test).
+-- at the nearest player (the stress test); fight (P4) = the kind's brain and attacks run.
 export type DummyGroupDef = {
 	kind: string,
-	behaviour: "idle" | "walk" | "strafe" | "jump" | "chase",
+	behaviour: "idle" | "walk" | "strafe" | "jump" | "chase" | "fight",
 	count: number,
 	-- Centre {x, z} in arena coordinates and the spacing of the packed grid / row.
 	at: { number },
@@ -1892,6 +1943,35 @@ export type ProvingGroundsConfig = {
 		knockMax: number,
 		-- Share of every hit that always gets through armour: max(amount - armor, amount * armorFloor).
 		armorFloor: number,
+		-- P4: the damage of one hit (after crit and chain falloff, before armour) from which it
+		-- counts as heavy: it damages a plate and cancels an `interrupt = "heavy"` windup.
+		heavyHit: number,
+		-- P4: rules of enemies that fight. attackersPerPlayer = most lunging enemies in windup or
+		-- attack against one player at once; spawnGrace = seconds a fresh enemy cannot start a
+		-- windup; spawnClear = a slot does not respawn while a player stands within this many
+		-- studs; maxShots = most enemy projectiles alive (a shooter waits when it is reached);
+		-- strikeSeconds = how long a lunge or arc stays in the `attack` state after its impact
+		-- (the visible thrust; a lane's `attack` state lasts its charge, range / speed).
+		threat: {
+			attackersPerPlayer: number,
+			spawnGrace: number,
+			spawnClear: number,
+			maxShots: number,
+			strikeSeconds: number,
+		},
+	},
+	-- P4: the player's body in the range. Max HP is Armory.MaxHp, as in missions. down = knocked
+	-- down at 0 HP for downSeconds, then up in place at full HP with getUpIframes; regen only
+	-- after regenDelay seconds unhurt; knockIframes follow any hit that knocks back;
+	-- knockFriction (studs/s²) bleeds a knockback's push off, in the air as on the ground, so
+	-- the slide is tuned apart from the crowd's own.
+	player: {
+		downSeconds: number,
+		getUpIframes: number,
+		regenDelay: number,
+		regenPerSecond: number,
+		knockIframes: number,
+		knockFriction: number,
 	},
 	-- Keyed by family id (broadsword, warhammer, spinblade, greataxe, spear, longbow, splitbow,
 	-- shotgun, rifle, launcher, P3: smg, beam, chaingun); loadout = the families a player starts
@@ -2016,18 +2096,43 @@ export type ValleyPlan = {
 
 -- Crowd replication. CrowdSpawn (reliable) introduces an enemy once; CrowdSnapshot (unreliable,
 -- buffer via CrowdCodec) carries every live enemy at crowd.snapshotHz; CrowdRemove ends it.
-export type CrowdState = "idle" | "move" | "windup" | "stagger" | "airborne" | "dead"
+-- P4 adds attack (the active part: the lunge, the charge) and recover (exposed after it); windup
+-- is the tell. Wire order is fixed in CrowdCodec.
+export type CrowdState =
+	"idle"
+	| "move"
+	| "windup"
+	| "stagger"
+	| "airborne"
+	| "dead"
+	| "attack"
+	| "recover"
 export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number }
 export type CrowdSnapshotEntry = {
 	id: number,
 	position: Vector3,
 	yaw: number,
 	state: CrowdState,
+	-- While `plated`, this is the plate's fraction: HP cannot change under a plate.
 	hpFraction: number,
+	-- P4 (codec v2): the plate is still on; attack = index into the kind's `attacks` during
+	-- windup, attack and recover, 0 otherwise.
+	plated: boolean,
+	attack: number,
 }
 -- One resolved attack, sent to every client in the range: draws the hitbox effect, the numbers
 -- burst, markers and reactions. origin/direction are the shape's frame; size = range or radius.
-export type StrikeHit = { id: number, amount: number, crit: boolean, killed: boolean }
+-- P4: blocked = a plate stopped it (amount 0); plate = the amount went to the plate, not to HP;
+-- broke = this hit shattered the plate.
+export type StrikeHit = {
+	id: number,
+	amount: number,
+	crit: boolean,
+	killed: boolean,
+	blocked: boolean?,
+	plate: boolean?,
+	broke: boolean?,
+}
 export type CombatFxStrike = {
 	kind: "strike",
 	userId: number,
@@ -2137,6 +2242,55 @@ export type RangeStats = {
 	ability: string?,
 	abilityHits: number?,
 	abilityKills: number?,
+	-- P4: what enemies did to this player since the set was loaded, and the Studio switch that
+	-- voids their hits.
+	damageTaken: number?,
+	downs: number?,
+	god: boolean?,
+}
+
+-- P4 threat effects (range only; the mission kinds telegraph / playerHit / playerDown are not
+-- reused). The server batches them once per crowd step. Times are server time.
+-- hurt: an enemy attack reached `userId`. dodged = an i-frame voided it (amount 0). down = this
+-- hit put them down until upAt. from = the attacker's position; push/launch are applied by the
+-- victim's own client.
+export type CombatFxHurt = {
+	kind: "hurt",
+	userId: number,
+	amount: number,
+	from: Vector3,
+	enemyKind: string,
+	attack: number,
+	push: Vector3?,
+	launch: number?,
+	dodged: boolean?,
+	down: boolean?,
+	upAt: number?,
+}
+-- enemyShot: a slow projectile, drawn from `from` along `velocity` since `firedAt`.
+-- enemyShotEnd: it hit a player, a wall, or ran out.
+export type CombatFxEnemyShot = {
+	kind: "enemyShot",
+	id: number,
+	enemyKind: string,
+	from: Vector3,
+	velocity: Vector3,
+	radius: number,
+	firedAt: number,
+	seconds: number,
+}
+export type CombatFxEnemyShotEnd = { kind: "enemyShotEnd", id: number, at: Vector3, hit: boolean }
+-- area: a ground circle that lands at endsAt (a lob now, boss rings at Stop 2). from = where
+-- the lob left, for its arc.
+export type CombatFxArea = {
+	kind: "area",
+	id: number,
+	enemyKind: string,
+	center: Vector3,
+	radius: number,
+	startsAt: number,
+	endsAt: number,
+	from: Vector3?,
 }
 
 return {}

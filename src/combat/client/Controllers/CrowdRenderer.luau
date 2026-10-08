@@ -23,6 +23,23 @@
 --   touch device here, and hit feedback is the point of the range on phones too.
 -- * Every enemy number (sizes, colours, snapshotHz, feedback strength) comes from Tuning.Get();
 --   the constants below are the feel of the placeholder figure itself.
+-- * P4 (docs/INTERFACES.md "P4 contracts": "State timing", "Codec v2" and the rule "Tells are
+--   drawn against server time"). Codec v2 names the attack an enemy is in the middle of, and
+--   its three states are drawn on the SERVER clock, not on the delayed clock the positions use.
+--   The first packet that shows a windup is stamped with its start, so the impact is that
+--   stamp plus the attack's windup, exactly; only when the packet before it was lost is the
+--   start taken as one step after the enemy's previous sighting, the earliest it can have
+--   been, so the blow is never shown later than the server's. From there the attack runs on
+--   this client's own clock (windup, the blow at the impact, recover after the strike) and
+--   the wire only corrects it: a recover that arrives before the blow was a cancelled windup,
+--   and the thrust is taken back. A stagger or a hop shows over an attack; the attack index
+--   in that packet says whether it still runs underneath (set) or is over (0).
+--   A fodder's tell is its body alone: pose and colour, never an Instance. The elite's `arc`
+--   also lays a pooled wedge on the floor (its reach and angle, along the locked facing) whose
+--   fill grows to its outline at the impact. Shapes this wave does not draw (lane, line, shot,
+--   lob) get the body pose only. Tells are information, so nothing here thins them on
+--   reducedMotion or lowEndDevice; a low-end device only gets a coarser wedge. Their numbers
+--   come from the kind's `attacks` and crowd.threat; their look from Theme.COMBAT_RANGE_TELL_*.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -46,6 +63,23 @@ export type ForEachCallback = (
 ) -> ()
 
 type Phase = "alive" | "dying" | "vanish"
+-- P4: the part of an attack being drawn ("none" = no attack, or one the config does not have).
+type Threat = "none" | "windup" | "attack" | "recover"
+
+-- The elite's ground tell: a flat wedge on the arena floor. `edge` outlines the whole reach
+-- from the first frame (one bar per slice of the rim, two more for the sides); `fill` is two
+-- wedges per slice and grows from the body to that outline. centre / fillRadius / laid and the
+-- two shown transparencies are what was last written, so a frame writes only what changed.
+type Tell = {
+	fill: { BasePart },
+	edge: { BasePart },
+	slices: number,
+	centre: Vector3,
+	fillRadius: number,
+	laid: boolean,
+	fillShown: number,
+	edgeShown: number,
+}
 
 type Entity = {
 	id: number,
@@ -120,6 +154,36 @@ type Entity = {
 	fade: number,
 	squash: number,
 	visorHot: boolean,
+
+	-- P4 threat (codec v2). attack = the wire's index into the kind's `attacks`, 0 = none;
+	-- plated = its plate is still on (the plate itself is drawn in wave 2).
+	attack: number,
+	plated: boolean,
+	-- The attack as drawn: `threat` is its phase on this client's clock and threatAt the server
+	-- time that phase began; impactAt = the end of its windup. threatOpen = that windup's clock
+	-- is running and the wire has not shown its attack or recover yet; threatAttack = the index
+	-- the numbers below were read for.
+	threat: Threat,
+	threatAt: number,
+	impactAt: number,
+	threatOpen: boolean,
+	threatAttack: number,
+	threatShape: string,
+	windupSeconds: number,
+	strikeSeconds: number,
+	recoverSeconds: number,
+	-- lunge: studs the figure jabs forward; arc: the wedge's radius, its angle in radians and
+	-- the facing the windup locked.
+	threatReach: number,
+	threatArc: number,
+	threatYaw: number,
+	tell: Tell?,
+	-- Body tint: how far the kind's own colours are taken toward tintColor (a few fixed steps),
+	-- and neon for the instant of the blow.
+	tint: number,
+	tintColor: Color3,
+	glow: boolean,
+
 	dirty: boolean,
 	lastShown: Vector3,
 	lastYaw: number,
@@ -216,6 +280,8 @@ local tuningConnection: Tuning.Connection? = nil
 local active: { Entity } = {}
 local byId: { [number]: Entity } = {}
 local pool: { Entity } = {}
+-- P4 ground tells, pooled whole: only the few elites of a set ever need one at a time.
+local tellPool: { Tell } = {}
 
 -- Reused every frame; entries past the live count are cleared so BulkMoveTo sees exact arrays.
 local moveParts: { BasePart } = {}
@@ -370,6 +436,24 @@ local function newEntity(): Entity?
 		fade = 0,
 		squash = 1,
 		visorHot = false,
+		attack = 0,
+		plated = false,
+		threat = "none",
+		threatAt = 0,
+		impactAt = 0,
+		threatOpen = false,
+		threatAttack = 0,
+		threatShape = "",
+		windupSeconds = 0,
+		strikeSeconds = 0,
+		recoverSeconds = 0,
+		threatReach = 0,
+		threatArc = 0,
+		threatYaw = 0,
+		tell = nil,
+		tint = 0,
+		tintColor = FLASH_COLOR,
+		glow = false,
 		dirty = true,
 		lastShown = Vector3.zero,
 		lastYaw = 0,
@@ -382,15 +466,45 @@ local function newEntity(): Entity?
 	return entity
 end
 
+-- The white hit flash wins; under it the kind's colours, taken toward the attack's tint. The
+-- head goes half as far, so the crit point still reads as the crit point.
 local function paint(entity: Entity, flash: boolean): ()
-	local material = if flash then FLASH_MATERIAL else BODY_MATERIAL
-	entity.legs.Color = if flash then FLASH_COLOR else entity.legColor
-	entity.torso.Color = if flash then FLASH_COLOR else entity.bodyColor
-	entity.head.Color = if flash then FLASH_COLOR else entity.headColor
+	local material = if flash or entity.glow then FLASH_MATERIAL else BODY_MATERIAL
+	local tint = entity.tint
+	if flash then
+		entity.legs.Color = FLASH_COLOR
+		entity.torso.Color = FLASH_COLOR
+		entity.head.Color = FLASH_COLOR
+	elseif tint > 0 then
+		entity.legs.Color = entity.legColor:Lerp(entity.tintColor, tint)
+		entity.torso.Color = entity.bodyColor:Lerp(entity.tintColor, tint)
+		entity.head.Color = entity.headColor:Lerp(entity.tintColor, tint * 0.5)
+	else
+		entity.legs.Color = entity.legColor
+		entity.torso.Color = entity.bodyColor
+		entity.head.Color = entity.headColor
+	end
 	entity.legs.Material = material
 	entity.torso.Material = material
 	entity.head.Material = material
 	entity.flashing = flash
+end
+
+-- P4: tints the body toward `color` by `share` (0-1), in a few fixed steps so a whole windup
+-- repaints a handful of times rather than every frame. A hit flash showing meanwhile keeps the
+-- body; the tint is there when it ends.
+local function setTint(entity: Entity, share: number, color: Color3, glow: boolean): ()
+	local steps = Theme.COMBAT_RANGE_TELL_TINT_STEPS
+	local tint = math.round(math.clamp(share, 0, 1) * steps) / steps
+	if tint == entity.tint and glow == entity.glow and (tint == 0 or color == entity.tintColor) then
+		return
+	end
+	entity.tint = tint
+	entity.tintColor = color
+	entity.glow = glow
+	if not entity.flashing then
+		paint(entity, false)
+	end
 end
 
 local function setVisorHot(entity: Entity, hot: boolean): ()
@@ -411,6 +525,106 @@ local function setFade(entity: Entity, fade: number): ()
 	entity.torso.Transparency = fade
 	entity.head.Transparency = fade
 	entity.visor.Transparency = fade
+end
+
+local function newTellPart(wedge: boolean, parent: Instance): BasePart
+	local part: BasePart = if wedge then Instance.new("WedgePart") else Instance.new("Part")
+	part.Name = "CrowdTell"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = FLASH_MATERIAL
+	part.Color = Theme.COMBAT_RANGE_TELL_COLOR
+	part.Transparency = 1
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Parent = parent
+	return part
+end
+
+-- A ground tell for a wedge of `slices` slices, `radius` out and `arc` radians wide: from the
+-- pool, grown if this wedge needs more parts than its last one. Everything comes out hidden;
+-- the outline is sized here once, the fill each time it grows.
+local function takeTell(parent: Instance, slices: number, radius: number, arc: number): Tell
+	local tell: Tell = table.remove(tellPool)
+		or {
+			fill = {},
+			edge = {},
+			slices = 0,
+			centre = Vector3.zero,
+			fillRadius = 0,
+			laid = false,
+			fillShown = 1,
+			edgeShown = 1,
+		}
+	while #tell.fill < slices * 2 do
+		table.insert(tell.fill, newTellPart(true, parent))
+	end
+	while #tell.edge < slices + 2 do
+		table.insert(tell.edge, newTellPart(false, parent))
+	end
+	tell.slices = slices
+	tell.laid = false
+	tell.fillRadius = 0
+	local width = Theme.COMBAT_RANGE_TELL_EDGE_WIDTH
+	local height = Theme.COMBAT_RANGE_TELL_EDGE_HEIGHT
+	-- Half a width longer than the chord, so neighbouring bars close the rim's corners.
+	local rim = Vector3.new(width, height, 2 * radius * math.sin(arc / slices * 0.5) + width * 0.5)
+	for index = 1, slices do
+		tell.edge[index].Size = rim
+	end
+	local side = Vector3.new(width, height, radius)
+	tell.edge[slices + 1].Size = side
+	tell.edge[slices + 2].Size = side
+	return tell
+end
+
+local function releaseTell(entity: Entity): ()
+	local tell = entity.tell
+	if tell == nil then
+		return
+	end
+	entity.tell = nil
+	for _, part in tell.fill do
+		part.Transparency = 1
+	end
+	for _, part in tell.edge do
+		part.Transparency = 1
+	end
+	tell.fillShown = 1
+	tell.edgeShown = 1
+	table.insert(tellPool, tell)
+end
+
+-- P4: sets the phase of the attack being drawn (`at` = the server time it began). The ground
+-- tell belongs to the windup and the blow of an arc; the visor is hot through both and cold
+-- in recover; "none" hands the body back to its kind's colours and the P1 visor rule.
+local function setThreat(entity: Entity, threat: Threat, at: number): ()
+	entity.threat = threat
+	entity.threatAt = at
+	entity.dirty = true
+	local parent = folder
+	local wantsTell = (threat == "windup" or threat == "attack")
+		and entity.threatShape == "arc"
+		and entity.threatReach > 0
+		and entity.threatArc > 0
+	if not wantsTell then
+		releaseTell(entity)
+	elseif entity.tell == nil and parent ~= nil then
+		local degrees = if Theme.lowEndDevice
+			then Theme.COMBAT_RANGE_TELL_LOW_END_SEGMENT_DEGREES
+			else Theme.COMBAT_RANGE_TELL_SEGMENT_DEGREES
+		local slices = math.max(math.ceil(entity.threatArc / math.rad(degrees)), 1)
+		entity.tell = takeTell(parent, slices, entity.threatReach, entity.threatArc)
+	end
+	if threat == "none" then
+		setTint(entity, 0, FLASH_COLOR, false)
+		setVisorHot(entity, entity.state == "windup")
+	else
+		setVisorHot(entity, threat ~= "recover")
+	end
 end
 
 -- Sizes, offsets and colours from the kind's current def. Runs on spawn and when Tuning changes.
@@ -466,6 +680,8 @@ local function release(entity: Entity): ()
 		byId[entity.id] = nil
 	end
 	entity.model.Parent = nil
+	entity.threatOpen = false
+	setThreat(entity, "none", 0)
 	if entity.flashing then
 		paint(entity, false)
 	end
@@ -503,6 +719,8 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	entity.maxHp = maxHp
 	entity.hpFraction = 1
 	entity.state = "idle"
+	entity.attack = 0
+	entity.plated = false
 	entity.phase = "alive"
 	entity.phaseStart = os.clock()
 	entity.deathDue = math.huge
@@ -520,7 +738,16 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	-- Parented on its first snapshot, so it never flashes up at the pool's last pose.
 end
 
+-- A body that stops being alive stops attacking: its tint, its glow and its ground tell go.
+local function dropThreat(entity: Entity): ()
+	entity.threatOpen = false
+	if entity.threat ~= "none" then
+		setThreat(entity, "none", 0)
+	end
+end
+
 local function startVanish(entity: Entity): ()
+	dropThreat(entity)
 	entity.phase = "vanish"
 	entity.phaseStart = os.clock()
 	entity.dirty = true
@@ -578,6 +805,7 @@ local function startDeath(entity: Entity, direction: Vector3, strength: number):
 		return
 	end
 	local push = strength * entity.knockbackMult
+	dropThreat(entity)
 	entity.phase = "dying"
 	entity.phaseStart = os.clock()
 	entity.deathDue = math.huge
@@ -676,12 +904,140 @@ local function sampleAt(entity: Entity, renderTime: number): number
 	return entity.yawA
 end
 
+-- P4: reads the numbers of the attack the wire names into the entity, once per attack, when
+-- its first state is seen. False = the config has no such attack: nothing is drawn for it
+-- beyond the P1 look (a hot visor and a fixed lean while the wire says windup).
+local function loadThreat(entity: Entity): boolean
+	local kind = kindDef(entity.kind)
+	local attacks = if kind ~= nil then kind.attacks else nil
+	local attack = if attacks ~= nil and entity.attack > 0 then attacks[entity.attack] else nil
+	if attack == nil then
+		return false
+	end
+	local threat = Tuning.Get().crowd.threat
+	local range = math.max(attack.range or 0, 0)
+	local speed = attack.speed or 0
+	entity.threatAttack = entity.attack
+	entity.threatShape = attack.shape
+	entity.windupSeconds = math.max(attack.windup, 0)
+	entity.recoverSeconds = math.max(attack.recover, 0)
+	-- "State timing": a lane's attack state lasts its charge, every other shape's the shared
+	-- strike time.
+	entity.strikeSeconds = if attack.shape == "lane" and speed > 0
+		then range / speed
+		elseif threat ~= nil then math.max(threat.strikeSeconds, 0)
+		else 0
+	entity.threatYaw = entity.yawC
+	if attack.shape == "lunge" then
+		-- `range` is measured from the body's centre: the figure jabs a share of what lies
+		-- beyond its own front. A visual offset only; the real position is the snapshot's.
+		entity.threatReach = math.max(range - entity.radius, 0)
+			* Theme.COMBAT_RANGE_TELL_LUNGE_SHARE
+		entity.threatArc = 0
+	elseif attack.shape == "arc" then
+		entity.threatReach = range
+		entity.threatArc = math.rad(math.clamp(attack.arcDegrees or 360, 0, 360))
+	else
+		entity.threatReach = 0
+		entity.threatArc = 0
+	end
+	return true
+end
+
+-- P4: the first sighting of an attack whose windup is (or may be) still running: its clock
+-- starts here. The server sets `windup` in the very step the windup starts and stamps that
+-- step's snapshot with its time, so with the snapshot before it in hand the start is `stamp`
+-- exactly. When that snapshot was lost, the start is only known to lie after this enemy's
+-- previous sighting: one step after it is the earliest it can have been, and timing the tell
+-- from there never shows the impact later than the server's.
+local function beginWindup(entity: Entity, stamp: number, previous: number): ()
+	if not loadThreat(entity) then
+		entity.threatOpen = false
+		setThreat(entity, "none", stamp)
+		return
+	end
+	local start = math.min(stamp, previous + interval)
+	entity.threatOpen = true
+	entity.impactAt = start + entity.windupSeconds
+	setThreat(entity, "windup", start)
+end
+
+-- P4: the wire's state or attack index changed. `stamp` = that packet's server time;
+-- `previous` = this enemy's sighting before it, which is the earliest a state the server
+-- changed between two steps (the blow, the recover) can have begun. The drawn attack runs on
+-- its own clock from its first sighting; here the wire starts it, confirms it, or corrects it.
+local function followThreat(entity: Entity, stamp: number, previous: number): ()
+	local state = entity.state
+	-- The attack already being drawn, back on the wire after a stagger or a hop that showed
+	-- OVER it (the last branch). Its clock never stopped, so nothing restarts.
+	local drawn = entity.threat ~= "none" and entity.threatAttack == entity.attack
+	if state == "windup" then
+		-- A drawn attack already in recover has had its blow: this windup is the next one.
+		if not (drawn and entity.threatOpen and entity.threat ~= "recover") then
+			beginWindup(entity, stamp, previous)
+		end
+	elseif state == "attack" then
+		if entity.threatOpen then
+			-- The blow the windup built to. This clock is already there unless the windup's
+			-- start had to be estimated from a late sighting; then it starts here.
+			entity.threatOpen = false
+			if entity.threat == "windup" then
+				setThreat(entity, "attack", math.min(entity.impactAt, previous))
+			end
+		elseif drawn then
+			return
+		elseif loadThreat(entity) then
+			setThreat(entity, "attack", previous)
+		else
+			setThreat(entity, "none", stamp)
+		end
+	elseif state == "recover" then
+		if entity.threatOpen then
+			entity.threatOpen = false
+			local threat = entity.threat
+			-- Ruling 9: a cancelled windup goes straight to recover. A recover that arrives
+			-- before the blow, or inside the first half of a strike this clock began on its
+			-- own, is that: the blow never fell, so the thrust is taken back.
+			if
+				threat == "windup"
+				or (threat == "attack" and stamp < entity.threatAt + entity.strikeSeconds * 0.5)
+			then
+				setThreat(entity, "recover", previous)
+			end
+		elseif entity.threat == "none" and loadThreat(entity) then
+			setThreat(entity, "recover", previous)
+		end
+	else
+		-- A stagger or a hop shows OVER the attack's state, and the wire says what goes on
+		-- under it: the attack index stays set while that windup or blow is still running (an
+		-- elite's arc lands on time even mid-hop, so its tell must not blink out for a shove)
+		-- and is 0 once it was cancelled or is over. Set: the attack goes on being drawn on
+		-- its clock, or starts if this is its first sighting. 0: the tell and any thrust not
+		-- yet thrown are dropped at once; only a body already spent keeps its slump, which
+		-- warns of nothing.
+		if state == "stagger" or state == "airborne" then
+			if entity.attack > 0 then
+				if not drawn then
+					beginWindup(entity, stamp, previous)
+				end
+				return
+			elseif entity.threat == "recover" then
+				return
+			end
+		end
+		entity.threatOpen = false
+		setThreat(entity, "none", stamp)
+	end
+end
+
 local function pushSample(
 	entity: Entity,
 	position: Vector3,
 	yaw: number,
 	state: Types.CrowdState,
 	hpFraction: number,
+	plated: boolean,
+	attack: number,
 	stamp: number
 ): ()
 	if entity.samples == 0 then
@@ -703,9 +1059,18 @@ local function pushSample(
 		return
 	end
 	entity.hpFraction = hpFraction
-	if state ~= entity.state then
+	entity.plated = plated
+	if state ~= entity.state or attack ~= entity.attack then
 		entity.state = state
-		setVisorHot(entity, state == "windup")
+		entity.attack = attack
+		-- This enemy's sighting before this one (the ring has just been shifted). A body seen
+		-- for the first time has none, and nothing says how long it has been doing what it is
+		-- doing: it is timed as if that began one step ago, which is a guess. A windup that
+		-- was already under way therefore shows its blow late, by up to its windup less a
+		-- step, until the wire's `attack` state starts the thrust instead. Only a player who
+		-- joins mid-fight can meet this, and it is accepted (contract ruling 25).
+		local previous = if entity.samples > 1 then entity.timeB else stamp - 2 * interval
+		followThreat(entity, stamp, previous)
 		entity.dirty = true
 		if state == "dead" and entity.deathDue == math.huge then
 			entity.deathDue = os.clock() + DEATH_WAIT_SECONDS
@@ -722,11 +1087,22 @@ local function onEntry(
 	z: number,
 	yaw: number,
 	state: Types.CrowdState,
-	hpFraction: number
+	hpFraction: number,
+	plated: boolean,
+	attack: number
 ): ()
 	local entity = byId[id]
 	if entity ~= nil and entity.phase == "alive" then
-		pushSample(entity, Vector3.new(x, y, z), yaw, state, hpFraction, decodeStamp)
+		pushSample(
+			entity,
+			Vector3.new(x, y, z),
+			yaw,
+			state,
+			hpFraction,
+			plated,
+			attack,
+			decodeStamp
+		)
 	end
 end
 
@@ -873,10 +1249,204 @@ local function smoothstep(u: number): number
 	return u * u * (3 - 2 * u)
 end
 
+-- P4: queues a ground tell's parts for a wedge of `radius` and `arc` radians about `yaw`,
+-- centred on tell.centre, with its fill out to `reach`. `edges` = the outline moves too: the
+-- first frame, a shoved body, and the blow, whose leading side crosses the wedge by `sweep`
+-- (0-1). Each slice's fill is the triangle (centre, rim, rim) split down its middle into two
+-- right-angled wedges.
+local function layTell(
+	tell: Tell,
+	yaw: number,
+	radius: number,
+	arc: number,
+	reach: number,
+	edges: boolean,
+	sweep: number
+): ()
+	local slices = tell.slices
+	local centre = tell.centre
+	local span = arc / slices
+	local start = yaw - arc * 0.5
+	local half = reach * math.sin(span * 0.5)
+	local depth = reach * math.cos(span * 0.5)
+	local size = Vector3.new(Theme.COMBAT_RANGE_TELL_THICKNESS, half, depth)
+	local resize = math.abs(reach - tell.fillRadius) > SETTLE_EPSILON
+	tell.fillRadius = reach
+	local n = moveCount
+	for index = 1, slices do
+		local middle = start + span * (index - 0.5)
+		local out = lookOf(middle)
+		local side = Vector3.new(-math.cos(middle), 0, math.sin(middle))
+		local chord = centre + out * depth
+		local first = tell.fill[index * 2 - 1]
+		local second = tell.fill[index * 2]
+		if resize then
+			first.Size = size
+			second.Size = size
+		end
+		-- A wedge's right angle sits at its bottom back edge: bottom toward the centre, back
+		-- along the rim. Its own centre is the middle of the slanted side.
+		moveParts[n + 1] = first
+		moveFrames[n + 1] = CFrame.fromMatrix((centre + chord + side * half) * 0.5, -UP, side, out)
+		moveParts[n + 2] = second
+		moveFrames[n + 2] = CFrame.fromMatrix((centre + chord - side * half) * 0.5, UP, -side, out)
+		n += 2
+	end
+	if edges then
+		for index = 1, slices do
+			local from = centre + lookOf(start + span * (index - 1)) * radius
+			local to = centre + lookOf(start + span * index) * radius
+			moveParts[n + 1] = tell.edge[index]
+			moveFrames[n + 1] = CFrame.lookAt((from + to) * 0.5, to, UP)
+			n += 1
+		end
+		local leading = centre + lookOf(start + arc * sweep) * radius
+		local trailing = centre + lookOf(start + arc) * radius
+		moveParts[n + 1] = tell.edge[slices + 1]
+		moveFrames[n + 1] = CFrame.lookAt((centre + leading) * 0.5, leading, UP)
+		moveParts[n + 2] = tell.edge[slices + 2]
+		moveFrames[n + 2] = CFrame.lookAt((centre + trailing) * 0.5, trailing, UP)
+		n += 2
+	end
+	moveCount = n
+end
+
+-- P4: one frame of an arc's ground tell. Windup: the outline shows the whole reach and the
+-- fill has grown `share` (0-1) of the way to it. The blow (`striking`, `u` = its progress): the
+-- whole wedge at its brightest, one side sweeping across, fading out as the strike ends. The
+-- wedge lies on the arena floor under the body's NEWEST position, not its delayed drawn one.
+local function drawTell(entity: Entity, tell: Tell, share: number, striking: boolean, u: number): ()
+	local at = entity.posC
+	local centre = Vector3.new(at.X, ARENA_ORIGIN.Y + Theme.COMBAT_RANGE_TELL_LIFT, at.Z)
+	local moved = not tell.laid or (centre - tell.centre).Magnitude > SETTLE_EPSILON
+	if moved then
+		tell.centre = centre
+		tell.laid = true
+	end
+	local radius = entity.threatReach
+	local least = Theme.COMBAT_RANGE_TELL_MIN_FILL
+	local reach = radius * (least + (1 - least) * math.clamp(share, 0, 1))
+	local sweep = if striking
+		then smoothstep(math.min(u / Theme.COMBAT_RANGE_TELL_ARC_SWEEP_SHARE, 1))
+		else 0
+	if moved or striking or math.abs(reach - tell.fillRadius) > SETTLE_EPSILON then
+		layTell(tell, entity.threatYaw, radius, entity.threatArc, reach, moved or striking, sweep)
+	end
+	local seen = if striking then 1 - u else 1
+	local fillBase = if striking
+		then Theme.COMBAT_RANGE_TELL_STRIKE_TRANSPARENCY
+		else Theme.COMBAT_RANGE_TELL_FILL_TRANSPARENCY
+	local fill = 1 - (1 - fillBase) * seen
+	local edge = 1 - (1 - Theme.COMBAT_RANGE_TELL_EDGE_TRANSPARENCY) * seen
+	if math.abs(fill - tell.fillShown) > 0.01 then
+		tell.fillShown = fill
+		for index = 1, tell.slices * 2 do
+			tell.fill[index].Transparency = fill
+		end
+	end
+	if math.abs(edge - tell.edgeShown) > 0.01 then
+		tell.edgeShown = edge
+		for index = 1, tell.slices + 2 do
+			tell.edge[index].Transparency = edge
+		end
+	end
+end
+
+-- P4: the attack as drawn this frame, on the server clock: lean in radians (+ = forward),
+-- forward thrust in studs, twist in radians, squash. Runs the phase clock on first (the blow
+-- at the windup's end, recover after the strike) and keeps the tint and the ground tell in
+-- step. The wire ends a recover; the clock ends it too, so a lost packet never leaves a body
+-- slumped.
+local function threatPose(entity: Entity, serverNow: number): (number, number, number, number)
+	if entity.threat == "windup" and serverNow >= entity.impactAt then
+		setThreat(entity, "attack", entity.impactAt)
+	end
+	if entity.threat == "attack" and serverNow >= entity.threatAt + entity.strikeSeconds then
+		setThreat(entity, "recover", entity.threatAt + entity.strikeSeconds)
+	end
+	local threat = entity.threat
+	local shape = entity.threatShape
+	local age = math.max(serverNow - entity.threatAt, 0)
+	local twistMost = entity.threatArc * 0.5 * Theme.COMBAT_RANGE_TELL_ARC_TWIST_SHARE
+	if threat == "windup" then
+		local u = if entity.windupSeconds > 0 then math.min(age / entity.windupSeconds, 1) else 1
+		local coil = Theme.COMBAT_RANGE_TELL_COIL_SHARE
+		-- Squared: a slow start and an unmistakable end, so the pose reads as building.
+		local build = math.min(u / coil, 1) ^ 2
+		setTint(
+			entity,
+			build * Theme.COMBAT_RANGE_TELL_HEAT_SHARE,
+			Theme.COMBAT_RANGE_TELL_COLOR,
+			false
+		)
+		local back = -Theme.COMBAT_RANGE_TELL_LEAN_BACK * build
+		if shape == "lunge" then
+			local pull = -entity.radius * Theme.COMBAT_RANGE_TELL_PULL_BACK * build
+			if u <= coil then
+				return back, pull, 0, 1
+			end
+			-- The last of the windup is the thrust leaving, so the figure is fully out
+			-- exactly at the impact and never after it.
+			local snap = ((u - coil) / (1 - coil)) ^ 2
+			return back + (Theme.COMBAT_RANGE_TELL_LEAN_FORWARD - back) * snap,
+				pull + (entity.threatReach - pull) * snap,
+				0,
+				1
+		end
+		local tell = entity.tell
+		if tell ~= nil then
+			drawTell(entity, tell, u, false, 0)
+		end
+		return back, 0, -twistMost * build, 1
+	elseif threat == "attack" then
+		local u = if entity.strikeSeconds > 0 then math.min(age / entity.strikeSeconds, 1) else 1
+		local left = 1 - u
+		setTint(entity, 1, Theme.COMBAT_RANGE_TELL_COLOR, true)
+		local forward = Theme.COMBAT_RANGE_TELL_LEAN_FORWARD * left
+		if shape == "lunge" then
+			return forward, entity.threatReach * left * left, 0, 1
+		end
+		local tell = entity.tell
+		if tell ~= nil then
+			drawTell(entity, tell, 1, true, u)
+		end
+		local sweep = smoothstep(math.min(u / Theme.COMBAT_RANGE_TELL_ARC_SWEEP_SHARE, 1))
+		return forward, 0, twistMost * (2 * sweep - 1), 1
+	end
+	if age >= entity.recoverSeconds then
+		-- Over by this clock even if the wire never showed its blow or its recover: whatever
+		-- the wire names next is a new attack.
+		entity.threatOpen = false
+		setThreat(entity, "none", serverNow)
+		return 0, 0, 0, 1
+	end
+	-- Spent: slumped and dull, settling in fast and waking as the opening closes.
+	local settle = math.min(age / Theme.COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS, 1)
+	local wake =
+		math.min((entity.recoverSeconds - age) / Theme.COMBAT_RANGE_TELL_SPENT_WAKE_SECONDS, 1)
+	local spent = math.min(settle, wake)
+	setTint(
+		entity,
+		spent * Theme.COMBAT_RANGE_TELL_SPENT_SHARE,
+		Theme.COMBAT_RANGE_TELL_SPENT_COLOR,
+		false
+	)
+	-- An arc's body unwinds from wherever it was last turned to: the end of its sweep, or part
+	-- of the way back when its windup was cancelled.
+	local twist = if shape == "arc"
+		then angleDelta(entity.yaw, entity.lastYaw) * (1 - settle)
+		else 0
+	return Theme.COMBAT_RANGE_TELL_SPENT_LEAN * spent,
+		0,
+		twist,
+		1 - (1 - Theme.COMBAT_RANGE_TELL_SPENT_SQUASH) * spent
+end
+
 -- Samples, smooths and poses one living body; queues its parts only when the pose changed.
 local function stepAlive(
 	entity: Entity,
 	now: number,
+	serverNow: number,
 	renderTime: number,
 	yawAlpha: number,
 	leanAlpha: number
@@ -889,15 +1459,26 @@ local function stepAlive(
 	local turn = angleDelta(entity.yaw, targetYaw)
 	entity.yaw = if math.abs(turn) < SETTLE_EPSILON then targetYaw else entity.yaw + turn * yawAlpha
 
-	local leanTarget = stateLeanTarget(entity)
-	local leanGap = leanTarget - entity.lean
-	entity.lean = if leanGap.Magnitude < SETTLE_EPSILON
-		then leanTarget
-		else entity.lean + leanGap * leanAlpha
-
 	local offset = Vector3.zero
-	local lean = entity.lean
+	local drawnYaw = entity.yaw
 	local squash = 1
+	if entity.threat ~= "none" then
+		local leanAngle, thrust, twist, slump = threatPose(entity, serverNow)
+		local facing = lookOf(entity.yaw)
+		-- The attack's own clock is the easing: smoothing on top would show the blow late.
+		entity.lean = facing * leanAngle
+		offset = facing * thrust
+		drawnYaw += twist
+		squash = math.round(slump * 100) / 100
+	else
+		local leanTarget = stateLeanTarget(entity)
+		local leanGap = leanTarget - entity.lean
+		entity.lean = if leanGap.Magnitude < SETTLE_EPSILON
+			then leanTarget
+			else entity.lean + leanGap * leanAlpha
+	end
+
+	local lean = entity.lean
 	local tumbleAngle = 0
 	local tuck = if entity.state == "airborne" then entity.legHeight * AIRBORNE_TUCK else 0
 
@@ -920,8 +1501,8 @@ local function stepAlive(
 	local flinchAge = now - entity.flinchStart
 	if flinchAge < FLINCH_SECONDS then
 		local envelope = (1 - flinchAge / FLINCH_SECONDS) ^ 2
-		squash = math.max(0.5, 1 - FLINCH_SQUASH * entity.flinchStrength * envelope)
-		squash = math.round(squash * 100) / 100
+		local flinched = math.max(0.5, 1 - FLINCH_SQUASH * entity.flinchStrength * envelope)
+		squash = math.min(squash, math.round(flinched * 100) / 100)
 		lean += entity.flinchDir * (FLINCH_LEAN * entity.flinchStrength * envelope)
 	end
 
@@ -930,7 +1511,7 @@ local function stepAlive(
 	if
 		not entity.dirty
 		and (shown - entity.lastShown).Magnitude < SETTLE_EPSILON
-		and math.abs(entity.yaw - entity.lastYaw) < SETTLE_EPSILON
+		and math.abs(drawnYaw - entity.lastYaw) < SETTLE_EPSILON
 		and (lean - entity.lastLean).Magnitude < SETTLE_EPSILON
 		and tumbleAngle == entity.lastTumble
 		and squash == entity.lastSquash
@@ -940,14 +1521,14 @@ local function stepAlive(
 	end
 	entity.dirty = false
 	entity.lastShown = shown
-	entity.lastYaw = entity.yaw
+	entity.lastYaw = drawnYaw
 	entity.lastLean = lean
 	entity.lastTumble = tumbleAngle
 	entity.lastSquash = squash
 	entity.lastTuck = tuck
 	queuePose(
 		entity,
-		rootFrame(entity, shown, entity.yaw, lean, entity.launchAxis, tumbleAngle),
+		rootFrame(entity, shown, drawnYaw, lean, entity.launchAxis, tumbleAngle),
 		squash,
 		tuck
 	)
@@ -1005,9 +1586,8 @@ local function step(dt: number): ()
 		return
 	end
 	local now = os.clock()
-	local renderTime = Workspace:GetServerTimeNow()
-		- (lagEstimate or 0)
-		- interval * INTERP_SNAPSHOTS
+	local serverNow = Workspace:GetServerTimeNow()
+	local renderTime = serverNow - (lagEstimate or 0) - interval * INTERP_SNAPSHOTS
 	local yawAlpha = 1 - math.exp(-dt * YAW_SMOOTH_RATE)
 	local leanAlpha = 1 - math.exp(-dt * LEAN_SMOOTH_RATE)
 	local previousCount = moveCount
@@ -1023,7 +1603,7 @@ local function step(dt: number): ()
 			continue
 		end
 		if entity.phase == "alive" then
-			stepAlive(entity, now, renderTime, yawAlpha, leanAlpha)
+			stepAlive(entity, now, serverNow, renderTime, yawAlpha, leanAlpha)
 		elseif entity.phase == "dying" then
 			stepDying(entity, now)
 		else
@@ -1144,6 +1724,8 @@ function CrowdRenderer.Destroy(): ()
 	end
 	table.clear(active)
 	table.clear(pool)
+	-- The tells' parts live in the folder destroyed below.
+	table.clear(tellPool)
 	table.clear(byId)
 	table.clear(moveParts)
 	table.clear(moveFrames)

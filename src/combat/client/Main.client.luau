@@ -13,6 +13,8 @@
 -- outside the Proving Grounds (CameraController.IsRange, decided in CameraController.Init).
 -- MovementController is started by InputController in the range, so it is not listed here.
 -- P3: AbilityFx (every player's lasting ability visuals) is range-only in the same way.
+-- P4: so is VitalsController (being hit: health bar, hurt feedback, knockback, down and up).
+-- It comes before CombatUIController, which mounts its HUD.
 
 type Controller = {
 	Init: () -> (),
@@ -31,6 +33,7 @@ local controllers: { Controller } = {
 	require(controllersFolder:WaitForChild("CrowdRenderer") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("FeedbackController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("AbilityFx") :: ModuleScript) :: Controller,
+	require(controllersFolder:WaitForChild("VitalsController") :: ModuleScript) :: Controller,
 	require(controllersFolder:WaitForChild("CombatUIController") :: ModuleScript) :: Controller,
 }
 

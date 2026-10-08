@@ -24,6 +24,11 @@
 -- P3: the range also mounts the AbilityBar (PC / gamepad cooldown tiles; hidden on touch, where
 -- InputController's ability buttons show the same). It reads InputController's ability getters
 -- and the loadout FeedbackController confirmed, and keeps clear of the RangePanel's column.
+--
+-- P4: enemies hit back, so the range does have HP to show after all. VitalsController's HUD
+-- (health bar, hurt flash, direction pointer, down banner) is mounted in the same inset-free
+-- ScreenGui as the crosshair and laid out here against the AbilityBar or, on touch, the thumb
+-- cluster. The panel gains the `god` switch and its readouts from RangeStats.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -54,6 +59,7 @@ local CombatFxController = require(script.Parent:WaitForChild("CombatFxControlle
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local FeedbackController = require(script.Parent:WaitForChild("FeedbackController"))
 local MovementController = require(script.Parent:WaitForChild("MovementController"))
+local VitalsController = require(script.Parent:WaitForChild("VitalsController"))
 
 local HUMANOID_WAIT_SECONDS = 5
 local DEFAULT_HIT_MARKER_SECONDS = 0.12
@@ -99,6 +105,10 @@ local function isRangeStats(payload: any): boolean
 		and (payload.ability == nil or typeof(payload.ability) == "string")
 		and (payload.abilityHits == nil or typeof(payload.abilityHits) == "number")
 		and (payload.abilityKills == nil or typeof(payload.abilityKills) == "number")
+		-- P4: nil from a server without enemies that fight; the panel then shows dashes.
+		and (payload.damageTaken == nil or typeof(payload.damageTaken) == "number")
+		and (payload.downs == nil or typeof(payload.downs) == "number")
+		and (payload.god == nil or typeof(payload.god) == "boolean")
 end
 
 local function bootRange(): ()
@@ -141,6 +151,7 @@ local function bootRange(): ()
 	})
 	local crosshair = Crosshair.new(rangeGui)
 	FeedbackController.Mount(rangeGui, crosshair)
+	VitalsController.Mount(rangeGui)
 
 	-- One debounce window for the command buttons (not the sliders, which throttle
 	-- themselves), so a double tap on Stress never becomes two spawns.
@@ -182,7 +193,10 @@ local function bootRange(): ()
 	end)
 	local abilityBar = AbilityBar.new(screenGui, {
 		getState = InputController.GetAbilityState,
-		isBusy = InputController.IsBusy,
+		-- P4: knocked down veils the tiles as an ability in progress does; neither can cast.
+		isBusy = function(): boolean
+			return InputController.IsBusy() or MovementController.IsDown()
+		end,
 		getActiveSlot = InputController.GetActiveSlot,
 		getLoadout = FeedbackController.GetLoadout,
 	})
@@ -245,15 +259,31 @@ local function bootRange(): ()
 		-- On touch the jump / dash / ADS cluster owns the bottom-right; the panel stays above
 		-- it. ADS sits above jump and is smaller than it, so one more jump size covers it.
 		local reserve = 0
+		-- P4: the health bar goes beside that cluster or above it, so it needs the cluster's
+		-- left and top edges: the leftmost buttons are the melee ability (top row) and the
+		-- slot button (bottom row).
+		local clusterLeft: number? = nil
+		local clusterTop: number? = nil
 		local camera = Workspace.CurrentCamera
 		if UserInputService.TouchEnabled and camera ~= nil then
 			local viewport = camera.ViewportSize
 			local jumpTopLeft, jumpSize = MovementController.JumpButtonRect(viewport)
 			reserve = viewport.Y - jumpTopLeft.Y + jumpSize
+			local meleeCentre, meleeSize = MovementController.ClusterRect(viewport, "abilityMelee")
+			local slotCentre, slotSize = MovementController.ClusterRect(viewport, "slot")
+			clusterLeft = math.min(meleeCentre.X - meleeSize / 2, slotCentre.X - slotSize / 2)
+			clusterTop = meleeCentre.Y - meleeSize / 2
 		end
 		panel.SetLayout(scale, size, reserve)
 		-- The panel docks right at the screen margin; the bar keeps out of that column.
-		abilityBar.SetLayout(scale, size, Theme.COMBAT_RANGE_PANEL_WIDTH + Theme.SCREEN_MARGIN)
+		local rightReserve = Theme.COMBAT_RANGE_PANEL_WIDTH + Theme.SCREEN_MARGIN
+		abilityBar.SetLayout(scale, size, rightReserve)
+		VitalsController.SetLayout({
+			scale = scale,
+			rightReserve = rightReserve,
+			clusterLeft = clusterLeft,
+			clusterTop = clusterTop,
+		})
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
 	end

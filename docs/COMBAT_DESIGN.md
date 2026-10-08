@@ -198,6 +198,14 @@ arrow rain, grenade, overcharged beam. Kills shorten the cooldown, as today.
   - A few elites have armour that needs a heavy hit.
   - Bosses keep telegraphed patterns.
 - Knockback and launches apply to fodder fully, to elites partly, and to bosses not at all.
+- **Decided for P4 (Ben, 2026-10-07):**
+  - Elite armour is a **breakable plate**: only heavy hits damage it, and once it shatters every
+    weapon hurts the elite in full. Heavy weapons open, fast weapons finish.
+  - **Three shooters**, one attack each: the slinger (slow glowing shots you dodge), the
+    marksman (a warning line, then an instant hit) and the lobber (an arcing shot that lands in
+    a ground circle).
+  - The rest of P4 (health, going down, tells, how each hit is judged) is in
+    `docs/INTERFACES.md` "P4 contracts".
 
 ## 8. The test range ("Proving Grounds")
 

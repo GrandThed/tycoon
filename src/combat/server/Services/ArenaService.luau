@@ -1276,10 +1276,6 @@ function ArenaService.ProvingSpawn(): (SpawnLocation?, CFrame)
 	return lobbySpawn, nextPlayerSpawn()
 end
 
-function ArenaService.ProfileMaxHp(player: Player): number?
-	return profileMaxHp(player)
-end
-
 function ArenaService.Init(): ()
 	combatConfig = Catalog.GetCombatConfig()
 	local folder = Instance.new("Folder")

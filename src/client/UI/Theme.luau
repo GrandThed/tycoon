@@ -834,6 +834,126 @@ local Theme = {
 	COMBAT_ABILITY_BAR_REFUND_RISE = 14,
 	COMBAT_ABILITY_BAR_REFUND_MIN = 0.05,
 
+	-- P4 "they hurt you" (docs/INTERFACES.md "P4 contracts"): enemy tells (CrowdRenderer) and
+	-- being hit (VitalsController, VitalsHud). Timing, reach and damage come from
+	-- ProvingGrounds.json (`crowd.kinds.*.attacks`, `crowd.threat`, `player`); these are only
+	-- the shape of each cue at strength 1.
+	-- Danger is hot red, in the world and on the HUD. Nothing the player's own weapons draw is
+	-- (hitbox effect cream, crits yellow, blasts and charge orange, abilities and the
+	-- wireframe blue), so an enemy's tell can never be taken for the player's own effect.
+	COMBAT_RANGE_TELL_COLOR = Color3.fromRGB(255, 48, 72),
+	-- Recover: the spent body goes dull, the opposite of the heat that built it up.
+	COMBAT_RANGE_TELL_SPENT_COLOR = Color3.fromRGB(52, 54, 64),
+	COMBAT_RANGE_TELL_HEAT_SHARE = 0.75, -- how far a body's own colour has gone to red by the impact
+	COMBAT_RANGE_TELL_SPENT_SHARE = 0.6,
+	COMBAT_RANGE_TELL_TINT_STEPS = 8, -- a windup repaints its body this many times, not every frame
+	-- Body pose. A lunge rears back over COIL_SHARE of its windup and throws itself forward in
+	-- the rest, so the figure is fully out exactly at the impact. Leans are radians.
+	COMBAT_RANGE_TELL_COIL_SHARE = 0.8,
+	COMBAT_RANGE_TELL_LEAN_BACK = 0.45,
+	COMBAT_RANGE_TELL_LEAN_FORWARD = 0.5,
+	COMBAT_RANGE_TELL_PULL_BACK = 0.35, -- share of its own radius the figure draws back while it coils
+	COMBAT_RANGE_TELL_LUNGE_SHARE = 0.7, -- share of the lunge's reach past the body that the figure jabs
+	COMBAT_RANGE_TELL_ARC_TWIST_SHARE = 0.5, -- share of the half arc the figure turns back, then through
+	COMBAT_RANGE_TELL_ARC_SWEEP_SHARE = 0.6, -- share of the strike spent sweeping across the wedge
+	COMBAT_RANGE_TELL_SPENT_LEAN = 0.3,
+	COMBAT_RANGE_TELL_SPENT_SQUASH = 0.84,
+	COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS = 0.15,
+	COMBAT_RANGE_TELL_SPENT_WAKE_SECONDS = 0.3,
+	-- The elite's ground wedge. It lies just above the player's own ground marks (ability rings
+	-- top out at 0.12 studs), so those never cover it; its fill is see-through, so it never
+	-- covers them either.
+	COMBAT_RANGE_TELL_LIFT = 0.16,
+	COMBAT_RANGE_TELL_THICKNESS = 0.06,
+	COMBAT_RANGE_TELL_SEGMENT_DEGREES = 20,
+	COMBAT_RANGE_TELL_LOW_END_SEGMENT_DEGREES = 30,
+	COMBAT_RANGE_TELL_EDGE_WIDTH = 0.4,
+	COMBAT_RANGE_TELL_EDGE_HEIGHT = 0.1,
+	COMBAT_RANGE_TELL_EDGE_TRANSPARENCY = 0.05,
+	COMBAT_RANGE_TELL_FILL_TRANSPARENCY = 0.55,
+	COMBAT_RANGE_TELL_STRIKE_TRANSPARENCY = 0.15, -- the whole wedge at the instant of the blow
+	COMBAT_RANGE_TELL_MIN_FILL = 0.12, -- the fill starts at this share of the reach, visible from frame one
+
+	-- Being hit. HURT is the HUD's danger red; DODGE the green of a hit an i-frame voided and
+	-- of the get-up shimmer (both say "nothing can touch you").
+	COMBAT_RANGE_HURT_COLOR = Color3.fromRGB(235, 40, 64),
+	COMBAT_RANGE_DODGE_COLOR = Color3.fromRGB(120, 240, 170),
+	-- Screen-edge flash: four bars fading inward, as the kill flash is built. Its strength is the
+	-- share of max health the hit took over FULL_SHARE, never under MIN.
+	COMBAT_RANGE_HURT_FLASH_THICKNESS = 150,
+	COMBAT_RANGE_HURT_FLASH_TRANSPARENCY = 0.3,
+	COMBAT_RANGE_HURT_FLASH_SECONDS = 0.45,
+	COMBAT_RANGE_HURT_FLASH_FULL_SHARE = 0.25,
+	COMBAT_RANGE_HURT_FLASH_MIN = 0.4,
+	COMBAT_RANGE_HURT_KICK_DEGREES = 2.5, -- camera kick at a full-strength hit (feedback.shake scales it)
+	COMBAT_RANGE_HURT_SHAKE = 0.35,
+	-- The number lost (or "DODGED"), over the player's own head: pops, rises and fades. Hits
+	-- of one kind landing within MERGE_SECONDS share one number (a total, or one "DODGED")
+	-- instead of stacking on one spot; 0.4 s of rise is about one line of text on a phone.
+	COMBAT_RANGE_HURT_NUMBER_MERGE_SECONDS = 0.4,
+	COMBAT_RANGE_HURT_NUMBER_WIDTH = 180,
+	COMBAT_RANGE_HURT_NUMBER_HEIGHT = 44,
+	COMBAT_RANGE_HURT_NUMBER_TEXT = 30,
+	COMBAT_RANGE_HURT_DODGE_TEXT = 22,
+	COMBAT_RANGE_HURT_NUMBER_SECONDS = 0.9,
+	COMBAT_RANGE_HURT_NUMBER_RISE = 2.5, -- studs
+	COMBAT_RANGE_HURT_NUMBER_DRIFT = 0.8, -- studs sideways in the camera's frame, alternating sides
+	COMBAT_RANGE_HURT_NUMBER_HEAD_CLEARANCE = 3.4, -- studs above the root where the number starts
+	COMBAT_RANGE_HURT_NUMBER_POP_SCALE = 1.6,
+	COMBAT_RANGE_HURT_NUMBER_POP_SECONDS = 0.1,
+	COMBAT_RANGE_HURT_NUMBER_FADE_FROM = 0.55,
+	COMBAT_RANGE_HURT_NUMBER_MAX_ACTIVE = 4,
+	-- Where it came from: a bar with a point on a ring round the screen centre, turned to the
+	-- attacker's bearing (straight down = behind the camera). The ring is a share of the shorter
+	-- screen side and is pulled in so its bottom never reaches the health bar.
+	COMBAT_RANGE_HURT_POINTERS = 4,
+	COMBAT_RANGE_HURT_POINTER_SECONDS = 1.4,
+	COMBAT_RANGE_HURT_POINTER_FADE_FROM = 0.5,
+	COMBAT_RANGE_HURT_POINTER_RADIUS_SHARE = 0.26,
+	COMBAT_RANGE_HURT_POINTER_WIDTH = 84,
+	COMBAT_RANGE_HURT_POINTER_THICKNESS = 10,
+	COMBAT_RANGE_HURT_POINTER_TIP = 14, -- a square turned 45 degrees, half hidden behind the bar
+	COMBAT_RANGE_HURT_POINTER_TRANSPARENCY = 0.1,
+	COMBAT_RANGE_HURT_POINTER_MERGE_DEGREES = 25, -- a hit from within this of a live pointer renews it
+	-- Another player's hit: a short red flash on their character, nothing on this screen's edges.
+	COMBAT_RANGE_FLINCH_SECONDS = 0.16,
+	COMBAT_RANGE_FLINCH_FILL = 0.45,
+	COMBAT_RANGE_FLINCH_POOL = 4,
+	-- Health bar (range): bottom centre, over the AbilityBar on PC and gamepad; on touch beside
+	-- the thumb cluster, or above it where the screen is too narrow for both.
+	COMBAT_RANGE_VITALS_WIDTH = 200,
+	COMBAT_RANGE_VITALS_HEIGHT = 18,
+	COMBAT_RANGE_VITALS_TEXT = 12,
+	COMBAT_RANGE_VITALS_GAP = 8,
+	COMBAT_RANGE_VITALS_BOTTOM = 10, -- design px above the screen's bottom edge when nothing sits under it
+	COMBAT_RANGE_VITALS_BG_TRANSPARENCY = 0.35,
+	COMBAT_RANGE_VITALS_FILL_COLOR = Color3.fromRGB(96, 200, 120),
+	COMBAT_RANGE_VITALS_LOW_COLOR = Color3.fromRGB(240, 170, 60),
+	COMBAT_RANGE_VITALS_LOW_SHARE = 0.5, -- the fill turns amber under this share, red under CRITICAL
+	COMBAT_RANGE_VITALS_CRITICAL_SHARE = 0.25,
+	-- A loss shows at once; the chunk just lost stays behind it for HOLD seconds, then drains.
+	COMBAT_RANGE_VITALS_LOST_COLOR = Color3.fromRGB(255, 205, 210),
+	COMBAT_RANGE_VITALS_LOST_HOLD_SECONDS = 0.35,
+	COMBAT_RANGE_VITALS_LOST_DRAIN_PER_SECOND = 1.2, -- shares of the bar
+	COMBAT_RANGE_VITALS_GAIN_RATE = 10, -- per second, toward a higher health (regen, the get-up)
+	COMBAT_RANGE_VITALS_POP_SCALE = 1.15, -- the bar's pop on a hit and on the get-up
+	COMBAT_RANGE_VITALS_POP_SECONDS = 0.18,
+	-- Knocked down: a one-line banner with the time left over a line that runs out with it,
+	-- the edge flash held and pulsing, then a green shimmer on the character while the
+	-- get-up i-frames last.
+	COMBAT_RANGE_DOWN_WIDTH = 200,
+	COMBAT_RANGE_DOWN_HEIGHT = 36,
+	COMBAT_RANGE_DOWN_TEXT = 18,
+	COMBAT_RANGE_DOWN_BAR_HEIGHT = 4,
+	COMBAT_RANGE_DOWN_FLASH = 0.55, -- the edge flash's floor while down
+	COMBAT_RANGE_DOWN_PULSE_SECONDS = 0.9,
+	COMBAT_RANGE_DOWN_PULSE_DEPTH = 0.25,
+	COMBAT_RANGE_GETUP_FILL_MIN = 0.45, -- the shimmer's Highlight fill swings between these
+	COMBAT_RANGE_GETUP_FILL_MAX = 0.85,
+	COMBAT_RANGE_GETUP_PULSE_HZ = 3,
+	-- RangePanel: one more readout line (damage taken, downs) under the P3 four.
+	COMBAT_RANGE_PANEL_VITALS_LINES = 1,
+
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.
 	-- Rows are 48 design px like the hub's DebugPanel, because 48 x MIN_SCALE is exactly

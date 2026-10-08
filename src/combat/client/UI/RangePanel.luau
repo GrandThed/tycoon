@@ -27,6 +27,12 @@
 -- (RequestTune abilities.cooldownScale 0 / 1: Ben's Studio is in Spanish, so no menu digging),
 -- and the active family's "Ability: <name>" rows follow its variant rows. A fourth readout
 -- line totals the latest cast from RangeStats.
+--
+-- P4 (INTERFACES "P4 contracts", ruling 14): the commands section opens with ONE big "God
+-- mode" button. It sends the range command `god`, which toggles on the server; the button
+-- shows what RangeStats.god says, never its own guess. A fifth readout line carries what
+-- enemies did to this player since the set was loaded (damage taken, downs). The dummy sets
+-- are listed from the config, so `fodderRush` and `elites` appear with no code here.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -426,7 +432,8 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			1,
 			0,
 			0,
-			Theme.COMBAT_RANGE_PANEL_READOUT_LINE * Theme.COMBAT_RANGE_PANEL_READOUT_LINES
+			Theme.COMBAT_RANGE_PANEL_READOUT_LINE
+					* (Theme.COMBAT_RANGE_PANEL_READOUT_LINES + Theme.COMBAT_RANGE_PANEL_VITALS_LINES)
 				+ Theme.COMBAT_RANGE_PANEL_GAP
 		),
 		BackgroundColor3 = Theme.COLOR_BG,
@@ -448,6 +455,8 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 		label("Clear — · Alive —", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
 	local frameLine = label("", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
 	local abilityLine = label("Ability: —", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
+	local vitalsLine =
+		label("Taken — · Downs —", Theme.COMBAT_RANGE_PANEL_READOUT_LINE, readouts)
 	local serverMs: number? = nil
 	local clientFps: number? = nil
 	local function paintFrameLine(): ()
@@ -761,6 +770,27 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 
 	-- Section: dummies and commands. --------------------------------------------------------
 	local commands = section("Dummies & commands", true)
+
+	-- P4: one obvious switch, like Cooldowns below. On = every enemy hit on this player is
+	-- voided (it still shows, as "DODGED"), so the tells can be studied without going down.
+	-- The server toggles; the face waits for its answer in RangeStats (2 Hz), so a click shows
+	-- "..." until then rather than a state the server may not have taken.
+	local godButton: TextButton
+	godButton = button("", commands, function()
+		godButton.Text = "God mode: ..."
+		deps.onCommand("god", nil)
+	end)
+	godButton.Size = UDim2.new(1, 0, 0, Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT)
+	godButton.Font = Theme.FONT_BOLD
+	local function paintGod(on: boolean): ()
+		godButton.Text = if on
+			then "God mode: ON  ·  click for off"
+			else "God mode: off  ·  click for on"
+		godButton.BackgroundColor3 = if on then Theme.COLOR_HIGHLIGHT else Theme.COLOR_BG_LIGHT
+		godButton.TextColor3 = if on then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
+	end
+	paintGod(false)
+
 	local setGrid = grid("Sets", Theme.COMBAT_RANGE_PANEL_COMMAND_COLUMNS, commands)
 	local config = Tuning.Get()
 	for _, setName in sortedKeys((config :: any).dummySets or {}) do
@@ -1132,6 +1162,14 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 					.. Format.Cash(stats.abilityKills or 0)
 					.. " kills"
 			end
+			-- P4: nil from a server whose enemies never fight; the line keeps its dashes.
+			local taken = stats.damageTaken
+			local downs = stats.downs
+			vitalsLine.Text = "Taken "
+				.. (if taken ~= nil then Format.Cash(taken) else "—")
+				.. " · Downs "
+				.. (if downs ~= nil then Format.Cash(downs) else "—")
+			paintGod(stats.god == true)
 		end,
 		SetLayout = function(scale: number, viewportSize: Vector2, bottomReserve: number)
 			uiScale.Scale = scale

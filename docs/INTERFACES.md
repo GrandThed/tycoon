@@ -4851,6 +4851,314 @@ take the seq.
 
 ---
 
+# P4 contracts — enemies that fight back, in the range (Ben, 2026-10-07)
+
+Plan of record: `docs/COMBAT_DESIGN.md` §7 and §10 step 5. Still range-only
+(`build/proving.rbxl`); missions return at P5. No sound. Phones must work. Branch
+`p4-enemy-roles`, worktree `C:\Users\benja\Desktop\tycoon-p4`.
+
+**Two playtest stops.** Stop 1 (this contract): the player can be hurt, and fodder, three
+shooters, the brute and the plated elite fight. It is built in two waves: wave 1 "they hurt
+you", wave 2 "roles". Stop 2: the boss, under its own contract after Ben's verdict on Stop 1,
+because its patterns are made of Stop 1's pieces (the lane, the circle, getting hit).
+
+**Gate protocol.** Ben builds with "Build all" and opens `tycoon\build\proving.rbxl` by habit
+(P3.1). So a wave he is to look at is merged to `main` first, once review and QA are green,
+and the place files are rebuilt there. The code is inert outside Studio's range.
+
+## Rulings (Ben, 2026-10-07)
+
+1. **Go for P4:** "feels good, lets start".
+2. **Armoured elites carry a breakable plate.** Only heavy hits damage the plate; when it
+   shatters, every weapon hurts the elite in full. This settles the P3 "SMG against armour"
+   flag: fast weapons do nothing to a plate and shred what is under it.
+3. **All three shooter attacks ship** ("lets make all of these"), read as three shooter
+   enemies, one attack each: the **slinger** (slow glowing shots you dodge), the **marksman**
+   (a warning line, then an instant hit) and the **lobber** (an arcing shot that lands in a
+   ground circle).
+
+## Rulings (lead; every number is a starting value in `ProvingGrounds.json`)
+
+4. **Health.** `Humanoid.Health`, max `Armory.MaxHp` (130 at tier 1), exactly as missions, so
+   P5 changes nothing here. The range's invisible ForceField goes. Health never reaches 0 in
+   the range: the hit that would do it puts the player **down** for `player.downSeconds`, then
+   up in place at full health with `player.getUpIframes`. No Roblox respawn. A downs counter.
+5. **Regen** only after `player.regenDelay` seconds unhurt, at `player.regenPerSecond`.
+   Roblox's default regen is off in the range.
+6. **Getting hit.** Every hit shows: a hurt flash, where it came from, and the number. Fodder
+   and shooter hits do not move the player. Hits with `knockback` or `launch` (elite, brute,
+   lob) do, applied by the victim's own client, and are followed by `player.knockIframes`.
+7. **A hit an i-frame voided says so** ("dodged"), so the dash reads as a dodge.
+8. **Fodder pressure is capped:** at most `crowd.threat.attackersPerPlayer` lunging enemies
+   may be in windup or attack against one player. The others crowd and wait.
+9. **Interrupts.** `interrupt = "stagger"` (fodder, shooters): any hit that staggers cancels
+   the windup. `"heavy"` (brute, elite): only a hit of `crowd.heavyHit` or more. A cancelled
+   windup goes to `recover`.
+10. **One meaning of "heavy":** a hit whose amount, after crit and chain falloff and before
+    armour, is at least `crowd.heavyHit`. It damages a plate and cancels a heavy windup.
+11. **A jump dodges ground attacks.** Every ground shape has a `height`; a player whose feet
+    are higher above the floor is missed.
+12. **The brute has no plate.** It is hit points and a charge.
+13. **Passive sets stay passive.** Only a group whose behaviour is `fight` runs its kind's
+    brain. The P1 to P3 sets are untouched, except that `armoured` gains its plate in wave 2.
+14. **`god`** (range command and a panel button) voids every hit on that player; the hurt
+    effects are still sent, flagged `dodged`, so tells can be studied safely.
+15. **Known limit:** the crowd ignores world geometry, as since P1. Enemies walk through
+    cover. A marksman's line and a slinger's shot are stopped by walls; a lob is not.
+
+**Added after the wave 1 reports (lead, 2026-10-07; reasons in `docs/BALANCE.md` "P4"):**
+
+16. **The fodder cap is 2, not 4.** A lunge place is held 0.8 s, so twelve fodder round a still
+    player land cap ÷ 0.8 lunges a second: at 4 he is down in about 5 s, under the 6 to 12 s
+    target; at 2 it is 8.7 s. Ben was told 4 first and has been told 2.
+17. **Health in the range is pinned to tier 1:** `Armory.MaxHp` for tier-1 weapons in both
+    slots (130), whatever the Studio profile holds. The range's weapon numbers are tier-1
+    values from the config, so the body they are balanced against must be too (a fresh
+    profile has 100, a tier-12 one 2,250). P5 returns to the profile.
+18. **Hits decided together do not stack through a knock.** When a hit that knocks back
+    lands, every other hit on that player still waiting for its decision at that moment, or
+    falling inside the `player.knockIframes` it opens, is voided and sent as `dodged`. Without
+    this, enemies that wound up in the same step (three elites over a player getting up) land
+    as one 60 or 90 damage hit.
+19. **The lunge's windup is 0.6 s** (was 0.5): at 0.5 a phone player with a 0.35 s reaction
+    has 0.01 s to step out.
+20. **Flat for now, for P5 to solve:** enemy damage, regen and `crowd.heavyHit` do not scale
+    with weapon tier while health grows ×17.
+
+**Review round, wave 1 (lead, after roblox-reviewer: 2 Critical, 1 Major, 10 Minor).** Both
+Criticals were rulings 17 and 18, added while the review ran and not yet in the code; fixed.
+
+21. **Major, ruled — a hopping player and ground attacks.** A jump is 0.86 s with the feet
+    above a lunge for 85% of it, and a windup started only inside 3D reach, so holding jump
+    voided about five hits in six. Two changes: **`reach` is measured on the flat** (X and Z),
+    so enemies gather and wind up under a player in the air and a landing is not free; and
+    **the answer to a player who stays in the air is the shooters** (wave 2): a `shot` is a
+    sphere tested in 3D and aimed at the body, and a marksman's `line` is aimed in 3D at the
+    body when it locks, so neither is jumped over by simply being airborne. Ground shapes
+    (`lunge`, `arc`, `lane`, `lob`) keep ruling 11. Wave 2's simulator gains a hopping player.
+22. **A due impact is never lost.** If an enemy is hit or killed between its impact time and
+    the step that would notice it, the impact still lands (the client has already drawn the
+    blow). Killing or interrupting it before the impact time still cancels.
+23. **`hurt` leaves in the frame it is decided**, one batch per player per frame, not held to
+    the next crowd step: the bar and the flash must move together. (Amends "batched once per
+    crowd step"; strikes are unchanged.)
+24. **Fixed as found:** a player who was down at an impact's time is skipped; the previous
+    i-frame window is kept beside the current one and both are tested; a bow draw is refused
+    while down; the health bar shows full from the get-up until the heal replicates.
+26. **A dash away reads as a dodge too** (found writing the playtest: the dash covers 20 studs
+    in 0.15 s, so it left the lunge's shape and the miss was silent; only a dash on the thrust
+    itself showed "DODGED"). An attack that misses the player it was aimed at, while an i-frame
+    of that player covered any moment of [T, T + lag], is sent to them as `dodged`. A miss
+    with no i-frame in that window still sends nothing: walking out is not a dodge. A
+    bystander's miss sends nothing.
+25. **Accepted:** with lag under one step (Studio's ping) about a quarter of impacts test the
+    root up to 33 ms late; ability zones placed before going down keep resolving; a body first
+    seen mid-windup (a player joining mid-fight) may show one blow late; the pointer ring
+    crosses the combo counters at some bearings on a 375-wide screen (for Ben's look).
+
+## Roles (Stop 1)
+
+| Kind | Brain | Attack | Tell | How you avoid it |
+|---|---|---|---|---|
+| `fodder` | rush | `lunge`: 0.6 s windup, 1.5 s recover | its body (visor, lean, then the thrust) | kill or shove it, step back, jump, dash |
+| `armoured` | rush, slow | `arc` 120°: 0.8 s windup, knocks back | body and an arc on the ground | leave the arc, jump, dash |
+| `slinger` (wave 2) | keepAway 18–30 | `shot`: slow glowing projectile | windup glow, then the shot itself | sidestep, jump, dash, cover |
+| `marksman` (wave 2) | keepAway 28–45 | `line`: 1.0 s warning line, aim locks 0.25 s before the hit | the line | move after the lock, dash, cover |
+| `lobber` (wave 2) | keepAway 22–40 | `lob`: lands after 1.4 s in a circle | the circle | leave the circle |
+| `brute` (wave 2) | rush to 22 | `lane`: 0.8 s windup, then a 30-stud charge at 55 studs/s | the lane | sidestep, jump, dash |
+
+Plate (wave 2): `armoured` gets `plate` (plate HP) and `armor` 0. While the plate lasts a hit
+below `crowd.heavyHit` is `blocked` (0); a heavy hit takes its amount off the plate (`plate`),
+never off HP; the hit that empties it is `broke`. Nothing carries over into HP.
+
+## Types and config (applied by the lead in `Types.luau` and `ProvingGrounds.json`)
+
+- `CrowdKindDef` += `brain`, `bandMin`, `bandMax`, `attacks: { CrowdAttackDef }` (at most 7),
+  `plate`. New `CrowdAttackDef` (`shape`, `reach`, `windup`, `recover`, `damage`, `knockback`,
+  `launch`, `range`, `width`, `arcDegrees`, `radius`, `speed`, `seconds`, `lockSeconds`,
+  `height`, `interrupt`).
+- `DummyGroupDef.behaviour` += `"fight"` (also the enum in `Tuning.luau`).
+- `crowd.heavyHit`, `crowd.threat { attackersPerPlayer, spawnGrace, spawnClear, maxShots,
+  strikeSeconds }`, `player { downSeconds, getUpIframes, regenDelay, regenPerSecond,
+  knockIframes, knockFriction }` (`knockFriction` bleeds the player's knock slide off, in the
+  air as on the ground; the push itself is capped at `crowd.knockMax`).
+- **State timing, the same on both sides:** `windup` lasts the attack's `windup` and ends at the
+  impact; `attack` then lasts `crowd.threat.strikeSeconds` for a lunge or an arc (a lane's lasts
+  its charge, `range / speed`); `recover` lasts the attack's `recover`. The attack index in the
+  snapshot stays set through all three.
+- `CrowdState` += `"attack"`, `"recover"`. `CrowdSnapshotEntry` += `plated`, `attack`.
+- `StrikeHit` += `blocked`, `plate`, `broke`. `RangeStats` += `damageTaken`, `downs`, `god`.
+- New effects in the `CombatFx` union: `CombatFxHurt` (`hurt`), `CombatFxEnemyShot`
+  (`enemyShot`), `CombatFxEnemyShotEnd` (`enemyShotEnd`), `CombatFxArea` (`area`). The mission
+  kinds `telegraph`, `playerHit` and `playerDown` are **not** reused: `CombatFxController`
+  still handles them with mission visuals, and it runs in the range.
+- Wave 1 config: `fodder` and `armoured` attacks; sets `fodderRush` (30 fodder) and `elites`
+  (3 armoured). Wave 2 config: the four new kinds, the plate, sets `shooters`, `brutes`,
+  `plated`, `fight` (100 fodder, 3 slingers, 3 marksmen, 2 lobbers, 3 brutes, 3 armoured).
+
+## Codec v2 (`CrowdCodec.luau`)
+
+`FORMAT_VERSION` 2; the entry stays 11 bytes. The state byte splits: low nibble = state index
+(append `attack`, `recover`; never reorder), bit 4 = `plated`, bits 5–7 = attack index (0–7).
+While `plated`, the hp byte carries the plate's fraction. A client that reads a version it
+does not know drops the packet, as today.
+
+## Rules
+
+- **Tells are drawn against server time.** The snapshot header carries it, and the server sets
+  `windup` in the very step the windup starts, so the first snapshot that shows a windup is
+  stamped with its start: the impact is that stamp + `windup`, exactly. Only when the snapshot
+  before it was lost (the enemy's previous sighting is older than one step) is the start
+  unknown; the client then takes the earliest it can have been, one step after that previous
+  sighting, so it never shows the impact later than the server's.
+- **Under a stagger or airborne overlay** the snapshot's attack index stays set only while that
+  windup or attack is still running underneath (an elite's windup survives a light hit); 0
+  means it was cancelled or is over, and the client drops the tell at once.
+- **A body in windup or attack is planted:** crowd separation does not move it (its neighbours
+  give way), or a facing locked at the windup's start would miss a player who never moved.
+  Knockback from a player's hit still moves it.
+- **Body tells cost no events.** `lunge`, `arc`, `lane` and `line` tells are drawn from the
+  snapshot alone (state, attack index, yaw, position). Events exist only for `hurt`, enemy
+  shots and areas, and the server sends them **batched once per crowd step**.
+- **The commit rule** (which position of the player an enemy's hit tests). At impact time T
+  the shape is frozen. For each player the hit is decided at T + lag, lag = min(ping +
+  `shooting.originLagSeconds`, `shooting.originLagMaxSeconds`), against the server's root at
+  that moment: it is where that player's own screen had them at T. Enemy shapes get no pad;
+  height is read from the same sample; an i-frame that covered any moment of [T, T + lag]
+  voids the hit. A client-claimed dodge position is never accepted. A slow shot is tested the
+  same way every step: the root now against where the shot was `lag` ago.
+- **Nothing in the crowd step yields.** No PathfindingService. Spawns, kills and effects
+  raised inside the step are queued and flushed after it. The brain reads enemy records by
+  reference (`CrowdService.Get` allocates).
+- **Raycast budget:** one sight ray per `line` or `shot` at fire time; one ray per live enemy
+  shot per step. No per-enemy ray per step.
+- **Spawn:** a fresh enemy cannot start a windup for `threat.spawnGrace`; a fight slot does
+  not respawn while a player stands within `threat.spawnClear` of it.
+- **Tells carry information:** they are never gated on `Theme.reducedMotion` (true on every
+  touch device) or `lowEndDevice`. Fodder tells add no Instances.
+- **Locals gate:** `FeedbackController` (166) takes no new top-level local; AI, vitals and
+  tells live in new modules. `py tools/check_compile.py` is part of every verify.
+
+## Remotes
+
+No new intent. Enemies act alone and the dodge is `RequestDash`. `RequestRangeCommand` gains
+`god` (toggles). `hurt`, `enemyShot`, `enemyShotEnd` and `area` ride the existing `CombatFx`
+event; health replicates as `Humanoid.Health`.
+
+## Ownership
+
+**Wave 1 — "they hurt you"** (fodder lunge, elite arc, health, down and up, the hurt feedback):
+- luau-engineer: new `src/combat/server/Services/CrowdBrain.luau` and `VitalsService.luau`;
+  `CrowdService.luau`, `RangeService.luau`, `src/shared/CrowdCodec.luau`,
+  `src/shared/Tuning.luau`, `CombatRemotes.luau`, and the wiring in
+  `src/combat/server/Main.server.luau` (reported to the lead line by line).
+- ui-engineer: new `src/combat/client/Controllers/VitalsController.luau` and
+  `src/combat/client/UI/VitalsHud.luau`; `CrowdRenderer.luau` (codec v2, attack and recover
+  poses, the lunge, the elite's ground arc), `MovementController.luau` (`ApplyKnock`),
+  `InputController.luau` (no attacks while down), `CombatUIController.luau`,
+  `UI/RangePanel.luau` (the `god` button, damage taken and downs), `src/client/UI/Theme.luau`
+  (add only), and the client's `Main` wiring under `src/combat/client`.
+- economy-designer: the values of the keys above in `ProvingGrounds.json` (not their shape),
+  a threat section in `tools/sim_range.py`, `docs/BALANCE.md` "P4".
+- lead: this section, `Types.luau`, the shape of the config keys, `docs/COMBAT_DESIGN.md`.
+
+**Wave 2 — "roles"** (the keepAway brain, `shot`, `line`, `lob`, `lane`, the plate): same
+owners; the client adds a `Controllers/ThreatFx/` folder for lanes, lines, circles and shots.
+Its rules and ownership are in "Wave 2 — roles" below.
+
+## Balance targets (economy-designer; checked by `sim_range.py --check`)
+
+- No single hit takes more than 25% of tier-1 health.
+- A player standing still in `fodderRush` goes down in 6 to 12 s; in `fight`, in 4 to 8 s.
+- A player who keeps moving and dodges every telegraphed hit takes damage only from fodder.
+- Wave 2: every melee family can break a plate within two combos; after the break an SMG kills
+  the elite in at most 2 s; the families that cannot break a plate are named in BALANCE.
+
+## Definition of done (Stop 1)
+
+- stylua, selene, both luau-lsp runs, `check_compile.py`, the three builds; `sim_economy.py
+  --check` and `sim_combat.py --check` unchanged; `sim_range.py --check` green with the threat
+  bands.
+- In `build/proving.rbxl`: the P1 to P3 sets behave as before. In `fodderRush` fodder close in,
+  lean, lunge and take health off the bar; a dash through a lunge shows "dodged"; at 0 the
+  player goes down and gets up. Each role shows its tell and is avoided by moving, jumping or
+  dashing. A plate blocks an SMG and breaks under a hammer. `god` voids hits. On the phone
+  emulator every tell is readable. Two players see the same tells.
+- Ben reads the server step time off the panel in `fight`, since nobody else can run Studio:
+  the budget is 2 ms.
+
+## Wave 2 — roles (lead, 2026-10-07)
+
+Wave 1 gave the pieces: the brain's windup → attack → recover, the commit rule, `hurt`, the
+tells from the snapshot. Wave 2 adds one brain, four shapes and the plate on top of them.
+
+**Types and config (lead):** `CrowdAttackDef.lead`; `crowd.plateBreakSeconds`; the kinds
+`slinger`, `marksman`, `lobber`, `brute`; `armoured` gets `plate` and `armor` 0; sets
+`shooters`, `brutes`, `fight` (`elites` stays and is now plated).
+
+**The keepAway brain.** Holds a flat distance of `bandMin`..`bandMax` from its target: walks
+in when further, backs off when closer, stands and faces it otherwise. It never leaves the
+arena: at the bound it stops and fights from there. It starts its attack whenever the target
+is within `reach` on the flat and it is not recovering. Planted in windup, like every body.
+
+**`shot` (slinger).** At T a projectile leaves the body centre, aimed at the target's body
+where it will be after the flight: its current position plus `lead` × (its motion over the
+flight), the motion taken from the root's displacement over the last crowd step (never the
+replicated velocity) and including gravity for a target in the air. `lead` 0 aims where they
+stand; 1 leads fully. It flies straight at `speed` for at most `seconds`, as a sphere of
+`radius` tested in 3D against each player's root by the commit rule (the root now against
+where the shot was `lag` ago). It stops at its first player and at world geometry (one ray per
+live shot per crowd step). At most `threat.maxShots` are alive; a slinger at the cap waits in
+windup-less idle. `enemyShot` leaves at T and `enemyShotEnd` at its end, in the frame's batch.
+
+**`line` (marksman).** The facing follows the target until T − `lockSeconds`, then is frozen.
+At T the shot is instant: a flat lane from the body centre, `range` long and `width` wide,
+along the locked facing, cut short by world geometry (one ray at T, at chest height). **It has
+no height rule:** it is a vertical plane, and being in the air does not avoid it; moving out
+of the lane after the lock does. No event besides `hurt`: the tell is drawn from the snapshot,
+and the client knows the lock moment from `lockSeconds`.
+
+**`lob` (lobber).** At T an `area` effect: centre = the target's floor point at T, `radius`,
+`startsAt` T, `endsAt` T + `seconds`, `from` the body centre. At `endsAt` every player within
+`radius` on the flat and under `height` is hit (the commit rule, decided at `endsAt` + lag),
+pushed away from the centre. Walls do not stop it.
+
+**`lane` (brute).** Facing locked when the windup starts. At T it charges along the facing for
+`range` at `speed` (its `attack` state lasts `range / speed`), stopping early at the arena
+bound. Nothing cancels or moves it during the charge; hits still damage it. A player is hit at
+most once per charge, when the brute's body as it was `lag` ago overlaps them: flat distance
+from the body centre at most `width / 2`, under `height`. Push along the charge, plus launch.
+
+**The plate (`armoured`).** While it lasts: a hit below `crowd.heavyHit` is `blocked` and does
+nothing at all (no damage, push, launch, stagger or interrupt). A heavy hit takes its amount
+off the plate (`plate`; the excess is lost) and otherwise acts as any hit. The hit that
+empties it is `broke`, and the elite reels, staggered, for `crowd.plateBreakSeconds`. After
+that the kind's `armor` applies (0). The snapshot's `plated` bit is set and its hp byte
+carries the plate's fraction. A respawned elite is plated again. Readouts: plate damage counts
+as damage dealt; a blocked hit counts as a hit of 0.
+
+**The client.** A `Controllers/ThreatFx/` folder: the lane and the line from the snapshot
+(the line thin and following until the lock, then solid; it must read as a wall, not as
+something to jump), circles and the lob's arc from `area`, shots from `enemyShot` /
+`enemyShotEnd`, all pooled and drawn against server time. `CrowdRenderer`: each role is told
+apart at a glance (colour and size come from the kind; one cheap shape cue each, never on
+fodder), the plate as a shell with its own bar, the break as a burst, the reel. Hit numbers:
+`blocked` reads as a block, not as a 0; plate damage in the plate's colour; `broke` is marked.
+`FeedbackController` (159 top-level locals) takes no new top-level local.
+
+**Balance (economy-designer).** Values of the new keys; the simulator gains the three shooters,
+the brute, the plate, and three more players: one who hops on the spot, one who strafes one
+way, one who reacts to every tell. Bands: the Stop 1 targets above, plus — a hopper and a
+one-way strafer are both hit by slingers often enough to matter; a player who reacts to every
+tell takes damage from fodder only; standing still in `fight` is down in 4 to 8 s; the plate
+time-to-break and time-to-kill matrix across the 13 families, naming the ones that cannot
+break it.
+
+**Ownership:** as wave 1, plus for the ui-engineer the new `Controllers/ThreatFx/` folder and
+`FeedbackController.luau` (hit-number flags only).
+
+---
+
 # M12 contracts — Growing city (wave 1: Village)
 
 Plan of record: `docs/CITY_GROWTH.md` (approved 2026-09-29). Ben's rulings: **growth layouts (mock

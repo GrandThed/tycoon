@@ -70,7 +70,6 @@
 --    strike. Ability, ranged and tick strikes stay fixed in the world. So does the wireframe:
 --    it is the shape the server resolved, there to check the effect against.
 
-local HapticService = game:GetService("HapticService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -91,6 +90,9 @@ local Crosshair = require(uiFolder:WaitForChild("Crosshair"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
+-- P4: the haptic pulse is shared with VitalsController (being hit), which drives the same
+-- motors; it used to be private here.
+local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
 -- Below this length a vector has no heading (mirrors HitShapes' own epsilon).
 local EPSILON = 1e-6
@@ -101,9 +103,6 @@ local BURST_SAMPLE = 16
 local FULL_CHARGE = 0.999
 -- The ability whose chain links leave a coil top rather than its ground-point origin.
 local COIL_ABILITY = "stormCoil"
--- Hit parts for a haptic pulse: gamepads have two motors, phones (where supported) one.
-local HAPTIC_INPUTS = { Enum.UserInputType.Gamepad1, Enum.UserInputType.Touch }
-local HAPTIC_MOTORS = { Enum.VibrationMotor.Large, Enum.VibrationMotor.Small }
 
 type Strike = {
 	userId: number,
@@ -211,8 +210,6 @@ type BeamFx = {
 
 type Spark = { anchor: Attachment, emitter: ParticleEmitter, freeAt: number }
 
-type HapticTarget = { input: Enum.UserInputType, motor: Enum.VibrationMotor }
-
 -- A crowd sphere a pellet tracer may stop in (body or head).
 type Body = { centre: Vector3, radius: number }
 
@@ -263,8 +260,6 @@ local comboExpires = 0
 local killsToken = 0
 local hitstopUntil = 0
 local frozenTracks: { [AnimationTrack]: number } = {}
-local hapticTargets: { HapticTarget } = {}
-local hapticToken = 0
 local flights: { Flight } = {}
 local merges: { [string]: Merge } = {}
 local beams: { [number]: BeamFx } = {}
@@ -1980,48 +1975,6 @@ local function releaseHitstop(): ()
 	table.clear(frozenTracks)
 end
 
-local function detectHaptics(): ()
-	table.clear(hapticTargets)
-	for _, input in HAPTIC_INPUTS do
-		local ok, supported = pcall(function()
-			return HapticService:IsVibrationSupported(input)
-		end)
-		if ok and supported == true then
-			for _, motor in HAPTIC_MOTORS do
-				local motorOk, motorSupported = pcall(function()
-					return HapticService:IsMotorSupported(input, motor)
-				end)
-				if motorOk and motorSupported == true then
-					table.insert(hapticTargets, { input = input, motor = motor })
-				end
-			end
-		end
-	end
-end
-
-local function setMotors(value: number): ()
-	for _, target in hapticTargets do
-		-- pcall: a gamepad unplugged mid-fight must not break the feedback loop.
-		pcall(function()
-			HapticService:SetMotor(target.input, target.motor, value)
-		end)
-	end
-end
-
-local function pulse(amount: number, seconds: number): ()
-	if amount <= 0 or #hapticTargets == 0 then
-		return
-	end
-	hapticToken += 1
-	local token = hapticToken
-	setMotors(math.clamp(amount, 0, 1))
-	task.delay(seconds, function()
-		if token == hapticToken then
-			setMotors(0)
-		end
-	end)
-end
-
 local function edgeFlash(strength: number): ()
 	if strength <= 0 or #edgeBars == 0 then
 		return
@@ -2923,12 +2876,15 @@ local function onStrike(strike: Strike): ()
 		local haptics = feedbackStrength("haptics")
 			* (if lasting then Theme.COMBAT_RANGE_TICK_HAPTIC_SCALE else 1)
 		if heavy then
-			pulse(
+			Haptics.Pulse(
 				Theme.COMBAT_RANGE_HAPTIC_HEAVY * haptics,
 				Theme.COMBAT_RANGE_HAPTIC_HEAVY_SECONDS
 			)
 		else
-			pulse(Theme.COMBAT_RANGE_HAPTIC_LIGHT * haptics, Theme.COMBAT_RANGE_HAPTIC_SECONDS)
+			Haptics.Pulse(
+				Theme.COMBAT_RANGE_HAPTIC_LIGHT * haptics,
+				Theme.COMBAT_RANGE_HAPTIC_SECONDS
+			)
 		end
 	end
 	-- A lasting hit's kill line shows the running total of its burst.
@@ -3249,7 +3205,7 @@ function FeedbackController.Start(): ()
 	end
 	fxFolder =
 		Create("Folder", { Name = Theme.COMBAT_RANGE_FX_FOLDER, Parent = Workspace }) :: Folder
-	detectHaptics()
+	Haptics.Detect()
 	-- Input cannot require this module (this one requires it), so the swing reaches us here.
 	InputController.SetSwingHandler(FeedbackController.PredictSwing)
 	table.insert(connections, RunService.RenderStepped:Connect(onRenderStep))
@@ -3409,8 +3365,7 @@ function FeedbackController.Destroy(): ()
 	table.clear(connections)
 	InputController.SetSwingHandler(nil)
 	releaseHitstop()
-	hapticToken += 1
-	setMotors(0)
+	Haptics.Stop()
 	for _, effect in effects do
 		for _, item in effect.parts do
 			item.part:Destroy()

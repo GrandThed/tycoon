@@ -1766,3 +1766,270 @@ With the lead's values, `--check` failed 22 times:
   by area. It's the one crowd ability that doesn't explode on packed dummies.
 - **Whirlwind needs movement.** Cast standing at a crowd's edge, it loses to plain swings over the
   same 2.4 s (see above). If Ben casts it standing still in the range, it'll feel weak.
+
+# P4 — enemies that fight back
+
+Starting values for the enemies that attack and for the player's body in the range
+(`Config/ProvingGrounds.json`; contract: `docs/INTERFACES.md` "P4 contracts"). This part is
+**wave 1, "they hurt you"**: the fodder's lunge, the armoured elite's arc, health, going down and
+getting up. Wave 2 (shooters, the brute, the plate) adds to this section.
+
+Targets from the contract, all at tier-1 health (130 = `Armory.MaxHp`, 100 + 20 + 10), where the
+range pins every player (ruling 17):
+- no single hit takes more than 25% of health;
+- a player standing still in `fodderRush` goes down in 6 to 12 s;
+- a player who keeps moving and dodges every telegraphed hit takes damage only from fodder.
+
+## How the numbers were measured
+
+`py tools/sim_range.py` has a new THREAT section, and `--check` guards its bands. It is the first
+part of the simulator where the crowd moves. It mirrors the contract's rules, each named in the
+code where it is applied, and follows `CrowdBrain`, `VitalsService` and
+`MovementController.ApplyKnock` where the contract leaves a choice:
+
+- **The crowd:** one step per `snapshotHz`. A rusher walks at its kind's speed until its attack's
+  `reach`, and bodies shove each other apart as `CrowdService.separate` does. A body in windup or
+  attack is planted. Nothing shoves the crowd off the player.
+- **An attack:** windup (the facing locks) → impact → `strikeSeconds` → `recover`. At most
+  `attackersPerPlayer` lungers are in windup or attack at once.
+- **A hit:** the shape is frozen at the impact and tested against the player's root, with no pad,
+  `originLagSeconds` later. An i-frame over any moment of that window voids it.
+- **Hits decided together** (ruling 18): when a hit that knocks back lands, every other hit on
+  that player still waiting for its decision at that moment, or falling inside the
+  `knockIframes` it opens, is voided and shows as "dodged".
+- **The player:** health, down for `downSeconds` (nobody's target meanwhile), up full with
+  `getUpIframes`, regen after `regenDelay`. A knock is a slide that starts at `knockback` studs
+  a second and bleeds off at `player.knockFriction`, with `knockIframes` from the hit.
+- **His hits:** the default melee family through the same strike code as the tables above, plus
+  what `CrowdService.Damage` does to a living enemy: shove, launch, stagger. A hit that staggers
+  cancels a `stagger` windup, and a hit of `heavyHit` or more cancels a `heavy` one.
+
+Every run starts when the set loads, with the player on the lobby pad (0, 90), and lasts 60 s.
+Three seeds move his start by ±1.5 studs. Health, the dash's server tolerance and the arena come
+from `Armory.json`, `Combat.json` and the arena's layout module, so nothing is copied.
+
+Three facts about the sim's player are assumptions, not tunables:
+- he reacts 0.25 s after a tell shows, and the sums allow one more crowd step (0.07 s) for a
+  lost snapshot;
+- he has no ping, so the lag in the commit rule is `originLagSeconds` alone (0.05 s);
+- when he fights he always turns to the nearest enemy. A real player turns slower.
+
+## Values
+
+Three values changed from the lead's first set. Everything else holds against the sums below.
+
+| Key | Lead | Now | Why |
+|---|---|---|---|
+| `crowd.threat.attackersPerPlayer` | 4 | **2** | 12 fodder stand in reach of a still player, so four lunge places are never empty: 4.9 hits/s, 39 damage/s, down at 5.5 s. With two: 2.5 hits/s, 20 damage/s, down at 8.7 s. Ruling 16. |
+| `armoured.attacks[0].launch` | 6 | **3** | A launch of 6 lifts his feet over the 4-stud fence and keeps him in the air 0.49 s, longer than `knockIframes` (0.40 s). At 3 he is up 0.35 s and stays under the fence. |
+| `fodder.attacks[0].windup` | 0.5 | **0.6** | At 0.5 a phone player who reacts in 0.35 s has 0.01 s to step out. At 0.6 he has 0.11 s, and a 0.25 s reaction has 0.21 s. Ruling 19. |
+| `fodder.attacks[0]`, the rest (reach 4.5, recover 1.5, damage 8, range 5, width 3, height 5) | | same | 8 is 6% of health: 17 hits to go down. The tell is in the table below. |
+| `armoured.attacks[0]`, the rest (reach 6, windup 0.8, recover 1.2, damage 30, knockback 30, range 7.5, arc 120°, height 6) | | same | 30 is 23% of health. |
+| `player.knockFriction` | 75 | same | The slide I want is 6 studs in 0.40 s. See "The knock" below. |
+| `crowd.heavyHit` | 40 | same | It equals fodder's HP: a heavy hit is one that one-shots a fodder. The nearest damage values are 41.6 above and 38.4 below. |
+| `threat.spawnGrace`, `spawnClear`, `strikeSeconds` | 1.0, 12, 0.2 | same | A fresh enemy cannot land a hit for 1.6 s. 12 is over the longest reach (6) and under the pad's 24 studs to the nearest slot, so sets refill. |
+| `player.downSeconds`, `getUpIframes` | 2, 1.5 | same | Seeing, reacting and walking out of a pack of 30 takes 0.69 s (1.0 s for wave 2's 100). |
+| `player.regenDelay`, `regenPerSecond` | 4, 10 | same | One fodder alone attacks every 2.3 s and one elite every 2.2 s, so the delay never runs out in reach. An empty bar is full 17 s after the last hit. |
+| `player.knockIframes` | 0.4 | same | Covers the 0.35 s in the air and the 0.40 s slide. |
+| `dummySets.fodderRush`, `elites` | 30 at (0, 60); 3 at (0, 60) | same | First lunge lands at 2.2 s, first arc at 3.5 s. |
+
+`threat.maxShots` belongs to wave 2 and is untouched.
+
+**Why the cap is 2, and why the recover does not help.** A lunge place is held for windup +
+strike, 0.8 s, so a swarm lands at most cap ÷ 0.8 lunges a second: 5.0 at cap 4, 2.5 at cap 2. A
+fodder's own cycle is 2.3 s, so the 1.5 s recover only spaces attacks out when fewer than about
+6 (cap 2) or 12 (cap 4) fodder stand in reach. In a rush there are 12, and a recovering fodder is
+replaced at once. For the 6–12 s band the swarm may deal 13 to 34 damage a second. Cap 4 deals 39
+and goes down at 5.5 s. Cap 3 deals 30 and goes down at 6.4 s, on the edge. Cap 2 deals 20 and
+sits in the middle.
+
+**The knock.** `knockback` 30 against `player.knockFriction` 75 is a slide of 30² ÷ (2 × 75) =
+6.0 studs that lasts 30 ÷ 75 = 0.40 s.
+- It ends exactly when `knockIframes` do. Any lower friction is a slide that outlasts them
+  (60 gives 7.5 studs in 0.50 s).
+- 6 studs is the arc's `reach`. Wherever in the arc he stood, he ends outside the reach of the
+  elite that hit him, and it must step before it can wind up again.
+- It carries him out of a second elite's arc from up to 102° round him, so elites that came from
+  one side cannot chain. More friction loses that: 90 gives 5.0 studs and 94°, 120 gives 3.8
+  studs and 82°.
+- It cannot throw him out. The launch keeps his feet under the fence, and from the pad the
+  fourth knock is the first one the back fence cuts short.
+- Clearing a flanking elite too needs 9.6 studs. That is knockback 40, friction 80 and
+  `knockIframes` 0.5 together. I have not taken it: it is three values for a case wave 1's set
+  cannot produce.
+
+**Heavy hits** (`heavyHit` 40, before armour). They cancel the elite's windup now and break the
+plate in wave 2.
+- Every hit: Warhammer, Greataxe A, Spear A, Shotgun, Rifle, Launcher, Chain Gun A, Splitbow B,
+  and a full-charge Longbow.
+- Finisher only: Broadsword (43.2), Spinblade (41.6), Greataxe B, Spear B.
+- Never, even on a crit: SMG, Beam. Chain Gun B and Splitbow A only on a head.
+
+## The tells against the player's moves
+
+| | Fodder lunge | Elite arc |
+|---|---|---|
+| Damage | 8 (6%) | 30 (23%) |
+| Tell | 0.60 s | 0.80 s |
+| Walking out needs | 0.39 s: 0.07 step + 0.25 reaction + 1.5 studs at 20/s | 0.49 s: the same + 3.5 studs |
+| Margin left | 0.21 s (0.11 s for a 0.35 s thumb) | 0.31 s (0.21 s) |
+| Jumping | clear from 0.06 s to 0.79 s after take-off | clear from 0.08 s to 0.78 s |
+| Dashing | 0.30 s to press in (i-frames 0.25 + lag 0.05); the 20 studs also leave the shape | the same |
+| Walking on without reacting | covers 12 studs; the longest way out is 6.7 | covers 16; the longest way out is 11.7 |
+| Enemy speed against the walk (20) | 12 | 9 |
+
+- **A walker is never hit.** Walking on through the tell leaves either shape, whichever way he
+  walks, and both enemies are slower than the walk.
+- **The dash is an escape more than a shield.** The server accepts a dash every 0.64 s (0.80 s
+  from an honest client), so spam is invulnerable 39% (31%) of the time. A player who could not
+  leave would still take six lunges in ten. What saves him is the 20 studs: fodder need 1.3 s to
+  close them, longer than the cooldown.
+
+## Results (tier 1, Broadsword, mean of three seeds, per 60 s)
+
+| Set | Player | First hit | Down at | Downs | Hits | Dodged | Missed | Worst burst | Kills |
+|---|---|---|---|---|---|---|---|---|---|
+| fodderRush | stands still | 2.2 s | **8.7 s** (8.6–8.8) | 5.0 | 97 | 20 | 0 | 16 | 0 |
+| fodderRush | walks away | never | never | 0 | 0 | 0 | 0 | 0 | 0 |
+| fodderRush | stands to half health, then walks | 2.2 s | never | 0 | 9 | 0 | 3 | 16 | 0 |
+| fodderRush | fights, dashes when threatened | never | never | 0 | 0 | 0 | 0 | 0 | 338 |
+| fodderRush | stands to half health, then fights | 2.2 s | never | 0 | 9 | 0 | 1 | 16 | 330 |
+| elites | stands still | 3.5 s | 11.9 s | 3.3 | 21 | 13 | 4 | 30 | 0 |
+| elites | walks away | never | never | 0 | 0 | 0 | 0 | 0 | 0 |
+| elites | stands to half health, then walks | 3.5 s | never | 0 | 3 | 1 | 1 | 30 | 0 |
+| elites | fights, dashes when threatened | never | never | 0 | 0 | 0 | 3 | 0 | 15 |
+| elites | stands to half health, then fights | 3.5 s | never | 0 | 3 | 1 | 1 | 30 | 12 |
+
+"Dodged" is a hit the i-frames of a dash, a knock or the get-up voided. "Missed" is an attack
+whose shape no longer held him. "Worst burst" is the most damage inside one dash i-frame window
+(0.25 s).
+
+- **Standing still:** 2.5 lunges land a second (20 damage/s) and none misses. No lull is longer
+  than 0.8 s, so regen never starts. He is down five times a minute.
+- **Walking away:** nobody comes nearer than 13 studs. Caught at half health, he walks out with
+  no further hit and is full again about 12 s later.
+- **Fighting:** nothing lands, and he never needs the dash. The set feeds him 5.6 fodder a second
+  and he kills them all. In the busy crowd of the abilities table the Broadsword kills 6.6/s and
+  the Longbow 4.8/s, so a bow alone falls behind a rush and has to kite.
+- **Elites:** three that swing together land one arc. The others are voided by ruling 18, or miss
+  because he has been carried clear. A still player takes 0.5 hits/s. That is 15 damage/s, less
+  than the fodder's 20.
+
+## Bands (`--check`)
+
+| Band | Value | Now |
+|---|---|---|
+| One hit, and one volley of the cap | ≤ 25% of health | 23% (arc), 12% (two lunges) |
+| Still in `fodderRush`: down at | 6–12 s, every seed | 8.7 s (8.6–8.8) |
+| The same with every lunge place taken the moment it frees | ≥ 6 s | 8.6 s |
+| Lunges landing on a still, swarmed player | 1.5–3.5 per second | 2.5 |
+| Worst burst inside one dash window, any still row | ≤ 25% | 12% (fodder), 23% (elites) |
+| Longest lull in the rush; one enemy's own cycle | < `regenDelay` (4 s) | 0.8 s; 2.3 s and 2.2 s |
+| A tell beyond step + reaction + the walk out | ≥ 0.05 s | 0.21 s (lunge), 0.31 s (arc) |
+| A jump clears the shape before the impact | yes | yes |
+| An attack reaches past where it starts; its enemy is slower than the walk | yes | yes |
+| Telegraphed hit: walking on covers the longest way out | yes | 16 ≥ 11.7 |
+| Launch under the fence | yes | 3 < 4 |
+| Flight and slide inside `knockIframes` | ≤ 0.40 s | 0.35 s; 0.40 s |
+| The knock clears a second arc from this far round him | ≥ 90° | 102° |
+| Dash spam invulnerable | 20–50% of the time | 39% |
+| Dash: press window; distance against the longest way out | ≥ 0.2 s; ≥ | 0.30 s; 20 ≥ 11.7 |
+| `getUpIframes` against walking out of the biggest pack | ≥ | 1.5 ≥ 0.69 s |
+| `spawnClear` between the longest reach and the pad's distance to a slot | yes | 6 < 12 < 24 |
+| `spawnGrace` at least a step + the reaction | ≥ 0.32 s | 1.0 s |
+| Walks away: damage; nearest enemy | 0; beyond the longest reach | 0; 13 studs |
+| Caught at half health, then walks: more hits; downs; full again | ≤ the cap; 0; yes | 0; 0; yes |
+| Telegraphed hits on any player who acts | 0 | 0 |
+
+Each band was proved by changing a value until it failed. With the lead's first values (cap 4,
+launch 6, windup 0.5) five fail: the fence, the flight, the time down (5.2 s), its floor (4.9 s)
+and the rhythm (5.3 hits/s).
+
+## What scales with weapon tier
+
+In the range nothing does: weapon numbers are tier-1 values and ruling 17 pins health at 130.
+P5 returns to the profile's own health, and there enemy damage, regen and `heavyHit` are still
+flat (ruling 20). This is what the same enemies would do to each tier's bar:
+
+| Gear | Health | Arc | Still in `fodderRush`: down at | Still in `elites`: down at | Empty bar full in |
+|---|---|---|---|---|---|
+| starter | 100 | 30% | 7.1 s | 9.8 s | 14 s |
+| tier 1 | 130 | 23% | 8.7 s | 11.9 s | 17 s |
+| tier 2 | 155 | 19% | 9.6 s | 12.9 s | 20 s |
+| tier 3 | 180 | 17% | 11.1 s | 12.9 s | 22 s |
+| tier 4 | 230 | 13% | 13.6 s | 15.7 s | 27 s |
+| tier 6 | 380 | 8% | 21 s | 25 s | 42 s |
+| tier 12 | 2 250 | 1% | 116 s | 103 s | 229 s |
+
+The `fodderRush` band would hold from starter gear to tier 3 and nowhere above, and on starter
+gear the arc is over 25%. For P5:
+- **Enemy damage needs a scale per mission**, close to health's: ×1.8 at tier 4, ×3.9 at tier 7,
+  ×9.6 at tier 10, ×17 at tier 12. Weapon damage grows ×267 over the same ladder, so enemy HP and
+  enemy damage need two different scales.
+- **Regen should be a share of the bar.** A flat 10/s is 7.7% a second at tier 1 and 0.4% at
+  tier 12.
+- **`heavyHit` must follow enemy HP.** At ×2.2 (tier 3) every Broadsword swing is over 40, and
+  the plate would stop nothing.
+
+## Where the server or the client can move these numbers
+
+The simulator's reading comes first in each line.
+
+- **Hits decided together.** Ruling 18, as written above. The server is being changed to match;
+  until it does, elites that wind up in the same step land every arc (see the first flag).
+- **When a lunge place frees.** At the end of `attack`, as ruling 8 says and `CrowdBrain` does. If
+  a lunger held its place through `recover`, a still player would last about 20 s and the band
+  would fail.
+- **What the cap counts.** Lunges only, as `CrowdBrain.admit` does. If arcs counted, only two of
+  three elites would swing.
+- **Where a rusher stops.** At `reach`, measured in space from the body centre to the root. Any
+  rule that leaves 6 or more fodder in reach keeps both places busy and changes nothing.
+- **The shapes.** The lunge is a capsule whose tip is `range` from the body centre, and the player
+  is a point, as `VitalsService.inPlan` has it. If the player gets a body radius, every way out
+  grows by it: 1 stud takes 0.05 s off each tell's margin.
+- **Who takes a free place.** The lowest id waiting in reach. Any other order lands the same
+  number of lunges from other sides.
+- **Lag.** The sim's player has no ping. Real ping only widens the dash's press window.
+
+## Flags for the owner
+
+- **Ruled (18): hits decided together do not stack through a knock.** When a hit that knocks
+  back lands, every other hit on that player still waiting for its decision at that moment, or
+  falling inside the `player.knockIframes` it opens, is voided and sent as `dodged`. The
+  simulator does exactly this, and its "worst burst" band (23%) depends on it. What I found in
+  `VitalsService.settle` before the ruling: the knock i-frames a first arc grants start at
+  `os.clock()` in that pass, later than the `decideAt` of the entries still to be judged in it,
+  so they were not covered. Enemies that wind up in one crowd step share one impact time, so two
+  or three elites dealt 60 or 90 at once (46% or 69% of the bar), most of all after a get-up.
+- **Ruled (16): the cap is 2, not the 4 the owner was first told.** The reason is in "Why the cap
+  is 2" above.
+- **Ruled (17): the bar in the range is pinned at 130.** It used to be the profile's: 100 on a
+  fresh Studio profile, where the arc is 30%, and 2 250 at tier 12, where nothing here is felt.
+  The tier table above is now P5's problem (ruling 20).
+- **Ruled (19): the lunge's windup is 0.6 s.** It was my phone flag. A 0.35 s thumb now has
+  0.11 s to step out, and every band holds (down at 8.7 s, 2.5 hits/s).
+- **Nothing in wave 1 hurts a player who keeps swinging.** All five melee families take no hit
+  in 60 s in either set, even when they start surrounded at half health.
+  - Fodder: the sword reaches 12.8 studs and the lunge starts at 4.5. A swing hits the 10 nearest,
+    throws each about 8 studs and staggers it. Swings come every 0.4 s and the tell lasts 0.6 s,
+    so any lunge that starts is cancelled (ruling 9).
+  - Elite: the Broadsword's finisher (43.2) is a heavy hit and cancels the arc. Its shove also
+    carries the elite out of its own range, because only 1.5 studs separate `reach` and `range`.
+  - So in the wave 1 playtest the bar moves only while Ben is not attacking. To see the lunge,
+    "dodged" and the down, he has to stand in the rush with his hands off.
+  - The levers that would change it are rulings, not values: the fodder's `interrupt`, or a longer
+    reach. Wave 2's shooters, lobber and brute are the roles that reach a player who is busy.
+  - The sim's fighter turns to the nearest enemy at once. A real player, and a phone's
+    auto-swing, will take some hits from behind.
+- **The pad is 20 studs from the back fence.** Elites come up the lane and knock a still player
+  toward it. After three knocks the fence stops the slide, and arcs then land as close as 0.6 s
+  apart. With the lead's launch of 6 a knock near the fence could have carried him over it.
+- **The elite is soft until it has a plate.** It never hits a walker, and a still player loses
+  less to three elites than to the fodder.
+- **Two lungers at a time may look thin** with 12 fodder standing round the player. The numbers
+  leave little room: cap 3 goes down at 6.4 s and lands 3.8 hits a second, and cap 3 with damage
+  6 holds the time (7.9 s) but lands 3.7 hits a second of 5% each.
+- **Kiting heals.** Fodder cannot stop a walker from regenerating a full bar in 17 s. Wave 2's
+  shooters are what interrupts that.
+- **The stairs are safe ground.** A player on the 8-stud step is above both shapes (heights 5 and
+  6), and the crowd stays on the floor (known limit 15). Wave 2's shooters and lobber reach it.

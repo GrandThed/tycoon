@@ -75,6 +75,11 @@
 --    one step picks the swing pose and the effect's arc. The strike that answers a swing
 --    carries the step the server used, which replaces the prediction (ConfirmSwing); a
 --    refusal takes back the swing it names, and nothing when it names a shot (RefuseSwing).
+--
+-- P4 (docs/INTERFACES.md "P4 contracts", ruling 4), range path only: while the player is
+-- knocked down (MovementController.IsDown) nothing is sent: no attack, no draw, no cast, no
+-- slot switch, and Mag Dump's own shots stop. The server refuses them all anyway. Held
+-- inputs are kept, so a held trigger and touch auto-fire pick up on the get-up by themselves.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -1735,7 +1740,7 @@ end
 local function castAbility(slot: Stance): ()
 	local remote = castState.requestRangeAbility
 	local rig = localRig()
-	if not rangeMode or remote == nil or rig == nil then
+	if not rangeMode or remote == nil or rig == nil or MovementController.IsDown() then
 		return
 	end
 	local cfg = Tuning.Get()
@@ -1777,9 +1782,9 @@ local function castAbility(slot: Stance): ()
 end
 
 -- A player's slot change (1 / 2, gamepad Y, the touch slot button): refused while busy (P3
--- ruling 3). A cast switches through setActiveSlot directly.
+-- ruling 3) and while knocked down (P4). A cast switches through setActiveSlot directly.
 local function requestSlot(slot: Stance): ()
-	if isBusy() then
+	if isBusy() or MovementController.IsDown() then
 		return
 	end
 	setActiveSlot(slot)
@@ -1855,8 +1860,9 @@ local function rangeStep(deltaTime: number): ()
 		dump = nil
 	end
 	local busy = isBusy()
-	-- A draw never survives its weapon: a slot switch, a loadout change, death or a busy
-	-- ability drops it.
+	local down = MovementController.IsDown()
+	-- A draw never survives its weapon: a slot switch, a loadout change, death, a busy
+	-- ability or being knocked down drops it.
 	if
 		rangeState.drawStartedAt ~= nil
 		and (
@@ -1865,12 +1871,14 @@ local function rangeStep(deltaTime: number): ()
 			or family ~= rangeState.drawFamily
 			or not isCharge(variant)
 			or busy
+			or down
 		)
 	then
 		cancelDraw()
 	end
 	local wantAds = rig ~= nil
 		and variant ~= nil
+		and not down
 		and isRanged(variant)
 		and (rangeState.adsHeld or rangeState.adsToggled)
 	if wantAds ~= rangeState.adsActive then
@@ -1878,12 +1886,21 @@ local function rangeStep(deltaTime: number): ()
 		CameraController.SetAds(wantAds)
 	end
 	MovementController.SetSpeedMult(if rangeState.adsActive then cfg.shooting.adsSpeedMult else 1)
-	refreshTouch(cfg, variant, busy)
+	-- The ability and slot buttons dim while down as they do while busy: neither would act.
+	refreshTouch(cfg, variant, busy or down)
 	if rig == nil or variant == nil then
 		rangeState.firingStream = false
 		return
 	end
 	updateBloom(cfg, rig, deltaTime)
+	if down then
+		-- P4: nothing is sent while knocked down, Mag Dump's own shots included. Only what
+		-- was queued is dropped; a held trigger stays held and touch auto-fire is asked again
+		-- every frame, so both attack again on the get-up without another press.
+		rangeState.firingStream = false
+		rangeState.tapQueuedAt = nil
+		return
+	end
 	if dump ~= nil then
 		-- Mag Dump's shots are the ability (ruling 3): they run through the busy lock.
 		if isRanged(variant) then

@@ -4085,6 +4085,74 @@ Setup: `docs/MANUAL_STEPS.md` "P3.1". Keys: **1** melee, **2** ranged, **Space**
 - Phone (step 8): swings that start too early and miss the nearest dummy?
 - Anything wrong: step numbers, PC or phone.
 
+## P4 wave 1 — They hurt you (quick look)
+
+**Goal:** a first look at enemies that hit back: your health bar, getting hit, dodging, going
+down. **Optional, about five minutes. Wave 2 (the shooters, the brute, the elite's plate) is
+built whatever you say.** Silent, placeholder bodies. Judge feel.
+
+<!-- FILE TO OPEN: start. Lead: if wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. The lead merges this wave to
+  `main` before asking for the look, so "Build all" builds it.
+- Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
+  that was open in Studio before "Build all" is the old one**: no health bar, no enemies that
+  fight.
+<!-- FILE TO OPEN: end -->
+
+Setup: `docs/MANUAL_STEPS.md` "P4 wave 1". Keys: **1** melee, **2** ranged, **Space** jump,
+**Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
+You start with Broadsword + Longbow.
+
+**Expected today, not bugs:**
+- **You only lose health while you are not attacking.** The sword outreaches a lunge and any
+  hit cancels it. To see the lunge, "DODGED" and the knock-down, stand in the rush with your
+  hands off the mouse. Wave 2's shooters and brute are what reach a busy player.
+- **Jumping again and again avoids most fodder hits.** The shooters are the answer (wave 2).
+- Enemies walk through cover (since P1).
+- Bodies are placeholders.
+- No sound.
+
+### Melee first (the open P3.1 check)
+
+- [ ] 1. **Play** → 30 red dummies, and a green health bar reading **130 / 130** above the two ability tiles. **1**, run straight at the crowd and **click while still running** → the arc appears on the click, in front of you, and stays in front while you keep running; the dummies inside it are the ones hit. Bug: the arc appears behind you, or is left behind. No health bar: you opened an old file (see the block above).
+
+### Getting hit
+
+- [ ] 2. **P** → **Dummies & commands** → **fodderRush** (a set button under **God mode**) → **P** to close. Stand still, hands off the mouse → 30 fodder walk up. The ones about to hit rear back and turn red (about half a second), jab forward, then slump, dull, for about 1.5 s. Never more than 2 lunge at once. Each hit: the bar drops, the screen edges flash red, a red pointer on a ring round the crosshair shows where it came from (straight down = behind you), and a red **−8** pops over your character (**−16** when two land together). Within about 10 s the bar is empty → you fall and a banner reads **DOWN · up in …**, counting down from 2 s. Then you stand up where you lay with a full bar and shimmer green for about 1.5 s; lunges in that time pop a green **DODGED** instead of a number. Bug: no **fodderRush** button (old file); you respawn at the start; the bar stays empty after the get-up; a hit with no flash or no pointer.
+- [ ] 3. Still in the rush. **Space** as a fodder rears back → its thrust passes under you: no hit (a hit as you land is fair). **Left Shift** as one rears back at you → the dash carries you about 20 studs clear, a green **DODGED** pops over your character and the bar does not move. Walking out of a lunge's way shows nothing: only a dash, or the shimmer after a get-up, counts as a dodge. Bug: a dash away with no **DODGED**; red numbers well into a dash; a hit while you are high in a jump.
+
+### Fighting back
+
+- [ ] 4. **1**, hold **left mouse** in the rush → the fodder you hit drop out of their wind-up and are thrown back; almost nothing lands on you while you keep swinging. That is the first "expected" line above. Bug: fodder you hit keep rearing back and thrust as if untouched, every time.
+
+### Elites
+
+- [ ] 5. **P** → **elites** → **P**. Stand still → 3 blue armoured elites walk up slowly. In reach, one turns red and a red wedge appears on the floor in front of it; the wedge fills for just under a second, then the elite swings: **−30**, and you are thrown back about 6 studs with a small hop. Step out of the wedge, or jump, before it is full → no hit. When two swing together, one lands and the other shows **DODGED** (expected). Now fight, holding **left mouse**: the Broadsword's first two swings of a combo do not stop a filling wedge, the **third** does. **P** → **Weapons** → **Melee** → **Warhammer** → every hit stops it. Bug: a wedge left on the floor after the swing; a light hit stops the swing; you are thrown over the fence.
+
+### God mode and the panel
+
+- [ ] 6. **P** → top of **Dummies & commands**: **God mode: off · click for on** → click → it reads **God mode: ...** for a moment, then gold **God mode: ON · click for off**. **P**, stand in the elites → every hit pops **DODGED**; the bar does not move and you are not thrown. Turn it off the same way. Bug: the bar drops with God mode ON, or the button stays on **...**.
+- [ ] 7. Readout lines under the **⚙ Range** tab (always on screen, panel open or shut). Fifth line, **Taken N · Downs N** → both go up as you are hit and knocked down; picking a set or **Reset** puts them back to 0. Then pick **fodderRush**, stand in it about 20 s and read the third line, **Server N ms · FPS N** → **write the Server number down** (it should stay under 2). Bug: Taken or Downs do not move.
+- [ ] 8. **P** → **crowd30** → walk into the dummies and stand there about 10 s → they never attack and the bar stays full, as in P3. Bug: a dummy of an old set rears back or lunges.
+
+### Phone (Test (Prueba) → Device (Dispositivo) → 375×667)
+
+- [ ] 9. Play → tap **⚙ Range** → **fodderRush** → tap **⚙ Range** again → stand still. The health bar sits just above the thumb buttons; the red lean, the pointer and the numbers are readable; going down shows the **DOWN** banner just above the bar. Tap **⚙ Range** → **elites** → the red wedge is readable on the floor. Still no attack button, and nothing overlaps **Dash**, **Jump**, the two ability buttons or the slot button. Question: does the pointer ring run across the combo counters? Bug: the bar or the banner covers a thumb button; an attack button.
+
+### Two players (optional)
+
+- [ ] 10. Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). Player 1 picks **elites**; both stand in reach → the same wedge fills at the same moment on both screens; when player 1 is hit, player 1's character flashes on player 2's screen. Bug: a tell on one screen only, or clearly later on one.
+
+### What to tell Claude
+
+- Does melee feel instant now (step 1)? That closes P3.1.
+- Does getting hit read clearly: the flash, the pointer, the number? Anything to turn up or down?
+- Fodder pressure (2 attack you at once): too soft, too hard, or right?
+- The elite's knockback: how does it feel? Too far, too short?
+- The **Server … ms** number from step 7.
+- Anything wrong: step numbers, PC or phone.
+
 ## M12 — Village growing city
 
 **Goal:** Village grows as one town around your landmarks: woods first, then building sites, then

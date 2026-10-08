@@ -13,6 +13,12 @@
 -- hook API at the bottom (Strike, FireProjectile, buffs, locks, i-frames); this file never
 -- requires it, so the dependency runs one way only.
 --
+-- P4 (INTERFACES "P4 contracts"): groups whose behaviour is `fight` attack. The player's body
+-- (health, regen, going down, `god`, the commit rule) is VitalsService, which this file drives
+-- and hands its i-frame clock to; the enemies' side is CrowdBrain, inside the crowd step. Here:
+-- the i-frame window's start, no attack, dash or slam while down, a fight slot's respawn held
+-- while a player stands on it, and the readout's damage taken and downs.
+--
 -- Studio only and opt-in: Main calls Configure(true) when the DebugProving attribute is set at
 -- boot. Otherwise every entry point here returns at once, so missions never touch this file.
 --
@@ -36,6 +42,7 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
+local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 
 type SlotName = "melee" | "ranged"
 type Variant = Types.RangeWeaponVariant
@@ -64,8 +71,9 @@ local ABILITY_SEED_BIT = 0x40000000
 local MAX_PROJECTILES = 256
 -- Height above standing height before a character counts as airborne (steps and slopes).
 local AIRBORNE_MARGIN_STUDS = 0.75
--- Server-set character attribute while dash i-frames are open, so the flag is visible in
--- Studio's Properties panel and to the client.
+-- Server-set character attribute while an i-frame window is open (a dash, an ability's leap,
+-- P4: after a knockback and on getting up), so the flag is visible in Studio's Properties panel
+-- and to the client.
 local IFRAMES_ATTRIBUTE = "RangeIframes"
 local DOWN = Vector3.new(0, -1, 0)
 
@@ -142,7 +150,16 @@ type Shooter = {
 	drawStartedAt: number,
 	drawWeapon: string,
 	lastDashAt: number,
+	-- The latest i-frame window, [iframesFrom, iframesUntil) on os.clock(). Kept after it
+	-- lapses: an enemy's hit is judged a moment after its impact (VitalsService), and the dash
+	-- that covered the impact may be over by then. The window before it is kept too
+	-- (iframesWas*): a new one may have opened by the time the impact is noticed.
+	-- iframesShown = the character attribute is set.
+	iframesFrom: number,
 	iframesUntil: number,
+	iframesWasFrom: number,
+	iframesWasUntil: number,
+	iframesShown: boolean,
 	lastSlamAt: number,
 	airborne: boolean,
 	peakY: number,
@@ -499,6 +516,7 @@ local function statsFor(shooter: Shooter, now: number, refusedSeq: number?): Typ
 		total += entry.amount
 	end
 	local hasAbility = shooter.abilityId ~= nil
+	local damageTaken, downs, god = VitalsService.Readout(shooter.player)
 	return {
 		lastHits = shooter.lastHits,
 		lastKills = shooter.lastKills,
@@ -511,6 +529,9 @@ local function statsFor(shooter: Shooter, now: number, refusedSeq: number?): Typ
 		ability = shooter.abilityId,
 		abilityHits = if hasAbility then shooter.abilityHits else nil,
 		abilityKills = if hasAbility then shooter.abilityKills else nil,
+		damageTaken = damageTaken,
+		downs = downs,
+		god = god,
 	}
 end
 
@@ -814,6 +835,7 @@ local function loadSet(name: string, countOverride: number?): ()
 	setSlots = {}
 	respawns = {}
 	abandonProjectiles()
+	VitalsService.OnSetLoaded()
 	currentSet = name
 	clearStartedAt = 0
 	clearSeconds = nil
@@ -1810,10 +1832,27 @@ local function trackAir(now: number, deltaTime: number): ()
 	end
 end
 
+-- Opens an i-frame window of `seconds` from `now`, or lengthens the one still open: it never
+-- shortens a longer window (a dash inside an ability's leap).
+local function openIframes(shooter: Shooter, now: number, seconds: number): ()
+	if now >= shooter.iframesUntil then
+		-- The last window had lapsed: it steps back and this one starts now.
+		shooter.iframesWasFrom = shooter.iframesFrom
+		shooter.iframesWasUntil = shooter.iframesUntil
+		shooter.iframesFrom = now
+	end
+	shooter.iframesUntil = math.max(shooter.iframesUntil, now + math.max(seconds, 0))
+	shooter.iframesShown = true
+	local character = shooter.player.Character
+	if character ~= nil then
+		character:SetAttribute(IFRAMES_ATTRIBUTE, true)
+	end
+end
+
 local function tickIframes(now: number): ()
 	for player, shooter in shooters do
-		if shooter.iframesUntil > 0 and now >= shooter.iframesUntil then
-			shooter.iframesUntil = 0
+		if shooter.iframesShown and now >= shooter.iframesUntil then
+			shooter.iframesShown = false
 			local character = player.Character
 			if character ~= nil then
 				character:SetAttribute(IFRAMES_ATTRIBUTE, nil)
@@ -1831,15 +1870,34 @@ local function sweepSlots(): ()
 	end
 end
 
-local function tickRespawns(now: number): ()
+-- P4: a fight slot does not respawn while a player stands within crowd.threat.spawnClear of
+-- its home (on the flat), so an enemy never appears on top of someone.
+local function playerNear(home: Vector3, clear: number): boolean
+	for player in shooters do
+		local _character, root = rootOf(player)
+		if root ~= nil then
+			local offset = root.Position - home
+			if offset.X * offset.X + offset.Z * offset.Z <= clear * clear then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function tickRespawns(config: Types.ProvingGroundsConfig, now: number): ()
 	if #respawns == 0 then
 		return
 	end
 	local due: { Slot } = {}
 	local waiting: { Respawn } = {}
+	local clear = math.max(config.crowd.threat.spawnClear, 0)
 	for _, entry in respawns do
-		if now >= entry.at then
-			table.insert(due, entry.slot)
+		local slot = entry.slot
+		if
+			now >= entry.at and not (slot.behaviour == "fight" and playerNear(slot.position, clear))
+		then
+			table.insert(due, slot)
 		else
 			table.insert(waiting, entry)
 		end
@@ -1856,7 +1914,7 @@ local function step(deltaTime: number): ()
 	trackAir(now, deltaTime)
 	tickIframes(now)
 	stepProjectiles(config, deltaTime)
-	tickRespawns(now)
+	tickRespawns(config, now)
 	statsAccumulator += deltaTime
 	if statsAccumulator >= STATS_INTERVAL_SECONDS then
 		statsAccumulator = 0
@@ -1869,26 +1927,15 @@ end
 
 -- Players ------------------------------------------------------------------------------------
 
--- Full HP from the profile and an invisible ForceField: nothing in P1 may hurt a player.
+-- Placed at a spawn. P4: no ForceField any more, and the body (its health included) is
+-- VitalsService's from here.
 local function prepareCharacter(player: Player, character: Model): ()
 	local spawnLocation, spawnCFrame = ArenaService.ProvingSpawn()
 	if spawnLocation ~= nil then
 		player.RespawnLocation = spawnLocation
 	end
 	character:PivotTo(spawnCFrame)
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid ~= nil then
-		local maxHp = ArenaService.ProfileMaxHp(player)
-		if maxHp ~= nil then
-			humanoid.MaxHealth = maxHp
-		end
-		humanoid.Health = humanoid.MaxHealth
-	end
-	if character:FindFirstChildOfClass("ForceField") == nil then
-		local shield = Instance.new("ForceField")
-		shield.Visible = false
-		shield.Parent = character
-	end
+	VitalsService.PrepareCharacter(player, character)
 end
 
 -- Must be called before Init. `proving` is Main's boot decision; the range also needs Studio and
@@ -1936,7 +1983,11 @@ function RangeService.AddPlayer(player: Player): ()
 		drawStartedAt = 0,
 		drawWeapon = "",
 		lastDashAt = 0,
+		iframesFrom = 0,
 		iframesUntil = 0,
+		iframesWasFrom = 0,
+		iframesWasUntil = 0,
+		iframesShown = false,
 		lastSlamAt = 0,
 		airborne = false,
 		peakY = 0,
@@ -1959,6 +2010,7 @@ function RangeService.AddPlayer(player: Player): ()
 		connections = {},
 	}
 	shooters[player] = shooter
+	VitalsService.AddPlayer(player)
 	table.insert(
 		shooter.connections,
 		player.CharacterAdded:Connect(function(character: Model)
@@ -1982,6 +2034,7 @@ function RangeService.RemovePlayer(player: Player): ()
 		connection:Disconnect()
 	end
 	shooters[player] = nil
+	VitalsService.RemovePlayer(player)
 	local survivors: { Projectile } = {}
 	for _, projectile in projectiles do
 		if projectile.player ~= player then
@@ -1991,10 +2044,24 @@ function RangeService.RemovePlayer(player: Player): ()
 	projectiles = survivors
 end
 
--- Studio flag for other systems (none in P1 hurt a player; the attribute shows it in Studio).
+-- True while an i-frame window is open (the character attribute shows the same in Studio).
 function RangeService.IsInvulnerable(player: Player): boolean
 	local shooter = shooters[player]
 	return shooter ~= nil and os.clock() < shooter.iframesUntil
+end
+
+-- The player's latest i-frame window on os.clock() and the one before it: (from, until,
+-- previous from, previous until), still answered after they have lapsed; 0, 0 = never had
+-- one. VitalsService voids an enemy hit whose judging span either of them met.
+function RangeService.IframeWindow(player: Player): (number, number, number, number)
+	local shooter = shooters[player]
+	if shooter == nil then
+		return 0, 0, 0, 0
+	end
+	return shooter.iframesFrom,
+		shooter.iframesUntil,
+		shooter.iframesWasFrom,
+		shooter.iframesWasUntil
 end
 
 -- Intents (payload shapes already checked by CombatRemotes) -----------------------------------
@@ -2029,8 +2096,9 @@ function RangeService.OnAttack(
 		return
 	end
 	local now = os.clock()
-	if slotLocked(shooter, slot, now) then
-		-- A busy ability owns the caster (ruling 3): the client's early effects are taken back.
+	if slotLocked(shooter, slot, now) or VitalsService.IsDown(player) then
+		-- A busy ability owns the caster (ruling 3), and a downed player attacks nothing (P4):
+		-- the client's early effects are taken back.
 		sendRefused(shooter, seq)
 		return
 	end
@@ -2112,7 +2180,8 @@ function RangeService.OnDraw(player: Player, weapon: string): ()
 		return
 	end
 	local slot: SlotName = if def.slot == "melee" then "melee" else "ranged"
-	if slotFamily(shooter, slot) ~= weapon then
+	-- A downed player starts no draw (P4 ruling 24c), like their other intents.
+	if slotFamily(shooter, slot) ~= weapon or VitalsService.IsDown(player) then
 		return
 	end
 	local now = os.clock()
@@ -2127,7 +2196,7 @@ function RangeService.OnDash(player: Player, _direction: Vector3): ()
 		return
 	end
 	local character, root = rootOf(player)
-	if character == nil or root == nil then
+	if character == nil or root == nil or VitalsService.IsDown(player) then
 		return
 	end
 	local movement = Tuning.Get().movement
@@ -2136,9 +2205,7 @@ function RangeService.OnDash(player: Player, _direction: Vector3): ()
 		return
 	end
 	shooter.lastDashAt = now
-	-- Never shortens a longer window an ability granted (GrantIframes).
-	shooter.iframesUntil = math.max(shooter.iframesUntil, now + movement.dashIframes)
-	character:SetAttribute(IFRAMES_ATTRIBUTE, true)
+	openIframes(shooter, now, movement.dashIframes)
 end
 
 -- The slam lands where the SERVER sees the character come down, and only after a fall of at
@@ -2151,7 +2218,7 @@ function RangeService.OnSlam(player: Player): ()
 		return
 	end
 	local _character, root, humanoid = rootOf(player)
-	if root == nil or humanoid == nil then
+	if root == nil or humanoid == nil or VitalsService.IsDown(player) then
 		return
 	end
 	local config = Tuning.Get()
@@ -2298,6 +2365,9 @@ function RangeService.OnCommand(player: Player, command: string, argument: strin
 		print(`[RangeService] ProvingGrounds.json with the current tuning:\n{Tuning.Export()}`)
 	elseif command == "clearTune" then
 		Tuning.SetOverrides({})
+	elseif command == "god" then
+		-- P4 ruling 14: a toggle; the readout below carries the new setting.
+		VitalsService.ToggleGod(player)
 	else
 		warn(`[RangeService] unknown or incomplete range command "{command}"`)
 		return
@@ -2317,9 +2387,10 @@ function RangeService.LoadoutOf(player: Player): Types.RangeLoadout?
 	return loadoutPayload(Tuning.Get(), shooter)
 end
 
--- The live root of a range player's living character.
+-- The live root of a range player's living character; nil while they are down (P4), so a
+-- cast is refused and a channel that follows its caster skips its ticks until they are up.
 function RangeService.RootOf(player: Player): BasePart?
-	if not active or shooters[player] == nil then
+	if not active or shooters[player] == nil or VitalsService.IsDown(player) then
 		return nil
 	end
 	local _character, root = rootOf(player)
@@ -2592,11 +2663,7 @@ function RangeService.GrantIframes(player: Player, seconds: number): ()
 	if not active or shooter == nil or not (seconds > 0 and seconds < math.huge) then
 		return
 	end
-	shooter.iframesUntil = math.max(shooter.iframesUntil, os.clock() + seconds)
-	local character = player.Character
-	if character ~= nil then
-		character:SetAttribute(IFRAMES_ATTRIBUTE, true)
-	end
+	openIframes(shooter, os.clock(), seconds)
 end
 
 -- Fires (on its own thread) when the `weapon` range command puts a different family in a slot.
@@ -2622,6 +2689,10 @@ function RangeService.Start(): ()
 		slotGone(id)
 	end)
 	Tuning.Changed:Connect(onTuningChanged)
+	VitalsService.Start({
+		iframeWindow = RangeService.IframeWindow,
+		grantIframes = RangeService.GrantIframes,
+	})
 	RunService.Heartbeat:Connect(step)
 	loadSet(config.defaultSet)
 	print("[RangeService] Proving Grounds ready")

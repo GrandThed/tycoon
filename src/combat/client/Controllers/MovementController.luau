@@ -26,9 +26,16 @@
 -- and the stock jump is disabled on the Humanoid. Whirlwind only scales the walk (Channel).
 -- A respawn or death drops every one of them.
 --
--- Movers are one LinearVelocity on the RootAttachment at a time (dash, slam, hang, leap or
--- lunge); a new one replaces the old, and a character respawn simply drops it with the old
--- rig. Movement is gameplay, so reduce motion (every touch device) never shortens or skips it.
+-- Movers are one LinearVelocity on the RootAttachment at a time (dash, slam, hang, leap,
+-- lunge or knock); a new one replaces the old, and a character respawn simply drops it with
+-- the old rig. Movement is gameplay, so reduce motion (every touch device) never shortens or
+-- skips it.
+--
+-- P4 (docs/INTERFACES.md "P4 contracts", rulings 4 and 6): enemies hit back, and the victim's
+-- own client moves its character. ApplyKnock carries it off with a hit that knocks back or
+-- launches; SetDown lays it on the floor until the server's get-up time. VitalsController
+-- decides when (it hears the server's `hurt` effects); the rules of who moves the character
+-- stay here: a committed move beats a knock, and being down beats everything.
 --
 -- The touch cluster (jump, dash, aim, two abilities, slot) is laid out here in one place
 -- (ClusterRect) so the six buttons can never be placed against each other by two owners.
@@ -76,6 +83,11 @@ local MOTION_LAND_SPEED_MAX = 60
 local LUNGE_PROBE_RADIUS = 1
 local LEAP_FOV_KICK_DEGREES = 8
 local LUNGE_FOV_KICK_DEGREES = 4
+-- P4 knocked down: the constraint that lays the body flat, how firmly it turns it (the
+-- AlignOrientation scale, 0-200), and how far under a lying root the floor is looked for.
+local DOWN_ALIGN_NAME = "RangeDown"
+local DOWN_RESPONSIVENESS = 60
+local DOWN_FLOOR_PROBE = 12
 
 -- Touch buttons, mirrored off Roblox's own jump button (PlayerModule TouchJump rule, the
 -- same Theme constants CombatHud uses), so they scale exactly as the stock button does.
@@ -129,6 +141,14 @@ local slamStartedAt = 0
 local mover: LinearVelocity? = nil
 local moverToken = 0
 local motion: Motion? = nil
+-- os.clock() until which the last dash's mover runs: a dash in progress is a committed move.
+local dashUntil = 0
+-- P4. knock = the horizontal speed a hit gave the character that has not bled off yet (zero =
+-- none); knockToken = the moverToken of its mover, so any move that takes the mover ends it.
+local knock = Vector3.zero
+local knockToken = 0
+local knockedDown = false
+local downAlign: AlignOrientation? = nil
 
 local screenGui: ScreenGui? = nil
 local dashButton: TextButton? = nil
@@ -337,6 +357,7 @@ local function canSlam(rig: Rig): boolean
 	local cfg = Tuning.Get().movement
 	return isAirborne(rig)
 		and not slamming
+		and not knockedDown
 		and motion == nil
 		and os.clock() >= slamReadyAt
 		and heightAboveGround(rig) >= cfg.slamMinHeight
@@ -364,8 +385,9 @@ end
 
 local function dashOrSlam(): ()
 	local rig = localRig()
-	-- A leap or lunge owns the character's motion (P3 ruling 3).
-	if rig == nil or slamming or motion ~= nil then
+	-- A leap or lunge owns the character's motion (P3 ruling 3); a downed body has no moves
+	-- (P4: the server refuses the dash too, so none is sent).
+	if rig == nil or slamming or motion ~= nil or knockedDown then
 		return
 	end
 	if canSlam(rig) then
@@ -382,6 +404,7 @@ local function dashOrSlam(): ()
 	local direction = if flat.Magnitude > MOVE_INPUT_MIN then flat.Unit else flatLook()
 	local seconds = math.max(cfg.dashSeconds, 1 / 60)
 	dashReadyAt = now + cfg.dashCooldown
+	dashUntil = now + seconds
 	-- In the air the dash holds altitude (a readable burst); on the ground only the plane is
 	-- driven so steps and slopes still work.
 	setMover(rig, direction * (cfg.dashDistance / seconds), not isAirborne(rig), seconds)
@@ -408,6 +431,7 @@ local function onJumpRequest(): ()
 		or not fresh
 		or airJumpUsed
 		or slamming
+		or knockedDown
 		or motion ~= nil
 		or not isAirborne(rig)
 	then
@@ -438,7 +462,7 @@ local function refreshDashButton(rig: Rig?): ()
 	if slamming or (rig ~= nil and canSlam(rig)) then
 		label = "Slam"
 		color = COLOR_SLAM
-	elseif motion ~= nil or os.clock() < dashReadyAt then
+	elseif knockedDown or motion ~= nil or os.clock() < dashReadyAt then
 		color = COLOR_COOLING
 	end
 	-- Polled every frame, so only a change touches the instance.
@@ -457,9 +481,83 @@ local function resetAbilityState(): ()
 	channelMult = 1
 end
 
-local function step(): ()
+-- P4 knock and down ------------------------------------------------------------------------
+
+-- Bleeds the knock off at player.knockFriction, in the air as on the ground, so
+-- knockback / knockFriction is how long a hit carries the player. A dash, slam, leap, lunge
+-- or hang that took the mover since has already ended it.
+local function stepKnock(rig: Rig?, deltaTime: number): ()
+	if knock == Vector3.zero then
+		return
+	end
+	local constraint = mover
+	if rig == nil or constraint == nil or knockToken ~= moverToken then
+		knock = Vector3.zero
+		return
+	end
+	local speed = knock.Magnitude
+	local friction = math.max(Tuning.Get().player.knockFriction, 0)
+	-- No friction would be a slide that never ends: the knock stops instead.
+	local slowed = if friction > 0 then speed - friction * deltaTime else 0
+	if slowed <= 0 then
+		knock = Vector3.zero
+		clearMover()
+		return
+	end
+	knock *= slowed / speed
+	constraint.PlaneVelocity = Vector2.new(knock.X, knock.Z)
+end
+
+-- Lays the body on its back with its head toward `away` (the way the blow was travelling).
+-- PlatformStand stops the Humanoid balancing and CameraController turning the root; the align
+-- does the rest, so the pose is the same every time instead of wherever physics drops it.
+local function layDown(rig: Rig, away: Vector3?): ()
+	local flat = if away ~= nil then Vector3.new(away.X, 0, away.Z) else Vector3.zero
+	local back = if flat.Magnitude > MOVE_INPUT_MIN then flat.Unit else -flatLook()
+	local align = Instance.new("AlignOrientation")
+	align.Name = DOWN_ALIGN_NAME
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = rig.attachment
+	-- Facing the blow, then tipped a quarter turn about its own right axis: face up, head
+	-- along `back`.
+	align.CFrame = CFrame.lookAt(Vector3.zero, -back) * CFrame.Angles(math.pi / 2, 0, 0)
+	align.MaxTorque = MOVER_MAX_FORCE
+	align.Responsiveness = DOWN_RESPONSIVENESS
+	align.Parent = rig.root
+	downAlign = align
+	rig.humanoid.PlatformStand = true
+end
+
+-- Stands the body up where it lies: upright over the floor under it, facing the camera's way,
+-- with nothing left of the fall. From this frame CameraController turns the root again.
+local function standUp(rig: Rig?): ()
+	local align = downAlign
+	downAlign = nil
+	if align ~= nil then
+		align:Destroy()
+	end
+	if rig == nil then
+		return
+	end
+	local root = rig.root
+	local position = root.Position
+	local floor =
+		Workspace:Raycast(position, Vector3.new(0, -DOWN_FLOOR_PROBE, 0), refreshGroundParams())
+	-- A lying root is lower than a standing one; left there, the legs would start in the floor.
+	local standing = if floor ~= nil
+		then Vector3.new(position.X, floor.Position.Y + standingOffset(rig), position.Z)
+		else position
+	rig.humanoid.PlatformStand = false
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	root.CFrame = CFrame.lookAt(standing, standing + flatLook())
+	rig.humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+end
+
+local function step(deltaTime: number): ()
 	local rig = localRig()
 	stepMotion(rig)
+	stepKnock(rig, deltaTime)
 	if rig == nil then
 		slamming = false
 		channelUntil = 0
@@ -474,6 +572,16 @@ local function step(): ()
 	end
 	wasAirborne = airborne
 	humanoid.UseJumpPower = false
+	if knockedDown then
+		-- No walk and no jump, and the pose is put back if anything stood the Humanoid up.
+		humanoid.WalkSpeed = 0
+		humanoid.JumpHeight = 0
+		if not humanoid.PlatformStand then
+			humanoid.PlatformStand = true
+		end
+		refreshDashButton(rig)
+		return
+	end
 	if not airborne then
 		airJumpUsed = false
 		humanoid.JumpHeight = cfg.jumpHeight
@@ -670,6 +778,11 @@ function MovementController.Start(): ()
 			slamming = false
 			airJumpUsed = false
 			wasAirborne = false
+			-- A new body stands, unshoved: the align went with the old rig.
+			dashUntil = 0
+			knock = Vector3.zero
+			knockedDown = false
+			downAlign = nil
 		end)
 	)
 	-- Above the stock bindings, so Left Shift dashes instead of toggling shift-lock.
@@ -699,10 +812,18 @@ function MovementController.SetSpeedMult(mult: number): ()
 end
 
 -- An airborne sword swing holds the character in place for `seconds` (the "air attack"
--- hang). A dash, slam, leap or lunge in progress wins: the hang never cancels a committed move.
+-- hang). A dash, slam, leap, lunge or knock in progress wins: the hang never cancels a
+-- committed move, and never holds a body a hit is carrying off.
 function MovementController.AirHang(seconds: number): ()
 	local rig = localRig()
-	if rig == nil or slamming or motion ~= nil or seconds <= 0 or not isAirborne(rig) then
+	if
+		rig == nil
+		or slamming
+		or knockedDown
+		or motion ~= nil
+		or seconds <= 0
+		or not isAirborne(rig)
+	then
 		return
 	end
 	if mover ~= nil then
@@ -716,7 +837,7 @@ end
 -- there is no character or no time to leap in.
 function MovementController.Leap(ground: Vector3, seconds: number, height: number): boolean
 	local rig = localRig()
-	if not started or rig == nil or seconds <= 0 then
+	if not started or rig == nil or knockedDown or seconds <= 0 then
 		return false
 	end
 	local from = rig.root.Position
@@ -745,7 +866,7 @@ end
 -- air it holds its altitude, as the air dash does.
 function MovementController.Lunge(direction: Vector3, distance: number, seconds: number): boolean
 	local rig = localRig()
-	if not started or rig == nil or seconds <= 0 then
+	if not started or rig == nil or knockedDown or seconds <= 0 then
 		return false
 	end
 	local flat = Vector3.new(direction.X, 0, direction.Z)
@@ -797,6 +918,90 @@ function MovementController.IsSlamming(): boolean
 	return slamming
 end
 
+-- P4 ruling 6: a hit that knocks back or launches moves its victim, on the victim's own
+-- client. `push` is a horizontal velocity change in studs/s (its Y is ignored) and `launch`
+-- an apex height in studs: the units CrowdService.Damage gives the same numbers on an enemy.
+-- The push is capped at crowd.knockMax and bleeds off at player.knockFriction (stepKnock).
+--
+-- Who wins: a committed move does. While a dash, a slam, a leap or a lunge runs, the knock is
+-- dropped whole (the hit still shows and still costs health); an air hang gives way to it. A
+-- knock drives X and Z only, so a double jump still lifts through it, and the next dash,
+-- slam, leap or lunge takes the character over from it. A body being knocked down takes the
+-- knock regardless: SetDown has just ended its moves.
+function MovementController.ApplyKnock(push: Vector3, launch: number): ()
+	local rig = localRig()
+	if not started or rig == nil then
+		return
+	end
+	if not knockedDown and (motion ~= nil or slamming or os.clock() < dashUntil) then
+		return
+	end
+	local config = Tuning.Get()
+	local friction = config.player.knockFriction
+	local flat = Vector3.new(push.X, 0, push.Z)
+	local speed = flat.Magnitude
+	local cap = math.max(config.crowd.knockMax, 0)
+	-- A NaN speed fails the first test; without friction the slide would never end.
+	if not (speed > 0 and speed < math.huge) or friction <= 0 then
+		flat = Vector3.zero
+	elseif speed > cap then
+		flat = if cap > 0 then flat.Unit * cap else Vector3.zero
+	end
+	local lift = if launch > 0 and launch < math.huge then jumpSpeed(launch) else 0
+	if flat == Vector3.zero and lift <= 0 then
+		return
+	end
+	-- Only a hang or an older knock can still hold the mover here, and both give way.
+	clearMover()
+	knock = Vector3.zero
+	if lift > 0 then
+		if not knockedDown then
+			-- Off the Humanoid's floor hold first: on the ground it would swallow the lift.
+			rig.humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+		end
+		local velocity = rig.root.AssemblyLinearVelocity
+		rig.root.AssemblyLinearVelocity =
+			Vector3.new(velocity.X, math.max(velocity.Y, lift), velocity.Z)
+	end
+	if flat ~= Vector3.zero then
+		knock = flat
+		setMover(rig, flat, true, nil)
+		knockToken = moverToken
+		-- The camera trails the slide, as it does a lunge, instead of the world snapping past.
+		CameraController.BeginMotion(flat.Magnitude / friction)
+	end
+end
+
+-- P4 ruling 4: knocked down until the caller stands the body up again. Health never reaches
+-- 0 in the range, so this is not a death and nothing respawns. Going down ends every move in
+-- progress (dash, slam, leap, lunge, hang, knock, the Whirlwind walk) and none starts while
+-- down: no walk, jump, double jump, dash or slam. `away` = the way the blow was travelling;
+-- the body lands on its back with its head that way. The knock that came with the same blow
+-- is applied after this call.
+function MovementController.SetDown(isDown: boolean, away: Vector3?): ()
+	if not started or isDown == knockedDown then
+		return
+	end
+	knockedDown = isDown
+	local rig = localRig()
+	if not isDown then
+		standUp(rig)
+		return
+	end
+	resetAbilityState()
+	slamming = false
+	knock = Vector3.zero
+	clearMover()
+	if rig ~= nil then
+		layDown(rig, away)
+	end
+end
+
+-- True while knocked down: InputController sends no attack, cast or slot switch meanwhile.
+function MovementController.IsDown(): boolean
+	return knockedDown
+end
+
 function MovementController.Destroy(): ()
 	for _, connection in connections do
 		connection:Disconnect()
@@ -806,6 +1011,11 @@ function MovementController.Destroy(): ()
 	ContextActionService:UnbindAction(ACTION_SLAM)
 	resetAbilityState()
 	clearMover()
+	knock = Vector3.zero
+	if knockedDown then
+		knockedDown = false
+		standUp(localRig())
+	end
 	local gui = screenGui
 	screenGui = nil
 	dashButton = nil
