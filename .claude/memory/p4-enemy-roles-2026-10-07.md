@@ -26,10 +26,31 @@ Contract: `docs/INTERFACES.md` "P4 contracts" (on the branch until its first mer
   10 Minor, all fixed or ruled; QA green; docs written (PLAN "P4", PLAYTEST and MANUAL_STEPS
   "P4 wave 1", a 10-step optional quick look that opens with the P3.1 melee check). Merged to
   `main` on 2026-10-08 under the gate protocol below; his look is optional and not yet reported.
-- **Wave 2 ("roles") was handed to the same three agents right after**, resumed by id with
-  their context: the keepAway brain, `shot` / `line` / `lob` / `lane`, the plate, a
-  `ThreatFx/` client folder, the simulator's new players. Its contract is INTERFACES "Wave 2 —
-  roles"; the lead's starting config for the four new kinds is uncommitted in the worktree.
+- **Wave 2 ("roles") is built, reviewed, QA green and merged to `main` (2026-10-08, 893fc8a
+  through the merge 2df322b); the place files are rebuilt.** The same three agents built it,
+  resumed by id (they were cut off once by the session limit and resumed with nothing lost):
+  the keepAway brain, `shot` / `line` / `lob` / `lane`, the plate, the `ThreatFx/` client
+  folder, the simulator's five player policies (176 checks). Review 0 Critical, 1 Major, 7
+  Minor. Contract: INTERFACES "Wave 2 — roles" with its rulings and review round.
+- **Stop 1 waits for Ben's playtest** (PLAYTEST "P4 Stop 1", 16 steps, about 15 minutes; it
+  stands alone and opens with the P3.1 melee check, because he never reported the optional
+  wave 1 look; Studio was not opened between the two merges). Asked of him: which role is most
+  fun and most annoying, any tell hard to read, soft or hard, how the plate feels, and the
+  **Server N ms** readout in `fight` (budget 2 ms; nobody else can run Studio).
+- Wave 2 rulings worth knowing before touching the code: enemies of one kind take turns
+  (`CrowdKindDef.perPlayer`: fodder 2, the others 1; it replaced
+  `crowd.threat.attackersPerPlayer`); a locked facing is snapped to the wire's yaw step; a
+  slinger's aim is led over flight plus the player's lag in six passes (`lead` 1 = where they
+  will be); the marksman's line has no height rule and locks 0.55 s before the hit; high
+  ground protects from melee and ground shapes only (shots, the line's 3D ray and the lob's
+  floor all reach a player on a block); a shot's path is cut by one ray at fire; plate and
+  health are separate entries on a strike.
+- Known limits told to Ben: kiting a big circle avoids everything and heals (P5: objectives);
+  elites are a time tax for a player who keeps swinging; enemies walk through cover; the
+  marksman's wall is drawn through cover; shots at a brute in mid-charge are judged up to 3.7
+  studs behind where it is drawn. Not in the simulator: cover and the stairs.
+- The branch `p4-enemy-roles` and worktree `tycoon-p4` stay for Stop 2 (the branch now holds
+  a merge of `main`, so the next merge to `main` is a fast-forward).
 - Rulings added on the way (16–26 in the contract): fodder cap 2 (not 4), lunge windup 0.6,
   range health pinned at tier 1 (130), a knock voids the other hits decided with it, `reach`
   on the flat, a due impact is never lost, `hurt` leaves in its own frame, a dash away from an
