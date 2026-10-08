@@ -5,16 +5,45 @@
 		"kinds": {
 			"fodder": {
 				"radius": 1.3, "headRadius": 0.7, "height": 5, "speed": 12, "hp": 40, "color": [205, 86, 64], "knockbackMult": 1.0, "armor": 0,
-				"brain": "rush",
+				"brain": "rush", "perPlayer": 2,
 				"attacks": [
 					{ "shape": "lunge", "reach": 4.5, "windup": 0.6, "recover": 1.5, "damage": 8, "range": 5, "width": 3, "height": 5, "interrupt": "stagger" }
 				]
 			},
 			"armoured": {
-				"radius": 1.7, "headRadius": 0.8, "height": 6.5, "speed": 9, "hp": 160, "color": [70, 100, 150], "knockbackMult": 0.35, "armor": 18,
-				"brain": "rush",
+				"radius": 1.7, "headRadius": 0.8, "height": 6.5, "speed": 9, "hp": 160, "color": [70, 100, 150], "knockbackMult": 0.35, "armor": 0,
+				"brain": "rush", "perPlayer": 1,
+				"plate": 80,
 				"attacks": [
 					{ "shape": "arc", "reach": 6, "windup": 0.8, "recover": 1.2, "damage": 30, "knockback": 30, "launch": 3, "range": 7.5, "arcDegrees": 120, "height": 6, "interrupt": "heavy" }
+				]
+			},
+			"slinger": {
+				"radius": 1.2, "headRadius": 0.65, "height": 5, "speed": 11, "hp": 45, "color": [226, 170, 60], "knockbackMult": 1.0, "armor": 0,
+				"brain": "keepAway", "bandMin": 18, "bandMax": 30, "perPlayer": 1,
+				"attacks": [
+					{ "shape": "shot", "reach": 32, "windup": 0.6, "recover": 2.2, "damage": 12, "speed": 28, "radius": 1.5, "seconds": 2.5, "lead": 1.0, "interrupt": "stagger" }
+				]
+			},
+			"marksman": {
+				"radius": 1.2, "headRadius": 0.65, "height": 5.4, "speed": 10, "hp": 45, "color": [150, 90, 200], "knockbackMult": 1.0, "armor": 0,
+				"brain": "keepAway", "bandMin": 28, "bandMax": 45, "perPlayer": 1,
+				"attacks": [
+					{ "shape": "line", "reach": 48, "windup": 1.0, "lockSeconds": 0.55, "recover": 4.0, "damage": 22, "range": 60, "width": 1.6, "interrupt": "stagger" }
+				]
+			},
+			"lobber": {
+				"radius": 1.4, "headRadius": 0.7, "height": 5, "speed": 9, "hp": 60, "color": [90, 170, 110], "knockbackMult": 0.8, "armor": 0,
+				"brain": "keepAway", "bandMin": 22, "bandMax": 40, "perPlayer": 1,
+				"attacks": [
+					{ "shape": "lob", "reach": 42, "windup": 0.5, "recover": 3.0, "damage": 18, "knockback": 14, "launch": 3, "radius": 5, "seconds": 1.4, "height": 4, "interrupt": "stagger" }
+				]
+			},
+			"brute": {
+				"radius": 2.2, "headRadius": 0.9, "height": 7.5, "speed": 10, "hp": 320, "color": [150, 70, 40], "knockbackMult": 0.35, "armor": 0,
+				"brain": "rush", "perPlayer": 1,
+				"attacks": [
+					{ "shape": "lane", "reach": 22, "windup": 0.8, "recover": 1.5, "damage": 28, "knockback": 30, "launch": 3, "range": 30, "width": 5, "speed": 55, "height": 5, "interrupt": "heavy" }
 				]
 			},
 			"boss": { "radius": 4, "headRadius": 1.6, "height": 14, "speed": 6, "hp": 10000, "color": [110, 40, 60], "knockbackMult": 0.0, "armor": 0 }
@@ -29,7 +58,8 @@
 		"knockMax": 140,
 		"armorFloor": 0.1,
 		"heavyHit": 40,
-		"threat": { "attackersPerPlayer": 2, "spawnGrace": 1.0, "spawnClear": 12, "maxShots": 24, "strikeSeconds": 0.2 }
+		"plateBreakSeconds": 1.5,
+		"threat": { "spawnGrace": 1.0, "spawnClear": 12, "maxShots": 24, "strikeSeconds": 0.2 }
 	},
 	"player": { "downSeconds": 2, "getUpIframes": 1.5, "regenDelay": 4, "regenPerSecond": 10, "knockIframes": 0.4, "knockFriction": 75 },
 	"weapons": {
@@ -152,7 +182,25 @@
 		"boss": [{ "kind": "boss", "behaviour": "idle", "count": 1, "at": [0, 55], "spacing": 0, "respawnSeconds": 5 }],
 		"stress": [{ "kind": "fodder", "behaviour": "chase", "count": 150, "at": [0, 20], "spacing": 3, "respawnSeconds": 3 }],
 		"fodderRush": [{ "kind": "fodder", "behaviour": "fight", "count": 30, "at": [0, 60], "spacing": 3, "respawnSeconds": 3 }],
-		"elites": [{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [0, 60], "spacing": 8, "respawnSeconds": 4 }]
+		"elites": [{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [0, 60], "spacing": 8, "respawnSeconds": 4 }],
+		"shooters": [
+			{ "kind": "slinger", "behaviour": "fight", "count": 2, "at": [-10, 70], "spacing": 6, "respawnSeconds": 4 },
+			{ "kind": "marksman", "behaviour": "fight", "count": 2, "at": [0, 50], "spacing": 6, "respawnSeconds": 4 },
+			{ "kind": "lobber", "behaviour": "fight", "count": 2, "at": [12, 62], "spacing": 6, "respawnSeconds": 4 }
+		],
+		"brutes": [
+			{ "kind": "brute", "behaviour": "fight", "count": 1, "at": [0, 62], "spacing": 0, "respawnSeconds": 5 },
+			{ "kind": "brute", "behaviour": "fight", "count": 1, "at": [-18, 52], "spacing": 0, "respawnSeconds": 5 },
+			{ "kind": "brute", "behaviour": "fight", "count": 1, "at": [18, 44], "spacing": 0, "respawnSeconds": 5 }
+		],
+		"fight": [
+			{ "kind": "fodder", "behaviour": "fight", "count": 100, "at": [0, 60], "spacing": 3, "respawnSeconds": 4 },
+			{ "kind": "slinger", "behaviour": "fight", "count": 3, "at": [-30, 55], "spacing": 6, "respawnSeconds": 6 },
+			{ "kind": "marksman", "behaviour": "fight", "count": 3, "at": [0, 2], "spacing": 6, "respawnSeconds": 6 },
+			{ "kind": "lobber", "behaviour": "fight", "count": 2, "at": [26, 34], "spacing": 6, "respawnSeconds": 6 },
+			{ "kind": "brute", "behaviour": "fight", "count": 3, "at": [-56, 46], "spacing": 12, "respawnSeconds": 8 },
+			{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [-10, 26], "spacing": 8, "respawnSeconds": 8 }
+		]
 	},
 	"defaultSet": "crowd30",
 	"movement": {

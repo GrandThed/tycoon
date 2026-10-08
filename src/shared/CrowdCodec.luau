@@ -97,6 +97,13 @@ CrowdCodec.MAX_HZ = 60
 -- The most attacks a kind may list: the wire carries the index in three bits.
 CrowdCodec.MAX_ATTACK = MAX_ATTACK
 
+-- The yaw the wire will carry for `yaw`: 1/256 of a turn. An enemy's locked facing is snapped
+-- to it on the server (P4 wave 2), so the line it is judged along is the line its tell is
+-- drawn along from the snapshot.
+function CrowdCodec.SnapYaw(yaw: number): number
+	return decodeYaw(encodeYaw(yaw))
+end
+
 -- Encodes at most MAX_ENTRIES entries (the rest are ignored; the caller splits). serverTime is
 -- carried in the header for ordering and interpolation; 0 when omitted.
 function CrowdCodec.Encode(

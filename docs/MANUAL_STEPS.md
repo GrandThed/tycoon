@@ -1556,16 +1556,17 @@ merge. The `tycoon-p3` folder used while the fix was built is gone.
 
 ## P4 wave 1 — They hurt you (quick look)
 
+**Superseded on 2026-10-08 by "P4 Stop 1 — Enemies that fight back" below. Do that one; this
+section is kept as a record.**
+
 **Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
 (no audio step). **Optional:** wave 2 is built whether or not you take this look.
 
-<!-- FILE TO OPEN: start. Lead: if wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. The lead merges this wave to
   `main` before asking for the look, so "Build all" builds it.
 - **A `proving.rbxl` that was open in Studio before "Build all" is the old one**: no health bar,
   no enemies that fight.
-<!-- FILE TO OPEN: end -->
 
 **Steps:**
 
@@ -1577,6 +1578,31 @@ merge. The `tycoon-p3` folder used while the fix was built is gone.
       bar reading **130 / 130** sits above the two ability tiles. No bar: it is the old file,
       go back to step 2.
 - [ ] 5. Run `docs/PLAYTEST.md` "P4 wave 1 — They hurt you (quick look)".
+
+## P4 Stop 1 — Enemies that fight back
+
+**Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
+(no audio step). About 15 minutes with the checklist.
+
+<!-- FILE TO OPEN: start. Lead: if wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Wave 2 is merged to `main`
+  once its checks are green, so "Build all" builds it.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the panel (**P**) has the set buttons **fight** and
+  **shooters**. The older build has neither.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 1. Build as the block above says.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save). Saving would write the
+      old version over the new file.
+- [ ] 3. Open the file named in the block above.
+- [ ] 4. Press **Play**. Output shows `[RangeService] Proving Grounds ready`. Press **P**: the
+      set buttons under **God mode** include **fight** and **shooters**. If they do not, it is
+      the old file: go back to step 2.
+- [ ] 5. Run `docs/PLAYTEST.md` "P4 Stop 1 — Enemies that fight back".
 
 ## M10 — Icon, store icons, thumbnails
 

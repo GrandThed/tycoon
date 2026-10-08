@@ -21,6 +21,8 @@
 -- is steered by CrowdBrain instead of the passive behaviours below, which are untouched. The
 -- brain only queues its impacts; after the step they go to the threat hooks (VitalsService),
 -- which this file never requires. The snapshot is CrowdCodec v2 (plated, attack index).
+-- Wave 2: a kind with `plate` wears it in every set, passive ones included (Damage); a brute's
+-- charge is carried by the brain (integrate), and nothing else moves it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -53,6 +55,9 @@ type Enemy = {
 	yaw: number,
 	hp: number,
 	maxHp: number,
+	-- What is left of the plate (0 = none, or broken) and what it started with.
+	plate: number,
+	plateMax: number,
 	state: Types.CrowdState,
 	staggerUntil: number,
 	deadAt: number?,
@@ -88,7 +93,16 @@ export type ThreatHooks = {
 	canTarget: (player: Player) -> boolean,
 	-- One enemy attack's impact, its shape frozen. Called after the step, never inside it.
 	impact: (strike: CrowdBrain.Strike) -> (),
+	-- Once per Heartbeat that stepped, after the impacts, with the frame's os.clock(): the
+	-- attacks that travel (shots, charges) are judged here.
+	step: (clock: number) -> (),
+	-- Enemy shots in the air, for the brain's cap.
+	shotsAlive: () -> number,
 }
+
+-- What Damage did besides the number: blocked = a plate stopped it (nothing happened); plate =
+-- it went to the plate; broke = it emptied the plate.
+export type Verdict = "blocked" | "plate" | "broke"
 
 local SPAWN_EVENT = "CrowdSpawn"
 local SNAPSHOT_EVENT = "CrowdSnapshot"
@@ -361,7 +375,7 @@ end
 
 -- `targets` is what the passive behaviours chase and watch: every living player. The brain's
 -- targets are the same players less the ones the threat hooks rule out.
-local function gatherTargets(): ()
+local function gatherTargets(shooting: Types.RangeShootingConfig): ()
 	table.clear(targets)
 	local hooks = threatHooks
 	for _, player in Players:GetPlayers() do
@@ -374,7 +388,10 @@ local function gatherTargets(): ()
 		if root ~= nil and root:IsA("BasePart") and humanoid ~= nil and humanoid.Health > 0 then
 			table.insert(targets, root.Position)
 			if hooks == nil or hooks.canTarget(player) then
-				CrowdBrain.AddTarget(player.UserId, root.Position)
+				-- R15's HipHeight is measured to the root's underside.
+				local standY = boundsCenter.Y + humanoid.HipHeight + root.Size.Y / 2
+				local lag = Tuning.CommitLag(shooting, player:GetNetworkPing())
+				CrowdBrain.AddTarget(player.UserId, root.Position, standY, lag)
 			end
 		end
 	end
@@ -402,6 +419,20 @@ local function integrate(
 			-- Called even when the body is not free: an attack under way keeps its timeline
 			-- through a stagger or a hop.
 			local goal, stopDistance = CrowdBrain.Think(enemy, mind, def, crowd, free)
+			local carried = if mind.charge ~= nil then CrowdBrain.Carried(mind) else nil
+			if carried ~= nil then
+				-- A charge: the brain carries the body down its lane, and nothing else moves it
+				-- or shows over it. It stops at the arena's edge (the brain cut its run there).
+				enemy.knock = Vector3.zero
+				enemy.vy = 0
+				enemy.position = Vector3.new(carried.X, floorY, carried.Z)
+				clampToBounds(enemy, def.radius)
+				enemy.velocity = (enemy.position - position) / dt
+				enemy.yaw = yawToward(mind.facing)
+				-- attack through the run; recover in the one step that sets it down at its end.
+				enemy.state = CrowdBrain.StateOf(mind) or "idle"
+				return
+			end
 			if goal ~= nil then
 				desired = seek(position, goal, math.max(def.speed, 0), stopDistance, dt)
 			end
@@ -436,9 +467,9 @@ local function integrate(
 	local moving = desired.Magnitude > MOVE_THRESHOLD
 	if alive then
 		if mind ~= nil then
-			-- Walking, it faces where it goes; otherwise its target, or the heading its windup
-			-- locked (the brain keeps `facing` for both).
-			enemy.yaw = yawToward(if moving then desired else mind.facing)
+			-- Walking, a rusher faces where it goes; otherwise, and for a shooter always, its
+			-- target or the heading its windup locked (the brain keeps `facing` for both).
+			enemy.yaw = yawToward(if moving and not mind.watch then desired else mind.facing)
 		elseif moving and enemy.behaviour ~= "strafe" then
 			-- Strafers and idlers watch the player; walkers and chasers face where they go.
 			enemy.yaw = yawToward(desired)
@@ -553,17 +584,25 @@ end
 -- `clock` = the frame's os.clock(): what the brain times its attacks on.
 local function simulate(dt: number, clock: number): ()
 	simTime += dt
-	local crowd = Tuning.Get().crowd
+	local config = Tuning.Get()
+	local crowd = config.crowd
 	local kinds = crowd.kinds
 	local g = gravity()
-	CrowdBrain.BeginStep(clock, boundsCenter.Y)
-	gatherTargets()
-	-- The attacker cap counts the lunges under way before anyone thinks, so the order the crowd
-	-- is walked in never decides who may start one.
+	local hooks = threatHooks
+	CrowdBrain.BeginStep(
+		clock,
+		boundsCenter.Y,
+		g,
+		if hooks ~= nil then hooks.shotsAlive() else 0,
+		Tuning.FastestMove(config)
+	)
+	gatherTargets(config.shooting)
+	-- The places each kind holds against each player are counted before anyone thinks, so a
+	-- body walked late in the step never finds its own place taken by one that started after it.
 	for _, enemy in order do
 		local mind = enemy.mind
 		if mind ~= nil and enemy.deadAt == nil then
-			CrowdBrain.Commit(mind)
+			CrowdBrain.Commit(enemy, mind)
 		end
 	end
 
@@ -626,7 +665,13 @@ local function sendSnapshot(serverTime: number): ()
 		entry.position = enemy.position
 		entry.yaw = enemy.yaw
 		entry.state = state
-		entry.hpFraction = if enemy.maxHp > 0 then enemy.hp / enemy.maxHp else 0
+		-- While the plate lasts the bar is the plate's: HP cannot change under it.
+		local plated = enemy.plate > 0
+		entry.plated = plated
+		entry.hpFraction = if plated
+			then enemy.plate / enemy.plateMax
+			elseif enemy.maxHp > 0 then enemy.hp / enemy.maxHp
+			else 0
 		-- The attack's index rides with the three states that draw it. Under a stagger or a hop
 		-- it stays set only while the windup or the thrust runs on underneath (an elite's
 		-- survives a light hit): 0 there tells the client it was cancelled or is over.
@@ -686,6 +731,9 @@ local function onHeartbeat(deltaTime: number): ()
 	-- Last, so a failing hook can never hold back the crowd's own stream.
 	local hooks = threatHooks
 	CrowdBrain.DrainStrikes(if hooks ~= nil then hooks.impact else nil)
+	if hooks ~= nil then
+		hooks.step(started)
+	end
 	lastStepMs = (os.clock() - started) * 1000
 end
 
@@ -725,6 +773,7 @@ function CrowdService.SetBounds(center: Vector3, halfSize: Vector3): ()
 	end
 	boundsCenter = center
 	boundsHalf = Vector3.new(math.abs(halfSize.X), math.abs(halfSize.Y), math.abs(halfSize.Z))
+	CrowdBrain.SetArena(boundsCenter, boundsHalf)
 	ensureRunning()
 end
 
@@ -767,6 +816,7 @@ function CrowdService.Spawn(
 		warn(`[CrowdService] unknown behaviour "{behaviour}"; using idle`)
 	end
 	local maxHp = math.max(def.hp, 1)
+	local plate = math.max(def.plate or 0, 0)
 	local phase = id * GOLDEN_RATIO_FRACTION % 1
 	local start = Vector3.new(position.X, math.max(position.Y, boundsCenter.Y), position.Z)
 	local enemy: Enemy = {
@@ -782,6 +832,8 @@ function CrowdService.Spawn(
 		yaw = 0,
 		hp = maxHp,
 		maxHp = maxHp,
+		plate = plate,
+		plateMax = plate,
 		state = "idle",
 		staggerUntil = 0,
 		deadAt = nil,
@@ -790,14 +842,13 @@ function CrowdService.Spawn(
 		nextHopAt = simTime
 			+ phase * math.max(config.crowd.behaviour.hopPeriod, MIN_PERIOD_SECONDS),
 		index = #order + 1,
-		-- Plates are wave 2: until then nothing is ever plated.
 		entry = {
 			id = id,
 			position = start,
 			yaw = 0,
 			state = "idle",
 			hpFraction = 1,
-			plated = false,
+			plated = plate > 0,
 			attack = 0,
 		},
 		spawnInfo = { id = id, kind = kind, maxHp = maxHp },
@@ -893,28 +944,50 @@ function CrowdService.Get(id: number): EnemyView?
 	}
 end
 
--- Returns (dealt, killed). dealt = amount after flat armour, not capped at the remaining HP (the
--- number the player sees). push = horizontal velocity change in studs/s (its Y is ignored);
--- launch = apex height in studs. Both scale by the kind's knockbackMult, as does the stagger.
--- A dead or unknown id takes nothing. A fighting enemy's windup may be cancelled by the hit
--- (CrowdBrain.OnHit); push, launch and stagger apply to it as to any other.
+-- Returns (dealt, killed, verdict). dealt = amount after flat armour, not capped at the
+-- remaining HP (the number the player sees). push = horizontal velocity change in studs/s (its
+-- Y is ignored); launch = apex height in studs. Both scale by the kind's knockbackMult, as does
+-- the stagger. A dead or unknown id takes nothing. A fighting enemy's windup may be cancelled by
+-- the hit (CrowdBrain.OnHit); push, launch and stagger apply to it as to any other, except in a
+-- brute's charge, which only the damage reaches.
+-- The plate (wave 2), while it lasts: a hit under crowd.heavyHit is blocked and does nothing at
+-- all (dealt 0). A heavy hit takes its amount off the plate, never off HP (dealt = that amount,
+-- the excess is lost), and otherwise acts as any hit; the one that empties the plate leaves the
+-- enemy reeling for crowd.plateBreakSeconds. After that the kind's armor applies.
 function CrowdService.Damage(
 	id: number,
 	amount: number,
 	byUserId: number,
 	push: Vector3?,
 	launch: number?
-): (number, boolean)
+): (number, boolean, Verdict?)
 	local enemy = enemies[id]
 	if enemy == nil or enemy.deadAt ~= nil or not isFinite(amount) or amount <= 0 then
-		return 0, false
+		return 0, false, nil
 	end
 	local crowd = Tuning.Get().crowd
 	local def = currentDef(enemy, crowd.kinds)
-	-- Armour is a flat per-hit reduction (lead ruling, P1), floored so a weak hit still chips.
-	local dealt =
-		math.max(amount - math.max(def.armor, 0), amount * math.clamp(crowd.armorFloor, 0, 1))
+	local mind = enemy.mind
+	local plated = enemy.plate > 0
+	local verdict: Verdict? = nil
+	local dealt: number
+	if plated then
+		if amount < crowd.heavyHit then
+			return 0, false, "blocked"
+		end
+		enemy.plate = math.max(enemy.plate - amount, 0)
+		verdict = if enemy.plate > 0 then "plate" else "broke"
+		dealt = amount
+	else
+		-- Armour is a flat per-hit reduction (lead ruling, P1), floored so a weak hit still chips.
+		dealt =
+			math.max(amount - math.max(def.armor, 0), amount * math.clamp(crowd.armorFloor, 0, 1))
+	end
 	local mult = math.max(def.knockbackMult, 0)
+	if mind ~= nil and CrowdBrain.IsCharging(mind) and (plated or enemy.hp - dealt > 0) then
+		-- Nothing moves, staggers or stops a charge, short of the blow that kills the brute.
+		mult = 0
+	end
 
 	if push ~= nil and isFiniteVector(push) and mult > 0 then
 		local shove = Vector3.new(push.X, 0, push.Z) * mult
@@ -933,9 +1006,10 @@ function CrowdService.Damage(
 		enemy.vy = math.max(enemy.vy, launchSpeed(launch * mult))
 	end
 
-	enemy.hp -= dealt
+	if not plated then
+		enemy.hp -= dealt
+	end
 	if enemy.hp <= 0 then
-		local mind = enemy.mind
 		if mind ~= nil then
 			-- Ruling 22: a blow whose impact time has already come still lands.
 			CrowdBrain.OnKilled(enemy, mind, def, crowd, os.clock())
@@ -947,16 +1021,19 @@ function CrowdService.Damage(
 		for _, callback in killCallbacks do
 			task.spawn(callback, id, byUserId)
 		end
-		return dealt, true
+		return dealt, true, verdict
 	end
 	local stagger = math.max(crowd.staggerSeconds, 0) * mult
+	if verdict == "broke" then
+		-- The opening: it reels for the config's time, however little a hit staggers its kind.
+		stagger = math.max(stagger, math.max(crowd.plateBreakSeconds, 0))
+	end
 	enemy.staggerUntil = math.max(enemy.staggerUntil, simTime + stagger)
-	local mind = enemy.mind
 	if mind ~= nil then
 		-- `amount`, not `dealt`: a heavy hit is judged before armour (ruling 10).
 		CrowdBrain.OnHit(mind, amount, stagger > 0, crowd.heavyHit, os.clock())
 	end
-	return dealt, false
+	return dealt, false, verdict
 end
 
 -- Callbacks run on their own threads, so they may yield without stalling the caller.

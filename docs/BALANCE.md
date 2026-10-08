@@ -1772,7 +1772,14 @@ With the lead's values, `--check` failed 22 times:
 Starting values for the enemies that attack and for the player's body in the range
 (`Config/ProvingGrounds.json`; contract: `docs/INTERFACES.md` "P4 contracts"). This part is
 **wave 1, "they hurt you"**: the fodder's lunge, the armoured elite's arc, health, going down and
-getting up. Wave 2 (shooters, the brute, the plate) adds to this section.
+getting up. **Wave 2, "roles"** (the three shooters, the brute, the plate) starts at "Wave 2 —
+roles" below.
+
+The wave 1 tables were measured again with wave 2's simulator. It follows rulings 21 (`reach` on
+the flat) and 22 (a due impact is never lost), the wave 2 review's rule that enemies of one kind
+take turns, and the server as built. So some wave 1 numbers differ from the first version of
+this page, the elites' most of all. No wave 1 value changed. One key was renamed:
+`crowd.threat.attackersPerPlayer` is now `perPlayer` on each kind, and the fodder's is still 2.
 
 Targets from the contract, all at tier-1 health (130 = `Armory.MaxHp`, 100 + 20 + 10), where the
 range pins every player (ruling 17):
@@ -1788,10 +1795,13 @@ code where it is applied, and follows `CrowdBrain`, `VitalsService` and
 `MovementController.ApplyKnock` where the contract leaves a choice:
 
 - **The crowd:** one step per `snapshotHz`. A rusher walks at its kind's speed until its attack's
-  `reach`, and bodies shove each other apart as `CrowdService.separate` does. A body in windup or
-  attack is planted. Nothing shoves the crowd off the player.
+  `reach`, measured on the flat (ruling 21), and bodies shove each other apart as
+  `CrowdService.separate` does. A body in windup or attack is planted. Nothing shoves the crowd
+  off the player.
 - **An attack:** windup (the facing locks) → impact → `strikeSeconds` → `recover`. At most
-  `attackersPerPlayer` lungers are in windup or attack at once.
+  `perPlayer` enemies of one kind are in windup or attack against one player at once: 2 fodder,
+  1 elite. An impact that is due still lands when its enemy is hit before the step that would
+  notice it (ruling 22).
 - **A hit:** the shape is frozen at the impact and tested against the player's root, with no pad,
   `originLagSeconds` later. An i-frame over any moment of that window voids it.
 - **Hits decided together** (ruling 18): when a hit that knocks back lands, every other hit on
@@ -1820,20 +1830,20 @@ Three values changed from the lead's first set. Everything else holds against th
 
 | Key | Lead | Now | Why |
 |---|---|---|---|
-| `crowd.threat.attackersPerPlayer` | 4 | **2** | 12 fodder stand in reach of a still player, so four lunge places are never empty: 4.9 hits/s, 39 damage/s, down at 5.5 s. With two: 2.5 hits/s, 20 damage/s, down at 8.7 s. Ruling 16. |
+| `fodder.perPlayer` (was `crowd.threat.attackersPerPlayer`) | 4 | **2** | 12 fodder stand in reach of a still player, so four lunge places are never empty: 4.9 hits/s, 39 damage/s, down at 5.5 s. With two: 2.5 hits/s, 20 damage/s, down at 8.7 s. Ruling 16. |
 | `armoured.attacks[0].launch` | 6 | **3** | A launch of 6 lifts his feet over the 4-stud fence and keeps him in the air 0.49 s, longer than `knockIframes` (0.40 s). At 3 he is up 0.35 s and stays under the fence. |
 | `fodder.attacks[0].windup` | 0.5 | **0.6** | At 0.5 a phone player who reacts in 0.35 s has 0.01 s to step out. At 0.6 he has 0.11 s, and a 0.25 s reaction has 0.21 s. Ruling 19. |
 | `fodder.attacks[0]`, the rest (reach 4.5, recover 1.5, damage 8, range 5, width 3, height 5) | | same | 8 is 6% of health: 17 hits to go down. The tell is in the table below. |
 | `armoured.attacks[0]`, the rest (reach 6, windup 0.8, recover 1.2, damage 30, knockback 30, range 7.5, arc 120°, height 6) | | same | 30 is 23% of health. |
 | `player.knockFriction` | 75 | same | The slide I want is 6 studs in 0.40 s. See "The knock" below. |
 | `crowd.heavyHit` | 40 | same | It equals fodder's HP: a heavy hit is one that one-shots a fodder. The nearest damage values are 41.6 above and 38.4 below. |
-| `threat.spawnGrace`, `spawnClear`, `strikeSeconds` | 1.0, 12, 0.2 | same | A fresh enemy cannot land a hit for 1.6 s. 12 is over the longest reach (6) and under the pad's 24 studs to the nearest slot, so sets refill. |
+| `threat.spawnGrace`, `spawnClear`, `strikeSeconds` | 1.0, 12, 0.2 | same | A fresh enemy cannot land a hit for 1.6 s. 12 is over the longest lunge or arc reach (6) and under the pad's distance to the nearest slot, so sets refill. That distance is 24 studs in wave 1's sets and 17 in `fight`. |
 | `player.downSeconds`, `getUpIframes` | 2, 1.5 | same | Seeing, reacting and walking out of a pack of 30 takes 0.69 s (1.0 s for wave 2's 100). |
 | `player.regenDelay`, `regenPerSecond` | 4, 10 | same | One fodder alone attacks every 2.3 s and one elite every 2.2 s, so the delay never runs out in reach. An empty bar is full 17 s after the last hit. |
 | `player.knockIframes` | 0.4 | same | Covers the 0.35 s in the air and the 0.40 s slide. |
 | `dummySets.fodderRush`, `elites` | 30 at (0, 60); 3 at (0, 60) | same | First lunge lands at 2.2 s, first arc at 3.5 s. |
 
-`threat.maxShots` belongs to wave 2 and is untouched.
+`threat.maxShots` belongs to wave 2 and is in its table.
 
 **Why the cap is 2, and why the recover does not help.** A lunge place is held for windup +
 strike, 0.8 s, so a swarm lands at most cap ÷ 0.8 lunges a second: 5.0 at cap 4, 2.5 at cap 2. A
@@ -1889,31 +1899,32 @@ plate in wave 2.
 
 | Set | Player | First hit | Down at | Downs | Hits | Dodged | Missed | Worst burst | Kills |
 |---|---|---|---|---|---|---|---|---|---|
-| fodderRush | stands still | 2.2 s | **8.7 s** (8.6–8.8) | 5.0 | 97 | 20 | 0 | 16 | 0 |
+| fodderRush | stands still | 2.2 s | **8.7 s** (8.6–8.8) | 5.0 | 96 | 20 | 0 | 16 | 0 |
 | fodderRush | walks away | never | never | 0 | 0 | 0 | 0 | 0 | 0 |
-| fodderRush | stands to half health, then walks | 2.2 s | never | 0 | 9 | 0 | 3 | 16 | 0 |
+| fodderRush | stands to half health, then walks | 2.2 s | never | 0 | 10 | 0 | 2 | 16 | 0 |
 | fodderRush | fights, dashes when threatened | never | never | 0 | 0 | 0 | 0 | 0 | 338 |
-| fodderRush | stands to half health, then fights | 2.2 s | never | 0 | 9 | 0 | 1 | 16 | 330 |
-| elites | stands still | 3.5 s | 11.9 s | 3.3 | 21 | 13 | 4 | 30 | 0 |
+| fodderRush | stands to half health, then fights | 2.2 s | never | 0 | 9 | 0 | 2 | 16 | 290 |
+| elites | stands still | 3.5 s | 9.8 s | 5.0 | 28 | 5 | 0 | 30 | 0 |
 | elites | walks away | never | never | 0 | 0 | 0 | 0 | 0 | 0 |
-| elites | stands to half health, then walks | 3.5 s | never | 0 | 3 | 1 | 1 | 30 | 0 |
-| elites | fights, dashes when threatened | never | never | 0 | 0 | 0 | 3 | 0 | 15 |
-| elites | stands to half health, then fights | 3.5 s | never | 0 | 3 | 1 | 1 | 30 | 12 |
+| elites | stands to half health, then walks | 3.5 s | never | 0 | 3 | 0 | 0 | 30 | 0 |
+| elites | fights, dashes when threatened | never | never | 0 | 0 | 0 | 0 | 0 | 18 |
+| elites | stands to half health, then fights | 3.5 s | never | 0 | 3 | 0 | 4 | 30 | 12 |
 
 "Dodged" is a hit the i-frames of a dash, a knock or the get-up voided. "Missed" is an attack
 whose shape no longer held him. "Worst burst" is the most damage inside one dash i-frame window
-(0.25 s).
+(0.25 s). The elites carry wave 2's plate in these rows.
 
 - **Standing still:** 2.5 lunges land a second (20 damage/s) and none misses. No lull is longer
-  than 0.8 s, so regen never starts. He is down five times a minute.
+  than 0.9 s, so regen never starts. He is down five times a minute.
 - **Walking away:** nobody comes nearer than 13 studs. Caught at half health, he walks out with
-  no further hit and is full again about 12 s later.
+  at most one more hit, a lunge that was already winding up, and is full again about 12 s later.
 - **Fighting:** nothing lands, and he never needs the dash. The set feeds him 5.6 fodder a second
   and he kills them all. In the busy crowd of the abilities table the Broadsword kills 6.6/s and
   the Longbow 4.8/s, so a bow alone falls behind a rush and has to kite.
-- **Elites:** three that swing together land one arc. The others are voided by ruling 18, or miss
-  because he has been carried clear. A still player takes 0.5 hits/s. That is 15 damage/s, less
-  than the fodder's 20.
+- **Elites:** they take turns, one arc at a time, a second apart at the least. Every arc lands on
+  a still player: 0.6 hits/s, 17 damage/s, still less than the fodder's 20. Before the turn rule
+  three swung together, one arc landed and ruling 18 voided the others (0.5 hits/s, down at
+  11.7 s).
 
 ## Bands (`--check`)
 
@@ -1924,7 +1935,7 @@ whose shape no longer held him. "Worst burst" is the most damage inside one dash
 | The same with every lunge place taken the moment it frees | ≥ 6 s | 8.6 s |
 | Lunges landing on a still, swarmed player | 1.5–3.5 per second | 2.5 |
 | Worst burst inside one dash window, any still row | ≤ 25% | 12% (fodder), 23% (elites) |
-| Longest lull in the rush; one enemy's own cycle | < `regenDelay` (4 s) | 0.8 s; 2.3 s and 2.2 s |
+| Longest lull in the rush; one enemy's own cycle | < `regenDelay` (4 s) | 0.9 s; 2.3 s and 2.2 s |
 | A tell beyond step + reaction + the walk out | ≥ 0.05 s | 0.21 s (lunge), 0.31 s (arc) |
 | A jump clears the shape before the impact | yes | yes |
 | An attack reaches past where it starts; its enemy is slower than the walk | yes | yes |
@@ -1934,11 +1945,11 @@ whose shape no longer held him. "Worst burst" is the most damage inside one dash
 | The knock clears a second arc from this far round him | ≥ 90° | 102° |
 | Dash spam invulnerable | 20–50% of the time | 39% |
 | Dash: press window; distance against the longest way out | ≥ 0.2 s; ≥ | 0.30 s; 20 ≥ 11.7 |
-| `getUpIframes` against walking out of the biggest pack | ≥ | 1.5 ≥ 0.69 s |
-| `spawnClear` between the longest reach and the pad's distance to a slot | yes | 6 < 12 < 24 |
+| `getUpIframes` against walking out of the biggest pack | ≥ | 1.5 ≥ 1.00 s (`fight`'s 100 fodder) |
+| `spawnClear` between the longest lunge or arc reach and the pad's distance to a slot | yes | 6 < 12 < 17 |
 | `spawnGrace` at least a step + the reaction | ≥ 0.32 s | 1.0 s |
-| Walks away: damage; nearest enemy | 0; beyond the longest reach | 0; 13 studs |
-| Caught at half health, then walks: more hits; downs; full again | ≤ the cap; 0; yes | 0; 0; yes |
+| Walks away in `fodderRush` and `elites`: damage; nearest enemy | 0; beyond the longest reach | 0; 13 studs |
+| Caught at half health, then walks: more hits; downs; full again | ≤ the cap; 0; yes | 1; 0; yes |
 | Telegraphed hits on any player who acts | 0 | 0 |
 
 Each band was proved by changing a value until it failed. With the lead's first values (cap 4,
@@ -1953,13 +1964,13 @@ flat (ruling 20). This is what the same enemies would do to each tier's bar:
 
 | Gear | Health | Arc | Still in `fodderRush`: down at | Still in `elites`: down at | Empty bar full in |
 |---|---|---|---|---|---|
-| starter | 100 | 30% | 7.1 s | 9.8 s | 14 s |
-| tier 1 | 130 | 23% | 8.7 s | 11.9 s | 17 s |
-| tier 2 | 155 | 19% | 9.6 s | 12.9 s | 20 s |
-| tier 3 | 180 | 17% | 11.1 s | 12.9 s | 22 s |
-| tier 4 | 230 | 13% | 13.6 s | 15.7 s | 27 s |
-| tier 6 | 380 | 8% | 21 s | 25 s | 42 s |
-| tier 12 | 2 250 | 1% | 116 s | 103 s | 229 s |
+| starter | 100 | 30% | 7.1 s | 8.7 s | 14 s |
+| tier 1 | 130 | 23% | 8.7 s | 9.8 s | 17 s |
+| tier 2 | 155 | 19% | 9.6 s | 11.7 s | 20 s |
+| tier 3 | 180 | 17% | 11.1 s | 11.7 s | 22 s |
+| tier 4 | 230 | 13% | 13.6 s | 14.1 s | 27 s |
+| tier 6 | 380 | 8% | 21 s | 23 s | 42 s |
+| tier 12 | 2 250 | 1% | 116 s | 96 s | 229 s |
 
 The `fodderRush` band would hold from starter gear to tier 3 and nowhere above, and on starter
 gear the arc is over 25%. For P5:
@@ -1975,15 +1986,16 @@ gear the arc is over 25%. For P5:
 
 The simulator's reading comes first in each line.
 
-- **Hits decided together.** Ruling 18, as written above. The server is being changed to match;
-  until it does, elites that wind up in the same step land every arc (see the first flag).
+- **Hits decided together.** Ruling 18, as written above. The server follows it since the wave 1
+  review. Without it, elites that wind up in the same step land every arc (see the first flag).
 - **When a lunge place frees.** At the end of `attack`, as ruling 8 says and `CrowdBrain` does. If
   a lunger held its place through `recover`, a still player would last about 20 s and the band
   would fail.
-- **What the cap counts.** Lunges only, as `CrowdBrain.admit` does. If arcs counted, only two of
-  three elites would swing.
-- **Where a rusher stops.** At `reach`, measured in space from the body centre to the root. Any
-  rule that leaves 6 or more fodder in reach keeps both places busy and changes nothing.
+- **What the cap counts.** Each kind has its own count since the wave 2 review (`perPlayer`), so
+  fodder do not wait for elites nor elites for fodder. Before it only lunges were counted.
+- **Where a rusher stops.** At `reach`, measured on the flat since ruling 21 (it was measured in
+  space, and a hopping player voided five lunges in six). Any rule that leaves 6 or more fodder
+  in reach keeps both places busy and changes nothing.
 - **The shapes.** The lunge is a capsule whose tip is `range` from the body centre, and the player
   is a point, as `VitalsService.inPlan` has it. If the player gets a body radius, every way out
   grows by it: 1 stud takes 0.05 s off each tell's margin.
@@ -2001,8 +2013,10 @@ The simulator's reading comes first in each line.
   `os.clock()` in that pass, later than the `decideAt` of the entries still to be judged in it,
   so they were not covered. Enemies that wind up in one crowd step share one impact time, so two
   or three elites dealt 60 or 90 at once (46% or 69% of the bar), most of all after a get-up.
+  Since the turn rule elites no longer swing together, and the ruling matters for unlike kinds:
+  a charge and an arc, or a lob and a charge.
 - **Ruled (16): the cap is 2, not the 4 the owner was first told.** The reason is in "Why the cap
-  is 2" above.
+  is 2" above. The key is `fodder.perPlayer` now.
 - **Ruled (17): the bar in the range is pinned at 130.** It used to be the profile's: 100 on a
   fresh Studio profile, where the arc is 30%, and 2 250 at tier 12, where nothing here is felt.
   The tier table above is now P5's problem (ruling 20).
@@ -2021,15 +2035,484 @@ The simulator's reading comes first in each line.
     reach. Wave 2's shooters, lobber and brute are the roles that reach a player who is busy.
   - The sim's fighter turns to the nearest enemy at once. A real player, and a phone's
     auto-swing, will take some hits from behind.
+  - **Wave 2:** `fight`, `brutes` and `shooters` now hurt him. `elites` still does not, plate or
+    no plate. See "Wave 2: flags for the owner".
 - **The pad is 20 studs from the back fence.** Elites come up the lane and knock a still player
-  toward it. After three knocks the fence stops the slide, and arcs then land as close as 0.6 s
-  apart. With the lead's launch of 6 a knock near the fence could have carried him over it.
+  toward it. After three knocks the fence stops the slide, and arcs then land a second apart,
+  the length of an elite's turn. With the lead's launch of 6 a knock near the fence could have
+  carried him over it.
 - **The elite is soft until it has a plate.** It never hits a walker, and a still player loses
-  less to three elites than to the fodder.
+  less to three elites than to the fodder. **Wave 2:** it has the plate now and is soft in the
+  same two ways. The plate makes it last longer, not hit more.
 - **Two lungers at a time may look thin** with 12 fodder standing round the player. The numbers
   leave little room: cap 3 goes down at 6.4 s and lands 3.8 hits a second, and cap 3 with damage
   6 holds the time (7.9 s) but lands 3.7 hits a second of 5% each.
 - **Kiting heals.** Fodder cannot stop a walker from regenerating a full bar in 17 s. Wave 2's
-  shooters are what interrupts that.
+  shooters are what interrupts that. **Wave 2:** they interrupt a player who stays in the fight,
+  not one who leaves it. See the wave 2 flags.
 - **The stairs are safe ground.** A player on the 8-stud step is above both shapes (heights 5 and
   6), and the crowd stays on the floor (known limit 15). Wave 2's shooters and lobber reach it.
+  **Wave 2:** since the wave 2 review a shot, a line and a lob reach him there (the lob lands on
+  the surface he stands on). The lunge, the arc and the lane do not.
+
+## Wave 2 — roles
+
+The slinger, the marksman, the lobber, the brute and the elite's plate (contract:
+`docs/INTERFACES.md` "Wave 2 — roles" and its review round). Everything is still measured at
+tier-1 health, 130.
+
+Targets, from the contract and the lead's brief:
+- no single hit takes more than 25% of health;
+- a player standing still in `fight` goes down in 4 to 8 s;
+- a player who reacts to every tell takes damage from fodder only;
+- a player who hops on the spot, and one who strafes one way, are both hit by slingers often
+  enough to matter, also at 100 and 150 ms of ping;
+- each of the three shooters has its own job and none is strictly better;
+- the brute's lane can be sidestepped, jumped and dashed inside its windup, and its recover is a
+  real opening;
+- the lob's circle can be walked out of, from its centre, during the flight;
+- every melee family breaks the plate within two combos, an SMG then kills the elite in at most
+  2 s, and the reel covers a slot switch plus the first second of that kill;
+- no instant takes most of the bar from a still player in `fight` (the review round's target).
+
+## Wave 2: what the simulator gained
+
+`py tools/sim_range.py` prints four more tables (ROLES, TURNS, SHOOTERS ALONE, PLATE) and more
+rows in THREAT. The new parts follow the server as built, the review round included:
+
+- **keepAway:** the band is the flat distance to the target. The shooter walks in to `bandMax`
+  or its `reach`, whichever is shorter, backs straight off to `bandMin`, and stays in the arena.
+  It moves while it approaches and recovers, never in windup or attack.
+- **turns:** at most `perPlayer` enemies of one kind are in windup or attack against one player.
+  A place is held from the windup's start to the end of `attack` (a brute's through its charge).
+  A shot or a lob in the air holds none, and neither does `recover`. The others wait in reach,
+  or in their band, and take a freed place.
+- **shot:** aimed when the windup ends, from the body centre, at `lead` of the way to where the
+  target will be after the flight plus his lag, which is when the hit is judged. The target's
+  motion is its displacement over the last step, capped at the fastest legal move. A target that
+  is rising or falling is led down its fall, as far as the surface it last stood on. The flight
+  time is refined six times. Each step the stretch the shot flew `lag` ago is tested against the
+  root as a point, within `radius`, in 3D.
+- **line:** the facing follows the target until `lockSeconds` before the hit, then freezes,
+  snapped to the snapshot's 1/256 of a turn. It is a rectangle with no height rule.
+- **lob:** the circle is centred on the target's place when the windup ends, on the surface
+  under him. It lands `seconds` later on anyone inside it whose feet are within `height` of
+  that surface.
+- **lane:** the facing locks when the windup starts. The charge runs `range`, or to the arena's
+  edge if that is nearer. It hits a root within half its `width` of the body's centre, feet
+  under `height`. Nothing but a killing blow stops it.
+- **the plate:** a hit under `heavyHit` does nothing at all. A heavy hit takes its full amount
+  off the plate and the excess is lost. The hit that empties it cancels the elite's windup and
+  starts the reel.
+- **`maxShots`:** shots in the air plus shot windups under way, on top of the turns.
+
+New players:
+- **Hops on the spot:** holds jump. He is on the floor 0.1 s between jumps, which is an
+  assumption.
+- **Strafes one way:** walks one way and turns back after 22, 30 and 38 studs in turn, so his
+  turns never fall in step with a shooter's cycle.
+- **Reacts to every tell:** 0.25 s plus one crowd step after a tell shows, he takes the cheapest
+  move that avoids everything he can see. The moves are: stand, a step of 0.1 to 1.0 s in one of
+  twelve directions, a jump, a jump with a step, and a dash when it is off cooldown. He judges
+  each move the way the server will judge the hit, and keeps 0.4 studs spare.
+- **Swings, never dodges** and **swings and reacts**, for the question wave 1 left open.
+
+Two more measurements:
+- One shooter of each kind, alone, for 300 s against a player who cannot go down. This gives a
+  clean landing rate per kind. The slinger is also watched at 100 and 150 ms of ping.
+- The plate matrix. It is arithmetic on the weapon numbers: normal attacks, body hits, none
+  missing.
+
+Limits:
+- Cover and the stairs are not modelled.
+- The player has no ping, so the lag is 0.05 s, except in the slinger's ping rows.
+- `fight` runs 30 s, the other sets 60 s.
+- The swinging player does not chase. In `shooters` nothing comes into his reach, so he is the
+  still player there.
+- **`fight` is sensitive to the last bit of the arithmetic.** A hundred bodies shove each other,
+  and the rows of that set move by a few percent between Python builds. `py tools/sim_range.py`
+  runs on Python 3.12, which the launcher picks from the file's first line. A script with no
+  such line runs on 3.14. The two give 39.7 and 40.7 hits on the still player from the same
+  seeds. Every band holds on both and on ten seeds. The numbers here are the tool's own.
+
+## Wave 2: values
+
+Eight values differ from the lead's starting set, and the three sets were laid out again.
+`lead`, `radius` and `lockSeconds` were set once more after the review round, and the list
+shows where they ended.
+
+| Key | Lead | Now | Why |
+|---|---|---|---|
+| `slinger.attacks[0].lead` | 0.7 | **1.0** | At 0.7 no shot ever hits a strafer. The aim is led over the flight plus the player's lag, in six passes, so 1.0 is where he will be: a strafer is hit by every shot at 0, 100 and 150 ms of ping. The value has room on both sides: 0.9 lands 90% and 1.2 lands 34%. |
+| `slinger.attacks[0].radius` | 1.0 | **1.5** | The strafer is hit at any radius from 1.0 up. The hopper sets it, because he is only in reach near the floor. At 0, 100 and 150 ms a radius of 1.0 lands 25%, 22% and 15% of shots on him; 1.25 lands 31%, 25% and 16%; 1.5 lands 33%, 28% and 22%. 1.5 is the smallest that keeps a fifth at 150 ms. Stepping out needs 1.5 studs: 0.39 s of the 0.64 s the shortest flight gives. |
+| `slinger.hp` | 50 | **45** | The Broadsword's first two swings deal 48. They now kill a slinger as they kill a marksman (45). No band reads this value. |
+| `marksman.attacks[0].lockSeconds` | 0.25 | **0.55** | After the lock a player needs 0.36 s to see it, react and step 0.8 studs. A lock of 0.25 s gave him 0.30 s. 0.55 s gives 0.60 s, which leaves a 0.35 s phone thumb 0.14 s (ruled in the review round; I had 0.45). The line still follows him for 0.45 s first. |
+| `marksman.attacks[0].recover` | 3.0 | **4.0** | At 3.0 one marksman deals 5.2 damage a second to a still player and to a hopper alike. That beats the lobber (4.8) wherever the lobber lands, so the lobber led nowhere. At 4.0 it deals 4.3. |
+| `brute.attacks[0].knockback` | 40 | **30** | 40 is a slide of 10.7 studs that lasts 0.53 s, longer than `knockIframes` (0.40 s). 30 is the elite's knock: 6.0 studs in 0.40 s. |
+| `armoured.plate` | 90 | **80** | Two Broadsword finishers deal 86.4 and two Spinblade finishers 83.2. At 90 both families need a third combo. The plate must also stay above the biggest single body hit (Greataxe A's finisher, 75.6), so it can be 76 to 83. |
+| `crowd.plateBreakSeconds` | 1.0 | **1.5** | A reaction (0.25 s) plus the first second of the SMG's kill is 1.25 s. 1.5 leaves a quarter second for the switch itself. Above 2.0 the elite would rarely fight again. |
+| `fodder.perPlayer` | 2 | same | Wave 1's cap under its new name. Two lunges are 16, 12% of health. |
+| `armoured`, `slinger`, `marksman`, `lobber`, `brute` `.perPlayer` | 1 | same | One turn of a kind then costs what one hit may: 30, 12, 22, 18 and 28. Two marksmen at once would be 44 (34%), and three slingers 36 (28%). See "Turns" below. |
+| `slinger`, the rest (band 18–30, reach 32, speed 11, windup 0.6, recover 2.2, damage 12, shot speed 28, seconds 2.5) | | same | 12 is 9% of health. A slower shot is easier to step out of and, under this aim rule, hits a hopper more often. |
+| `marksman`, the rest (band 28–45, reach 48, speed 10, hp 45, windup 1.0, damage 22, range 60, width 1.6) | | same | 22 is 17% of health. Half the width (0.8) is more than the 0.59 studs the snapped facing can be off at its reach. |
+| `lobber`, all of it (band 22–40, reach 42, speed 9, hp 60, windup 0.5, recover 3.0, damage 18, knockback 14, launch 3, radius 5, seconds 1.4, height 4) | | same | 18 is 14% of health. Walking out from the centre takes 0.57 s of the 1.4 s flight. The knock is 1.3 studs. |
+| `brute`, the rest (reach 22, speed 10, hp 320, windup 0.8, recover 1.5, damage 28, launch 3, range 30, width 5, charge speed 55, height 5) | | same | 28 is 22% of health. The tell and the opening are in the tables below. |
+| `threat.maxShots` | 24 | same | At most 3 shots are in the air in `fight` and 2 in `shooters`, so that cap never silences a slinger for one player. |
+
+**The sets.** Counts, spacing and respawn times are the lead's. The positions are new.
+
+| Set | Lead | Now | Why |
+|---|---|---|---|
+| `shooters` | slingers (−14, 60), marksmen (0, 75), lobbers (14, 60) | slingers (−10, 70), marksmen (0, 50), lobbers (12, 62) | Each kind now starts inside its own band, measured from the pad at (0, 90): 22, 40 and 31 studs. The lead's marksmen stood 15 studs from the pad, under their `bandMin`, and began by backing off. |
+| `brutes` | one row of three at (0, 60) | three singles at (0, 62), (−18, 52), (18, 44) | They are 28, 42 and 49 studs from the pad and arrive one after another. A still player is down at 8.3 s. |
+| `fight` | slingers (−24, 70), marksmen (0, 85), lobbers (24, 70), brutes (−30, 50), elites (30, 50) | slingers (−30, 55), marksmen (0, 2), lobbers (26, 34), brutes (−56, 46), elites (−10, 26) | The roles reach a player on the pad in turn: fodder at 1.7 s, slingers at about 3 s, lobbers at 4.3 s, marksmen at 5.3 s, brutes at 5.7 s, elites after 7 s. The lead's layout had every role within 35 studs of the pad, and a still player was down at 2.8 s. His marksmen also stood 5 studs from the pad, inside `spawnClear`, so that slot never refilled. |
+
+In `fight` the marksmen stand at the far end of the lane, the lobbers beside the cover on the
+right flank, the slingers on the open left, and the brutes far left with a full runway.
+
+## Wave 2: turns
+
+Enemies of one kind take turns (`perPlayer`, ruled in the review round). A place is held from
+the windup's start to the end of the attack.
+
+| Kind | Places | A place is held | Its own cycle | One turn costs | In `fight` | Attacks a second there | Without turns |
+|---|---|---|---|---|---|---|---|
+| Fodder | 2 | 0.80 s | 2.30 s | 16 (12%) | 100 | 2.50 | 43.5 |
+| Elite | 1 | 1.00 s | 2.20 s | 30 (23%) | 3 | 1.00 | 1.36 |
+| Slinger | 1 | 0.80 s | 3.00 s | 12 (9%) | 3 | 1.00 | 1.00 |
+| Marksman | 1 | 1.20 s | 5.20 s | 22 (17%) | 3 | 0.58 | 0.58 |
+| Lobber | 1 | 0.70 s | 3.70 s | 18 (14%) | 2 | 0.54 | 0.54 |
+| Brute | 1 | 1.35 s | 2.85 s | 28 (22%) | 3 | 0.74 | 1.05 |
+
+- **The three shooters lose nothing.** Three turns of a slinger or a marksman fit inside one of
+  their own cycles. They now fire one after another and no longer as one.
+- **Brutes and elites attack less often and land more.** Three brutes share one place of 1.35 s
+  and three elites one of 1.0 s. But ruling 18 used to void most of what they threw together.
+  A still player in `brutes` now takes 30 charges a minute where he took 14, and in `elites` 28
+  arcs where he took 24.
+- **The worst instant.** One turn of every kind that does not knock (two lunges, a shot, a
+  line: 50), plus the hardest knock (the arc's 30), is 80, 62% of the bar. Ruling 18 lets only
+  one knock land. That is the most one instant can cost in `fight` by the rules alone. It needs
+  four kinds inside a quarter second with the knock last, and it has not happened on thirty
+  seeds.
+
+The worst quarter second a still player takes, before the rule and now:
+
+| Set | Before | Now | What it is now |
+|---|---|---|---|
+| `fight` | 102 (78%), and 112 (86%) on ten seeds | **66 (51%)**, and 68 (52%) at most on thirty seeds | two lunges, a line and a charge |
+| `shooters` | 46 (35%) | 40 (31%) | a line and a lob |
+| `brutes` | 28 (22%) | 28 (22%) | one charge |
+| `elites` | 30 (23%) | 30 (23%) | one arc |
+
+"Before" is my last report: three lines and three shots in one tenth of a second. With today's
+values and the rule switched off, `fight` reads 82 (63%).
+
+**The ceiling.** Two bands, because one number cannot do both jobs.
+- **Measured: the still player's worst quarter second in `fight` is at most 55% of the bar.**
+  The target is that no instant takes most of the bar. What meets in one instant is one turn of
+  three kinds: the fodder pair (16), a line (22) and a knock (28 or 30). That is 66 to 68, half
+  the bar. A ceiling of exactly 50% would hang on one point of damage, so the band has the
+  weight of one lunge to spare. It fails the behaviour before the rule.
+- **By the rules: the most one instant can cost in any set is at most two thirds of the bar.**
+  More than a third is then always left, so one more hit of any size the 25% rule allows does
+  not finish a bar that was full. `fight` is at 62%. This is the band that pins each
+  `perPlayer`: two marksmen make it 78%, three slingers 80%, three fodder 68%.
+
+## Wave 2: the roles
+
+| Kind | Job | Threat | Counter |
+|---|---|---|---|
+| Slinger | Punishes blind movement. Its shot leads a walker. | 12 (9%) every 3.0 s. It lands on every shot at a still player or a strafer, and on 33% at a hopper. | Step 1.5 studs aside once it has thrown, or dash. Two sword swings kill it. A wall stops the shot. |
+| Marksman | Punishes standing and hopping. Its line has no height rule. | 22 (17%) every 5.2 s, from 28 to 45 studs. It always lands on a still player and on a hopper. | Step 0.8 studs off the line after it locks, or keep walking: a strafer takes 1% of them. A jump does nothing. A wall stops it. |
+| Lobber | Hits whoever stays put, also behind cover. It is the hardest hitter on a still player. | 18 (14%) and a short knock every 3.7 s, in a circle 5 studs in radius. | Walk out of the circle. Any walker does: a strafer takes 8%, a hopper 22%. |
+| Brute | Breaks the player's position, and soaks damage (320 HP). | 28 (22%) and a 6-stud knock. The charge covers 30 studs in 0.55 s, 5 wide. One alone attacks every 2.85 s. | Sidestep 2.5 studs, jump, or dash through. It then stands open for 1.5 s. A heavy hit cancels its windup, and nothing stops the charge. |
+| Elite | Holds the front. Light hits do nothing to it until the plate breaks. | 30 (23%) and a knock every 2.2 s, in reach 6. Plate 80 over 160 HP. | Two heavy hits break the plate, then it reels 1.5 s. Walk out of the arc. |
+
+The tells against the player's moves, as wave 1's table has them for the lunge and the arc:
+
+| | Slinger shot | Marksman line | Lobber lob | Brute lane |
+|---|---|---|---|---|
+| What the player answers | the flight: 0.64 s from the near edge of its band, 1.07 s from the far edge | the lock: 0.60 s | the flight: 1.40 s | the windup: 0.80 s |
+| Stepping out needs | 0.39 s (1.5 studs) | 0.36 s (0.8 studs) | 0.57 s (5 studs, from the centre) | 0.44 s (2.5 studs) |
+| Margin left | 0.25 s (0.15 s for a 0.35 s thumb) | 0.24 s (0.14 s) | 0.83 s (0.73 s) | 0.36 s (0.26 s) |
+| Jumping | clears it if he is over 1.5 studs up when it arrives; the aim follows a fall, not a later jump | does nothing | clear from 0.05 s to 0.81 s after take-off | clear from 0.06 s to 0.79 s, longer than the whole charge |
+| Dashing | 0.25 s of i-frames | the same | the same | the lane passes in 0.09 s |
+| Its speed against the walk (20) | 11 | 10 | 9 | 10 |
+| Knock | none | none | 1.3 studs in 0.19 s | 6.0 studs in 0.40 s |
+
+- **The brute's opening.** A reaction and one full Broadsword combo take 1.05 s. The recover is
+  1.5 s.
+- **The lob and the lane launch him 3 studs,** under the 4-stud fence, for 0.35 s in the air.
+  Both slides end inside `knockIframes`.
+- **The line shows for 0.45 s before it locks.** That is more than a step and a reaction
+  (0.32 s), so the player has seen it before he must move.
+
+**One shooter of each kind, alone** (300 s, three seeds, the player cannot go down):
+
+| Kind | Stands still | Hops on the spot | Strafes one way |
+|---|---|---|---|
+| Slinger | 100% land, 4.0 damage/s | 33%, 1.3 | 100%, **4.0** |
+| Marksman | 100%, 4.3 | 100%, **4.3** | 1%, 0.0 |
+| Lobber | 100%, **4.8** | 22%, 1.1 | 8%, 0.4 |
+
+Each shooter is the hardest hitter against one of the three players, so none is strictly
+better. Counted for `fight`'s three slingers, a hopper is hit every 3.1 s and a strafer every
+1.0 s.
+
+**"Often enough to matter".** I set two conditions for the slinger against blind movement.
+- It lands at least 20% of its shots on a hopper and 50% on a strafer, at 0, 100 and 150 ms of
+  ping.
+- At that rate `fight`'s slingers alone hit him more often than his regen can answer. Regen
+  needs `regenDelay` plus the time to heal one shot: 4 + 12 ÷ 10 = 5.2 s between hits.
+
+| The slinger alone, by the player's ping | 0 ms | 100 ms | 150 ms |
+|---|---|---|---|
+| Shots landing on a hopper | 33% | 28% | 22% |
+| Shots landing on a strafer | 100% | 100% | 100% |
+
+The hopper's 33% is a long-run rate, which is why the shooters are watched for 300 s. The hits
+come in runs, because the slinger's 3.0 s cycle drifts slowly against the 0.96 s hop: over 60 s
+the same slinger lands 25%, and over 90 s 36%. Inside a set it lands far less, 6% in `shooters`
+and 5% in `fight`, because every get-up starts the crowd again in step with his first hop. A
+person does not hop that evenly, so I take the long-run rate as the fair one. In both sets it
+is the marksmen who punish the hopper.
+
+## Wave 2: the plate
+
+Plate 80 over 160 HP. A hit of 40 or more is heavy. The elite reels 1.5 s when the plate breaks.
+Times run from the weapon's first hit.
+
+| Weapon | Breaks the plate in | Then kills in | Total | No plate |
+|---|---|---|---|---|
+| Broadsword A | 6 hits, 2.00 s | 2.40 s | 4.40 s | 2.00 s |
+| Warhammer A | 2 hits, 0.77 s | 2.31 s | 3.08 s | 1.54 s |
+| Spinblade A | 6 hits, 1.47 s | 2.06 s | 3.53 s | 1.76 s |
+| Greataxe A | 2 hits, 0.77 s | 2.31 s | 3.08 s | 1.54 s |
+| Greataxe B | 6 hits, 2.63 s | 2.11 s | 4.74 s | 1.58 s |
+| Spear A | 2 hits, 0.59 s | 2.35 s | 2.94 s | 1.76 s |
+| Spear B | 6 hits, 2.08 s | 2.08 s | 4.17 s | 1.67 s |
+| Longbow A | 2 hits, 1.05 s | 4.20 s | 5.25 s | 3.15 s |
+| Longbow B | 2 hits, 0.55 s | 2.20 s | 2.75 s | 1.65 s |
+| Splitbow A | never (on the head: 0.83 s) | | | 5.00 s |
+| Splitbow B | 2 hits, 1.00 s | 4.00 s | 5.00 s | 3.00 s |
+| Shotgun A | 2 hits, 0.91 s | 2.73 s | 3.64 s | 1.82 s |
+| Piercing Rifle A | 2 hits, 0.42 s | 1.67 s | 2.08 s | 1.25 s |
+| Launcher A | 2 hits, 1.33 s | 4.00 s | 5.33 s | 2.67 s |
+| SMG A | never | | | 1.42 s |
+| SMG B | never | | | 1.29 s |
+| Beam A | never | | | 3.10 s |
+| Beam B | never | | | 1.30 s |
+| Chain Gun A | 2 hits, 0.83 s | 2.50 s | 3.33 s | 1.67 s |
+| Chain Gun B | never (on the head: 0.42 s) | | | 2.08 s |
+| Ground slam | 2 slams, 1.80 s | | | |
+
+- **Every melee family breaks it within two combos.** The Warhammer, Greataxe A and Spear A
+  break it in two swings. The Broadsword, Spinblade, Greataxe B and Spear B have one heavy hit
+  per combo, the finisher, and need exactly two combos.
+- **These cannot break it alone:** Splitbow A, SMG A and B, Beam A and B, Chain Gun B. No body
+  hit of theirs reaches 40. Splitbow A and Chain Gun B break it with head shots.
+- **What such a loadout does.** Break it with the melee slot, or with two ground slams (45
+  each), then switch. Every loadout has a melee slot and the slam, so none is stuck.
+- **After the break an SMG kills the elite in 1.42 s (A) or 1.29 s (B).** With a 0.25 s reaction
+  the kill ends 0.17 s after the reel for A and 0.04 s after it for B. The elite's windup is
+  0.8 s, so it gets no arc off.
+- **No weapon that breaks the plate also kills inside the reel.** The fastest is the Piercing
+  Rifle at 1.67 s. So a player who does not switch meets the elite again.
+- **The plate costs a Broadsword 2.4 s more per elite** (4.40 s against 2.00 s), and a break
+  followed by an SMG switch about 3.7 s in all.
+
+## Wave 2: results (tier 1, Broadsword, mean of three seeds)
+
+Per 60 s. `fight` is per 30 s.
+
+| Set | Player | First hit | Down at | Downs | Damage | Hits | Dodged | Missed | Worst burst | Kills |
+|---|---|---|---|---|---|---|---|---|---|---|
+| fodderRush | hops on the spot | 3.6 s | 28.9 s | 1.3 | 275 | 34 | 0 | 103 | 16 | 0 |
+| elites | reacts to every tell | never | never | 0 | 0 | 0 | 0 | 51 | 0 | 0 |
+| elites | swings, never dodges | never | never | 0 | 0 | 0 | 0 | 0 | 0 | 18 |
+| shooters | stands still | 2.1 s | 7.3 s | 7.0 | 986 | 61 | 10 | 2 | 40 | 0 |
+| shooters | walks away | never | never | 0 | 0 | 0 | 0 | 5 | 0 | 0 |
+| shooters | hops on the spot | 2.1 s | 11.6 s | 4.0 | 584 | 29 | 3 | 54 | 40 | 0 |
+| shooters | strafes one way | 2.4 s | 22.5 s | 2.0 | 325 | 26 | 1 | 58 | 22 | 0 |
+| shooters | reacts to every tell | never | never | 0 | 0 | 0 | 0 | 93 | 0 | 0 |
+| brutes | stands still | 2.3 s | 8.3 s | 6.0 | 840 | 30 | 5 | 0 | 28 | 0 |
+| brutes | walks away | never | never | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| brutes | hops on the spot | 3.8 s | 39.5 s | 1.0 | 289 | 10 | 0 | 22 | 28 | 0 |
+| brutes | strafes one way | 17.5 s | two seeds in three | 0.7 | 205 | 7 | 0 | 29 | 28 | 0 |
+| brutes | reacts to every tell | never | never | 0 | 0 | 0 | 0 | 41 | 0 | 0 |
+| brutes | swings, never dodges | 2.3 s | 15.6 s | 2.0 | 439 | 16 | 0 | 2 | 28 | 11 |
+| fight | stands still | 1.7 s | **5.8 s** (5.7–5.8) | 4.0 | 587 | 40 | 40 | 26 | 66 | 0 |
+| fight | walks away | never | never | 0 | 0 | 0 | 0 | 3 | 0 | 0 |
+| fight | hops on the spot | 2.5 s | 9.9 s | 3.0 | 415 | 26 | 7 | 79 | 50 | 0 |
+| fight | strafes one way | 3.2 s | 17.1 s | 1.0 | 231 | 16 | 1 | 102 | 50 | 0 |
+| fight | reacts to every tell | never | never | 0 | 0 | 0 | 0 | 151 | 0 | 0 |
+| fight | swings, never dodges | 2.8 s | 6.6 s | 4.0 | 556 | 32 | 17 | 29 | 62 | 277 |
+| fight | swings and reacts | never | never | 0 | 0 | 0 | 0 | 97 | 0 | 397 |
+
+The still player's time down in each set: `fodderRush` 8.7 s, `elites` 9.8 s, `shooters` 7.3 s,
+`brutes` 8.3 s, `fight` 5.8 s. On thirty seeds `fight` runs from 5.1 to 5.8 s.
+
+Damage by kind:
+
+| Set, player | Fodder | Slinger | Marksman | Lobber | Brute | Elite |
+|---|---|---|---|---|---|---|
+| shooters, stands still | | 312 | 242 | 432 | | |
+| shooters, hops | | 24 | 440 | 120 | | |
+| shooters, strafes | | 300 | 7 | 18 | | |
+| fight, stands still | 133 | 96 | 51 | 90 | 196 | 20 |
+| fight, hops | 93 | 12 | 147 | 60 | 103 | 0 |
+| fight, strafes | 16 | 116 | 22 | 30 | 47 | 0 |
+| fight, swings, never dodges | 53 | 128 | 51 | 54 | 149 | 120 |
+
+- **The reacting player takes no hit in any set,** fodder included, on ten seeds. The target
+  allows him fodder damage. He needs none of it.
+- **Blind movement is not a free pass, and each kind is answered by a different shooter.** A
+  hopper avoids most lobs and shots, and the marksmen take him down in 11.6 s. A strafer walks
+  out of lines and lobs, and the slingers take him down in 22.5 s.
+- **Hopping in the rush.** One lunge in four lands on a hopper. He is down at 28.9 s, against
+  8.7 s standing still.
+- **Brutes.** A still player is down at 8.3 s, six times a minute. One charge in three lands on
+  a hopper, 289 damage a minute, and he is down at 39.5 s. In `brutes` nothing else answers
+  him. In `fight` the marksmen do.
+- **`fight`, standing still: down at 5.8 s.** Brutes, fodder, slingers and lobbers do most of
+  it.
+- **Swinging without dodging in `fight` is down at 6.6 s.** The sword kills 277 enemies in 30 s
+  and it does not save him: the brutes, the slingers and the elites reach him all the same. The
+  other four melee families go down between 6.4 and 8.2 s.
+- **Swinging and reacting takes nothing** and kills 397.
+- **Walking away takes nothing in any set.** See the flags.
+
+## Wave 2: bands (`--check`)
+
+| Band | Value | Now |
+|---|---|---|
+| One hit of each new attack | ≤ 25% of health | 9%, 17%, 14%, 22% |
+| One turn of each kind (`perPlayer` × damage) | ≤ 25% of health | 12%, 23%, 9%, 17%, 14%, 22% |
+| The most one instant can cost by the rules, in every set | ≤ two thirds of the bar | 62% in `fight`, 40% in `shooters` |
+| Still in `fight`: the worst quarter second | ≤ 55% of the bar | 51% |
+| What each tell leaves beyond a step, a reaction and the walk out | ≥ 0.05 s | 0.25, 0.24, 0.83, 0.36 s |
+| Each new kind is slower than the walk | yes | 11, 10, 9, 10 against 20 |
+| A shooter's band lies inside its reach | yes | 18–30 in 32, 28–45 in 48, 22–40 in 42 |
+| The shot flies at least its reach | yes | 70 ≥ 32 |
+| The line shows before it locks; it is at least as long as its reach | ≥ 0.32 s; yes | 0.45 s; 60 ≥ 48 |
+| Half the line's width against the snapped facing's error at its reach | > | 0.80 > 0.59 studs |
+| Lob and lane: launch under the fence, flight and slide inside `knockIframes` | yes | 3 < 4; 0.35 s; 0.19 s and 0.40 s |
+| A jump clears the lob; one jump clears the whole charge | yes | yes; 0.73 s ≥ 0.55 s |
+| Dash against the lane: i-frames outlast its passing; distance clears it | yes | 0.25 s against 0.09 s; 20 ≥ 2.5 |
+| The charge runs past where it starts | yes | 30 > 22 |
+| The brute's recover against a reaction and one full combo | ≥ 0.05 s more | 1.5 s against 1.05 s |
+| Slinger alone against a hopper: shots landing; seconds between hits from `fight`'s three | ≥ 20%; < 5.2 s | 33%; 3.1 s |
+| Slinger alone against a strafer: the same | ≥ 50%; < 5.2 s | 100%; 1.0 s |
+| Slinger alone against a hopper at 100 and 150 ms of ping | ≥ 20% | 28%, 22% |
+| Slinger alone against a strafer at 100 and 150 ms of ping | ≥ 50% | 100%, 100% |
+| Marksman alone against a hopper | ≥ 90% | 100% |
+| Each shooter is the hardest hitter per head against one of the three players | yes | lobber: still; marksman: hopper; slinger: strafer |
+| Shots in the air in any set | < `maxShots` (24) | 3 |
+| Still in `fight`: down at | 4–8 s, every seed | 5.8 s (5.7–5.8) |
+| Telegraphed hits on a player who reacts, in `elites`, `shooters`, `brutes` and `fight` | 0 | 0 |
+| Swings, never dodges, in `fight` | goes down | at 6.6 s |
+| Every melee family breaks the plate | within 2 combos | 2 to 6 hits |
+| The plate against the biggest body hit of any family | more | 80 > 75.6 |
+| After the break an SMG kills the elite | ≤ 2 s | 1.42 s and 1.29 s |
+| The reel | 1.25–2.0 s | 1.5 s |
+| The ground slam breaks the plate | in ≤ 2 slams | 2 |
+
+Each band was proved by a value that makes it fail. Wave 1's bands and printed lines are all
+still there. Its kiting-distance band stays on `fodderRush` and `elites`: wave 2's kinds attack
+from further away than a walker keeps off.
+
+**Where the starting values missed.** With the lead's first wave 2 set, before the review
+round, eleven bands failed:
+- the spawn clearance, because the pad was 5 studs from a slot;
+- `fight` standing still, down at 2.8 s;
+- the reacting player, hit by two shots in `shooters`;
+- the marksman's lock (0.30 s against 0.36 s);
+- the brute's slide (0.53 s);
+- the slinger against the hopper (8%) and the strafer (0%), and with them "each shooter leads
+  somewhere";
+- the Broadsword and the Spinblade on the plate (9 hits);
+- the reel (1.0 s).
+
+## Wave 2: where the server can move these numbers
+
+The simulator copies each of these. A change on the server moves the numbers named.
+
+- **The shot is led over its flight plus the player's lag, in six passes.** That is what lets
+  `lead` be 1.0 and the strafer be hit at any ping. With two passes a walker crossing at
+  mid-band was missed by 1.8 studs, and the radius had to cover it.
+- **The target's motion is one step's displacement.** A player who turns between two steps is
+  led the wrong way for that shot. That is the slinger's counter and I have left it.
+- **Only a root that is rising or falling is led down a fall,** as far as the surface it last
+  stood on. The hopper's rate hangs on this rule and on how long he touches the floor.
+- **The root is a point.** A body radius for the player would widen every shape by it: each
+  margin loses 0.05 s for each stud.
+- **The line locks on where he was at the lock.** If it locked on his led position, a strafer
+  would be hit and the marksman would do the slinger's job as well.
+- **The facing is snapped to 1/256 of a turn.** At 48 studs that is up to 0.59 studs off. A
+  line narrower than 1.2 would miss a still player at some bearings.
+- **The lob's centre is fixed when the windup ends.** If it were led, a walker would no longer
+  be safe from it.
+- **A place frees at the end of `attack`.** If `recover` held it too, three brutes would charge
+  once every 2.85 s between them, and three marksmen once every 5.2 s.
+- **Each kind has its own count.** A count shared by all shooters would let one slinger silence
+  a marksman.
+- **The charge stops at the arena's edge.** A brute standing against the fence has no runway
+  toward a player who stands nearer that fence than the brute's own radius allows (2.2 studs).
+  Its charge then has no length and cannot hit him.
+- **Ruling 18 voids only what a knocking hit covers.** A line, a shot and two lunges can land
+  with one knock. That is the 62% in "Turns".
+- **Blocked hits do nothing.** If a blocked hit staggered or shoved, the plate would stop being
+  a wall against a crowd weapon.
+
+## Wave 2: flags for the owner
+
+Ruled in the review round:
+- **Enemies of one kind take turns.** It was my first flag: three marksmen fired as one, 66 at
+  once, and the worst quarter second in `fight` took 78% of the bar. It is 51% now. See "Turns".
+- **A shot is led over its flight plus the player's lag,** and in six passes. It was my P5
+  flag. `lead` is 1.0 and the orb went from 4 studs across to 3.
+- **The marksman's lock is 0.55 s,** for the phone thumb.
+- **The contract's Roles table** names the new lock.
+
+Known limits, for the owner:
+- **Kiting still heals.** A player who runs a lap of the arena takes no damage in `shooters`,
+  `brutes` or `fight`. In 60 s the six shooters get five attacks off at him and all miss. Every
+  kind is slower than the walk, the shot flies at 28 against his 20, and the arena is 220 studs
+  across. Wave 2's shooters punish a player who stays in the fight and moves blindly. They do
+  not hold a player who leaves. That is P5's: a reason to stay (an objective, a timer), a
+  smaller arena, or an enemy faster than the walk.
+- **The elites are a time tax on a player who keeps swinging.** In `elites` he takes nothing
+  with four melee families of five, and the Spear takes one or two arcs a minute. Every combo
+  has a heavy hit, and a heavy hit cancels the arc. The plate costs the Broadsword 2.4 s more
+  per elite. Everywhere else swinging alone no longer saves him: in `fight` every family is
+  down between 6.4 and 8.2 s, and in `brutes` between 8.5 and 18.1 s.
+
+Still open:
+- **Slingers and the hopper.** A slinger alone lands 33% on him, and 22% at 150 ms of ping. In
+  the sets it is 6% and 5%, because every get-up starts the crowd in step with his hop. The
+  marksman is his real answer. The 33% also depends on my guess of 0.1 s on the floor between
+  jumps: with none it is 15%.
+- **Hopping is the cheapest defence against everything on the ground.** A hopper takes one
+  lunge in four, one charge in three and one lob in four or five. If Ben finds that holding
+  jump is too safe in `fodderRush` or `brutes`, the answer is a marksman in those sets, or a
+  rule.
+- **The turn rule made `brutes` and `elites` harder on a player who stands.** Fewer of their
+  hits are voided. A still player in `brutes` takes 840 damage a minute where he took 392, and
+  goes down six times a minute where it was two.
+- **`fight` is hard on a player who does not dodge, and free for one who does.** A player who
+  swings and never dodges is down at 6.6 s, and one who only strafes at 17.1 s. Expect Ben's
+  first try to end somewhere in that span. The set is tuned to the contract's band for a still
+  player, and I have no band between the two extremes.
+- **The worst instant is half the bar, not under it.** 66 of 130 is 51%. Getting it under 50%
+  for certain would take a fifth off the damage of several kinds, and the other bands with it.
+  I set the band at 55% and say so here.
+- **Six weapon variants cannot break a plate alone** (the list is under the matrix). In a
+  loadout the melee slot or two slams always can. If Ben wants every ranged weapon to have its
+  own answer, that is a weapon number or a ruling, and I have changed neither.
+- **Not modelled:** cover, and the stairs. By the contract a wall stops shots and lines and not
+  lobs, and the lobbers in `fight` stand by the cover for that reason. On high ground the three
+  shooters reach a player and the ground shapes do not. The simulator's floor is flat, so none
+  of this is measured.
+- **Flat values (ruling 20) now include the plate.** `plate` 80 sits between two finishers of
+  the tier-1 Broadsword and one of the Greataxe. P5 must scale it with `heavyHit` and enemy HP.

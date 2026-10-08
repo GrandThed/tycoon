@@ -954,6 +954,99 @@ local Theme = {
 	-- RangePanel: one more readout line (damage taken, downs) under the P3 four.
 	COMBAT_RANGE_PANEL_VITALS_LINES = 1,
 
+	-- P4 wave 2 "roles" (docs/INTERFACES.md "P4 contracts" -> "Wave 2"): the shooters, the
+	-- brute and the plate. Reach, width, speed and every time come from the kind's `attacks`
+	-- and the effects themselves; these are only how each one looks. Everything an enemy warns
+	-- with or throws is the tell red above.
+	-- The marksman's line. It is a vertical plane (a jump does not clear it), so it is drawn
+	-- standing up: a floor strip of the shot's true width, a beam at chest height, and a sheet
+	-- over them in three bands, each fainter than the one below and the top one well above a
+	-- double jump (18 + 12 studs). Until the lock only a thin strip and beam follow the aim.
+	COMBAT_RANGE_TELL_LINE_THIN_WIDTH = 0.3,
+	COMBAT_RANGE_TELL_LINE_THIN_TRANSPARENCY = 0.35,
+	COMBAT_RANGE_TELL_LINE_BEAM_HEIGHT = 3,
+	COMBAT_RANGE_TELL_LINE_BEAM_THIN = 0.12,
+	COMBAT_RANGE_TELL_LINE_BEAM_LOCKED = 0.4,
+	COMBAT_RANGE_TELL_LINE_BEAM_SHOT = 1,
+	COMBAT_RANGE_TELL_LINE_LOW_TOP = 8,
+	COMBAT_RANGE_TELL_LINE_MID_TOP = 18,
+	COMBAT_RANGE_TELL_LINE_HIGH_TOP = 34,
+	COMBAT_RANGE_TELL_LINE_LOW_TRANSPARENCY = 0.72,
+	COMBAT_RANGE_TELL_LINE_MID_TRANSPARENCY = 0.86,
+	COMBAT_RANGE_TELL_LINE_HIGH_TRANSPARENCY = 0.94,
+	COMBAT_RANGE_TELL_LINE_SHOT_LIFT = 0.35, -- how much more solid every band is at the shot
+	COMBAT_RANGE_TELL_LINE_FOLLOW_RATE = 18, -- per second: the thin line eases after the wire's yaw steps
+	-- The brute's charge is drawn on the server clock, ahead of its delayed snapshots; at the
+	-- lane's end the body waits for them and takes over once they are this close (studs).
+	COMBAT_RANGE_TELL_RUSH_ARRIVE = 1,
+	-- A shooter walks through its recover. The spent slump is a standing body's: it lifts with
+	-- the body's pace and is gone at this many studs/s (every keepAway kind walks faster). The
+	-- dull tint stays, which is what says "spent".
+	COMBAT_RANGE_TELL_SPENT_WALK_SPEED = 4,
+	-- The slinger's shot: an orb of its true radius in a larger halo, a short tapering tail
+	-- behind it, and a flash where it ends (bright on a player, small and dull on a wall).
+	COMBAT_RANGE_SHOT_HALO_SCALE = 1.8,
+	COMBAT_RANGE_SHOT_HALO_TRANSPARENCY = 0.7,
+	COMBAT_RANGE_SHOT_HALO_PULSE = 0.15,
+	COMBAT_RANGE_SHOT_HALO_PULSE_HZ = 6,
+	COMBAT_RANGE_SHOT_TAIL = 3, -- fading copies behind the orb (none on a low-end device)
+	COMBAT_RANGE_SHOT_TAIL_SECONDS = 0.05, -- how far apart in flight time
+	COMBAT_RANGE_SHOT_TAIL_TRANSPARENCY = 0.5,
+	COMBAT_RANGE_SHOT_HIT_COLOR = Color3.fromRGB(255, 196, 206),
+	COMBAT_RANGE_SHOT_HIT_SCALE = 3.2,
+	COMBAT_RANGE_SHOT_HIT_SECONDS = 0.22,
+	COMBAT_RANGE_SHOT_WALL_COLOR = Color3.fromRGB(128, 58, 70),
+	COMBAT_RANGE_SHOT_WALL_SCALE = 1.6,
+	COMBAT_RANGE_SHOT_WALL_SECONDS = 0.14,
+	-- A hit's end arrives after the orb was drawn through its victim: it fades over this long,
+	-- still flying, and is never pulled back to the flash.
+	COMBAT_RANGE_SHOT_SPENT_SECONDS = 0.1,
+	-- The lobber's circle: a faint disc and a bright rim at its full reach, a brighter disc
+	-- growing to the rim, the shot arcing in, and a flash on landing.
+	COMBAT_RANGE_AREA_SEGMENTS = 24,
+	COMBAT_RANGE_AREA_LOW_END_SEGMENTS = 12,
+	COMBAT_RANGE_AREA_BASE_TRANSPARENCY = 0.82,
+	COMBAT_RANGE_AREA_LAND_SECONDS = 0.3,
+	COMBAT_RANGE_LOB_BALL_SIZE = 1.4,
+	COMBAT_RANGE_LOB_APEX_SHARE = 0.35, -- the arc's height as a share of the flat distance thrown
+	COMBAT_RANGE_LOB_APEX_MIN = 4,
+	COMBAT_RANGE_LOB_APEX_MAX = 14,
+	-- Role cues on the bodies (ThreatFx/Cues). A shooter's lit piece swells to this share of its
+	-- body's height by the end of the windup: at forty studs that is still a clear red ball.
+	COMBAT_RANGE_CUE_CHARGE_SHARE = 0.6,
+	COMBAT_RANGE_CUE_AIM_CHARGE_SHARE = 0.3, -- the marksman's barrel tip: its line is the tell
+	COMBAT_RANGE_CUE_DARK_COLOR = Color3.fromRGB(26, 28, 34),
+	COMBAT_RANGE_CUE_HORN_COLOR = Color3.fromRGB(238, 228, 204),
+	COMBAT_RANGE_CUE_BREAK_SECONDS = 0.3, -- the shell's burst when the plate breaks
+	COMBAT_RANGE_CUE_BREAK_GROW = 0.6,
+	COMBAT_RANGE_CUE_GLINT_SECONDS = 0.1, -- the shell's flash when it turns a hit
+	-- The plate: a steel blue that is neither the white and yellow of ordinary numbers nor any
+	-- enemy red. Its shell, its bar and the numbers of the damage it takes all share it.
+	COMBAT_RANGE_PLATE_COLOR = Color3.fromRGB(120, 175, 240),
+	COMBAT_RANGE_ENEMY_HEALTH_COLOR = Color3.fromRGB(235, 84, 84),
+	COMBAT_RANGE_PLATE_BAR_WIDTH = 68, -- px, the same at any distance
+	COMBAT_RANGE_PLATE_BAR_HEIGHT = 6, -- each of the two rows
+	COMBAT_RANGE_PLATE_BAR_GAP = 2,
+	COMBAT_RANGE_PLATE_BAR_RISE = 0.9, -- studs above the top of the head
+	COMBAT_RANGE_PLATE_BAR_BG_TRANSPARENCY = 0.35,
+	COMBAT_RANGE_PLATE_BAR_MAX_DISTANCE = 160,
+	-- The reel after a plate breaks: the opening. Slumped and dull like a spent body, but
+	-- thrown further back and swaying.
+	COMBAT_RANGE_REEL_LEAN = 0.5,
+	COMBAT_RANGE_REEL_SWAY = 0.35, -- radians of twist either way
+	COMBAT_RANGE_REEL_SWAY_HZ = 2.5,
+	COMBAT_RANGE_REEL_SQUASH = 0.88,
+	-- Hit numbers on a plate (FeedbackController). A blocked hit is a small grey word, never a
+	-- 0; plate damage is its amount in the plate's colour; the break has its own line.
+	COMBAT_RANGE_BLOCKED_COLOR = Color3.fromRGB(150, 156, 170),
+	COMBAT_RANGE_BLOCKED_TEXT = 17,
+	COMBAT_RANGE_BLOCKED_LABEL = "BLOCKED",
+	COMBAT_RANGE_PLATE_BROKEN_LABEL = "PLATE BROKEN",
+	-- A body whose plate broke can carry three lines at once (health number, plate number,
+	-- "PLATE BROKEN"). Each sits one row above the last: a share of a number's own height, in
+	-- pixels, so the rows hold apart at any distance and on any screen.
+	COMBAT_RANGE_NUMBER_ROW_SHARE = 0.5,
+
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.
 	-- Rows are 48 design px like the hub's DebugPanel, because 48 x MIN_SCALE is exactly

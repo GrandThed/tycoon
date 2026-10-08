@@ -1774,6 +1774,9 @@ export type CrowdKindDef = {
 	brain: ("rush" | "keepAway")?,
 	bandMin: number?,
 	bandMax: number?,
+	-- Most enemies of this kind in windup or attack against one player at once; the rest wait
+	-- their turn, so a kind's hits come as a rhythm and never as one volley. nil = no cap.
+	perPlayer: number?,
 	-- At most 7 (the snapshot carries the attack's index in 3 bits; 0 = none).
 	attacks: { CrowdAttackDef }?,
 	-- Plate HP. While it lasts, only a hit of crowd.heavyHit or more touches the enemy, and that
@@ -1809,8 +1812,12 @@ export type CrowdAttackDef = {
 	-- line only: the aim follows its target until this long before the impact. Every other
 	-- shape locks its facing when the windup starts.
 	lockSeconds: number?,
+	-- shot only: how far the aim leads its target's motion over the flight (0 = where they
+	-- stand, 1 = where they will be, gravity included for a target in the air).
+	lead: number?,
 	-- Ground shapes reach this many studs above the floor: a player whose feet are higher is
-	-- missed (a jump dodges). Unused by shot, which is tested as a sphere.
+	-- missed (a jump dodges). Unused by shot, which is tested as a sphere, and by line, which
+	-- is a vertical plane (being in the air does not avoid it).
 	height: number?,
 	-- What cancels the windup: stagger = any hit that staggers; heavy = only a hit of
 	-- crowd.heavyHit or more; none = nothing.
@@ -1946,14 +1953,14 @@ export type ProvingGroundsConfig = {
 		-- P4: the damage of one hit (after crit and chain falloff, before armour) from which it
 		-- counts as heavy: it damages a plate and cancels an `interrupt = "heavy"` windup.
 		heavyHit: number,
-		-- P4: rules of enemies that fight. attackersPerPlayer = most lunging enemies in windup or
-		-- attack against one player at once; spawnGrace = seconds a fresh enemy cannot start a
+		-- P4 wave 2: seconds an enemy reels, staggered, when its plate shatters (the opening).
+		plateBreakSeconds: number,
+		-- P4: rules of enemies that fight. spawnGrace = seconds a fresh enemy cannot start a
 		-- windup; spawnClear = a slot does not respawn while a player stands within this many
 		-- studs; maxShots = most enemy projectiles alive (a shooter waits when it is reached);
 		-- strikeSeconds = how long a lunge or arc stays in the `attack` state after its impact
 		-- (the visible thrust; a lane's `attack` state lasts its charge, range / speed).
 		threat: {
-			attackersPerPlayer: number,
 			spawnGrace: number,
 			spawnClear: number,
 			maxShots: number,

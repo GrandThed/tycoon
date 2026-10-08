@@ -4087,18 +4087,19 @@ Setup: `docs/MANUAL_STEPS.md` "P3.1". Keys: **1** melee, **2** ranged, **Space**
 
 ## P4 wave 1 — They hurt you (quick look)
 
+**Superseded on 2026-10-08 by "P4 Stop 1 — Enemies that fight back" below. Run that one; this
+section is kept as a record.**
+
 **Goal:** a first look at enemies that hit back: your health bar, getting hit, dodging, going
 down. **Optional, about five minutes. Wave 2 (the shooters, the brute, the elite's plate) is
 built whatever you say.** Silent, placeholder bodies. Judge feel.
 
-<!-- FILE TO OPEN: start. Lead: if wave 1 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. The lead merges this wave to
   `main` before asking for the look, so "Build all" builds it.
 - Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
   that was open in Studio before "Build all" is the old one**: no health bar, no enemies that
   fight.
-<!-- FILE TO OPEN: end -->
 
 Setup: `docs/MANUAL_STEPS.md` "P4 wave 1". Keys: **1** melee, **2** ranged, **Space** jump,
 **Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
@@ -4152,6 +4153,101 @@ You start with Broadsword + Longbow.
 - The elite's knockback: how does it feel? Too far, too short?
 - The **Server … ms** number from step 7.
 - Anything wrong: step numbers, PC or phone.
+
+## P4 Stop 1 — Enemies that fight back
+
+**Goal:** judge the enemies that fight (fodder, slinger, marksman, lobber, brute, plated elite)
+and what it is like to be hit, to dodge and to go down. **About 15 minutes.** This is the
+first real stop of P4: the boss (Stop 2) waits for your verdict. Silent, placeholder bodies.
+Judge feel, and whether every warning can be read in time.
+
+<!-- FILE TO OPEN: start. Lead: if wave 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Wave 2 is merged to `main`
+  once its checks are green, so "Build all" builds it.
+- Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
+  that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** the panel (**P**) has the set buttons **fight** and
+  **shooters**. The older build has neither.
+<!-- FILE TO OPEN: end -->
+
+Setup: `docs/MANUAL_STEPS.md` "P4 Stop 1". Keys: **1** melee, **2** ranged, **Space** jump,
+**Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
+You start with Broadsword + Longbow. Sets are the buttons under **God mode** in the panel's
+**Dummies & commands** section.
+
+**Who is who** (colour, and the one shape that marks the role):
+- Fodder: red, plain.
+- Slinger: amber, a ball held out in one hand.
+- Marksman: purple, a long dark barrel.
+- Lobber: green, a pack on its back with a ball on top.
+- Brute: big, rust-brown, two pale horns.
+- Elite: blue, a metal shell and a two-row bar over its head.
+
+**Expected today, not bugs:**
+- **Running a big circle avoids everything and heals you.** Missions will add the pressure
+  (P5).
+- **Elites are slow work, not danger,** while you keep swinging.
+- Enemies walk through cover (since P1). Their shots and the marksman's line are stopped by it.
+- The marksman's wall is drawn at full length, also through cover. It can look dangerous
+  where you are safe, never the reverse.
+- Your own shots at a brute in mid-charge may be judged a little behind where it is drawn.
+- Bodies are placeholders with one shape per role.
+- No sound.
+
+### Melee and the health bar
+
+- [ ] 1. **Play** → 30 red dummies, and a green health bar reading **130 / 130** above the two ability tiles. **1**, run straight at the crowd and **click while still running** → the arc appears on the click, in front of you, and stays in front while you keep running; the dummies inside it are the ones hit. Bug: the arc appears behind you, or is left behind. Then **P** → the set buttons include **fight** and **shooters**. If not: old file, see the block above.
+
+### Getting hit, dodging, going down
+
+- [ ] 2. **P** → **fodderRush** → **P** to close. Stand still, hands off the mouse → the fodder about to hit rear back and turn red (about half a second), then jab. Never more than 2 lunge at once. Each hit: the bar drops, the screen edges flash red, a red pointer on a ring round the crosshair shows where it came from (straight down = behind you), and a red **−8** pops over your character. At zero you fall and a banner reads **DOWN · up in …**, counting down from 2 s. Then you stand up where you lay with a full bar and shimmer green for about 1.5 s. Bug: you respawn at the start; the bar stays empty after the get-up; a hit with no flash or no pointer.
+- [ ] 3. Still in the rush. **Left Shift** as a fodder rears back at you → the dash carries you about 20 studs clear, a green **DODGED** pops over your character and the bar does not move. **Space** as one rears back → its thrust passes under you (a hit as you land is fair). Walking out of the way shows nothing: only a dash, or the shimmer after a get-up, counts as a dodge. Bug: a dash away with no **DODGED**; a hit while you are high in a jump.
+
+### The three shooters
+
+- [ ] 4. **P** → **shooters** → **P**. Six enemies keep their distance: 2 slingers, 2 marksmen, 2 lobbers. Tell them apart by colour and shape (list above). Watch a **slinger**: the ball in its hand swells and turns red (about half a second), then a glowing red orb flies at you, slow enough to watch: **−12**. Walk steadily one way → the orb meets you. Change direction once it has left the hand → it misses. Bug: you cannot tell the three kinds apart; standing still, an orb passes through you with no number.
+- [ ] 5. Watch a **marksman**: a thin red line on the floor follows you for about half a second. Then it stops following, widens, and a see-through red wall stands on it for about half a second. Then the wall flashes: **−22** if you are still inside it. Step sideways out of the wall once it has risen → no hit. **Space** inside the wall → still hit: a jump does not save you. Bug: the wall turns to follow you after it has risen; a hit while you are clearly outside the wall; a hit with no wall first.
+- [ ] 6. Watch a **lobber**: the ball on its pack swells red, then a ball arcs up toward you and a red circle appears on the ground under you, faint with a bright rim, and fills. It lands about a second and a half later: **−18** and a small shove. Walk out of the circle before it is full → no hit. Now jump onto the first step of the staircase left of the start → the next circle is drawn on top of the step, under you. Bug: the circle lies on the floor below the step; a hit outside the circle; the ball lands clearly before or after the circle is full.
+- [ ] 7. Stand behind one of the tall grey walls on the right, so the wall is between you and the shooters → orbs die on the wall with a small dull puff; the marksman's wall is still drawn through the cover (expected) but its shot does not hurt you; the lobber's ball comes over the wall and lands on you. Bug: an orb or a marksman's shot hurts you through a wall taller than you; a lob stopped by the wall.
+
+### Brutes
+
+- [ ] 8. **P** → **brutes** → **P**. Three brutes walk up. About 20 studs away one stops and a red lane appears on the floor from it toward you, round at both ends, and fills for just under a second. Then the brute charges down it, head down, 30 studs in about half a second: **−28**, and you are thrown about 6 studs. Sidestep out of the lane, jump, or dash → no hit. After the charge it stands slumped and dull for about 1.5 s: that is your opening. Only one winds up or charges at a time; the others wait their turn. Bug: two brutes charging you at once; a hit while you are outside the lane; a charge with no lane first; a brute that leaves its lane.
+
+### The plate
+
+- [ ] 9. **P** → **elites** → **P** (calmer, same plates: set **armoured**, 8 elites that never attack). The elites now wear a metal shell and a two-row bar over the head: top row blue = plate, bottom row red = health. **2** (Longbow), quick clicks → a small grey **BLOCKED**, the shell glints, neither row moves. **P** → **Weapons** → **Ranged** → **SMG**, hold **left mouse** on an elite → the whole stream shows one small **BLOCKED**. **1** (Broadsword), hold **left mouse** → swings 1 and 2: **BLOCKED**; the third: a blue number, and the top row drops by about half. The third swing of the next combo → **PLATE BROKEN**, the shell bursts off, and the elite reels, slumped and swaying, for about 1.5 s. From then on the red row drops under every weapon: press **2** and finish it with the SMG. **Warhammer** (**Weapons** → **Melee**) breaks a plate in 2 hits. Bug: a **0** instead of **BLOCKED**; a blocked hit pushes or staggers the elite; the red row drops while the blue row is not empty; no **PLATE BROKEN**; light hits still **BLOCKED** after the break.
+
+### High ground
+
+- [ ] 10. **P** → **fodderRush** → **P**. Jump onto the first step of the staircase left of the start → the fodder crowd below and cannot hit you; the bar stays full. **P** → **shooters** → **P**, stand on the same step → orbs and the marksman's wall still reach you (the lobber's circle was step 6). Bug: a lunge reaches you on the step; or on the step no shooter can hit you.
+
+### The whole fight
+
+- [ ] 11. **P** → **fight** → **P**. 100 fodder, 3 slingers, 3 marksmen, 2 lobbers, 3 brutes and 3 plated elites; they reach you one kind after another over the first few seconds. Stand still once → you are down within about 6 s (expected). Then play it properly for a few minutes: move, dodge, fight back. Note what puts you down most often and which warning you miss. Bug: two marksman walls standing on you at once, or two brutes charging you at once (every kind takes turns; fodder come two at a time); an orb, a shot, a circle or a charge that hits with nothing drawn first.
+- [ ] 12. Still in **fight**, after about 30 s of fighting: read the third readout line under the **⚙ Range** tab, **Server N ms · FPS N** → **write the Server number down** (it should stay under 2), and the FPS. Say if anything stutters.
+- [ ] 13. **P** → top of **Dummies & commands**: **God mode: off · click for on** → click → gold **God mode: ON · click for off**. **P**, stand in the fight → every hit pops **DODGED**, the bar does not move and you are not thrown: study each warning calmly. Turn it off the same way. Bug: the bar drops with God mode ON.
+- [ ] 14. **P** → **crowd30** → walk into the dummies and stand there about 10 s → they never attack and the bar stays full, as in P3. Bug: a dummy of an old set attacks.
+
+### Phone (Test (Prueba) → Device (Dispositivo) → 375×667)
+
+- [ ] 15. Play → tap **⚙ Range** → **fight** → tap **⚙ Range** again. The health bar sits just above the thumb buttons. Check that each of these can be read at phone size: the brute's lane, the marksman's wall, the lobber's circle, the slinger's orb, the elite's two-row bar, **BLOCKED** and **PLATE BROKEN**. Still no attack button, and nothing overlaps **Dash**, **Jump**, the two ability buttons or the slot button. Say how smoothly it runs. Bug: a warning you cannot make out; anything covering a thumb button; an attack button.
+
+### Two players (optional)
+
+- [ ] 16. Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). Player 1 picks **fight** → the same lanes, walls, circles and orbs show at the same moment on both screens; each player is attacked on their own rhythm (each has their own two fodder and one of every other kind); when player 1 is hit, player 1's character flashes on player 2's screen. Bug: a warning on one screen only, or clearly later on one.
+
+### What to tell Claude
+
+- Does melee feel instant now (step 1)? That closes P3.1.
+- Which role is the most fun, and which the most annoying? Why?
+- Is any warning hard to read? Which one, and from how far away?
+- The fight: too soft or too hard when you stand still? When you move and dodge?
+- The plate: how do **BLOCKED**, the break and the reel feel?
+- The **Server … ms** number from step 12, and how the phone-sized screen ran (step 15).
+- Anything wrong: step numbers, PC or phone.
+- Still open from P3, if you have a view: A or B for SMG, Beam and Chain Gun; are cross-slot refunds fun or spammy; favourite and weakest ability.
 
 ## M12 — Village growing city
 

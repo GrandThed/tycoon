@@ -1703,25 +1703,39 @@ local function burstPosition(strike: Strike): Vector3
 end
 
 -- A total and its "×N" (enemies hit) written into a burst, sized by the crowd and the strength.
+-- P4 wave 2, `tone` = what a plate did with these hits: "plate" = the amount came off a plate
+-- (the plate's colour), "blocked" = the plate turned them (a small grey word, never a 0),
+-- "broke" = the plate shattered (its own line). nil = an ordinary hit.
 local function paintBurst(
 	burst: Burst,
 	total: number,
 	count: number,
 	crit: boolean,
-	strength: number
+	strength: number,
+	tone: string?
 ): ()
 	local size = math.clamp(
 		strength,
 		Theme.COMBAT_RANGE_NUMBER_MIN_STRENGTH,
 		Theme.COMBAT_RANGE_NUMBER_MAX_STRENGTH
 	)
-	local color = if crit then Theme.COMBAT_RANGE_CRIT_COLOR else Theme.COLOR_TEXT
+	local color = if tone == "blocked"
+		then Theme.COMBAT_RANGE_BLOCKED_COLOR
+		elseif tone ~= nil then Theme.COMBAT_RANGE_PLATE_COLOR
+		elseif crit then Theme.COMBAT_RANGE_CRIT_COLOR
+		else Theme.COLOR_TEXT
 	-- Bigger crowds make bigger numbers: a few px per doubling of the hit count.
 	local text = (
-		if crit then Theme.COMBAT_RANGE_NUMBER_CRIT_TEXT else Theme.COMBAT_RANGE_NUMBER_TEXT
+		if tone == "blocked"
+			then Theme.COMBAT_RANGE_BLOCKED_TEXT
+			elseif crit or tone == "broke" then Theme.COMBAT_RANGE_NUMBER_CRIT_TEXT
+			else Theme.COMBAT_RANGE_NUMBER_TEXT
 	) + Theme.COMBAT_RANGE_NUMBER_GROWTH_PER_DOUBLING * math.log(math.max(count, 1), 2)
 	burst.main.TextSize = math.floor(math.min(text, Theme.COMBAT_RANGE_NUMBER_MAX_TEXT))
-	burst.main.Text = Format.Cash(total)
+	burst.main.Text = if tone == "blocked"
+		then Theme.COMBAT_RANGE_BLOCKED_LABEL
+		elseif tone == "broke" then Theme.COMBAT_RANGE_PLATE_BROKEN_LABEL
+		else Format.Cash(total)
 	burst.main.TextColor3 = color
 	burst.count.TextSize = Theme.COMBAT_RANGE_NUMBER_COUNT_TEXT
 	burst.count.Text = if count > 1 then "×" .. Format.Cash(count) else ""
@@ -1733,7 +1747,9 @@ local function paintBurst(
 end
 
 -- Shows a painted burst at `position`: popped now, fully opaque, and still until `started`.
-local function launchBurst(burst: Burst, position: Vector3): ()
+-- P4 wave 2, `row` = how many rows above that point it sits (nil = on it). A row is a share of
+-- the burst's own height on screen, so stacked lines hold apart at any distance.
+local function launchBurst(burst: Burst, position: Vector3, row: number?): ()
 	burst.main.TextTransparency = 0
 	burst.count.TextTransparency = 0
 	for _, stroke in burst.strokes do
@@ -1741,6 +1757,9 @@ local function launchBurst(burst: Burst, position: Vector3): ()
 	end
 	burst.anchor.WorldPosition = position
 	burst.gui.StudsOffset = Vector3.zero
+	burst.gui.SizeOffset = if row ~= nil and row > 0
+		then Vector2.new(0, row * Theme.COMBAT_RANGE_NUMBER_ROW_SHARE)
+		else Vector2.zero
 	burst.side = if math.random() < 0.5 then -1 else 1
 	burst.pop = if Theme.reducedMotion
 		then Theme.COMBAT_RANGE_NUMBER_REDUCED_POP_SCALE
@@ -1753,16 +1772,25 @@ local function launchBurst(burst: Burst, position: Vector3): ()
 	burst.gui.Enabled = true
 end
 
-local function showNumbers(strike: Strike, total: number, crit: boolean, strength: number): ()
-	if strength <= 0 or total <= 0 then
+-- `tone` as paintBurst's, `row` as launchBurst's. A "broke" line has no amount of its own and
+-- sits a row above the number of the hit that did it.
+local function showNumbers(
+	strike: Strike,
+	total: number,
+	crit: boolean,
+	strength: number,
+	tone: string?,
+	row: number?
+): ()
+	if strength <= 0 or (total <= 0 and tone ~= "broke") then
 		return
 	end
 	local burst = takeBurst()
 	if burst == nil then
 		return
 	end
-	paintBurst(burst, total, #strike.hits, crit, strength)
-	launchBurst(burst, burstPosition(strike))
+	paintBurst(burst, total, #strike.hits, crit, strength, tone)
+	launchBurst(burst, burstPosition(strike), row)
 end
 
 -- Lasting hits (ticks, a held beam) of one shooter + ability run into ONE burst: the first
@@ -1771,6 +1799,9 @@ end
 -- open TICK_MERGE_MAX_SECONDS (the next hit then opens a fresh one). "×N" counts the distinct
 -- enemies. Returns the kills the open burst has counted so far (this strike's alone when
 -- numbers are off).
+-- P4 wave 2: `tone` as paintBurst's. Blocked hits always come through here, under their own
+-- key and whatever fired them, so a hose of light fire on a plate is ONE small "BLOCKED" that
+-- pulses, not a word per shot.
 local function mergeNumbers(
 	key: string,
 	strike: Strike,
@@ -1778,7 +1809,8 @@ local function mergeNumbers(
 	crit: boolean,
 	kills: number,
 	gap: number,
-	strength: number
+	strength: number,
+	tone: string?
 ): number
 	local now = os.clock()
 	local maxOpen = Theme.COMBAT_RANGE_TICK_MERGE_MAX_SECONDS
@@ -1795,7 +1827,7 @@ local function mergeNumbers(
 		merges[key] = nil
 		merge = nil
 	end
-	if strength <= 0 or total <= 0 then
+	if strength <= 0 or (total <= 0 and tone ~= "blocked") then
 		return if merge ~= nil then merge.kills + kills else kills
 	end
 	local opened = merge == nil
@@ -1831,7 +1863,7 @@ local function mergeNumbers(
 		end
 	end
 	local burst = running.burst
-	paintBurst(burst, running.total, running.count, running.crit, strength)
+	paintBurst(burst, running.total, running.count, running.crit, strength, tone)
 	local position = burstPosition(strike)
 	if opened then
 		launchBurst(burst, position)
@@ -1916,6 +1948,14 @@ local function react(strike: Strike, impactValues: Impact): ()
 	local knocks = impactValues.knockback > 0 or pulls
 	local launches = impactValues.launch > 0
 	for _, hit in strike.hits do
+		if hit.blocked then
+			-- P4 wave 2: a plate turned this hit and the server moved nothing, so the body
+			-- neither flashes nor flinches. Its shell glints instead.
+			if flash > 0 then
+				CrowdRenderer.React(hit.id, "block", nil, flash)
+			end
+			continue
+		end
 		if flash > 0 then
 			CrowdRenderer.React(hit.id, "flash", nil, flash)
 		end
@@ -2651,11 +2691,15 @@ local function parseHits(raw: any): { Types.StrikeHit }?
 			and typeof(hit.id) == "number"
 			and typeof(hit.amount) == "number"
 		then
+			-- P4 wave 2: what a plate did with the hit (nil on every other body).
 			table.insert(hits, {
 				id = hit.id,
 				amount = hit.amount,
 				crit = hit.crit == true,
 				killed = hit.killed == true,
+				blocked = if hit.blocked == true then true else nil,
+				plate = if hit.plate == true then true else nil,
+				broke = if hit.broke == true then true else nil,
 			})
 		end
 	end
@@ -2760,12 +2804,25 @@ local function onStrike(strike: Strike): ()
 	local total = 0
 	local kills = 0
 	local crit = false
+	-- P4 wave 2: what a plate did with this strike. blocked = hits it turned (amount 0);
+	-- plateTotal = damage that came off a plate; broke = the hit that shattered one.
+	local blockedCount = 0
+	local plateTotal = 0
+	local broke: Types.StrikeHit? = nil
 	for _, hit in strike.hits do
 		total += hit.amount
 		if hit.killed then
 			kills += 1
 		end
 		crit = crit or hit.crit
+		if hit.blocked then
+			blockedCount += 1
+		elseif hit.plate then
+			plateTotal += hit.amount
+		end
+		if hit.broke then
+			broke = hit
+		end
 	end
 	local hitCount = #strike.hits
 	local now = os.clock()
@@ -2820,6 +2877,76 @@ local function onStrike(strike: Strike): ()
 		return
 	end
 
+	-- P4 wave 2: a strike that met a plate is told apart by what the plate did with each hit.
+	-- `landed` are the hits that did something (the plate's and the ordinary ones) and carry
+	-- the usual feedback; `onPlate` and `flesh` split them for the numbers' colour. A strike
+	-- no plate touched keeps the one list it came with, so an ordinary fight allocates nothing.
+	local numbers = feedbackStrength("numbers")
+	local landed = strike
+	local onPlate: Strike? = nil
+	local flesh = strike
+	if blockedCount > 0 or plateTotal > 0 then
+		local blockedHits: { Types.StrikeHit } = {}
+		local landedHits: { Types.StrikeHit } = {}
+		local plateHits: { Types.StrikeHit } = {}
+		local fleshHits: { Types.StrikeHit } = {}
+		for _, hit in strike.hits do
+			if hit.blocked then
+				table.insert(blockedHits, hit)
+			else
+				table.insert(landedHits, hit)
+				table.insert(if hit.plate then plateHits else fleshHits, hit)
+			end
+		end
+		landed = table.clone(strike)
+		landed.hits = landedHits
+		flesh = table.clone(strike)
+		flesh.hits = fleshHits
+		if #plateHits > 0 then
+			local part = table.clone(strike)
+			part.hits = plateHits
+			onPlate = part
+		end
+		if blockedCount > 0 then
+			-- A blocked hit reads as a block, never as a 0, and as nothing else: no marker,
+			-- hitstop, shake or pulse, and no place in the combo. One small "BLOCKED" per
+			-- shooter takes every one of them in while they keep coming.
+			local turned = table.clone(strike)
+			turned.hits = blockedHits
+			mergeNumbers(
+				tostring(strike.userId) .. ":blocked",
+				turned,
+				0,
+				false,
+				0,
+				mergeGap(strike, variant),
+				numbers,
+				"blocked"
+			)
+			if #landedHits == 0 then
+				return
+			end
+		end
+	end
+	local landedCount = #landed.hits
+	-- A plate that broke with hits of the same strike still to come gives its body two entries,
+	-- the plate's and the health's. It is one body to the hitstop and the counters, and its two
+	-- numbers would land on one spot: the plate's then goes a row up.
+	local plateRow = 0
+	if onPlate ~= nil then
+		for _, plateHit in onPlate.hits do
+			for _, fleshHit in flesh.hits do
+				if fleshHit.id == plateHit.id then
+					landedCount -= 1
+					plateRow = 1
+					break
+				end
+			end
+		end
+	end
+	-- Every bit of the damage came off a plate: the whole number is the plate's colour.
+	local allPlate = plateTotal > 0 and plateTotal >= total
+
 	-- A held beam marks and pulses at most once per BEAM_MARKER_SECONDS; a kill always does.
 	local quiet = beamWeapon
 		and kills == 0
@@ -2837,30 +2964,46 @@ local function onStrike(strike: Strike): ()
 		local key = tostring(strike.userId) .. ":" .. (ability or ("beam:" .. strike.weapon))
 		shownKills = mergeNumbers(
 			key,
-			strike,
+			landed,
 			total,
 			crit,
 			kills,
 			mergeGap(strike, variant),
-			feedbackStrength("numbers")
+			numbers,
+			if allPlate then "plate" else nil
 		)
 	else
-		showNumbers(strike, total, crit, feedbackStrength("numbers"))
+		-- The plate's share is its own number over the plated bodies, in the plate's colour;
+		-- what is left is the ordinary one (neither shows when it has nothing to say).
+		if onPlate ~= nil then
+			showNumbers(onPlate, plateTotal, crit, numbers, "plate", plateRow)
+		end
+		showNumbers(flesh, total - plateTotal, crit, numbers)
 		local hitstopSeconds = math.min(
-			Theme.COMBAT_RANGE_HITSTOP_BASE + Theme.COMBAT_RANGE_HITSTOP_PER_HIT * (hitCount - 1),
+			Theme.COMBAT_RANGE_HITSTOP_BASE + Theme.COMBAT_RANGE_HITSTOP_PER_HIT * (landedCount - 1),
 			Theme.COMBAT_RANGE_HITSTOP_MAX,
 			(now - lastLocalHitAt) * Theme.COMBAT_RANGE_HITSTOP_INTERVAL_SHARE
 		)
 		hitstop(hitstopSeconds * feedbackStrength("hitstop"))
 	end
+	if broke ~= nil then
+		-- The plate shattered: its own line over the body, a row above the number of the hit
+		-- that did it (a lasting strike's one merged number sits on the base row), and the
+		-- heavy shake and pulse below.
+		local shatter = table.clone(strike)
+		shatter.hits = { broke }
+		showNumbers(shatter, 0, false, numbers, "broke", if lasting then 1 else plateRow + 1)
+	end
 	lastLocalHitAt = now
 
 	-- Lasting hits never count as heavy: their shake and pulse are a soft running rumble.
-	local heavy = not lasting
+	local heavy = (
+		not lasting
 		and (
 			impactValues.knockback >= Theme.COMBAT_RANGE_HEAVY_KNOCKBACK
 			or kills >= Theme.COMBAT_RANGE_EDGE_FLASH_KILLS
 		)
+	) or broke ~= nil
 	local shake = if heavy
 		then Theme.COMBAT_RANGE_SHAKE_HEAVY
 		else math.min(
@@ -2888,7 +3031,7 @@ local function onStrike(strike: Strike): ()
 		end
 	end
 	-- A lasting hit's kill line shows the running total of its burst.
-	updateCounters(hitCount, if kills > 0 then shownKills else 0, feedbackStrength("counters"))
+	updateCounters(landedCount, if kills > 0 then shownKills else 0, feedbackStrength("counters"))
 end
 
 local function applyFx(fx: any): ()

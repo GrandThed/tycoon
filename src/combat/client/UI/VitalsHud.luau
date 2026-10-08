@@ -527,7 +527,12 @@ function VitalsHud.new(parent: Instance): VitalsHudHandle
 			local now = os.clock()
 			local camera = Workspace.CurrentCamera
 			local frame = if camera ~= nil then camera.CFrame else CFrame.identity
-			local bearing = bearingOf(frame, lastOrigin or frame.Position, from) or 0
+			local bearing = bearingOf(frame, lastOrigin or frame.Position, from)
+			if bearing == nil then
+				-- It came from where the player stands (a lob landing on them): there is no
+				-- way to point at that, and a pointer straight ahead would be a lie.
+				return
+			end
 			-- A hit from where a live pointer already points renews it; otherwise a free
 			-- pointer, or the oldest.
 			local chosen: Pointer? = nil

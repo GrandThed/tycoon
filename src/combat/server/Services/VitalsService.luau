@@ -1,13 +1,13 @@
 --!strict
 -- The player's body in the Proving Grounds (docs/INTERFACES.md "P4 contracts": rulings 4-7, 11,
--- 14, 17, 18, 22-24 and 26, and "The commit rule"). Until P4 nothing in the range could hurt a
--- player. This is where an enemy's attack meets one: health, regen, dodges, going down and
--- getting up, the `god` switch and the `hurt` effects.
+-- 14, 17, 18, 22-24 and 26, "The commit rule" and "Wave 2 — roles"). Until P4 nothing in the
+-- range could hurt a player. This is where an enemy's attack meets one: health, regen, dodges,
+-- going down and getting up, the `god` switch and the `hurt` effects.
 --
 -- RangeService owns the players and drives this module (AddPlayer, PrepareCharacter, the set
 -- reset, the readout). It hands its i-frame clock over as hooks at Start, so this file never
--- requires it. CrowdService calls the threat hooks set here: `canTarget`, and `impact` with
--- every enemy attack's frozen shape.
+-- requires it. CrowdService calls the threat hooks set here: `canTarget`, `impact` with every
+-- enemy attack at its impact, and `step` once per crowd step.
 --
 -- The commit rule. An attack's shape is frozen at its impact T, but whether it hits a player is
 -- decided at T + lag (ping + shooting.originLagSeconds, capped) against the server's copy of
@@ -17,6 +17,11 @@
 -- crowd step is too coarse a clock for a dash); nothing here yields. What a frame decides
 -- leaves in that frame, as one CombatFx batch per player, so the health bar and the flash move
 -- together (ruling 23).
+--
+-- Wave 2. A lunge, an arc and a line are judged from the queue as above; a lob too, its impact
+-- being its landing. A shot and a charge travel: ThreatField sweeps them every crowd step and
+-- hands each contact back to be settled here by the same rules (i-frames, `god`, the knock
+-- window, down), so one attack never sends one player two effects.
 --
 -- Health is Humanoid.Health. Its maximum is pinned to tier-1 weapons in both slots (ruling 17),
 -- whatever the Studio profile holds: the range's weapon numbers are tier-1 values, and the body
@@ -39,6 +44,7 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdBrain = require(script.Parent:WaitForChild("CrowdBrain"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
+local ThreatField = require(script.Parent:WaitForChild("ThreatField"))
 
 -- RangeService's side of the i-frames, both on os.clock().
 export type Hooks = {
@@ -93,6 +99,8 @@ local raised: { Types.CombatFx } = {}
 local hooks: Hooks? = nil
 local started = false
 local regenAccumulator = 0
+-- Scratch for the crowd step: who is on their feet, records and all, reused step after step.
+local standing: { ThreatField.Standing } = {}
 
 local VitalsService = {}
 
@@ -109,16 +117,15 @@ local function bodyOf(player: Player): (BasePart?, Humanoid?)
 	return root, humanoid
 end
 
+-- R15's HipHeight is measured to the root's underside.
+local function feetOf(root: BasePart, humanoid: Humanoid): number
+	return root.Position.Y - (humanoid.HipHeight + root.Size.Y / 2)
+end
+
 -- How far the server's copy of a character trails that player's own screen: the lag, and the
--- ceiling on it, that RangeService excuses on a claimed attack origin.
+-- ceiling on it, that RangeService excuses on a claimed attack origin and a shot is led by.
 local function lagOf(player: Player, shooting: Types.RangeShootingConfig): number
-	local ping = player:GetNetworkPing()
-	-- A NaN ping fails every comparison, math.max included.
-	ping = if ping == ping then math.max(ping, 0) else 0
-	return math.min(
-		ping + math.max(shooting.originLagSeconds, 0),
-		math.max(shooting.originLagMaxSeconds, 0)
-	)
+	return Tuning.CommitLag(shooting, player:GetNetworkPing())
 end
 
 local function grantIframes(player: Player, seconds: number): ()
@@ -126,6 +133,10 @@ local function grantIframes(player: Player, seconds: number): ()
 	if range ~= nil then
 		range.grantIframes(player, seconds)
 	end
+end
+
+local function raise(fx: Types.CombatFx): ()
+	table.insert(raised, fx)
 end
 
 -- Ruling 5: Roblox's own regen is off in the range. A disabled script's threads stop. Mission
@@ -141,32 +152,61 @@ local function met(from: number, untilClock: number, impact: number, limit: numb
 	return untilClock > math.max(from, impact) and from <= limit
 end
 
+-- Did either of the player's last two i-frame windows meet [impact, limit]?
+local function shielded(player: Player, impact: number, limit: number): boolean
+	local range = hooks
+	if range == nil then
+		return false
+	end
+	local from, untilClock, wasFrom, wasUntil = range.iframeWindow(player)
+	return met(from, untilClock, impact, limit) or met(wasFrom, wasUntil, impact, limit)
+end
+
 -- Is `point` inside the strike's shape, seen from above? The root is tested as a point (enemy
 -- shapes get no pad) lowered or raised to the shape's own level: height is the `height` rule's
 -- business alone.
 local function inPlan(strike: CrowdBrain.Strike, point: Vector3): boolean
 	local attack = strike.def
+	local shape = attack.shape
 	local origin = strike.origin
 	local level = Vector3.new(point.X, origin.Y, point.Z)
 	local range = math.max(attack.range or 0, 0)
-	if attack.shape == "lunge" then
+	if shape == "lunge" then
 		-- A thrust `width` across, along the locked heading. `range` is how far the hit
 		-- reaches from the body centre, so the capsule's round tip ends there.
 		local radius = math.max(attack.width or 0, 0) / 2
 		local tip = origin + strike.facing * math.max(range - radius, 0)
 		return HitShapes.Capsule(origin, tip, radius, 0, level, 0)
-	elseif attack.shape == "arc" then
+	elseif shape == "arc" then
 		local arcDegrees = attack.arcDegrees or FULL_CIRCLE_DEGREES
 		return HitShapes.Arc(origin, strike.facing, range, arcDegrees, 0, level, 0)
+	elseif shape == "line" then
+		-- A lane with square ends from the body centre, as far as world geometry let it go.
+		local width = math.max(attack.width or 0, 0)
+		return HitShapes.Lane(origin, strike.facing, strike.length or range, width, 0, level, 0)
+	elseif shape == "lob" then
+		local centre = strike.aim
+		local radius = math.max(attack.radius or 0, 0)
+		if centre == nil then
+			return false
+		end
+		local dx = point.X - centre.X
+		local dz = point.Z - centre.Z
+		return dx * dx + dz * dz <= radius * radius
 	end
 	return false
 end
 
--- Where a landed hit sends its victim: a sweep throws them away from the attacker, a thrust
--- along itself.
+-- Where a landed hit sends its victim: a sweep throws them away from the attacker and a lob
+-- away from where it landed; a thrust, a line, a shot and a charge push along themselves.
 local function pushOf(strike: CrowdBrain.Strike, point: Vector3): Vector3
-	if strike.def.shape == "arc" then
-		local away = Vector3.new(point.X - strike.origin.X, 0, point.Z - strike.origin.Z)
+	local shape = strike.def.shape
+	local centre = if shape == "arc"
+		then strike.origin
+		elseif shape == "lob" then strike.aim
+		else nil
+	if centre ~= nil then
+		local away = Vector3.new(point.X - centre.X, 0, point.Z - centre.Z)
 		if away.Magnitude > EPSILON then
 			return away.Unit
 		end
@@ -174,35 +214,29 @@ local function pushOf(strike: CrowdBrain.Strike, point: Vector3): Vector3
 	return strike.facing
 end
 
--- The decision of the commit rule, taken at the pending entry's moment against the root as the
--- server has it now. It raises at most one `hurt`: for a hit, landed or voided, and for a miss
--- the player it was aimed at dodged. Any other miss is silent.
-local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: number): ()
-	local vitals = entry.vitals
+-- One standing player's outcome of one attack, judged now against the root as the server has
+-- it. `held` = the attack's shape holds them; `covered` = an i-frame met its judging span.
+-- At most one `hurt` is raised: for a hit, landed or voided, and for a miss the player it was
+-- aimed at dodged. Any other miss is silent. Returns what was sent, if anything.
+local function rule(
+	config: Types.ProvingGroundsConfig,
+	vitals: Vitals,
+	strike: CrowdBrain.Strike,
+	held: boolean,
+	covered: boolean,
+	root: BasePart,
+	humanoid: Humanoid,
+	now: number
+): ThreatField.Verdict?
 	local player = vitals.player
-	-- Gone, or down: a downed player takes no further hits.
-	if vitalsByPlayer[player] ~= vitals or vitals.down then
-		return
-	end
-	local root, humanoid = bodyOf(player)
-	if root == nil or humanoid == nil then
-		return
-	end
-	local strike = entry.strike
 	local attack = strike.def
-	local position = root.Position
-	-- Ruling 11: a jump clears a ground shape. The feet come from the same sample as the plan
-	-- test; R15's HipHeight is measured to the root's underside.
-	local height = attack.height
-	local feetY = position.Y - (humanoid.HipHeight + root.Size.Y / 2)
-	local held = inPlan(strike, position) and not (height ~= nil and feetY - strike.floorY > height)
-	-- An i-frame met the judging span, or (ruling 18) a knockback's window is open.
-	local covered = entry.covered or now < vitals.knockUntil
+	-- Ruling 18: a knockback's window voids what is decided inside it.
+	local voided = covered or now < vitals.knockUntil
 	-- Ruling 26: a dash carries the player far out of a lunge, so the shape rarely still holds
 	-- them when it is judged. A miss by the player the attack was aimed at, under an i-frame,
 	-- is their dodge and says so. Walking out is not a dodge, and a bystander dodged nothing.
-	if not held and not (covered and strike.targetUserId == player.UserId) then
-		return
+	if not held and not (voided and strike.targetUserId == player.UserId) then
+		return nil
 	end
 
 	local fx: Types.CombatFxHurt = {
@@ -214,14 +248,15 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 		attack = strike.attack,
 	}
 	table.insert(raised, fx)
-	if not held or covered or vitals.god then
+	if not held or voided or vitals.god then
 		-- Rulings 7 and 14: a voided hit still says so, so a dash reads as a dodge and `god`
 		-- lets the tells be studied. Ruling 18: so does a hit decided inside a knockback's
 		-- window, even one whose impact was only noticed after that knockback landed.
 		fx.dodged = true
-		return
+		return "dodged"
 	end
 
+	local position = root.Position
 	local amount = math.max(attack.damage, 0)
 	local knockback = math.max(attack.knockback or 0, 0)
 	local launch = math.max(attack.launch or 0, 0)
@@ -244,7 +279,7 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 		vitals.downUntil = now + downSeconds
 		fx.down = true
 		fx.upAt = Workspace:GetServerTimeNow() + downSeconds
-		return
+		return "landed"
 	end
 	humanoid.Health -= amount
 	if knockback > 0 or launch > 0 then
@@ -253,14 +288,84 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 		grantIframes(player, knockIframes)
 		-- Ruling 18: nor by the ones decided with it. Enemies that wound up in the same step
 		-- would otherwise land as one hit, and stay in step for good. Every other hit of theirs
-		-- still waiting is voided here; `knockUntil` voids the ones not yet raised.
+		-- that has struck and is waiting for its decision is voided here (a lob still in the
+		-- air has not struck); `knockUntil` voids the ones not yet raised.
 		vitals.knockUntil = now + knockIframes
 		for _, other in pending do
-			if other.vitals == vitals then
+			if other.vitals == vitals and other.strike.at <= now then
 				other.covered = true
 			end
 		end
 	end
+	return "landed"
+end
+
+-- Was the player down at `impact`? Then the attack is not theirs to take or to dodge (24a).
+local function wasDown(vitals: Vitals, impact: number): boolean
+	return impact >= vitals.downFrom and impact < vitals.downUntil
+end
+
+-- The decision of the commit rule for an instant shape, taken at the pending entry's moment.
+local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: number): ()
+	local vitals = entry.vitals
+	local player = vitals.player
+	local strike = entry.strike
+	-- Gone, or down: a downed player takes no further hits. Down now, or down when it struck
+	-- (ruling 24a): an impact that fell just before a get-up is judged after it, and a lob may
+	-- land in a down that began after it was thrown.
+	if vitalsByPlayer[player] ~= vitals or vitals.down or wasDown(vitals, strike.at) then
+		return
+	end
+	local root, humanoid = bodyOf(player)
+	if root == nil or humanoid == nil then
+		return
+	end
+	-- Ruling 11: a jump clears a ground shape; the feet come from the same sample as the plan
+	-- test. A line is a wall, not a ground shape: being in the air does not avoid it.
+	local attack = strike.def
+	local shape = attack.shape
+	local height = if shape == "line" then nil else attack.height
+	local held = inPlan(strike, root.Position)
+	if held and height ~= nil then
+		-- A lob's floor is the surface under its target, which may be a block's top: a player
+		-- on the arena floor beside that block is under the circle, not in it. The other
+		-- ground shapes lie on the crowd's floor, where nothing stands below them.
+		local above = feetOf(root, humanoid) - strike.floorY
+		held = above <= height and (shape ~= "lob" or above >= -height)
+	end
+	rule(config, vitals, strike, held, entry.covered, root, humanoid, now)
+end
+
+-- The same decision for an attack that travels, asked by ThreatField at the step that saw it:
+-- `impactAt` = when the shot or the charging body was where it touched them (their lag ago),
+-- or, with `held` false, when it reached the point it was aimed at without touching them.
+local function judgeTravelling(
+	strike: CrowdBrain.Strike,
+	player: Player,
+	impactAt: number,
+	held: boolean
+): ThreatField.Verdict?
+	local vitals = vitalsByPlayer[player]
+	if vitals == nil or vitals.down or wasDown(vitals, impactAt) then
+		return nil
+	end
+	local root, humanoid = bodyOf(player)
+	if root == nil or humanoid == nil then
+		return nil
+	end
+	local config = Tuning.Get()
+	local now = os.clock()
+	local limit = math.min(now, impactAt + lagOf(player, config.shooting))
+	return rule(
+		config,
+		vitals,
+		strike,
+		held,
+		shielded(player, impactAt, limit),
+		root,
+		humanoid,
+		now
+	)
 end
 
 -- Walks the queue: notes any i-frame that has covered an entry so far, decides the entries
@@ -270,19 +375,15 @@ local function settle(config: Types.ProvingGroundsConfig, now: number): ()
 	if count == 0 then
 		return
 	end
-	local range = hooks
 	local kept = 0
 	for index = 1, count do
 		local entry = pending[index]
-		if not entry.covered and range ~= nil then
+		if not entry.covered then
 			-- Asked every frame, not only at the decision, and of the window before the current
 			-- one as well: a dash that covered the impact may have lapsed and been replaced by
 			-- then, or even before the step that raised the strike.
-			local from, untilClock, wasFrom, wasUntil = range.iframeWindow(entry.vitals.player)
-			local impact = entry.strike.at
-			local limit = math.min(now, entry.decideAt)
-			entry.covered = met(from, untilClock, impact, limit)
-				or met(wasFrom, wasUntil, impact, limit)
+			entry.covered =
+				shielded(entry.vitals.player, entry.strike.at, math.min(now, entry.decideAt))
 		end
 		if now >= entry.decideAt then
 			decide(config, entry, now)
@@ -359,18 +460,54 @@ local function canTarget(player: Player): boolean
 	return vitals == nil or not vitals.down
 end
 
--- An enemy attack's impact: every player who was standing at that moment gets a decision at
--- their own lag. Nothing is judged here: the root the rule wants is the one the server will
--- hold then, not now.
+-- An enemy attack's impact. A shot and a charge go to ThreatField, which sweeps them step by
+-- step. Every other shape is frozen here and each player gets a decision at their own lag.
+-- Nothing is judged now, not even who was down: the root the rule wants is the one the server
+-- will hold then.
 local function onImpact(strike: CrowdBrain.Strike): ()
+	local attack = strike.def
+	local shape = attack.shape
+	-- Effects carry server time; the strike's clock is os.clock().
+	local serverOffset = Workspace:GetServerTimeNow() - os.clock()
+	if shape == "shot" then
+		local shot = ThreatField.Fire(strike, serverOffset)
+		if shot ~= nil then
+			table.insert(raised, shot)
+		end
+		return
+	elseif shape == "lane" then
+		ThreatField.Charge(strike)
+		return
+	elseif shape == "lob" then
+		-- The throw: the circle is shown now and lands after its flight. From here on the
+		-- strike is that landing, the impact the commit rule judges. It no longer needs its
+		-- lobber, and walls do not stop it.
+		-- It lands on whatever its target stood on (its one ray, straight down from their
+		-- root): on a block, the circle lies on the block and `height` is measured from there.
+		local seconds = math.max(attack.seconds or 0, 0)
+		local centre = ThreatField.Below(strike.aim or strike.origin, strike.floorY)
+		strike.aim = centre
+		strike.floorY = centre.Y
+		table.insert(raised, {
+			kind = "area",
+			id = ThreatField.NextId(),
+			enemyKind = strike.enemyKind,
+			center = centre,
+			radius = math.max(attack.radius or 0, 0),
+			startsAt = strike.at + serverOffset,
+			endsAt = strike.at + seconds + serverOffset,
+			from = strike.origin,
+		})
+		strike.at += seconds
+	elseif shape == "line" then
+		-- Its one ray, cast at the body it locked on: world geometry between the two cuts the
+		-- lane short, the block that body stands on does not.
+		local range = math.max(attack.range or 0, 0)
+		strike.length = ThreatField.Reach(strike.origin, strike.aim, strike.facing, range)
+	end
 	local shooting = Tuning.Get().shooting
 	local impact = strike.at
 	for player, vitals in vitalsByPlayer do
-		-- Down at the impact's own time, not at this later step's: an impact that fell just
-		-- before a get-up is raised after it, and would land inside the get-up window.
-		if impact >= vitals.downFrom and impact < vitals.downUntil then
-			continue
-		end
 		table.insert(pending, {
 			strike = strike,
 			vitals = vitals,
@@ -378,6 +515,46 @@ local function onImpact(strike: CrowdBrain.Strike): ()
 			covered = false,
 		})
 	end
+end
+
+-- Once per crowd step, after its impacts: the shots and charges under way are swept against
+-- everyone on their feet. Costs nothing while none is.
+local function onCrowdStep(clock: number): ()
+	if not ThreatField.Busy() then
+		return
+	end
+	local shooting = Tuning.Get().shooting
+	local count = 0
+	for player, vitals in vitalsByPlayer do
+		if vitals.down then
+			continue
+		end
+		local root, humanoid = bodyOf(player)
+		if root ~= nil and humanoid ~= nil then
+			count += 1
+			local who = standing[count]
+			if who == nil then
+				standing[count] = {
+					player = player,
+					userId = player.UserId,
+					position = root.Position,
+					feetY = feetOf(root, humanoid),
+					lag = lagOf(player, shooting),
+				}
+			else
+				who.player = player
+				who.userId = player.UserId
+				who.position = root.Position
+				who.feetY = feetOf(root, humanoid)
+				who.lag = lagOf(player, shooting)
+			end
+		end
+	end
+	for index = #standing, count + 1, -1 do
+		standing[index] = nil
+	end
+	local maxLag = math.max(shooting.originLagMaxSeconds, 0)
+	ThreatField.Step(clock, standing, maxLag, judgeTravelling, raise)
 end
 
 -- Public -----------------------------------------------------------------------------------------
@@ -389,7 +566,12 @@ function VitalsService.Start(rangeHooks: Hooks): ()
 	end
 	started = true
 	hooks = rangeHooks
-	CrowdService.SetThreatHooks({ canTarget = canTarget, impact = onImpact })
+	CrowdService.SetThreatHooks({
+		canTarget = canTarget,
+		impact = onImpact,
+		step = onCrowdStep,
+		shotsAlive = ThreatField.ShotsAlive,
+	})
 	RunService.Heartbeat:Connect(step)
 end
 
@@ -488,9 +670,11 @@ function VitalsService.Readout(player: Player): (number, number, boolean)
 end
 
 -- A dummy set was loaded: the counters start over, and the attacks of enemies that no longer
--- exist land on nobody. A player who is down stays down for the rest of their time.
+-- exist land on nobody: queued decisions (lobs in the air among them), shots and charges all
+-- go. A player who is down stays down for the rest of their time.
 function VitalsService.OnSetLoaded(): ()
 	table.clear(pending)
+	ThreatField.Clear(raise)
 	for _, vitals in vitalsByPlayer do
 		vitals.damageTaken = 0
 		vitals.downs = 0

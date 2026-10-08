@@ -60,6 +60,7 @@ local CameraController = require(script.Parent:WaitForChild("CameraController"))
 local FeedbackController = require(script.Parent:WaitForChild("FeedbackController"))
 local MovementController = require(script.Parent:WaitForChild("MovementController"))
 local VitalsController = require(script.Parent:WaitForChild("VitalsController"))
+local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
 
 local HUMANOID_WAIT_SECONDS = 5
 local DEFAULT_HIT_MARKER_SECONDS = 0.12
@@ -172,8 +173,10 @@ local function bootRange(): ()
 			lastCommandAt = now
 			remote:FireServer(cmd, arg)
 			if cmd == "set" or cmd == "reset" or cmd == "stress" then
-				-- The server drops every projectile with the crowd it replaces.
+				-- The server drops every projectile with the crowd it replaces: the player's
+				-- own in flight, and (P4 wave 2) the enemy's shots and circles.
 				FeedbackController.ClearFlights()
+				ThreatFx.Clear()
 			end
 			if cmd == "export" then
 				toast.Show("Tuned values printed to Output", Theme.TOAST_ERROR_SECONDS, false)

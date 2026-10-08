@@ -42,6 +42,7 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
+local StrikeTally = require(script.Parent:WaitForChild("StrikeTally"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 
 type SlotName = "melee" | "ranged"
@@ -429,18 +430,11 @@ local function claimSlack(
 	config: Types.ProvingGroundsConfig
 ): number
 	local shooting = config.shooting
-	local movement = config.movement
-	local dashSpeed = if movement.dashSeconds > 0
-		then movement.dashDistance / movement.dashSeconds
-		else 0
-	local fastest = math.max(movement.walkSpeed, movement.slamFallSpeed, dashSpeed, 0)
+	local fastest = Tuning.FastestMove(config)
 	local speed = root.AssemblyLinearVelocity.Magnitude
 	-- A NaN speed fails every comparison, math.min included.
 	speed = if speed == speed then math.min(speed, fastest) else 0
-	local lag = math.min(
-		math.max(player:GetNetworkPing(), 0) + math.max(shooting.originLagSeconds, 0),
-		math.max(shooting.originLagMaxSeconds, 0)
-	)
+	local lag = Tuning.CommitLag(shooting, player:GetNetworkPing())
 	return math.max(pad, 0) + speed * lag
 end
 
@@ -704,14 +698,12 @@ local function capOf(variant: Variant, count: number): number
 	return if variant.cap > 0 then math.min(variant.cap, count) else count
 end
 
-type Tally = { hits: { Types.StrikeHit }, kills: number, dealt: number }
-
-local function newTally(): Tally
-	return { hits = {}, kills = 0, dealt = 0 }
-end
+type Tally = StrikeTally.Tally
 
 -- Every multiplier (chain, finisher, crit) is already in `amount`: CrowdService takes its flat
--- armour cut from the final number (lead ruling).
+-- armour cut from the final number (lead ruling), and judges a plate by it (P4 wave 2). Every
+-- hit of the range goes through here into StrikeTally, which builds the StrikeHit: blocked, on
+-- the plate, the one that broke it, or plain.
 local function strike(
 	tally: Tally,
 	player: Player,
@@ -721,25 +713,9 @@ local function strike(
 	push: Vector3?,
 	launch: number
 ): boolean
-	local dealt, killed = CrowdService.Damage(id, amount, player.UserId, push, launch)
-	tally.dealt += dealt
-	local existing: Types.StrikeHit? = nil
-	for _, hit in tally.hits do
-		if hit.id == id then
-			existing = hit
-			break
-		end
-	end
-	if existing ~= nil then
-		existing.amount += dealt
-		existing.crit = existing.crit or crit
-		existing.killed = existing.killed or killed
-	else
-		table.insert(tally.hits, { id = id, amount = dealt, crit = crit, killed = killed })
-	end
-	if killed then
-		tally.kills += 1
-	end
+	local dealt: number, killed: boolean, verdict: StrikeTally.Verdict? =
+		CrowdService.Damage(id, amount, player.UserId, push, launch)
+	StrikeTally.Add(tally, id, dealt, crit, killed, verdict)
 	return killed
 end
 
@@ -782,9 +758,9 @@ local function finish(
 		return
 	end
 	if ability ~= nil then
-		addAbilityReadout(shooter, ability, #tally.hits, tally.kills)
+		addAbilityReadout(shooter, ability, tally.enemies, tally.kills)
 	else
-		shooter.lastHits = if totals ~= nil then totals.hits else #tally.hits
+		shooter.lastHits = if totals ~= nil then totals.hits else tally.enemies
 		shooter.lastKills = if totals ~= nil then totals.kills else tally.kills
 	end
 	if tally.dealt > 0 then
@@ -804,7 +780,7 @@ local function abandonProjectiles(): ()
 			projectile.player,
 			projectile.weapon,
 			projectile.variantKey,
-			newTally(),
+			StrikeTally.New(),
 			{
 				shape = "ray",
 				origin = projectile.position,
@@ -1068,7 +1044,7 @@ local function resolveMelee(
 	local reachDown = if shooter.airborne or lifted
 		then math.max(config.movement.airSwingReachDown, 0)
 		else 0
-	local tally = newTally()
+	local tally = StrikeTally.New()
 
 	if shape == "sphere" then
 		explode(config, shooter.player, origin, range, variant, damage, heading, tally)
@@ -1273,7 +1249,7 @@ local function resolveRanged(
 	local critMult = config.shooting.critMult
 	local params = worldParams()
 	local player = shooter.player
-	local tally = newTally()
+	local tally = StrikeTally.New()
 	local pushBase = (flatten(unit) or Vector3.zero) * variant.knockback
 
 	if variant.shape == "cone" then
@@ -1477,7 +1453,7 @@ local function detonate(
 	end
 	local variant = projectile.variant
 	local radius = variant.splashRadius or 0
-	local tally = newTally()
+	local tally = StrikeTally.New()
 	explode(config, projectile.player, impact, radius, variant, projectile.damage, direction, tally)
 	reportShot(projectile, tally, {
 		shape = "sphere",
@@ -1632,7 +1608,7 @@ local function stepProjectile(
 	local expired = projectile.lifetime >= config.shooting.projectileMaxSeconds
 	if length < 1e-6 then
 		if expired then
-			endArrow(config, projectile, from, DOWN, from, newTally())
+			endArrow(config, projectile, from, DOWN, from, StrikeTally.New())
 		end
 		return not expired
 	end
@@ -1677,7 +1653,14 @@ local function stepProjectile(
 			end
 		end
 		if contact == nil and wall < reach then
-			endArrow(config, projectile, from, direction, from + direction * wall, newTally())
+			endArrow(
+				config,
+				projectile,
+				from,
+				direction,
+				from + direction * wall,
+				StrikeTally.New()
+			)
 			return false
 		end
 		if contact == nil and reach >= splitAt then
@@ -1699,7 +1682,7 @@ local function stepProjectile(
 		projectile.position = from + direction * reach
 		projectile.travelled += reach
 		if spent then
-			endArrow(config, projectile, from, direction, projectile.position, newTally())
+			endArrow(config, projectile, from, direction, projectile.position, StrikeTally.New())
 			return false
 		end
 		return true
@@ -1707,10 +1690,10 @@ local function stepProjectile(
 
 	-- Its siblings already filled the volley's cap: this arrow ends where it is, no ghost flight.
 	if volley.cap > 0 and volley.distinct >= volley.cap then
-		endArrow(config, projectile, from, direction, from, newTally())
+		endArrow(config, projectile, from, direction, from, StrikeTally.New())
 		return false
 	end
-	local tally = newTally()
+	local tally = StrikeTally.New()
 	local critMult = config.shooting.critMult
 	local push = (flatten(direction) or Vector3.zero) * variant.knockback
 	local stopAt: number? = nil
@@ -2266,7 +2249,7 @@ function RangeService.OnSlam(player: Player): ()
 		knockback = movement.slamKnockback,
 		launch = movement.slamLaunch,
 	}
-	local tally = newTally()
+	local tally = StrikeTally.New()
 	explode(
 		config,
 		player,
@@ -2539,7 +2522,7 @@ function RangeService.Strike(
 	local limit = if spec.cap > 0 then math.min(spec.cap, #eligible) else #eligible
 	local critMult = config.shooting.critMult
 	local pull = spec.pull or 0
-	local tally = newTally()
+	local tally = StrikeTally.New()
 	local seeds: { Candidate } = {}
 	for index = 1, limit do
 		local candidate = eligible[index]
@@ -2580,7 +2563,7 @@ function RangeService.Strike(
 		end
 	end
 	finish(player, family, variantKey, tally, fx, nil, { id = ability, cast = spec.cast })
-	return #tally.hits, tally.kills
+	return tally.enemies, tally.kills
 end
 
 -- An ability projectile on the normal projectile path (frozen, announced, stepped). Refused when

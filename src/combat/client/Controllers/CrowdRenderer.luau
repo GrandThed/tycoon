@@ -36,10 +36,22 @@
 --   in that packet says whether it still runs underneath (set) or is over (0).
 --   A fodder's tell is its body alone: pose and colour, never an Instance. The elite's `arc`
 --   also lays a pooled wedge on the floor (its reach and angle, along the locked facing) whose
---   fill grows to its outline at the impact. Shapes this wave does not draw (lane, line, shot,
---   lob) get the body pose only. Tells are information, so nothing here thins them on
---   reducedMotion or lowEndDevice; a low-end device only gets a coarser wedge. Their numbers
+--   fill grows to its outline at the impact. Tells are information, so nothing here thins them
+--   on reducedMotion or lowEndDevice; a low-end device only gets a coarser wedge. Their numbers
 --   come from the kind's `attacks` and crowd.threat; their look from Theme.COMBAT_RANGE_TELL_*.
+-- * P4 wave 2 ("Wave 2 — roles"). The other four shapes are drawn by ThreatFx: a lane and a
+--   line from the clock kept here (ForEachThreat), a shot and a lob from their own effects.
+--   What stays here is the body:
+--   - each fighting role wears one cheap shape cue (ThreatFx/Cues: a slinger's orb, a
+--     marksman's barrel, a lobber's pack, a brute's horns, the elite's shell), a few pooled
+--     parts on those few bodies and none on fodder; a shooter's lit piece swells and reddens
+--     through its windup, which is its whole tell before it fires;
+--   - the plate: a shell while the wire says `plated`, a two-row bar over the head (the plate
+--     running down, then the health), a burst when it breaks, and the reel that follows drawn
+--     as the opening it is;
+--   - a lane's charge is drawn on the server clock, ahead of its own delayed snapshots
+--     (stepRush), because at that speed "a snapshot behind" is several studs and the server
+--     hits where the brute is.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -52,14 +64,37 @@ local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 local CameraController = require(script.Parent:WaitForChild("CameraController"))
+-- P4 wave 2: what hangs on a body. Children of ThreatFx (never ThreatFx itself, which
+-- requires this module).
+local Cues = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("Cues"))
+local PlateBar = require(script.Parent:WaitForChild("ThreatFx"):WaitForChild("PlateBar"))
 
-export type Reaction = "flash" | "flinch" | "knockback" | "launch" | "death"
+-- "block" (P4 wave 2): a plate turned the hit. Nothing moves; the shell glints.
+export type Reaction = "flash" | "flinch" | "knockback" | "launch" | "death" | "block"
 export type ForEachCallback = (
 	id: number,
 	position: Vector3,
 	radius: number,
 	headRadius: number,
 	height: number
+) -> ()
+-- P4 wave 2: one body's lane or line, for ThreatFx to draw. `striking` = its blow is under way
+-- (the charge, the shot); phaseAt = the server time that phase began; impactAt = the end of
+-- its windup; origin = the body's floor point (where the charge began, once it has); yaw =
+-- the facing the attack runs along (the wire's latest for a line, which follows its target
+-- until the lock).
+export type ThreatCallback = (
+	id: number,
+	shape: string,
+	striking: boolean,
+	phaseAt: number,
+	impactAt: number,
+	origin: Vector3,
+	yaw: number,
+	range: number,
+	width: number,
+	lockSeconds: number,
+	strikeSeconds: number
 ) -> ()
 
 type Phase = "alive" | "dying" | "vanish"
@@ -156,9 +191,21 @@ type Entity = {
 	visorHot: boolean,
 
 	-- P4 threat (codec v2). attack = the wire's index into the kind's `attacks`, 0 = none;
-	-- plated = its plate is still on (the plate itself is drawn in wave 2).
+	-- plated = its plate is still on (hpFraction is then the plate's share, not the health's).
 	attack: number,
 	plated: boolean,
+	-- Wave 2, what hangs on the body: its role cue pieces, the plate's bar (kinds with a plate
+	-- only), how far a windup has charged the lit piece (0-1), when the plate broke and when
+	-- it last turned a hit (os.clock), and until when the body reels from the break (server
+	-- time, 0 = it is not reeling; the reel then holds on while the wire still says stagger;
+	-- `reeling` = that pose's dull tint is on and must be taken off again).
+	cues: Cues.CueSet?,
+	bar: PlateBar.Bar?,
+	charge: number,
+	breakAt: number,
+	glintAt: number,
+	reelUntil: number,
+	reeling: boolean,
 	-- The attack as drawn: `threat` is its phase on this client's clock and threatAt the server
 	-- time that phase began; impactAt = the end of its windup. threatOpen = that windup's clock
 	-- is running and the wire has not shown its attack or recover yet; threatAttack = the index
@@ -173,11 +220,30 @@ type Entity = {
 	strikeSeconds: number,
 	recoverSeconds: number,
 	-- lunge: studs the figure jabs forward; arc: the wedge's radius, its angle in radians and
-	-- the facing the windup locked.
+	-- the facing the windup locked. Wave 2: a lane's or a line's length, its width, and a
+	-- line's lock time; threatOrigin = the floor point the attack is thrown from (the body's
+	-- newest position through the windup, frozen once the blow starts).
 	threatReach: number,
 	threatArc: number,
 	threatYaw: number,
+	threatWidth: number,
+	threatLock: number,
+	threatSpeed: number,
+	threatOrigin: Vector3,
 	tell: Tell?,
+	-- A lane's charge is drawn on the server clock, ahead of the delayed snapshots: `rush` is
+	-- what that adds to the sampled position, rushTarget the lane's end, and until
+	-- rushHoldUntil (server time) the body waits there for its snapshots to arrive.
+	rush: Vector3,
+	rushTarget: Vector3,
+	rushHoldUntil: number,
+	-- Recover. walks = the kind keeps its distance (brain keepAway), so it walks through its
+	-- recover instead of standing spent; stride = how much of the slump that walking has lifted
+	-- (0-1, eased). recoverFrom = the server time a recover began that a stagger or a hop is
+	-- showing over (0 = none), for when the wire shows the rest of it.
+	walks: boolean,
+	stride: number,
+	recoverFrom: number,
 	-- Body tint: how far the kind's own colours are taken toward tintColor (a few fixed steps),
 	-- and neon for the instant of the blow.
 	tint: number,
@@ -297,6 +363,9 @@ local newestStamp = -math.huge
 local burstsThisStep = 0
 local burstEmitters: { [string]: ParticleEmitter } = {}
 local burstColors: { [string]: Color3 } = {}
+-- P4 wave 2: the arena floor's half extents (X and Z), read once from the shared layout the
+-- server builds the floor from; nil = no such layout. Only a charge is bounded by it here.
+local arenaHalf: Vector3? = nil
 
 local function angleDelta(from: number, to: number): number
 	return (to - from + math.pi) % TWO_PI - math.pi
@@ -438,6 +507,13 @@ local function newEntity(): Entity?
 		visorHot = false,
 		attack = 0,
 		plated = false,
+		cues = nil,
+		bar = nil,
+		charge = 0,
+		breakAt = -math.huge,
+		glintAt = -math.huge,
+		reelUntil = 0,
+		reeling = false,
 		threat = "none",
 		threatAt = 0,
 		impactAt = 0,
@@ -450,7 +526,17 @@ local function newEntity(): Entity?
 		threatReach = 0,
 		threatArc = 0,
 		threatYaw = 0,
+		threatWidth = 0,
+		threatLock = 0,
+		threatSpeed = 0,
+		threatOrigin = Vector3.zero,
 		tell = nil,
+		rush = Vector3.zero,
+		rushTarget = Vector3.zero,
+		rushHoldUntil = 0,
+		walks = false,
+		stride = 0,
+		recoverFrom = 0,
 		tint = 0,
 		tintColor = FLASH_COLOR,
 		glow = false,
@@ -525,6 +611,38 @@ local function setFade(entity: Entity, fade: number): ()
 	entity.torso.Transparency = fade
 	entity.head.Transparency = fade
 	entity.visor.Transparency = fade
+	local cues = entity.cues
+	if cues ~= nil then
+		Cues.Fade(cues, fade)
+	end
+end
+
+-- P4 wave 2: takes the role cue and the plate's bar off a body (it is leaving, or its kind's
+-- numbers changed and both are about to be put on again).
+local function undress(entity: Entity): ()
+	local cues = entity.cues
+	if cues ~= nil then
+		entity.cues = nil
+		Cues.Detach(cues)
+	end
+	local bar = entity.bar
+	if bar ~= nil then
+		entity.bar = nil
+		PlateBar.Give(bar)
+	end
+end
+
+-- The plate's bar: the plate's share while it is on (the wire's one fraction is the plate's
+-- then, and health cannot change under it), the health's after.
+local function showBar(entity: Entity): ()
+	local bar = entity.bar
+	if bar ~= nil then
+		if entity.plated then
+			PlateBar.Set(bar, entity.hpFraction, 1)
+		else
+			PlateBar.Set(bar, 0, entity.hpFraction)
+		end
+	end
 end
 
 local function newTellPart(wedge: boolean, parent: Instance): BasePart
@@ -605,6 +723,8 @@ local function setThreat(entity: Entity, threat: Threat, at: number): ()
 	entity.threat = threat
 	entity.threatAt = at
 	entity.dirty = true
+	-- Every phase starts with the body standing where the last one left it.
+	entity.stride = 0
 	local parent = folder
 	local wantsTell = (threat == "windup" or threat == "attack")
 		and entity.threatShape == "arc"
@@ -618,6 +738,11 @@ local function setThreat(entity: Entity, threat: Threat, at: number): ()
 			else Theme.COMBAT_RANGE_TELL_SEGMENT_DEGREES
 		local slices = math.max(math.ceil(entity.threatArc / math.rad(degrees)), 1)
 		entity.tell = takeTell(parent, slices, entity.threatReach, entity.threatArc)
+	end
+	if threat ~= "windup" then
+		-- Wave 2: a shooter's lit piece is charged only while the windup runs. The shot
+		-- leaving, a cancel and the end all leave it spent at once.
+		entity.charge = 0
 	end
 	if threat == "none" then
 		setTint(entity, 0, FLASH_COLOR, false)
@@ -665,6 +790,30 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	entity.headColor = base:Lerp(HEAD_TINT, HEAD_TINT_SHARE)
 	paint(entity, entity.flashing)
 	entity.dirty = true
+
+	-- Wave 2: the role's shape cue (none for a kind that only lunges or never fights) and,
+	-- for a kind with a plate, the bar over its head. Both are measured against the figure
+	-- above, so they are put on again whenever it changes.
+	undress(entity)
+	entity.cues = Cues.Attach(
+		entity.model,
+		def,
+		radius,
+		height,
+		legHeight,
+		torsoHeight,
+		headRadius,
+		entity.torsoSize,
+		base
+	)
+	if (def.plate or 0) > 0 and entity.phase == "alive" then
+		entity.bar = PlateBar.Take(entity.head, headRadius + Theme.COMBAT_RANGE_PLATE_BAR_RISE)
+		showBar(entity)
+	end
+	local cues = entity.cues
+	if cues ~= nil then
+		Cues.Fade(cues, entity.fade)
+	end
 end
 
 local function release(entity: Entity): ()
@@ -682,6 +831,7 @@ local function release(entity: Entity): ()
 	entity.model.Parent = nil
 	entity.threatOpen = false
 	setThreat(entity, "none", 0)
+	undress(entity)
 	if entity.flashing then
 		paint(entity, false)
 	end
@@ -721,6 +871,14 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	entity.state = "idle"
 	entity.attack = 0
 	entity.plated = false
+	entity.charge = 0
+	entity.breakAt = -math.huge
+	entity.glintAt = -math.huge
+	entity.reelUntil = 0
+	entity.reeling = false
+	entity.rush = Vector3.zero
+	entity.rushHoldUntil = 0
+	entity.recoverFrom = 0
 	entity.phase = "alive"
 	entity.phaseStart = os.clock()
 	entity.deathDue = math.huge
@@ -739,10 +897,21 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 end
 
 -- A body that stops being alive stops attacking: its tint, its glow and its ground tell go.
+-- So do the plate's bar (a corpse has nothing left to read) and whatever its charge had been
+-- drawn ahead of its snapshots.
 local function dropThreat(entity: Entity): ()
 	entity.threatOpen = false
 	if entity.threat ~= "none" then
 		setThreat(entity, "none", 0)
+	end
+	entity.rush = Vector3.zero
+	entity.rushHoldUntil = 0
+	entity.reelUntil = 0
+	entity.recoverFrom = 0
+	local bar = entity.bar
+	if bar ~= nil then
+		entity.bar = nil
+		PlateBar.Give(bar)
 	end
 end
 
@@ -919,6 +1088,7 @@ local function loadThreat(entity: Entity): boolean
 	local speed = attack.speed or 0
 	entity.threatAttack = entity.attack
 	entity.threatShape = attack.shape
+	entity.walks = kind ~= nil and kind.brain == "keepAway"
 	entity.windupSeconds = math.max(attack.windup, 0)
 	entity.recoverSeconds = math.max(attack.recover, 0)
 	-- "State timing": a lane's attack state lasts its charge, every other shape's the shared
@@ -928,18 +1098,24 @@ local function loadThreat(entity: Entity): boolean
 		elseif threat ~= nil then math.max(threat.strikeSeconds, 0)
 		else 0
 	entity.threatYaw = entity.yawC
+	entity.threatOrigin = Vector3.new(entity.posC.X, ARENA_ORIGIN.Y, entity.posC.Z)
+	entity.threatWidth = math.max(attack.width or 0, 0)
+	entity.threatLock = math.max(attack.lockSeconds or 0, 0)
+	entity.threatSpeed = math.max(speed, 0)
+	entity.threatArc = 0
 	if attack.shape == "lunge" then
 		-- `range` is measured from the body's centre: the figure jabs a share of what lies
 		-- beyond its own front. A visual offset only; the real position is the snapshot's.
 		entity.threatReach = math.max(range - entity.radius, 0)
 			* Theme.COMBAT_RANGE_TELL_LUNGE_SHARE
-		entity.threatArc = 0
 	elseif attack.shape == "arc" then
 		entity.threatReach = range
 		entity.threatArc = math.rad(math.clamp(attack.arcDegrees or 360, 0, 360))
+	elseif attack.shape == "lane" or attack.shape == "line" then
+		-- Wave 2: the charge's length, the shot's length. ThreatFx draws both on the floor.
+		entity.threatReach = range
 	else
 		entity.threatReach = 0
-		entity.threatArc = 0
 	end
 	return true
 end
@@ -951,6 +1127,7 @@ end
 -- previous sighting: one step after it is the earliest it can have been, and timing the tell
 -- from there never shows the impact later than the server's.
 local function beginWindup(entity: Entity, stamp: number, previous: number): ()
+	entity.recoverFrom = 0
 	if not loadThreat(entity) then
 		entity.threatOpen = false
 		setThreat(entity, "none", stamp)
@@ -992,9 +1169,16 @@ local function followThreat(entity: Entity, stamp: number, previous: number): ()
 			setThreat(entity, "none", stamp)
 		end
 	elseif state == "recover" then
-		if entity.threatOpen then
-			entity.threatOpen = false
-			local threat = entity.threat
+		local threat = entity.threat
+		local open = entity.threatOpen
+		entity.threatOpen = false
+		if drawn and threat == "attack" and entity.threatShape == "lane" then
+			-- A charge this clock still has running, which the wire says is over. The wire is
+			-- the authority on that: the body is where its snapshots put it, so the charge ends
+			-- here and its lead over them is let go.
+			entity.rushHoldUntil = 0
+			setThreat(entity, "recover", previous)
+		elseif open then
 			-- Ruling 9: a cancelled windup goes straight to recover. A recover that arrives
 			-- before the blow, or inside the first half of a strike this clock began on its
 			-- own, is that: the blow never fell, so the thrust is taken back.
@@ -1004,9 +1188,15 @@ local function followThreat(entity: Entity, stamp: number, previous: number): ()
 			then
 				setThreat(entity, "recover", previous)
 			end
-		elseif entity.threat == "none" and loadThreat(entity) then
-			setThreat(entity, "recover", previous)
+		elseif threat == "none" and loadThreat(entity) then
+			-- A recover seen from nothing. After a stagger or a hop that showed over it (a hit
+			-- that cancelled the windup, a plate break and its reel) this is what is left of it,
+			-- timed from where it began, so the body wakes when the server's does. Otherwise it
+			-- began after the previous sighting.
+			local from = entity.recoverFrom
+			setThreat(entity, "recover", if from > 0 then from else previous)
 		end
+		entity.recoverFrom = 0
 	else
 		-- A stagger or a hop shows OVER the attack's state, and the wire says what goes on
 		-- under it: the attack index stays set while that windup or blow is still running (an
@@ -1015,7 +1205,8 @@ local function followThreat(entity: Entity, stamp: number, previous: number): ()
 		-- its clock, or starts if this is its first sighting. 0: the tell and any thrust not
 		-- yet thrown are dropped at once; only a body already spent keeps its slump, which
 		-- warns of nothing.
-		if state == "stagger" or state == "airborne" then
+		local overlaid = state == "stagger" or state == "airborne"
+		if overlaid then
 			if entity.attack > 0 then
 				if not drawn then
 					beginWindup(entity, stamp, previous)
@@ -1024,6 +1215,14 @@ local function followThreat(entity: Entity, stamp: number, previous: number): ()
 			elseif entity.threat == "recover" then
 				return
 			end
+		end
+		if not overlaid then
+			entity.recoverFrom = 0
+		elseif entity.threat ~= "none" then
+			-- A windup or a blow that was still on at the previous sighting and is off under
+			-- this stagger or hop: the server put the body in recover in between. Should that
+			-- recover outlast what shows over it, the wire names it then.
+			entity.recoverFrom = previous
 		end
 		entity.threatOpen = false
 		setThreat(entity, "none", stamp)
@@ -1058,23 +1257,54 @@ local function pushSample(
 	else
 		return
 	end
-	entity.hpFraction = hpFraction
-	entity.plated = plated
+	-- This enemy's sighting before this one (the ring has just been shifted). A body seen for
+	-- the first time has none, and nothing says how long it has been doing what it is doing:
+	-- it is timed as if that began one step ago, which is a guess. A windup that was already
+	-- under way therefore shows its blow late, by up to its windup less a step, until the
+	-- wire's `attack` state starts the thrust instead. Only a player who joins mid-fight can
+	-- meet this, and it is accepted (contract ruling 25).
+	local previous = if entity.samples > 1 then entity.timeB else stamp - 2 * interval
+	if plated ~= entity.plated or hpFraction ~= entity.hpFraction then
+		if entity.plated and not plated then
+			-- Wave 2: the plate broke. The shell bursts, and the body reels for
+			-- crowd.plateBreakSeconds from the hit that did it, which fell after the previous
+			-- sighting: the opening is drawn from there, so it never outlasts the server's.
+			entity.breakAt = os.clock()
+			entity.reelUntil = previous + math.max(Tuning.Get().crowd.plateBreakSeconds or 0, 0)
+			entity.dirty = true
+			-- Shards, where the device can afford particles; the shell's own burst (Cues) and
+			-- the reel carry the break without them.
+			burstAt(entity, 1)
+		end
+		entity.plated = plated
+		entity.hpFraction = hpFraction
+		showBar(entity)
+	end
 	if state ~= entity.state or attack ~= entity.attack then
 		entity.state = state
 		entity.attack = attack
-		-- This enemy's sighting before this one (the ring has just been shifted). A body seen
-		-- for the first time has none, and nothing says how long it has been doing what it is
-		-- doing: it is timed as if that began one step ago, which is a guess. A windup that
-		-- was already under way therefore shows its blow late, by up to its windup less a
-		-- step, until the wire's `attack` state starts the thrust instead. Only a player who
-		-- joins mid-fight can meet this, and it is accepted (contract ruling 25).
-		local previous = if entity.samples > 1 then entity.timeB else stamp - 2 * interval
 		followThreat(entity, stamp, previous)
 		entity.dirty = true
 		if state == "dead" and entity.deathDue == math.huge then
 			entity.deathDue = os.clock() + DEATH_WAIT_SECONDS
 		end
+	end
+	-- A body in windup is planted, but a hit can still shove it: its attack is thrown from
+	-- where it stands now. Once the blow starts the floor point is frozen (a lane's charge
+	-- moves the body away from it). A line's aim follows its target until the lock and is
+	-- frozen after it (snapped to the wire's own step, so the wall drawn from it is the
+	-- server's lane); the wire's yaw is that aim either way, through windup and blow. In
+	-- recover the marksman turns to its target again, and that yaw is no longer the shot's: a
+	-- recover snapshot that beats this clock to the end of the blow must not swing the wall.
+	if entity.threat == "windup" then
+		entity.threatOrigin = Vector3.new(position.X, ARENA_ORIGIN.Y, position.Z)
+	end
+	if
+		entity.threatShape == "line"
+		and state ~= "recover"
+		and (entity.threat == "windup" or entity.threat == "attack")
+	then
+		entity.threatYaw = yaw
 	end
 end
 
@@ -1211,6 +1441,11 @@ local function queuePose(entity: Entity, root: CFrame, squash: number, tuck: num
 		moveFrames[n + 4] = root * entity.visorOffset
 	end
 	moveCount = n + 4
+	-- Wave 2: the role's cue pieces ride the same root (fodder have none).
+	local cues = entity.cues
+	if cues ~= nil then
+		moveCount = Cues.Queue(cues, root, moveParts, moveFrames, moveCount)
+	end
 end
 
 local function rootFrame(
@@ -1373,6 +1608,9 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 		local coil = Theme.COMBAT_RANGE_TELL_COIL_SHARE
 		-- Squared: a slow start and an unmistakable end, so the pose reads as building.
 		local build = math.min(u / coil, 1) ^ 2
+		-- Wave 2: a shooter's lit piece swells with the same build (ThreatFx/Cues). It runs
+		-- straight on the windup, not on the coil, so it is at its largest exactly at the shot.
+		entity.charge = u * u
 		setTint(
 			entity,
 			build * Theme.COMBAT_RANGE_TELL_HEAT_SHARE,
@@ -1405,6 +1643,10 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 		local forward = Theme.COMBAT_RANGE_TELL_LEAN_FORWARD * left
 		if shape == "lunge" then
 			return forward, entity.threatReach * left * left, 0, 1
+		elseif shape == "lane" then
+			-- Head down for the whole charge. The run itself is stepRush's: the body is moved
+			-- on the server clock, not thrust from where it stands.
+			return Theme.COMBAT_RANGE_TELL_LEAN_FORWARD, 0, 0, 1
 		end
 		local tell = entity.tell
 		if tell ~= nil then
@@ -1436,10 +1678,88 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 	local twist = if shape == "arc"
 		then angleDelta(entity.yaw, entity.lastYaw) * (1 - settle)
 		else 0
-	return Theme.COMBAT_RANGE_TELL_SPENT_LEAN * spent,
+	-- The slump is a standing body's. A shooter walks through its recover, facing its target
+	-- even as it backs off, and a slumped figure gliding over the floor reads as dragged: the
+	-- pose lifts with its pace (stepAlive) and only the dull tint above goes with it.
+	local slump = spent * (1 - entity.stride)
+	return Theme.COMBAT_RANGE_TELL_SPENT_LEAN * slump,
 		0,
 		twist,
-		1 - (1 - Theme.COMBAT_RANGE_TELL_SPENT_SQUASH) * spent
+		1 - (1 - Theme.COMBAT_RANGE_TELL_SPENT_SQUASH) * slump
+end
+
+-- P4 wave 2: how far a lane's charge really runs: its range, or less where the arena's edge
+-- is nearer. The server stops the body there while its `attack` state runs on for the full
+-- range / speed, so the wire never says the charge stopped short; the client has to know the
+-- edge. This mirrors CrowdBrain's runway (a body of its radius stays wholly on the floor),
+-- and the floor's size is the shared layout's, so it is the server's number. With no layout
+-- nothing bounds the charge here.
+local function laneReach(entity: Entity): number
+	local reach = entity.threatReach
+	local half = arenaHalf
+	if half == nil then
+		return reach
+	end
+	local heading = lookOf(entity.threatYaw)
+	local from = entity.threatOrigin
+	-- The kind's radius as the config has it, which is what the server measures with: the
+	-- drawn figure's is floored.
+	local def = kindDef(entity.kind)
+	local radius = if def ~= nil then def.radius else entity.radius
+	local limitX = math.max(half.X - radius, 0)
+	local limitZ = math.max(half.Z - radius, 0)
+	if heading.X > 0 then
+		reach = math.min(reach, (ARENA_ORIGIN.X + limitX - from.X) / heading.X)
+	elseif heading.X < 0 then
+		reach = math.min(reach, (ARENA_ORIGIN.X - limitX - from.X) / heading.X)
+	end
+	if heading.Z > 0 then
+		reach = math.min(reach, (ARENA_ORIGIN.Z + limitZ - from.Z) / heading.Z)
+	elseif heading.Z < 0 then
+		reach = math.min(reach, (ARENA_ORIGIN.Z - limitZ - from.Z) / heading.Z)
+	end
+	return math.max(reach, 0)
+end
+
+-- P4 wave 2: a lane's charge, drawn on the server clock. Positions are drawn a little over
+-- one snapshot behind the server, which at a walk nobody sees; at a charge's speed it is
+-- several studs, and the server judges the hit where the brute IS (the commit rule: its body
+-- as it was `lag` ago against the player's root now, which is this screen at this moment). So
+-- while the charge runs the body is put where the clock has it, origin + facing x speed x
+-- time up to the lane's end, and `rush` is what that adds to the sampled position. When the
+-- clock says the attack is over, its snapshots may still be on their way: the body waits at
+-- the lane's end until they reach it, then lets the last of the lead go. A charge the wire
+-- ends early lets go at once. `alpha` = this frame's share of an exponential ease.
+local function stepRush(entity: Entity, serverNow: number, alpha: number): ()
+	local sampled = entity.position
+	if entity.threat == "attack" and entity.threatShape == "lane" then
+		local reach = laneReach(entity)
+		local facing = lookOf(entity.threatYaw)
+		local run = math.min(entity.threatSpeed * math.max(serverNow - entity.threatAt, 0), reach)
+		local target = entity.threatOrigin + facing * run
+		entity.rushTarget = entity.threatOrigin + facing * reach
+		entity.rush = Vector3.new(target.X - sampled.X, 0, target.Z - sampled.Z)
+		entity.rushHoldUntil = entity.threatAt
+			+ entity.strikeSeconds
+			+ (lagEstimate or 0)
+			+ interval * (INTERP_SNAPSHOTS + 1)
+	elseif entity.rush ~= Vector3.zero then
+		local finish = entity.rushTarget
+		local gap = Vector3.new(finish.X - sampled.X, 0, finish.Z - sampled.Z)
+		if
+			serverNow < entity.rushHoldUntil
+			and gap.Magnitude > Theme.COMBAT_RANGE_TELL_RUSH_ARRIVE
+		then
+			entity.rush = gap
+		else
+			entity.rushHoldUntil = 0
+			local left = entity.rush * (1 - alpha)
+			entity.rush = if left.Magnitude < SETTLE_EPSILON then Vector3.zero else left
+		end
+	else
+		return
+	end
+	entity.position = sampled + entity.rush
 end
 
 -- Samples, smooths and poses one living body; queues its parts only when the pose changed.
@@ -1462,20 +1782,94 @@ local function stepAlive(
 	local offset = Vector3.zero
 	local drawnYaw = entity.yaw
 	local squash = 1
+	-- Wave 2: the reel after a plate breaks is a stagger on the wire, crowd.plateBreakSeconds
+	-- from the hit. It holds by its clock (that hit may have thrown the body up, and `airborne`
+	-- shows over the stagger first) and then for as long as the wire still says stagger, so
+	-- nothing blinks between its end and what the wire names next: the rest of a recover, when
+	-- the break cancelled a windup.
+	if entity.reelUntil > 0 and serverNow >= entity.reelUntil and entity.state ~= "stagger" then
+		entity.reelUntil = 0
+	end
 	if entity.threat ~= "none" then
+		if entity.threat == "recover" and entity.walks then
+			-- How fast the body is walking, off its two newest sightings. Only a kind that
+			-- keeps its distance walks in recover (a rusher stands spent, and what moves it is
+			-- the crowd's jostling), and only while the wire itself says recover: under a
+			-- stagger the movement is a shove, and a shoved body stays slumped.
+			local pace = 0
+			if
+				entity.state == "recover"
+				and entity.samples >= 2
+				and entity.timeC > entity.timeB
+			then
+				local step = entity.posC - entity.posB
+				pace = math.sqrt(step.X * step.X + step.Z * step.Z) / (entity.timeC - entity.timeB)
+			end
+			local stride = math.min(pace / Theme.COMBAT_RANGE_TELL_SPENT_WALK_SPEED, 1)
+			local gap = stride - entity.stride
+			entity.stride = if math.abs(gap) < 0.01 then stride else entity.stride + gap * leanAlpha
+		end
 		local leanAngle, thrust, twist, slump = threatPose(entity, serverNow)
 		local facing = lookOf(entity.yaw)
-		-- The attack's own clock is the easing: smoothing on top would show the blow late.
-		entity.lean = facing * leanAngle
+		local leanTo = facing * leanAngle
+		if entity.threat == "recover" then
+			-- The slump warns of nothing, so it may be eased: a body coming out of a reel or a
+			-- cancelled coil rocks into it instead of snapping.
+			local leanGap = leanTo - entity.lean
+			entity.lean = if leanGap.Magnitude < SETTLE_EPSILON
+				then leanTo
+				else entity.lean + leanGap * leanAlpha
+		else
+			-- The attack's own clock is the easing: smoothing on top would show the blow late.
+			entity.lean = leanTo
+		end
 		offset = facing * thrust
 		drawnYaw += twist
 		squash = math.round(slump * 100) / 100
 	else
-		local leanTarget = stateLeanTarget(entity)
+		-- The reel is the opening: thrown further back than a plain stagger, swaying, and dull
+		-- and slumped like a spent body, which is how wave 1 taught the player to read "hit me
+		-- now".
+		local reeling = entity.reelUntil > 0
+		local leanTarget = if reeling
+			then lookOf(entity.yaw) * -Theme.COMBAT_RANGE_REEL_LEAN
+			else stateLeanTarget(entity)
 		local leanGap = leanTarget - entity.lean
 		entity.lean = if leanGap.Magnitude < SETTLE_EPSILON
 			then leanTarget
 			else entity.lean + leanGap * leanAlpha
+		if reeling then
+			drawnYaw += Theme.COMBAT_RANGE_REEL_SWAY * math.sin(
+				serverNow * TWO_PI * Theme.COMBAT_RANGE_REEL_SWAY_HZ
+			)
+			squash = Theme.COMBAT_RANGE_REEL_SQUASH
+			entity.reeling = true
+			setTint(
+				entity,
+				Theme.COMBAT_RANGE_TELL_SPENT_SHARE,
+				Theme.COMBAT_RANGE_TELL_SPENT_COLOR,
+				false
+			)
+		elseif entity.reeling then
+			entity.reeling = false
+			setTint(entity, 0, FLASH_COLOR, false)
+		end
+	end
+	-- The charge moves the sampled position itself, so aim assist and the numbers follow it.
+	if entity.rush ~= Vector3.zero or entity.threatShape == "lane" then
+		stepRush(entity, serverNow, leanAlpha)
+	end
+	-- Wave 2: the role cue's own state (the lit piece's charge, the shell). It changes sizes
+	-- and colours, never a frame, so it runs whether or not the pose below is redrawn.
+	local cues = entity.cues
+	if cues ~= nil then
+		Cues.Paint(
+			cues,
+			entity.charge,
+			entity.plated,
+			(now - entity.breakAt) / Theme.COMBAT_RANGE_CUE_BREAK_SECONDS,
+			now - entity.glintAt < Theme.COMBAT_RANGE_CUE_GLINT_SECONDS
+		)
 	end
 
 	local lean = entity.lean
@@ -1697,6 +2091,22 @@ function CrowdRenderer.Start(): ()
 	folder = created
 	template = buildTemplate()
 
+	-- Wave 2: the floor's size, from Shared/Layouts/Arenas/<arena>, as ArenaService reads it.
+	local layouts = sharedFolder:FindFirstChild("Layouts")
+	local arenas = if layouts ~= nil then layouts:FindFirstChild("Arenas") else nil
+	local module = if arenas ~= nil then arenas:FindFirstChild(Tuning.Get().arena) else nil
+	if module ~= nil and module:IsA("ModuleScript") then
+		local ok, layout = pcall(require, module)
+		local size = if ok and typeof(layout) == "table" then (layout :: any).size else nil
+		if
+			typeof(size) == "table"
+			and typeof(size.x) == "number"
+			and typeof(size.z) == "number"
+		then
+			arenaHalf = Vector3.new(size.x / 2, 0, size.z / 2)
+		end
+	end
+
 	tuningConnection = Tuning.Changed:Connect(onTuningChanged)
 	table.insert(connections, RunService.Heartbeat:Connect(step))
 	task.spawn(wire)
@@ -1726,6 +2136,9 @@ function CrowdRenderer.Destroy(): ()
 	table.clear(pool)
 	-- The tells' parts live in the folder destroyed below.
 	table.clear(tellPool)
+	-- Cue pieces in use went with their bodies' models; these are the spare ones and the bars.
+	Cues.Destroy()
+	PlateBar.Destroy()
 	table.clear(byId)
 	table.clear(moveParts)
 	table.clear(moveFrames)
@@ -1782,6 +2195,47 @@ function CrowdRenderer.ForEach(callback: ForEachCallback): ()
 	end
 end
 
+-- P4 wave 2: every living body that is winding up or throwing a lane or a line, the two
+-- attacks whose tells ThreatFx draws from the snapshot. The clock is this module's: an
+-- attack that was cancelled or is over is simply no longer reported. The callback must not
+-- yield.
+function CrowdRenderer.ForEachThreat(callback: ThreatCallback): ()
+	for _, entity in active do
+		local threat = entity.threat
+		local shape = entity.threatShape
+		if
+			entity.phase == "alive"
+			and (threat == "windup" or threat == "attack")
+			and (shape == "lane" or shape == "line")
+		then
+			-- A lane is as long as the charge really runs (the arena's edge may cut it), and
+			-- its blow lasts as long as the brute takes to cover that, not the full attack
+			-- state: the lane behind the brute goes dark at the brute's own pace.
+			local reach = entity.threatReach
+			local lasts = entity.strikeSeconds
+			if shape == "lane" then
+				reach = laneReach(entity)
+				if entity.threatSpeed > 0 then
+					lasts = reach / entity.threatSpeed
+				end
+			end
+			callback(
+				entity.id,
+				shape,
+				threat == "attack",
+				entity.threatAt,
+				entity.impactAt,
+				entity.threatOrigin,
+				entity.threatYaw,
+				reach,
+				entity.threatWidth,
+				entity.threatLock,
+				lasts
+			)
+		end
+	end
+end
+
 -- direction: world direction of the hit (flattened; nil = away from the camera). strength: the
 -- layer strength (feedback.enemyReaction or enemyFlash, times any per-weapon scale): 0 = off,
 -- 1 = default, capped at MAX_STRENGTH.
@@ -1807,7 +2261,11 @@ function CrowdRenderer.React(
 		return
 	end
 	local now = os.clock()
-	if reaction == "flash" then
+	if reaction == "block" then
+		-- Wave 2: the plate turned the hit, and the server moved nothing. Only the shell
+		-- answers (Cues.Paint lights it while the glint lasts).
+		entity.glintAt = now
+	elseif reaction == "flash" then
 		entity.flashUntil = now + FLASH_SECONDS * math.clamp(power, 0.5, 2)
 		if not entity.flashing then
 			paint(entity, true)

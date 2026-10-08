@@ -144,6 +144,32 @@ function HitShapes.Capsule(
 	return (c - closest).Magnitude <= radius + pad + r
 end
 
+-- A flat lane (P4: a marksman's line, the path of a brute's charge): the rectangle `length`
+-- long and `width` wide that lies along the flattened `forward` from `origin`, with square ends.
+-- It is tested in plan only: height plays no part, so being in the air does not avoid it.
+function HitShapes.Lane(
+	origin: Vector3,
+	forward: Vector3,
+	length: number,
+	width: number,
+	pad: number,
+	c: Vector3,
+	r: number
+): boolean
+	local heading = flatten(forward)
+	if heading == nil then
+		return false
+	end
+	local offset = c - origin
+	local along = offset.X * heading.X + offset.Z * heading.Z
+	local across = offset.Z * heading.X - offset.X * heading.Z
+	-- Distance from the circle's centre to the nearest point of the rectangle.
+	local ahead = along - math.clamp(along, 0, math.max(length, 0))
+	local aside = math.max(math.abs(across) - math.max(width, 0) / 2, 0)
+	local reach = pad + r
+	return ahead * ahead + aside * aside <= reach * reach
+end
+
 -- A spherical sector (a shotgun blast): apex at origin, `halfAngleDegrees` off the axis, out to
 -- `range` from the apex.
 function HitShapes.Cone(

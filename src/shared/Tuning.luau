@@ -60,8 +60,13 @@ local POSITIVE_ABILITY_FIELDS = { "tickSeconds", "speed" }
 local NON_NEGATIVE_PATHS = {
 	"^shooting%.rateBurstShots$",
 	"^crowd%.heavyHit$",
+	"^crowd%.plateBreakSeconds$",
 	"^crowd%.threat%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.attacks%.%d+%.[^.]+$",
+	"^crowd%.kinds%.[^.]+%.bandMin$",
+	"^crowd%.kinds%.[^.]+%.bandMax$",
+	"^crowd%.kinds%.[^.]+%.perPlayer$",
+	"^crowd%.kinds%.[^.]+%.plate$",
 	"^player%.[^.]+$",
 }
 local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
@@ -288,6 +293,30 @@ function Tuning.Get(): Types.ProvingGroundsConfig
 	local result = copy :: Types.ProvingGroundsConfig
 	merged = result
 	return result
+end
+
+-- The fastest a character can legally move in the range: a walk, a dash or a slam's dive. A
+-- position or a motion a client reports is trusted no further than this speed explains (P3.1's
+-- claim slack; the lead of an enemy shot).
+function Tuning.FastestMove(config: Types.ProvingGroundsConfig): number
+	local movement = config.movement
+	local dashSpeed = if movement.dashSeconds > 0
+		then movement.dashDistance / movement.dashSeconds
+		else 0
+	return math.max(movement.walkSpeed, movement.slamFallSpeed, dashSpeed, 0)
+end
+
+-- How far the server's copy of a character trails that player's own screen: their ping plus a
+-- fixed allowance, under a ceiling. P3.1 excuses a claimed attack origin by it, the commit rule
+-- judges an enemy attack that long after its impact, and an enemy shot is led by it. `ping` is
+-- Player:GetNetworkPing(), the client's word: the ceiling is what bounds it.
+function Tuning.CommitLag(shooting: Types.RangeShootingConfig, ping: number): number
+	-- A NaN ping fails every comparison, math.max included.
+	local seen = if ping == ping then math.max(ping, 0) else 0
+	return math.min(
+		seen + math.max(shooting.originLagSeconds, 0),
+		math.max(shooting.originLagMaxSeconds, 0)
+	)
 end
 
 -- Replaces the whole override set. Entries that fail Validate are dropped silently, so a stale

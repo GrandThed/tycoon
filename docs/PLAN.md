@@ -1975,7 +1975,7 @@ lands where you stand" (with its "Review round").
 and a plated elite each fight their own way; then the boss. Still range-only
 (`build/proving.rbxl`); missions return at P5. **No sound. Phones must work.** Plan of record:
 `docs/COMBAT_DESIGN.md` §7 and §10 step 5; contracts: `docs/INTERFACES.md` "P4 contracts"
-(rulings 1–25); values: `docs/BALANCE.md` "P4".
+(rulings 1–26, and "Wave 2 — roles" with its review round); values: `docs/BALANCE.md` "P4".
 
 **Ben's rulings (2026-10-07):**
 - Go for P4: "feels good, lets start".
@@ -1992,15 +1992,19 @@ and a plated elite each fight their own way; then the boss. Still range-only
 - **Stop 1:** the player can be hurt; fodder, the three shooters, the brute and the plated elite
   fight. Built in two waves, then Ben's playtest.
   - **Wave 1, "they hurt you":** fodder lunge, elite arc, health, down and up, hurt feedback.
-    Ben gets an **optional quick look, not a stop**: wave 2 continues whatever he says.
+    Ben was offered an **optional quick look, not a stop**. He did not report one, so Stop 1's
+    checklist covers it.
   - **Wave 2, "roles":** slinger, marksman, lobber, brute, the plate; sets `shooters`, `brutes`,
-    `plated`, `fight`.
+    `fight`; `elites` gets plates.
 - **Stop 2:** the boss, under its own contract after Ben's verdict on Stop 1.
 
-**Where it is (2026-10-07):** wave 1 is built and reviewed on branch `p4-enemy-roles` (worktree
-`tycoon-p4`).
-- "Build all" builds `main`, and Ben opens `tycoon\build\proving.rbxl` by habit (P3.1). So the
-  lead merges a wave to `main` before Ben looks at it, once review and QA are green.
+**Where it is (2026-10-08):** wave 1 is merged to `main` (e14c4cb) and the place files are
+rebuilt; wave 2 is merged the same day, after review and QA, and the place files are rebuilt
+again. Stop 1 waits for Ben's playtest (`docs/PLAYTEST.md` "P4 Stop 1"). The branch
+`p4-enemy-roles` (worktree `tycoon-p4`) stays for Stop 2.
+- "Build all" builds `main`, and Ben opens `tycoon\build\proving.rbxl` by habit (P3.1). Asked
+  on 2026-10-08, he chose **"Merge each ready wave"**: every P4 wave that has passed review and
+  QA is merged to `main` without asking again.
 - The code is inert outside Studio's range.
 
 **Wave 1 shipped (2026-10-07):**
@@ -2054,7 +2058,7 @@ and a plated elite each fight their own way; then the boss. Still range-only
 - **Balance tools:** `tools/sim_range.py` has a threat section, the first where the crowd
   moves. `--check` guards its bands.
 
-**Rulings the lead added during the wave (16–25):**
+**Rulings the lead added during wave 1 (16–25; 26 came after its QA, below):**
 - **Numbers (16, 19):**
   - The fodder cap is 2, not 4. At 4 a still player is down in about 5 s. Ben was told 4 first
     and has been told 2.
@@ -2079,7 +2083,7 @@ and a plated elite each fight their own way; then the boss. Still range-only
   - The pointer ring crosses the combo counters at some bearings on a 375-wide screen (for
     Ben's look).
 
-**Review outcome:** 2 Critical, 1 Major, 10 Minor.
+**Review outcome, wave 1:** 2 Critical, 1 Major, 10 Minor.
 - Both Criticals were rulings 17 and 18: added while the review ran, not yet in the code.
   Implemented.
 - Major, ruled (21): holding jump voided about five fodder hits in six.
@@ -2096,9 +2100,9 @@ and a plated elite each fight their own way; then the boss. Still range-only
 - After QA: ruling 26 (a dash away from an attack aimed at you reads as "DODGED"), server only,
   re-verified by the lead.
 
-**Balance (`docs/BALANCE.md` "P4"; tier 1, from `sim_range.py`):**
+**Balance, wave 1 (`docs/BALANCE.md` "P4"; tier 1, from `sim_range.py`):**
 - A player standing still goes down in **8.7 s** in `fodderRush` (target 6–12 s) and in
-  **11.9 s** in `elites`.
+  **11.9 s** in `elites` (9.8 s since wave 2's turn rule).
 - No single hit takes more than 25% of health: lunge 8 (6%), arc 30 (23%).
 - Walking away takes no damage in either set. Both enemies are slower than the walk.
 - A player who keeps swinging takes no hit in either set (all five melee families, 60 s).
@@ -2117,25 +2121,172 @@ and a plated elite each fight their own way; then the boss. Still range-only
 - **Unmeasured:** the server step time with `fodderRush` running. Only Ben can read it, off
   the panel in Studio. Budget 2 ms.
 
+**Wave 2 shipped (2026-10-08):**
+- **What the player meets:**
+  - **Slinger** (amber, an orb held in one hand; keeps 18–30 studs away): the orb swells and
+    reddens for 0.6 s, then flies as a slow glowing red orb aimed at where the player will be.
+    12 damage. Answers: change direction after the throw, dash, or put cover between. Hopping
+    on the spot is not safe.
+  - **Marksman** (purple, a long barrel; keeps 28–45): a thin red line follows the player for
+    0.45 s, locks and stands as a wall for 0.55 s, then the shot is instant along it. 22
+    damage. Answer: step out of the wall after it locks. A jump does nothing.
+  - **Lobber** (green, a pack on its back; keeps 22–40): a shot arcs in and lands 1.4 s later
+    in a red ground circle 5 studs in radius. 18 damage and a short knock. Answer: walk out.
+    It comes over cover and lands on a block the player stands on.
+  - **Brute** (big, horned, 320 HP): a lane fills for 0.8 s, then it charges 30 studs in
+    0.55 s. 28 damage and a knock of about 6 studs. Answers: sidestep, jump or dash. Then it
+    stands spent for 1.5 s. A heavy hit cancels its windup; nothing stops the charge.
+  - **Plated elite:** plate 80 over 160 HP, shown as a metal shell and a two-row bar over its
+    head.
+    - A hit under 40 shows a small grey "BLOCKED" and does nothing at all.
+    - A heavy hit (40 or more) takes its amount off the plate, shown in the plate's blue.
+    - The hit that empties it shows "PLATE BROKEN". The elite reels for 1.5 s, and after that
+      every weapon hurts it.
+  - **Turns:** at most 2 fodder, and 1 of every other kind, are in windup or attack against
+    one player at once.
+  - **High ground:** a stair or a pillar is safe from fodder, elites and brutes. The three
+    shooters still reach it.
+  - **Sets:** `shooters` (2 slingers, 2 marksmen, 2 lobbers), `brutes` (3), `fight` (100
+    fodder, 3 slingers, 3 marksmen, 2 lobbers, 3 brutes, 3 elites). `elites` now has plates.
+  - **An old set changed (ruling 13):** the passive `armoured` set's dummies carry the plate
+    too. Light fire on them now reads "BLOCKED" where P3 showed tiny numbers. They still never
+    attack.
+- **Server:**
+  - `CrowdBrain`: the `keepAway` brain; the shapes `shot`, `line`, `lob`, `lane`; the turn
+    rule (`perPlayer`).
+  - New `ThreatField.luau`: the two attacks that travel (a slinger's shot, a brute's charge),
+    judged every crowd step; and the world queries of enemy attacks, one ray each (a shot's
+    path cut at fire, a line at its impact, the surface under a lob's target).
+  - New `StrikeTally.luau`: the one place a strike's hit list is built. Plate damage and
+    health damage are separate entries; `blocked` is a hit of 0.
+  - `CrowdService`: the plate (blocked, plate, broke) and the reel, worn in every set.
+  - `VitalsService`: the line, the lob's landing, the high-ground rule, and ruling 26 (an
+    aimed miss under an i-frame reads as "DODGED").
+  - No new remote. `enemyShot`, `enemyShotEnd` and `area` ride the existing `CombatFx` event.
+- **Client:**
+  - New `Controllers/ThreatFx/` folder: `Tells` (the lane and the line, from the snapshot),
+    `Areas` (the circle and the lob's arc), `Shots` (the orbs), `Cues` (one shape cue per
+    role), `PlateBar` (the two-row bar), `Pool` (pooled parts, one batched move a frame).
+  - `CrowdRenderer`: wears the cues and the plate's bar; the shell's burst and the reel; a
+    brute's charge is drawn on the server clock, ahead of its snapshots.
+  - `FeedbackController`: "BLOCKED" (one small grey word per stream of light fire, never a
+    0), plate damage in the plate's blue, "PLATE BROKEN" on its own line.
+  - Everything is drawn against server time. Tells are never thinned; a low-end device loses
+    only decoration (the orb's tail, half the bars of a circle's rim).
+- **Config (`src/shared/Config/ProvingGrounds.json`):** the kinds `slinger`, `marksman`,
+  `lobber`, `brute`; `armoured.plate` 80 with `armor` 0; `crowd.plateBreakSeconds` 1.5;
+  `perPlayer` on every kind that fights (replaces `crowd.threat.attackersPerPlayer`); the three
+  sets.
+- **Balance tools:** `tools/sim_range.py` gained the three shooters, the brute, the plate, the
+  turns and five more players (hops on the spot, strafes one way, reacts to every tell, swings
+  and never dodges, swings and reacts). Four more tables; `--check` guards the new bands.
+
+**Rulings given during wave 2 (lead, 2026-10-08):**
+- **A.** A locked facing is snapped to the snapshot's yaw step and judged with that value, and
+  a shove never turns a body whose facing is locked. The wall the client draws and the lane
+  the server tests are the same line.
+- **B.** Plate and health are separate hit entries when one strike does both to one enemy.
+- **26** (wave 1, after its QA): a dash away from an attack aimed at you reads as "DODGED".
+  Walking out is not a dodge and shows nothing.
+
+**Review outcome, wave 2:** 0 Critical, 1 Major, 7 Minor.
+- Major, fixed: standing on range furniture voided every attack. High ground now protects
+  from melee and ground shapes only; the three shooters reach it.
+  - Shot: a player standing on a block is aimed at where they stand.
+  - Line: its ray goes at the body it locked on, so the block under the target does not cut
+    it. A wall between the two still does.
+  - Lob: it lands on the surface under its target.
+- Minors, fixed:
+  - A shot's path is cut once, at fire. The client fizzles the orb at the wall on its own
+    clock.
+  - The lane's tell is drawn to the rounded end the server tests.
+  - A line whose target is gone before the lock is still snapped.
+  - The speed the led aim trusts is capped at the fastest legal move.
+  - The travelling attacks reuse their per-step scratch tables.
+- Minors, accepted:
+  - The marksman's wall is drawn at full range, also through cover.
+  - `maxShots` can be passed by one on a catch-up frame.
+  - A player's own shots at a charging brute are tested up to 3.7 studs behind where it is
+    drawn (for Ben's look).
+- After the review, from the balance report:
+  - **Enemies of one kind take turns.** Three marksmen had fired as one: 66 damage at once.
+  - **A shot is led over its flight plus the player's lag,** in six passes. `lead` is 1.0.
+  - **The marksman's lock is 0.55 s before the hit,** so a phone thumb keeps 0.14 s.
+- qa-runner: ALL GREEN (2026-10-08). stylua; selene (only the old `LegacyPanel` warning); hub
+  and combat luau-lsp with fresh sourcemaps; `check_compile.py` (138 files; highest top-level
+  counts FeedbackController 159, CrowdRenderer 145, InputController 144); the hub, combat and
+  proving builds; `sim_economy.py --check`, `sim_combat.py --check`, `sim_range.py --check`
+  (176 checks). The server's own harness: 310 checks, 104 mutations, none surviving. Asset
+  gates not run: no asset or template changed.
+
+**Balance, wave 2 (`docs/BALANCE.md` "P4" → "Wave 2"; tier 1, from `sim_range.py`):**
+- **Standing still, down at:** `fodderRush` 8.7 s, `elites` 9.8 s, `shooters` 7.3 s, `brutes`
+  8.3 s, `fight` **5.8 s** (target 4–8 s).
+- **The worst quarter second in `fight`, standing still:** 102 damage (78% of the bar) before
+  the turn rule, **66 (51%)** now. By the rules alone one instant can cost at most 80 (62%).
+- **A player who reacts to every tell takes no hit in any set,** fodder included. Swinging and
+  reacting in `fight` takes nothing and kills 397 in 30 s.
+- **Swinging without dodging in `fight` is down at 6.6 s.** Strafing one way without looking,
+  at 17.1 s.
+- **No single hit over 25%:** shot 12 (9%), line 22 (17%), lob 18 (14%), charge 28 (22%).
+- **Blind movement is answered:** in `shooters` the marksmen take a hopper down at 11.6 s and
+  the slingers a one-way strafer at 22.5 s.
+- **The plate:**
+  - Break it in 2 hits: Warhammer, Greataxe A, Spear A, Longbow A and B, Splitbow B, Shotgun,
+    Piercing Rifle, Launcher, Chain Gun A.
+  - Need two combos (6 hits; the finisher is their one heavy hit): Broadsword, Spinblade,
+    Greataxe B, Spear B.
+  - Cannot alone: Splitbow A, SMG A and B, Beam A and B, Chain Gun B. They use the melee slot
+    or two ground slams. Splitbow A and Chain Gun B can with head shots.
+  - After the break an SMG kills the elite in 1.42 s (A) or 1.29 s (B), against a 1.5 s reel.
+- Nothing was tuned in real play. Every number is a starting value.
+
+**Known limits at P4 Stop 1:**
+- **Kiting heals.** A player who runs a big circle takes no damage in `shooters`, `brutes` or
+  `fight`, and regenerates. Every enemy is slower than the walk.
+- **Elites are slow work, not danger,** for a player who keeps swinging: every combo has a
+  heavy hit, and a heavy hit cancels the arc.
+- **Hopping is still the cheapest defence against ground attacks:** one lunge in four, one
+  charge in three and one lob in four or five land on a hopper. The marksman is the answer,
+  and `fodderRush` and `brutes` have none.
+- **Six weapon variants cannot break a plate alone** (the list above).
+- Enemies walk through cover (since P1). Shots and the marksman's line are stopped by it; a
+  lob is not.
+- The marksman's wall is drawn at full length through cover: it can look dangerous where the
+  player is safe, never the reverse.
+- A player's own shots at a brute in mid-charge are judged a little behind where it is drawn.
+- **Not in the simulator:** cover and the stairs. Nothing about them is measured.
+- `fight`'s simulator rows move a few percent between Python 3.12 and 3.14. Every band holds
+  on both.
+- Placeholder bodies with one shape cue per role. No sound.
+- **Unmeasured, only Ben can:** the server step time with `fight` running (budget 2 ms), and
+  how it runs on a phone-sized screen.
+
 **Carried:**
 - **To P5 (owner: lead):**
-  - Enemy damage, regen and `heavyHit` are flat while health grows ×17 over the tiers
-    (ruling 20; table in BALANCE "What scales with weapon tier").
+  - **Kiting:** a reason to stay (an objective, a timer), a smaller arena, or an enemy faster
+    than the walk.
+  - **Flat values against tiered health:** enemy damage, regen, `heavyHit` and now `plate` do
+    not scale while health grows ×17 over the tiers (ruling 20; table in BALANCE "What scales
+    with weapon tier").
   - Health comes from the profile again (ruling 17).
-  - Server-measured speed for the melee slack (from P3.1).
-- **To wave 2 (owner: economy-designer):** `sim_range.py` gains a hopping player (ruling 21).
+  - **Server-measured speed:** the melee slack still needs it (from P3.1). The slinger's led
+    aim already reads the server's own measure, capped at the fastest legal move.
+  - **Cover and the stairs are not in the simulator** (owner of the model: economy-designer).
+- **Done in wave 2:** `sim_range.py` has its hopping player (ruling 21).
+- **Still open from P3, for Ben:** A or B for SMG, Beam and Chain Gun; cross-slot refunds;
+  favourite and weakest ability.
 
 **Next:**
-- **Wave 2, "roles"** (same owners; the client adds `Controllers/ThreatFx/`): the keepAway
-  brain, `shot`, `line`, `lob`, `lane`, the plate.
-- Then **Ben's Stop 1 playtest**, with the server step time read in `fight`.
-- Then **Stop 2, the boss**, under its own contract.
+- **Ben's Stop 1 playtest** (`docs/PLAYTEST.md` "P4 Stop 1 — Enemies that fight back"), with
+  the server step time read in `fight`.
+- Then **Stop 2, the boss**, under its own contract after his verdict.
 
-- [x] Wave 1 built and reviewed (INTERFACES "P4 contracts", rulings 1–25)
-- [ ] Wave 1 quick look by Ben, **optional** (`docs/PLAYTEST.md` "P4 wave 1 — They hurt you
-  (quick look)"). Its step 1 is the P3.1 melee check, which ticks the open P3.1 box above.
-- [ ] Wave 2, "roles"
-- [ ] Stop 1 playtest (Ben)
+- [x] Wave 1 built and reviewed (INTERFACES "P4 contracts", rulings 1–26)
+- [ ] Wave 1 quick look by Ben, **optional**: not reported; covered by Stop 1.
+- [x] Wave 2 built and reviewed (INTERFACES "Wave 2 — roles" with its review round)
+- [ ] Stop 1 playtest (Ben). Its step 1 is the P3.1 melee check, which ticks the open P3.1
+  box above.
 - [ ] Stop 2, the boss
 
 ## M12 — Growing city

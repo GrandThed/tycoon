@@ -4889,7 +4889,8 @@ and the place files are rebuilt there. The code is inert outside Studio's range.
    and shooter hits do not move the player. Hits with `knockback` or `launch` (elite, brute,
    lob) do, applied by the victim's own client, and are followed by `player.knockIframes`.
 7. **A hit an i-frame voided says so** ("dodged"), so the dash reads as a dodge.
-8. **Fodder pressure is capped:** at most `crowd.threat.attackersPerPlayer` lunging enemies
+8. **Fodder pressure is capped** (generalised in wave 2 to every kind, as
+   `CrowdKindDef.perPlayer`): at most `crowd.threat.attackersPerPlayer` lunging enemies
    may be in windup or attack against one player. The others crowd and wait.
 9. **Interrupts.** `interrupt = "stagger"` (fodder, shooters): any hit that staggers cancels
    the windup. `"heavy"` (brute, elite): only a hit of `crowd.heavyHit` or more. A cancelled
@@ -4963,7 +4964,7 @@ Criticals were rulings 17 and 18, added while the review ran and not yet in the 
 | `fodder` | rush | `lunge`: 0.6 s windup, 1.5 s recover | its body (visor, lean, then the thrust) | kill or shove it, step back, jump, dash |
 | `armoured` | rush, slow | `arc` 120°: 0.8 s windup, knocks back | body and an arc on the ground | leave the arc, jump, dash |
 | `slinger` (wave 2) | keepAway 18–30 | `shot`: slow glowing projectile | windup glow, then the shot itself | sidestep, jump, dash, cover |
-| `marksman` (wave 2) | keepAway 28–45 | `line`: 1.0 s warning line, aim locks 0.25 s before the hit | the line | move after the lock, dash, cover |
+| `marksman` (wave 2) | keepAway 28–45 | `line`: 1.0 s warning line, aim locks 0.55 s before the hit | the line | move after the lock, dash, cover |
 | `lobber` (wave 2) | keepAway 22–40 | `lob`: lands after 1.4 s in a circle | the circle | leave the circle |
 | `brute` (wave 2) | rush to 22 | `lane`: 0.8 s windup, then a 30-stud charge at 55 studs/s | the lane | sidestep, jump, dash |
 
@@ -4978,7 +4979,7 @@ never off HP; the hit that empties it is `broke`. Nothing carries over into HP.
   `launch`, `range`, `width`, `arcDegrees`, `radius`, `speed`, `seconds`, `lockSeconds`,
   `height`, `interrupt`).
 - `DummyGroupDef.behaviour` += `"fight"` (also the enum in `Tuning.luau`).
-- `crowd.heavyHit`, `crowd.threat { attackersPerPlayer, spawnGrace, spawnClear, maxShots,
+- `crowd.heavyHit`, `crowd.threat { spawnGrace, spawnClear, maxShots,
   strikeSeconds }`, `player { downSeconds, getUpIframes, regenDelay, regenPerSecond,
   knockIframes, knockFriction }` (`knockFriction` bleeds the player's knock slide off, in the
   air as on the ground; the push itself is capped at `crowd.knockMax`).
@@ -4994,7 +4995,7 @@ never off HP; the hit that empties it is `broke`. Nothing carries over into HP.
   still handles them with mission visuals, and it runs in the range.
 - Wave 1 config: `fodder` and `armoured` attacks; sets `fodderRush` (30 fodder) and `elites`
   (3 armoured). Wave 2 config: the four new kinds, the plate, sets `shooters`, `brutes`,
-  `plated`, `fight` (100 fodder, 3 slingers, 3 marksmen, 2 lobbers, 3 brutes, 3 armoured).
+  `fight` (100 fodder, 3 slingers, 3 marksmen, 2 lobbers, 3 brutes, 3 armoured); `elites` is plated.
 
 ## Codec v2 (`CrowdCodec.luau`)
 
@@ -5156,6 +5157,52 @@ break it.
 
 **Ownership:** as wave 1, plus for the ui-engineer the new `Controllers/ThreatFx/` folder and
 `FeedbackController.luau` (hit-number flags only).
+
+### Rulings given while wave 2 was built (lead, 2026-10-08)
+
+- **A. A locked facing is snapped to the wire's yaw step** (1/256 turn) and judged with that
+  value, and a shove never turns a body whose facing is locked: the wall the client draws and
+  the lane the server tests are the same line.
+- **B. Plate and health are separate `StrikeHit` entries** when one strike does both to one
+  enemy; `blocked` is an entry whose whole amount was stopped.
+
+### Review round, wave 2 (lead, after roblox-reviewer: 0 Critical, 1 Major, 7 Minor)
+
+- **Major, fixed — standing on range furniture voided every attack.** High ground now
+  protects from melee and ground shapes only (they reach `height` above the crowd's floor,
+  and the crowd does not climb); the three shooters reach it:
+  - **`shot`:** a target is led down a fall only while it is actually moving vertically; a
+    player standing on a block is aimed at where they stand.
+  - **`line`:** its one ray is cast in 3D from the body centre at the body it locked on, not
+    level at chest height, so a block the target stands on does not cut the lane in front of
+    them. A wall between the two still does. (This is ruling 21's "aimed at the body".)
+  - **`lob`:** its floor is the surface under the target at T (one ray down), `area.center`
+    carries that height, and `height` is measured from it, above and below: a lob lands on
+    the block the player stands on and does not reach someone on the floor beside it.
+- **A shot's path is cut once, at fire** (amends "one ray per live shot per crowd step"): the
+  world is static, so one ray along the path at T shortens the `seconds` sent in `enemyShot`,
+  and the client fizzles the orb on its own clock exactly at the wall. `enemyShotEnd` is sent
+  only for a hit and for a set load.
+- **Fixed as found:** the lane's tell is drawn to the rounded end the server tests (it ended
+  `width / 2` short); a line whose target is gone before the lock is still snapped; the speed
+  the led aim trusts is capped at the fastest legal move (as P3.1's slack is); the per-step
+  scratch tables of the travelling attacks are reused.
+- **Enemies of one kind take turns** (from the balance report: three marksmen fired as one,
+  66 damage at once, and the worst quarter second of `fight` took 78% of the bar; every
+  get-up re-synced them, so no layout could fix it). The fodder cap is generalised:
+  `crowd.threat.attackersPerPlayer` is replaced by **`CrowdKindDef.perPlayer`**, the most
+  enemies of that kind in windup or attack against one player at once (fodder 2, every other
+  kind 1; nil = no cap). A shot in the air does not hold a place; only its slinger's windup
+  and attack do. Amends ruling 8.
+- **A shot is led over its flight plus that player's lag** (the commit rule judges it `lag`
+  late, which is why `lead` had to be 1.1 and the radius 2 to land on a strafer, and why at
+  150 ms ping it landed never). `lead` is then a plain share again (1 = where they will be).
+- **The marksman's lock is 0.55 s before the hit** (was 0.45): a phone thumb at 0.35 s keeps
+  0.14 s to step out. The Roles table's 0.25 s is superseded.
+- **Accepted:** the marksman's wall is drawn to its full range, also through cover (the drawn
+  wall is the worst case; cover only shortens the real one); `maxShots` can be passed by one
+  on a catch-up frame; a player's own shots at a charging brute are tested against its body
+  as of the last crowd step, up to 3.7 studs behind where it is drawn (for Ben's look).
 
 ---
 
