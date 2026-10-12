@@ -49,3 +49,32 @@ stylua clean, selene only the old LegacyPanel:200 warning, `check_compile.py --c
   and pass that path to luau-lsp (the tracked sourcemap stays untouched).
 - Wave 2 must be judged on: keepAway brain, shot/line/lob/lane, plate (`heavy` is judged per
   `CrowdService.Damage` call, before armour), enemy-shot raycast budget, `Controllers/ThreatFx/`.
+
+**Wave 2 "roles" (2026-10-08, uncommitted tree vs e14c4cb): SHIP WITH FIXES, 0 Critical, 1 Major.**
+Wave 1's findings were all fixed or ruled (rulings 21-26; the hopper became ruling 21: reach on
+the flat, shooters answer height). New server `ThreatField` (shots and charges swept per crowd
+step, "root now vs shape lag ago"), `StrikeTally` (the one StrikeHit builder), keepAway brain,
+plate in `CrowdService.Damage`; client `Controllers/ThreatFx/` (Pool, Shots, Areas, Tells, Cues,
+PlateBar). stylua clean, selene unchanged, compile PASS (FeedbackController 159, CrowdRenderer 145),
+luau-lsp 0 errors, `sim_range.py --check` PASS.
+
+- **Recurring pattern (new): "in the air" judged by height above the crowd's floor.** The range
+  has furniture to stand on (stairs 8/16/24, pillars, cover 3-9, a 10-high backstop). `ahead()`
+  leads a target as falling whenever its root is over standY + 0.75, so a player standing on a
+  block is aimed at 1.1 x the block's height too low; the line's one ray is horizontal at the
+  marksman's chest, so the block's own face cuts the lane; every ground shape has a `height`
+  rule. Result: any block top of 8+ studs is immune to all six attacks. Whenever a rule says
+  "airborne", "floor" or "height", test it against a player standing ON geometry, not only
+  jumping; the sim has no geometry and cannot see it.
+- **Recurring pattern (confirmed): WYSIWYG against the server's actual test.** The charge is a
+  capsule (distance to the swept body centre <= width/2); the lane tell is a square-ended
+  rectangle `range` long, so the server reaches width/2 past the drawn far end.
+- **A thing announced when the server notices it, not when it happened**, shows late on a
+  client that draws on the server clock: a shot's wall end is found by one ray per crowd step, so
+  the orb is drawn up to a step plus latency past the wall. A deterministic path can carry its
+  own end time in the opening effect instead.
+- What held: `CrowdRenderer.laneReach` mirrors `CrowdBrain.runway` exactly (config radius, layout
+  size / 2, wire-snapped yaw); locked facings are snapped to the 1/256 yaw step and integrate
+  rewrites a fight body's yaw before every snapshot, so a shove never reaches the wire; every hit
+  goes through `RangeService.strike` -> `StrikeTally.Add`; blocked hits return before any side
+  effect; shot ends are raised exactly once; `fight` never has more than 3 shots alive (cap 24).
