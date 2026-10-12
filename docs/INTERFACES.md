@@ -5204,6 +5204,95 @@ break it.
   on a catch-up frame; a player's own shots at a charging brute are tested against its body
   as of the last crowd step, up to 3.7 studs behind where it is drawn (for Ben's look).
 
+## Stop 2 — the Colossus (Ben, 2026-10-12)
+
+**Ben on 2026-10-12:** "okey, everything feels great now, lets proceed". Studio's log shows
+his session ran the Stop 1 build for six minutes with no script error and loaded only
+`crowd30`, the passive set: it confirms the P3.1 melee fix and that the build loads, not the
+fighting enemies. `defaultSet` became `fight` the same day so that Play alone shows them.
+Stop 2 starts on his word.
+
+**Rulings (Ben, asked with previews):**
+1. **Two bosses, built one after the other, each with its own stop:** the **Colossus**
+   (this contract, Stop 2), then the **Warlord and his guard** (Stop 3, its own contract).
+2. **Two phases:** at half health a boss enrages: shorter tells, chained attacks, one new
+   attack.
+
+**The Colossus** (kind `colossus`, set `colossus`; values in `ProvingGrounds.json`):
+- A giant on the crowd system, like every enemy: no Humanoid. It cannot be pushed, launched,
+  staggered or interrupted (`knockbackMult` 0, every attack `interrupt = "none"`). Hits only
+  take its health. The passive `boss` dummy kind stays as it is.
+- **Slam** (`ring`): after its windup a shockwave leaves its feet and grows to `radius` at
+  `speed`. A player is hit when the front (`width` thick) passes them with their feet under
+  `height`: jump it, or be outside `radius`. Each player is hit at most once per ring. Pushed
+  outward.
+- **Charge** (`lane`): wave 2's lane, wide.
+- **Call** (`summon`): at the impact `count` enemies of kind `summon` rise evenly on a circle
+  of `radius` round it, inside the arena. They fight (their kind's brain), obey
+  `crowd.threat.spawnGrace`, never respawn, and are removed when their boss dies or the set
+  is loaded. A call that would pass `crowd.maxAlive` summons only what fits.
+- **Barrage** (`lob` with `count` and `spread`, `enraged`): `count` circles at once, the
+  first on the target and the rest scattered within `spread` of them, each an ordinary lob
+  (one `area` each, landing together).
+- **Choosing an attack** (any enemy with several): among the attacks that are off `cooldown`,
+  in `reach` and allowed in the current phase, the one used longest ago; never the same one
+  twice running when another is ready. `cooldown` runs from that attack's impact.
+- **Enrage:** entered for good when health share ≤ `enrage.at`, at the next moment it is not
+  in windup or attack. Windups × `windupScale`, recovers × `recoverScale`, `enraged` attacks
+  unlock, and up to `chain` attacks follow each other with no recover between (the last one
+  recovers in full, scaled). The client reads the phase from the health share it already has.
+- **Everything from Stop 1 holds:** the commit rule (a ring is a travelling shape: the root
+  now against where the front was `lag` ago), i-frames and "DODGED" (ruling 26: for a ring the
+  aimed player is its target), ruling 18, a due impact never lost, planted in windup, the
+  per-kind turn rule for the summoned fodder, no yields, queued spawns, tells from the
+  snapshot (ring and lane) and `area` events (barrage) only. No new effect kind, no new remote.
+- **Large bodies and `separate()`** (carried from the groundwork study): the cell reach must
+  not grow for every body because one giant is alive. Fix it in this wave.
+- **The boss bar** (client): for a living kind with `boss`, its `name`, health, and a mark at
+  `enrage.at`; an "ENRAGED" beat when it crosses. The ring's tell: the full circle drawn at
+  the windup (so the player sees how far it reaches), then the front running outward on the
+  server clock. Summons rise visibly. The Colossus must read as a boss at a glance.
+- **Balance targets:** solo, tier 1, a player who reacts to every tell kills it in 60 to 90 s
+  with any melee family and takes no hit; a player who only ever jumps the ring and sidesteps
+  the charge survives; standing still is down inside 10 s; no hit over 25% of health; each
+  attack leaves a punish window of at least a second; the enraged phase is harder but every
+  tell still clears a 0.25 s reaction (0.35 s on a phone).
+- **The look:** `defaultSet` becomes `colossus` at the merge, so Play opens on the boss.
+
+**Types and config (lead, applied):** `CrowdKindDef.boss`, `name`, `enrage { at, windupScale,
+recoverScale, chain }`; `CrowdAttackDef.shape` += `"ring"`, `"summon"`; `CrowdAttackDef.cooldown`,
+`enraged`, `count`, `spread`, `summon`; kind `colossus` and set `colossus`.
+
+**Rulings after the reports (lead, 2026-10-12):**
+- **A boss's death takes back everything it had in the air:** its queued impact, ring,
+  charge, shots, barrage decisions, and its summons with their pending lunges; the client
+  drops its circles. The kill is clean. Ruling 22 (a due impact is never lost) stays for
+  ordinary kinds.
+- **A call tops up, it does not stack:** it raises only as many as bring that boss's living
+  summons to `count` (none if all are alive; the attack still plays).
+- **A player takes at most one circle of a barrage.**
+- **Large bodies** (radius 3 or more) are never pushed by smaller ones.
+- The enrage latch, the chain (`attack` straight to the next `windup`) and the scaled
+  durations are as the server engineer's report states them; the client matches.
+
+**Review round, Stop 2 (lead, after roblox-reviewer: 0 Critical, 0 Major, 7 Minor):**
+- `area` and `enemyShot` carry `enemyId`, the thrower's crowd id; a dead boss's circles and
+  shots are dropped by it, not by kind.
+- `crowd.largeRadius` (3) replaces the code constant: who pushes whom is a gameplay rule.
+- A strike that kills a boss no longer books its vanished summons as hits of 0.
+- Ground marks sit near the floor again: overlapping marks differ by their top faces only,
+  nothing informational above about 0.4 studs (a raised mark misreads against the player's
+  feet).
+- The enrage haptic obeys `feedback.haptics`; the boss bar's last two visual constants moved
+  to Theme.
+- Accepted: summoned bodies are told from a set's own by a heuristic (kind, time, place); on
+  a portrait phone the open panel covers the boss bar.
+
+**Ownership:** as wave 2. Server: `CrowdBrain`, `ThreatField`, `VitalsService`,
+`CrowdService`, `RangeService`, `Tuning`, `HitShapes`. Client: `ThreatFx/` (the ring), a new
+`UI/BossBar.luau`, `CrowdRenderer`, `CombatUIController`, Theme (add only). Balance: the
+`colossus` values and set, the simulator, BALANCE.
+
 ---
 
 # M12 contracts — Growing city (wave 1: Village)

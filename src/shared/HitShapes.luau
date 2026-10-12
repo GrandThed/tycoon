@@ -313,6 +313,39 @@ function HitShapes.Scatter(
 	return points
 end
 
+-- A barrage's circles (P4 Stop 2, a lob with `count`): `count` (at most MAX_FAN) flat points.
+-- The first is `center`. The others stand evenly round it, the whole ring turned by one
+-- Park-Miller angle from `seed`, each at its own drawn distance within `spread` (even over the
+-- disc, as Pellets spreads). Deterministic, so a test can pin what the server threw.
+function HitShapes.Barrage(
+	center: Vector3,
+	count: number,
+	spread: number,
+	seed: number
+): { Vector3 }
+	local points: { Vector3 } = {}
+	local total = math.min(math.floor(count), MAX_FAN)
+	if not (total > 0) then
+		return points
+	end
+	points[1] = center
+	local state, draw = advance(seedState(seed))
+	local turn = FULL_TURN * draw
+	local reach = math.max(spread, 0)
+	local outer = total - 1
+	for index = 1, outer do
+		local angle = turn + FULL_TURN * (index - 1) / outer
+		local nextState, share = advance(state)
+		state = nextState
+		local distance = reach * math.sqrt(share)
+		table.insert(
+			points,
+			center + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
+		)
+	end
+	return points
+end
+
 HitShapes.MAX_FAN = MAX_FAN
 HitShapes.GROUND_PROBE_LIFT = GROUND_PROBE_LIFT
 HitShapes.GROUND_PROBE_DEPTH = GROUND_PROBE_DEPTH

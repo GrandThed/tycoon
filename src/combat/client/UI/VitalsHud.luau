@@ -26,7 +26,8 @@
 --    beside the cluster, when the screen is wide enough for both; otherwise centred above the
 --    cluster's top row (a portrait phone).
 --  * The pointer ring is a share of the shorter screen side, pulled in so that a pointer at
---    the bottom never reaches the bar.
+--    the bottom never reaches the bar, and (Stop 2) one at the top never reaches the boss bar
+--    where that sits low: on a phone, in either orientation.
 --  * The banner hangs under the crosshair, inside the ring, where the ring is wide enough to
 --    hold it (a monitor); on a phone it sits on the bar and the ring is pulled in above it.
 
@@ -46,6 +47,10 @@ export type Layout = {
 	-- without it, where the AbilityBar is what sits under the bar.
 	clusterLeft: number?,
 	clusterTop: number?,
+	-- Stop 2: the bottom edge, in this HUD's own px, of whatever sits above the crosshair (the
+	-- boss bar). The pointer ring is pulled in so a pointer at its top stays under it: in a
+	-- boss fight most hits come from straight ahead, which is exactly that pointer.
+	topLimit: number?,
 }
 
 export type VitalsHudHandle = {
@@ -355,6 +360,10 @@ function VitalsHud.new(parent: Instance): VitalsHudHandle
 		end
 		banner.Position = UDim2.fromOffset(centreX, bannerTop)
 		bannerScale.Scale = scale
+		local topLimit = layout.topLimit
+		if topLimit ~= nil then
+			radius = math.min(radius, centreY - topLimit - reach - gap)
+		end
 		ringRadius = math.max(radius, 0)
 		for _, pointer in pointers do
 			pointer.frame.Size =

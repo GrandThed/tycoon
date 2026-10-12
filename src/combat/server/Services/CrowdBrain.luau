@@ -22,8 +22,20 @@
 --
 -- Two brains. `rush` closes until its shortest attack reaches and stands through its recover.
 -- `keepAway` holds bandMin..bandMax from its target, also while it recovers, and keeps facing
--- it. Six shapes: lunge, arc and line are judged from the Strike alone; a shot and a lob carry
--- the point they were aimed at; a lane is a charge, and the brain carries the body down it.
+-- it. Eight shapes: lunge, arc and line are judged from the Strike alone; a shot and a lob carry
+-- the point they were aimed at; a lane is a charge, and the brain carries the body down it; a
+-- ring leaves the body's feet and travels on by itself; a summon only names its summoner.
+--
+-- Stop 2 ("Stop 2 - the Colossus"). An enemy with several attacks takes, among those off their
+-- cooldown, in reach and allowed in its phase, the one it used longest ago (choose). A kind with
+-- `enrage` enters its second phase for good once its health share, as the snapshot carries it,
+-- is at or under `enrage.at`: asked whenever it is about to choose an attack and whenever an
+-- attack state ends, never inside a windup or an attack. Enraged, windups and recovers are
+-- scaled, `enraged` attacks unlock, and up to `chain` attacks follow each other with no recover
+-- between them (the attack the phase began in is not the first of a chain: it recovers). The
+-- client reads the same phase off the same byte: it latches it at the first snapshot whose
+-- share is at or under `enrage.at` while the body is not in a windup or an attack, or is in a
+-- windup it was not in the snapshot before.
 --
 -- Rules that shape the module:
 -- * Nothing here yields, raycasts or builds a path: the crowd ignores world geometry (ruling 15).
@@ -53,6 +65,9 @@ export type Strike = {
 	-- its landing.)
 	at: number,
 	enemyKind: string,
+	-- The attacker's crowd id. It is never followed back to a record to judge the attack: it
+	-- names the summoner of a `summon`, and lets a boss's death take its attacks with it.
+	bodyId: number,
 	-- 1-based index into the kind's `attacks`.
 	attack: number,
 	def: Types.CrowdAttackDef,
@@ -69,10 +84,13 @@ export type Strike = {
 	facing: Vector3,
 	-- shot: the point it flies at (the led aim). lob: its target's root at the throw, which
 	-- VitalsService drops to the surface below: where the circle lands. line: the body it
-	-- locked on (its one ray is cast at it). lane: where its target stood when it was aimed.
+	-- locked on (its one ray is cast at it). lane and ring: where its target stood when the
+	-- windup began.
 	aim: Vector3?,
 	-- lane: the body's feet when the charge began.
 	feet: Vector3?,
+	-- A barrage's circles share this: the players one of them has already sent an effect to.
+	volley: { [number]: boolean }?,
 	-- lane: how far the charge really runs (cut short at the arena's edge). line: how far it
 	-- reaches before world geometry stops it (VitalsService fills that in at the impact).
 	length: number?,
@@ -105,12 +123,25 @@ export type Mind = {
 	charge: Strike?,
 	-- keepAway: the body keeps facing its target while it walks.
 	watch: boolean,
+	-- os.clock() of each attack's last impact, by its index: its cooldown runs from there, and
+	-- the one used longest ago is chosen first.
+	usedAt: { number },
+	-- The attack the last windup was for: not chosen again while another is ready.
+	last: number,
+	-- The second phase (the kind's `enrage`), entered for good.
+	enraged: boolean,
+	-- How many attacks the chain under way has started; a fresh windup is the first.
+	chained: number,
 }
 
 -- The fields of a CrowdService enemy record that the brain reads. `position` is the feet.
 export type Body = {
+	id: number,
 	kind: string,
 	position: Vector3,
+	hp: number,
+	maxHp: number,
+	plate: number,
 }
 
 -- A player the fighting crowd may go for, kept from step to step so their motion can be read.
@@ -320,6 +351,113 @@ local function admit(
 	return true
 end
 
+-- The second phase begins once the health share is at or under `enrage.at`, as the snapshot
+-- will carry it: the same byte the client reads the phase from. Under a plate the bar is the
+-- plate's and health cannot have moved.
+local function enrage(body: Body, mind: Mind, def: Types.CrowdKindDef): ()
+	local phase = def.enrage
+	if phase == nil or mind.enraged or body.plate > 0 then
+		return
+	end
+	if CrowdCodec.SnapHp(body.hp / math.max(body.maxHp, 1)) <= phase.at then
+		mind.enraged = true
+	end
+end
+
+-- A windup's or a recover's length in the mind's phase.
+local function paced(mind: Mind, def: Types.CrowdKindDef, seconds: number, recover: boolean): number
+	local phase = def.enrage
+	if phase == nil or not mind.enraged then
+		return math.max(seconds, 0)
+	end
+	local scale = if recover then phase.recoverScale else phase.windupScale
+	return math.max(seconds, 0) * math.max(scale, 0)
+end
+
+-- Which attack next? Among those off their cooldown, within `distance` and allowed in the
+-- mind's phase (`refused` = a bit per index already turned away this step), the one whose last
+-- impact is oldest; one never used counts as oldest, and the list's order breaks a tie. The
+-- attack of the last windup is only taken when no other is ready. 0 = none.
+local function choose(
+	mind: Mind,
+	attacks: { Types.CrowdAttackDef },
+	distance: number,
+	now: number,
+	refused: number
+): number
+	local best = 0
+	local bestAt = math.huge
+	local again = false
+	local usedAt = mind.usedAt
+	for index, attack in attacks do
+		if index > CrowdCodec.MAX_ATTACK then
+			-- The snapshot cannot name a later attack, so its tell could never be drawn.
+			break
+		end
+		if bit32.btest(refused, bit32.lshift(1, index)) then
+			continue
+		end
+		if
+			(attack.enraged == true and not mind.enraged)
+			or distance > attack.reach + REACH_EPSILON
+		then
+			continue
+		end
+		local used = usedAt[index]
+		if used ~= nil and now < used + math.max(attack.cooldown or 0, 0) - TIME_EPSILON then
+			continue
+		end
+		if index == mind.last then
+			again = true
+		elseif (used or -math.huge) < bestAt then
+			best = index
+			bestAt = used or -math.huge
+		end
+	end
+	return if best == 0 and again then mind.last else best
+end
+
+-- Starts a windup against `target` if an attack is ready and admitted. The facing the caller
+-- turned to the target is locked here. `chained` = this attack's place in its chain.
+local function begin(
+	body: Body,
+	mind: Mind,
+	def: Types.CrowdKindDef,
+	attacks: { Types.CrowdAttackDef },
+	threat: ThreatConfig,
+	target: Target,
+	distance: number,
+	now: number,
+	chained: number
+): boolean
+	local refused = 0
+	while true do
+		local index = choose(mind, attacks, distance, now, refused)
+		if index == 0 then
+			return false
+		end
+		local attack = attacks[index]
+		if admit(body, def, attack, target.userId, threat) then
+			mind.phase = "windup"
+			mind.phaseUntil = now + paced(mind, def, attack.windup, false)
+			mind.attack = index
+			mind.def = attack
+			mind.last = index
+			mind.chained = chained
+			mind.targetUserId = target.userId
+			-- Locked from here (a line: a provisional aim, until its own lock).
+			mind.facing = snapped(mind.facing)
+			mind.locked = false
+			mind.aim = target.position
+			return true
+		end
+		if #attacks == 1 then
+			return false
+		end
+		refused = bit32.bor(refused, bit32.lshift(1, index))
+	end
+end
+
 -- Has the mind's windup reached its impact time?
 local function isDue(mind: Mind, now: number): boolean
 	return mind.phase == "windup" and now >= mind.phaseUntil - TIME_EPSILON
@@ -387,10 +525,13 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 	if attack ~= nil then
 		local shape = attack.shape
 		local origin = body.position + Vector3.new(0, def.height / 2, 0)
+		-- Its cooldown runs from the impact.
+		mind.usedAt[mind.attack] = impactAt
 		local strike: Strike = {
 			-- Not the time of this step: it may notice the impact up to one step late.
 			at = impactAt,
 			enemyKind = body.kind,
+			bodyId = body.id,
 			attack = mind.attack,
 			def = attack,
 			targetUserId = mind.targetUserId,
@@ -440,6 +581,10 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 				then math.min(range, runway(body.position, mind.facing, def.radius))
 				else 0
 			mind.charge = strike
+		elseif shape == "ring" then
+			-- The shockwave leaves the feet and travels on by itself; the body stands.
+			strike.feet = body.position
+			strike.aim = mind.aim
 		end
 		table.insert(strikes, strike)
 	end
@@ -447,15 +592,65 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 	mind.phaseUntil = impactAt + lasts
 end
 
--- The attack is over: the body stands exposed, and its place goes back to its kind.
-local function spend(body: Body, mind: Mind): ()
-	local attack = mind.def
-	if attack ~= nil then
+-- The attack state is over: its place goes back to its kind.
+local function release(body: Body, mind: Mind): ()
+	if mind.def ~= nil then
 		local held = placesOf(body.kind)
 		held[mind.targetUserId] = math.max((held[mind.targetUserId] or 0) - 1, 0)
 	end
+end
+
+-- The body stands exposed for its attack's recover, measured from the attack state's own end.
+local function expose(mind: Mind, def: Types.CrowdKindDef): ()
+	local attack = mind.def
 	mind.phase = "recover"
-	mind.phaseUntil += if attack ~= nil then math.max(attack.recover, 0) else 0
+	mind.phaseUntil += if attack ~= nil then paced(mind, def, attack.recover, true) else 0
+end
+
+-- Enraged, an attack may follow the one that has just ended with no recover between them, up
+-- to `enrage.chain` in a row. It follows only if it can start in this very step (ready, in
+-- reach, admitted); otherwise the chain is over and the body recovers. Its windup is an
+-- ordinary one, timed from this step like any other.
+local function chain(
+	body: Body,
+	mind: Mind,
+	def: Types.CrowdKindDef,
+	threat: ThreatConfig,
+	now: number
+): boolean
+	local phase = def.enrage
+	local attacks = def.attacks
+	if
+		phase == nil
+		or attacks == nil
+		or not mind.enraged
+		or mind.chained >= math.floor(phase.chain)
+	then
+		return false
+	end
+	-- A charge that has just run leaves the body at its lane's end: CrowdService sets it down
+	-- there after this step's thinking, so the next attack is aimed from there.
+	local here = body.position
+	local charge = mind.charge
+	if charge ~= nil and charge.feet ~= nil then
+		here = charge.feet + charge.facing * (charge.length or 0)
+	end
+	local target = nearest(here)
+	if target == nil then
+		return false
+	end
+	local offset = target.position - here
+	local flat = Vector3.new(offset.X, 0, offset.Z)
+	local distance = flat.Magnitude
+	local kept = mind.facing
+	if distance > FACING_EPSILON then
+		mind.facing = flat.Unit
+	end
+	if begin(body, mind, def, attacks, threat, target, distance, now, mind.chained + 1) then
+		return true
+	end
+	mind.facing = kept
+	return false
 end
 
 local function rest(mind: Mind): ()
@@ -478,6 +673,10 @@ function CrowdBrain.NewMind(now: number): Mind
 		aim = Vector3.zero,
 		charge = nil,
 		watch = false,
+		usedAt = {},
+		last = 0,
+		enraged = false,
+		chained = 0,
 	}
 end
 
@@ -591,7 +790,15 @@ function CrowdBrain.Think(
 		land(body, mind, def, threat)
 	end
 	if mind.phase == "attack" and now >= mind.phaseUntil - TIME_EPSILON then
-		spend(body, mind)
+		release(body, mind)
+		-- A chain is made of second-phase attacks. The attack the phase began in ends in a
+		-- recover, an enraged one: the first thing every client sees of the phase is that
+		-- shorter recover, never a windup it could not have known was a chained one.
+		local chains = mind.enraged
+		enrage(body, mind, def)
+		if not (chains and free and chain(body, mind, def, threat, now)) then
+			expose(mind, def)
+		end
 	end
 	if mind.phase == "recover" and now >= mind.phaseUntil - TIME_EPSILON then
 		rest(mind)
@@ -633,29 +840,18 @@ function CrowdBrain.Think(
 	if distance > FACING_EPSILON then
 		mind.facing = flat.Unit
 	end
+	enrage(body, mind, def)
 	local ready = phase == "approach" and now - mind.bornAt >= threat.spawnGrace
+	if ready and begin(body, mind, def, attacks, threat, target, distance, now, 1) then
+		return nil, 0
+	end
 	local shortest = math.huge
 	for index, attack in attacks do
 		if index > CrowdCodec.MAX_ATTACK then
-			-- The snapshot cannot name a later attack, so its tell could never be drawn.
 			break
 		end
-		shortest = math.min(shortest, attack.reach)
-		if
-			ready
-			and distance <= attack.reach + REACH_EPSILON
-			and admit(body, def, attack, target.userId, threat)
-		then
-			mind.phase = "windup"
-			mind.phaseUntil = now + math.max(attack.windup, 0)
-			mind.attack = index
-			mind.def = attack
-			mind.targetUserId = target.userId
-			-- Locked from here (a line: a provisional aim, until its own lock).
-			mind.facing = snapped(mind.facing)
-			mind.locked = false
-			mind.aim = target.position
-			return nil, 0
+		if attack.enraged ~= true or mind.enraged then
+			shortest = math.min(shortest, attack.reach)
 		end
 	end
 	if shortest == math.huge then
@@ -711,6 +907,7 @@ end
 -- impact time has come is past cancelling: the next step lands it.
 function CrowdBrain.OnHit(
 	mind: Mind,
+	def: Types.CrowdKindDef,
 	amount: number,
 	staggers: boolean,
 	heavyHit: number,
@@ -723,7 +920,7 @@ function CrowdBrain.OnHit(
 	local rule = attack.interrupt
 	if (rule == "stagger" and staggers) or (rule == "heavy" and amount >= heavyHit) then
 		mind.phase = "recover"
-		mind.phaseUntil = now + math.max(attack.recover, 0)
+		mind.phaseUntil = now + paced(mind, def, attack.recover, true)
 	end
 end
 
@@ -759,6 +956,23 @@ function CrowdBrain.StateOf(mind: Mind): Types.CrowdState?
 		return "recover"
 	end
 	return nil
+end
+
+-- Takes back the queued impacts of the bodies in `ids` (a boss that has died, the bodies it
+-- summoned): nothing of theirs is handed over at the next drain.
+function CrowdBrain.Recall(ids: { [number]: boolean }): ()
+	local count = #strikes
+	local kept = 0
+	for index = 1, count do
+		local strike = strikes[index]
+		if not ids[strike.bodyId] then
+			kept += 1
+			strikes[kept] = strike
+		end
+	end
+	for index = count, kept + 1, -1 do
+		strikes[index] = nil
+	end
 end
 
 -- Hands every impact the steps since the last drain raised to `handler`, oldest first, and

@@ -1773,7 +1773,7 @@ Starting values for the enemies that attack and for the player's body in the ran
 (`Config/ProvingGrounds.json`; contract: `docs/INTERFACES.md` "P4 contracts"). This part is
 **wave 1, "they hurt you"**: the fodder's lunge, the armoured elite's arc, health, going down and
 getting up. **Wave 2, "roles"** (the three shooters, the brute, the plate) starts at "Wave 2 —
-roles" below.
+roles" below, and **Stop 2, the Colossus** (the first boss) at "Stop 2 — the Colossus".
 
 The wave 1 tables were measured again with wave 2's simulator. It follows rulings 21 (`reach` on
 the flat) and 22 (a due impact is never lost), the wave 2 review's rule that enemies of one kind
@@ -2516,3 +2516,263 @@ Still open:
   of this is measured.
 - **Flat values (ruling 20) now include the plate.** `plate` 80 sits between two finishers of
   the tier-1 Broadsword and one of the Greataxe. P5 must scale it with `heavyHit` and enemy HP.
+
+## Stop 2 — the Colossus
+
+The first boss (contract: `docs/INTERFACES.md` "Stop 2 — the Colossus"): a giant with four
+attacks, two phases, and fodder it calls. Solo, at tier-1 health (130).
+
+Targets, from the contract and the lead's brief:
+- a player who reacts to every tell kills it in 60 to 90 s with any melee family and takes no hit;
+- a player who only ever jumps the ring and sidesteps the charge survives the fight;
+- a player standing still is down inside 10 s;
+- no hit over 25% of health, and no instant over the Stop 1 ceilings;
+- each attack leaves a window of at least a second, in both phases;
+- every tell clears a 0.25 s reaction, and a 0.35 s phone thumb, also when it is the second
+  attack of a chain;
+- the ring can be jumped at any distance inside its radius, and walked out of only from far out;
+- what it calls matters and does not decide the fight;
+- a ranged-only loadout can kill it too.
+
+## Stop 2: what the simulator gained
+
+`py tools/sim_range.py` prints a BOSS table and `--check` guards its bands. The boss is a crowd
+enemy like the others, so everything of Stop 1 applies to it. The new parts follow the server
+as built:
+
+- **Several attacks and the choice.** Among the attacks allowed in the phase, in reach and off
+  cooldown, the one whose last impact is oldest. One never used counts as oldest, and the
+  list's order breaks a tie. The attack of the last windup is taken only when no other is
+  ready. A cooldown runs from the attack's impact. The body closes to its shortest reach.
+- **The ring.** At the impact a front leaves the body's feet and grows to `radius` at `speed`.
+  Its band is `width` wide round the front. A player within `radius` is hit once, when the
+  band reaches him with his feet under `height`. The body's own attack lasts `strikeSeconds`.
+- **The call.** Fodder rise on a circle of `radius` round the boss, as many as bring its living
+  summons to `count`. They fight, wait out `spawnGrace`, never respawn and fall with the boss.
+- **The barrage.** `count` lobs at once: the first on the target, the rest at even angles
+  round him, each up to `spread` away. A player takes at most one circle of a barrage.
+- **Enrage.** At half health, asked when an attack ends and before each choice: windups and
+  recovers are scaled, the barrage unlocks, and up to `chain` attacks follow each other with no
+  recover between. The attack the phase began in is not part of a chain.
+- **The giant** is never pushed by a smaller body.
+
+The players of a boss fight:
+- **Stands still.**
+- **Jumps the ring, sidesteps the charge:** he answers those two tells and no other. He does
+  attack: what the boss called while it is on him, then the boss.
+- **Reacts to every tell, attacks:** the Stop 1 planner, holding his ground. He takes a short
+  step, then a jump he times, before any long walk or dash, and walks back into reach when
+  nothing threatens. He is run with each of the 13 families, without abilities and with them.
+
+Assumptions of the model, not tunables:
+- Attacks go on while he moves or jumps. A ranged weapon fires along the aim ray at the body,
+  so it never crits.
+- An ability is cast at the boss whenever it is ready, on its base cooldown, with no refunds,
+  and its whole damage lands at the cast. He does not cast one that deals less than his own
+  attacks would in the time it locks him: Whirlwind and Overload Sweep are for crowds.
+- He can move sideways in the air.
+
+**Why `windupScale` 0.8 failed at first.** A longer tell got the reacting player hit, and that
+was the planner's error, not the fight. He judged a jump against a landing circle and a
+passing charge at moments of his own, a thirtieth of a second apart, while the server decides
+on a frame. A jump coming down loses over a stud a frame. So he took a plan that cleared a
+circle 4 studs high by 0.4 studs on paper and was 0.8 under it when it was decided, and one
+that cleared the charge's 6 studs by 0.7 and was 0.4 under. At 0.75 no landing fell on those
+frames; at 0.8 a barrage or a charge chained after a ring put one there. He now follows both
+frame by frame and allows himself a frame either way. With that, 0.8 passes every band and
+no family takes a hit on nine seeds. Stop 1's tables did not move.
+
+## Stop 2: values
+
+| Key | Lead | Now | Why |
+|---|---|---|---|
+| `colossus.hp` | 6000 | **4700** | With the lead's set the five melee families take 78 to 105 s. At 4700 they take 64 to 82 s, and 63 to 85 s over nine seeds. |
+| `colossus.speed` | 7 | **9** | It walks back to the player sooner after its own charge. It is one of the things that put a still player down inside 10 s. An elite walks at 9 too. |
+| `enrage.recoverScale` | 0.6 | **0.7** | At 0.6 the enraged ring leaves 0.94 s and the enraged charge 0.88 s. At 0.7 they leave 1.10 s and 1.08 s. |
+| `enrage.windupScale` | 0.75 | **0.8** | Phones first, as ruling 19 and the marksman's lock. At 0.75 the enraged charge left a 0.35 s thumb 0.08 s to sidestep. At 0.8 it leaves 0.13 s. |
+| `enrage.at`, `chain` | 0.5, 2 | same | Half health, and two attacks in a row. |
+| ring `radius`, `speed` | 26, 34 | **40, 70** | At the lead's values a player could walk out of the ring from anywhere inside it: the front was barely faster than the walk. Now walking out works only from 15.3 studs or further, and the boss starts the ring within 14. So the player it is aimed at has to jump. |
+| ring `windup` | 1.1 | **1.0** | Every tenth of windup is two more studs of walking out. 1.0 s still clears a reaction by 0.63 s. |
+| ring, the rest (reach 14, recover 1.6, damage 26, knockback 24, launch 3, width 3, height 4, cooldown 6) | | same | 26 is 20% of health. The band is on one spot for 0.11 s and a jump is above it for 0.76 s. |
+| lane `reach` | 40 | **30** | With the boss 42 studs off, only the call is in reach when the fight opens. See "The opening". |
+| lane `damage` | 30 | **32** | 24.6% of health, the most the rule allows. It takes half a second off the still player's time. |
+| lane `knockback` | 36 | **30** | 36 is a slide of 0.48 s, longer than `knockIframes` (0.40 s). The same change as the brute's. |
+| lane, the rest (windup 1.0, recover 2.0, range 44, width 10, speed 60, height 6, cooldown 8) | | same | A sidestep is 5 studs: 0.57 s of the 1.0 s tell. A jump or a dash clears it too. |
+| summon `windup`, `recover`, `radius` | 1.4, 1.2, 12 | **1.0, 1.0, 16** | The fodder are up 0.4 s sooner and 4 studs nearer. The call still leaves the longest window, 2.2 s. |
+| summon, the rest (count 12, cooldown 18, reach 60) | | same | Twelve fodder cost a Broadsword 2.8 s of the fight. |
+| lob, all of it (windup 0.9, recover 1.4, damage 18, knockback 14, radius 5, seconds 1.6, count 5, spread 14, cooldown 10) | | same | One circle of the five can land: 18, 14% of health. A straight walk begun on a reaction covers 26 studs before they land, and every circle lies within 19. |
+| `dummySets.colossus` position | (0, 60) | **(0, 48)** | 42 studs from the pad. See "The opening". |
+| `defaultSet` | `fight` | **`colossus`** | The lead's ruling: Play opens on the boss. |
+
+**The opening.** A still player has to be down inside 10 s, and the boss alone cannot do it.
+With no call he lasts 28 s: the cooldowns allow one slam in six seconds and one charge in eight.
+Even with no cooldowns it needs five hits of 25%, and an attack with a readable tell and a
+one-second window after it takes 2 s: 11 s in all. The fodder make the difference: two lunges
+every 0.8 s, 20 damage a second. So the fight has to open with the call. With the boss 42
+studs off and the charge's reach at 30, the call is the only attack in reach when `spawnGrace`
+ends. The still player is then down at 8.6 s (8.4 to 8.7 s over ten seeds): lunges from 3.8 s,
+the charge at 5.1 s, the ring at 8.6 s. With the lead's layout the charge came first and he
+was down at 14.0 s.
+
+## Stop 2: the attacks
+
+| Attack | Phase | Damage | Tell | The answer needs | For a 0.35 s thumb | Window after it |
+|---|---|---|---|---|---|---|
+| Ring (slam) | calm | 26 (20%) | 1.00 s | 0.37 s: a jump | 0.47 s | 1.58 s |
+| Ring | enraged | 26 | 0.80 s | 0.37 s | 0.47 s | 1.10 s |
+| Lane (charge) | calm | 32 (25%) | 1.00 s | 0.57 s: 5 studs aside | 0.67 s | 1.68 s |
+| Lane | enraged | 32 | 0.80 s | 0.57 s | 0.67 s | 1.08 s |
+| Summon (call) | calm | none | | none needed | | 2.20 s |
+| Summon | enraged | none | | none needed | | 1.70 s |
+| Lob barrage | enraged only | 18 (14%) | 1.60 s (the flight) | 0.57 s: 5 studs out of a circle | 0.67 s | 1.18 s |
+
+- **Tell** is the time the attack gives. **Needs** is a crowd step, the reaction and the move.
+- **Window** is how long after its danger the boss does nothing. In the enraged phase a window
+  follows the last attack of a chain, and there is none between the two.
+  - Ring: from the moment the band has passed a player at the boss's standoff (14 studs).
+  - Lane: its recover, less the 0.32 s a melee player needs to be back in reach of where the
+    charge ended. A ranged player has the whole recover: 2.0 s and 1.4 s.
+  - Summon: there is no danger, so its windup counts too.
+  - Barrage: from the throw. The circles are still in the air for part of it.
+- **A chain's second attack** has its whole windup, and it starts when the first attack ends.
+  The tightest is a charge after a ring: 0.80 s against 0.57 s, and 0.13 s to spare for a thumb.
+- **The ring and the jump.** The front crosses its 40 studs in 0.57 s. The band is on one spot
+  for 0.11 s, and a jump holds the feet above it for 0.76 s, so the jump has over half a
+  second of room at any distance.
+- **The ring and walking.** On foot it can be left only from 15.3 studs or further (19.3 when
+  enraged). With a dash it can be left from anywhere, and a dash's i-frames also carry him
+  through the front.
+- **The most one instant can cost** is 48, 37% of health: two lunges and the charge. Every
+  attack of the boss knocks, so ruling 18 lets only one of its own land at a time.
+
+## Stop 2: results (tier 1, mean of three seeds; two for the ranged families)
+
+| Player | Weapon | Kill | Fastest to slowest | Enraged at | Hits of the boss | Lunges | Damage taken |
+|---|---|---|---|---|---|---|---|
+| Stands still | | never; down at **8.6 s** | | never | 5 | 33 | 404 in 30 s |
+| Jumps the ring, sidesteps the charge | Broadsword | 73.5 s | 73.1–73.9 | 37.7 s | 4 | 0 | 86, no down |
+| Reacts to every tell | Broadsword | **76.3 s** | 75.4–76.8 | 37.7 s | 0 | 0 | 0 |
+| Reacts to every tell | Warhammer | **81.7 s** | 81.3–82.4 | 39.9 s | 0 | 0 | 0 |
+| Reacts to every tell | Spinblade | **69.5 s** | 68.1–71.8 | 34.6 s | 0 | 0 | 0 |
+| Reacts to every tell | Greataxe | **79.2 s** | 77.8–80.7 | 38.8 s | 0 | 0 | 0 |
+| Reacts to every tell | Spear | **64.4 s** | 62.8–65.6 | 34.1 s | 0 | 0 | 0 |
+| Reacts, and the boss calls nothing | Broadsword | 73.5 s | 73.3–73.8 | 37.4 s | 0 | 0 | 0 |
+
+Kill times for every family, without its ability and with it:
+
+| Family | Kill | With its ability | |
+|---|---|---|---|
+| Broadsword | 76.3 s | 76.3 s | Whirlwind is not cast at a lone boss. |
+| Warhammer | 81.7 s | 67.7 s | |
+| Spinblade | 69.5 s | 55.4 s | |
+| Greataxe | 79.2 s | 71.0 s | |
+| Spear | 64.4 s | 56.3 s | |
+| Piercing Rifle | 55.0 s | 38.3 s | |
+| SMG | 58.5 s | 37.5 s | |
+| Chain Gun | 77.1 s | 61.0 s | |
+| Shotgun | 93.8 s | 72.9 s | |
+| Launcher | 115.3 s | 66.6 s | |
+| Beam | 118.4 s | 118.4 s | Overload Sweep is not cast at a lone boss. |
+| Longbow | 142.3 s | 117.6 s | |
+| Splitbow | 225.8 s | 180.9 s | One arrow of seven finds a single target. |
+
+- **The reacting player takes no hit with any of the 13 families.**
+- **The jump-and-sidestep player survives.** He takes four hits of the boss in the worst seed:
+  lobs he does not walk out of, and one charge that lands while a lob's knock has him. That is
+  86 damage in all. No fodder touches him, because he kills them. He never goes down, on ten
+  seeds. He is also 3 s faster than the player who reacts to everything: walking out of
+  circles costs sword time.
+- **What it calls costs a Broadsword 4%** of the fight: 76.3 s against 73.5 s with no call.
+  The arc kills the fodder as it turns to them.
+- **Ranged-only loadouts all kill it.** Rifle and SMG are faster than any melee family. Six of
+  the eight are inside two minutes. The Longbow takes 142 s and the Splitbow 226 s.
+- **A second player.** The boss's health does not scale in the range, so two players of the
+  same family finish in about half the time: 32 to 41 s for two melee players. That is under
+  the 60 s floor.
+
+## Stop 2: bands (`--check`)
+
+| Band | Value | Now |
+|---|---|---|
+| One hit of each attack | ≤ 25% of health | 20%, 25%, 14% |
+| Each tell beyond a step, a 0.25 s reaction and the answer | ≥ 0.05 s | 0.63 and 0.43 s (ring), 0.43 and 0.23 s (lane), 1.03 s (barrage) |
+| Each tell against a 0.35 s thumb | ≥ 0.12 s | the tightest: enraged lane, 0.13 s |
+| A chain's second tell against a thumb | ≥ 0.12 s | 0.13 s |
+| The window after each attack, each phase | ≥ 1 s | 1.08 to 2.20 s |
+| Each knock: launch under the fence, flight and slide inside `knockIframes` | yes | 3 < 4; 0.35 s; 0.32, 0.40 and 0.19 s |
+| Ring: a jump's time above it against the band's time on one spot | more, by 0.05 s | 0.76 s against 0.11 s |
+| Ring: it reaches past where it starts | yes | 40 > 14 |
+| Ring: the nearest point walking out works from | ≥ its reach (14) | 15.3 studs; 19.3 enraged |
+| Lane: a jump clears it; a dash's i-frames outlast its passing | yes | yes; 0.25 s against 0.17 s |
+| Barrage: a straight walk covers every circle's reach before they land | yes | 26 ≥ 19 studs |
+| The most one instant can cost by the rules | ≤ two thirds of the bar | 37% |
+| Standing still: down | inside 10 s, every seed | 8.6 s (8.4–8.7) |
+| Standing still: the worst quarter second | ≤ 55% of the bar | 37% |
+| Jumps the ring, sidesteps the charge | no down, and the boss falls | 0 downs; 73.5 s |
+| Reacting, each melee family, no ability: the kill | 60–90 s, every seed | 62.8 to 82.4 s |
+| Reacting, each melee family: hits taken | 0 | 0 |
+| Reacting, every family, with or without its ability: hits of the boss | 0 | 0 |
+| What it calls lengthens the default melee's kill by | 3% to 30% | 4% |
+
+Each band was proved by a value that makes it fail. All of Stop 1's bands and printed lines are
+still there, with the same numbers.
+
+**Where the starting values missed.** With the lead's set thirteen bands fail: the enraged
+charge's thumb margin (0.08 s, alone and in a chain), the enraged ring's
+window (0.70 s) and the enraged charge's (0.88 s), the charge's slide (0.48 s), walking out of
+the ring (possible from anywhere, in both phases), standing still (14.0 s), the kill with the
+Spinblade (90 s), the Broadsword (94 s), the Greataxe (96 s) and the Warhammer (105 s), and
+what the call costs (under 3%).
+
+## Stop 2: rules these numbers hang on
+
+The simulator follows the server's report. These are the rules a change would move most.
+
+- **The body closes to its shortest reach, and attacks on its way in.** The opening hangs on
+  this: at 42 studs only the call reaches.
+- **The ring's `attack` state lasts `strikeSeconds`.** If it lasted the front's 0.57 s of
+  travel, every ring's window would be 0.37 s longer and a chained attack would start later.
+- **A chained attack starts on the step the one before it ends, aimed from where a charge set
+  the body down.**
+- **A call tops up.** If calls stacked, a player who left the fodder alive would face 24 and
+  then 36. With the cap of two lunges at a time his damage would not change, only the crowd.
+- **A player takes one circle of a barrage.** Circles that overlapped on him would otherwise add up, to 90 at the most.
+- **The player can move sideways in the air.** Without it, a charge chained after a ring leaves
+  a player who jumped late no time on the ground to sidestep.
+- **Attacks go on while he moves.** If a jump or a step stopped his swing, every kill time
+  would grow by the time he spends dodging.
+- **Two things the simulator does not copy:** what is called rises from angle 0 round the
+  caller, and a body refused its place is not offered a second choice in the same step. With
+  one boss and a free place neither changes a number.
+
+## Stop 2: flags for the owner
+
+- **The fight opens with the call, and that is what puts a still player down in time.** It
+  works because the boss starts 42 studs from the pad. A player who walks at it gets the charge
+  or the slam first. If the boss should open with a slam at arm's length, the 10 s target has
+  to give: with the lead's layout a still player lasted 14.0 s, and with no call 28 s.
+- **"Walked out of only from near its edge" cannot be literal.** A one-second tell is 13.7
+  studs of walking before the ring even leaves. What the values give is that the player it is
+  aimed at cannot walk out (15.3 against 14). With a dash he can, from anywhere, and that costs
+  him his place at the boss.
+- **Abilities take a melee kill under the floor.** With its ability the Spinblade takes 55.4 s
+  and the Spear 56.3 s. The 60 to 90 s band is measured without abilities, as the brief has it.
+- **Reacting to everything is slower than ignoring the barrage.** The player who only jumps and
+  sidesteps wins 3 s sooner and loses 86 health in all. It says the barrage is the gentlest of
+  the four.
+- **The Warhammer has the least room: 85.2 s at the slowest of nine seeds.** The Spear is the
+  other end at 62.8 s. The band holds both, with about 3 s under the Spear and 5 s over the
+  Warhammer.
+- **What it calls costs the Broadsword 4%,** and the band's floor is 3%. The arc kills the
+  fodder almost for free. A single-target weapon pays more.
+- **The charge is 32, which is 24.6%.** There is no room left under the 25% rule.
+- **Not modelled:** crits (a ranged player who aims at the head is faster), kill refunds on
+  abilities, the fodder under a crowd ability, cover, and the stairs.
+
+Known limits, for the owner (ruled by the lead):
+- **Boss health does not scale with players in the range.** Two melee players finish in 32 to
+  41 s. Missions scale it (C2).
+- **The bows are slow on a boss:** the Splitbow takes 226 s (181 s with its ability) and the
+  Longbow 142 s. The Splitbow deals 31 damage a second to one target. A weapon-number question.
+- **Kiting works here too.** The boss walks at 9 and its slam reaches 14. A ranged player who
+  keeps 31 studs off meets only the call and, when it is enraged, the barrage. P5's.

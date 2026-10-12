@@ -15,7 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
 -- What CrowdService.Damage said of the hit besides its number.
-export type Verdict = "blocked" | "plate" | "broke"
+export type Verdict = "blocked" | "plate" | "broke" | "gone"
 
 export type Tally = {
 	hits: { Types.StrikeHit },
@@ -43,6 +43,11 @@ function StrikeTally.Add(
 	killed: boolean,
 	verdict: Verdict?
 ): ()
+	if verdict == "gone" then
+		-- No such body any more: the blow that killed a boss removed its summons under the
+		-- same strike, and what the strike still held for them is no hit at all.
+		return
+	end
 	local blocked = verdict == "blocked"
 	local onPlate = verdict == "plate" or verdict == "broke"
 	tally.dealt += dealt

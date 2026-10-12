@@ -5,6 +5,8 @@
 -- player's lasting ability visuals:
 --
 --   Tells   the brute's lane and the marksman's line, from the crowd snapshot alone
+--   Rings   a boss's slam (the circle, then the front running out) and the circle of its
+--           call, from the crowd snapshot alone (Stop 2)
 --   Areas   the lobber's ground circle and the shot arcing into it, from `area`
 --   Shots   the slinger's slow orbs, from `enemyShot` / `enemyShotEnd`
 --   Pool    the pooled parts and the frame's one batched move
@@ -37,6 +39,7 @@ local Pool = require(script:WaitForChild("Pool"))
 local Shots = require(script:WaitForChild("Shots"))
 local Areas = require(script:WaitForChild("Areas"))
 local Tells = require(script:WaitForChild("Tells"))
+local Rings = require(script:WaitForChild("Rings"))
 
 local ThreatFx = {}
 
@@ -67,8 +70,24 @@ local function onThreat(
 	range: number,
 	width: number,
 	lockSeconds: number,
-	strikeSeconds: number
+	strikeSeconds: number,
+	speed: number
 ): ()
+	if shape == "ring" or shape == "summon" then
+		Rings.Feed(
+			id,
+			shape == "summon",
+			striking,
+			phaseAt,
+			impactAt,
+			origin,
+			range,
+			width,
+			speed,
+			frameServerNow
+		)
+		return
+	end
 	Tells.Feed(
 		id,
 		shape,
@@ -86,12 +105,24 @@ local function onThreat(
 	)
 end
 
+-- Stop 2: the boss with this crowd id died or was taken away. Its death takes back everything
+-- it had in the air, and the server cannot recall circles it has already announced: its own
+-- go here, with any shot it fired; another boss's stay. (Its ring goes by itself: Rings asks
+-- whether its body lives.)
+local function onBossEnd(enemyId: number): ()
+	Areas.Drop(enemyId)
+	Shots.Drop(enemyId)
+end
+
 -- Only an effect with every field its drawing needs, each of its type, is acted on.
 local function applyFx(fx: any): ()
 	if typeof(fx) ~= "table" then
 		return
 	end
 	local kind = fx.kind
+	-- Whose it is, by crowd id: only ever compared with a dead boss's, so one that is missing
+	-- or malformed matches nobody.
+	local enemyId: number? = if isNumber(fx.enemyId) then fx.enemyId else nil
 	if kind == "enemyShot" then
 		if
 			isNumber(fx.id)
@@ -101,7 +132,7 @@ local function applyFx(fx: any): ()
 			and isNumber(fx.firedAt)
 			and isNumber(fx.seconds)
 		then
-			Shots.Fire(fx.id, fx.from, fx.velocity, fx.radius, fx.firedAt, fx.seconds)
+			Shots.Fire(fx.id, fx.from, fx.velocity, fx.radius, fx.firedAt, fx.seconds, enemyId)
 		end
 	elseif kind == "enemyShotEnd" then
 		if isNumber(fx.id) and isPoint(fx.at) then
@@ -121,7 +152,8 @@ local function applyFx(fx: any): ()
 				fx.radius,
 				fx.startsAt,
 				fx.endsAt,
-				if isPoint(fx.from) then fx.from else nil
+				if isPoint(fx.from) then fx.from else nil,
+				enemyId
 			)
 		end
 	end
@@ -149,8 +181,10 @@ local function step(deltaTime: number): ()
 	end
 	frameServerNow = Workspace:GetServerTimeNow()
 	frameDelta = deltaTime
+	CrowdRenderer.DrainBossEnds(onBossEnd)
 	CrowdRenderer.ForEachThreat(onThreat)
 	Tells.Sweep()
+	Rings.Step(frameServerNow, CrowdRenderer.IsAlive)
 	Shots.Step(frameServerNow, os.clock())
 	Areas.Step(frameServerNow)
 	Pool.Flush()
@@ -185,13 +219,15 @@ end
 -- The local player loaded or reset a dummy set: the server drops the crowd's circles without a
 -- word and ends each shot where it is. Both go here at once, ahead of those ends (which then
 -- find no shot), so the screen is clean the moment the command is sent. The snapshot-driven
--- tells go by themselves with their bodies.
+-- tells go by themselves with their bodies, all but a slam's front that has already left its
+-- boss: that one runs on its own and goes here.
 function ThreatFx.Clear(): ()
 	if not Pool.IsReady() then
 		return
 	end
 	Shots.Clear()
 	Areas.Clear()
+	Rings.Clear()
 end
 
 function ThreatFx.Destroy(): ()
@@ -204,6 +240,7 @@ function ThreatFx.Destroy(): ()
 		Shots.Clear()
 		Areas.Clear()
 		Tells.Clear()
+		Rings.Clear()
 	end
 	Pool.Destroy()
 end

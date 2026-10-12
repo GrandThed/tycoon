@@ -9,8 +9,11 @@
 --   lob  (lobber)    a pack on the back with the next round on top
 --   lane (brute)     two horns
 --   plate (elite)    a metal shell round the torso, there only while the plate is
+--   boss (Stop 2)    shoulders, a crown of three spikes, two spines down the back and a core
+--                    in the chest that charges through every windup; enraged, the crown, the
+--                    spines and the core are lit for good
 --
--- A kind with none of these (fodder, dummies, the boss) gets nothing: no part, no cost.
+-- A kind with none of these (fodder, the passive dummies) gets nothing: no part, no cost.
 --
 -- The lit pieces are also the shooters' windup tell. A slinger and a lobber put nothing on
 -- the ground before they fire, so their body is the tell: the orb or the round swells to a
@@ -26,14 +29,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 local Theme = require(script.Parent.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 
--- plain = never changes; glow = swells and reddens as a windup charges; shell = the plate.
--- `own` is the piece's transparency before the body's fade is laid over it.
+-- plain = never changes; ember = never changes and is lit (an enraged boss's crown); glow =
+-- swells and reddens as a windup charges; shell = the plate. `own` is the piece's transparency
+-- before the body's fade is laid over it.
+type Role = "plain" | "ember" | "glow" | "shell"
 type Piece = {
 	part: Part,
 	offset: CFrame,
 	size: Vector3,
 	color: Color3,
-	role: "plain" | "glow" | "shell",
+	role: Role,
 	swell: number,
 	own: number,
 }
@@ -76,7 +81,7 @@ end
 local function add(
 	set: CueSet,
 	model: Model,
-	role: "plain" | "glow" | "shell",
+	role: Role,
 	shape: Enum.PartType,
 	size: Vector3,
 	offset: CFrame,
@@ -87,7 +92,7 @@ local function add(
 	part.Shape = shape
 	part.Size = size
 	part.Color = color
-	part.Material = if role == "glow"
+	part.Material = if role == "glow" or role == "ember"
 		then Enum.Material.Neon
 		elseif role == "shell" then Enum.Material.Metal
 		else Enum.Material.SmoothPlastic
@@ -106,7 +111,7 @@ end
 
 -- The cue pieces for a kind, parented into `model`, or nil when the kind has no cue. The
 -- measurements are CrowdRenderer's figure: body radius and height, leg and torso heights, head
--- radius, the torso's size and the kind's colour.
+-- radius, the torso's size and the kind's colour. `enraged` = a boss in its second phase.
 function Cues.Attach(
 	model: Model,
 	def: Types.CrowdKindDef,
@@ -116,14 +121,17 @@ function Cues.Attach(
 	torsoHeight: number,
 	headRadius: number,
 	torsoSize: Vector3,
-	color: Color3
+	color: Color3,
+	enraged: boolean
 ): CueSet?
 	local attacks = def.attacks
 	local first = if attacks ~= nil then attacks[1] else nil
 	local shape = if first ~= nil then first.shape else nil
 	local plated = (def.plate or 0) > 0
+	local boss = def.boss == true
 	if
 		not plated
+		and not boss
 		and shape ~= "shot"
 		and shape ~= "line"
 		and shape ~= "lob"
@@ -211,6 +219,76 @@ function Cues.Attach(
 				1
 			)
 		end
+	end
+	if boss then
+		-- A silhouette no other body has, in eight parts: wide shoulders, a crown, spines, and
+		-- the core that says "something is coming" whatever the attack. Front is -Z.
+		local shoulder = Vector3.new(radius * 0.95, torsoHeight * 0.3, radius * 1.5)
+		for side = -1, 1, 2 do
+			add(
+				set,
+				model,
+				"plain",
+				Enum.PartType.Block,
+				shoulder,
+				CFrame.new(
+					side * (torsoSize.X * 0.5 + shoulder.X * 0.2),
+					legHeight + torsoHeight * 0.9,
+					0
+				) * CFrame.Angles(0, 0, math.rad(-14 * side)),
+				dark,
+				1
+			)
+		end
+		-- Enraged, the crown and the spines are lit and stay lit: the phase reads off the
+		-- body from any side, with no bar in view.
+		local spikeRole: Role = if enraged then "ember" else "plain"
+		local spikeColor = if enraged
+			then Theme.COMBAT_RANGE_ENRAGE_GLOW_COLOR
+			else Theme.COMBAT_RANGE_CUE_HORN_COLOR
+		local spike = Vector3.new(headRadius * 0.34, headRadius * 1.3, headRadius * 0.34)
+		for slot = -1, 1 do
+			add(
+				set,
+				model,
+				spikeRole,
+				Enum.PartType.Block,
+				spike,
+				CFrame.new(slot * headRadius * 0.6, height - headRadius * 0.05, 0)
+					* CFrame.Angles(0, 0, math.rad(-22 * slot)),
+				spikeColor,
+				1
+			)
+		end
+		local spine = Vector3.new(radius * 0.22, torsoHeight * 0.42, radius * 0.22)
+		for slot = 0, 1 do
+			add(
+				set,
+				model,
+				spikeRole,
+				Enum.PartType.Block,
+				spine,
+				CFrame.new(
+					0,
+					legHeight + torsoHeight * (0.45 + 0.38 * slot),
+					torsoSize.Z * 0.5 + spine.Z * 0.5
+				) * CFrame.Angles(math.rad(40), 0, 0),
+				spikeColor,
+				1
+			)
+		end
+		local d = math.max(radius * 0.6, 0.8)
+			* (if enraged then Theme.COMBAT_RANGE_ENRAGE_CORE_SCALE else 1)
+		add(
+			set,
+			model,
+			"glow",
+			Enum.PartType.Ball,
+			Vector3.one * d,
+			CFrame.new(0, chest, -torsoSize.Z * 0.5),
+			if enraged then Theme.COMBAT_RANGE_ENRAGE_GLOW_COLOR else lit,
+			math.max(height * Theme.COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE / d, 1)
+		)
 	end
 	if plated then
 		add(

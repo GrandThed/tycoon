@@ -23,6 +23,10 @@
 -- hands each contact back to be settled here by the same rules (i-frames, `god`, the knock
 -- window, down), so one attack never sends one player two effects.
 --
+-- Stop 2 (the Colossus). A ring travels too (ThreatField). A lob with `count` is a barrage:
+-- that many circles thrown at once, each landing as a lob of its own, and one player takes at
+-- most one of them. When a boss dies, what it had in the air goes with it (onGone).
+--
 -- Health is Humanoid.Health. Its maximum is pinned to tier-1 weapons in both slots (ruling 17),
 -- whatever the Studio profile holds: the range's weapon numbers are tier-1 values, and the body
 -- they are balanced against must be too. It never reaches 0 here: the hit that would do it puts
@@ -197,11 +201,12 @@ local function inPlan(strike: CrowdBrain.Strike, point: Vector3): boolean
 	return false
 end
 
--- Where a landed hit sends its victim: a sweep throws them away from the attacker and a lob
--- away from where it landed; a thrust, a line, a shot and a charge push along themselves.
+-- Where a landed hit sends its victim: a sweep and a ring throw them away from the attacker
+-- and a lob away from where it landed; a thrust, a line, a shot and a charge push along
+-- themselves.
 local function pushOf(strike: CrowdBrain.Strike, point: Vector3): Vector3
 	local shape = strike.def.shape
-	local centre = if shape == "arc"
+	local centre = if shape == "arc" or shape == "ring"
 		then strike.origin
 		elseif shape == "lob" then strike.aim
 		else nil
@@ -316,6 +321,11 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 	if vitalsByPlayer[player] ~= vitals or vitals.down or wasDown(vitals, strike.at) then
 		return
 	end
+	-- A barrage is one attack: a player another of its circles has already answered is done.
+	local volley = strike.volley
+	if volley ~= nil and volley[player.UserId] then
+		return
+	end
 	local root, humanoid = bodyOf(player)
 	if root == nil or humanoid == nil then
 		return
@@ -333,7 +343,10 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 		local above = feetOf(root, humanoid) - strike.floorY
 		held = above <= height and (shape ~= "lob" or above >= -height)
 	end
-	rule(config, vitals, strike, held, entry.covered, root, humanoid, now)
+	local verdict = rule(config, vitals, strike, held, entry.covered, root, humanoid, now)
+	if volley ~= nil and verdict ~= nil then
+		volley[player.UserId] = true
+	end
 end
 
 -- The same decision for an attack that travels, asked by ThreatField at the step that saw it:
@@ -460,51 +473,8 @@ local function canTarget(player: Player): boolean
 	return vitals == nil or not vitals.down
 end
 
--- An enemy attack's impact. A shot and a charge go to ThreatField, which sweeps them step by
--- step. Every other shape is frozen here and each player gets a decision at their own lag.
--- Nothing is judged now, not even who was down: the root the rule wants is the one the server
--- will hold then.
-local function onImpact(strike: CrowdBrain.Strike): ()
-	local attack = strike.def
-	local shape = attack.shape
-	-- Effects carry server time; the strike's clock is os.clock().
-	local serverOffset = Workspace:GetServerTimeNow() - os.clock()
-	if shape == "shot" then
-		local shot = ThreatField.Fire(strike, serverOffset)
-		if shot ~= nil then
-			table.insert(raised, shot)
-		end
-		return
-	elseif shape == "lane" then
-		ThreatField.Charge(strike)
-		return
-	elseif shape == "lob" then
-		-- The throw: the circle is shown now and lands after its flight. From here on the
-		-- strike is that landing, the impact the commit rule judges. It no longer needs its
-		-- lobber, and walls do not stop it.
-		-- It lands on whatever its target stood on (its one ray, straight down from their
-		-- root): on a block, the circle lies on the block and `height` is measured from there.
-		local seconds = math.max(attack.seconds or 0, 0)
-		local centre = ThreatField.Below(strike.aim or strike.origin, strike.floorY)
-		strike.aim = centre
-		strike.floorY = centre.Y
-		table.insert(raised, {
-			kind = "area",
-			id = ThreatField.NextId(),
-			enemyKind = strike.enemyKind,
-			center = centre,
-			radius = math.max(attack.radius or 0, 0),
-			startsAt = strike.at + serverOffset,
-			endsAt = strike.at + seconds + serverOffset,
-			from = strike.origin,
-		})
-		strike.at += seconds
-	elseif shape == "line" then
-		-- Its one ray, cast at the body it locked on: world geometry between the two cuts the
-		-- lane short, the block that body stands on does not.
-		local range = math.max(attack.range or 0, 0)
-		strike.length = ThreatField.Reach(strike.origin, strike.aim, strike.facing, range)
-	end
+-- A frozen shape waits for each player's decision, at their own lag after its impact.
+local function await(strike: CrowdBrain.Strike): ()
 	local shooting = Tuning.Get().shooting
 	local impact = strike.at
 	for player, vitals in vitalsByPlayer do
@@ -515,6 +485,116 @@ local function onImpact(strike: CrowdBrain.Strike): ()
 			covered = false,
 		})
 	end
+end
+
+-- One lob's throw at `centre`, the surface point it lands on: the circle is shown now and
+-- lands after its flight. From here on the strike is that landing, the impact the commit rule
+-- judges. It no longer needs its lobber, and walls do not stop it. On a block, the circle lies
+-- on the block and `height` is measured from there.
+local function throw(
+	strike: CrowdBrain.Strike,
+	centre: Vector3,
+	id: number,
+	serverOffset: number
+): ()
+	local attack = strike.def
+	local seconds = math.max(attack.seconds or 0, 0)
+	strike.aim = centre
+	strike.floorY = centre.Y
+	table.insert(raised, {
+		kind = "area",
+		id = id,
+		enemyKind = strike.enemyKind,
+		enemyId = strike.bodyId,
+		center = centre,
+		radius = math.max(attack.radius or 0, 0),
+		startsAt = strike.at + serverOffset,
+		endsAt = strike.at + seconds + serverOffset,
+		from = strike.origin,
+	})
+	strike.at += seconds
+	await(strike)
+end
+
+-- An enemy attack's impact. A shot, a charge and a ring go to ThreatField, which sweeps them
+-- step by step. Every other shape is frozen here and each player gets a decision at their own
+-- lag. Nothing is judged now, not even who was down: the root the rule wants is the one the
+-- server will hold then.
+local function onImpact(strike: CrowdBrain.Strike): ()
+	local attack = strike.def
+	local shape = attack.shape
+	-- Effects carry server time; the strike's clock is os.clock().
+	local serverOffset = Workspace:GetServerTimeNow() - os.clock()
+	if shape == "shot" then
+		local shot = ThreatField.Fire(strike, serverOffset)
+		if shot ~= nil then
+			table.insert(raised, shot)
+		end
+	elseif shape == "lane" then
+		ThreatField.Charge(strike)
+	elseif shape == "ring" then
+		ThreatField.Ring(strike)
+	elseif shape == "lob" then
+		local target = strike.aim or strike.origin
+		local count = attack.count or 1
+		local first = ThreatField.NextId()
+		if count >= 2 then
+			-- A barrage: the first circle on the target, the others scattered round them from
+			-- the first circle's id. The circles answer each player once between them, the first
+			-- circle first: so only that one can be the dodge of the player it was thrown at.
+			local volley: { [number]: boolean } = {}
+			local spread = math.max(attack.spread or 0, 0)
+			local points = HitShapes.Barrage(target, count, spread, first)
+			-- Copied before any is thrown: a throw moves its strike on to its landing.
+			local circles = table.create(#points, strike)
+			for index = 2, #points do
+				circles[index] = table.clone(strike)
+			end
+			local floorY = strike.floorY
+			for index, point in points do
+				local circle = circles[index]
+				circle.volley = volley
+				if index == 1 then
+					throw(circle, ThreatField.Below(point, floorY), first, serverOffset)
+				else
+					-- Nobody stood there: it comes down on whatever is highest at that point.
+					local centre = ThreatField.Landing(point, floorY)
+					throw(circle, centre, ThreatField.NextId(), serverOffset)
+				end
+			end
+		else
+			-- It lands on whatever its target stood on: its one ray, straight down from their root.
+			throw(strike, ThreatField.Below(target, strike.floorY), first, serverOffset)
+		end
+	elseif shape == "line" then
+		-- Its one ray, cast at the body it locked on: world geometry between the two cuts the
+		-- lane short, the block that body stands on does not.
+		local range = math.max(attack.range or 0, 0)
+		strike.length = ThreatField.Reach(strike.origin, strike.aim, strike.facing, range)
+		await(strike)
+	elseif shape ~= "summon" then
+		-- A summon hurts nobody: CrowdService raises its bodies and never sends it here.
+		await(strike)
+	end
+end
+
+-- The bodies in `ids` are gone for good: a boss has died, and what it summoned went with it.
+-- Nothing of theirs lands any more: decisions still waiting (a barrage in the air among them),
+-- shots, charges and rings.
+local function onGone(ids: { [number]: boolean }): ()
+	local count = #pending
+	local kept = 0
+	for index = 1, count do
+		local entry = pending[index]
+		if not ids[entry.strike.bodyId] then
+			kept += 1
+			pending[kept] = entry
+		end
+	end
+	for index = kept + 1, count do
+		pending[index] = nil
+	end
+	ThreatField.Drop(ids, raise)
 end
 
 -- Once per crowd step, after its impacts: the shots and charges under way are swept against
@@ -569,6 +649,7 @@ function VitalsService.Start(rangeHooks: Hooks): ()
 	CrowdService.SetThreatHooks({
 		canTarget = canTarget,
 		impact = onImpact,
+		gone = onGone,
 		step = onCrowdStep,
 		shotsAlive = ThreatField.ShotsAlive,
 	})

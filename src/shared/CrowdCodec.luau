@@ -104,6 +104,13 @@ function CrowdCodec.SnapYaw(yaw: number): number
 	return decodeYaw(encodeYaw(yaw))
 end
 
+-- The health share the wire will carry for `fraction`: 1/255 steps, rounded up. A boss enrages
+-- at a health share (P4 Stop 2), and the client times its tells by the phase it reads off this
+-- byte, so the server asks its own question of the same number.
+function CrowdCodec.SnapHp(fraction: number): number
+	return encodeHp(fraction) / 255
+end
+
 -- Encodes at most MAX_ENTRIES entries (the rest are ignored; the caller splits). serverTime is
 -- carried in the header for ordering and interpolation; 0 when omitted.
 function CrowdCodec.Encode(

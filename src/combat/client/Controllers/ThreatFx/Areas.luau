@@ -22,6 +22,9 @@ local Pool = require(script.Parent:WaitForChild("Pool"))
 
 type Area = {
 	id: number,
+	-- The crowd id of the body that threw it (nil = not said): a boss's death takes its own
+	-- circles with it (Drop).
+	owner: number?,
 	centre: Vector3,
 	radius: number,
 	startsAt: number,
@@ -41,6 +44,10 @@ local UP = Vector3.yAxis
 local FLAT = CFrame.Angles(0, 0, math.pi / 2)
 -- The same guard as for shots: far above anything the server sends at once.
 local MAX_DRAWN = 32
+-- Ids that run on from one another (a barrage's) take levels this many apart. It shares no
+-- factor with Theme.COMBAT_RANGE_AREA_LEVELS, so as many circles as there are levels, thrown
+-- together, each get one of their own.
+local LEVEL_STRIDE = 7
 
 local areas: { Area } = {}
 
@@ -68,14 +75,16 @@ end
 
 -- `area`: a circle of `radius` round `centre` (a point on the surface it lands on, at that
 -- surface's own height) that opens at `startsAt` and lands at `endsAt`, both server time.
--- `from` = where the lobbed shot left, when there is one.
+-- `from` = where the lobbed shot left, when there is one; `enemyId` = the crowd id of the
+-- body that threw it, when the effect says.
 function Areas.Open(
 	id: number,
 	centre: Vector3,
 	radius: number,
 	startsAt: number,
 	endsAt: number,
-	from: Vector3?
+	from: Vector3?,
+	enemyId: number?
 ): ()
 	for index, area in areas do
 		if area.id == id then
@@ -87,13 +96,22 @@ function Areas.Open(
 		return
 	end
 	local color = Theme.COMBAT_RANGE_TELL_COLOR
-	local floor = centre + UP * Theme.COMBAT_RANGE_TELL_LIFT
+	-- Circles overlap (a barrage is several at once, thrown close together), and two flat
+	-- discs whose top faces share a height would fight for the same pixels. Each circle takes
+	-- a level of its own by its id (a barrage's ids run on from one another), and only the top
+	-- faces are told apart (Pool.MarkTop): the faint discs' on the first slots, the growing
+	-- discs' on the next, every rim's on the one after. Nothing is stacked, so the whole mark
+	-- stays close to the surface it lies on.
+	local levels = math.max(math.floor(Theme.COMBAT_RANGE_AREA_LEVELS), 1)
+	local level = (id * LEVEL_STRIDE) % levels
+	local half = Theme.COMBAT_RANGE_TELL_THICKNESS / 2
+	local floor = centre + UP * (Pool.MarkTop(level) - half)
 	local base = Pool.Take(Enum.PartType.Cylinder, color)
 	disc(base, radius)
 	Pool.Place(base, CFrame.new(floor) * FLAT)
 	local fill = Pool.Take(Enum.PartType.Cylinder, color)
-	-- A hair above the base disc, so the two never fight for the same pixels.
-	Pool.Place(fill, CFrame.new(floor + UP * Theme.COMBAT_RANGE_TELL_THICKNESS) * FLAT)
+	Pool.Place(fill, CFrame.new(centre + UP * (Pool.MarkTop(levels + level) - half)) * FLAT)
+	local edge = centre + UP * (Pool.MarkTop(2 * levels) - Theme.COMBAT_RANGE_TELL_EDGE_HEIGHT / 2)
 
 	local segments = if Theme.lowEndDevice
 		then Theme.COMBAT_RANGE_AREA_LOW_END_SEGMENTS
@@ -110,8 +128,8 @@ function Areas.Open(
 	for index = 1, segments do
 		local a = span * (index - 1)
 		local b = a + span
-		local pa = floor + Vector3.new(math.cos(a), 0, math.sin(a)) * radius
-		local pb = floor + Vector3.new(math.cos(b), 0, math.sin(b)) * radius
+		local pa = edge + Vector3.new(math.cos(a), 0, math.sin(a)) * radius
+		local pb = edge + Vector3.new(math.cos(b), 0, math.sin(b)) * radius
 		local part = Pool.Take(Enum.PartType.Block, color)
 		part.Size = size
 		Pool.Place(part, CFrame.lookAt((pa + pb) / 2, pb, UP))
@@ -133,6 +151,7 @@ function Areas.Open(
 	end
 	table.insert(areas, {
 		id = id,
+		owner = enemyId,
 		centre = floor,
 		radius = radius,
 		startsAt = startsAt,
@@ -194,6 +213,17 @@ function Areas.Step(serverNow: number): ()
 			local along = from:Lerp(area.centre, u)
 			Pool.Place(shot, CFrame.new(along + UP * (area.apex * 4 * u * (1 - u))))
 			Pool.Show(shot, 0)
+		end
+	end
+end
+
+-- The boss with this crowd id died or was taken away, and its death takes back everything it
+-- had in the air: its own circles go at once, with no landing. (An ordinary enemy's lob still
+-- lands after its lobber dies; nobody calls this for those.)
+function Areas.Drop(enemyId: number): ()
+	for index = #areas, 1, -1 do
+		if areas[index].owner == enemyId then
+			release(index)
 		end
 	end
 end

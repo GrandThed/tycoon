@@ -1047,6 +1047,83 @@ local Theme = {
 	-- pixels, so the rows hold apart at any distance and on any screen.
 	COMBAT_RANGE_NUMBER_ROW_SHARE = 0.5,
 
+	-- P4 Stop 2, the Colossus (docs/INTERFACES.md "P4 contracts" -> "Stop 2"). Radius, width,
+	-- speed and every time come from the kind's `attacks`; these are only the look.
+	-- The slam's ring (ThreatFx/Rings): the whole circle it will reach from the windup's first
+	-- frame, drawn as a lob's circle is, then a low bright crest that runs out to the rim. Low
+	-- and flat is the point: this one is jumped, where the marksman's line is a wall.
+	COMBAT_RANGE_RING_SEGMENTS = 32,
+	COMBAT_RANGE_RING_LOW_END_SEGMENTS = 16,
+	COMBAT_RANGE_RING_FRONT_HEIGHT = 1, -- studs: a crest, far under any jump
+	COMBAT_RANGE_RING_FRONT_TRANSPARENCY = 0.1,
+	COMBAT_RANGE_RING_BASE_RUNNING = 0.9, -- the reach's disc, fainter still while the front runs
+	-- Flat marks that can lie over one another (a barrage is several circles at once, and a
+	-- chain can lay its slam's circle under them) must not show two top faces at one height,
+	-- or the two fight for the same pixels. Only the TOP faces need telling apart, so the marks
+	-- are not stacked: each takes a top face of its own, MARK_STEP above the last, starting at
+	-- MARK_FLOOR, just over the player's own ground marks (ThreatFx/Pool.MarkTop skips the
+	-- three heights the lane, the line and the elite's wedge already use). In order: each lob
+	-- circle's faint disc on one of AREA_LEVELS, their growing discs on as many more, every
+	-- circle's rim, then a slam's disc, its fill and its rim. Everything stays under 0.4 studs:
+	-- a mark that floats reads further from the camera than it is, on exactly the question
+	-- "am I inside it". Heights are studs above the surface the mark lies on.
+	COMBAT_RANGE_MARK_FLOOR = 0.13,
+	COMBAT_RANGE_MARK_STEP = 0.01,
+	COMBAT_RANGE_AREA_LEVELS = 10,
+	-- The slam itself: the body stretches up through the windup and comes down flat at the
+	-- impact (squash shares of the torso; lean in radians).
+	COMBAT_RANGE_RING_SLAM_RISE = 0.12,
+	COMBAT_RANGE_RING_SLAM_SQUASH = 0.76,
+	COMBAT_RANGE_RING_SLAM_LEAN = 0.3,
+	-- The call: head thrown back, shaking, and a circle where the summoned will rise. That
+	-- circle hurts nobody, so it is never the danger's red.
+	COMBAT_RANGE_CALL_COLOR = Color3.fromRGB(190, 120, 255),
+	COMBAT_RANGE_CALL_TRANSPARENCY = 0.2,
+	COMBAT_RANGE_CALL_PULSE = 0.4, -- how much more see-through the circle swings, at PULSE_HZ
+	COMBAT_RANGE_CALL_PULSE_HZ = 3,
+	COMBAT_RANGE_CALL_LEAN = 0.5,
+	COMBAT_RANGE_CALL_SHAKE = 0.12, -- radians of twist either way
+	COMBAT_RANGE_CALL_SHAKE_HZ = 9,
+	COMBAT_RANGE_CALL_STRETCH = 0.08,
+	-- A body first seen within WINDOW seconds of a call, of the kind called and within SLACK
+	-- studs of its circle, was raised by it: it comes up out of the floor instead of appearing.
+	COMBAT_RANGE_CALL_WINDOW_SECONDS = 2,
+	COMBAT_RANGE_CALL_SLACK = 4,
+	COMBAT_RANGE_RISE_SECONDS = 0.45,
+	-- A boss's cue set (ThreatFx/Cues): shoulders, a crown, back spines and a core in the chest
+	-- that charges through every windup, to this share of the body's height.
+	COMBAT_RANGE_CUE_BOSS_CHARGE_SHARE = 0.3,
+	-- A boss breathes: the torso swells by this share, this many times a second. Enraged, it
+	-- heaves.
+	COMBAT_RANGE_BOSS_BREATH = 0.02,
+	COMBAT_RANGE_BOSS_BREATH_HZ = 0.35,
+	COMBAT_RANGE_ENRAGE_BREATH = 0.035,
+	COMBAT_RANGE_ENRAGE_BREATH_HZ = 0.9,
+	-- Enraged for good: the body's own colours go this far toward hot red, and the crown, the
+	-- spines and the core are lit.
+	COMBAT_RANGE_ENRAGE_COLOR = Color3.fromRGB(255, 60, 40),
+	COMBAT_RANGE_ENRAGE_SHARE = 0.4,
+	COMBAT_RANGE_ENRAGE_GLOW_COLOR = Color3.fromRGB(255, 170, 70),
+	COMBAT_RANGE_ENRAGE_CORE_SCALE = 1.35,
+	-- The boss bar (UI/BossBar): one row, the name and the phase written on the bar itself, a
+	-- mark where the enrage begins. Top centre where the RangePanel's column leaves room,
+	-- beside it on a landscape phone, under its readouts on a portrait one.
+	COMBAT_RANGE_BOSS_BAR_WIDTH = 300,
+	COMBAT_RANGE_BOSS_BAR_MIN_WIDTH = 200,
+	COMBAT_RANGE_BOSS_BAR_HEIGHT = 20,
+	COMBAT_RANGE_BOSS_BAR_TEXT = 12,
+	COMBAT_RANGE_BOSS_BAR_FILL_COLOR = Color3.fromRGB(206, 56, 64),
+	COMBAT_RANGE_BOSS_BAR_ENRAGED_COLOR = Color3.fromRGB(255, 128, 24),
+	COMBAT_RANGE_BOSS_BAR_MARK_WIDTH = 2,
+	COMBAT_RANGE_BOSS_BAR_ENRAGED_LABEL = "ENRAGED",
+	COMBAT_RANGE_BOSS_BAR_SHOW_SECONDS = 0.25,
+	COMBAT_RANGE_BOSS_BAR_POP_SCALE = 1.3, -- the enrage beat: the bar jumps and flashes white
+	COMBAT_RANGE_BOSS_BAR_POP_SECONDS = 0.4,
+	COMBAT_RANGE_BOSS_BAR_FLASH_SECONDS = 0.6,
+	COMBAT_RANGE_BOSS_BAR_DEATH_SECONDS = 0.7, -- emptied, it flashes and fades out over this long
+	COMBAT_RANGE_BOSS_BAR_DEATH_HOLD_SHARE = 0.55, -- of that, spent emptied before it folds shut
+	COMBAT_RANGE_BOSS_BAR_FLASH_TRANSPARENCY = 0.15, -- the white flash over the bar at its strongest
+
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.
 	-- Rows are 48 design px like the hub's DebugPanel, because 48 x MIN_SCALE is exactly

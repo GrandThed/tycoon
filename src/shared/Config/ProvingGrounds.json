@@ -46,7 +46,19 @@
 					{ "shape": "lane", "reach": 22, "windup": 0.8, "recover": 1.5, "damage": 28, "knockback": 30, "launch": 3, "range": 30, "width": 5, "speed": 55, "height": 5, "interrupt": "heavy" }
 				]
 			},
-			"boss": { "radius": 4, "headRadius": 1.6, "height": 14, "speed": 6, "hp": 10000, "color": [110, 40, 60], "knockbackMult": 0.0, "armor": 0 }
+			"boss": { "radius": 4, "headRadius": 1.6, "height": 14, "speed": 6, "hp": 10000, "color": [110, 40, 60], "knockbackMult": 0.0, "armor": 0 },
+			"colossus": {
+				"radius": 4, "headRadius": 1.6, "height": 14, "speed": 9, "hp": 4700, "color": [110, 40, 60], "knockbackMult": 0.0, "armor": 0,
+				"brain": "rush", "perPlayer": 1,
+				"boss": true, "name": "Colossus",
+				"enrage": { "at": 0.5, "windupScale": 0.8, "recoverScale": 0.7, "chain": 2 },
+				"attacks": [
+					{ "shape": "ring", "reach": 14, "windup": 1.0, "recover": 1.6, "damage": 26, "knockback": 24, "launch": 3, "radius": 40, "speed": 70, "width": 3, "height": 4, "cooldown": 6, "interrupt": "none" },
+					{ "shape": "lane", "reach": 30, "windup": 1.0, "recover": 2.0, "damage": 32, "knockback": 30, "launch": 3, "range": 44, "width": 10, "speed": 60, "height": 6, "cooldown": 8, "interrupt": "none" },
+					{ "shape": "summon", "reach": 60, "windup": 1.0, "recover": 1.0, "damage": 0, "count": 12, "summon": "fodder", "radius": 16, "cooldown": 18, "interrupt": "none" },
+					{ "shape": "lob", "reach": 60, "windup": 0.9, "recover": 1.4, "damage": 18, "knockback": 14, "launch": 3, "radius": 5, "seconds": 1.6, "count": 5, "spread": 14, "height": 4, "cooldown": 10, "enraged": true, "interrupt": "none" }
+				]
+			}
 		},
 		"snapshotHz": 15,
 		"maxAlive": 160,
@@ -58,6 +70,7 @@
 		"knockMax": 140,
 		"armorFloor": 0.1,
 		"heavyHit": 40,
+		"largeRadius": 3,
 		"plateBreakSeconds": 1.5,
 		"threat": { "spawnGrace": 1.0, "spawnClear": 12, "maxShots": 24, "strikeSeconds": 0.2 }
 	},
@@ -200,9 +213,10 @@
 			{ "kind": "lobber", "behaviour": "fight", "count": 2, "at": [26, 34], "spacing": 6, "respawnSeconds": 6 },
 			{ "kind": "brute", "behaviour": "fight", "count": 3, "at": [-56, 46], "spacing": 12, "respawnSeconds": 8 },
 			{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [-10, 26], "spacing": 8, "respawnSeconds": 8 }
-		]
+		],
+		"colossus": [{ "kind": "colossus", "behaviour": "fight", "count": 1, "at": [0, 48], "spacing": 0, "respawnSeconds": 12 }]
 	},
-	"defaultSet": "fight",
+	"defaultSet": "colossus",
 	"movement": {
 		"jumpHeight": 18,
 		"doubleJumpHeight": 12,

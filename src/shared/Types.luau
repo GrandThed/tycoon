@@ -1782,13 +1782,23 @@ export type CrowdKindDef = {
 	-- Plate HP. While it lasts, only a hit of crowd.heavyHit or more touches the enemy, and that
 	-- hit goes to the plate; when the plate is gone every hit lands in full.
 	plate: number?,
+	-- P4 Stop 2. boss = the client shows its name and health as the boss bar. enrage = its
+	-- second phase, entered for good when its health share falls to `at`: every windup and
+	-- recover is multiplied by the two scales, attacks marked `enraged` unlock, and up to
+	-- `chain` attacks follow each other with no recover between them (the last one recovers).
+	boss: boolean?,
+	name: string?,
+	enrage: { at: number, windupScale: number, recoverScale: number, chain: number }?,
 }
 -- One enemy attack: windup (the tell, facing locked) -> impact -> recover (exposed).
 -- shape: lunge = a short thrust from the body; arc = a sweep round the body; lane = the enemy
 -- charges down a lane and hits each player on it once; line = an instant shot along a warning
 -- line; shot = a slow visible projectile; lob = an arcing shot that lands in a ground circle.
+-- P4 Stop 2: ring = a shockwave that leaves the body at the impact and grows to `radius` at
+-- `speed`, hitting whoever its front passes on the ground (a jump clears it); summon = `count`
+-- enemies of kind `summon` rise in a circle of `radius` round the body at the impact.
 export type CrowdAttackDef = {
-	shape: "lunge" | "arc" | "lane" | "line" | "shot" | "lob",
+	shape: "lunge" | "arc" | "lane" | "line" | "shot" | "lob" | "ring" | "summon",
 	-- The windup starts when the target is within this many studs on the flat (X and Z), so
 	-- enemies wind up under a player in the air and a landing is not free.
 	reach: number,
@@ -1815,6 +1825,16 @@ export type CrowdAttackDef = {
 	-- shot only: how far the aim leads its target's motion over the flight (0 = where they
 	-- stand, 1 = where they will be, gravity included for a target in the air).
 	lead: number?,
+	-- P4 Stop 2. cooldown = seconds after this attack's impact before the same enemy may choose
+	-- it again (an enemy with several attacks takes, among those ready and in reach, the one it
+	-- used longest ago). enraged = only chosen in the enraged phase. count = lob: circles thrown
+	-- at once, scattered within `spread` studs of the target; summon: how many rise. summon =
+	-- the kind that rises. A ring's `width` is the thickness of its front.
+	cooldown: number?,
+	enraged: boolean?,
+	count: number?,
+	spread: number?,
+	summon: string?,
 	-- Ground shapes reach this many studs above the floor: a player whose feet are higher is
 	-- missed (a jump dodges). Unused by shot, which is tested as a sphere, and by line, which
 	-- is a vertical plane (being in the air does not avoid it).
@@ -1955,6 +1975,9 @@ export type ProvingGroundsConfig = {
 		heavyHit: number,
 		-- P4 wave 2: seconds an enemy reels, staggered, when its plate shatters (the opening).
 		plateBreakSeconds: number,
+		-- P4 Stop 2: a body of this radius or more is large: smaller bodies never push it and give
+		-- way to it, and it does not widen the crowd's neighbour search.
+		largeRadius: number,
 		-- P4: rules of enemies that fight. spawnGrace = seconds a fresh enemy cannot start a
 		-- windup; spawnClear = a slot does not respawn while a player stands within this many
 		-- studs; maxShots = most enemy projectiles alive (a shooter waits when it is reached);
@@ -2280,6 +2303,8 @@ export type CombatFxEnemyShot = {
 	kind: "enemyShot",
 	id: number,
 	enemyKind: string,
+	-- The crowd id of the enemy that fired it, so a dead boss's shots are dropped by body.
+	enemyId: number,
 	from: Vector3,
 	velocity: Vector3,
 	radius: number,
@@ -2293,6 +2318,8 @@ export type CombatFxArea = {
 	kind: "area",
 	id: number,
 	enemyKind: string,
+	-- The crowd id of the enemy that threw it.
+	enemyId: number,
 	center: Vector3,
 	radius: number,
 	startsAt: number,

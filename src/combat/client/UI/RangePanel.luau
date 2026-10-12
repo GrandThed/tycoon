@@ -59,7 +59,9 @@ export type RangePanelHandle = {
 	SetLoadout: (loadout: Types.RangeLoadout?) -> (),
 	SetStats: (stats: Types.RangeStats) -> (),
 	-- bottomReserve: physical px kept free at the bottom (the touch thumb cluster), 0 if none.
-	SetLayout: (scale: number, viewportSize: Vector2, bottomReserve: number) -> (),
+	-- Returns the bottom edge, in px, of what shows with the sheet shut (the tab and the
+	-- readouts): the boss bar goes under it where it cannot go beside it.
+	SetLayout: (scale: number, viewportSize: Vector2, bottomReserve: number) -> number,
 	Destroy: () -> (),
 }
 
@@ -1198,6 +1200,12 @@ function RangePanel.new(parent: Instance, deps: Deps): RangePanelHandle
 			-- that stays put.
 			local top = bandTop + math.max((band - fixed - height) / 2, 0)
 			root.Position = UDim2.new(1, -Theme.SCREEN_MARGIN * scale, 0, top * scale)
+			return (
+				top
+				+ Theme.COMBAT_RANGE_PANEL_ROW_HEIGHT
+				+ Theme.COMBAT_RANGE_PANEL_GAP
+				+ readouts.Size.Y.Offset
+			) * scale
 		end,
 		Destroy = function()
 			disconnectAll(connections)

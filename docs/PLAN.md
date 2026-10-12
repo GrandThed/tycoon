@@ -1903,6 +1903,7 @@ lands where you stand" (with its "Review round").
   the day had `tycoon\build\proving.rbxl` open, built at 15:07 from `main` before the fix;
   Studio's log names no other range file. The playtest box below stays open until he has
   played a build made after the merge.
+- **Confirmed 2026-10-12:** he played a build made after the merge. The box below is ticked.
 
 **Cause (two lags):**
 - The server swept a swing from its own copy of the character's position. That copy trails
@@ -1967,15 +1968,18 @@ lands where you stand" (with its "Review round").
 - Melee abilities at the server's position, if Ben feels it.
 
 - [x] P3.1 built and reviewed (definition of done in INTERFACES "P3.1")
-- [ ] Ben's playtest (`docs/PLAYTEST.md` "P3.1 — A swing lands where you stand")
+- [x] Ben's playtest (2026-10-12): "okey, everything feels great now, lets proceed". Studio's
+  log for that day shows one six-minute session on a build made after the merge (the P4 Stop 1
+  build), with no script error, on `crowd30`: the melee fix is confirmed in Studio.
 
 ## P4 — Enemies that fight back
 
 **Goal:** the range's enemies attack and the player can be hurt. Fodder, three shooters, a brute
-and a plated elite each fight their own way; then the boss. Still range-only
+and a plated elite each fight their own way; then two bosses. Still range-only
 (`build/proving.rbxl`); missions return at P5. **No sound. Phones must work.** Plan of record:
 `docs/COMBAT_DESIGN.md` §7 and §10 step 5; contracts: `docs/INTERFACES.md` "P4 contracts"
-(rulings 1–26, and "Wave 2 — roles" with its review round); values: `docs/BALANCE.md` "P4".
+(rulings 1–26, "Wave 2 — roles" and "Stop 2 — the Colossus", each with its review round);
+values: `docs/BALANCE.md` "P4".
 
 **Ben's rulings (2026-10-07):**
 - Go for P4: "feels good, lets start".
@@ -1996,12 +2000,15 @@ and a plated elite each fight their own way; then the boss. Still range-only
     checklist covers it.
   - **Wave 2, "roles":** slinger, marksman, lobber, brute, the plate; sets `shooters`, `brutes`,
     `fight`; `elites` gets plates.
-- **Stop 2:** the boss, under its own contract after Ben's verdict on Stop 1.
+- **Stop 2:** the Colossus, the first of two bosses (Ben, 2026-10-12: "Both, as two bosses").
+- **Stop 3:** the Warlord and his guard, under its own contract after Ben's verdict on the
+  Colossus.
 
-**Where it is (2026-10-08):** wave 1 is merged to `main` (e14c4cb) and the place files are
-rebuilt; wave 2 is merged the same day, after review and QA, and the place files are rebuilt
-again. Stop 1 waits for Ben's playtest (`docs/PLAYTEST.md` "P4 Stop 1"). The branch
-`p4-enemy-roles` (worktree `tycoon-p4`) stays for Stop 2.
+**Where it is (2026-10-12):** waves 1 and 2 are merged to `main` (2026-10-08) and the place
+files are rebuilt. Stop 2 (the Colossus) is merged the day it was built, after review and QA,
+and the place files are rebuilt again: Play opens on the Colossus. Stop 2 waits for Ben's
+playtest (`docs/PLAYTEST.md` "P4 Stop 2"). The branch `p4-enemy-roles` (worktree
+`tycoon-p4`) stays for Stop 3. The Stop 1 enemies are still not judged by Ben (see the checkboxes).
 - "Build all" builds `main`, and Ben opens `tycoon\build\proving.rbxl` by habit (P3.1). Asked
   on 2026-10-08, he chose **"Merge each ready wave"**: every P4 wave that has passed review and
   QA is merged to `main` without asking again.
@@ -2262,8 +2269,121 @@ again. Stop 1 waits for Ben's playtest (`docs/PLAYTEST.md` "P4 Stop 1"). The bra
 - **Unmeasured, only Ben can:** the server step time with `fight` running (budget 2 ms), and
   how it runs on a phone-sized screen.
 
+**Stop 2 — the Colossus (2026-10-12):**
+- **Ben's word:** "okey, everything feels great now, lets proceed" (2026-10-12).
+  - Studio's log for that day: one six-minute session on the Stop 1 build, no script error,
+    and only `crowd30` (the passive dummies) was loaded.
+  - So it confirms the P3.1 melee fix and that the build loads. It does not judge the Stop 1
+    enemies.
+  - `defaultSet` became `fight` the same day, so Play alone shows them. At Stop 2's merge it
+    becomes `colossus`.
+  - Stop 2 was started on his word.
+- **His two answers (asked with previews):**
+  - "Both, as two bosses": the Colossus now, then the Warlord and his guard (Stop 3).
+  - "Two phases": a boss enrages at half health.
+- **What the player meets:**
+  - **The Colossus:** a giant (4,700 health) that cannot be pushed, launched, staggered or
+    interrupted. Hits only take its health.
+  - **Boss bar** at the top of the screen: its name, its health, a mark at half.
+  - **Slam:** a circle on the floor shows how far it reaches (40 studs), then a low crest
+    runs out from its feet. 26 damage. Jump it, or dash through it ("DODGED"). The player it
+    is aimed at cannot walk out of it.
+  - **Charge:** a wide lane (10 studs) fills, then it runs. 32 damage. Sidestep, jump or dash.
+  - **Call:** it roars and fodder rise from the floor on a circle round it, up to 12. A call
+    only replaces the ones killed.
+  - **Enraged** at half health, for good: the bar and the body change, tells are shorter, two
+    attacks follow each other with no pause, and a **Barrage** of five ground circles lands
+    at once. A player takes at most one of the five (18 damage).
+  - Every attack leaves an opening of about a second or more.
+  - **The kill is clean:** its death takes back everything it had in the air and removes its
+    fodder. It comes back 12 s later.
+  - Play opens on it: `defaultSet` is `colossus`.
+- **Server:**
+  - `CrowdBrain`: an enemy with several attacks chooses among those off `cooldown`, in reach
+    and allowed in its phase, the one used longest ago, never the same twice running. The
+    enrage latch, the scaled windups and recovers, and the chain.
+  - `ring` (the slam): a travelling shape in `ThreatField`, judged like a shot or a charge.
+    Each player is hit at most once per ring.
+  - `summon` (the call): the summoned fight with their kind's brain, never respawn, and fall
+    with their boss.
+  - The barrage: a `lob` with `count` and `spread`, one `area` per circle.
+  - `CrowdService`: large bodies (`crowd.largeRadius` 3 or more) are never pushed by smaller
+    ones, and `separate()` no longer widens its search for every body because one giant is
+    alive.
+  - No new effect kind, no new remote. `area` and `enemyShot` carry the thrower's `enemyId`.
+- **Client:**
+  - New `UI/BossBar.luau`: one row with the name on the health, the mark, the "ENRAGED" beat
+    and the death beat.
+  - New `ThreatFx/Rings.luau`: the slam's circle and crest, and the call's circle in a colour
+    that is not the danger's red.
+  - `ThreatFx/Cues`: a boss's silhouette (shoulders, a crown, back spines, a core in the chest
+    that charges through every windup). Enraged, they are lit for good.
+  - `CrowdRenderer`: the slam and call poses, the enraged look, summoned bodies rising through
+    the floor.
+  - `ThreatFx/Areas`: overlapping circles stay readable; a dead boss's circles go at once.
+- **Config (`src/shared/Config/ProvingGrounds.json`):** kind `colossus`, set `colossus`,
+  `crowd.largeRadius`, `defaultSet`. The passive `boss` dummy kind is unchanged.
+- **Balance tools:** `tools/sim_range.py` prints a BOSS table; `--check` guards its bands.
+
+**Rulings after the Stop 2 reports (lead, 2026-10-12):**
+- A boss's death takes back everything it had in the air. Ruling 22 (a due impact is never
+  lost) stays for ordinary kinds.
+- A call tops up, it does not stack.
+- A player takes at most one circle of a barrage.
+- Large bodies are never pushed by smaller ones.
+
+**Review outcome, Stop 2:** 0 Critical, 0 Major, 7 Minor.
+- Fixed:
+  - A dead boss's circles and shots are dropped by its own id, not by kind.
+  - `crowd.largeRadius` replaces a code constant.
+  - A strike that kills a boss no longer books its vanished summons as hits of 0.
+  - Ground marks sit near the floor again (nothing informational above about 0.4 studs).
+  - The enrage haptic obeys `feedback.haptics`; the boss bar's last two visual constants
+    moved to Theme.
+- Accepted:
+  - Summoned bodies are told from a set's own by a heuristic (kind, time, place).
+  - On a portrait phone the open panel covers the boss bar.
+- The server's own harness: 440 checks, 176 mutations, none surviving.
+- qa-runner: ALL GREEN (2026-10-12). stylua; selene (only the old `LegacyPanel` warning); hub
+  and combat luau-lsp with fresh sourcemaps; `check_compile.py` (140 files; highest top-level
+  counts FeedbackController 159, CrowdRenderer 149, InputController 144); the hub, combat and
+  proving builds; `sim_economy.py --check`, `sim_combat.py --check`, `sim_range.py --check`
+  (239 checks). The server's own harness: 440 checks, 176 mutations, none surviving. Asset
+  gates not run: no asset or template changed.
+
+**Balance, Stop 2 (`docs/BALANCE.md` "P4" → "Stop 2"; solo, tier 1, from `sim_range.py`):**
+- **A player who reacts to every tell takes no hit** and kills it in about **64 to 82 s** with
+  any melee family, without abilities (target 60 to 90 s).
+- **A player who only jumps the slam and sidesteps the charge survives:** no down, about 86
+  damage taken in the whole fight.
+- **Standing still is down in under 9 s** (target: inside 10 s). The fodder do most of it,
+  which is why the fight opens with the call.
+- **No hit over 25% of health:** slam 26 (20%), charge 32 (25%), one barrage circle 18 (14%).
+  The most one instant can cost is 48 (37%).
+- **Every attack leaves a window of 1.08 to 2.20 s,** in both phases.
+- **Ranged:** every family kills it. Piercing Rifle and SMG take under a minute. **The bows
+  are slow: about 2.5 minutes with the Longbow (142 s) and close to 4 with the Splitbow
+  (226 s).** A weapon question for Ben, not a bug.
+- **Enraged tells are 0.8 s where the calm ones are 1.0 s** (`windupScale` 0.8, set for
+  phones). The enraged charge is the tightest: a 0.35 s thumb keeps 0.13 s.
+- Nothing was tuned in real play. Every number is a starting value.
+
+**Known limits at P4 Stop 2:**
+- **Boss health does not scale with a second player in the range.** Two players finish in
+  about half the time (32 to 41 s for two melee players).
+- **Kiting works here too.** A ranged player who keeps far away meets only the call and, when
+  it is enraged, the barrage.
+- Abilities take a melee kill under the 60 s floor (the band is measured without them).
+- Fodder are shoved aside when it walks or charges through them.
+- The barrage is the gentlest of the four attacks: ignoring it costs little.
+- Placeholder bodies. No sound. The Stop 1 limits still apply.
+- **Unmeasured, only Ben can:** the server step time during the boss fight with its fodder up
+  (budget 2 ms).
+
 **Carried:**
 - **To P5 (owner: lead):**
+  - **Boss health scaling with party size,** as missions already do (C2).
+  - **The bows' time on a boss** (a weapon number; Ben's call first).
   - **Kiting:** a reason to stay (an objective, a timer), a smaller arena, or an enemy faster
     than the walk.
   - **Flat values against tiered health:** enemy damage, regen, `heavyHit` and now `plate` do
@@ -2274,20 +2394,25 @@ again. Stop 1 waits for Ben's playtest (`docs/PLAYTEST.md` "P4 Stop 1"). The bra
     aim already reads the server's own measure, capped at the fastest legal move.
   - **Cover and the stairs are not in the simulator** (owner of the model: economy-designer).
 - **Done in wave 2:** `sim_range.py` has its hopping player (ruling 21).
+- **Done in Stop 2:** large bodies in `separate()` (from the groundwork study).
 - **Still open from P3, for Ben:** A or B for SMG, Beam and Chain Gun; cross-slot refunds;
   favourite and weakest ability.
 
 **Next:**
-- **Ben's Stop 1 playtest** (`docs/PLAYTEST.md` "P4 Stop 1 — Enemies that fight back"), with
-  the server step time read in `fight`.
-- Then **Stop 2, the boss**, under its own contract after his verdict.
+- **Ben's Stop 2 playtest** (`docs/PLAYTEST.md` "P4 Stop 2 — The Colossus"), with the server
+  step time read during the boss fight.
+- Then **Stop 3, the Warlord and his guard**, under its own contract after his verdict on the
+  Colossus.
 
 - [x] Wave 1 built and reviewed (INTERFACES "P4 contracts", rulings 1–26)
 - [ ] Wave 1 quick look by Ben, **optional**: not reported; covered by Stop 1.
 - [x] Wave 2 built and reviewed (INTERFACES "Wave 2 — roles" with its review round)
-- [ ] Stop 1 playtest (Ben). Its step 1 is the P3.1 melee check, which ticks the open P3.1
-  box above.
-- [ ] Stop 2, the boss
+- [ ] Stop 1 playtest (Ben). Not judged yet: his 2026-10-12 session loaded only `crowd30`.
+  The range was changed to open on `fight` that day, and opens on the boss from Stop 2's
+  merge; the Stop 2 checklist asks about the fodder and offers `fight` as an optional step.
+- [x] Stop 2 built and reviewed (INTERFACES "Stop 2 — the Colossus" with its review round)
+- [ ] Stop 2 playtest (Ben)
+- [ ] Stop 3, the Warlord and his guard
 
 ## M12 — Growing city
 

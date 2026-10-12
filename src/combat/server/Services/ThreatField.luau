@@ -1,9 +1,10 @@
 --!strict
 -- Enemy attacks that travel (docs/INTERFACES.md "P4 contracts" -> "Wave 2 — roles" and its
--- review round): a slinger's `shot` and a brute's `lane` charge. An instant shape (a lunge, an
--- arc, a line, a lob's landing) is frozen once and judged once per player by VitalsService.
--- These two move, so they are judged every crowd step instead, by the same commit rule turned
--- round: the player's root now against where the shot, or the charging body, was `lag` ago.
+-- review round, and "Stop 2 - the Colossus"): a slinger's `shot`, a brute's `lane` charge and
+-- a boss's `ring`. An instant shape (a lunge, an arc, a line, a lob's landing) is frozen once
+-- and judged once per player by VitalsService. These move, so they are judged every crowd step
+-- instead, by the same commit rule turned round: the player's root now against where the shot,
+-- the charging body or the ring's front was `lag` ago.
 -- Each test sweeps the stretch it travelled since the last step, so nothing slips between two
 -- steps, and reports the moment within that stretch at which it first reached the root: that
 -- moment is the contact's impact time (what an i-frame must have covered, and when a downed
@@ -74,14 +75,32 @@ type Charge = {
 	missed: boolean,
 }
 
+-- A shockwave on the ground: its front left `strike.origin` at the strike's time and grows at
+-- `speed` until it is `radius` out. The front is a band `halfWidth` either side of that.
+type Ring = {
+	strike: Strike,
+	speed: number,
+	radius: number,
+	halfWidth: number,
+	-- os.clock(): when the front is `radius` out, and when it passes where its target stood.
+	endAt: number,
+	aimAt: number,
+	done: { [number]: boolean },
+	missed: boolean,
+}
+
 local EPSILON = 1e-4
 -- No ray of an enemy attack needs to be longer than this (the engine refuses very long ones):
 -- a line aimed steeply up would otherwise ask for one.
 local MAX_RAY_STUDS = 1000
 local DOWN = Vector3.new(0, -1, 0)
+-- A barrage's scattered circles come down from the sky: each lands on the first thing under
+-- it from this far above the crowd's floor, which no range furniture reaches.
+local SKY_STUDS = 100
 
 local shots: { Shot } = {}
 local charges: { Charge } = {}
+local rings: { Ring } = {}
 -- Shots still in flight.
 local flying = 0
 local lastId = 0
@@ -300,6 +319,72 @@ local function stepCharge(
 	return now - maxLag < endAt
 end
 
+-- One ring's step. Its front hits every player it passes on the ground, each once: a player
+-- is in its way while they stand within `radius` of where it left, and it reaches them when
+-- its band does. Returns false when its record can go.
+local function stepRing(
+	ring: Ring,
+	now: number,
+	before: number,
+	standing: { Standing },
+	maxLag: number,
+	judge: Judge
+): boolean
+	local strike = ring.strike
+	local origin = strike.origin
+	local height = strike.def.height
+	local speed = ring.speed
+	local halfWidth = ring.halfWidth
+	local leftAt = strike.at
+	local endAt = ring.endAt
+	for _, who in standing do
+		if ring.done[who.userId] then
+			continue
+		end
+		local to = math.min(now - who.lag, endAt)
+		local from = math.max(before - who.lag, leftAt)
+		if to < from or (height ~= nil and who.feetY - strike.floorY > height) then
+			continue
+		end
+		local dx = who.position.X - origin.X
+		local dz = who.position.Z - origin.Z
+		local distance = math.sqrt(dx * dx + dz * dz)
+		if distance > ring.radius then
+			continue
+		end
+		-- The band covers their distance from the moment its leading edge gets there until its
+		-- trailing edge has passed.
+		local reached = leftAt + (distance - halfWidth) / speed
+		local passed = leftAt + (distance + halfWidth) / speed
+		if passed < from or reached > to then
+			continue
+		end
+		if judge(strike, who.player, math.max(reached, from), true) ~= nil then
+			ring.done[who.userId] = true
+		end
+	end
+	if not ring.missed then
+		ring.missed = aimedMiss(strike, ring.done, ring.aimAt, endAt, now, standing, maxLag, judge)
+	end
+	return now - maxLag < endAt
+end
+
+-- Keeps the records `step` still wants, in order, without a new table.
+local function sweep<T>(list: { T }, step: (item: T) -> boolean): ()
+	local count = #list
+	local kept = 0
+	for index = 1, count do
+		local item = list[index]
+		if step(item) then
+			kept += 1
+			list[kept] = item
+		end
+	end
+	for index = kept + 1, count do
+		list[index] = nil
+	end
+end
+
 -- A marksman's line, its one ray. It is cast in 3D at the body the line locked on (`aim`), not
 -- level at the marksman's chest: the block that body stands on then does not cut the lane in
 -- front of it, and a wall between the two still does. Returns how far the lane runs on the flat
@@ -330,6 +415,17 @@ end
 -- geometry only. The crowd's floor, at `floorY`, when it finds nothing.
 function ThreatField.Below(point: Vector3, floorY: number): Vector3
 	local result = Workspace:Raycast(point, DOWN * HitShapes.GROUND_PROBE_DEPTH, world())
+	return if result ~= nil then result.Position else Vector3.new(point.X, floorY, point.Z)
+end
+
+-- Where a barrage's scattered circle lands: the highest surface at `point` (a ray from the
+-- sky, world geometry only), so one that falls on a block lies on the block's top. Its target
+-- was not there, so there is no root to probe from as Below does. The crowd's floor, at
+-- `floorY`, when it finds nothing.
+function ThreatField.Landing(point: Vector3, floorY: number): Vector3
+	local from = Vector3.new(point.X, floorY + SKY_STUDS, point.Z)
+	local reach = SKY_STUDS + HitShapes.GROUND_PROBE_DEPTH
+	local result = Workspace:Raycast(from, DOWN * reach, world())
 	return if result ~= nil then result.Position else Vector3.new(point.X, floorY, point.Z)
 end
 
@@ -376,6 +472,7 @@ function ThreatField.Fire(strike: Strike, serverOffset: number): Types.CombatFxE
 		kind = "enemyShot",
 		id = shot.id,
 		enemyKind = strike.enemyKind,
+		enemyId = strike.bodyId,
 		from = strike.origin,
 		velocity = direction * speed,
 		radius = shot.radius,
@@ -405,9 +502,33 @@ function ThreatField.Charge(strike: Strike): ()
 	})
 end
 
+-- A boss's ring leaves its feet at the strike's time. The body stays where it is; this judges
+-- the front as it grows.
+function ThreatField.Ring(strike: Strike): ()
+	local attack = strike.def
+	local speed = attack.speed or 0
+	local radius = math.max(attack.radius or 0, 0)
+	if speed <= 0 or radius <= 0 then
+		return
+	end
+	-- Ruling 26: it was aimed at where its target stood when the windup began.
+	local toAim = if strike.aim ~= nil then strike.aim - strike.origin else Vector3.zero
+	local aimed = math.sqrt(toAim.X * toAim.X + toAim.Z * toAim.Z)
+	table.insert(rings, {
+		strike = strike,
+		speed = speed,
+		radius = radius,
+		halfWidth = math.max(attack.width or 0, 0) / 2,
+		endAt = strike.at + radius / speed,
+		aimAt = strike.at + aimed / speed,
+		done = {},
+		missed = false,
+	})
+end
+
 -- Is there anything in the air or on the run? (Step is not worth calling otherwise.)
 function ThreatField.Busy(): boolean
-	return #shots > 0 or #charges > 0
+	return #shots > 0 or #charges > 0 or #rings > 0
 end
 
 -- Enemy shots still flying: the brain's cap counts these.
@@ -454,6 +575,47 @@ function ThreatField.Step(
 			charges[index] = nil
 		end
 	end
+	local ringCount = #rings
+	if ringCount > 0 then
+		local kept = 0
+		for index = 1, ringCount do
+			local ring = rings[index]
+			if stepRing(ring, now, before, standing, maxLag, judge) then
+				kept += 1
+				rings[kept] = ring
+			end
+		end
+		for index = kept + 1, ringCount do
+			rings[index] = nil
+		end
+	end
+end
+
+-- The bodies in `ids` are gone for good (a boss has died, and what it summoned with it): their
+-- shots, charges and rings end here and hit nobody. A shot in the air is told, as at a set load.
+function ThreatField.Drop(ids: { [number]: boolean }, raise: Raise): ()
+	local now = os.clock()
+	sweep(shots, function(shot: Shot): boolean
+		if not ids[shot.strike.bodyId] then
+			return true
+		end
+		if shot.flying then
+			flying -= 1
+			raise({
+				kind = "enemyShotEnd",
+				id = shot.id,
+				at = shotAt(shot, math.min(now, shot.endsAt)),
+				hit = false,
+			})
+		end
+		return false
+	end)
+	sweep(charges, function(charge: Charge): boolean
+		return not ids[charge.strike.bodyId]
+	end)
+	sweep(rings, function(ring: Ring): boolean
+		return not ids[ring.strike.bodyId]
+	end)
 end
 
 -- A dummy set was loaded: every shot in the air ends where it is, and is told (the clients
@@ -472,6 +634,7 @@ function ThreatField.Clear(raise: Raise): ()
 	end
 	table.clear(shots)
 	table.clear(charges)
+	table.clear(rings)
 	flying = 0
 end
 

@@ -52,6 +52,14 @@
 --   - a lane's charge is drawn on the server clock, ahead of its own delayed snapshots
 --     (stepRush), because at that speed "a snapshot behind" is several studs and the server
 --     hits where the brute is.
+-- * P4 Stop 2 ("Stop 2 — the Colossus"). A kind with `boss` is tracked for the boss bar
+--   (GetBoss), wears a boss's cue set and breathes. Its second phase is read off the health
+--   share the wire already carries and latched as the server latches it (pushSample): from
+--   then on its colours are turned, its crown is lit, it heaves, and every attack it starts
+--   runs on the scaled windup and recover. Chained attacks need nothing: the wire goes from
+--   one attack's blow straight to the next one's windup, and each attack runs its own clock.
+--   The slam's ring and the call's circle are ThreatFx's (ForEachThreat); the slam and the
+--   call themselves are poses here; a body the call raised comes up through the floor.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -82,7 +90,8 @@ export type ForEachCallback = (
 -- (the charge, the shot); phaseAt = the server time that phase began; impactAt = the end of
 -- its windup; origin = the body's floor point (where the charge began, once it has); yaw =
 -- the facing the attack runs along (the wire's latest for a line, which follows its target
--- until the lock).
+-- until the lock). Stop 2: a ring's and a summon's `range` is the circle's radius, a ring's
+-- `width` the thickness of its front, and `speed` what a lane or a ring's front moves at.
 export type ThreatCallback = (
 	id: number,
 	shape: string,
@@ -94,7 +103,8 @@ export type ThreatCallback = (
 	range: number,
 	width: number,
 	lockSeconds: number,
-	strikeSeconds: number
+	strikeSeconds: number,
+	speed: number
 ) -> ()
 
 type Phase = "alive" | "dying" | "vanish"
@@ -244,6 +254,16 @@ type Entity = {
 	walks: boolean,
 	stride: number,
 	recoverFrom: number,
+	-- Stop 2. boss = the kind has the boss bar (and a boss's cue set, and breathes); title =
+	-- the name that bar shows. enrageAt = the health share its second phase begins at (0 = it
+	-- has none); enraged = it is in it, for good: the look, and the scaled times of every
+	-- attack that starts from then on. riseStart = os.clock() a summoned body began to come up
+	-- through the floor.
+	boss: boolean,
+	title: string,
+	enrageAt: number,
+	enraged: boolean,
+	riseStart: number,
 	-- Body tint: how far the kind's own colours are taken toward tintColor (a few fixed steps),
 	-- and neon for the instant of the blow.
 	tint: number,
@@ -366,6 +386,15 @@ local burstColors: { [string]: Color3 } = {}
 -- P4 wave 2: the arena floor's half extents (X and Z), read once from the shared layout the
 -- server builds the floor from; nil = no such layout. Only a charge is bounded by it here.
 local arenaHalf: Vector3? = nil
+-- Stop 2: the boss the bar shows (the first one alive, kept through its death flight so the
+-- bar can empty and go), and the latest call: the server time of its impact, its floor point,
+-- its circle and the kind it raised, by which the bodies it raised are known when they appear.
+local bossEntity: Entity? = nil
+local call = { at = -math.huge, centre = Vector3.zero, radius = 0, kind = "" }
+-- The crowd ids of the bosses that died or were taken away since ThreatFx last asked: a
+-- boss's end takes back what that body had in the air, and its circles and shots are
+-- ThreatFx's to drop.
+local bossEnds: { number } = {}
 
 local function angleDelta(from: number, to: number): number
 	return (to - from + math.pi) % TWO_PI - math.pi
@@ -537,6 +566,11 @@ local function newEntity(): Entity?
 		walks = false,
 		stride = 0,
 		recoverFrom = 0,
+		boss = false,
+		title = "",
+		enrageAt = 0,
+		enraged = false,
+		riseStart = -math.huge,
 		tint = 0,
 		tintColor = FLASH_COLOR,
 		glow = false,
@@ -744,6 +778,17 @@ local function setThreat(entity: Entity, threat: Threat, at: number): ()
 		-- leaving, a cancel and the end all leave it spent at once.
 		entity.charge = 0
 	end
+	if threat == "attack" and entity.threatShape == "summon" then
+		-- Stop 2: the call's impact. What it raised arrives as ordinary spawns; this is how
+		-- their first sighting knows them (pushSample).
+		local def = kindDef(entity.kind)
+		local attacks = if def ~= nil then def.attacks else nil
+		local attack = if attacks ~= nil then attacks[entity.threatAttack] else nil
+		call.at = at
+		call.centre = entity.threatOrigin
+		call.radius = entity.threatReach
+		call.kind = if attack ~= nil then attack.summon or "" else ""
+	end
 	if threat == "none" then
 		setTint(entity, 0, FLASH_COLOR, false)
 		setVisorHot(entity, entity.state == "windup")
@@ -784,7 +829,20 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	entity.midUp = CFrame.new(0, height * 0.5, 0)
 	entity.midDown = CFrame.new(0, -height * 0.5, 0)
 
+	-- Stop 2: what makes a boss a boss, and its second phase. Enraged, the body's own colours
+	-- move toward hot red for good, so every tint laid over them (a windup's heat, the spent
+	-- dullness) still reads against them.
+	local enrage = def.enrage
+	entity.boss = def.boss == true
+	entity.title = def.name or entity.kind
+	entity.enrageAt = if enrage ~= nil then math.clamp(enrage.at, 0, 1) else 0
+	if entity.enrageAt <= 0 then
+		entity.enraged = false
+	end
 	local base = colorOf(def.color)
+	if entity.enraged then
+		base = base:Lerp(Theme.COMBAT_RANGE_ENRAGE_COLOR, Theme.COMBAT_RANGE_ENRAGE_SHARE)
+	end
 	entity.bodyColor = base
 	entity.legColor = base:Lerp(LEG_SHADE, LEG_SHADE_SHARE)
 	entity.headColor = base:Lerp(HEAD_TINT, HEAD_TINT_SHARE)
@@ -804,7 +862,8 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 		torsoHeight,
 		headRadius,
 		entity.torsoSize,
-		base
+		base,
+		entity.enraged
 	)
 	if (def.plate or 0) > 0 and entity.phase == "alive" then
 		entity.bar = PlateBar.Take(entity.head, headRadius + Theme.COMBAT_RANGE_PLATE_BAR_RISE)
@@ -816,7 +875,23 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	end
 end
 
+-- Stop 2: a body that is gone stops being the boss the bar shows; another living boss, if
+-- the set has one, takes its place.
+local function untrackBoss(entity: Entity): ()
+	if bossEntity ~= entity then
+		return
+	end
+	bossEntity = nil
+	for _, other in active do
+		if other ~= entity and other.boss and other.phase == "alive" then
+			bossEntity = other
+			return
+		end
+	end
+end
+
 local function release(entity: Entity): ()
+	untrackBoss(entity)
 	local index = entity.index
 	if index > 0 and active[index] == entity then
 		local last = active[#active]
@@ -856,6 +931,9 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 			existing.kind = kind
 			existing.maxHp = maxHp
 			applyKind(existing, def)
+			if existing.boss and bossEntity == nil then
+				bossEntity = existing
+			end
 			return
 		end
 		release(existing)
@@ -879,6 +957,8 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	entity.rush = Vector3.zero
 	entity.rushHoldUntil = 0
 	entity.recoverFrom = 0
+	entity.enraged = false
+	entity.riseStart = -math.huge
 	entity.phase = "alive"
 	entity.phaseStart = os.clock()
 	entity.deathDue = math.huge
@@ -893,6 +973,11 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	table.insert(active, entity)
 	entity.index = #active
 	byId[id] = entity
+	local shown = bossEntity
+	if entity.boss and (shown == nil or shown.phase ~= "alive") then
+		-- A fresh boss takes the bar, also from one still in its death flight.
+		bossEntity = entity
+	end
 	-- Parented on its first snapshot, so it never flashes up at the pool's last pose.
 end
 
@@ -903,6 +988,11 @@ local function dropThreat(entity: Entity): ()
 	entity.threatOpen = false
 	if entity.threat ~= "none" then
 		setThreat(entity, "none", 0)
+	end
+	if entity.boss and table.find(bossEnds, entity.id) == nil then
+		-- Stop 2: noted for ThreatFx (DrainBossEnds), by body, so another boss of the same
+		-- kind keeps what it has in the air.
+		table.insert(bossEnds, entity.id)
 	end
 	entity.rush = Vector3.zero
 	entity.rushHoldUntil = 0
@@ -917,6 +1007,8 @@ end
 
 local function startVanish(entity: Entity): ()
 	dropThreat(entity)
+	-- Taken away, not killed: the boss bar has nothing to show an ending for.
+	untrackBoss(entity)
 	entity.phase = "vanish"
 	entity.phaseStart = os.clock()
 	entity.dirty = true
@@ -1089,8 +1181,14 @@ local function loadThreat(entity: Entity): boolean
 	entity.threatAttack = entity.attack
 	entity.threatShape = attack.shape
 	entity.walks = kind ~= nil and kind.brain == "keepAway"
+	-- Stop 2: an attack that starts in the enraged phase runs on the scaled times. The phase
+	-- is the one this body was in when the attack's first state was seen (pushSample latches
+	-- it before this runs), as the server takes it when the attack starts.
+	local enrage = if kind ~= nil and entity.enraged then kind.enrage else nil
 	entity.windupSeconds = math.max(attack.windup, 0)
+		* (if enrage ~= nil then math.max(enrage.windupScale, 0) else 1)
 	entity.recoverSeconds = math.max(attack.recover, 0)
+		* (if enrage ~= nil then math.max(enrage.recoverScale, 0) else 1)
 	-- "State timing": a lane's attack state lasts its charge, every other shape's the shared
 	-- strike time.
 	entity.strikeSeconds = if attack.shape == "lane" and speed > 0
@@ -1114,6 +1212,10 @@ local function loadThreat(entity: Entity): boolean
 	elseif attack.shape == "lane" or attack.shape == "line" then
 		-- Wave 2: the charge's length, the shot's length. ThreatFx draws both on the floor.
 		entity.threatReach = range
+	elseif attack.shape == "ring" or attack.shape == "summon" then
+		-- Stop 2: how far the slam's front runs; the circle the summoned rise on. ThreatFx
+		-- draws both (threatWidth is then the front's thickness, threatSpeed its speed).
+		entity.threatReach = math.max(attack.radius or 0, 0)
 	else
 		entity.threatReach = 0
 	end
@@ -1239,7 +1341,8 @@ local function pushSample(
 	attack: number,
 	stamp: number
 ): ()
-	if entity.samples == 0 then
+	local first = entity.samples == 0
+	if first then
 		entity.posA, entity.posB, entity.posC = position, position, position
 		entity.yawA, entity.yawB, entity.yawC = yaw, yaw, yaw
 		entity.timeA, entity.timeB, entity.timeC = stamp, stamp, stamp
@@ -1249,6 +1352,22 @@ local function pushSample(
 		entity.yaw = yaw
 		entity.dirty = true
 		entity.model.Parent = folder
+		-- Stop 2: first seen just after a call, of the kind it raised and on its circle: this
+		-- body was summoned, and it comes up through the floor instead of appearing.
+		if
+			entity.kind == call.kind
+			and stamp - call.at >= -interval
+			and stamp - call.at < Theme.COMBAT_RANGE_CALL_WINDOW_SECONDS
+		then
+			local away = position - call.centre
+			if
+				math.sqrt(away.X * away.X + away.Z * away.Z)
+				<= call.radius + Theme.COMBAT_RANGE_CALL_SLACK
+			then
+				entity.riseStart = os.clock()
+				burstAt(entity, 1)
+			end
+		end
 	elseif stamp > entity.timeC then
 		entity.posA, entity.yawA, entity.timeA = entity.posB, entity.yawB, entity.timeB
 		entity.posB, entity.yawB, entity.timeB = entity.posC, entity.yawC, entity.timeC
@@ -1280,6 +1399,51 @@ local function pushSample(
 		entity.hpFraction = hpFraction
 		showBar(entity)
 	end
+	-- Stop 2: the second phase is read off the health share already on the wire. The server
+	-- enters it, for good, at the first moment the share is at or under `enrage.at` and the
+	-- body is not in a windup or a blow; that is latched here the same way, on the wire's own
+	-- states. It runs before the state below is followed, so an attack whose first state rides
+	-- in this packet already takes the scaled times.
+	if
+		entity.enrageAt > 0
+		and not entity.enraged
+		and not plated
+		and state ~= "dead"
+		and hpFraction <= entity.enrageAt
+	then
+		local wasBusy = entity.state == "windup"
+			or entity.state == "attack"
+			or ((entity.state == "stagger" or entity.state == "airborne") and entity.attack > 0)
+		local isBusy = state == "windup"
+			or state == "attack"
+			or ((state == "stagger" or state == "airborne") and attack > 0)
+		if first or not (wasBusy and isBusy) then
+			entity.enraged = true
+			local def = kindDef(entity.kind)
+			if def ~= nil then
+				applyKind(entity, def)
+				local phase = def.enrage
+				if
+					phase ~= nil
+					and state == "recover"
+					and entity.state ~= "recover"
+					and entity.threat ~= "none"
+				then
+					-- It crossed during the attack that has just ended. The server asks the
+					-- question again as that attack ends, so the recover that follows is
+					-- already the scaled one, though this attack was loaded unscaled.
+					entity.recoverSeconds *= math.max(phase.recoverScale, 0)
+				end
+			end
+			if not first then
+				-- The beat on the body itself: a white flash and a burst as its colours turn.
+				-- A client that first sees it already enraged gets the look and no beat.
+				entity.flashUntil = os.clock() + FLASH_SECONDS * 3
+				paint(entity, true)
+				burstAt(entity, 2)
+			end
+		end
+	end
 	if state ~= entity.state or attack ~= entity.attack then
 		entity.state = state
 		entity.attack = attack
@@ -1287,6 +1451,10 @@ local function pushSample(
 		entity.dirty = true
 		if state == "dead" and entity.deathDue == math.huge then
 			entity.deathDue = os.clock() + DEATH_WAIT_SECONDS
+			if entity.boss and table.find(bossEnds, entity.id) == nil then
+				-- Dead on the wire: what it had in the air goes now, not when the body falls.
+				table.insert(bossEnds, entity.id)
+			end
 		end
 	end
 	-- A body in windup is planted, but a hit can still shove it: its attack is thrown from
@@ -1428,23 +1596,26 @@ local function queuePose(entity: Entity, root: CFrame, squash: number, tuck: num
 	moveParts[n + 2] = entity.torso
 	moveParts[n + 3] = entity.head
 	moveParts[n + 4] = entity.visor
+	-- What sits on the torso rides down (or up) with its top when it is squashed.
+	local carried = root
 	if entity.squash ~= 1 then
 		local drop = entity.torsoHeight * (1 - entity.squash)
 		moveFrames[n + 2] = root
 			* CFrame.new(0, entity.legHeight + entity.torsoHeight * entity.squash * 0.5, 0)
-		local lowered = root * CFrame.new(0, -drop, 0)
-		moveFrames[n + 3] = lowered * entity.headOffset
-		moveFrames[n + 4] = lowered * entity.visorOffset
+		carried = root * CFrame.new(0, -drop, 0)
+		moveFrames[n + 3] = carried * entity.headOffset
+		moveFrames[n + 4] = carried * entity.visorOffset
 	else
 		moveFrames[n + 2] = root * entity.torsoOffset
 		moveFrames[n + 3] = root * entity.headOffset
 		moveFrames[n + 4] = root * entity.visorOffset
 	end
 	moveCount = n + 4
-	-- Wave 2: the role's cue pieces ride the same root (fodder have none).
+	-- Wave 2: the role's cue pieces (fodder have none). Stop 2: they ride with the head, so a
+	-- boss's shoulders and crown come down with its slam instead of hanging over it.
 	local cues = entity.cues
 	if cues ~= nil then
-		moveCount = Cues.Queue(cues, root, moveParts, moveFrames, moveCount)
+		moveCount = Cues.Queue(cues, carried, moveParts, moveFrames, moveCount)
 	end
 end
 
@@ -1630,6 +1801,27 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 				pull + (entity.threatReach - pull) * snap,
 				0,
 				1
+		elseif shape == "ring" then
+			-- Stop 2, the slam: up on its toes through the coil, then down, so the body is
+			-- flat on the floor exactly at the impact, when the front leaves its feet.
+			local rise = 1 + Theme.COMBAT_RANGE_RING_SLAM_RISE * build
+			if u <= coil then
+				return back, 0, 0, rise
+			end
+			local snap = ((u - coil) / (1 - coil)) ^ 2
+			return back + (Theme.COMBAT_RANGE_RING_SLAM_LEAN - back) * snap,
+				0,
+				0,
+				rise + (Theme.COMBAT_RANGE_RING_SLAM_SQUASH - rise) * snap
+		elseif shape == "summon" then
+			-- Stop 2, the call: head thrown back and the whole body shaking harder as it
+			-- builds. It hurts nobody, so the pose and the circle on the floor are all of it.
+			return -Theme.COMBAT_RANGE_CALL_LEAN * build,
+				0,
+				Theme.COMBAT_RANGE_CALL_SHAKE * build * math.sin(
+					serverNow * TWO_PI * Theme.COMBAT_RANGE_CALL_SHAKE_HZ
+				),
+				1 + Theme.COMBAT_RANGE_CALL_STRETCH * build
 		end
 		local tell = entity.tell
 		if tell ~= nil then
@@ -1647,6 +1839,12 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 			-- Head down for the whole charge. The run itself is stepRush's: the body is moved
 			-- on the server clock, not thrust from where it stands.
 			return Theme.COMBAT_RANGE_TELL_LEAN_FORWARD, 0, 0, 1
+		elseif shape == "ring" then
+			-- Down flat at the impact, rising again as the front runs out.
+			return Theme.COMBAT_RANGE_RING_SLAM_LEAN * left,
+				0,
+				0,
+				1 - (1 - Theme.COMBAT_RANGE_RING_SLAM_SQUASH) * left
 		end
 		local tell = entity.tell
 		if tell ~= nil then
@@ -1663,7 +1861,12 @@ local function threatPose(entity: Entity, serverNow: number): (number, number, n
 		return 0, 0, 0, 1
 	end
 	-- Spent: slumped and dull, settling in fast and waking as the opening closes.
-	local settle = math.min(age / Theme.COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS, 1)
+	-- Stop 2: an enraged boss may chain. The wire then goes from this blow straight to the
+	-- next windup, which this client learns a snapshot and its lag later; the slump waits
+	-- that long, so a chain shows no nod between its attacks.
+	local held = if entity.enraged then interval + (lagEstimate or 0) else 0
+	local settle =
+		math.min(math.max(age - held, 0) / Theme.COMBAT_RANGE_TELL_SPENT_SETTLE_SECONDS, 1)
 	local wake =
 		math.min((entity.recoverSeconds - age) / Theme.COMBAT_RANGE_TELL_SPENT_WAKE_SECONDS, 1)
 	local spent = math.min(settle, wake)
@@ -1854,6 +2057,18 @@ local function stepAlive(
 			entity.reeling = false
 			setTint(entity, 0, FLASH_COLOR, false)
 		end
+		if entity.boss and not reeling then
+			-- Stop 2: between attacks a boss breathes, so it is never a statue; enraged, it
+			-- heaves, which is the phase read off the body's motion alone. The server clock
+			-- runs it, so every client sees the same breath.
+			local depth = if entity.enraged
+				then Theme.COMBAT_RANGE_ENRAGE_BREATH
+				else Theme.COMBAT_RANGE_BOSS_BREATH
+			local rate = if entity.enraged
+				then Theme.COMBAT_RANGE_ENRAGE_BREATH_HZ
+				else Theme.COMBAT_RANGE_BOSS_BREATH_HZ
+			squash = math.round((1 + depth * math.sin(serverNow * TWO_PI * rate)) * 100) / 100
+		end
 	end
 	-- The charge moves the sampled position itself, so aim assist and the numbers follow it.
 	if entity.rush ~= Vector3.zero or entity.threatShape == "lane" then
@@ -1875,6 +2090,14 @@ local function stepAlive(
 	local lean = entity.lean
 	local tumbleAngle = 0
 	local tuck = if entity.state == "airborne" then entity.legHeight * AIRBORNE_TUCK else 0
+
+	-- Stop 2: a summoned body comes up through the floor, fast at first and settling, so the
+	-- call visibly raises what it raises.
+	local riseAge = now - entity.riseStart
+	if riseAge < Theme.COMBAT_RANGE_RISE_SECONDS then
+		local left = 1 - riseAge / Theme.COMBAT_RANGE_RISE_SECONDS
+		offset -= UP * (entity.height * left * left)
+	end
 
 	local knockAge = now - entity.knockStart
 	if knockAge < KNOCKBACK_SECONDS then
@@ -2134,6 +2357,7 @@ function CrowdRenderer.Destroy(): ()
 	end
 	table.clear(active)
 	table.clear(pool)
+	bossEntity = nil
 	-- The tells' parts live in the folder destroyed below.
 	table.clear(tellPool)
 	-- Cue pieces in use went with their bodies' models; these are the spare ones and the bars.
@@ -2198,7 +2422,7 @@ end
 -- P4 wave 2: every living body that is winding up or throwing a lane or a line, the two
 -- attacks whose tells ThreatFx draws from the snapshot. The clock is this module's: an
 -- attack that was cancelled or is over is simply no longer reported. The callback must not
--- yield.
+-- yield. Stop 2: a ring and a summon are reported the same way.
 function CrowdRenderer.ForEachThreat(callback: ThreatCallback): ()
 	for _, entity in active do
 		local threat = entity.threat
@@ -2206,7 +2430,7 @@ function CrowdRenderer.ForEachThreat(callback: ThreatCallback): ()
 		if
 			entity.phase == "alive"
 			and (threat == "windup" or threat == "attack")
-			and (shape == "lane" or shape == "line")
+			and (shape == "lane" or shape == "line" or shape == "ring" or shape == "summon")
 		then
 			-- A lane is as long as the charge really runs (the arena's edge may cut it), and
 			-- its blow lasts as long as the brute takes to cover that, not the full attack
@@ -2230,10 +2454,45 @@ function CrowdRenderer.ForEachThreat(callback: ThreatCallback): ()
 				reach,
 				entity.threatWidth,
 				entity.threatLock,
-				lasts
+				lasts,
+				entity.threatSpeed
 			)
 		end
 	end
+end
+
+-- Stop 2: is this body still drawn and alive (not dead on the wire, dying or fading out)?
+-- What a body threw that ends with it (a slam's front) asks every frame.
+function CrowdRenderer.IsAlive(id: number): boolean
+	local entity = byId[id]
+	return entity ~= nil and entity.phase == "alive" and entity.state ~= "dead"
+end
+
+-- Stop 2: hands `callback` the crowd id of every boss that died or was taken away since the
+-- last call, and forgets them. A boss's end takes back everything that body had in the air;
+-- the caller drops its circles and shots, and nobody else's. The callback must not yield.
+function CrowdRenderer.DrainBossEnds(callback: (id: number) -> ()): ()
+	for index = #bossEnds, 1, -1 do
+		local id = bossEnds[index]
+		bossEnds[index] = nil
+		callback(id)
+	end
+end
+
+-- Stop 2: the boss the bar shows, if there is one: its id, its name, its health share (0 once
+-- it is dead, through its death flight), the share its second phase begins at (0 = it has
+-- none) and whether it is in it. nil = no boss; a boss that was taken away (a set load)
+-- simply stops being reported.
+function CrowdRenderer.GetBoss(): (number?, string, number, number, boolean)
+	local entity = bossEntity
+	if entity == nil or entity.samples == 0 then
+		return nil, "", 0, 0, false
+	end
+	local share = if entity.phase ~= "alive" or entity.state == "dead"
+		then 0
+		elseif entity.plated then 1
+		else entity.hpFraction
+	return entity.id, entity.title, share, entity.enrageAt, entity.enraged
 end
 
 -- direction: world direction of the hit (flattened; nil = away from the camera). strength: the

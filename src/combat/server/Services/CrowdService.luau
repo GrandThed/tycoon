@@ -23,6 +23,10 @@
 -- which this file never requires. The snapshot is CrowdCodec v2 (plated, attack index).
 -- Wave 2: a kind with `plate` wears it in every set, passive ones included (Damage); a brute's
 -- charge is carried by the brain (integrate), and nothing else moves it.
+-- Stop 2 (the Colossus): a `summon` impact raises its bodies here (summon), and they go when
+-- their summoner dies (dismiss), as does everything a `boss` kind had in the air. A body of
+-- crowd.largeRadius or more is separated in a pass of its own, so one giant does not widen the
+-- neighbourhood every other body scans, and nothing smaller ever pushes it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -72,6 +76,12 @@ type Enemy = {
 	spawnInfo: Types.CrowdSpawnInfo,
 	-- Only a `fight` enemy has one; nil keeps every passive path exactly as it was.
 	mind: CrowdBrain.Mind?,
+	-- The enemy whose `summon` raised this one, and how many this one has raised itself: a
+	-- summoned body is no slot of any set, never respawns and goes when its summoner dies.
+	summoner: Enemy?,
+	summoned: number,
+	-- A summoned body: which of its summoner's even places it rose on (0-based).
+	place: number,
 }
 
 type CrowdConfig = typeof((({} :: any) :: Types.ProvingGroundsConfig).crowd)
@@ -93,6 +103,9 @@ export type ThreatHooks = {
 	canTarget: (player: Player) -> boolean,
 	-- One enemy attack's impact, its shape frozen. Called after the step, never inside it.
 	impact: (strike: CrowdBrain.Strike) -> (),
+	-- The bodies with these ids are gone for good (a boss has died, and its summons with it):
+	-- nothing of their attacks may land any more.
+	gone: (ids: { [number]: boolean }) -> (),
 	-- Once per Heartbeat that stepped, after the impacts, with the frame's os.clock(): the
 	-- attacks that travel (shots, charges) are judged here.
 	step: (clock: number) -> (),
@@ -101,8 +114,8 @@ export type ThreatHooks = {
 }
 
 -- What Damage did besides the number: blocked = a plate stopped it (nothing happened); plate =
--- it went to the plate; broke = it emptied the plate.
-export type Verdict = "blocked" | "plate" | "broke"
+-- it went to the plate; broke = it emptied the plate; gone = there is no such body (any more).
+export type Verdict = "blocked" | "plate" | "broke" | "gone"
 
 local SPAWN_EVENT = "CrowdSpawn"
 local SNAPSHOT_EVENT = "CrowdSnapshot"
@@ -120,7 +133,7 @@ local MOVE_THRESHOLD = 0.2
 -- Before SetBounds: floor at y 0, effectively unbounded sideways, launches capped at 200.
 local DEFAULT_HALF_SIZE = Vector3.new(1024, 200, 1024)
 -- Spatial hash. Small cells keep a packed stress crowd at ~2 bodies per cell; separation widens
--- its neighbourhood to cover the widest living body, so a boss still meets everything it overlaps.
+-- its neighbourhood to cover the widest living body that is not large (crowd.largeRadius).
 local CELL_SIZE = 4
 local CELL_OFFSET = 32768
 local CELL_STRIDE = 65536
@@ -162,6 +175,7 @@ local threatHooks: ThreatHooks? = nil
 -- Scratch tables reused every step so the loop allocates nothing per enemy.
 local targets: { Vector3 } = {}
 local expired: { Enemy } = {}
+local giants: { Enemy } = {}
 local chunk: { Types.CrowdSnapshotEntry } = {}
 
 local running = false
@@ -501,17 +515,108 @@ local function integrate(
 	end
 end
 
+-- The large bodies' share of separation: each against everything in the cells it can reach.
+-- A smaller body gives way to a large one by the whole overlap, and a large one is never moved
+-- by a smaller one: where the smaller one is planted in its windup or attack the two simply
+-- overlap until it has struck. Two large bodies split their overlap as any pair does.
+-- `widest` = the widest living body that is not large; `largeRadius` = crowd.largeRadius.
+local function shoulder(widest: number, largeRadius: number): ()
+	local broadest = widest
+	for _, giant in giants do
+		broadest = math.max(broadest, giant.def.radius)
+	end
+	for _, giant in giants do
+		local def = giant.def
+		local radius = def.radius
+		local mind = giant.mind
+		local planted = mind ~= nil and CrowdBrain.IsStriking(mind)
+		local cx = math.floor(giant.position.X / CELL_SIZE) + CELL_OFFSET
+		local cz = math.floor(giant.position.Z / CELL_SIZE) + CELL_OFFSET
+		local reach = math.ceil((radius + broadest) / CELL_SIZE)
+		for ox = -reach, reach do
+			for oz = -reach, reach do
+				local cell = grid[(cx + ox) * CELL_STRIDE + (cz + oz)]
+				if cell == nil then
+					continue
+				end
+				for _, other in cell do
+					if other == giant or other.deadAt ~= nil then
+						continue
+					end
+					local otherDef = other.def
+					local large = otherDef.radius >= largeRadius
+					if large and other.id < giant.id then
+						-- That pair was handled from the other side.
+						continue
+					end
+					local a = giant.position
+					local b = other.position
+					if math.abs(a.Y - b.Y) > (def.height + otherDef.height) / 2 then
+						continue
+					end
+					local dx = b.X - a.X
+					local dz = b.Z - a.Z
+					local minDistance = radius + otherDef.radius
+					local distanceSq = dx * dx + dz * dz
+					if distanceSq >= minDistance * minDistance then
+						continue
+					end
+					local distance = math.sqrt(distanceSq)
+					local nx: number, nz: number
+					if distance > 1e-4 then
+						nx = dx / distance
+						nz = dz / distance
+					else
+						local angle = (giant.id * GOLDEN_RATIO_FRACTION % 1) * 2 * math.pi
+						nx = math.cos(angle)
+						nz = math.sin(angle)
+					end
+					local overlap = minDistance - distance
+					local otherMind = other.mind
+					local otherPlanted = otherMind ~= nil and CrowdBrain.IsStriking(otherMind)
+					local shareA = 0
+					if large then
+						local massA = radius * radius
+						local massB = otherDef.radius * otherDef.radius
+						shareA = massB / (massA + massB)
+						if planted ~= otherPlanted then
+							shareA = if planted then 0 else 1
+						elseif planted then
+							continue
+						end
+					elseif otherPlanted then
+						continue
+					end
+					local shareB = 1 - shareA
+					giant.position = a
+						- Vector3.new(nx * overlap * shareA, 0, nz * overlap * shareA)
+					other.position = b
+						+ Vector3.new(nx * overlap * shareB, 0, nz * overlap * shareB)
+				end
+			end
+		end
+	end
+end
+
 -- Pushes overlapping living bodies apart, heavier (wider) bodies moving less. Each pair is
--- handled once, by its lower id.
+-- handled once, by its lower id. A body of `largeRadius` (crowd.largeRadius) or more is large:
+-- it is left to `shoulder`, so the crowd around it keeps scanning the cells it would scan
+-- without it.
 -- Runs right after integrate, which refreshed every enemy's def for this step.
 -- P4: a fighting body in windup or attack is planted. Its neighbour takes the whole overlap, and
 -- two planted bodies leave each other where they are. Only this pass spares it: a player's hit
 -- still shoves and launches it through integrate.
-local function separate(): ()
+local function separate(largeRadius: number): ()
 	local widest = 0
+	table.clear(giants)
 	for _, enemy in order do
 		if enemy.deadAt == nil then
-			widest = math.max(widest, enemy.def.radius)
+			local radius = enemy.def.radius
+			if radius >= largeRadius then
+				table.insert(giants, enemy)
+			else
+				widest = math.max(widest, radius)
+			end
 		end
 	end
 	for _, enemy in order do
@@ -520,6 +625,9 @@ local function separate(): ()
 		end
 		local def = enemy.def
 		local radius = def.radius
+		if radius >= largeRadius then
+			continue
+		end
 		local mind = enemy.mind
 		local planted = mind ~= nil and CrowdBrain.IsStriking(mind)
 		local cx = math.floor(enemy.position.X / CELL_SIZE) + CELL_OFFSET
@@ -536,6 +644,9 @@ local function separate(): ()
 						continue
 					end
 					local otherDef = other.def
+					if otherDef.radius >= largeRadius then
+						continue
+					end
 					local a = enemy.position
 					local b = other.position
 					if math.abs(a.Y - b.Y) > (def.height + otherDef.height) / 2 then
@@ -579,6 +690,9 @@ local function separate(): ()
 			end
 		end
 	end
+	if #giants > 0 then
+		shoulder(widest, largeRadius)
+	end
 end
 
 -- `clock` = the frame's os.clock(): what the brain times its attacks on.
@@ -620,7 +734,7 @@ local function simulate(dt: number, clock: number): ()
 	end
 
 	gridRebuild()
-	separate()
+	separate(crowd.largeRadius)
 	for _, enemy in order do
 		if enemy.deadAt == nil then
 			clampToBounds(enemy, currentDef(enemy, kinds).radius)
@@ -700,6 +814,10 @@ local function sendSnapshot(serverTime: number): ()
 	end
 end
 
+-- Where every impact the brain raised goes after the step. A summon is the crowd's own
+-- business; every other shape is the threat hooks'.
+local dispatch: (strike: CrowdBrain.Strike) -> ()
+
 local function stepInterval(): number
 	-- snapshotHz is the step rate as well: one step, one snapshot. Clamped (to the bounds the
 	-- renderer shares) so a bad slider value can neither stall the crowd nor flood the network.
@@ -729,8 +847,8 @@ local function onHeartbeat(deltaTime: number): ()
 	flushLifecycle()
 	sendSnapshot(serverNow)
 	-- Last, so a failing hook can never hold back the crowd's own stream.
+	CrowdBrain.DrainStrikes(dispatch)
 	local hooks = threatHooks
-	CrowdBrain.DrainStrikes(if hooks ~= nil then hooks.impact else nil)
 	if hooks ~= nil then
 		hooks.step(started)
 	end
@@ -853,6 +971,9 @@ function CrowdService.Spawn(
 		},
 		spawnInfo = { id = id, kind = kind, maxHp = maxHp },
 		mind = if resolvedBehaviour == "fight" then CrowdBrain.NewMind(os.clock()) else nil,
+		summoner = nil,
+		summoned = 0,
+		place = 0,
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy
@@ -864,18 +985,123 @@ function CrowdService.Spawn(
 	return id
 end
 
+-- A `summon` impact. The attack's `count` even places lie on a circle of `radius` round the
+-- summoner, the first on its facing. A call tops the summoner's living summons up to `count`:
+-- it raises one body of the `summon` kind on a place none of them rose on, as many as are
+-- missing, and none when all are alive (the attack plays all the same). When crowd.maxAlive
+-- leaves room for fewer, those are spread evenly through the free places. Each is kept inside
+-- the arena, fights (so it waits out threat.spawnGrace like any spawn) and is announced with
+-- the next batch. A summoner that died before the drain raises nothing.
+local function summon(strike: CrowdBrain.Strike): ()
+	local summoner = enemies[strike.bodyId]
+	local attack = strike.def
+	local kind = attack.summon
+	if summoner == nil or summoner.deadAt ~= nil or kind == nil then
+		return
+	end
+	local count = math.floor(attack.count or 0)
+	if not (count > 0) then
+		return
+	end
+	-- Which places its living summons hold, and how many of them there are.
+	local held: { [number]: boolean } = {}
+	local living = 0
+	if summoner.summoned > 0 then
+		for _, other in order do
+			if other.summoner == summoner and other.deadAt == nil then
+				living += 1
+				held[other.place] = true
+			end
+		end
+	end
+	local free: { number } = {}
+	for place = 0, count - 1 do
+		if not held[place] then
+			table.insert(free, place)
+		end
+	end
+	local room = math.floor(Tuning.Get().crowd.maxAlive) - aliveCount
+	local raise = math.min(count - living, room, #free)
+	if not (raise > 0) then
+		return
+	end
+	local radius = math.max(attack.radius or 0, 0)
+	local centre = summoner.position
+	for index = 0, raise - 1 do
+		-- All the free places when every missing body fits; evenly through them otherwise.
+		local place = free[index * #free // raise + 1]
+		-- Yaw as yawToward has it: 0 looks down -Z.
+		local angle = summoner.yaw + place / count * 2 * math.pi
+		local spot = Vector3.new(
+			centre.X - math.sin(angle) * radius,
+			boundsCenter.Y,
+			centre.Z - math.cos(angle) * radius
+		)
+		local risen = enemies[CrowdService.Spawn(kind, spot, "fight")]
+		if risen ~= nil then
+			risen.summoner = summoner
+			risen.place = place
+			summoner.summoned += 1
+		end
+	end
+end
+
+function dispatch(strike: CrowdBrain.Strike): ()
+	if strike.def.shape == "summon" then
+		summon(strike)
+		return
+	end
+	local hooks = threatHooks
+	if hooks ~= nil then
+		hooks.impact(strike)
+	end
+end
+
+-- An enemy is dead or removed. What it summoned is removed with it, and when it is a boss
+-- (`whole`) its own attacks end too: nothing it or its summons had queued, in the air or on
+-- the run lands after this.
+local function dismiss(enemy: Enemy, whole: boolean): ()
+	if enemy.summoned == 0 and not whole then
+		return
+	end
+	local ids: { [number]: boolean } = {}
+	if whole then
+		ids[enemy.id] = true
+	end
+	if enemy.summoned > 0 then
+		enemy.summoned = 0
+		-- Backwards: a removal moves the last record into the freed slot.
+		for index = #order, 1, -1 do
+			local other = order[index]
+			if other.summoner == enemy then
+				ids[other.id] = true
+				removeRecord(other)
+			end
+		end
+	end
+	CrowdBrain.Recall(ids)
+	local hooks = threatHooks
+	if hooks ~= nil then
+		hooks.gone(ids)
+	end
+end
+
 -- Ends an enemy at once (no dead state, no OnKilled): for set changes and resets.
 function CrowdService.Remove(id: number): ()
 	local enemy = enemies[id]
 	if enemy ~= nil then
+		dismiss(enemy, true)
 		removeRecord(enemy)
 	end
 end
 
+-- Every enemy goes, and with them the impacts their brains had still queued. (Whoever holds
+-- the threat hooks clears what is already in the air: VitalsService.OnSetLoaded.)
 function CrowdService.Clear(): ()
 	for index = #order, 1, -1 do
 		removeRecord(order[index])
 	end
+	CrowdBrain.DrainStrikes(nil)
 end
 
 -- Broadphase: every living enemy whose body (body sphere and head sphere) may reach within
@@ -947,7 +1173,8 @@ end
 -- Returns (dealt, killed, verdict). dealt = amount after flat armour, not capped at the
 -- remaining HP (the number the player sees). push = horizontal velocity change in studs/s (its
 -- Y is ignored); launch = apex height in studs. Both scale by the kind's knockbackMult, as does
--- the stagger. A dead or unknown id takes nothing. A fighting enemy's windup may be cancelled by
+-- the stagger. A dead or unknown id takes nothing, and an unknown one says so (`gone`: a strike
+-- must not book a body its own killing blow removed). A fighting enemy's windup may be cancelled by
 -- the hit (CrowdBrain.OnHit); push, launch and stagger apply to it as to any other, except in a
 -- brute's charge, which only the damage reaches.
 -- The plate (wave 2), while it lasts: a hit under crowd.heavyHit is blocked and does nothing at
@@ -962,7 +1189,10 @@ function CrowdService.Damage(
 	launch: number?
 ): (number, boolean, Verdict?)
 	local enemy = enemies[id]
-	if enemy == nil or enemy.deadAt ~= nil or not isFinite(amount) or amount <= 0 then
+	if enemy == nil then
+		return 0, false, "gone"
+	end
+	if enemy.deadAt ~= nil or not isFinite(amount) or amount <= 0 then
 		return 0, false, nil
 	end
 	local crowd = Tuning.Get().crowd
@@ -1018,20 +1248,23 @@ function CrowdService.Damage(
 		enemy.deadAt = simTime
 		enemy.state = "dead"
 		aliveCount -= 1
+		-- A boss's death is the end of its fight: its summons, and whatever it had in the air.
+		dismiss(enemy, def.boss == true)
 		for _, callback in killCallbacks do
 			task.spawn(callback, id, byUserId)
 		end
 		return dealt, true, verdict
 	end
 	local stagger = math.max(crowd.staggerSeconds, 0) * mult
-	if verdict == "broke" then
+	if verdict == "broke" and mult > 0 then
 		-- The opening: it reels for the config's time, however little a hit staggers its kind.
+		-- A body nothing moves (knockbackMult 0, or a brute in its charge) does not reel either.
 		stagger = math.max(stagger, math.max(crowd.plateBreakSeconds, 0))
 	end
 	enemy.staggerUntil = math.max(enemy.staggerUntil, simTime + stagger)
 	if mind ~= nil then
 		-- `amount`, not `dealt`: a heavy hit is judged before armour (ruling 10).
-		CrowdBrain.OnHit(mind, amount, stagger > 0, crowd.heavyHit, os.clock())
+		CrowdBrain.OnHit(mind, def, amount, stagger > 0, crowd.heavyHit, os.clock())
 	end
 	return dealt, false, verdict
 end

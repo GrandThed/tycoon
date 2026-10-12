@@ -41,6 +41,9 @@ type Shot = {
 	spentAt: number,
 	-- A set load dropped it in flight: it goes on the next step, where it is drawn then.
 	dropped: boolean,
+	-- The crowd id of the body that fired it (nil = not said): a boss's death takes its own
+	-- shots with it (Drop).
+	owner: number?,
 }
 -- The flash where a shot ended: a ball growing between two diameters while it fades.
 type Burst = { part: Part, startedAt: number, seconds: number, from: number, to: number }
@@ -91,14 +94,16 @@ local function release(id: number, shot: Shot): ()
 	end
 end
 
--- `enemyShot`: a shot left its slinger at `firedAt` (server time).
+-- `enemyShot`: a shot left its slinger at `firedAt` (server time). `enemyId` = the crowd id
+-- of the body that fired it, when the effect says.
 function Shots.Fire(
 	id: number,
 	from: Vector3,
 	velocity: Vector3,
 	radius: number,
 	firedAt: number,
-	seconds: number
+	seconds: number,
+	enemyId: number?
 ): ()
 	local known = shots[id]
 	if known ~= nil then
@@ -132,6 +137,7 @@ function Shots.Fire(
 		seconds = seconds,
 		spentAt = 0,
 		dropped = false,
+		owner = enemyId,
 	}
 	shotCount += 1
 end
@@ -222,6 +228,18 @@ function Shots.Step(serverNow: number, clock: number): ()
 		else
 			flash.part.Size = Vector3.one * (flash.from + (flash.to - flash.from) * u)
 			Pool.Show(flash.part, u)
+		end
+	end
+end
+
+-- The boss with this crowd id died or was taken away, and its death takes back everything it
+-- had in the air: its own shots fizzle on the next step, where they are drawn. The server's
+-- end for each then finds a shot already dropped and is ignored. (An ordinary enemy's shot
+-- flies on after its slinger dies; nobody calls this for those.)
+function Shots.Drop(enemyId: number): ()
+	for _, shot in shots do
+		if shot.owner == enemyId and shot.spentAt == 0 then
+			shot.dropped = true
 		end
 	end
 end

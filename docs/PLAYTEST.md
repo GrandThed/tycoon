@@ -4161,7 +4161,6 @@ and what it is like to be hit, to dodge and to go down. **About 15 minutes.** Th
 first real stop of P4: the boss (Stop 2) waits for your verdict. Silent, placeholder bodies.
 Judge feel, and whether every warning can be read in time.
 
-<!-- FILE TO OPEN: start. Lead: if wave 2 is not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Wave 2 is merged to `main`
   once its checks are green, so "Build all" builds it.
@@ -4169,12 +4168,15 @@ Judge feel, and whether every warning can be read in time.
   that was open in Studio before "Build all" is the old one.**
 - **You have the new build if** the panel (**P**) has the set buttons **fight** and
   **shooters**. The older build has neither.
-<!-- FILE TO OPEN: end -->
 
 **Since 2026-10-12 the range opens on the `fight` set** (it used to open on `crowd30`, the
 passive dummies, and Ben's first look at this build never left it). Pressing Play now puts
 the whole mix in front of you. For the calm steps (1 and 14) pick **crowd30** in the panel;
 **God mode** makes the fight safe to watch.
+
+**From the Stop 2 build on, the range opens on the Colossus instead** ("P4 Stop 2 — The
+Colossus" below, which is the checklist to run first). For this one, pick **fight** in the
+panel after Play.
 
 Setup: `docs/MANUAL_STEPS.md` "P4 Stop 1". Keys: **1** melee, **2** ranged, **Space** jump,
 **Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
@@ -4253,6 +4255,71 @@ You start with Broadsword + Longbow. Sets are the buttons under **God mode** in 
 - The **Server … ms** number from step 12, and how the phone-sized screen ran (step 15).
 - Anything wrong: step numbers, PC or phone.
 - Still open from P3, if you have a view: A or B for SMG, Beam and Chain Gun; are cross-slot refunds fun or spammy; favourite and weakest ability.
+
+## P4 Stop 2 — The Colossus
+
+**Goal:** judge the first boss: a giant with a slam, a charge, a call for fodder, and a second,
+enraged half. **About 10 minutes. Steps 1 to 9 need only Play and the keys, no panel.** Silent,
+placeholder bodies. Judge whether it is fun, and whether every warning can be read in time.
+
+<!-- FILE TO OPEN: start. Lead: if Stop 2 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Stop 2 is merged to `main`
+  once its checks are green, so "Build all" builds it.
+- Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
+  that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play puts a giant in front of you and a red bar reading
+  **COLOSSUS** at the top of the screen.
+<!-- FILE TO OPEN: end -->
+
+Setup: `docs/MANUAL_STEPS.md` "P4 Stop 2". Keys: **1** melee, **2** ranged, **Space** jump,
+**Left Shift** dash. You start with Broadsword + Longbow. Your own health bar (**130 / 130**)
+is above the two ability tiles; at zero you are down for 2 s and get up where you lay.
+
+**Expected today, not bugs:**
+- **The bows are slow on it** (minutes, where a sword takes about one). A weapon question for
+  you, not a bug.
+- **Its health does not grow with a second player** in the range: two players kill it in about
+  half the time.
+- **A ranged player who keeps far away** meets only the call and, once it is enraged, the
+  barrage.
+- Fodder are shoved aside when it walks or charges through them.
+- On a portrait phone the open panel covers the boss bar.
+- Bodies are placeholders. No sound.
+- The Stop 1 limits still apply: enemies walk through cover, and running a big circle avoids
+  everything and heals you.
+
+### The boss and its three attacks (no panel)
+
+- [ ] 1. **Play** → a dark red giant stands down the lane, about 40 studs ahead, with wide shoulders and a crown of spikes. A red bar drops open at the top of the screen: **COLOSSUS** written on it, a thin white mark at half. Stay where you start for a few seconds → its first move is the call (step 2). Bug: no bar (old file, see the block above); the bar does not drop as you hit the boss.
+- [ ] 2. The **call**: it throws its head back and shakes, and a pulsing purple circle lies on the floor round it for about a second. Then up to 12 red fodder come up through the floor on that circle and run at you. They fight as in Stop 1: one rears back, turns red and jabs, **−8**, never more than 2 at once. **1**, hold **left mouse** → kill them. A later call only replaces the ones you killed. Bug: the purple circle hurts you; more than 12 of its fodder alive at once.
+- [ ] 3. The **slam** (stand close to it): it rises on its toes and a big red circle with a bright rim lies on the floor all round it, filling for about a second: that is how far the slam reaches. Then it drops flat and a low bright crest runs out from its feet to the rim: **−26** and a push outward. **Space** as the circle finishes filling → the crest passes under you. Next slam, **Left Shift** through the crest → green **DODGED**. Next slam, just walk away from it → you are still hit: when it is aimed at you, you cannot walk out, only jump or dash. Bug: a hit while you are in the air over the crest; one crest hits you twice; a hit outside the circle.
+- [ ] 4. The **charge** (stand further off, 15 to 30 studs): a wide red lane appears on the floor from it toward you and fills for about a second, then it runs down the lane: **−32**, and you are thrown about 6 studs. Sidestep out of the lane, jump, or dash → no hit. After the run it stands still for a moment: run in and hit it. Bug: a hit while you are outside the lane; a charge with no lane first.
+- [ ] 5. Hit it with everything: the Broadsword's third swing, the bow at full draw. Numbers pop and the bar drops, but the giant is never pushed, never staggers, and never stops an attack it has begun. (The fodder round it still fly.) Bug: the boss is knocked back, or one of its wind-ups is cancelled by your hit.
+
+### The enraged half and the kill (no panel)
+
+- [ ] 6. Bring the bar down to the white mark → the bar jumps, flashes white, turns orange and reads **ENRAGED** on its right; the giant flashes, turns hot red, its crown and spines light up, and it heaves. From now on: its warnings are shorter, two attacks follow each other with no pause before the opening, and it has a new one, the **barrage**: five red circles appear on the floor at once, one on you and four round you, and land about a second and a half later: **−18**, and never more than one of the five hurts you. Walk out of the circles. Bug: two circles of one barrage both hurt you; three attacks in a row with no pause; **ENRAGED** goes away again.
+- [ ] 7. Kill it → the bar empties, flashes and folds shut. Any crest, any circles still on the floor and every fodder it called vanish at once. About 12 s later it is back in its place with a full bar. Bug: a crest or a circle still hurts you after it died; its fodder stay; it does not come back.
+- [ ] 8. When it is back, stand still once at the start, hands off the mouse → you are down in under 10 s, mostly from the fodder, with a charge or a slam on top (expected). Bug: you respawn at the start instead of getting up where you lay; nothing attacks a still player.
+- [ ] 9. Time two kills, dodging as well as you can. First with the sword (**1**): about one to one and a half minutes is what the numbers say. Then with the bow only (**2**): expect minutes. Note both times, and say if the bow feels endless.
+
+### Optional (these need the panel: **P** opens it, **P** again closes it)
+
+- [ ] 10. During the fight, with its fodder up, read the third line under the **⚙ Range** tab, **Server N ms · FPS N** → **write the Server number down** (it should stay under 2). To watch the warnings safely: **P** → top of **Dummies & commands** → **God mode: off · click for on** → gold **God mode: ON · click for off** → every hit pops **DODGED** and your bar does not move. Turn it off the same way.
+- [ ] 11. **P** → **fight** → **P**: the Stop 1 mix, if you have not seen it yet (100 fodder, the three shooters, brutes, plated elites). The checklist for it is "P4 Stop 1" above. **P** → **colossus** brings the boss back.
+- [ ] 12. Phone: Test (Prueba) → Device (Dispositivo) → 375×667 → Play → the boss bar sits near the top, under the panel's readout lines; the slam's circle and crest, the lane and the five circles can be read; still no attack button. Two players: Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar) → both see the same bar, circles and crest at the same moment. Bug: a warning you cannot make out on the phone; a warning on one screen only.
+
+### What to tell Claude
+
+- Is the boss fun?
+- Which attack is the best, and which is annoying or hard to read?
+- Too long or too short with your favourite weapon? Your two times from step 9.
+- The enraged half: harder in a good way, or just messy?
+- The kill moment: does it feel like a win?
+- The fodder it calls: do they add to the fight or get in the way? (You had not met the Stop 1 enemies before: say also what you thought of **fight**, if you tried step 11.)
+- The **Server … ms** number, if you did step 10.
+- Anything wrong: step numbers, PC or phone.
 
 ## M12 — Village growing city
 

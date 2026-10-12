@@ -61,11 +61,13 @@ local NON_NEGATIVE_PATHS = {
 	"^shooting%.rateBurstShots$",
 	"^crowd%.heavyHit$",
 	"^crowd%.plateBreakSeconds$",
+	"^crowd%.largeRadius$",
 	"^crowd%.threat%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.attacks%.%d+%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.bandMin$",
 	"^crowd%.kinds%.[^.]+%.bandMax$",
 	"^crowd%.kinds%.[^.]+%.perPlayer$",
+	"^crowd%.kinds%.[^.]+%.enrage%.[^.]+$",
 	"^crowd%.kinds%.[^.]+%.plate$",
 	"^player%.[^.]+$",
 }
@@ -99,7 +101,14 @@ local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	{ pattern = "^crowd%.kinds%.[^.]+%.brain$", check = oneOf({ "rush", "keepAway" }) },
 	{
 		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.shape$",
-		check = oneOf({ "lunge", "arc", "lane", "line", "shot", "lob" }),
+		check = oneOf({ "lunge", "arc", "lane", "line", "shot", "lob", "ring", "summon" }),
+	},
+	{
+		-- Stop 2: what a `summon` attack raises must be a kind the base config knows.
+		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.summon$",
+		check = function(value: string, _path: string, base: Types.ProvingGroundsConfig): boolean
+			return base.crowd.kinds[value] ~= nil
+		end,
 	},
 	{
 		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.interrupt$",

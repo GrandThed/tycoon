@@ -29,7 +29,13 @@
 -- (health bar, hurt flash, direction pointer, down banner) is mounted in the same inset-free
 -- ScreenGui as the crosshair and laid out here against the AbilityBar or, on touch, the thumb
 -- cluster. The panel gains the `god` switch and its readouts from RangeStats.
+--
+-- P4 Stop 2: a boss has a bar. BossBar is mounted in the HUD ScreenGui (the one that keeps
+-- under the top bar and inside the device's safe area, where the RangePanel also lives), fed
+-- every frame from CrowdRenderer.GetBoss, and laid out here against the panel's column; the
+-- pointer ring of the vitals HUD is told where the bar ends so it keeps under it.
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -40,6 +46,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
+local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local uiFolder = script.Parent.Parent:WaitForChild("UI")
 local Create = require(uiFolder:WaitForChild("Create"))
@@ -52,6 +59,7 @@ local DebugPanel = require(uiFolder:WaitForChild("DebugPanel"))
 local Crosshair = require(uiFolder:WaitForChild("Crosshair"))
 local RangePanel = require(uiFolder:WaitForChild("RangePanel"))
 local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
+local BossBar = require(uiFolder:WaitForChild("BossBar"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -61,6 +69,8 @@ local FeedbackController = require(script.Parent:WaitForChild("FeedbackControlle
 local MovementController = require(script.Parent:WaitForChild("MovementController"))
 local VitalsController = require(script.Parent:WaitForChild("VitalsController"))
 local ThreatFx = require(script.Parent:WaitForChild("ThreatFx"))
+local CrowdRenderer = require(script.Parent:WaitForChild("CrowdRenderer"))
+local Haptics = require(script.Parent:WaitForChild("Haptics"))
 
 local HUMANOID_WAIT_SECONDS = 5
 local DEFAULT_HIT_MARKER_SECONDS = 0.12
@@ -153,6 +163,19 @@ local function bootRange(): ()
 	local crosshair = Crosshair.new(rangeGui)
 	FeedbackController.Mount(rangeGui, crosshair)
 	VitalsController.Mount(rangeGui)
+	local bossBar = BossBar.new(screenGui, {
+		onEnrage = function()
+			-- The phase change is felt as well as seen, where the device can and as strongly
+			-- as the tuned haptics layer says (0 = off), like every other pulse in the range.
+			local feedback = (Tuning.Get() :: any).feedback
+			local layer = if typeof(feedback) == "table" then feedback.haptics else nil
+			local strength = if typeof(layer) == "number" then math.max(layer, 0) else 1
+			Haptics.Pulse(
+				Theme.COMBAT_RANGE_HAPTIC_HEAVY * strength,
+				Theme.COMBAT_RANGE_HAPTIC_HEAVY_SECONDS
+			)
+		end,
+	})
 
 	-- One debounce window for the command buttons (not the sliders, which throttle
 	-- themselves), so a double tap on Stress never becomes two spawns.
@@ -277,15 +300,21 @@ local function bootRange(): ()
 			clusterLeft = math.min(meleeCentre.X - meleeSize / 2, slotCentre.X - slotSize / 2)
 			clusterTop = meleeCentre.Y - meleeSize / 2
 		end
-		panel.SetLayout(scale, size, reserve)
+		local panelBottom = panel.SetLayout(scale, size, reserve)
 		-- The panel docks right at the screen margin; the bar keeps out of that column.
 		local rightReserve = Theme.COMBAT_RANGE_PANEL_WIDTH + Theme.SCREEN_MARGIN
 		abilityBar.SetLayout(scale, size, rightReserve)
+		-- Stop 2: the boss bar takes the top, beside that column or under its readouts.
+		local bossBottom =
+			bossBar.SetLayout(scale, size, size.X - rightReserve * scale, panelBottom)
+		-- This ScreenGui starts under the top bar; the vitals HUD's does not.
+		local inset = GuiService:GetGuiInset()
 		VitalsController.SetLayout({
 			scale = scale,
 			rightReserve = rightReserve,
 			clusterLeft = clusterLeft,
 			clusterTop = clusterTop,
+			topLimit = bossBottom + inset.Y,
 		})
 		loadScreen.SetScale(scale)
 		toast.SetLayout(scale, size.X > size.Y, 0)
@@ -294,6 +323,10 @@ local function bootRange(): ()
 	stateChanged.OnClientEvent:Connect(onStateChanged)
 	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
 	applyLayout()
+	-- The boss bar is pure display: CrowdRenderer knows the boss, this hands it over.
+	RunService.RenderStepped:Connect(function(deltaTime: number)
+		bossBar.Update(deltaTime, CrowdRenderer.GetBoss())
+	end)
 	requestSnapshot:FireServer()
 
 	local waitSeconds = Theme.COMBAT_REMOTE_WAIT_SECONDS
