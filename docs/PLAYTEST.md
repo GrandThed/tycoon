@@ -4174,9 +4174,9 @@ passive dummies, and Ben's first look at this build never left it). Pressing Pla
 the whole mix in front of you. For the calm steps (1 and 14) pick **crowd30** in the panel;
 **God mode** makes the fight safe to watch.
 
-**From the Stop 2 build on, the range opens on the Colossus instead** ("P4 Stop 2 — The
-Colossus" below, which is the checklist to run first). For this one, pick **fight** in the
-panel after Play.
+**From the Stop 2 build on, the range opens on a boss instead** (the Colossus, then the
+Warlord from Stop 3; the newest "P4 Stop" section below is the checklist to run first). For
+this one, pick **fight** in the panel after Play.
 
 Setup: `docs/MANUAL_STEPS.md` "P4 Stop 1". Keys: **1** melee, **2** ranged, **Space** jump,
 **Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
@@ -4262,7 +4262,9 @@ You start with Broadsword + Longbow. Sets are the buttons under **God mode** in 
 enraged half. **About 10 minutes. Steps 1 to 9 need only Play and the keys, no panel.** Silent,
 placeholder bodies. Judge whether it is fun, and whether every warning can be read in time.
 
-<!-- FILE TO OPEN: start. Lead: if Stop 2 is not merged to `main`, change only this block. -->
+**Signed off by Ben on 2026-10-12** ("Great, on to the Warlord"). From the Stop 3 build on,
+Play opens on the Warlord: to see the Colossus again, pick **colossus** in the panel.
+
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Stop 2 is merged to `main`
   once its checks are green, so "Build all" builds it.
@@ -4270,7 +4272,6 @@ placeholder bodies. Judge whether it is fun, and whether every warning can be re
   that was open in Studio before "Build all" is the old one.**
 - **You have the new build if** Play puts a giant in front of you and a red bar reading
   **COLOSSUS** at the top of the screen.
-<!-- FILE TO OPEN: end -->
 
 Setup: `docs/MANUAL_STEPS.md` "P4 Stop 2". Keys: **1** melee, **2** ranged, **Space** jump,
 **Left Shift** dash. You start with Broadsword + Longbow. Your own health bar (**130 / 130**)
@@ -4320,6 +4321,66 @@ is above the two ability tiles; at zero you are down for 2 s and get up where yo
 - The fodder it calls: do they add to the fight or get in the way? (You had not met the Stop 1 enemies before: say also what you thought of **fight**, if you tried step 11.)
 - The **Server … ms** number, if you did step 10.
 - Anything wrong: step numbers, PC or phone.
+
+## P4 Stop 3 — The Warlord and his guard
+
+**Goal:** judge the second boss: a siege (kill his guard, break his plate), then a duel. It is
+the last stop of P4. **About 10 minutes. Steps 1 to 8 need only Play and the keys, no panel.**
+Silent, placeholder bodies. Judge whether it is fun, and whether the fight explains itself.
+
+<!-- FILE TO OPEN: start. Lead: if Stop 3 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Stop 3 is merged to `main`
+  once its checks are green, so "Build all" builds it.
+- Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
+  that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play shows a bar reading **WARLORD** at the top of the screen,
+  with a thin second row over it and four small pips at its right end.
+<!-- FILE TO OPEN: end -->
+
+Setup: `docs/MANUAL_STEPS.md` "P4 Stop 3". Keys: **1** melee, **2** ranged, **Space** jump,
+**Left Shift** dash, **C** in the air = ground slam. You start with Broadsword + Longbow.
+
+**Expected today, not bugs:**
+- **Light weapons cannot break plates.** A heavy hit can: the sword's third swing, a hammer, a
+  full bow draw, or the ground slam (jump, then **C**).
+- **He walks slowly.** In the duel he never catches a player who walks away, except with his
+  charge.
+- **The bows are slow here too** (minutes). A weapon question for you.
+- His health does not grow with a second player in the range.
+- Bodies are placeholders. No sound.
+
+### The siege (no panel)
+
+- [ ] 1. **Play** → the Warlord stands about 30 studs ahead: purple, cloaked, a tall standard with a violet flag, inside a shimmering violet shell. At the top of the screen: a bar reading **WARLORD**, a thin violet row over it (his plate) and four violet pips at its right end (his guard). Shoot or hit him at once → a violet **GUARDED**, and neither row moves. Bug: no thin row or no pips (old file, see the block above); a number or a grey **BLOCKED** instead of **GUARDED**.
+- [ ] 2. The **call**, about a second in: four guards come up through the floor round him and rush you. They are blue plated elites, each with a violet pennant on its back and a two-row bar over its head. A lit violet line runs from each guard to him. Bug: not four; no lines; he calls a second time later in the fight.
+- [ ] 3. Fight the guards (**1**, hold **left mouse**). They swing like Stop 1's elites: a red wedge fills on the floor, then **−28** and a throw of about 4 studs; never more than 2 at you at once. Your swings 1 and 2: grey **BLOCKED**. The third: **PLATE BROKEN**, the guard reels, and from then every swing hurts it. They are tough: the four take about half a minute. Each one that dies takes its line with it, and one pip goes dark. Bug: a guard's plate survives a third swing that hit it; a line stays after its guard died; the lit pips do not match the guards alive.
+- [ ] 4. Once, while a guard still lives, chase **him** instead: run up and swing → every hit says **GUARDED**, his plate row does not move, he backs away slowly, and the guards catch you and knock you off him. That is the lesson, not a bug. Bug: his plate row drops while a guard is alive.
+- [ ] 5. His **barrages**, all through the siege: the orb on his standard swells red, then three red circles appear on the floor, one on you, and land about a second and a half later: **−18**, and never more than one of the three hurts you. Step out of them while you fight. Bug: two circles of one barrage both hurt you.
+- [ ] 6. Kill the last guard → the last line goes, his shell flashes white and becomes plain metal, and the thin row on the bar flashes and turns blue. Now your third swing shows a blue number on him and the thin row drops (about nine of them empty it); swings 1 and 2 show grey **BLOCKED**. He backs off slowly and keeps throwing circles. Bug: **GUARDED** after the last guard died; a heavy hit takes his health while the plate row is not empty.
+
+### The duel (no panel)
+
+- [ ] 7. Empty the thin row → **PLATE BROKEN**: the shell bursts off, the thin row folds away, and he staggers for about a second and a half. The bar jumps, flashes white, changes colour and reads **DUEL** on its right; he turns hot red and comes at you. Bug: no stagger; he keeps backing off; **DUEL** goes away again.
+- [ ] 8. The duel: every weapon hurts him now. His **swing**: a red half circle fills on the floor in front of him for just under a second, then **−30** and a throw of about 6 studs → step back out of it, or jump. His **charge**: a red lane fills, then he runs down it, **−30** → sidestep. A **barrage** of four circles. Two attacks come back to back, then he stands open for about a second and a half: hit him then. Kill him → the bar empties, flashes and folds shut, and anything still on the floor goes. About 12 s later he is back, guarded again. Bug: three attacks in a row with no pause; a hit outside the half circle or the lane; a circle still hurts after he died.
+
+### Optional
+
+- [ ] 9. The ground slam on plates (for a loadout with no heavy hit: SMG, Beam, Splitbow). **Space**, then **C** near the top of the jump, landing among the guards → one slam breaks the plate of every guard it reaches. On his own plate, about nine slams. Bug: a slam shows **BLOCKED** on an unguarded plate.
+- [ ] 10. Panel (**P** opens it, **P** again closes it): with the four guards up, read the third line under the **⚙ Range** tab, **Server N ms · FPS N** → **write the Server number down** (it should stay under 2). The set buttons **colossus** and **fight** are still there; **warlord** brings him back.
+- [ ] 11. Phone: Test (Prueba) → Device (Dispositivo) → 375×667 → Play → the bar's thin row and its four pips, the lines to the guards and **GUARDED** can be read; still no attack button. Two players: Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar) → both see the same bar, lines and circles. Bug: something you cannot make out on the phone; something on one screen only.
+
+### What to tell Claude
+
+- The siege: fun, or a chore?
+- Was **GUARDED** clear without being told what it means?
+- The moment the plate breaks: does it land?
+- The duel: good, too easy, too hard?
+- Which boss do you prefer, the Colossus or the Warlord, and why?
+- Too long or too short?
+- The **Server … ms** number, if you did step 10.
+- Anything wrong: step numbers, PC or phone.
+- Still open, if you have a view: the **fight** set (shooters, brutes, plated elites) you have not seen yet; the bows on bosses; and from P3, A or B for SMG, Beam and Chain Gun, cross-slot refunds, favourite and weakest ability.
 
 ## M12 — Village growing city
 

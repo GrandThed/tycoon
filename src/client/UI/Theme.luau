@@ -1085,10 +1085,7 @@ local Theme = {
 	COMBAT_RANGE_CALL_SHAKE = 0.12, -- radians of twist either way
 	COMBAT_RANGE_CALL_SHAKE_HZ = 9,
 	COMBAT_RANGE_CALL_STRETCH = 0.08,
-	-- A body first seen within WINDOW seconds of a call, of the kind called and within SLACK
-	-- studs of its circle, was raised by it: it comes up out of the floor instead of appearing.
-	COMBAT_RANGE_CALL_WINDOW_SECONDS = 2,
-	COMBAT_RANGE_CALL_SLACK = 4,
+	-- A body a boss called comes up out of the floor instead of appearing, over this long.
 	COMBAT_RANGE_RISE_SECONDS = 0.45,
 	-- A boss's cue set (ThreatFx/Cues): shoulders, a crown, back spines and a core in the chest
 	-- that charges through every windup, to this share of the body's height.
@@ -1123,6 +1120,37 @@ local Theme = {
 	COMBAT_RANGE_BOSS_BAR_DEATH_SECONDS = 0.7, -- emptied, it flashes and fades out over this long
 	COMBAT_RANGE_BOSS_BAR_DEATH_HOLD_SHARE = 0.55, -- of that, spent emptied before it folds shut
 	COMBAT_RANGE_BOSS_BAR_FLASH_TRANSPARENCY = 0.15, -- the white flash over the bar at its strongest
+
+	-- P4 Stop 3, the Warlord and his guard (docs/INTERFACES.md "P4 contracts" -> "Stop 3").
+	-- One colour is the guard's and everything that comes of it: the circle they are called
+	-- up in, the pennant each of them carries, the tether from each to the Warlord, his shell
+	-- while they protect it, the word a hit on him earns then, and their pips on his bar. It
+	-- is the call's violet, so the player meets it first as "this is his guard arriving".
+	COMBAT_RANGE_WARD_COLOR = Color3.fromRGB(190, 120, 255),
+	COMBAT_RANGE_WARD_SHELL_SCALE = 1.14, -- the guarded shell stands this much prouder of the plate
+	COMBAT_RANGE_WARD_OPEN_SECONDS = 0.5, -- the shell's white flash when the last guard falls
+	-- The tether from each living guard to the Warlord: a thin lit bar, breathing slowly.
+	COMBAT_RANGE_LINK_THICKNESS = 0.24,
+	COMBAT_RANGE_LINK_TRANSPARENCY = 0.3,
+	COMBAT_RANGE_LINK_PULSE = 0.4, -- how much more see-through it swings, at PULSE_HZ
+	COMBAT_RANGE_LINK_PULSE_HZ = 1.5,
+	-- A hit his guard turned away: its own word, in the guard's colour, never "BLOCKED".
+	COMBAT_RANGE_GUARDED_LABEL = "GUARDED",
+	COMBAT_RANGE_GUARDED_TEXT = 19,
+	-- The commander's standard: the orb on its pole charges through every windup to this share
+	-- of his height, high over his guard's heads, so a barrage reads from across his band.
+	COMBAT_RANGE_CUE_COMMANDER_CHARGE_SHARE = 0.55,
+	-- The boss bar of a plated boss: the plate as a thin row over the health row (the elite's
+	-- overhead bar, written large), and a pip per guard on the health row's right end.
+	COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT = 6,
+	COMBAT_RANGE_BOSS_BAR_PLATE_GAP = 2,
+	COMBAT_RANGE_BOSS_BAR_PLATE_FOLD_RATE = 12, -- per second: the row eases open, and folds away when it breaks
+	COMBAT_RANGE_BOSS_BAR_PIP = 9,
+	COMBAT_RANGE_BOSS_BAR_PIP_GAP = 5, -- a pip stands on its point, so its diagonal needs the room
+	COMBAT_RANGE_BOSS_BAR_PIP_DEAD_TRANSPARENCY = 0.8,
+	COMBAT_RANGE_BOSS_BAR_MAX_PIPS = 8,
+	-- The second phase of a boss with a guard is the turn from siege to duel, and says so.
+	COMBAT_RANGE_BOSS_BAR_DUEL_LABEL = "DUEL",
 
 	-- C1 Studio debug strip. Parked mid-left, the one screen edge no HUD element uses in
 	-- either orientation.

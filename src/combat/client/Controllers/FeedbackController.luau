@@ -1705,7 +1705,8 @@ end
 -- A total and its "×N" (enemies hit) written into a burst, sized by the crowd and the strength.
 -- P4 wave 2, `tone` = what a plate did with these hits: "plate" = the amount came off a plate
 -- (the plate's colour), "blocked" = the plate turned them (a small grey word, never a 0),
--- "broke" = the plate shattered (its own line). nil = an ordinary hit.
+-- "broke" = the plate shattered (its own line). nil = an ordinary hit. Stop 3: "guarded" = the
+-- plate turned them because its body's guard lives (its own word, in the guard's colour).
 local function paintBurst(
 	burst: Burst,
 	total: number,
@@ -1721,6 +1722,7 @@ local function paintBurst(
 	)
 	local color = if tone == "blocked"
 		then Theme.COMBAT_RANGE_BLOCKED_COLOR
+		elseif tone == "guarded" then Theme.COMBAT_RANGE_WARD_COLOR
 		elseif tone ~= nil then Theme.COMBAT_RANGE_PLATE_COLOR
 		elseif crit then Theme.COMBAT_RANGE_CRIT_COLOR
 		else Theme.COLOR_TEXT
@@ -1728,12 +1730,14 @@ local function paintBurst(
 	local text = (
 		if tone == "blocked"
 			then Theme.COMBAT_RANGE_BLOCKED_TEXT
+			elseif tone == "guarded" then Theme.COMBAT_RANGE_GUARDED_TEXT
 			elseif crit or tone == "broke" then Theme.COMBAT_RANGE_NUMBER_CRIT_TEXT
 			else Theme.COMBAT_RANGE_NUMBER_TEXT
 	) + Theme.COMBAT_RANGE_NUMBER_GROWTH_PER_DOUBLING * math.log(math.max(count, 1), 2)
 	burst.main.TextSize = math.floor(math.min(text, Theme.COMBAT_RANGE_NUMBER_MAX_TEXT))
 	burst.main.Text = if tone == "blocked"
 		then Theme.COMBAT_RANGE_BLOCKED_LABEL
+		elseif tone == "guarded" then Theme.COMBAT_RANGE_GUARDED_LABEL
 		elseif tone == "broke" then Theme.COMBAT_RANGE_PLATE_BROKEN_LABEL
 		else Format.Cash(total)
 	burst.main.TextColor3 = color
@@ -1827,7 +1831,7 @@ local function mergeNumbers(
 		merges[key] = nil
 		merge = nil
 	end
-	if strength <= 0 or (total <= 0 and tone ~= "blocked") then
+	if strength <= 0 or (total <= 0 and tone ~= "blocked" and tone ~= "guarded") then
 		return if merge ~= nil then merge.kills + kills else kills
 	end
 	local opened = merge == nil
@@ -2700,6 +2704,8 @@ local function parseHits(raw: any): { Types.StrikeHit }?
 				blocked = if hit.blocked == true then true else nil,
 				plate = if hit.plate == true then true else nil,
 				broke = if hit.broke == true then true else nil,
+				-- P4 Stop 3: the plate turned it because the body's guard lives.
+				guarded = if hit.guarded == true then true else nil,
 			})
 		end
 	end
@@ -2823,6 +2829,11 @@ local function onStrike(strike: Strike): ()
 		if hit.broke then
 			broke = hit
 		end
+		if not hit.guarded then
+			-- P4 Stop 3: any hit that comes back without the guard's flag tells the renderer
+			-- that body is not guarded (it only matters for one whose guard protects it).
+			CrowdRenderer.NoteUnguarded(hit.id)
+		end
 	end
 	local hitCount = #strike.hits
 	local now = os.clock()
@@ -2887,12 +2898,17 @@ local function onStrike(strike: Strike): ()
 	local flesh = strike
 	if blockedCount > 0 or plateTotal > 0 then
 		local blockedHits: { Types.StrikeHit } = {}
+		local guardedHits: { Types.StrikeHit } = {}
 		local landedHits: { Types.StrikeHit } = {}
 		local plateHits: { Types.StrikeHit } = {}
 		local fleshHits: { Types.StrikeHit } = {}
 		for _, hit in strike.hits do
 			if hit.blocked then
-				table.insert(blockedHits, hit)
+				-- Stop 3: a block by a plate whose guard lives is not the ordinary one (a heavy
+				-- hit would not have got through either), and gets its own word. The hit says
+				-- so itself: the server stops guarding the instant the last guard dies, a
+				-- snapshot before this client sees it dead.
+				table.insert(if hit.guarded then guardedHits else blockedHits, hit)
 			else
 				table.insert(landedHits, hit)
 				table.insert(if hit.plate then plateHits else fleshHits, hit)
@@ -2911,18 +2927,35 @@ local function onStrike(strike: Strike): ()
 			-- A blocked hit reads as a block, never as a 0, and as nothing else: no marker,
 			-- hitstop, shake or pulse, and no place in the combo. One small "BLOCKED" per
 			-- shooter takes every one of them in while they keep coming.
-			local turned = table.clone(strike)
-			turned.hits = blockedHits
-			mergeNumbers(
-				tostring(strike.userId) .. ":blocked",
-				turned,
-				0,
-				false,
-				0,
-				mergeGap(strike, variant),
-				numbers,
-				"blocked"
-			)
+			if #blockedHits > 0 then
+				local turned = table.clone(strike)
+				turned.hits = blockedHits
+				mergeNumbers(
+					tostring(strike.userId) .. ":blocked",
+					turned,
+					0,
+					false,
+					0,
+					mergeGap(strike, variant),
+					numbers,
+					"blocked"
+				)
+			end
+			if #guardedHits > 0 then
+				-- Under its own key, so the two words never run into one burst.
+				local warded = table.clone(strike)
+				warded.hits = guardedHits
+				mergeNumbers(
+					tostring(strike.userId) .. ":guarded",
+					warded,
+					0,
+					false,
+					0,
+					mergeGap(strike, variant),
+					numbers,
+					"guarded"
+				)
+			end
 			if #landedHits == 0 then
 				return
 			end

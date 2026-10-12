@@ -12,6 +12,11 @@
 --   boss (Stop 2)    shoulders, a crown of three spikes, two spines down the back and a core
 --                    in the chest that charges through every windup; enraged, the crown, the
 --                    spines and the core are lit for good
+--   commander        (Stop 3: a boss with `guarded`) not a giant but a leader: a cloak, a
+--                    crest on the helm, and a standard on a pole with a flag in his guard's
+--                    colour and an orb on top that charges through every windup, high over
+--                    their heads; his shell is a ward while his guard lives
+--   his guard        the pennant each of them carries, in the same colour: they are his
 --
 -- A kind with none of these (fodder, the passive dummies) gets nothing: no part, no cost.
 --
@@ -44,13 +49,15 @@ type Piece = {
 }
 -- swollen / charge / shell / glint are what was last painted: the charge the lit pieces were
 -- sized for, the step of it they were coloured for, the shell (0 = on, 1 = gone, between =
--- the share of the break burst that has played) and whether it was glinting.
+-- the share of the break burst that has played), whether it was glinting and whether it
+-- was a ward (its body's guard lives).
 export type CueSet = {
 	pieces: { Piece },
 	swollen: number,
 	charge: number,
 	shell: number,
 	glint: boolean,
+	warded: boolean,
 	fade: number,
 }
 
@@ -111,7 +118,8 @@ end
 
 -- The cue pieces for a kind, parented into `model`, or nil when the kind has no cue. The
 -- measurements are CrowdRenderer's figure: body radius and height, leg and torso heights, head
--- radius, the torso's size and the kind's colour. `enraged` = a boss in its second phase.
+-- radius, the torso's size and the kind's colour. `enraged` = a boss in its second phase;
+-- `guards` = the kind is the guard some boss calls up.
 function Cues.Attach(
 	model: Model,
 	def: Types.CrowdKindDef,
@@ -122,7 +130,8 @@ function Cues.Attach(
 	headRadius: number,
 	torsoSize: Vector3,
 	color: Color3,
-	enraged: boolean
+	enraged: boolean,
+	guards: boolean
 ): CueSet?
 	local attacks = def.attacks
 	local first = if attacks ~= nil then attacks[1] else nil
@@ -132,6 +141,7 @@ function Cues.Attach(
 	if
 		not plated
 		and not boss
+		and not guards
 		and shape ~= "shot"
 		and shape ~= "line"
 		and shape ~= "lob"
@@ -139,7 +149,15 @@ function Cues.Attach(
 	then
 		return nil
 	end
-	local set: CueSet = { pieces = {}, swollen = 0, charge = 0, shell = 1, glint = false, fade = 0 }
+	local set: CueSet = {
+		pieces = {},
+		swollen = 0,
+		charge = 0,
+		shell = 1,
+		glint = false,
+		warded = false,
+		fade = 0,
+	}
 	local chest = legHeight + torsoHeight * 0.62
 	local lit = color:Lerp(WHITE, GLOW_REST_SHARE)
 	local dark = color:Lerp(Theme.COMBAT_RANGE_CUE_DARK_COLOR, DARK_SHARE)
@@ -220,7 +238,107 @@ function Cues.Attach(
 			)
 		end
 	end
-	if boss then
+	-- Lit in the guard's colour; enraged, in the enrage's.
+	local mark = if enraged
+		then Theme.COMBAT_RANGE_ENRAGE_GLOW_COLOR
+		else Theme.COMBAT_RANGE_WARD_COLOR
+	local behind = torsoSize.Z * 0.5
+	if guards then
+		-- One of a guard: a pennant on its back in the colour of the tether and of the ward
+		-- it keeps up, turned a quarter so it shows from the front and from the side.
+		local pole = height * 0.55
+		local foot = legHeight + torsoHeight * 0.4
+		local flag = Vector3.new(radius * 0.9, pole * 0.4, 0.1)
+		local out = (flag.X / 2 + 0.1) * math.sqrt(0.5)
+		add(
+			set,
+			model,
+			"plain",
+			Enum.PartType.Block,
+			Vector3.new(0.18, pole, 0.18),
+			CFrame.new(0, foot + pole / 2, behind + 0.25),
+			Theme.COMBAT_RANGE_CUE_DARK_COLOR,
+			1
+		)
+		add(
+			set,
+			model,
+			"ember",
+			Enum.PartType.Block,
+			flag,
+			CFrame.new(-out, foot + pole - flag.Y / 2, behind + 0.25 + out)
+				* CFrame.Angles(0, math.rad(45), 0),
+			Theme.COMBAT_RANGE_WARD_COLOR,
+			1
+		)
+	end
+	if boss and def.guarded == true then
+		-- A commander: the same height band as his guard's elites would be lost among them,
+		-- so what marks him stands above them. A cloak down his back, a crest along his helm,
+		-- and a standard: a pole half again his height with a flag and, on top, the orb that
+		-- charges through every windup (a barrage thrown from across his band is read off
+		-- it). Front is -Z.
+		local cloak = Vector3.new(torsoSize.X * 0.95, torsoHeight + legHeight * 0.55, 0.25)
+		add(
+			set,
+			model,
+			"plain",
+			Enum.PartType.Block,
+			cloak,
+			CFrame.new(0, legHeight * 0.45 + cloak.Y / 2, behind + 0.4)
+				* CFrame.Angles(math.rad(8), 0, 0),
+			dark,
+			1
+		)
+		add(
+			set,
+			model,
+			"ember",
+			Enum.PartType.Block,
+			Vector3.new(headRadius * 0.3, headRadius * 0.9, headRadius * 1.9),
+			CFrame.new(0, height + headRadius * 0.2, 0),
+			mark,
+			1
+		)
+		local pole = height * 0.85
+		local foot = legHeight + torsoHeight * 0.35
+		local staff = CFrame.new(-torsoSize.X * 0.3, foot, behind + 0.75)
+		add(
+			set,
+			model,
+			"plain",
+			Enum.PartType.Block,
+			Vector3.new(0.3, pole, 0.3),
+			staff * CFrame.new(0, pole / 2, 0),
+			Theme.COMBAT_RANGE_CUE_DARK_COLOR,
+			1
+		)
+		local flag = Vector3.new(radius * 1.3, pole * 0.32, 0.14)
+		local out = (flag.X / 2 + 0.15) * math.sqrt(0.5)
+		add(
+			set,
+			model,
+			"ember",
+			Enum.PartType.Block,
+			flag,
+			staff
+				* CFrame.new(-out, pole - flag.Y / 2 - 0.2, out)
+				* CFrame.Angles(0, math.rad(45), 0),
+			mark,
+			1
+		)
+		local d = math.max(radius * 0.4, 0.7)
+		add(
+			set,
+			model,
+			"glow",
+			Enum.PartType.Ball,
+			Vector3.one * d,
+			staff * CFrame.new(0, pole + d * 0.4, 0),
+			mark:Lerp(WHITE, GLOW_REST_SHARE),
+			math.max(height * Theme.COMBAT_RANGE_CUE_COMMANDER_CHARGE_SHARE / d, 1)
+		)
+	elseif boss then
 		-- A silhouette no other body has, in eight parts: wide shoulders, a crown, spines, and
 		-- the core that says "something is coming" whatever the attack. Front is -Z.
 		local shoulder = Vector3.new(radius * 0.95, torsoHeight * 0.3, radius * 1.5)
@@ -343,13 +461,15 @@ end
 
 -- charge: how far a windup has built, 0-1 (the lit pieces swell and redden with it).
 -- plated: the plate is on. breakShare: how much of the break burst has played, 0-1, or 1 when
--- none is playing. glint: the plate has just turned a hit.
+-- none is playing. glint: the plate has just turned a hit. warded: the plate cannot be
+-- touched because the body's guard lives (the shell is then a ward, not a plate).
 function Cues.Paint(
 	set: CueSet,
 	charge: number,
 	plated: boolean,
 	breakShare: number,
-	glint: boolean
+	glint: boolean,
+	warded: boolean
 ): ()
 	local steps = Theme.COMBAT_RANGE_TELL_TINT_STEPS
 	local raw = math.clamp(charge, 0, 1)
@@ -358,7 +478,13 @@ function Cues.Paint(
 	local quantised = math.round(raw * steps) / steps
 	local resize = math.abs(raw - set.swollen) >= 0.01
 	local shell = if plated then 0 else math.clamp(breakShare, 0.001, 1)
-	if not resize and quantised == set.charge and shell == set.shell and glint == set.glint then
+	if
+		not resize
+		and quantised == set.charge
+		and shell == set.shell
+		and glint == set.glint
+		and warded == set.warded
+	then
 		return
 	end
 	for _, piece in set.pieces do
@@ -371,16 +497,28 @@ function Cues.Paint(
 				piece.part.Color =
 					piece.color:Lerp(Theme.COMBAT_RANGE_TELL_COLOR, math.min(quantised * 2, 1))
 			end
-		elseif piece.role == "shell" and (shell ~= set.shell or glint ~= set.glint) then
+		elseif
+			piece.role == "shell"
+			and (shell ~= set.shell or glint ~= set.glint or warded ~= set.warded)
+		then
 			local breaking = shell > 0 and shell < 1
 			piece.own = shell
 			piece.part.Size = if breaking
 				then piece.size * (1 + Theme.COMBAT_RANGE_CUE_BREAK_GROW * shell)
+				elseif warded then piece.size * Theme.COMBAT_RANGE_WARD_SHELL_SCALE
 				else piece.size
-			-- White and lit while it turns a hit or flies apart; plain metal otherwise.
+			-- White and lit while it turns a hit or flies apart. While the guard lives it is a
+			-- ward: a shimmering field in the guard's colour, prouder of the body, which no
+			-- plate looks like. Plain metal otherwise: a plate, to be broken.
 			local lit = glint or breaking
-			piece.part.Color = if lit then WHITE else piece.color
-			piece.part.Material = if lit then Enum.Material.Neon else Enum.Material.Metal
+			piece.part.Color = if lit
+				then WHITE
+				elseif warded then Theme.COMBAT_RANGE_WARD_COLOR
+				else piece.color
+			piece.part.Material = if lit
+				then Enum.Material.Neon
+				elseif warded then Enum.Material.ForceField
+				else Enum.Material.Metal
 			show(piece, set.fade)
 		end
 	end
@@ -390,6 +528,7 @@ function Cues.Paint(
 	set.charge = quantised
 	set.shell = shell
 	set.glint = glint
+	set.warded = warded
 end
 
 -- The body's own fade (a death, a vanish) laid over every piece.

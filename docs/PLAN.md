@@ -1978,7 +1978,8 @@ lands where you stand" (with its "Review round").
 and a plated elite each fight their own way; then two bosses. Still range-only
 (`build/proving.rbxl`); missions return at P5. **No sound. Phones must work.** Plan of record:
 `docs/COMBAT_DESIGN.md` §7 and §10 step 5; contracts: `docs/INTERFACES.md` "P4 contracts"
-(rulings 1–26, "Wave 2 — roles" and "Stop 2 — the Colossus", each with its review round);
+(rulings 1–26, "Wave 2 — roles", "Stop 2 — the Colossus" and "Stop 3 — the Warlord and his
+guard", each with its review round);
 values: `docs/BALANCE.md` "P4".
 
 **Ben's rulings (2026-10-07):**
@@ -2001,14 +2002,13 @@ values: `docs/BALANCE.md` "P4".
   - **Wave 2, "roles":** slinger, marksman, lobber, brute, the plate; sets `shooters`, `brutes`,
     `fight`; `elites` gets plates.
 - **Stop 2:** the Colossus, the first of two bosses (Ben, 2026-10-12: "Both, as two bosses").
-- **Stop 3:** the Warlord and his guard, under its own contract after Ben's verdict on the
-  Colossus.
+- **Stop 3:** the Warlord and his guard, the second boss. It closes P4.
 
-**Where it is (2026-10-12):** waves 1 and 2 are merged to `main` (2026-10-08) and the place
-files are rebuilt. Stop 2 (the Colossus) is merged the day it was built, after review and QA,
-and the place files are rebuilt again: Play opens on the Colossus. Stop 2 waits for Ben's
-playtest (`docs/PLAYTEST.md` "P4 Stop 2"). The branch `p4-enemy-roles` (worktree
-`tycoon-p4`) stays for Stop 3. The Stop 1 enemies are still not judged by Ben (see the checkboxes).
+**Where it is (2026-10-12):** everything of P4 is merged to `main` and the place files are
+rebuilt: waves 1 and 2 (2026-10-08), Stop 2 the Colossus (signed off by Ben) and Stop 3 the
+Warlord and his guard, merged the day it was built after review and QA. Play opens on the
+Warlord. Stop 3 waits for Ben's playtest (`docs/PLAYTEST.md` "P4 Stop 3"); P4 is complete
+when he signs it off. The Stop 1 `fight` set is still not judged by him.
 - "Build all" builds `main`, and Ben opens `tycoon\build\proving.rbxl` by habit (P3.1). Asked
   on 2026-10-08, he chose **"Merge each ready wave"**: every P4 wave that has passed review and
   QA is merged to `main` without asking again.
@@ -2380,10 +2380,122 @@ playtest (`docs/PLAYTEST.md` "P4 Stop 2"). The branch `p4-enemy-roles` (worktree
 - **Unmeasured, only Ben can:** the server step time during the boss fight with its fodder up
   (budget 2 ms).
 
+**Stop 3 — the Warlord and his guard (2026-10-12):**
+- **Ben on the Colossus (2026-10-12):** a six-minute session in the `colossus` set, then
+  "Great, on to the Warlord", "Nothing, all clear" on the tells, "About right" on the length.
+  Stop 2 is signed off; it was also his first fight against enemies that hit back.
+- **What the player meets, a siege then a duel:**
+  - **Guarded from the first moment.** The Warlord stands back inside a shimmering shell.
+    Hits on him say "GUARDED".
+  - **The call, once:** after about a second four plated guards rise round him and rush the
+    player. A lit line ties each living guard to him.
+  - **Barrages** of three ground circles while the guard fights.
+  - **The guard:** one heavy hit breaks a guard's plate (the sword's third swing, a hammer, a
+    full bow draw, or the ground slam). Two attack one player at a time.
+  - **Chasing him while his guard lives gets nowhere:** his plate cannot be hurt and the guard
+    catches the player.
+  - **Guard dead:** his shell opens. Heavy hits now break his plate, which has its own row on
+    the boss bar, while he backs away slowly.
+  - **The plate shatters:** he staggers for a second and a half, the bar reads "DUEL", and he
+    comes at the player: a wide half-circle swing, a charge, a four-circle barrage, two
+    attacks back to back.
+  - Killing him removes anything left. He comes back 12 s later.
+  - Play opens on him: `defaultSet` is `warlord`. The Colossus stays in the panel.
+- **Server (four new keys, each general):**
+  - `CrowdAttackDef.calm`: an attack chosen only before the second phase.
+  - `CrowdAttackDef.uses`: the most times one enemy may land an attack in its life (the call:
+    once).
+  - `CrowdKindDef.guarded`: the plate takes no damage while the body has a living summon or
+    still owes its call. A guarded hit is flagged `guarded` on the strike.
+  - `enrage.brain`: the brain it fights with once enraged (`rush`). His phase turns when the
+    plate breaks (`enrage.at` 1, the existing latch).
+  - `CrowdSpawnInfo.summonerId` names the boss that called a body. Stop 2's heuristic for
+    summoned bodies is gone.
+  - **The reel:** a plate break always staggers, whatever the `knockbackMult`, and cancels a
+    windup he was in. Ordinary hits still never move him.
+  - Summons rise on a circle turned half a step for an even count, so none is stuck straight
+    behind its summoner.
+  - `crowd.largeRadius` is 2.5: his guard cannot push him.
+- **Client:**
+  - New `ThreatFx/Links.luau`: the tether from each living guard to him.
+  - `UI/BossBar`: a plate row over the health row (the guard's colour while guarded, the
+    plate's colour once it can be broken), a pip per guard, and "DUEL" for a boss with a
+    guard ("ENRAGED" otherwise).
+  - `ThreatFx/Cues`: the Warlord as a commander (a cloak, a crest, a standard whose orb
+    charges through every windup); a pennant on each guard; the shell drawn as a ward while
+    guarded.
+  - `FeedbackController`: "GUARDED" as its own word in the guard's colour, never "BLOCKED".
+- **Config (`src/shared/Config/ProvingGrounds.json`):** kinds `guard` (plate 40) and `warlord`
+  (plate 385, nine Broadsword finishers); set `warlord`; `defaultSet`.
+- **Balance tools:** `tools/sim_range.py` prints the Warlord after the Colossus, with tables
+  for the guard, the way through the plates and the siege. `--check` makes 353 checks.
+
+**Rulings after the Stop 3 reports and review (lead, 2026-10-12):**
+- Guarded from the first moment (before the call too), or a rifle at the start takes half
+  his plate before the guard rises.
+- A plate break always reels.
+- **The fight was retargeted** after the first balance pass (two minutes, 38 s of it on a
+  retreating plate): a reacting melee player wins in 75 to 115 s; the plate phase is at most
+  20 s and 60 studs of ground; the siege is 35 to 55% of the fight; every ranged family that
+  is not a bow wins inside 150 s. The contract's first 90 to 150 s target is superseded.
+- The turns band counts one hit when an attack knocks (ruling 18), so the guard keeps two at
+  a time.
+- Accepted: a late joiner reads him as guarded until the first unflagged hit; a passive-set
+  Warlord would show a ward the server never applies.
+
+**Review outcome, Stop 3:** 0 Critical, 0 Major, 5 Minor, fixed or accepted as above.
+- qa-runner: ALL GREEN (2026-10-12). stylua; selene (only the old `LegacyPanel` warning); hub
+  and combat luau-lsp with fresh sourcemaps; `check_compile.py` (141 files; highest top-level
+  counts FeedbackController 159, CrowdRenderer 151, InputController 144); the hub, combat and
+  proving builds; `sim_economy.py --check`, `sim_combat.py --check`, `sim_range.py --check`
+  (353 checks). The server's own harness: 492 checks, 203 mutations, none surviving. Asset
+  gates not run: no asset or template changed.
+
+**Balance, Stop 3 (`docs/BALANCE.md` "P4" → "Stop 3"; solo, tier 1, from `sim_range.py`):**
+- **A player who reacts to every tell takes no hit** and wins in about **77 to 101 s** with
+  any melee family, without abilities (target 75 to 115 s).
+- **Where the time goes:** the guard 23 to 27 s, his plate 10 to 19 s, the duel 40 to 59 s.
+  The siege is 37 to 50% of the fight.
+- **Standing still is down in about 9 s** (target: inside 10 s).
+- **The chaser gets nowhere:** after 90 s his plate is whole and the guard alive. He is down
+  first at about 18 s and 5 to 8 times in the 90 s.
+- **No hit over 25% of health:** the guard's swing 28 (22%), his swing 30 (23%), his charge
+  30 (23%), one barrage circle 18 (14%). One instant costs at most 30 (23%).
+- **Every attack leaves a window of 1.52 to 2.40 s.** The tightest tell leaves a phone thumb
+  0.21 s.
+- **Ranged:**
+  - Quick: Piercing Rifle (about 74 s) and Chain Gun (about 88 s).
+  - SMG and Beam have no heavy hit: they break plates with the ground slam and spend long on
+    the guard (about 108 s and 146 s).
+  - **The bows are slow:** about 2.6 minutes with the Longbow (159 s) and 3.5 with the
+    Splitbow (208 s). A weapon question for Ben, as on the Colossus.
+- **What is tight** (four targets bind at once; no single value buys room):
+  - Melee kill of 75 s or more: the Spear's fastest seed is 77.4 s.
+  - Siege of 35% or more: Greataxe 37.0%, Warhammer 37.1%.
+  - Ranged that is not a bow, 150 s or less: the Beam's slowest seed is 146.7 s.
+  - Plate phase of 20 s or less: the Broadsword's longest is 18.6 s.
+- The Colossus's rows moved by 4 s at the most (its fodder rise where the server puts them);
+  every Stop 2 band still passes.
+- Nothing was tuned in real play. Every number is a starting value.
+
+**Known limits at P4 Stop 3:**
+- **Light weapons cannot break plates.** SMG, Beam and Splitbow use the ground slam.
+- **He is slow (3 studs a second), in the duel too.** A player who walks away is never caught
+  on foot, only by his charge.
+- **The duel is gentle on a player who keeps his distance:** every melee family reaches him
+  from outside his swing.
+- Boss health does not scale with a second player in the range.
+- With its ability the Spear wins under the 75 s floor (the band is measured without them).
+- The plate is counted in Broadsword finishers: a change to that weapon moves the plate phase
+  by a whole finisher (about 2 s).
+- Placeholder bodies. No sound. The Stop 1 and Stop 2 limits still apply.
+- **Unmeasured, only Ben can:** the server step time with the guard up (budget 2 ms).
+
 **Carried:**
 - **To P5 (owner: lead):**
   - **Boss health scaling with party size,** as missions already do (C2).
-  - **The bows' time on a boss** (a weapon number; Ben's call first).
+  - **The bows' time on a boss** (a weapon number; Ben's call first). The Spear and the Beam
+    are the two ends of the Warlord's bands, and both are weapon numbers too.
   - **Kiting:** a reason to stay (an objective, a timer), a smaller arena, or an enemy faster
     than the walk.
   - **Flat values against tiered health:** enemy damage, regen, `heavyHit` and now `plate` do
@@ -2399,10 +2511,11 @@ playtest (`docs/PLAYTEST.md` "P4 Stop 2"). The branch `p4-enemy-roles` (worktree
   favourite and weakest ability.
 
 **Next:**
-- **Ben's Stop 2 playtest** (`docs/PLAYTEST.md` "P4 Stop 2 — The Colossus"), with the server
-  step time read during the boss fight.
-- Then **Stop 3, the Warlord and his guard**, under its own contract after his verdict on the
-  Colossus.
+- **Ben's Stop 3 playtest** (`docs/PLAYTEST.md` "P4 Stop 3 — The Warlord and his guard"), with
+  the server step time read with the guard up.
+- **After it P4 is complete.** P5 (back into the missions) starts only on his word.
+- **Still open for Ben, besides the P3 questions above:** the Stop 1 `fight` set (shooters,
+  brutes, plated elites), never seen; the bows on bosses.
 
 - [x] Wave 1 built and reviewed (INTERFACES "P4 contracts", rulings 1–26)
 - [ ] Wave 1 quick look by Ben, **optional**: not reported; covered by Stop 1.
@@ -2411,8 +2524,14 @@ playtest (`docs/PLAYTEST.md` "P4 Stop 2"). The branch `p4-enemy-roles` (worktree
   The range was changed to open on `fight` that day, and opens on the boss from Stop 2's
   merge; the Stop 2 checklist asks about the fodder and offers `fight` as an optional step.
 - [x] Stop 2 built and reviewed (INTERFACES "Stop 2 — the Colossus" with its review round)
-- [ ] Stop 2 playtest (Ben)
-- [ ] Stop 3, the Warlord and his guard
+- [x] Stop 2 playtest (Ben, 2026-10-12): a six-minute session in the `colossus` set (Studio's
+      log), then "Great, on to the Warlord", "Nothing, all clear" on the tells, "About right" on
+      the length. No measurement reported. Stop 3 started the same day.
+- [x] Stop 3 built and reviewed (INTERFACES "Stop 3 — the Warlord and his guard" with its
+  rulings and review)
+- [ ] Stop 3 playtest (Ben)
+
+**P4 is complete when the Stop 3 playtest box is ticked.**
 
 ## M12 — Growing city
 

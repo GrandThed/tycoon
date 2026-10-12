@@ -37,6 +37,11 @@
 -- share is at or under `enrage.at` while the body is not in a windup or an attack, or is in a
 -- windup it was not in the snapshot before.
 --
+-- Stop 3 ("Stop 3 - the Warlord and his guard"). An attack marked `calm` is only chosen before
+-- the second phase, the mirror of `enraged`; one with `uses` lands at most that often in the
+-- body's life (usable). Enraged, a kind with `enrage.brain` moves by that brain instead of its
+-- own: a commander who kept away closes in.
+--
 -- Rules that shape the module:
 -- * Nothing here yields, raycasts or builds a path: the crowd ignores world geometry (ruling 15).
 -- * A Strike is only queued. CrowdService drains the queue after its step, so nothing a hit
@@ -128,6 +133,8 @@ export type Mind = {
 	usedAt: { number },
 	-- The attack the last windup was for: not chosen again while another is ready.
 	last: number,
+	-- How often each attack has landed, by its index: `uses` is counted at the impact.
+	landed: { number },
 	-- The second phase (the kind's `enrage`), entered for good.
 	enraged: boolean,
 	-- How many attacks the chain under way has started; a fresh windup is the first.
@@ -374,6 +381,42 @@ local function paced(mind: Mind, def: Types.CrowdKindDef, seconds: number, recov
 	return math.max(seconds, 0) * math.max(scale, 0)
 end
 
+-- May the mind still use this attack at all? Not an `enraged` one before the second phase, not
+-- a `calm` one in it, and not one that has landed its `uses`.
+local function usable(mind: Mind, index: number, attack: Types.CrowdAttackDef): boolean
+	if attack.enraged == true and not mind.enraged then
+		return false
+	end
+	if attack.calm == true and mind.enraged then
+		return false
+	end
+	local uses = attack.uses
+	return uses == nil or (mind.landed[index] or 0) < math.floor(uses)
+end
+
+-- Has the mind a call still to make? A `summon` attack it may use that either has `uses` left
+-- or, with no limit, has never landed. Until then a `guarded` body's guard is on its way, and
+-- its plate is as safe as when the guard stands (CrowdService.Damage).
+function CrowdBrain.OwesCall(mind: Mind, def: Types.CrowdKindDef): boolean
+	local attacks = def.attacks
+	if attacks == nil then
+		return false
+	end
+	for index, attack in attacks do
+		if index > CrowdCodec.MAX_ATTACK then
+			break
+		end
+		if
+			attack.shape == "summon"
+			and usable(mind, index, attack)
+			and (attack.uses ~= nil or (mind.landed[index] or 0) == 0)
+		then
+			return true
+		end
+	end
+	return false
+end
+
 -- Which attack next? Among those off their cooldown, within `distance` and allowed in the
 -- mind's phase (`refused` = a bit per index already turned away this step), the one whose last
 -- impact is oldest; one never used counts as oldest, and the list's order breaks a tie. The
@@ -397,10 +440,7 @@ local function choose(
 		if bit32.btest(refused, bit32.lshift(1, index)) then
 			continue
 		end
-		if
-			(attack.enraged == true and not mind.enraged)
-			or distance > attack.reach + REACH_EPSILON
-		then
+		if not usable(mind, index, attack) or distance > attack.reach + REACH_EPSILON then
 			continue
 		end
 		local used = usedAt[index]
@@ -525,8 +565,9 @@ local function land(body: Body, mind: Mind, def: Types.CrowdKindDef, threat: Thr
 	if attack ~= nil then
 		local shape = attack.shape
 		local origin = body.position + Vector3.new(0, def.height / 2, 0)
-		-- Its cooldown runs from the impact.
+		-- Its cooldown runs from the impact, and the impact is what `uses` counts.
 		mind.usedAt[mind.attack] = impactAt
+		mind.landed[mind.attack] = (mind.landed[mind.attack] or 0) + 1
 		local strike: Strike = {
 			-- Not the time of this step: it may notice the impact up to one step late.
 			at = impactAt,
@@ -675,6 +716,7 @@ function CrowdBrain.NewMind(now: number): Mind
 		watch = false,
 		usedAt = {},
 		last = 0,
+		landed = {},
 		enraged = false,
 		chained = 0,
 	}
@@ -815,12 +857,23 @@ function CrowdBrain.Think(
 		end
 		return nil, 0
 	end
+	if phase == "attack" then
+		return nil, 0
+	end
+	-- Neither winding up nor attacking: the moment the second phase may begin, whether or not
+	-- the body is free and has a target (every client latches it off the same snapshot).
+	enrage(body, mind, def)
+	local phaseDef = def.enrage
+	local brain = def.brain
+	if mind.enraged and phaseDef ~= nil and phaseDef.brain ~= nil then
+		brain = phaseDef.brain
+	end
 	-- Booleans, not the string: the checker narrows a compared union across these returns.
-	local rusher = def.brain == "rush"
-	local shooter = def.brain == "keepAway"
+	local rusher = brain == "rush"
+	local shooter = brain == "keepAway"
 	local attacks = def.attacks
 	-- A rusher stands exposed through its recover; a shooter keeps its distance through it.
-	if phase == "attack" or not free or (phase == "recover" and not shooter) then
+	if not free or (phase == "recover" and not shooter) then
 		return nil, 0
 	end
 	if attacks == nil or not (rusher or shooter) then
@@ -840,7 +893,6 @@ function CrowdBrain.Think(
 	if distance > FACING_EPSILON then
 		mind.facing = flat.Unit
 	end
-	enrage(body, mind, def)
 	local ready = phase == "approach" and now - mind.bornAt >= threat.spawnGrace
 	if ready and begin(body, mind, def, attacks, threat, target, distance, now, 1) then
 		return nil, 0
@@ -850,7 +902,7 @@ function CrowdBrain.Think(
 		if index > CrowdCodec.MAX_ATTACK then
 			break
 		end
-		if attack.enraged ~= true or mind.enraged then
+		if usable(mind, index, attack) then
 			shortest = math.min(shortest, attack.reach)
 		end
 	end
@@ -903,13 +955,15 @@ end
 -- A hit this fighting enemy survives, after CrowdService.Damage has applied its push, launch
 -- and stagger. Rulings 9 and 10: `stagger` = any hit that staggers this kind cancels the
 -- windup; `heavy` = only a hit whose amount before armour is crowd.heavyHit or more; `none` =
--- nothing does. A cancelled windup goes to recover, its attack index still set. A windup whose
--- impact time has come is past cancelling: the next step lands it.
+-- nothing does. `reels` = the hit emptied its plate and it reels: that cancels any windup,
+-- whatever the rule (Stop 3). A cancelled windup goes to recover, its attack index still set.
+-- A windup whose impact time has come is past cancelling: the next step lands it.
 function CrowdBrain.OnHit(
 	mind: Mind,
 	def: Types.CrowdKindDef,
 	amount: number,
 	staggers: boolean,
+	reels: boolean,
 	heavyHit: number,
 	now: number
 ): ()
@@ -918,7 +972,7 @@ function CrowdBrain.OnHit(
 		return
 	end
 	local rule = attack.interrupt
-	if (rule == "stagger" and staggers) or (rule == "heavy" and amount >= heavyHit) then
+	if reels or (rule == "stagger" and staggers) or (rule == "heavy" and amount >= heavyHit) then
 		mind.phase = "recover"
 		mind.phaseUntil = now + paced(mind, def, attack.recover, true)
 	end

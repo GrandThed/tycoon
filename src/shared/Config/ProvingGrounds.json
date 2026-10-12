@@ -58,6 +58,28 @@
 					{ "shape": "summon", "reach": 60, "windup": 1.0, "recover": 1.0, "damage": 0, "count": 12, "summon": "fodder", "radius": 16, "cooldown": 18, "interrupt": "none" },
 					{ "shape": "lob", "reach": 60, "windup": 0.9, "recover": 1.4, "damage": 18, "knockback": 14, "launch": 3, "radius": 5, "seconds": 1.6, "count": 5, "spread": 14, "height": 4, "cooldown": 10, "enraged": true, "interrupt": "none" }
 				]
+			},
+			"guard": {
+				"radius": 1.7, "headRadius": 0.8, "height": 6.5, "speed": 11, "hp": 1400, "color": [60, 80, 120], "knockbackMult": 0.35, "armor": 0,
+				"brain": "rush", "perPlayer": 2,
+				"plate": 40,
+				"attacks": [
+					{ "shape": "arc", "reach": 6, "windup": 0.8, "recover": 1.2, "damage": 28, "knockback": 26, "launch": 3, "range": 7.5, "arcDegrees": 120, "height": 6, "interrupt": "heavy" }
+				]
+			},
+			"warlord": {
+				"radius": 2.6, "headRadius": 1.1, "height": 9, "speed": 3, "hp": 3650, "color": [80, 40, 110], "knockbackMult": 0.0, "armor": 0,
+				"brain": "keepAway", "bandMin": 24, "bandMax": 40, "perPlayer": 1,
+				"boss": true, "name": "Warlord",
+				"plate": 385, "guarded": true,
+				"enrage": { "at": 1, "windupScale": 1, "recoverScale": 1, "chain": 2, "brain": "rush" },
+				"attacks": [
+					{ "shape": "summon", "reach": 80, "windup": 1.0, "recover": 1.0, "damage": 0, "count": 4, "summon": "guard", "radius": 9, "uses": 1, "calm": true, "interrupt": "none" },
+					{ "shape": "lob", "reach": 60, "windup": 0.9, "recover": 2.2, "damage": 18, "knockback": 14, "launch": 3, "radius": 5, "seconds": 1.6, "count": 3, "spread": 12, "height": 4, "cooldown": 5, "calm": true, "interrupt": "none" },
+					{ "shape": "arc", "reach": 9, "windup": 0.9, "recover": 1.4, "damage": 30, "knockback": 30, "launch": 3, "range": 11, "arcDegrees": 180, "height": 6, "cooldown": 3, "enraged": true, "interrupt": "none" },
+					{ "shape": "lane", "reach": 34, "windup": 0.9, "recover": 1.8, "damage": 30, "knockback": 30, "launch": 3, "range": 36, "width": 7, "speed": 60, "height": 6, "cooldown": 7, "enraged": true, "interrupt": "none" },
+					{ "shape": "lob", "reach": 60, "windup": 0.8, "recover": 1.4, "damage": 18, "knockback": 14, "launch": 3, "radius": 5, "seconds": 1.6, "count": 4, "spread": 12, "height": 4, "cooldown": 9, "enraged": true, "interrupt": "none" }
+				]
 			}
 		},
 		"snapshotHz": 15,
@@ -70,7 +92,7 @@
 		"knockMax": 140,
 		"armorFloor": 0.1,
 		"heavyHit": 40,
-		"largeRadius": 3,
+		"largeRadius": 2.5,
 		"plateBreakSeconds": 1.5,
 		"threat": { "spawnGrace": 1.0, "spawnClear": 12, "maxShots": 24, "strikeSeconds": 0.2 }
 	},
@@ -214,9 +236,10 @@
 			{ "kind": "brute", "behaviour": "fight", "count": 3, "at": [-56, 46], "spacing": 12, "respawnSeconds": 8 },
 			{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [-10, 26], "spacing": 8, "respawnSeconds": 8 }
 		],
-		"colossus": [{ "kind": "colossus", "behaviour": "fight", "count": 1, "at": [0, 48], "spacing": 0, "respawnSeconds": 12 }]
+		"colossus": [{ "kind": "colossus", "behaviour": "fight", "count": 1, "at": [0, 48], "spacing": 0, "respawnSeconds": 12 }],
+		"warlord": [{ "kind": "warlord", "behaviour": "fight", "count": 1, "at": [0, 62], "spacing": 0, "respawnSeconds": 12 }]
 	},
-	"defaultSet": "colossus",
+	"defaultSet": "warlord",
 	"movement": {
 		"jumpHeight": 18,
 		"doubleJumpHeight": 12,

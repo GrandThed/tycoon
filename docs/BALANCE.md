@@ -1773,7 +1773,8 @@ Starting values for the enemies that attack and for the player's body in the ran
 (`Config/ProvingGrounds.json`; contract: `docs/INTERFACES.md` "P4 contracts"). This part is
 **wave 1, "they hurt you"**: the fodder's lunge, the armoured elite's arc, health, going down and
 getting up. **Wave 2, "roles"** (the three shooters, the brute, the plate) starts at "Wave 2 —
-roles" below, and **Stop 2, the Colossus** (the first boss) at "Stop 2 — the Colossus".
+roles" below, **Stop 2, the Colossus** (the first boss) at "Stop 2 — the Colossus", and
+**Stop 3, the Warlord** (the boss with a guard) at "Stop 3 — the Warlord".
 
 The wave 1 tables were measured again with wave 2's simulator. It follows rulings 21 (`reach` on
 the flat) and 22 (a due impact is never lost), the wave 2 review's rule that enemies of one kind
@@ -2647,6 +2648,9 @@ was down at 14.0 s.
 
 ## Stop 2: results (tier 1, mean of three seeds; two for the ranged families)
 
+These are the numbers Stop 2 shipped with. In Stop 3 the server moved where summons rise, and
+the Colossus's rows moved by up to 4 s: today's are in "Stop 3: the Colossus again".
+
 | Player | Weapon | Kill | Fastest to slowest | Enraged at | Hits of the boss | Lunges | Damage taken |
 |---|---|---|---|---|---|---|---|
 | Stands still | | never; down at **8.6 s** | | never | 5 | 33 | 404 in 30 s |
@@ -2741,9 +2745,10 @@ The simulator follows the server's report. These are the rules a change would mo
   a player who jumped late no time on the ground to sidestep.
 - **Attacks go on while he moves.** If a jump or a step stopped his swing, every kill time
   would grow by the time he spends dodging.
-- **Two things the simulator does not copy:** what is called rises from angle 0 round the
-  caller, and a body refused its place is not offered a second choice in the same step. With
-  one boss and a free place neither changes a number.
+- **One thing the simulator does not copy:** a body refused its place is not offered a second
+  choice in the same step. With one boss and a free place it changes no number. (Until Stop 3
+  its summons also rose from angle 0 round the caller; they now rise where the server puts
+  them.)
 
 ## Stop 2: flags for the owner
 
@@ -2776,3 +2781,387 @@ Known limits, for the owner (ruled by the lead):
   Longbow 142 s. The Splitbow deals 31 damage a second to one target. A weapon-number question.
 - **Kiting works here too.** The boss walks at 9 and its slam reaches 14. A ranged player who
   keeps 31 studs off meets only the call and, when it is enraged, the barrage. P5's.
+
+## Stop 3 — the Warlord
+
+The second boss (contract: `docs/INTERFACES.md` "Stop 3 — the Warlord and his guard"): a siege,
+then a duel. Calm, he keeps his distance, calls a guard of four plated elites once and throws
+barrages; while his guard lives his plate takes nothing. When the plate breaks he reels, and
+then he turns: he closes in and fights with a wide arc, a charge and a bigger barrage, chained.
+Solo, at tier-1 health (130).
+
+Targets, from the contract and the lead's retarget after the first round (the first round
+aimed at 90 to 150 s; the owner called the Colossus's 76 s "about right", so the fight was
+shortened and its middle cut):
+- a player who reacts to every tell wins in **75 to 115 s** with any melee family and takes no hit;
+- the plate phase (guard dead to plate broken) is at most 20 s for the default sword and for
+  the ground slam, and he gives no more than about 60 studs of ground in it;
+- the siege (start to plate broken) is 35 to 55% of the fight for every melee family;
+- every loadout has a way through the guard's plates and his (the ground slam counts);
+- the guard is not a slog for single-target weapons: every ranged family that can win does so
+  inside 150 s (the bows are a known weapon question, flagged and not fixed);
+- a player who ignores the guard and chases him gets nowhere and is punished;
+- a player standing still is down inside 10 s;
+- no hit over 25% of health, and no instant over the Stop 1 ceilings;
+- every tell clears a 0.25 s reaction and a 0.35 s phone thumb by at least 0.12 s;
+- each of his duel attacks leaves a window of at least a second.
+
+## Stop 3: what the simulator gained
+
+The BOSS part of `py tools/sim_range.py` now prints the Warlord after the Colossus, with three
+more tables (the guard, the way through the plates, the siege), and `--check` guards his bands.
+The new rules follow the server as built and the lead's rulings:
+
+- **`calm`** is the mirror of `enraged`: a calm attack is only chosen before the second phase.
+- **`uses`** is counted at the impact, in the body's life. An attack the body may no longer
+  use (wrong phase, or out of uses) stops counting toward the reach it walks to.
+- **`guarded`.** His plate takes nothing, heavy or not, from the moment he spawns until his
+  guard has been called and is dead. "Called" is the summon's impact. Only the plate is guarded.
+- **The reel.** The hit that empties a plate reels the body for `plateBreakSeconds` (1.5 s)
+  whatever its `knockbackMult`; only a charge under way runs on. A windup it was in is
+  cancelled whatever its `interrupt` (one whose impact time has come still lands) and recovers
+  in full from the break.
+- **The turn.** `enrage.at` is 1, so he is enraged at the step the plate breaks, or when the
+  attack he was in ends. The phase is now asked in every step outside a windup and an attack.
+  From then he moves by `enrage.brain` (`rush`): he closes to 9 studs, the reach of the arc,
+  and stands through his recovers.
+- **Summons rise on the caller's facing,** half a step off it for an even count, and a call
+  tops up the places none of its living summons rose on.
+- **`crowd.largeRadius`** is read from the config (2.5): the Warlord, at 2.6, is never pushed
+  by his guard.
+
+The players of this fight:
+- **Stands still.**
+- **Ignores the guard, chases him:** he walks at the Warlord and swings at him and at nothing
+  else, and answers no tell. Watched for 90 s.
+- **The same, and reacts to every tell.** Watched for 90 s.
+- **Reacts to every tell, attacks:** the Stop 2 player. While the plate is guarded he goes for
+  the nearest of the guard, wherever it is; then for the Warlord. He is run with each of the 13
+  families, without abilities and with them.
+
+Assumptions of the model, added to Stop 2's:
+- **The ground slam.** A family none of whose hits is heavy (SMG, Beam, Splitbow) breaks plates
+  with the slam: he walks into its reach and slams whenever it is ready, 45 damage every 1.8 s
+  to every body in its radius, and his weapon is still for 0.4 s each time. A family with a
+  heavy hit never slams, though a real player could do both.
+- **An ability is cast only once the plate is broken,** at the Warlord. It is never spent on
+  the guard, where a crowd ability would do most. So the ranged families' time on the guard
+  is the worst case.
+- Before the call, the reacting player walks at the Warlord and his hits are warded. It costs
+  him nothing: the guard rises 9 studs from the Warlord, where he then stands.
+
+**One planner error fixed.** A blow is decided on the first frame at or after its time, after
+the player has moved in that frame. The planner dropped a blow whose time fell inside the
+current frame, and could then step into it. It showed once: a rifleman stepped into a guard's
+arc in one seed of nine. The boss-fight player now counts such a blow where this frame's move
+puts him. The Stop 1 player is unchanged.
+
+**What moved in the earlier tables.**
+- Stop 1 and wave 2: nothing. Every line is printed with the same numbers. The guard appears
+  as one more kind in the attack table and the turns table.
+- The turns band now says what ruling 18 already meant (accepted by the lead): when a kind's
+  attack knocks, a turn of several costs one hit, because the first knock voids the rest. With
+  one place a kind's line reads as before. The guard's reads "2 guard at once, of which the
+  first knock voids the rest, = 28 = 22%".
+- The Colossus's measured rows moved, by 4 s at the most, and only because its fodder now rise
+  where the server puts them. With the old places put back the rows are the Stop 2 numbers to
+  the last digit. They are in "Stop 3: the Colossus again" below. Every Stop 2 band still passes.
+
+## Stop 3: values
+
+| Key | Lead | Now | Why |
+|---|---|---|---|
+| `guard.hp` | 120 | **1400** | Four guards of 120 fall to a cleave in 3 s, and the siege was a quarter of the fight. At 1400 the guard lasts a melee family 23 to 27 s. It is also what holds the two hammers' siege over 35%: at 1200 theirs is 34.9%. |
+| `guard.speed` | 9 | **11** | The guard has to be faster than the Warlord backs off, or it never reaches a player who is at him. |
+| guard arc `damage` | 26 | **28** | 22% of health. Four arcs and one barrage circle put a still player down; at 26 it takes five arcs. |
+| guard arc `knockback` | 30 | **26** | A knock of 30 throws the still player 6 studs, out of the barrage circle already in the air (radius 5), so the barrage never landed on him. 26 throws him 4.5. It is also the least that keeps the Stop 1 rule that a second arc from the same side cannot chain (90 degrees). |
+| guard, the rest (plate 40, 2 at a time, arc windup 0.8, recover 1.2, reach 6, range 7.5, 120 degrees) | | same | One heavy hit or one ground slam breaks a guard's plate, and it reels 1.5 s. The 0.8 s tell leaves a thumb 0.21 s. |
+| `warlord.hp` | 2600 | **3650** | The duel: 40 to 59 s for a melee family. At 3300 the Spear's fastest seed is 73.7 s, under the floor; at 3900 the Beam needs 151.7 s, over the ranged ceiling. |
+| `warlord.plate` | 240 | **385** | Counted in hits: nine Broadsword finishers (9 × 43.2 = 388.8), nine slams, eight hits of either hammer, seven Spear finishers. From 389 the Broadsword needs a tenth finisher, and its plate phase passes 20 s (20.3 s at 390 in one seed of six, 20.5 s at 450). Under 383 the Warhammer needs one hit fewer and its siege loses about half a point. |
+| `warlord.speed` | 11 | **3** | He backs away from any player inside 24 studs. At 3 he gives 44 studs in the plate phase; at 5 he gives 69, over the 60. Under 2 the chaser gets through: see "His speed" below. Enraged he has the charge (reach 34) to close. |
+| `warlord.bandMin`, `bandMax` | 30, 46 | **24, 40** | He stands 28 studs from the pad. With 30 he opened by backing off. |
+| summon `windup` | 1.2 | **1.0** | As the Colossus's call. The guard is up at 2.05 s. |
+| summon, the rest (count 4, radius 9, recover 1.0, uses 1) | | same | Four is what the owner was shown. |
+| calm lob, all of it (windup 0.9, recover 2.2, damage 18, radius 5, seconds 1.6, count 3, spread 12, cooldown 5) | | same | One barrage every 5.9 s. One circle of the three can land: 14% of health. |
+| arc `windup` | 0.8 | **0.9** | At 0.8 a 0.35 s thumb had 0.11 s to walk the 5.5 studs out of a half circle, under the 0.12 s floor. At 0.9 it has 0.21 s. |
+| arc, the rest (reach 9, range 11, 180 degrees, recover 1.4, damage 30, knockback 30, cooldown 3) | | same | 23% of health. |
+| lane, all of it (reach 34, range 36, width 7, speed 60, windup 0.9, recover 1.8, damage 30, cooldown 7) | | same | A sidestep is 3.5 studs: a thumb has 0.31 s to spare. |
+| enraged lob, all of it (windup 0.8, recover 1.4, count 4, spread 12, cooldown 9) | | same | |
+| `enrage` (at 1, scales 1 and 1, chain 2, brain `rush`) | | same | |
+| `dummySets.warlord` position | (0, 62) | same | 28 studs from the pad. |
+| `crowd.largeRadius` | 2.5 (lead) | same | Confirmed. Only the Warlord (2.6) lies between 2.5 and 3, so no Stop 1 or Stop 2 number moves. |
+| `defaultSet` | `colossus` | **`warlord`** | The contract: Play opens on the Warlord. |
+
+The first round shipped `guard.hp` 1300, `warlord.hp` 4100, `plate` 850 and `speed` 5 for the
+90 to 150 s target: 124.6 s with the Broadsword, 38 s of it on the plate, 160 studs of ground.
+
+**His speed: the chaser against the ground he gives.** These two do pull against each other,
+and only through his speed. The plate phase's length hardly depends on it (with a plate of
+450: 20.5 s at speed 1, 22.6 s at 3, 21.3 s at 5); the ground he gives does: 44 studs at 3, 69
+at 5. The chaser needs him to keep backing off. When he all but stands (speed 1), the guard
+gathers round the player at his feet, the player's arc kills it without meaning to, and the
+plate breaks, in every seed of six. At 1.5 a chaser who dodges everything broke through in one
+seed of three. From 2 up no chaser does. So the values leave a window from 2 to about 4, and
+3 sits in it: no rule is needed. If the Warlord should give no ground at all in the plate phase, the rule "he
+stops backing off once his guard is dead" does it, and costs the chaser band nothing, because
+that band is about the time the guard lives.
+
+## Stop 3: the attacks
+
+| Attack | Phase | Damage | Tell | The answer needs | For a 0.35 s thumb | Window after it |
+|---|---|---|---|---|---|---|
+| Summon (the call) | calm, once | none | | none needed | | 2.20 s |
+| Lob barrage, 3 circles | calm | 18 (14%) | 1.60 s (the flight) | 0.57 s: 5 studs out of a circle | 0.67 s | 2.40 s |
+| Arc | duel | 30 (23%) | 0.90 s | 0.59 s: 5.5 studs out of it | 0.69 s | 1.60 s |
+| Lane (charge) | duel | 30 (23%) | 0.90 s | 0.49 s: 3.5 studs aside | 0.59 s | 1.52 s |
+| Lob barrage, 4 circles | duel | 18 (14%) | 1.60 s (the flight) | 0.57 s | 0.67 s | 1.60 s |
+| The guard's arc | siege | 28 (22%) | 0.80 s | 0.49 s: 3.5 studs out of it | 0.59 s | its recover, 1.2 s |
+
+- **The tightest tell** is 0.21 s over a thumb's need: the Warlord's arc and the guard's arc.
+  In a chain the second attack's windup is whole and starts when the first attack ends.
+- **The arc** is a half circle of 11 studs round him, started when the player is within 9. A
+  jump clears it from 0.08 to 0.78 s after take-off. Every melee family reaches him from
+  outside it (the shortest, the Spinblade, from 13.1 studs), so a player who steps out is in
+  reach at once: the whole 1.6 s is his.
+- **The charge** runs 36 studs in 0.6 s. A melee player is back in reach 0.28 s into its
+  recover.
+- **The most one instant can cost** is 30, 23% of health. Every attack of his and the guard's
+  arc knock, so ruling 18 lets one land at a time.
+- **Two guards at a time.** Their arcs land one at a time for the same reason. A still player
+  takes a guard's arc about every 1.5 s.
+- **The reel at the turn.** From the break to his first duel windup is 1.5 s, or 2.2 s when
+  the plate breaks inside the calm barrage's windup (that windup is cancelled and recovers in
+  full). The first duel blow lands 2.4 s after the break at the soonest. Before the ruling the
+  median pause was 0.05 s: in 29 fights of 45 his first duel windup began in the step after
+  the shatter. The reel costs him 2 to 3% of his health and moves no kill by a second.
+
+## Stop 3: the fight, second by second
+
+The default loadout (Broadsword), a player who reacts to every tell, seed 11. Means of three
+seeds in brackets.
+
+| At | What happens |
+|---|---|
+| 0 s | The set loads. He stands 28 studs from the pad. His plate is guarded from the start. |
+| 1.05 s | He raises the call (windup 1.0 s). |
+| 2.05 s | Four guards rise 9 studs round him and rush the player. |
+| 3.25 s | The first barrage: three circles land 2.5 s later. One follows every 5.9 s, seven in the siege. |
+| 22.1 to 24.5 s | The four guards fall, within 2.4 s of each other: the arc hits them together. (25.9 s) |
+| 24.5 to 42.6 s | The plate: nine finishers in 18.1 s, with three barrages to step out of. He backs off at 3 studs a second. |
+| 42.6 s | The plate breaks. He reels for 1.5 s and is enraged. (43.1 s) |
+| 44.2 s | His first duel windup: a charge. |
+| 44.2 to 98.1 s | The duel: 7 arcs, 7 charges, 6 barrages, in chains of two. |
+| 98.1 s | He falls. (97.7 s; 94.9 to 101.1 s over nine seeds) |
+
+On the three-seed means: 25.9 s of guard, 17.2 s of plate, 54.6 s of duel. The siege is 44% of
+the fight. Over the whole siege he walks 45 to 54 studs, so the duel begins near the middle of
+the arena.
+
+## Stop 3: results (tier 1, mean of three seeds; two for the ranged families)
+
+| Player | Weapon | Outcome |
+|---|---|---|
+| Stands still | | Down at **9.0 s** (8.8 to 9.4 s over twelve seeds). First hit at 4.4 to 4.8 s; 17 hits in 30 s. |
+| Ignores the guard, chases him | Broadsword | After 90 s: plate **100%**, guard alive, 187 swings warded. Down first at **17.8 s** (11.7 to 21.6 s over nine seeds), 5 to 8 times in the 90 s; up to 40 hits, 780 health lost at the least. |
+| The same, and reacts to every tell | Broadsword | After 90 s: plate 100%, guard alive, 175 swings warded. He takes no hit and gets nowhere. |
+| Reacts to every tell, attacks | every melee family | Kill in **79.1 to 97.7 s**, no hit taken. |
+
+**How the chaser is punished.** His swings at the Warlord are warded, all of them. The guard
+walks 8 studs a second faster than the Warlord backs off, so it is on him at once, and each
+arc throws him 4.5 studs off his target. He takes an arc every 3 s or so and goes down every
+15 s: six health bars or more in the 90 s. A chaser who dodges everything loses nothing and still
+breaks nothing.
+
+Kill times per melee family, without its ability:
+
+| Family | Guard dead | Plate broken | Plate phase, longest | Ground given | Kill | Fastest to slowest | Siege | Duel | With its ability |
+|---|---|---|---|---|---|---|---|---|---|
+| Broadsword | 25.9 s | 43.1 s | **18.1 s** | 44 studs | **97.7 s** | 97.3–98.1 | 44% | 54.6 s | 97.7 s (Whirlwind is not cast at a lone boss) |
+| Warhammer | 26.7 s | 35.7 s | 10.3 s | 24 | **95.1 s** | 93.3–96.2 | 38% | 59.4 s | 84.4 s |
+| Spinblade | 22.6 s | 36.6 s | 14.5 s | 34 | **89.8 s** | 87.5–92.0 | 41% | 53.2 s | 78.1 s |
+| Greataxe | 26.1 s | 34.7 s | 9.5 s | 20 | **92.9 s** | 91.6–94.0 | 37% | 58.2 s | 86.0 s |
+| Spear | 26.7 s | 39.3 s | 13.0 s | 22 | **79.1 s** | 77.4–82.3 | 50% | 39.7 s | 72.8 s |
+
+Over nine seeds the five families take 77.4 to 101.1 s, none takes a hit, the Broadsword's
+plate phase is 18.6 s at the longest and its siege shares run from 37.0% (Greataxe) to 50.5%
+(Spear).
+
+Ranged families (none of them takes a hit either):
+
+| Family | Guard dead | What it pays for the guard | Plate broken | Kill | With its ability | Way through the plates |
+|---|---|---|---|---|---|---|
+| Piercing Rifle | 34.0 s | 8 s | 38.1 s | 74.4 s | 64.5 s | its hits |
+| Chain Gun | 30.8 s | 5 s | 36.7 s | 87.5 s | 78.3 s | its hits |
+| SMG | 55.9 s | 30 s | 73.4 s | 107.5 s | 95.5 s | the slam: 11 slams, 17.5 s |
+| Shotgun | 46.9 s | 21 s | 53.9 s | 116.1 s | 103.0 s | its hits |
+| Launcher | 39.3 s | 13 s | 48.7 s | 130.0 s | 99.3 s | its hits |
+| Beam | 54.8 s | 29 s | 72.5 s | **145.8 s** (146.7 at the slowest) | 145.8 s | the slam: 11 slams, 17.8 s |
+| Longbow (a bow) | 73.5 s | 48 s | 81.9 s | 158.6 s | 147.0 s | its hits |
+| Splitbow (a bow) | 74.4 s | 49 s | 91.2 s | 208.3 s | 191.6 s | the slam: 11 slams, 17.6 s |
+
+"What it pays for the guard" is its time to the last guard's fall, less the Broadsword's 25.9 s.
+
+- **The guard is 5600 health in four bodies.** A melee arc hits them together and is through
+  in 23 to 27 s. The Chain Gun, the Rifle and the Launcher pay 5 to 13 s more. The Shotgun
+  pays 21 s. The SMG and the Beam pay 29 to 30 s: the guard is half of the SMG's fight and
+  over a third of the Beam's. The bows pay 48 s.
+- **Every ranged family that is not a bow wins inside 150 s.** The Beam is the slowest at
+  146 s. The Longbow takes 159 s and the Splitbow 208 s: the Stop 2 weapon-number question.
+- **The guard cannot be made lighter for them with values.** Each 100 off a guard's health
+  saves the SMG and the Beam 2 to 4 s and costs the hammers' siege about a point: at 1200 it
+  is 34.9%, and the Spear's fastest seed is 72.9 s.
+
+**The way through the plates** (default variants; a hit of 40 or more is heavy):
+
+| Family | Heaviest hit | A guard's plate (40) | His plate (385), never missing | In the fight, longest |
+|---|---|---|---|---|
+| Broadsword | 43.2 (the finisher) | 1 finisher | 9 heavy hits, 10.4 s | 18.1 s |
+| Warhammer | 70.4 | 1 hit | 8, 5.4 s | 10.3 s |
+| Spinblade | 41.6 (the finisher) | 1 finisher | 10, 8.5 s | 14.5 s |
+| Greataxe | 75.6 | 1 hit | 8, 5.4 s | 9.5 s |
+| Spear | 60.0 (the finisher) | 1 finisher | 7, 8.3 s | 13.0 s |
+| Longbow | 50.0 | 1 arrow | 8, 7.4 s | 8.4 s |
+| Shotgun | 55.0 | 1 shot | 7, 5.5 s | 7.6 s |
+| Piercing Rifle | 42.0 | 1 shot | 10, 3.8 s | 4.2 s |
+| Launcher | 60.0 | 1 shell | 7, 8.0 s | 9.3 s |
+| Chain Gun | 60.0 | 1 hit | 7, 5.0 s | 5.8 s |
+| SMG, Beam, Splitbow | 9, 5, 26: none heavy | 1 slam | 9 slams, 14.4 s | 17.5 to 17.8 s |
+
+- **Every loadout has a way through.** One slam breaks the plate of every guard within its
+  radius. Against his plate the slam is as fast as the Broadsword's finishers.
+- **The Broadsword's phase is twice its count:** nine finishers are 10.4 s of swinging, and
+  the phase is 18 s. The walk to him, three barrages to step out of, and a combo that starts
+  again when a step takes him out of reach make the rest.
+
+## Stop 3: bands (`--check`)
+
+| Band | Value | Now |
+|---|---|---|
+| One hit of each of his attacks, and of the guard's arc | ≤ 25% of health | 14%, 23%, 23%; the guard 22% |
+| Each tell beyond a step, a 0.25 s reaction and the answer | ≥ 0.05 s | 0.31 s (arc), 0.41 s (lane), 1.03 s (barrages); the guard 0.31 s |
+| Each tell against a 0.35 s thumb | ≥ 0.12 s | the tightest: 0.21 s (his arc, the guard's arc) |
+| A chain's second tell against a thumb | ≥ 0.12 s | 0.21 s |
+| The window after each attack | ≥ 1 s | 1.52 to 2.40 s |
+| Each knock: launch under the fence, flight and slide inside `knockIframes` | yes | 3 < 4; 0.35 s; 0.40, 0.40 and 0.19 s |
+| Arc: a jump clears it; it reaches past where it starts | yes | yes; 11 > 9 |
+| Lane: a jump clears it; a dash's i-frames outlast its passing | yes | yes; 0.25 s against 0.12 s |
+| Barrage: a straight walk covers every circle's reach before they land | yes | 26 ≥ 17 studs |
+| The most one instant can cost by the rules | ≤ two thirds of the bar | 23% |
+| The guard is faster than he backs off | yes | 11 against 3 |
+| The ground slam is a heavy hit | ≥ `heavyHit` | 45 against 40 |
+| The slam breaks a guard's plate in | ≤ 2 slams | 1 |
+| Standing still: down | inside 10 s, every seed | 9.0 s (8.8–9.2) |
+| Standing still: the worst quarter second | ≤ 55% of the bar | 22% |
+| Ignores the guard, chases him, after 90 s | plate whole, guard alive, down at least once, ≥ 3 bars lost | 100%; alive; down at 17.8 s; 780 health (6 bars) at the least |
+| The same, reacting, after 90 s | plate whole, guard alive | 100%; alive |
+| Reacting, each melee family, no ability: the kill | **75–115 s**, every seed | 77.4 to 98.1 s |
+| Reacting, each melee family: hits taken | 0 | 0 |
+| Reacting, every family, with or without its ability: hits of his or the guard's | 0 | 0 |
+| Every family: the plate breaks in every seed | yes | yes; the slam for three of them |
+| The siege's share of the kill, every melee family | **35% to 55%** | 37% to 50% |
+| The plate phase, default melee and each slam family, every seed | **≤ 20 s** | 18.1 s; 17.5 to 17.8 s |
+| The ground he gives in it, the same rows | **≤ 60 studs** | 44; 39 to 40 |
+| Each ranged family that is not a bow, no ability: the kill, slowest seed | **≤ 150 s** | 77.5 to 146.7 s |
+| The guard, as any kind (the Stop 1 bands) | all | all; its knock clears a second arc from 90 degrees, the floor |
+| A kind's turn (several knocking attacks at once cost one) | ≤ 25% of health | the guard: 22% |
+
+Each band was proved by a value that makes it fail. `--check` now makes 353 checks (239 before
+Stop 3), on both interpreters.
+
+**Four targets bind at once, and the room between them is small.**
+
+| Target | Now | Room | What breaks it |
+|---|---|---|---|
+| Every melee kill ≥ 75 s | Spear, 77.4 s at the fastest of nine seeds | 2.4 s | `warlord.hp` 3300: 73.7 s |
+| Every melee siege ≥ 35% | Greataxe 37.0%, Warhammer 37.1% (nine seeds) | 2 points | `guard.hp` 1200: 34.9% |
+| Ranged, not a bow, ≤ 150 s | Beam, 146.7 s at the slowest | 3.3 s | `warlord.hp` 3900: 151.7 s |
+| Plate phase ≤ 20 s | Broadsword, 18.6 s at the longest of nine seeds | 1.4 s | `plate` 450: 20.5 s |
+
+More health for him helps the Spear's floor and the Beam breaks the ceiling; a heavier guard
+helps the hammers' share and the Beam and the SMG pay it four times; a bigger plate would help
+both floors and the Broadsword's phase passes 20 s. The Spear (reach 18, the fastest family on
+any boss) and the Beam (the slowest gun on one target) are the two ends, and both are
+weapon-number questions.
+
+**Where the starting values missed.** With the lead's set nineteen of these bands fail: the
+arc's thumb margin (0.11 s, alone and in a chain), the guard slower than the Warlord, standing
+still (12.6 s), the chaser (not one down in 90 s), the reacting chaser (he broke half the
+plate: the guard of 120 died under swings meant for the Warlord), the kill with every melee
+family (44 to 61 s), the siege's share for four of them (26% to 34%), and the ground given in
+the plate phase by the default sword and the three slam families (123 to 131 studs).
+
+## Stop 3: the Colossus again
+
+The Colossus's fodder now rise where the server puts them (on its facing, half a step off for
+twelve), and its fights moved a little. Three seeds; Stop 2's numbers in brackets.
+
+| Player | Weapon | Kill | With its ability |
+|---|---|---|---|
+| Stands still | | down at 8.6 s (8.6) | |
+| Jumps the ring, sidesteps the charge | Broadsword | 74.7 s (73.5), 5 hits (4), no down | |
+| Reacts to every tell | Broadsword | 76.3 s (76.3) | 76.3 s |
+| Reacts to every tell | Warhammer | 83.0 s (81.7) | 67.7 s (67.7) |
+| Reacts to every tell | Spinblade | 71.0 s (69.5) | 55.7 s (55.4) |
+| Reacts to every tell | Greataxe | 75.3 s (79.2) | 69.3 s (71.0) |
+| Reacts to every tell | Spear | 64.9 s (64.4) | 54.2 s (56.3) |
+| Reacts, and the boss calls nothing | Broadsword | 73.5 s (73.5) | |
+
+Over nine seeds the five melee families take 61.5 to 85.2 s (63.1 to 85.2 before), inside 60
+to 90. The ranged families moved by 4 s at the most. One fodder lunge (8 damage) now lands on
+the Splitbow player in one seed of two.
+
+## Stop 3: rules these numbers hang on
+
+- **Guarded from the spawn.** If the plate were open before the call, a rifleman at the pad
+  would take over half of it (five shots of 42) in the two seconds before the guard rises.
+- **He backs straight away, slowly, and the guard goes for the player.** The chaser's outcome
+  hangs on both, as "His speed" says. If he held his ground, or the guard stayed at his side,
+  a cleave meant for him would kill the guard.
+- **One turn in two for the guard** (`perPlayer` 2) and ruling 18. Without the void, two arcs
+  at once would cost 56, 43% of health.
+- **The reel cancels a windup into its full recover.** If the cancelled barrage did not
+  recover, the pause at the turn would be 1.5 s always, never 2.2 s.
+- **Enraged, he closes to 9 and stands through his recovers.** If he kept backing off in the
+  duel, the arc would never be thrown, and a melee player's 1.5 to 1.6 s windows would be
+  spent walking.
+- **A chained attack starts on the step the one before it ends.** As for the Colossus.
+- **The combo starts again after `comboResetSeconds` out of reach.** It is why the Broadsword's
+  nine finishers take 18 s and not 10. A longer reset would shorten its plate phase.
+- **The slam is a sphere round the player's standing root,** 13.5 studs plus the body's radius
+  to its centre. If it were measured on the floor, the Warlord (centre 4.5 studs up) would be
+  in reach from 15.4 studs instead of 16.0.
+- **The player's attacks go on while he moves.** If a step or a jump stopped his swing, every
+  time here would grow by the time he spends dodging: 7 calm barrages and 20 duel attacks in
+  the default fight.
+
+## Stop 3: flags for the owner
+
+- **The fight is 98 s with the default sword,** against the Colossus's 76 s: 26 s of guard,
+  17 s of plate, 55 s of duel. A real player, who is hit and misses, takes longer.
+- **The four targets leave little room** (the table above). No single value buys room: a
+  guard of 1200 saves the SMG 8 s, and takes the hammers' siege to 34.9% and the Spear's
+  fastest seed to 72.9 s.
+- **With its ability the Spear wins in 72.8 s,** under the 75 s floor. The band is measured
+  without abilities, as for the Colossus. The Spinblade with its ability takes 78.1 s.
+- **The SMG spends half its fight on the guard** (56 s of 108) and the Beam over a third (55 s
+  of 146). The model never casts an ability at the guard, so a real player with Overload Sweep
+  or Mag Dump is quicker than this.
+- **The bows:** the Longbow takes 159 s (147 s with its ability) and the Splitbow 208 s. Not
+  fixed here.
+- **The plate is counted in the Broadsword's finishers.** 385 is nine of them. Any change to
+  the Broadsword's damage or its finisher moves the plate phase by a whole finisher (2 s).
+- **He is slow: 3 studs a second, in the duel too.** He closes with the charge. A player who
+  walks away from him is never caught on foot; the charge reaches 34 studs and the barrage 60.
+- **A chaser with the default sword goes down every 15 s,** and a chaser who dodges gets
+  nowhere. Both hold only while he backs off at 2 studs a second or more.
+- **The duel is gentle on a player who keeps his distance.** Every melee family reaches him
+  from outside his arc (11 studs), and the sim's player stands at the edge of his own reach, so
+  the arc only threatens when the Warlord has walked in to 9. A player who hugs him meets it
+  far more.
+- **A barrage never lands on a still player while a knock of 6 studs has him:** the circle is
+  aimed 1.6 s before. That is why the guard's knock is 26 here. The armoured elite's is still
+  30.
+- **The Spear has the least room under the Colossus's floor now:** 61.5 s at the fastest of
+  nine seeds, against 60.
+- **Not modelled:** crits, kill refunds, abilities on the guard, a melee player who also
+  slams, cover, and the stairs.

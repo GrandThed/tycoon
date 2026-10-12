@@ -8,14 +8,15 @@
 -- is one entry, with one exception the client draws as two numbers: what went to its plate and
 -- what went to its health are separate entries (lead ruling B, wave 2). So an enemy has at most
 -- a plate entry (`plate`, and `broke` if this attack emptied the plate) and a plain one.
--- `blocked` marks an entry whose whole amount a plate stopped: it is a hit of 0.
+-- `blocked` marks an entry whose whole amount a plate stopped: it is a hit of 0. `guarded`
+-- (Stop 3) rides on such an entry when the plate stopped it because its body's guard lives.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Types"))
 
 -- What CrowdService.Damage said of the hit besides its number.
-export type Verdict = "blocked" | "plate" | "broke" | "gone"
+export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone"
 
 export type Tally = {
 	hits: { Types.StrikeHit },
@@ -48,7 +49,8 @@ function StrikeTally.Add(
 		-- same strike, and what the strike still held for them is no hit at all.
 		return
 	end
-	local blocked = verdict == "blocked"
+	local guarded = verdict == "guarded"
+	local blocked = verdict == "blocked" or guarded
 	local onPlate = verdict == "plate" or verdict == "broke"
 	tally.dealt += dealt
 	if killed then
@@ -69,7 +71,7 @@ function StrikeTally.Add(
 		end
 	end
 	if entry == nil then
-		table.insert(tally.hits, {
+		local hit: Types.StrikeHit = {
 			id = id,
 			amount = dealt,
 			crit = crit,
@@ -77,7 +79,10 @@ function StrikeTally.Add(
 			blocked = if blocked then true else nil,
 			plate = if onPlate then true else nil,
 			broke = if verdict == "broke" then true else nil,
-		})
+			-- The wire's word that the body's guard stopped the hit, not the plate's own rule.
+			guarded = if guarded then true else nil,
+		}
+		table.insert(tally.hits, hit)
 		if not known then
 			tally.enemies += 1
 		end
@@ -86,7 +91,11 @@ function StrikeTally.Add(
 	entry.amount += dealt
 	entry.crit = entry.crit or crit
 	entry.killed = entry.killed or killed
+	if guarded and entry.blocked == true then
+		entry.guarded = true
+	end
 	if not blocked then
+		entry.guarded = nil
 		entry.blocked = nil
 		entry.plate = if onPlate then true else nil
 		if verdict == "broke" then

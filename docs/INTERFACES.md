@@ -5293,6 +5293,67 @@ recoverScale, chain }`; `CrowdAttackDef.shape` += `"ring"`, `"summon"`; `CrowdAt
 `UI/BossBar.luau`, `CrowdRenderer`, `CombatUIController`, Theme (add only). Balance: the
 `colossus` values and set, the simulator, BALANCE.
 
+## Stop 3 — the Warlord and his guard (Ben, 2026-10-12)
+
+**Ben on the Colossus, 2026-10-12** (a six-minute session in the `colossus` set, per Studio's
+log, then three clicks): "Great, on to the Warlord"; "Nothing, all clear" on the tells; "About
+right" on the length. Stop 2 is signed off. It is also his first fight against enemies that
+hit back (the summoned fodder); the shooters, brutes and plated elites are still unseen.
+
+**The fight** (kind `warlord`, its guard kind `guard`, set `warlord`): a siege, then a duel.
+- **Siege (calm).** The Warlord keeps his distance (`keepAway`). He calls his guard once
+  (`summon`, `uses` 1): `count` plated `guard` elites who rush the player. He throws barrages
+  (`lob` with `count`). **While any of his guard lives his plate takes no damage** (`guarded`):
+  every hit on it is `blocked`, heavy or not. When the guard is dead, heavy hits break his
+  plate like any other.
+- **Duel (enraged).** His phase turns when the plate breaks: `enrage.at` is 1, and the latch is
+  the existing rule (`not plated and health share <= at`), so it needs no new trigger. From
+  then he fights with `enrage.brain` (`rush`): a wide arc, a charge, a bigger barrage,
+  chained. Calm attacks (`calm`) are no longer chosen; `enraged` ones unlock.
+- **New keys, each general:** `CrowdAttackDef.calm` (only before the enraged phase), `uses`
+  (most times one enemy may land this attack in its life), `CrowdKindDef.guarded`,
+  `enrage.brain`. Everything else is Stop 1 and Stop 2 machinery: the plate and its reel (a
+  body with `knockbackMult` 0 does not reel: decide whether the Warlord should — the designer
+  proposes, the lead rules), summons that go with their boss, the barrage, the chain, attack
+  choice, the boss's death taking everything back.
+- **A guarded plate must read as guarded:** hits show that the guard protects him (not the
+  ordinary "BLOCKED"), and the link to the living guard is visible, so the player learns the
+  rule without reading. The boss bar shows his plate, then his health, and how many of the
+  guard live.
+- **Balance targets:** solo, tier 1, a player who reacts to every tell wins in 90 to 150 s
+  with any melee family and takes no hit; the siege (guard plus plate) is about half of it;
+  every loadout has a way through the guard's plates and his (the ground slam counts); a
+  player who ignores the guard and chases him gets nowhere and is punished; standing still is
+  down inside 10 s; no hit over 25% of health and no instant over the Stop 1 burst ceiling;
+  every tell clears a 0.25 s reaction and a 0.35 s thumb by 0.12 s.
+- **The look:** `defaultSet` becomes `warlord` at the merge. The Colossus stays in the panel.
+
+**Rulings after the reports and the review (lead, 2026-10-12; review 0 Critical, 0 Major, 5 Minor):**
+- **Guarded from the first moment:** his plate takes no damage while he has a living summon
+  or still owes his call (a summon attack he may still choose with `uses` left, or with no
+  limit and never landed). A guarded hit is a `StrikeHit` with `blocked` and `guarded`, also at
+  amount 0. A `guarded` kind with no summon attack, or in a passive set, is never guarded.
+- **`CrowdSpawnInfo.summonerId`** names the boss that called a body: the client counts the
+  guard, draws its tethers and raises summoned bodies by it (Stop 2's heuristic is gone).
+- **A plate break always reels,** whatever the `knockbackMult`: the Warlord staggers for
+  `crowd.plateBreakSeconds`, a windup he was in is cancelled, and he is enraged by the time it
+  ends. Ordinary hits still never move him.
+- **Summons rise on a circle turned half a step for an even count,** so none is straight
+  behind its summoner (it was stuck there since Stop 2).
+- **`crowd.largeRadius` is 2.5:** the Warlord is a large body; his guard cannot push him.
+- **The fight was retargeted** after the first balance pass (two minutes, 38 s of it on a
+  retreating plate): a reacting melee player wins in 75 to 115 s; the plate phase is at most
+  20 s and 60 studs of ground; the siege is 35 to 55% of the fight; every ranged family that
+  is not a bow wins inside 150 s. The 90 to 150 s target above is superseded.
+- **The turns band** counts one hit when an attack knocks (ruling 18 voids the rest), so the
+  guard keeps `perPlayer` 2.
+- The bar's label is "DUEL" for a boss with a guard, "ENRAGED" otherwise; no config key.
+- Accepted: a late joiner reads him as guarded until the first unflagged hit; a passive-set
+  Warlord would show a ward the server never applies.
+
+**Types and config (lead, applied):** the four keys above; kinds `guard` and `warlord`; set
+`warlord`. **Ownership:** as Stop 2.
+
 ---
 
 # M12 contracts — Growing city (wave 1: Village)

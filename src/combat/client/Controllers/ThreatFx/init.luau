@@ -7,6 +7,8 @@
 --   Tells   the brute's lane and the marksman's line, from the crowd snapshot alone
 --   Rings   a boss's slam (the circle, then the front running out) and the circle of its
 --           call, from the crowd snapshot alone (Stop 2)
+--   Links   the tethers from a boss's living guard to the boss whose plate they protect,
+--           from the bodies CrowdRenderer draws (Stop 3)
 --   Areas   the lobber's ground circle and the shot arcing into it, from `area`
 --   Shots   the slinger's slow orbs, from `enemyShot` / `enemyShotEnd`
 --   Pool    the pooled parts and the frame's one batched move
@@ -40,6 +42,7 @@ local Shots = require(script:WaitForChild("Shots"))
 local Areas = require(script:WaitForChild("Areas"))
 local Tells = require(script:WaitForChild("Tells"))
 local Rings = require(script:WaitForChild("Rings"))
+local Links = require(script:WaitForChild("Links"))
 
 local ThreatFx = {}
 
@@ -103,6 +106,11 @@ local function onThreat(
 		frameServerNow,
 		frameDelta
 	)
+end
+
+-- Stop 3: one living guard and the boss whose plate it protects.
+local function onWard(guardId: number, guardChest: Vector3, bossChest: Vector3): ()
+	Links.Feed(guardId, guardChest, bossChest, frameServerNow)
 end
 
 -- Stop 2: the boss with this crowd id died or was taken away. Its death takes back everything
@@ -184,6 +192,8 @@ local function step(deltaTime: number): ()
 	CrowdRenderer.DrainBossEnds(onBossEnd)
 	CrowdRenderer.ForEachThreat(onThreat)
 	Tells.Sweep()
+	CrowdRenderer.ForEachWard(onWard)
+	Links.Sweep()
 	Rings.Step(frameServerNow, CrowdRenderer.IsAlive)
 	Shots.Step(frameServerNow, os.clock())
 	Areas.Step(frameServerNow)
@@ -241,6 +251,7 @@ function ThreatFx.Destroy(): ()
 		Areas.Clear()
 		Tells.Clear()
 		Rings.Clear()
+		Links.Clear()
 	end
 	Pool.Destroy()
 end

@@ -1601,20 +1601,44 @@ section is kept as a record.**
       set buttons under **God mode** include **fight** and **shooters**. If they do not, it is
       the old file: go back to step 2.
 - [ ] 5. Run `docs/PLAYTEST.md` "P4 Stop 1 — Enemies that fight back". From the Stop 2 build
-      on, Play opens on the Colossus: pick **fight** in the panel first.
+      on, Play opens on a boss (the Warlord from Stop 3): pick **fight** in the panel first.
 
 ## P4 Stop 2 — The Colossus
 
 **Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
 (no audio step). About 10 minutes with the checklist, and no panel needed for its core.
 
-<!-- FILE TO OPEN: start. Lead: if Stop 2 is not merged to `main`, change only this block. -->
+**Done 2026-10-12** (Ben played it and signed Stop 2 off). From the Stop 3 build on, Play opens
+on the Warlord: pick **colossus** in the panel to see the Colossus again.
+
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
 - **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Stop 2 is merged to `main`
   once its checks are green, so "Build all" builds it.
 - **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
 - **You have the new build if** Play puts a giant in front of you and a red bar reading
   **COLOSSUS** at the top of the screen.
+
+**Steps:**
+
+- [x] 1. Build as the block above says.
+- [x] 2. If a `proving.rbxl` is open in Studio, close it (don't save), then open the file
+      named in the block above.
+- [x] 3. Press **Play**. The giant and its **COLOSSUS** bar are there at once. If you see
+      dummies or the Stop 1 mix and no bar, it is the old file: go back to step 2.
+- [x] 4. Run `docs/PLAYTEST.md` "P4 Stop 2 — The Colossus".
+
+## P4 Stop 3 — The Warlord and his guard
+
+**Studio only. No Creator Hub work, no uploads, no republish, no new Studio setup.** Still silent
+(no audio step). About 10 minutes with the checklist, and no panel needed for its core.
+
+<!-- FILE TO OPEN: start. Lead: if Stop 3 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Build it first:** VS Code, **Ctrl+Shift+B** → **"Build all"**. Stop 3 is merged to `main`
+  once its checks are green, so "Build all" builds it.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play shows a bar reading **WARLORD** at the top of the screen,
+  with a thin second row over it and four small pips at its right end.
 <!-- FILE TO OPEN: end -->
 
 **Steps:**
@@ -1622,9 +1646,9 @@ section is kept as a record.**
 - [ ] 1. Build as the block above says.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save), then open the file
       named in the block above.
-- [ ] 3. Press **Play**. The giant and its **COLOSSUS** bar are there at once. If you see
-      dummies or the Stop 1 mix and no bar, it is the old file: go back to step 2.
-- [ ] 4. Run `docs/PLAYTEST.md` "P4 Stop 2 — The Colossus".
+- [ ] 3. Press **Play**. The Warlord and his **WARLORD** bar are there at once. If you see the
+      Colossus or dummies instead, it is the old file: go back to step 2.
+- [ ] 4. Run `docs/PLAYTEST.md` "P4 Stop 3 — The Warlord and his guard".
 
 ## M10 — Icon, store icons, thumbnails
 

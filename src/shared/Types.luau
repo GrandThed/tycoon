@@ -1788,7 +1788,17 @@ export type CrowdKindDef = {
 	-- `chain` attacks follow each other with no recover between them (the last one recovers).
 	boss: boolean?,
 	name: string?,
-	enrage: { at: number, windupScale: number, recoverScale: number, chain: number }?,
+	enrage: {
+		at: number,
+		windupScale: number,
+		recoverScale: number,
+		chain: number,
+		-- P4 Stop 3: the brain it fights with once enraged (a commander who kept away closes in).
+		brain: ("rush" | "keepAway")?,
+	}?,
+	-- P4 Stop 3: while any enemy it summoned lives, its plate takes no damage: every hit on it
+	-- is blocked, heavy or not. Break the guard first.
+	guarded: boolean?,
 }
 -- One enemy attack: windup (the tell, facing locked) -> impact -> recover (exposed).
 -- shape: lunge = a short thrust from the body; arc = a sweep round the body; lane = the enemy
@@ -1832,6 +1842,10 @@ export type CrowdAttackDef = {
 	-- the kind that rises. A ring's `width` is the thickness of its front.
 	cooldown: number?,
 	enraged: boolean?,
+	-- P4 Stop 3. calm = only chosen BEFORE the enraged phase. uses = the most times one enemy
+	-- may land this attack in its life (a guard is called once); nil = no limit.
+	calm: boolean?,
+	uses: number?,
 	count: number?,
 	spread: number?,
 	summon: string?,
@@ -2137,7 +2151,8 @@ export type CrowdState =
 	| "dead"
 	| "attack"
 	| "recover"
-export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number }
+-- summonerId (P4 Stop 3): the crowd id of the boss that called this body; nil for a set's own.
+export type CrowdSpawnInfo = { id: number, kind: string, maxHp: number, summonerId: number? }
 export type CrowdSnapshotEntry = {
 	id: number,
 	position: Vector3,
@@ -2162,6 +2177,8 @@ export type StrikeHit = {
 	blocked: boolean?,
 	plate: boolean?,
 	broke: boolean?,
+	-- P4 Stop 3: blocked because the body's guard still protects its plate (amount 0).
+	guarded: boolean?,
 }
 export type CombatFxStrike = {
 	kind: "strike",

@@ -100,6 +100,10 @@ local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	-- P4: what a fighting kind does and how each of its attacks resolves.
 	{ pattern = "^crowd%.kinds%.[^.]+%.brain$", check = oneOf({ "rush", "keepAway" }) },
 	{
+		pattern = "^crowd%.kinds%.[^.]+%.enrage%.brain$",
+		check = oneOf({ "rush", "keepAway" }),
+	},
+	{
 		pattern = "^crowd%.kinds%.[^.]+%.attacks%.%d+%.shape$",
 		check = oneOf({ "lunge", "arc", "lane", "line", "shot", "lob", "ring", "summon" }),
 	},

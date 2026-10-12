@@ -45,6 +45,11 @@ summon, the barrage, the enraged phase and its chains. Its fights run until it f
 who stands, one who only jumps the ring and sidesteps the charge, and one who reacts to every
 tell and attacks, with every weapon family, without abilities and with them.
 
+P4 Stop 3 adds the boss with a guard: `calm` attacks, `uses`, the `guarded` plate, the brain an
+enraged body takes (enrage.brain). Its players: one who stands, two who ignore the guard and
+chase the boss (one of them reacting to every tell), and the one who reacts, kills the guard,
+breaks the plate (with the ground slam when no hit of his weapon is heavy) and then duels.
+
 Usage:
   py tools/sim_range.py                 # all tables
   py tools/sim_range.py --check         # exit 1 if a shipped value leaves the design bands
@@ -162,8 +167,11 @@ INSTANT_SHARE_MAX = 2 / 3
 PING_CHECKS = (0.1, 0.15)
 # P4 Stop 2 bands (docs/INTERFACES.md "Stop 2 - the Colossus" -> "Balance targets";
 # docs/BALANCE.md "P4"). Solo, at THREAT_TIER health.
-# A player who reacts to every tell kills the boss within these seconds with any melee family.
-BOSS_KILL_SECONDS = (60.0, 90.0)
+# A player who reacts to every tell kills the boss within these seconds with any melee family
+# (per boss kind; Stop 3: docs/INTERFACES.md "Stop 3 - the Warlord and his guard").
+BOSS_KILL_SECONDS = {"colossus": (60.0, 90.0), "warlord": (75.0, 115.0)}
+# The stop a boss kind was built in, for the report's headings (no entry = Stop 2).
+BOSS_STOP = {"warlord": 3}
 # A player who stands still from the set's load is down within this.
 BOSS_STAND_DOWN_SECONDS = 10.0
 # After each attack, in each phase, the boss does nothing for at least this long.
@@ -174,6 +182,20 @@ BOSS_THUMB_MARGIN_SECONDS = 0.12
 # What the boss calls matters and does not decide: with the call, the default melee's kill takes
 # this much longer than without it.
 BOSS_CALL_SHARE = (0.03, 0.30)
+# P4 Stop 3 bands (the lead's retarget after the first round). The siege (from the set's load to
+# the plate's break) is this share of the kill for every melee family.
+SIEGE_SHARE = (0.35, 0.55)
+# The plate phase (the guard dead, the plate not yet broken) lasts at most this long, and the
+# boss gives at most this much ground in it, for the default melee family and for every family
+# that needs the ground slam; in every seed.
+PLATE_PHASE_SECONDS = 20.0
+PLATE_PHASE_STUDS = 60.0
+# Every ranged family but the bows (a known weapon question) wins inside this, without its ability.
+RANGED_KILL_SECONDS = 150.0
+# A player who ignores the guard and only chases the boss is watched this long; by then the
+# plate is whole, the guard lives, he has been down, and it has cost him this many health bars.
+CHASE_SECONDS = 90.0
+CHASE_COST_BARS = 3.0
 # The plate: every melee family breaks it within this many combos; once it is broken this
 # family kills the elite within these seconds; the reel lasts at least a reaction (the slot
 # switch) plus PLATE_FOLLOW_SECONDS of that kill, and at most PLATE_REEL_MAX_SECONDS, so the
@@ -257,10 +279,10 @@ ADDS_RANGE = 20.0  # with a ranged weapon he turns to what the boss called once 
 HOLD_STEP_SECONDS = 0.45  # holding his ground, he tries steps up to this long before a jump
 PLAN_DELAYS = tuple(k / 10 for k in range(1, 16))  # a jump he times: seconds he waits first
 MELEE_CAST_FRONT = 10.0  # a melee ability is measured on a boss this far ahead
+SLAM_SECONDS = 0.4  # a ground slam (the jump and the dive) keeps his weapon still this long
 BOSS_RANGED_SEEDS = (11, 23)  # the ranged rows are information, not bands: two seeds each
 BOSS_STAND_SECONDS = 30.0  # the still player is watched this long: his first down is what counts
 FACING_STEP = 2 * math.pi / 256  # a locked facing is snapped to the snapshot's yaw byte
-LARGE_RADIUS = 3.0  # CrowdService.LARGE_RADIUS: a body this wide is never pushed by a smaller one
 HP_STEPS = 255  # CrowdCodec.SnapHp: the health share as the snapshot carries it, rounded up
 
 
@@ -1329,6 +1351,14 @@ def effective_cooldown(cfg, family, spacing, respawn):
 #               threat.spawnGrace, never respawn and are removed when their caller dies;
 #   [barrage]   Stop 2: a lob with `count` throws that many circles at once, the first on the
 #               target and the rest scattered within `spread` of them; each is an ordinary lob.
+#   [uses]      Stop 3: an attack with `uses` lands at most that often in its body's life,
+#               counted at the impact; a `calm` attack is only chosen before the enraged phase
+#               (the mirror of `enraged`); an attack the body may no longer use stops counting
+#               toward the reach it walks to, and with none left it stands;
+#   [guarded]   Stop 3: the plate of a `guarded` kind takes nothing, heavy or not, from its
+#               spawn until its guard (what it summoned) has been called and is dead; only the
+#               plate is guarded. Enraged, a kind with enrage.brain moves by that brain. A
+#               plate break reels every body, whatever its knockbackMult.
 #
 # Where the contract leaves a choice, the sim follows the code as written (CrowdBrain,
 # ThreatField, VitalsService, MovementController.ApplyKnock) and says so at the line: the lunge
@@ -1340,12 +1370,14 @@ def effective_cooldown(cfg, family, spacing, respawn):
 # on. One thing is the sim's own: a freed place goes to the lowest id of its kind waiting in
 # reach (the server takes its records in list order). Stop 2 was written before the server's
 # report and then set by it: the choice is CrowdBrain.choose's; the phase is asked when an
-# attack ends and before a choice; a ring's `attack` state lasts threat.strikeSeconds and its
-# band, `width` wide round the front, is judged as ThreatField.stepRing judges it; a chained
+# attack ends and (since Stop 3) in every step outside a windup and an attack; a ring's
+# `attack` state lasts threat.strikeSeconds and its band, `width` wide round the front, is
+# judged as ThreatField.stepRing judges it; a chained
 # attack begins on the step the one before it ends, aimed from where a charge set the body
 # down; a call tops up; a barrage falls at even angles from one random turn and a player takes
-# one circle of it. Two things are the sim's own: what is called rises from angle 0 round the
-# caller, and a body refused its place is not offered its next choice in the same step.
+# one circle of it; what is called rises on the caller's facing, half a step off it for an even
+# count (Stop 3: before, the sim's summons rose from angle 0). One more thing is the sim's own:
+# a body refused its place is not offered its next choice in the same step.
 
 
 def armory_max_hp(armory, tier):
@@ -1605,17 +1637,15 @@ class Fighter(Enemy):
         self.attacks = kind["attacks"]
         self.attack = self.attacks[0]
         self.shape = self.attack["shape"]
-        self.brain = kind["brain"]
-        # [windup] Ruling 21: `reach` is measured on the flat. A body closes to the shortest
-        # reach among the attacks its phase allows.
-        self.reach = min((a["reach"] for a in self.attacks if not a.get("enraged")),
-                         default=min(a["reach"] for a in self.attacks))
+        self.kind = kind
         self.enrage = kind.get("enrage")  # [enrage]
         self.boss = bool(kind.get("boss"))
+        self.guarded = bool(kind.get("guarded"))  # [guarded]
         self.summoner = None  # [summon] the body that called this one
-        # [keepAway] CrowdBrain.Think: the band never holds it so far out that nothing reaches.
-        self.band_max = max(min(kind.get("bandMax") or self.reach, self.reach), 0)
-        self.band_min = min(max(kind.get("bandMin") or 0, 0), self.band_max)
+        self.slot = 0  # [summon] which of its caller's even places it rose on
+        self.enraged = False
+        self.landed = [0] * len(self.attacks)
+        self.pace()
         self.speed = max(kind["speed"], 0)
         self.mult = max(kind["knockbackMult"], 0)
         self.head_y = kind["height"] - kind["headRadius"]
@@ -1632,6 +1662,10 @@ class Fighter(Enemy):
         self.alive = True
         self.hp = self.max_hp
         self.plate = self.max_plate  # [plate] a respawned elite is plated again
+        self.enraged = False
+        self.called = False  # [guarded] has it called its guard yet?
+        self.landed = [0] * len(self.attacks)  # [uses] how often each attack has come to its impact
+        self.pace()
         self.state = "approach"
         self.started = self.until = 0.0
         self.face = (0.0, 1.0)
@@ -1648,7 +1682,6 @@ class Fighter(Enemy):
         self.ready = [0.0] * len(self.attacks)
         self.used = [-math.inf] * len(self.attacks)
         self.last = None
-        self.enraged = False
         self.enraged_at = None
         self.chain_left = 0
         self.place()
@@ -1657,6 +1690,27 @@ class Fighter(Enemy):
         self.body = (self.x, self.body_y, self.z)
         self.head = (self.x, self.head_y, self.z)
 
+    def usable(self, index):
+        """[choice] CrowdBrain.usable: may the body still use this attack at all? Not an
+        `enraged` one before the second phase, not a `calm` one in it, and not one that has
+        landed its `uses` ([uses] counted at the impact, in this body's life)."""
+        attack = self.attacks[index]
+        if attack.get("calm") if self.enraged else attack.get("enraged"):
+            return False
+        return attack.get("uses") is None or self.landed[index] < math.floor(attack["uses"])
+
+    def pace(self):
+        """The brain, the reach and the band of the body's phase. [enrage] An enraged body takes
+        enrage.brain when it has one. [windup] Ruling 21: `reach` is measured on the flat, and a
+        body closes to the shortest reach among the attacks it may still use (with none left it
+        stands). [keepAway] CrowdBrain.Think: the band never holds it so far out that nothing
+        reaches."""
+        kind = self.kind
+        self.brain = (self.enrage.get("brain") if self.enraged and self.enrage else None) or kind["brain"]
+        self.reach = min((a["reach"] for i, a in enumerate(self.attacks) if self.usable(i)), default=math.inf)
+        self.band_max = max(min(kind.get("bandMax") or self.reach, self.reach), 0)
+        self.band_min = min(max(kind.get("bandMin") or 0, 0), self.band_max)
+
     def choose(self, now, gap):
         """[choice] CrowdBrain.choose: among the attacks allowed in this phase, in reach and off
         cooldown, the one whose last impact is oldest (never used = oldest; the list's order
@@ -1664,7 +1718,7 @@ class Fighter(Enemy):
         None when nothing is."""
         best, best_at, again = None, math.inf, False
         for i, a in enumerate(self.attacks):
-            if (a.get("enraged") and not self.enraged) or gap > a["reach"] + REACH_EPSILON:
+            if not self.usable(i) or gap > a["reach"] + REACH_EPSILON:
                 continue
             if now < self.ready[i] - THREAT_EPS:
                 continue
@@ -1675,16 +1729,16 @@ class Fighter(Enemy):
         return self.last if best is None and again else best
 
     def rage(self, now):
-        """[enrage] CrowdBrain.enrage: asked when the body is about to choose an attack and when
-        an attack ends, never inside a windup or an attack; for good. The share is the one the
+        """[enrage] CrowdBrain.enrage: asked when an attack ends and in every step the body is
+        outside a windup and an attack, never inside one; for good. The share is the one the
         snapshot carries, in 1/255 steps rounded up. The body then closes to the shortest reach
-        of the attacks its phase allows."""
+        of the attacks its phase allows, by enrage.brain when the kind names one."""
         if self.enrage is None or self.enraged or self.plate > 0:
             return
         if math.ceil(self.hp / max(self.max_hp, 1) * HP_STEPS) / HP_STEPS <= self.enrage["at"]:
             self.enraged = True
             self.enraged_at = now
-            self.reach = min(a["reach"] for a in self.attacks)
+            self.pace()
 
     def begin(self, index, now):
         """[windup] The windup of attack `index` starts; [enrage] an enraged body's is scaled."""
@@ -1719,12 +1773,18 @@ class ThreatWorld(World):
         self.owed = None
         self.fell = None  # called with every body that dies
         self.cancelled = self.blocked = self.broken = 0
+        self.warded = 0  # hits a living guard kept off its boss's plate
+        self.broke_at = None  # when a boss's plate broke
 
     def damage(self, enemy, amount):
         if not enemy.alive or amount <= 0:
             return 0.0, False
         now = self.now
         if enemy.plate > 0:  # [plate]
+            if self.wards(enemy):
+                self.blocked += 1  # [guarded] its plate takes nothing, heavy or not
+                self.warded += 1
+                return 0.0, False
             if amount < self.heavy:
                 self.blocked += 1
                 return 0.0, False
@@ -1732,14 +1792,19 @@ class ThreatWorld(World):
             enemy.plate -= dealt
             self.react(enemy, amount, now)
             if enemy.plate <= 0:
-                # The break: it reels for max(its stagger, plateBreakSeconds), whatever its
-                # knockbackMult, and the windup it was in is cancelled.
                 self.broken += 1
-                enemy.stagger_until = max(enemy.stagger_until, now + self.reel)
-                if enemy.state == "windup" and now < enemy.until - THREAT_EPS:
-                    enemy.state = "recover"
-                    enemy.until = now + enemy.recover_seconds()
-                    self.cancelled += 1
+                if enemy.boss and self.broke_at is None:
+                    self.broke_at = now
+                if not (enemy.charge is not None and enemy.state == "attack"):
+                    # The break (CrowdService.Damage, Stop 3): it reels for max(its stagger,
+                    # plateBreakSeconds) whatever its knockbackMult; only a charge under way
+                    # runs on. A windup it was in is cancelled whatever its `interrupt` (one
+                    # whose impact time has come still lands) and recovers in full from here.
+                    enemy.stagger_until = max(enemy.stagger_until, now + self.reel)
+                    if enemy.state == "windup" and now < enemy.until - THREAT_EPS:
+                        enemy.state = "recover"
+                        enemy.until = now + enemy.recover_seconds()
+                        self.cancelled += 1
             return dealt, False
         dealt, killed = super().damage(enemy, amount)
         if killed:
@@ -1751,6 +1816,16 @@ class ThreatWorld(World):
             return dealt, killed
         self.react(enemy, amount, now)
         return dealt, killed
+
+    def guard_of(self, enemy):
+        """[guarded] Does any body this one called still live?"""
+        return any(e.alive and e.summoner is enemy for e in self.enemies)
+
+    def wards(self, enemy):
+        """[guarded] Is the plate of a `guarded` body kept? From the moment it spawns until its
+        guard has been called and is dead (the lead's ruling, Stop 3). Only the plate is
+        guarded, never health."""
+        return enemy.guarded and enemy.plate > 0 and (not enemy.called or self.guard_of(enemy))
 
     def react(self, enemy, amount, now):
         """Shove, launch, stagger and the interrupt of a hit the enemy survives."""
@@ -1816,6 +1891,12 @@ THREAT_POLICIES = {
               "chase": True, "hold": True, "heed": ("ring", "lane")},
     "slay": {"label": "reacts to every tell, attacks", "fight": True, "react": True, "boss": True, "chase": True,
              "hold": True},
+    # Stop 3. adds = "never": he strikes the boss and nothing else. (While a guard keeps a boss's
+    # plate, every other boss-fight player goes for the guard first.)
+    "storm": {"label": "ignores the guard, chases him", "fight": True, "boss": True, "chase": True,
+              "adds": "never"},
+    "stalk": {"label": "the same, and reacts to every tell", "fight": True, "react": True, "boss": True,
+              "chase": True, "hold": True, "adds": "never"},
 }
 # The rows of the threat table: each set with the players sent into it.
 THREAT_PLAN = (
@@ -1902,14 +1983,21 @@ class ThreatRun:
         self.shots_fired = 0
         self.busy_until = 0.0
         self.jump_at = None  # react: when the jump he is timing leaves the floor
-        # The boss fight: how near the boss he wants to stand, and his ability if he uses it.
+        # The boss fight: whom he closes on and how near, his ability if he uses it, and the
+        # ground slam, his way through a plate when no hit of his weapon is heavy.
         self.want = math.inf
+        self.quarry = self.boss
         self.cast = None
         self.cast_ready = 0.0
         self.casts = 0
+        self.slams = 0
+        self.slam_ready = 0.0
+        chain = self.variant.get("chain") or [1.0]
+        self.heavy = self.variant["damage"] * (max(chain) if self.melee else 1) >= crowd["heavyHit"]
+        self.guards_at = None  # when the last of a boss's guard fell
+        self.gave = 0.0  # studs the boss walked between then and its plate's break
         if self.boss is not None:
-            reach = self.variant["range"] + (self.variant["pad"] if self.melee else 0) + self.boss.r
-            self.want = reach - CHASE_MARGIN if self.melee else min(reach - CHASE_MARGIN, RANGED_STAND)
+            self.want = self.wanted(self.boss)
             if policy.get("abilities"):
                 # He casts it only when it beats what his own attacks would do in the time it
                 # locks him: a crowd ability (a whirlwind) is no use on a lone giant.
@@ -2018,6 +2106,8 @@ class ThreatRun:
                 self.evade(t, dt)
         if policy.get("react"):
             self.react(t, dt)
+        elif policy.get("chase") and self.dash is None:
+            self.close_in(dt)  # he answers nothing: he only walks at his quarry
 
     def walk_lap(self, dt):
         """Walks a lap of the arena at walk speed, clockwise, easing onto a radius that keeps
@@ -2039,12 +2129,28 @@ class ThreatRun:
         boss = self.boss if self.policy.get("boss") and self.boss is not None and self.boss.alive else None
         nearest = min(live, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
         if boss is not None:
-            # The boss fight: what the boss called comes first while it is on him, then the boss.
-            near = v["range"] + v["pad"] if self.melee else ADDS_RANGE
-            if nearest is boss or math.hypot(nearest.x - self.x, nearest.z - self.z) > near + nearest.r:
-                nearest = boss
-            if (self.cast is not None and t >= self.cast_ready - THREAT_EPS and t >= self.busy_until - THREAT_EPS
-                    and math.hypot(boss.x - self.x, boss.z - self.z) <= self.want + CHASE_MARGIN):
+            nearest = self.mark(live, boss, nearest)
+            # He closes on the boss, or on the one of its guard he is after.
+            self.quarry = nearest if nearest.summoner is boss and boss.guarded else boss
+            self.want = self.wanted(self.quarry)
+            if self.slam_for(nearest):
+                # The ground slam: every body within its radius takes it, and it is heavy.
+                move = self.move
+                if (t >= self.slam_ready - THREAT_EPS and t >= self.busy_until - THREAT_EPS
+                        and math.hypot(nearest.x - self.x, nearest.z - self.z) <= self.slam_reach(nearest)):
+                    # RangeService: a sphere round where his root stands when he lands.
+                    self.world.now = t
+                    self.world.blow = (self.x, self.z, move["slamKnockback"], move["slamLaunch"])
+                    explode(self.world, self.cfg, (self.x, ROOT_HEIGHT, self.z), move["slamRadius"],
+                            move["slamPad"], 0, move["slamDamage"])
+                    self.world.blow = None
+                    self.slams += 1
+                    self.slam_ready = t + move["slamCooldown"]
+                    self.busy_until = t + SLAM_SECONDS
+                    return
+            if (self.cast is not None and boss.plate <= 0
+                    and t >= self.cast_ready - THREAT_EPS and t >= self.busy_until - THREAT_EPS
+                    and math.hypot(boss.x - self.x, boss.z - self.z) <= self.wanted(boss) + CHASE_MARGIN):
                 dealt, busy, cooldown = self.cast  # one cast, at the boss
                 self.world.now = t
                 self.world.damage(boss, dealt)
@@ -2079,9 +2185,46 @@ class ThreatRun:
             self.last_swing = t
             self.next_swing = t + attack_interval(v)
 
+    def wanted(self, target):
+        """How near a target he wants to stand: inside his weapon's reach of it, or, when only
+        the slam breaks its plate, inside the slam's."""
+        v = self.variant
+        reach = v["range"] + (v["pad"] if self.melee else 0) + target.r
+        want = reach - CHASE_MARGIN if self.melee else min(reach - CHASE_MARGIN, RANGED_STAND)
+        if self.slam_for(target):
+            want = min(want, self.slam_reach(target) - CHASE_MARGIN)
+        return want
+
+    def slam_reach(self, target):
+        """How far off, on the flat, a ground slam still takes a body: the slam is a sphere
+        round his standing root, and it is measured to the body's centre."""
+        reach = self.move["slamRadius"] + self.move["slamPad"] + target.r
+        return math.sqrt(max(reach * reach - (target.body_y - ROOT_HEIGHT) ** 2, 0.0))
+
+    def slam_for(self, target):
+        """Is the ground slam his way through this target's plate? It is when the plate can be
+        hurt at all and no hit of his weapon is heavy."""
+        return target.plate > 0 and not self.heavy and not self.world.wards(target)
+
+    def mark(self, live, boss, nearest):
+        """The boss fight: whom he strikes. A player who ignores what the boss called strikes
+        the boss. While a guard keeps the boss's plate he goes for the nearest of the guard,
+        wherever it is. Otherwise what the boss called comes first while it is on him."""
+        if self.policy.get("adds") == "never":
+            return boss
+        if self.world.wards(boss):
+            guard = [e for e in live if e.summoner is boss]
+            if guard:
+                return min(guard, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
+        near = self.variant["range"] + self.variant["pad"] if self.melee else ADDS_RANGE
+        if nearest is boss or math.hypot(nearest.x - self.x, nearest.z - self.z) > near + nearest.r:
+            return boss
+        return nearest
+
     def close_in(self, dt):
-        """The boss fight: with nothing to answer, he walks to where his weapon reaches the boss."""
-        boss = self.boss
+        """The boss fight: with nothing to answer, he walks to where his weapon reaches the boss
+        (or the one of its guard he is after)."""
+        boss = self.quarry
         if boss is None or not boss.alive:
             return
         dx, dz = boss.x - self.x, boss.z - self.z
@@ -2222,7 +2365,16 @@ class ThreatRun:
             if threat[0] == "shape":
                 _kind, _key, impact, attack, ex, ez, face, aim, lunge = threat
                 decided = impact + lag
-                if decided < t0:
+                if self.policy.get("hold"):
+                    # The boss fight's player knows the hit is decided on the first frame at or
+                    # after `decided`, after he has moved in it: a blow due inside this very
+                    # frame still counts, where this frame's move puts him. (The Stop 1 player's
+                    # look is kept, and his tables with it.)
+                    frame = math.ceil(decided / FRAME - 1e-9) * FRAME
+                    if frame < t0 - THREAT_EPS:
+                        continue
+                    decided = max(decided, t0)
+                elif decided < t0:
                     continue
                 x, z, feet = self.plan_state(plan, t0, decided)
                 height = None if attack["shape"] == "line" else attack.get("height")
@@ -2330,7 +2482,7 @@ class ThreatRun:
             # Holding his ground (the boss fight): first the walk back into his weapon's reach
             # when he is out of it, then short steps, then a jump, now or timed, before any long
             # walk or a dash.
-            boss = self.boss
+            boss = self.quarry
             if self.policy.get("chase") and boss is not None and boss.alive:
                 dx, dz = boss.x - self.x, boss.z - self.z
                 gap = math.hypot(dx, dz)
@@ -2634,25 +2786,39 @@ class ThreatRun:
         kind = self.cfg["crowd"]["kinds"].get(name)
         if kind is None or not kind.get("brain") or not kind.get("attacks"):
             return
+        e.called = True  # [guarded] its guard has been called
         room = math.floor(self.cfg["crowd"]["maxAlive"]) - sum(1 for f in self.fighters if f.alive)
-        # A call tops up: only as many as bring this caller's living summons to `count`.
-        living = sum(1 for f in self.fighters if f.alive and f.summoner is e)
-        count = min(max(math.floor(attack.get("count") or 0) - living, 0), max(room, 0))
+        # CrowdService.summon: the attack's `count` even places lie on a circle round the
+        # caller, turned so that none lies straight behind it: the first on its facing for an
+        # odd count, half a step off it for an even one. A call tops up: it raises a body on
+        # each place none of its living summons rose on, as many as are missing (and as
+        # crowd.maxAlive leaves room for, spread evenly through the free places).
+        count = max(math.floor(attack.get("count") or 0), 0)
+        taken = {f.slot for f in self.fighters if f.alive and f.summoner is e}
+        free = [place for place in range(count) if place not in taken]
+        raise_ = min(len(free), max(room, 0))
         radius = attack.get("radius") or 0
         limit_x, limit_z = max(self.half[0] - kind["radius"], 0), max(self.half[1] - kind["radius"], 0)
-        for n in range(count):
-            turn = 2 * math.pi * n / count
+        yaw = math.atan2(-e.face[0], -e.face[1])  # as yawToward has it: 0 looks down -Z
+        turned = 0.5 if count % 2 == 0 else 0.0
+        for n in range(raise_):
+            place = free[n * len(free) // raise_]
+            angle = yaw + (place + turned) / count * 2 * math.pi
             body = Fighter(len(self.fighters) + 1, name, kind,
-                           clamp(e.x + math.cos(turn) * radius, -limit_x, limit_x),
-                           clamp(e.z + math.sin(turn) * radius, -limit_z, limit_z), math.inf)
+                           clamp(e.x - math.sin(angle) * radius, -limit_x, limit_x),
+                           clamp(e.z - math.cos(angle) * radius, -limit_z, limit_z), math.inf)
             body.spawned_at = now
             body.summoner = e
+            body.slot = place
             self.fighters.append(body)
             self.summoned += 1
 
     def fall(self, enemy):
         """[summon] What a boss called is removed with it, and so is everything it had in the
         air; the run notes when a boss fell."""
+        boss = enemy.summoner
+        if boss is not None and boss.boss and self.guards_at is None and not self.world.guard_of(boss):
+            self.guards_at = self.world.now  # the last of a boss's guard has fallen
         if enemy.boss:
             if self.kill_at is None:
                 self.kill_at = self.world.now
@@ -2791,6 +2957,9 @@ class ThreatRun:
                 landed.append((e, e.until))
                 e.state = "attack"
                 e.used[e.index] = e.until  # [choice] its turn and its cooldown run from the impact
+                e.landed[e.index] += 1
+                if attack.get("uses") is not None:
+                    e.pace()  # [uses] a spent attack no longer counts toward the reach it walks to
                 e.ready[e.index] = e.until + (attack.get("cooldown") or 0)
                 if shape == "lane" and (attack.get("speed") or 0) > 0:
                     e.until += (attack.get("range") or 0) / attack["speed"]
@@ -2828,6 +2997,10 @@ class ThreatRun:
                     held[e.name] -= 1  # [cap] the place is free from here: `recover` holds none
             if e.state == "recover" and now >= e.until - THREAT_EPS:
                 e.state = "approach"
+            if e.state in ("approach", "recover"):
+                # [enrage] Neither winding up nor attacking: the moment the second phase may
+                # begin, whether or not the body is free and has a target.
+                e.rage(now)
             grounded = now >= e.air_until
             vx = vz = 0.0
             state = e.state
@@ -2841,7 +3014,6 @@ class ThreatRun:
                 # shooter keeps its distance through it.
                 if gap > EPSILON:
                     e.face = (dx / gap, dz / gap)
-                e.rage(now)  # [enrage] asked whenever it is about to choose
                 ready = state == "approach" and now >= e.spawned_at + threat["spawnGrace"] - THREAT_EPS  # [spawn]
                 admitted = False
                 choice = e.choose(now, gap) if ready else None  # [windup] [choice]
@@ -2858,6 +3030,8 @@ class ThreatRun:
                     e.begin(choice, now)
                     if e.shape in ("lunge", "arc", "lane"):
                         e.face = snap_face(e.face)  # locked here, as the snapshot carries it
+                elif e.reach == math.inf:
+                    pass  # nothing left it may use: it stands
                 elif e.brain == "rush":
                     if gap > e.reach:  # [rush] CrowdService.seek
                         travel = min(e.speed, (gap - e.reach) / dt)
@@ -2886,7 +3060,11 @@ class ThreatRun:
                 e.kx, e.kz = (e.kx * slowed / speed, e.kz * slowed / speed) if slowed > 0 else (0.0, 0.0)
             e.x += (vx + e.kx) * dt
             e.z += (vz + e.kz) * dt
+            if e.boss and self.guards_at is not None and self.world.broke_at is None:
+                self.gave += math.hypot(vx, vz) * dt  # the ground it gives in the plate phase
         live = [e for e in fighters if e.alive]
+        # crowd.largeRadius: a body this wide is never pushed by a smaller one.
+        large = self.cfg["crowd"]["largeRadius"]
         for index, a in enumerate(live):  # [rush] CrowdService.separate, each pair once
             ax, az, ar = a.x, a.z, a.r
             for b in live[index + 1:]:
@@ -2909,12 +3087,12 @@ class ThreatRun:
                 overlap = reach - gap
                 # [planted] A body in windup or attack stays; the other takes the whole overlap.
                 held_a, held_b = a.state in ("windup", "attack"), b.state in ("windup", "attack")
-                if (ar >= LARGE_RADIUS) != (b.r >= LARGE_RADIUS):
+                if (ar >= large) != (b.r >= large):
                     # CrowdService.shoulder: a large body is never pushed by a smaller one, and
                     # a small one planted in its windup overlaps the giant until it has struck.
-                    if held_b if ar >= LARGE_RADIUS else held_a:
+                    if held_b if ar >= large else held_a:
                         continue
-                    share_a = 0.0 if ar >= LARGE_RADIUS else 1.0
+                    share_a = 0.0 if ar >= large else 1.0
                 elif held_a and held_b:
                     continue
                 else:
@@ -2978,7 +3156,11 @@ class ThreatRun:
                 "nearest": self.nearest, "fullAt": self.full_at,
                 "killAt": self.kill_at, "enragedAt": self.boss.enraged_at if self.boss is not None else None,
                 "bossLeft": self.boss.hp / self.boss.max_hp if self.boss is not None else None,
-                "summoned": self.summoned, "casts": self.casts,
+                "summoned": self.summoned, "casts": self.casts, "slams": self.slams,
+                "guardsAt": self.guards_at, "brokeAt": self.world.broke_at, "warded": self.world.warded,
+                "gave": self.gave,
+                "plateLeft": (self.boss.plate / self.boss.max_plate
+                              if self.boss is not None and self.boss.max_plate > 0 else None),
                 "wokeAt": self.woke_at, "hitsAwake": len(awake),
                 "solidAwake": sum(1 for _when, shape in awake if shape != "lunge"),
                 "lastHitAwake": awake[-1][0] - self.woke_at if awake else None,
@@ -3144,6 +3326,13 @@ def places_of(kind):
     return math.floor(kind["perPlayer"]) if kind.get("perPlayer") is not None else math.inf
 
 
+def turn_cost(a):
+    """What one turn of a kind can cost in one instant: `places` hits, or one when its attack
+    knocks ([together] ruling 18: a hit that knocks voids every other decided with it)."""
+    knocks = a["knockback"] > 0 or a["launch"] > 0
+    return (1 if knocks and a["places"] > 1 else a["places"]) * a["damage"]
+
+
 def threat_facts(cfg, env):
     """The sums that need no run: every fighting kind's attack against the player's speed, dash
     and jump, the attacker cap, the dash's uptime, the knock, the regen, the spawn rules."""
@@ -3271,6 +3460,27 @@ def range_crowd(cfg):
     return group["spacing"], group["respawnSeconds"]
 
 
+def plate_hits(cfg, family, key, plate):
+    """How a weapon variant gets through a plate of `plate` when it never misses: (hits, heavy
+    hits, seconds from the first hit); None when no hit of its is heavy. family None = the
+    ground slam, one every slamCooldown."""
+    heavy = cfg["crowd"]["heavyHit"]
+    move = cfg["movement"]
+    hits = (((n * move["slamCooldown"], move["slamDamage"]) for n in range(10 ** 6)) if family is None
+            else plate_sequence(cfg, family, key))
+    count = landed = 0
+    for when, amount in hits:
+        count += 1
+        if amount >= heavy:
+            landed += 1
+            plate -= amount
+            if plate <= 0:
+                return count, landed, when
+        if count >= 3 and landed == 0:
+            return None  # a whole combo with no heavy hit: it never breaks a plate
+    return None
+
+
 def boss_sets(cfg):
     """The dummy sets a boss fights in: (set, the boss's kind name, its kind)."""
     found = []
@@ -3292,7 +3502,12 @@ def boss_facts(cfg, env, name, kind):
             walk back into his reach of where the charge ends, and that comes off the window;
     lob     the tell is the flight; the answer is the walk out of a circle; the boss is idle
             from the throw, while the circles are still in the air;
-    summon  no danger: its windup counts as window too."""
+    arc     the tell is the windup; the answer is the walk out of the sector from the worst
+            place in it (a jump is quicker); a melee player whose weapon does not reach from
+            outside it walks back in, and that comes off the window;
+    summon  no danger: its windup counts as window too.
+    A `guarded` boss also gets: the kind it calls (the guard) with its tell, and each family's
+    way through the guard's plate and its own."""
     crowd = cfg["crowd"]
     threat = crowd["threat"]
     vitals = cfg["player"]
@@ -3305,7 +3520,9 @@ def boss_facts(cfg, env, name, kind):
     friction = max(vitals["knockFriction"], 0)
     enrage = kind.get("enrage")
     attacks = kind.get("attacks") or []
-    standoff = min(a["reach"] for a in attacks)
+    # The nearest it closes to in each phase: the shortest reach among the phase's attacks.
+    reaches = {"calm": min((a["reach"] for a in attacks if not a.get("enraged")), default=math.inf),
+               "enraged": min((a["reach"] for a in attacks if not a.get("calm")), default=math.inf)}
     melee = variant_of(cfg, cfg["loadout"]["melee"])
     want = melee["range"] + melee["pad"] + kind["radius"] - CHASE_MARGIN
     rows = []
@@ -3316,6 +3533,9 @@ def boss_facts(cfg, env, name, kind):
         for phase in ("calm", "enraged"):
             if (phase == "calm" and attack.get("enraged")) or (phase == "enraged" and enrage is None):
                 continue
+            if phase == "enraged" and attack.get("calm"):
+                continue  # [choice] a calm attack ends with the first phase
+            standoff = reaches[phase]
             windup = attack["windup"] * (enrage["windupScale"] if phase == "enraged" else 1)
             recover = attack["recover"] * (enrage["recoverScale"] if phase == "enraged" else 1)
             row = {"shape": shape, "phase": phase, "windup": windup, "recover": recover,
@@ -3361,29 +3581,66 @@ def boss_facts(cfg, env, name, kind):
                            # Every circle lies within spread + radius of him: does a straight
                            # walk begun on a reaction leave them all before they land?
                            walkAll=(seconds - see) * walk, reachAll=spread + radius)
+            elif shape == "arc":
+                length = attack.get("range") or 0
+                out = worst_exit(attack)
+                clear = jump_clear(move["jumpHeight"], attack.get("height") or 0)
+                # A melee player who left it stands at its edge: has his weapon the reach from there?
+                regain = max(length - want, 0) / walk
+                row.update(given=windup, need=see + out / walk, needThumb=thumb + out / walk,
+                           answer=f"{out:.1f} studs out of it", window=strike + recover - regain, regain=regain,
+                           jump=clear, range=length, through=longest_way_out(attack),
+                           degrees=min(attack.get("arcDegrees") or 360, 360))
             elif shape == "summon":
                 row.update(window=windup + strike + recover, answer="none needed",
-                           count=max(math.floor(attack.get("count") or 0), 0), summon=attack.get("summon"))
+                           count=max(math.floor(attack.get("count") or 0), 0), summon=attack.get("summon"),
+                           uses=attack.get("uses"))
             else:
                 raise ValueError(f"no boss mirror for the attack shape {shape}")
             row["strike"] = strike
             rows.append(row)
-    # [together] The most one instant can cost: one turn of each kind the boss calls (their
-    # hits do not knock), plus the hardest hit of its own that knocks, plus any of its own that
-    # does not (ruling 18 lets only one knock land).
+    # [together] The most one instant can cost: one turn of each kind the boss calls whose hits
+    # do not knock, plus the hardest hit that knocks, its own or theirs, plus any of its own
+    # that does not (ruling 18 lets only one knock land).
     soft = 0.0
+    hard = max((a["damage"] for a in attacks
+                if (a.get("knockback") or 0) > 0 or (a.get("launch") or 0) > 0), default=0.0)
+    guard = []
     for attack in attacks:
         if attack["shape"] == "summon":
             called = crowd["kinds"].get(attack.get("summon")) or {}
             for theirs in (called.get("attacks") or [])[:1]:
                 if (theirs.get("knockback") or 0) <= 0 and (theirs.get("launch") or 0) <= 0:
                     soft += places_of(called) * theirs["damage"]
+                else:
+                    hard = max(hard, theirs["damage"])
+                if kind.get("guarded") and theirs["shape"] in ("lunge", "arc"):
+                    out = worst_exit(theirs)
+                    guard.append({"kind": attack.get("summon"), "count": max(math.floor(attack.get("count") or 0), 0),
+                                  "hp": called["hp"], "plate": max(called.get("plate") or 0, 0),
+                                  "speed": called["speed"], "places": places_of(called), "shape": theirs["shape"],
+                                  "damage": theirs["damage"], "share": theirs["damage"] / hp,
+                                  "windup": theirs["windup"], "recover": theirs["recover"], "out": out,
+                                  "need": see + out / walk, "needThumb": thumb + out / walk})
         elif (attack.get("knockback") or 0) <= 0 and (attack.get("launch") or 0) <= 0:
             soft += attack["damage"]
-    hard = max((a["damage"] for a in attacks
-                if (a.get("knockback") or 0) > 0 or (a.get("launch") or 0) > 0), default=0.0)
+    plate = max(kind.get("plate") or 0, 0)
+    ways = []
+    if kind.get("guarded"):
+        guard_plate = max((g["plate"] for g in guard), default=0)
+        slam = {"guardHits": plate_hits(cfg, None, None, guard_plate), "ownHits": plate_hits(cfg, None, None, plate)}
+        for family, fam in cfg["weapons"].items():
+            v = fam["variants"][fam["default"]]
+            heaviest = v["damage"] * (max(v.get("chain") or [1.0]) if v["kind"] == "melee" else 1)
+            mine = {"guardHits": plate_hits(cfg, family, fam["default"], guard_plate),
+                    "ownHits": plate_hits(cfg, family, fam["default"], plate)}
+            ways.append({"family": family, "name": fam["name"], "slot": fam["slot"], "heaviest": heaviest,
+                         "heavy": heaviest >= crowd["heavyHit"], **(mine if mine["ownHits"] is not None else slam)})
     return {"name": kind.get("name") or name, "kind": name, "hp": kind["hp"], "speed": kind["speed"],
-            "standoff": standoff, "want": want, "attacks": rows, "instant": soft + hard, "enrage": enrage,
+            "standoff": reaches["calm"], "duel": reaches["enraged"], "want": want, "attacks": rows,
+            "instant": soft + hard, "enrage": enrage, "plate": plate, "guarded": bool(kind.get("guarded")),
+            "brain": kind["brain"], "band": (kind.get("bandMin") or 0, kind.get("bandMax") or 0),
+            "guard": guard, "ways": ways, "stop": BOSS_STOP.get(name, 2),
             "melee": cfg["weapons"][cfg["loadout"]["melee"]]["name"]}
 
 
@@ -3399,6 +3656,11 @@ def boss_row(cfg, env, set_name, key, weapon=None, abilities=False, seeds=THREAT
     kills = [r["killAt"] for r in runs]
     downs = [r["firstDown"] for r in runs]
     family = cfg["weapons"][weapon or cfg["loadout"]["melee"]]
+
+    def whole(field):
+        """The mean over the seeds, or None unless it happened in every one."""
+        return mean_of([r[field] for r in runs]) if all(r[field] is not None for r in runs) else None
+
     return {"policy": key, "label": label or policy["label"], "weapon": family["name"], "slot": family["slot"],
             "abilities": abilities, "seeds": len(seeds),
             "kill": mean_of(kills) if all(k is not None for k in kills) else None,
@@ -3412,7 +3674,19 @@ def boss_row(cfg, env, set_name, key, weapon=None, abilities=False, seeds=THREAT
             "solid": max(r["solidAwake"] for r in runs),
             "lunges": max(r["hitsAwake"] - r["solidAwake"] for r in runs),
             "burst": max(r["burst"] for r in runs), "summoned": mean_of([r["summoned"] for r in runs]),
-            "kills": mean_of([r["kills"] for r in runs]), "casts": mean_of([r["casts"] for r in runs])}
+            "kills": mean_of([r["kills"] for r in runs]), "casts": mean_of([r["casts"] for r in runs]),
+            # Stop 3, the siege: when the last of the guard fell and when the plate broke (None
+            # unless it did in every seed), the plate left in the best-kept seed, ground slams.
+            "guardsAt": whole("guardsAt"), "brokeAt": whole("brokeAt"),
+            "plateLeft": max((r["plateLeft"] or 0) for r in runs), "slams": mean_of([r["slams"] for r in runs]),
+            "warded": mean_of([r["warded"] for r in runs]), "watched": seconds or BOSS_SECONDS,
+            # The plate phase: its longest over the seeds, and the most ground the boss gave in it.
+            "phase": (max(r["brokeAt"] - r["guardsAt"] for r in runs)
+                      if all(r["brokeAt"] is not None and r["guardsAt"] is not None for r in runs) else None),
+            "gave": max(r["gave"] for r in runs),
+            # A bow: a ranged family whose shot is an arrow that falls (`gravity`).
+            "bow": (variant_of(cfg, weapon or cfg["loadout"]["melee"]).get("gravity") or 0) > 0,
+            "cost": min(r["damage"] for r in runs)}  # the health he lost in the seed that cost him least
 
 
 def boss_rows(cfg, env):
@@ -3423,8 +3697,14 @@ def boss_rows(cfg, env):
     found = []
     for set_name, name, kind in boss_sets(cfg):
         facts = boss_facts(cfg, env, name, kind)
-        rows = [boss_row(cfg, env, set_name, "stand", seconds=BOSS_STAND_SECONDS),
-                boss_row(cfg, env, set_name, "siege")]
+        rows = [boss_row(cfg, env, set_name, "stand", seconds=BOSS_STAND_SECONDS)]
+        if kind.get("guarded"):
+            # Stop 3: instead of the player who only answers the ring and the charge, the two
+            # who ignore the guard and chase the boss.
+            rows += [boss_row(cfg, env, set_name, "storm", seconds=CHASE_SECONDS),
+                     boss_row(cfg, env, set_name, "stalk", seconds=CHASE_SECONDS)]
+        else:
+            rows.append(boss_row(cfg, env, set_name, "siege"))
         for slot, seeds in (("melee", THREAT_SEEDS), ("ranged", BOSS_RANGED_SEEDS)):
             for family, weapon in cfg["weapons"].items():
                 if weapon["slot"] == slot:
@@ -3434,7 +3714,7 @@ def boss_rows(cfg, env):
         lone = alone["crowd"]["kinds"][name]
         lone["attacks"] = [a for a in lone["attacks"] if a["shape"] != "summon"]
         quiet = None
-        if len(lone["attacks"]) < len(kind["attacks"]) and lone["attacks"]:
+        if len(lone["attacks"]) < len(kind["attacks"]) and lone["attacks"] and not kind.get("guarded"):
             quiet = boss_row(alone, env, set_name, "slay", label="the same, and the boss calls nothing")
         found.append({"set": set_name, "facts": facts, "rows": rows, "quiet": quiet})
     return found
@@ -3678,7 +3958,7 @@ def print_threat(cfg, env, facts, rows, roles, plates, ab_rows=()):
             count = facts["counts"].get(a["kind"], 0)
             free = count / a["cycle"]
             capped = min(free, a["places"] / a["place"])
-            turn = a["places"] * a["damage"]
+            turn = turn_cost(a)
             print(f"{a['kind']:9} {a['places']:6} {a['place']:6.2f} {a['cycle']:6.2f} "
                   f"{turn:5.0f} = {turn / hp:4.0%} {count:9d} {capped:16.2f} {free:14.2f}")
         for name, most in facts["instants"].items():
@@ -3783,9 +4063,11 @@ def check_threat(cfg, env, facts, rows, roles, plates, expect):
            f"cap: a full volley {facts['volley']:.0f} = {facts['volley'] / hp:.0%} of health <= {HIT_SHARE_MAX:.0%}")
     for a in facts["attacks"] + facts["roles"]:
         if a["shape"] != "lunge":  # the lunge's turn is the volley above
-            turn = a["places"] * a["damage"]
+            turn = turn_cost(a)
             expect(turn / hp <= HIT_SHARE_MAX,
-                   f"turns: {a['places']} {a['kind']} at once = {turn:.0f} = {turn / hp:.0%} of health <= "
+                   f"turns: {a['places']} {a['kind']} at once"
+                   + (", of which the first knock voids the rest," if turn < a["places"] * a["damage"] else "")
+                   + f" = {turn:.0f} = {turn / hp:.0%} of health <= "
                    f"{HIT_SHARE_MAX:.0%} (one kind's turn costs no more than one hit may)")
     for name, most in facts["instants"].items():
         expect(most / hp <= INSTANT_SHARE_MAX,
@@ -3996,11 +4278,19 @@ def print_boss(cfg, env, bosses):
         f = boss["facts"]
         enrage = f["enrage"]
         print()
-        print(f"BOSS {f['name']} (P4 Stop 2; set `{boss['set']}`; {f['hp']:.0f} HP; it closes to "
-              f"{f['standoff']:.0f} studs at {f['speed']:.0f}; solo, tier-{THREAT_TIER} health {hp:.0f})")
-        if enrage is not None:
-            print(f"  enraged from {enrage['at']:.0%} health: windups x {enrage['windupScale']}, recovers x "
-                  f"{enrage['recoverScale']}, up to {enrage['chain']:.0f} attacks with no recover between")
+        if f["guarded"]:
+            print(f"BOSS {f['name']} (P4 Stop {f['stop']}; set `{boss['set']}`; plate {f['plate']:.0f} over "
+                  f"{f['hp']:.0f} HP, guarded; calm it keeps {f['band'][0]:.0f} to {f['band'][1]:.0f} studs off at "
+                  f"{f['speed']:.0f}, enraged it closes to {f['duel']:.0f}; solo, tier-{THREAT_TIER} health {hp:.0f})")
+            print(f"  enraged when its plate breaks (enrage.at {enrage['at']:.0%} of health): windups x "
+                  f"{enrage['windupScale']}, recovers x {enrage['recoverScale']}, up to {enrage['chain']:.0f} attacks "
+                  f"with no recover between; it then moves by `{enrage.get('brain') or f['brain']}`")
+        else:
+            print(f"BOSS {f['name']} (P4 Stop {f['stop']}; set `{boss['set']}`; {f['hp']:.0f} HP; it closes to "
+                  f"{f['standoff']:.0f} studs at {f['speed']:.0f}; solo, tier-{THREAT_TIER} health {hp:.0f})")
+            if enrage is not None:
+                print(f"  enraged from {enrage['at']:.0%} health: windups x {enrage['windupScale']}, recovers x "
+                      f"{enrage['recoverScale']}, up to {enrage['chain']:.0f} attacks with no recover between")
         print(f"{'attack':7} {'phase':8} {'dmg':>4} {'share':>5} {'windup':>6} {'recover':>7} {'cooldown':>8} "
               f"{'tell':>5} {'needs':>6} {'thumb':>6} {'window':>6}  the answer")
         for a in f["attacks"]:
@@ -4029,6 +4319,15 @@ def print_boss(cfg, env, bosses):
                 print(f"  lob: {a['count']} circles within {a['spread']:.0f} studs of the target; a straight walk "
                       f"begun on a reaction covers {a['walkAll']:.0f} studs before they land, and every circle lies "
                       f"within {a['reachAll']:.0f}; knock {a['throw']:.1f} studs in {a['slide']:.2f} s")
+            elif a["shape"] == "arc":
+                jump = (f"a jump is clear of it {a['jump'][0]:.2f}-{a['jump'][1]:.2f} s after take-off"
+                        if a["jump"] is not None else "a jump does not clear it")
+                print(f"  arc: {a['degrees']:.0f} degrees, {a['range']:.0f} studs from its centre, started within "
+                      f"{a['reach']:.0f}; {jump}; a melee player is back in reach {a['regain']:.2f} s into its "
+                      f"recover; knock {a['throw']:.1f} studs in {a['slide']:.2f} s")
+            elif a["shape"] == "summon" and a["uses"] is not None:
+                print(f"  summon: {a['count']} {a['summon']} rise round it, {a['uses']:.0f} time(s) in its life; they "
+                      "never respawn and fall with it")
             elif a["shape"] == "summon":
                 print(f"  summon: {a['count']} {a['summon']} rise round it; they never respawn and fall with it")
         print(f"  the most one instant can cost by the rules: {f['instant']:.0f} ({f['instant'] / hp:.0%} of health)")
@@ -4046,10 +4345,47 @@ def print_boss(cfg, env, bosses):
         print("  kill and span = seconds to the kill (mean, and fastest to slowest); hits = hits of the boss's own")
         print("  and lunges = lunges of what it called, both in the worst seed; abil = the family's ability is cast")
         print("  at the boss whenever it is ready (its base cooldown, no refunds).")
+        if f["guarded"]:
+            print_siege(cfg, env, boss)
+
+
+def print_siege(cfg, env, boss):
+    """Stop 3: the guard, each family's way through the plates, and the siege's share of each fight."""
+    f = boss["facts"]
+    crowd = cfg["crowd"]
+    move = cfg["movement"]
+    print("  (here `hits` counts the guard's arcs too, and an ability is cast only once the plate is broken.)")
+    for g in f["guard"]:
+        print(f"  THE GUARD: {g['count']} {g['kind']} (plate {g['plate']:.0f} over {g['hp']:.0f} HP, speed "
+              f"{g['speed']:.0f}, {g['places']} at a time): {g['shape']} {g['damage']:.0f} ({g['share']:.0%}), windup "
+              f"{g['windup']:.2f} s against {g['need']:.2f} s needed ({g['needThumb']:.2f} s for a thumb) to walk "
+              f"{g['out']:.1f} studs out; recover {g['recover']:.1f} s")
+    print(f"  THE WAY THROUGH THE PLATES (default variants, never missing; a hit of {crowd['heavyHit']:.0f} or more "
+          f"is heavy; the ground slam is {move['slamDamage']:.0f} every {move['slamCooldown']:.1f} s)")
+    print(f"  {'family':16} {'heaviest':>8} {'by':>10} {'guard plate':>16} {'its plate':>18}")
+    for w in f["ways"]:
+        by = "its hits" if w["heavy"] else "the slam"
+        guard = f"{w['guardHits'][1]} heavy, {w['guardHits'][2]:.1f} s" if w["guardHits"] is not None else "-"
+        own = f"{w['ownHits'][1]} heavy, {w['ownHits'][2]:.1f} s" if w["ownHits"] is not None else "-"
+        print(f"  {w['name']:16} {w['heaviest']:8.1f} {by:>10} {guard:>16} {own:>18}")
+    print(f"  THE SIEGE (the same fights as above; guard = the last of the guard falls, plate = its plate breaks, "
+          "seconds from the set's load)")
+    print(f"  {'player':38} {'weapon':16} {'abil':>4} {'guard':>6} {'plate':>6} {'kill':>6} {'siege':>6} {'duel':>6} "
+          f"{'phase':>6} {'gave':>5} {'slams':>5} {'warded':>6} {'plate left':>10}")
+    for r in boss["rows"]:
+        siege = f"{r['brokeAt'] / r['kill']:6.0%}" if r["kill"] and r["brokeAt"] else "     -"
+        duel = fmt(r["kill"] - r["brokeAt"], 6, 1) if r["kill"] and r["brokeAt"] else "     -"
+        print(f"  {r['label']:38} {r['weapon']:16} {'yes' if r['abilities'] else '':>4} {fmt(r['guardsAt'], 6, 1)} "
+              f"{fmt(r['brokeAt'], 6, 1)} {fmt(r['kill'], 6, 1)} {siege} {duel} {fmt(r['phase'], 6, 1)} "
+              f"{fmt(r['gave'], 5)} {fmt(r['slams'], 5)} {fmt(r['warded'], 6)} {r['plateLeft']:10.0%}")
+    print("  siege = the share of the kill that passed before the plate broke; duel = seconds from there to the")
+    print("  kill; phase = the plate phase (guard dead to plate broken) and gave = the studs the boss walked in")
+    print("  it, both in the worst seed; slams = ground slams (only by a family none of whose hits is heavy);")
+    print("  warded = hits the living guard kept off the plate; plate left = in the seed that kept most of it.")
 
 
 def check_boss(cfg, env, bosses, expect):
-    """The Stop 2 bands."""
+    """The Stop 2 bands, and for a `guarded` boss the Stop 3 ones."""
     hp = env["hp"]
     vitals = cfg["player"]
     move = cfg["movement"]
@@ -4057,7 +4393,7 @@ def check_boss(cfg, env, bosses, expect):
         f = boss["facts"]
         name = f["name"]
         print()
-        print(f"CHECK boss {name} (targets: docs/INTERFACES.md \"Stop 2\" and docs/BALANCE.md P4; solo, "
+        print(f"CHECK boss {name} (targets: docs/INTERFACES.md \"Stop {f['stop']}\" and docs/BALANCE.md P4; solo, "
               f"tier-{THREAT_TIER} health {hp:.0f})")
         for a in f["attacks"]:
             what = f"{name} {a['shape']}, {a['phase']}"
@@ -4094,6 +4430,10 @@ def check_boss(cfg, env, bosses, expect):
                 expect(a["jump"] is not None and move["dashIframes"] >= a["passes"] + TELL_MARGIN_SECONDS,
                        f"{name} lane: a jump clears its height, and a dash's {move['dashIframes']:.2f} s of i-frames "
                        f"outlast the {a['passes']:.2f} s it takes to pass")
+            elif a["shape"] == "arc":
+                expect(a["jump"] is not None and a["range"] > a["reach"],
+                       f"{name} arc: a jump clears its height, and it reaches {a['range']:.0f}, past the "
+                       f"{a['reach']:.0f} it starts from (a still player is hit)")
         for a in f["attacks"]:
             if a["shape"] == "ring":
                 expect(a["walkOut"] >= a["reach"],
@@ -4110,7 +4450,9 @@ def check_boss(cfg, env, bosses, expect):
         expect(f["instant"] / hp <= INSTANT_SHARE_MAX,
                f"{name}: the most one instant can cost is {f['instant']:.0f} = {f['instant'] / hp:.0%} of health <= "
                f"{INSTANT_SHARE_MAX:.0%}")
-        lo, hi = BOSS_KILL_SECONDS
+        lo, hi = BOSS_KILL_SECONDS[f["kind"]]
+        if f["guarded"]:
+            check_siege(cfg, env, boss, expect)
         for r in boss["rows"]:
             who = f"{name}, {r['label']}" + (f", {r['weapon']}" if r["policy"] == "slay" else "")
             who += " with its ability" if r["abilities"] else ""
@@ -4126,6 +4468,17 @@ def check_boss(cfg, env, bosses, expect):
                 expect(r["killSpan"] is not None and r["downs"] == 0,
                        f"{who}: he survives the fight ({r['downs']} downs; the boss falls at "
                        f"{fmt(r['kill'], 0, 1).strip()} s)")
+            elif r["policy"] == "storm":
+                expect(r["plateLeft"] >= 1 and r["guardsAt"] is None and r["downSpan"] is not None
+                       and r["cost"] >= CHASE_COST_BARS * hp,
+                       f"{who}: after {r['watched']:.0f} s the plate is whole ({r['plateLeft']:.0%}; {r['warded']:.0f} "
+                       f"hits warded), the guard lives, he has been down (first at {fmt(r['firstDown'], 0, 1).strip()} "
+                       f"s; {r['downs']} times at worst) and it has cost him {r['cost']:.0f} health at the least (>= "
+                       f"{CHASE_COST_BARS:.0f} bars, {CHASE_COST_BARS * hp:.0f}; up to {r['solid']} hits)")
+            elif r["policy"] == "stalk":
+                expect(r["plateLeft"] >= 1 and r["guardsAt"] is None,
+                       f"{who}: after {r['watched']:.0f} s the plate is whole ({r['plateLeft']:.0%}; {r['warded']:.0f} "
+                       f"hits warded) and the guard lives: dodging everything gets him nowhere either")
             elif r["slot"] == "melee" and not r["abilities"]:
                 expect(r["killSpan"] is not None and lo <= r["killSpan"][0] and r["killSpan"][1] <= hi,
                        f"{who}: the kill takes {fmt(r['kill'], 0, 1).strip()} s"
@@ -4140,6 +4493,34 @@ def check_boss(cfg, env, bosses, expect):
                 took = (f"the kill takes {r['kill']:.1f} s" if r["kill"] is not None
                         else f"no kill inside {BOSS_SECONDS:.0f} s")
                 expect(r["solid"] == 0, f"{who}: none of the boss's hits lands ({took})")
+        if f["guarded"]:
+            lo_s, hi_s = SIEGE_SHARE
+            slammers = {w["name"] for w in f["ways"] if not w["heavy"]}
+            for r in boss["rows"]:
+                if r["policy"] != "slay":
+                    continue
+                who = f"{name}, {r['weapon']}" + (" with its ability" if r["abilities"] else "")
+                expect(r["brokeAt"] is not None,
+                       f"{who}: a way through: the guard falls at {fmt(r['guardsAt'], 0, 1).strip()} s and the plate "
+                       f"breaks at {fmt(r['brokeAt'], 0, 1).strip()} s ({r['slams']:.0f} ground slams)")
+                if r["abilities"]:
+                    continue
+                if r["slot"] == "melee" and r["kill"] and r["brokeAt"]:
+                    share = r["brokeAt"] / r["kill"]
+                    expect(lo_s <= share <= hi_s,
+                           f"{who}: the siege is {share:.0%} of the kill, in [{lo_s:.0%}, {hi_s:.0%}]")
+                if r["weapon"] == f["melee"] or r["weapon"] in slammers:
+                    route = "the ground slam" if r["weapon"] in slammers else "the default melee"
+                    expect(r["phase"] is not None and r["phase"] <= PLATE_PHASE_SECONDS
+                           and r["gave"] <= PLATE_PHASE_STUDS,
+                           f"{who} ({route}): the plate phase lasts {fmt(r['phase'], 0, 1).strip()} s at the most (<= "
+                           f"{PLATE_PHASE_SECONDS:.0f}) and the boss gives {r['gave']:.0f} studs of ground in it (<= "
+                           f"{PLATE_PHASE_STUDS:.0f})")
+                if r["slot"] == "ranged" and not r["bow"]:
+                    slowest = r["killSpan"][1] if r["killSpan"] is not None else None
+                    expect(slowest is not None and slowest <= RANGED_KILL_SECONDS,
+                           f"{who}: a ranged family that is not a bow wins in {fmt(slowest, 0, 1).strip()} s at the "
+                           f"slowest (<= {RANGED_KILL_SECONDS:.0f})")
         quiet = boss["quiet"]
         base = next((r for r in boss["rows"] if r["policy"] == "slay" and not r["abilities"]
                      and r["weapon"] == f["melee"]), None)
@@ -4149,6 +4530,36 @@ def check_boss(cfg, env, bosses, expect):
             expect(lo_c <= share <= hi_c,
                    f"{name}: what it calls lengthens the {f['melee']}'s kill by {share:.0%} ({quiet['kill']:.1f} s "
                    f"without, {base['kill']:.1f} s with), in [{lo_c:.0%}, {hi_c:.0%}]: it matters, it does not decide")
+
+
+def check_siege(cfg, env, boss, expect):
+    """Stop 3: the guard's own hit and tell, and that every loadout has a way through the plates."""
+    f = boss["facts"]
+    name = f["name"]
+    crowd = cfg["crowd"]
+    move = cfg["movement"]
+    for g in f["guard"]:
+        what = f"{name}'s {g['kind']} {g['shape']}"
+        expect(g["share"] <= HIT_SHARE_MAX,
+               f"{what}: one hit {g['damage']:.0f} = {g['share']:.0%} of health <= {HIT_SHARE_MAX:.0%}")
+        expect(g["windup"] - g["need"] >= TELL_MARGIN_SECONDS
+               and g["windup"] - g["needThumb"] >= BOSS_THUMB_MARGIN_SECONDS,
+               f"{what}: its tell {g['windup']:.2f} s clears a {REACTION_SECONDS:.2f} s reaction by "
+               f"{g['windup'] - g['need']:.2f} s (>= {TELL_MARGIN_SECONDS}) and a {BOSS_THUMB_SECONDS:.2f} s thumb by "
+               f"{g['windup'] - g['needThumb']:.2f} s (>= {BOSS_THUMB_MARGIN_SECONDS})")
+        expect(g["speed"] > f["speed"],
+               f"{what}: the {g['kind']} is faster ({g['speed']:.0f}) than {name} backs off ({f['speed']:.0f}): a "
+               f"player who chases him is caught by his guard")
+    expect(move["slamDamage"] >= crowd["heavyHit"],
+           f"{name}: the ground slam ({move['slamDamage']:.0f}) is a heavy hit (>= {crowd['heavyHit']:.0f}): every "
+           f"loadout has a way through the guard's plates and his")
+    light = [w["name"] for w in f["ways"] if not w["heavy"]]
+    slam = next((w for w in f["ways"] if not w["heavy"]), None)
+    if slam is not None and slam["guardHits"] is not None and slam["ownHits"] is not None:
+        expect(slam["guardHits"][1] <= PLATE_SLAMS,
+               f"{name}: the slam breaks a guard's plate in {slam['guardHits'][1]} (<= {PLATE_SLAMS}) and his in "
+               f"{slam['ownHits'][1]}, {slam['ownHits'][2]:.0f} s of slams; the families with no heavy hit, which "
+               f"need it: {', '.join(light)}")
 
 
 def check(cfg, fam_rows, ab_rows, threat=None, bosses=None):

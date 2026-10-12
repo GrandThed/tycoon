@@ -23,6 +23,9 @@
 -- which this file never requires. The snapshot is CrowdCodec v2 (plated, attack index).
 -- Wave 2: a kind with `plate` wears it in every set, passive ones included (Damage); a brute's
 -- charge is carried by the brain (integrate), and nothing else moves it.
+-- Stop 3 (the Warlord): a `guarded` kind's plate takes no damage until its guard has been
+-- called and is dead (Damage); a summoned body's spawn names its summoner, so every client can
+-- count that guard.
 -- Stop 2 (the Colossus): a `summon` impact raises its bodies here (summon), and they go when
 -- their summoner dies (dismiss), as does everything a `boss` kind had in the air. A body of
 -- crowd.largeRadius or more is separated in a pass of its own, so one giant does not widen the
@@ -80,6 +83,8 @@ type Enemy = {
 	-- summoned body is no slot of any set, never respawns and goes when its summoner dies.
 	summoner: Enemy?,
 	summoned: number,
+	-- How many of the bodies it summoned are alive now (a body in its dead state is not).
+	guard: number,
 	-- A summoned body: which of its summoner's even places it rose on (0-based).
 	place: number,
 }
@@ -114,8 +119,9 @@ export type ThreatHooks = {
 }
 
 -- What Damage did besides the number: blocked = a plate stopped it (nothing happened); plate =
--- it went to the plate; broke = it emptied the plate; gone = there is no such body (any more).
-export type Verdict = "blocked" | "plate" | "broke" | "gone"
+-- it went to the plate; broke = it emptied the plate; gone = there is no such body (any more);
+-- guarded = blocked, heavy or not, because the body's guard lives (a `guarded` kind).
+export type Verdict = "blocked" | "guarded" | "plate" | "broke" | "gone"
 
 local SPAWN_EVENT = "CrowdSpawn"
 local SNAPSHOT_EVENT = "CrowdSnapshot"
@@ -278,6 +284,11 @@ local function removeRecord(enemy: Enemy): ()
 	order[#order] = nil
 	if enemy.deadAt == nil then
 		aliveCount -= 1
+		-- Removed alive (a set load, its summoner's death): it leaves its summoner's guard.
+		local summoner = enemy.summoner
+		if summoner ~= nil then
+			summoner.guard = math.max(summoner.guard - 1, 0)
+		end
 	end
 	if pendingSpawnSet[enemy.id] then
 		-- Never announced, so there is nothing to end on the client.
@@ -973,6 +984,7 @@ function CrowdService.Spawn(
 		mind = if resolvedBehaviour == "fight" then CrowdBrain.NewMind(os.clock()) else nil,
 		summoner = nil,
 		summoned = 0,
+		guard = 0,
 		place = 0,
 	}
 	clampToBounds(enemy, def.radius)
@@ -986,7 +998,11 @@ function CrowdService.Spawn(
 end
 
 -- A `summon` impact. The attack's `count` even places lie on a circle of `radius` round the
--- summoner, the first on its facing. A call tops the summoner's living summons up to `count`:
+-- summoner, turned so that none lies straight behind it: the first on its facing for an odd
+-- count, half a step off it for an even one. (A body that rises straight behind its summoner
+-- walks into its back on the way to the player and, head on, never gets round it: it would
+-- shove a summoner that keeps its distance, or stay stuck behind one nothing moves.) A call
+-- tops the summoner's living summons up to `count`:
 -- it raises one body of the `summon` kind on a place none of them rose on, as many as are
 -- missing, and none when all are alive (the attack plays all the same). When crowd.maxAlive
 -- leaves room for fewer, those are spread evenly through the free places. Each is kept inside
@@ -1027,11 +1043,12 @@ local function summon(strike: CrowdBrain.Strike): ()
 	end
 	local radius = math.max(attack.radius or 0, 0)
 	local centre = summoner.position
+	local turned = if count % 2 == 0 then 0.5 else 0
 	for index = 0, raise - 1 do
 		-- All the free places when every missing body fits; evenly through them otherwise.
 		local place = free[index * #free // raise + 1]
 		-- Yaw as yawToward has it: 0 looks down -Z.
-		local angle = summoner.yaw + place / count * 2 * math.pi
+		local angle = summoner.yaw + (place + turned) / count * 2 * math.pi
 		local spot = Vector3.new(
 			centre.X - math.sin(angle) * radius,
 			boundsCenter.Y,
@@ -1042,6 +1059,9 @@ local function summon(strike: CrowdBrain.Strike): ()
 			risen.summoner = summoner
 			risen.place = place
 			summoner.summoned += 1
+			summoner.guard += 1
+			-- Its spawn names its summoner: the client's exact count of a boss's living guard.
+			risen.spawnInfo.summonerId = summoner.id
 		end
 	end
 end
@@ -1180,7 +1200,8 @@ end
 -- The plate (wave 2), while it lasts: a hit under crowd.heavyHit is blocked and does nothing at
 -- all (dealt 0). A heavy hit takes its amount off the plate, never off HP (dealt = that amount,
 -- the excess is lost), and otherwise acts as any hit; the one that empties the plate leaves the
--- enemy reeling for crowd.plateBreakSeconds. After that the kind's armor applies.
+-- enemy reeling for crowd.plateBreakSeconds, whatever its knockbackMult, and cancels the windup
+-- it was in, whatever that attack's `interrupt`. After that the kind's armor applies.
 function CrowdService.Damage(
 	id: number,
 	amount: number,
@@ -1192,13 +1213,28 @@ function CrowdService.Damage(
 	if enemy == nil then
 		return 0, false, "gone"
 	end
-	if enemy.deadAt ~= nil or not isFinite(amount) or amount <= 0 then
+	if enemy.deadAt ~= nil then
 		return 0, false, nil
 	end
 	local crowd = Tuning.Get().crowd
 	local def = currentDef(enemy, crowd.kinds)
 	local mind = enemy.mind
 	local plated = enemy.plate > 0
+	if
+		plated
+		and def.guarded == true
+		and (enemy.guard > 0 or (mind ~= nil and CrowdBrain.OwesCall(mind, def)))
+	then
+		-- Stop 3: its plate takes nothing, heavy or not, from the moment it spawns until its
+		-- guard has been called and is dead. A `guarded` kind with no summon attack, or one
+		-- that does not fight, is never guarded (nothing ships that way). Judged before the
+		-- amount is looked at: a hit of 0 says `guarded` too, or a client would read the plain
+		-- hit it got instead as the guard being gone.
+		return 0, false, "guarded"
+	end
+	if not isFinite(amount) or amount <= 0 then
+		return 0, false, nil
+	end
 	local verdict: Verdict? = nil
 	local dealt: number
 	if plated then
@@ -1214,8 +1250,11 @@ function CrowdService.Damage(
 			math.max(amount - math.max(def.armor, 0), amount * math.clamp(crowd.armorFloor, 0, 1))
 	end
 	local mult = math.max(def.knockbackMult, 0)
-	if mind ~= nil and CrowdBrain.IsCharging(mind) and (plated or enemy.hp - dealt > 0) then
-		-- Nothing moves, staggers or stops a charge, short of the blow that kills the brute.
+	-- Nothing moves, staggers or stops a charge, short of the blow that kills the brute.
+	local charging = mind ~= nil
+		and CrowdBrain.IsCharging(mind)
+		and (plated or enemy.hp - dealt > 0)
+	if charging then
 		mult = 0
 	end
 
@@ -1248,6 +1287,10 @@ function CrowdService.Damage(
 		enemy.deadAt = simTime
 		enemy.state = "dead"
 		aliveCount -= 1
+		local summoner = enemy.summoner
+		if summoner ~= nil then
+			summoner.guard = math.max(summoner.guard - 1, 0)
+		end
 		-- A boss's death is the end of its fight: its summons, and whatever it had in the air.
 		dismiss(enemy, def.boss == true)
 		for _, callback in killCallbacks do
@@ -1256,15 +1299,17 @@ function CrowdService.Damage(
 		return dealt, true, verdict
 	end
 	local stagger = math.max(crowd.staggerSeconds, 0) * mult
-	if verdict == "broke" and mult > 0 then
-		-- The opening: it reels for the config's time, however little a hit staggers its kind.
-		-- A body nothing moves (knockbackMult 0, or a brute in its charge) does not reel either.
+	local reels = verdict == "broke" and not charging
+	if reels then
+		-- The opening: it reels for the config's time whatever its knockbackMult, a body that
+		-- no ordinary hit moves or staggers included (Stop 3: a plate break always reels). Only
+		-- a charge under way runs on.
 		stagger = math.max(stagger, math.max(crowd.plateBreakSeconds, 0))
 	end
 	enemy.staggerUntil = math.max(enemy.staggerUntil, simTime + stagger)
 	if mind ~= nil then
 		-- `amount`, not `dealt`: a heavy hit is judged before armour (ruling 10).
-		CrowdBrain.OnHit(mind, def, amount, stagger > 0, crowd.heavyHit, os.clock())
+		CrowdBrain.OnHit(mind, def, amount, stagger > 0, reels, crowd.heavyHit, os.clock())
 	end
 	return dealt, false, verdict
 end

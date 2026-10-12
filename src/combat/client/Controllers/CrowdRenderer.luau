@@ -60,6 +60,13 @@
 --   one attack's blow straight to the next one's windup, and each attack runs its own clock.
 --   The slam's ring and the call's circle are ThreatFx's (ForEachThreat); the slam and the
 --   call themselves are poses here; a body the call raised comes up through the floor.
+-- * P4 Stop 3 ("Stop 3 — the Warlord and his guard"). A boss with `guarded` is a commander:
+--   its own cue set, and a plate its guard protects. Who guards it and whether they live is
+--   read in one place (isWardOf / wardsOf, off the `summonerId` each summoned body is
+--   announced with); from that come the ward its shell is drawn as, the tethers
+--   (ForEachWard) and the pips on its bar (GetBoss). The word a hit on it earns comes
+--   with the hit itself. Its second phase begins when its plate breaks (`enrage.at` 1, the
+--   same latch), and from then it fights with `enrage.brain`.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -106,6 +113,26 @@ export type ThreatCallback = (
 	strikeSeconds: number,
 	speed: number
 ) -> ()
+-- Stop 3: one tether (ForEachWard): a living guard, and the chests of it and of the boss whose
+-- plate it protects.
+export type WardCallback = (guardId: number, guardChest: Vector3, bossChest: Vector3) -> ()
+-- Stop 3: the boss as its bar shows it (GetBoss). health = its health share, 0 once it is
+-- dead; plate = its plate's share, -1 for a kind with no plate; enrageAt = the health share
+-- its second phase begins at (0 = it has none); label = what that phase is called on the bar;
+-- guards / guardTotal = how many of the guard it calls live, and how many it calls; guarded =
+-- its plate cannot be touched now, because one of them lives.
+export type BossInfo = {
+	id: number,
+	name: string,
+	health: number,
+	plate: number,
+	enrageAt: number,
+	enraged: boolean,
+	label: string,
+	guards: number,
+	guardTotal: number,
+	guarded: boolean,
+}
 
 type Phase = "alive" | "dying" | "vanish"
 -- P4: the part of an attack being drawn ("none" = no attack, or one the config does not have).
@@ -264,6 +291,24 @@ type Entity = {
 	enrageAt: number,
 	enraged: boolean,
 	riseStart: number,
+	-- Stop 3, the guard. phaseLabel = what the bar calls this boss's second phase. guards =
+	-- this kind is the guard some boss calls (it carries the pennant). guardKind / guardTotal
+	-- = for a kind whose plate its guard protects, the kind it calls and how many; "" = none.
+	-- summonerId = the crowd id of the boss that called this body, 0 for a set's own.
+	-- wards = how many of the bodies it called live now; called = this client has seen one
+	-- of them; opened = a hit on it has come back without the guard's flag, so it is
+	-- unguarded here until it calls again. warded = its plate is on and cannot be touched (the shell is
+	-- drawn as a ward, and the tethers are up). plateMax = the kind has a plate.
+	phaseLabel: string,
+	guards: boolean,
+	guardKind: string,
+	guardTotal: number,
+	summonerId: number,
+	wards: number,
+	called: boolean,
+	opened: boolean,
+	warded: boolean,
+	plateMax: number,
 	-- Body tint: how far the kind's own colours are taken toward tintColor (a few fixed steps),
 	-- and neon for the instant of the blow.
 	tint: number,
@@ -387,10 +432,21 @@ local burstColors: { [string]: Color3 } = {}
 -- server builds the floor from; nil = no such layout. Only a charge is bounded by it here.
 local arenaHalf: Vector3? = nil
 -- Stop 2: the boss the bar shows (the first one alive, kept through its death flight so the
--- bar can empty and go), and the latest call: the server time of its impact, its floor point,
--- its circle and the kind it raised, by which the bodies it raised are known when they appear.
+-- bar can empty and go).
 local bossEntity: Entity? = nil
-local call = { at = -math.huge, centre = Vector3.zero, radius = 0, kind = "" }
+-- Stop 3: what GetBoss hands out, the same table every frame.
+local bossInfo: BossInfo = {
+	id = 0,
+	name = "",
+	health = 0,
+	plate = -1,
+	enrageAt = 0,
+	enraged = false,
+	label = "",
+	guards = 0,
+	guardTotal = 0,
+	guarded = false,
+}
 -- The crowd ids of the bosses that died or were taken away since ThreatFx last asked: a
 -- boss's end takes back what that body had in the air, and its circles and shots are
 -- ThreatFx's to drop.
@@ -571,6 +627,16 @@ local function newEntity(): Entity?
 		enrageAt = 0,
 		enraged = false,
 		riseStart = -math.huge,
+		phaseLabel = "",
+		guards = false,
+		guardKind = "",
+		guardTotal = 0,
+		summonerId = 0,
+		wards = 0,
+		called = false,
+		opened = false,
+		warded = false,
+		plateMax = 0,
 		tint = 0,
 		tintColor = FLASH_COLOR,
 		glow = false,
@@ -778,17 +844,6 @@ local function setThreat(entity: Entity, threat: Threat, at: number): ()
 		-- leaving, a cancel and the end all leave it spent at once.
 		entity.charge = 0
 	end
-	if threat == "attack" and entity.threatShape == "summon" then
-		-- Stop 2: the call's impact. What it raised arrives as ordinary spawns; this is how
-		-- their first sighting knows them (pushSample).
-		local def = kindDef(entity.kind)
-		local attacks = if def ~= nil then def.attacks else nil
-		local attack = if attacks ~= nil then attacks[entity.threatAttack] else nil
-		call.at = at
-		call.centre = entity.threatOrigin
-		call.radius = entity.threatReach
-		call.kind = if attack ~= nil then attack.summon or "" else ""
-	end
 	if threat == "none" then
 		setTint(entity, 0, FLASH_COLOR, false)
 		setVisorHot(entity, entity.state == "windup")
@@ -835,6 +890,32 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	local enrage = def.enrage
 	entity.boss = def.boss == true
 	entity.title = def.name or entity.kind
+	-- Stop 3: who guards whom, read off the config and never off a name. A kind with
+	-- `guarded` is protected by whatever it summons; a kind some such boss summons is a guard.
+	entity.guardKind = ""
+	entity.guardTotal = 0
+	entity.guards = false
+	entity.plateMax = math.max(def.plate or 0, 0)
+	for name, other in Tuning.Get().crowd.kinds do
+		if other.guarded == true and other.attacks ~= nil then
+			for _, attack in other.attacks do
+				if attack.shape == "summon" and attack.summon ~= nil then
+					if attack.summon == entity.kind then
+						entity.guards = true
+					end
+					if name == entity.kind then
+						entity.guardKind = attack.summon
+						entity.guardTotal = math.max(math.floor(attack.count or 0), 0)
+					end
+				end
+			end
+		end
+	end
+	-- The bar's word for the second phase. For a boss with a guard that phase is the turn
+	-- from siege to duel; any other boss is enraged.
+	entity.phaseLabel = if entity.guardKind ~= ""
+		then Theme.COMBAT_RANGE_BOSS_BAR_DUEL_LABEL
+		else Theme.COMBAT_RANGE_BOSS_BAR_ENRAGED_LABEL
 	entity.enrageAt = if enrage ~= nil then math.clamp(enrage.at, 0, 1) else 0
 	if entity.enrageAt <= 0 then
 		entity.enraged = false
@@ -863,9 +944,11 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 		headRadius,
 		entity.torsoSize,
 		base,
-		entity.enraged
+		entity.enraged,
+		entity.guards
 	)
-	if (def.plate or 0) > 0 and entity.phase == "alive" then
+	-- A boss's plate is on the boss bar; a second bar over its head would only repeat it.
+	if (def.plate or 0) > 0 and not entity.boss and entity.phase == "alive" then
 		entity.bar = PlateBar.Take(entity.head, headRadius + Theme.COMBAT_RANGE_PLATE_BAR_RISE)
 		showBar(entity)
 	end
@@ -873,6 +956,30 @@ local function applyKind(entity: Entity, def: Types.CrowdKindDef): ()
 	if cues ~= nil then
 		Cues.Fade(cues, entity.fade)
 	end
+end
+
+-- Stop 3: is `other` one of the bodies `boss` called, alive? This and wardsOf are the one
+-- place that knows who guards a boss now. The wire says it: every summoned body is
+-- announced with its summoner's crowd id, late joiners included.
+local function isWardOf(boss: Entity, other: Entity): boolean
+	return other.summonerId == boss.id
+		and other.phase == "alive"
+		and other.samples > 0
+		and other.state ~= "dead"
+end
+
+-- Stop 3: how many of its guard live now (0 for a kind nobody guards).
+local function wardsOf(boss: Entity): number
+	if boss.guardKind == "" then
+		return 0
+	end
+	local count = 0
+	for _, other in active do
+		if isWardOf(boss, other) then
+			count += 1
+		end
+	end
+	return count
 end
 
 -- Stop 2: a body that is gone stops being the boss the bar shows; another living boss, if
@@ -919,7 +1026,8 @@ local function release(entity: Entity): ()
 	table.insert(pool, entity)
 end
 
-local function spawnEntity(id: number, kind: string, maxHp: number): ()
+-- summonerId = the crowd id of the boss that called this body, 0 for a set's own.
+local function spawnEntity(id: number, kind: string, maxHp: number, summonerId: number): ()
 	local def = kindDef(kind)
 	if def == nil then
 		return
@@ -930,6 +1038,7 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 			-- A re-announce (join sync) of a body already drawn: keep its motion.
 			existing.kind = kind
 			existing.maxHp = maxHp
+			existing.summonerId = summonerId
 			applyKind(existing, def)
 			if existing.boss and bossEntity == nil then
 				bossEntity = existing
@@ -959,6 +1068,11 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	entity.recoverFrom = 0
 	entity.enraged = false
 	entity.riseStart = -math.huge
+	entity.summonerId = summonerId
+	entity.wards = 0
+	entity.called = false
+	entity.opened = false
+	entity.warded = false
 	entity.phase = "alive"
 	entity.phaseStart = os.clock()
 	entity.deathDue = math.huge
@@ -973,6 +1087,13 @@ local function spawnEntity(id: number, kind: string, maxHp: number): ()
 	table.insert(active, entity)
 	entity.index = #active
 	byId[id] = entity
+	-- Stop 3: a fresh body a boss called. If a hit had told this client that boss was
+	-- unguarded, that is over: a guard that can be called again guards again. (One that is
+	-- called once never gets here twice.)
+	local summoner = if summonerId ~= 0 then byId[summonerId] else nil
+	if summoner ~= nil then
+		summoner.opened = false
+	end
 	local shown = bossEntity
 	if entity.boss and (shown == nil or shown.phase ~= "alive") then
 		-- A fresh boss takes the bar, also from one still in its death flight.
@@ -1180,7 +1301,14 @@ local function loadThreat(entity: Entity): boolean
 	local speed = attack.speed or 0
 	entity.threatAttack = entity.attack
 	entity.threatShape = attack.shape
-	entity.walks = kind ~= nil and kind.brain == "keepAway"
+	-- Stop 3: the brain it fights with now. A commander who kept his distance closes in once
+	-- enraged, and a body that closes in stands spent through its recover.
+	local turned = if kind ~= nil and entity.enraged then kind.enrage else nil
+	local brain = if turned ~= nil and turned.brain ~= nil
+		then turned.brain
+		elseif kind ~= nil then kind.brain
+		else nil
+	entity.walks = brain == "keepAway"
 	-- Stop 2: an attack that starts in the enraged phase runs on the scaled times. The phase
 	-- is the one this body was in when the attack's first state was seen (pushSample latches
 	-- it before this runs), as the server takes it when the attack starts.
@@ -1352,21 +1480,12 @@ local function pushSample(
 		entity.yaw = yaw
 		entity.dirty = true
 		entity.model.Parent = folder
-		-- Stop 2: first seen just after a call, of the kind it raised and on its circle: this
-		-- body was summoned, and it comes up through the floor instead of appearing.
-		if
-			entity.kind == call.kind
-			and stamp - call.at >= -interval
-			and stamp - call.at < Theme.COMBAT_RANGE_CALL_WINDOW_SECONDS
-		then
-			local away = position - call.centre
-			if
-				math.sqrt(away.X * away.X + away.Z * away.Z)
-				<= call.radius + Theme.COMBAT_RANGE_CALL_SLACK
-			then
-				entity.riseStart = os.clock()
-				burstAt(entity, 1)
-			end
+		-- A body a boss called (it was announced with its summoner's id) comes up through
+		-- the floor instead of appearing. A client that joins later sees those already
+		-- standing rise once, as its first sight of them.
+		if entity.summonerId ~= 0 then
+			entity.riseStart = os.clock()
+			burstAt(entity, 1)
 		end
 	elseif stamp > entity.timeC then
 		entity.posA, entity.yawA, entity.timeA = entity.posB, entity.yawB, entity.timeB
@@ -1389,7 +1508,11 @@ local function pushSample(
 			-- crowd.plateBreakSeconds from the hit that did it, which fell after the previous
 			-- sighting: the opening is drawn from there, so it never outlasts the server's.
 			entity.breakAt = os.clock()
-			entity.reelUntil = previous + math.max(Tuning.Get().crowd.plateBreakSeconds or 0, 0)
+			-- Stop 3: only a body the wire shows staggered (or thrown up) by that hit reels. One
+			-- that cannot be staggered goes straight on, and so does its drawing.
+			if state == "stagger" or state == "airborne" then
+				entity.reelUntil = previous + math.max(Tuning.Get().crowd.plateBreakSeconds or 0, 0)
+			end
 			entity.dirty = true
 			-- Shards, where the device can afford particles; the shell's own burst (Cues) and
 			-- the reel carry the break without them.
@@ -1550,10 +1673,12 @@ local function onSpawn(payload: any): ()
 			and typeof(info.id) == "number"
 			and typeof(info.kind) == "string"
 		then
+			local summoner = info.summonerId
 			spawnEntity(
 				info.id,
 				info.kind,
-				if typeof(info.maxHp) == "number" then info.maxHp else 0
+				if typeof(info.maxHp) == "number" then info.maxHp else 0,
+				if typeof(summoner) == "number" and summoner == summoner then summoner else 0
 			)
 		end
 	end
@@ -2076,6 +2201,28 @@ local function stepAlive(
 	end
 	-- Wave 2: the role cue's own state (the lit piece's charge, the shell). It changes sizes
 	-- and colours, never a frame, so it runs whether or not the pose below is redrawn.
+	if entity.guardKind ~= "" then
+		-- Stop 3: is its plate guarded now? The server guards it from its spawn until its
+		-- guard has been called AND is dead, so here: the plate is on, and either one of the
+		-- bodies it called lives or this client has never seen one (it has not called yet;
+		-- a client that joined after they all died learns better from its first hit, which
+		-- comes back without the guard's flag: NoteUnguarded). While it holds, the shell is a
+		-- ward and the tethers are up (ThreatFx draws them from ForEachWard). When it ends
+		-- the shell flashes white and is a plain plate again: it has opened to attack.
+		local wards = wardsOf(entity)
+		if wards > 0 then
+			entity.called = true
+		end
+		local warded = entity.plated and not entity.opened and (wards > 0 or not entity.called)
+		if entity.warded and not warded and entity.plated then
+			entity.glintAt = now
+				+ Theme.COMBAT_RANGE_WARD_OPEN_SECONDS
+				- Theme.COMBAT_RANGE_CUE_GLINT_SECONDS
+			burstAt(entity, 1)
+		end
+		entity.wards = wards
+		entity.warded = warded
+	end
 	local cues = entity.cues
 	if cues ~= nil then
 		Cues.Paint(
@@ -2083,7 +2230,8 @@ local function stepAlive(
 			entity.charge,
 			entity.plated,
 			(now - entity.breakAt) / Theme.COMBAT_RANGE_CUE_BREAK_SECONDS,
-			now - entity.glintAt < Theme.COMBAT_RANGE_CUE_GLINT_SECONDS
+			now - entity.glintAt < Theme.COMBAT_RANGE_CUE_GLINT_SECONDS,
+			entity.warded
 		)
 	end
 
@@ -2479,20 +2627,72 @@ function CrowdRenderer.DrainBossEnds(callback: (id: number) -> ()): ()
 	end
 end
 
--- Stop 2: the boss the bar shows, if there is one: its id, its name, its health share (0 once
--- it is dead, through its death flight), the share its second phase begins at (0 = it has
--- none) and whether it is in it. nil = no boss; a boss that was taken away (a set load)
--- simply stops being reported.
-function CrowdRenderer.GetBoss(): (number?, string, number, number, boolean)
+-- Stop 2: the boss the bar shows, if there is one (BossInfo; the same table every call, so
+-- a frame allocates nothing: read it, do not keep it). Its health is 0 once it is dead,
+-- through its death flight. nil = no boss; a boss that was taken away (a set load) simply
+-- stops being reported. Stop 3: under a plate the wire's one fraction is the plate's, and
+-- health cannot have moved, so it reads full.
+function CrowdRenderer.GetBoss(): BossInfo?
 	local entity = bossEntity
 	if entity == nil or entity.samples == 0 then
-		return nil, "", 0, 0, false
+		return nil
 	end
-	local share = if entity.phase ~= "alive" or entity.state == "dead"
+	local dead = entity.phase ~= "alive" or entity.state == "dead"
+	local info = bossInfo
+	info.id = entity.id
+	info.name = entity.title
+	info.health = if dead then 0 elseif entity.plated then 1 else entity.hpFraction
+	info.plate = if entity.plateMax <= 0
+		then -1
+		elseif entity.plated and not dead then entity.hpFraction
+		else 0
+	info.enrageAt = entity.enrageAt
+	info.enraged = entity.enraged
+	info.label = entity.phaseLabel
+	-- Before it has called anyone its guard is whole, not dead: the pips are all lit, as the
+	-- plate they stand over is the guard's colour.
+	info.guards = if dead
 		then 0
-		elseif entity.plated then 1
-		else entity.hpFraction
-	return entity.id, entity.title, share, entity.enrageAt, entity.enraged
+		elseif
+			entity.guardKind ~= ""
+			and not entity.called
+			and not entity.opened
+		then entity.guardTotal
+		else entity.wards
+	info.guardTotal = entity.guardTotal
+	info.guarded = entity.warded and not dead
+	return info
+end
+
+-- Stop 3: a hit on this body came back without the guard's flag. For a body its guard
+-- protects that settles it: the server does not guard it now, whatever this client has or
+-- has not seen of its guard. It stays so until a fresh body it calls is seen (spawnEntity).
+-- Any other body: nothing.
+function CrowdRenderer.NoteUnguarded(id: number): ()
+	local entity = byId[id]
+	if entity ~= nil and entity.guardKind ~= "" then
+		entity.opened = true
+	end
+end
+
+-- Stop 3: every tether there is to draw: for each living body whose plate is guarded now,
+-- each living one of its guard, with the two chests the tether runs between (as drawn this
+-- frame). The callback must not yield.
+function CrowdRenderer.ForEachWard(callback: WardCallback): ()
+	for _, boss in active do
+		if boss.warded and boss.phase == "alive" then
+			local to = boss.shown + UP * (boss.legHeight + boss.torsoHeight * 0.6)
+			for _, other in active do
+				if isWardOf(boss, other) then
+					callback(
+						other.id,
+						other.shown + UP * (other.legHeight + other.torsoHeight * 0.6),
+						to
+					)
+				end
+			end
+		end
+	end
 end
 
 -- direction: world direction of the hit (flattened; nil = away from the camera). strength: the
