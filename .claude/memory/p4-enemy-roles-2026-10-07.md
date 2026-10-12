@@ -37,6 +37,14 @@ Contract: `docs/INTERFACES.md` "P4 contracts" (on the branch until its first mer
   wave 1 look; Studio was not opened between the two merges). Asked of him: which role is most
   fun and most annoying, any tell hard to read, soft or hard, how the plate feels, and the
   **Server N ms** readout in `fight` (budget 2 ms; nobody else can run Studio).
+- **2026-10-12, Ben: "okey, everything feels great now, lets proceed".** Studio's log for that
+  day: he ran "Build all", opened the new `proving.rbxl`, played once for six minutes with no
+  script error, and **only the default set `crowd30` was ever loaded**: the passive dummies. So
+  that verdict covers the build loading, the health bar and the P3.1 melee fix (its first
+  real Studio look: confirmed), and **not** the fighting enemies. Told to him plainly. Two
+  consequences: `defaultSet` is now `fight`, so Play alone shows P4 (he does not use the panel
+  or the checklists: anything he must see has to be what Play opens on); and Stop 2 was
+  started on his word, with Stop 1's enemies still unjudged by him.
 - Wave 2 rulings worth knowing before touching the code: enemies of one kind take turns
   (`CrowdKindDef.perPlayer`: fodder 2, the others 1; it replaced
   `crowd.threat.attackersPerPlayer`); a locked facing is snapped to the wire's yaw step; a
