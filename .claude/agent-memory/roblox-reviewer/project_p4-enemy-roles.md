@@ -73,8 +73,34 @@ luau-lsp 0 errors, `sim_range.py --check` PASS.
   client that draws on the server clock: a shot's wall end is found by one ray per crowd step, so
   the orb is drawn up to a step plus latency past the wall. A deterministic path can carry its
   own end time in the opening effect instead.
+- Stop 2 notes are at the end of this file.
 - What held: `CrowdRenderer.laneReach` mirrors `CrowdBrain.runway` exactly (config radius, layout
   size / 2, wire-snapped yaw); locked facings are snapped to the 1/256 yaw step and integrate
   rewrites a fight body's yaw before every snapshot, so a shove never reaches the wire; every hit
   goes through `RangeService.strike` -> `StrikeTally.Add`; blocked hits return before any side
   effect; shot ends are raised exactly once; `fight` never has more than 3 shots alive (cap 24).
+
+**Stop 2 "the Colossus" (2026-10-12, uncommitted tree vs b4c3a01): SHIP, 0 Critical, 0 Major, Minors only.**
+Wave 2's Major was fixed (shots led only for a target moving vertically, the line's ray cast in 3D,
+lobs land on the surface under the target; a shot's path is cut once at fire). New: attack choice
+(`CrowdBrain.choose`/`begin`), enrage latch and chain, `ring` (ThreatField), `summon` and the
+top-up rule, `dismiss` on a boss's death, `shoulder()` for bodies of radius >= 3, barrage
+(`HitShapes.Barrage`, one shared `volley` map), client `ThreatFx/Rings`, `UI/BossBar`. All gates
+green (FeedbackController 159, CrowdRenderer 149), sim PASS.
+
+- **Recurring pattern (new): a client-side drop keyed by something coarser than the server's.**
+  The server takes back a dead boss's attacks by body id; the client drops circles and shots by
+  KIND (`area`/`enemyShot` carry `enemyKind`, no id). Two bosses of one kind: the survivor's
+  circles vanish and still land. Check before Stop 3 (the Warlord and his guard).
+- **Recurring pattern (new): fixing z-fight by stacking lifts moves the tell off the floor.**
+  Lob rims went from 0.21 to 0.71 studs and the slam's rim to 0.92; a raised mark reads about
+  distance x h / (H - h) further from the camera (over a stud at the player's own feet). Parts
+  only need distinct top faces (0.01 apart), not stacked thicknesses.
+- A removal inside `CrowdService.Damage` (a boss's summons at its death) leaves later candidates
+  of the same strike as ids that take 0: `StrikeTally` books them as hits of 0.
+- What held: one-attack kinds go through `choose` to exactly the old result (cooldown nil = 0,
+  `last` only blocks when another is ready); the enrage latch reads `CrowdCodec.SnapHp` on the
+  server and the same byte on the client, and the client rescales a recover already running;
+  `separate()` is unchanged without a large body; `dismiss` -> `CrowdBrain.Recall` + hooks.gone
+  covers queued, pending and travelling attacks; BossBar clears the panel, crosshair and vitals
+  bar at 375x667, 667x375 and 1920x1080 (portrait: under the panel's readouts).

@@ -45,6 +45,25 @@ Contract: `docs/INTERFACES.md` "P4 contracts" (on the branch until its first mer
   consequences: `defaultSet` is now `fight`, so Play alone shows P4 (he does not use the panel
   or the checklists: anything he must see has to be what Play opens on); and Stop 2 was
   started on his word, with Stop 1's enemies still unjudged by him.
+- **Stop 2 rulings (Ben, 2026-10-12, asked with previews):** "Both, as two bosses" — the
+  **Colossus** first (Stop 2: slam ring, charge, summon, an enraged barrage), then the
+  **Warlord and his guard** (Stop 3, its own contract) — and **two phases** (enrage at half
+  health). As foreseen, offered alternatives he took both. Contract: INTERFACES "Stop 2 — the
+  Colossus". **Built, reviewed (0 Critical, 0 Major, 7 Minor), QA green and merged to `main`
+  the same day (e9b8031 through the merge 3a94031); the place files are rebuilt and
+  `defaultSet` is `colossus`, so Play opens on the boss.** Stop 2 waits for Ben's playtest
+  (PLAYTEST "P4 Stop 2", 12 steps, the first nine need only Play and the keys). Numbers: 4,700
+  HP; a reacting player kills it in 64 to 82 s with any melee family and takes no hit;
+  standing still is down in under 9 s; the bows take minutes (a weapon question for Ben);
+  boss health does not scale with players in the range. Rules: attack choice by cooldown,
+  reach, phase and least recent use; a boss's death takes back everything it had in the air;
+  a call tops up; `crowd.largeRadius`; `area` and `enemyShot` carry `enemyId`.
+- **Stop 3, the Warlord and his guard, is next and needs its own contract** (a plated
+  commander behind four elites who calls barrages; break the guard, break his plate, then he
+  duels), only after Ben's word on the Colossus.
+- A lesson from the simulator, three times now: its reacting player judged jumps a frame off
+  from the server and "passed" or "failed" by luck. When a longer tell makes the simulated
+  player get hit, suspect the planner before the fight.
 - Wave 2 rulings worth knowing before touching the code: enemies of one kind take turns
   (`CrowdKindDef.perPlayer`: fodder 2, the others 1; it replaced
   `crowd.threat.attackersPerPlayer`); a locked facing is snapped to the wire's yaw step; a
