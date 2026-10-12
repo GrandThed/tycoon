@@ -104,3 +104,23 @@ green (FeedbackController 159, CrowdRenderer 149), sim PASS.
   `separate()` is unchanged without a large body; `dismiss` -> `CrowdBrain.Recall` + hooks.gone
   covers queued, pending and travelling attacks; BossBar clears the panel, crosshair and vitals
   bar at 375x667, 667x375 and 1920x1080 (portrait: under the panel's readouts).
+
+**Stop 3 "the Warlord and his guard" (2026-10-12, uncommitted tree vs 3a94031): SHIP, 0 Critical, 0 Major, Minors only.**
+Stop 2's Minors were fixed (effects carry `enemyId`, `crowd.largeRadius`, marks near the floor).
+New: `calm` / `uses` / `enrage.brain` (`CrowdBrain.usable`, `OwesCall`), `guarded` in
+`CrowdService.Damage` (plate takes nothing while `enemy.guard > 0` or a call is owed),
+`CrowdSpawnInfo.summonerId`, client wards (`isWardOf`, `NoteUnguarded`, `ThreatFx/Links`), the bar's
+plate row and pips. Gates green (FeedbackController 159, CrowdRenderer 151).
+
+- **Recurring pattern (new): the client infers a server state from the absence of a flag.**
+  "Any hit on him without `guarded` = unguarded for good." `Damage` returns `0, false, nil` for
+  `amount <= 0` before the guarded test, so a zero-amount hit (a damage slider at 0) is tallied as
+  a plain hit and opens him on every client while the server still guards. When a rule reads
+  "no flag means X", list every early return that produces a flagless result.
+- "For good" on the client only matches a summon with `uses`: a kind that calls again re-guards
+  on the server and never on a client that saw one unflagged hit. The keys are called general.
+- What held: the guarded return is ahead of every side effect and `RangeService.strike` is still
+  the one caller; `enemy.guard` drops at death (not at record removal) and on live removal, never
+  twice; `landed` is per mind, so a respawn owes its call again; the enrage latch moved ahead of
+  the free/target tests and now matches the client in recover; one-attack kinds and the Colossus
+  are unchanged apart from the half-step turn of an even summon circle (12 fodder).

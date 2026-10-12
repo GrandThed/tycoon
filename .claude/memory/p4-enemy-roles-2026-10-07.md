@@ -58,9 +58,32 @@ Contract: `docs/INTERFACES.md` "P4 contracts" (on the branch until its first mer
   boss health does not scale with players in the range. Rules: attack choice by cooldown,
   reach, phase and least recent use; a boss's death takes back everything it had in the air;
   a call tops up; `crowd.largeRadius`; `area` and `enemyShot` carry `enemyId`.
-- **Stop 3, the Warlord and his guard, is next and needs its own contract** (a plated
-  commander behind four elites who calls barrages; break the guard, break his plate, then he
-  duels), only after Ben's word on the Colossus.
+- **Stop 2 signed off 2026-10-12.** "i completed the playtest": Studio's log shows a
+  six-minute session in the `colossus` set with no script error. Asked with three click
+  questions: "Great, on to the Warlord"; "Nothing, all clear" on the tells; "About right" on
+  the length. No Server ms number. **What worked: Play opened on the thing to judge, and the
+  verdict was asked as click questions right after the log showed he had played.** The
+  shooters, brutes and plated elites (the `fight` set) are still unseen by him.
+- **Stop 3, the Warlord and his guard, started the same day** (contract: INTERFACES "Stop 3"):
+  a siege then a duel — he keeps away, calls a guard of four plated elites once, throws
+  barrages, and his plate cannot be damaged while any guard lives (`guarded`); when his plate
+  breaks he enrages (`enrage.at` 1, the existing latch) and closes in (`enrage.brain`). New
+  general keys: `calm`, `uses`, `guarded`, `enrage.brain`. **Built, reviewed (0 Critical,
+  0 Major, 5 Minor), QA green and merged to `main` the same day (92413bd through the merge
+  56329e6); the place files are rebuilt and `defaultSet` is `warlord`, so Play opens on him.**
+  Stop 3 waits for Ben's playtest (PLAYTEST "P4 Stop 3", 11 steps, the first eight key-only);
+  **P4 is complete when he signs it off; P5 (back into the missions) only on his word.**
+  Numbers: guard 4 × 1,400 HP with one-hit plates, his plate 385 and 3,650 HP; a reacting
+  melee player wins in 77 to 101 s (guard about 26 s, plate under 20 s, duel about 55 s);
+  SMG and Beam need the ground slam and are slow; the bows take minutes. Rulings: guarded from
+  his first moment until the guard is called and dead; a plate break always reels (also for
+  `knockbackMult` 0); `summonerId` on spawns; `crowd.largeRadius` 2.5. The first balance pass
+  met its own bands with a two-minute fight whose middle was 38 s of hitting a retreating
+  plate: the lead retargeted to the length Ben called "about right" on the Colossus. **Check
+  a designer's result against what the owner said felt right, not only against the bands.**
+  The tuning is tight (Spear floor, Beam ceiling, Broadsword plate phase): any weapon-number
+  change means re-tuning this boss.
+- `main` was fully on origin on 2026-10-12 18:16 (the editor's sync had pushed it).
 - A lesson from the simulator, three times now: its reacting player judged jumps a frame off
   from the server and "passed" or "failed" by luck. When a longer tell makes the simulated
   player get hit, suspect the planner before the fight.
