@@ -202,7 +202,7 @@
 			{ "kind": "armoured", "behaviour": "fight", "count": 3, "at": [-10, 26], "spacing": 8, "respawnSeconds": 8 }
 		]
 	},
-	"defaultSet": "crowd30",
+	"defaultSet": "fight",
 	"movement": {
 		"jumpHeight": 18,
 		"doubleJumpHeight": 12,

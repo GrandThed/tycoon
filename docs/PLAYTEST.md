@@ -4171,6 +4171,11 @@ Judge feel, and whether every warning can be read in time.
   **shooters**. The older build has neither.
 <!-- FILE TO OPEN: end -->
 
+**Since 2026-10-12 the range opens on the `fight` set** (it used to open on `crowd30`, the
+passive dummies, and Ben's first look at this build never left it). Pressing Play now puts
+the whole mix in front of you. For the calm steps (1 and 14) pick **crowd30** in the panel;
+**God mode** makes the fight safe to watch.
+
 Setup: `docs/MANUAL_STEPS.md` "P4 Stop 1". Keys: **1** melee, **2** ranged, **Space** jump,
 **Left Shift** dash, **P** opens the panel and **P** again closes it, **Alt** frees the cursor.
 You start with Broadsword + Longbow. Sets are the buttons under **God mode** in the panel's
