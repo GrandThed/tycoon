@@ -6,9 +6,10 @@
 -- the server to resolve the slam sphere at its own copy of the root. No damage, no cooldown
 -- the server trusts, and no position ever leaves this module.
 --
--- Everything is inert outside the range (CameraController.IsRange), so missions keep the
--- stock Humanoid movement untouched. Every number is read through Tuning.Get() at the moment
--- it is used, so a slider in the range panel changes the next jump.
+-- Everything is inert unless the range's combat runs (CameraController.IsCrowdCombat: the range
+-- and, since P5, every crowd mission), so a build without it keeps the stock Humanoid movement
+-- untouched. Every number is read through Tuning.Get() at the moment it is used, so a slider in
+-- the range panel changes the next jump.
 --
 -- Controls:
 --  * Jump is the stock jump on every device (Space, gamepad A, Roblox's touch jump button);
@@ -754,7 +755,7 @@ end
 function MovementController.Init(): () end
 
 function MovementController.Start(): ()
-	if started or not CameraController.IsRange() then
+	if started or not CameraController.IsCrowdCombat() then
 		return
 	end
 	started = true

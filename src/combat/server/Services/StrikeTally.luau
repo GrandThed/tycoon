@@ -26,12 +26,20 @@ export type Tally = {
 	kills: number,
 	-- Plate damage counts as damage dealt; a blocked hit adds nothing.
 	dealt: number,
+	-- P5 ruling 8: the Armory tier's damage scale, computed once for the attack. Every hit of it
+	-- hands this to CrowdService.Damage beside the unscaled tier-1 amount (ruling 9).
+	scale: number,
 }
 
 local StrikeTally = {}
 
-function StrikeTally.New(): Tally
-	return { hits = {}, enemies = 0, kills = 0, dealt = 0 }
+-- `scale` nil, negative or not finite = 1 (the range's tier-1 numbers).
+function StrikeTally.New(scale: number?): Tally
+	local used = 1
+	if scale ~= nil and scale >= 0 and scale < math.huge then
+		used = scale
+	end
+	return { hits = {}, enemies = 0, kills = 0, dealt = 0, scale = used }
 end
 
 -- One hit of the attack on enemy `id`: `dealt` and `killed` as CrowdService.Damage returned

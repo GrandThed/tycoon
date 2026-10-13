@@ -1,7 +1,9 @@
-# Combat design (draft for Ben's review)
+# Combat design (plan of record)
 
-Status: **draft, 2026-09-24.** Nothing below is built yet. Once Ben approves it, this document is
-the plan of record for combat, and `docs/INTERFACES.md` contracts are written from it.
+Status: **plan of record since Ben approved it (2026-09-24); written 2026-09-24.** Built so far
+(2026-10-12): P1 to P4 in the range (movement, controls, feedback, 13 weapon families,
+abilities, enemy roles, both bosses) and P5 Wave 1 (the crowd in the Village mission). Contracts
+are in `docs/INTERFACES.md` (the P1 to P5 contract sections); progress is in `docs/PLAN.md`.
 
 ## Why this document exists
 
@@ -213,6 +215,12 @@ A Studio-first space for building and judging every system above. It's the first
 
 - **Where:** a separate arena in the Expeditions place, chosen with a debug lever. It uses the
   same combat code as real missions, so what is tuned there is what ships.
+  - **Status (2026-10-12):** true for the Village mission since P5 Wave 1. Weapons, abilities,
+    the crowd and the player's health run through the same modules (`WeaponService`,
+    `AbilityService`, `CrowdService`, `VitalsService`) in the range and in the mission. The
+    other three eras' missions are refused ("locked") until P5 Wave 3 gives them crowds.
+  - Since P5, `build/proving.rbxl` boots into the Village mission. The range is a Studio-only
+    bench behind `Combat.json` `debug.provingBoots` = `"range"`.
 - **Dummies:**
   - rows at 10, 25, 50 and 100 studs for ranged testing;
   - packed crowds of 10, 30 and 100 for multi-hit testing;
@@ -242,6 +250,16 @@ A Studio-first space for building and judging every system above. It's the first
 | Touch controls | **Attack button removed.** Auto-fire and auto-swing (section 3). |
 | Sound | Off. |
 | C2.5 Stop 1 code | Reused where it fits (telegraphs, ragdolls, impact effects, steering ideas). The rest is replaced as each piece is rebuilt. |
+
+**Status (2026-10-12, P5 Wave 1):**
+- **Missions and waves:** done for Village. Raider Woods plays ten crowd waves on one skeleton
+  for every era (Ben, 2026-10-12), with rewards per kind. The other eras follow in P5 Wave 3.
+- **Enemy system:** no Humanoid rigs remain in the Village mission. Both bosses (the Colossus,
+  the Warlord) are crowd bodies like the fodder. `EnemyService` and `CombatService` are no
+  longer booted; they are deleted in P5 Wave 3.
+- **Kept, unchanged:** co-op, joining runs, rewards, Mentor, Armory tiers. Health and weapon
+  damage now follow the player's Armory tiers in missions.
+- **Not yet:** variant styles in the Armory (P5 Wave 2), revive by a teammate (P5 Wave 4).
 
 ## 10. Build order (each step ends with Ben playing it in the range)
 

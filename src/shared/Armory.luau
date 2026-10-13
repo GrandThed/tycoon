@@ -170,6 +170,31 @@ function Armory.WeaponDamage(
 	return def.damage * (if level ~= nil then level.damageMult else NEUTRAL_MULT)
 end
 
+-- P5 ruling 8: a weapon family's numbers in ProvingGrounds.json are tier-1 values, so a hit
+-- scales by the slot's damage at (tier, ascension) over its tier-1, ascension-0 damage. An
+-- ability takes the Ascension level's abilityMult where an attack takes its damageMult. 1 for an
+-- unknown slot, a tier-1 damage of 0 or a tier past the last one: those degrade to the range's
+-- tier-1 numbers, never to hits of nothing. Mirrored in tools/sim_range.py and sim_combat.py.
+function Armory.DamageScale(
+	cfg: ArmoryConfig,
+	slot: string,
+	tier: number,
+	ascLevel: number,
+	ability: boolean
+): number
+	local base = Armory.TierDef(cfg, slot, 1)
+	local def = Armory.TierDef(cfg, slot, tier)
+	if base == nil or def == nil or base.damage <= 0 then
+		return NEUTRAL_MULT
+	end
+	local level = ascensionLevel(cfg, ascLevel)
+	local mult = NEUTRAL_MULT
+	if level ~= nil then
+		mult = if ability then level.abilityMult else level.damageMult
+	end
+	return def.damage * mult / base.damage
+end
+
 function Armory.WeaponHp(cfg: ArmoryConfig, slot: string, tier: number, ascLevel: number): number
 	local def = Armory.TierDef(cfg, slot, tier)
 	if def == nil then

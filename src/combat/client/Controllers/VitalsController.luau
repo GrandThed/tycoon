@@ -29,6 +29,12 @@
 -- Nothing here is gated on Theme.reducedMotion (true on every touch device) or
 -- lowEndDevice: all of it is information. CameraController already halves the kick and the
 -- shake under reducedMotion on its own.
+--
+-- P5 (docs/INTERFACES.md "P5 contracts", rulings 18 and 22): missions are hurt the same way.
+-- The one difference is the down: a mission's `hurt` with `down` carries no `upAt`, because a
+-- down there never ends by itself. The player lies down under a "DOWN" banner with no count
+-- until the server stands them up (a wave boundary, a new run), which no effect announces:
+-- the RunState's PartyMember.down is that word, pushed in through SetServerDown.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -87,8 +93,13 @@ local layoutScale = 1
 local numbers: { Number } = {}
 local numberSide = 1
 local flinches: { Flinch } = {}
--- Server time the local player gets up; nil = standing.
+-- Server time the local player gets up; nil = standing; math.huge = a mission's down, held
+-- until the server stands the player up (SetServerDown).
 local downUntil: number? = nil
+-- P5: a held down, as the RunState has reported it. `seen` = a RunState has said "down" since
+-- it began, `at` = the os.clock it began; together they keep a RunState sent before the down
+-- reached the server from standing the player up again.
+local held = { seen = false, at = 0 }
 -- The get-up heal on its way: until os.clock() reaches healBy, or the replicated Health moves
 -- off staleHealth (what it read at the get-up), the bar shows full. 0 = not waiting.
 local healBy = 0
@@ -435,7 +446,9 @@ local function standUp(real: boolean): ()
 	if not real then
 		return
 	end
-	shimmerUntil = upAt + math.max(Tuning.Get().player.getUpIframes, 0)
+	-- A held down's get-up is now: the server stood the player up as the RunState said so.
+	local upFrom = if upAt == math.huge then Workspace:GetServerTimeNow() else upAt
+	shimmerUntil = upFrom + math.max(Tuning.Get().player.getUpIframes, 0)
 	-- The heal happens on the server at this same moment but replicates half a ping later:
 	-- until it does, the Humanoid still reads the sliver it was held at while down, and the
 	-- bar must not show that as the health the player got up with (see step).
@@ -448,19 +461,26 @@ local function standUp(real: boolean): ()
 	)
 end
 
--- `upAt` = the server time of the get-up; `away` = the way the blow was travelling.
+-- `upAt` = the server time of the get-up; `away` = the way the blow was travelling. In a
+-- mission no `upAt` comes: the down is held (P5 ruling 18). In the range a missing one still
+-- falls back to player.downSeconds, as in P4.
 local function goDown(upAt: number?, away: Vector3?): ()
 	local serverNow = Workspace:GetServerTimeNow()
 	local seconds = math.max(Tuning.Get().player.downSeconds, 0)
 	local latest = serverNow + seconds + DOWN_SLACK_SECONDS
-	local at = if upAt ~= nil and upAt == upAt then math.min(upAt, latest) else serverNow + seconds
+	local at = if upAt ~= nil and upAt == upAt
+		then math.min(upAt, latest)
+		elseif CameraController.IsRange() then serverNow + seconds
+		else math.huge
 	downUntil = at
+	held.seen = false
+	held.at = os.clock()
 	healBy = 0
 	endShimmer()
 	MovementController.SetDown(true, away)
 	local mounted = hud
 	if mounted ~= nil then
-		mounted.SetDown(at, math.max(at - serverNow, seconds))
+		mounted.SetDown(at, if at == math.huge then 0 else math.max(at - serverNow, seconds))
 	end
 end
 
@@ -613,9 +633,10 @@ function VitalsController.Init(): ()
 	-- Remotes and PlayerGui are replicated instances: everything happens in Start.
 end
 
--- Inert outside the Proving Grounds: missions keep CombatFxController's own hurt feedback.
+-- Inert unless the range's combat runs (the range and, since P5, every crowd mission); a build
+-- without it keeps CombatFxController's C1 hurt feedback.
 function VitalsController.Start(): ()
-	if started or not CameraController.IsRange() then
+	if started or not CameraController.IsCrowdCombat() then
 		return
 	end
 	started = true
@@ -659,6 +680,21 @@ function VitalsController.SetLayout(layout: VitalsHud.Layout): ()
 	local mounted = hud
 	if mounted ~= nil then
 		mounted.SetLayout(layout)
+	end
+end
+
+-- P5: the local player's PartyMember.down from every RunState of a mission. It ends a held
+-- down (the server's StandUp sends no effect). A RunState that says "standing" only counts once
+-- a RunState has shown the down, or the down is older than the slack: one sent just before the
+-- blow reached the server must not stand the player straight back up.
+function VitalsController.SetServerDown(down: boolean): ()
+	if downUntil ~= math.huge then
+		return
+	end
+	if down then
+		held.seen = true
+	elseif held.seen or os.clock() - held.at >= DOWN_SLACK_SECONDS then
+		standUp(true)
 	end
 end
 

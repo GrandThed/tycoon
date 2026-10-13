@@ -3165,3 +3165,247 @@ the Splitbow player in one seed of two.
   nine seeds, against 60.
 - **Not modelled:** crits, kill refunds, abilities on the guard, a melee player who also
   slams, cover, and the stairs.
+
+# P5 — back into the missions
+
+## Wave 1 — the Village crowd (Raider Woods)
+
+Raider Woods now plays the range's crowd, not the C1 Humanoid waves. It uses the range's
+weapons, enemy kinds and bosses, scaled by the mission's `crowd` block (contract:
+`docs/INTERFACES.md` "P5 contracts" → "Wave 1 — crowd in a mission"). Every number below is
+measured at the recommended power: gear 2/1 (Combat.json `debug.provingGear`), ascension 0,
+the range's loadout (Broadsword + Longbow), solo, no Overdrive. At that gear the bar is
+`Armory.MaxHp` = 100 + 35 + 10 = **145**. The player's HP loss is ×1.5 on melee (18 ÷ 12) and
+×1 on ranged (tier 1).
+
+Targets, from the contract and the lead's brief:
+- a whole run pays 142,185 cash and 256 Timber, each within ±10%, and exactly 35 Valor. These
+  are the C1 run's numbers at power 57. Boss summons count at the number `sim_range.py` reports;
+- a player who reacts to every tell clears all ten waves in 10 to 15 minutes, breathers included;
+- the Colossus takes 64 to 90 s with the default sword, and the Warlord 77 to 101 s. Neither may
+  get there with a dull middle;
+- no enemy hit is over 25% of the bar;
+- a player standing still in a fodder wave goes down in 6 to 12 s;
+- `regenShare` is close to the range's 10/130 a second.
+
+## P5: how the numbers were measured
+
+**`py tools/sim_range.py`** has a MISSION section, and `--check` adds eleven mission checks to
+the 352 range checks. The range checks print the same lines as at Stop 3, to the character: the
+mission view is a copy of the config, and the HP-loss scale is 1 wherever no view sets it. The
+section reads the mission, `Armory.json`, `Combat.json` and the arena layout, so it copies no
+number. `--mission-only` runs just this section. What it mirrors:
+- **The scales (ruling 10).** Every body's HP is ×`hpScale`, summons included. Plates are
+  ×`plateScale`. Every enemy hit is `max(round(damage × damageScale), 1)`, as `VitalsService`
+  rounds it. Regen is `regenShare × MaxHealth` a second after `regenDelay`.
+- **The tier (rulings 8 and 9).** Only the HP loss of the player's hits is scaled: a weapon by
+  its slot, the ground slam as melee, an ability by its slot's ability scale. Heavy hits,
+  plates, interrupts and armour read the tier-1 amount.
+- **The queue and the director (rulings 15 to 18).** These follow `WaveService` as engineer B
+  wrote it (checked against the file on 2026-10-12):
+  - groups are queued in order, as bursts of up to `burst`;
+  - a burst rises at the next `enemySpawns` point, round-robin over the run, from the first
+    entry;
+  - its grid has ceil(√n) columns across the line to the arena centre, with rows stepping inward;
+  - a burst held by `maxAlive` places what it can and waits at the head of the queue;
+  - the boss is placed outside the queue, at `boss.at`;
+  - tempo comes from crowd kills against `spec.total / targetWaveSeconds`, held at 1 for
+    `tempoWarmupSeconds`;
+  - a wave that has finished spawning merges the next one in when `Combat.ShouldMerge` says so,
+    never into or out of a boss wave;
+  - after each clear comes the `Combat.BreatherSeconds` breather, with no healing but regen;
+  - solo, the first down ends the run.
+- **The player of the whole run** reacts to every tell (the Stop 2 planner). He attacks with the
+  Broadsword only, with no bow and no ability, and goes for the nearest body. While a boss lives
+  he follows the boss-fight rules of Stop 2 and Stop 3. Between waves he stands where the last
+  body fell. A second player, for information only, does the same but never dodges.
+- **The bosses alone:** the Stop 2 and Stop 3 "reacts to every tell, attacks" player with the
+  default sword. The boss stands at its `boss.at` and the player starts on the Village pad
+  (0, 0). Three seeds each.
+
+**`py tools/sim_combat.py`** gains the pure mirrors `Combat.CrowdWave`, `Combat.CrowdReward`,
+`Combat.BurstInterval` and `Armory.DamageScale`, and four assertions (15 to 18). For both bosses
+and the whole run it imports `sim_range.py`. A mission with a `crowd` block no longer plays the
+C1 waves (the Wave 1 boot refuses every other kind), and its `targetWaveSeconds` was re-tuned.
+So the legacy run assertions 3, 7, 8, 10, 11 and 14 skip it and say so. Assertion 4 (cash
+against the era) reads the crowd run's cash. The economy, split and Mentor assertions (1, 2, 5,
+6, 9, 12, 13) are unchanged and pass.
+
+**The clear time is measured, not estimated.** The contract named a per-wave spawn-against-kill
+estimate. A run through the real director gives a different answer, for three reasons:
+- the tempo follows kills, which arrive in bunches as each burst reaches the player;
+- the director merges waves when the tempo spikes;
+- after every breather the window is empty, so the next wave's first bursts come at
+  `tempoMin` (0.7), 1.43 times further apart.
+
+An estimate at tempo 1 came to about 10 minutes. The measured run is the same bursts and the
+same director, with kills from the same strike code as the DPS tables.
+
+**Two interpreters.** `py tools/sim_*.py` runs Python 3.12, which the shebang selects; `py -`
+runs 3.14. A ten-minute crowd run is chaotic: a last-digit float difference can move a merge.
+At the shipped values both interpreters give the same clear times to 0.01 min, and every gate
+passes on both. With `burst` 12 they differed by up to half a minute.
+
+## P5: values
+
+`src/shared/Config/Missions/1_Village.json`:
+
+| Key | Was | Now | Why |
+|---|---|---|---|
+| `crowd.hpScale` | — | **1.5** | The melee `DamageScale` at gear 2/1 (18 ÷ 12). Every sword hit kills what it killed in the range, so both bosses are the range's fights to the second (76.8 s and 97.7 s, against 76.3 s and 97.7 s in the range). At 1.25 the Colossus falls in 63.3 s; at 1.6 the Warlord takes up to 106.3 s. |
+| `crowd.plateScale` | — | **1** | Plates are counted in heavy hits (ruling 9), so 1 keeps the range's counts: one finisher per guard, nine for the Warlord. |
+| `crowd.damageScale` | — | **1.12** | The bar grows from 130 to 145 (×1.115), so a bar that went down in so many hits in the range goes down in the same number here. The lunge is 9 (6.2%, as 8 of 130), and a still player needs 17 lunges in both. The ceiling is the Colossus's charge: 32 × 1.14 rounds to 36 (24.8%), and 1.15 gives 37 (25.5%). |
+| `crowd.regenShare` | — | **0.077** | 10/130 = 0.0769: 11.2 a second on 145, so an empty bar is full 13 s after `regenDelay`, as in the range. |
+| `crowd.maxAlive` | — | **60** | The reacting player never sees more than 26 to 30 alive. 60 holds a slower player's backlog and a party's larger waves, and it is under the crowd's 160. The lead reads the server's step time from the `[Perf]` line. |
+| `crowd.burst` | — | **10** | 5 to 18 bursts a wave, each arriving as a block. With 12 the kills bunched, the director merged more and the clear fell to 10.6 min on one interpreter. 10 gives the same clears on both. At 4 a still player lasts 11.8 s; at 2, 12.6 s. |
+| `crowd.burstSpacing` | — | **3.5** | Over the widest common body (fodder 2.6, slinger 2.4). A 10-body burst is 4 across (10.5 studs) and 3 rows deep. |
+| `crowd.waves` | — | the table below | On `crowdSkeleton`. Groups alternate, so shooters, brutes and elites arrive inside a wave, not after the fodder. |
+| `crowd.rewards` | — | the table below | Hits the C1 run's cash and Timber. Fodder pay only cash. |
+| `crowd.eliteKind` | — | absent | Optional. The director adds no extra elite in Wave 1. |
+| `targetWaveSeconds` | 30 | **45** | The contract re-tunes it for crowds. At 30 the reacting player clears in 10.4 to 10.7 min, under half a minute above the floor, while merges move a run by about ±0.5 min. At 45 he takes 11.5 to 11.8 min. A struggling player's tempo falls toward 0.7 and stretches a wave toward 45 ÷ 0.7 = 64 s, which I estimate puts his run near 15 min. At 120 even the reacting player reaches the 20-minute `runCapSeconds`. |
+| `targetMinutes` | 8 | **12** | The hub's Expedition panel shows it. The reacting player takes 11.5 to 11.8 min, and a real player longer. Its meaning is unchanged. |
+| Colossus `boss.at` | — | **(0, 40)** | 40 studs from the pad, as the range's 42. The fight opens with the call when the player starts at the pad. |
+| Warlord `boss.at` | — | **(0, 28)** | The range's 28 studs. He has 24 studs to the fence behind him and gives less ground than in the range; the fight takes the same 97.7 s. |
+| `valor` | — | **10, 25** | 35, the C1 run's Valor. |
+
+`Combat.json`: `crowdSkeleton` as the contract has it, and the debug keys `provingBoots`
+"mission", `provingMission` "village", `provingStartWave` 1, `provingStartDelay` 3,
+`provingGear` {2, 1} and `perfLogSeconds` 10. `ProvingGrounds.json` is unchanged.
+
+## P5: the waves (solo)
+
+| Wave | Bodies | Bursts | Holds | Cash | Timber | Valor |
+|---|---|---|---|---|---|---|
+| 1 | 48 | 5 | 48 fodder | 2,880 | 0 | 0 |
+| 2 | 72 | 8 | 72 fodder | 4,320 | 0 | 0 |
+| 3 | 78 | 11 | 72 fodder, 6 slingers | 6,120 | 6 | 0 |
+| 4 | 82 | 13 | 72 fodder, 4 brutes, 6 slingers | 10,920 | 22 | 0 |
+| 5 | 1 | 0 | the Colossus (+48 fodder called) | 20,880 | 30 | 10 |
+| 6 | 85 | 15 | 72 fodder, 4 marksmen, 4 lobbers, 3 slingers, 2 brutes | 10,420 | 19 | 0 |
+| 7 | 108 | 15 | 96 fodder, 3 marksmen, 3 lobbers, 3 slingers, 3 brutes | 12,360 | 21 | 0 |
+| 8 | 86 | 14 | 72 fodder, 6 armoured, 2 marksmen, 3 lobbers, 3 slingers | 15,970 | 38 | 0 |
+| 9 | 127 | 18 | 108 fodder, 6 armoured, 3 marksmen, 3 lobbers, 3 brutes, 4 slingers | 22,380 | 52 | 0 |
+| 10 | 1 | 0 | the Warlord (+4 guards called) | 38,000 | 70 | 25 |
+| **Run** | 688 (+52 called) | | | **144,250** | **258** | **35** |
+
+Rewards per kill, and each kind's share of the run's cash:
+
+| Kind | Cash | Timber | Kills a run | Share of cash |
+|---|---|---|---|---|
+| fodder | 60 | 0 | 660 (48 called by the Colossus) | 27% |
+| slinger | 300 | 1 | 25 | 5% |
+| marksman | 350 | 1 | 12 | 3% |
+| lobber | 350 | 1 | 13 | 3% |
+| brute | 1,200 | 4 | 12 | 10% |
+| armoured | 1,500 | 5 | 12 | 12% |
+| guard | 2,000 | 5 | 4 | 6% |
+| colossus | 18,000 | 30 | 1 | 12% |
+| warlord | 30,000 | 50 | 1 | 21% |
+
+- **The run pays 144,250 cash (+1.5%), 258 Timber (+0.8%) and 35 Valor.** The measured
+  kills of the reacting player's three runs pay 144,410 and 258. They differ only in how many
+  fodder the Colossus calls during a run.
+- **Pay rises through the run.** Waves 1 to 4 pay 24k, the Colossus 21k, waves 6 to 9 61k and
+  the Warlord 38k. A player who goes down in wave 7 keeps about 67k.
+- **Cash per minute falls.** The C1 run paid 142,185 in 8:32. The crowd pays 144,250 in about
+  12 minutes, about a quarter less a minute. The run is still under 1% of what the Village era
+  costs at that point (assertion 4).
+- **Calling is not a farm.** A Colossus left alive calls 12 fodder every 18 s: 40 cash a second,
+  against the run's 205.
+
+## P5: results (sim_range, Python 3.12; 3.14 gives the same to 0.01 min)
+
+Enemy hits at the mission's scale, on a bar of 145:
+
+| Kind | Attack | Range | Mission | Share |
+|---|---|---|---|---|
+| fodder | lunge | 8 | 9 | 6.2% |
+| slinger | shot | 12 | 13 | 9.0% |
+| marksman | line | 22 | 25 | 17.2% |
+| lobber, Colossus and Warlord | lob | 18 | 20 | 13.8% |
+| brute | lane | 28 | 31 | 21.4% |
+| guard | arc | 28 | 31 | 21.4% |
+| armoured, Warlord | arc | 30 | 34 | 23.4% |
+| Warlord | lane | 30 | 34 | 23.4% |
+| Colossus | ring | 26 | 29 | 20.0% |
+| Colossus | lane | 32 | 36 | **24.8%** |
+
+| Player | Outcome |
+|---|---|
+| Stands still in wave 1 | First lunge at 3.6 to 3.8 s (the first burst walks in from the rim). Down at **10.6 to 10.8 s** from the wave's start. |
+| Reacts to every tell, the Colossus alone, Broadsword | **76.8 s** (75.4 to 77.7). No hit; 48 fodder called. |
+| Reacts to every tell, the Warlord alone, Broadsword | **97.7 s** (96.9 to 98.4). No hit; the guard falls at 25.5 s and the plate breaks at 43.0 s. |
+| Reacts to every tell, the whole run | **Cleared in 11.67, 11.81 and 11.53 min** (seeds 11, 23, 37). No down. One slinger shot (13) in one seed. Peak alive 26 to 30. Breathers 81 to 86 s in all. |
+| The same, never dodging (information) | Down in wave 5, at 4.4 to 4.5 min, after 16 hits, mostly brute charges and the Colossus. |
+
+The whole run, seed 11:
+
+| Wave | Bodies | Start | Spawned by | Clear | Length |
+|---|---|---|---|---|---|
+| 1 | 48 | 0.0 | 37.2 | 39.4 | 39.4 s |
+| 2 | 72 | 45.4 | 101.8 | 103.7 | 58.3 s |
+| 3 | 78 | 116.3 | 169.8 | 172.2 | 55.9 s |
+| 4 | 82 | 183.3 | 235.2 | 239.8 | 56.5 s |
+| 5 | the Colossus | 245.8 | | 326.9 | 81.0 s |
+| 6 | 85 | 340.9 | 390.9 | 395.5 | 54.6 s |
+| 7 | 108 | 409.5 | 461.0 | 466.3 | 56.8 s |
+| 8 + 9 (merged) | 86 + 127 | 472.3 | 577.2 | 588.0 | 115.8 s |
+| 10 | the Warlord | 602.0 | | 700.1 | 98.1 s |
+
+- **In the run the bosses take 81 s and 98 s.** The player starts each boss wave where the
+  last body fell, not on the pad, so the Colossus's opening varies.
+- **A wave is paced by its bursts, not by the sword.** The reacting Broadsword kills each burst
+  as it arrives: 26 to 30 alive at the most, and almost nothing lands on him. A real player is
+  slower, his tempo drops, and his waves stretch toward 64 s. The playtest asks Ben whether
+  wave 9 is too easy, about right or too hard.
+- **A player who never dodges does not see the Warlord.** Brute charges (31) and the Colossus
+  put him down in wave 5. The pressure is real once brutes arrive, but only for a player who
+  stops answering tells.
+
+## P5: bands (`--check`)
+
+| Band | Where | Value | Now | Fails at |
+|---|---|---|---|---|
+| Every kind the mission fields: one hit | sim_range | ≤ 25% of the bar | 24.8% (the Colossus's charge) | `damageScale` 1.15: 25.5% |
+| `regenShare` close to 10/130 | sim_range | ±10% | 0.077 | 0.085 |
+| Still in wave 1: down, every seed | sim_range | 6–12 s | 10.6–10.8 s | `burst` 2: 12.6 s; `damageScale` 0.9: 12.2–12.5 s |
+| The Colossus alone, Broadsword, every seed | sim_range | 64–90 s | 75.4–77.7 s | `hpScale` 1.25: 63.3 s |
+| The Warlord alone, Broadsword, every seed | sim_range | 77–101 s | 96.9–98.4 s | `hpScale` 1.6: 106.3 s |
+| Both bosses: hits taken by the reacting player | sim_range | 0 | 0 | |
+| The whole run, reacting, every seed | sim_range, sim_combat 17 | 10–15 min | 11.5–11.8 min | `burst` 20: 9.9 min; `targetWaveSeconds` 120: the 20-minute cap |
+| `targetMinutes` in the band and within 1.5 min of the mean clear | sim_combat 17 | | 12 against 11.7 | |
+| `maxAlive` ≤ the crowd's 160 | sim_range, sim_combat 15 | | 60 | 200 |
+| Skeleton, `#waves`, `bossWaves`, rewards for every kind that can be fielded, `boss.at` on the floor | sim_combat 15 | | all | a slinger in wave 2; wave 8 without armoured; `boss.at` (0, 52); no `guard` reward; `bossWaves` [5]; a swapped skeleton boss |
+| Run cash and Timber; Valor | sim_combat 16 | ±10%; exact | +1.5%, +0.8%; 35 | fodder cash 80: +10.7%; armoured 8 Timber: +14.8% |
+| The `CrowdWave` mirror against the config, party 1–4, Overdrive | sim_combat 18 | | 80 combinations | |
+
+## P5: rules these numbers hang on
+
+- **`hpScale` equals the melee scale, so the ranged slot falls behind.** At gear 2/1 the bow is
+  a tier behind the sword, and every body has 1.5 times its range HP. The Longbow alone does
+  not kill the mission's Colossus inside the simulator's 240 s window (142 s in the range).
+- **After a boss wave the breather is the longest, 14 s.** A boss wave's `spec.total` is 0, so
+  the expected kill rate is 0 and `Combat.Tempo` returns `tempoMin`. The next wave also opens
+  at `tempoMin`. That is the code as written, and it gives a rest after a boss.
+- **Merges come from bunched kills.** A burst dies together, the 10-second window spikes, and
+  the tempo passes `mergeTempo` (1.25). A bigger `burst` merges more and shortens the run.
+- **Rewards are whole numbers per kill** (`Combat.CrowdReward` rounds). Fodder therefore pay no
+  Timber: a single Timber each would be 660 a run.
+- **The summon count is the reacting player's.** A slower player lets the Colossus call more
+  (a call tops up every 18 s), and each extra fodder pays 60.
+
+## P5: flags for the owner
+
+- **The sim's player is ideal.** He reacts in 0.25 s and his weapon never misses, so almost
+  nothing hits him in a whole run. A real player will be hit and will be slower. The 10–15
+  minute band is met at 11.5–11.8 min, which leaves room above for that.
+- **Legacy assertions retired for Village.** 3, 7, 8, 10, 11 and 14 now skip a crowd mission.
+  With `targetWaveSeconds` 45 the C1 model of Village clears 8 of 10 waves and pays 52,945,
+  but that model no longer runs in the game. Boomtown, Metropolis and Orbital are judged by it
+  until Wave 3.
+- **Party scaling is untested in play.** With `countPerExtraPlayer` 0.6, four players make wave
+  9 hold 354 bodies, and `maxAlive` 60 queues the rest. That is Wave 4's check.
+- **Overdrive is wired and not tuned.** The mirror shows it scales HP and damage, not plates or
+  regen.
+- **Bows on bosses** are slower still in a mission (see the rules above). It is the open P3
+  question.

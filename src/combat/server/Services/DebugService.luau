@@ -13,9 +13,15 @@
 -- C2 adds `admitCheck` (remote only): the caller is judged by the SAME CheckAdmission a real
 -- arrival runs, as a stranger arriving now, and gets the verdict as a toast; nobody is sent home.
 --
--- P1: in the Proving Grounds every mission lever is inert. They would start Humanoid waves or
--- bots inside the range, or write the profile, which the range never does; the range has its
--- own Studio commands (RequestRangeCommand, RangeService).
+-- P1: in the Proving Grounds every mission lever is inert. They would start waves inside the
+-- range, or write the profile, which the range never does; the range has its own Studio
+-- commands (RequestRangeCommand, RangeService).
+--
+-- P5 (docs/INTERFACES.md "P5 contracts", ruling 25): the levers point at the crowd. `wave`
+-- starts that wave at once, `skip` ("next" | "boss") is the B and N keys, `spawn` raises a crowd
+-- kind at the rim, `godMode` and `setGear` go through VitalsService, `killAll` kills the crowd
+-- with its rewards. Debug bots are Humanoid rigs the crowd cannot target: until Wave 4 the
+-- `bots` lever only warns.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -30,21 +36,20 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
-local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
-local CombatService = require(script.Parent:WaitForChild("CombatService"))
 local WaveService = require(script.Parent:WaitForChild("WaveService"))
 local RangeService = require(script.Parent:WaitForChild("RangeService"))
+local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 
 local TICK_INTERVAL_SECONDS = 1
-local MAX_BOTS = 8
-local BOT_TICK_SECONDS = 0.5
-local BOT_REACH_STUDS = 8
 
 local isStudio = RunService:IsStudio()
 local tickAccumulator = 0
-local botAccumulator = 0
 local levelConnection: RBXScriptConnection? = nil
 local warnedRange = false
+local warnedBots = false
+-- The godMode attribute is a state, applied when it changes, so the remote lever's own setting
+-- for one player is not overwritten by the poll a second later.
+local lastGodAttribute: boolean? = nil
 
 local DebugService = {}
 
@@ -114,44 +119,31 @@ local function setGear(player: Player?, spec: string): ()
 		if wanted.ranged ~= nil then
 			state.combat.gear.ranged = wanted.ranged
 		end
-		-- Weapons decide max HP, so the Humanoid has to be resized from the new loadout.
-		local character = target.Character
-		if character ~= nil then
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			if humanoid ~= nil then
-				local maxHp = Armory.MaxHp(armoryConfig, state.combat.gear, state.combat.ascension)
-				humanoid.MaxHealth = maxHp
-				humanoid.Health = maxHp
-			end
-		end
+		-- Weapons decide max HP: VitalsService, the bar's only writer, resizes it from the new
+		-- gear (a proving mission keeps its baked gear, ruling 12).
+		VitalsService.RefreshMaxHp(target)
 		ArenaService.SendSnapshot(target)
 	end)
 end
 
 local function setGodMode(player: Player?, enabled: boolean): ()
 	if player ~= nil then
-		local member = ArenaService.GetMemberFor(player)
-		if member ~= nil then
-			member.godMode = enabled
-		end
+		VitalsService.SetGod(player, enabled)
 		return
 	end
 	for _, member in ArenaService.GetMembers() do
-		member.godMode = enabled
+		local target = member.player
+		if target ~= nil then
+			VitalsService.SetGod(target, enabled)
+		end
 	end
 end
 
--- Bots exist so party scaling, aggro and the contribution split can be seen from one client.
-function DebugService.SetBots(count: number): ()
-	local wanted = math.clamp(math.floor(count), 0, MAX_BOTS)
-	-- Indices, not a local counter: a run reset drops every bot, and the live roster is the
-	-- only count that stays true across it. AddBot/RemoveBot are idempotent per index.
-	for index = 1, MAX_BOTS do
-		if index <= wanted then
-			ArenaService.AddBot(index)
-		else
-			ArenaService.RemoveBot(index)
-		end
+-- Ruling 24: the crowd targets Players only, so a bot would stand in the arena doing nothing.
+local function refuseBots(): ()
+	if not warnedBots then
+		warnedBots = true
+		warn("[DebugService] debug bots are not supported in crowd missions until Wave 4")
 	end
 end
 
@@ -197,6 +189,8 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 	end
 	if lever == "wave" and typeof(value) == "number" then
 		WaveService.ForceWave(value)
+	elseif lever == "skip" and (value == "next" or value == "boss") then
+		WaveService.Skip(value)
 	elseif lever == "spawn" and typeof(value) == "string" and value ~= "" then
 		WaveService.SpawnOne(value)
 	elseif lever == "godMode" then
@@ -206,7 +200,7 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 	elseif lever == "setGear" and typeof(value) == "string" then
 		setGear(player, value)
 	elseif lever == "bots" and typeof(value) == "number" then
-		DebugService.SetBots(value)
+		refuseBots()
 	elseif lever == "grantMaterials" and typeof(value) == "number" then
 		grantMaterials(player, value)
 	elseif lever == "grantValor" and typeof(value) == "number" then
@@ -272,62 +266,16 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 		applyLever(nil, "grantValor", valor)
 	end
 
-	-- States, read but never reset.
-	setGodMode(nil, workspace:GetAttribute(debugConfig.godModeAttribute) == true)
+	-- States, read but never reset. God mode is applied when the attribute changes (and to
+	-- whoever is in the run at that moment); a new arrival starts mortal.
+	local god = workspace:GetAttribute(debugConfig.godModeAttribute) == true
+	if god ~= lastGodAttribute then
+		lastGodAttribute = god
+		setGodMode(nil, god)
+	end
 	local bots = workspace:GetAttribute(debugConfig.botsAttribute)
-	-- Only while a run is open: bots belong to a run, and a reset has just removed them.
-	if
-		typeof(bots) == "number"
-		and ArenaService.GetMission() ~= nil
-		and math.floor(bots) ~= ArenaService.BotCount()
-	then
-		DebugService.SetBots(bots)
-	end
-end
-
--- Bots walk at the nearest enemy and chip at it through CombatService, so their damage lands in
--- the same tally the contribution split reads.
-local function tickBots(debugConfig: Types.CombatDebugConfig, delta: number): ()
-	if ArenaService.BotCount() == 0 then
-		return
-	end
-	botAccumulator += delta
-	if botAccumulator < BOT_TICK_SECONDS then
-		return
-	end
-	local elapsed = botAccumulator
-	botAccumulator = 0
-	local damage = debugConfig.botDamagePerSecond * elapsed
-	for _, member in ArenaService.GetMembers() do
-		-- A bot parked on the pad for the wave boundary sits it out like a waiting joiner.
-		if not member.bot or not ArenaService.IsFighting(member) then
-			continue
-		end
-		local character = member.character
-		local humanoid = member.humanoid
-		local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
-		if humanoid == nil or root == nil or not root:IsA("BasePart") then
-			continue
-		end
-		local nearest: EnemyService.Enemy? = nil
-		local nearestDistance = math.huge
-		for _, enemy in EnemyService.GetEnemies() do
-			if enemy.dead then
-				continue
-			end
-			local distance = (enemy.root.Position - root.Position).Magnitude
-			if distance < nearestDistance then
-				nearestDistance = distance
-				nearest = enemy
-			end
-		end
-		if nearest == nil then
-			continue
-		end
-		humanoid:MoveTo(nearest.root.Position)
-		if nearestDistance <= BOT_REACH_STUDS then
-			CombatService.DealDamage(nearest, damage, member.userId, false)
-		end
+	if typeof(bots) == "number" and bots > 0 then
+		refuseBots()
 	end
 end
 
@@ -347,7 +295,6 @@ function DebugService.Start(): ()
 		if RangeService.IsActive() then
 			return
 		end
-		tickBots(debugConfig, delta)
 		tickAccumulator += delta
 		if tickAccumulator < TICK_INTERVAL_SECONDS then
 			return

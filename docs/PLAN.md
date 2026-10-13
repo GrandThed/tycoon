@@ -2533,6 +2533,186 @@ when he signs it off. The Stop 1 `fight` set is still not judged by him.
 
 **P4 is complete when the Stop 3 playtest box is ticked.**
 
+## P5 — Back into the missions
+
+**Goal:** the range's combat replaces the old mission combat. Crowd enemies, the 13 weapon
+families, abilities and the player's body go into the Expeditions missions, era by era.
+**No sound. Phones must work.**
+- Plan of record: `docs/COMBAT_DESIGN.md` §9 and §10 step 6.
+- Contracts: `docs/INTERFACES.md` "P5 contracts" → "Wave 1 — crowd in a mission" (rulings
+  5–28, with "Review round and state").
+- Values: `docs/BALANCE.md` "P5".
+- Branch `p5-missions`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+
+**Ben's rulings (2026-10-12):**
+1. **Free variant styles in the Armory.** Every owned family offers all its variants; switch in
+   the lobby and between waves. (Wave 2.)
+2. **One 10-wave skeleton for every era,** scaled per era by config. Colossus = boss of wave 5,
+   Warlord and his guard = boss of wave 10.
+3. **A teammate standing near revives you,** no button. Solo, the first down ends the run.
+   (Revive = Wave 4.)
+4. **`proving.rbxl` boots into a mission.** The range stays as a Studio-only bench behind a
+   config switch.
+
+**Waves (each ends in a playtest stop):**
+
+| Wave | Scope |
+|---|---|
+| 1 | Crowd in a mission: Village, solo, the range loadout. **Built.** |
+| 2 | Loadout and progression: variant styles in the Armory, profile schema v7. |
+| 3 | All four eras, both bosses everywhere, reward garnish; old mission code deleted. |
+| 4 | Co-op: revive by a teammate, party scaling checked, debug bots as crowd targets. |
+
+**Where it is (2026-10-12):**
+- Wave 1 is built on `p5-missions`, reviewed and QA-green. Not merged to `main` yet.
+- The lead merges it before Ben's look ("Build all" builds `main`; Ben opens
+  `tycoon\build\proving.rbxl`). Whether P4's "Merge each ready wave" holds for P5 is asked once.
+- P4's last box (Stop 3, the Warlord) is still open. Wave 1 shows the Warlord at wave 10, so
+  Ben meets him here either way.
+
+**Wave 1 shipped (2026-10-12):**
+- **What the player meets (`build/proving.rbxl`, Play):**
+  - Raider Woods: a grassy 110 × 110 arena with a wooden fence. No range, no panel.
+  - Wave 1 starts by itself about 3 s after joining. No Ready button.
+  - Fodder rise from the fence in bursts of up to 10.
+  - Ten waves on the skeleton: fodder (1–2), slingers (3), brutes (4), the **Colossus** (5),
+    marksmen and lobbers (6–7), plated elites (8–9), the **Warlord and his guard** (10).
+  - Loadout: Broadsword + Longbow. Health **145** (gear 2/1 baked for Studio).
+  - Breathers between waves. No healing but regen.
+  - Solo, the first down ends the run. The summary card shows waves, kills, cash, Timber and
+    Valor, no Return button, and "Next run in …". About 15 s later a new run starts at wave 1.
+  - Rewards are paid to the Studio profile.
+  - Studio keys: **B** = next boss wave, **N** = next wave. A corner hint shows them.
+  - Phone: the range's touch controls (auto-swing, auto-fire, ability and slot buttons). No
+    Attack button.
+- **Server:**
+  - New `WeaponService.luau`: weapons, projectiles, dash, slam, aim, i-frames and the ability
+    hooks, split out of `RangeService`. The range keeps sets, respawns, the panel's commands.
+  - New `src/shared/CombatMode.luau`: `"range"` or `"mission"`, decided once at boot, same on
+    server and client.
+  - New `RunFx.luau`: the run effects (`wave`, `bossDown`, `mentor`), moved from
+    `CombatService`.
+  - `CrowdService`: mission scales (`SetScales`), `OnKilled` with who did the damage,
+    `KillAll`, a `[Perf]` step-time line in Studio's log every 10 s.
+  - `VitalsService`: mission rules (health from the Armory, enemy damage scale, regen share, a
+    down that never ends by itself, one targeting filter), `StandUp`, `SetGod`, `RunLost`.
+  - `WaveService`: crowd waves in bursts, kill rewards per kind, the solo down rule, the proving
+    loop, `Skip`.
+  - `ArenaService`: arena bounds, spawn points, the character hook, `PartyMember.down`.
+  - `DebugService`: levers pointed at the crowd, plus `skip`.
+  - `Main`: the new boot. **`EnemyService` and `CombatService` are no longer booted** (still
+    in the tree until Wave 3).
+  - Weapon damage follows the Armory tier; heavy hits, plates and armour still read the tier-1
+    amount.
+  - Melee slack uses the server's own position history (carried from P3.1: done).
+  - No new remote.
+- **Client:**
+  - One mode gate (`CombatMode.Get()`) replaces `CameraController.IsRange()` checks.
+  - `CombatUIController.bootMission`: the range HUD plus the run layer of `CombatHud`, without
+    its old Attack, stance and ability cluster.
+  - `VitalsHud`: a "DOWN" banner with no countdown in missions.
+  - `SummaryCard`: a `nextRun` option (no Return button, "Next run in …").
+- **Config:**
+  - `Combat.json`: `crowdSkeleton`; debug keys `provingBoots` "mission", `provingMission`
+    "village", `provingStartWave` 1, `provingStartDelay` 3, `provingGear` {2, 1},
+    `perfLogSeconds` 10.
+  - `Missions/1_Village.json`: a `crowd` block; `targetWaveSeconds` 30 → 45; `targetMinutes`
+    8 → 12. The old `enemies`, `waveTable`, `bosses` stay until Wave 3.
+  - `ProvingGrounds.json`: unchanged.
+- **Tools:**
+  - `sim_range.py`: a MISSION section, 11 more checks (`--mission-only`).
+  - `sim_combat.py`: pure mirrors of the crowd functions, assertions 15–18.
+  - `tools/crowd_harness/tests_p5.luau`; `mutate.py` extended.
+  - `proving_project.py` also bakes `DebugMission`.
+
+**Review outcome, Wave 1:** 0 Critical, 1 Major, 5 Minor.
+- **Major, fixed:** a run could hang up to 1,200 s when a downed player's partner left or
+  died. The run's end is now judged from state every frame (`VitalsService.RunLost`, called by
+  `WaveService.endIfLost`).
+- Minors:
+  - Fixed: the proving summary card had a dead Return button (now `SummaryCard` `nextRun`).
+  - Fixed: warn spam from the start and skip levers, and a lost reward pool on that path.
+  - Fixed: the pellet seed is a fresh server-side draw per shot.
+  - Fixed: dead `SetArena` state removed (a no-op stub stays; `WaveService` calls it).
+  - Accepted as design: after a boss wave the breather is always the longest, 14 s
+    (`breatherMaxSeconds`).
+- qa-runner: ALL GREEN (2026-10-12). stylua; selene; hub and combat luau-lsp; `check_compile.py`;
+  the hub, combat and proving builds; `sim_economy.py --check` (unchanged), `sim_combat.py
+  --check` (18 assertions), `sim_range.py --check`; the server's own harness 546 checks,
+  `mutate.py` 221 mutations, none surviving.
+- Skipped: `streetplan.py` and `check_mirror.py` (Pillow is not installed). Wave 1 touches no
+  city file.
+
+**Balance, Wave 1 (`docs/BALANCE.md` "P5"; gear 2/1, solo, Broadsword, from `sim_range.py`):**
+- **A run pays 144,250 cash (+1.5%), 258 Timber (+0.8%) and 35 Valor.** Target 142,185 / 256 /
+  35.
+- **A reacting player clears all ten waves in 11.5 to 11.8 min** (target 10–15).
+- **The Colossus alone: 76.8 s. The Warlord alone: 97.7 s.** Both as in the range. No hit taken.
+- **Standing still in wave 1: down at 10.6 to 10.8 s** (target 6–12).
+- **No hit over 25%:** the worst is the Colossus's charge, 36 of 145 (24.8%).
+- Mission scales: `hpScale` 1.5, `plateScale` 1, `damageScale` 1.12, `regenShare` 0.077,
+  `maxAlive` 60, `burst` 10.
+- A player who never dodges is down in wave 5.
+- Nothing was tuned in real play. Every number is a starting value.
+
+**Known limits at Wave 1:**
+- **The Longbow is weaker in missions.** Bodies have 1.5× HP and the bow is still tier 1: the
+  Longbow alone does not kill the Colossus inside 240 s.
+- **Cash per minute is down about a quarter:** 144k in about 12 min, against the old run's 142k
+  in 8.5 min.
+- **Co-op is unchecked.** A party of 4 makes wave 9 hold 354 bodies; `maxAlive` 60 queues them.
+- **Two humans in Studio:** a downed player stands up at the next wave boundary. A stand-in
+  until the Wave 4 revive.
+- **Debug bots do nothing in missions** (the lever warns once).
+- No per-kill cash pops (Wave 3). No sound. Placeholder bodies.
+- The crowd walks through boulders and fence posts. The keepAway bands span most of a
+  110-stud floor. Kiting still avoids most hits.
+- **Boomtown, Metropolis and Orbital missions are refused** ("locked"): they have no `crowd`
+  block until Wave 3.
+- **Unmeasured:** the `[Perf]` step time in real play (budget p95 under 2 ms in waves 1–4). The
+  lead reads it from Studio's log after Ben's session.
+
+**Carried:**
+- **Publish freeze (owner: lead):** do not publish the Expeditions place from `main` until
+  Wave 3 is merged. Until then it plays only Village.
+- **To Wave 2 (owner: lead; luau-engineer, ui-engineer):** loadout and variant styles in the
+  lobby and between waves; profile schema v7 (`combat.loadout`); the cooldown carried across a
+  family switch.
+- **To Wave 3 (owner: lead; economy-designer for the numbers):**
+  - `crowd` blocks for Boomtown, Metropolis and Orbital; lift the publish freeze.
+  - Per-kill cash pops and big-kill callouts.
+  - Delete `EnemyService`, `CombatService`, the four old remotes, the C1 mission client paths,
+    the old mission JSON blocks and `director.maxAlive`.
+  - Era tuning of the mission scales; Overdrive numbers.
+- **To Wave 4 (owner: lead; luau-engineer, ui-engineer, economy-designer):**
+  - Revive by a teammate standing near (replaces the wave-boundary stand-up).
+  - Party scaling checked in play (party of 4: wave 9 = 354 bodies, `maxAlive` 60).
+  - Debug bots as crowd targets, or retired.
+  - A two-account published round trip.
+- **Weapon numbers (owner: lead, Ben's call first):** the Longbow in missions and the bows on
+  bosses; cash per minute down a quarter.
+- **Still unjudged by Ben (owner: lead):** the Warlord (P4 Stop 3) and the `fight` set. Wave 1
+  shows both enemies' kinds in waves 3–10.
+- **Still open from P3, for Ben:** A or B for SMG, Beam and Chain Gun; cross-slot refunds;
+  favourite and weakest ability.
+- **Unscheduled (owner: lead):** melee abilities still resolve at the server's position; early
+  drawing of own shots and ability visuals; refunds against chasing crowds; cover and stairs
+  not in the simulator (economy-designer); kiting.
+
+**Next:**
+1. The lead merges `p5-missions` to `main` and rebuilds the place files.
+2. **Ben's Wave 1 playtest** (`docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission"; setup in
+   `docs/MANUAL_STEPS.md` "P5 Wave 1").
+3. The lead reads the `[Perf]` lines from Studio's log.
+4. Wave 2 only on Ben's word.
+
+- [x] Wave 1 built and reviewed (INTERFACES "Wave 1 — crowd in a mission" with its review round)
+- [ ] Wave 1 merged to `main` (lead)
+- [ ] Wave 1 playtest (Ben)
+- [ ] Wave 2 — loadout and progression
+- [ ] Wave 3 — all four eras
+- [ ] Wave 4 — co-op
+
 ## M12 — Growing city
 
 **Goal:** the city should feel "alive and like a growing city, not a grid being filled" (Ben,

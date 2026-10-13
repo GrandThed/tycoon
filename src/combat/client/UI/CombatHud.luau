@@ -20,6 +20,13 @@
 --
 -- No radial cooldown image exists in this project, so a "ring" is a dark wipe that falls
 -- across the round button plus the remaining whole seconds (reported as a deviation).
+--
+-- P5 (docs/INTERFACES.md "P5 contracts", ruling 22): a crowd mission shows only the run layer
+-- (`deps.actions = false`): header, wave line, breather timer, wallet, party list, Ready /
+-- Return and the waiting card. The range HUD does the rest (crosshair, health bar, boss bar,
+-- touch buttons), so the Attack / stance / ability cluster, the HP bar, the old boss bar and
+-- the old reticle never show, and Ready / Return drop to the bottom-left corner the HP bar
+-- left (a proving mission shows neither: `deps.runButtons = false`). A party member who is down reads " · DOWN" (PartyMember.down, ruling 18).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,7 +52,19 @@ export type Deps = {
 	onAbility: (slot: string) -> (),
 	-- C2.5: the touch that pressed the attack button, so it can also steer the camera.
 	onAttackInput: ((input: InputObject) -> ())?,
+	-- P5: false = the run layer only (see the header). nil = true, the C1 HUD.
+	actions: boolean?,
+	-- P5: false = no Ready / Return pair: a proving mission starts and restarts by itself
+	-- (ruling 19), and leaving it from Studio would kick through the bridge.
+	runButtons: boolean?,
+	-- P5: a dim line over the bottom-left buttons on keyboard devices (the Studio keys).
+	keyHint: string?,
 }
+
+-- P5: where the run layer's top blocks ended up, in px of the parent, for what must keep clear
+-- of them (the range's boss bar): the header-and-wallet block's bottom and right edges, and the
+-- party list's left edge.
+export type HudEdges = { headerBottom: number, headerRight: number, partyLeft: number }
 
 export type AbilityInfo = { name: string, cooldown: number }
 export type AbilitySet = { melee: AbilityInfo?, ranged: AbilityInfo? }
@@ -57,7 +76,7 @@ export type CombatHudHandle = {
 	SetWallet: (cash: number, material: string, amount: number, valor: number) -> (),
 	SetStance: (stance: string) -> (),
 	SetAbilities: (abilities: AbilitySet) -> (),
-	SetLayout: (scale: number, viewportSize: Vector2) -> (),
+	SetLayout: (scale: number, viewportSize: Vector2) -> HudEdges,
 	-- C2.5 reticle: camera state, bow draw (nil = not drawing) and the hit marker.
 	SetAiming: (shoulderCamera: boolean, cursorLocked: boolean) -> (),
 	SetCharge: (fraction: number?) -> (),
@@ -110,6 +129,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	-- fought went down and is "back next wave"; anyone else just arrived and "joins next
 	-- wave". PartyMember carries only the flag, so the history is ours.
 	local seenFighting: { [number]: boolean } = {}
+	local actions = deps.actions ~= false
 
 	local function bar(parentFrame: Frame, name: string, height: number): Frame
 		local track = Create("Frame", {
@@ -313,6 +333,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			Theme.COMBAT_HP_LABEL_HEIGHT + Theme.COMBAT_HP_BAR_HEIGHT
 		),
 		BackgroundTransparency = 1,
+		Visible = actions,
 		Parent = parent,
 	}) :: Frame
 	local hpScale = Create("UIScale", { Parent = hpFrame }) :: UIScale
@@ -347,6 +368,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
+	buttonRow.Visible = deps.runButtons ~= false
 	local buttonScale = Create("UIScale", { Parent = buttonRow }) :: UIScale
 	Create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
@@ -553,6 +575,23 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Parent = parent,
 	}) :: TextLabel
 	local altHintScale = Create("UIScale", { Parent = altHint }) :: UIScale
+	-- P5: the Studio keys, one line above the Alt hint.
+	local keyHintText = deps.keyHint
+	local keyHint = Create("TextLabel", {
+		Name = "KeyHint",
+		Active = false,
+		AnchorPoint = Vector2.new(0, 1),
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(Theme.COMBAT_HP_BAR_WIDTH, Theme.COMBAT_ALT_HINT_HEIGHT),
+		Font = Theme.FONT,
+		TextSize = Theme.TEXT_SMALL,
+		TextColor3 = Theme.COLOR_HIGHLIGHT,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Text = keyHintText or "",
+		Visible = keyHintText ~= nil and keyHints,
+		Parent = parent,
+	}) :: TextLabel
+	local keyHintScale = Create("UIScale", { Parent = keyHint }) :: UIScale
 
 	-- Reticle: a separate ScreenGui with no top-bar inset, so (0.5, 0.5) is the exact
 	-- viewport centre the camera's aim ray passes through. Nothing in it takes input.
@@ -818,8 +857,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		waveLabel.Text = waveText(run)
 		readyButton.Visible = phase == "lobby"
 		fighting = phase == "wave" or phase == "breather" or phase == "boss"
-		controls.Visible = fighting
-		reticle.Visible = fighting and shoulderCamera
+		controls.Visible = fighting and actions
+		reticle.Visible = fighting and shoulderCamera and actions
 		altHint.Visible = fighting and shoulderCamera and keyHints
 		tempoDot.BackgroundColor3 = if run.tempo >= Theme.COMBAT_TEMPO_HOT
 			then Theme.COLOR_ERROR
@@ -833,7 +872,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		lastTickAt = os.clock()
 
 		local boss = run.boss
-		bossFrame.Visible = boss ~= nil
+		bossFrame.Visible = boss ~= nil and actions
 		if boss ~= nil then
 			bossLabel.Text = boss.name
 			bossFill.Size = UDim2.fromScale(
@@ -865,9 +904,12 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			if waiting and member.userId == localUserId then
 				localWaiting = true
 			end
+			-- P5: a crowd mission's down keeps its Humanoid alive (read defensively: an older
+			-- server build sends no `down`).
+			local down = not member.alive or member.down == true
 			local suffix = if phase == "lobby" and member.ready
 				then " ✓"
-				elseif not member.alive then " · DOWN"
+				elseif down then " · DOWN"
 				elseif member.bot then " · BOT"
 				else ""
 			row.nameLabel.Text = (if member.host == true then HOST_MARK else "")
@@ -884,12 +926,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					then "back next wave"
 					else "joins next wave"
 			end
-			row.nameLabel.TextColor3 = if member.alive
-				then Theme.COLOR_TEXT
-				else Theme.COLOR_TEXT_DIM
-			row.frame.BackgroundTransparency = if member.alive
-				then Theme.BG_TRANSPARENCY
-				else Theme.COMBAT_PARTY_DOWN_TRANSPARENCY
+			row.nameLabel.TextColor3 = if down then Theme.COLOR_TEXT_DIM else Theme.COLOR_TEXT
+			row.frame.BackgroundTransparency = if down
+				then Theme.COMBAT_PARTY_DOWN_TRANSPARENCY
+				else Theme.BG_TRANSPARENCY
 			local maxHp = member.maxHp
 			row.fill.Size =
 				UDim2.fromScale(if maxHp > 0 then math.clamp(member.hp / maxHp, 0, 1) else 0, 1)
@@ -1061,11 +1101,16 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			bossFrame.Position = UDim2.new(0.5, 0, 0, bossTop)
 			-- Portrait stacks header, wallet and boss down the middle, so the party list
 			-- starts below all three; landscape parks them at the left and the list can
-			-- sit beside them at the top-right corner.
+			-- sit beside them at the top-right corner. P5: in a crowd mission the boss row
+			-- is the range's boss bar at its tallest (plate row included).
+			local bossBlock = if actions
+				then Theme.COMBAT_BOSS_LABEL_HEIGHT + Theme.COMBAT_BOSS_BAR_HEIGHT
+				else Theme.COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT
+					+ Theme.COMBAT_RANGE_BOSS_BAR_PLATE_GAP
+					+ Theme.COMBAT_RANGE_BOSS_BAR_HEIGHT
 			local headerBlock = Theme.TOP_BAR_HEIGHT
 				+ Theme.COMBAT_WALLET_HEIGHT
-				+ Theme.COMBAT_BOSS_LABEL_HEIGHT
-				+ Theme.COMBAT_BOSS_BAR_HEIGHT
+				+ bossBlock
 				+ Theme.SCREEN_MARGIN * 3
 			local partyTop = if landscape then margin else margin + headerBlock * scale
 			partyFrame.Position = UDim2.new(1, -margin, 0, partyTop)
@@ -1100,15 +1145,33 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			controls.Position = UDim2.new(1, -right, 1, -lift)
 
 			hpFrame.Position = UDim2.new(0, margin, 1, -bottom)
-			local hpHeight = (Theme.COMBAT_HP_LABEL_HEIGHT + Theme.COMBAT_HP_BAR_HEIGHT) * scale
-			buttonRow.Position =
-				UDim2.new(0, margin, 1, -(bottom + hpHeight + Theme.ROW_SPACING * scale))
-			altHint.Position = UDim2.new(
+			-- P5: with no HP bar the buttons take its corner.
+			local hpHeight = if actions
+				then (Theme.COMBAT_HP_LABEL_HEIGHT + Theme.COMBAT_HP_BAR_HEIGHT + Theme.ROW_SPACING)
+					* scale
+				else 0
+			buttonRow.Position = UDim2.new(0, margin, 1, -(bottom + hpHeight))
+			local altBottom = bottom
+				+ hpHeight
+				+ (Theme.ROW_SPACING + Theme.ROW_BUTTON_HEIGHT) * scale
+			altHint.Position = UDim2.new(0, margin, 1, -altBottom)
+			keyHintScale.Scale = scale
+			keyHint.Position = UDim2.new(
 				0,
 				margin,
 				1,
-				-(bottom + hpHeight + (Theme.ROW_SPACING * 2 + Theme.ROW_BUTTON_HEIGHT) * scale)
+				-(altBottom + (Theme.COMBAT_ALT_HINT_HEIGHT + Theme.ROW_SPACING) * scale)
 			)
+			local headerWidth = Theme.TOP_BAR_WIDTH * scale
+			return {
+				headerBottom = margin
+					+ (Theme.TOP_BAR_HEIGHT + Theme.SCREEN_MARGIN + Theme.COMBAT_WALLET_HEIGHT)
+						* scale,
+				headerRight = if landscape
+					then margin + headerWidth
+					else (viewportSize.X + headerWidth) / 2,
+				partyLeft = viewportSize.X - margin - Theme.COMBAT_PARTY_WIDTH * scale,
+			}
 		end,
 		Destroy = function()
 			for _, connection in connections do
@@ -1123,6 +1186,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			buttonRow:Destroy()
 			controls:Destroy()
 			altHint:Destroy()
+			keyHint:Destroy()
 			reticleGui:Destroy()
 			waitingFrame:Destroy()
 		end,
@@ -1132,7 +1196,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			end
 			shoulderCamera = nextShoulder
 			cursorWasLocked = cursorLocked
-			reticle.Visible = fighting and shoulderCamera
+			reticle.Visible = fighting and shoulderCamera and actions
 			altHint.Visible = fighting and shoulderCamera and keyHints
 			altHint.Text = if cursorLocked then ALT_HINT_LOCKED else ALT_HINT_FREE
 		end,

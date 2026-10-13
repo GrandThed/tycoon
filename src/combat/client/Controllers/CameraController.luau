@@ -24,13 +24,19 @@
 -- summary / ended phases, so a down player watches their own ragdoll and the summary card
 -- has the ordinary cursor.
 --
--- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place that
--- decides whether the client is in the range (`IsRange`), because it is the lowest-level
--- controller and both InputController and MovementController already require it. In the
--- range there is no run phase, so the phase rules are skipped; aim-down-sights narrows the
--- field of view to `shooting.adsFieldOfView` and scales look sensitivity with it; and the
+-- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts"): this module is the one place the
+-- other controllers ask which combat runs, because it is the lowest-level controller and both
+-- InputController and MovementController already require it. Aim-down-sights narrows the
+-- field of view to `shooting.adsFieldOfView` and scales look sensitivity with it, and the
 -- pivot's height follows the character through a clamped lag, so a 16-stud jump or a slam
--- glides instead of yanking the view. Missions never see any of it.
+-- glides instead of yanking the view.
+--
+-- P5 (docs/INTERFACES.md "P5 contracts", ruling 5): the mode is the shared CombatMode value,
+-- decided once at boot with the server's own function. `IsRange` is the range bench only
+-- (no run phase, so the phase rules are skipped there). `IsCrowdCombat` is the range's combat
+-- (crowd, weapon families, abilities, the player's body), which runs in missions too whenever
+-- the ProvingGrounds config ships, as WeaponService does; ADS, the pivot lag and the leap
+-- follow belong to it. The phase rules apply in missions only, as before.
 --
 -- P3 (docs/INTERFACES.md "P3 contracts"): during a Leap Smash or an Impale Dash
 -- (MovementController.BeginMotion) the pivot's horizontal position trails the character by
@@ -48,6 +54,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Tuning = require(sharedFolder:WaitForChild("Tuning"))
+local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 
 local Theme = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("Theme"))
 
@@ -88,7 +95,9 @@ local shoulderOffset = Vector3.zero
 
 local phase = "lobby"
 local active = false
+-- Both decided once in Init and never change: the range bench, and the range's combat.
 local rangeMode = false
+local crowdCombat = false
 local adsOn = false
 local fieldOfView = FALLBACK_CAMERA.fieldOfView
 local pivotHeight: number? = nil
@@ -168,26 +177,8 @@ local function cursorFree(): boolean
 	return phaseFreesCursor() or next(cursorHolds) ~= nil or altFree
 end
 
--- Studio-only by contract: the server boots the Proving Grounds from the same Workspace
--- attribute, so a live game can never enter the range whatever the attribute says.
-local function detectRange(): boolean
-	if not RunService:IsStudio() then
-		return false
-	end
-	local cfg = Catalog.GetCombatConfig()
-	if cfg == nil then
-		return false
-	end
-	-- Workspace attributes arrive with the first replication; wait for it only in Studio.
-	if not game:IsLoaded() then
-		game.Loaded:Wait()
-	end
-	-- Same gate as the server's boot: no ProvingGrounds config means no range.
-	return Workspace:GetAttribute(cfg.debug.provingAttribute) == true and Tuning.IsAvailable()
-end
-
 local function targetFieldOfView(): number
-	if rangeMode and adsOn then
+	if crowdCombat and adsOn then
 		return Tuning.Get().shooting.adsFieldOfView
 	end
 	return cameraConfig.fieldOfView
@@ -195,7 +186,7 @@ end
 
 -- Look sensitivity follows the zoom, so a scoped view does not swing further per pixel.
 local function lookScale(): number
-	if not rangeMode then
+	if not crowdCombat then
 		return 1
 	end
 	local hip = math.tan(math.rad(cameraConfig.fieldOfView) * 0.5)
@@ -457,7 +448,7 @@ end
 -- vertical trails (movement.cameraFollowRate per second), and never by more than
 -- movement.cameraMaxLag, so a 120 stud/s slam keeps the character on screen.
 local function followHeight(rootY: number, deltaTime: number): number
-	if not rangeMode then
+	if not crowdCombat then
 		return rootY
 	end
 	local current = pivotHeight
@@ -478,7 +469,7 @@ end
 -- eases toward the root (movement.cameraFollowRate, never more than movement.cameraMaxLag
 -- behind); otherwise the trail only shrinks, so ordinary aiming stays rigid.
 local function followFlat(rootPosition: Vector3, deltaTime: number): Vector3
-	if not rangeMode then
+	if not crowdCombat then
 		return rootPosition
 	end
 	local flatRoot = Vector3.new(rootPosition.X, 0, rootPosition.Z)
@@ -646,7 +637,9 @@ function CameraController.Init(): ()
 	targetZoom = cameraConfig.defaultZoom
 	zoom = targetZoom
 	fieldOfView = cameraConfig.fieldOfView
-	rangeMode = detectRange()
+	-- On a Studio client this waits for game.Loaded (the Workspace lever replicates with it).
+	rangeMode = CombatMode.Get() == "range"
+	crowdCombat = Tuning.IsAvailable()
 end
 
 function CameraController.Start(): ()
@@ -698,14 +691,22 @@ function CameraController.IsActive(): boolean
 	return active
 end
 
--- True when this client booted into the Proving Grounds (Studio + the provingAttribute).
+-- True when this client booted into the Proving Grounds bench (CombatMode "range": Studio, the
+-- provingAttribute and `debug.provingBoots` "range"). Only the bench's own pieces ask this.
 function CameraController.IsRange(): boolean
 	return rangeMode
 end
 
--- Aim down sights (range only): the view eases to `shooting.adsFieldOfView`, read live.
+-- P5: true when the range's combat runs (the bench and every crowd mission): the crowd, the
+-- weapon families, abilities, vitals and movement. False only in a build without the
+-- ProvingGrounds config, where the C1 mission path is all there is.
+function CameraController.IsCrowdCombat(): boolean
+	return crowdCombat
+end
+
+-- Aim down sights: the view eases to `shooting.adsFieldOfView`, read live.
 function CameraController.SetAds(on: boolean): ()
-	adsOn = rangeMode and on
+	adsOn = crowdCombat and on
 end
 
 -- True while the shoulder camera has the mouse locked to the crosshair.
@@ -747,9 +748,9 @@ function CameraController.AdoptTouch(input: InputObject): ()
 end
 
 -- P3: a leap or lunge runs for `seconds`; the pivot may trail the character horizontally
--- meanwhile (range only). EndMotion cuts it short when the move ends early.
+-- meanwhile (the range's combat only). EndMotion cuts it short when the move ends early.
 function CameraController.BeginMotion(seconds: number): ()
-	if not rangeMode then
+	if not crowdCombat then
 		return
 	end
 	motionUntil = math.max(motionUntil, os.clock() + math.max(seconds, 0))
@@ -759,10 +760,10 @@ function CameraController.EndMotion(): ()
 	motionUntil = 0
 end
 
--- A short widening of the view in degrees (range only), e.g. on a leap. Reduce motion keeps
--- it, at a smaller size, as Shake and Kick do.
+-- A short widening of the view in degrees (the range's combat only), e.g. on a leap. Reduce
+-- motion keeps it, at a smaller size, as Shake and Kick do.
 function CameraController.FovKick(degrees: number): ()
-	if not rangeMode or degrees <= 0 then
+	if not crowdCombat or degrees <= 0 then
 		return
 	end
 	local scaled = if Theme.reducedMotion then degrees * Theme.REDUCED_MOTION_FACTOR else degrees

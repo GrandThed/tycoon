@@ -4,8 +4,12 @@
 -- replaces C0's bare pad with the mission's own layout and gives every member the record the AI
 -- and the hit math read; C2 adds the run ticket, admission, and the wave-boundary entry rule.
 --
--- The weapons decide max HP, so the Humanoid is resized from the PROFILE on every spawn — never
--- from anything the client sent, and never from the teleport data.
+-- The weapons decide max HP. P5 (ruling 11): a human's Humanoid is VitalsService's alone, sized
+-- from the profile's gear through the character hook WaveService installs (never from anything
+-- the client sent, never from teleport data); this file sizes only the debug bots.
+--
+-- P5 also adds what a crowd mission reads from the arena: its bounds (ArenaBounds), the rim
+-- points the crowd arrives at (EnemySpawnPoints), and PartyMember.down (SetDownSource).
 --
 -- The per-wave numbers in RunState (wave, alive, tempo, boss…) are pushed here by WaveService
 -- through SetRunFields: WaveService sits above this service in the boot order, so it cannot be
@@ -17,7 +21,6 @@ local RunService = game:GetService("RunService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
-local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
 
@@ -83,6 +86,8 @@ local builtArena = ""
 local lobbySpawn: SpawnLocation? = nil
 local lobbyPosition = Vector3.zero
 local playerSpawns: { Vector3 } = {}
+-- P5: where crowd bursts arrive (the layout's enemySpawns; the fallback arena's rim).
+local enemySpawnPoints: { Vector3 } = {}
 local spawnCursor = 0
 -- Half the floor's footprint of the arena last built (X and Z), for the Proving Grounds bounds.
 local floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZE / 2)
@@ -93,6 +98,10 @@ local sendSnapshot: ((player: Player) -> ())? = nil
 local shareSource: ((userId: number) -> number)? = nil
 -- WaveService.Reset, handed in for the same reason: called whenever the run resets.
 local resetHook: (() -> ())? = nil
+-- P5: called last whenever a member's character is added (WeaponService.PrepareCharacter).
+local characterHook: ((player: Player, character: Model) -> ())? = nil
+-- P5: is this member down (VitalsService), for PartyMember.down. Handed in by WaveService.
+local downSource: ((userId: number) -> boolean)? = nil
 
 -- Everything WaveService owns in the RunState payload, defaulted to the lobby.
 export type RunFields = {
@@ -209,6 +218,14 @@ local function buildFallbackArena(folder: Folder): ()
 	floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZE / 2)
 	buildLobbyPad(folder, Vector3.new(0, 0.5, 0), Color3.fromRGB(96, 104, 120))
 	playerSpawns = { lobbyPosition }
+	-- The four sides' midpoints, a body's width in from the edge.
+	local inset = FALLBACK_FLOOR_SIZE / 2 - SPAWN_CLEARANCE
+	enemySpawnPoints = {
+		Vector3.new(0, 0, -inset),
+		Vector3.new(inset, 0, 0),
+		Vector3.new(0, 0, inset),
+		Vector3.new(-inset, 0, 0),
+	}
 	EnemyService.SetSpawnPoints({})
 	EnemyService.SetArenaGeometry({}, {}, floor)
 end
@@ -289,6 +306,7 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 		table.insert(enemyPoints, Vector3.new(point.x, 0, point.z))
 	end
 	EnemyService.SetSpawnPoints(enemyPoints)
+	enemySpawnPoints = table.clone(enemyPoints)
 end
 
 -- Idempotent per arena name: the first admit of a run builds the mission's arena over the
@@ -328,36 +346,16 @@ local function midWave(): boolean
 	return runFields.phase == "wave" or runFields.phase == "boss"
 end
 
--- The profile is authoritative for max HP. nil without a loaded profile or Armory.json: the
--- Humanoid then keeps its default 100, which is the degrade path, not an error.
-local function profileMaxHp(player: Player): number?
-	local state = DataService.GetState(player)
-	local armoryConfig = Catalog.GetArmoryConfig()
-	if state == nil or armoryConfig == nil then
-		return nil
-	end
-	return Armory.MaxHp(armoryConfig, state.combat.gear, state.combat.ascension)
-end
-
+-- Bots only (ruling 11): a human's maximum is VitalsService's, through the character hook.
 local function applyMaxHp(member: Types.RunMember): ()
 	local humanoid = member.humanoid
-	if humanoid == nil then
+	if humanoid == nil or not member.bot then
 		return
 	end
-	if member.bot then
-		local config = combatConfig
-		local botHp = if config ~= nil then config.debug.botHp else DEFAULT_BOT_HP
-		humanoid.MaxHealth = botHp
-		humanoid.Health = botHp
-		return
-	end
-	local player = member.player
-	local maxHp = if player ~= nil then profileMaxHp(player) else nil
-	if maxHp == nil then
-		return
-	end
-	humanoid.MaxHealth = maxHp
-	humanoid.Health = maxHp
+	local config = combatConfig
+	local botHp = if config ~= nil then config.debug.botHp else DEFAULT_BOT_HP
+	humanoid.MaxHealth = botHp
+	humanoid.Health = botHp
 end
 
 local function emptySummary(): Types.RunSummary
@@ -406,6 +404,11 @@ function ArenaService.IsFighting(member: Types.RunMember): boolean
 	return not member.waiting and ArenaService.IsAlive(member)
 end
 
+local function isDown(member: Types.RunMember): boolean
+	local source = downSource
+	return not member.bot and source ~= nil and source(member.userId)
+end
+
 local function memberEntry(member: Types.RunMember): Types.PartyMember
 	local humanoid = member.humanoid
 	local now = os.clock()
@@ -425,6 +428,7 @@ local function memberEntry(member: Types.RunMember): Types.PartyMember
 		host = member.userId == hostUserId,
 		waiting = member.waiting,
 		damageShare = damageShareOf(member.userId),
+		down = isDown(member),
 	}
 end
 
@@ -521,9 +525,19 @@ function ArenaService.SetResetHook(hook: () -> ()): ()
 	resetHook = hook
 end
 
--- CombatService hands its run-wide share lookup over at Init.
+-- WaveService hands its run-wide share lookup over at Init (CombatService did until P5).
 function ArenaService.SetShareSource(source: (userId: number) -> number): ()
 	shareSource = source
+end
+
+-- P5: run last whenever an admitted member's character is added, after it has been placed.
+function ArenaService.SetCharacterHook(hook: (player: Player, character: Model) -> ()): ()
+	characterHook = hook
+end
+
+-- P5 ruling 18: fills PartyMember.down (always false for bots).
+function ArenaService.SetDownSource(source: (userId: number) -> boolean): ()
+	downSource = source
 end
 
 -- Used after a reward flush so the HUD wallet strip is current; Main owns the Snapshot shape.
@@ -921,6 +935,10 @@ function ArenaService.Admit(player: Player): ()
 				-- A co-op death respawns here: mid-wave onto the pad as waiting, in a breather
 				-- straight back into the fight.
 				placeBody(live, character)
+				local hook = characterHook
+				if hook ~= nil then
+					hook(player, character)
+				end
 				announce(nil)
 			end)
 		)
@@ -1267,7 +1285,25 @@ end
 -- Returns the floor's bounds (centre, half-size) for CrowdService.SetBounds.
 function ArenaService.BuildProvingArena(arenaName: string): (Vector3, Vector3)
 	ensureArena(arenaName)
+	return ArenaService.ArenaBounds()
+end
+
+-- P5: the arena's bounds for CrowdService.SetBounds and WeaponService.SetArena: the floor's top
+-- centre (every arena is built at the world origin) and its half extents, Y the launch ceiling.
+function ArenaService.ArenaBounds(): (Vector3, Vector3)
 	return Vector3.zero, Vector3.new(floorHalfSize.X, BOUNDS_HALF_HEIGHT, floorHalfSize.Z)
+end
+
+-- P5: where crowd bursts arrive, on the floor (y 0). A copy: callers may keep it.
+function ArenaService.EnemySpawnPoints(): { Vector3 }
+	return table.clone(enemySpawnPoints)
+end
+
+-- P5 (proving loop, ruling 19): a fresh summary for every member, as at a run's first admit.
+function ArenaService.ResetSummaries(): ()
+	for _, userId in partyOrder do
+		summaries[userId] = emptySummary()
+	end
 end
 
 -- Where a range player (re)spawns: the lobby SpawnLocation for Roblox's own respawn, and the

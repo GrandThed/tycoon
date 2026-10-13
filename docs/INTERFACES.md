@@ -9373,3 +9373,55 @@ about right or too hard at wave 9; was the run's length right.
   - phone measurements of the melee follow and the ground marks;
   - Ben's open P3 questions (A or B for SMG/Beam/Chain Gun, cross-slot refunds, bows on bosses);
   - his Stop 3 and `fight`-set verdicts, which are still owed.
+
+### Review round and state (2026-10-12)
+
+**How Ben's rulings (2026-10-12) landed in Wave 1:**
+1. **Free variant styles:** not in Wave 1. It plays the range's loadout (`ProvingGrounds.json`
+   `loadout`); the styles are Wave 2.
+2. **One skeleton:** `Combat.json` `crowdSkeleton` (ten waves); Village's `crowd.waves` is
+   checked against it (`sim_combat.py` assertion 15). The other eras get theirs in Wave 3.
+3. **Revive by a teammate:** Wave 4. Wave 1 ships the solo rule (the first down ends the run),
+   the seam (`WaveService.OnDown`, `PartyMember.down`) and the wave-boundary stand-up as a
+   stand-in.
+4. **`proving.rbxl` boots into a mission:** `debug.provingBoots` "mission"; the range is the
+   bench behind `"range"`.
+
+**Review:** 0 Critical, 1 Major, 5 Minor.
+- **Major, fixed:** a run could hang up to `runCapSeconds` (1,200 s) when a downed player's
+  partner left or died, because ruling 18 heard only of downs. The loss is now judged from
+  state every tick: `VitalsService.RunLost(members)` (every non-bot, non-waiting fighter is
+  down or has no body) is called by `WaveService.endIfLost`, from the tick and from `OnDown`.
+  Reason `"down"` when any fighter is down, `"wipe"` when all died outright.
+- **Minor, fixed:** the proving summary card's Return button did nothing (the server ignores
+  `RequestLeave` there). `SummaryCard` takes `deps.nextRun`: no Return button, and the
+  countdown reads "Next run in …".
+- **Minor, fixed:** warn spam from the start and skip levers, and a lost reward pool on that
+  path.
+- **Minor, fixed:** the pellet seed is a fresh server-side draw per shot.
+- **Minor, fixed:** dead `SetArena` state removed. `WeaponService.SetArena` stays as a no-op
+  stub because `WaveService` calls it.
+- **Minor, accepted (design note):** after a boss wave the breather is always
+  `breatherMaxSeconds` (14 s). A boss wave's `spec.total` is 0, so `Combat.Tempo` returns
+  `tempoMin`.
+
+**Deviations from this contract (accepted by the lead):**
+- `Types.SlotTiers` added (the `{ melee, ranged }` shape `GearOf` returns).
+- `WeaponService` has five more public functions: `MayAct`, `OnDamageDealt`, `SendStats`,
+  `SetFamily`, `SetVariant`.
+- `CrowdService.SetPerfLog` (switches the ruling 26 perf line).
+- `ArenaService.ResetSummaries` (the proving loop clears the last run's summaries).
+- `Main` also ignores `RequestLeave` in a proving mission, as well as `RequestReady`.
+- `DebugBots` is inert in crowd missions (ruling 24), the attribute included.
+- The mission clear time is **measured** by `sim_range.py` (the real director, bursts and
+  merges), not estimated per wave. Method: `docs/BALANCE.md` "P5: how the numbers were
+  measured".
+
+**QA (2026-10-12): green.** stylua, selene, luau-lsp (hub and combat), `check_compile.py`, the
+three builds, `sim_economy.py --check`, `sim_combat.py --check` (18), `sim_range.py --check`,
+the harness (546 checks) and `mutate.py` (221 mutations, none uncaught). `streetplan.py` and
+`check_mirror.py` were skipped: Pillow is not installed, and Wave 1 touches no city file.
+
+**State:** built, reviewed and QA-green on `p5-missions`; not merged. Next: the lead merges to
+`main`, then Ben's playtest (`docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission"). The
+publish freeze above holds until Wave 3.

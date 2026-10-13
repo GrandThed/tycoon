@@ -3375,8 +3375,9 @@ function FeedbackController.Init(): ()
 end
 
 function FeedbackController.Start(): ()
-	-- Missions keep their own feedback (CombatFxController); strikes exist only in the range.
-	if not CameraController.IsRange() then
+	-- Strikes come from the range's weapons, which P5 missions fight with too; a build without
+	-- them keeps the C1 feedback (CombatFxController).
+	if not CameraController.IsCrowdCombat() then
 		return
 	end
 	fxFolder =

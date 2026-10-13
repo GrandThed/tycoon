@@ -31,6 +31,13 @@
 -- whatever the Studio profile holds: the range's weapon numbers are tier-1 values, and the body
 -- they are balanced against must be too. It never reaches 0 here: the hit that would do it puts
 -- the player down instead.
+--
+-- P5 (INTERFACES "P5 contracts", rulings 11, 13 and 18): the same body fights in missions, told
+-- so by SetMission. There the maximum is the profile's gear (`maxHpOf`), enemy hits are scaled
+-- by the mission (`damageScale`), regen is a share of the bar, a player the mission rules out
+-- (`mayJudge`: waiting on the pad) is neither a target nor judged by any shape, and a down never
+-- ends by itself: `onDown` is told once, after the frame's batch has left, and the run decides.
+-- This module still requires nothing of the mission: everything comes through SetMission.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -49,6 +56,18 @@ local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdBrain = require(script.Parent:WaitForChild("CrowdBrain"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
 local ThreatField = require(script.Parent:WaitForChild("ThreatField"))
+
+-- P5: the mission's rules. nil = the range's (P4, unchanged).
+export type MissionRules = {
+	-- Ruling 13: may enemies target this player, and may their shapes hit them?
+	mayJudge: (player: Player) -> boolean,
+	-- Ruling 18: called once per down, after the frame's batch has been sent.
+	onDown: (player: Player) -> (),
+	-- Armory.MaxHp of the player's gear; nil = leave the Humanoid's maximum alone.
+	maxHpOf: (player: Player) -> number?,
+	damageScale: number,
+	regenShare: number,
+}
 
 -- RangeService's side of the i-frames, both on os.clock().
 export type Hooks = {
@@ -101,6 +120,9 @@ local pending: { Pending } = {}
 -- Effects raised this frame; they leave at its end as one CombatFx batch per player.
 local raised: { Types.CombatFx } = {}
 local hooks: Hooks? = nil
+local mission: MissionRules? = nil
+-- Players who went down since the last flush; their onDown runs after that flush.
+local downed: { Player } = {}
 local started = false
 local regenAccumulator = 0
 -- Scratch for the crowd step: who is on their feet, records and all, reused step after step.
@@ -143,8 +165,8 @@ local function raise(fx: Types.CombatFx): ()
 	table.insert(raised, fx)
 end
 
--- Ruling 5: Roblox's own regen is off in the range. A disabled script's threads stop. Mission
--- characters keep theirs: only RangeService sends a character through PrepareCharacter.
+-- Ruling 5: Roblox's own regen is off. A disabled script's threads stop. P5: in missions too,
+-- where this module's regen is the only healing.
 local function silenceRegen(child: Instance): ()
 	if child.Name == REGEN_SCRIPT_NAME and child:IsA("Script") then
 		child.Enabled = false
@@ -263,6 +285,11 @@ local function rule(
 
 	local position = root.Position
 	local amount = math.max(attack.damage, 0)
+	local rules = mission
+	if rules ~= nil and amount > 0 then
+		-- Ruling 10: the mission's enemies hit as hard as its era asks, never for nothing.
+		amount = math.max(math.round(amount * rules.damageScale), 1)
+	end
 	local knockback = math.max(attack.knockback or 0, 0)
 	local launch = math.max(attack.launch or 0, 0)
 	fx.amount = amount
@@ -276,14 +303,20 @@ local function rule(
 	vitals.lastHurtAt = now
 	if humanoid.Health - amount <= 0 then
 		-- Ruling 4: the hit that would empty the bar puts the player down instead.
-		local downSeconds = math.max(config.player.downSeconds, 0)
 		humanoid.Health = math.min(DOWN_HEALTH, humanoid.MaxHealth)
 		vitals.downs += 1
 		vitals.down = true
 		vitals.downFrom = now
-		vitals.downUntil = now + downSeconds
 		fx.down = true
-		fx.upAt = Workspace:GetServerTimeNow() + downSeconds
+		if rules ~= nil then
+			-- P5 ruling 18: no get-up timer. The run decides, after this frame's batch.
+			vitals.downUntil = math.huge
+			table.insert(downed, player)
+		else
+			local downSeconds = math.max(config.player.downSeconds, 0)
+			vitals.downUntil = now + downSeconds
+			fx.upAt = Workspace:GetServerTimeNow() + downSeconds
+		end
 		return "landed"
 	end
 	humanoid.Health -= amount
@@ -305,6 +338,12 @@ local function rule(
 	return "landed"
 end
 
+-- P5 ruling 13: in a mission, a player the run rules out (waiting on the pad) is in no shape.
+local function judged(player: Player): boolean
+	local rules = mission
+	return rules == nil or rules.mayJudge(player)
+end
+
 -- Was the player down at `impact`? Then the attack is not theirs to take or to dodge (24a).
 local function wasDown(vitals: Vitals, impact: number): boolean
 	return impact >= vitals.downFrom and impact < vitals.downUntil
@@ -318,7 +357,12 @@ local function decide(config: Types.ProvingGroundsConfig, entry: Pending, now: n
 	-- Gone, or down: a downed player takes no further hits. Down now, or down when it struck
 	-- (ruling 24a): an impact that fell just before a get-up is judged after it, and a lob may
 	-- land in a down that began after it was thrown.
-	if vitalsByPlayer[player] ~= vitals or vitals.down or wasDown(vitals, strike.at) then
+	if
+		vitalsByPlayer[player] ~= vitals
+		or vitals.down
+		or wasDown(vitals, strike.at)
+		or not judged(player)
+	then
 		return
 	end
 	-- A barrage is one attack: a player another of its circles has already answered is done.
@@ -359,7 +403,7 @@ local function judgeTravelling(
 	held: boolean
 ): ThreatField.Verdict?
 	local vitals = vitalsByPlayer[player]
-	if vitals == nil or vitals.down or wasDown(vitals, impactAt) then
+	if vitals == nil or vitals.down or wasDown(vitals, impactAt) or not judged(player) then
 		return nil
 	end
 	local root, humanoid = bodyOf(player)
@@ -424,6 +468,19 @@ local function getUp(config: Types.ProvingGroundsConfig, vitals: Vitals, now: nu
 	grantIframes(vitals.player, config.player.getUpIframes - late)
 end
 
+-- Health per second: the range's flat rate, or the mission's share of the bar.
+local function regenRate(vitals: Vitals, rangeRate: number): number
+	local rules = mission
+	if rules == nil then
+		return math.max(rangeRate, 0)
+	end
+	local _root, humanoid = bodyOf(vitals.player)
+	if humanoid == nil then
+		return 0
+	end
+	return math.max(rules.regenShare, 0) * humanoid.MaxHealth
+end
+
 local function regen(vitals: Vitals, amount: number): ()
 	local _root, humanoid = bodyOf(vitals.player)
 	if humanoid ~= nil and amount > 0 and humanoid.Health < humanoid.MaxHealth then
@@ -433,13 +490,28 @@ end
 
 -- One remote call per player, and only in a frame that raised something.
 local function flush(): ()
-	if #raised == 0 then
+	if #raised > 0 then
+		local batch = raised
+		raised = {}
+		for _, player in Players:GetPlayers() do
+			RemoteService.FireClient(player, "CombatFx", batch)
+		end
+	end
+	-- After the batch: the down has reached every client before the run reacts to it.
+	if #downed == 0 then
 		return
 	end
-	local batch = raised
-	raised = {}
-	for _, player in Players:GetPlayers() do
-		RemoteService.FireClient(player, "CombatFx", batch)
+	local list = downed
+	downed = {}
+	local rules = mission
+	if rules == nil then
+		return
+	end
+	for _, player in list do
+		local vitals = vitalsByPlayer[player]
+		if vitals ~= nil and vitals.down then
+			rules.onDown(player)
+		end
 	end
 end
 
@@ -459,7 +531,7 @@ local function step(deltaTime: number): ()
 				getUp(config, vitals, now)
 			end
 		elseif regenSeconds > 0 and now - vitals.lastHurtAt >= body.regenDelay then
-			regen(vitals, math.max(body.regenPerSecond, 0) * regenSeconds)
+			regen(vitals, regenRate(vitals, body.regenPerSecond) * regenSeconds)
 		end
 	end
 	settle(config, now)
@@ -470,7 +542,7 @@ end
 
 local function canTarget(player: Player): boolean
 	local vitals = vitalsByPlayer[player]
-	return vitals == nil or not vitals.down
+	return (vitals == nil or not vitals.down) and judged(player)
 end
 
 -- A frozen shape waits for each player's decision, at their own lag after its impact.
@@ -606,7 +678,7 @@ local function onCrowdStep(clock: number): ()
 	local shooting = Tuning.Get().shooting
 	local count = 0
 	for player, vitals in vitalsByPlayer do
-		if vitals.down then
+		if vitals.down or not judged(player) then
 			continue
 		end
 		local root, humanoid = bodyOf(player)
@@ -639,7 +711,7 @@ end
 
 -- Public -----------------------------------------------------------------------------------------
 
--- Called by RangeService.Start, so only when the range booted. Idempotent.
+-- Called by WeaponService.Start, in the range and in missions alike (P5). Idempotent.
 function VitalsService.Start(rangeHooks: Hooks): ()
 	if started then
 		return
@@ -686,26 +758,38 @@ function VitalsService.RemovePlayer(player: Player): ()
 	vitalsByPlayer[player] = nil
 end
 
--- A range player's fresh character: the tier-1 body at full health, Roblox's regen silenced,
--- and whatever the last character was in the middle of over. Without Armory.json the Humanoid
--- keeps its own maximum, as in missions.
+-- The maximum this body should have: the mission's gear (nil = leave it), or ruling 17's tier-1
+-- body in both slots with no Ascension. nil also without Armory.json.
+local function maxHpFor(player: Player): number?
+	local rules = mission
+	if rules ~= nil then
+		return rules.maxHpOf(player)
+	end
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if armoryConfig == nil then
+		return nil
+	end
+	return Armory.MaxHp(armoryConfig, { melee = 1, ranged = 1 }, { melee = 0, ranged = 0 })
+end
+
+-- A player's fresh character: its body at full health, Roblox's regen silenced, and whatever the
+-- last character was in the middle of over. In the range a respawn also ends a down; in a
+-- mission (ruling 18) only the run ends one, so a downed player's new body is down too.
 function VitalsService.PrepareCharacter(player: Player, character: Model): ()
 	local vitals = vitalsByPlayer[player]
 	if vitals == nil then
 		return
 	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local armoryConfig = Catalog.GetArmoryConfig()
+	local stayDown = mission ~= nil and vitals.down
 	if humanoid ~= nil then
-		if armoryConfig ~= nil then
-			-- Ruling 17: tier 1 in both slots, no Ascension.
-			humanoid.MaxHealth = Armory.MaxHp(
-				armoryConfig,
-				{ melee = 1, ranged = 1 },
-				{ melee = 0, ranged = 0 }
-			)
+		local maxHp = maxHpFor(player)
+		if maxHp ~= nil then
+			humanoid.MaxHealth = maxHp
 		end
-		humanoid.Health = humanoid.MaxHealth
+		humanoid.Health = if stayDown
+			then math.min(DOWN_HEALTH, humanoid.MaxHealth)
+			else humanoid.MaxHealth
 	end
 	if vitals.watch ~= nil then
 		vitals.watch:Disconnect()
@@ -715,13 +799,60 @@ function VitalsService.PrepareCharacter(player: Player, character: Model): ()
 	end
 	vitals.watch = character.ChildAdded:Connect(silenceRegen)
 	local now = os.clock()
-	if vitals.down then
+	if vitals.down and not stayDown then
 		-- A respawn ends the down early: impacts from here on meet a standing player.
 		vitals.down = false
 		vitals.downUntil = math.min(vitals.downUntil, now)
 	end
 	vitals.knockUntil = 0
 	vitals.lastHurtAt = now
+end
+
+-- P5: the mission's rules from here on (rulings 11, 13 and 18); nil = the range's. WaveService
+-- sets them at every run start.
+function VitalsService.SetMission(rules: MissionRules?): ()
+	mission = rules
+	if rules == nil then
+		table.clear(downed)
+	end
+end
+
+-- Ruling 18's stand-in for the Wave 4 revive: the down ends now, the bar fills and the get-up
+-- i-frames run, as at a get-up in the range. A player who is not down is just healed in full.
+function VitalsService.StandUp(player: Player): ()
+	local vitals = vitalsByPlayer[player]
+	if vitals == nil then
+		return
+	end
+	local now = os.clock()
+	local wasDownNow = vitals.down
+	vitals.down = false
+	vitals.downUntil = math.min(vitals.downUntil, now)
+	vitals.knockUntil = 0
+	vitals.lastHurtAt = now
+	local _root, humanoid = bodyOf(player)
+	if humanoid ~= nil then
+		humanoid.Health = humanoid.MaxHealth
+	end
+	if wasDownNow then
+		grantIframes(player, Tuning.Get().player.getUpIframes)
+	end
+end
+
+-- The gear changed (the setGear lever): the new maximum, keeping the share of the bar the player
+-- had. A downed player stays at the down's health.
+function VitalsService.RefreshMaxHp(player: Player): ()
+	local vitals = vitalsByPlayer[player]
+	local _root, humanoid = bodyOf(player)
+	local maxHp = maxHpFor(player)
+	if vitals == nil or humanoid == nil or maxHp == nil then
+		return
+	end
+	local share = if humanoid.MaxHealth > 0 then humanoid.Health / humanoid.MaxHealth else 1
+	humanoid.MaxHealth = maxHp
+	humanoid.Health = if vitals.down
+		then math.min(DOWN_HEALTH, maxHp)
+		else math.clamp(share * maxHp, DOWN_HEALTH, maxHp)
 end
 
 -- Down players attack nothing, are no enemy's target and take no hits. Read off the clock, not
@@ -732,11 +863,41 @@ function VitalsService.IsDown(player: Player): boolean
 	return vitals ~= nil and vitals.down and os.clock() < vitals.downUntil
 end
 
+-- P5 ruling 18, judged from state rather than from the moment of a down: the run is lost when a
+-- human is in the fight (not waiting on the pad) and none of them is standing (a live body that
+-- is not down). A partner who leaves, dies to a reset or respawns onto the pad after the last
+-- down therefore ends it too, with no down of their own to report it. Returns the verdict and
+-- the userIds of the fighters, who are all fallen when it is true. Bots never count.
+function VitalsService.RunLost(members: { Types.RunMember }): (boolean, { number })
+	local fighters: { number } = {}
+	local anyStanding = false
+	for _, member in members do
+		local player = member.player
+		if member.bot or player == nil or member.waiting then
+			continue
+		end
+		table.insert(fighters, member.userId)
+		local root = bodyOf(player)
+		if root ~= nil and not VitalsService.IsDown(player) then
+			anyStanding = true
+		end
+	end
+	return #fighters > 0 and not anyStanding, fighters
+end
+
 -- The `god` range command (ruling 14); Readout carries the setting.
 function VitalsService.ToggleGod(player: Player): ()
 	local vitals = vitalsByPlayer[player]
 	if vitals ~= nil then
 		vitals.god = not vitals.god
+	end
+end
+
+-- The `godMode` mission lever (P5 ruling 25): the same switch, set rather than flipped.
+function VitalsService.SetGod(player: Player, on: boolean): ()
+	local vitals = vitalsByPlayer[player]
+	if vitals ~= nil then
+		vitals.god = on
 	end
 end
 
@@ -750,12 +911,17 @@ function VitalsService.Readout(player: Player): (number, number, boolean)
 	return vitals.damageTaken, vitals.downs, vitals.god
 end
 
--- A dummy set was loaded: the counters start over, and the attacks of enemies that no longer
--- exist land on nobody: queued decisions (lobs in the air among them), shots and charges all
--- go. A player who is down stays down for the rest of their time.
-function VitalsService.OnSetLoaded(): ()
+-- The attacks of enemies that no longer exist land on nobody: queued decisions (lobs in the air
+-- among them), shots and charges all go. A run's end and a forced wave call this (P5).
+function VitalsService.ClearThreats(): ()
 	table.clear(pending)
 	ThreatField.Clear(raise)
+end
+
+-- A dummy set was loaded: the counters start over, and the threats go (ClearThreats). A player
+-- who is down stays down for the rest of their time.
+function VitalsService.OnSetLoaded(): ()
+	VitalsService.ClearThreats()
 	for _, vitals in vitalsByPlayer do
 		vitals.damageTaken = 0
 		vitals.downs = 0

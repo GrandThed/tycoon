@@ -9,8 +9,8 @@
 	"waves": 10,
 	"bossWaves": [5, 10],
 	"recommendedPower": 60,
-	"targetMinutes": 8,
-	"targetWaveSeconds": 30,
+	"targetMinutes": 12,
+	"targetWaveSeconds": 45,
 	"enemies": {
 		"raider": { "template": "Raider", "kind": "melee", "hp": 52, "damage": 3, "speed": 14, "reach": 5, "attackCooldown": 2.0, "cash": 300, "materials": 1, "elite": false, "color": [150, 84, 54] },
 		"archer": { "template": "Archer", "kind": "ranged", "hp": 34, "damage": 2, "speed": 12, "reach": 30, "attackCooldown": 3.0, "cash": 400, "materials": 1, "elite": false, "color": [110, 122, 70] },
@@ -55,6 +55,38 @@
 				{ "kind": "charge", "cooldown": 14, "windupSeconds": 0.9, "damageMult": 2.5 },
 				{ "kind": "summon", "cooldown": 24, "windupSeconds": 1.5, "enemy": "raider", "count": 2 }
 			]
+		}
+	},
+	"crowd": {
+		"hpScale": 1.5,
+		"plateScale": 1,
+		"damageScale": 1.12,
+		"regenShare": 0.077,
+		"maxAlive": 60,
+		"burst": 10,
+		"burstSpacing": 3.5,
+		"waves": [
+			{ "groups": [{ "kind": "fodder", "count": 48 }] },
+			{ "groups": [{ "kind": "fodder", "count": 72 }] },
+			{ "groups": [{ "kind": "fodder", "count": 24 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 24 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 24 }] },
+			{ "groups": [{ "kind": "fodder", "count": 24 }, { "kind": "brute", "count": 2 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 24 }, { "kind": "brute", "count": 2 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 24 }] },
+			{ "groups": [], "boss": { "kind": "colossus", "at": [0, 40], "valor": 10 } },
+			{ "groups": [{ "kind": "fodder", "count": 24 }, { "kind": "marksman", "count": 2 }, { "kind": "lobber", "count": 2 }, { "kind": "fodder", "count": 24 }, { "kind": "slinger", "count": 3 }, { "kind": "brute", "count": 2 }, { "kind": "fodder", "count": 24 }, { "kind": "marksman", "count": 2 }, { "kind": "lobber", "count": 2 }] },
+			{ "groups": [{ "kind": "fodder", "count": 36 }, { "kind": "marksman", "count": 3 }, { "kind": "lobber", "count": 3 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 36 }, { "kind": "brute", "count": 3 }, { "kind": "fodder", "count": 24 }] },
+			{ "groups": [{ "kind": "fodder", "count": 24 }, { "kind": "armoured", "count": 3 }, { "kind": "marksman", "count": 2 }, { "kind": "fodder", "count": 24 }, { "kind": "lobber", "count": 3 }, { "kind": "slinger", "count": 3 }, { "kind": "armoured", "count": 3 }, { "kind": "fodder", "count": 24 }] },
+			{ "groups": [{ "kind": "fodder", "count": 36 }, { "kind": "armoured", "count": 3 }, { "kind": "marksman", "count": 3 }, { "kind": "lobber", "count": 3 }, { "kind": "fodder", "count": 36 }, { "kind": "brute", "count": 3 }, { "kind": "armoured", "count": 3 }, { "kind": "slinger", "count": 4 }, { "kind": "fodder", "count": 36 }] },
+			{ "groups": [], "boss": { "kind": "warlord", "at": [0, 28], "valor": 25 } }
+		],
+		"rewards": {
+			"fodder": { "cash": 60, "materials": 0 },
+			"slinger": { "cash": 300, "materials": 1 },
+			"brute": { "cash": 1200, "materials": 4 },
+			"marksman": { "cash": 350, "materials": 1 },
+			"lobber": { "cash": 350, "materials": 1 },
+			"armoured": { "cash": 1500, "materials": 5 },
+			"guard": { "cash": 2000, "materials": 5 },
+			"colossus": { "cash": 18000, "materials": 30 },
+			"warlord": { "cash": 30000, "materials": 50 }
 		}
 	}
 }

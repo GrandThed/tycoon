@@ -4382,6 +4382,61 @@ Setup: `docs/MANUAL_STEPS.md` "P4 Stop 3". Keys: **1** melee, **2** ranged, **Sp
 - Anything wrong: step numbers, PC or phone.
 - Still open, if you have a view: the **fight** set (shooters, brutes, plated elites) you have not seen yet; the bows on bosses; and from P3, A or B for SMG, Beam and Chain Gun, cross-slot refunds, favourite and weakest ability.
 
+## P5 Wave 1 — Crowd in a mission
+
+**Goal:** judge the first real mission on the new combat: Raider Woods (Village), ten waves of
+crowds, the Colossus at wave 5, the Warlord at wave 10. Solo. **About 15 minutes. Keys only, no
+panel.** Silent, placeholder bodies. Judge whether it feels like a mission or like the range.
+
+<!-- FILE TO OPEN: start. Lead: if Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
+  that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play puts you in a grassy arena with a wooden fence and a
+  **WAVE 1** banner, not in the big grey range.
+<!-- FILE TO OPEN: end -->
+
+Setup: `docs/MANUAL_STEPS.md` "P5 Wave 1". Keys: **1** melee, **2** ranged, **Space** jump,
+**Left Shift** dash, **C** in the air = slam, **B** = skip to the next boss, **N** = skip to the
+next wave. You start with Broadsword + Longbow and a health bar of **145**.
+
+**Expected today, not bugs:**
+- **The bow is weak here.** Enemies have 1.5× their range health and the bow is still tier 1.
+  The sword is the main weapon in this test.
+- After a boss wave the breather is the longest one (about 14 s).
+- No cash pop per kill: the wallet moves at each wave's end.
+- Enemies walk through boulders and fence posts. Running a big circle avoids most hits.
+- Shooters may hang back near the fence (their keep-away distance spans most of the floor).
+- Bodies are placeholders. No sound.
+
+### The run (no panel)
+
+- [ ] 1. **Play** → after about 3 s the **WAVE 1** banner; red fodder come in from the fence in groups. Your health bar shows **145**. No Attack button. Bug: a range panel, an Attack button, or nothing spawns.
+- [ ] 2. Fight waves 1–3 (no keys) → between waves a short breather with a timer; wave 3 adds slingers (glowing shots). Your wallet grows at each wave's end. Bug: a wave never ends with the floor empty; the wallet does not move.
+- [ ] 3. **B** → wave 5: the **COLOSSUS** bar at the top, his slam rings, charge and fodder calls as in the range. Kill him → the bar folds, a **boss down** banner with **+10 Valor**. About as long as in the range (a minute and a bit). Bug: two boss bars; he melts in seconds or takes minutes.
+- [ ] 4. **N** a few times → waves 6–9: marksmen (warning line), lobbers (circles), plated elites (**BLOCKED**, then **PLATE BROKEN** on a heavy hit).
+- [ ] 5. **B** → wave 10: the **WARLORD**, guard first, then the duel, as in Stop 3.
+- [ ] 6. Stand still and let them hit you → a **DOWN** banner with no countdown, and the run ends: the **Expedition over** card with waves, kills, cash, Timber and Valor. The card has **no Return button**; its last line reads **Next run in …** and counts down from about 15 s. Then a new run starts at wave 1 with a full bar. Bug: you get up by yourself; a Return button shows; the countdown ends and nothing starts; Studio stops or kicks you.
+
+### Phone and two players (optional)
+
+- [ ] 7. Phone: Test (Prueba) → Device (Dispositivo) → 375×667 → Play → auto-swing and auto-fire work, the ability and slot buttons show, the wave banner, health bar and boss bar fit, and there is no Attack button. Bug: an Attack button; something cut off or unreadable.
+- [ ] 8. Two players: Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). If one player shows as waiting on the pad, press **N** once in the other window: both fight. In window A, stand still until **DOWN** → the run goes on for B. Then in window B: **Esc** → **R** → **Enter** (reset) → the run ends at once, the summary card on both screens. Bug: the run goes on with nobody standing; nothing happens for a minute or more. (Do not press **N** while A is down: a new wave stands A up.)
+
+### What to tell Claude
+
+Asked afterwards as click questions:
+- Does it feel like a mission or like the range?
+- Wave 9: too easy, about right or too hard?
+- The run's length: right, too long, too short?
+
+Also, if you have a view:
+- The Warlord at wave 10 (P4 Stop 3 was never played): fun, or a chore?
+- The shooters, brutes and plated elites (waves 3–9): first time you meet them.
+- Anything wrong: step numbers, PC or phone.
+
 ## M12 — Village growing city
 
 **Goal:** Village grows as one town around your landmarks: woods first, then building sites, then

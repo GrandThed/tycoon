@@ -27,8 +27,8 @@
 --  * One RenderStepped connection, no per-effect connection, no table per frame. The
 --    snapshot-driven tells are pulled through one module-level callback.
 --
--- Inert outside the range (CameraController.IsRange): missions keep CombatFxController's
--- `telegraph`, which this module never touches.
+-- Inert unless the range's combat runs (CameraController.IsCrowdCombat: the range and, since
+-- P5, every crowd mission). CombatFxController's C1 `telegraph` is never touched here.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -205,7 +205,7 @@ function ThreatFx.Init(): ()
 end
 
 function ThreatFx.Start(): ()
-	if started or not CameraController.IsRange() then
+	if started or not CameraController.IsCrowdCombat() then
 		return
 	end
 	started = true

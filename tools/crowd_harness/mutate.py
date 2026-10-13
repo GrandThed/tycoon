@@ -44,7 +44,7 @@ REACHED = "if not usable(mind, index, attack) or distance > attack.reach + REACH
 USES = "return uses == nil or (mind.landed[index] or 0) < math.floor(uses)"
 GUARDED = "\t\tand def.guarded == true\n\t\tand (enemy.guard > 0 or (mind ~= nil and CrowdBrain.OwesCall(mind, def)))\n"
 OWED = "and (attack.uses ~= nil or (mind.landed[index] or 0) == 0)"
-DIED = 'enemy.state = "dead"\n\t\taliveCount -= 1\n\t\tlocal summoner = enemy.summoner\n\t\tif summoner ~= nil then\n\t\t\tsummoner.guard = math.max(summoner.guard - 1, 0)'
+DIED = 'enemy.state = "dead"\n\taliveCount -= 1\n\tlocal summoner = enemy.summoner\n\tif summoner ~= nil then\n\t\tsummoner.guard = math.max(summoner.guard - 1, 0)'
 LEFT = "-- Removed alive (a set load, its summoner's death): it leaves its summoner's guard.\n\t\tlocal summoner = enemy.summoner\n\t\tif summoner ~= nil then\n\t\t\tsummoner.guard = math.max(summoner.guard - 1, 0)"
 BRAIN_OF = "if mind.enraged and phaseDef ~= nil and phaseDef.brain ~= nil then"
 SCALE = "local scale = if recover then phase.recoverScale else phase.windupScale"
@@ -95,8 +95,8 @@ MUTATIONS = {
     ),
     "24a: an instant shape judged though they were down": (
         VITALS,
-        "if vitalsByPlayer[player] ~= vitals or vitals.down or wasDown(vitals, strike.at) then",
-        "if vitalsByPlayer[player] ~= vitals or vitals.down then",
+        "\t\tor wasDown(vitals, strike.at)\n",
+        "",
     ),
     "24b: the previous window forgotten": (VITALS, "or met(wasFrom, wasUntil, impact, limit)", "or false"),
     "17: the body keeps the profile's health": (VITALS, "{ melee = 1, ranged = 1 }", "{ melee = 0, ranged = 0 }"),
@@ -160,8 +160,8 @@ MUTATIONS = {
     ),
     "travelling: judged though they were down": (
         VITALS,
-        "if vitals == nil or vitals.down or wasDown(vitals, impactAt) then",
-        "if vitals == nil or vitals.down then",
+        "if vitals == nil or vitals.down or wasDown(vitals, impactAt) or not judged(player) then",
+        "if vitals == nil or vitals.down or not judged(player) then",
     ),
     # Wave 2: line.
     "line: never locks": (
@@ -237,8 +237,8 @@ MUTATIONS = {
     "plate: a light hit goes to it": (CROWD, "if amount < crowd.heavyHit then", "if false then"),
     "plate: its damage also takes HP": (
         CROWD,
-        "\tif not plated then\n\t\tenemy.hp -= dealt\n\tend",
-        "\tenemy.hp -= dealt",
+        "\tif not plated then\n\t\tlocal removed",
+        "\tdo\n\t\tlocal removed",
     ),
     "plate: no reel when it breaks": (
         CROWD,
@@ -555,8 +555,8 @@ MUTATIONS = {
     "summon: left behind when the summoner dies": (CROWD, "if other.summoner == enemy then", "if false then"),
     "summon: the summoner does not know it called": (CROWD, "summoner.summoned += 1", "summoner.summoned += 0"),
     # Stop 2. A boss's death, a set load.
-    "boss: its attacks outlive it": (CROWD, "dismiss(enemy, def.boss == true)", "dismiss(enemy, false)"),
-    "boss: every kind's attacks die with it": (CROWD, "dismiss(enemy, def.boss == true)", "dismiss(enemy, true)"),
+    "boss: its attacks outlive it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, false)"),
+    "boss: every kind's attacks die with it": (CROWD, "dismiss(enemy, boss)", "dismiss(enemy, true)"),
     "boss: its queued impact is still handed over": (CROWD, "\tCrowdBrain.Recall(ids)\n", ""),
     "boss: decisions still waiting are kept": (VITALS, "if not ids[entry.strike.bodyId] then", "if true then"),
     "boss: what travels is kept": (VITALS, "\tThreatField.Drop(ids, raise)\n", ""),
@@ -717,6 +717,78 @@ MUTATIONS = {
         'pattern = "^never$",',
     ),
     "tuning: enrage numbers may go below 0": (TUNING, '\t"^crowd%.kinds%.[^.]+%.enrage%.[^.]+$",\n', ""),
+    # P5 wave 1: the crowd in a mission (tests_p5.luau).
+    "p5: plate loss scaled": (
+        CROWD,
+        "enemy.plate = math.max(enemy.plate - amount, 0)",
+        "enemy.plate = math.max(enemy.plate - amount * (scale or 1), 0)",
+    ),
+    "p5: damageBy uncapped": (CROWD, "local removed = math.min(dealt, enemy.hp)", "local removed = dealt"),
+    "p5: mayJudge skipped for areas": (VITALS, "\t\tor not judged(player)\n\tthen", "\tthen"),
+    "p5: canTarget ignores mayJudge": (
+        VITALS,
+        "return (vitals == nil or not vitals.down) and judged(player)",
+        "return vitals == nil or not vitals.down",
+    ),
+    "p5: hpMult ignored": (
+        CROWD,
+        "local maxHp = math.max(def.hp * scales.hp * bodyMult, 1)",
+        "local maxHp = math.max(def.hp * scales.hp, 1)",
+    ),
+    "p5: plate not scaled": (
+        CROWD,
+        "local plate = math.max((def.plate or 0) * scales.plate, 0)",
+        "local plate = math.max(def.plate or 0, 0)",
+    ),
+    "p5: armour judged on the scaled amount": (
+        CROWD,
+        "\t\tdealt = math.max(\n\t\t\tamount - math.max(def.armor, 0),\n\t\t\tamount * math.clamp(crowd.armorFloor, 0, 1)\n\t\t) * lossScale",
+        "\t\tdealt = math.max(\n\t\t\tamount * lossScale - math.max(def.armor, 0),\n\t\t\tamount * lossScale * math.clamp(crowd.armorFloor, 0, 1)\n\t\t)",
+    ),
+    "p5: the interrupt judges the scaled amount": (
+        CROWD,
+        "CrowdBrain.OnHit(mind, def, amount, stagger > 0, reels, crowd.heavyHit, os.clock())",
+        "CrowdBrain.OnHit(mind, def, amount * (scale or 1), stagger > 0, reels, crowd.heavyHit, os.clock())",
+    ),
+    "p5: enemy damage not rounded": (
+        VITALS,
+        "amount = math.max(math.round(amount * rules.damageScale), 1)",
+        "amount = math.max(amount * rules.damageScale, 1)",
+    ),
+    "p5: onDown every frame": (VITALS, "\tlocal list = downed\n\tdowned = {}\n", "\tlocal list = downed\n"),
+    "p5: a mission down gets up by itself": (
+        VITALS,
+        "vitals.downUntil = math.huge",
+        "vitals.downUntil = now + math.max(config.player.downSeconds, 0)",
+    ),
+    "p5: regen share ignored": (VITALS, "return math.max(rules.regenShare, 0) * humanoid.MaxHealth", "return 0"),
+    "p5: a new character ends a mission down": (
+        VITALS,
+        "local stayDown = mission ~= nil and vitals.down",
+        "local stayDown = false",
+    ),
+    "p5: KillAll kills nobody": (CROWD, "\t\t\tdie(enemy, currentDef(enemy, crowd.kinds), crowd, byUserId)\n", ""),
+    # Review round: ruling 18 judged from state (VitalsService.RunLost).
+    "p5 lost: a member on the pad still fights": (
+        VITALS,
+        "if member.bot or player == nil or member.waiting then",
+        "if member.bot or player == nil then",
+    ),
+    "p5 lost: a dead partner still stands": (
+        VITALS,
+        "if root ~= nil and not VitalsService.IsDown(player) then",
+        "if not VitalsService.IsDown(player) then",
+    ),
+    "p5 lost: a downed fighter still stands": (
+        VITALS,
+        "if root ~= nil and not VitalsService.IsDown(player) then",
+        "if root ~= nil then",
+    ),
+    "p5 lost: an empty fight is lost": (
+        VITALS,
+        "return #fighters > 0 and not anyStanding, fighters",
+        "return not anyStanding, fighters",
+    ),
 }
 
 vacuous = []

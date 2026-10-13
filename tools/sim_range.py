@@ -50,11 +50,21 @@ enraged body takes (enrage.brain). Its players: one who stands, two who ignore t
 chase the boss (one of them reacting to every tell), and the one who reacts, kills the guard,
 breaks the plate (with the ground slam when no hit of his weapon is heavy) and then duels.
 
+P5 Wave 1 adds the mission: the same crowd and player seen through a mission's `crowd` block
+(HP, plate, damage and regen scales; the player's hits scaled by his Armory tier, the plate and
+heavy-hit rules on the tier-1 amount; his health from his gear), in the mission's arena, at
+Combat.json debug.provingGear. It measures the hits against that bar, a still player in the first
+fodder wave, both bosses alone at their `boss.at`, and whole runs of all ten waves through
+WaveService's queue, director and breathers: the player who reacts to every tell and, for
+information, the one who never dodges. With no mission view every range number is as before.
+
 Usage:
   py tools/sim_range.py                 # all tables
   py tools/sim_range.py --check         # exit 1 if a shipped value leaves the design bands
   py tools/sim_range.py --config PATH   # measure another ProvingGrounds.json
   py tools/sim_range.py --trials 60     # fewer random trials (faster, noisier)
+  py tools/sim_range.py --mission-only  # only the P5 mission section (with --check: its bands)
+  py tools/sim_range.py --mission PATH  # measure another Missions/*.json
 """
 
 from __future__ import annotations
@@ -509,15 +519,19 @@ class World:
         self.kills = 0
         self.front = None  # distance to the first row (front placements)
         self.dead = []
+        # P5 ruling 9: only the HP loss follows the attacker's Armory tier (Armory.DamageScale);
+        # armour, heavy hits, plates and interrupts read the tier-1 amount. 1 in the range.
+        self.scale = 1.0
 
     def live(self):
         return [e for e in self.enemies if e.alive]
 
     def damage(self, enemy, amount):
-        """CrowdService.Damage: flat armour with a floor; returns (dealt, killed)."""
+        """CrowdService.Damage: flat armour with a floor; returns (dealt, killed). P5 ruling 9:
+        hpLoss = max(amount - armor, amount * armorFloor) * scale."""
         if not enemy.alive or amount <= 0:
             return 0.0, False
-        dealt = max(amount - enemy.armor, amount * self.floor_share)
+        dealt = max(amount - enemy.armor, amount * self.floor_share) * self.scale
         if not self.mortal:
             return dealt, False
         enemy.hp -= dealt
@@ -1980,6 +1994,14 @@ class ThreatRun:
         weapon = policy.get("weapon") or (cfg["loadout"]["melee"], None)
         self.variant = variant_of(cfg, *weapon)
         self.melee = self.variant["kind"] == "melee"
+        # P5 ruling 8: the HP-loss scale of his weapon's slot, of the ground slam (melee) and of
+        # his ability. A mission view carries them in `_scales`; the range has none, so all are 1.
+        scales = cfg.get("_scales") or {}
+        slot = cfg["weapons"][weapon[0]]["slot"]
+        self.hit_scale = scales.get(slot, 1.0)
+        self.slam_scale = scales.get("melee", 1.0)
+        self.cast_scale = scales.get(slot + "Ability", self.hit_scale)
+        self.world.scale = self.hit_scale
         self.shots_fired = 0
         self.busy_until = 0.0
         self.jump_at = None  # react: when the jump he is timing leaves the floor
@@ -2141,8 +2163,10 @@ class ThreatRun:
                     # RangeService: a sphere round where his root stands when he lands.
                     self.world.now = t
                     self.world.blow = (self.x, self.z, move["slamKnockback"], move["slamLaunch"])
+                    self.world.scale = self.slam_scale  # P5 ruling 8: the slam scales as melee
                     explode(self.world, self.cfg, (self.x, ROOT_HEIGHT, self.z), move["slamRadius"],
                             move["slamPad"], 0, move["slamDamage"])
+                    self.world.scale = self.hit_scale
                     self.world.blow = None
                     self.slams += 1
                     self.slam_ready = t + move["slamCooldown"]
@@ -2153,7 +2177,9 @@ class ThreatRun:
                     and math.hypot(boss.x - self.x, boss.z - self.z) <= self.wanted(boss) + CHASE_MARGIN):
                 dealt, busy, cooldown = self.cast  # one cast, at the boss
                 self.world.now = t
+                self.world.scale = self.cast_scale
                 self.world.damage(boss, dealt)
+                self.world.scale = self.hit_scale
                 self.casts += 1
                 self.cast_ready = t + cooldown
                 self.busy_until = t + busy
@@ -2774,6 +2800,10 @@ class ThreatRun:
         if e.locked:
             e.face = snap_face(e.face)
 
+    def new_id(self):
+        """The next body's id: one past the bodies so far (a mission run keeps its own count)."""
+        return len(self.fighters) + 1
+
     def owe(self, e):
         """Ruling 22: the blow of a body killed after its impact's time still lands."""
         self.land(e, e.until, self.world.now)
@@ -2804,7 +2834,7 @@ class ThreatRun:
         for n in range(raise_):
             place = free[n * len(free) // raise_]
             angle = yaw + (place + turned) / count * 2 * math.pi
-            body = Fighter(len(self.fighters) + 1, name, kind,
+            body = Fighter(self.new_id(), name, kind,
                            clamp(e.x - math.sin(angle) * radius, -limit_x, limit_x),
                            clamp(e.z - math.cos(angle) * radius, -limit_z, limit_z), math.inf)
             body.spawned_at = now
@@ -4562,7 +4592,535 @@ def check_siege(cfg, env, boss, expect):
                f"need it: {', '.join(light)}")
 
 
-def check(cfg, fam_rows, ab_rows, threat=None, bosses=None):
+# ---------------------------------------------------------------------------------------------
+# P5 Wave 1: a mission (docs/INTERFACES.md "P5 contracts" -> "Wave 1 — crowd in a mission").
+#
+# The same crowd, brains, shapes and player as the range, seen through the mission's `crowd`
+# block, in the mission's arena, at the gear the bands are measured at (Combat.json
+# debug.provingGear, 2/1):
+#   [scales]   ruling 10: every body's HP x hpScale (summons too), plates x plateScale, every
+#              enemy hit max(round(damage x damageScale), 1), regen = regenShare x MaxHealth;
+#   [tier]     rulings 8 and 9: the player's HP loss x Armory.DamageScale of the slot (the slam
+#              as melee); heavy hits, plates, interrupts and armour read the tier-1 amount;
+#   [health]   ruling 11: the bar is Armory.MaxHp of the gear; ruling 18: solo, the first down
+#              ends the run;
+#   [queue]    ruling 15: a wave is its groups, in order, as bursts of up to `burst` bodies; a
+#              burst rises at the next rim point of the arena's enemySpawns (round-robin over the
+#              run) in a grid of pitch `burstSpacing`; bursts are BurstInterval apart; a boss
+#              rises first, at `boss.at`; the queue holds while maxAlive bodies live;
+#   [director] ruling 17: tempo from crowd kills (summons included) against spec.total /
+#              targetWaveSeconds, held at 1 for tempoWarmupSeconds; a wave that has finished
+#              spawning merges the next in when Combat.ShouldMerge says so, never into or out of
+#              a boss wave; cleared = nothing queued and nothing alive; then the breather
+#              (Combat.BreatherSeconds, no healing but regen), then the next wave.
+# Where the contract leaves a choice the sim follows WaveService as built: the rim cursor runs
+# over the whole run from the first enemySpawns entry; a burst's grid is ceil(sqrt(n)) columns
+# across the line to the centre, rows stepping inward; a burst held by maxAlive places what it
+# can and waits at the head of the queue; the boss is placed outside the burst queue. The player
+# of the whole run reacts to every tell and attacks with the default melee family only (no bow,
+# no ability), going for the nearest body; between waves he stands where the last one fell.
+# ---------------------------------------------------------------------------------------------
+
+MISSIONS_DIR = REPO_ROOT / "src" / "shared" / "Config" / "Missions"
+MISSION_FILE = "1_Village.json"
+MISSION_GEAR_DEFAULT = {"melee": 2, "ranged": 1}
+# Balance bands (INTERFACES "P5" -> "Balance bands"): the bosses with the default sword, a clear
+# of all ten waves by a reacting player (breathers included), a still player in a fodder wave,
+# no enemy hit over HIT_SHARE_MAX of the bar, regen close to the range's 10/130 a second.
+MISSION_BOSS_SECONDS = {"colossus": (64.0, 90.0), "warlord": (77.0, 101.0)}
+MISSION_CLEAR_SECONDS = (600.0, 900.0)
+MISSION_STAND_DOWN_SECONDS = (6.0, 12.0)
+MISSION_STAND_WAVE = 1
+MISSION_REGEN_SHARE = 10 / 130
+MISSION_REGEN_TOLERANCE = 0.10
+MISSION_SEEDS = (11, 23, 37)
+
+
+def luau_round(value):
+    """Luau math.round: half away from zero (VitalsService rounds a scaled hit with it)."""
+    return math.floor(value + 0.5) if value >= 0 else -math.floor(-value + 0.5)
+
+
+def load_rim(name):
+    """The `enemySpawns` points of Layouts/Arenas/<name>.luau, in order: [(x, z)]."""
+    text = (LAYOUT_DIR / f"{name}.luau").read_text(encoding="utf-8")
+    names = {m.group(1): float(m.group(2))
+             for m in re.finditer(r"^local ([A-Z][A-Z0-9_]*) = (-?\d+(?:\.\d+)?)\s*$", text, re.MULTILINE)}
+    block = re.search(r"enemySpawns = \{(.*?)\n\t\}", text, re.DOTALL)
+    if block is None:
+        raise SystemExit(f"sim_range: no enemySpawns in Layouts/Arenas/{name}.luau")
+
+    def number(token):
+        token = token.strip()
+        negative = token.startswith("-")
+        token = token.lstrip("-")
+        value = names[token] if token in names else float(token)
+        return -value if negative else value
+
+    return [(number(x), number(z)) for x, z in re.findall(r"\{ x = ([\w.-]+), z = ([\w.-]+) \}", block.group(1))]
+
+
+def gear_max_hp(armory, gear):
+    """Armory.MaxHp of a gear with no Ascension."""
+    total = armory["baseHp"]
+    for slot in ("melee", "ranged"):
+        tier = gear[slot]
+        slot_def = armory["slots"][slot]
+        total += slot_def["starter"]["hp"] if tier <= 0 else slot_def["tiers"][tier - 1]["hp"]
+    return total
+
+
+def mission_gear():
+    """Combat.json debug.provingGear (ruling 12), or the contract's default 2/1."""
+    try:
+        gear = load_config(COMBAT_PATH)["debug"].get("provingGear")
+    except (FileNotFoundError, KeyError):
+        gear = None
+    gear = gear or MISSION_GEAR_DEFAULT
+    return {"melee": gear["melee"], "ranged": gear["ranged"]}
+
+
+def mission_view(cfg, mission, armory, gear):
+    """[scales] [tier] [health] The range's config as the mission plays it, and the threat env of
+    the mission's arena. The view carries `_scales` (the player's HP-loss scale per source)."""
+    import sim_combat as sc  # the Armory and Combat mirrors live there (lazy: it imports this file)
+    crowd = mission["crowd"]
+    view = json.loads(json.dumps(cfg))
+    for kind in view["crowd"]["kinds"].values():
+        kind["hp"] = max(kind["hp"] * crowd["hpScale"], 1)
+        if kind.get("plate"):
+            kind["plate"] = kind["plate"] * crowd["plateScale"]
+        for attack in kind.get("attacks") or []:
+            if attack["damage"] > 0:
+                attack["damage"] = max(luau_round(attack["damage"] * crowd["damageScale"]), 1)
+    hp = gear_max_hp(armory, gear)
+    view["player"]["regenPerSecond"] = crowd["regenShare"] * hp
+    view["_scales"] = {slot + suffix: sc.damage_scale(armory, slot, gear[slot], 0, ability)
+                       for slot in ("melee", "ranged") for suffix, ability in (("", False), ("Ability", True))}
+    env = load_arena(mission["arena"])
+    env["hp"] = hp
+    env["tolerance"] = timing_tolerance()
+    env["spawns"] = load_rim(mission["arena"])
+    return view, env
+
+
+class MissionRun(ThreatRun):
+    """One player through a mission's waves `first`..`last`, solo, at the mission's scales: the
+    queue, the director and the breathers of WaveService (ruling 15 to 18), the crowd and the
+    player of the threat. He stands on the lobby pad when the first wave begins."""
+
+    def __init__(self, cfg, env, mission, combat_cfg, policy, seed, first=1, last=None):
+        super().__init__(cfg, env, "", policy, seed, combat_cfg["director"]["runCapSeconds"])
+        import sim_combat as sc
+        self.sc = sc
+        self.mission = mission
+        self.crowd = mission["crowd"]
+        self.combat = combat_cfg
+        self.director = combat_cfg["director"]
+        self.spawns = env["spawns"]
+        self.first = first
+        self.last = last or mission["waves"]
+        self.ids = 0
+        self.cursor = 0
+        self.wave = 0
+        self.spec = None
+        self.queue = []
+        self.boss_pending = None
+        self.bursts = 0
+        self.next_spawn = 0.0
+        self.spawned = 0
+        self.phase = "wave"
+        self.breather_until = 0.0
+        self.tempo = 1.0
+        self.stamps = []
+        self.cleared_through = first - 1
+        self.waves = {}  # wave -> {start, spawnEnd, clear, merged, kills, tempo}
+        self.killed = {}  # kind -> kills (summons included; dismissed summons are not kills)
+        self.boss_fights = {}  # boss kind -> (spawned at, fell at)
+        self.end_reason = None
+        self.end_at = None
+        self.peak_alive = 0
+        self.breathers = 0.0
+
+    def new_id(self):
+        self.ids += 1
+        return self.ids
+
+    # -- the queue and the director (WaveService) ----------------------------------------------
+
+    def alive(self):
+        return sum(1 for f in self.fighters if f.alive)
+
+    def boss_wave(self, wave):
+        definition = self.crowd["waves"][wave - 1] if 1 <= wave <= len(self.crowd["waves"]) else None
+        return definition is not None and definition.get("boss") is not None
+
+    def queue_wave(self, wave, t):
+        spec = self.sc.crowd_wave(self.mission, wave, 1, False, self.combat)
+        self.spec = spec
+        if spec["boss"] is not None:
+            self.boss_pending = spec["boss"]
+        bursts = self.sc.crowd_bursts(spec, self.crowd["burst"])
+        # A burst: [kind, bodies left, bodies placed, rim point] (WaveService's Burst).
+        self.queue += [[kind, count, 0, None] for kind, count in bursts]
+        self.bursts = len(bursts)
+        self.spawned += spec["total"]
+        self.next_spawn = t
+        self.waves[wave] = {"start": t, "spawnEnd": None, "clear": None, "merged": False,
+                            "kills": 0, "bodies": spec["total"], "boss": spec["boss"] is not None,
+                            "tempo": self.tempo}
+
+    def begin_wave(self, wave, t):
+        self.wave = wave
+        self.spawned = 0
+        self.phase = "wave"
+        self.queue_wave(wave, t)
+
+    def raise_body(self, name, x, z, t):
+        kind = self.cfg["crowd"]["kinds"][name]
+        limit_x, limit_z = max(self.half[0] - kind["radius"], 0), max(self.half[1] - kind["radius"], 0)
+        body = Fighter(self.new_id(), name, kind, clamp(x, -limit_x, limit_x), clamp(z, -limit_z, limit_z),
+                       math.inf)
+        body.spawned_at = t
+        self.fighters.append(body)
+        return body
+
+    def spawn_boss(self, t):
+        """WaveService.spawnBoss: the boss first, at its own spot, outside the burst queue."""
+        entry = self.boss_pending
+        if entry is None:
+            return
+        self.boss_pending = None
+        boss = self.raise_body(entry["kind"], entry["at"][0], entry["at"][1], t)
+        self.boss = self.quarry = boss
+        self.want = self.wanted(boss)
+        self.guards_at = None
+        self.boss_fights[entry["kind"]] = (t, None)
+        self.peak_alive = max(self.peak_alive, self.alive())
+
+    def spawn_next(self, t):
+        """WaveService.spawnBursts: the head burst, once its time has come, body by body while
+        fewer than maxAlive live; what is left waits at the head and carries on as room frees.
+        Its grid (gridPoint): ceil(sqrt(size)) columns across the line to the arena centre,
+        centred on the rim point, rows stepping inward from it at `burstSpacing`."""
+        if not self.queue:
+            return
+        burst = self.queue[0]
+        if burst[2] == 0 and t < self.next_spawn - THREAT_EPS:
+            return
+        if burst[3] is None:
+            burst[3] = self.spawns[self.cursor % len(self.spawns)]
+            self.cursor += 1
+        cx, cz = burst[3]
+        reach = math.hypot(cx, cz)
+        ix, iz = (-cx / reach, -cz / reach) if reach > 1e-3 else (0.0, 1.0)
+        ax, az = -iz, ix
+        size = burst[1] + burst[2]
+        columns = max(math.ceil(math.sqrt(size)), 1)
+        spacing = self.crowd["burstSpacing"]
+        while burst[1] > 0 and self.alive() < self.crowd["maxAlive"]:
+            row, column = burst[2] // columns, burst[2] % columns
+            across = (column - (columns - 1) / 2) * spacing
+            inward = row * spacing
+            self.raise_body(burst[0], cx + ax * across + ix * inward, cz + az * across + iz * inward, t)
+            burst[2] += 1
+            burst[1] -= 1
+        self.peak_alive = max(self.peak_alive, self.alive())
+        if burst[1] > 0:
+            return
+        self.queue.pop(0)
+        if not self.queue:
+            self.waves[self.wave]["spawnEnd"] = t
+        self.next_spawn = t + self.sc.burst_interval(self.mission, self.bursts, self.tempo, False, self.combat)
+
+    def update_tempo(self, t):
+        director = self.director
+        cutoff = t - director["windowSeconds"]
+        self.stamps = [s for s in self.stamps if s >= cutoff]
+        if t < director["tempoWarmupSeconds"]:
+            self.tempo = 1.0
+            return
+        target = self.mission["targetWaveSeconds"]
+        expected = self.spec["total"] / target if target > 0 and self.spec is not None else 0
+        self.tempo = self.sc.tempo(len(self.stamps), director["windowSeconds"], expected, director)
+
+    def end(self, reason, t):
+        self.end_reason = reason
+        self.end_at = t
+
+    def tick(self, t):
+        self.update_tempo(t)
+        if self.downs:
+            self.end("down", self.downs[0])
+            return
+        if t >= self.director["runCapSeconds"]:
+            self.end("runCap", t)
+            return
+        if self.phase == "breather":
+            if t >= self.breather_until - THREAT_EPS:
+                self.begin_wave(self.wave + 1, t)
+            return
+        self.spawn_boss(t)
+        self.spawn_next(t)
+        if self.queue or self.boss_pending is not None:
+            return
+        if self.waves[self.wave]["spawnEnd"] is None:
+            self.waves[self.wave]["spawnEnd"] = t
+        alive = self.alive()
+        if alive > 0:
+            dead = (self.spawned - alive) / self.spawned if self.spawned > 0 else 0.0
+            if (self.wave < self.last and not self.boss_wave(self.wave) and not self.boss_wave(self.wave + 1)
+                    and self.sc.should_merge(self.tempo, dead, self.director)):
+                self.wave += 1
+                self.queue_wave(self.wave, t)
+                self.waves[self.wave]["merged"] = True
+            return
+        for wave in range(self.cleared_through + 1, self.wave + 1):
+            self.waves[wave]["clear"] = t
+        self.cleared_through = self.wave
+        if self.wave >= self.last:
+            self.end("cleared", t)
+            return
+        seconds = self.sc.breather_seconds(self.tempo, self.director)
+        self.breathers += seconds
+        self.breather_until = t + seconds
+        self.phase = "breather"
+
+    # -- the player and the kills ---------------------------------------------------------------
+
+    def swing(self, t):
+        """The mission's player: the boss fight's rules while a boss lives; otherwise he goes for
+        the nearest body (`hunt`)."""
+        if self.policy.get("hunt") and (self.boss is None or not self.boss.alive):
+            live = [e for e in self.fighters if e.alive]
+            if live:
+                nearest = min(live, key=lambda e: (e.x - self.x) ** 2 + (e.z - self.z) ** 2)
+                self.quarry = nearest
+                self.want = self.wanted(nearest)
+            else:
+                self.quarry = None
+        super().swing(t)
+
+    def fall(self, enemy):
+        super().fall(enemy)
+        now = self.world.now
+        self.killed[enemy.name] = self.killed.get(enemy.name, 0) + 1
+        self.stamps.append(now)
+        if self.wave in self.waves:
+            self.waves[self.wave]["kills"] += 1
+        if enemy.boss:
+            self.boss_fights[enemy.name] = (self.boss_fights.get(enemy.name, (now, None))[0], now)
+            self.kill_at = None
+
+    def run(self):
+        t = 0.0
+        accumulator = 0.0
+        self.begin_wave(self.first, t)
+        while self.end_reason is None:
+            self.world.now = t
+            self.control(t, FRAME)
+            accumulator += FRAME
+            while accumulator >= self.interval - THREAT_EPS:
+                accumulator -= self.interval
+                self.crowd_step(t, self.interval)
+                # Dead bodies never come back here: drop them (in place: the world shares the list).
+                self.fighters[:] = [f for f in self.fighters if f.alive]
+            self.resolve(t)
+            self.tick(t)
+            t += FRAME
+        log = self.log
+        return {"end": self.end_reason, "at": self.end_at, "waves": self.waves, "killed": self.killed,
+                "bosses": self.boss_fights, "downs": len(self.downs), "firstDown": self.downs[0] if self.downs else None,
+                "hits": len(log), "damage": sum(d for _w, d, _k, _s in log), "dodged": self.dodged,
+                "byKind": {k: sum(d for _w, d, kk, _s in log if kk == k) for k in {kk for _w, _d, kk, _s in log}},
+                "peakAlive": self.peak_alive, "breathers": self.breathers, "summoned": self.summoned,
+                "firstHit": log[0][0] if log else None}
+
+
+THREAT_POLICIES["mission"] = {"label": "reacts to every tell, attacks the nearest", "fight": True, "react": True,
+                              "boss": True, "chase": True, "hold": True, "hunt": True}
+# Information, not a band: the same player who never dodges. Where he goes down says how much
+# the waves ask of a player who stops answering the tells.
+THREAT_POLICIES["rampage"] = {"label": "attacks the nearest, never dodges", "fight": True, "boss": True,
+                              "chase": True, "hunt": True}
+
+
+def mission_kinds(cfg, mission):
+    """Every kind the mission can field: its groups, its bosses and what they call."""
+    kinds = cfg["crowd"]["kinds"]
+    found = []
+    for wave in mission["crowd"]["waves"]:
+        names = [g["kind"] for g in wave["groups"]] + ([wave["boss"]["kind"]] if wave.get("boss") else [])
+        for name in names:
+            if name not in found:
+                found.append(name)
+            for attack in (kinds.get(name) or {}).get("attacks") or []:
+                called = attack.get("summon") if attack["shape"] == "summon" else None
+                if called and called not in found:
+                    found.append(called)
+    return found
+
+
+def mission_boss_set(view, mission, name):
+    """A dummy set holding the mission's boss alone at its `boss.at`, added to the view."""
+    for wave in mission["crowd"]["waves"]:
+        boss = wave.get("boss")
+        if boss and boss["kind"] == name:
+            set_name = f"_mission_{name}"
+            view["dummySets"][set_name] = [{"kind": name, "behaviour": "fight", "count": 1, "at": list(boss["at"]),
+                                            "spacing": 0, "respawnSeconds": 12}]
+            return set_name
+    return None
+
+
+def mission_report(cfg, path=None, mission=None, careless=True):
+    """Everything the mission bands read: the view, the hit shares, the still player in a fodder
+    wave, the two bosses at the mission's scales, and the whole run of the reacting player (and,
+    for information, of one who never dodges). `mission` = an already loaded mission config."""
+    import sim_combat as sc
+    if mission is None:
+        mission = load_config(path or MISSIONS_DIR / MISSION_FILE)
+    if mission.get("crowd") is None:
+        return None
+    armory = load_config(ARMORY_PATH)
+    combat_cfg = load_config(COMBAT_PATH)
+    gear = mission_gear()
+    view, env = mission_view(cfg, mission, armory, gear)
+    hp = env["hp"]
+    hits = []
+    for name in mission_kinds(view, mission):
+        theirs = cfg["crowd"]["kinds"][name].get("attacks") or []
+        for attack, base in zip(view["crowd"]["kinds"][name].get("attacks") or [], theirs):
+            if attack["damage"] > 0:
+                hits.append({"kind": name, "shape": attack["shape"], "damage": attack["damage"],
+                             "share": attack["damage"] / hp, "base": base["damage"]})
+    stand = [MissionRun(view, env, mission, combat_cfg, THREAT_POLICIES["stand"], seed, MISSION_STAND_WAVE,
+                        MISSION_STAND_WAVE).run() for seed in MISSION_SEEDS]
+    bosses = {}
+    for name in MISSION_BOSS_SECONDS:
+        set_name = mission_boss_set(view, mission, name)
+        if set_name is not None:
+            bosses[name] = boss_row(view, env, set_name, "slay")
+    runs = [MissionRun(view, env, mission, combat_cfg, THREAT_POLICIES["mission"], seed).run()
+            for seed in MISSION_SEEDS]
+    careless_runs = []
+    for seed in MISSION_SEEDS if careless else ():
+        run = MissionRun(view, env, mission, combat_cfg, THREAT_POLICIES["rampage"], seed)
+        result = run.run()
+        result["wave"] = run.wave
+        careless_runs.append(result)
+    return {"mission": mission, "view": view, "env": env, "gear": gear, "hp": hp, "hits": hits, "stand": stand,
+            "bosses": bosses, "runs": runs, "careless": careless_runs, "combat": combat_cfg, "sc": sc}
+
+
+def print_mission(cfg, report):
+    if report is None:
+        print()
+        print("MISSION: no crowd block, nothing to measure")
+        return
+    mission, view, env = report["mission"], report["view"], report["env"]
+    crowd = mission["crowd"]
+    scales = view["_scales"]
+    print()
+    print(f"MISSION (P5; {mission['name']}, arena {mission['arena']}, gear {report['gear']['melee']}/"
+          f"{report['gear']['ranged']}, health {report['hp']:.0f}; hpScale {crowd['hpScale']:g}, plateScale "
+          f"{crowd['plateScale']:g}, damageScale {crowd['damageScale']:g}, regenShare {crowd['regenShare']:g} = "
+          f"{view['player']['regenPerSecond']:.1f}/s; his HP-loss scale melee x{scales['melee']:g}, ranged "
+          f"x{scales['ranged']:g})")
+    print("  enemy hits at the mission's scale:")
+    for h in report["hits"]:
+        print(f"    {h['kind']:<9} {h['shape']:<6} {h['base']:>3} -> {h['damage']:>3} = {100 * h['share']:4.1f}% of the bar")
+    downs = [r["firstDown"] for r in report["stand"]]
+    hits = [r["firstHit"] for r in report["stand"]]
+    print(f"  stands still in wave {MISSION_STAND_WAVE} (from the wave's start): first hit "
+          + ", ".join(fmt(h, 0, 1).strip() for h in hits) + " s; down at "
+          + ", ".join(fmt(d, 0, 1).strip() for d in downs) + " s")
+    for name, row in report["bosses"].items():
+        lo, hi = MISSION_BOSS_SECONDS[name]
+        span = row["killSpan"]
+        print(f"  {row['weapon']} against the {name} alone at its boss.at, from the pad: kill "
+              f"{fmt(row['kill'], 0, 1).strip()} s ({span[0]:.1f}-{span[1]:.1f}) " if span else
+              f"  {row['weapon']} against the {name}: never killed ", end="")
+        print(f"[band {lo:.0f}-{hi:.0f}], hits of the boss {row['solid']}, lunges {row['lunges']}, "
+              f"summoned {row['summoned']:.1f}, damage taken {row['damage']:.0f}")
+    print("  the whole run, reacting player, default melee only (per seed):")
+    print("    seed  end      clear    down  hits  damage  peak alive  breathers  kills")
+    for seed, r in zip(MISSION_SEEDS, report["runs"]):
+        kills = sum(r["killed"].values())
+        print(f"    {seed:>4}  {r['end']:<7}  {r['at'] / 60:5.2f} min  {r['downs']:>4}  {r['hits']:>4}  {r['damage']:>6.0f}  "
+              f"{r['peakAlive']:>10}  {r['breathers']:>7.1f} s  {kills:>5}")
+    first = report["runs"][0]
+    print(f"  waves of seed {MISSION_SEEDS[0]}: wave  bodies  start  spawned by  clear  length  kills  merged")
+    for wave, w in sorted(first["waves"].items()):
+        clear = w["clear"]
+        print(f"    {wave:>4}  {w['bodies'] + (1 if w['boss'] else 0):>6}  {w['start']:6.1f}  "
+              f"{fmt(w['spawnEnd'], 0, 1):>9}  {fmt(clear, 0, 1):>6}  "
+              f"{fmt(clear - w['start'] if clear is not None else None, 0, 1):>6}  {w['kills']:>5}  "
+              f"{'yes' if w['merged'] else ''}")
+    for name, (spawned, fell) in sorted(first["bosses"].items()):
+        print(f"    the {name} in the run: {fmt(fell - spawned if fell is not None else None, 0, 1).strip()} s "
+              f"from its rise to its fall")
+    if report["careless"]:
+        print("  the same player who never dodges (information): "
+              + "; ".join(f"seed {seed} {r['end']} in wave {r['wave']} at {r['at'] / 60:.2f} min "
+                          f"({r['hits']} hits; " + ", ".join(f"{k} {v:.0f}" for k, v in sorted(r["byKind"].items()))
+                          + ")" for seed, r in zip(MISSION_SEEDS, report["careless"])))
+    killed = {}
+    for r in report["runs"]:
+        for kind, n in r["killed"].items():
+            killed[kind] = killed.get(kind, 0) + n / len(report["runs"])
+    print("  kills per run (mean): " + ", ".join(f"{k} {v:.1f}" for k, v in sorted(killed.items())))
+    sc = report["sc"]
+    spec = {"rewardMult": 1}
+    cash = sum(sc.crowd_reward(mission, k, spec)[0] * v for k, v in killed.items())
+    materials = sum(sc.crowd_reward(mission, k, spec)[1] * v for k, v in killed.items())
+    valor = sum(w["boss"]["valor"] for w in crowd["waves"] if w.get("boss"))
+    print(f"  what those kills pay: {cash:,.0f} cash, {materials:.0f} {mission['material']}, {valor} Valor "
+          f"(sim_combat.py --check bands the configured run)")
+
+
+def check_mission(cfg, report, expect):
+    if report is None:
+        return
+    mission, view = report["mission"], report["view"]
+    crowd = mission["crowd"]
+    hp = report["hp"]
+    worst = max(report["hits"], key=lambda h: h["share"])
+    expect(worst["share"] <= HIT_SHARE_MAX,
+           f"mission: no enemy hit over {HIT_SHARE_MAX:.0%} of the bar ({hp:.0f}): the worst is the {worst['kind']}'s "
+           f"{worst['shape']}, {worst['damage']} = {worst['share']:.1%}")
+    regen = crowd["regenShare"]
+    expect(abs(regen / MISSION_REGEN_SHARE - 1) <= MISSION_REGEN_TOLERANCE,
+           f"mission: regenShare {regen:g} within {MISSION_REGEN_TOLERANCE:.0%} of the range's 10/130 = "
+           f"{MISSION_REGEN_SHARE:.4f} ({view['player']['regenPerSecond']:.1f}/s on {hp:.0f})")
+    lo, hi = MISSION_STAND_DOWN_SECONDS
+    downs = [r["firstDown"] for r in report["stand"]]
+    expect(all(d is not None and lo <= d <= hi for d in downs),
+           f"mission: standing still in wave {MISSION_STAND_WAVE}, down in {lo:.0f}-{hi:.0f} s from the wave's start, "
+           f"every seed: " + ", ".join(fmt(d, 0, 1).strip() for d in downs))
+    for name, (lo, hi) in MISSION_BOSS_SECONDS.items():
+        row = report["bosses"].get(name)
+        if row is None:
+            expect(False, f"mission: the {name} is fought in the mission")
+            continue
+        span = row["killSpan"]
+        expect(span is not None and lo <= span[0] and span[1] <= hi,
+               f"mission: the {name} with the {row['weapon']}, every seed, {lo:.0f}-{hi:.0f} s: "
+               + (f"{span[0]:.1f}-{span[1]:.1f} s" if span else "never killed"))
+        expect(row["solid"] == 0 and row["lunges"] == 0,
+               f"mission: the {name}: the reacting player takes no hit ({row['solid']} of the boss, "
+               f"{row['lunges']} lunges)")
+    lo, hi = MISSION_CLEAR_SECONDS
+    for seed, r in zip(MISSION_SEEDS, report["runs"]):
+        expect(r["end"] == "cleared" and lo <= r["at"] <= hi,
+               f"mission: seed {seed}, the reacting player clears all {mission['waves']} waves in "
+               f"{lo / 60:.0f}-{hi / 60:.0f} min: {r['end']} at {r['at'] / 60:.2f} min, {r['downs']} down(s)")
+    alive = max(r["peakAlive"] for r in report["runs"])
+    expect(alive <= cfg["crowd"]["maxAlive"] and crowd["maxAlive"] <= cfg["crowd"]["maxAlive"],
+           f"mission: maxAlive {crowd['maxAlive']} <= the crowd's {cfg['crowd']['maxAlive']} (peak alive {alive})")
+
+
+def check(cfg, fam_rows, ab_rows, threat=None, bosses=None, mission=None):
     failures = []
 
     def expect(ok, text):
@@ -4619,6 +5177,8 @@ def check(cfg, fam_rows, ab_rows, threat=None, bosses=None):
         check_threat(cfg, *threat, expect)
         if bosses:
             check_boss(cfg, threat[0], bosses, expect)
+    if mission is not None:
+        check_mission(cfg, mission, expect)
     print()
     print(f"CHECK: {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")
     return not failures
@@ -4629,8 +5189,26 @@ def main():
     parser.add_argument("--check", action="store_true", help="exit 1 if a shipped value leaves the design bands")
     parser.add_argument("--config", default=str(CONFIG_PATH), help="ProvingGrounds.json to measure")
     parser.add_argument("--trials", type=int, default=120, help="random trials per measurement")
+    parser.add_argument("--mission", default=None, help="a Missions/*.json to measure (default: Village)")
+    parser.add_argument("--mission-only", action="store_true", help="only the P5 mission section")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if args.mission_only:
+        report = mission_report(cfg, args.mission)
+        print_mission(cfg, report)
+        if args.check:
+            failures = []
+
+            def expect(ok, text):
+                print(f"  {'PASS' if ok else 'FAIL'}  {text}")
+                if not ok:
+                    failures.append(text)
+
+            print()
+            check_mission(cfg, report, expect)
+            print(f"\nCHECK (mission only): {'PASS' if not failures else 'FAIL (' + str(len(failures)) + ')'}")
+            sys.exit(0 if not failures else 1)
+        return
     fam_rows = family_rows(cfg, args.trials)
     print_families(fam_rows)
     ab_rows = ability_rows(cfg, fam_rows, args.trials)
@@ -4640,8 +5218,10 @@ def main():
     print_threat(cfg, *threat, ab_rows)
     bosses = boss_rows(cfg, env)
     print_boss(cfg, env, bosses)
+    report = mission_report(cfg, args.mission)
+    print_mission(cfg, report)
     if args.check:
-        sys.exit(0 if check(cfg, fam_rows, ab_rows, threat, bosses) else 1)
+        sys.exit(0 if check(cfg, fam_rows, ab_rows, threat, bosses, report) else 1)
 
 
 if __name__ == "__main__":

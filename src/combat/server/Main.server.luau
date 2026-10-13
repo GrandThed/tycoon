@@ -10,6 +10,12 @@
 --
 -- P1: with the DebugProving Workspace attribute true at boot (Studio only), the place boots the
 -- Proving Grounds instead: no run, no admission, no waves; RangeService owns every player.
+--
+-- P5 (docs/INTERFACES.md "P5 contracts" → "Boot sequence"): one mode, decided once by
+-- CombatMode. Missions fight with the range's weapons (WeaponService, AbilityService) against
+-- the crowd (WaveService); EnemyService and CombatService are no longer booted here, and the
+-- four C1 hit intents have no handlers. A proving build boots into a mission unless Combat.json
+-- debug.provingBoots says "range".
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -20,6 +26,7 @@ local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
 local Combat = require(sharedFolder:WaitForChild("Combat"))
+local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 
 local servicesFolder = script.Parent:WaitForChild("Services")
 local combatFolder = script.Parent:WaitForChild("Combat")
@@ -30,13 +37,13 @@ local StudioBridge = require(servicesFolder:WaitForChild("StudioBridge"))
 local CombatRemotes = require(combatFolder:WaitForChild("CombatRemotes"))
 local RunRegistry = require(combatFolder:WaitForChild("RunRegistry"))
 local ArenaService = require(combatFolder:WaitForChild("ArenaService"))
-local EnemyService = require(combatFolder:WaitForChild("EnemyService"))
-local CombatService = require(combatFolder:WaitForChild("CombatService"))
 local WaveService = require(combatFolder:WaitForChild("WaveService"))
 local DebugService = require(combatFolder:WaitForChild("DebugService"))
 local ReturnService = require(combatFolder:WaitForChild("ReturnService"))
 local RangeService = require(combatFolder:WaitForChild("RangeService"))
+local WeaponService = require(combatFolder:WaitForChild("WeaponService"))
 local AbilityService = require(combatFolder:WaitForChild("AbilityService"))
+local CrowdService = require(combatFolder:WaitForChild("CrowdService"))
 
 type Service = {
 	Init: () -> (),
@@ -57,14 +64,11 @@ local TICK_INTERVAL_SECONDS = 1
 
 local tickAccumulator = 0
 
--- Decided once at boot: flipping the attribute mid-session must not turn a live mission into a
--- range. RangeService.Configure re-checks Studio and the config and may still refuse.
-local function wantsProving(): boolean
-	local combatConfig = Catalog.GetCombatConfig()
-	return RunService:IsStudio()
-		and combatConfig ~= nil
-		and workspace:GetAttribute(combatConfig.debug.provingAttribute) == true
-end
+-- Ruling 5: decided once, before anything else; flipping an attribute mid-session must not turn
+-- a live mission into a range.
+local mode: Types.CombatMode = CombatMode.Get()
+-- Ruling 19: a proving build that boots a mission loops it in place, with no Ready button.
+local provingMission = mode == "mission" and CombatMode.IsProving()
 
 -- The combat place sends the same Snapshot shape as the hub so the client model is identical,
 -- with the city fields zeroed: there is no plot and no income here. persistedIncomePerSecond is
@@ -200,11 +204,22 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		sendSnapshot(player)
 		return
 	end
+	if mode == "range" then
+		-- The range was asked for but could not boot (RangeService.Configure refused): nobody is
+		-- admitted to anything.
+		return
+	end
 	Combat.TouchHighestEra(state)
 
 	local mission, overdrive, hostUserId, debugMission = resolveRun(player)
 	if mission == nil or Catalog.GetCombatConfig() == nil then
 		-- The hint named no mission this build knows (or the configs are missing).
+		ReturnService.Refuse(player, "locked")
+		return
+	end
+	if mission.crowd == nil then
+		-- Ruling 27: only crowd missions play until Wave 3 gives every era its crowd block.
+		warn(`[Combat] mission {mission.id} has no crowd block; refused as locked`)
 		ReturnService.Refuse(player, "locked")
 		return
 	end
@@ -228,12 +243,17 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	-- No yield between the verdict and the admit, so the seat it counted is still free.
 	ArenaService.Admit(player)
+	-- WeaponService also prepares the character Admit placed (its body record did not exist
+	-- then); every later character goes through ArenaService's character hook.
+	WeaponService.AddPlayer(player)
+	AbilityService.AddPlayer(player)
 	sendSnapshot(player)
 end
 
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
 RemoteService.Configure(CombatRemotes)
-RangeService.Configure(wantsProving())
+WeaponService.Configure(mode)
+RangeService.Configure(mode == "range")
 
 -- There is no Delta pipeline in this place (EconomyService is hub-only), so a fresh Snapshot is
 -- how a reward flush or a debug grant reaches the client. Main owns the Snapshot shape;
@@ -262,22 +282,20 @@ local waveBoot: Service = {
 	Start = WaveService.Boot,
 }
 
--- Boot order per contract: data, remotes, registry, arena, enemies, hits, waves, debug, return.
--- Enemies before hits because CombatService wires EnemyService's hooks in its own Init, and
--- hits before waves because WaveService installs the kill handler on CombatService.
+-- Boot order per contract (P5): data, remotes, registry, arena, weapons, range, abilities,
+-- waves, debug, return. WeaponService starts VitalsService (the body) in both modes; RangeService
+-- builds the range arena over ArenaService's fallback pad (range only); AbilityService needs
+-- WeaponService's hooks; WaveService wires the mission hooks (inert in the range).
 local orderedServices: { Service } = {
 	DataService,
 	RemoteService,
 	RunRegistry,
 	ArenaService,
-	EnemyService,
-	CombatService,
+	WeaponService,
+	RangeService,
+	AbilityService,
 	waveBoot,
 	DebugService,
-	-- Last before the return path: it builds the range arena over ArenaService's fallback pad.
-	RangeService,
-	-- P3: needs RangeService started (its hooks and the kill listener); inert off the range.
-	AbilityService,
 	returnBoot,
 }
 
@@ -311,8 +329,9 @@ end)
 -- may not require it.
 RemoteService.SetHandler("RequestReady", function(player: Player)
 	-- Both halves are guarded on the lobby: ArenaService ignores the toggle once the run is
-	-- under way, and nothing here may restart a run that is already going. The range has no run.
-	if RangeService.IsActive() or WaveService.GetPhase() ~= "lobby" then
+	-- under way, and nothing here may restart a run that is already going. The range has no run,
+	-- and a proving mission starts itself (ruling 19).
+	if RangeService.IsActive() or provingMission or WaveService.GetPhase() ~= "lobby" then
 		return
 	end
 	ArenaService.SetReady(player)
@@ -324,35 +343,19 @@ end)
 -- Yields (the teleport retries), so it gets its own thread. Goes home alone, before or
 -- instead of the group return.
 RemoteService.SetHandler("RequestLeave", function(player: Player)
+	-- Lead ruling (P5): a proving mission never sends anyone home. In Studio that trip is the
+	-- bridge's kick; the run restarts in place instead (ruling 19).
+	if provingMission then
+		return
+	end
 	task.spawn(ReturnService.SendHome, player, "leave")
 end)
 
--- The hit and ability math (server raycasts and arc checks against the live wave). Every
--- payload here has already passed its validator; CombatService re-resolves every id.
-RemoteService.SetHandler(
-	"RequestAttack",
-	function(player: Player, swingSeq: number, targetIds: { number })
-		CombatService.OnAttack(player, swingSeq, targetIds)
-	end
-)
-
-RemoteService.SetHandler(
-	"RequestFire",
-	function(player: Player, seq: number, origin: Vector3, direction: Vector3, charge: number)
-		CombatService.OnFire(player, seq, origin, direction, charge)
-	end
-)
-
-RemoteService.SetHandler("RequestDraw", function(player: Player)
-	CombatService.OnDraw(player)
-end)
-
-RemoteService.SetHandler("RequestAbility", function(player: Player, slot: string)
-	CombatService.OnAbility(player, slot)
-end)
-
--- P1 Proving Grounds intents. RangeService drops every one of them outside the range, and tune
--- and command also outside Studio.
+-- Ruling 20: RequestAttack, RequestFire, RequestDraw and RequestAbility have no handler any more
+-- (their definitions stay in CombatRemotes until Wave 3). Every attack, in the range and in a
+-- mission, is one of the intents below. WeaponService and AbilityService refuse them outside a
+-- run, from a member on the pad and from a downed player (ruling 21); tune and command stay
+-- RangeService's, inert outside the range and outside Studio.
 RemoteService.SetHandler(
 	"RequestRangeAttack",
 	function(
@@ -364,12 +367,12 @@ RemoteService.SetHandler(
 		ads: boolean,
 		charge: number
 	)
-		RangeService.OnAttack(player, weapon, seq, origin, direction, ads, charge)
+		WeaponService.OnAttack(player, weapon, seq, origin, direction, ads, charge)
 	end
 )
 
 RemoteService.SetHandler("RequestRangeDraw", function(player: Player, weapon: string)
-	RangeService.OnDraw(player, weapon)
+	WeaponService.OnDraw(player, weapon)
 end)
 
 RemoteService.SetHandler(
@@ -380,11 +383,11 @@ RemoteService.SetHandler(
 )
 
 RemoteService.SetHandler("RequestDash", function(player: Player, direction: Vector3)
-	RangeService.OnDash(player, direction)
+	WeaponService.OnDash(player, direction)
 end)
 
 RemoteService.SetHandler("RequestSlam", function(player: Player)
-	RangeService.OnSlam(player)
+	WeaponService.OnSlam(player)
 end)
 
 RemoteService.SetHandler(
@@ -446,6 +449,7 @@ end
 local function releasePlayer(player: Player): ()
 	AbilityService.RemovePlayer(player)
 	RangeService.RemovePlayer(player)
+	WeaponService.RemovePlayer(player)
 	ArenaService.Remove(player)
 	-- A refused first arrival opened a run but was never a member, so Remove did nothing. Either
 	-- reset also puts the wave machine back in the lobby (ArenaService's reset hook).
@@ -481,8 +485,20 @@ game:BindToClose(function()
 	end
 end)
 
+-- Ruling 26: the crowd's [Perf] line, Studio only, in both modes.
+local combatConfig = Catalog.GetCombatConfig()
+if RunService:IsStudio() and combatConfig ~= nil then
+	local perfSeconds = (combatConfig.debug :: any).perfLogSeconds
+	CrowdService.SetPerfLog(if typeof(perfSeconds) == "number" then perfSeconds else 0)
+end
+
 if RangeService.IsActive() then
-	print("[Combat] booted — Proving Grounds (DebugProving)")
+	print("[Combat] booted — Proving Grounds (range)")
+elseif provingMission and combatConfig ~= nil then
+	local debugConfig = combatConfig.debug :: any
+	print(
+		`[Combat] booted — mission (crowd, proving: {debugConfig.provingMission} from wave {debugConfig.provingStartWave})`
+	)
 else
-	print("[Combat] booted — mission attribute lever ready")
+	print("[Combat] booted — mission (crowd)")
 end
