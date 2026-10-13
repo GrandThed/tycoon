@@ -40,6 +40,18 @@ tiers, so a weapon you like stays usable for the whole game.
    - **The map is its own path.** A level opens when the previous one is cleared. Levels are not
      tied to the city's eras.
 
+7. **Third round, after the pictures (https://claude.ai/artifact/9iGAoSonw48U8VpV17MTA4):**
+   - **One map screen** for all five levels.
+   - **One big camp in three parts** for Forest Road ("looks good").
+   - **The Armory is a screen, in both places** (the city and the dungeons).
+   - **All dungeons are in one Roblox place, and the player is moved to the level inside that
+     place.** No level gets a place of its own.
+   - **After a level you stay in the dungeon place**, in a small lobby camp where the map and the
+     Armory open; a Return button goes back to the city.
+   - **One party per server.** One level runs at a time in a server.
+   - **Go for L1** (Forest Road in grey blocks). Each step that passes review and QA is merged to
+     `main`, as in P5.
+
 Rulings this replaces: one ten-wave skeleton for every era (2026-10-12); one mission per city era;
 the slot tier ladder of 12. P5 Waves 2 to 4 as planned are suspended.
 
@@ -64,7 +76,8 @@ Arena"), because it is finished and costs nothing to keep. **[proposed]**
         +------ [???]            opens from a secret exit inside the Forest
 ```
 
-- One screen, a winding path, one node per level, drawn in that level's colours. **[Ben: path map]**
+- One screen for all five levels, a winding path, one node per level, drawn in that level's
+  colours. **[Ben]**
 - A node shows: its stars, how many secrets are found, and an icon for what each missing secret
   needs (a wing for double jump, a flame, a snowflake). So you know what to bring. **[proposed]**
 - **Stars:** one per difficulty cleared (three per level). The next level opens on any clear.
@@ -73,6 +86,23 @@ Arena"), because it is finished and costs nothing to keep. **[proposed]**
   the map (the Super Mario World idea). This is what makes the map a tree. **[proposed]**
 - Tapping a node opens a level card: difficulty buttons with the recommended tier and the rewards
   of each, the party, and Depart.
+
+### Where it runs
+
+```
+CITY --teleport--> DUNGEON PLACE (one server per party)
+                     [ lobby camp ]   the map and the Armory open here
+                        |  moved inside the place: no loading screen
+                        v
+                     [ the level ]
+                        |  the level ends, or everyone is down
+                        +--> back to the lobby camp: pick again, or Return to the city
+```
+
+- The dungeon place is today's Expeditions place. It holds every level; the server builds the one
+  that was picked and removes it when the run ends, so only one level exists at a time.
+- The party leader picks the level and the difficulty on the map.
+- A replay never crosses between places: that teleport is the slow step and the one that can fail.
 
 ## 5. A level
 
@@ -185,8 +215,8 @@ A relic       T20                   [#]  found in a hard secret, already at the 
 **The screen.** One weapon shown large, in 3D, turning slowly. Beside it: its tier track, what the
 next tier gives, what it costs and **which level drops it**, its styles (A and B) and its ability.
 Below, a shelf of every weapon: the ones you own, and dark outlines of the ones you do not, each
-with a hint of where it is found. A second tab for abilities. **[proposed: a screen, not a room
-you walk into]**
+with a hint of where it is found. A second tab for abilities. **[Ben: a screen, and it opens in both places, the city and the
+dungeon place's lobby]**
 
 - This needs real weapon models. Today weapons are placeholders. No Kenney weapon kit exists
   locally, so they are generated, as the buildings' missing pieces were.
@@ -198,9 +228,8 @@ Answered on 2026-10-13 and moved to §2: solo downs, double jump, flight, the ci
 1. **What still ties combat to the city?** Today a weapon tier can only be bought once the city
    earns enough per second. With the map as its own path, the lead proposes dropping that gate:
    tiers are limited by what the levels drop. The city still receives the cash a level pays.
-2. **The Armory: a screen (proposed) or a room in the hub you walk into?**
-3. **The frost weapon:** melee, ranged, or one of each later?
-4. **Players who already own tiers in the live game** need a rule for what they get in the new
+2. **The frost weapon:** melee, ranged, or one of each later?
+3. **Players who already own tiers in the live game** need a rule for what they get in the new
    system. The balance pass proposes one.
 
 ## 12. The five levels
@@ -221,7 +250,7 @@ tent with a big boss.
      +-- creek bend (ICE): freeze the water, cross to an island shrine
 ```
 
-- **One camp in three parts**, so it reads as a single big camp: the pickets at its edge, the main
+- **One camp in three parts [Ben]**, so it reads as a single big camp: the pickets at its edge, the main
   camp, the chief's clearing.
 - **Enemies:** A = fodder and slingers. B = fodder, slingers, brutes, one lobber. Hard adds
   marksmen and plated elites.
@@ -272,7 +301,7 @@ of the five. Scenery is generated.
 | Step | What Ben gets to look at |
 |---|---|
 | **L0. Pictures** | A picture of the map screen, a top-down plan of Forest Road, a picture of the Armory screen. No code. |
-| **L1. Forest Road in grey** | Play opens on the level: path, three camps with gates, checkpoints, a stand-in boss, the difficulty choice. Plain blocks, today's enemies. |
+| **L1. Forest Road in grey** | Play opens in the dungeon place's lobby camp with the map; one node is playable. Forest Road in plain blocks: path, the three camp parts with gates, checkpoints, a stand-in boss, the difficulty choice, and back to the lobby at the end. Today's enemies. Stars last for the session only. **Started 2026-10-13.** |
 | **L2. Secrets and keys** | Double jump as a purchase and the lookout; the Flamethrower and the bramble cave; the frost weapon and the creek. |
 | **L3. The Armory** | Per-weapon tiers, the upgrade loop with Forest drops, the new screen, weapon models. |
 | **L4. The real forest** | Scenery, the Camp Chief, the map in the hub, rewards balanced. First version that can be published. |

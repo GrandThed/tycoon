@@ -63,3 +63,19 @@ unanswered: one map screen or one per theme; one big camp in three parts or sepa
 screen or a walk-in room. In the mock the Flamethrower is the first Hard clear of Forest Road and the frost
 weapon is found in the Castle, so the forest's ice secret is the first reason to return from a later level.
 Pillow is not installed, so the old PNG sheet tools cannot run: an HTML page was the way to show pictures.
+
+**Third round (2026-10-13, after the pictures):** "1. yes" (one map screen for all five levels), "2. looks
+good" (one big camp in three parts), "3. a screen in both experiences" (the Armory is a screen, in the city
+and in the dungeon place), and a new requirement: **"make all the dungeos in one roblox place and teleport
+the player to the destination inside the place"**. Asked with previews, he then chose: **after a level you
+stay in the dungeon place** (a lobby camp with the map and the Armory; Return goes to the city), **one party
+per server**, and **"Yes, start"** for L1, with the P5 merge rule (each step that passes review and QA is
+merged to `main`). "Experiences" is his word for the two places.
+
+**L1 "Forest Road in grey" started 2026-10-13** on branch `l1-forest-road` (worktree folder
+`C:/Users/benja/Desktop/tycoon-p5`, reused; the merged branch `p5-missions` is deleted). Lead rulings for
+L1: level progress (stars) lives in server memory for the session, no profile schema change until the Armory
+step designs the whole shape once; the hub is untouched (its Depart lands in the dungeon lobby and the
+ticket's mission is ignored for choosing); the stand-in boss is the Colossus; the ten-wave Village arena
+becomes a node on the map; secret sites are marked blocks that do nothing yet; double jump stays free in L1
+but the main path must be passable with one jump and the dash.
