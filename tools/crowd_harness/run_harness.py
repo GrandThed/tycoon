@@ -1,6 +1,7 @@
 """Regression harness for the crowd combat server (P4): bundles the real CrowdCodec, HitShapes,
 Armory, Tuning, CrowdBrain, ThreatField, StrikeTally, CrowdService and VitalsService sources
 with stubbed Roblox globals and runs the tests_*.luau cases under the plain luau interpreter.
+P5 adds tests_p5.luau: the mission scales, kill info, KillAll and VitalsService.SetMission.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 (defaults: this repo, tools/bin/luau.exe, which tools/check_mirror.py fetches)."""
@@ -45,10 +46,15 @@ for name, rel in SOURCES.items():
     text = (repo / rel).read_text(encoding="utf-8")
     text = re.sub(r"(?m)^export type", "type", text)
     parts.append(f"SOURCES.{name} = function(game, script, require, Vector3, os, task, warn, RaycastParams, Enum)\n{text}\nend\n")
-parts.append((here / "tests.luau").read_text(encoding="utf-8"))
-parts.append((here / "tests_w2.luau").read_text(encoding="utf-8"))
-parts.append((here / "tests_s2.luau").read_text(encoding="utf-8"))
-parts.append((here / "tests_s3.luau").read_text(encoding="utf-8"))
+# One bundle, in this order: each file sees every local of the files before it. Only the last
+# file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
+TESTS = ["tests.luau", "tests_w2.luau", "tests_s2.luau", "tests_s3.luau", "tests_p5.luau"]
+VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
+for index, name in enumerate(TESTS):
+    text = (here / name).read_text(encoding="utf-8")
+    if index < len(TESTS) - 1:
+        text = text.replace(VERDICT, "")
+    parts.append(text)
 bundle = here / "bundle.luau"
 bundle.write_text("".join(parts), encoding="utf-8")
 try:

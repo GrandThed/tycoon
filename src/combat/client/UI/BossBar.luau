@@ -32,6 +32,10 @@
 --    it clears the column;
 --  * where it is not (a portrait phone, whose top the panel spans): full width, just under
 --    the panel's readouts, still well above the crosshair.
+-- P5: a crowd mission has no panel but the run header at the top left (or top centre) and the
+-- party list at the top right. The caller passes the list's left edge as `panelLeft`, the
+-- header's bottom as `panelBottom` and its right edge as `leftEdge`: the bar takes the strip
+-- between them where it fits (a monitor), else it hangs under the header.
 -- It never takes input (Active = false), so no aiming drag is swallowed.
 
 local Create = require(script.Parent:WaitForChild("Create"))
@@ -62,14 +66,16 @@ export type Boss = {
 export type BossBarHandle = {
 	-- scale = the HUD's UI scale; viewportSize = the parent ScreenGui's size in px; panelLeft =
 	-- the left edge, in px, of the column kept for the RangePanel (the viewport's width when
-	-- there is none); panelBottom = the bottom edge, in px, of what that panel shows shut.
+	-- there is none); panelBottom = the bottom edge, in px, of what that panel shows shut;
+	-- leftEdge (P5, nil = 0) = the right edge, in px, of what stands at the top left.
 	-- Returns the bar's own bottom edge in px at its tallest (with a plate row), for whatever
 	-- must keep under it.
 	SetLayout: (
 		scale: number,
 		viewportSize: Vector2,
 		panelLeft: number,
-		panelBottom: number
+		panelBottom: number,
+		leftEdge: number?
 	) -> number,
 	-- boss = the boss on show this frame; nil = none.
 	Update: (deltaTime: number, boss: Boss?) -> (),
@@ -330,17 +336,21 @@ function BossBar.new(parent: Instance, deps: BossBarDeps): BossBarHandle
 			scale: number,
 			viewportSize: Vector2,
 			panelLeft: number,
-			panelBottom: number
+			panelBottom: number,
+			leftEdge: number?
 		): number
 			local margin = Theme.SCREEN_MARGIN * scale
 			local width = Theme.COMBAT_RANGE_BOSS_BAR_WIDTH * scale
 			local top = margin
 			local centreX = viewportSize.X / 2
-			-- The strip at the top that the RangePanel's column leaves free.
-			local band = panelLeft - 2 * margin
+			local left = leftEdge or 0
+			-- The strip at the top that the RangePanel's column (and what stands at the top
+			-- left) leaves free.
+			local band = panelLeft - left - 2 * margin
 			if band >= Theme.COMBAT_RANGE_BOSS_BAR_MIN_WIDTH * scale then
 				width = math.min(width, band)
-				centreX = math.clamp(centreX, margin + width / 2, panelLeft - margin - width / 2)
+				centreX =
+					math.clamp(centreX, left + margin + width / 2, panelLeft - margin - width / 2)
 			else
 				width = math.min(width, viewportSize.X - 2 * margin)
 				top = panelBottom + margin

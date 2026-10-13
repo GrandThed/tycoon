@@ -8,6 +8,10 @@
 --
 -- C2 adds the damage share (co-op only), the Mentor line and the group-return countdown
 -- (RunState.returnIn). The Return button still sends RequestLeave, which goes home alone.
+--
+-- P5 (ruling 19): a proving mission sends nobody home; at the end of the same countdown the
+-- server starts the run again. With `deps.nextRun` set the card has no Return button (the
+-- server ignores RequestLeave there) and the countdown line names the next run instead.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -21,7 +25,8 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
-export type Deps = { onReturn: () -> () }
+-- nextRun (P5): true in a proving mission, where the run restarts in place (see the header).
+export type Deps = { onReturn: () -> (), nextRun: boolean? }
 
 -- C2 context from the RunState around the summary: `partySize` decides whether a damage
 -- share is worth a line, `returnIn` (seconds) drives the group-return countdown.
@@ -39,11 +44,14 @@ local BLANK = "—"
 local PERCENT = 100
 local RETURN_ALONE_TEXT = "Return now (alone)"
 local RETURN_TEXT = "Return to your city"
+local GROUP_RETURN_TEXT = "Returning together in "
+local NEXT_RUN_TEXT = "Next run in "
 
 local SummaryCard = {}
 
 function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	local connections: { RBXScriptConnection } = {}
+	local nextRun = deps.nextRun == true
 
 	-- A Frame, not a TextButton: the dim must never swallow the camera drag behind it.
 	local scrim = Create("Frame", {
@@ -135,6 +143,7 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 		TextSize = Theme.TEXT_HEADER,
 		TextColor3 = Theme.COLOR_TEXT_DARK,
 		Text = RETURN_TEXT,
+		Visible = not nextRun,
 		Parent = card,
 	}) :: TextButton
 	Create(
@@ -149,7 +158,8 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 			return
 		end
 		local left = math.max(math.ceil(dueAt - os.clock()), 0)
-		groupLabel.Text = "Returning together in " .. Format.Duration(left)
+		groupLabel.Text = (if nextRun then NEXT_RUN_TEXT else GROUP_RETURN_TEXT)
+			.. Format.Duration(left)
 		groupLabel.Visible = true
 	end
 

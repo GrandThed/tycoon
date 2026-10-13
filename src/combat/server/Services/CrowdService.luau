@@ -30,6 +30,11 @@
 -- their summoner dies (dismiss), as does everything a `boss` kind had in the air. A body of
 -- crowd.largeRadius or more is separated in a pass of its own, so one giant does not widen the
 -- neighbourhood every other body scans, and nothing smaller ever pushes it.
+-- P5 (INTERFACES "P5 contracts", rulings 9, 10, 14 and 26): the crowd fights in missions too.
+-- A run sets crowd-wide scales once (SetScales: HP, plate), a boss body takes its party HP factor
+-- at Spawn, and a hit's HP loss is multiplied by the attacker's tier scale while the plate,
+-- heavyHit, the interrupt and armour keep judging the unscaled tier-1 amount. A kill carries what
+-- the run pays for (CrowdKillInfo). In Studio the step's cost is logged as a `[Perf]` line.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -87,7 +92,22 @@ type Enemy = {
 	guard: number,
 	-- A summoned body: which of its summoner's even places it rose on (0-based).
 	place: number,
+	-- P5: HP removed from this body per userId, each hit capped at the HP it had left.
+	damageBy: { [number]: number },
 }
+
+-- P5: the run's crowd-wide multipliers. The range never sets them.
+export type CrowdScales = { hp: number, plate: number }
+-- P5 ruling 14: what a kill hands the run. Bodies removed without a kill carry none.
+export type CrowdKillInfo = {
+	id: number,
+	kind: string,
+	boss: boolean,
+	position: Vector3,
+	byUserId: number,
+	damageBy: { [number]: number },
+}
+type KillCallback = (id: number, byUserId: number, info: CrowdKillInfo) -> ()
 
 type CrowdConfig = typeof((({} :: any) :: Types.ProvingGroundsConfig).crowd)
 type CrowdBehaviourConfig = typeof((({} :: any) :: CrowdConfig).behaviour)
@@ -144,6 +164,8 @@ local CELL_SIZE = 4
 local CELL_OFFSET = 32768
 local CELL_STRIDE = 65536
 local GOLDEN_RATIO_FRACTION = 0.6180339887
+-- Step times kept for the [Perf] line: more than ten seconds at the fastest snapshot rate.
+local PERF_RING = 512
 
 local BEHAVIOURS: { [string]: Behaviour } = {
 	idle = "idle",
@@ -174,9 +196,21 @@ local pendingSpawnOrder: { number } = {}
 local pendingSpawnSet: { [number]: boolean } = {}
 local pendingRemoves: { number } = {}
 
-local killCallbacks: { (id: number, byUserId: number) -> () } = {}
+local killCallbacks: { KillCallback } = {}
 local warnedKinds: { [string]: boolean } = {}
 local threatHooks: ThreatHooks? = nil
+local scales: CrowdScales = { hp = 1, plate = 1 }
+-- The [Perf] line (ruling 26): `every` 0 = off. A fixed ring of step times, so a step allocates
+-- nothing; a copy is sorted only when a line is printed.
+local perf = {
+	every = 0,
+	ring = table.create(PERF_RING, 0) :: { number },
+	sorted = table.create(PERF_RING, 0) :: { number },
+	head = 0,
+	count = 0,
+	peak = 0,
+	since = 0,
+}
 
 -- Scratch tables reused every step so the loop allocates nothing per enemy.
 local targets: { Vector3 } = {}
@@ -839,6 +873,46 @@ local function stepInterval(): number
 	return 1 / math.clamp(hz, CrowdCodec.MIN_HZ, CrowdCodec.MAX_HZ)
 end
 
+-- One stepping Heartbeat's cost into the ring; every `perf.every` seconds of stepping, one line
+-- over the steps since the last one. A window starts at its first step, so a crowd that sat idle
+-- for a minute does not print a line over one step.
+local function notePerf(clock: number, ms: number): ()
+	if perf.every <= 0 then
+		return
+	end
+	if perf.count == 0 then
+		perf.since = clock
+		perf.peak = 0
+		perf.head = 0
+	end
+	perf.head = perf.head % PERF_RING + 1
+	perf.ring[perf.head] = ms
+	perf.count += 1
+	perf.peak = math.max(perf.peak, aliveCount)
+	if clock - perf.since < perf.every then
+		return
+	end
+	local samples = math.min(perf.count, PERF_RING)
+	local sorted = perf.sorted
+	table.move(perf.ring, 1, samples, 1, sorted)
+	for index = samples + 1, #sorted do
+		sorted[index] = nil
+	end
+	table.sort(sorted)
+	local p50 = sorted[math.max(math.ceil(samples * 0.5), 1)]
+	local p95 = sorted[math.max(math.ceil(samples * 0.95), 1)]
+	print(
+		string.format(
+			"[Perf] crowd step p50 %.2f ms p95 %.2f ms (%d steps, peak alive %d)",
+			p50,
+			p95,
+			perf.count,
+			perf.peak
+		)
+	)
+	perf.count = 0
+end
+
 local function onHeartbeat(deltaTime: number): ()
 	local interval = stepInterval()
 	accumulator = math.min(accumulator + deltaTime, interval * MAX_CATCHUP_STEPS)
@@ -864,6 +938,7 @@ local function onHeartbeat(deltaTime: number): ()
 		hooks.step(started)
 	end
 	lastStepMs = (os.clock() - started) * 1000
+	notePerf(started, lastStepMs)
 end
 
 -- A late joiner learns every enemy already announced; ones still pending go out in the next
@@ -911,14 +986,40 @@ function CrowdService.SetThreatHooks(hooks: ThreatHooks): ()
 	threatHooks = hooks
 end
 
+-- P5 ruling 10: the run's scales, read by every Spawn from here on (summons included). A
+-- non-finite or negative scale keeps its old value. The range never calls this: { 1, 1 }.
+function CrowdService.SetScales(wanted: CrowdScales): ()
+	local hp = wanted.hp
+	local plate = wanted.plate
+	if typeof(hp) ~= "number" or not isFinite(hp) or hp < 0 then
+		warn(`[CrowdService] SetScales: bad hp scale {hp}; kept {scales.hp}`)
+		hp = scales.hp
+	end
+	if typeof(plate) ~= "number" or not isFinite(plate) or plate < 0 then
+		warn(`[CrowdService] SetScales: bad plate scale {plate}; kept {scales.plate}`)
+		plate = scales.plate
+	end
+	scales = { hp = hp, plate = plate }
+end
+
+-- Ruling 26: Main turns the [Perf] line on in Studio with Combat.json debug.perfLogSeconds; 0 or
+-- less turns it off. (This module reads no Combat.json and asks nothing of RunService itself.)
+function CrowdService.SetPerfLog(seconds: number): ()
+	perf.every = if isFinite(seconds) and seconds > 0 then seconds else 0
+	perf.count = 0
+end
+
 -- Returns the new id, or 0 when refused (unknown kind, non-finite position, maxAlive reached).
 -- anchor = the point idle/walk/strafe/jump behaviours hold to; defaults to the spawn position.
 -- behaviour `fight` runs the kind's brain (CrowdBrain); a kind without one stands.
+-- P5: maxHp = def.hp x scales.hp x hpMult (a boss body's party factor), plate = def.plate x
+-- scales.plate.
 function CrowdService.Spawn(
 	kind: string,
 	position: Vector3,
 	behaviour: string,
-	anchor: Vector3?
+	anchor: Vector3?,
+	hpMult: number?
 ): number
 	ensureRunning()
 	local config = Tuning.Get()
@@ -944,8 +1045,9 @@ function CrowdService.Spawn(
 	if BEHAVIOURS[behaviour] == nil then
 		warn(`[CrowdService] unknown behaviour "{behaviour}"; using idle`)
 	end
-	local maxHp = math.max(def.hp, 1)
-	local plate = math.max(def.plate or 0, 0)
+	local bodyMult = if hpMult ~= nil and isFinite(hpMult) and hpMult > 0 then hpMult else 1
+	local maxHp = math.max(def.hp * scales.hp * bodyMult, 1)
+	local plate = math.max((def.plate or 0) * scales.plate, 0)
 	local phase = id * GOLDEN_RATIO_FRACTION % 1
 	local start = Vector3.new(position.X, math.max(position.Y, boundsCenter.Y), position.Z)
 	local enemy: Enemy = {
@@ -986,6 +1088,7 @@ function CrowdService.Spawn(
 		summoned = 0,
 		guard = 0,
 		place = 0,
+		damageBy = {},
 	}
 	clampToBounds(enemy, def.radius)
 	enemies[id] = enemy
@@ -1190,6 +1293,42 @@ function CrowdService.Get(id: number): EnemyView?
 	}
 end
 
+-- The death path, for a killing blow and for KillAll alike: the body lies dead for deadSeconds,
+-- leaves its summoner's guard, and a boss takes its fight with it. Every kill callback is handed
+-- what the run pays for (ruling 14), each on its own thread.
+local function die(enemy: Enemy, def: Types.CrowdKindDef, crowd: CrowdConfig, byUserId: number): ()
+	local mind = enemy.mind
+	if mind ~= nil then
+		-- Ruling 22: a blow whose impact time has already come still lands.
+		CrowdBrain.OnKilled(enemy, mind, def, crowd, os.clock())
+	end
+	enemy.hp = 0
+	enemy.deadAt = simTime
+	enemy.state = "dead"
+	aliveCount -= 1
+	local summoner = enemy.summoner
+	if summoner ~= nil then
+		summoner.guard = math.max(summoner.guard - 1, 0)
+	end
+	-- A boss's death is the end of its fight: its summons, and whatever it had in the air.
+	local boss = def.boss == true
+	dismiss(enemy, boss)
+	if #killCallbacks == 0 then
+		return
+	end
+	local info: CrowdKillInfo = {
+		id = enemy.id,
+		kind = enemy.kind,
+		boss = boss,
+		position = enemy.position,
+		byUserId = byUserId,
+		damageBy = enemy.damageBy,
+	}
+	for _, callback in killCallbacks do
+		task.spawn(callback, enemy.id, byUserId, info)
+	end
+end
+
 -- Returns (dealt, killed, verdict). dealt = amount after flat armour, not capped at the
 -- remaining HP (the number the player sees). push = horizontal velocity change in studs/s (its
 -- Y is ignored); launch = apex height in studs. Both scale by the kind's knockbackMult, as does
@@ -1202,12 +1341,17 @@ end
 -- the excess is lost), and otherwise acts as any hit; the one that empties the plate leaves the
 -- enemy reeling for crowd.plateBreakSeconds, whatever its knockbackMult, and cancels the windup
 -- it was in, whatever that attack's `interrupt`. After that the kind's armor applies.
+-- P5 ruling 9: `amount` is the attacker's tier-1 number and `scale` (nil = 1) their tier's
+-- multiplier. heavyHit, the plate, the interrupt and armour all judge `amount`; only the HP loss
+-- is scaled, so a plate hit returns its unscaled plate loss and an HP hit its scaled loss.
+-- damageBy books the HP actually removed, capped at what was left (plate loss is not booked).
 function CrowdService.Damage(
 	id: number,
 	amount: number,
 	byUserId: number,
 	push: Vector3?,
-	launch: number?
+	launch: number?,
+	scale: number?
 ): (number, boolean, Verdict?)
 	local enemy = enemies[id]
 	if enemy == nil then
@@ -1246,8 +1390,11 @@ function CrowdService.Damage(
 		dealt = amount
 	else
 		-- Armour is a flat per-hit reduction (lead ruling, P1), floored so a weak hit still chips.
-		dealt =
-			math.max(amount - math.max(def.armor, 0), amount * math.clamp(crowd.armorFloor, 0, 1))
+		local lossScale = if scale ~= nil and isFinite(scale) and scale >= 0 then scale else 1
+		dealt = math.max(
+			amount - math.max(def.armor, 0),
+			amount * math.clamp(crowd.armorFloor, 0, 1)
+		) * lossScale
 	end
 	local mult = math.max(def.knockbackMult, 0)
 	-- Nothing moves, staggers or stops a charge, short of the blow that kills the brute.
@@ -1276,26 +1423,14 @@ function CrowdService.Damage(
 	end
 
 	if not plated then
+		local removed = math.min(dealt, enemy.hp)
+		if removed > 0 then
+			enemy.damageBy[byUserId] = (enemy.damageBy[byUserId] or 0) + removed
+		end
 		enemy.hp -= dealt
 	end
 	if enemy.hp <= 0 then
-		if mind ~= nil then
-			-- Ruling 22: a blow whose impact time has already come still lands.
-			CrowdBrain.OnKilled(enemy, mind, def, crowd, os.clock())
-		end
-		enemy.hp = 0
-		enemy.deadAt = simTime
-		enemy.state = "dead"
-		aliveCount -= 1
-		local summoner = enemy.summoner
-		if summoner ~= nil then
-			summoner.guard = math.max(summoner.guard - 1, 0)
-		end
-		-- A boss's death is the end of its fight: its summons, and whatever it had in the air.
-		dismiss(enemy, def.boss == true)
-		for _, callback in killCallbacks do
-			task.spawn(callback, id, byUserId)
-		end
+		die(enemy, def, crowd, byUserId)
 		return dealt, true, verdict
 	end
 	local stagger = math.max(crowd.staggerSeconds, 0) * mult
@@ -1314,9 +1449,31 @@ function CrowdService.Damage(
 	return dealt, false, verdict
 end
 
--- Callbacks run on their own threads, so they may yield without stalling the caller.
-function CrowdService.OnKilled(callback: (id: number, byUserId: number) -> ()): ()
+-- Callbacks run on their own threads, so they may yield without stalling the caller. A body
+-- removed without a kill (a boss's summons at its death, Remove, Clear) calls none of them.
+function CrowdService.OnKilled(callback: KillCallback): ()
 	table.insert(killCallbacks, callback)
+end
+
+-- Every living body dies through the death path, credited to `byUserId` (0 = nobody), and the
+-- kill callbacks pay for each. Bodies a dying boss takes with it are removed, not killed.
+-- Returns how many died.
+function CrowdService.KillAll(byUserId: number): number
+	local crowd = Tuning.Get().crowd
+	local living: { Enemy } = {}
+	for _, enemy in order do
+		if enemy.deadAt == nil then
+			table.insert(living, enemy)
+		end
+	end
+	local killed = 0
+	for _, enemy in living do
+		if enemies[enemy.id] == enemy and enemy.deadAt == nil then
+			die(enemy, currentDef(enemy, crowd.kinds), crowd, byUserId)
+			killed += 1
+		end
+	end
+	return killed
 end
 
 function CrowdService.AliveCount(): number

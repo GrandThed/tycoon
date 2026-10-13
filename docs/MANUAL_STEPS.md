@@ -1650,6 +1650,49 @@ on the Warlord: pick **colossus** in the panel to see the Colossus again.
       Colossus or dummies instead, it is the old file: go back to step 2.
 - [ ] 4. Run `docs/PLAYTEST.md` "P4 Stop 3 — The Warlord and his guard".
 
+## P5 Wave 1 — Crowd in a mission
+
+**Studio only. No Creator Hub work, no uploads, no new Studio setup.** Still silent (no audio
+step). About 15 minutes with the checklist, keys only, no panel.
+
+**Do NOT publish the Expeditions place from `main` until P5 Wave 3 is merged.** Until then it
+plays only the Village mission; the other three eras refuse to start ("locked").
+
+<!-- FILE TO OPEN: start. Lead: if Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Wait for the lead's word first.** The lead merges `p5-missions` to `main` before the look,
+  so "Build all" builds it. Before that, "Build all" gives the P4 range.
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play puts you in a grassy arena with a wooden fence and a
+  **WAVE 1** banner, not in the big grey range.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge `p5-missions` to `main`, rebuild the place files, tell Ben.
+- [ ] 1. Build as the block above says.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save), then open the file named
+      in the block above.
+- [ ] 3. Press **Play**. Output shows
+      `[Combat] booted — mission (crowd, proving: village from wave 1)`. You stand in the
+      grassy, fenced arena; about 3 s later the **WAVE 1** banner. If you see the grey range or
+      a boss in front of you, it is the old file: go back to step 2.
+- [ ] 4. Keys while playing: **B** = skip to the next boss wave (5, then 10), **N** = skip to the
+      next wave. A small hint in the corner reads `B boss · N next wave`.
+- [ ] 5. Run `docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission".
+- [ ] 6. Optional, two players: Test (Prueba) → **Local Server** (Servidor local), **2 players**
+      (2 jugadores) → **Start** (Iniciar). Player A stands still until **DOWN**. Player B
+      resets (**Esc** → **R** → **Enter**) → the run ends at once on both screens. Checklist:
+      PLAYTEST "P5 Wave 1" step 8.
+- [ ] 7. Close Studio without saving `proving.rbxl`. Tell Claude when you are done: the lead
+      reads the `[Perf]` lines from Studio's log; nothing to copy.
+
+**Notes:**
+- The range bench (every P1–P4 set and the panel) is still there. To get it back the lead
+  flips `Combat.json` `debug.provingBoots` to `"range"`; then "Build all".
+- Rewards land in your Studio save, as in any mission.
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the

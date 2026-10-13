@@ -8,6 +8,8 @@
 --    attacker's bearing every frame (straight down = behind the camera), so it reads without
 --    seeing the attacker;
 --  * knocked down: a banner with the time left, the edge flash held, and a pop on the get-up.
+--    P5: a mission's down has no get-up time (upAt = math.huge): the banner reads "DOWN" with
+--    no count and no running-out line until the caller stands the player up.
 --
 -- Pure display. VitalsController hears the server's `hurt` effects and reads the Humanoid; it
 -- pushes values in and calls Step from its one RenderStepped connection, so nothing here
@@ -60,7 +62,8 @@ export type VitalsHudHandle = {
 	Hurt: (share: number) -> (),
 	-- A pointer at the world position the hit came from.
 	Point: (from: Vector3) -> (),
-	-- Knocked down until `upAt` (server time), `seconds` in all; nil = standing again.
+	-- Knocked down until `upAt` (server time), `seconds` in all; nil = standing again;
+	-- math.huge = held until the caller says otherwise (a mission's down: no count).
 	SetDown: (upAt: number?, seconds: number) -> (),
 	-- `origin` = the local character's root, the point bearings are taken from (nil = the
 	-- camera's own position).
@@ -84,8 +87,11 @@ type Edge = { size: UDim2, position: UDim2, anchor: Vector2, rotation: number, f
 local TAU = 2 * math.pi
 -- Below this many studs on the flat an attacker has no bearing; the pointer keeps its last.
 local MIN_BEARING_STUDS = 0.05
--- The banner's line; the seconds left follow it.
+-- The banner's line; the seconds left follow it. A held down (a mission's) has no seconds.
 local DOWN_TEXT = "DOWN · up in "
+local DOWN_HELD_TEXT = "DOWN"
+-- tenthsShown for the held line, which no count can equal.
+local HELD_TENTHS = -2
 -- The pointer's bar fades out toward both ends, so it reads as an arc of the ring.
 local BLADE_FADE = NumberSequence.new({
 	NumberSequenceKeypoint.new(0, 0.9),
@@ -482,6 +488,18 @@ function VitalsHud.new(parent: Instance): VitalsHudHandle
 		local upAt = downUntil
 		if upAt == nil then
 			return false
+		end
+		if upAt == math.huge then
+			if tenthsShown ~= HELD_TENTHS then
+				tenthsShown = HELD_TENTHS
+				caption.Text = DOWN_HELD_TEXT
+				timerShown = 0
+				timer.Visible = false
+			end
+			return true
+		end
+		if not timer.Visible then
+			timer.Visible = true
 		end
 		local left = math.max(upAt - Workspace:GetServerTimeNow(), 0)
 		-- Tenths, so the line is rewritten ten times a second, not every frame.

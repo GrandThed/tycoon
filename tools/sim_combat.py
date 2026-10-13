@@ -31,9 +31,17 @@ DPS model (fixed by the contract; C1 replaces it with measured hit rates):
 Abilities, kiting, respawns, breathers and the tempo director are NOT in the
 model; breather time is reported beside the combat time, never inside it.
 
+P5 ("back into the missions", docs/INTERFACES.md "P5 contracts"): a mission with a `crowd`
+block plays the range's crowd, not the C1 Humanoid waves. This file mirrors the pure
+`Combat.CrowdWave`, `Combat.CrowdReward`, `Combat.BurstInterval` and `Armory.DamageScale`, and
+asserts the crowd block (15-18): its gates, what a whole run pays, the reacting player's clear
+and the CrowdWave mirror. The fights themselves (both bosses at the mission's scales and the
+whole run, wave by wave) are measured by `tools/sim_range.py`, which this file imports for them.
+The legacy run assertions (3, 7, 8, 10, 11, 14) skip a crowd mission.
+
 Usage:
   py tools/sim_combat.py                  # unlock table + Village run report
-  py tools/sim_combat.py --check          # the fourteen C0-C2.5 assertions; exit 1 on any
+  py tools/sim_combat.py --check          # the eighteen C0-P5 assertions; exit 1 on any
   py tools/sim_combat.py --era 1          # only that era's mission
   py tools/sim_combat.py --power 84       # model the run at a given Gear Power
   py tools/sim_combat.py --party 4        # party size for the modelled run
@@ -94,6 +102,19 @@ MERGE_ASSERTED_MISSIONS = {"village"}
 # Assertion 14, the C2.5 mission shape ("one evolving horde").
 HORDE_KINDS = {"melee", "ranged", "charger"}
 RUN_MATERIALS_BAND = (250, 350)
+# P5 crowd missions (docs/INTERFACES.md "P5 contracts" -> "Balance bands"). A whole run at the
+# recommended power (gear 2/1), solo, no Overdrive, pays what the C1 run of the same mission paid
+# (docs/BALANCE.md "C0"/"C1": 142,185 cash and 256 Timber at power 57), within the tolerance, and
+# exactly the Valor; a reacting player clears it inside CROWD_CLEAR_SECONDS, breathers included.
+# targetMinutes is what the hub's Expedition panel promises, so it must sit inside that band and
+# near the modelled clear.
+CROWD_RUN_TARGETS = {"village": {"cash": 142185, "materials": 256, "valor": 35}}
+CROWD_REWARD_TOLERANCE = 0.10
+CROWD_CLEAR_SECONDS = (600.0, 900.0)
+CROWD_TARGET_MINUTES_SLACK = 1.5
+# The legacy run model's assertions (3, 7, 8, 10, 11, 14) judge the C1 Humanoid waves. A mission
+# with a `crowd` block no longer plays them (P5 ruling 27 and the Wave 1 boot), and its
+# targetWaveSeconds is re-tuned for crowds, so they skip it; 15-18 judge its crowd instead.
 # Run-simulator resolution and the spatial facts it needs. The arena is 110 x 110
 # with eight rim spawns (every Layouts/Arenas/*.luau), so a spawn is ~45 studs
 # from a player fighting near the middle. Neither is a game constant -- the
@@ -226,6 +247,21 @@ def weapon_damage(cfg, slot, tier, asc_level):
         return 0
     level = ascension_level_def(cfg, asc_level)
     return definition["damage"] * (level["damageMult"] if level else 1)
+
+
+def damage_scale(cfg, slot, tier, asc_level, ability):
+    """Armory.DamageScale (P5 ruling 8) -- the slot's WeaponDamage(tier, asc) over its tier-1,
+    ascension-0 damage; an ability takes the level's abilityMult instead of damageMult. 1 for an
+    unknown slot, a tier past the last one or a tier-1 damage of 0."""
+    if slot not in cfg["slots"]:
+        return 1.0
+    base = tier_def(cfg, slot, 1)
+    definition = tier_def(cfg, slot, tier)
+    if base is None or definition is None or base["damage"] <= 0:
+        return 1.0
+    level = ascension_level_def(cfg, asc_level)
+    mult = (level["abilityMult"] if ability else level["damageMult"]) if level else 1
+    return definition["damage"] * mult / base["damage"]
 
 
 def weapon_hp(cfg, slot, tier, asc_level):
@@ -589,6 +625,81 @@ def should_merge(tempo_value, dead_fraction, director):
     """Combat.ShouldMerge -- tempo >= mergeTempo AND deadFraction >= mergeThreshold.
     Only asked once the wave has finished spawning."""
     return tempo_value >= director["mergeTempo"] and dead_fraction >= director["mergeThreshold"]
+
+
+# --------------------------------------------------------------------------
+# src/shared/Combat.luau mirror -- P5 crowd missions (docs/INTERFACES.md
+# "P5 contracts" -> "Server modules", B). tools/sim_range.py drives a whole
+# mission through these, so both tools read one copy.
+# --------------------------------------------------------------------------
+
+
+def crowd_wave(mission, wave, party_size, overdrive, combat_cfg):
+    """Combat.CrowdWave -- None when the mission has no `crowd` block or no such wave.
+    Group count = round(count x (1 + (perExtra or countPerExtraPlayer) x extras) x
+    (countMult under Overdrive)), floored at 0; extras = max(party, 1) - 1. hpScale and
+    damageScale take Overdrive's hpMult and damageMult; plateScale and regenShare do not."""
+    crowd = mission.get("crowd")
+    if crowd is None or not 1 <= wave <= len(crowd["waves"]):
+        return None
+    definition = crowd["waves"][wave - 1]
+    od = combat_cfg["overdrive"]
+    extras = max(party_size, 1) - 1
+    count_mult = od["countMult"] if overdrive else 1
+    groups = []
+    total = 0
+    for group in definition["groups"]:
+        per_extra = group.get("perExtra")
+        if per_extra is None:
+            per_extra = combat_cfg["coop"]["countPerExtraPlayer"]
+        count = max(luau_round(group["count"] * (1 + per_extra * extras) * count_mult), 0)
+        groups.append({"kind": group["kind"], "count": count})
+        total += count
+    return {
+        "wave": wave,
+        "groups": groups,
+        "total": total,
+        "boss": definition.get("boss"),
+        "bossHpMult": 1 + combat_cfg["coop"]["bossHpPerExtraPlayer"] * extras,
+        "hpScale": crowd["hpScale"] * (od["hpMult"] if overdrive else 1),
+        "plateScale": crowd["plateScale"],
+        "damageScale": crowd["damageScale"] * (od["damageMult"] if overdrive else 1),
+        "regenShare": crowd["regenShare"],
+        "rewardMult": od["rewardMult"] if overdrive else 1,
+    }
+
+
+def crowd_reward(mission, kind, spec):
+    """Combat.CrowdReward -- (round(cash x rewardMult), round(materials x rewardMult)) for one
+    kill of `kind`; a kind with no rewards entry pays (0, 0)."""
+    crowd = mission.get("crowd")
+    reward = crowd["rewards"].get(kind) if crowd is not None else None
+    if reward is None:
+        return 0, 0
+    return luau_round(reward["cash"] * spec["rewardMult"]), luau_round(reward["materials"] * spec["rewardMult"])
+
+
+def burst_interval(mission, bursts, tempo_value, overdrive, combat_cfg):
+    """Combat.BurstInterval -- targetWaveSeconds / bursts / tempo / (spawnRateMult under
+    Overdrive); targetWaveSeconds when bursts <= 0 or tempo <= 0."""
+    if bursts <= 0 or tempo_value <= 0:
+        return mission["targetWaveSeconds"]
+    rate = combat_cfg["overdrive"]["spawnRateMult"] if overdrive else 1
+    return mission["targetWaveSeconds"] / bursts / tempo_value / rate
+
+
+def crowd_bursts(spec, burst):
+    """WaveService's queue (ruling 15): each group, in order, as bursts of up to `burst` bodies.
+    Returns [(kind, bodies)]."""
+    size = max(math.floor(burst), 1)
+    out = []
+    for group in spec["groups"]:
+        left = group["count"]
+        while left > 0:
+            take = min(size, left)
+            out.append((group["kind"], take))
+            left -= take
+    return out
 
 
 def equipped(cfg, state, slot):
@@ -2107,6 +2218,206 @@ def first_boss_flush(events):
     return min((e["wave"] for e in events), default=None)
 
 
+# --------------------------------------------------------------------------
+# P5 crowd missions: gates, rewards and the clear (assertions 15-18)
+# --------------------------------------------------------------------------
+
+
+def crowd_mission(mission):
+    return mission is not None and mission.get("crowd") is not None
+
+
+def crowd_fieldable(mission, kinds):
+    """Every kind a crowd wave can put on the floor: its groups, its bosses, and whatever any of
+    those calls (a ProvingGrounds.json attack of shape `summon`), followed to the end."""
+    todo = []
+    for wave in mission["crowd"]["waves"]:
+        todo += [group["kind"] for group in wave["groups"]]
+        if wave.get("boss"):
+            todo.append(wave["boss"]["kind"])
+    elite = mission["crowd"].get("eliteKind")
+    if elite:
+        todo.append(elite)
+    found = []
+    while todo:
+        name = todo.pop(0)
+        if name in found:
+            continue
+        found.append(name)
+        for attack in (kinds.get(name) or {}).get("attacks") or []:
+            if attack["shape"] == "summon" and attack.get("summon"):
+                todo.append(attack["summon"])
+    return found
+
+
+def crowd_gates(mission, combat_cfg, proving, arena):
+    """The contract's gates on a crowd block; returns the problems found (none = pass)."""
+    crowd = mission["crowd"]
+    kinds = proving["crowd"]["kinds"]
+    waves = crowd["waves"]
+    skeleton = combat_cfg.get("crowdSkeleton") or []
+    problems = []
+    if len(waves) != mission["waves"]:
+        problems.append(f"{len(waves)} crowd waves for waves {mission['waves']}")
+    if len(skeleton) != len(waves):
+        problems.append(f"crowdSkeleton has {len(skeleton)} waves, the crowd {len(waves)}")
+    boss_waves = [i for i, wave in enumerate(waves, 1) if wave.get("boss")]
+    if boss_waves != mission["bossWaves"]:
+        problems.append(f"bossWaves {mission['bossWaves']} but bosses on {boss_waves}")
+    introduced = set()
+    for i, wave in enumerate(waves, 1):
+        beat = skeleton[i - 1] if i <= len(skeleton) else {"introduces": [], "boss": None}
+        introduced |= set(beat["introduces"])
+        present = {group["kind"] for group in wave["groups"]}
+        if present - introduced:
+            problems.append(f"w{i} fields {sorted(present - introduced)} before the skeleton introduces them")
+        if set(beat["introduces"]) - present:
+            problems.append(f"w{i} lacks {sorted(set(beat['introduces']) - present)}, which it introduces")
+        boss = wave.get("boss")
+        if (boss["kind"] if boss else None) != beat.get("boss"):
+            problems.append(f"w{i} boss {boss['kind'] if boss else None}, skeleton {beat.get('boss')}")
+        for group in wave["groups"]:
+            kind = kinds.get(group["kind"])
+            if kind is None or not kind.get("brain") or not kind.get("attacks") or kind.get("boss"):
+                problems.append(f"w{i} group {group['kind']} is not a fighting crowd kind")
+            if group["count"] <= 0:
+                problems.append(f"w{i} group {group['kind']} count {group['count']}")
+        if boss:
+            kind = kinds.get(boss["kind"])
+            if kind is None or not kind.get("boss"):
+                problems.append(f"w{i} boss {boss['kind']} is not a boss kind")
+            else:
+                half_x, half_z = arena["half"]
+                x, z = boss["at"]
+                if abs(x) > half_x - kind["radius"] or abs(z) > half_z - kind["radius"]:
+                    problems.append(f"w{i} boss.at {boss['at']} outside the floor less its radius")
+    for name in crowd_fieldable(mission, kinds):
+        if name not in crowd["rewards"]:
+            problems.append(f"{name} can be fielded but has no rewards entry")
+    for name, reward in crowd["rewards"].items():
+        if name not in kinds:
+            problems.append(f"rewards names {name}, which is no crowd kind")
+        if reward["cash"] < 0 or reward["materials"] < 0:
+            problems.append(f"{name} rewards are negative")
+    elite = crowd.get("eliteKind")
+    if elite is not None and (elite not in kinds or kinds[elite].get("boss")):
+        problems.append(f"eliteKind {elite} is not an ordinary crowd kind")
+    if not 0 < crowd["maxAlive"] <= proving["crowd"]["maxAlive"]:
+        problems.append(f"maxAlive {crowd['maxAlive']} not in 1..{proving['crowd']['maxAlive']}")
+    if crowd["burst"] < 1 or crowd["burstSpacing"] <= 0:
+        problems.append(f"burst {crowd['burst']}, burstSpacing {crowd['burstSpacing']}")
+    for key in ("hpScale", "plateScale", "damageScale", "regenShare"):
+        if crowd[key] <= 0:
+            problems.append(f"{key} {crowd[key]}")
+    return problems
+
+
+def crowd_run_pay(mission, combat_cfg, summon_kills):
+    """What a whole solo run pays (Combat.CrowdReward per kill, rewardMult 1): every configured
+    body, every boss, and `summon_kills` {kind: kills} of what the bosses call. Per wave too:
+    [(wave, cash, materials, valor)], summons booked to their boss's wave."""
+    rows = []
+    totals = {"cash": 0, "materials": 0, "valor": 0}
+    for i in range(1, len(mission["crowd"]["waves"]) + 1):
+        spec = crowd_wave(mission, i, 1, False, combat_cfg)
+        cash = materials = valor = 0
+        for group in spec["groups"]:
+            c, m = crowd_reward(mission, group["kind"], spec)
+            cash += c * group["count"]
+            materials += m * group["count"]
+        boss = spec["boss"]
+        if boss is not None:
+            c, m = crowd_reward(mission, boss["kind"], spec)
+            cash += c
+            materials += m
+            valor += luau_round(boss["valor"] * spec["rewardMult"])
+            for kind, kills in (summon_kills.get(boss["kind"]) or {}).items():
+                c, m = crowd_reward(mission, kind, spec)
+                cash += c * kills
+                materials += m * kills
+        rows.append((i, cash, materials, valor))
+        totals["cash"] += cash
+        totals["materials"] += materials
+        totals["valor"] += valor
+    return totals, rows
+
+
+def crowd_report(mission):
+    """sim_range's mission report: the bosses fought at the mission's scales and the reacting
+    player's whole run (sim_range imports this file for the Combat mirrors, so it is imported
+    here only when a crowd mission is checked)."""
+    import sim_range as sr
+
+    proving = sr.load_config(sr.CONFIG_PATH)
+    return proving, sr.mission_report(proving, mission=mission, careless=False)
+
+
+def crowd_summon_kills(proving, report):
+    """{boss kind: {called kind: kills}} from the reacting player's boss fights: what the boss
+    called less what was dismissed with it (a dismissed body pays nothing, ruling 14)."""
+    found = {}
+    for name, row in report["bosses"].items():
+        called = [a.get("summon") for a in proving["crowd"]["kinds"][name]["attacks"] if a["shape"] == "summon"]
+        if called and called[0]:
+            found[name] = {called[0]: row["kills"] - 1}  # the fight's kills less the boss
+    return found
+
+
+def print_crowd(mission, armory, combat_cfg, curves):
+    """The crowd run of a mission: what each wave holds and pays, where the summons come from,
+    and the reacting player's measured clear (sim_range)."""
+    proving, report = crowd_report(mission)
+    summons = crowd_summon_kills(proving, report)
+    pay, rows = crowd_run_pay(mission, combat_cfg, summons)
+    block = mission["crowd"]
+    print(f"{mission['name']} ({mission['id']}) -- CROWD run, solo, gear {report['gear']['melee']}/"
+          f"{report['gear']['ranged']} (health {report['hp']:.0f}), targetWaveSeconds "
+          f"{mission['targetWaveSeconds']}, burst {block['burst']}, maxAlive {block['maxAlive']}")
+    print(f"  wave  bodies  bursts  {'holds':<70} {'cash':>9}  {mission['material']:>8}  valor")
+    for wave, cash, materials, valor in rows:
+        spec = crowd_wave(mission, wave, 1, False, combat_cfg)
+        holds = {}
+        for group in spec["groups"]:
+            holds[group["kind"]] = holds.get(group["kind"], 0) + group["count"]
+        text = ", ".join(f"{n} {k}" for k, n in holds.items())
+        if spec["boss"] is not None:
+            called = summons.get(spec["boss"]["kind"]) or {}
+            text = f"the {spec['boss']['kind']}" + "".join(f" (+{n:.0f} {k} called)" for k, n in called.items())
+        bodies = spec["total"] + (1 if spec["boss"] else 0)
+        print(f"  {wave:>4}  {bodies:>6}  {len(crowd_bursts(spec, block['burst'])):>6}  {text:<70} "
+              f"{cash:>9,.0f}  {materials:>8.0f}  {valor:>5}")
+    target = CROWD_RUN_TARGETS.get(mission["id"], {})
+    print(f"  run   {pay['cash']:,.0f} cash, {pay['materials']:.0f} {mission['material']}, {pay['valor']} Valor"
+          + (f"  (targets {target['cash']:,} / {target['materials']} / {target['valor']}, "
+             f"+-{CROWD_REWARD_TOLERANCE:.0%})" if target else ""))
+    share = {}
+    for wave_def in block["waves"]:
+        for group in wave_def["groups"]:
+            share[group["kind"]] = share.get(group["kind"], 0) + group["count"]
+        if wave_def.get("boss"):
+            kind = wave_def["boss"]["kind"]
+            share[kind] = share.get(kind, 0) + 1
+            for called, kills in (summons.get(kind) or {}).items():
+                share[called] = share.get(called, 0) + kills
+    print("  cash by kind: " + ", ".join(
+        f"{kind} {n:.0f} x {block['rewards'][kind]['cash']:,} = "
+        f"{100 * n * block['rewards'][kind]['cash'] / pay['cash']:.0f}%" for kind, n in share.items()))
+    runs = report["runs"]
+    print("  measured clear (sim_range, reacting player, default melee): "
+          + ", ".join(f"{r['end']} {se.fmt_time(r['at'])}" for r in runs)
+          + f"; targetMinutes {mission['targetMinutes']}")
+    for curve in curves:
+        if curve.era["name"] == mission["eraName"]:
+            rate = max(tier_unlock_rate(armory, "melee", report["gear"]["melee"]),
+                       tier_unlock_rate(armory, "ranged", report["gear"]["ranged"]))
+            second = curve.crossing(rate)
+            second = curve.seconds // 2 if second is None else second
+            remaining = curve.remaining_slot_cost(second)
+            print(f"  vs the tycoon: {pay['cash']:,.0f} = {100 * pay['cash'] / remaining:.2f}% of the "
+                  f"{remaining:,.0f} the era still costs at {se.fmt_time(second)}")
+    print()
+
+
 class Checks:
     def __init__(self):
         self.failed = 0
@@ -2119,8 +2430,18 @@ class Checks:
 
 def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 contracts, fourteen assertions)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 + P5 contracts, eighteen assertions)")
     curves = greedy_curves(game, eras)
+    # P5: the crowd missions are measured once, by sim_range (bosses and the whole run).
+    crowd = {}
+    for mission in missions.values():
+        if crowd_mission(mission):
+            proving, report = crowd_report(mission)
+            summons = crowd_summon_kills(proving, report)
+            pay, per_wave = crowd_run_pay(mission, combat_cfg, summons)
+            crowd[mission["id"]] = {"proving": proving, "report": report, "summons": summons, "pay": pay,
+                                    "perWave": per_wave}
+    retired = " (crowd mission: see 15-18)"
 
     # 1. unlockRate non-decreasing per slot; each band's entry tier unlocks inside its era.
     problems = []
@@ -2188,6 +2509,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         mission = missions.get(curve.index)
         if mission is None:
             continue
+        if crowd_mission(mission):
+            details.append(mission["id"] + retired)
+            continue
         gear, power = gear_for_power(armory, mission["recommendedPower"])
         _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
         baselines[mission["id"]] = totals
@@ -2216,7 +2540,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
             continue
         gear, _ = gear_for_power(armory, mission["recommendedPower"])
         totals = baselines.get(mission["id"])
-        if totals is None:
+        if crowd_mission(mission):
+            totals = crowd[mission["id"]]["pay"]  # the crowd run's cash, summons included
+        elif totals is None:
             _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
         rate = max(
             tier_unlock_rate(armory, "melee", gear["melee"]),
@@ -2260,6 +2586,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     details = []
     ok7 = True
     for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if crowd_mission(mission):
+            details.append(mission["id"] + retired)
+            continue
         gear, ascension, power = loadout_for_power(
             armory, STRONG_POWER_MULT * mission["recommendedPower"]
         )
@@ -2277,6 +2606,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     details = []
     ok8 = True
     for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if crowd_mission(mission):
+            details.append(mission["id"] + retired)
+            continue
         gear, power = gear_for_power(armory, WEAK_POWER_MULT * mission["recommendedPower"])
         _, totals = simulate_run(mission, armory, combat_cfg, gear, NO_ASCENSION, 1, False)
         wave = totals["died_wave"]
@@ -2332,6 +2664,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     details = []
     ok10 = True
     for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if crowd_mission(mission):
+            details.append(mission["id"] + retired)
+            continue
         base = baselines.get(mission["id"])
         if base is None:
             gear, _ = gear_for_power(armory, mission["recommendedPower"])
@@ -2364,6 +2699,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     details = []
     ok11 = True
     for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if crowd_mission(mission):
+            details.append(mission["id"] + retired)
+            continue
         gear, _ = gear_for_power(armory, mission["recommendedPower"])
         solo = boss_wave_lengths(mission, armory, combat_cfg, gear, 1)
         details.append(
@@ -2469,6 +2807,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     problems = []
     notes = []
     for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if crowd_mission(mission):
+            notes.append(mission["id"] + retired)
+            continue
         kinds = sorted(e["kind"] for e in mission["enemies"].values())
         if kinds != sorted(HORDE_KINDS) or set(kinds) - HORDE_KINDS:
             problems.append(f"{mission['id']} kinds {kinds}")
@@ -2504,11 +2845,129 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         f"only; materials per run {', '.join(notes)} (band {RUN_MATERIALS_BAND})",
     )
 
+    # 15. P5 crowd gates: every wave matches Combat.json crowdSkeleton, #waves and bossWaves
+    #     agree with the bosses, every kind a wave can field (summons included) has a rewards
+    #     entry, boss.at lies inside the floor less the kind's radius, maxAlive <= the crowd's.
+    import sim_range as sr
+
+    problems = []
+    notes = []
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if not crowd_mission(mission):
+            notes.append(f"{mission['id']} no crowd block (refused in game until Wave 3)")
+            continue
+        data = crowd[mission["id"]]
+        arena = sr.load_arena(mission["arena"])
+        problems += [f"{mission['id']} {p}" for p in crowd_gates(mission, combat_cfg, data["proving"], arena)]
+        kinds = crowd_fieldable(mission, data["proving"]["crowd"]["kinds"])
+        notes.append(f"{mission['id']} {len(mission['crowd']['waves'])} waves on the skeleton, fields "
+                     f"{', '.join(kinds)}")
+    checks.verdict(not problems, "15 crowd gates     ", "; ".join(problems) if problems else "; ".join(notes))
+
+    # 16. A whole solo crowd run at recommended power pays the C1 run's cash and materials within
+    #     CROWD_REWARD_TOLERANCE, and exactly its Valor (summons at the counts sim_range reports
+    #     for the reacting player's boss fights).
+    details = []
+    ok16 = True
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if not crowd_mission(mission):
+            continue
+        data = crowd[mission["id"]]
+        pay = data["pay"]
+        target = CROWD_RUN_TARGETS.get(mission["id"])
+        if target is None:
+            ok16 = False
+            details.append(f"{mission['id']} has no CROWD_RUN_TARGETS entry")
+            continue
+        cash_ok = abs(pay["cash"] / target["cash"] - 1) <= CROWD_REWARD_TOLERANCE
+        mat_ok = abs(pay["materials"] / target["materials"] - 1) <= CROWD_REWARD_TOLERANCE
+        valor_ok = pay["valor"] == target["valor"]
+        ok16 = ok16 and cash_ok and mat_ok and valor_ok
+        summons = ", ".join(f"{kills:.1f} {kind} from the {boss}" for boss, called in data["summons"].items()
+                            for kind, kills in called.items())
+        details.append(
+            f"{mission['id']} {pay['cash']:,.0f} cash ({100 * (pay['cash'] / target['cash'] - 1):+.1f}% of "
+            f"{target['cash']:,}), {pay['materials']:.0f} {mission['material']} "
+            f"({100 * (pay['materials'] / target['materials'] - 1):+.1f}% of {target['materials']}), "
+            f"{pay['valor']} Valor (needs {target['valor']}); summons {summons}"
+        )
+    checks.verdict(ok16, "16 crowd rewards   ", "; ".join(details) + f" (tolerance {CROWD_REWARD_TOLERANCE:.0%})")
+
+    # 17. The reacting player (sim_range's whole run, every seed) clears every wave inside
+    #     CROWD_CLEAR_SECONDS, breathers included, and targetMinutes (the hub panel's promise)
+    #     lies in that band and within CROWD_TARGET_MINUTES_SLACK of the mean clear.
+    details = []
+    ok17 = True
+    lo, hi = CROWD_CLEAR_SECONDS
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if not crowd_mission(mission):
+            continue
+        runs = crowd[mission["id"]]["report"]["runs"]
+        clears = [r["at"] for r in runs if r["end"] == "cleared"]
+        every = len(clears) == len(runs) and all(lo <= s <= hi for s in clears)
+        mean = sum(clears) / len(clears) if clears else math.inf
+        promise = mission["targetMinutes"]
+        honest = lo / 60 <= promise <= hi / 60 and abs(promise - mean / 60) <= CROWD_TARGET_MINUTES_SLACK
+        ok17 = ok17 and every and honest
+        details.append(
+            f"{mission['id']} " + ", ".join(f"{r['end']} {se.fmt_time(r['at'])}" for r in runs)
+            + f" (mean {mean / 60:.1f} min; targetMinutes {promise}; targetWaveSeconds "
+            f"{mission['targetWaveSeconds']})"
+        )
+    checks.verdict(ok17, "17 crowd clear     ", "; ".join(details) + f" (needs {lo / 60:.0f}-{hi / 60:.0f} min)")
+
+    # 18. The Combat.CrowdWave mirror against the config: solo and no Overdrive is the config as
+    #     written; counts never fall with party size; Overdrive raises counts, HP and damage and
+    #     leaves plates and regen; the burst queue holds exactly `total` bodies; BurstInterval
+    #     spreads the bursts over targetWaveSeconds at tempo 1.
+    problems = []
+    checked = 0
+    for mission in sorted(missions.values(), key=lambda m: m["era"]):
+        if not crowd_mission(mission):
+            continue
+        block = mission["crowd"]
+        od = combat_cfg["overdrive"]
+        for wave in range(1, len(block["waves"]) + 1):
+            solo = crowd_wave(mission, wave, 1, False, combat_cfg)
+            written = [(g["kind"], g["count"]) for g in block["waves"][wave - 1]["groups"]]
+            if [(g["kind"], g["count"]) for g in solo["groups"]] != written:
+                problems.append(f"{mission['id']} w{wave} solo counts differ from the config")
+            if solo["bossHpMult"] != 1 or solo["rewardMult"] != 1 or solo["hpScale"] != block["hpScale"]:
+                problems.append(f"{mission['id']} w{wave} solo multipliers are not neutral")
+            previous = solo["total"]
+            for party in range(1, combat_cfg["coop"]["maxParty"] + 1):
+                for overdrive in (False, True):
+                    spec = crowd_wave(mission, wave, party, overdrive, combat_cfg)
+                    checked += 1
+                    bursts = crowd_bursts(spec, block["burst"])
+                    if sum(n for _k, n in bursts) != spec["total"]:
+                        problems.append(f"{mission['id']} w{wave} p{party}: bursts hold the wrong count")
+                    if bursts and abs(burst_interval(mission, len(bursts), 1.0, False, combat_cfg) * len(bursts)
+                                      - mission["targetWaveSeconds"]) > 1e-9:
+                        problems.append(f"{mission['id']} w{wave} p{party}: bursts not spread over the wave")
+                    if overdrive:
+                        if (spec["hpScale"] != block["hpScale"] * od["hpMult"]
+                                or spec["damageScale"] != block["damageScale"] * od["damageMult"]
+                                or spec["plateScale"] != block["plateScale"]
+                                or spec["regenShare"] != block["regenShare"]):
+                            problems.append(f"{mission['id']} w{wave} p{party}: Overdrive scales")
+                    elif spec["total"] < previous:
+                        problems.append(f"{mission['id']} w{wave} p{party}: fewer bodies than a smaller party")
+                    else:
+                        previous = spec["total"]
+    checks.verdict(
+        not problems,
+        "18 crowd spec      ",
+        "; ".join(problems[:4]) if problems
+        else f"{checked} wave/party/overdrive combinations: the config as written solo, counts rise with the "
+        f"party, Overdrive scales HP and damage only, bursts hold every body over targetWaveSeconds",
+    )
+
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all fourteen assertions hold"
+            "PASS -- all eighteen assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -2525,7 +2984,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="run the fourteen C0-C2.5 assertions")
+    parser.add_argument("--check", action="store_true", help="run the eighteen C0-P5 assertions")
     parser.add_argument(
         "--trace", action="store_true", help="print the wave timeline of the simulated run"
     )
@@ -2567,6 +3026,9 @@ def main():
         print(f"no mission config for era {args.era}")
         sys.exit(2)
     for mission in selected:
+        if crowd_mission(mission):
+            print_crowd(mission, armory, combat_cfg, curves)
+            continue
         # Overdrive triples enemy HP, so its recommended power is the scaled one
         # (Combat.RecommendedPower) -- the modelled loadout must follow it.
         baseline = recommended_power(mission, args.overdrive, combat_cfg)

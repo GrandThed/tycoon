@@ -1,9 +1,9 @@
 --!strict
--- Range abilities (docs/INTERFACES.md "P3 contracts", docs/WEAPONS.md §2): one per weapon
+-- Weapon abilities (docs/INTERFACES.md "P3 contracts", docs/WEAPONS.md §2): one per weapon
 -- family; Q casts the melee slot's ability and E the ranged slot's. This service owns the cast
 -- pipeline, the cooldown clocks and kill refunds, the busy lock and every ability's timeline.
--- RangeService owns the hits (Strike, FireProjectile) and the attack modifiers (buff, lock,
--- i-frames), so an ability hit resolves exactly like a weapon hit.
+-- WeaponService owns the hits (Strike, FireProjectile) and the attack modifiers (buff, lock,
+-- i-frames), so an ability hit resolves exactly like a weapon hit, Armory scale included.
 --
 -- Server-authoritative like every range attack: the client sends only the slot, a seq and its
 -- camera ray. The server checks the ray's origin, its own cooldowns and busy window, and builds
@@ -11,8 +11,9 @@
 -- slider moved mid-cast applies to the next cast. Every timeline runs on this service's own
 -- Heartbeat, and nothing here yields.
 --
--- Inert off the range: Start connects nothing unless RangeService.IsActive(), and every entry
--- point returns at once.
+-- P5 (INTERFACES "P5 contracts" → "Wave 1"): runs in the range and in missions alike, gated on
+-- WeaponService.IsActive(); in a mission a cast is refused unless the act gate lets the player
+-- act (ruling 21). Kills refund from CrowdService.OnKilled's (id, byUserId) in both modes.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,7 +27,7 @@ local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
-local RangeService = require(script.Parent:WaitForChild("RangeService"))
+local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 
 type SlotName = "melee" | "ranged"
 type AbilityDef = Types.RangeAbilityDef
@@ -47,7 +48,7 @@ local MIN_TICK_SECONDS = 0.05
 -- tick from rounding.
 local TICK_EPSILON = 1e-6
 -- A shell always bursts within shooting.projectileMaxSeconds; this covers the frame order between
--- RangeService's step and ours. A shell dropped without a burst (a set reload) ends here.
+-- WeaponService's step and ours. A shell dropped without a burst (a set reload) ends here.
 local IMPACT_WAIT_SLACK_SECONDS = 1
 local FULL_CIRCLE_DEGREES = 360
 local EPSILON = 1e-4
@@ -80,7 +81,7 @@ type Caster = {
 	ranged: SlotClock,
 	-- os.clock() until which the caster is locked in an ability (the table's "busy" column).
 	busyUntil: number,
-	-- The slot whose ability set the latest RangeService lock / attack buff.
+	-- The slot whose ability set the latest WeaponService lock / attack buff.
 	lockSlot: SlotName?,
 	buffSlot: SlotName?,
 	-- Replay guard: seq must increase per player across both slots.
@@ -113,7 +114,7 @@ type Cast = {
 	target: Vector3,
 }
 
--- "ground" = RangeService.GroundPoint at castRange; "dash" = the Impale Dash end; "floor" = the
+-- "ground" = WeaponService.GroundPoint at castRange; "dash" = the Impale Dash end; "floor" = the
 -- floor under the root, sent so clients centre the Earthquake rings without their own raycast.
 type TargetKind = "ground" | "dash" | "floor"
 type Mechanic = {
@@ -166,7 +167,7 @@ local function flatten(vector: Vector3): Vector3?
 	return flat.Unit
 end
 
--- Mirrors RangeService: crowd dummies have no Instances, so world queries only skip players.
+-- Mirrors WeaponService: crowd bodies have no Instances, so world queries only skip players.
 local function worldParams(): RaycastParams
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -202,7 +203,7 @@ local function muzzleOf(player: Player, root: BasePart): Vector3
 	return if head ~= nil and head:IsA("BasePart") then head.Position else root.Position
 end
 
--- Same delivery as RangeService.broadcastFx: one-entry batches to every player.
+-- Same delivery as WeaponService.broadcastFx: one-entry batches to every player.
 local function broadcastFx(fx: Types.CombatFx): ()
 	local batch: { Types.CombatFx } = { fx }
 	for _, player in Players:GetPlayers() do
@@ -255,9 +256,9 @@ end
 -- The caster's clocks, moved from os.clock() onto workspace:GetServerTimeNow() so the client can
 -- compare them with its own synced clock. refusedSeq is set only when answering a refused cast.
 local function sendState(caster: Caster, refusedSeq: number?): ()
-	local loadout = RangeService.LoadoutOf(caster.player)
+	local loadout = WeaponService.LoadoutOf(caster.player)
 	if loadout == nil then
-		-- RangeService has not taken the player yet: the Heartbeat retries while dirty.
+		-- WeaponService has not taken the player yet: the Heartbeat retries while dirty.
 		caster.dirty = true
 		return
 	end
@@ -335,7 +336,7 @@ local function newSpec(
 end
 
 local function strike(c: Cast, spec: StrikeSpec): ()
-	RangeService.Strike(c.player, c.family, c.id, spec)
+	WeaponService.Strike(c.player, c.family, c.id, spec)
 end
 
 -- A lasting ability's ticks: every `tick` seconds from `start` for `duration` (half-open, so a
@@ -364,7 +365,7 @@ local function launchWhirlwind(c: Cast, timeline: Timeline): boolean
 	timeline.endsAt = c.now + duration
 	timeline.fire = function(_index: number)
 		-- The channel follows the caster: every tick spins around the root where it is now.
-		local root = RangeService.RootOf(c.player)
+		local root = WeaponService.RootOf(c.player)
 		if root == nil then
 			return
 		end
@@ -440,7 +441,7 @@ local function launchLeapSmash(c: Cast, timeline: Timeline): boolean
 	local def = c.def
 	local delay = nonNegative(def.delaySeconds)
 	local radius = nonNegative(def.radius)
-	RangeService.GrantIframes(c.player, delay)
+	WeaponService.GrantIframes(c.player, delay)
 	timeline.times = { delay }
 	timeline.endsAt = c.now + delay
 	timeline.fire = function(_index: number)
@@ -457,7 +458,7 @@ local function launchImpaleDash(c: Cast, timeline: Timeline): boolean
 	local width = nonNegative(def.width)
 	local from = c.rootPosition
 	local to = c.target
-	RangeService.GrantIframes(c.player, delay)
+	WeaponService.GrantIframes(c.player, delay)
 	timeline.times = { 0 }
 	timeline.endsAt = c.now + delay
 	timeline.fire = function(_index: number)
@@ -493,7 +494,7 @@ local function launchVolley(c: Cast, _timeline: Timeline): boolean
 		splitDistance = nonNegative(def.spacing),
 		splitArcDegrees = nonNegative(def.arcDegrees),
 	}
-	return RangeService.FireProjectile(
+	return WeaponService.FireProjectile(
 		c.player,
 		c.family,
 		c.id,
@@ -518,7 +519,7 @@ local function launchSlugBurst(c: Cast, timeline: Timeline): boolean
 	timeline.endsAt = c.now + count * tick
 	timeline.fire = function(_index: number)
 		-- Each slug leaves the head where it is now, but keeps the aim of the cast.
-		local root = RangeService.RootOf(c.player)
+		local root = WeaponService.RootOf(c.player)
 		if root == nil then
 			return
 		end
@@ -551,7 +552,7 @@ end
 local function launchMagDump(c: Cast, timeline: Timeline): boolean
 	local def = c.def
 	local duration = nonNegative(def.durationSeconds)
-	RangeService.SetAttackBuff(c.player, c.slot, {
+	WeaponService.SetAttackBuff(c.player, c.slot, {
 		rateMult = nonNegative(def.rateMult, 1),
 		pierce = nonNegative(def.pierce, 1),
 		untilClock = c.now + duration,
@@ -561,7 +562,7 @@ local function launchMagDump(c: Cast, timeline: Timeline): boolean
 	return true
 end
 
--- The shell bursts through RangeService (radius, damage); its hook scatters the bomblets, which
+-- The shell bursts through WeaponService (radius, damage); its hook scatters the bomblets, which
 -- this timeline detonates delaySeconds later. Until the hook runs the timeline waits with no
 -- events, so a family switch can still cancel the bomblets.
 local function launchClusterShell(c: Cast, timeline: Timeline): boolean
@@ -598,7 +599,7 @@ local function launchClusterShell(c: Cast, timeline: Timeline): boolean
 			strike(c, spec)
 		end
 	end
-	-- Runs inside RangeService's step: it only records the burst, never strikes or yields.
+	-- Runs inside WeaponService's step: it only records the burst, never strikes or yields.
 	local function onImpact(point: Vector3): ()
 		if timeline.ended or #timeline.times > 0 then
 			return
@@ -609,7 +610,7 @@ local function launchClusterShell(c: Cast, timeline: Timeline): boolean
 		timeline.times = { offset }
 		timeline.endsAt = c.now + offset
 	end
-	return RangeService.FireProjectile(
+	return WeaponService.FireProjectile(
 		c.player,
 		c.family,
 		c.id,
@@ -637,7 +638,7 @@ local function launchOverloadSweep(c: Cast, timeline: Timeline): boolean
 	end
 	timeline.endsAt = c.now + duration
 	timeline.fire = function(index: number)
-		local root = RangeService.RootOf(c.player)
+		local root = WeaponService.RootOf(c.player)
 		if root == nil then
 			return
 		end
@@ -795,7 +796,7 @@ local function onKilled(_id: number, byUserId: number): ()
 	if caster == nil then
 		return
 	end
-	local loadout = RangeService.LoadoutOf(caster.player)
+	local loadout = WeaponService.LoadoutOf(caster.player)
 	if loadout == nil then
 		return
 	end
@@ -827,11 +828,11 @@ local function onLoadoutChanged(player: Player, slot: SlotName): ()
 		caster.lockSlot = nil
 		caster.busyUntil = math.min(caster.busyUntil, now)
 		-- An expired lock is a no-op: this clears it.
-		RangeService.SetAbilityLock(player, 0, nil)
+		WeaponService.SetAbilityLock(player, 0, nil)
 	end
 	if caster.buffSlot == slot then
 		caster.buffSlot = nil
-		RangeService.SetAttackBuff(player, slot, nil)
+		WeaponService.SetAttackBuff(player, slot, nil)
 	end
 	local clock = clockOf(caster, slot)
 	clock.readyAt = now
@@ -843,21 +844,21 @@ end
 
 function AbilityService.Init(): () end
 
--- After RangeService.Start. Only when the range booted.
+-- After WeaponService.Start, in both modes. Only when the weapons are on.
 function AbilityService.Start(): ()
-	if started or not RangeService.IsActive() then
+	if started or not WeaponService.IsActive() then
 		return
 	end
 	started = true
 	CrowdService.OnKilled(onKilled)
-	RangeService.OnLoadoutChanged(onLoadoutChanged)
+	WeaponService.OnLoadoutChanged(onLoadoutChanged)
 	RunService.Heartbeat:Connect(step)
 end
 
--- Sends the first RangeAbility state (or, if RangeService has not taken the player yet, the
+-- Sends the first RangeAbility state (or, if WeaponService has not taken the player yet, the
 -- Heartbeat sends it as soon as it has).
 function AbilityService.AddPlayer(player: Player): ()
-	if not RangeService.IsActive() or player.Parent == nil then
+	if not WeaponService.IsActive() or player.Parent == nil then
 		return
 	end
 	sendState(casterFor(player))
@@ -871,8 +872,9 @@ function AbilityService.RemovePlayer(player: Player): ()
 	end
 end
 
--- RequestRangeAbility. Checks in contract order: range player and slot, seq, ability, busy,
--- ready, aim and root. Any refusal resends the caster's state so the buttons resync.
+-- RequestRangeAbility. Checks in contract order: weapon player and slot, seq, the act gate (P5
+-- ruling 21), ability, busy, ready, aim and root. Any refusal resends the caster's state so the
+-- buttons resync.
 function AbilityService.OnCast(
 	player: Player,
 	slot: string,
@@ -880,10 +882,10 @@ function AbilityService.OnCast(
 	origin: Vector3,
 	direction: Vector3
 ): ()
-	if not RangeService.IsActive() or player.Parent == nil then
+	if not WeaponService.IsActive() or player.Parent == nil then
 		return
 	end
-	local loadout = RangeService.LoadoutOf(player)
+	local loadout = WeaponService.LoadoutOf(player)
 	if loadout == nil then
 		return
 	end
@@ -907,7 +909,7 @@ function AbilityService.OnCast(
 		and isFiniteVector(origin)
 		and isFiniteVector(direction)
 		and direction.Magnitude > EPSILON
-	if not validPayload then
+	if not validPayload or not WeaponService.MayAct(player) then
 		sendState(caster, refused)
 		return
 	end
@@ -933,10 +935,10 @@ function AbilityService.OnCast(
 		sendState(caster, refused)
 		return
 	end
-	local root = RangeService.RootOf(player)
+	local root = WeaponService.RootOf(player)
 	if
 		root == nil
-		or not RangeService.CheckAim(player, origin)
+		or not WeaponService.CheckAim(player, origin)
 		or #caster.timelines >= MAX_TIMELINES_PER_PLAYER
 	then
 		sendState(caster, refused)
@@ -949,7 +951,7 @@ function AbilityService.OnCast(
 	local rootPosition = root.Position
 	local target = rootPosition
 	if mechanic.target == "ground" then
-		local ground = RangeService.GroundPoint(player, origin, aim, nonNegative(def.castRange))
+		local ground = WeaponService.GroundPoint(player, origin, aim, nonNegative(def.castRange))
 		if ground == nil then
 			sendState(caster, refused)
 			return
@@ -963,7 +965,7 @@ function AbilityService.OnCast(
 			nonNegative(config.abilities.dashWallClearance)
 		)
 	elseif mechanic.target == "floor" then
-		target = RangeService.FloorBelow(rootPosition)
+		target = WeaponService.FloorBelow(rootPosition)
 	end
 
 	-- Accepted: the cooldown starts now, so kills from this very cast already refund it.
@@ -973,7 +975,7 @@ function AbilityService.OnCast(
 	clock.readyAt = now + cooldown
 	clock.floorAt = now + math.min(nonNegative(def.minCooldownSeconds) * scale, cooldown)
 	lastCastId += 1
-	local seed = RangeService.SeedFor(player, seq)
+	local seed = WeaponService.SeedFor(player, seq)
 	local fx: Types.CombatFxCast = {
 		kind = "cast",
 		userId = player.UserId,
@@ -1014,7 +1016,7 @@ function AbilityService.OnCast(
 		target = target,
 	}
 	if not mechanic.launch(cast, timeline) then
-		-- Only the projectile abilities can be refused here (RangeService's projectile budget, or
+		-- Only the projectile abilities can be refused here (WeaponService's projectile budget, or
 		-- a speed tuned to 0), and neither is busy: give the cooldown back, take the visuals back.
 		clock.readyAt = previous.readyAt
 		clock.floorAt = previous.floorAt
@@ -1028,7 +1030,7 @@ function AbilityService.OnCast(
 	if busy > 0 then
 		caster.busyUntil = now + busy
 		caster.lockSlot = slotName
-		RangeService.SetAbilityLock(
+		WeaponService.SetAbilityLock(
 			player,
 			caster.busyUntil,
 			if mechanic.allowOwnSlot then slotName else nil

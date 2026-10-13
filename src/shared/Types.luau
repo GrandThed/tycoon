@@ -1249,6 +1249,13 @@ export type CombatDebugConfig = {
 	-- C2 hub levers (RequestDebug "fakeParty" / "fakeInvite" use the same names).
 	fakePartyAttribute: string,
 	fakeInviteAttribute: string,
+	-- P5 wave 1: what `proving.rbxl` boots into, and the baked test player's gear.
+	provingBoots: string, -- "mission" | "range"
+	provingMission: string,
+	provingStartWave: number,
+	provingStartDelay: number,
+	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
+	perfLogSeconds: number,
 }
 -- Enemy AI tunables (EnemyService) and client presentation tunables (CombatFxController).
 export type CombatEnemyConfig = {
@@ -1285,6 +1292,8 @@ export type CombatConfig = {
 	camera: CombatCameraConfig,
 	ai: CombatAiConfig,
 	feel: CombatFeelConfig,
+	-- P5 ruling 2: the one 10-wave skeleton every era's `crowd` block follows.
+	crowdSkeleton: { CrowdSkeletonWave },
 }
 
 -- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
@@ -1350,6 +1359,8 @@ export type MissionConfig = {
 	waveTable: WaveTableDef,
 	-- Keyed by the wave number as a string ("5"), because JSON has no integer keys.
 	bosses: { [string]: BossDef },
+	-- P5: crowd waves; a mission without one is refused at arrival (ruling 27).
+	crowd: MissionCrowdConfig?,
 }
 
 -- The four numbers Combat.EnemyStats resolves for one spawned enemy. Declared here as well as
@@ -1405,6 +1416,9 @@ export type PartyMember = {
 	host: boolean,
 	waiting: boolean,
 	damageShare: number,
+	-- P5 ruling 18: down in a crowd mission (until a wave boundary, or the revive in Wave 4);
+	-- false for bots.
+	down: boolean,
 }
 -- The server-side party record behind a PartyMember: it also holds the character, the ability
 -- cooldown stamps and the per-run bookkeeping the client never sees. Lives in Types (not in
@@ -2343,5 +2357,33 @@ export type CombatFxArea = {
 	endsAt: number,
 	from: Vector3?,
 }
+
+-- P5 wave 1 (docs/INTERFACES.md "P5 contracts")
+export type CombatMode = "range" | "mission"
+-- A tier (or Ascension level) per weapon slot: WeaponService.GearOf returns two of them.
+export type SlotTiers = { melee: number, ranged: number }
+
+-- Missions/<n>_<Era>.json `crowd` block. Counts are per solo run; party size scales them
+-- (Combat.CrowdWave). Scales multiply ProvingGrounds.json's tier-1 kind numbers.
+export type MissionCrowdGroup = { kind: string, count: number, perExtra: number? }
+export type MissionCrowdBoss = { kind: string, at: { number }, valor: number } -- at = { x, z }
+export type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
+export type MissionCrowdReward = { cash: number, materials: number }
+export type MissionCrowdConfig = {
+	hpScale: number,
+	plateScale: number,
+	damageScale: number,
+	regenShare: number,
+	maxAlive: number,
+	burst: number,
+	burstSpacing: number,
+	eliteKind: string?,
+	waves: { MissionCrowdWave },
+	rewards: { [string]: MissionCrowdReward },
+}
+
+-- Combat.json `crowdSkeleton` (ruling 2): wave i may hold the kinds introduced in waves 1..i
+-- (bosses excepted) and must hold its own `introduces`.
+export type CrowdSkeletonWave = { introduces: { string }, boss: string? }
 
 return {}

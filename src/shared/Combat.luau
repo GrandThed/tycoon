@@ -67,6 +67,23 @@ type BossDef = {
 	valor: number,
 	patterns: { BossPatternDef }?,
 }
+-- P5: the mission's `crowd` block (Types.MissionCrowdConfig and friends).
+type MissionCrowdGroup = { kind: string, count: number, perExtra: number? }
+type MissionCrowdBoss = { kind: string, at: { number }, valor: number }
+type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
+type MissionCrowdReward = { cash: number, materials: number }
+type MissionCrowdConfig = {
+	hpScale: number,
+	plateScale: number,
+	damageScale: number,
+	regenShare: number,
+	maxAlive: number,
+	burst: number,
+	burstSpacing: number,
+	eliteKind: string?,
+	waves: { MissionCrowdWave },
+	rewards: { [string]: MissionCrowdReward },
+}
 type MissionConfig = {
 	version: number,
 	id: string,
@@ -83,6 +100,7 @@ type MissionConfig = {
 	enemies: { [string]: EnemyDef },
 	waveTable: WaveTableDef,
 	bosses: { [string]: BossDef },
+	crowd: MissionCrowdConfig?,
 }
 
 type CombatCoopConfig = {
@@ -278,6 +296,22 @@ export type WaveSpec = {
 }
 
 export type EnemyStats = { hp: number, damage: number, cash: number, materials: number }
+
+-- P5: one crowd wave, fully resolved (docs/INTERFACES.md "P5 contracts" → "Server modules").
+-- `groups` counts are already scaled for party size and Overdrive; `total` leaves the boss out.
+-- The scales multiply ProvingGrounds.json's tier-1 kind numbers.
+export type CrowdWaveSpec = {
+	wave: number,
+	groups: { { kind: string, count: number } },
+	total: number,
+	boss: MissionCrowdBoss?,
+	bossHpMult: number,
+	hpScale: number,
+	plateScale: number,
+	damageScale: number,
+	regenShare: number,
+	rewardMult: number,
+}
 
 local NEUTRAL_MULT = 1
 
@@ -716,6 +750,83 @@ function Combat.SplitPool(pool: RewardPool, shares: { [number]: number }): { [nu
 		}
 	end
 	return split
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- P5: crowd missions. Party size scales the counts of the ordinary groups and the boss body's
+-- HP only (the C2 rule); Overdrive scales counts, HP, damage and rewards, never plates or regen.
+-- tools/sim_combat.py mirrors these three functions exactly.
+-- ---------------------------------------------------------------------------------------------
+
+-- nil when the mission has no `crowd` block or no such wave.
+function Combat.CrowdWave(
+	mission: MissionConfig,
+	wave: number,
+	partySize: number,
+	overdrive: boolean,
+	combatCfg: CombatRules
+): CrowdWaveSpec?
+	local crowd = mission.crowd
+	if crowd == nil then
+		return nil
+	end
+	local waveDef = crowd.waves[wave]
+	if waveDef == nil then
+		return nil
+	end
+	local overdriveCfg = combatCfg.overdrive
+	local extras = math.max(partySize, 1) - 1
+	local countMult = if overdrive then overdriveCfg.countMult else NEUTRAL_MULT
+	local groups: { { kind: string, count: number } } = {}
+	local total = 0
+	for _, group in waveDef.groups do
+		local perExtra = group.perExtra or combatCfg.coop.countPerExtraPlayer
+		local count = math.max(math.round(group.count * (1 + perExtra * extras) * countMult), 0)
+		table.insert(groups, { kind = group.kind, count = count })
+		total += count
+	end
+	return {
+		wave = wave,
+		groups = groups,
+		total = total,
+		boss = waveDef.boss,
+		bossHpMult = 1 + combatCfg.coop.bossHpPerExtraPlayer * extras,
+		hpScale = crowd.hpScale * (if overdrive then overdriveCfg.hpMult else NEUTRAL_MULT),
+		plateScale = crowd.plateScale,
+		damageScale = crowd.damageScale
+			* (if overdrive then overdriveCfg.damageMult else NEUTRAL_MULT),
+		regenShare = crowd.regenShare,
+		rewardMult = if overdrive then overdriveCfg.rewardMult else NEUTRAL_MULT,
+	}
+end
+
+-- Fixed cash and materials for one kill of `kind`; a kind with no rewards entry pays nothing.
+function Combat.CrowdReward(
+	mission: MissionConfig,
+	kind: string,
+	spec: CrowdWaveSpec
+): (number, number)
+	local crowd = mission.crowd
+	local reward = if crowd ~= nil then crowd.rewards[kind] else nil
+	if reward == nil then
+		return 0, 0
+	end
+	return math.round(reward.cash * spec.rewardMult), math.round(reward.materials * spec.rewardMult)
+end
+
+-- Seconds between two bursts of the same wave: SpawnInterval over bursts instead of bodies.
+function Combat.BurstInterval(
+	mission: MissionConfig,
+	bursts: number,
+	tempo: number,
+	overdrive: boolean,
+	combatCfg: CombatRules
+): number
+	if bursts <= 0 or tempo <= 0 then
+		return mission.targetWaveSeconds
+	end
+	local rateMult = if overdrive then combatCfg.overdrive.spawnRateMult else NEUTRAL_MULT
+	return mission.targetWaveSeconds / bursts / tempo / rateMult
 end
 
 return Combat

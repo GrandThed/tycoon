@@ -280,9 +280,10 @@ function AbilityFx.Init(): ()
 	-- Remotes are replicated instances: everything happens in Start.
 end
 
--- Inert outside the Proving Grounds, like every range controller (CameraController.IsRange).
+-- Inert unless the range's combat runs (the range and, since P5, every crowd mission), like
+-- every range controller (CameraController.IsCrowdCombat).
 function AbilityFx.Start(): ()
-	if started or destroyed or not CameraController.IsRange() then
+	if started or destroyed or not CameraController.IsCrowdCombat() then
 		return
 	end
 	started = true

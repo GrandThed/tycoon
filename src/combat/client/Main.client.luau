@@ -10,12 +10,14 @@
 -- together (stance, gear, health, banners) once the HUD exists.
 --
 -- P1: CrowdRenderer and FeedbackController boot in every build but their Start is inert
--- outside the Proving Grounds (CameraController.IsRange, decided in CameraController.Init).
--- MovementController is started by InputController in the range, so it is not listed here.
--- P3: AbilityFx (every player's lasting ability visuals) is range-only in the same way.
--- P4: so is VitalsController (being hit: health bar, hurt feedback, knockback, down and up).
--- It comes before CombatUIController, which mounts its HUD. And so is ThreatFx (wave 2: the
--- enemy's lanes, lines, circles and shots).
+-- unless the range's combat runs. MovementController is started by InputController's range
+-- path, so it is not listed here. P3: AbilityFx (every player's lasting ability visuals) is
+-- gated the same way. P4: so is VitalsController (being hit: health bar, hurt feedback,
+-- knockback, down and up), which comes before CombatUIController, which mounts its HUD. And so
+-- is ThreatFx (wave 2: the enemy's lanes, lines, circles and shots).
+-- P5: that gate is CameraController.IsCrowdCombat, true in the range AND in every crowd
+-- mission. The mode itself (the shared CombatMode, "range" or "mission") is read once in
+-- CameraController.Init, which is why CameraController comes before every controller that asks.
 
 type Controller = {
 	Init: () -> (),

@@ -428,8 +428,8 @@ local newestStamp = -math.huge
 local burstsThisStep = 0
 local burstEmitters: { [string]: ParticleEmitter } = {}
 local burstColors: { [string]: Color3 } = {}
--- P4 wave 2: the arena floor's half extents (X and Z), read once from the shared layout the
--- server builds the floor from; nil = no such layout. Only a charge is bounded by it here.
+-- P4 wave 2: the arena floor's half extents (X and Z), read from the shared layout the server
+-- builds the floor from (SetArena); nil = no such layout. Only a charge is bounded by it here.
 local arenaHalf: Vector3? = nil
 -- Stop 2: the boss the bar shows (the first one alive, kept through its death flight so the
 -- bar can empty and go).
@@ -2447,11 +2447,30 @@ local CrowdRenderer = {}
 -- Main's controller contract; everything happens in Start.
 function CrowdRenderer.Init(): () end
 
--- Inert outside the Proving Grounds. CameraController.IsRange is the client's one range gate
--- (Studio only, then the Workspace lever), so a published place saved with the lever on never
--- draws a crowd, and a mission client never waits on crowd remotes.
+-- Wave 2: the floor a charge is bounded by, from Shared/Layouts/Arenas/<name>, as ArenaService
+-- reads it. P5: the range names its arena in ProvingGrounds.json at Start; a mission's arena is
+-- the mission config's, which CombatUIController hands over from the first RunState. An
+-- unknown name leaves no bound, as before.
+function CrowdRenderer.SetArena(name: string): ()
+	arenaHalf = nil
+	local layouts = sharedFolder:FindFirstChild("Layouts")
+	local arenas = if layouts ~= nil then layouts:FindFirstChild("Arenas") else nil
+	local module = if arenas ~= nil then arenas:FindFirstChild(name) else nil
+	if module == nil or not module:IsA("ModuleScript") then
+		return
+	end
+	local ok, layout = pcall(require, module)
+	local size = if ok and typeof(layout) == "table" then (layout :: any).size else nil
+	if typeof(size) == "table" and typeof(size.x) == "number" and typeof(size.z) == "number" then
+		arenaHalf = Vector3.new(size.x / 2, 0, size.z / 2)
+	end
+end
+
+-- Inert unless the range's combat runs. CameraController.IsCrowdCombat is that gate (the range,
+-- and since P5 every crowd mission), so a build without the ProvingGrounds config never waits
+-- on crowd remotes.
 function CrowdRenderer.Start(): ()
-	if started or destroyed or not CameraController.IsRange() then
+	if started or destroyed or not CameraController.IsCrowdCombat() then
 		return
 	end
 	started = true
@@ -2462,20 +2481,8 @@ function CrowdRenderer.Start(): ()
 	folder = created
 	template = buildTemplate()
 
-	-- Wave 2: the floor's size, from Shared/Layouts/Arenas/<arena>, as ArenaService reads it.
-	local layouts = sharedFolder:FindFirstChild("Layouts")
-	local arenas = if layouts ~= nil then layouts:FindFirstChild("Arenas") else nil
-	local module = if arenas ~= nil then arenas:FindFirstChild(Tuning.Get().arena) else nil
-	if module ~= nil and module:IsA("ModuleScript") then
-		local ok, layout = pcall(require, module)
-		local size = if ok and typeof(layout) == "table" then (layout :: any).size else nil
-		if
-			typeof(size) == "table"
-			and typeof(size.x) == "number"
-			and typeof(size.z) == "number"
-		then
-			arenaHalf = Vector3.new(size.x / 2, 0, size.z / 2)
-		end
+	if CameraController.IsRange() then
+		CrowdRenderer.SetArena(Tuning.Get().arena)
 	end
 
 	tuningConnection = Tuning.Changed:Connect(onTuningChanged)

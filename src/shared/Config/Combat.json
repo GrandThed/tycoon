@@ -113,8 +113,26 @@
 		"botDamagePerSecond": 12,
 		"botIncomeRate": 0,
 		"fakePartyAttribute": "DebugFakeParty",
-		"fakeInviteAttribute": "DebugFakeInvite"
+		"fakeInviteAttribute": "DebugFakeInvite",
+		"provingBoots": "mission",
+		"provingMission": "village",
+		"provingStartWave": 1,
+		"provingStartDelay": 3,
+		"provingGear": { "melee": 2, "ranged": 1 },
+		"perfLogSeconds": 10
 	},
+	"crowdSkeleton": [
+		{ "introduces": ["fodder"] },
+		{ "introduces": [] },
+		{ "introduces": ["slinger"] },
+		{ "introduces": ["brute"] },
+		{ "introduces": [], "boss": "colossus" },
+		{ "introduces": ["marksman", "lobber"] },
+		{ "introduces": [] },
+		{ "introduces": ["armoured"] },
+		{ "introduces": [] },
+		{ "introduces": [], "boss": "warlord" }
+	],
 	"camera": {
 		"shoulderOffset": [1.75, 0.6, 0],
 		"fieldOfView": 72,

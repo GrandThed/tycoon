@@ -18,8 +18,8 @@
 -- older server build) or a dead character all make the input a silent no-op, never an error.
 --
 -- P1 Proving Grounds (docs/INTERFACES.md "P1 contracts", docs/COMBAT_DESIGN.md section 3):
--- when CameraController.IsRange() is true at boot, none of the mission bindings above are
--- made and a separate range path runs instead, so missions keep exactly today's input.
+-- when the range's combat runs (CameraController.IsCrowdCombat at boot; P1 called it the
+-- range), none of the mission bindings above are made and a separate range path runs instead.
 --  * P2: the range holds one melee FAMILY and one ranged family (RangeLoadout, pushed by
 --    FeedbackController through SetLoadout). 1 / 2 pick the active slot locally, gamepad Y
 --    toggles; every attack names the active family and sends a `charge` (1 when the weapon
@@ -80,6 +80,12 @@
 -- knocked down (MovementController.IsDown) nothing is sent: no attack, no draw, no cast, no
 -- slot switch, and Mag Dump's own shots stop. The server refuses them all anyway. Held
 -- inputs are kept, so a held trigger and touch auto-fire pick up on the get-up by themselves.
+--
+-- P5 (docs/INTERFACES.md "P5 contracts", Client): the range path is the input of every crowd
+-- mission too (CameraController.IsCrowdCombat), with the range's remotes, so the C1 mission
+-- bindings above stay unbound until Wave 3 deletes them. In a mission nothing is sent while
+-- the run phase is `lobby`, `summary` or `ended`, exactly as while knocked down: the server
+-- refuses those anyway, and this keeps the client from drawing swings it would take back.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -179,7 +185,11 @@ local combatConfig: Types.CombatConfig? = nil
 
 local stance: Stance = MELEE_SLOT
 local connections: { RBXScriptConnection } = {}
-local rangeMode = false
+-- The range's input path (P1-P4), which P5 missions use too. Decided once in Init.
+local rangePath = false
+-- P5: the run phases of a mission in which nothing is sent (the run has not begun or is over).
+local IDLE_PHASES: { [string]: boolean } =
+	table.freeze({ lobby = true, summary = true, ended = true })
 
 -- Mission-path state (C1-C2.5).
 type MissionState = {
@@ -229,6 +239,8 @@ type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
 type PendingSwing = { seq: number, family: string, length: number, sentAt: number }
 type RangeState = {
 	rangeStarted: boolean,
+	-- P5: this range path serves a mission (not the bench), so the run phase gates it.
+	inMission: boolean,
 	activeSlot: Stance,
 	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
 	loadout: Types.RangeLoadout?,
@@ -270,6 +282,7 @@ type RangeState = {
 }
 local rangeState: RangeState = {
 	rangeStarted = false,
+	inMission = false,
 	activeSlot = MELEE_SLOT,
 	device = "pc",
 	rangeTouches = {},
@@ -389,6 +402,13 @@ local function inPlay(): boolean
 	return missionState.phase == "wave"
 		or missionState.phase == "breather"
 		or missionState.phase == "boss"
+end
+
+-- Range path: no attack, draw or cast leaves now. Knocked down (P4), or (P5) a mission whose
+-- run has not begun or is over.
+local function cannotAct(): boolean
+	return MovementController.IsDown()
+		or (rangeState.inMission and IDLE_PHASES[missionState.phase] == true)
 end
 
 type LocalRig = { root: BasePart, head: BasePart, humanoid: Humanoid }
@@ -1740,7 +1760,7 @@ end
 local function castAbility(slot: Stance): ()
 	local remote = castState.requestRangeAbility
 	local rig = localRig()
-	if not rangeMode or remote == nil or rig == nil or MovementController.IsDown() then
+	if not rangePath or remote == nil or rig == nil or cannotAct() then
 		return
 	end
 	local cfg = Tuning.Get()
@@ -1860,7 +1880,8 @@ local function rangeStep(deltaTime: number): ()
 		dump = nil
 	end
 	local busy = isBusy()
-	local down = MovementController.IsDown()
+	-- Knocked down, or a mission phase with no fight in it: the same hold either way.
+	local down = cannotAct()
 	-- A draw never survives its weapon: a slot switch, a loadout change, death, a busy
 	-- ability or being knocked down drops it.
 	if
@@ -2120,14 +2141,15 @@ end
 function InputController.Init(): ()
 	armoryConfig = Catalog.GetArmoryConfig()
 	combatConfig = Catalog.GetCombatConfig()
-	rangeMode = CameraController.IsRange()
+	rangePath = CameraController.IsCrowdCombat()
+	rangeState.inMission = rangePath and not CameraController.IsRange()
 	MovementController.Init()
 end
 
 function InputController.Start(): ()
-	if rangeMode then
-		-- MovementController is a range-only sub-controller of input, started from here so
-		-- the client boot list stays the mission list.
+	if rangePath then
+		-- MovementController is a sub-controller of the range path, started from here so the
+		-- client boot list stays the C1 list.
 		startRange()
 		MovementController.Start()
 		return
@@ -2161,7 +2183,7 @@ end
 -- The HUD's attack button is a press-and-hold control, so it drives the same two entry
 -- points the mouse does; touch never reaches InputBegan because the button consumes it.
 function InputController.AttackDown(): ()
-	if rangeMode then
+	if rangePath then
 		rangeState.rangeHeld = true -- the range should not show this button; a stray press still attacks
 		return
 	end
@@ -2169,7 +2191,7 @@ function InputController.AttackDown(): ()
 end
 
 function InputController.AttackUp(): ()
-	if rangeMode then
+	if rangePath then
 		rangeState.rangeHeld = false
 		return
 	end
@@ -2178,7 +2200,7 @@ end
 
 -- Missions: the HUD's ability buttons. In the range the same call is a cast of that slot.
 function InputController.UseAbility(slot: string): ()
-	if rangeMode then
+	if rangePath then
 		if slot == MELEE_SLOT then
 			castAbility(MELEE_SLOT)
 		elseif slot == RANGED_SLOT then
@@ -2190,7 +2212,7 @@ function InputController.UseAbility(slot: string): ()
 end
 
 function InputController.ToggleStance(): ()
-	if rangeMode then
+	if rangePath then
 		toggleSlot()
 		return
 	end
@@ -2206,7 +2228,7 @@ end
 -- Swaps the active slot, exactly as 1 / 2, gamepad Y and the touch slot button do; refused
 -- while busy.
 function InputController.ToggleSlot(): ()
-	if rangeMode then
+	if rangePath then
 		toggleSlot()
 	end
 end
@@ -2215,7 +2237,7 @@ end
 -- and busy window laid over it; nil before either exists and outside the range. The table is
 -- shared and rewritten in place: read it, never keep or write it.
 function InputController.GetAbilityState(): Types.RangeAbilityState?
-	if not rangeMode then
+	if not rangePath then
 		return nil
 	end
 	return abilityView(Tuning.Get())
@@ -2224,7 +2246,7 @@ end
 -- True while an ability occupies the caster (the server's busyUntil, or the local window of a
 -- cast it has not answered yet).
 function InputController.IsBusy(): boolean
-	return rangeMode and isBusy()
+	return rangePath and isBusy()
 end
 
 -- P1 range API, read every frame by Feedback's Crosshair.
@@ -2232,7 +2254,7 @@ end
 -- a ready first shot, for melee and during Mag Dump. Crosshair radius in px = tan(rad(b)) /
 -- tan(rad(fov) / 2) × viewport height / 2, using the live Camera.FieldOfView (ADS changes it).
 function InputController.GetBloomDegrees(): number
-	if not rangeMode then
+	if not rangePath then
 		return 0
 	end
 	return nextSpreadDegrees(Tuning.Get())
@@ -2255,7 +2277,7 @@ end
 -- on a family that left the loadout is dropped on the next frame. P3 ruling 2: a slot whose
 -- family changed loses its running ability, so this client's part of it stops at once.
 function InputController.SetLoadout(nextLoadout: Types.RangeLoadout): ()
-	if not rangeMode then
+	if not rangePath then
 		rangeState.loadout = nextLoadout
 		return
 	end
@@ -2344,7 +2366,7 @@ end
 -- nothing is drawn); in missions nil means nothing is drawn, which the mission HUD needs to
 -- hide its dots. Display only: the server caps the real charge from its own draw stamp.
 function InputController.GetCharge(): number?
-	if rangeMode then
+	if rangePath then
 		local variant = currentVariant(Tuning.Get())
 		return if variant ~= nil then chargeOf(variant) else 0
 	end
@@ -2401,7 +2423,7 @@ function InputController.Destroy(): ()
 	for _, action in RANGE_ACTIONS do
 		ContextActionService:UnbindAction(action)
 	end
-	if rangeMode then
+	if rangePath then
 		RunService:UnbindFromRenderStep(RANGE_BIND)
 		CameraController.SetAds(false)
 		MovementController.Destroy()
