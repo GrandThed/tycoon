@@ -9689,7 +9689,8 @@ The full list with owners is in `docs/PLAN.md` "P5" → "Carried". Two of them a
 
 # L1 contracts — Forest Road in grey (Ben, 2026-10-13)
 
-**Status: draft, written from the code on 2026-10-13. Not yet applied.** Plan of record:
+**Status: confirmed by the lead on 2026-10-13; the wave is running.** Written from the code the
+same day. Plan of record:
 `docs/MISSIONS_DESIGN.md` (§2, §4 "Where it runs", §5, §6, §12, §14). Branch `l1-forest-road`,
 worktree `C:\Users\benja\Desktop\tycoon-p5`. The fighting of P5 Wave 1 is kept as built
 (weapons, crowd, bosses, health). L1 replaces the mission layer around it.
@@ -9711,6 +9712,20 @@ place files are rebuilt there (Ben's "Yes, start", 2026-10-13). Ben opens
 
 **Publish freeze.** The Expeditions place must not be published from `main` until L4. This
 replaces the P5 freeze "until Wave 3".
+
+## Lead's confirmation (2026-10-13)
+
+- Every ruling marked *(draft's proposal)* below is confirmed as written: 5 (admission is seats
+  and timing), 21 (Abandon in the summary means "back to camp now"), 26 (Forest Road writes no
+  mission record), 27 (the arena's numbers stay where they are, behind two adapters), 31
+  (layouts are JSON). So are ruling 15 ("only a checkpoint pays", which changes what a failed
+  arena run pays) and ruling 20 (`coop.returnGroupSeconds` is the summary's length).
+- **One ownership change:** `combat.project.json` goes to the ui-engineer for exactly two
+  edits (map `MapScreen` into the combat client's `UI` node; state `StreamingEnabled = false`
+  on `Workspace`), because its own typecheck needs the first one.
+- **Camp sizes are "about".** The economy-designer may change a camp's size so that every
+  ranged kind placed in it has room for its keepAway band, and says so in its report.
+- Every number in "Config" and "Balance bands" is a placeholder for the designer to set.
 
 ## Rulings (Ben, 2026-10-13) that bind L1
 
@@ -10695,9 +10710,9 @@ No intent carries an amount, a position or a reward. `CrowdSnapshot`, `CrowdSpaw
 |---|---|
 | luau-engineer **A** (the world) | new `src/combat/server/Services/LevelService.luau`, `LevelGeometry.luau`, `BarrierGroups.luau`; new `tools/crowd_harness/tests_l1_world.luau` |
 | luau-engineer **B** (the run) | `src/shared/Types.luau` (first), `src/shared/Catalog.luau`, `src/shared/Combat.luau`; `src/combat/server/Services/` new `StageFlow.luau`, `WaveService.luau`, `ArenaService.luau`, `CrowdService.luau`, `WeaponService.luau` (ruling 34 only), `DebugService.luau`, `ReturnService.luau`, `CombatRemotes.luau`, `RunFx.luau` (only if needed); `src/combat/server/Main.server.luau`; `tools/proving_project.py`; `tools/crowd_harness/run_harness.py`, `mutate.py`, new `tests_l1.luau` |
-| ui-engineer | new `src/client/UI/MapScreen.luau`; `src/client/UI/Theme.luau` (add only); `src/combat/client/Controllers/` `CombatUIController.luau`, `CrowdRenderer.luau`, `InputController.luau`, `CombatFxController.luau`, and `CameraController.luau` and `VitalsController.luau` only if needed; `src/combat/client/UI/` `CombatHud.luau`, `SummaryCard.luau`, `DebugPanel.luau`, new files there |
+| ui-engineer | new `src/client/UI/MapScreen.luau`; `src/client/UI/Theme.luau` (add only); `src/combat/client/Controllers/` `CombatUIController.luau`, `CrowdRenderer.luau`, `InputController.luau`, `CombatFxController.luau`, and `CameraController.luau` and `VitalsController.luau` only if needed; `src/combat/client/UI/` `CombatHud.luau`, `SummaryCard.luau`, `DebugPanel.luau`, new files there; `combat.project.json` (two edits: map `MapScreen` into the combat client's `UI` node, as `Create` and `Theme` are; state `StreamingEnabled = false` on `Workspace`) |
 | economy-designer | `src/shared/Config/Combat.json`; new `src/shared/Config/Expeditions.json`, `Config/Levels/0_RaiderArena.json`, `Config/Levels/1_ForestRoad.json`; new `src/shared/Layouts/Levels/Lobby.json`, `ForestRoad.json`, `RaiderArena.json`; `tools/sim_range.py`, `tools/sim_combat.py`, new `tools/check_levels.py`; `docs/BALANCE.md` "L1" |
-| lead | this section; `combat.project.json` (maps `MapScreen` into the combat client's `UI` node, as `Create` and `Theme` are; states `StreamingEnabled = false` on `Workspace`); `docs/MISSIONS_DESIGN.md`; merges; the questions to Ben |
+| lead | this section; `docs/MISSIONS_DESIGN.md`; merges; the questions to Ben |
 | untouched | everything under `src/server`; everything under `src/client` but the two files named; `RangeService.luau`, `AbilityService.luau`, `VitalsService.luau`, `CrowdBrain.luau`, `ThreatField.luau`, `PositionRing.luau`, `StrikeTally.luau`, `RunRegistry.luau`, `EnemyService.luau`, `CombatService.luau`; `CombatMode.luau`, `CrowdCodec.luau`, `HitShapes.luau`, `Tuning.luau`, `Armory.luau`, `Economy.luau`; `Config/ProvingGrounds.json`, `Config/Missions/*.json`, `Config/Armory.json`, `Layouts/Arenas/*`; `tools/sim_economy.py` |
 
 - B applies the Types block before anyone else builds. B registers A's `tests_l1_world.luau`
