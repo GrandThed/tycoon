@@ -55,3 +55,11 @@ three eras' ten-wave missions, both of which are dead.
 
 **How to apply:** read `docs/MISSIONS_DESIGN.md` first; ask Ben with previews; pictures before contracts, as
 for every city layout. See [[p5-missions-2026-10-12]], [[feel-pass-2026-09-23]], [[combat-2026-09-17]].
+
+**L0 pictures (2026-10-13):** a clickable mock page of the map, Forest Road from above and the Armory:
+https://claude.ai/artifact/9iGAoSonw48U8VpV17MTA4 (private to Ben; source kept in
+`assets/research/2026-10-13-missions/expeditions-mockups.html`, gitignored). Three asks are on the page and
+unanswered: one map screen or one per theme; one big camp in three parts or separate camps; the Armory as a
+screen or a walk-in room. In the mock the Flamethrower is the first Hard clear of Forest Road and the frost
+weapon is found in the Castle, so the forest's ice secret is the first reason to return from a later level.
+Pillow is not installed, so the old PNG sheet tools cannot run: an HTML page was the way to show pictures.
