@@ -1,7 +1,8 @@
 """Regression harness for the crowd combat server (P4): bundles the real CrowdCodec, HitShapes,
 Armory, Tuning, CrowdBrain, ThreatField, StrikeTally, CrowdService and VitalsService sources
 with stubbed Roblox globals and runs the tests_*.luau cases under the plain luau interpreter.
-P5 adds tests_p5.luau: the mission scales, kill info, KillAll and VitalsService.SetMission.
+P5 adds tests_p5.luau: the mission scales, kill info, KillAll, VitalsService.SetMission and
+the pure PositionRing (the server's own reading of a player's speed).
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 (defaults: this repo, tools/bin/luau.exe, which tools/check_mirror.py fetches)."""
@@ -23,6 +24,7 @@ SOURCES = {
     "CrowdBrain": "src/combat/server/Services/CrowdBrain.luau",
     "ThreatField": "src/combat/server/Services/ThreatField.luau",
     "StrikeTally": "src/combat/server/Services/StrikeTally.luau",
+    "PositionRing": "src/combat/server/Services/PositionRing.luau",
     "CrowdService": "src/combat/server/Services/CrowdService.luau",
     "VitalsService": "src/combat/server/Services/VitalsService.luau",
 }

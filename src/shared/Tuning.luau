@@ -71,6 +71,7 @@ local NON_NEGATIVE_PATHS = {
 	"^crowd%.kinds%.[^.]+%.plate$",
 	"^player%.[^.]+$",
 }
+local SPEED_SPAN_PATH = "shooting.originSpeedSeconds"
 local ENUM_PATHS: { { pattern: string, check: EnumCheck } } = {
 	{ pattern = "^weapons%.[^.]+%.variants%.[^.]+%.kind$", check = oneOf(SLOTS) },
 	{
@@ -246,6 +247,13 @@ function Tuning.Validate(path: string, value: any): boolean
 		local abilityField = string.match(path, "^weapons%.[^.]+%.ability%.([^.]+)$")
 		if abilityField ~= nil and table.find(POSITIVE_ABILITY_FIELDS, abilityField) ~= nil then
 			return value > 0
+		end
+		if path == SPEED_SPAN_PATH then
+			-- P5 ruling 7: the stretch a player's own speed is averaged over, inside the window
+			-- originLagMaxSeconds keeps. 0 would divide a single frame's step by nothing, and a
+			-- span longer than the window has no samples to cover it.
+			local base = baseConfig()
+			return value > 0 and base ~= nil and value <= base.shooting.originLagMaxSeconds
 		end
 		for _, pattern in NON_NEGATIVE_PATHS do
 			if string.match(path, pattern) ~= nil then

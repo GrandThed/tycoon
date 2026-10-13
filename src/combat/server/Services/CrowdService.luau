@@ -873,11 +873,12 @@ local function stepInterval(): number
 	return 1 / math.clamp(hz, CrowdCodec.MIN_HZ, CrowdCodec.MAX_HZ)
 end
 
--- One stepping Heartbeat's cost into the ring; every `perf.every` seconds of stepping, one line
--- over the steps since the last one. A window starts at its first step, so a crowd that sat idle
--- for a minute does not print a line over one step.
+-- One stepping Heartbeat's cost into the ring; every `perf.every` seconds, one line over the
+-- steps since the last one. Only steps with a living body count: an empty field (lobby,
+-- breather, summary) costs nothing worth reading, and would both print a line every window and
+-- drag the median down. A window starts at its first counted step.
 local function notePerf(clock: number, ms: number): ()
-	if perf.every <= 0 then
+	if perf.every <= 0 or aliveCount == 0 then
 		return
 	end
 	if perf.count == 0 then

@@ -2540,7 +2540,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 **No sound. Phones must work.**
 - Plan of record: `docs/COMBAT_DESIGN.md` §9 and §10 step 6.
 - Contracts: `docs/INTERFACES.md` "P5 contracts" → "Wave 1 — crowd in a mission" (rulings
-  5–28, with "Review round and state").
+  5–28, with "Review round and state" and "Second review round (2026-10-13)").
 - Values: `docs/BALANCE.md` "P5".
 - Branch `p5-missions`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
 
@@ -2558,15 +2558,20 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 | Wave | Scope |
 |---|---|
-| 1 | Crowd in a mission: Village, solo, the range loadout. **Built.** |
+| 1 | Crowd in a mission: Village, solo, the range loadout. **Merged 2026-10-13; second-review fixes pending merge.** |
 | 2 | Loadout and progression: variant styles in the Armory, profile schema v7. |
 | 3 | All four eras, both bosses everywhere, reward garnish; old mission code deleted. |
 | 4 | Co-op: revive by a teammate, party scaling checked, debug bots as crowd targets. |
 
-**Where it is (2026-10-12):**
-- Wave 1 is built on `p5-missions`, reviewed and QA-green. Not merged to `main` yet.
-- The lead merges it before Ben's look ("Build all" builds `main`; Ben opens
-  `tycoon\build\proving.rbxl`). Whether P4's "Merge each ready wave" holds for P5 is asked once.
+**Where it is (2026-10-13):**
+- **Wave 1 merged 2026-10-13; second-review fixes pending merge.**
+- Wave 1 is on `main` (`7968a24`; the six place files rebuilt in `1bd191e`). Ben chose
+  "Merge now"; the same OK covers later P5 waves once they pass review and QA.
+- Ben then asked for a review with Opus. It found 2 Major. Every fix is done on
+  `p5-missions`; QA is running; not merged yet.
+- **The build on `main` today has no wall at the fence:** jumping out ends a solo run. Ben
+  waits for the lead's word, then "Build all", before he tests jumping.
+- Ben has not reported a look at Wave 1 yet.
 - P4's last box (Stop 3, the Warlord) is still open. Wave 1 shows the Warlord at wave 10, so
   Ben meets him here either way.
 
@@ -2618,7 +2623,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
     `perfLogSeconds` 10.
   - `Missions/1_Village.json`: a `crowd` block; `targetWaveSeconds` 30 → 45; `targetMinutes`
     8 → 12. The old `enemies`, `waveTable`, `bosses` stay until Wave 3.
-  - `ProvingGrounds.json`: unchanged.
+  - `ProvingGrounds.json`: unchanged at the first merge. The second review added one key
+    (below).
 - **Tools:**
   - `sim_range.py`: a MISSION section, 11 more checks (`--mission-only`).
   - `sim_combat.py`: pure mirrors of the crowd functions, assertions 15–18.
@@ -2643,6 +2649,57 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - Skipped: `streetplan.py` and `check_mirror.py` (Pillow is not installed). Wave 1 touches no
   city file.
 
+**Second review (Opus), 2026-10-13** (INTERFACES "Second review round (2026-10-13)"):
+- Asked for by Ben after the merge. Three independent Opus reviewers read the merged code in
+  three slices: weapons and damage; the mission run; the client.
+- **0 Critical, 2 Major, 22 Minor.** Fixed by the same four owners.
+- An independent check of the fix diff: **1 more Major (in a fix), 11 Minor.** Fixed too.
+- **Major 1, fixed twice over: leaving the floor ended a solo run.** The Village fence is 4
+  studs; a jump, double jump and dash clear it; nothing lies outside the floor.
+  - An invisible wall behind each fence side, 80 studs high and 8 deep (`wall.barrierHeight`,
+    `wall.barrierThickness`). Only characters collide with it (collision groups
+    `ArenaBarrier` and `ArenaPlayers`); camera and shot rays pass through.
+  - A rescue: a player 8 studs under the floor or 4 past its edge is put back on a spawn
+    with the get-up i-frames (`player.rescue.below`, `player.rescue.outside`). Not a down, no
+    cost.
+  - The fix check's Major was in this wall: its first version used `CanQuery = false`, which
+    the engine ignores on a collidable part. The camera would have snapped in along the rim
+    and shots stopped in mid-air.
+- **Major 2, fixed: small landscape phones (about 667 × 375 and below).** The boss bar landed
+  on the crosshair and the hurt pointers collapsed onto the dot.
+  - The mission's boss bar sits in the top strip between the run header and the party list,
+    down to 140 px wide. Narrower still, it goes under the header, clear of the crosshair.
+  - The pointer ring keeps under the bar only while a boss exists, and never shrinks under a
+    radius of 48 px.
+- **Other changes that shipped with the fixes:**
+  - Melee and aim slack: the server reads the fastest 0.1 s stretch of the last 0.3 s from a
+    ring of root positions (new `PositionRing.luau`, new key `shooting.originSpeedSeconds`).
+    A dash reads its full 133 studs/s by its seventh server frame; the first version never
+    did. Cost accepted by the lead: one legal dash buys 40 + 4 studs of slack at the lag
+    ceiling (before 20 + 4), 17 at an honest 50 ms.
+  - **A clear field wins:** a down decided when the wave's last body is already dead does not
+    end the run. The player stands up at that boundary; on wave 10 the run ends "cleared".
+  - A wave clear removes what the dead still had in the air (server and client).
+  - A run starts only once every human member has a living body.
+  - Downed players stand up before a cleared end, when the proving loop resets, and on a
+    rejoin.
+  - A crowd kind the config does not know is dropped with one warn, instead of holding the
+    queue until the run cap.
+  - `director.runCapSeconds` 1200 → **1800** (2.5 × the 12-minute target). A tier-1 Longbow
+    clear takes 19.2–20.0 min and was being cut off in wave 10.
+  - Client: the down follows the server's `PartyMember.down` both ways; no attacks, casts or
+    slot switch while waiting on the pad; on touch, Return is hidden while you fight; the
+    crowd pool is pre-warmed to the mission's own `maxAlive`; the HUD boot no longer depends
+    on a layout pass.
+- **Gates, as reported by the engineers** (QA still running when written): the harness 574
+  checks; `mutate.py` 231 mutations, 0 not caught; `sim_range.py --check` 363 passes;
+  `sim_combat.py --check` 18 assertions (17 now also needs the run cap to be at least twice
+  `targetMinutes`).
+- **Checked by reading only** (no test can load them): all of `WaveService`, `ArenaService`,
+  `Main`, and every client file.
+- **Needs Studio (Ben):** the wall's behaviour, the camera at the rim, the rescue teleport.
+  PLAYTEST "P5 Wave 1" step 2; MANUAL_STEPS "P5 Wave 1" step 6 (optional).
+
 **Balance, Wave 1 (`docs/BALANCE.md` "P5"; gear 2/1, solo, Broadsword, from `sim_range.py`):**
 - **A run pays 144,250 cash (+1.5%), 258 Timber (+0.8%) and 35 Valor.** Target 142,185 / 256 /
   35.
@@ -2657,7 +2714,11 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 **Known limits at Wave 1:**
 - **The Longbow is weaker in missions.** Bodies have 1.5× HP and the bow is still tier 1: the
-  Longbow alone does not kill the Colossus inside 240 s.
+  Longbow alone takes 276 s on the Colossus and 227 s on the Warlord. A bow-only run takes
+  19.2–20.0 min (it now finishes: the run cap is 1,800 s).
+- **After a boss wave the breather is always the longest, 14 s.**
+- **No wall outside Village.** The other three arenas have no `barrierHeight` yet (they are
+  refused anyway until Wave 3).
 - **Cash per minute is down about a quarter:** 144k in about 12 min, against the old run's 142k
   in 8.5 min.
 - **Co-op is unchecked.** A party of 4 makes wave 9 hold 354 bodies; `maxAlive` 60 queues them.
@@ -2689,6 +2750,33 @@ families, abilities and the player's body go into the Expeditions missions, era 
   - Party scaling checked in play (party of 4: wave 9 = 354 bodies, `maxAlive` 60).
   - Debug bots as crowd targets, or retired.
   - A two-account published round trip.
+- **From the second review (2026-10-13):**
+  - **BEFORE THE PUBLISH FREEZE LIFTS (Wave 3), owner: luau-engineer.** `OnDash` grants
+    i-frames on the request alone. A modified client that requests a dash every 0.64 s
+    without moving voids about 56% of enemy hits at 60 ms ping, and about 86% at the 0.3 s
+    lag ceiling. Fix: judge the dash against the position ring at hit time.
+  - **Wave 3, owner: lead + economy-designer.** The Boomtown, Metropolis and Orbital arenas
+    have 5-stud fences and no `barrierHeight`. There the free rescue could be repeated every
+    1.5 s for near-permanent i-frames. Each era needs `barrierHeight` (gate: a `crowd` block
+    implies `barrierHeight`) or a rescue cooldown before it gets crowd waves.
+  - **Wave 3, owner: economy-designer:**
+    - One run cap serves all four eras: keep targets near 12 minutes, or make the cap per
+      mission.
+    - Mag Dump scales by `damageMult` while the other abilities scale by `abilityMult`
+      (×6.0 against ×2.8 at Ascension 3).
+    - The breather after a boss wave is always the 14 s maximum.
+    - A dropped boss (unknown kind) counts as a clear.
+  - **Wave 4, owner: luau-engineer:**
+    - No timeout on the wait for a member's body before a run starts.
+    - Breaking a plate earns no reward share.
+    - The bot functions in `ArenaService`.
+  - **Any wave, owner: luau-engineer:**
+    - The Studio `setGear` lever is inert in a proving mission (`provingGear` wins).
+    - A same-wave `ForceWave` leaves the client's circles.
+  - **Owner: ui-engineer:**
+    - The portrait lobby overlap (phones are landscape-only).
+    - The boss bar's end near a hurt pointer at 568 × 320.
+    - The C1 fallback `boot()` is dead; delete it in Wave 3.
 - **Weapon numbers (owner: lead, Ben's call first):** the Longbow in missions and the bows on
   bosses; cash per minute down a quarter.
 - **Still unjudged by Ben (owner: lead):** the Warlord (P4 Stop 3) and the `fight` set. Wave 1
@@ -2700,14 +2788,18 @@ families, abilities and the player's body go into the Expeditions missions, era 
   not in the simulator (economy-designer); kiting.
 
 **Next:**
-1. The lead merges `p5-missions` to `main` and rebuilds the place files.
-2. **Ben's Wave 1 playtest** (`docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission"; setup in
-   `docs/MANUAL_STEPS.md` "P5 Wave 1").
-3. The lead reads the `[Perf]` lines from Studio's log.
-4. Wave 2 only on Ben's word.
+1. QA finishes on the second-review fixes.
+2. The lead merges `p5-missions` to `main` and rebuilds the six place files.
+3. **Ben's Wave 1 playtest** (`docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission"; setup in
+   `docs/MANUAL_STEPS.md` "P5 Wave 1"). Not before step 2: the wall is in that build.
+4. The lead reads the `[Perf]` lines from Studio's log.
+5. Wave 2 only on Ben's word.
 
 - [x] Wave 1 built and reviewed (INTERFACES "Wave 1 — crowd in a mission" with its review round)
-- [ ] Wave 1 merged to `main` (lead)
+- [x] Second review (Opus): fixes built on `p5-missions` (INTERFACES "Second review round
+  (2026-10-13)")
+- [ ] Wave 1 merged to `main` (lead): Wave 1 merged 2026-10-13; second-review fixes pending
+  merge
 - [ ] Wave 1 playtest (Ben)
 - [ ] Wave 2 — loadout and progression
 - [ ] Wave 3 — all four eras

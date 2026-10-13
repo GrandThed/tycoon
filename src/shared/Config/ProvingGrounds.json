@@ -279,6 +279,7 @@
 		"bloomMovingSpeed": 1.5,
 		"originLagSeconds": 0.05,
 		"originLagMaxSeconds": 0.3,
+		"originSpeedSeconds": 0.1,
 		"projectileMaxSeconds": 3,
 		"fanJitterShare": 0.25,
 		"rateBurstShots": 1

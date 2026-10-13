@@ -6,7 +6,8 @@
 -- Rules that shape the module:
 -- * Bodies are pooled placeholder figures (legs, torso, a bright head = the crit point, a visor
 --   that shows facing and glows on wind-up). A spawn never creates an Instance in steady state:
---   Start pre-warms the pool up to crowd.maxAlive over a few frames.
+--   the pool is pre-warmed over a few frames, to the bench's crowd.maxAlive in the range and to
+--   the mission's own in a mission (Prewarm).
 -- * One Heartbeat loop and one BulkMoveTo for every moved part. A body whose pose did not change
 --   this frame is skipped, so an idle crowd costs almost nothing. The loop allocates no tables.
 -- * Positions are drawn ~1 snapshot behind the newest packet, timed by the server clock each
@@ -2394,9 +2395,8 @@ local function onTuningChanged(): ()
 	end
 end
 
-local function prewarm(): ()
-	local crowd = Tuning.Get().crowd
-	local target = if crowd ~= nil then crowd.maxAlive else 0
+-- Builds bodies into the pool, a few a frame, until `target` exist (drawn and spare). Yields.
+local function prewarm(target: number): ()
 	while not destroyed and #pool + #active < target do
 		for _ = 1, PREWARM_PER_FRAME do
 			local entity = newEntity()
@@ -2439,7 +2439,12 @@ local function wire(): ()
 	table.insert(connections, spawnRemote.OnClientEvent:Connect(onSpawn))
 	table.insert(connections, snapshotRemote.OnClientEvent:Connect(onSnapshot))
 	table.insert(connections, removeRemote.OnClientEvent:Connect(onRemove))
-	prewarm()
+	-- The range fills its pool to the bench's cap here. A mission waits for its own, smaller
+	-- cap (Prewarm), so a 60-body mission does not build the bench's 160.
+	if CameraController.IsRange() then
+		local crowd = Tuning.Get().crowd
+		prewarm(if crowd ~= nil then crowd.maxAlive else 0)
+	end
 end
 
 local CrowdRenderer = {}
@@ -2464,6 +2469,18 @@ function CrowdRenderer.SetArena(name: string): ()
 	if typeof(size) == "table" and typeof(size.x) == "number" and typeof(size.z) == "number" then
 		arenaHalf = Vector3.new(size.x / 2, 0, size.z / 2)
 	end
+end
+
+-- P5: a mission's pool is filled to that mission's `crowd.maxAlive`, which CombatUIController
+-- hands over once the first RunState names the mission. Never past the bench's own cap, which
+-- is the most the server will ever field; a body past the pool is still built on demand.
+function CrowdRenderer.Prewarm(count: number): ()
+	if not started or destroyed or count ~= count then
+		return
+	end
+	local crowd = Tuning.Get().crowd
+	local cap = if crowd ~= nil then crowd.maxAlive else 0
+	task.spawn(prewarm, math.max(math.min(math.floor(count), cap), 0))
 end
 
 -- Inert unless the range's combat runs. CameraController.IsCrowdCombat is that gate (the range,

@@ -979,8 +979,21 @@ end
 -- down: no walk, jump, double jump, dash or slam. `away` = the way the blow was travelling;
 -- the body lands on its back with its head that way. The knock that came with the same blow
 -- is applied after this call.
+--
+-- P5: asked again while already down, a body that was never laid is laid now. That is a new
+-- character in a mission, where the server keeps the down across a respawn: the old body's
+-- pose went with it, and the new one may not have been whole when the down was re-applied.
 function MovementController.SetDown(isDown: boolean, away: Vector3?): ()
-	if not started or isDown == knockedDown then
+	if not started then
+		return
+	end
+	if isDown == knockedDown then
+		if isDown and downAlign == nil then
+			local body = localRig()
+			if body ~= nil then
+				layDown(body, away)
+			end
+		end
 		return
 	end
 	knockedDown = isDown

@@ -3213,8 +3213,14 @@ number. `--mission-only` runs just this section. What it mirrors:
     `tempoWarmupSeconds`;
   - a wave that has finished spawning merges the next one in when `Combat.ShouldMerge` says so,
     never into or out of a boss wave;
+  - at each clear, what the dead still had in the air (a lob, a shot, a ring) is cleared with
+    them (`VitalsService.ClearThreats`), so nothing lands in the breather;
   - after each clear comes the `Combat.BreatherSeconds` breather, with no healing but regen;
-  - solo, the first down ends the run.
+  - solo, a down ends the run, unless the field is already clear ("a clear field wins", the
+    lead's ruling): a down decided when the wave's last body is dead does not lose the run. The
+    player stands up at that wave's boundary, and on wave 10 the run ends cleared. The reason: at
+    near-zero ping a dying enemy's blow could end the run on an empty field, even on wave 10.
+    Neither simulated player goes down on a clear field, so no number here depends on it.
 - **The player of the whole run** reacts to every tell (the Stop 2 planner). He attacks with the
   Broadsword only, with no bow and no ability, and goes for the nearest body. While a boss lives
   he follows the boss-fight rules of Stop 2 and Stop 3. Between waves he stands where the last
@@ -3262,7 +3268,7 @@ passes on both. With `burst` 12 they differed by up to half a minute.
 | `crowd.waves` | — | the table below | On `crowdSkeleton`. Groups alternate, so shooters, brutes and elites arrive inside a wave, not after the fodder. |
 | `crowd.rewards` | — | the table below | Hits the C1 run's cash and Timber. Fodder pay only cash. |
 | `crowd.eliteKind` | — | absent | Optional. The director adds no extra elite in Wave 1. |
-| `targetWaveSeconds` | 30 | **45** | The contract re-tunes it for crowds. At 30 the reacting player clears in 10.4 to 10.7 min, under half a minute above the floor, while merges move a run by about ±0.5 min. At 45 he takes 11.5 to 11.8 min. A struggling player's tempo falls toward 0.7 and stretches a wave toward 45 ÷ 0.7 = 64 s, which I estimate puts his run near 15 min. At 120 even the reacting player reaches the 20-minute `runCapSeconds`. |
+| `targetWaveSeconds` | 30 | **45** | The contract re-tunes it for crowds. At 30 the reacting player clears in 10.4 to 10.7 min, under half a minute above the floor, while merges move a run by about ±0.5 min. At 45 he takes 11.5 to 11.8 min. A struggling player's tempo falls toward 0.7 and stretches a wave toward 45 ÷ 0.7 = 64 s, which I estimate puts his run near 15 min. At 120 the reacting player needs 23 min. |
 | `targetMinutes` | 8 | **12** | The hub's Expedition panel shows it. The reacting player takes 11.5 to 11.8 min, and a real player longer. Its meaning is unchanged. |
 | Colossus `boss.at` | — | **(0, 40)** | 40 studs from the pad, as the range's 42. The fight opens with the call when the player starts at the pad. |
 | Warlord `boss.at` | — | **(0, 28)** | The range's 28 studs. He has 24 studs to the fence behind him and gives less ground than in the range; the fight takes the same 97.7 s. |
@@ -3270,7 +3276,71 @@ passes on both. With `burst` 12 they differed by up to half a minute.
 
 `Combat.json`: `crowdSkeleton` as the contract has it, and the debug keys `provingBoots`
 "mission", `provingMission` "village", `provingStartWave` 1, `provingStartDelay` 3,
-`provingGear` {2, 1} and `perfLogSeconds` 10. `ProvingGrounds.json` is unchanged.
+`provingGear` {2, 1} and `perfLogSeconds` 10. `director.runCapSeconds` goes from 1200 to
+**1800** (the next part). Two keys were added for the server engineers after the review
+("P5: keys added for the server" below). No kind or weapon number in `ProvingGrounds.json`
+changed.
+
+## P5: the run cap
+
+`director.runCapSeconds` ends a run that will never finish: a party that has stopped fighting,
+or one too weak to kill a boss. It is not a difficulty lever, so it must not cut off a run that
+is only slow.
+
+- **It was 1200 s since C1,** when a mission targeted 8 minutes: 2.5 times the target. Village
+  now targets 12 minutes, so 1200 s was 1.67 times.
+- **It is 1800 s now:** 2.5 times 12 minutes again.
+
+| Player (reacts to every tell) | Clears in | At 1200 s | At 1800 s |
+|---|---|---|---|
+| Broadsword only | 11.5–11.8 min | clears | clears |
+| Longbow only (the tier-1 bow of gear 2/1) | 19.2–20.0 min | one seed of two is cut off in wave 10, seconds before the Warlord falls | clears |
+
+The bow-only player is the slowest one the simulator can still play to the end. His bosses
+take 276 s (the Colossus, 270 to 281) and 227 s (the Warlord, 226 to 229), with no hit taken.
+
+**What value would break which band:**
+- **700 s or less** cuts the reacting sword player off in wave 10: two seeds of three at 700,
+  all three at 690. That fails the clear band in `sim_range.py` and in `sim_combat.py` 17.
+- **Under 900 s** the cap lies inside the 10–15 minute band itself.
+- **Under 1440 s** (twice `targetMinutes`) fails the new gate in `sim_combat.py` 17: the cap
+  must leave at least twice the time the hub panel promises. 1200 fails it at ×1.67, and 1430
+  at ×1.99.
+
+**The key is shared with the missions still on the C1 model** (Boomtown, Metropolis, Orbital).
+None of their numbers moves: every legacy run, solo, at party 2 and 4 and under Overdrive,
+already ended inside 1200 s. `--check` and the reports differ only in the cap's own label and
+in assertion 17's line. Those missions are refused in the game until Wave 3. One cap will then
+serve all four eras, so either each era keeps a target near 12 minutes or the cap becomes a
+per-mission key, which the config's shape does not have today.
+
+## P5: keys added for the server
+
+Neither key is read by a simulator, and no band depends on either.
+
+| Key | Value | What it is for |
+|---|---|---|
+| `Combat.json` `player.rescue.below` | **8** | A player who leaves the arena floor is put back on a spawn. It is not a down and costs nothing. `below` is how many studs under the floor the root must be. A standing root is about 3 above it, so 8 is 11 studs of falling: no jump, knock or slam on the floor reaches it. |
+| `Combat.json` `player.rescue.outside` | **4** | How many studs past the floor's edge the root must be. The fence is 1 stud thick, so 4 is clear of a body leaning on it. Without the `rescue` block nobody is rescued. |
+| `ProvingGrounds.json` `shooting.originSpeedSeconds` | **0.1** | The stretch over which the server measures a player's own speed for the claim slack: the fastest average over about that long within the last `originLagMaxSeconds` (0.3). It must be positive and no longer than that. |
+
+**Why 0.1 and not 0.05** (engineer B's measurements of a 20-stud dash, read at server frames
+1, 3 and 5):
+
+| `originSpeedSeconds` | Frame 1 | Frame 3 | Frame 5 |
+|---|---|---|---|
+| 0.05 | 33 studs/s | 100 | 133 |
+| 0.1 | 19 | 57 | 95 |
+
+0.05 ramps twice as fast, so an honest dash gets its slack sooner. The price is that a shaking
+root reads about twice as fast too, under the same cap (`Tuning.FastestMove`). 0.1 is the
+slower ramp and the steadier reading. The simulator's player has no client and claims no
+position, so this number moves nothing in `sim_range.py`.
+
+**Mirroring `ClearThreats` moved no number.** The server now clears what is in the air at
+every wave clear. With the same clear in the simulator's mission run, every printed line of
+`sim_range.py --check` and `sim_combat.py --check` is the same as before, on both
+interpreters: neither simulated player had anything land on him in a breather.
 
 ## P5: the waves (solo)
 
@@ -3372,8 +3442,9 @@ The whole run, seed 11:
 | The Colossus alone, Broadsword, every seed | sim_range | 64–90 s | 75.4–77.7 s | `hpScale` 1.25: 63.3 s |
 | The Warlord alone, Broadsword, every seed | sim_range | 77–101 s | 96.9–98.4 s | `hpScale` 1.6: 106.3 s |
 | Both bosses: hits taken by the reacting player | sim_range | 0 | 0 | |
-| The whole run, reacting, every seed | sim_range, sim_combat 17 | 10–15 min | 11.5–11.8 min | `burst` 20: 9.9 min; `targetWaveSeconds` 120: the 20-minute cap |
+| The whole run, reacting, every seed | sim_range, sim_combat 17 | 10–15 min | 11.5–11.8 min | `burst` 20: 9.9 min; `targetWaveSeconds` 120: 23 min; `runCapSeconds` 700: cut off in wave 10 |
 | `targetMinutes` in the band and within 1.5 min of the mean clear | sim_combat 17 | | 12 against 11.7 | |
+| `runCapSeconds` against `targetMinutes` | sim_combat 17 | ≥ ×2 | ×2.5 (1800 s) | 1200: ×1.67; 1430: ×1.99 |
 | `maxAlive` ≤ the crowd's 160 | sim_range, sim_combat 15 | | 60 | 200 |
 | Skeleton, `#waves`, `bossWaves`, rewards for every kind that can be fielded, `boss.at` on the floor | sim_combat 15 | | all | a slinger in wave 2; wave 8 without armoured; `boss.at` (0, 52); no `guard` reward; `bossWaves` [5]; a swapped skeleton boss |
 | Run cash and Timber; Valor | sim_combat 16 | ±10%; exact | +1.5%, +0.8%; 35 | fodder cash 80: +10.7%; armoured 8 Timber: +14.8% |
@@ -3382,11 +3453,23 @@ The whole run, seed 11:
 ## P5: rules these numbers hang on
 
 - **`hpScale` equals the melee scale, so the ranged slot falls behind.** At gear 2/1 the bow is
-  a tier behind the sword, and every body has 1.5 times its range HP. The Longbow alone does
-  not kill the mission's Colossus inside the simulator's 240 s window (142 s in the range).
+  a tier behind the sword, and every body has 1.5 times its range HP. The Longbow alone takes
+  276 s on the mission's Colossus (142 s in the range) and 227 s on the Warlord (159 s). A
+  bow-only run takes 19.2 to 20.0 min.
 - **After a boss wave the breather is the longest, 14 s.** A boss wave's `spec.total` is 0, so
-  the expected kill rate is 0 and `Combat.Tempo` returns `tempoMin`. The next wave also opens
-  at `tempoMin`. That is the code as written, and it gives a rest after a boss.
+  the expected kill rate is 0 and `Combat.Tempo` returns `tempoMin`. So the breather after a
+  boss wave is always `director.breatherMaxSeconds`, however fast the boss fell, and the next
+  wave opens at `tempoMin`. Wave 5's is the one a run plays; wave 10 ends the run.
+  - **Wave 1: intended.** It is a fixed rest after the boss, and no value was tuned against it.
+  - **A question for Wave 3,** when every era has both bosses: should the rest after a boss be
+    its own number, or follow how the boss fight went? Today it is a side effect of a guard
+    against dividing by zero.
+- **Mag Dump scales as an attack, every other ability as an ability.** Its bullets are ordinary
+  attacks under a fire-rate buff, so they take the Ascension level's `damageMult`. Every other
+  ability takes `abilityMult`. At Ascension 0 both are 1, so no Wave 1 number depends on it.
+  At Ascension 1 it is ×2.0 against ×1.5, at Ascension 2 ×3.5 against ×2.0, and at Ascension 3
+  **×6.0 against ×2.8**. The simulator follows the server. **A question for Wave 3:** is Mag
+  Dump meant to out-scale the other twelve abilities, by more than twice at the top?
 - **Merges come from bunched kills.** A burst dies together, the 10-second window spikes, and
   the tempo passes `mergeTempo` (1.25). A bigger `burst` merges more and shortens the run.
 - **Rewards are whole numbers per kill** (`Combat.CrowdReward` rounds). Fodder therefore pay no

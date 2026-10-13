@@ -323,6 +323,9 @@ function P5.lostTests(): ()
 	check(not Vitals.RunLost({ a, b, bot }), "A down while B stands: the run goes on")
 	local lost, fallen = Vitals.RunLost({ a, bot })
 	check(lost and #fallen == 1 and fallen[1] == 7, "then B leaves: lost, A fallen")
+	lost, fallen = Vitals.RunLost({ a, bot }, true)
+	check(not lost and #fallen == 1, "but a clear field wins: the same down with the wave's last body dead loses nothing")
+	check((Vitals.RunLost({ a, bot }, false)), "(and with a body still alive it is lost)")
 	b.waiting = true
 	lost, fallen = Vitals.RunLost({ a, b, bot })
 	check(lost and #fallen == 1 and fallen[1] == 7, "or B respawns onto the pad: lost, the waiting one is no fighter")
@@ -344,5 +347,150 @@ function P5.lostTests(): ()
 	fresh()
 end
 P5.lostTests()
+
+function P5.reviewTests(): ()
+	print(" a run does not start before every human has a body")
+	fresh()
+	local a: any = { userId = 7, player = player, bot = false, waiting = false }
+	local b: any = { userId = 8, player = player2, bot = false, waiting = false }
+	local bot: any = { userId = -1001, player = nil, bot = true, waiting = false }
+	check(player2.Character == nil and not Vitals.AllHaveBodies({ a, b, bot }), "a human whose character has not spawned: not yet")
+	check((Vitals.RunLost({ b })), "(a run would read that missing body as fallen, and end in its first frame)")
+	join2(vec(30, 3, 30))
+	check(Vitals.AllHaveBodies({ a, b, bot }), "every human has a living body: the run may start")
+	humanoid2.Health = 0
+	check(not Vitals.AllHaveBodies({ a, b, bot }), "a dead body is no body")
+	humanoid2.Health = 130
+	leave2()
+	check(Vitals.AllHaveBodies({ bot }) and Vitals.AllHaveBodies({}), "bots, or nobody, never hold a start")
+
+	print(" ClearThreats (the wave's clear, the run's end)")
+	fresh()
+	local lobber = Crowd.Spawn("lobber", vec(0, 0, 30), "fight")
+	waitFor(lobber, "windup", 40)
+	check(waitFx("area", 15) ~= nil, "(a lob is in the air)")
+	kill(lobber)
+	table.clear(log)
+	Vitals.ClearThreats()
+	advance(2.5)
+	gather()
+	check(humanoid.Health == 130 and #of(log, "hurt") == 0, "what was in the air lands on nobody once the threats are cleared")
+
+	print(" the [Perf] line counts only steps with a living body")
+	fresh()
+	local lines: { string } = {}
+	local realPrint = print
+	print = function(...)
+		local text = tostring((...))
+		if string.find(text, "[Perf]", 1, true) ~= nil then
+			table.insert(lines, text)
+		else
+			realPrint(...)
+		end
+	end
+	Crowd.SetPerfLog(1)
+	step2(45)
+	local idle = #lines
+	for index = 1, 3 do
+		Crowd.Spawn("pawn", vec(10 * index, 0, 30), "idle")
+	end
+	step2(20)
+	local busy = #lines
+	Crowd.KillAll(0)
+	step2(45)
+	local after = #lines
+	Crowd.SetPerfLog(0)
+	print = realPrint
+	local line = lines[1] or ""
+	local steps = tonumber(string.match(line, "%((%d+) steps")) or 0
+	check(idle == 0, "three seconds of an empty field print nothing")
+	check(busy == 1 and string.find(line, "peak alive 3", 1, true) ~= nil and steps >= 15 and steps <= 17, `one line over a second of a living crowd ({line})`)
+	check(after == busy, "and none once the field is empty again")
+	fresh()
+end
+P5.reviewTests()
+
+function P5.ringTests(): ()
+	print(" PositionRing: the server's own reading of a player's speed (ruling 7)")
+	local Ring = load("PositionRing")
+	local WINDOW = 0.3
+	local FRAME = 1 / 60
+	local T0 = 100
+	local DASH = 20 / 0.15
+	-- Where a body is at `frame`: a 20-stud dash of 0.15 s that starts at frame 0, or the spot.
+	local function place(frame: number, still: boolean?): any
+		return vec(if still then 0 else math.clamp(frame * FRAME, 0, 0.15) * DASH, 0, 0)
+	end
+	-- The reading at `frame` of a ring that recorded every frame from `first` to it. The times
+	-- are built as T0 + frame * FRAME on purpose: at T0 = 100 six frames from frame 1 come out a
+	-- hair under 0.1 s in doubles (so the anchor is the seventh, 19.05), while later ones come
+	-- out at it. The server's clock behaves the same way; the expected values below are A's.
+	local function reading(capacity: number, first: number, frame: number, span: number, still: boolean?): number
+		local ring = Ring.New(capacity)
+		for at = first, frame do
+			Ring.Record(ring, T0 + at * FRAME, place(at, still))
+		end
+		return Ring.Speed(ring, T0 + frame * FRAME, place(frame, still), WINDOW, span)
+	end
+	-- Do the readings at `frames` match `wanted` (1e-3)? Also returns them, for the label.
+	local function match(capacity: number, first: number, span: number, frames: { number }, wanted: { number }, still: boolean?): (boolean, string)
+		local ok = true
+		local shown = {}
+		for index, frame in frames do
+			local got = reading(capacity, first, frame, span, still)
+			ok = ok and near(got, wanted[index], 1e-3)
+			table.insert(shown, string.format("%.4f", got))
+		end
+		return ok, table.concat(shown, " / ")
+	end
+	local RAMP = { 19.0476, 57.1429, 95.2381, 133.3333 }
+	local AT = { 1, 3, 5, 9 }
+
+	local ok, shown = match(120, -60, 0.1, AT, RAMP)
+	check(ok, `1: a 20-stud, 0.15 s dash from standing reads 19.05 / 57.14 / 95.24 / 133.33 at frames 1 / 3 / 5 / 9 ({shown})`)
+	check(reading(120, -60, 6, 0.1) < 130 and near(reading(120, -60, 7, 0.1), 133.3333, 1e-3), "   and reaches its 133.33 at frame 7")
+	ok, shown = match(120, -60, 0.05, AT, { 33.3333, 100.0, 133.3333, 133.3333 })
+	check(ok, `1b: over a span of 0.05 it reads 33.33 / 100 / 133.33 / 133.33 ({shown})`)
+	ok, shown = match(120, -60, 0.1, { 1, 9, 60 }, { 0, 0, 0 }, true)
+	check(ok, `2: standing still reads 0 ({shown})`)
+
+	local young = Ring.New(120)
+	Ring.Record(young, T0, vec(0, 0, 0))
+	local early = Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1)
+	check(near(early, 50, 1e-3), `3: a history shorter than the span under-reads: 5 studs in 0.01 s is 50, the divisor floored at the span ({string.format("%.1f", early)})`)
+	ok, shown = match(120, 0, 0.1, AT, { 22.2222, 66.6667, 111.1111, 133.3333 })
+	check(ok, `3b: a dash with no history before it reads 22.22 / 66.67 / 111.11 / 133.33 ({shown})`)
+
+	local fallback = true
+	local labels = {}
+	for _, span in { 0, 0 / 0, -1, 0.5 } do
+		local same, got = match(120, -60, span, { 1, 9, 18 }, { 7.0175, 66.6667, 66.6667 })
+		fallback = fallback and same
+		table.insert(labels, got)
+	end
+	check(fallback, `4: a span of 0, NaN, -1 or 0.5 falls back to the whole window: 7.02 / 66.67 / 66.67 ({labels[1]})`)
+
+	ok, shown = match(120, -300, 0.1, AT, RAMP)
+	check(ok, `5: a ring that has wrapped (300 samples through 120 slots) reads the same ({shown})`)
+	ok, shown = match(30, -300, 0.1, AT, RAMP)
+	check(ok, `5b: and so does one of 30 slots ({shown})`)
+
+	ok, shown = match(120, -60, 0.1, { 9, 18, 27, 28, 33, 34, 40 }, { 133.3333, 133.3333, 133.3333, 111.1111, 19.0476, 0, 0 })
+	check(ok, `6: the reading holds for the window after the dash and is gone by frame 34 ({shown})`)
+
+	local blank = Ring.New(120)
+	check(Ring.Speed(blank, T0, vec(5, 0, 0), WINDOW, 0.1) == 0, "7: an empty history reads 0")
+	check(Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), 0, 0.1) == 0 and Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), -1, 0.1) == 0 and Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), 0 / 0, 0.1) == 0, "7b: a window of 0, -1 or NaN reads 0")
+	Ring.Clear(young)
+	check(Ring.Speed(young, T0 + 0.01, vec(5, 0, 0), WINDOW, 0.1) == 0 and young.count == 0, "8: Clear forgets every sample")
+	check(Ring.New(0).capacity == 1 and Ring.New(2.9).capacity == 2, "9: the capacity is floored, and at least 1")
+
+	print(" Tuning: shooting.originSpeedSeconds")
+	config.shooting.originSpeedSeconds = 0.1
+	local Tune = S2.Tuning
+	check(Tune.Validate("shooting.originSpeedSeconds", 0.05) and Tune.Validate("shooting.originSpeedSeconds", 0.3), "the span may be anything positive up to originLagMaxSeconds")
+	check(not Tune.Validate("shooting.originSpeedSeconds", 0) and not Tune.Validate("shooting.originSpeedSeconds", -0.1) and not Tune.Validate("shooting.originSpeedSeconds", 0.31) and not Tune.Validate("shooting.originSpeedSeconds", 0 / 0), "never 0, negative, NaN or longer than that window")
+end
+P5.ringTests()
 
 print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)

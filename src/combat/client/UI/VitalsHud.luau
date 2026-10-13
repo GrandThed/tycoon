@@ -29,7 +29,8 @@
 --    cluster's top row (a portrait phone).
 --  * The pointer ring is a share of the shorter screen side, pulled in so that a pointer at
 --    the bottom never reaches the bar, and (Stop 2) one at the top never reaches the boss bar
---    where that sits low: on a phone, in either orientation.
+--    where that sits low: on a phone, in either orientation. P5: it is never pulled in under
+--    Theme.COMBAT_RANGE_HURT_POINTER_MIN_RADIUS, so a pointer always has a bearing to show.
 --  * The banner hangs under the crosshair, inside the ring, where the ring is wide enough to
 --    hold it (a monitor); on a phone it sits on the bar and the ring is pulled in above it.
 
@@ -370,7 +371,9 @@ function VitalsHud.new(parent: Instance): VitalsHudHandle
 		if topLimit ~= nil then
 			radius = math.min(radius, centreY - topLimit - reach - gap)
 		end
-		ringRadius = math.max(radius, 0)
+		-- The floor wins over both limits: a ring collapsed onto the crosshair dot points
+		-- nowhere, which is worse than a pointer touching a bar for a moment.
+		ringRadius = math.max(radius, Theme.COMBAT_RANGE_HURT_POINTER_MIN_RADIUS * scale)
 		for _, pointer in pointers do
 			pointer.frame.Size =
 				UDim2.fromOffset(Theme.COMBAT_RANGE_HURT_POINTER_WIDTH * scale, bladeHeight)

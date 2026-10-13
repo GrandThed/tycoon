@@ -10,7 +10,8 @@
 		"aimAssistDegrees": 20,
 		"corpseSeconds": 0.6,
 		"dashHitRadius": 4,
-		"burstConeDegrees": 60
+		"burstConeDegrees": 60,
+		"rescue": { "below": 8, "outside": 4 }
 	},
 	"remotes": {
 		"attackCallsPerSecond": 12,
@@ -30,7 +31,7 @@
 		"breatherSeconds": 6,
 		"breatherMaxSeconds": 14,
 		"maxAlive": 24,
-		"runCapSeconds": 1200,
+		"runCapSeconds": 1800,
 		"tempoWarmupSeconds": 15
 	},
 	"coop": {

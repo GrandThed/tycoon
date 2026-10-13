@@ -2001,6 +2001,10 @@ class ThreatRun:
         self.hit_scale = scales.get(slot, 1.0)
         self.slam_scale = scales.get("melee", 1.0)
         self.cast_scale = scales.get(slot + "Ability", self.hit_scale)
+        if cfg["weapons"][weapon[0]]["ability"]["id"] == "magDump":
+            # Mag Dump only buffs the fire: its bullets are ordinary attacks and scale as such
+            # (damageMult, not abilityMult; the two differ from Ascension 1 on).
+            self.cast_scale = self.hit_scale
         self.world.scale = self.hit_scale
         self.shots_fired = 0
         self.busy_until = 0.0
@@ -4611,7 +4615,10 @@ def check_siege(cfg, env, boss, expect):
 #   [director] ruling 17: tempo from crowd kills (summons included) against spec.total /
 #              targetWaveSeconds, held at 1 for tempoWarmupSeconds; a wave that has finished
 #              spawning merges the next in when Combat.ShouldMerge says so, never into or out of
-#              a boss wave; cleared = nothing queued and nothing alive; then the breather
+#              a boss wave; cleared = nothing queued and nothing alive, and what the dead had
+#              in the air is cleared with them (VitalsService.ClearThreats); a down decided on
+#              a field that is already clear does not lose the run ("a clear field wins"): he
+#              stands up at that boundary; then the breather
 #              (Combat.BreatherSeconds, no healing but regen), then the next wave.
 # Where the contract leaves a choice the sim follows WaveService as built: the rim cursor runs
 # over the whole run from the first enemySpawns entry; a burst's grid is ceil(sqrt(n)) columns
@@ -4741,6 +4748,7 @@ class MissionRun(ThreatRun):
         self.end_at = None
         self.peak_alive = 0
         self.breathers = 0.0
+        self.forgiven = 0  # downs on a clear field, stood up at that wave's boundary
 
     def new_id(self):
         self.ids += 1
@@ -4848,13 +4856,43 @@ class MissionRun(ThreatRun):
         self.end_reason = reason
         self.end_at = t
 
-    def tick(self, t):
-        self.update_tempo(t)
-        if self.downs:
-            self.end("down", self.downs[0])
+    def field_clear(self):
+        """WaveService.fieldClear: nothing queued, no boss still to place, nothing alive."""
+        return not self.queue and self.boss_pending is None and self.alive() == 0
+
+    def hurt(self, t, kind, attack, push):
+        """Ruling 18: in a mission a down does not end by itself (no get-up timer)."""
+        before = len(self.downs)
+        super().hurt(t, kind, attack, push)
+        if len(self.downs) > before:
+            self.down_until = math.inf
+            self.down_span = (t, math.inf)
+
+    def stand_up(self, t):
+        """VitalsService.StandUp: the down ends here, full health, the get-up i-frames."""
+        if self.down_until is None:
             return
+        self.down_until = None
+        self.down_span = (self.down_span[0], t)
+        self.hp = self.max_hp
+        self.last_hurt = t
+        self.knock_until = -math.inf
+        self.windows.append((t, t + self.vitals["getUpIframes"]))
+        self.forgiven += 1
+
+    def tick(self, t):
+        """WaveService.tick, in its order: the tempo, the run cap, the lost run, the breather,
+        then the wave (spawns, the merge, the clear)."""
+        self.update_tempo(t)
         if t >= self.director["runCapSeconds"]:
             self.end("runCap", t)
+            return
+        # WaveService.endIfLost and VitalsService.RunLost: solo, a down loses the run, unless the
+        # field is clear ("a clear field wins": a blow decided when the wave's last body is
+        # already dead does not lose a wave that was beaten). The clear branch below then
+        # stands him up at that boundary, and on the last wave the run ends cleared.
+        if self.down_until is not None and not self.field_clear():
+            self.end("down", self.downs[-1])
             return
         if self.phase == "breather":
             if t >= self.breather_until - THREAT_EPS:
@@ -4875,9 +4913,16 @@ class MissionRun(ThreatRun):
                 self.queue_wave(self.wave, t)
                 self.waves[self.wave]["merged"] = True
             return
+        # WaveService calls VitalsService.ClearThreats at every clear: what the dead still had
+        # in the air (a lob, a shot, a ring) goes with them and lands on nobody in the breather.
+        self.pending = []
+        self.shots = []
+        self.charges = []
+        self.rings = []
         for wave in range(self.cleared_through + 1, self.wave + 1):
             self.waves[wave]["clear"] = t
         self.cleared_through = self.wave
+        self.stand_up(t)  # a clear is a wave boundary: the downed stand up, on the last wave too
         if self.wave >= self.last:
             self.end("cleared", t)
             return
@@ -4934,6 +4979,7 @@ class MissionRun(ThreatRun):
                 "hits": len(log), "damage": sum(d for _w, d, _k, _s in log), "dodged": self.dodged,
                 "byKind": {k: sum(d for _w, d, kk, _s in log if kk == k) for k in {kk for _w, _d, kk, _s in log}},
                 "peakAlive": self.peak_alive, "breathers": self.breathers, "summoned": self.summoned,
+                "forgiven": self.forgiven,
                 "firstHit": log[0][0] if log else None}
 
 
@@ -5049,6 +5095,9 @@ def print_mission(cfg, report):
         kills = sum(r["killed"].values())
         print(f"    {seed:>4}  {r['end']:<7}  {r['at'] / 60:5.2f} min  {r['downs']:>4}  {r['hits']:>4}  {r['damage']:>6.0f}  "
               f"{r['peakAlive']:>10}  {r['breathers']:>7.1f} s  {kills:>5}")
+    forgiven = sum(r["forgiven"] for r in report["runs"] + report["careless"])
+    if forgiven:
+        print(f"  downs on a field already clear, stood up at the boundary (a clear field wins): {forgiven}")
     first = report["runs"][0]
     print(f"  waves of seed {MISSION_SEEDS[0]}: wave  bodies  start  spawned by  clear  length  kills  merged")
     for wave, w in sorted(first["waves"].items()):

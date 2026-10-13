@@ -34,7 +34,9 @@
 -- The one difference is the down: a mission's `hurt` with `down` carries no `upAt`, because a
 -- down there never ends by itself. The player lies down under a "DOWN" banner with no count
 -- until the server stands them up (a wave boundary, a new run), which no effect announces:
--- the RunState's PartyMember.down is that word, pushed in through SetServerDown.
+-- the RunState's PartyMember.down is that word, pushed in through SetServerDown. It counts in
+-- both directions: a member the server holds down whom this client shows standing (a new
+-- character: the server keeps the down across a respawn) is laid down again.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -98,8 +100,9 @@ local flinches: { Flinch } = {}
 local downUntil: number? = nil
 -- P5: a held down, as the RunState has reported it. `seen` = a RunState has said "down" since
 -- it began, `at` = the os.clock it began; together they keep a RunState sent before the down
--- reached the server from standing the player up again.
-local held = { seen = false, at = 0 }
+-- reached the server from standing the player up again. `upAt` = the os.clock of the last
+-- stand-up the RunState ordered, which keeps a RunState sent before it from undoing it.
+local held = { seen = false, at = 0, upAt = -math.huge }
 -- The get-up heal on its way: until os.clock() reaches healBy, or the replicated Health moves
 -- off staleHealth (what it read at the get-up), the bar shows full. 0 = not waiting.
 local healBy = 0
@@ -599,6 +602,11 @@ local function step(deltaTime: number): ()
 		standUp(true)
 	end
 	local rig = localRig()
+	if downUntil == math.huge and rig ~= nil then
+		-- P5: a held down outlives its body. MovementController forgets the pose with the old
+		-- character, so the new one is laid down as soon as it is whole (a no-op otherwise).
+		MovementController.SetDown(true, nil)
+	end
 	local mounted = hud
 	if mounted ~= nil then
 		if rig ~= nil then
@@ -643,11 +651,15 @@ function VitalsController.Start(): ()
 	fxFolder = Create("Folder", { Name = FX_FOLDER, Parent = Workspace }) :: Folder
 	Haptics.Detect()
 	table.insert(connections, RunService.RenderStepped:Connect(step))
-	-- A new body is standing: whatever the old one was in the middle of is over.
+	-- A new body is standing: whatever the old one was in the middle of is over. P5: all but
+	-- a mission's held down, which the server keeps on the new body too; `step` lays it down
+	-- again, and only the RunState ends it.
 	table.insert(
 		connections,
 		Players.LocalPlayer.CharacterAdded:Connect(function()
-			standUp(false)
+			if downUntil ~= math.huge then
+				standUp(false)
+			end
 			endShimmer()
 			healBy = 0
 		end)
@@ -683,18 +695,30 @@ function VitalsController.SetLayout(layout: VitalsHud.Layout): ()
 	end
 end
 
--- P5: the local player's PartyMember.down from every RunState of a mission. It ends a held
--- down (the server's StandUp sends no effect). A RunState that says "standing" only counts once
--- a RunState has shown the down, or the down is older than the slack: one sent just before the
--- blow reached the server must not stand the player straight back up.
+-- P5: the local player's PartyMember.down from every RunState of a mission: the server's word
+-- on the down, in both directions.
+--  * "standing" ends a held down (the server's StandUp sends no effect). It only counts once a
+--    RunState has shown the down, or the down is older than the slack: one sent just before
+--    the blow reached the server must not stand the player straight back up.
+--  * "down" while this client shows the player standing lays them down, held. That is a down
+--    whose `hurt` this client never acted on, and a body the server kept down across a respawn
+--    this client did not carry it through. The same slack guards the stand-up just ordered.
+-- Never called in the range, whose downs are timed.
 function VitalsController.SetServerDown(down: boolean): ()
-	if downUntil ~= math.huge then
+	if not started or CameraController.IsRange() then
 		return
 	end
-	if down then
+	local now = os.clock()
+	if downUntil == math.huge then
+		if down then
+			held.seen = true
+		elseif held.seen or now - held.at >= DOWN_SLACK_SECONDS then
+			held.upAt = now
+			standUp(true)
+		end
+	elseif down and downUntil == nil and now - held.upAt >= DOWN_SLACK_SECONDS then
+		goDown(nil, nil)
 		held.seen = true
-	elseif held.seen or os.clock() - held.at >= DOWN_SLACK_SECONDS then
-		standUp(true)
 	end
 end
 

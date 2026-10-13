@@ -37,7 +37,10 @@
 --
 -- P5 (docs/INTERFACES.md "P5 contracts", rulings 5, 19, 22 and 25): three boots, chosen once
 -- from the shared CombatMode. The range bench (`bootRange`), a crowd mission (`bootMission`),
--- and the C1 mission HUD (`boot`) for a build without the range's combat. A crowd mission
+-- and the C1 mission HUD (`boot`) for a build without the range's combat. That last one is
+-- unreachable while ProvingGrounds.json ships and cannot fight any more (the server dropped
+-- the C1 attack handlers in Wave 1); it warns if it is ever taken, and Wave 3 deletes it. A
+-- crowd mission
 -- mounts the range's HUD stack (crosshair, Feedback's overlay, AbilityBar, the vitals HUD,
 -- BossBar; the touch buttons come with InputController and MovementController) under the run
 -- layer of CombatHud with no Attack / stance / ability cluster: on a phone attacks are the
@@ -45,6 +48,14 @@
 -- CombatFxController's; there is no per-kill pop (ruling 23). The summary card path is C1's.
 -- In Studio, B and N skip to the next boss wave and the next wave (RequestDebug "skip"), and a
 -- corner line names the keys; the C1 lever strip stays, its spawn buttons naming crowd kinds.
+--
+-- Mission layout (review of 2026-10-13; the ScreenGui is the viewport less the top inset):
+--  * The boss bar sits in the top strip between the run header and the party list, shrunk to
+--    it down to Theme.COMBAT_MISSION_BOSS_BAR_MIN_WIDTH (a 640 px landscape phone). Hung under
+--    the header it would lie on the crosshair of a short landscape screen, so it only hangs
+--    where that clears the crosshair box (portrait); on anything narrower still it goes under
+--    the header at the left, ending short of the box.
+--  * The vitals HUD's pointer ring is pulled in under the bar only while a boss is on show.
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -72,6 +83,7 @@ local Crosshair = require(uiFolder:WaitForChild("Crosshair"))
 local RangePanel = require(uiFolder:WaitForChild("RangePanel"))
 local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local BossBar = require(uiFolder:WaitForChild("BossBar"))
+local VitalsHud = require(uiFolder:WaitForChild("VitalsHud"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -221,8 +233,10 @@ local function newAbilityBar(screenGui: ScreenGui): AbilityBar.AbilityBarHandle
 	return AbilityBar.new(screenGui, {
 		getState = InputController.GetAbilityState,
 		-- P4: knocked down veils the tiles as an ability in progress does; neither can cast.
+		-- P5: or anything else that stops a cast (a mission's idle phases, the wait on the
+		-- pad). One rule, InputController's, so a tile never looks ready while Q does nothing.
 		isBusy = function(): boolean
-			return InputController.IsBusy() or MovementController.IsDown()
+			return InputController.IsBusy() or not InputController.CanAct()
 		end,
 		getActiveSlot = InputController.GetActiveSlot,
 		getLoadout = FeedbackController.GetLoadout,
@@ -245,6 +259,53 @@ local function touchCluster(): (number, number?, number?)
 	return viewport.Y - jumpTopLeft.Y + jumpSize,
 		math.min(meleeCentre.X - meleeSize / 2, slotCentre.X - slotSize / 2),
 		meleeCentre.Y - meleeSize / 2
+end
+
+-- Where a mission's boss bar goes, in px of the HUD ScreenGui (see the header's layout notes).
+-- `cross` = the crosshair's centre in the same px. Returns the bar's bottom edge when the bar
+-- stands over the crosshair's column (what the pointer ring must then keep under), nil when it
+-- stands to the left of it.
+local function placeMissionBoss(
+	bossBar: BossBar.BossBarHandle,
+	scale: number,
+	size: Vector2,
+	edges: CombatHud.HudEdges,
+	cross: Vector2
+): number?
+	local margin = Theme.SCREEN_MARGIN * scale
+	local width = Theme.COMBAT_RANGE_BOSS_BAR_WIDTH * scale
+	local strip = edges.partyLeft - edges.headerRight - 2 * margin
+	if strip >= Theme.COMBAT_MISSION_BOSS_BAR_MIN_WIDTH * scale then
+		width = math.min(width, strip)
+		-- Not math.clamp: squeezed to the strip the two bounds are the same number, and
+		-- rounding can leave the lower one a hair above the upper, which math.clamp throws
+		-- on. Max first, so the lower bound wins when they cross.
+		local centreX = math.min(
+			math.max(size.X / 2, edges.headerRight + margin + width / 2),
+			edges.partyLeft - margin - width / 2
+		)
+		return bossBar.SetRect(scale, centreX, margin, width)
+	end
+	local top = edges.headerBottom + margin
+	local boxHalf = Theme.COMBAT_RANGE_CROSSHAIR_SIZE / 2 * scale
+	local bottom = bossBar.SetRect(scale, size.X / 2, top, math.min(width, size.X - 2 * margin))
+	if bottom + margin <= cross.Y - boxHalf then
+		return bottom -- portrait: the whole bar is clear above the crosshair box
+	end
+	-- A landscape screen too narrow for the strip: under the header, short of the box.
+	width = math.max(math.min(width, cross.X - boxHalf - 2 * margin), 0)
+	bossBar.SetRect(scale, margin + width / 2, top, width)
+	return nil
+end
+
+-- A boot's first layout pass. It must never take the boot down with it: the snapshot request
+-- and the remote wiring come after it, and a HUD laid out wrong is still a HUD.
+local function firstLayout(applyLayout: () -> ()): ()
+	-- Cast: the analyzer wants a second value from pcall of a function that returns none.
+	local ok, message = pcall(applyLayout :: () -> any)
+	if not ok then
+		warn("[CombatUIController] the HUD's first layout failed: " .. tostring(message))
+	end
 end
 
 -- The C1 lever strip names its spawn buttons from `mission.enemies`. A crowd mission spawns
@@ -413,7 +474,7 @@ local function bootRange(): ()
 
 	stateChanged.OnClientEvent:Connect(onStateChanged)
 	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
-	applyLayout()
+	firstLayout(applyLayout)
 	-- The boss bar is pure display: CrowdRenderer knows the boss, this hands it over.
 	RunService.RenderStepped:Connect(function(deltaTime: number)
 		bossBar.Update(deltaTime, CrowdRenderer.GetBoss())
@@ -820,6 +881,13 @@ local function bootMission(): ()
 	local mission: Types.MissionConfig? = nil
 	local arenaName = ""
 	local lastPhase = ""
+	local lastWave = 0
+	-- The vitals HUD's layout as last computed, the bar's bottom edge in its px (nil = the
+	-- bar is not over the crosshair's column), and whether a boss is on show: the pointer ring
+	-- keeps under the bar only while there is one.
+	local vitalsLayout: VitalsHud.Layout? = nil
+	local bossLimit: number? = nil
+	local bossShown = false
 	-- One debounce window for Ready, Return and the skip keys (review of 2026-09-17).
 	local lastIntentTime = 0
 	local function debounced(): boolean
@@ -971,25 +1039,34 @@ local function bootMission(): ()
 				arenaName = missionConfig.arena
 				CrowdRenderer.SetArena(arenaName)
 			end
+			local crowd = missionConfig.crowd
+			if not hadMission and crowd ~= nil then
+				CrowdRenderer.Prewarm(crowd.maxAlive)
+			end
 			CombatFxController.SetMaterial(missionConfig.material)
 		end
 		local phase = run.phase
 		hud.SetMission(if missionConfig ~= nil then missionConfig.name else run.missionId)
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
-		InputController.SetPhase(phase)
 		CombatFxController.SetParty(run.party)
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
 			debugPanel.SetMission(leverMission(missionConfig))
 		end
+		local fighting = phase == "wave" or phase == "boss"
 		local userId = player.UserId
+		local waiting = false
 		for _, member in run.party do
 			if typeof(member) == "table" and member.userId == userId then
 				VitalsController.SetServerDown(member.down == true)
+				-- Waiting on the pad for the next wave: the server refuses every attack, so
+				-- none is sent (CombatHud reads the flag the same way).
+				waiting = member.waiting == true and (fighting or phase == "breather")
 				break
 			end
 		end
+		InputController.SetPhase(phase, waiting)
 		local over = RUN_OVER_PHASES[phase] == true
 		-- The summary card has the screen: no crosshair, health bar or banner under it.
 		rangeGui.Enabled = not over
@@ -1002,23 +1079,52 @@ local function bootMission(): ()
 		else
 			summaryCard.Hide()
 		end
+		-- Named ahead of the chain below: tested inside it, the analyzer narrows `lastPhase`
+		-- for the branches that follow and rejects their comparisons.
+		local wasFighting = lastPhase == "wave" or lastPhase == "boss"
+		local enteredBreather = phase == "breather" and lastPhase ~= "breather"
 		if over and not RUN_OVER_PHASES[lastPhase] then
 			-- The server ended the run: its crowd, threats and projectiles are gone (EndRun),
 			-- and the run's pool was paid, so the wallet is asked for at once.
 			ThreatFx.Clear()
 			FeedbackController.ClearFlights()
 			requestSnapshot:FireServer()
-		elseif lastPhase == "wave" and phase == "breather" then
-			-- A wave clear is the moment the pool is flushed.
-			requestSnapshot:FireServer()
+		elseif enteredBreather then
+			-- A wave clear. The server drops every threat still in the air before the breather
+			-- (VitalsService.ClearThreats): a shot is ended by its own effect, but a lob's
+			-- circle and a ground area get none and would "land" on nothing, so the enemy's
+			-- circles and shots go here. The players' own projectiles fly on.
+			ThreatFx.Clear()
+			if lastPhase == "wave" then
+				-- It is also the moment the pool is flushed.
+				requestSnapshot:FireServer()
+			end
+		elseif fighting and wasFighting and run.wave ~= lastWave and not run.merged then
+			-- The wave changed in mid-fight with no breather and no merge: a Studio skip that
+			-- the server carried out (ForceWave). It dropped the crowd's circles and shots and
+			-- the players' projectiles without a word, so they go here, now that it is known
+			-- to have happened. A skip the server refuses (the last wave) changes nothing.
+			ThreatFx.Clear()
+			FeedbackController.ClearFlights()
 		end
 		lastPhase = phase
+		lastWave = run.wave
 	end
 
 	local function onActionResult(payload: any): ()
 		local text, isError = actionResultText(payload)
 		if text ~= nil then
 			toast.Show(text, Theme.TOAST_ERROR_SECONDS, isError)
+		end
+	end
+
+	-- The pointer ring keeps under the boss bar only while a boss is on show: with no bar there
+	-- the limit would squeeze the ring on a short screen in every wave for nothing.
+	local function applyVitalsLayout(): ()
+		local layout = vitalsLayout
+		if layout ~= nil then
+			layout.topLimit = if bossShown then bossLimit else nil
+			VitalsController.SetLayout(layout)
 		end
 	end
 
@@ -1040,35 +1146,34 @@ local function bootMission(): ()
 		local _, clusterLeft, clusterTop = touchCluster()
 		-- No panel column: the tiles and the health bar sit bottom centre.
 		abilityBar.SetLayout(scale, size, 0)
-		-- The boss bar takes the top strip between the run header and the party list where
-		-- it fits (a monitor), else it hangs under the header and wallet; CombatHud starts a
-		-- portrait party list under that.
-		local bossBottom =
-			bossBar.SetLayout(scale, size, edges.partyLeft, edges.headerBottom, edges.headerRight)
-		-- This ScreenGui starts under the top bar; the vitals HUD's does not.
+		-- This ScreenGui starts under the top bar; the crosshair's and the vitals HUD's does
+		-- not, so the crosshair's centre is the viewport's, less the inset.
 		local inset = GuiService:GetGuiInset()
-		VitalsController.SetLayout({
+		local camera = Workspace.CurrentCamera
+		local viewport = if camera ~= nil then camera.ViewportSize else size + inset
+		local bossBottom = placeMissionBoss(bossBar, scale, size, edges, viewport / 2 - inset)
+		bossLimit = if bossBottom ~= nil then bossBottom + inset.Y else nil
+		vitalsLayout = {
 			scale = scale,
 			rightReserve = 0,
 			clusterLeft = clusterLeft,
 			clusterTop = clusterTop,
-			topLimit = bossBottom + inset.Y,
-		})
+		}
+		applyVitalsLayout()
 	end
 
 	-- Ruling 25 / the contract's keys: B = the next boss wave, N = the next wave. Studio only;
-	-- the server ignores the lever anywhere else. The skip clears the crowd and its threats on
-	-- the server without a word, so the client's circles and shots go at once.
+	-- the server ignores the lever anywhere else. Nothing is cleared here: the server may
+	-- refuse the skip (there is no wave after the last), and what it then leaves in the air
+	-- still lands. onRunState clears once the wave has really changed.
 	local function onSkipKey(input: InputObject, processed: boolean): ()
 		local which = SKIP_KEYS[input.KeyCode]
 		if processed or which == nil or requestDebug == nil then
 			return
 		end
-		if not debounced() then
-			return
+		if debounced() then
+			requestDebug:FireServer(SKIP_LEVER, which)
 		end
-		requestDebug:FireServer(SKIP_LEVER, which)
-		ThreatFx.Clear()
 	end
 
 	CombatFxController.SetBannerHandler(function(title: string)
@@ -1088,13 +1193,19 @@ local function bootMission(): ()
 	end
 	-- Pure display every frame: the boss off CrowdRenderer, and the Alt hint's camera state.
 	RunService.RenderStepped:Connect(function(deltaTime: number)
-		bossBar.Update(deltaTime, CrowdRenderer.GetBoss())
+		local boss = CrowdRenderer.GetBoss()
+		bossBar.Update(deltaTime, boss)
+		if (boss ~= nil) ~= bossShown then
+			bossShown = boss ~= nil
+			applyVitalsLayout()
+		end
 		hud.SetAiming(CameraController.IsActive(), CameraController.IsAiming())
 	end)
-	applyLayout()
 	-- One explicit request on boot: the server's join snapshot may have fired before this
-	-- connection existed; duplicate snapshots are harmless by design.
+	-- connection existed; duplicate snapshots are harmless by design. Sent before the layout
+	-- pass, which is guarded as well: neither this nor the wiring below waits on it.
 	requestSnapshot:FireServer()
+	firstLayout(applyLayout)
 
 	-- RangeStats still comes in a mission, for the one thing a mission needs of it: a refused
 	-- attack names its seq, so a swing drawn early is taken back (P3.1). Only those two fields
@@ -1122,12 +1233,18 @@ end
 
 function CombatUIController.Start(): ()
 	-- P5 ruling 5: the mode is decided once, before anything (CameraController.Init).
-	task.spawn(
-		if CameraController.IsRange()
-			then bootRange
-			elseif CameraController.IsCrowdCombat() then bootMission
-			else boot
-	)
+	if CameraController.IsRange() then
+		task.spawn(bootRange)
+	elseif CameraController.IsCrowdCombat() then
+		task.spawn(bootMission)
+	else
+		-- Start runs once, so this is said once.
+		warn(
+			"[CombatUIController] Config/ProvingGrounds is missing: booting the C1 mission HUD,"
+				.. " which cannot fight since P5 Wave 1 (the server has no C1 attack handlers)"
+		)
+		task.spawn(boot)
+	end
 end
 
 return CombatUIController

@@ -19,49 +19,49 @@ local RANGE_BOOT = "range"
 local RANGE: Types.CombatMode = "range"
 local MISSION: Types.CombatMode = "mission"
 
--- Decided once: nil until the first Get.
-local cached: boolean? = nil
+-- Decided once, both answers together: nil until the first question.
+local decided: { proving: boolean, range: boolean }? = nil
 
 local CombatMode = {}
 
--- Studio, and the place was built with the proving switch baked in (tools/proving_project.py).
-function CombatMode.IsProving(): boolean
-	if not RunService:IsStudio() then
-		return false
+-- Studio only: is the proving switch baked in (tools/proving_project.py), and does it boot the
+-- range? Read once, after the first replication on a client, so a Workspace attribute flipped
+-- mid-session changes nothing (ruling 5).
+local function decide(): { proving: boolean, range: boolean }
+	local known = decided
+	if known ~= nil then
+		return known
 	end
+	local answer = { proving = false, range = false }
 	local cfg = Catalog.GetCombatConfig()
-	if cfg == nil then
-		return false
+	if RunService:IsStudio() and cfg ~= nil then
+		if RunService:IsClient() and not game:IsLoaded() then
+			-- Workspace attributes arrive with the first replication; only Studio ever waits here.
+			game.Loaded:Wait()
+		end
+		local debugConfig = cfg.debug
+		answer.proving = Workspace:GetAttribute(debugConfig.provingAttribute) == true
+		answer.range = answer.proving
+			and debugConfig.provingBoots == RANGE_BOOT
+			and Tuning.IsAvailable()
 	end
-	return Workspace:GetAttribute(cfg.debug.provingAttribute) == true
+	-- A second caller may have decided during the wait: the first answer stands.
+	local raced = decided
+	if raced ~= nil then
+		return raced
+	end
+	decided = answer
+	return answer
 end
 
--- True when this session is the range.
-local function decide(): boolean
-	if not RunService:IsStudio() then
-		return false
-	end
-	local cfg = Catalog.GetCombatConfig()
-	if cfg == nil then
-		return false
-	end
-	if RunService:IsClient() and not game:IsLoaded() then
-		-- Workspace attributes arrive with the first replication; only Studio ever waits here.
-		game.Loaded:Wait()
-	end
-	-- The key is new in P5: a Combat.json without it boots the mission, the P5 default.
-	local boots = (cfg.debug :: any).provingBoots
-	return CombatMode.IsProving() and boots == RANGE_BOOT and Tuning.IsAvailable()
+-- Studio, and the place was built with the proving switch baked in. Yields like Get.
+function CombatMode.IsProving(): boolean
+	return decide().proving
 end
 
 -- Yields once on a Studio client until the game has loaded; never on a server or a live client.
 function CombatMode.Get(): Types.CombatMode
-	local range = cached
-	if range == nil then
-		range = decide()
-		cached = range
-	end
-	return if range then RANGE else MISSION
+	return if decide().range then RANGE else MISSION
 end
 
 return CombatMode

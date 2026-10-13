@@ -1658,19 +1658,29 @@ step). About 15 minutes with the checklist, keys only, no panel.
 **Do NOT publish the Expeditions place from `main` until P5 Wave 3 is merged.** Until then it
 plays only the Village mission; the other three eras refuse to start ("locked").
 
-<!-- FILE TO OPEN: start. Lead: if Wave 1 is not merged to `main`, change only this block. -->
+**Status 2026-10-13:**
+- Wave 1 is on `main` (merged 2026-10-13).
+- The second-review fixes (the invisible wall at the fence, the phone boss bar) wait for
+  their merge.
+- **Do not test jumping at the fence before that merge and a rebuild.** Without the wall, one
+  hop over the fence ends the run.
+
+<!-- FILE TO OPEN: start. Lead: if the second-review fixes are not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
-- **Wait for the lead's word first.** The lead merges `p5-missions` to `main` before the look,
-  so "Build all" builds it. Before that, "Build all" gives the P4 range.
+- **Wait for the lead's word first.** The lead merges the second-review fixes to `main`
+  before the look, so "Build all" builds them. Before that, "Build all" gives Wave 1 without
+  the wall.
 - **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
-- **You have the new build if** Play puts you in a grassy arena with a wooden fence and a
+- **You have a P5 build if** Play puts you in a grassy arena with a wooden fence and a
   **WAVE 1** banner, not in the big grey range.
 <!-- FILE TO OPEN: end -->
 
 **Steps:**
 
-- [ ] 0. (Lead) Merge `p5-missions` to `main`, rebuild the place files, tell Ben.
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] Wave 1 merged to `main`, the six place files rebuilt (2026-10-13).
+      - [ ] Second-review fixes merged to `main`, the six place files rebuilt.
 - [ ] 1. Build as the block above says.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save), then open the file named
       in the block above.
@@ -1680,18 +1690,30 @@ plays only the Village mission; the other three eras refuse to start ("locked").
       a boss in front of you, it is the old file: go back to step 2.
 - [ ] 4. Keys while playing: **B** = skip to the next boss wave (5, then 10), **N** = skip to the
       next wave. A small hint in the corner reads `B boss · N next wave`.
-- [ ] 5. Run `docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission".
-- [ ] 6. Optional, two players: Test (Prueba) → **Local Server** (Servidor local), **2 players**
+- [ ] 5. Run `docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission". It starts at the fence
+      (step 2).
+- [ ] 6. **Optional. Skip it freely:** PLAYTEST step 2 already shows the same thing. The
+      wall's ray check:
+      - Keep Play running in the Village mission.
+      - View (Vista) → **Command Bar** (Barra de comandos).
+      - Paste this line and press **Enter**:
+        `print(workspace:Raycast(Vector3.new(0,20,0), Vector3.new(100,0,0)))`
+      - Output (Salida) prints `nil` → good: rays pass through the wall.
+      - Bug: it prints a result that names a part called `Barrier` (`Barrier4`): rays see the
+        wall. Tell Claude.
+- [ ] 7. Optional, two players: Test (Prueba) → **Local Server** (Servidor local), **2 players**
       (2 jugadores) → **Start** (Iniciar). Player A stands still until **DOWN**. Player B
       resets (**Esc** → **R** → **Enter**) → the run ends at once on both screens. Checklist:
-      PLAYTEST "P5 Wave 1" step 8.
-- [ ] 7. Close Studio without saving `proving.rbxl`. Tell Claude when you are done: the lead
+      PLAYTEST "P5 Wave 1" step 10.
+- [ ] 8. Close Studio without saving `proving.rbxl`. Tell Claude when you are done: the lead
       reads the `[Perf]` lines from Studio's log; nothing to copy.
 
 **Notes:**
 - The range bench (every P1–P4 set and the panel) is still there. To get it back the lead
   flips `Combat.json` `debug.provingBoots` to `"range"`; then "Build all".
 - Rewards land in your Studio save, as in any mission.
+- The invisible wall needs no Studio setup. The server builds it and its two collision groups
+  (`ArenaBarrier`, `ArenaPlayers`) by itself. Only the Village arena has one today.
 
 ## M10 — Icon, store icons, thumbnails
 

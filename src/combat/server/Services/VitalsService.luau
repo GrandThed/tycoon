@@ -866,9 +866,15 @@ end
 -- P5 ruling 18, judged from state rather than from the moment of a down: the run is lost when a
 -- human is in the fight (not waiting on the pad) and none of them is standing (a live body that
 -- is not down). A partner who leaves, dies to a reset or respawns onto the pad after the last
--- down therefore ends it too, with no down of their own to report it. Returns the verdict and
--- the userIds of the fighters, who are all fallen when it is true. Bots never count.
-function VitalsService.RunLost(members: { Types.RunMember }): (boolean, { number })
+-- down therefore ends it too, with no down of their own to report it.
+-- `fieldClear` (the wave's last body is dead, nothing left to spawn): a clear field wins. A blow
+-- decided in the frame of the last kill does not lose a wave that was already beaten.
+-- Returns the verdict and the userIds of the fighters, who are all fallen when it is true. Bots
+-- never count.
+function VitalsService.RunLost(
+	members: { Types.RunMember },
+	fieldClear: boolean?
+): (boolean, { number })
 	local fighters: { number } = {}
 	local anyStanding = false
 	for _, member in members do
@@ -882,7 +888,20 @@ function VitalsService.RunLost(members: { Types.RunMember }): (boolean, { number
 			anyStanding = true
 		end
 	end
-	return #fighters > 0 and not anyStanding, fighters
+	return fieldClear ~= true and #fighters > 0 and not anyStanding, fighters
+end
+
+-- RunLost reads a human with no living body as fallen, which is right in a run and wrong before
+-- one: a character that has not spawned yet would end the run in its first frame. A run may
+-- only start once this is true: every human member has a living body. Bots never count.
+function VitalsService.AllHaveBodies(members: { Types.RunMember }): boolean
+	for _, member in members do
+		local player = member.player
+		if not member.bot and player ~= nil and bodyOf(player) == nil then
+			return false
+		end
+	end
+	return true
 end
 
 -- The `god` range command (ruling 14); Readout carries the setting.

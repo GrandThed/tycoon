@@ -699,7 +699,10 @@ end
 
 -- P5: true when the range's combat runs (the bench and every crowd mission): the crowd, the
 -- weapon families, abilities, vitals and movement. False only in a build without the
--- ProvingGrounds config, where the C1 mission path is all there is.
+-- ProvingGrounds config. That config always ships, and since P5 Wave 1 nothing fights without
+-- it: the server no longer handles the C1 attack remotes, so the C1 HUD that
+-- CombatUIController still falls back to there (with a warning) can show a run but not play
+-- one. Wave 3 deletes that path.
 function CameraController.IsCrowdCombat(): boolean
 	return crowdCombat
 end

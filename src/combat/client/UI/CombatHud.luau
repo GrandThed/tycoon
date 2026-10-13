@@ -26,7 +26,10 @@
 -- Return and the waiting card. The range HUD does the rest (crosshair, health bar, boss bar,
 -- touch buttons), so the Attack / stance / ability cluster, the HP bar, the old boss bar and
 -- the old reticle never show, and Ready / Return drop to the bottom-left corner the HP bar
--- left (a proving mission shows neither: `deps.runButtons = false`). A party member who is down reads " · DOWN" (PartyMember.down, ruling 18).
+-- left (a proving mission shows neither: `deps.runButtons = false`). That corner is the left
+-- thumb's on a phone, and Return has no confirm, so on a touch device it is not there while
+-- the local player fights in a `wave` or `boss` phase; it shows in the lobby, a breather, the
+-- summary and after, and all along for a player who is waiting on the pad or down. A party member who is down reads " · DOWN" (PartyMember.down, ruling 18).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -883,6 +886,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 
 		local localUserId = Players.LocalPlayer.UserId
 		local localWaiting = false
+		local localDown = false
 		-- A share only means something with company; solo it would always read 100%.
 		local showShare = #run.party > 1 and phase ~= "lobby"
 		local shown = 0
@@ -907,6 +911,9 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			-- P5: a crowd mission's down keeps its Humanoid alive (read defensively: an older
 			-- server build sends no `down`).
 			local down = not member.alive or member.down == true
+			if down and member.userId == localUserId then
+				localDown = true
+			end
 			local suffix = if phase == "lobby" and member.ready
 				then " ✓"
 				elseif down then " · DOWN"
@@ -947,6 +954,13 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			partyRows[index].frame.Visible = false
 		end
 		waitingFrame.Visible = localWaiting
+		-- P5: no Return under the left thumb of a player in the middle of a fight (see the
+		-- header). One who is waiting or down is not fighting, and may want to leave.
+		returnButton.Visible = actions
+			or not touchDevice
+			or (phase ~= "wave" and phase ~= "boss")
+			or localWaiting
+			or localDown
 		if phase == "summary" or phase == "ended" then
 			table.clear(seenFighting) -- nothing carries past a run
 		end

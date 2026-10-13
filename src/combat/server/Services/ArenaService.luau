@@ -15,6 +15,7 @@
 -- through SetRunFields: WaveService sits above this service in the boot order, so it cannot be
 -- required from here, and one payload builder for the whole HUD is worth the indirection.
 
+local PhysicsService = game:GetService("PhysicsService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -45,6 +46,10 @@ local BOT_USER_ID_BASE = -1000
 -- the floor. Layouts have no height, so it is generous rather than tuned.
 local BOUNDS_HALF_HEIGHT = 200
 local DEFAULT_BOT_HP = 150
+-- The barrier's collision groups (see ensureBarrierGroups). Names are engine plumbing.
+local BARRIER_GROUP = "ArenaBarrier"
+local PLAYER_GROUP = "ArenaPlayers"
+local DEFAULT_GROUP = "Default"
 local NEUTRAL_EMPOWER = 1
 
 -- The verdict every arrival gets before Admit. "ok" admits; anything else is a refusal the hub
@@ -94,7 +99,7 @@ local floorHalfSize = Vector3.new(FALLBACK_FLOOR_SIZE / 2, 0, FALLBACK_FLOOR_SIZ
 local runStartedAt = 0
 local combatConfig: Types.CombatConfig? = nil
 local sendSnapshot: ((player: Player) -> ())? = nil
--- CombatService's run-wide raw damage share. Handed in (CombatService sits above this service).
+-- WaveService's run-wide raw damage share. Handed in (WaveService sits above this service).
 local shareSource: ((userId: number) -> number)? = nil
 -- WaveService.Reset, handed in for the same reason: called whenever the run resets.
 local resetHook: (() -> ())? = nil
@@ -102,6 +107,11 @@ local resetHook: (() -> ())? = nil
 local characterHook: ((player: Player, character: Model) -> ())? = nil
 -- P5: is this member down (VitalsService), for PartyMember.down. Handed in by WaveService.
 local downSource: ((userId: number) -> boolean)? = nil
+-- P5 review: called after every move this service makes of a human's body (a placement, the
+-- release from the pad, a rescue), so whoever measures that body's motion can forget the jump.
+local movedHook: ((player: Player) -> ())? = nil
+-- nil = not tried yet; false = the engine refused the groups, so no barrier is built.
+local barrierGroupsReady: boolean? = nil
 
 -- Everything WaveService owns in the RunState payload, defaulted to the lobby.
 export type RunFields = {
@@ -146,6 +156,60 @@ local function materialOf(name: string): Enum.Material
 	return Enum.Material.Plastic
 end
 
+-- The invisible barrier must stop characters and nothing else: not the camera's boom, not a
+-- shot, not the crosshair's ray. CanQuery = false cannot do that (the engine only honours it on
+-- a part that is also non-colliding), so the barrier gets a collision group that collides with
+-- ONE other group, the one every member's character parts are put in. A ray or a shape cast
+-- runs in the Default group, which the barrier does not collide with, and passes through.
+-- The players' group collides with exactly what Default does, group by group (the arena's own
+-- group, and C1's ragdoll group, registered by EnemyService), so nothing else about a
+-- character changes. Registered once; pcall because the group API throws past the engine's cap.
+local function ensureBarrierGroups(): boolean
+	local known = barrierGroupsReady
+	if known ~= nil then
+		return known
+	end
+	-- EnemyService registers its groups on this call: they must exist before the loop below.
+	EnemyService.ArenaCollisionGroup()
+	local ok, err = pcall(function()
+		for _, name in { BARRIER_GROUP, PLAYER_GROUP } do
+			if not PhysicsService:IsCollisionGroupRegistered(name) then
+				PhysicsService:RegisterCollisionGroup(name)
+			end
+		end
+		for _, group in PhysicsService:GetRegisteredCollisionGroups() do
+			local name: string = group.name
+			if name ~= BARRIER_GROUP and name ~= PLAYER_GROUP then
+				PhysicsService:CollisionGroupSetCollidable(
+					PLAYER_GROUP,
+					name,
+					PhysicsService:CollisionGroupsAreCollidable(DEFAULT_GROUP, name)
+				)
+			end
+			if name ~= PLAYER_GROUP then
+				PhysicsService:CollisionGroupSetCollidable(BARRIER_GROUP, name, false)
+			end
+		end
+		PhysicsService:CollisionGroupSetCollidable(
+			PLAYER_GROUP,
+			PLAYER_GROUP,
+			PhysicsService:CollisionGroupsAreCollidable(DEFAULT_GROUP, DEFAULT_GROUP)
+		)
+		PhysicsService:CollisionGroupSetCollidable(BARRIER_GROUP, PLAYER_GROUP, true)
+	end)
+	if not ok then
+		warn(`[ArenaService] collision groups unavailable: {err}; the arena has no barrier`)
+	end
+	barrierGroupsReady = ok
+	return ok
+end
+
+local function joinPlayerGroup(instance: Instance): ()
+	if instance:IsA("BasePart") then
+		instance.CollisionGroup = PLAYER_GROUP
+	end
+end
+
 local function newPart(name: string, size: Vector3, position: Vector3, parent: Instance): Part
 	local part = Instance.new("Part")
 	part.Name = name
@@ -154,7 +218,8 @@ local function newPart(name: string, size: Vector3, position: Vector3, parent: I
 	part.Anchored = true
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
-	-- Enemy ragdolls collide with this group only (EnemyService), never with players.
+	-- The arena's own collision group, kept from C1 (EnemyService registers it; it is never
+	-- Init'd in a crowd mission, so the group is the default one until Wave 3 removes this).
 	local group = EnemyService.ArenaCollisionGroup()
 	if group ~= nil then
 		part.CollisionGroup = group
@@ -269,6 +334,44 @@ local function buildFromLayout(folder: Folder, layout: Types.ArenaLayout): ()
 			part.Color = color
 			part.Material = material
 			table.insert(fence, part)
+		end
+		-- The fence is low enough to hop (jump, double jump, dash, an airborne knockback) and
+		-- there is no ground beyond it, so an invisible wall stands behind each side: from the
+		-- floor up to `barrierHeight`, its inner face on the fence's outer face, and
+		-- `barrierThickness` deep outward, because a dash covers more than a stud a frame and
+		-- would step through a wall as thin as the fence. The two Z sides run past the X sides,
+		-- so the corners close. Only characters collide with it (ensureBarrierGroups), and it is
+		-- not handed to EnemyService as a wall.
+		local barrierHeight = wall.barrierHeight
+		if barrierHeight ~= nil and barrierHeight > 0 and ensureBarrierGroups() then
+			local depth = math.max(wall.barrierThickness or WALL_THICKNESS, WALL_THICKNESS)
+			local outerX = sizeX / 2 + WALL_THICKNESS
+			local outerZ = sizeZ / 2 + WALL_THICKNESS
+			local barriers = {
+				{
+					size = Vector3.new((outerX + depth) * 2, barrierHeight, depth),
+					position = Vector3.new(0, barrierHeight / 2, -(outerZ + depth / 2)),
+				},
+				{
+					size = Vector3.new((outerX + depth) * 2, barrierHeight, depth),
+					position = Vector3.new(0, barrierHeight / 2, outerZ + depth / 2),
+				},
+				{
+					size = Vector3.new(depth, barrierHeight, outerZ * 2),
+					position = Vector3.new(-(outerX + depth / 2), barrierHeight / 2, 0),
+				},
+				{
+					size = Vector3.new(depth, barrierHeight, outerZ * 2),
+					position = Vector3.new(outerX + depth / 2, barrierHeight / 2, 0),
+				},
+			}
+			for index, side in barriers do
+				local barrier = newPart(`Barrier{index}`, side.size, side.position, folder)
+				barrier.CollisionGroup = BARRIER_GROUP
+				barrier.Transparency = 1
+				barrier.CanTouch = false
+				barrier.CastShadow = false
+			end
 		end
 	end
 
@@ -511,8 +614,8 @@ function ArenaService.SetRunFields(fields: RunFields): ()
 	runFields = fields
 end
 
--- True from the first spawn of wave 1 until the run ends: the gate CombatService uses to refuse
--- swings fired in the lobby or after the summary card.
+-- True from the first spawn of wave 1 until the run ends: the gate WaveService's act rule uses
+-- to refuse attacks sent in the lobby or after the summary card.
 function ArenaService.InRun(): boolean
 	return runFields.inRun
 end
@@ -533,6 +636,11 @@ end
 -- P5: run last whenever an admitted member's character is added, after it has been placed.
 function ArenaService.SetCharacterHook(hook: (player: Player, character: Model) -> ()): ()
 	characterHook = hook
+end
+
+-- P5 review: called after every move this service makes of a human member's body.
+function ArenaService.SetMovedHook(hook: (player: Player) -> ()): ()
+	movedHook = hook
 end
 
 -- P5 ruling 18: fills PartyMember.down (always false for bots).
@@ -737,6 +845,15 @@ local function humanCount(): number
 	return humans
 end
 
+-- This service has just moved the member's body: the jump is not motion of theirs.
+local function noteMoved(member: Types.RunMember): ()
+	local hook = movedHook
+	local player = member.player
+	if hook ~= nil and player ~= nil then
+		hook(player)
+	end
+end
+
 -- Places a (re)spawned body by the wave-boundary rule: mid-wave it waits on the pad, in a
 -- breather it goes straight to a player spawn, in the lobby or on the summary it stays home.
 local function placeBody(member: Types.RunMember, character: Model): ()
@@ -750,6 +867,7 @@ local function placeBody(member: Types.RunMember, character: Model): ()
 		member.waiting = false
 		character:PivotTo(lobbyCFrame())
 	end
+	noteMoved(member)
 end
 
 -- Sends the roster to the party, or just this player's summary card when the run is over.
@@ -780,6 +898,14 @@ local function watchCharacter(member: Types.RunMember, character: Model): ()
 	local connections = characterConnections[player]
 	if connections == nil then
 		return
+	end
+	if ensureBarrierGroups() then
+		-- Every part of the body, and whatever it is given later (accessories, tools): only this
+		-- group is stopped by the arena's barrier.
+		for _, descendant in character:GetDescendants() do
+			joinPlayerGroup(descendant)
+		end
+		table.insert(connections, character.DescendantAdded:Connect(joinPlayerGroup))
 	end
 	table.insert(
 		connections,
@@ -1019,6 +1145,7 @@ function ArenaService.ReleaseWaiting(): ()
 		end
 		humanoid.Health = humanoid.MaxHealth
 		character:PivotTo(nextPlayerSpawn())
+		noteMoved(member)
 	end
 end
 
@@ -1292,6 +1419,39 @@ end
 -- centre (every arena is built at the world origin) and its half extents, Y the launch ceiling.
 function ArenaService.ArenaBounds(): (Vector3, Vector3)
 	return Vector3.zero, Vector3.new(floorHalfSize.X, BOUNDS_HALF_HEIGHT, floorHalfSize.Z)
+end
+
+-- The arena last built (the mission's `arena` name; "" before any): the crowd's bounds follow it.
+function ArenaService.ArenaName(): string
+	return builtArena
+end
+
+-- P5 review: a member whose body has left the arena (under the floor by `below` studs, or past
+-- its edge by `outside`) is put back: on the pad while waiting, at the next player spawn
+-- otherwise. Falling out is the arena's fault, so this only moves the body; the caller grants
+-- the i-frames. Returns true when it moved them. Never yields.
+function ArenaService.RescueIfOut(member: Types.RunMember, below: number, outside: number): boolean
+	local character = member.character
+	local humanoid = member.humanoid
+	if character == nil or humanoid == nil or humanoid.Health <= 0 or character.Parent == nil then
+		return false
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root == nil or not root:IsA("BasePart") then
+		return false
+	end
+	local position = root.Position
+	local out = position.Y < -below
+		or math.abs(position.X) > floorHalfSize.X + outside
+		or math.abs(position.Z) > floorHalfSize.Z + outside
+	if not out then
+		return false
+	end
+	-- The fall's speed would carry them through the floor again on the frame they land.
+	root.AssemblyLinearVelocity = Vector3.zero
+	character:PivotTo(if member.waiting then lobbyCFrame() else nextPlayerSpawn())
+	noteMoved(member)
+	return true
 end
 
 -- P5: where crowd bursts arrive, on the floor (y 0). A copy: callers may keep it.

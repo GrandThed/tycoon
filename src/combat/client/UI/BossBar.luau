@@ -32,10 +32,8 @@
 --    it clears the column;
 --  * where it is not (a portrait phone, whose top the panel spans): full width, just under
 --    the panel's readouts, still well above the crosshair.
--- P5: a crowd mission has no panel but the run header at the top left (or top centre) and the
--- party list at the top right. The caller passes the list's left edge as `panelLeft`, the
--- header's bottom as `panelBottom` and its right edge as `leftEdge`: the bar takes the strip
--- between them where it fits (a monitor), else it hangs under the header.
+-- P5: a crowd mission has no panel; the run header and the party list hold the top corners,
+-- and CombatUIController, which knows where they are, places the bar itself (SetRect).
 -- It never takes input (Active = false), so no aiming drag is swallowed.
 
 local Create = require(script.Parent:WaitForChild("Create"))
@@ -66,17 +64,18 @@ export type Boss = {
 export type BossBarHandle = {
 	-- scale = the HUD's UI scale; viewportSize = the parent ScreenGui's size in px; panelLeft =
 	-- the left edge, in px, of the column kept for the RangePanel (the viewport's width when
-	-- there is none); panelBottom = the bottom edge, in px, of what that panel shows shut;
-	-- leftEdge (P5, nil = 0) = the right edge, in px, of what stands at the top left.
+	-- there is none); panelBottom = the bottom edge, in px, of what that panel shows shut.
 	-- Returns the bar's own bottom edge in px at its tallest (with a plate row), for whatever
 	-- must keep under it.
 	SetLayout: (
 		scale: number,
 		viewportSize: Vector2,
 		panelLeft: number,
-		panelBottom: number,
-		leftEdge: number?
+		panelBottom: number
 	) -> number,
+	-- P5: the bar exactly here, in px of the parent: centred on centreX, its top edge at `top`,
+	-- `width` wide. Returns its bottom edge at its tallest, as SetLayout does.
+	SetRect: (scale: number, centreX: number, top: number, width: number) -> number,
 	-- boss = the boss on show this frame; nil = none.
 	Update: (deltaTime: number, boss: Boss?) -> (),
 	Destroy: () -> (),
@@ -331,41 +330,46 @@ function BossBar.new(parent: Instance, deps: BossBarDeps): BossBarHandle
 		end
 	end
 
+	local function setRect(scale: number, centreX: number, top: number, width: number): number
+		uiScale.Scale = scale
+		root.Position = UDim2.fromOffset(centreX, top)
+		root.Size = UDim2.fromOffset(width / scale, root.Size.Y.Offset)
+		return top
+			+ (
+					Theme.COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT
+					+ Theme.COMBAT_RANGE_BOSS_BAR_PLATE_GAP
+					+ Theme.COMBAT_RANGE_BOSS_BAR_HEIGHT
+				)
+				* scale
+	end
+
 	local handle: BossBarHandle = {
 		SetLayout = function(
 			scale: number,
 			viewportSize: Vector2,
 			panelLeft: number,
-			panelBottom: number,
-			leftEdge: number?
+			panelBottom: number
 		): number
 			local margin = Theme.SCREEN_MARGIN * scale
 			local width = Theme.COMBAT_RANGE_BOSS_BAR_WIDTH * scale
 			local top = margin
 			local centreX = viewportSize.X / 2
-			local left = leftEdge or 0
-			-- The strip at the top that the RangePanel's column (and what stands at the top
-			-- left) leaves free.
-			local band = panelLeft - left - 2 * margin
+			-- The strip at the top that the RangePanel's column leaves free.
+			local band = panelLeft - 2 * margin
 			if band >= Theme.COMBAT_RANGE_BOSS_BAR_MIN_WIDTH * scale then
 				width = math.min(width, band)
+				-- Not math.clamp: squeezed to the band the two bounds are the same number, and
+				-- rounding can leave the lower a hair above the upper, which math.clamp throws
+				-- on. Max first, so the lower bound wins when they cross.
 				centreX =
-					math.clamp(centreX, left + margin + width / 2, panelLeft - margin - width / 2)
+					math.min(math.max(centreX, margin + width / 2), panelLeft - margin - width / 2)
 			else
 				width = math.min(width, viewportSize.X - 2 * margin)
 				top = panelBottom + margin
 			end
-			uiScale.Scale = scale
-			root.Position = UDim2.fromOffset(centreX, top)
-			root.Size = UDim2.fromOffset(width / scale, root.Size.Y.Offset)
-			return top
-				+ (
-						Theme.COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT
-						+ Theme.COMBAT_RANGE_BOSS_BAR_PLATE_GAP
-						+ Theme.COMBAT_RANGE_BOSS_BAR_HEIGHT
-					)
-					* scale
+			return setRect(scale, centreX, top, width)
 		end,
+		SetRect = setRect,
 		Update = function(deltaTime: number, boss: Boss?)
 			local now = os.clock()
 			local wantsPlate = false

@@ -1076,6 +1076,9 @@ export type CombatPlayerConfig = {
 	corpseSeconds: number,
 	dashHitRadius: number,
 	burstConeDegrees: number,
+	-- P5 review: a member whose root is `below` studs under the floor, or `outside` studs past
+	-- its edge, is put back on a spawn (never a down). Absent = no rescue.
+	rescue: { below: number, outside: number }?,
 }
 export type CombatRemotesConfig = {
 	attackCallsPerSecond: number,
@@ -1385,8 +1388,16 @@ export type ArenaPoint = { x: number, z: number }
 export type ArenaLayout = {
 	size: { x: number, z: number },
 	floor: ArenaSurface,
-	-- nil = open edges (no fence); `height` is studs above the floor.
-	wall: { height: number, material: string, color: { number } }?,
+	-- nil = open edges (no fence); `height` is studs above the floor. barrierHeight (P5) = the
+	-- top of the invisible wall behind the fence, in studs above the floor (nil = none);
+	-- barrierThickness = how deep it is, outward from the fence's outer face (nil = the fence's).
+	wall: {
+		height: number,
+		material: string,
+		color: { number },
+		barrierHeight: number?,
+		barrierThickness: number?,
+	}?,
 	lobbyPad: ArenaPoint,
 	-- At least 4 / 8 respectively, both used round-robin.
 	playerSpawns: { ArenaPoint },
@@ -1928,6 +1939,10 @@ export type RangeShootingConfig = {
 	-- P3.1 review: the most lag (ping + originLagSeconds) a claimed position may be excused by.
 	-- Ping is the client's word, so without a ceiling a stalled client buys unlimited slack.
 	originLagMaxSeconds: number,
+	-- P5 ruling 7: the server measures a player's own speed for the claim slack as the fastest
+	-- average over about this many seconds within the last originLagMaxSeconds. Positive, and
+	-- no longer than that window (Tuning.Validate).
+	originSpeedSeconds: number,
 	-- Projectile lifetime (server and client) and how far each split child is jittered, as a
 	-- share of the gap between children.
 	projectileMaxSeconds: number,

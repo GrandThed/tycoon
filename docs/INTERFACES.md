@@ -8802,9 +8802,9 @@ Armory tiers. Solo, the first down ends the run. Every number is config.
 
 | # | Ruling | Why |
 |---|---|---|
-| 5 | **One mode value, decided once at boot:** `CombatMode.Get()` returns `"range"` or `"mission"`. It is `"range"` only in Studio, with `Workspace.DebugProving` true, `Combat.json debug.provingBoots == "range"` and `Tuning.IsAvailable()`. In every other case it is `"mission"`. Server and client compute it with the same function (`src/shared/CombatMode.luau`). | The client gate `CameraController.IsRange()` becomes this value. Range controllers run in both modes, and only the range's bench UI is range-only. |
+| 5 | **One mode value, decided once at boot:** `CombatMode.Get()` returns `"range"` or `"mission"`. It is `"range"` only in Studio, with `Workspace.DebugProving` true, `Combat.json debug.provingBoots == "range"` and `Tuning.IsAvailable()`. In every other case it is `"mission"`. Server and client compute it with the same function (`src/shared/CombatMode.luau`). **Added 2026-10-13 (second review):** `IsProving()` is decided in the same single read, so both answers are fixed together; a Workspace attribute flipped mid-session changes nothing. | The client gate `CameraController.IsRange()` becomes this value. Range controllers run in both modes, and only the range's bench UI is range-only. |
 | 6 | **`RangeService` splits.** The new place-agnostic **`WeaponService`** takes attacks, draws, projectiles, dash, slam, aim checks, i-frames, the AbilityService hooks (`Strike`, `FireProjectile`, buffs, locks), the shooter record, `TuneState` (loadout) and `RangeStats` (refusals and attack readouts). `RangeService` keeps dummy sets, respawns, `OnTune`, `OnCommand` and the range-only readout fields. | Missions need the weapons and nothing of the bench. |
-| 7 | **`claimSlack` uses the server's own position history:** speed = the server root's displacement over the last `shooting.originLagMaxSeconds` ÷ that window. It no longer reads the replicated `AssemblyLinearVelocity`. It is still capped at `Tuning.FastestMove`, and slack = pad + speed × `CommitLag`. | Carried from P3.1. The client must not buy slack in a place with rewards. |
+| 7 | **`claimSlack` uses the server's own position history:** speed = the fastest average speed of the server's root over a stretch of about `shooting.originSpeedSeconds` (0.1 s) that ended within the last `shooting.originLagMaxSeconds` (0.3 s), read from a per-player ring of root positions (`PositionRing`). It no longer reads the replicated `AssemblyLinearVelocity`. It is still capped at `Tuning.FastestMove`, and slack = pad + speed × `CommitLag`. **Corrected 2026-10-13 (second review):** the first version was the net displacement over the whole window ÷ that window, which read a dash far too slowly; numbers and cost are in "Second review round (2026-10-13)". | Carried from P3.1. The client must not buy slack in a place with rewards. |
 | 8 | **Weapon damage follows the Armory tier at the choke point.** `strike()` passes the family's tier-1 amount *and* a scale: `Armory.DamageScale(cfg, slot, tier, ascension, ability)` = the slot's `WeaponDamage(tier, asc)` ÷ `WeaponDamage(tier 1, asc 0)`. For an ability, the level's `abilityMult` replaces `damageMult`. The scale is computed once per resolved attack (carried on the `Tally`). The slot is the family's `weapons[family].slot`, and the slam uses melee. In the range the scale is always 1. | Weapon numbers in `ProvingGrounds.json` are tier-1 values (range ruling 17). The ladder is ×0.67 (starter) to ×267 (tier 12). |
 | 9 | **Heavy, plate and armour are judged on the unscaled amount.** `CrowdService.Damage(id, amount, byUserId, push, launch, scale)`: `amount` stays the tier-1 number. `heavyHit`, the plate test, the plate's loss, the interrupt and armour all read `amount`. Only the HP loss is multiplied: `hpLoss = max(amount - armor, amount * armorFloor) * scale`. A plate hit returns the plate loss (unscaled), so the number and the plate bar agree. | Plates and interrupts are a mechanic (how many heavy hits), not a damage race. `heavyHit` would stop meaning anything at tier 3 (BALANCE "What scales with weapon tier"). |
 | 10 | **Enemy stats get mission scales** from the mission's `crowd` block: `hpScale` (HP of every body, summons included), `plateScale` (plate HP, in unscaled units), `damageScale` (every enemy hit on a player), `regenShare` (player regen as a share of MaxHealth per second, after `player.regenDelay`). Overdrive multiplies `hpScale` and `damageScale` by its `hpMult` and `damageMult`. Wired in Wave 1 but not tuned. | Enemy damage must grow with player tier (BALANCE: ×1.8 at tier 4 … ×17 at tier 12). Per era is the unit, because a mission's recommended power is per era. |
@@ -8815,15 +8815,15 @@ Armory tiers. Solo, the first down ends the run. Every number is config.
 | 15 | **Waves are crowd groups.** `WaveService` reads `mission.crowd.waves[wave]` through the pure `Combat.CrowdWave`. Each group is queued as bursts of up to `crowd.burst` bodies. A burst spawns at the next rim point (`ArenaService.EnemySpawnPoints`, round-robin), in a grid of pitch `crowd.burstSpacing`, with `CrowdService.Spawn(kind, pos, "fight", arenaCentre)`. Bursts are paced by `Combat.BurstInterval` (the old `SpawnInterval` over bursts instead of bodies). A boss spawns first, at `boss.at`, with `hpMult = bossHpMult`. The queue holds while `CrowdService.AliveCount() >= crowd.maxAlive`, and a refused body stays queued. | Burst spawning lets 30–60 bodies arrive as a crowd, not as a drip. |
 | 16 | **Boss HP × party.** The boss body takes `Combat.WaveSpec`'s `bossHpMult` (`1 + coop.bossHpPerExtraPlayer × extras`). Its summons do not. Ordinary groups scale by count only: `count × (1 + (perExtra or coop.countPerExtraPlayer) × extras)`. | C2 ruling, unchanged. Solo in Wave 1 means both are 1, but they are wired. |
 | 17 | **The director measures crowds.** Kill stamps come from crowd kills, summons included. The expected pace is `spec.total / targetWaveSeconds`. Merges and the extra elite (`crowd.eliteKind`, optional) work as before, except that **a boss wave is never merged into or out of**. `crowd.maxAlive` (per mission, ≤ `ProvingGrounds.json crowd.maxAlive`) gates the spawn queue. `director.maxAlive` (24, the Humanoid budget) is not read by crowd missions; it goes with `EnemyService` in Wave 3. | The bosses are judged as whole fights. |
-| 18 | **Going down in a mission.** A down does not end by itself (no get-up timer; `hurt.upAt` is absent). `VitalsService` calls the `onDown` hook once per down, after that frame's batch is raised. `WaveService.OnDown(player)` is the one rule function. In Wave 1: when no fighting human is left standing, it calls `ArenaService.MarkDied(userId)` for each and `EndRun("down")`. Solo, that is the first down. A downed player in a run that goes on (two humans in Studio) is stood up at full health at the next wave boundary (`VitalsService.StandUp`). This stand-in is replaced by the Wave 4 revive. | The ruling-3 seam. The old 8 s Roblox respawn is gone from missions. |
-| 19 | **A proving mission plays in a loop.** When `CombatMode.IsProving()` and the mode is `"mission"`: the run starts `debug.provingStartDelay` seconds after the first human is admitted, with no Ready button. It starts at `debug.provingStartWave`. After the summary's `coop.returnGroupSeconds`, it resets and starts again, instead of sending anyone home. Rewards are paid to the Studio profile as in any mission. | Ben does not use panels, and the Studio return kicks. |
+| 18 | **Going down in a mission.** A down does not end by itself (no get-up timer; `hurt.upAt` is absent). `VitalsService` calls the `onDown` hook once per down, after that frame's batch is raised. `WaveService.OnDown(player)` is the one rule function. In Wave 1: when no fighting human is left standing, it calls `ArenaService.MarkDied(userId)` for each and `EndRun("down")`. Solo, that is the first down. A downed player in a run that goes on (two humans in Studio) is stood up at full health at the next wave boundary (`VitalsService.StandUp`). This stand-in is replaced by the Wave 4 revive. **Corrected 2026-10-13 (second review): a clear field wins.** A down decided when the wave's last body is already dead does not end the run; the clear branch stands the downed up, and on the last wave the run ends `"cleared"`. | The ruling-3 seam. The old 8 s Roblox respawn is gone from missions. |
+| 19 | **A proving mission plays in a loop.** When `CombatMode.IsProving()` and the mode is `"mission"`: the run starts `debug.provingStartDelay` seconds after the first human is admitted, with no Ready button. It starts at `debug.provingStartWave`. After the summary's `coop.returnGroupSeconds`, it resets and starts again, instead of sending anyone home. Rewards are paid to the Studio profile as in any mission. **Added 2026-10-13 (second review):** the reset stands every downed member up, and a run starts only once every human member has a living body. | Ben does not use panels, and the Studio return kicks. |
 | 20 | **Old remotes retired from use.** `RequestAttack`, `RequestFire`, `RequestDraw` and `RequestAbility` lose their handlers in `Main`. Their definitions stay in `CombatRemotes` until Wave 3, and no client sends them. Missions use `RequestRangeAttack`, `RequestRangeDraw`, `RequestRangeAbility`, `RequestDash` and `RequestSlam` (names unchanged). `RequestTune` and `RequestRangeCommand` stay range-only. | No new remote in Wave 1. |
 | 21 | **Who may act.** In missions, `WeaponService` and `AbilityService` refuse an intent unless `ArenaService.InRun()` and the member is fighting and not down. A refused attack is answered with `RangeStats.refusedSeq`, as today. | The old `CombatService` lobby and waiting refusals, kept. |
 | 22 | **Mission HUD has no attack button.** The touch controls are the range's (auto-fire, auto-swing, ability and slot buttons). The old Attack, stance and ability cluster of `CombatHud` is not shown in missions. The boss bar is `BossBar` (`CrowdRenderer.GetBoss`). `RunState.boss` is nil in crowd missions, so the old bar never shows. No sound. | COMBAT_DESIGN §3 and Ben's phone rule. |
 | 23 | **No per-kill `kill` effect** in crowd missions (5–10× the kills; `CrowdRenderer` draws the deaths). `wave`, `bossDown` (name = the kind's `name`) and `mentor` are still sent, through `RunFx`. Per-kill reward pops are Wave 3 garnish. | Effect volume. |
 | 24 | **Debug bots are unsupported in crowd missions until Wave 4.** The crowd targets `Player`s only. The `bots` lever warns once and does nothing. | Bots are Humanoid rigs. |
-| 25 | **Studio levers re-pointed at the crowd:** `wave` → `WaveService.ForceWave` (clears the crowd and its threats, starts that wave at once, credits nothing skipped); new `skip` (`"next"` or `"boss"`); `spawn` (a crowd kind, at the next rim point, with the run's scales); `godMode` → `VitalsService.SetGod`; `killAll` → `CrowdService.KillAll(0)` (rewards paid, credit to nobody); `setGear` writes the profile as before, then `VitalsService.RefreshMaxHp`. Every lever is still dead outside Studio and in the range. | C1's lever contract, same two entry points. |
-| 26 | **A Studio-only perf line.** `CrowdService` prints `[Perf] crowd step p50 X.XX ms p95 Y.YY ms (N steps, peak alive M)` every `debug.perfLogSeconds` (10), in Studio, in both modes, over the steps since the last line. Nothing prints in a frame with no step. | The lead reads server step time from Studio's log (`%LOCALAPPDATA%\Roblox\logs`). Ben never has to read the panel. |
+| 25 | **Studio levers re-pointed at the crowd:** `wave` → `WaveService.ForceWave` (clears the crowd and its threats, starts that wave at once, credits nothing skipped); new `skip` (`"next"` or `"boss"`); `spawn` (a crowd kind, at the next rim point, with the run's scales); `godMode` → `VitalsService.SetGod`; `killAll` → `CrowdService.KillAll(0)` (rewards paid, credit to nobody); `setGear` writes the profile as before, then `VitalsService.RefreshMaxHp`. Every lever is still dead outside Studio and in the range. **Corrected 2026-10-13 (second review):** when a flush finds an empty damage tally (`killAll` on a field nobody had hit), the pot is split evenly among the fighters; `setGear` is inert in a proving mission, where `provingGear` wins (carried). | C1's lever contract, same two entry points. |
+| 26 | **A Studio-only perf line.** `CrowdService` prints `[Perf] crowd step p50 X.XX ms p95 Y.YY ms (N steps, peak alive M)` every `debug.perfLogSeconds` (10), in Studio, in both modes, over the steps since the last line. Nothing prints in a frame with no step. **Corrected 2026-10-13 (second review):** only steps with a living body count, so a lobby, a breather or a summary prints no line and does not pull the median down. | The lead reads server step time from Studio's log (`%LOCALAPPDATA%\Roblox\logs`). Ben never has to read the panel. |
 | 27 | **A mission without a `crowd` block is refused** with `"locked"` at arrival, with one warn naming it. In Wave 1 that is Boomtown, Metropolis and Orbital. | Hence the publish freeze above. |
 | 28 | **Hard rules, unchanged:** nothing in the crowd step or a Heartbeat run loop yields; the server owns all state; every remote is validated and rate-limited; every constant is in Config JSON; `src/shared/Economy.luau` is untouched; `sim_economy.py --check` stays green unchanged. | |
 
@@ -8877,6 +8877,15 @@ ordered Init, then Start:
   `WeaponService.SetArena(ArenaService.ArenaBounds())` and `CrowdService.SetBounds(...)` (the
   first run only; the arena is built at the world origin like every arena). Every member then
   stands up at full health.
+  - **Corrected 2026-10-13 (second review):** the bounds are set whenever
+    `ArenaService.ArenaName()` differs from the arena they were last set for, not only on the
+    first run (a reserved server may host a second run in another arena).
+  - **Added 2026-10-13:** `Start` does nothing until `VitalsService.AllHaveBodies(members)` is
+    true. The lobby polls it again next frame.
+- **Rejoin (added 2026-10-13):** in `runJoinSequence`, a player who is still down from an
+  earlier run is stood up (`VitalsService.StandUp`) just before `ArenaService.Admit`, so the
+  first RunState already says so. The "range was asked for but could not boot" early return
+  is removed: it could not be reached.
 - **Boot print:** `[Combat] booted — mission (crowd)`, `— mission (crowd, proving: <missionId> from wave <n>)`
   or `— Proving Grounds (range)`.
 
@@ -8888,6 +8897,9 @@ ordered Init, then Start:
   - `CombatMode.Get(): Types.CombatMode`, cached after the first call. On a client it first
     waits for `game.Loaded` in Studio, exactly as `CameraController.detectRange` does today.
   - `CombatMode.IsProving(): boolean` = Studio and `Workspace[debug.provingAttribute] == true`.
+    **Corrected 2026-10-13 (second review):** it is no longer read live. One `decide()` reads
+    proving and range together, once, behind `game.Loaded` on a Studio client, and caches
+    both. `IsProving()` therefore yields like `Get()`.
 - `tools/proving_project.py` keeps baking `DebugProving = true`, and also bakes
   `DebugMission = debug.provingMission` (the existing `missionAttribute`, which also bypasses the
   era lock in Studio).
@@ -8948,7 +8960,8 @@ ordered Init, then Start:
   what `strike()` passes to `CrowdService.Damage`.
 - **`src/shared/Armory.luau`**: adds the pure `Armory.DamageScale(cfg, slot, tier, ascLevel,
   ability): number`. It is 1 when the tier-1 damage is 0 or the slot is unknown, and it is mirrored
-  in `tools/sim_range.py` and `tools/sim_combat.py`.
+  in `tools/sim_range.py` and `tools/sim_combat.py`. **Corrected 2026-10-13 (second review):**
+  it is also 1 for a tier whose own damage is 0, so a hit never staggers and removes no HP.
 
 **B — the mission.**
 
@@ -9008,7 +9021,9 @@ ordered Init, then Start:
     - `WeaponService.SetActGate`
     - `ArenaService.SetResetHook(WaveService.Reset)`
   - **Spawning:** rulings 15–17.
-  - **Wave clear:** the queue is empty and `CrowdService.AliveCount() == 0`.
+  - **Wave clear:** the queue is empty and `CrowdService.AliveCount() == 0`. **Added
+    2026-10-13 (second review):** the clear calls `VitalsService.ClearThreats()` first, then
+    flushes, then stands the downed up, also on the last wave.
   - **Phase:** `"boss"` while the boss body lives.
   - **`onCrowdKilled(id, byUserId, info)`:**
     - adds `Combat.CrowdReward(mission, info.kind, spec)` to the pool;
@@ -9038,7 +9053,9 @@ ordered Init, then Start:
   - Its `EnemyService` require and setter calls stay until Wave 3.
 - **`RunFx.luau` (new)**: `CombatService.PushFx` and its per-frame batching, moved verbatim, as
   `RunFx.Push(fx)` and `RunFx.PushTo(player, fx)`, with one `FireClient` per player per
-  Heartbeat. It is used by `WaveService` and `DebugService`.
+  Heartbeat. It is used by `WaveService` and `DebugService`. **Corrected 2026-10-13 (second
+  review):** `RunFx.PushTo` and the per-player queue are removed. Nothing in a crowd mission
+  sends a private effect. `RunFx.Push` is the whole API.
 - **`DebugService.luau`**: ruling 25, plus the lever `skip`. The bot tick is a no-op in crowd
   missions.
 - **`Main.server.luau`**: the boot sequence above.
@@ -9094,7 +9111,10 @@ ordered Init, then Start:
   rules (`camera.freeCursorPhases`) apply in missions only, as before.
 - **`InputController`**: no attacks or abilities while the run phase is `lobby`, `summary` or
   `ended`, or while the player is down. The server refuses them anyway; this keeps the client from
-  drawing swings that will be taken back.
+  drawing swings that will be taken back. **Corrected 2026-10-13 (second review):** also not
+  while the local member waits on the pad for the next wave, and the same rule gates the slot
+  switch. It is one predicate, `InputController.CanAct()`, fed by
+  `InputController.SetPhase(phase, waiting)`; the HUD veils its ability tiles by it.
 - **`CombatUIController`**: a third boot, `bootMission`. It mounts the range HUD pieces
   (`Crosshair`, the Feedback overlay, `AbilityBar`, the `VitalsHud`, `BossBar`, the range's touch
   buttons) and the run layer of `CombatHud`: wave and phase banner, breather timer, wallet, party
@@ -9104,7 +9124,10 @@ ordered Init, then Start:
   - The Studio-only `B` / `N` keys and their corner hint (above) live here.
   - `RangePanel` is range-only.
 - **`VitalsHud` / `VitalsController`**: a `hurt` with `down = true` and no `upAt` shows a "DOWN"
-  banner with no countdown. Solo, the summary card follows within a frame or two.
+  banner with no countdown. Solo, the summary card follows within a frame or two. **Added
+  2026-10-13 (second review):** the mission down follows `PartyMember.down` in both directions
+  (`VitalsController.SetServerDown`), each after a 1 s slack, and a held down survives a new
+  character.
 - **`CombatFxController`**: unchanged; it keeps `wave`, `bossDown` and `mentor`. Verify it
   ignores the range kinds as today.
 - **Locals.** `FeedbackController` (159) and `CrowdRenderer` (151): group their state into tables
@@ -9209,6 +9232,12 @@ lie inside the 110 × 110 floor less the kind's radius. `ProvingGrounds.json` ne
 Wave 1. If tuning a mission needs a kind number changed, the range and both bosses must be
 re-checked (`sim_range.py --check`).
 
+**Corrected 2026-10-13 (second review):** `ProvingGrounds.json` gained one key,
+`shooting.originSpeedSeconds` (0.1). No kind or weapon number changed. `Combat.json` gained
+`player.rescue` and `director.runCapSeconds` went from 1200 to 1800. The Village arena layout
+gained `wall.barrierHeight` and `wall.barrierThickness`. Shapes are in "Second review round
+(2026-10-13)".
+
 ### Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "P5")
 
 All bands are at recommended power: gear 2/1, ascension 0, the range's default loadout
@@ -9259,6 +9288,11 @@ missions. `RunState` is unchanged except `PartyMember.down`.
 | lead | this section; `docs/COMBAT_DESIGN.md`; merges; the questions to Ben |
 | untouched | `EnemyService.luau`, `CombatService.luau`, `CombatRemotes.luau`, `CrowdBrain.luau`, `ThreatField.luau`, `CrowdCodec.luau`, `HitShapes.luau`, `Tuning.luau`, `Economy.luau`, `tools/sim_economy.py`, everything in the hub |
 
+- **Corrected 2026-10-13 (second review):** the fix round also touched three files this table
+  does not list: `Tuning.luau` (it left the "untouched" row for one `Tuning.Validate` bound),
+  the new `src/combat/server/Services/PositionRing.luau`, and
+  `src/shared/Layouts/Arenas/Village.luau` (the barrier keys). The lead routed each to one of
+  the four owners.
 - A and B meet at the `WeaponService` API above. B's `Main` and `WaveService` code against it
   before A lands it, and each reports any difference "for the other owner".
 - If an engineer needs a change in a file it does not own, it reports it and the lead routes it.
@@ -9336,6 +9370,10 @@ Keys: **1** melee, **2** ranged, **Space** jump, **Left Shift** dash, **C** in t
 Asked afterwards, as click questions: does it feel like a mission or like the range; too easy,
 about right or too hard at wave 9; was the run's length right.
 
+**Updated 2026-10-13 (second review):** `docs/PLAYTEST.md` "P5 Wave 1" is the current
+checklist. It adds the fence (invisible wall, camera, arrows), a swing while dashing, the
+wave clear that never shows a "down" summary, and the stand-up at the next run's lobby.
+
 ### Open for later waves
 
 - **Wave 2:**
@@ -9393,6 +9431,9 @@ about right or too hard at wave 9; was the run's length right.
   state every tick: `VitalsService.RunLost(members)` (every non-bot, non-waiting fighter is
   down or has no body) is called by `WaveService.endIfLost`, from the tick and from `OnDown`.
   Reason `"down"` when any fighter is down, `"wipe"` when all died outright.
+  - **Corrected 2026-10-13 (second review):** the signature is now
+    `VitalsService.RunLost(members, fieldClear)`, and a clear field is never lost. The cap is
+    now 1,800 s.
 - **Minor, fixed:** the proving summary card's Return button did nothing (the server ignores
   `RequestLeave` there). `SummaryCard` takes `deps.nextRun`: no Return button, and the
   countdown reads "Next run in …".
@@ -9425,3 +9466,223 @@ the harness (546 checks) and `mutate.py` (221 mutations, none uncaught). `street
 **State:** built, reviewed and QA-green on `p5-missions`; not merged. Next: the lead merges to
 `main`, then Ben's playtest (`docs/PLAYTEST.md` "P5 Wave 1 — Crowd in a mission"). The
 publish freeze above holds until Wave 3.
+
+**Update 2026-10-13:** merged to `main` (`7968a24`), the six place files rebuilt (`1bd191e`).
+The state from here on is in the next section.
+
+### Second review round (2026-10-13)
+
+Wave 1 was merged to `main` on 2026-10-13. Ben then asked for a review with Opus.
+
+**How it ran:**
+1. Three independent Opus reviewers read the merged code in three slices: weapons and damage;
+   the mission run; the client.
+2. Result: **0 Critical, 2 Major, 22 Minor.**
+3. The same four owners made the fixes (luau-engineer A and B, ui-engineer, economy-designer).
+4. An independent check of the fix diff found **1 more Major (in a fix) and 11 Minor.** Those
+   were fixed too.
+
+#### Major 1, fixed twice over: leaving the floor ended a solo run
+
+- **Cause:** the Village fence is 4 studs high. Movement is jump 18 + double jump 12 + dash 20.
+  There is no ground outside the 110 × 110 floor.
+- **(a) An invisible wall behind each fence side** (`ArenaService.buildFromLayout`):
+  - Four parts, `Barrier1`–`Barrier4`, transparent, anchored, `CanTouch` false.
+  - Each runs from the floor up to `wall.barrierHeight`. Its inner face is on the fence's
+    outer face. It is `wall.barrierThickness` deep, outward. The two Z sides run past the X
+    sides, so the corners close.
+  - Village: `barrierHeight` **80**. The highest legal feet height is 58 (jump 18 + double
+    jump 12 + the largest launch 18 + Leap Smash's rise 10). Add a body's 6, then a quarter
+    as margin.
+  - Village: `barrierThickness` **8**. A dash moves over 2 studs a frame and would step
+    through a wall as thin as the fence.
+  - Collision group `ArenaBarrier` collides with **one** group, `ArenaPlayers`.
+  - Every run member's character parts go into `ArenaPlayers`, and so does anything added to
+    the character later (`DescendantAdded`). `ArenaPlayers` collides with exactly what
+    `Default` does, group by group.
+  - Camera, shot and crosshair rays run in `Default`, so they pass through the wall.
+  - A layout with no `barrierHeight` gets no barrier. If the engine refuses the collision
+    groups, no barrier is built either, with one warn.
+  - The barrier is not handed to `EnemyService` as a wall.
+- **(b) A rescue** (`WaveService.tick` → `rescueFallen` → `ArenaService.RescueIfOut`):
+  - A human whose root is `player.rescue.below` (8) studs under the floor, or
+    `player.rescue.outside` (4) studs past its edge, is put back: on the pad if waiting,
+    else on the next player spawn.
+  - The root's velocity is zeroed. The get-up i-frames are granted (`player.getUpIframes`,
+    1.5 s). It is not a down and costs nothing.
+  - A member just rescued is left alone for the length of those i-frames.
+  - It runs in every phase, lobby included. Without `player.rescue` nobody is rescued.
+- **The fix check's Major, in fix (a):** the first wall used `CanQuery = false`. The engine
+  ignores that on a collidable part. The camera would have snapped in along the rim, and
+  shots would have stopped in mid-air. The collision groups above replaced it.
+
+#### Major 2, fixed: the HUD on small landscape phones
+
+On about 667 × 375 and below, the boss bar landed on the crosshair, and the hurt pointers
+collapsed onto the dot.
+
+- The mission's boss bar sits in the top strip between the run header and the party list
+  (`CombatUIController.placeMissionBoss`, `BossBar.SetRect`).
+- It shrinks to that strip, down to `Theme.COMBAT_MISSION_BOSS_BAR_MIN_WIDTH` (140 design px).
+  A 640 px landscape phone leaves 154.
+- Where the strip is narrower still, the bar goes under the header: centred where that clears
+  the crosshair box (portrait), else at the left, ending short of the box.
+- `topLimit` (the pointer ring keeps under the bar) reaches the vitals HUD only while a boss
+  is on show.
+- The pointer ring has a floor radius, `Theme.COMBAT_RANGE_HURT_POINTER_MIN_RADIUS` (48
+  design px). The floor wins over both limits.
+- `BossBar.SetLayout` (the range) lost the `leftEdge` argument Wave 1 had added.
+
+#### Rulings and changes (lead)
+
+1. **Ruling 7, the claim slack, rewritten.**
+   - The server's own measure is the fastest average speed over a stretch of about
+     `shooting.originSpeedSeconds` (0.1 s) that ended within the last
+     `shooting.originLagMaxSeconds` (0.3 s).
+   - It reads a per-player ring of root positions, one sample per Heartbeat, in the new pure
+     module `src/combat/server/Services/PositionRing.luau` (`New`, `Record`, `Clear`,
+     `Speed`). The harness loads it as it stands.
+   - It is capped by `Tuning.FastestMove` and multiplied by `CommitLag`, as before. The hard
+     ceiling is unchanged: 42 studs + pad.
+   - `originSpeedSeconds` is a new key in `ProvingGrounds.json`. `Tuning.Validate` bounds it:
+     positive, finite, at most `originLagMaxSeconds`.
+   - A 20-stud, 0.15 s dash, in studs/s:
+
+     | Server frame | 1 | 3 | 5 | 9 |
+     |---|---|---|---|---|
+     | Now (full by frame 7) | 19.0 | 57.1 | 95.2 | 133.3 |
+     | First version (net displacement over the whole window) | 7 | 22 | 37 | 63, never 133 |
+
+   - **Cost, accepted by the lead:** one legal dash now buys 40 + 4 studs of slack at the lag
+     ceiling (before: 20 + 4), and 17 at an honest 50 ms. A shaking client can hold the cap.
+   - `WeaponService.ForgetMotion(player)` clears the ring after every move the server itself
+     makes of a body. `ArenaService.SetMovedHook` wires it: `placeBody`, `ReleaseWaiting`,
+     `RescueIfOut`. A fresh character clears it too (`PrepareCharacter`).
+2. **A clear field wins.**
+   - A down decided when the wave's last body is already dead does not end the run.
+   - `fieldClear()` in `WaveService` = nothing queued, no boss still to place, nothing alive.
+     It is passed to `VitalsService.RunLost(members, fieldClear)`. `OnDown` and the tick both
+     ask through `endIfLost`, so the rule cannot differ between them.
+   - The clear branch stands the downed up. On the last wave the run ends `"cleared"`.
+3. **Threats end with the wave.**
+   - Server: the wave clear calls `VitalsService.ClearThreats()`.
+   - Client: on entering the breather it clears threats (`ThreatFx.Clear`). The players' own
+     projectiles fly on.
+   - Client: when the wave number changes between two fighting phases, with no breather and
+     `merged` false, it clears threats and flights. That is a Studio skip the server carried
+     out. The skip keys clear nothing themselves, because the server may refuse the skip.
+4. **A run starts only with bodies.** `WaveService.Start` returns until every human member
+   has a living body (`VitalsService.AllHaveBodies`). The lobby polls it again next frame.
+5. **Stand-ups, three more places:** before `EndRun("cleared")`; in `restartProving`; in
+   `Main`, before `Admit`, for a rejoiner who is still down.
+6. **Smaller server changes:**
+   - `queueWave` drops a group, elite or boss whose kind is unknown, with one warn per kind.
+     A burst that can never spawn would hold the queue until the run cap.
+   - An empty tally at a flush (the Studio `killAll` lever) splits evenly among the fighters.
+   - Crowd bounds are set whenever the arena name changes (`ArenaService.ArenaName`).
+   - `CombatMode` decides proving and range once, together, behind `game.Loaded`.
+   - The `[Perf]` line skips steps with no living body.
+   - `RunFx.PushTo` and the unreachable range branch in `Main` are removed.
+   - `spawnedThisGroup` counts what was queued. The `wave` effect's `boss` flag is true only
+     when a boss was really queued.
+   - `WeaponService` caches its world `RaycastParams` and rebuilds them only after a
+     character comes or goes.
+   - `WeaponService.OnReadoutTick`: `RangeService` sweeps its lost dummies on the one 2 Hz
+     readout clock.
+   - `Armory.DamageScale` returns 1 for a tier whose damage is 0.
+7. **`director.runCapSeconds` 1200 → 1800.**
+   - 1800 s is 2.5 × the 12-minute target, the ratio C1 shipped.
+   - A tier-1 Longbow clear takes 19.2–20.0 min and was being cut off in wave 10.
+   - `sim_combat.py` assertion 17 now also requires the cap to be at least twice
+     `targetMinutes`.
+8. **Client:**
+   - The mission down follows `PartyMember.down` in both directions, each after a 1 s slack
+     (`VitalsController.SetServerDown`). A held down survives a new character.
+   - `InputController.SetPhase(phase, waiting)` and one `CanAct()` predicate. It gates
+     attacks, casts and the slot switch, and the HUD dims its ability tiles by it.
+   - On touch, Return is hidden only while the local player is fighting in `wave` or `boss`.
+     It shows for a player who is waiting or down.
+   - `CrowdRenderer.Prewarm(mission.crowd.maxAlive)`: a mission fills its pool to its own
+     cap, never past the bench's. The range still fills to the bench's cap at start.
+   - Two layout clamps that could throw on a rounding error are hardened.
+   - The mission boot no longer depends on a layout pass: the snapshot request goes first,
+     and the first layout runs under `pcall`.
+   - The C1 fallback `boot()` warns if it is ever taken. It is dead and goes in Wave 3.
+
+#### New names
+
+- **Module:** `PositionRing` (`New(capacity)`, `Record(history, now, position)`,
+  `Clear(history)`, `Speed(history, now, position, window, span)`; type `History`).
+- **Server:**
+  - `WeaponService.ForgetMotion(player)`
+  - `WeaponService.OnReadoutTick(callback)`
+  - `VitalsService.AllHaveBodies(members): boolean`
+  - `VitalsService.RunLost(members, fieldClear: boolean?): (boolean, { number })`
+  - `ArenaService.ArenaName(): string`
+  - `ArenaService.SetMovedHook(hook: (player: Player) -> ())`
+  - `ArenaService.RescueIfOut(member, below, outside): boolean`
+- **Client:**
+  - `BossBar.SetRect(scale, centreX, top, width): number`
+  - `CrowdRenderer.Prewarm(count)`
+  - `InputController.SetPhase(phase, waiting: boolean?)`
+  - `InputController.CanAct(): boolean`
+  - `VitalsController.SetServerDown(down)`
+- **Removed:** `RunFx.PushTo`; `BossBar.SetLayout`'s `leftEdge` argument.
+- **Config keys:**
+
+  | File | Key | Value |
+  |---|---|---|
+  | `Combat.json` | `player.rescue.below` | 8 |
+  | `Combat.json` | `player.rescue.outside` | 4 |
+  | `Combat.json` | `director.runCapSeconds` | 1800 (was 1200) |
+  | `ProvingGrounds.json` | `shooting.originSpeedSeconds` | 0.1 |
+  | `Layouts/Arenas/Village.luau` | `wall.barrierHeight` | 80 |
+  | `Layouts/Arenas/Village.luau` | `wall.barrierThickness` | 8 |
+
+- **Types:** `CombatPlayerConfig.rescue: { below, outside }?`;
+  `RangeShootingConfig.originSpeedSeconds`; `ArenaLayout.wall.barrierHeight: number?` and
+  `barrierThickness: number?`.
+- **Theme:** `COMBAT_MISSION_BOSS_BAR_MIN_WIDTH` 140, `COMBAT_RANGE_HURT_POINTER_MIN_RADIUS`
+  48.
+- **Layout note:** the `wall = { … }` line in `Village.luau` stays on one line with the fence
+  height as its first key. `tools/sim_range.py` reads that number from the line's text.
+
+#### Gates at the end of the round
+
+As reported by the engineers. The QA pass was still running when this was written.
+
+| Gate | Count |
+|---|---|
+| `tools/crowd_harness/run_harness.py` | 574 checks |
+| `tools/crowd_harness/mutate.py` | 231 mutations, 0 not caught |
+| `tools/sim_range.py --check` | 363 passes |
+| `tools/sim_combat.py --check` | 18 assertions |
+
+- One proposed mutation (the ring's "anchor may equal the end") was an equivalent mutant. The
+  line it mutated was removed.
+- **Checked by reading only** (no test can load them): all of `WaveService` (rescue, unknown
+  kinds, stand-ups, bounds, the tick wiring); `ArenaService` (barrier, collision groups, the
+  moved hook); `Main`; every client file.
+- **Needs Studio:** the wall's behaviour, the camera at the rim, the rescue teleport.
+  PLAYTEST "P5 Wave 1" step 2 and MANUAL_STEPS "P5 Wave 1" step 6 cover the first two.
+
+#### Carried from this round
+
+The full list with owners is in `docs/PLAN.md` "P5" → "Carried". Two of them are gates:
+
+- **Before the publish freeze lifts (Wave 3), luau-engineer:** `OnDash` grants i-frames on
+  the request alone. A modified client that requests a dash every 0.64 s without moving voids
+  about 56% of enemy hits at 60 ms ping, and about 86% at the 0.3 s lag ceiling. Judge the
+  dash against the position ring at hit time.
+- **Wave 3, lead + economy-designer:** the Boomtown, Metropolis and Orbital arenas have
+  5-stud fences and no `barrierHeight`. There the free rescue could be repeated every 1.5 s
+  for near-permanent i-frames. Each era needs `barrierHeight` (gate: a `crowd` block implies
+  `barrierHeight`) or a rescue cooldown before it gets crowd waves.
+
+#### State (2026-10-13)
+
+- Wave 1 is on `main` since 2026-10-13.
+- Every second-review fix is done on `p5-missions`. QA is running. **Not merged yet.**
+- Next: the lead merges after QA and rebuilds the six place files. Then Ben's playtest
+  (`docs/PLAYTEST.md` "P5 Wave 1"), which now starts at the fence.
+- The publish freeze holds until Wave 3.

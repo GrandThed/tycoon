@@ -17,9 +17,11 @@ VITALS = "src/combat/server/Services/VitalsService.luau"
 FIELD = "src/combat/server/Services/ThreatField.luau"
 TALLY = "src/combat/server/Services/StrikeTally.luau"
 TUNING = "src/shared/Tuning.luau"
+RING = "src/combat/server/Services/PositionRing.luau"
 FILES = [
     TALLY,
     TUNING,
+    RING,
     "src/shared/CrowdCodec.luau",
     "src/shared/HitShapes.luau",
     "src/shared/Armory.luau",
@@ -786,8 +788,56 @@ MUTATIONS = {
     ),
     "p5 lost: an empty fight is lost": (
         VITALS,
+        "return fieldClear ~= true and #fighters > 0 and not anyStanding, fighters",
+        "return fieldClear ~= true and not anyStanding, fighters",
+    ),
+    "p5 lost: a clear field does not win": (
+        VITALS,
+        "return fieldClear ~= true and #fighters > 0 and not anyStanding, fighters",
         "return #fighters > 0 and not anyStanding, fighters",
-        "return not anyStanding, fighters",
+    ),
+    # Second review round.
+    "p5: a start does not wait for bodies": (
+        VITALS,
+        "if not member.bot and player ~= nil and bodyOf(player) == nil then",
+        "if false then",
+    ),
+    "p5: ClearThreats keeps the queued decisions": (
+        VITALS,
+        "function VitalsService.ClearThreats(): ()\n\ttable.clear(pending)\n",
+        "function VitalsService.ClearThreats(): ()\n",
+    ),
+    "p5: the perf line counts an empty field": (
+        CROWD,
+        "if perf.every <= 0 or aliveCount == 0 then",
+        "if perf.every <= 0 then",
+    ),
+    # Ruling 7: the server's own reading of a player's speed (PositionRing), and its span.
+    "speed ring: the divisor floor removed": (RING, "/ math.max(elapsed, stretch)", "/ elapsed"),
+    "speed ring: the index without the modulo": (
+        RING,
+        "return (history.head - order) % history.capacity + 1",
+        "return history.head - order + 1",
+    ),
+    "speed ring: the anchor is not moved back to the span": (
+        RING,
+        "\t\twhile anchorOrder < count and endAt - history.times[anchor] < stretch do\n\t\t\tanchorOrder += 1\n\t\t\tanchor = indexOf(history, anchorOrder)\n\t\tend\n",
+        "\t\twhile anchorOrder < count and endAt - history.times[anchor] < 0 do\n\t\t\tanchorOrder += 1\n\t\t\tanchor = indexOf(history, anchorOrder)\n\t\tend\n",
+    ),
+    "speed ring: the window break removed": (
+        RING,
+        "\t\t\tif now - endAt > window then\n\t\t\t\tbreak\n\t\t\tend\n",
+        "",
+    ),
+    "speed ring: a bad span is not the whole window": (
+        RING,
+        "local stretch = if span > 0 and span < window then span else window",
+        "local stretch = if span > 0 and span < window then span else 0",
+    ),
+    "tuning: the speed span may be 0 or outlast its window": (
+        TUNING,
+        "return value > 0 and base ~= nil and value <= base.shooting.originLagMaxSeconds",
+        "return true",
     ),
 }
 

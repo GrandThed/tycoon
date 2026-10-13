@@ -18,7 +18,17 @@ local DIAGONAL = 32.5
 return {
 	size = { x = 110, z = 110 },
 	floor = { material = "Grass", color = { 106, 127, 63 } },
-	wall = { height = 4, material = "WoodPlanks", color = { 112, 84, 56 } },
+	-- barrierHeight: the fence is hop-high and nothing lies beyond it, so an invisible wall stands
+	-- behind it. 80 = the highest a player's feet can legally get (jump 18 + double jump 12 + the
+	-- largest launch in ProvingGrounds.json 18 + Leap Smash's rise 10 = 58), a character's own
+	-- height (6), and a quarter again as margin.
+	-- barrierThickness: outward from the fence's outer face. A dash moves 133 studs a second,
+	-- over 2 studs a frame (and more on a slow one), which steps through a 1-stud wall; 8 studs
+	-- is well over three frames of it.
+	-- Kept on one line, with the fence height as its first key: tools/sim_range.py reads that
+	-- number from this line's text.
+	-- stylua: ignore
+	wall = { height = 4, material = "WoodPlanks", color = { 112, 84, 56 }, barrierHeight = 80, barrierThickness = 8 },
 	lobbyPad = { x = 0, z = 0 },
 	-- Respawns, round-robin: a ring just off the pad so a returning player lands next to the
 	-- fight rather than inside the enemy that killed them.

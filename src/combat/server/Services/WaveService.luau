@@ -63,8 +63,8 @@ type Run = {
 	merged: boolean,
 	forcedNextWave: number?,
 	queue: { Burst },
-	-- Bodies the current group put on the field (the boss and the director's elite included),
-	-- for the merge test's dead fraction.
+	-- Bodies the current group's waves queued (the director's elite and lever spawns included; a
+	-- boss and what it summons are not), for the merge test's dead fraction.
 	spawnedThisGroup: number,
 	-- The crowd wave being spawned, and the boss it still has to place (spawned first).
 	spec: Combat.CrowdWaveSpec?,
@@ -135,9 +135,14 @@ local run = freshRun()
 local boot = {
 	mission = false,
 	proving = false,
-	-- The crowd's bounds are set once, by the first run (every arena is built at the origin).
-	boundsSet = false,
+	-- The arena the crowd's bounds were last set for ("" = never): a reserved server may host a
+	-- second run in another arena.
+	boundsArena = "",
 	warnedStartWave = false,
+	-- Crowd kinds a mission named that ProvingGrounds.json does not have, warned once each.
+	warnedKinds = {} :: { [string]: boolean },
+	-- os.clock() a member was last put back on the floor, by userId.
+	rescuedAt = {} :: { [number]: number },
 	broadcastAccumulator = 0,
 	loop = nil :: RBXScriptConnection?,
 }
@@ -315,6 +320,17 @@ local function crowdOf(mission: Types.MissionConfig): Types.MissionCrowdConfig?
 	return mission.crowd
 end
 
+local function knownKind(kind: string): boolean
+	if Tuning.Get().crowd.kinds[kind] ~= nil then
+		return true
+	end
+	if not boot.warnedKinds[kind] then
+		boot.warnedKinds[kind] = true
+		warn(`[WaveService] unknown crowd kind "{kind}" in the mission's crowd block; dropped`)
+	end
+	return false
+end
+
 -- Queues one wave's groups as bursts, the boss to be placed first. Ruling 17: a boss wave takes
 -- no extra elite (bosses are judged as whole fights).
 local function queueWave(
@@ -337,7 +353,14 @@ local function queueWave(
 	end
 	local burstSize = math.max(math.floor(crowd.burst), 1)
 	local bursts = 0
+	local queued = 0
+	-- A kind ProvingGrounds.json does not have is dropped here, with one warn: CrowdService.Spawn
+	-- answers 0 for it exactly as for "no room", and a burst that can never spawn would hold the
+	-- head of the queue until the run cap.
 	local function add(kind: string, count: number): ()
+		if not knownKind(kind) then
+			return
+		end
 		local left = count
 		while left > 0 do
 			local size = math.min(left, burstSize)
@@ -345,6 +368,7 @@ local function queueWave(
 			left -= size
 			bursts += 1
 		end
+		queued += count
 	end
 	for _, group in spec.groups do
 		add(group.kind, group.count)
@@ -353,21 +377,20 @@ local function queueWave(
 	local elite = crowd.eliteKind
 	if boss == nil and elite ~= nil and run.tempo >= combatConfig.director.eliteTempo then
 		add(elite, 1)
-		run.spawnedThisGroup += 1
 	end
-	if boss ~= nil then
+	if boss ~= nil and knownKind(boss.kind) then
 		run.bossPending = boss
 		run.bossHpMult = spec.bossHpMult
 		run.bossValor = math.round(boss.valor * spec.rewardMult)
 	end
 	run.burstsThisWave = bursts
-	run.spawnedThisGroup += spec.total
+	run.spawnedThisGroup += queued
 	run.nextBurstAt = os.clock()
 	RunFx.Push({
 		kind = "wave",
 		wave = waveNumber,
 		merged = run.merged,
-		boss = boss ~= nil,
+		boss = run.bossPending ~= nil,
 	})
 end
 
@@ -468,6 +491,15 @@ local function flushPool(waveNumber: number, waveCount: number, cleared: boolean
 	end
 	local tally = run.damageTally
 	run.damageTally = {}
+	if next(tally) == nil then
+		-- Nobody damaged anything that died (the killAll lever, or a boss's fight ended by it):
+		-- the pot is still theirs. Zero damage each is an even split (ContributionShares).
+		for _, member in ArenaService.GetMembers() do
+			if not member.waiting then
+				tally[member.userId] = 0
+			end
+		end
+	end
 	if cleared and run.bossClearsThisFlush > 0 then
 		-- Before the per-member loop below, whose snapshot then carries the Mentor Valor too.
 		payMentors(combatConfig, tally)
@@ -658,36 +690,67 @@ local function spawnBursts(mission: Types.MissionConfig, combatConfig: Types.Com
 		)
 end
 
--- Humans in the fight (waiting members are on the pad and do not count), how many of those are
--- alive, and how many humans are alive on the pad. A down is alive here: OnDown rules on it.
-local function humanCounts(): (number, number, number)
+-- Humans in the fight (waiting members are on the pad and do not count), and how many humans
+-- are alive on the pad.
+local function humanCounts(): (number, number)
 	local fighters = 0
-	local fightersAlive = 0
 	local waitingAlive = 0
 	for _, member in ArenaService.GetMembers() do
 		if member.bot then
 			continue
 		end
-		local alive = ArenaService.IsAlive(member)
-		if member.waiting then
-			if alive then
-				waitingAlive += 1
-			end
-			continue
-		end
-		fighters += 1
-		if alive then
-			fightersAlive += 1
+		if not member.waiting then
+			fighters += 1
+		elseif ArenaService.IsAlive(member) then
+			waitingAlive += 1
 		end
 	end
-	return fighters, fightersAlive, waitingAlive
+	return fighters, waitingAlive
+end
+
+-- P5 review: a body that has left the arena (through the floor, or past its edge) is put back on
+-- a spawn with the get-up i-frames. It is not a down and costs nothing: falling out is the
+-- arena's fault. Without Combat.json player.rescue nobody is rescued. A member just rescued is
+-- left alone for the length of those i-frames: their client still reports the old place for a
+-- frame or two, and a second rescue would only move them again.
+local function rescueFallen(combatConfig: Types.CombatConfig): ()
+	local rescue = combatConfig.player.rescue
+	if rescue == nil then
+		return
+	end
+	local now = os.clock()
+	local iframes = Tuning.Get().player.getUpIframes
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		if member.bot or player == nil then
+			continue
+		end
+		local last = boot.rescuedAt[member.userId]
+		if last ~= nil and now - last < iframes then
+			continue
+		end
+		if ArenaService.RescueIfOut(member, rescue.below, rescue.outside) then
+			boot.rescuedAt[member.userId] = now
+			WeaponService.GrantIframes(player, iframes)
+		end
+	end
+end
+
+-- Nothing alive, nothing left to spawn and no boss still to place: the wave is beaten, whether
+-- or not this frame's tick has reached its clear branch yet (and all through a breather).
+local function fieldClear(): boolean
+	return #run.queue == 0 and run.bossPending == nil and CrowdService.AliveCount() == 0
 end
 
 -- Ruling 18: no fighting human left standing ends the run, each fighter marked as having died.
 -- "down" when any of them is down; "wipe" when every one of them died outright (a reset).
+-- A clear field wins (lead ruling): a dying enemy's last blow can be decided in the very frame
+-- of the last kill, and whichever Heartbeat runs first, the wave was beaten. The run is then
+-- not lost; the clear branch runs, and the downed stand up at that boundary as at any other.
+-- OnDown and the tick both ask here, so the rule cannot differ between them.
 local function endIfLost(): boolean
 	local members = ArenaService.GetMembers()
-	local lost, fallen = VitalsService.RunLost(members)
+	local lost, fallen = VitalsService.RunLost(members, fieldClear())
 	if not lost then
 		return false
 	end
@@ -735,6 +798,8 @@ local function restartProving(): ()
 		member.ready = false
 	end
 	run.lobbySince = os.clock()
+	-- The run that ended them is over: nobody waits out the lobby under the DOWN banner.
+	standUpDowned()
 	broadcast()
 end
 
@@ -773,25 +838,19 @@ local function tickProvingLobby(mission: Types.MissionConfig, combatConfig: Type
 	if run.lobbySince == 0 then
 		run.lobbySince = now
 	end
-	local debugConfig = combatConfig.debug :: any
-	local delay = tonumber(debugConfig.provingStartDelay) or 0
-	if now - run.lobbySince < delay then
+	local debugConfig = combatConfig.debug
+	if now - run.lobbySince < debugConfig.provingStartDelay then
 		return
 	end
 	if run.forcedNextWave == nil then
-		local startWave = tonumber(debugConfig.provingStartWave)
+		local startWave = math.max(math.floor(debugConfig.provingStartWave), FIRST_WAVE)
 		local crowd = crowdOf(mission)
-		if startWave ~= nil then
-			startWave = math.max(math.floor(startWave), FIRST_WAVE)
-			if crowd ~= nil and crowd.waves[startWave] ~= nil then
-				run.forcedNextWave = startWave
-			elseif not boot.warnedStartWave then
-				-- Once per server: the loop restarts every run, and wave 1 is the safe start.
-				boot.warnedStartWave = true
-				warn(
-					`[WaveService] provingStartWave {startWave} has no crowd wave; starting at wave 1`
-				)
-			end
+		if crowd ~= nil and crowd.waves[startWave] ~= nil then
+			run.forcedNextWave = startWave
+		elseif not boot.warnedStartWave then
+			-- Once per server: the loop restarts every run, and wave 1 is the safe start.
+			boot.warnedStartWave = true
+			warn(`[WaveService] provingStartWave {startWave} has no crowd wave; starting at wave 1`)
 		end
 	end
 	WaveService.Start()
@@ -833,19 +892,22 @@ local function tickWave(mission: Types.MissionConfig, combatConfig: Types.Combat
 		return
 	end
 
-	-- Wave (or merged pair) cleared.
+	-- Wave (or merged pair) cleared. What its dead still had in the air (a lob, a slinger's shot)
+	-- goes with them: nothing lands on an empty field, in the breather or on the summary card.
+	VitalsService.ClearThreats()
 	local count = run.wave - run.clearedThrough
 	run.clearedThrough = run.wave
 	flushPool(run.wave, count, true)
 	ArenaService.PublishRun()
+	-- A clear is a wave boundary: the downed stand up, also when it was the last wave.
+	standUpDowned()
 	if run.wave >= mission.waves then
 		WaveService.EndRun("cleared")
 		return
 	end
 	-- No flat breather regen in crowd missions: VitalsService's regen is the only healing.
 	run.breatherUntil = now + Combat.BreatherSeconds(run.tempo, combatConfig.director)
-	-- The breather is a wave boundary: the waiting enter now, and the downed stand up.
-	standUpDowned()
+	-- The waiting enter now.
 	ArenaService.ReleaseWaiting()
 	setPhase("breather")
 end
@@ -856,6 +918,7 @@ local function tick(): ()
 	if mission == nil or combatConfig == nil then
 		return
 	end
+	rescueFallen(combatConfig)
 	local phase = run.phase
 	if phase == "lobby" then
 		if boot.proving then
@@ -885,7 +948,7 @@ local function tick(): ()
 	if endIfLost() then
 		return
 	end
-	local fighters, _fightersAlive, waitingAlive = humanCounts()
+	local fighters, waitingAlive = humanCounts()
 	if fighters == 0 and waitingAlive > 0 then
 		-- Every fighter LEFT (nobody fell): the joiners on the pad take over now rather than
 		-- watching an unattended wave until the run cap.
@@ -909,6 +972,11 @@ function WaveService.Start(): ()
 	local mission = ArenaService.GetMission()
 	local combatConfig = config()
 	if mission == nil or combatConfig == nil then
+		return
+	end
+	if not VitalsService.AllHaveBodies(ArenaService.GetMembers()) then
+		-- A character still spawning has no body, and a run reads "no body" as fallen: its first
+		-- frame would end it. The lobby polls Start again next frame.
 		return
 	end
 	local startWave = run.forcedNextWave or FIRST_WAVE
@@ -940,8 +1008,9 @@ function WaveService.Start(): ()
 	run.lobbySince = 0
 	CrowdService.SetScales({ hp = spec.hpScale, plate = spec.plateScale })
 	VitalsService.SetMission(missionRules(spec))
-	if not boot.boundsSet then
-		boot.boundsSet = true
+	local arena = ArenaService.ArenaName()
+	if boot.boundsArena ~= arena then
+		boot.boundsArena = arena
 		local center, halfSize = ArenaService.ArenaBounds()
 		WeaponService.SetArena(center, halfSize)
 		CrowdService.SetBounds(center, halfSize)
@@ -1052,6 +1121,7 @@ function WaveService.Reset(): ()
 	run = freshRun()
 	CrowdService.Clear()
 	VitalsService.ClearThreats()
+	table.clear(boot.rescuedAt)
 	pushRunFields()
 end
 
@@ -1070,6 +1140,9 @@ function WaveService.Init(): ()
 		return player ~= nil and VitalsService.IsDown(player)
 	end)
 	ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)
+	-- A placement, a release from the pad or a rescue is not the player's own motion: without
+	-- this the jump would read as speed, and buy their next claimed position the full slack.
+	ArenaService.SetMovedHook(WeaponService.ForgetMotion)
 	WeaponService.SetActGate(mayAct)
 	ArenaService.SetResetHook(WaveService.Reset)
 	-- From the first admit, so a lobby bar is already the gear's; Start re-sets the scales.

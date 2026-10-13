@@ -84,8 +84,10 @@
 -- P5 (docs/INTERFACES.md "P5 contracts", Client): the range path is the input of every crowd
 -- mission too (CameraController.IsCrowdCombat), with the range's remotes, so the C1 mission
 -- bindings above stay unbound until Wave 3 deletes them. In a mission nothing is sent while
--- the run phase is `lobby`, `summary` or `ended`, exactly as while knocked down: the server
--- refuses those anyway, and this keeps the client from drawing swings it would take back.
+-- the run phase is `lobby`, `summary` or `ended`, or while the player waits on the pad for the
+-- next wave, exactly as while knocked down: the server refuses those anyway, and this keeps
+-- the client from drawing swings it would take back. That one rule (CanAct) also gates the
+-- slot switch and is what the HUD dims its ability tiles and buttons by.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -239,8 +241,10 @@ type TapState = { start: Vector2, at: number, moved: number, drawing: boolean }
 type PendingSwing = { seq: number, family: string, length: number, sentAt: number }
 type RangeState = {
 	rangeStarted: boolean,
-	-- P5: this range path serves a mission (not the bench), so the run phase gates it.
+	-- P5: this range path serves a mission (not the bench), so the run phase gates it, and
+	-- so does waiting on the pad for the next wave (the local PartyMember.waiting).
 	inMission: boolean,
+	waiting: boolean,
 	activeSlot: Stance,
 	-- nil until FeedbackController pushes the server's loadout: the config's starting loadout.
 	loadout: Types.RangeLoadout?,
@@ -283,6 +287,7 @@ type RangeState = {
 local rangeState: RangeState = {
 	rangeStarted = false,
 	inMission = false,
+	waiting = false,
 	activeSlot = MELEE_SLOT,
 	device = "pc",
 	rangeTouches = {},
@@ -404,11 +409,14 @@ local function inPlay(): boolean
 		or missionState.phase == "boss"
 end
 
--- Range path: no attack, draw or cast leaves now. Knocked down (P4), or (P5) a mission whose
--- run has not begun or is over.
+-- Range path: no attack, draw, cast or slot switch now. Knocked down (P4), or (P5) a mission
+-- whose run has not begun or is over, or a member waiting on the pad for the next wave.
 local function cannotAct(): boolean
 	return MovementController.IsDown()
-		or (rangeState.inMission and IDLE_PHASES[missionState.phase] == true)
+		or (
+			rangeState.inMission
+			and (IDLE_PHASES[missionState.phase] == true or rangeState.waiting)
+		)
 end
 
 type LocalRig = { root: BasePart, head: BasePart, humanoid: Humanoid }
@@ -1802,9 +1810,11 @@ local function castAbility(slot: Stance): ()
 end
 
 -- A player's slot change (1 / 2, gamepad Y, the touch slot button): refused while busy (P3
--- ruling 3) and while knocked down (P4). A cast switches through setActiveSlot directly.
+-- ruling 3) and whenever nothing can be done (knocked down, P4; a mission's idle phases and
+-- the wait on the pad, P5), which is exactly when the touch slot button is dimmed. A cast
+-- switches through setActiveSlot directly.
 local function requestSlot(slot: Stance): ()
-	if isBusy() or MovementController.IsDown() then
+	if isBusy() or cannotAct() then
 		return
 	end
 	setActiveSlot(slot)
@@ -2249,6 +2259,13 @@ function InputController.IsBusy(): boolean
 	return rangePath and isBusy()
 end
 
+-- P5: false whenever the range path sends no attack, cast or slot switch: knocked down, or in a
+-- mission an idle phase or the wait on the pad. The HUD veils its ability tiles by the same
+-- rule the input obeys, so a tile never looks ready while its key does nothing.
+function InputController.CanAct(): boolean
+	return not cannotAct()
+end
+
 -- P1 range API, read every frame by Feedback's Crosshair.
 -- Half-angle in degrees of the cone the next shot is drawn from, ADS already applied; 0 for
 -- a ready first shot, for melee and during Mag Dump. Crosshair radius in px = tan(rad(b)) /
@@ -2402,8 +2419,11 @@ function InputController.SetAbilityReady(readyIn: SlotTiers): ()
 	missionState.abilityReadyIn = readyIn
 end
 
-function InputController.SetPhase(nextPhase: string): ()
+-- Pushed from every RunState: the run phase, and (P5) whether the local member is waiting on
+-- the pad for the next wave (nil = not).
+function InputController.SetPhase(nextPhase: string, waiting: boolean?): ()
 	missionState.phase = nextPhase
+	rangeState.waiting = waiting == true
 	if not inPlay() then
 		missionState.attackHeld = false
 		missionState.chargeStartedAt = nil

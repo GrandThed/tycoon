@@ -112,6 +112,10 @@ CROWD_RUN_TARGETS = {"village": {"cash": 142185, "materials": 256, "valor": 35}}
 CROWD_REWARD_TOLERANCE = 0.10
 CROWD_CLEAR_SECONDS = (600.0, 900.0)
 CROWD_TARGET_MINUTES_SLACK = 1.5
+# director.runCapSeconds ends a run that never finishes. It must leave a player slower than the
+# simulator's this many times the mission's targetMinutes (C1 shipped 1200 s against 8 minutes,
+# x2.5), or it cuts off runs that are merely slow.
+CROWD_RUN_CAP_RATIO = 2.0
 # The legacy run model's assertions (3, 7, 8, 10, 11, 14) judge the C1 Humanoid waves. A mission
 # with a `crowd` block no longer plays them (P5 ruling 27 and the Wave 1 boot), and its
 # targetWaveSeconds is re-tuned for crowds, so they skip it; 15-18 judge its crowd instead.
@@ -252,12 +256,13 @@ def weapon_damage(cfg, slot, tier, asc_level):
 def damage_scale(cfg, slot, tier, asc_level, ability):
     """Armory.DamageScale (P5 ruling 8) -- the slot's WeaponDamage(tier, asc) over its tier-1,
     ascension-0 damage; an ability takes the level's abilityMult instead of damageMult. 1 for an
-    unknown slot, a tier past the last one or a tier-1 damage of 0."""
+    unknown slot, a tier past the last one, a tier-1 damage of 0 or a tier whose own damage is 0:
+    each degrades to the range's tier-1 numbers, never to hits of nothing."""
     if slot not in cfg["slots"]:
         return 1.0
     base = tier_def(cfg, slot, 1)
     definition = tier_def(cfg, slot, tier)
-    if base is None or definition is None or base["damage"] <= 0:
+    if base is None or definition is None or base["damage"] <= 0 or definition["damage"] <= 0:
         return 1.0
     level = ascension_level_def(cfg, asc_level)
     mult = (level["abilityMult"] if ability else level["damageMult"]) if level else 1
@@ -2894,8 +2899,9 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks.verdict(ok16, "16 crowd rewards   ", "; ".join(details) + f" (tolerance {CROWD_REWARD_TOLERANCE:.0%})")
 
     # 17. The reacting player (sim_range's whole run, every seed) clears every wave inside
-    #     CROWD_CLEAR_SECONDS, breathers included, and targetMinutes (the hub panel's promise)
-    #     lies in that band and within CROWD_TARGET_MINUTES_SLACK of the mean clear.
+    #     CROWD_CLEAR_SECONDS, breathers included; targetMinutes (the hub panel's promise) lies
+    #     in that band and within CROWD_TARGET_MINUTES_SLACK of the mean clear; and the run cap
+    #     leaves at least CROWD_RUN_CAP_RATIO times targetMinutes.
     details = []
     ok17 = True
     lo, hi = CROWD_CLEAR_SECONDS
@@ -2908,11 +2914,14 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         mean = sum(clears) / len(clears) if clears else math.inf
         promise = mission["targetMinutes"]
         honest = lo / 60 <= promise <= hi / 60 and abs(promise - mean / 60) <= CROWD_TARGET_MINUTES_SLACK
-        ok17 = ok17 and every and honest
+        cap = combat_cfg["director"]["runCapSeconds"]
+        roomy = cap >= CROWD_RUN_CAP_RATIO * promise * 60
+        ok17 = ok17 and every and honest and roomy
         details.append(
             f"{mission['id']} " + ", ".join(f"{r['end']} {se.fmt_time(r['at'])}" for r in runs)
             + f" (mean {mean / 60:.1f} min; targetMinutes {promise}; targetWaveSeconds "
-            f"{mission['targetWaveSeconds']})"
+            f"{mission['targetWaveSeconds']}; run cap {cap} s = x{cap / (promise * 60):.2f} of the target, "
+            f"needs >= x{CROWD_RUN_CAP_RATIO:g})"
         )
     checks.verdict(ok17, "17 crowd clear     ", "; ".join(details) + f" (needs {lo / 60:.0f}-{hi / 60:.0f} min)")
 

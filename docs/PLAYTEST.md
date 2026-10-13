@@ -4384,28 +4384,41 @@ Setup: `docs/MANUAL_STEPS.md` "P4 Stop 3". Keys: **1** melee, **2** ranged, **Sp
 
 ## P5 Wave 1 — Crowd in a mission
 
+**Do not test jumping before rebuilding: the build with the wall at the fence is the one after the second-review merge.**
+
 **Goal:** judge the first real mission on the new combat: Raider Woods (Village), ten waves of
 crowds, the Colossus at wave 5, the Warlord at wave 10. Solo. **About 15 minutes. Keys only, no
 panel.** Silent, placeholder bodies. Judge whether it feels like a mission or like the range.
 
-<!-- FILE TO OPEN: start. Lead: if Wave 1 is not merged to `main`, change only this block. -->
+**Status 2026-10-13:**
+- Wave 1 is on `main`. A second review (Opus) found two Majors; their fixes wait for the merge.
+- Steps 2 and 3 are new, and steps 4 and 8 gained a check. They cover what no offline test can.
+
+<!-- FILE TO OPEN: start. Lead: if the second-review fixes are not merged to `main`, change only this block. -->
 **File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
-- **Only after the lead says Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
-  **"Build all"**.
+- **Only after the lead says the second-review fixes are merged.** Then VS Code,
+  **Ctrl+Shift+B** → **"Build all"**.
+- Before that, "Build all" gives Wave 1 without the wall: one hop over the fence ends the run.
 - Then close any `proving.rbxl` open in Studio (don't save) and open the file again. **A copy
   that was open in Studio before "Build all" is the old one.**
-- **You have the new build if** Play puts you in a grassy arena with a wooden fence and a
+- **You have a P5 build if** Play puts you in a grassy arena with a wooden fence and a
   **WAVE 1** banner, not in the big grey range.
+- **You have the build with the wall if** step 2 stops you at the fence. Nothing on screen
+  tells the two apart before that.
 <!-- FILE TO OPEN: end -->
 
-Setup: `docs/MANUAL_STEPS.md` "P5 Wave 1". Keys: **1** melee, **2** ranged, **Space** jump,
-**Left Shift** dash, **C** in the air = slam, **B** = skip to the next boss, **N** = skip to the
-next wave. You start with Broadsword + Longbow and a health bar of **145**.
+Setup: `docs/MANUAL_STEPS.md` "P5 Wave 1". Keys: **1** melee, **2** ranged, **Space** jump
+(twice = double jump), **Left Shift** dash, **C** in the air = slam, **B** = skip to the next
+boss, **N** = skip to the next wave. You start with Broadsword + Longbow and a health bar of
+**145**.
 
 **Expected today, not bugs:**
 - **The bow is weak here.** Enemies have 1.5× their range health and the bow is still tier 1.
   The sword is the main weapon in this test.
-- After a boss wave the breather is the longest one (about 14 s).
+- A 14 s pause follows a boss wave (the longest breather).
+- On a small phone the boss bar is narrow and sits right of centre, in the top strip.
+- You cannot leave the arena. If you ever do end up outside or under the floor, you are put
+  back on a spawn at once with no health lost. Tell Claude where it happened.
 - No cash pop per kill: the wallet moves at each wave's end.
 - Enemies walk through boulders and fence posts. Running a big circle avoids most hits.
 - Shooters may hang back near the fence (their keep-away distance spans most of the floor).
@@ -4414,20 +4427,30 @@ next wave. You start with Broadsword + Longbow and a health bar of **145**.
 ### The run (no panel)
 
 - [ ] 1. **Play** → after about 3 s the **WAVE 1** banner; red fodder come in from the fence in groups. Your health bar shows **145**. No Attack button. Bug: a range panel, an Attack button, or nothing spawns.
-- [ ] 2. Fight waves 1–3 (no keys) → between waves a short breather with a timer; wave 3 adds slingers (glowing shots). Your wallet grows at each wave's end. Bug: a wave never ends with the floor empty; the wallet does not move.
-- [ ] 3. **B** → wave 5: the **COLOSSUS** bar at the top, his slam rings, charge and fodder calls as in the range. Kill him → the bar folds, a **boss down** banner with **+10 Valor**. About as long as in the range (a minute and a bit). Bug: two boss bars; he melts in seconds or takes minutes.
-- [ ] 4. **N** a few times → waves 6–9: marksmen (warning line), lobbers (circles), plated elites (**BLOCKED**, then **PLATE BROKEN** on a heavy hit).
-- [ ] 5. **B** → wave 10: the **WARLORD**, guard first, then the duel, as in Stop 3.
-- [ ] 6. Stand still and let them hit you → a **DOWN** banner with no countdown, and the run ends: the **Expedition over** card with waves, kills, cash, Timber and Valor. The card has **no Return button**; its last line reads **Next run in …** and counts down from about 15 s. Then a new run starts at wave 1 with a full bar. Bug: you get up by yourself; a Return button shows; the countdown ends and nothing starts; Studio stops or kicks you.
+- [ ] 2. **The fence (new).** In wave 1, run to the fence. The fodder follow you; that is fine.
+      - Jump, double-jump and dash outward, in any mix → an invisible wall stops you and you drop back onto the grass. Bug: you land outside the fence, or fall; the run ends by itself.
+      - Stand with your back against the fence, looking into the arena → the camera stays where it always is. Bug: the camera snaps in close, or jitters along the fence.
+      - **2**, face outward, shoot arrows over the fence → they fly on past the edge. Bug: arrows stop in mid-air at the fence line.
+- [ ] 3. **Swing while dashing (new).** **1**, then dash into a group and click during the dash → the swing's effect and its hits land where you are. Bug: the swing lands behind you, where the dash began.
+- [ ] 4. Fight waves 1–3 (no keys) → between waves a short breather with a timer; wave 3 adds slingers (glowing shots). Your wallet grows at each wave's end. A wave you cleared always goes to the breather, even if the last enemy's blow drops you as it dies: you stand up at once. Bug: a wave never ends with the floor empty; the wallet does not move; a cleared wave ends on the **Expedition over** card; a shot or circle lands on you during the breather.
+- [ ] 5. **B** → wave 5: the **COLOSSUS** bar at the top, his slam rings, charge and fodder calls as in the range. Kill him → the bar folds, a **boss down** banner with **+10 Valor**, then the 14 s pause. About as long as in the range (a minute and a bit). Bug: two boss bars; he melts in seconds or takes minutes.
+- [ ] 6. **N** a few times → waves 6–9: marksmen (warning line), lobbers (circles), plated elites (**BLOCKED**, then **PLATE BROKEN** on a heavy hit). Bug: circles or lines of the skipped wave stay on the ground.
+- [ ] 7. **B** → wave 10: the **WARLORD**, guard first, then the duel, as in Stop 3.
+- [ ] 8. Stand still and let them hit you → a **DOWN** banner with no countdown, and the run ends: the **Expedition over** card with waves, kills, cash, Timber and Valor. The card has **no Return button**; its last line reads **Next run in Xs** and counts down from about 15. At 0 you stand up at once, in the new run's lobby; about 3 s later **WAVE 1**, with a full bar. Bug: you get up by yourself before the card; you still lie under **DOWN** when the lobby or wave 1 starts; a Return button shows; the countdown ends and nothing starts; Studio stops or kicks you.
 
 ### Phone and two players (optional)
 
-- [ ] 7. Phone: Test (Prueba) → Device (Dispositivo) → 375×667 → Play → auto-swing and auto-fire work, the ability and slot buttons show, the wave banner, health bar and boss bar fit, and there is no Attack button. Bug: an Attack button; something cut off or unreadable.
-- [ ] 8. Two players: Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). If one player shows as waiting on the pad, press **N** once in the other window: both fight. In window A, stand still until **DOWN** → the run goes on for B. Then in window B: **Esc** → **R** → **Enter** (reset) → the run ends at once, the summary card on both screens. Bug: the run goes on with nobody standing; nothing happens for a minute or more. (Do not press **N** while A is down: a new wave stands A up.)
+- [ ] 9. Phone: Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape (667×375) → Play.
+      - Auto-swing and auto-fire work, the ability and slot buttons show, and there is no Attack button.
+      - **B** → the **COLOSSUS** bar sits in the top strip between the wave header and the party list, right of centre. Bug: the bar lies on the crosshair; it is cut off.
+      - Let something hit you → red pointers stand in a ring around the crosshair. Bug: they pile up on the crosshair dot.
+- [ ] 10. Two players: Test (Prueba) → **Local Server** (Servidor local), **2 players** (2 jugadores) → **Start** (Iniciar). Wave 1 starts once both characters have spawned. If one player shows as waiting on the pad, press **N** once in the other window: both fight. In window A, stand still until **DOWN** → the run goes on for B. Then in window B: **Esc** → **R** → **Enter** (reset) → the run ends at once, the summary card on both screens. Bug: the run ends in its first second; the run goes on with nobody standing; nothing happens for a minute or more. (Do not press **N** while A is down: a new wave stands A up.)
 
 ### What to tell Claude
 
 Asked afterwards as click questions:
+- The fence (step 2): does the wall hold, is the camera fine, do arrows pass?
+- A swing while dashing (step 3): does it land where you are?
 - Does it feel like a mission or like the range?
 - Wave 9: too easy, about right or too hard?
 - The run's length: right, too long, too short?

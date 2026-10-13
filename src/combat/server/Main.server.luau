@@ -44,6 +44,7 @@ local RangeService = require(combatFolder:WaitForChild("RangeService"))
 local WeaponService = require(combatFolder:WaitForChild("WeaponService"))
 local AbilityService = require(combatFolder:WaitForChild("AbilityService"))
 local CrowdService = require(combatFolder:WaitForChild("CrowdService"))
+local VitalsService = require(combatFolder:WaitForChild("VitalsService"))
 
 type Service = {
 	Init: () -> (),
@@ -204,11 +205,6 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		sendSnapshot(player)
 		return
 	end
-	if mode == "range" then
-		-- The range was asked for but could not boot (RangeService.Configure refused): nobody is
-		-- admitted to anything.
-		return
-	end
 	Combat.TouchHighestEra(state)
 
 	local mission, overdrive, hostUserId, debugMission = resolveRun(player)
@@ -240,6 +236,12 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 			ReturnService.Refuse(player, verdict)
 			return
 		end
+	end
+	-- A down belongs to the run that caused it: a rejoin after a failed trip home still holds its
+	-- body record, and must not come back lying down (in a live wave they wait on the pad).
+	-- Before the admit, so the first RunState it announces already says so.
+	if VitalsService.IsDown(player) then
+		VitalsService.StandUp(player)
 	end
 	-- No yield between the verdict and the admit, so the seat it counted is still free.
 	ArenaService.Admit(player)
@@ -488,14 +490,13 @@ end)
 -- Ruling 26: the crowd's [Perf] line, Studio only, in both modes.
 local combatConfig = Catalog.GetCombatConfig()
 if RunService:IsStudio() and combatConfig ~= nil then
-	local perfSeconds = (combatConfig.debug :: any).perfLogSeconds
-	CrowdService.SetPerfLog(if typeof(perfSeconds) == "number" then perfSeconds else 0)
+	CrowdService.SetPerfLog(combatConfig.debug.perfLogSeconds)
 end
 
 if RangeService.IsActive() then
 	print("[Combat] booted — Proving Grounds (range)")
 elseif provingMission and combatConfig ~= nil then
-	local debugConfig = combatConfig.debug :: any
+	local debugConfig = combatConfig.debug
 	print(
 		`[Combat] booted — mission (crowd, proving: {debugConfig.provingMission} from wave {debugConfig.provingStartWave})`
 	)

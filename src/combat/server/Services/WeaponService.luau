@@ -2,11 +2,15 @@
 -- The player's weapons in either place mode (docs/INTERFACES.md "P5 contracts" → "Wave 1",
 -- ruling 6): the per-player loadout, attack resolution against the crowd, bow draws,
 -- projectiles, dash i-frames, the ground slam, aim checks, the AbilityService hooks and the
--- attack readouts. Moved here from RangeService (P1–P4) unchanged except for three P5 rulings:
+-- attack readouts. Moved here from RangeService (P1–P4) unchanged except for three P5 rulings
+-- and two things their review asked for:
 --   7  a claimed origin's slack reads the server root's own displacement, not its velocity;
 --   8  every hit scales by the Armory tier at the one strike() choke point; heavy, plate and
 --      armour are judged on the unscaled tier-1 amount (ruling 9). The scale is 1 in the range;
---   21 in missions an intent is refused unless the act gate (WaveService) lets the player act.
+--   21 in missions an intent is refused unless the act gate (WaveService) lets the player act;
+--   -  a pattern seed (pellets, fans, scatters) is a fresh server draw per shot or cast, no
+--      longer derived from the client's seq;
+--   -  a fresh character starts with its air state and position history cleared (resetAir).
 -- RangeService keeps the bench (dummy sets, respawns, tuning, commands) and adds the range-only
 -- readout fields through the stats provider.
 --
@@ -41,14 +45,13 @@ local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
 local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
+local PositionRing = require(script.Parent:WaitForChild("PositionRing"))
 local StrikeTally = require(script.Parent:WaitForChild("StrikeTally"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 
 type SlotName = "melee" | "ranged"
 type Variant = Types.RangeWeaponVariant
--- A tier (or Ascension level) per slot, the profile's `combat.gear` / `combat.ascension` shape.
--- Exported here because Types.luau has no such name (INTERFACES writes `Types.SlotTiers`).
-export type SlotTiers = { melee: number, ranged: number }
+type SlotTiers = Types.SlotTiers
 
 -- Grouped in one table so the module stays far below Studio's 200-locals limit as it grows.
 local CONST = {
@@ -131,7 +134,6 @@ type DamageEntry = { at: number, amount: number }
 -- SetAttackBuff: until `untilClock`, the slot fires at rate x rateMult and its hitscan rays hit
 -- `pierce` enemies.
 type AttackBuff = { rateMult: number, pierce: number, untilClock: number }
-type PositionHistory = { times: { number }, positions: { Vector3 }, head: number, count: number }
 type Shooter = {
 	player: Player,
 	loadout: Types.RangeLoadout,
@@ -185,9 +187,8 @@ type Shooter = {
 	abilityCast: number,
 	abilityHits: number,
 	abilityKills: number,
-	-- Ruling 7: a ring of the server root's positions on os.clock(), one per Heartbeat. `head`
-	-- is the newest slot, `count` how many slots hold a sample.
-	history: PositionHistory,
+	-- Ruling 7: a ring of the server root's positions on os.clock(), one per Heartbeat.
+	history: PositionRing.History,
 }
 -- One enemy the shape touched. `order` sorts nearest-first (distance, or entry along a ray).
 type Candidate = { id: number, order: number, body: Vector3, crit: boolean }
@@ -231,6 +232,12 @@ local state = {
 	-- Ruling 21 (nil = every player may act) and the range's readout fields.
 	actGate = nil :: ((player: Player) -> boolean)?,
 	statsProvider = nil :: ((player: Player, stats: Types.RangeStats) -> ())?,
+	-- Run at the 2 Hz readout tick, before the readouts go out.
+	readoutListeners = {} :: { () -> () },
+	-- worldParams' cache: rebuilt only after a character came or went (Start's connections).
+	worldParams = nil :: RaycastParams?,
+	worldStale = true,
+	characterConnections = {} :: { [Player]: { RBXScriptConnection } },
 }
 
 local WeaponService = {}
@@ -366,8 +373,15 @@ local function flatten(vector: Vector3): Vector3?
 	return flat.Unit
 end
 
--- Crowd dummies have no Instances, so world queries only need to skip the players.
+-- Crowd dummies have no Instances, so world queries only need to skip the players. One shared
+-- RaycastParams, rebuilt only after a character came or went: air tracking asks for it every
+-- Heartbeat, in every mission server. Callers never change it. Before Start has connected the
+-- character signals nothing marks it stale, so it is built fresh each time.
 local function worldParams(): RaycastParams
+	local cached = state.worldParams
+	if cached ~= nil and state.started and not state.worldStale then
+		return cached
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.RespectCanCollide = true
@@ -379,6 +393,8 @@ local function worldParams(): RaycastParams
 		end
 	end
 	params.FilterDescendantsInstances = ignored
+	state.worldParams = params
+	state.worldStale = false
 	return params
 end
 
@@ -417,56 +433,11 @@ local function floorUnder(position: Vector3, params: RaycastParams): number?
 	return if result ~= nil then result.Position.Y else nil
 end
 
-local function newHistory(): PositionHistory
-	return {
-		times = table.create(CONST.HISTORY_CAPACITY, 0),
-		positions = table.create(CONST.HISTORY_CAPACITY, Vector3.zero),
-		head = 0,
-		count = 0,
-	}
-end
-
--- One sample per Heartbeat into the fixed ring: nothing is allocated per frame.
-local function recordPosition(history: PositionHistory, now: number, position: Vector3): ()
-	local head = history.head % CONST.HISTORY_CAPACITY + 1
-	history.head = head
-	history.times[head] = now
-	history.positions[head] = position
-	history.count = math.min(history.count + 1, CONST.HISTORY_CAPACITY)
-end
-
--- Ruling 7: how fast the server's own copy of the root has moved over the last `window`
--- seconds: its displacement since the newest sample at least `window` old (else the oldest it
--- has), over that sample's age but never over less than `window`, so a short history (a fresh
--- spawn) can only under-read. The client's word (replicated velocity) buys nothing.
-local function serverSpeed(
-	history: PositionHistory,
-	now: number,
-	position: Vector3,
-	window: number
-): number
-	if window <= 0 or history.count == 0 then
-		return 0
-	end
-	local capacity = CONST.HISTORY_CAPACITY
-	local index = history.head
-	local sampledAt = history.times[index]
-	local sampled = history.positions[index]
-	for _ = 1, history.count do
-		sampledAt = history.times[index]
-		sampled = history.positions[index]
-		if now - sampledAt >= window then
-			break
-		end
-		index = (index - 2) % capacity + 1
-	end
-	return (position - sampled).Magnitude / math.max(now - sampledAt, window)
-end
-
 -- How far a position a client claims may sit from the server's copy of its character: a moving
 -- character leads the server's view of it by the ping plus a margin. The speed is the server's
--- own measure (ruling 7) and the ping the client's word, so neither buys more slack than the
--- fastest legal move over the longest lag the range excuses.
+-- own measure (ruling 7: the fastest stretch of shooting.originSpeedSeconds inside the last
+-- originLagMaxSeconds of its position ring) and the ping the client's word, so neither buys more
+-- slack than the fastest legal move over the longest lag the range excuses.
 local function claimSlack(
 	shooter: Shooter,
 	root: BasePart,
@@ -476,7 +447,13 @@ local function claimSlack(
 	local shooting = config.shooting
 	local fastest = Tuning.FastestMove(config)
 	local window = math.max(shooting.originLagMaxSeconds, 0)
-	local speed = serverSpeed(shooter.history, os.clock(), root.Position, window)
+	local speed = PositionRing.Speed(
+		shooter.history,
+		os.clock(),
+		root.Position,
+		window,
+		shooting.originSpeedSeconds
+	)
 	-- A NaN speed fails every comparison, math.min included.
 	speed = if speed == speed then math.min(speed, fastest) else 0
 	local lag = Tuning.CommitLag(shooting, shooter.player:GetNetworkPing())
@@ -1793,10 +1770,10 @@ local function trackAir(now: number, deltaTime: number): ()
 		if root == nil or humanoid == nil then
 			shooter.airborne = false
 			shooter.lastY = nil
-			shooter.history.count = 0
+			PositionRing.Clear(shooter.history)
 			continue
 		end
-		recordPosition(shooter.history, now, root.Position)
+		PositionRing.Record(shooter.history, now, root.Position)
 		local floorY = floorBelow(root, params)
 		local height = if floorY ~= nil then root.Position.Y - floorY else math.huge
 		local airborne = height > standingOffset(root, humanoid) + CONST.AIRBORNE_MARGIN_STUDS
@@ -1835,7 +1812,7 @@ local function resetAir(shooter: Shooter): ()
 	shooter.diveSpeed = 0
 	shooter.lastDiveSpeed = 0
 	shooter.lastY = nil
-	shooter.history.count = 0
+	PositionRing.Clear(shooter.history)
 end
 
 -- Opens an i-frame window of `seconds` from `now`, or lengthens the one still open: it never
@@ -1876,6 +1853,9 @@ local function step(deltaTime: number): ()
 	state.statsAccumulator += deltaTime
 	if state.statsAccumulator >= CONST.STATS_INTERVAL_SECONDS then
 		state.statsAccumulator = 0
+		for _, listener in state.readoutListeners do
+			listener()
+		end
 		for _, shooter in state.shooters do
 			sendStats(shooter)
 		end
@@ -1923,6 +1903,12 @@ end
 -- included). Must not yield. RangeService starts its clear clock on it.
 function WeaponService.OnDamageDealt(callback: (player: Player, dealt: number) -> ()): ()
 	table.insert(state.dealtListeners, callback)
+end
+
+-- Runs synchronously at every 2 Hz readout tick, just before the readouts go out. Must not
+-- yield. RangeService sweeps its lost dummies on it, on the one readout clock.
+function WeaponService.OnReadoutTick(callback: () -> ()): ()
+	table.insert(state.readoutListeners, callback)
 end
 
 -- True when this player may attack, draw, dash, slam or cast at all (ruling 21; down is
@@ -1980,7 +1966,7 @@ function WeaponService.AddPlayer(player: Player): ()
 		abilityCast = 0,
 		abilityHits = 0,
 		abilityKills = 0,
-		history = newHistory(),
+		history = PositionRing.New(CONST.HISTORY_CAPACITY),
 	}
 	state.shooters[player] = shooter
 	VitalsService.AddPlayer(player)
@@ -2034,6 +2020,18 @@ end
 -- Ruling 8: Armory.DamageScale at the player's gear; 1 in the range.
 function WeaponService.DamageScale(player: Player, slot: string, ability: boolean): number
 	return damageScale(player, slot, ability)
+end
+
+-- The server itself just moved this player's body (a rescue, a release from the lobby pad):
+-- the jump is not the player's motion, and left in the position ring it would read as up to
+-- originLagMaxSeconds of capped claim slack. Clears that history and nothing else. A fresh
+-- character needs no call: PrepareCharacter already clears it. No-op for a player without
+-- weapons, and so before any player has been added.
+function WeaponService.ForgetMotion(player: Player): ()
+	local shooter = state.shooters[player]
+	if shooter ~= nil then
+		PositionRing.Clear(shooter.history)
+	end
 end
 
 -- Every live projectile ends where it is (an empty end strike, so clients stop their flights):
@@ -2663,6 +2661,33 @@ function WeaponService.OnLoadoutChanged(
 	table.insert(state.loadoutListeners, callback)
 end
 
+-- worldParams goes stale whenever a character comes or goes.
+local function markWorldStale(): ()
+	state.worldStale = true
+end
+
+local function watchCharacters(player: Player): ()
+	if state.characterConnections[player] ~= nil then
+		return
+	end
+	state.characterConnections[player] = {
+		player.CharacterAdded:Connect(markWorldStale),
+		player.CharacterRemoving:Connect(markWorldStale),
+	}
+	markWorldStale()
+end
+
+local function unwatchCharacters(player: Player): ()
+	local connections = state.characterConnections[player]
+	if connections ~= nil then
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		state.characterConnections[player] = nil
+	end
+	markWorldStale()
+end
+
 function WeaponService.Init(): () end
 
 -- After Configure, in both modes: VitalsService takes the i-frame clock, and one Heartbeat steps
@@ -2672,6 +2697,12 @@ function WeaponService.Start(): ()
 		return
 	end
 	state.started = true
+	-- Every player's character is in worldParams' filter, with or without weapons.
+	Players.PlayerAdded:Connect(watchCharacters)
+	Players.PlayerRemoving:Connect(unwatchCharacters)
+	for _, player in Players:GetPlayers() do
+		watchCharacters(player)
+	end
 	Tuning.Changed:Connect(onTuningChanged)
 	VitalsService.Start({
 		iframeWindow = WeaponService.IframeWindow,

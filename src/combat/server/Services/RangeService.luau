@@ -7,8 +7,8 @@
 -- WeaponService: the per-player loadout and variants, attacks, bow draws, projectiles, dash
 -- i-frames, the slam, aim checks, the AbilityService hooks, TuneState and the attack readouts.
 -- This file wraps WeaponService.AddPlayer / RemovePlayer, places the body at a range spawn, adds
--- its fields to every RangeStats through WeaponService's stats provider and starts its clear
--- clock on WeaponService.OnDamageDealt. In the range every number is the P4 one: WeaponService
+-- its fields to every RangeStats through WeaponService's stats provider, starts its clear
+-- clock on WeaponService.OnDamageDealt and sweeps lost dummies on WeaponService.OnReadoutTick. In the range every number is the P4 one: WeaponService
 -- scales nothing here (ruling 8) and no act gate is set (ruling 21).
 --
 -- P4: groups whose behaviour is `fight` attack; a fight slot's respawn is held while a player
@@ -35,8 +35,6 @@ local ROW_MAX_COUNT = 10
 -- A slot the crowd refuses this many times in a row (crowd.maxAlive lowered mid-set) is dropped
 -- from the set instead of being retried forever.
 local MAX_SPAWN_ATTEMPTS = 3
--- The lost-dummy sweep runs with the 2 Hz readouts, as it did beside them in P4.
-local SWEEP_INTERVAL_SECONDS = 0.5
 
 type Slot = {
 	kind: string,
@@ -61,7 +59,6 @@ local currentSet = ""
 -- os.clock() of the first damage since the set loaded; 0 = nobody has hit it yet.
 local clearStartedAt = 0
 local clearSeconds: number? = nil
-local sweepAccumulator = 0
 -- The floor's half-size (X, Z) from the arena build, so dummies stay on it.
 local floorHalfSize = Vector3.zero
 
@@ -257,13 +254,8 @@ local function tickRespawns(config: Types.ProvingGroundsConfig, now: number): ()
 	end
 end
 
-local function step(deltaTime: number): ()
+local function step(): ()
 	tickRespawns(Tuning.Get(), os.clock())
-	sweepAccumulator += deltaTime
-	if sweepAccumulator >= SWEEP_INTERVAL_SECONDS then
-		sweepAccumulator = 0
-		sweepSlots()
-	end
 end
 
 -- The bench's readout fields on every RangeStats WeaponService assembles.
@@ -417,6 +409,8 @@ function RangeService.Start(): ()
 		slotGone(id)
 	end)
 	WeaponService.SetStatsProvider(provideStats)
+	-- The lost-dummy sweep rides the readout clock, just before the readouts, as in P4.
+	WeaponService.OnReadoutTick(sweepSlots)
 	WeaponService.OnDamageDealt(function(_player: Player, _dealt: number)
 		if clearStartedAt == 0 then
 			clearStartedAt = os.clock()

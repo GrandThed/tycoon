@@ -915,6 +915,10 @@ local Theme = {
 	COMBAT_RANGE_HURT_POINTER_TIP = 14, -- a square turned 45 degrees, half hidden behind the bar
 	COMBAT_RANGE_HURT_POINTER_TRANSPARENCY = 0.1,
 	COMBAT_RANGE_HURT_POINTER_MERGE_DEGREES = 25, -- a hit from within this of a live pointer renews it
+	-- P5: the ring never shrinks under this (design px), whatever sits above or below it: a
+	-- pointer drawn on the crosshair dot has no bearing, and it is the only cue for a hit from
+	-- behind. 48 keeps the blade clear of the crosshair's ticks.
+	COMBAT_RANGE_HURT_POINTER_MIN_RADIUS = 48,
 	-- Another player's hit: a short red flash on their character, nothing on this screen's edges.
 	COMBAT_RANGE_FLINCH_SECONDS = 0.16,
 	COMBAT_RANGE_FLINCH_FILL = 0.45,
@@ -1107,6 +1111,10 @@ local Theme = {
 	-- beside it on a landscape phone, under its readouts on a portrait one.
 	COMBAT_RANGE_BOSS_BAR_WIDTH = 300,
 	COMBAT_RANGE_BOSS_BAR_MIN_WIDTH = 200,
+	-- P5: in a mission the bar shrinks to the top strip between the run header and the party
+	-- list, down to this (design px): "WARLORD" plus four guard pips needs about 133. A 640 px
+	-- landscape phone leaves 154.
+	COMBAT_MISSION_BOSS_BAR_MIN_WIDTH = 140,
 	COMBAT_RANGE_BOSS_BAR_HEIGHT = 20,
 	COMBAT_RANGE_BOSS_BAR_TEXT = 12,
 	COMBAT_RANGE_BOSS_BAR_FILL_COLOR = Color3.fromRGB(206, 56, 64),
