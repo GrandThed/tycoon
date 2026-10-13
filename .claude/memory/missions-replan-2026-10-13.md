@@ -30,6 +30,13 @@ along the path and an improvice tent with a big boss".
   dreamy place". "lets do just the first one for now"**: only the forest is planned in detail and built.
   The themes are his own answer (the lead had offered "all five in a forest world" or "spread over the eras").
 
+**Second round (same day, click questions):** solo, **a down ends the run** (the lead proposed tries from the
+last checkpoint; he kept his 2026-10-12 rule, checkpoints still bank rewards); **double jump is the first
+cheap purchase**; **flight = glide first, then a jetpack with fuel**, off inside a live camp; **the map is
+its own path** (a level opens when the previous one is cleared; not tied to the city's eras, against the
+lead's recommendation). Consequence still open: whether city income keeps gating weapon tiers (the lead
+proposes dropping it).
+
 **Lead's proposals in the doc, not yet ruled on:** the ten-wave Village arena stays as a bonus node; stars per
 difficulty (Normal / Hard / Brutal, Overdrive above); secrets visible before reachable, about three per level,
 some are a second exit that opens a side node; abilities paid with Valor; five bands of four tiers, one band

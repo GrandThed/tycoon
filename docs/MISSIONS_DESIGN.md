@@ -32,6 +32,14 @@ tiers, so a weapon you like stays usable for the whole game.
    advanced one); replaying a level after unlocking gear is the point; the Armory should be
    "contemplative".
 
+6. **Second round of answers, the same day:**
+   - **Solo, a down ends the run.** You keep what the checkpoints banked. (The lead had proposed
+     tries from the last checkpoint; Ben kept his 2026-10-12 rule.)
+   - **Double jump is the first cheap purchase**, not free.
+   - **Flight is a glide first, then a jetpack with fuel** that is off inside a live camp.
+   - **The map is its own path.** A level opens when the previous one is cleared. Levels are not
+     tied to the city's eras.
+
 Rulings this replaces: one ten-wave skeleton for every era (2026-10-12); one mission per city era;
 the slot tier ladder of 12. P5 Waves 2 to 4 as planned are suspended.
 
@@ -83,8 +91,9 @@ Arena"), because it is finished and costs nothing to keep. **[proposed]**
 - **A checkpoint after each camp** banks what you earned so far. **[proposed]**
 - **Length:** about 6 to 8 minutes on a first clear at the first difficulty, shorter than today's
   12-minute arena, because levels are meant to be replayed. **[proposed]**
-- **Going down:** in a party, a teammate standing near you revives you (Ben, 2026-10-12). Solo is
-  **[open]**: see §11.
+- **Going down:** in a party, a teammate standing near you revives you (Ben, 2026-10-12). **Solo,
+  a down ends the run [Ben]**, wherever it happens, the boss included; you keep what the
+  checkpoints banked.
 
 ## 6. Difficulty
 
@@ -116,14 +125,13 @@ Arena"), because it is finished and costs nothing to keep. **[proposed]**
 
 | Ability | What it does | When |
 |---|---|---|
-| **Double Jump** | a second jump in the air | the first unlock, cheap **[open: or free, as today]** |
-| **Glide** | hold jump in the air to fall slowly and cross long gaps | middle of the game |
-| **Flight** | **[open]** the lead proposes a jetpack with fuel that refills on the ground and is switched off inside a camp while enemies are alive | very late, the big prize |
+| **Double Jump** | a second jump in the air | the first purchase, cheap: about what the first boss pays **[Ben]** |
+| **Glide** | hold jump in the air to fall slowly and cross long gaps | middle of the game **[Ben]** |
+| **Jetpack** | flight with fuel that refills on the ground; switched off inside a camp while enemies are alive | very late, the big prize **[Ben]** |
 
 - Jump, dash and the ground slam stay free: they are the feel Ben approved.
-- Today double jump is free in the test range. If it becomes a purchase, the first minutes of the
-  game have less movement; the lead proposes it is the reward for the very first clear, so it is
-  missed only once.
+- Today double jump is free in the test range. As a purchase, the first run of the game has only
+  the jump and the dash; the price is set so one clear of Forest Road pays for it.
 - Free flight with no limit would pass every wall, reach every secret and float over every ground
   enemy, so levels could not be designed around it. Hence the fuel and the rule inside camps.
 - More candidates for later, none planned: wall climb, grapple, a heavy push for boulders.
@@ -185,17 +193,14 @@ you walk into]**
 
 ## 11. Questions for Ben
 
-1. **Solo, what does going down mean in a level?** Proposed: you restart from the last checkpoint,
-   with a number of tries that depends on the difficulty (three, two, one). The 2026-10-12 ruling
-   (solo, the first down ends the run) was made for the arena.
-2. **Double jump:** the first, cheap unlock (proposed), or free as today?
-3. **Flight:** a jetpack with fuel, off inside camps (proposed), or true free flight?
-4. **Are the five levels tied to the city?** Proposed: Forest with the Village, Castle with
-   Boomtown, Underworld with Metropolis, the other planet with the Orbital Colony, the dream place
-   after the first Rebirth. The map shows the lock ("Reach Boomtown").
-5. **The Armory: a screen (proposed) or a room in the hub you walk into?**
-6. **The frost weapon:** melee, ranged, or one of each later?
-7. **Players who already own tiers in the live game** need a rule for what they get in the new
+Answered on 2026-10-13 and moved to §2: solo downs, double jump, flight, the city link.
+
+1. **What still ties combat to the city?** Today a weapon tier can only be bought once the city
+   earns enough per second. With the map as its own path, the lead proposes dropping that gate:
+   tiers are limited by what the levels drop. The city still receives the cash a level pays.
+2. **The Armory: a screen (proposed) or a room in the hub you walk into?**
+3. **The frost weapon:** melee, ranged, or one of each later?
+4. **Players who already own tiers in the live game** need a rule for what they get in the new
    system. The balance pass proposes one.
 
 ## 12. The five levels
