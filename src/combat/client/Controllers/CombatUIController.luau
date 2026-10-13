@@ -56,7 +56,26 @@
 --    where that clears the crosshair box (portrait); on anything narrower still it goes under
 --    the header at the left, ending short of the box.
 --  * The vitals HUD's pointer ring is pulled in under the bar only while a boss is on show.
+--
+-- L1 (docs/INTERFACES.md "L1 contracts" -> Client; rulings 7, 8, 20 to 22, 25, 28, 30, 32, 33):
+-- the dungeon place boots into a lobby camp with the MAP, and every run ends in a summary and
+-- then the lobby again, never the city.
+--  * `bootMission` mounts UI/MapScreen (a shared module: the hub mounts it in L4). It opens
+--    whenever the phase becomes `lobby` and closes when the phase leaves it; M opens and closes
+--    it in the lobby; while it is open the arrows pick a level and a difficulty and Enter
+--    departs (RequestStartLevel). The first open is seeded (a proving build: the config's
+--    level and difficulty; else the first open node with no star), so one click or one key
+--    departs. Only the leader's Depart is live; a refusal frees it and says why.
+--  * The level, not the mission: the header shows RunState.levelName and the difficulty, the
+--    wallet's material chip is RunState.material, CrowdRenderer is handed the level's cap and,
+--    whenever it changes, the crowd's floor (RunState.floor, ruling 30).
+--  * The summary card shows for a RunState that carries a `result`; Enter (or its button) is
+--    "Back to camp" (RequestAbandon), and Abandon in a live run is the same intent.
+--  * Studio keys: N finishes the stage, B jumps to the boss, G steps the gear (RequestDebug).
+--  * The C1 `boot` is still unreachable and still cannot fight; it is kept typechecking against
+--    the level's RunState until L4 deletes it.
 
+local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -84,6 +103,7 @@ local RangePanel = require(uiFolder:WaitForChild("RangePanel"))
 local AbilityBar = require(uiFolder:WaitForChild("AbilityBar"))
 local BossBar = require(uiFolder:WaitForChild("BossBar"))
 local VitalsHud = require(uiFolder:WaitForChild("VitalsHud"))
+local MapScreen = require(uiFolder:WaitForChild("MapScreen"))
 local SoundController = require(script.Parent:WaitForChild("SoundController"))
 local InputController = require(script.Parent:WaitForChild("InputController"))
 local WeaponController = require(script.Parent:WaitForChild("WeaponController"))
@@ -105,15 +125,53 @@ local HOLD_RANGE_PANEL = "rangePanel"
 local MELEE_SLOT = "melee"
 local RANGED_SLOT = "ranged"
 local ADMIT_CHECK_LEVER = "admitCheck"
--- P5, Studio missions only: the skip keys, the lever they send and the line that names them.
-local SKIP_LEVER = "skip"
-local SKIP_KEYS: { [Enum.KeyCode]: string } = {
-	[Enum.KeyCode.B] = "boss",
-	[Enum.KeyCode.N] = "next",
+-- L1 ruling 33, Studio only: the keys, the lever each sends and the line that names them.
+local DEBUG_KEYS: { [Enum.KeyCode]: { lever: string, value: string } } = {
+	[Enum.KeyCode.N] = { lever = "skip", value = "stage" },
+	[Enum.KeyCode.B] = { lever = "skip", value = "boss" },
+	[Enum.KeyCode.G] = { lever = "gear", value = "next" },
 }
-local SKIP_HINT = "B boss · N next wave"
+local DEBUG_HINT = "N stage · B boss · G gear"
 -- Run phases with nothing left to fight: the summary card has the screen.
 local RUN_OVER_PHASES: { [string]: boolean } = { summary = true, ended = true }
+-- L1 ruling 8: the five phases in which a member may act.
+local LIVE_PHASES: { [string]: boolean } =
+	{ travel = true, gate = true, wave = true, boss = true, breather = true }
+-- L1, the map. Its keys are bound only while it is open (the arrows and Enter; the d-pad and A
+-- on a gamepad), M opens and closes it in the lobby, and Enter on the summary card is "Back to
+-- camp". Up is the harder difficulty.
+local HOLD_MAP = "map"
+local DEFAULT_MAP_NAME = "Expeditions"
+-- RunResult.reason of the trip home, whose card shows whatever the phase.
+local LEAVE_REASON = "leave"
+local MAP_ACTION = "ExpeditionMapKeys"
+local SUMMARY_ACTION = "ExpeditionSummaryKeys"
+local MAP_TOGGLE_KEY = Enum.KeyCode.M
+local MAP_KEY_HINT = "← → level · ↑ ↓ difficulty · Enter depart"
+local MAP_STEP_KEYS: { [Enum.KeyCode]: Vector2 } = {
+	[Enum.KeyCode.Left] = Vector2.new(-1, 0),
+	[Enum.KeyCode.Right] = Vector2.new(1, 0),
+	[Enum.KeyCode.Up] = Vector2.new(0, 1),
+	[Enum.KeyCode.Down] = Vector2.new(0, -1),
+	[Enum.KeyCode.DPadLeft] = Vector2.new(-1, 0),
+	[Enum.KeyCode.DPadRight] = Vector2.new(1, 0),
+	[Enum.KeyCode.DPadUp] = Vector2.new(0, 1),
+	[Enum.KeyCode.DPadDown] = Vector2.new(0, -1),
+}
+local CONFIRM_KEYS: { Enum.KeyCode } =
+	{ Enum.KeyCode.Return, Enum.KeyCode.KeypadEnter, Enum.KeyCode.ButtonA }
+local MAP_KEYS: { Enum.KeyCode } = table.clone(CONFIRM_KEYS)
+for key in MAP_STEP_KEYS do
+	table.insert(MAP_KEYS, key)
+end
+-- What a refused RequestStartLevel tells the player (ActionResult.reason).
+local START_ACTION = "startLevel"
+local START_REFUSALS: { [string]: string } = {
+	notLeader = "Only the leader can depart",
+	busy = "Not ready yet",
+	locked = "That level is locked",
+	unavailable = "Can't start that level",
+}
 
 local CombatUIController = {}
 
@@ -121,11 +179,58 @@ local CombatUIController = {}
 local function isRunState(payload: any): boolean
 	return typeof(payload) == "table"
 		and typeof(payload.phase) == "string"
-		and typeof(payload.missionId) == "string"
+		and typeof(payload.levelId) == "string"
+		and typeof(payload.levelName) == "string"
+		and typeof(payload.difficulty) == "string"
+		and typeof(payload.material) == "string"
+		and typeof(payload.stage) == "number"
+		and typeof(payload.stageName) == "string"
+		and typeof(payload.camps) == "number"
+		and typeof(payload.campsCleared) == "number"
+		and typeof(payload.left) == "number"
+		and typeof(payload.banked) == "number"
+		and typeof(payload.leaderUserId) == "number"
 		and typeof(payload.wave) == "number"
 		and typeof(payload.waves) == "number"
 		and typeof(payload.tempo) == "number"
 		and typeof(payload.party) == "table"
+end
+
+-- L1: a RunState's `result`, for the summary card; nil and anything malformed show no card.
+local function isRunResult(payload: any): boolean
+	return typeof(payload) == "table"
+		and typeof(payload.levelName) == "string"
+		and typeof(payload.difficulty) == "string"
+		and typeof(payload.reason) == "string"
+		and typeof(payload.campsCleared) == "number"
+		and typeof(payload.camps) == "number"
+		and typeof(payload.savedAt) == "string"
+		and typeof(payload.star) == "boolean"
+end
+
+-- L1: the crowd kinds a level rewards, which are the kinds it can field: what the Studio
+-- strip's spawn buttons name. A level file that names a `mission` (the Raider Arena) takes
+-- them from that mission's crowd block. No level (the lobby) has none.
+local function rewardedKinds(levelId: string): { string }
+	local kinds: { string } = {}
+	local file = if levelId ~= "" then Catalog.GetLevelFile(levelId) else nil
+	if file == nil then
+		return kinds
+	end
+	local crowd = file.crowd
+	local rewards = if crowd ~= nil then crowd.rewards else nil
+	local missionId = file.mission
+	if rewards == nil and missionId ~= nil then
+		local mission = Catalog.GetMissionById(missionId)
+		local block = if mission ~= nil then mission.crowd else nil
+		rewards = if block ~= nil then block.rewards else nil
+	end
+	if rewards ~= nil then
+		for kind in rewards do
+			table.insert(kinds, kind)
+		end
+	end
+	return kinds
 end
 
 -- Ability keys are config ids ("fanTheHammer"); the button shows them as words. Truncation
@@ -279,7 +384,7 @@ local function placeMissionBoss(
 		width = math.min(width, strip)
 		-- Not math.clamp: squeezed to the strip the two bounds are the same number, and
 		-- rounding can leave the lower one a hair above the upper, which math.clamp throws
-		-- on. Max first, so the lower bound wins when they cross.
+		-- on. This cannot: crossed by a hair, either bound is the answer.
 		local centreX = math.min(
 			math.max(size.X / 2, edges.headerRight + margin + width / 2),
 			edges.partyLeft - margin - width / 2
@@ -306,18 +411,6 @@ local function firstLayout(applyLayout: () -> ()): ()
 	if not ok then
 		warn("[CombatUIController] the HUD's first layout failed: " .. tostring(message))
 	end
-end
-
--- The C1 lever strip names its spawn buttons from `mission.enemies`. A crowd mission spawns
--- crowd kinds (ruling 25), every one of which has a `crowd.rewards` entry, so the strip is
--- handed a view of the mission whose `enemies` are those kinds.
-local function leverMission(mission: Types.MissionConfig?): Types.MissionConfig?
-	if mission == nil or mission.crowd == nil then
-		return mission
-	end
-	local view = table.clone(mission)
-	view.enemies = (mission.crowd :: Types.MissionCrowdConfig).rewards :: any
-	return view
 end
 
 local function bootRange(): ()
@@ -502,6 +595,8 @@ local function bootRange(): ()
 	end
 end
 
+-- The C1 HUD. Unreachable while ProvingGrounds.json ships, and it cannot fight (see the header
+-- and CameraController.IsCrowdCombat); kept reading the level's RunState until L4 deletes it.
 local function boot(): ()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
@@ -519,7 +614,6 @@ local function boot(): ()
 	local runStateEvent = remotesFolder:WaitForChild("RunState") :: RemoteEvent
 	local requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent
 	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
-	local requestReady = remotesFolder:WaitForChild("RequestReady") :: RemoteEvent
 	local requestLeave = remotesFolder:WaitForChild("RequestLeave") :: RemoteEvent
 	-- C1 adds RequestDebug; an older server build simply has no lever strip.
 	local requestDebug =
@@ -539,7 +633,7 @@ local function boot(): ()
 	-- both are dropped when the next character arrives so a respawn leaks nothing.
 	local healthConnections: { RBXScriptConnection } = {}
 	local applyLayout: () -> ()
-	local mission: Types.MissionConfig? = nil
+	local material = ""
 
 	-- Same client-side debounce as the hub's panels (review of 2026-09-17): ten taps on
 	-- Return must not become ten RequestLeave intents against the rate limit. One window for
@@ -566,9 +660,6 @@ local function boot(): ()
 		end,
 	})
 	local hud = CombatHud.new(screenGui, {
-		onReady = function()
-			fireIntent(requestReady)
-		end,
 		onLeave = function()
 			fireIntent(requestLeave)
 		end,
@@ -589,9 +680,11 @@ local function boot(): ()
 		end,
 	})
 	local summaryCard = SummaryCard.new(screenGui, {
+		onBack = function() end,
 		onReturn = function()
 			fireIntent(requestLeave)
 		end,
+		canReturn = true,
 	})
 	-- Studio only, by contract: a live client never builds the strip at all, and the
 	-- server ignores the remote even if one were forged.
@@ -662,10 +755,10 @@ local function boot(): ()
 				debugPanel.SetGear(gear.melee, gear.ranged)
 			end
 		end
-		-- Wallet: cash and Valor are always shown; the material chip needs the mission, so
-		-- it stays blank until the first RunState names one.
+		-- Wallet: cash and Valor are always shown; the material chip needs the level, so it
+		-- stays blank until a RunState names one.
 		local materials = combat.materials
-		local materialName = if mission ~= nil then mission.material else ""
+		local materialName = material
 		local amount = 0
 		if typeof(materials) == "table" and materialName ~= "" then
 			local owned = materials[materialName]
@@ -710,36 +803,35 @@ local function boot(): ()
 			return
 		end
 		local run = (payload :: any) :: Types.RunState
-		-- The run carries an id; the human-readable name lives in the mission config both
-		-- places share. A missing config degrades to the id, never to an error.
-		local hadMission = mission ~= nil
-		mission = Catalog.GetMissionById(run.missionId)
-		local missionConfig = mission
-		if not hadMission and missionConfig ~= nil then
-			-- The wallet's material chip needs the mission name, and the join Snapshot
-			-- arrived before this first RunState named one. Ask once for a fresh one.
+		if run.material ~= material then
+			-- The wallet's material chip is the level's, and the Snapshot in hand was read
+			-- before this RunState named it. Ask for a fresh one.
+			material = run.material
+			CombatFxController.SetMaterial(material)
 			requestSnapshot:FireServer()
 		end
-		hud.SetMission(if missionConfig ~= nil then missionConfig.name else run.missionId)
+		hud.SetMission(if run.levelName ~= "" then run.levelName else DEFAULT_MAP_NAME)
 		CameraController.SetPhase(run.phase)
 		hud.SetRunState(run)
 		InputController.SetPhase(run.phase)
-		if missionConfig ~= nil then
-			CombatFxController.SetMaterial(missionConfig.material)
-		end
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
-			debugPanel.SetMission(missionConfig)
+			debugPanel.SetKinds(rewardedKinds(run.levelId))
 		end
 		CombatFxController.SetParty(run.party)
-		if run.phase == "summary" then
-			if lastPhase ~= "summary" then
+		local result = run.result
+		if isRunResult(result) and result ~= nil then
+			if lastPhase ~= "summary" and run.phase == "summary" then
 				SoundController.Play("runEnd")
 			end
 			local returnIn = run.returnIn
-			summaryCard.Show(run.summary, {
+			summaryCard.Show(run.summary, result, {
 				partySize = #run.party,
 				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
+				canBack = false,
+				waves = run.waves,
+				difficultyName = run.difficulty,
+				mapName = DEFAULT_MAP_NAME,
 			})
 		else
 			summaryCard.Hide()
@@ -838,30 +930,40 @@ local function boot(): ()
 	requestSnapshot:FireServer()
 end
 
--- P5: a crowd mission (see the header). The run layer is C1's; the fight is the range's.
+-- The dungeon place (L1): a lobby camp with the map, a level, a summary, and the lobby again.
+-- The run layer is CombatHud's; the fight is the range's. See the header for what is mounted.
+-- One function, so its state lives in tables: Studio gives a function 200 local registers.
 local function bootMission(): ()
 	local player = Players.LocalPlayer
 	local playerGui = player:WaitForChild("PlayerGui")
 	local studio = RunService:IsStudio()
-	-- Ruling 19: a proving mission starts and loops by itself; there is nothing to be ready for
-	-- and nowhere to return to (the Studio return kicks).
+	-- A proving build never goes to the city: the trip home kicks from Studio (ruling 22).
 	local proving = CombatMode.IsProving()
+	local combatConfig = Catalog.GetCombatConfig()
+	local expeditions = Catalog.GetExpeditionsConfig()
 	-- The load card needs the pointer until the profile arrives.
 	CameraController.SetCursorHold(HOLD_LOAD, true)
 
+	-- Every remote is made at the server's boot, so the waits with a timeout return at once;
+	-- the timeout only keeps a client of an older server build from hanging here.
 	local remotesFolder = ReplicatedStorage:WaitForChild("Remotes")
-	local stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent
-	local actionResult = remotesFolder:WaitForChild("ActionResult") :: RemoteEvent
-	local runStateEvent = remotesFolder:WaitForChild("RunState") :: RemoteEvent
-	local requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent
-	local requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent
-	local requestReady = remotesFolder:WaitForChild("RequestReady") :: RemoteEvent
-	local requestLeave = remotesFolder:WaitForChild("RequestLeave") :: RemoteEvent
-	local requestDebug =
-		remotesFolder:WaitForChild("RequestDebug", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
+	local timeout = Theme.COMBAT_REMOTE_WAIT_SECONDS
+	local remotes = {
+		stateChanged = remotesFolder:WaitForChild("StateChanged") :: RemoteEvent,
+		actionResult = remotesFolder:WaitForChild("ActionResult") :: RemoteEvent,
+		runState = remotesFolder:WaitForChild("RunState") :: RemoteEvent,
+		requestSnapshot = remotesFolder:WaitForChild("RequestSnapshot") :: RemoteEvent,
+		requestRetryLoad = remotesFolder:WaitForChild("RequestRetryLoad") :: RemoteEvent,
+		requestLeave = remotesFolder:WaitForChild("RequestLeave") :: RemoteEvent,
+		mapState = remotesFolder:WaitForChild("MapState", timeout) :: RemoteEvent?,
+		requestStartLevel = remotesFolder:WaitForChild("RequestStartLevel", timeout) :: RemoteEvent?,
+		requestAbandon = remotesFolder:WaitForChild("RequestAbandon", timeout) :: RemoteEvent?,
+		requestDebug = remotesFolder:WaitForChild("RequestDebug", timeout) :: RemoteEvent?,
+	}
 
-	-- Above the range layer, so the run layer, cards and toasts draw over the crosshair. The
-	-- range layer ignores the top-bar inset, so its centre is the camera's centre line.
+	-- Above the range layer, so the run layer, the map, cards and toasts draw over the
+	-- crosshair. The range layer ignores the top-bar inset, so its centre is the camera's
+	-- centre line.
 	local screenGui = Create("ScreenGui", {
 		Name = "ExpeditionHUD",
 		ResetOnSpawn = false,
@@ -877,29 +979,51 @@ local function bootMission(): ()
 		Parent = playerGui,
 	}) :: ScreenGui
 
-	local loaded = false
-	local mission: Types.MissionConfig? = nil
-	local arenaName = ""
-	local lastPhase = ""
-	local lastWave = 0
-	-- The vitals HUD's layout as last computed, the bar's bottom edge in its px (nil = the
-	-- bar is not over the crosshair's column), and whether a boss is on show: the pointer ring
-	-- keeps under the bar only while there is one.
-	local vitalsLayout: VitalsHud.Layout? = nil
-	local bossLimit: number? = nil
-	local bossShown = false
-	-- One debounce window for Ready, Return and the skip keys (review of 2026-09-17).
-	local lastIntentTime = 0
+	-- What the last RunState, Snapshot and MapState said, as far as the next one is compared
+	-- against it. `departToken` names the latest reason Depart is busy, so an older timer
+	-- cannot free a newer wait. `floor` is the crowd's floor as last handed to CrowdRenderer.
+	local st = {
+		loaded = false,
+		phase = "",
+		wave = 0,
+		stage = 0,
+		banked = 0,
+		levelId = "",
+		material = "",
+		prewarmed = 0,
+		mapSeeded = false,
+		departToken = 0,
+		lastIntentTime = 0,
+		mapKeys = false,
+		summaryKeys = false,
+		bossShown = false,
+		bossLimit = nil :: number?,
+		vitalsLayout = nil :: VitalsHud.Layout?,
+		floor = { set = false, x = 0, y = 0, z = 0, hx = 0, hz = 0 },
+		wallet = { cash = 0, valor = 0, materials = {} :: { [string]: any } },
+	}
+	local mapName = if expeditions ~= nil then expeditions.name else DEFAULT_MAP_NAME
+
+	-- One debounce window for every button and key that sends an intent (review of
+	-- 2026-09-17): ten taps must not become ten intents against the rate limit.
 	local function debounced(): boolean
 		local now = os.clock()
-		if now - lastIntentTime < Theme.ACTION_DEBOUNCE_SECONDS then
+		if now - st.lastIntentTime < Theme.ACTION_DEBOUNCE_SECONDS then
 			return false
 		end
-		lastIntentTime = now
+		st.lastIntentTime = now
 		return true
 	end
-	local function fireIntent(remote: RemoteEvent): ()
+	local function leave(): ()
 		if debounced() then
+			remotes.requestLeave:FireServer()
+		end
+	end
+	-- Ruling 21: in a live run this ends it with what was banked; in the summary it ends the
+	-- wait. The server drops it from anyone who may not.
+	local function abandon(): ()
+		local remote = remotes.requestAbandon
+		if remote ~= nil and debounced() then
 			remote:FireServer()
 		end
 	end
@@ -907,7 +1031,7 @@ local function bootMission(): ()
 	local toast = Toast.new(screenGui)
 	local loadScreen = LoadScreen.new(screenGui, {
 		onRetry = function()
-			requestRetryLoad:FireServer()
+			remotes.requestRetryLoad:FireServer()
 		end,
 		onLeave = function()
 			-- Kick, not RequestLeave: with no profile loaded the server has nothing to send
@@ -920,38 +1044,155 @@ local function bootMission(): ()
 	VitalsController.Mount(rangeGui)
 	local bossBar = BossBar.new(screenGui, { onEnrage = enragePulse })
 	local abilityBar = newAbilityBar(screenGui)
+	local mapScreen: MapScreen.MapScreenHandle? = nil
+
+	-- Depart is busy until `seconds` pass, unless something newer made it busy or free first.
+	local function busyFor(seconds: number): ()
+		local screen = mapScreen
+		if screen == nil then
+			return
+		end
+		st.departToken += 1
+		local token = st.departToken
+		screen.SetBusy(true)
+		task.delay(seconds, function()
+			if token == st.departToken then
+				screen.SetBusy(false)
+			end
+		end)
+	end
+	local function freeDepart(): ()
+		st.departToken += 1
+		local screen = mapScreen
+		if screen ~= nil then
+			screen.SetBusy(false)
+		end
+	end
+
+	-- While the map is open the arrows pick a level and a difficulty and Enter departs. Bound
+	-- above the movement keys and sunk, so an arrow does not also turn the camera.
+	local function onMapKey(
+		_action: string,
+		state: Enum.UserInputState,
+		input: InputObject
+	): Enum.ContextActionResult
+		local screen = mapScreen
+		if state == Enum.UserInputState.Begin and screen ~= nil then
+			local step: Vector2? = MAP_STEP_KEYS[input.KeyCode]
+			if step ~= nil then
+				screen.Step(step.X, step.Y)
+			else
+				screen.Confirm()
+			end
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	local function bindMapKeys(bound: boolean): ()
+		if bound == st.mapKeys then
+			return
+		end
+		st.mapKeys = bound
+		if bound then
+			ContextActionService:BindActionAtPriority(
+				MAP_ACTION,
+				onMapKey,
+				false,
+				Enum.ContextActionPriority.High.Value + 1,
+				table.unpack(MAP_KEYS)
+			)
+		else
+			ContextActionService:UnbindAction(MAP_ACTION)
+		end
+	end
+	-- On the summary card Enter is "Back to camp", for whoever may end the wait.
+	local function onSummaryKey(
+		_action: string,
+		state: Enum.UserInputState,
+		_input: InputObject
+	): Enum.ContextActionResult
+		if state == Enum.UserInputState.Begin then
+			abandon()
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	local function bindSummaryKeys(bound: boolean): ()
+		if bound == st.summaryKeys then
+			return
+		end
+		st.summaryKeys = bound
+		if bound then
+			ContextActionService:BindActionAtPriority(
+				SUMMARY_ACTION,
+				onSummaryKey,
+				false,
+				Enum.ContextActionPriority.High.Value + 1,
+				table.unpack(CONFIRM_KEYS)
+			)
+		else
+			ContextActionService:UnbindAction(SUMMARY_ACTION)
+		end
+	end
+
+	if expeditions ~= nil then
+		mapScreen = MapScreen.new(screenGui, expeditions, {
+			onDepart = function(levelId: string, difficulty: string)
+				local remote = remotes.requestStartLevel
+				if remote == nil then
+					freeDepart()
+					toast.Show(START_REFUSALS.unavailable, Theme.TOAST_ERROR_SECONDS, true)
+					return
+				end
+				remote:FireServer(levelId, difficulty)
+				-- The answer is a refusal or the phase leaving the lobby. Should neither come,
+				-- Depart is live again after a while rather than dead for the session.
+				busyFor(Theme.MAP_DEPART_TIMEOUT_SECONDS)
+			end,
+			onOpenChanged = function(open: boolean)
+				CameraController.SetCursorHold(HOLD_MAP, open)
+				bindMapKeys(open)
+			end,
+			onReturn = if proving then nil else leave,
+			keyHint = if UserInputService.KeyboardEnabled then MAP_KEY_HINT else nil,
+		})
+	else
+		warn(
+			"[CombatUIController] Config/Expeditions is missing: no map, the lobby is all there is"
+		)
+	end
+	local function openMap(): ()
+		local screen = mapScreen
+		if screen ~= nil and st.phase == "lobby" then
+			screen.Open()
+		end
+	end
+
 	-- The cluster's handlers are never pressed (it is not shown); they route to the range path
 	-- like every other entry point, so a stray call still does the right thing.
 	local hud = CombatHud.new(screenGui, {
-		onReady = function()
-			fireIntent(requestReady)
-		end,
-		onLeave = function()
-			fireIntent(requestLeave)
-		end,
+		onMap = if mapScreen ~= nil then openMap else nil,
+		onLeave = leave,
+		onAbandon = abandon,
 		onStance = InputController.ToggleStance,
 		onAttackDown = InputController.AttackDown,
 		onAttackUp = InputController.AttackUp,
 		onAbility = InputController.UseAbility,
 		actions = false,
 		runButtons = not proving,
-		keyHint = if studio then SKIP_HINT else nil,
+		keyHint = if studio then DEBUG_HINT else nil,
 	})
-	-- A proving mission restarts in place after the summary's countdown (ruling 19): no Return
-	-- button, and the countdown names the next run.
 	local summaryCard = SummaryCard.new(screenGui, {
-		onReturn = function()
-			fireIntent(requestLeave)
-		end,
-		nextRun = proving,
+		onBack = abandon,
+		onReturn = leave,
+		canReturn = not proving,
 	})
 	-- Studio only, by contract: a live client never builds the strip, and the server ignores
 	-- the remote even if one were forged.
 	local debugPanel = if studio
 		then DebugPanel.new(screenGui, {
 			onLever = function(lever: string, value: any)
-				if requestDebug ~= nil then
-					requestDebug:FireServer(lever, value)
+				local remote = remotes.requestDebug
+				if remote ~= nil then
+					remote:FireServer(lever, value)
 				end
 			end,
 			onToggle = function(open: boolean)
@@ -960,13 +1201,43 @@ local function bootMission(): ()
 		})
 		else nil
 
+	-- A proving build opens on the level and the difficulty the config names (ruling 32), so
+	-- one click or one key departs. Any other build is seeded by its first MapState.
+	if proving and mapScreen ~= nil and expeditions ~= nil and combatConfig ~= nil then
+		local level = (combatConfig.debug :: any).provingLevel
+		local difficulty = (combatConfig.debug :: any).provingDifficulty
+		for _, node in expeditions.nodes do
+			if node.level ~= nil and node.level == level then
+				mapScreen.Select(
+					node.id,
+					if typeof(difficulty) == "string" then difficulty else nil
+				)
+				st.mapSeeded = true
+				break
+			end
+		end
+	end
+
+	-- Wallet: cash and Valor always; the material chip is the level's (RunState.material), so
+	-- it is blank in the lobby. Never predicted: every bank re-sends the Snapshot it shows.
+	local function paintWallet(): ()
+		local wallet = st.wallet
+		local owned = if st.material ~= "" then wallet.materials[st.material] else nil
+		hud.SetWallet(
+			wallet.cash,
+			st.material,
+			if typeof(owned) == "number" then owned else 0,
+			wallet.valor
+		)
+	end
+
 	local function onSnapshot(payload: { [string]: any }): ()
 		local state = payload.state
 		if typeof(state) ~= "table" then
 			return
 		end
-		if not loaded then
-			loaded = true
+		if not st.loaded then
+			st.loaded = true
 			loadScreen.Hide() -- permanent: the profile is here
 			CameraController.SetCursorHold(HOLD_LOAD, false)
 		end
@@ -983,19 +1254,11 @@ local function bootMission(): ()
 		if debugPanel ~= nil and typeof(gear) == "table" then
 			debugPanel.SetGear(gear.melee, gear.ranged)
 		end
-		-- Wallet: cash and Valor always; the material chip needs the mission, so it stays
-		-- blank until the first RunState names one. Never predicted: every flush re-sends it.
-		local materials = combat.materials
-		local materialName = if mission ~= nil then mission.material else ""
-		local owned = if typeof(materials) == "table" and materialName ~= ""
-			then materials[materialName]
-			else nil
-		hud.SetWallet(
-			if typeof(state.cash) == "number" then state.cash else 0,
-			materialName,
-			if typeof(owned) == "number" then owned else 0,
-			if typeof(combat.valor) == "number" then combat.valor else 0
-		)
+		local wallet = st.wallet
+		wallet.cash = if typeof(state.cash) == "number" then state.cash else 0
+		wallet.valor = if typeof(combat.valor) == "number" then combat.valor else 0
+		wallet.materials = if typeof(combat.materials) == "table" then combat.materials else {}
+		paintWallet()
 	end
 
 	local function onStateChanged(payload: any): ()
@@ -1004,7 +1267,7 @@ local function bootMission(): ()
 		end
 		if payload.kind == "snapshot" then
 			onSnapshot(payload)
-		elseif payload.kind == "loadStatus" and not loaded then
+		elseif payload.kind == "loadStatus" and not st.loaded then
 			local phase = payload.phase
 			if phase ~= "loading" and phase ~= "failed" then
 				return
@@ -1021,97 +1284,249 @@ local function bootMission(): ()
 		end
 	end
 
+	-- The first MapState of a session picks what the map opens on: the first open node, in
+	-- config order, that has no star, at its lowest difficulty; failing that the first open
+	-- node with a difficulty still to clear, at the lowest such. Later the selection is the
+	-- player's.
+	local function seedMap(state: Types.MapState): ()
+		local screen = mapScreen
+		if screen == nil or expeditions == nil or st.mapSeeded then
+			return
+		end
+		local fallback: Types.MapNodeState? = nil
+		for _, node in state.nodes do
+			if typeof(node) == "table" and node.open == true and typeof(node.stars) == "table" then
+				if #node.stars == 0 then
+					st.mapSeeded = true
+					screen.Select(node.id, nil)
+					return
+				end
+				fallback = fallback or node
+			end
+		end
+		if fallback ~= nil then
+			st.mapSeeded = true
+			for _, difficulty in expeditions.difficulties do
+				if table.find(fallback.stars, difficulty) == nil then
+					screen.Select(fallback.id, difficulty)
+					return
+				end
+			end
+			screen.Select(fallback.id, nil)
+		end
+	end
+
+	local function onMapState(payload: any): ()
+		local screen = mapScreen
+		if
+			screen == nil
+			or typeof(payload) ~= "table"
+			or payload.kind ~= "map"
+			or typeof(payload.nodes) ~= "table"
+		then
+			return
+		end
+		local state = payload :: Types.MapState
+		screen.SetState(state)
+		seedMap(state)
+	end
+
+	-- The crowd's floor (ruling 30): handed on whenever it changes, nil when no camp holds it.
+	local function applyFloor(floor: Types.RunFloor?): ()
+		local held = st.floor
+		if
+			floor == nil
+			or typeof(floor) ~= "table"
+			or typeof(floor.x) ~= "number"
+			or typeof(floor.y) ~= "number"
+			or typeof(floor.z) ~= "number"
+			or typeof(floor.hx) ~= "number"
+			or typeof(floor.hz) ~= "number"
+		then
+			if held.set then
+				held.set = false
+				CrowdRenderer.SetFloor(nil, nil)
+			end
+			return
+		end
+		if
+			held.set
+			and held.x == floor.x
+			and held.y == floor.y
+			and held.z == floor.z
+			and held.hx == floor.hx
+			and held.hz == floor.hz
+		then
+			return
+		end
+		held.set = true
+		held.x, held.y, held.z, held.hx, held.hz = floor.x, floor.y, floor.z, floor.hx, floor.hz
+		CrowdRenderer.SetFloor(
+			Vector3.new(floor.x, floor.y, floor.z),
+			Vector3.new(floor.hx, 0, floor.hz)
+		)
+	end
+
 	local function onRunState(payload: any): ()
 		if not isRunState(payload) then
 			return
 		end
 		local run = (payload :: any) :: Types.RunState
-		local hadMission = mission ~= nil
-		mission = Catalog.GetMissionById(run.missionId)
-		local missionConfig = mission
-		if missionConfig ~= nil then
-			if not hadMission then
-				-- The wallet's material chip needs the mission name, and the join Snapshot
-				-- arrived before this first RunState named one. Ask once for a fresh one.
-				requestSnapshot:FireServer()
-			end
-			if missionConfig.arena ~= arenaName then
-				arenaName = missionConfig.arena
-				CrowdRenderer.SetArena(arenaName)
-			end
-			local crowd = missionConfig.crowd
-			if not hadMission and crowd ~= nil then
-				CrowdRenderer.Prewarm(crowd.maxAlive)
-			end
-			CombatFxController.SetMaterial(missionConfig.material)
-		end
 		local phase = run.phase
-		hud.SetMission(if missionConfig ~= nil then missionConfig.name else run.missionId)
+		local last = st.phase
+		local live = LIVE_PHASES[phase] == true
+		local over = RUN_OVER_PHASES[phase] == true
+
+		-- The level, not the mission: its kinds for the Studio strip, its pool of bodies, its
+		-- material for the wallet and the reward pops, its floor for the crowd.
+		if run.levelId ~= st.levelId then
+			st.levelId = run.levelId
+			st.prewarmed = 0
+			if debugPanel ~= nil then
+				debugPanel.SetKinds(rewardedKinds(run.levelId))
+			end
+		end
+		if typeof(run.maxAlive) == "number" and run.maxAlive > st.prewarmed then
+			st.prewarmed = run.maxAlive
+			CrowdRenderer.Prewarm(run.maxAlive)
+		end
+		if run.material ~= st.material then
+			st.material = run.material
+			CombatFxController.SetMaterial(run.material)
+			paintWallet()
+		end
+		applyFloor(run.floor)
+
+		local difficultyName = run.difficulty
+		if expeditions ~= nil then
+			difficultyName = expeditions.difficultyNames[run.difficulty] or run.difficulty
+		end
+		hud.SetMission(
+			if run.levelName == ""
+				then mapName
+				elseif difficultyName ~= "" then run.levelName .. " · " .. difficultyName
+				else run.levelName
+		)
 		CameraController.SetPhase(phase)
 		hud.SetRunState(run)
 		CombatFxController.SetParty(run.party)
 		if debugPanel ~= nil then
 			debugPanel.SetWave(run.wave)
-			debugPanel.SetMission(leverMission(missionConfig))
 		end
-		local fighting = phase == "wave" or phase == "boss"
+
 		local userId = player.UserId
+		local humans = 0
 		local waiting = false
 		for _, member in run.party do
-			if typeof(member) == "table" and member.userId == userId then
+			if typeof(member) ~= "table" then
+				continue
+			end
+			if not member.bot then
+				humans += 1
+			end
+			if member.userId == userId then
 				VitalsController.SetServerDown(member.down == true)
-				-- Waiting on the pad for the next wave: the server refuses every attack, so
-				-- none is sent (CombatHud reads the flag the same way).
-				waiting = member.waiting == true and (fighting or phase == "breather")
-				break
+				-- Waiting in the lobby camp for the next boundary (ruling 18): the server
+				-- refuses every attack, so none is sent. CombatHud reads the flag the same way.
+				waiting = member.waiting == true and live
 			end
 		end
 		InputController.SetPhase(phase, waiting)
-		local over = RUN_OVER_PHASES[phase] == true
-		-- The summary card has the screen: no crosshair, health bar or banner under it.
+
+		-- The map opens whenever the phase becomes `lobby` (the first RunState and every
+		-- return) and closes when the phase leaves it. On a return Depart rests for the
+		-- server's own start cooldown, which would refuse it anyway.
+		local screen = mapScreen
+		if screen ~= nil then
+			screen.SetParty(run.party, userId, run.leaderUserId)
+			if phase == "lobby" and last ~= "lobby" then
+				local levels = if combatConfig ~= nil then (combatConfig :: any).levels else nil
+				local cooldown = if typeof(levels) == "table"
+					then levels.startCooldownSeconds
+					else nil
+				if last ~= "" and typeof(cooldown) == "number" and cooldown > 0 then
+					busyFor(cooldown)
+				else
+					freeDepart()
+				end
+				screen.Open()
+			elseif phase ~= "lobby" and screen.IsOpen() then
+				freeDepart()
+				screen.Close()
+			end
+		end
+
+		-- The summary card, for a RunState that carries a result. It has the screen: no
+		-- crosshair, health bar or banner under it, and no map beside it (the trip home shows
+		-- its card whatever the phase).
 		rangeGui.Enabled = not over
-		if phase == "summary" then
+		local result = run.result
+		-- Only where a card belongs: a result still riding on a lobby RunState must not keep
+		-- the map shut.
+		if isRunResult(result) and result ~= nil and (over or result.reason == LEAVE_REASON) then
 			local returnIn = run.returnIn
-			summaryCard.Show(run.summary, {
+			if screen ~= nil then
+				screen.Close()
+			end
+			summaryCard.Show(run.summary, result, {
 				partySize = #run.party,
 				returnIn = if typeof(returnIn) == "number" then returnIn else nil,
+				canBack = humans <= 1 or run.leaderUserId == userId,
+				waves = run.waves,
+				difficultyName = difficultyName,
+				mapName = mapName,
 			})
 		else
 			summaryCard.Hide()
 		end
-		-- Named ahead of the chain below: tested inside it, the analyzer narrows `lastPhase`
-		-- for the branches that follow and rejects their comparisons.
-		local wasFighting = lastPhase == "wave" or lastPhase == "boss"
-		local enteredBreather = phase == "breather" and lastPhase ~= "breather"
-		if over and not RUN_OVER_PHASES[lastPhase] then
-			-- The server ended the run: its crowd, threats and projectiles are gone (EndRun),
-			-- and the run's pool was paid, so the wallet is asked for at once.
+		bindSummaryKeys(summaryCard.CanBack())
+
+		-- What the server dropped without a word goes from the screen here. Three things take
+		-- the enemy's circles and shots AND the players' projectiles with them:
+		--  * the run ended (its crowd, threats and projectiles are gone);
+		--  * the stage changed (a camp was cleared, or a Studio skip moved the party on);
+		--  * the wave changed in mid-fight with no breather and no merge (a Studio lever the
+		--    server carried out: a forced wave, a skip to this camp's boss; one it refuses
+		--    changes nothing).
+		-- A wave clear inside a camp (entering a breather) takes the enemy's alone: a shot is
+		-- ended by its own effect, but a lob's circle and a ground area get none and would
+		-- "land" on nothing, while the players' own projectiles fly on.
+		local ended = (over or phase == "lobby") and LIVE_PHASES[last] == true
+		local staged = run.stage ~= st.stage
+		local forced = (phase == "wave" or phase == "boss")
+			and (last == "wave" or last == "boss")
+			and run.wave ~= st.wave
+			and not run.merged
+		if ended or staged or forced then
 			ThreatFx.Clear()
 			FeedbackController.ClearFlights()
-			requestSnapshot:FireServer()
-		elseif enteredBreather then
-			-- A wave clear. The server drops every threat still in the air before the breather
-			-- (VitalsService.ClearThreats): a shot is ended by its own effect, but a lob's
-			-- circle and a ground area get none and would "land" on nothing, so the enemy's
-			-- circles and shots go here. The players' own projectiles fly on.
+		elseif phase == "breather" and last ~= "breather" then
 			ThreatFx.Clear()
-			if lastPhase == "wave" then
-				-- It is also the moment the pool is flushed.
-				requestSnapshot:FireServer()
-			end
-		elseif fighting and wasFighting and run.wave ~= lastWave and not run.merged then
-			-- The wave changed in mid-fight with no breather and no merge: a Studio skip that
-			-- the server carried out (ForceWave). It dropped the crowd's circles and shots and
-			-- the players' projectiles without a word, so they go here, now that it is known
-			-- to have happened. A skip the server refuses (the last wave) changes nothing.
-			ThreatFx.Clear()
-			FeedbackController.ClearFlights()
 		end
-		lastPhase = phase
-		lastWave = run.wave
+		-- A checkpoint banked, or the run ended: the wallet changed, so ask for it now.
+		if run.banked > st.banked or (over and not RUN_OVER_PHASES[last]) then
+			remotes.requestSnapshot:FireServer()
+		end
+		st.phase = phase
+		st.wave = run.wave
+		st.stage = run.stage
+		st.banked = run.banked
 	end
 
 	local function onActionResult(payload: any): ()
+		if typeof(payload) == "table" and payload.action == START_ACTION then
+			-- The server's answer to Depart: only a refusal comes back (a start changes the
+			-- phase instead), and it frees the button and says why.
+			if payload.ok == false then
+				freeDepart()
+				toast.Show(
+					START_REFUSALS[payload.reason] or START_REFUSALS.unavailable,
+					Theme.TOAST_ERROR_SECONDS,
+					true
+				)
+			end
+			return
+		end
 		local text, isError = actionResultText(payload)
 		if text ~= nil then
 			toast.Show(text, Theme.TOAST_ERROR_SECONDS, isError)
@@ -1121,9 +1536,9 @@ local function bootMission(): ()
 	-- The pointer ring keeps under the boss bar only while a boss is on show: with no bar there
 	-- the limit would squeeze the ring on a short screen in every wave for nothing.
 	local function applyVitalsLayout(): ()
-		local layout = vitalsLayout
+		local layout = st.vitalsLayout
 		if layout ~= nil then
-			layout.topLimit = if bossShown then bossLimit else nil
+			layout.topLimit = if st.bossShown then st.bossLimit else nil
 			VitalsController.SetLayout(layout)
 		end
 	end
@@ -1141,6 +1556,10 @@ local function bootMission(): ()
 		if debugPanel ~= nil then
 			debugPanel.SetLayout(scale, size)
 		end
+		local screen = mapScreen
+		if screen ~= nil then
+			screen.SetLayout(scale, size)
+		end
 		crosshair.SetLayout(scale)
 		FeedbackController.SetLayout(scale)
 		local _, clusterLeft, clusterTop = touchCluster()
@@ -1152,8 +1571,8 @@ local function bootMission(): ()
 		local camera = Workspace.CurrentCamera
 		local viewport = if camera ~= nil then camera.ViewportSize else size + inset
 		local bossBottom = placeMissionBoss(bossBar, scale, size, edges, viewport / 2 - inset)
-		bossLimit = if bossBottom ~= nil then bossBottom + inset.Y else nil
-		vitalsLayout = {
+		st.bossLimit = if bossBottom ~= nil then bossBottom + inset.Y else nil
+		st.vitalsLayout = {
 			scale = scale,
 			rightReserve = 0,
 			clusterLeft = clusterLeft,
@@ -1162,17 +1581,28 @@ local function bootMission(): ()
 		applyVitalsLayout()
 	end
 
-	-- Ruling 25 / the contract's keys: B = the next boss wave, N = the next wave. Studio only;
-	-- the server ignores the lever anywhere else. Nothing is cleared here: the server may
-	-- refuse the skip (there is no wave after the last), and what it then leaves in the air
-	-- still lands. onRunState clears once the wave has really changed.
-	local function onSkipKey(input: InputObject, processed: boolean): ()
-		local which = SKIP_KEYS[input.KeyCode]
-		if processed or which == nil or requestDebug == nil then
+	-- M opens and closes the map in the lobby. Studio (ruling 33): N finishes the stage, B
+	-- jumps to the boss, G steps the gear; the server ignores the levers anywhere else, and a
+	-- skip it carries out shows as a new stage or wave, which is what clears the screen.
+	local function onKey(input: InputObject, processed: boolean): ()
+		if processed then
 			return
 		end
-		if debounced() then
-			requestDebug:FireServer(SKIP_LEVER, which)
+		if input.KeyCode == MAP_TOGGLE_KEY then
+			local screen = mapScreen
+			if screen ~= nil and st.phase == "lobby" then
+				if screen.IsOpen() then
+					screen.Close()
+				else
+					screen.Open()
+				end
+			end
+			return
+		end
+		local lever = if studio then DEBUG_KEYS[input.KeyCode] else nil
+		local remote = remotes.requestDebug
+		if lever ~= nil and remote ~= nil and debounced() then
+			remote:FireServer(lever.lever, lever.value)
 		end
 	end
 
@@ -1184,19 +1614,23 @@ local function bootMission(): ()
 		toast.Show(text, Theme.TOAST_ERROR_SECONDS, false)
 	end)
 
-	stateChanged.OnClientEvent:Connect(onStateChanged)
-	actionResult.OnClientEvent:Connect(onActionResult)
-	runStateEvent.OnClientEvent:Connect(onRunState)
-	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
-	if studio then
-		UserInputService.InputBegan:Connect(onSkipKey)
+	remotes.stateChanged.OnClientEvent:Connect(onStateChanged)
+	remotes.actionResult.OnClientEvent:Connect(onActionResult)
+	remotes.runState.OnClientEvent:Connect(onRunState)
+	local mapStateEvent = remotes.mapState
+	if mapStateEvent ~= nil then
+		mapStateEvent.OnClientEvent:Connect(onMapState)
+	else
+		warn("[CombatUIController] MapState missing: the map shows every level closed")
 	end
+	screenGui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyLayout)
+	UserInputService.InputBegan:Connect(onKey)
 	-- Pure display every frame: the boss off CrowdRenderer, and the Alt hint's camera state.
 	RunService.RenderStepped:Connect(function(deltaTime: number)
 		local boss = CrowdRenderer.GetBoss()
 		bossBar.Update(deltaTime, boss)
-		if (boss ~= nil) ~= bossShown then
-			bossShown = boss ~= nil
+		if (boss ~= nil) ~= st.bossShown then
+			st.bossShown = boss ~= nil
 			applyVitalsLayout()
 		end
 		hud.SetAiming(CameraController.IsActive(), CameraController.IsAiming())
@@ -1204,15 +1638,14 @@ local function bootMission(): ()
 	-- One explicit request on boot: the server's join snapshot may have fired before this
 	-- connection existed; duplicate snapshots are harmless by design. Sent before the layout
 	-- pass, which is guarded as well: neither this nor the wiring below waits on it.
-	requestSnapshot:FireServer()
+	remotes.requestSnapshot:FireServer()
 	firstLayout(applyLayout)
 
 	-- RangeStats still comes in a mission, for the one thing a mission needs of it: a refused
 	-- attack names its seq, so a swing drawn early is taken back (P3.1). Only those two fields
 	-- are read: the bench's readouts (alive, server ms, ...) are the range's provider's, which a
 	-- mission does not run.
-	local rangeStats =
-		remotesFolder:WaitForChild("RangeStats", Theme.COMBAT_REMOTE_WAIT_SECONDS) :: RemoteEvent?
+	local rangeStats = remotesFolder:WaitForChild("RangeStats", timeout) :: RemoteEvent?
 	if rangeStats == nil then
 		warn("[CombatUIController] RangeStats missing — refused swings are not taken back")
 		return

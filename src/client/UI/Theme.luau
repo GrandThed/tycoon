@@ -1175,6 +1175,89 @@ local Theme = {
 	COMBAT_DEBUG_GRANT_VALOR = 10,
 	COMBAT_DEBUG_MAX_SPAWN_KEYS = 3,
 
+	-- L1 (docs/INTERFACES.md "L1 contracts"): the expeditions map (UI/MapScreen) and the run
+	-- layer's new pieces. The map's colours are the ones of the picture Ben approved
+	-- (assets/research/2026-10-13-missions): one navy look for the screen, each node in its
+	-- theme's colour, which comes from Config/Expeditions.json.
+	-- The whole screen (map and card) never grows past this, in design px; it fills the
+	-- viewport less a margin on anything smaller.
+	MAP_MAX_WIDTH = 960,
+	MAP_MAX_HEIGHT = 540,
+	MAP_GAP = 8,
+	MAP_CARD_WIDTH = 232,
+	MAP_CARD_PADDING = 10,
+	MAP_CARD_LINE_GAP = 6,
+	MAP_CARD_CHIP_HEIGHT = 20,
+	MAP_CARD_NAME_HEIGHT = 24,
+	MAP_CARD_ROW_HEIGHT = 16, -- one info row ("Rewards x2 cash and drops")
+	MAP_CARD_REASON_HEIGHT = 48, -- a locked node's reason, up to three lines
+	MAP_CARD_LABEL_WIDTH = 62, -- the dim caption column of an info row
+	MAP_CARD_HINT_HEIGHT = 14,
+	MAP_CARD_HINT_TEXT = 10,
+	-- Every tap target of the map is at least 48 design px: 44 physical px at MIN_SCALE.
+	MAP_NODE_SIZE = 64,
+	MAP_BONUS_NODE_SIZE = 48,
+	MAP_NODE_RING = 5, -- the ring round a node: gold on the selected one
+	MAP_NODE_GAP = 2, -- between a node, its stars above and its name below
+	MAP_NODE_NAME_WIDTH = 76,
+	MAP_NODE_NAME_HEIGHT = 28, -- two lines: "Another / Planet"
+	MAP_NODE_NAME_TEXT = 12,
+	MAP_NODE_PAD_X = 44, -- from the map's side edges to the outermost node centres
+	MAP_NODE_PAD_EDGE = 6, -- from the map's top and bottom edges to a node's stars and name
+	MAP_STAR_SIZE = 18,
+	MAP_STAR_TEXT = 17,
+	MAP_LOCK_COLOR = Color3.fromRGB(170, 183, 216),
+	MAP_PATH_DOT_SIZE = 7,
+	MAP_PATH_DOT_SPACING = 16,
+	MAP_PATH_CLEARANCE = 6, -- the dots stop this far short of a node's ring
+	MAP_BAND_TRANSPARENCY = 0.72, -- each theme's band behind the path
+	-- The spread that keeps nodes off each other on a small map: footprints end up at least
+	-- this far apart, in at most this many passes over every pair.
+	MAP_SPREAD_GAP = 2,
+	MAP_SPREAD_PASSES = 16,
+	MAP_DIFFICULTY_HEIGHT = 52,
+	MAP_DIFFICULTY_NAME_TEXT = 13,
+	MAP_DIFFICULTY_SUB_TEXT = 11,
+	MAP_DEPART_HEIGHT = 48,
+	MAP_RETURN_HEIGHT = 48,
+	MAP_CLOSE_SIZE = 48,
+	MAP_SCRIM_TRANSPARENCY = 0.35,
+	MAP_SELECT_POP_SCALE = 1.12,
+	MAP_SELECT_POP_SECONDS = 0.14,
+	-- A Depart nobody answered (no refusal, no phase change) is live again after this long.
+	MAP_DEPART_TIMEOUT_SECONDS = 6,
+	MAP_COLOR_INK = Color3.fromRGB(20, 27, 46),
+	MAP_COLOR_PANEL = Color3.fromRGB(30, 41, 70),
+	MAP_COLOR_PANEL_LIGHT = Color3.fromRGB(43, 58, 97),
+	MAP_COLOR_PANEL_SELECTED = Color3.fromRGB(53, 72, 122),
+	MAP_COLOR_TEXT = Color3.fromRGB(243, 246, 255),
+	MAP_COLOR_DIM = Color3.fromRGB(170, 183, 216),
+	MAP_COLOR_GOLD = Color3.fromRGB(255, 200, 61),
+	MAP_COLOR_OFF = Color3.fromRGB(85, 100, 140), -- an unearned star, a theme with no colour
+	MAP_COLOR_LOCKED = Color3.fromRGB(58, 70, 102),
+	MAP_COLOR_PATH = Color3.fromRGB(233, 215, 166),
+	-- The shoulder camera follows its character through a short clamped lag. A root that moved
+	-- further than this in one frame was moved by the server (the lobby camp to a level, a
+	-- camp's entry, a rescue): the camera is there at once, with no lag left to close. No move
+	-- a player makes covers this in a frame (a slam is 120 studs a second).
+	COMBAT_CAMERA_SNAP_STUDS = 40,
+	-- The run layer (CombatHud). "Progress saved" shows this long when a checkpoint banks; the
+	-- first press of Abandon asks for a second one within this long.
+	COMBAT_SAVED_NOTICE_SECONDS = 3,
+	COMBAT_ABANDON_CONFIRM_SECONDS = 3,
+	COMBAT_SAVED_NOTICE_WIDTH = 168,
+	-- The summary card's lines sit closer than a dialog's: with two buttons and a party's two
+	-- extra lines it must still fit 329 design px of height (640x360 under a 58 px top bar).
+	COMBAT_SUMMARY_LINE_GAP = 6,
+	COMBAT_SAVED_NOTICE_HEIGHT = 24,
+	-- The bottom-left buttons: Map, and a two-line button (Return to your city / Abandon).
+	COMBAT_MAP_BUTTON_WIDTH = 72,
+	COMBAT_RUN_BUTTON_WIDTH = 104,
+	COMBAT_RUN_BUTTON_TEXT = 13,
+	-- The Studio strip's spawn buttons: one per rewarded kind of the level (the C1 cap of
+	-- three enemy keys is too few for a level's seven).
+	COMBAT_DEBUG_MAX_KIND_KEYS = 10,
+
 	-- Sibling ZIndex tiers so modal layers never depend on instance creation order.
 	ZINDEX_CARD = 15,
 	ZINDEX_DIALOG = 20,

@@ -326,10 +326,15 @@ type Entity = {
 	index: number,
 }
 
+-- The crowd's floor: its top centre and its half extents in X and Z (nil = unknown).
+type Floor = { centre: Vector3, half: Vector3? }
+
 local FOLDER_NAME = "CrowdBodies"
--- CrowdService encodes against its bounds centre, and every arena is built at the world origin
--- with its floor top at y = 0, so both sides decode against the same point.
-local ARENA_ORIGIN = Vector3.zero
+-- The wire's origin is the world origin, for good (L1 ruling 12): CrowdService encodes every
+-- snapshot against it wherever the crowd's floor is, and this decodes against it. Until L1 this
+-- one constant was also the floor's height (a tell's, a threat origin's) and the centre a
+-- charge is bounded round; those three now read `floor`, which the server tells (SetFloor).
+local WIRE_ORIGIN = Vector3.zero
 
 -- Interpolation.
 local INTERP_SNAPSHOTS = 1.2 -- render this many snapshot intervals behind the newest packet
@@ -429,9 +434,10 @@ local newestStamp = -math.huge
 local burstsThisStep = 0
 local burstEmitters: { [string]: ParticleEmitter } = {}
 local burstColors: { [string]: Color3 } = {}
--- P4 wave 2: the arena floor's half extents (X and Z), read from the shared layout the server
--- builds the floor from (SetArena); nil = no such layout. Only a charge is bounded by it here.
-local arenaHalf: Vector3? = nil
+-- The crowd's floor as last told (SetFloor): its top centre, and its half extents in X and Z
+-- (nil = unknown: nothing bounds a charge). A camp's floor in a level (L1 ruling 30), the
+-- arena's in the range (SetArena). With no camp it is the world origin at height 0.
+local floor: Floor = { centre = Vector3.zero, half = nil }
 -- Stop 2: the boss the bar shows (the first one alive, kept through its death flight so the
 -- bar can empty and go).
 local bossEntity: Entity? = nil
@@ -1325,7 +1331,7 @@ local function loadThreat(entity: Entity): boolean
 		elseif threat ~= nil then math.max(threat.strikeSeconds, 0)
 		else 0
 	entity.threatYaw = entity.yawC
-	entity.threatOrigin = Vector3.new(entity.posC.X, ARENA_ORIGIN.Y, entity.posC.Z)
+	entity.threatOrigin = Vector3.new(entity.posC.X, floor.centre.Y, entity.posC.Z)
 	entity.threatWidth = math.max(attack.width or 0, 0)
 	entity.threatLock = math.max(attack.lockSeconds or 0, 0)
 	entity.threatSpeed = math.max(speed, 0)
@@ -1589,7 +1595,7 @@ local function pushSample(
 	-- recover the marksman turns to its target again, and that yaw is no longer the shot's: a
 	-- recover snapshot that beats this clock to the end of the blow must not swing the wall.
 	if entity.threat == "windup" then
-		entity.threatOrigin = Vector3.new(position.X, ARENA_ORIGIN.Y, position.Z)
+		entity.threatOrigin = Vector3.new(position.X, floor.centre.Y, position.Z)
 	end
 	if
 		entity.threatShape == "line"
@@ -1661,7 +1667,7 @@ local function onSnapshot(data: any): ()
 		end
 	end
 	decodeStamp = stamp
-	CrowdCodec.DecodeEach(packet, ARENA_ORIGIN, onEntry)
+	CrowdCodec.DecodeEach(packet, WIRE_ORIGIN, onEntry)
 end
 
 local function onSpawn(payload: any): ()
@@ -1849,7 +1855,7 @@ end
 -- wedge lies on the arena floor under the body's NEWEST position, not its delayed drawn one.
 local function drawTell(entity: Entity, tell: Tell, share: number, striking: boolean, u: number): ()
 	local at = entity.posC
-	local centre = Vector3.new(at.X, ARENA_ORIGIN.Y + Theme.COMBAT_RANGE_TELL_LIFT, at.Z)
+	local centre = Vector3.new(at.X, floor.centre.Y + Theme.COMBAT_RANGE_TELL_LIFT, at.Z)
 	local moved = not tell.laid or (centre - tell.centre).Magnitude > SETTLE_EPSILON
 	if moved then
 		tell.centre = centre
@@ -2021,14 +2027,15 @@ end
 -- is nearer. The server stops the body there while its `attack` state runs on for the full
 -- range / speed, so the wire never says the charge stopped short; the client has to know the
 -- edge. This mirrors CrowdBrain's runway (a body of its radius stays wholly on the floor),
--- and the floor's size is the shared layout's, so it is the server's number. With no layout
--- nothing bounds the charge here.
+-- and the floor is the one the server told (SetFloor), so it is the server's rectangle. With
+-- no floor known nothing bounds the charge here.
 local function laneReach(entity: Entity): number
 	local reach = entity.threatReach
-	local half = arenaHalf
+	local half = floor.half
 	if half == nil then
 		return reach
 	end
+	local middle = floor.centre
 	local heading = lookOf(entity.threatYaw)
 	local from = entity.threatOrigin
 	-- The kind's radius as the config has it, which is what the server measures with: the
@@ -2038,14 +2045,14 @@ local function laneReach(entity: Entity): number
 	local limitX = math.max(half.X - radius, 0)
 	local limitZ = math.max(half.Z - radius, 0)
 	if heading.X > 0 then
-		reach = math.min(reach, (ARENA_ORIGIN.X + limitX - from.X) / heading.X)
+		reach = math.min(reach, (middle.X + limitX - from.X) / heading.X)
 	elseif heading.X < 0 then
-		reach = math.min(reach, (ARENA_ORIGIN.X - limitX - from.X) / heading.X)
+		reach = math.min(reach, (middle.X - limitX - from.X) / heading.X)
 	end
 	if heading.Z > 0 then
-		reach = math.min(reach, (ARENA_ORIGIN.Z + limitZ - from.Z) / heading.Z)
+		reach = math.min(reach, (middle.Z + limitZ - from.Z) / heading.Z)
 	elseif heading.Z < 0 then
-		reach = math.min(reach, (ARENA_ORIGIN.Z - limitZ - from.Z) / heading.Z)
+		reach = math.min(reach, (middle.Z - limitZ - from.Z) / heading.Z)
 	end
 	return math.max(reach, 0)
 end
@@ -2452,12 +2459,22 @@ local CrowdRenderer = {}
 -- Main's controller contract; everything happens in Start.
 function CrowdRenderer.Init(): () end
 
--- Wave 2: the floor a charge is bounded by, from Shared/Layouts/Arenas/<name>, as ArenaService
--- reads it. P5: the range names its arena in ProvingGrounds.json at Start; a mission's arena is
--- the mission config's, which CombatUIController hands over from the first RunState. An
--- unknown name leaves no bound, as before.
+-- L1 ruling 30: the crowd's floor, as the server tells it in RunState.floor from a camp's
+-- trigger until that camp is cleared. `center` = the floor's top centre (its Y is the height
+-- tells and threat origins are drawn at), `halfSize` = its half extents in X and Z (what a
+-- charge is bounded by). nil = no camp: height 0 and no bound. The wire's origin does not move
+-- with it (WIRE_ORIGIN), so a floor that arrives late only draws a tell at the old height for a
+-- moment; no body is ever misplaced.
+function CrowdRenderer.SetFloor(center: Vector3?, halfSize: Vector3?): ()
+	floor.centre = center or Vector3.zero
+	floor.half = if center ~= nil then halfSize else nil
+end
+
+-- The range's floor: Shared/Layouts/Arenas/<name> at the world origin, as ArenaService builds
+-- it (the range names its arena in ProvingGrounds.json). An unknown name leaves no bound. A
+-- level never calls this: its floors come through SetFloor.
 function CrowdRenderer.SetArena(name: string): ()
-	arenaHalf = nil
+	CrowdRenderer.SetFloor(nil, nil)
 	local layouts = sharedFolder:FindFirstChild("Layouts")
 	local arenas = if layouts ~= nil then layouts:FindFirstChild("Arenas") else nil
 	local module = if arenas ~= nil then arenas:FindFirstChild(name) else nil
@@ -2467,7 +2484,7 @@ function CrowdRenderer.SetArena(name: string): ()
 	local ok, layout = pcall(require, module)
 	local size = if ok and typeof(layout) == "table" then (layout :: any).size else nil
 	if typeof(size) == "table" and typeof(size.x) == "number" and typeof(size.z) == "number" then
-		arenaHalf = Vector3.new(size.x / 2, 0, size.z / 2)
+		CrowdRenderer.SetFloor(Vector3.zero, Vector3.new(size.x / 2, 0, size.z / 2))
 	end
 end
 

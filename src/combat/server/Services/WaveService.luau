@@ -1,26 +1,28 @@
 --!strict
--- The run: lobby, waves, merges, breathers, bosses, rewards and the end (docs/INTERFACES.md
--- "C1 contracts" → "Waves"). One run per server, entirely on the server clock.
+-- The run: a level's stages, its camps' waves, the rewards and the end (docs/INTERFACES.md
+-- "L1 contracts" → "Flow" and "Server modules" → "B — the run"). One run per server, entirely on
+-- the server clock.
 --
--- Two things are deliberate here:
--- * The pacing director only ever changes PACING — burst interval, merges, breather length,
---   the one extra elite. It never touches enemy HP or damage; only Overdrive does that.
--- * Rewards are banked into a per-wave pool and flushed to the profiles at every wave clear, so
---   a disconnect, a wipe or a crash costs at most the wave in progress. This is the only place
---   under src/combat that writes a profile, and it writes nothing but cash, materials, valor,
---   combat stats and the mission record.
+-- L1 makes this one stage-driven machine for every level (ruling 1). The RULES of a run are not
+-- here: which stage is next, when a camp triggers, when it is clear, what a checkpoint banks,
+-- what ends the run, where a body belongs, what a skip does, which node is open. They are
+-- StageFlow's, a pure module the harness loads and mutates (ruling 2). This file only builds
+-- StageFlow's input once a tick and EXECUTES the actions it returns: it moves the crowd's floor,
+-- closes and opens gates, queues waves, banks the pool, moves bodies.
 --
--- C2 adds the co-op edges: the lobby start rule (ArenaService.CanStart), the wave boundary that
--- lets waiting members in, the Mentor bonus at a boss clear, and the group return home after
--- coop.returnGroupSeconds on the summary card.
+-- Kept from P5, unchanged in meaning:
+-- * Waves are crowd groups arriving in bursts at the camp's spawn points; a kill pays its kind's
+--   fixed reward into a pool and books the HP its body lost per player (CrowdKillInfo).
+-- * The pacing director only ever changes PACING (burst interval, merges, breather length, the
+--   one extra elite), never enemy HP or damage.
+-- * This is the only place under src/combat that writes a profile, and it writes nothing but
+--   cash, materials, Valor, combat stats and (for a level that names a mission) its record.
+-- * Nothing in the tick yields. The level's removal is deferred out of it.
 --
--- P5 (docs/INTERFACES.md "P5 contracts", rulings 13-19): the waves are crowd groups. They come
--- from the mission's `crowd` block (Combat.CrowdWave) and arrive in bursts at the arena's rim;
--- a kill pays its kind's fixed reward and books the HP its body lost per player (CrowdKillInfo).
--- The damage tally and the run's damage map live here now (CombatService's until P5). A down is
--- this file's to rule on (OnDown), and in a Studio proving build the run loops in place.
--- EnemyService and CombatService take no part: a mission without a `crowd` block is refused at
--- arrival, so every run that reaches this file is a crowd run.
+-- New with L1: only a checkpoint pays (ruling 15: whatever ends the run drops the pool that was
+-- not banked); every run ends in a summary and then the lobby camp, never the city (ruling 20);
+-- the leader starts a level with RequestStartLevel (ruling 7); stars are session memory, kept
+-- here per userId (ruling 25).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -35,64 +37,79 @@ local Tuning = require(sharedFolder:WaitForChild("Tuning"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
+local RemoteService = require(servicesFolder:WaitForChild("RemoteService"))
 local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
-local ReturnService = require(script.Parent:WaitForChild("ReturnService"))
 local CrowdService = require(script.Parent:WaitForChild("CrowdService"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
 local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
 local RunFx = require(script.Parent:WaitForChild("RunFx"))
+local StageFlow = require(script.Parent:WaitForChild("StageFlow"))
+local LevelService = require(script.Parent:WaitForChild("LevelService"))
+local LevelGeometry = require(script.Parent:WaitForChild("LevelGeometry"))
 
 -- Degrade value: without Combat.json the place never leaves the lobby, but the broadcast loop
 -- still needs a legal period.
 local DEFAULT_STATE_HZ = 4
-local FIRST_WAVE = 1
 local FIGHT = "fight"
+-- halfSize.Y handed to CrowdService.SetBounds: the highest a launch may carry a body above a
+-- camp's floor. Layouts have no ceiling, so it is generous rather than tuned (P1's value).
+local CROWD_CEILING = 200
 
--- One burst of one group: up to crowd.burst bodies of a kind, arriving together at one rim point
--- in a grid. `placed` survives a hold (maxAlive, or a refused spawn), so the grid carries on.
+-- One burst of one group: up to crowd.burst bodies of a kind, arriving together at one spawn
+-- point in a grid. `placed` survives a hold (maxAlive, or a refused spawn), so the grid carries on.
 type Burst = { kind: string, left: number, placed: number, at: Vector3? }
-
 type Pool = Combat.RewardPool
+type StartRefusal = "notLeader" | "busy" | "locked" | "unavailable"
 
 -- Everything a run holds, in one table (Studio's 200-local limit and one place to reset).
 type Run = {
 	phase: Types.RunPhase,
-	wave: number,
-	-- The highest wave whose rewards have been flushed; a merged pair clears both at once.
-	clearedThrough: number,
+	-- What is played: nil in the lobby. `flow` is StageFlow's state, moved on by its rules alone.
+	level: Types.LevelConfig?,
+	plan: StageFlow.Plan?,
+	flow: StageFlow.State?,
+	scales: Types.LevelDifficulty?,
+	-- The played difficulty's place in Expeditions.json `difficulties` (minDifficulty reads it).
+	rank: number,
+	-- The live camp's wave.
 	merged: boolean,
-	forcedNextWave: number?,
 	queue: { Burst },
 	-- Bodies the current group's waves queued (the director's elite and lever spawns included; a
 	-- boss and what it summons are not), for the merge test's dead fraction.
 	spawnedThisGroup: number,
-	-- The crowd wave being spawned, and the boss it still has to place (spawned first).
 	spec: Combat.CrowdWaveSpec?,
 	bossPending: Types.MissionCrowdBoss?,
 	bossHpMult: number,
-	-- The living boss body's crowd id (0 = none), and the Valor its kill pays.
+	-- The living boss body's crowd id (0 = none), the Valor its kill pays, and its name.
 	bossId: number,
 	bossValor: number,
+	bossName: string?,
 	burstsThisWave: number,
-	rimCursor: number,
+	spawnCursor: number,
 	nextBurstAt: number,
-	breatherUntil: number,
+	-- Bodies the live camp's later waves will field, for RunState.left.
+	laterBodies: number,
+	-- os.clock() the live camp's gates closed: the director's warmup counts from it.
+	campClosedAt: number,
+	-- The crowd's floor from a camp's trigger until it is cleared (ruling 30).
+	floor: Types.RunFloor?,
+	maxAlive: number,
 	runEndsAt: number,
-	-- os.clock() the summary card sends everyone home together (or, proving, restarts the run);
-	-- 0 = nothing pending.
+	-- os.clock() the summary ends and the party is back in the lobby; 0 = nothing pending.
 	returnAt: number,
-	-- Proving loop: os.clock() the lobby first held a human; 0 = not yet.
-	lobbySince: number,
 	tempo: number,
 	pool: Pool,
 	killsByUser: { [number]: number },
 	bossClearsThisFlush: number,
 	killStamps: { number },
-	-- The damage split of the current flush, and of the whole run (PartyMember.damageShare and
+	-- The damage split of the current pool, and of the whole run (PartyMember.damageShare and
 	-- RunSummary.damageShare read the latter; it is never drained mid-run).
 	damageTally: { [number]: number },
 	runDamage: { [number]: number },
 	runDamageTotal: number,
+	-- Checkpoints banked this run, and the stage name of the last one ("" = nothing was banked).
+	banked: number,
+	savedAt: string,
 }
 
 local function emptyPool(): Pool
@@ -102,10 +119,12 @@ end
 local function freshRun(): Run
 	return {
 		phase = "lobby",
-		wave = 0,
-		clearedThrough = 0,
+		level = nil,
+		plan = nil,
+		flow = nil,
+		scales = nil,
+		rank = 0,
 		merged = false,
-		forcedNextWave = nil,
 		queue = {},
 		spawnedThisGroup = 0,
 		spec = nil,
@@ -113,13 +132,16 @@ local function freshRun(): Run
 		bossHpMult = 1,
 		bossId = 0,
 		bossValor = 0,
+		bossName = nil,
 		burstsThisWave = 0,
-		rimCursor = 0,
+		spawnCursor = 0,
 		nextBurstAt = 0,
-		breatherUntil = 0,
+		laterBodies = 0,
+		campClosedAt = 0,
+		floor = nil,
+		maxAlive = 0,
 		runEndsAt = 0,
 		returnAt = 0,
-		lobbySince = 0,
 		tempo = 1,
 		pool = emptyPool(),
 		killsByUser = {},
@@ -128,23 +150,33 @@ local function freshRun(): Run
 		damageTally = {},
 		runDamage = {},
 		runDamageTotal = 0,
+		banked = 0,
+		savedAt = "",
 	}
 end
 
 local run = freshRun()
+-- What outlives a run, for the life of the server.
 local boot = {
 	mission = false,
 	proving = false,
-	-- The arena the crowd's bounds were last set for ("" = never): a reserved server may host a
-	-- second run in another arena.
-	boundsArena = "",
-	warnedStartWave = false,
-	-- Crowd kinds a mission named that ProvingGrounds.json does not have, warned once each.
+	-- Crowd kinds a level named that ProvingGrounds.json does not have, warned once each.
 	warnedKinds = {} :: { [string]: boolean },
-	-- os.clock() a member was last put back on the floor, by userId.
+	warnedNoMap = false,
+	-- os.clock() a member was last put back on the ground, by userId.
 	rescuedAt = {} :: { [number]: number },
 	broadcastAccumulator = 0,
 	loop = nil :: RBXScriptConnection?,
+	-- Ruling 25: the stars of this session, by userId. Kept when a member leaves and comes back.
+	stars = {} :: { [number]: StageFlow.Stars },
+	-- The leader the last MapState was computed for: a change sends a new one to everybody.
+	mapLeader = 0,
+	-- os.clock() of the last return to the lobby (the start cooldown), and of the moment the
+	-- lobby first held a human since then (the proving auto-start); 0 = not yet.
+	returnedAt = 0,
+	lobbySince = 0,
+	-- A return to the lobby is deferred out of the tick: this keeps it to one.
+	returning = false,
 }
 
 local WaveService = {}
@@ -162,6 +194,39 @@ local function stateHz(): number
 	return hz
 end
 
+local function isLive(phase: Types.RunPhase): boolean
+	return phase == "travel"
+		or phase == "gate"
+		or phase == "wave"
+		or phase == "boss"
+		or phase == "breather"
+end
+
+-- The stage the run is in, as the plan has it (nil in the lobby).
+local function currentStage(): StageFlow.Stage?
+	local plan = run.plan
+	local flow = run.flow
+	if plan == nil or flow == nil then
+		return nil
+	end
+	return plan.stages[flow.stage]
+end
+
+-- The camp whose floor the crowd stands on: the current stage's zone, in its countdown, its
+-- fight and its breathers.
+local function liveZone(): (StageFlow.Stage?, StageFlow.Zone?)
+	local flow = run.flow
+	local stage = currentStage()
+	if flow == nil or stage == nil then
+		return nil, nil
+	end
+	local step = flow.step
+	if step ~= "gate" and step ~= "fight" and step ~= "breather" then
+		return nil, nil
+	end
+	return stage, stage.zone
+end
+
 local function queuedBodies(): number
 	local bodies = 0
 	for _, burst in run.queue do
@@ -176,35 +241,46 @@ end
 local function pushRunFields(): ()
 	local now = os.clock()
 	local phase: Types.RunPhase = run.phase
+	local plan = run.plan
+	local flow = run.flow
+	local stage = currentStage()
+	local inCamp = flow ~= nil and (flow.step == "fight" or flow.step == "breather")
+	local alive = CrowdService.AliveCount()
+	local queued = queuedBodies()
 	ArenaService.SetRunFields({
 		phase = phase,
-		wave = run.wave,
-		alive = CrowdService.AliveCount(),
-		remaining = queuedBodies(),
+		wave = if flow ~= nil and inCamp then flow.wave else 0,
+		waves = if stage ~= nil then stage.waves else 0,
+		alive = alive,
+		remaining = queued,
 		tempo = run.tempo,
 		merged = run.merged,
-		breatherEndsIn = if phase == "breather" then math.max(0, run.breatherUntil - now) else nil,
+		breatherEndsIn = if phase == "breather" and flow ~= nil
+			then math.max(0, flow.breatherUntil - now)
+			else nil,
 		runEndsIn = if run.runEndsAt > 0 then math.max(0, run.runEndsAt - now) else 0,
-		-- Ruling 22: the crowd's boss bar is the client's (CrowdRenderer); this one stays empty.
-		boss = nil,
-		inRun = phase == "wave" or phase == "breather" or phase == "boss",
+		inRun = isLive(phase),
 		returnIn = if phase == "summary" and run.returnAt > 0
 			then math.max(0, run.returnAt - now)
 			else nil,
+		stage = if flow ~= nil then flow.stage else 0,
+		stages = if plan ~= nil then #plan.stages else 0,
+		stageKind = if stage ~= nil then stage.kind else "",
+		stageName = if stage ~= nil then stage.name else "",
+		campsCleared = if flow ~= nil then flow.cleared else 0,
+		camps = if plan ~= nil then plan.camps else 0,
+		left = if inCamp then alive + queued + run.laterBodies else 0,
+		bossName = if run.bossId ~= 0 or run.bossPending ~= nil then run.bossName else nil,
+		gateIn = if phase == "gate" and flow ~= nil then math.max(0, flow.gateAt - now) else nil,
+		banked = run.banked,
+		floor = run.floor,
+		maxAlive = run.maxAlive,
 	})
 end
 
 local function broadcast(): ()
 	pushRunFields()
 	ArenaService.Broadcast(run.phase)
-end
-
-local function setPhase(next: Types.RunPhase): ()
-	if run.phase == next then
-		return
-	end
-	run.phase = next
-	broadcast()
 end
 
 -- Raw (pre-floor) share of everything dealt this run, 0-1.
@@ -227,19 +303,27 @@ local function humanPlayers(): { Player }
 	return players
 end
 
--- Ruling 13: in the fight right now (admitted, not on the pad, alive). Down is VitalsService's.
+local function rootOf(member: Types.RunMember): BasePart?
+	local character = member.character
+	local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	if root ~= nil and root:IsA("BasePart") then
+		return root
+	end
+	return nil
+end
+
+-- P5 ruling 13: in the fight right now (admitted, not waiting, alive). Down is VitalsService's.
 local function mayJudge(player: Player): boolean
 	local member = ArenaService.GetMemberFor(player)
 	return member ~= nil and ArenaService.IsFighting(member)
 end
 
--- Ruling 21: an attack or ability only from a fighting member, standing, in a run.
+-- L1 ruling 8: a member may act in the five live phases, fighting and standing.
 local function mayAct(player: Player): boolean
 	return ArenaService.InRun() and mayJudge(player) and not VitalsService.IsDown(player)
 end
 
--- Ruling 11: the player's gear decides their bar (the baked proving gear in a proving mission;
--- WeaponService.GearOf already knows which).
+-- P5 ruling 11: the player's gear decides their bar (WeaponService.GearOf knows which gear).
 local function maxHpOf(player: Player): number?
 	local armoryConfig = Catalog.GetArmoryConfig()
 	if armoryConfig == nil then
@@ -249,21 +333,21 @@ local function maxHpOf(player: Player): number?
 	return Armory.MaxHp(armoryConfig, gear, ascension)
 end
 
--- The mission's rules for VitalsService; the scales come from the run's crowd spec, neutral until
--- a run has started (the lobby has no enemies, but its bar must already be the gear's).
-local function missionRules(spec: Combat.CrowdWaveSpec?): VitalsService.MissionRules
+-- The rules VitalsService fights by. Neutral in the lobby (no enemy there, but the bar must
+-- already be the gear's); a run sets its difficulty's damage scale and its level's regen.
+local function missionRules(damageScale: number, regenShare: number): VitalsService.MissionRules
 	return {
 		mayJudge = mayJudge,
 		onDown = function(player: Player)
 			WaveService.OnDown(player)
 		end,
 		maxHpOf = maxHpOf,
-		damageScale = if spec ~= nil then spec.damageScale else 1,
-		regenShare = if spec ~= nil then spec.regenShare else 0,
+		damageScale = damageScale,
+		regenShare = regenShare,
 	}
 end
 
--- Ruling 18: every downed member stands up at a wave boundary (until the Wave 4 revive).
+-- P5 ruling 18: every downed member stands up at a boundary (until the L5 revive).
 local function standUpDowned(): ()
 	for _, player in humanPlayers() do
 		if VitalsService.IsDown(player) then
@@ -272,9 +356,73 @@ local function standUpDowned(): ()
 	end
 end
 
+-- The map ------------------------------------------------------------------------------------
+
+local function starsOf(userId: number): StageFlow.Stars
+	local stars = boot.stars[userId]
+	if stars == nil then
+		stars = {}
+		boot.stars[userId] = stars
+	end
+	return stars
+end
+
+-- Ruling 28: a node is built when a level file with its `level` id exists.
+local function builtLevels(): { [string]: boolean }
+	local built: { [string]: boolean } = {}
+	for _, id in Catalog.GetLevelIds() do
+		built[id] = true
+	end
+	return built
+end
+
+-- The place of every difficulty in Expeditions.json (the order is the rank).
+local function difficultyRanks(map: Types.ExpeditionsConfig): { [string]: number }
+	local ranks: { [string]: number } = {}
+	for index, name in map.difficulties do
+		ranks[name] = index
+	end
+	return ranks
+end
+
+-- Rulings 25 and 28: each member gets their own stars; which nodes are open is the leader's
+-- doing. Sent at every admit, after every run and when the leader changes; `only` = to that one
+-- member (a client that asks for its snapshot again cannot ask for the map).
+local function sendMapState(only: Player?): ()
+	local map = Catalog.GetExpeditionsConfig()
+	if map == nil then
+		if not boot.warnedNoMap then
+			boot.warnedNoMap = true
+			warn(
+				"[WaveService] Config/Expeditions is missing: no map, the place stays in its lobby"
+			)
+		end
+		return
+	end
+	local leader = ArenaService.LeaderUserId()
+	if only == nil then
+		boot.mapLeader = leader
+	end
+	local built = builtLevels()
+	local leaderStars = starsOf(leader)
+	for _, member in ArenaService.GetMembers() do
+		local player = member.player
+		if not member.bot and player ~= nil and (only == nil or player == only) then
+			RemoteService.FireClient(
+				player,
+				"MapState",
+				StageFlow.MapState(map, built, leaderStars, starsOf(member.userId), leader)
+			)
+		end
+	end
+end
+
+-- The director -------------------------------------------------------------------------------
+
 -- Kills inside director.windowSeconds, against the pace the wave was budgeted for. Held at 1.0
--- through the warmup so the very first seconds of a run never trigger a merge or an elite.
-local function updateTempo(combatConfig: Types.CombatConfig, mission: Types.MissionConfig): ()
+-- through the warmup after a camp's gates close, so its first seconds never trigger a merge or
+-- an elite (P5 counted the warmup from the run's start, which was its one camp's).
+local function updateTempo(combatConfig: Types.CombatConfig, stage: StageFlow.Stage): ()
 	local director = combatConfig.director
 	local now = os.clock()
 	local cutoff = now - director.windowSeconds
@@ -282,42 +430,14 @@ local function updateTempo(combatConfig: Types.CombatConfig, mission: Types.Miss
 	while #stamps > 0 and stamps[1] < cutoff do
 		table.remove(stamps, 1)
 	end
-	if ArenaService.RunSeconds() < director.tempoWarmupSeconds then
+	if now - run.campClosedAt < director.tempoWarmupSeconds then
 		run.tempo = 1
 		return
 	end
 	local spec = run.spec
 	local total = if spec ~= nil then spec.total else 0
-	local expected = if mission.targetWaveSeconds > 0 then total / mission.targetWaveSeconds else 0
+	local expected = if stage.targetWaveSeconds > 0 then total / stage.targetWaveSeconds else 0
 	run.tempo = Combat.Tempo(#stamps, director.windowSeconds, expected, director)
-end
-
--- The next rim point, round-robin; the arena centre when the arena has none.
-local function nextRimPoint(): Vector3
-	local points = ArenaService.EnemySpawnPoints()
-	if #points == 0 then
-		return Vector3.zero
-	end
-	run.rimCursor += 1
-	return points[(run.rimCursor - 1) % #points + 1]
-end
-
--- The `index`-th body (0-based) of a burst of `size` at rim point `at`: a grid of pitch
--- `spacing`, its rows stepping in toward the arena centre and centred across, so a burst at the
--- fence arrives as a block rather than a line along the fence.
-local function gridPoint(at: Vector3, size: number, index: number, spacing: number): Vector3
-	local inward = Vector3.new(-at.X, 0, -at.Z)
-	inward = if inward.Magnitude > 1e-3 then inward.Unit else Vector3.new(0, 0, 1)
-	local across = Vector3.new(-inward.Z, 0, inward.X)
-	local columns = math.max(math.ceil(math.sqrt(size)), 1)
-	local row = index // columns
-	local column = index % columns
-	local offset = across * ((column - (columns - 1) / 2) * spacing) + inward * (row * spacing)
-	return Vector3.new(at.X + offset.X, 0, at.Z + offset.Z)
-end
-
-local function crowdOf(mission: Types.MissionConfig): Types.MissionCrowdConfig?
-	return mission.crowd
 end
 
 local function knownKind(kind: string): boolean
@@ -326,31 +446,65 @@ local function knownKind(kind: string): boolean
 	end
 	if not boot.warnedKinds[kind] then
 		boot.warnedKinds[kind] = true
-		warn(`[WaveService] unknown crowd kind "{kind}" in the mission's crowd block; dropped`)
+		warn(`[WaveService] unknown crowd kind "{kind}" in a level's waves; dropped`)
 	end
 	return false
 end
 
--- Queues one wave's groups as bursts, the boss to be placed first. Ruling 17: a boss wave takes
--- no extra elite (bosses are judged as whole fights).
-local function queueWave(
-	mission: Types.MissionConfig,
-	combatConfig: Types.CombatConfig,
-	waveNumber: number
-): ()
-	local crowd = crowdOf(mission)
-	local spec = Combat.CrowdWave(
-		mission,
-		waveNumber,
+-- One wave of the live camp, resolved for the run's difficulty and party (Combat.CampWave).
+local function waveSpec(
+	level: Types.LevelConfig,
+	stageIndex: number,
+	wave: number,
+	combatConfig: Types.CombatConfig
+): Combat.CrowdWaveSpec?
+	local stageDef = level.stages[stageIndex]
+	local waves = if stageDef ~= nil then stageDef.waves else nil
+	local waveDef = if waves ~= nil then waves[wave] else nil
+	local scales = run.scales
+	local map = Catalog.GetExpeditionsConfig()
+	if waveDef == nil or scales == nil or map == nil then
+		return nil
+	end
+	local spec = Combat.CampWave(
+		waveDef,
+		level.crowd.regenShare,
+		scales,
+		run.rank,
+		difficultyRanks(map),
 		ArenaService.PartySize(),
-		ArenaService.IsOverdrive(),
 		combatConfig
 	)
-	run.spec = spec
-	if crowd == nil or spec == nil then
-		warn(`[WaveService] {mission.id} has no crowd wave {waveNumber}; nothing spawns`)
+	spec.wave = wave
+	return spec
+end
+
+-- Queues one wave's groups as bursts, the boss to be placed first. P5 ruling 17: a boss wave
+-- takes no extra elite (bosses are judged as whole fights). `merged` = the director folded it in
+-- on top of the wave before it.
+local function queueWave(stageIndex: number, wave: number, merged: boolean): ()
+	local level = run.level
+	local combatConfig = config()
+	local plan = run.plan
+	local stage = if plan ~= nil then plan.stages[stageIndex] else nil
+	if level == nil or combatConfig == nil or stage == nil then
 		return
 	end
+	if not merged then
+		-- A new wave, not one folded in: the field is this wave's alone.
+		run.spawnedThisGroup = 0
+		run.bossId = 0
+		run.bossPending = nil
+		run.queue = {}
+	end
+	run.merged = merged
+	local spec = waveSpec(level, stageIndex, wave, combatConfig)
+	run.spec = spec
+	if spec == nil then
+		warn(`[WaveService] {level.id} stage {stageIndex} has no wave {wave}; nothing spawns`)
+		return
+	end
+	local crowd = level.crowd
 	local burstSize = math.max(math.floor(crowd.burst), 1)
 	local bursts = 0
 	local queued = 0
@@ -381,40 +535,35 @@ local function queueWave(
 	if boss ~= nil and knownKind(boss.kind) then
 		run.bossPending = boss
 		run.bossHpMult = spec.bossHpMult
+		-- Ruling 23: the difficulty's rewardMult multiplies the boss's Valor too.
 		run.bossValor = math.round(boss.valor * spec.rewardMult)
+		local def = Tuning.Get().crowd.kinds[boss.kind]
+		run.bossName = if def ~= nil and def.name ~= nil then def.name else boss.kind
 	end
 	run.burstsThisWave = bursts
 	run.spawnedThisGroup += queued
 	run.nextBurstAt = os.clock()
-	RunFx.Push({
-		kind = "wave",
-		wave = waveNumber,
-		merged = run.merged,
-		boss = run.bossPending ~= nil,
-	})
+	-- What the camp's later waves will still field (RunState.left).
+	local later = 0
+	for following = wave + 1, stage.waves do
+		local followingSpec = waveSpec(level, stageIndex, following, combatConfig)
+		if followingSpec ~= nil then
+			later += followingSpec.total
+		end
+	end
+	run.laterBodies = later
+	if stage.waves > 1 then
+		-- A camp of one wave announces itself with its gates; only a camp of several counts waves.
+		RunFx.Push({
+			kind = "wave",
+			wave = wave,
+			merged = merged,
+			boss = run.bossPending ~= nil,
+		})
+	end
 end
 
-local function beginWave(waveNumber: number): ()
-	local mission = ArenaService.GetMission()
-	local combatConfig = config()
-	if mission == nil or combatConfig == nil then
-		return
-	end
-	run.wave = waveNumber
-	run.merged = false
-	run.spawnedThisGroup = 0
-	run.bossId = 0
-	run.bossPending = nil
-	run.queue = {}
-	-- A wave boundary: anyone who arrived mid-wave enters now, and anyone down stands up. Before
-	-- queueWave, so they count as fighters for everything this wave does.
-	standUpDowned()
-	ArenaService.ReleaseWaiting()
-	queueWave(mission, combatConfig, waveNumber)
-	setPhase("wave")
-	broadcast()
-	ArenaService.PublishRun()
-end
+-- Rewards -------------------------------------------------------------------------------------
 
 local function missionRecord(state: Types.PlayerState, missionId: string): Types.MissionRecord
 	local record = state.combat.missions[missionId]
@@ -425,9 +574,9 @@ local function missionRecord(state: Types.PlayerState, missionId: string): Types
 	return record
 end
 
--- Mentor bonus at a cleared boss group (docs/INTERFACES.md "C2 contracts"): each human is paid
+-- Mentor bonus at a banked boss clear (docs/INTERFACES.md "C2 contracts"): each human is paid
 -- Combat.MentorBonus against the rates of the OTHER members present whose raw share of THIS
--- flush reached coop.mentorMinDamageShare, so an idle alt parked in the party earns its main
+-- pool reached coop.mentorMinDamageShare, so an idle alt parked in the party earns its main
 -- nothing. Bots report debug.botIncomeRate and are never mentors.
 local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: number }): ()
 	local total = 0
@@ -441,8 +590,8 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 	local members = ArenaService.GetMembers()
 	for _, mentor in members do
 		local player = mentor.player
-		-- Same floor as a mentee (lead ruling): a mentor parked on the pad, or one who let the
-		-- party carry the boss, earns nothing for "carrying".
+		-- Same floor as a mentee (lead ruling): a mentor waiting in the lobby camp, or one who
+		-- let the party carry the boss, earns nothing for "carrying".
 		if
 			mentor.bot
 			or player == nil
@@ -480,13 +629,13 @@ local function payMentors(combatConfig: Types.CombatConfig, tally: { [number]: n
 	end
 end
 
--- The wave pot, split by damage share with a floor and written straight into the profiles.
--- `cleared` = the group was actually beaten (not the partial flush at a wipe or the run cap), the
--- only case that can pay the Mentor bonus.
-local function flushPool(waveNumber: number, waveCount: number, cleared: boolean): ()
-	local mission = ArenaService.GetMission()
+-- A checkpoint (ruling 15): the pool, split by damage share with a floor and written straight
+-- into the profiles. `waveNumber` is the live camp's wave that was just cleared and `waveCount`
+-- how many waves this bank covers. Only a checkpoint calls this: nothing that ends a run does.
+local function flushPool(waveNumber: number, waveCount: number): ()
+	local level = run.level
 	local combatConfig = config()
-	if mission == nil or combatConfig == nil then
+	if level == nil or combatConfig == nil then
 		return
 	end
 	local tally = run.damageTally
@@ -500,7 +649,7 @@ local function flushPool(waveNumber: number, waveCount: number, cleared: boolean
 			end
 		end
 	end
-	if cleared and run.bossClearsThisFlush > 0 then
+	if run.bossClearsThisFlush > 0 then
 		-- Before the per-member loop below, whose snapshot then carries the Mentor Valor too.
 		payMentors(combatConfig, tally)
 	end
@@ -508,7 +657,8 @@ local function flushPool(waveNumber: number, waveCount: number, cleared: boolean
 	local split = Combat.SplitPool(run.pool, shares)
 	local gameConfig = Catalog.GetGameConfig()
 	local shopConfig = Catalog.GetLegacyShopConfig()
-	local overdrive = ArenaService.IsOverdrive()
+	local material = level.material
+	local missionId = level.mission
 
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
@@ -526,15 +676,15 @@ local function flushPool(waveNumber: number, waveCount: number, cleared: boolean
 			local cash = math.floor(share.cash * mult)
 			state.cash += cash
 			state.combat.valor += share.valor
-			if share.materials > 0 then
-				local owned = state.combat.materials[mission.material] or 0
-				state.combat.materials[mission.material] = owned + share.materials
+			if share.materials > 0 and material ~= "" then
+				local owned = state.combat.materials[material] or 0
+				state.combat.materials[material] = owned + share.materials
 			end
 			state.combat.stats.cashFromCombat += cash
 			ArenaService.CreditSummary(
 				member.userId,
 				cash,
-				mission.material,
+				material,
 				share.materials,
 				share.valor,
 				kills
@@ -542,11 +692,12 @@ local function flushPool(waveNumber: number, waveCount: number, cleared: boolean
 		end
 		state.combat.stats.kills += kills
 		state.combat.stats.wavesCleared += waveCount
-		local record = missionRecord(state, mission.id)
-		record.bestWave = math.max(record.bestWave, waveNumber)
-		record.bossClears += run.bossClearsThisFlush
-		if overdrive then
-			record.overdriveBest = math.max(record.overdriveBest, waveNumber)
+		if missionId ~= nil then
+			-- Ruling 26: only a level that names a mission writes a mission record (the arena
+			-- writes `village`, as before). Forest Road writes none.
+			local record = missionRecord(state, missionId)
+			record.bestWave = math.max(record.bestWave, waveNumber)
+			record.bossClears += run.bossClearsThisFlush
 		end
 		-- The wallet strip is fed by Snapshots in this place (EconomyService is hub-only).
 		ArenaService.SendSnapshot(player)
@@ -563,53 +714,24 @@ local function clearField(): ()
 	run.queue = {}
 	run.bossPending = nil
 	run.bossId = 0
+	run.laterBodies = 0
 	CrowdService.Clear()
 	VitalsService.ClearThreats()
 	WeaponService.AbandonProjectiles()
 end
 
-function WaveService.EndRun(reason: string): ()
-	if run.phase == "summary" or run.phase == "ended" or run.phase == "lobby" then
-		return
-	end
-	-- Rewards banked since the last wave clear are kept: dying on wave 7 still pays for wave 7's
-	-- kills, which is what makes a failed run worth starting. The wave in progress was NOT
-	-- cleared though, so bestWave is credited to the last wave actually finished (0 when they
-	-- died in wave 1) and wavesCleared gains nothing.
-	if run.wave > run.clearedThrough then
-		flushPool(run.clearedThrough, 0, false)
-	end
-	clearField()
-	run.spec = nil
-	run.phase = "summary"
-	local combatConfig = config()
-	run.returnAt = if combatConfig ~= nil
-		then os.clock() + combatConfig.coop.returnGroupSeconds
-		else 0
-	pushRunFields()
-	ArenaService.BroadcastSummary()
-	-- Queued, never awaited: this runs inside a Heartbeat and the registry retries with a
-	-- task.wait backoff. The run stops being joinable the moment it ends, even though the party
-	-- is still here reading the summary card.
-	ArenaService.ClearRegistry(ArenaService.GetHostUserId())
-	warn(`[WaveService] run ended ({reason}) at wave {run.wave}`)
-end
-
--- Ruling 14: a kill pays its kind's fixed reward into the pool and books the HP its body lost.
--- Runs inside the strike that killed it (CrowdService's callbacks are synchronous threads), so
--- it must not yield.
+-- P5 ruling 14: a kill pays its kind's fixed reward into the pool and books the HP its body
+-- lost. Runs inside the strike that killed it (CrowdService's callbacks are synchronous threads),
+-- so it must not yield.
 local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.CrowdKillInfo): ()
 	local phase = run.phase
-	if phase ~= "wave" and phase ~= "boss" and phase ~= "breather" then
+	local level = run.level
+	if level == nil or (phase ~= "wave" and phase ~= "boss" and phase ~= "breather") then
 		return
 	end
-	local mission = ArenaService.GetMission()
 	local spec = run.spec
-	if mission == nil then
-		return
-	end
 	if spec ~= nil then
-		local cash, materials = Combat.CrowdReward(mission, info.kind, spec)
+		local cash, materials = Combat.CampReward(level.crowd.rewards, info.kind, spec)
 		run.pool.cash += cash
 		run.pool.materials += materials
 	end
@@ -627,50 +749,61 @@ local function onCrowdKilled(id: number, byUserId: number, info: CrowdService.Cr
 		run.bossId = 0
 		run.pool.valor += run.bossValor
 		run.bossClearsThisFlush += 1
-		local def = Tuning.Get().crowd.kinds[info.kind]
-		local name = if def ~= nil and def.name ~= nil then def.name else info.kind
-		RunFx.Push({ kind = "bossDown", name = name, valor = run.bossValor })
+		RunFx.Push({ kind = "bossDown", name = run.bossName or info.kind, valor = run.bossValor })
 	end
 end
 
--- The boss first, at its own spot, with the party HP factor (ruling 16). A refused spawn stays
--- pending and is tried again next frame.
-local function spawnBoss(): ()
+-- Spawning ------------------------------------------------------------------------------------
+
+local function centreOf(zone: StageFlow.Zone): Vector3
+	return Vector3.new(zone.rect.x, zone.floorY, zone.rect.z)
+end
+
+-- The camp's next spawn point, round-robin; its centre when it has none.
+local function nextSpawnPoint(zone: StageFlow.Zone): Vector3
+	local points = zone.spawns
+	if #points == 0 then
+		return centreOf(zone)
+	end
+	run.spawnCursor += 1
+	return points[(run.spawnCursor - 1) % #points + 1]
+end
+
+-- The boss first, at its own spot in the camp, with the party HP factor (P5 ruling 16). A
+-- refused spawn stays pending and is tried again next frame.
+local function spawnBoss(zone: StageFlow.Zone): ()
 	local boss = run.bossPending
 	if boss == nil then
 		return
 	end
-	local at = Vector3.new(boss.at[1] or 0, 0, boss.at[2] or 0)
-	local id = CrowdService.Spawn(boss.kind, at, FIGHT, Vector3.zero, run.bossHpMult)
+	local at = StageFlow.BossPoint(zone, boss.at)
+	local id = CrowdService.Spawn(boss.kind, at, FIGHT, centreOf(zone), run.bossHpMult)
 	if id ~= 0 then
 		run.bossPending = nil
 		run.bossId = id
-		setPhase("boss")
 	end
 end
 
--- Ruling 15: the next burst, when its time has come and the field has room. A burst held by
+-- P5 ruling 15: the next burst, when its time has come and the field has room. A burst held by
 -- maxAlive (or a refused spawn) stays at the head of the queue and carries on as room frees.
-local function spawnBursts(mission: Types.MissionConfig, combatConfig: Types.CombatConfig): ()
-	local crowd = crowdOf(mission)
-	if crowd == nil then
-		return
-	end
+local function spawnBursts(stage: StageFlow.Stage, zone: StageFlow.Zone): ()
+	local level = run.level
 	local burst = run.queue[1]
-	if burst == nil then
+	if level == nil or burst == nil then
 		return
 	end
 	local now = os.clock()
 	if burst.placed == 0 and now < run.nextBurstAt then
 		return
 	end
-	local maxAlive = crowd.maxAlive
-	local at: Vector3 = burst.at or nextRimPoint()
+	local crowd = level.crowd
+	local at: Vector3 = burst.at or nextSpawnPoint(zone)
 	burst.at = at
 	local size = burst.placed + burst.left
-	while burst.left > 0 and CrowdService.AliveCount() < maxAlive do
-		local position = gridPoint(at, size, burst.placed, crowd.burstSpacing)
-		if CrowdService.Spawn(burst.kind, position, FIGHT, Vector3.zero) == 0 then
+	local centre = centreOf(zone)
+	while burst.left > 0 and CrowdService.AliveCount() < stage.maxAlive do
+		local position = StageFlow.BurstPoint(zone, at, size, burst.placed, crowd.burstSpacing)
+		if CrowdService.Spawn(burst.kind, position, FIGHT, centre) == 0 then
 			break
 		end
 		burst.placed += 1
@@ -681,17 +814,13 @@ local function spawnBursts(mission: Types.MissionConfig, combatConfig: Types.Com
 	end
 	table.remove(run.queue, 1)
 	run.nextBurstAt = now
-		+ Combat.BurstInterval(
-			mission,
-			run.burstsThisWave,
-			run.tempo,
-			ArenaService.IsOverdrive(),
-			combatConfig
-		)
+		+ Combat.BurstSeconds(stage.targetWaveSeconds, run.burstsThisWave, run.tempo)
 end
 
--- Humans in the fight (waiting members are on the pad and do not count), and how many humans
--- are alive on the pad.
+-- Bodies --------------------------------------------------------------------------------------
+
+-- Humans in the fight (waiting members are in the lobby camp and do not count), and how many
+-- humans are alive there, waiting.
 local function humanCounts(): (number, number)
 	local fighters = 0
 	local waitingAlive = 0
@@ -708,51 +837,102 @@ local function humanCounts(): (number, number)
 	return fighters, waitingAlive
 end
 
--- P5 review: a body that has left the arena (through the floor, or past its edge) is put back on
--- a spawn with the get-up i-frames. It is not a down and costs nothing: falling out is the
--- arena's fault. Without Combat.json player.rescue nobody is rescued. A member just rescued is
--- left alone for the length of those i-frames: their client still reports the old place for a
--- frame or two, and a second rescue would only move them again.
+-- Ruling 18: where a member's body belongs right now, and whether they wait. A character added
+-- during `wave` or `boss` waits in the lobby camp until the next boundary; one added in any
+-- other live phase goes to the run's safe point; in the lobby and on the summary, the lobby camp.
+local function placer(_member: Types.RunMember): (Vector3, boolean)
+	local plan = run.plan
+	local flow = run.flow
+	local phase: Types.RunPhase = run.phase
+	if plan == nil or flow == nil or not isLive(phase) then
+		return LevelService.LobbyPoint(), false
+	end
+	if phase == "wave" or phase == "boss" then
+		return LevelService.LobbyPoint(), true
+	end
+	return StageFlow.SafePoint(plan, flow), false
+end
+
+-- The lobby's kill height: its layout's, else well under its blocks.
+local function lobbyKillY(bounds: LevelGeometry.Bounds, margin: number): number
+	local map = Catalog.GetExpeditionsConfig()
+	local layout = if map ~= nil then Catalog.GetLevelLayout(map.lobby.layout) else nil
+	if layout ~= nil and layout.arena == nil then
+		return layout.killY
+	end
+	return bounds.minY - margin
+end
+
+-- Ruling 19: a human whose root is under the kill height or outside the box is put at the safe
+-- point with the get-up i-frames. Never a down, no cost, in every phase: falling out is the
+-- level's fault. A waiting member, and everyone when no level is live, is judged against the
+-- lobby camp and put on a lobby point. A member just rescued is left alone for the length of
+-- those i-frames: their client still reports the old place for a frame or two, and a second
+-- rescue would only move them again. Without Combat.json player.rescue nobody is rescued.
 local function rescueFallen(combatConfig: Types.CombatConfig): ()
 	local rescue = combatConfig.player.rescue
 	if rescue == nil then
 		return
 	end
+	local rules = combatConfig.levels
 	local now = os.clock()
 	local iframes = Tuning.Get().player.getUpIframes
+	local plan = run.plan
+	local flow = run.flow
 	for _, member in ArenaService.GetMembers() do
 		local player = member.player
-		if member.bot or player == nil then
+		local root = rootOf(member)
+		if member.bot or player == nil or root == nil or not ArenaService.IsAlive(member) then
 			continue
 		end
 		local last = boot.rescuedAt[member.userId]
 		if last ~= nil and now - last < iframes then
 			continue
 		end
-		if ArenaService.RescueIfOut(member, rescue.below, rescue.outside) then
+		local position = root.Position
+		local target: Vector3? = nil
+		if plan == nil or flow == nil or member.waiting then
+			local bounds = LevelService.LobbyBounds()
+			local killY = lobbyKillY(bounds, rules.boxMargin)
+			if StageFlow.OutOfBox(bounds, killY, position, rules.boxMargin) then
+				target = LevelService.LobbyPoint()
+			end
+		elseif StageFlow.IsOut(plan, flow, position, rescue, rules.boxMargin) then
+			target = StageFlow.SafePoint(plan, flow)
+		end
+		if target ~= nil and ArenaService.MoveMember(member, target) then
 			boot.rescuedAt[member.userId] = now
 			WeaponService.GrantIframes(player, iframes)
 		end
 	end
 end
 
--- Nothing alive, nothing left to spawn and no boss still to place: the wave is beaten, whether
--- or not this frame's tick has reached its clear branch yet (and all through a breather).
-local function fieldClear(): boolean
-	return #run.queue == 0 and run.bossPending == nil and CrowdService.AliveCount() == 0
+-- Every fighting member's body goes to `feet` (a skip's `move`). With `closing`, the camp whose
+-- gates are closing, only those StageFlow says must be brought inside (MustEnter).
+local function moveFighters(feet: Vector3, closing: StageFlow.Zone?): ()
+	for _, member in ArenaService.GetMembers() do
+		if member.bot or not ArenaService.IsFighting(member) then
+			continue
+		end
+		if closing ~= nil then
+			local root = rootOf(member)
+			if root == nil or not StageFlow.MustEnter(closing, root.Position) then
+				continue
+			end
+		end
+		ArenaService.MoveMember(member, feet)
+	end
 end
 
--- Ruling 18: no fighting human left standing ends the run, each fighter marked as having died.
--- "down" when any of them is down; "wipe" when every one of them died outright (a reset).
--- A clear field wins (lead ruling): a dying enemy's last blow can be decided in the very frame
--- of the last kill, and whichever Heartbeat runs first, the wave was beaten. The run is then
--- not lost; the clear branch runs, and the downed stand up at that boundary as at any other.
--- OnDown and the tick both ask here, so the rule cannot differ between them.
-local function endIfLost(): boolean
+-- The run's end -------------------------------------------------------------------------------
+
+-- P5's reason rule for a lost run: "down" when a fighter is down, "wipe" when every one of
+-- them died outright (a reset). nil while somebody stands. Also returns the fighters.
+local function fallenReason(): (string?, { number })
 	local members = ArenaService.GetMembers()
-	local lost, fallen = VitalsService.RunLost(members, fieldClear())
+	local lost, fallen = VitalsService.RunLost(members, false)
 	if not lost then
-		return false
+		return nil, fallen
 	end
 	local reason = "wipe"
 	for _, member in members do
@@ -765,362 +945,609 @@ local function endIfLost(): boolean
 			reason = "down"
 		end
 	end
-	for _, userId in fallen do
-		ArenaService.MarkDied(userId)
-	end
-	WaveService.EndRun(reason)
-	return true
+	return reason, fallen
 end
 
-local function advanceAfterBreather(mission: Types.MissionConfig): ()
-	local nextWave = run.forcedNextWave or (run.wave + 1)
-	run.forcedNextWave = nil
-	if nextWave > mission.waves then
-		WaveService.EndRun("cleared")
+-- Ruling 20: every run ends in a summary. What was not banked is dropped (ruling 15: only a
+-- checkpoint pays); the field is cleared; a lost run marks its fallen; a cleared one gives the
+-- star of its difficulty to every human who was fighting at the end (ruling 25). The level
+-- stays built while the card is up.
+function WaveService.EndRun(reason: string): ()
+	local plan = run.plan
+	local flow = run.flow
+	local level = run.level
+	if plan == nil or flow == nil or level == nil or not isLive(run.phase) then
 		return
 	end
-	beginWave(nextWave)
-end
-
--- Is `waveNumber` a boss wave of this mission's crowd?
-local function isBossWave(mission: Types.MissionConfig, waveNumber: number): boolean
-	local crowd = crowdOf(mission)
-	local waveDef = if crowd ~= nil then crowd.waves[waveNumber] else nil
-	return waveDef ~= nil and waveDef.boss ~= nil
-end
-
--- Ruling 19: a proving mission does not send anyone home; it resets in place and starts again.
-local function restartProving(): ()
-	local members = ArenaService.GetMembers()
-	run = freshRun()
-	ArenaService.ResetSummaries()
-	for _, member in members do
-		member.ready = false
+	-- For a caller that did not come through StageFlow's own `end`.
+	StageFlow.Finish(plan, flow, reason)
+	run.pool = emptyPool()
+	run.killsByUser = {}
+	run.damageTally = {}
+	run.bossClearsThisFlush = 0
+	if reason == "down" or reason == "wipe" then
+		local _lost, fallen = fallenReason()
+		for _, userId in fallen do
+			ArenaService.MarkDied(userId)
+		end
 	end
-	run.lobbySince = os.clock()
-	-- The run that ended them is over: nobody waits out the lobby under the DOWN banner.
-	standUpDowned()
-	broadcast()
-end
+	clearField()
+	run.spec = nil
+	run.floor = nil
 
--- The group return: once, when the summary countdown runs out. Everyone still here goes home in
--- ONE teleport with the party hint, so the hub can re-form the party. Spawned: it yields.
-local function tickSummary(): ()
-	if run.returnAt <= 0 or os.clock() < run.returnAt then
-		return
-	end
-	run.returnAt = 0
-	if boot.proving then
-		restartProving()
-		return
-	end
-	pushRunFields()
-	local players: { Player } = {}
+	local results: { [number]: Types.RunResult } = {}
 	for _, member in ArenaService.GetMembers() do
-		local player = member.player
-		if player ~= nil then
-			table.insert(players, player)
+		if member.bot or member.player == nil then
+			continue
 		end
+		local star = false
+		if reason == "cleared" and not member.waiting then
+			star = StageFlow.Award(starsOf(member.userId), plan.levelId, plan.difficulty)
+		end
+		results[member.userId] = {
+			levelId = level.id,
+			levelName = level.name,
+			difficulty = plan.difficulty,
+			reason = reason,
+			campsCleared = flow.cleared,
+			camps = plan.camps,
+			savedAt = run.savedAt,
+			star = star,
+		}
 	end
-	if #players > 0 then
-		task.spawn(ReturnService.SendHomeGroup, players, "runOver")
-	end
+	ArenaService.SetResults(results)
+
+	run.phase = "summary"
+	local combatConfig = config()
+	run.returnAt = os.clock()
+		+ (if combatConfig ~= nil then combatConfig.coop.returnGroupSeconds else 0)
+	pushRunFields()
+	ArenaService.BroadcastSummary()
+	print(`[WaveService] run ended ({reason}): {level.id} {plan.difficulty}, stage {flow.stage}`)
 end
 
--- Ruling 19: no Ready button in a proving mission; the run starts provingStartDelay after the
--- lobby first holds a human, at provingStartWave.
-local function tickProvingLobby(mission: Types.MissionConfig, combatConfig: Types.CombatConfig): ()
-	if #humanPlayers() == 0 then
-		run.lobbySince = 0
+-- Ruling 20: after the summary, the lobby. Everyone stands up and is moved to the lobby camp,
+-- the level is removed, and the phase is `lobby`. Nobody is sent to the city. Deferred out of
+-- the tick (it destroys the level's Instances), or called at once from RequestAbandon.
+local function backToLobby(): ()
+	boot.returning = false
+	if run.phase ~= "summary" then
 		return
 	end
-	local now = os.clock()
-	if run.lobbySince == 0 then
-		run.lobbySince = now
-	end
-	local debugConfig = combatConfig.debug
-	if now - run.lobbySince < debugConfig.provingStartDelay then
-		return
-	end
-	if run.forcedNextWave == nil then
-		local startWave = math.max(math.floor(debugConfig.provingStartWave), FIRST_WAVE)
-		local crowd = crowdOf(mission)
-		if crowd ~= nil and crowd.waves[startWave] ~= nil then
-			run.forcedNextWave = startWave
-		elseif not boot.warnedStartWave then
-			-- Once per server: the loop restarts every run, and wave 1 is the safe start.
-			boot.warnedStartWave = true
-			warn(`[WaveService] provingStartWave {startWave} has no crowd wave; starting at wave 1`)
-		end
-	end
-	WaveService.Start()
-end
-
-local function tickWave(mission: Types.MissionConfig, combatConfig: Types.CombatConfig): ()
-	local now = os.clock()
-	spawnBoss()
-	spawnBursts(mission, combatConfig)
-
-	if run.bossId ~= 0 or run.bossPending ~= nil then
-		setPhase("boss")
-	elseif run.phase == "boss" then
-		setPhase("wave")
-	end
-
-	if #run.queue > 0 or run.bossPending ~= nil then
-		return
-	end
-
-	local alive = CrowdService.AliveCount()
-	if alive > 0 then
-		-- Spawning is over; the director may fold the next wave in on top of this one, but
-		-- never into or out of a boss wave (ruling 17).
-		local spawned = run.spawnedThisGroup
-		local deadFraction = if spawned > 0 then math.max(spawned - alive, 0) / spawned else 0
-		if
-			run.wave < mission.waves
-			and not isBossWave(mission, run.wave)
-			and not isBossWave(mission, run.wave + 1)
-			and Combat.ShouldMerge(run.tempo, deadFraction, combatConfig.director)
-		then
-			run.merged = true
-			run.wave += 1
-			queueWave(mission, combatConfig, run.wave)
-			broadcast()
-			ArenaService.PublishRun()
-		end
-		return
-	end
-
-	-- Wave (or merged pair) cleared. What its dead still had in the air (a lob, a slinger's shot)
-	-- goes with them: nothing lands on an empty field, in the breather or on the summary card.
-	VitalsService.ClearThreats()
-	local count = run.wave - run.clearedThrough
-	run.clearedThrough = run.wave
-	flushPool(run.wave, count, true)
-	ArenaService.PublishRun()
-	-- A clear is a wave boundary: the downed stand up, also when it was the last wave.
 	standUpDowned()
-	if run.wave >= mission.waves then
-		WaveService.EndRun("cleared")
+	for _, member in ArenaService.GetMembers() do
+		if member.bot or member.player == nil then
+			continue
+		end
+		member.waiting = false
+		ArenaService.MoveMember(member, LevelService.LobbyPoint())
+	end
+	LevelService.Clear()
+	clearField()
+	run = freshRun()
+	ArenaService.SetLevel(nil)
+	VitalsService.SetMission(missionRules(1, 0))
+	boot.returnedAt = os.clock()
+	boot.lobbySince = 0
+	broadcast()
+	sendMapState(nil)
+	-- Joinable again (ruling 6).
+	ArenaService.PublishRun()
+end
+
+-- Executing StageFlow's actions ---------------------------------------------------------------
+
+-- Ruling 11: the crowd's floor is set at a camp's trigger, with no body alive.
+local function setCrowdFloor(stage: StageFlow.Stage, zone: StageFlow.Zone): ()
+	CrowdService.Clear()
+	VitalsService.ClearThreats()
+	local centre = centreOf(zone)
+	local half = Vector3.new(zone.rect.hx, CROWD_CEILING, zone.rect.hz)
+	CrowdService.SetBounds(centre, half)
+	WeaponService.SetArena(centre, half)
+	run.floor = {
+		x = zone.rect.x,
+		y = zone.floorY,
+		z = zone.rect.z,
+		hx = zone.rect.hx,
+		hz = zone.rect.hz,
+	}
+	run.maxAlive = stage.maxAlive
+end
+
+-- The contract's table "What WaveService does for each action", in the order StageFlow gave.
+local function execute(actions: { StageFlow.Action }): ()
+	local plan = run.plan
+	local flow = run.flow
+	if plan == nil or flow == nil or #actions == 0 then
 		return
 	end
-	-- No flat breather regen in crowd missions: VitalsService's regen is the only healing.
-	run.breatherUntil = now + Combat.BreatherSeconds(run.tempo, combatConfig.director)
-	-- The waiting enter now.
-	ArenaService.ReleaseWaiting()
-	setPhase("breather")
+	-- The stage a `bank` of this batch paid for: its `open` then says the progress was saved.
+	local bankedStage = 0
+	for _, action in actions do
+		local stage = plan.stages[action.stage]
+		local zone = if stage ~= nil then stage.zone else nil
+		local kind = action.kind
+		if kind == "gate" then
+			if stage ~= nil and zone ~= nil then
+				setCrowdFloor(stage, zone)
+			end
+		elseif kind == "close" then
+			if stage ~= nil and zone ~= nil then
+				-- Both in this frame, the move first: the wall that turns solid is 8 studs deep
+				-- outside the fence line and runs across the gate gaps, so whoever stands off the
+				-- floor or against its edge (in a gap, on the road) would be inside a solid Part.
+				moveFighters(zone.entry, zone)
+				LevelService.SetCamp(zone.id, "closed")
+				run.tempo = 1
+				run.killStamps = {}
+				run.campClosedAt = os.clock()
+				RunFx.Push({ kind = "camp", event = "closed", name = stage.name, saved = false })
+			end
+		elseif kind == "wave" then
+			queueWave(action.stage, action.wave or 1, action.merged == true)
+		elseif kind == "clear" then
+			-- What the dead still had in the air (a lob, a slinger's shot) goes with them:
+			-- nothing lands on an empty field.
+			VitalsService.ClearThreats()
+		elseif kind == "bank" then
+			flushPool(action.wave or 0, action.count or 0)
+			run.banked += 1
+			run.savedAt = if stage ~= nil then stage.name else ""
+			bankedStage = action.stage
+		elseif kind == "boundary" then
+			standUpDowned()
+			ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow))
+		elseif kind == "open" then
+			if stage ~= nil and zone ~= nil then
+				LevelService.SetCamp(zone.id, "cleared")
+				RunFx.Push({
+					kind = "camp",
+					event = "cleared",
+					name = stage.name,
+					saved = bankedStage == action.stage,
+				})
+			end
+			run.floor = nil
+			run.spec = nil
+		elseif kind == "drop" then
+			clearField()
+		elseif kind == "move" then
+			if zone ~= nil then
+				moveFighters(zone.entry, nil)
+			end
+		elseif kind == "end" then
+			WaveService.EndRun(action.reason or "cleared")
+		end
+		-- `breather` and `travel` change nothing here: StageFlow's state carries the time, and the
+		-- broadcast below carries the news.
+	end
+end
+
+-- What the HUD is told, from StageFlow's step. Once the run is over the phase is EndRun's.
+local function syncPhase(): ()
+	local flow = run.flow
+	if flow == nil or not isLive(run.phase) then
+		return
+	end
+	run.phase = StageFlow.Phase(flow, run.bossId ~= 0 or run.bossPending ~= nil)
+end
+
+-- One question to StageFlow, asked by the tick every frame and by OnDown at once: what happens
+-- now? Its input is built here, once.
+local function advance(combatConfig: Types.CombatConfig): ()
+	local plan = run.plan
+	local flow = run.flow
+	if plan == nil or flow == nil or not isLive(run.phase) then
+		return
+	end
+	local now = os.clock()
+	local roots: { Vector3 } = {}
+	for _, member in ArenaService.GetMembers() do
+		if not member.bot and ArenaService.IsFighting(member) then
+			local root = rootOf(member)
+			if root ~= nil then
+				table.insert(roots, root.Position)
+			end
+		end
+	end
+	local alive = CrowdService.AliveCount()
+	local spawningDone = #run.queue == 0 and run.bossPending == nil
+	local spawned = run.spawnedThisGroup
+	local deadFraction = if spawned > 0 then math.max(spawned - alive, 0) / spawned else 0
+	local fallen = fallenReason()
+	local before = run.phase
+	local actions = StageFlow.Advance(plan, flow, {
+		now = now,
+		roots = roots,
+		fieldClear = spawningDone and alive == 0,
+		spawningDone = spawningDone,
+		mergeOk = Combat.ShouldMerge(run.tempo, deadFraction, combatConfig.director),
+		breatherSeconds = Combat.BreatherSeconds(run.tempo, combatConfig.director),
+		fallen = fallen,
+		runCap = run.runEndsAt > 0 and now >= run.runEndsAt,
+	}, combatConfig.levels)
+	execute(actions)
+	syncPhase()
+	-- RunState goes out at once on every action, and on a phase change no action announced (a
+	-- boss placed, a boss killed).
+	if isLive(run.phase) and (#actions > 0 or run.phase ~= before) then
+		broadcast()
+	end
+end
+
+-- Starting a level ----------------------------------------------------------------------------
+
+-- Spelled out so the literal types survive: a singleton union that has passed through a local
+-- reaches the next call as plain `string` under the old solver.
+local function refuseStart(player: Player, levelId: string, reason: string): ()
+	local result: Types.ActionResult = {
+		action = "startLevel",
+		slotId = levelId,
+		ok = false,
+		reason = if reason == "notLeader"
+			then "notLeader"
+			elseif reason == "busy" then "busy"
+			elseif reason == "locked" then "locked"
+			else "unavailable",
+	}
+	RemoteService.FireClient(player, "ActionResult", result)
+end
+
+-- The level file, its layout and its difficulty, resolved and validated. nil = `unavailable`
+-- (every problem is warned). The Raider Arena comes through the two adapters (ruling 27).
+local function resolveLevel(
+	levelId: string,
+	difficulty: string,
+	combatConfig: Types.CombatConfig,
+	map: Types.ExpeditionsConfig
+): (Types.LevelConfig?, Types.LevelLayout?)
+	local file = Catalog.GetLevelFile(levelId)
+	if file == nil or not WeaponService.IsActive() then
+		return nil, nil
+	end
+	local missionId = file.mission
+	local mission = if missionId ~= nil then Catalog.GetMissionById(missionId) else nil
+	local level = StageFlow.Resolve(file, mission, combatConfig.director.runCapSeconds)
+	local layout = Catalog.GetLevelLayout(file.layout)
+	if level == nil or layout == nil then
+		warn(`[WaveService] level {levelId}: its file or its layout {file.layout} is incomplete`)
+		return nil, nil
+	end
+	local arenaName = layout.arena
+	if arenaName ~= nil then
+		local arena = Catalog.GetArenaLayout(arenaName)
+		if arena == nil then
+			warn(`[WaveService] level {levelId}: no Layouts/Arenas/{arenaName}`)
+			return nil, nil
+		end
+		-- P5's rescue rule for the arena: the kill height is the floor (0) less rescue.below.
+		local rescue = combatConfig.player.rescue
+		layout = LevelGeometry.FromArena(arena, -(if rescue ~= nil then rescue.below else 0))
+	end
+	if level.difficulties[difficulty] == nil then
+		return nil, nil
+	end
+	local problems =
+		StageFlow.Validate(level, layout, Tuning.Get().crowd.kinds, difficultyRanks(map))
+	for _, problem in problems do
+		warn(`[WaveService] {problem}`)
+	end
+	if #problems > 0 then
+		return nil, nil
+	end
+	return level, layout
+end
+
+-- Starts `levelId` at `difficulty` for the leader `player`, or says why not: the contract's
+-- checks, in its order. Nothing yields from the first check to the last line.
+local function startLevel(player: Player, levelId: string, difficulty: string): StartRefusal?
+	local combatConfig = config()
+	local member = ArenaService.GetMemberFor(player)
+	if not boot.mission or member == nil or member.userId ~= ArenaService.LeaderUserId() then
+		return "notLeader"
+	end
+	if combatConfig == nil then
+		return "unavailable"
+	end
+	local rules = combatConfig.levels
+	local now = os.clock()
+	if run.phase ~= "lobby" or now - boot.returnedAt < rules.startCooldownSeconds then
+		return "busy"
+	end
+	local map = Catalog.GetExpeditionsConfig()
+	if map == nil then
+		return "unavailable"
+	end
+	-- The level's node must be open for the leader (ruling 28).
+	local leaderStars = starsOf(member.userId)
+	local open = false
+	for _, node in map.nodes do
+		if node.level == levelId then
+			local state = StageFlow.NodeState(map, builtLevels(), leaderStars, leaderStars, node.id)
+			open = state ~= nil and state.open
+			break
+		end
+	end
+	if not open then
+		return "locked"
+	end
+	local level, layout = resolveLevel(levelId, difficulty, combatConfig, map)
+	if level == nil or layout == nil then
+		return "unavailable"
+	end
+	local members = ArenaService.GetMembers()
+	if not ArenaService.PartyIn() or not VitalsService.AllHaveBodies(members) then
+		-- A character still spawning has no body, and a run reads "no body" as fallen.
+		return "busy"
+	end
+	local scales = level.difficulties[difficulty]
+	local plan, problem =
+		StageFlow.Plan(level, layout, difficulty, rules, LevelGeometry.Bounds(layout))
+	if plan == nil and problem ~= nil then
+		warn(`[WaveService] {problem}`)
+	end
+	if scales == nil or plan == nil or not LevelService.Build(layout, map, rules) then
+		return "unavailable"
+	end
+	local flow = StageFlow.Begin(plan)
+
+	run = freshRun()
+	run.level = level
+	run.plan = plan
+	run.flow = flow
+	run.scales = scales
+	run.rank = difficultyRanks(map)[difficulty] or 0
+	-- The biggest camp's cap until a camp sets its own: the client prewarms its pool with it.
+	for _, stage in plan.stages do
+		run.maxAlive = math.max(run.maxAlive, stage.maxAlive)
+	end
+	ArenaService.SetLevel({
+		id = level.id,
+		name = level.name,
+		difficulty = difficulty,
+		material = level.material,
+		mission = level.mission,
+	})
+	ArenaService.ResetSummaries()
+	clearField()
+	CrowdService.SetScales({ hp = scales.hpScale, plate = scales.plateScale })
+	VitalsService.SetMission(missionRules(scales.damageScale, level.crowd.regenShare))
+	-- Every member starts on their feet, at full health, with the gear's bar, at the trailhead.
+	local index = 0
+	for _, other in members do
+		local otherPlayer = other.player
+		if other.bot or otherPlayer == nil then
+			continue
+		end
+		index += 1
+		other.waiting = false
+		VitalsService.RefreshMaxHp(otherPlayer)
+		VitalsService.StandUp(otherPlayer)
+		ArenaService.MoveMember(other, StageFlow.StartPoint(plan, index, rules.startSpacing))
+	end
+	ArenaService.MarkRunStarted()
+	run.runEndsAt = if level.runCapSeconds > 0 then now + level.runCapSeconds else 0
+	run.phase = StageFlow.Phase(flow, false)
+	broadcast()
+	-- Closed to joiners until the party is back in the lobby (ruling 6).
+	ArenaService.PublishRun()
+	return nil
+end
+
+-- RequestStartLevel (ruling 7): the leader picks what is played. The remote's own thread. A
+-- refusal is answered with an ActionResult; a start needs no answer, the RunState is one.
+function WaveService.OnStartLevel(player: Player, levelId: string, difficulty: string): ()
+	local refusal = startLevel(player, levelId, difficulty)
+	if refusal ~= nil then
+		refuseStart(player, levelId, refusal)
+	end
+end
+
+-- The tick ------------------------------------------------------------------------------------
+
+-- Ruling 32: with debug.provingAutoStart the server starts debug.provingLevel by itself,
+-- provingStartDelay after the lobby holds a human, and again after every return.
+local function tickAutoStart(combatConfig: Types.CombatConfig): ()
+	local debugConfig = combatConfig.debug
+	if not boot.proving or not debugConfig.provingAutoStart then
+		return
+	end
+	local leader = ArenaService.GetMember(ArenaService.LeaderUserId())
+	local player = if leader ~= nil then leader.player else nil
+	if player == nil then
+		boot.lobbySince = 0
+		return
+	end
+	local now = os.clock()
+	if boot.lobbySince == 0 then
+		boot.lobbySince = now
+	end
+	if now - boot.lobbySince < debugConfig.provingStartDelay then
+		return
+	end
+	-- A refusal (a body still spawning, a level that cannot be built) waits the delay again
+	-- rather than asking every frame, and is not sent to the client as a toast.
+	boot.lobbySince = now
+	local refusal = startLevel(player, debugConfig.provingLevel, debugConfig.provingDifficulty)
+	if refusal ~= nil then
+		warn(`[WaveService] proving auto-start of {debugConfig.provingLevel} refused: {refusal}`)
+	end
 end
 
 local function tick(): ()
-	local mission = ArenaService.GetMission()
 	local combatConfig = config()
-	if mission == nil or combatConfig == nil then
+	if combatConfig == nil then
 		return
 	end
 	rescueFallen(combatConfig)
 	local phase = run.phase
 	if phase == "lobby" then
-		if boot.proving then
-			tickProvingLobby(mission, combatConfig)
-		elseif ArenaService.CanStart() then
-			-- The expected-party / lobbyWaitSeconds half of the start rule has no event of its
-			-- own, so it is polled here; RequestReady also checks it for an instant start.
-			WaveService.Start()
+		tickAutoStart(combatConfig)
+		if run.phase == "lobby" and ArenaService.LeaderUserId() ~= boot.mapLeader then
+			sendMapState(nil)
 		end
 		return
 	end
 	if phase == "summary" then
-		tickSummary()
+		if run.returnAt > 0 and os.clock() >= run.returnAt and not boot.returning then
+			-- Deferred: the return destroys the level's Instances, which has no place in a tick.
+			boot.returning = true
+			task.defer(backToLobby)
+		end
 		return
 	end
 	if phase == "ended" then
 		return
 	end
 
-	updateTempo(combatConfig, mission)
-	if run.runEndsAt > 0 and os.clock() >= run.runEndsAt then
-		WaveService.EndRun("runCap")
-		return
-	end
-	-- Ruling 18 from state, every frame: OnDown only hears of a down, and the last standing
-	-- fighter may instead leave, die to a reset or respawn onto the pad after it.
-	if endIfLost() then
-		return
+	local stage, zone = liveZone()
+	local flow = run.flow
+	if stage ~= nil and flow ~= nil and flow.step == FIGHT then
+		updateTempo(combatConfig, stage)
 	end
 	local fighters, waitingAlive = humanCounts()
-	if fighters == 0 and waitingAlive > 0 then
-		-- Every fighter LEFT (nobody fell): the joiners on the pad take over now rather than
-		-- watching an unattended wave until the run cap.
-		ArenaService.ReleaseWaiting()
+	local plan = run.plan
+	if fighters == 0 and waitingAlive > 0 and plan ~= nil and flow ~= nil then
+		-- Every fighter LEFT (nobody fell): those waiting in the lobby camp take over now rather
+		-- than watching an unattended run until its cap.
+		ArenaService.ReleaseWaiting(StageFlow.SafePoint(plan, flow))
 		broadcast()
 	end
-
-	if run.phase == "breather" then
-		if os.clock() >= run.breatherUntil then
-			advanceAfterBreather(mission)
-		end
-		return
+	if stage ~= nil and zone ~= nil and flow ~= nil and flow.step == FIGHT then
+		spawnBoss(zone)
+		spawnBursts(stage, zone)
 	end
-	tickWave(mission, combatConfig)
+	advance(combatConfig)
 end
 
-function WaveService.Start(): ()
-	if run.phase ~= "lobby" then
+-- RequestAbandon (ruling 21). In a live run, from any member when the run has one human, else
+-- from the leader: the run ends `abandoned` with what was banked. On the summary, from the
+-- leader or a solo player: the wait ends and the party is in the lobby at once. Anything else
+-- is dropped silently.
+function WaveService.OnAbandon(player: Player): ()
+	local member = ArenaService.GetMemberFor(player)
+	if member == nil then
 		return
 	end
-	local mission = ArenaService.GetMission()
-	local combatConfig = config()
-	if mission == nil or combatConfig == nil then
+	local solo = #humanPlayers() <= 1
+	if not solo and member.userId ~= ArenaService.LeaderUserId() then
 		return
 	end
-	if not VitalsService.AllHaveBodies(ArenaService.GetMembers()) then
-		-- A character still spawning has no body, and a run reads "no body" as fallen: its first
-		-- frame would end it. The lobby polls Start again next frame.
-		return
+	local plan = run.plan
+	local flow = run.flow
+	if run.phase == "summary" then
+		backToLobby()
+	elseif isLive(run.phase) and plan ~= nil and flow ~= nil then
+		execute(StageFlow.Finish(plan, flow, "abandoned"))
 	end
-	local startWave = run.forcedNextWave or FIRST_WAVE
-	local spec = Combat.CrowdWave(
-		mission,
-		startWave,
-		ArenaService.PartySize(),
-		ArenaService.IsOverdrive(),
-		combatConfig
-	)
-	if spec == nil then
-		-- Forgotten, so the next start is wave 1 rather than the same refusal every frame.
-		run.forcedNextWave = nil
-		run.lobbySince = os.clock()
-		warn(`[WaveService] {mission.id} has no crowd wave {startWave}; the run cannot start there`)
-		return
+end
+
+-- Every member gets the map (their own stars, the leader's open nodes): an arrival may have
+-- changed who leads.
+function WaveService.OnAdmitted(_player: Player): ()
+	sendMapState(nil)
+end
+
+-- The map again, to one member: a client that booted late or rebuilt its UI asks for its
+-- snapshot, and has no intent of its own for the map.
+function WaveService.SendMap(player: Player): ()
+	if boot.mission and ArenaService.IsAdmitted(player) then
+		sendMapState(player)
 	end
-	run.forcedNextWave = nil
-	run.clearedThrough = startWave - 1
-	run.tempo = 1
-	run.pool = emptyPool()
-	run.killsByUser = {}
-	run.bossClearsThisFlush = 0
-	run.killStamps = {}
-	run.damageTally = {}
-	run.runDamage = {}
-	run.runDamageTotal = 0
-	run.rimCursor = 0
-	run.lobbySince = 0
-	CrowdService.SetScales({ hp = spec.hpScale, plate = spec.plateScale })
-	VitalsService.SetMission(missionRules(spec))
-	local arena = ArenaService.ArenaName()
-	if boot.boundsArena ~= arena then
-		boot.boundsArena = arena
-		local center, halfSize = ArenaService.ArenaBounds()
-		WeaponService.SetArena(center, halfSize)
-		CrowdService.SetBounds(center, halfSize)
+end
+
+-- Ruling 22: RequestLeave is ignored from a fighting member of a live run (the client shows
+-- Abandon there). Everyone else may go home: the lobby, the summary, a member who waits.
+function WaveService.MayLeave(player: Player): boolean
+	local member = ArenaService.GetMemberFor(player)
+	if member == nil or not isLive(run.phase) then
+		return true
 	end
-	clearField()
-	-- Every member starts the run on their feet, at full health, with the gear's bar (a body
-	-- prepared before the mission rules were set would still hold the range's).
-	for _, player in humanPlayers() do
-		VitalsService.RefreshMaxHp(player)
-		VitalsService.StandUp(player)
-	end
-	ArenaService.MarkRunStarted()
-	run.runEndsAt = os.clock() + combatConfig.director.runCapSeconds
-	run.returnAt = 0
-	beginWave(startWave)
+	return member.waiting
 end
 
 function WaveService.GetPhase(): Types.RunPhase
 	return run.phase
 end
 
-function WaveService.GetWave(): number
-	return run.wave
-end
-
--- Ruling 18, the one rule for a down (WaveService's until the Wave 4 revive): when no fighting
--- human is left standing the run ends, and each of them is marked as having died.
+-- P5 ruling 18, the one rule for a down: VitalsService reports it, and this asks StageFlow at
+-- once what the tick asks it every frame (the fallen end the run unless the field is clear).
 function WaveService.OnDown(_player: Player): ()
-	local phase = run.phase
-	if phase ~= "wave" and phase ~= "boss" and phase ~= "breather" then
-		return
+	local combatConfig = config()
+	if combatConfig ~= nil then
+		advance(combatConfig)
 	end
-	-- Someone still standing: the run goes on, and the downed get up at the boundary. tick asks
-	-- the same question every frame, for the partner who leaves or dies later.
-	endIfLost()
 end
 
--- Debug lever (ruling 25): the crowd and its threats go and `waveNumber` starts at once; nothing
--- skipped is credited. In the lobby the run starts there.
-function WaveService.ForceWave(waveNumber: number): ()
-	local mission = ArenaService.GetMission()
-	if mission == nil then
-		return
-	end
-	-- Clamped: past the last wave, clearedThrough would overtake the wave in progress and the
-	-- run's end would skip the flush of what that wave had banked.
-	local target = math.clamp(math.floor(waveNumber), 1, math.max(mission.waves, 1))
-	local phase = run.phase
-	if phase == "summary" or phase == "ended" then
-		return
-	end
-	run.forcedNextWave = target
-	if phase == "lobby" then
-		WaveService.Start()
-		return
-	end
-	clearField()
-	run.breatherUntil = 0
-	-- Skipping forward is not clearing: without this, jumping from wave 2 to wave 9 would credit
-	-- seven waves nobody fought the next time the pool flushed.
-	run.clearedThrough = target - 1
-	advanceAfterBreather(mission)
-end
+-- Studio levers -------------------------------------------------------------------------------
 
--- The B and N keys (Studio only, through DebugService): "next" = the wave after this one, "boss"
--- = the next boss wave after this one (nothing when there is none).
+-- The N and B keys (ruling 33, through DebugService): "stage" finishes this part of the level,
+-- "boss" goes to the next wave with a boss. Nothing is banked and nothing skipped is credited.
 function WaveService.Skip(which: string): ()
-	local mission = ArenaService.GetMission()
-	if mission == nil then
+	local combatConfig = config()
+	local plan = run.plan
+	local flow = run.flow
+	if combatConfig == nil or plan == nil or flow == nil or not isLive(run.phase) then
 		return
 	end
-	local current = run.wave
-	if which == "next" then
-		if current < mission.waves then
-			WaveService.ForceWave(current + 1)
-		end
+	local actions = StageFlow.Skip(plan, flow, which, os.clock(), combatConfig.levels)
+	if #actions == 0 then
 		return
 	end
-	if which ~= "boss" then
-		return
-	end
-	for waveNumber = current + 1, mission.waves do
-		if isBossWave(mission, waveNumber) then
-			WaveService.ForceWave(waveNumber)
-			return
-		end
+	execute(actions)
+	syncPhase()
+	if isLive(run.phase) then
+		broadcast()
 	end
 end
 
--- Debug lever: one extra body of a crowd kind at the next rim point, with the run's scales.
-function WaveService.SpawnOne(kind: string): ()
-	if ArenaService.GetMission() == nil then
+-- The `wave` lever: forces a wave of the live camp (its fight or its breather), as P5's did
+-- inside its one camp. Elsewhere it does nothing.
+function WaveService.ForceWave(wave: number): ()
+	local plan = run.plan
+	local flow = run.flow
+	if plan == nil or flow == nil or not isLive(run.phase) then
 		return
 	end
-	if CrowdService.Spawn(kind, nextRimPoint(), FIGHT, Vector3.zero) ~= 0 then
+	local actions = StageFlow.Force(plan, flow, wave)
+	if #actions == 0 then
+		return
+	end
+	execute(actions)
+	syncPhase()
+	broadcast()
+end
+
+-- The `spawn` lever: one extra body of a crowd kind at the live camp's next spawn point, with
+-- the run's scales. Only while a camp fights.
+function WaveService.SpawnOne(kind: string): ()
+	local _stage, zone = liveZone()
+	local flow = run.flow
+	if zone == nil or flow == nil or flow.step ~= FIGHT then
+		return
+	end
+	if CrowdService.Spawn(kind, nextSpawnPoint(zone), FIGHT, centreOf(zone)) ~= 0 then
 		run.spawnedThisGroup += 1
 	end
 end
 
--- Debug lever: every living body dies with its normal rewards, credited to nobody.
+-- The `killAll` lever: every living body dies with its normal rewards, credited to nobody.
 function WaveService.KillAll(): ()
 	CrowdService.KillAll(0)
 end
 
--- The last member left: a reserved server can be reused by a later arrival, and a service still
--- sitting in `summary` would refuse to ever start another run here.
+-- The last human left (ArenaService's reset hook): the run and its level go; the stars stay,
+-- they are keyed by userId. A reserved server can be reused by a later arrival.
 function WaveService.Reset(): ()
 	run = freshRun()
+	boot.returning = false
+	boot.lobbySince = 0
 	CrowdService.Clear()
 	VitalsService.ClearThreats()
+	WeaponService.AbandonProjectiles()
+	LevelService.Clear()
+	VitalsService.SetMission(missionRules(1, 0))
 	table.clear(boot.rescuedAt)
 	pushRunFields()
 end
@@ -1140,17 +1567,17 @@ function WaveService.Init(): ()
 		return player ~= nil and VitalsService.IsDown(player)
 	end)
 	ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)
-	-- A placement, a release from the pad or a rescue is not the player's own motion: without
-	-- this the jump would read as speed, and buy their next claimed position the full slack.
+	-- A placement, a release or a rescue is not the player's own motion: without this the jump
+	-- would read as speed, and buy their next claimed position the full slack.
 	ArenaService.SetMovedHook(WeaponService.ForgetMotion)
+	ArenaService.SetPlacer(placer)
 	WeaponService.SetActGate(mayAct)
 	ArenaService.SetResetHook(WaveService.Reset)
-	-- From the first admit, so a lobby bar is already the gear's; Start re-sets the scales.
-	VitalsService.SetMission(missionRules(nil))
+	-- From the first admit, so a lobby bar is already the gear's; a run sets its own scales.
+	VitalsService.SetMission(missionRules(1, 0))
 end
 
--- The boot hook, NOT the run start: Start() above is the contract's "the lobby is ready, go".
--- Main wires this one into the ordered Init/Start pass.
+-- The boot hook: Main wires this one into the ordered Init/Start pass.
 function WaveService.Boot(): ()
 	if not boot.mission or boot.loop ~= nil then
 		return

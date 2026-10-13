@@ -22,14 +22,35 @@
 -- across the round button plus the remaining whole seconds (reported as a deviation).
 --
 -- P5 (docs/INTERFACES.md "P5 contracts", ruling 22): a crowd mission shows only the run layer
--- (`deps.actions = false`): header, wave line, breather timer, wallet, party list, Ready /
--- Return and the waiting card. The range HUD does the rest (crosshair, health bar, boss bar,
--- touch buttons), so the Attack / stance / ability cluster, the HP bar, the old boss bar and
--- the old reticle never show, and Ready / Return drop to the bottom-left corner the HP bar
--- left (a proving mission shows neither: `deps.runButtons = false`). That corner is the left
--- thumb's on a phone, and Return has no confirm, so on a touch device it is not there while
--- the local player fights in a `wave` or `boss` phase; it shows in the lobby, a breather, the
--- summary and after, and all along for a player who is waiting on the pad or down. A party member who is down reads " · DOWN" (PartyMember.down, ruling 18).
+-- (`deps.actions = false`): header, objective line, wallet, party list, the run's buttons and
+-- the waiting card. The range HUD does the rest (crosshair, health bar, boss bar, touch
+-- buttons), so the Attack / stance / ability cluster, the HP bar and the old reticle never
+-- show, and the buttons drop to the bottom-left corner the HP bar left. A party member who is
+-- down reads " · DOWN" (PartyMember.down, ruling 18).
+--
+-- L1 (docs/INTERFACES.md "L1 contracts" -> Client): the run is a level, not ten waves.
+--  * The wave line is the OBJECTIVE line: "Camp" in the lobby, the stage's name on the road
+--    ("Follow the road"), "Gates close in 3" while a camp counts down, "Pickets: 14 left" in a
+--    camp of one wave and "Raider Arena: wave 3 / 10" in one of several, the boss's name, "Next
+--    wave in 6", "Run over". The two countdowns tick locally between RunStates.
+--  * The dim line at the header's right reads "Camp 2 / 3" (a level of one camp shows what is
+--    left of the wave there instead).
+--  * "Progress saved" shows under the wallet for Theme.COMBAT_SAVED_NOTICE_SECONDS when
+--    RunState.banked rises: a checkpoint is the only thing that pays (ruling 15).
+--  * The bottom-left buttons. In the lobby: Map and Return to your city (`deps.runButtons =
+--    false`, a proving build, hides only Return: the trip home kicks from Studio). In a run:
+--    Abandon, for whoever ruling 21 lets abandon (the only human, else the leader); it asks
+--    twice, with no dialog: the first press reads "Abandon? Press again" for
+--    Theme.COMBAT_ABANDON_CONFIRM_SECONDS. There is no Ready (the leader departs from the map)
+--    and no Return in a run.
+--  * On a touch device Abandon is not there while the local player fights in a `wave` or
+--    `boss` phase (lead ruling, 2026-10-13). That corner is the left thumb's: a thumb that
+--    lands on the button to move does not move, lifts and presses the same spot again, and
+--    the second press would abandon the run, so asking twice does not protect it. It shows on
+--    the road, in a camp's countdown and in a breather, and all along for a player who is
+--    waiting or down. Keyboard and gamepad keep it in every live phase.
+--  * `fighting` covers the five live phases (travel, gate, wave, boss, breather). The old boss
+--    frame went with RunState.boss: the boss bar is the range's.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,8 +68,12 @@ local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
 export type Deps = {
-	onReady: () -> (),
+	-- L1: "Map" in the lobby; nil = no such button.
+	onMap: (() -> ())?,
+	-- "Return to your city" (RequestLeave), offered in the lobby.
 	onLeave: () -> (),
+	-- L1: "Abandon", after its second press (RequestAbandon); nil = no such button.
+	onAbandon: (() -> ())?,
 	onStance: () -> (),
 	onAttackDown: () -> (),
 	onAttackUp: () -> (),
@@ -57,8 +82,8 @@ export type Deps = {
 	onAttackInput: ((input: InputObject) -> ())?,
 	-- P5: false = the run layer only (see the header). nil = true, the C1 HUD.
 	actions: boolean?,
-	-- P5: false = no Ready / Return pair: a proving mission starts and restarts by itself
-	-- (ruling 19), and leaving it from Studio would kick through the bridge.
+	-- false = no Return to your city (a proving build: leaving it from Studio would kick
+	-- through the bridge). Map and Abandon stay.
 	runButtons: boolean?,
 	-- P5: a dim line over the bottom-left buttons on keyboard devices (the Studio keys).
 	keyHint: string?,
@@ -106,7 +131,17 @@ type AbilityButton = {
 }
 
 local BLANK = "—"
-local LOBBY_TEXT = "Lobby"
+local LOBBY_TEXT = "Camp"
+local RUN_OVER_TEXT = "Run over"
+local ROAD_TEXT = "Follow the road"
+local MAP_TEXT = "Map"
+local RETURN_TEXT = "Return to your city"
+local ABANDON_TEXT = "Abandon"
+local ABANDON_CONFIRM_TEXT = "Abandon? Press again"
+local SAVED_TEXT = "✓ Progress saved"
+-- L1 ruling 8: the phases in which a member may act; the run layer shows its fight pieces.
+local LIVE_PHASES: { [string]: boolean } =
+	{ travel = true, gate = true, wave = true, boss = true, breather = true }
 local WAITING_TEXT = "You'll join at the next wave"
 local HOST_MARK = "★ "
 local PERCENT = 100
@@ -133,6 +168,17 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	-- wave". PartyMember carries only the flag, so the history is ours.
 	local seenFighting: { [number]: boolean } = {}
 	local actions = deps.actions ~= false
+	-- L1: what the objective line and the notices are painted from. `gateAt` / `breatherAt` are
+	-- os.clock stamps (nil = not counting) re-anchored by every RunState; `savedUntil` is when
+	-- "Progress saved" goes; `abandonUntil` is until when a second press of Abandon confirms.
+	local objective = {
+		run = nil :: Types.RunState?,
+		gateAt = nil :: number?,
+		breatherAt = nil :: number?,
+		banked = 0,
+		savedUntil = 0,
+		abandonUntil = 0,
+	}
 
 	local function bar(parentFrame: Frame, name: string, height: number): Frame
 		local track = Create("Frame", {
@@ -275,39 +321,30 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	local materialChip = walletChip("Material", 2, Theme.COLOR_TEXT)
 	local valorChip = walletChip("Valor", 3, Theme.COLOR_HIGHLIGHT)
 
-	-- Boss block: only visible while RunState carries a boss.
-	local bossFrame = Create("Frame", {
-		Name = "Boss",
-		AnchorPoint = Vector2.new(0.5, 0),
-		Size = UDim2.fromOffset(
-			Theme.COMBAT_BOSS_WIDTH,
-			Theme.COMBAT_BOSS_LABEL_HEIGHT + Theme.COMBAT_BOSS_BAR_HEIGHT
-		),
-		BackgroundTransparency = 1,
+	-- L1: "Progress saved", under the wallet, when a checkpoint banks.
+	local savedFrame = Create("Frame", {
+		Name = "Saved",
+		Active = false,
+		Size = UDim2.fromOffset(Theme.COMBAT_SAVED_NOTICE_WIDTH, Theme.COMBAT_SAVED_NOTICE_HEIGHT),
+		BackgroundColor3 = Theme.COLOR_BG,
+		BackgroundTransparency = Theme.BG_TRANSPARENCY,
+		BorderSizePixel = 0,
 		Visible = false,
 		Parent = parent,
 	}) :: Frame
-	local bossScale = Create("UIScale", { Parent = bossFrame }) :: UIScale
-	local bossLabel = Create("TextLabel", {
-		Name = "Name",
+	Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = savedFrame })
+	local savedScale = Create("UIScale", { Parent = savedFrame }) :: UIScale
+	Create("TextLabel", {
+		Name = "Text",
+		Active = false,
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, Theme.COMBAT_BOSS_LABEL_HEIGHT),
+		Size = UDim2.fromScale(1, 1),
 		Font = Theme.FONT_BOLD,
 		TextSize = Theme.TEXT_SMALL,
-		TextColor3 = Theme.COLOR_ERROR,
-		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = "",
-		Parent = bossFrame,
-	}) :: TextLabel
-	local bossTrack = Create("Frame", {
-		Name = "Track",
-		Position = UDim2.fromOffset(0, Theme.COMBAT_BOSS_LABEL_HEIGHT),
-		Size = UDim2.new(1, 0, 0, Theme.COMBAT_BOSS_BAR_HEIGHT),
-		BackgroundTransparency = 1,
-		Parent = bossFrame,
-	}) :: Frame
-	local bossFill = bar(bossTrack, "Bar", Theme.COMBAT_BOSS_BAR_HEIGHT)
-	bossFill.BackgroundColor3 = Theme.COLOR_ERROR
+		TextColor3 = Theme.COLOR_ACCENT,
+		Text = SAVED_TEXT,
+		Parent = savedFrame,
+	})
 
 	-- Party list: one row per member with the HP the server published for them.
 	local partyFrame = Create("Frame", {
@@ -360,18 +397,18 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 	}) :: Frame
 	local hpFill = bar(hpTrack, "Bar", Theme.COMBAT_HP_BAR_HEIGHT)
 
-	-- Ready / Return live bottom-left above the HP bar: the bottom-right belongs to combat.
+	-- The run's buttons live bottom-left (above the HP bar in the C1 HUD): the bottom-right
+	-- belongs to combat. L1: Map and Return to your city in the lobby, Abandon in a run.
 	local buttonRow = Create("Frame", {
 		Name = "Actions",
 		AnchorPoint = Vector2.new(0, 1),
 		Size = UDim2.fromOffset(
-			Theme.ROW_BUTTON_WIDTH * 2 + Theme.ROW_SPACING,
+			Theme.COMBAT_MAP_BUTTON_WIDTH + Theme.ROW_SPACING + Theme.COMBAT_RUN_BUTTON_WIDTH,
 			Theme.ROW_BUTTON_HEIGHT
 		),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
-	buttonRow.Visible = deps.runButtons ~= false
 	local buttonScale = Create("UIScale", { Parent = buttonRow }) :: UIScale
 	Create("UIListLayout", {
 		FillDirection = Enum.FillDirection.Horizontal,
@@ -382,26 +419,38 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		Parent = buttonRow,
 	})
 
-	local function actionButton(name: string, order: number, accent: boolean): TextButton
+	-- Two words wrap onto two lines, so a 104 px button holds "Return to your city".
+	local function actionButton(
+		name: string,
+		text: string,
+		order: number,
+		width: number,
+		accent: boolean
+	): TextButton
 		local button = Create("TextButton", {
 			Name = name,
 			LayoutOrder = order,
-			Size = UDim2.fromOffset(Theme.ROW_BUTTON_WIDTH, Theme.ROW_BUTTON_HEIGHT),
+			Size = UDim2.fromOffset(width, Theme.ROW_BUTTON_HEIGHT),
 			BackgroundColor3 = if accent then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT,
 			BorderSizePixel = 0,
 			Font = Theme.FONT_BOLD,
-			TextSize = Theme.TEXT_HEADER,
+			TextSize = Theme.COMBAT_RUN_BUTTON_TEXT,
 			TextColor3 = if accent then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT,
-			Text = name,
+			TextWrapped = true,
+			Text = text,
+			Visible = false,
 			Parent = buttonRow,
 		}) :: TextButton
 		Create("UICorner", { CornerRadius = UDim.new(0, Theme.CORNER_RADIUS), Parent = button })
 		return button
 	end
 
-	local readyButton = actionButton("Ready", 1, true)
-	local returnButton = actionButton("Return", 2, false)
-	readyButton.Visible = false
+	local mapButton = actionButton("Map", MAP_TEXT, 1, Theme.COMBAT_MAP_BUTTON_WIDTH, true)
+	mapButton.TextSize = Theme.TEXT_HEADER
+	local returnButton =
+		actionButton("Return", RETURN_TEXT, 2, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
+	local abandonButton =
+		actionButton("Abandon", ABANDON_TEXT, 3, Theme.COMBAT_RUN_BUTTON_WIDTH, false)
 
 	-- Right-thumb cluster (C2.5). One frame with one UIScale holds every combat control, so
 	-- the arc keeps its shape at any scale. Offsets are design px from the attack centre.
@@ -837,29 +886,87 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		entry.timerLabel.Text = tostring(math.ceil(entry.readyIn))
 	end
 
-	local function waveText(run: Types.RunState): string
-		local phase = run.phase
-		if phase == "lobby" then
+	-- Whole seconds left until an os.clock stamp, never under 0 (nil = 0).
+	local function secondsUntil(at: number?): number
+		return if at ~= nil then math.max(math.ceil(at - os.clock()), 0) else 0
+	end
+
+	-- L1: what the party is doing now, in one line (see the header).
+	local function objectiveText(): string
+		local run = objective.run
+		if run == nil or run.phase == "lobby" then
 			return LOBBY_TEXT
-		elseif phase == "summary" or phase == "ended" then
-			return "Run over"
 		end
-		local boss = run.boss
-		if phase == "boss" and boss ~= nil then
-			return "Boss — " .. boss.name
+		local phase = run.phase
+		local stage = run.stageName
+		if phase == "summary" or phase == "ended" then
+			return RUN_OVER_TEXT
+		elseif phase == "travel" then
+			return if stage ~= "" then stage else ROAD_TEXT
+		elseif phase == "gate" then
+			return "Gates close in " .. Format.Cash(secondsUntil(objective.gateAt))
 		elseif phase == "breather" then
-			return "Breather — wave " .. tostring(run.wave) .. " / " .. tostring(run.waves)
+			return "Next wave in " .. Format.Cash(secondsUntil(objective.breatherAt))
+		elseif phase == "boss" then
+			local bossName = run.bossName
+			return if bossName ~= nil and bossName ~= "" then bossName else stage
+		elseif run.waves <= 1 then
+			return stage .. ": " .. Format.Cash(run.left) .. " left"
 		elseif run.merged then
-			return "Waves " .. tostring(run.wave - 1) .. " + " .. tostring(run.wave)
+			return stage
+				.. ": waves "
+				.. Format.Cash(run.wave - 1)
+				.. " + "
+				.. Format.Cash(run.wave)
 		end
-		return "Wave " .. tostring(run.wave) .. " / " .. tostring(run.waves)
+		return stage .. ": wave " .. Format.Cash(run.wave) .. " / " .. Format.Cash(run.waves)
+	end
+
+	-- The dim line at the header's right: which camp of the level, or, in a level of one
+	-- camp, what is left of the wave.
+	local function campText(run: Types.RunState): string
+		if not LIVE_PHASES[run.phase] then
+			return ""
+		elseif run.camps > 1 then
+			return "Camp "
+				.. Format.Cash(math.min(run.campsCleared + 1, run.camps))
+				.. " / "
+				.. Format.Cash(run.camps)
+		elseif run.phase == "wave" or run.phase == "boss" then
+			return Format.Cash(run.left) .. " left"
+		end
+		return ""
+	end
+
+	local function paintAbandon(): ()
+		local armed = os.clock() < objective.abandonUntil
+		abandonButton.Text = if armed then ABANDON_CONFIRM_TEXT else ABANDON_TEXT
+		abandonButton.BackgroundColor3 = if armed then Theme.COLOR_ERROR else Theme.COLOR_BG_LIGHT
+		abandonButton.TextColor3 = if armed then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT
 	end
 
 	local function setRunState(run: Types.RunState): ()
 		local phase = run.phase
-		waveLabel.Text = waveText(run)
-		readyButton.Visible = phase == "lobby"
-		fighting = phase == "wave" or phase == "breather" or phase == "boss"
+		local live = LIVE_PHASES[phase] == true
+		local gateIn = run.gateIn
+		local breatherIn = run.breatherEndsIn
+		objective.run = run
+		objective.gateAt = if typeof(gateIn) == "number" then os.clock() + gateIn else nil
+		objective.breatherAt = if typeof(breatherIn) == "number"
+			then os.clock() + breatherIn
+			else nil
+		waveLabel.Text = objectiveText()
+		-- A checkpoint banked: say so. A new run starts again from 0, which says nothing.
+		if run.banked > objective.banked then
+			objective.savedUntil = os.clock() + Theme.COMBAT_SAVED_NOTICE_SECONDS
+			savedFrame.Visible = true
+		end
+		objective.banked = run.banked
+		if not live then
+			objective.abandonUntil = 0
+			paintAbandon()
+		end
+		fighting = live
 		controls.Visible = fighting and actions
 		reticle.Visible = fighting and shoulderCamera and actions
 		altHint.Visible = fighting and shoulderCamera and keyHints
@@ -868,25 +975,14 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			elseif run.tempo <= Theme.COMBAT_TEMPO_CALM then Theme.COLOR_ACCENT_ALT
 			else Theme.COLOR_ACCENT
 
-		aliveLabel.Text = if phase == "lobby"
-			then ""
-			else "Alive " .. tostring(run.alive) .. " · Left " .. tostring(run.remaining)
+		aliveLabel.Text = campText(run)
 		runEndsIn = run.runEndsIn
 		lastTickAt = os.clock()
-
-		local boss = run.boss
-		bossFrame.Visible = boss ~= nil and actions
-		if boss ~= nil then
-			bossLabel.Text = boss.name
-			bossFill.Size = UDim2.fromScale(
-				if boss.maxHp > 0 then math.clamp(boss.hp / boss.maxHp, 0, 1) else 0,
-				1
-			)
-		end
 
 		local localUserId = Players.LocalPlayer.UserId
 		local localWaiting = false
 		local localDown = false
+		local humans = 0
 		-- A share only means something with company; solo it would always read 100%.
 		local showShare = #run.party > 1 and phase ~= "lobby"
 		local shown = 0
@@ -908,17 +1004,16 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			if waiting and member.userId == localUserId then
 				localWaiting = true
 			end
+			if not member.bot then
+				humans += 1
+			end
 			-- P5: a crowd mission's down keeps its Humanoid alive (read defensively: an older
 			-- server build sends no `down`).
 			local down = not member.alive or member.down == true
 			if down and member.userId == localUserId then
 				localDown = true
 			end
-			local suffix = if phase == "lobby" and member.ready
-				then " ✓"
-				elseif down then " · DOWN"
-				elseif member.bot then " · BOT"
-				else ""
+			local suffix = if down then " · DOWN" elseif member.bot then " · BOT" else ""
 			row.nameLabel.Text = (if member.host == true then HOST_MARK else "")
 				.. member.name
 				.. suffix
@@ -954,13 +1049,27 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			partyRows[index].frame.Visible = false
 		end
 		waitingFrame.Visible = localWaiting
-		-- P5: no Return under the left thumb of a player in the middle of a fight (see the
+		-- L1: Map and Return in the lobby; Abandon in a run, for whoever may abandon (ruling
+		-- 21: the only human, else the leader). The summary card has its own buttons.
+		local inLobby = phase == "lobby"
+		mapButton.Visible = inLobby and deps.onMap ~= nil
+		returnButton.Visible = inLobby and deps.runButtons ~= false
+		-- No Abandon under the left thumb of a player in the middle of a fight (see the
 		-- header). One who is waiting or down is not fighting, and may want to leave.
-		returnButton.Visible = actions
-			or not touchDevice
-			or (phase ~= "wave" and phase ~= "boss")
-			or localWaiting
-			or localDown
+		local underThumb = touchDevice
+			and (phase == "wave" or phase == "boss")
+			and not localWaiting
+			and not localDown
+		local offered = live
+			and not underThumb
+			and deps.onAbandon ~= nil
+			and (humans <= 1 or run.leaderUserId == localUserId)
+		if not offered and objective.abandonUntil > 0 then
+			-- A first press must not stay armed on a button that is gone.
+			objective.abandonUntil = 0
+			paintAbandon()
+		end
+		abandonButton.Visible = offered
 		if phase == "summary" or phase == "ended" then
 			table.clear(seenFighting) -- nothing carries past a run
 		end
@@ -981,6 +1090,19 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			tickAccumulator = 0
 			runEndsIn = math.max(runEndsIn - elapsed, 0)
 			timerLabel.Text = if runEndsIn > 0 then Format.Duration(runEndsIn) else ""
+			-- L1: the two countdowns of the objective line, the notice and the armed Abandon
+			-- all run out on this tick.
+			local run = objective.run
+			if run ~= nil and (run.phase == "gate" or run.phase == "breather") then
+				waveLabel.Text = objectiveText()
+			end
+			if savedFrame.Visible and os.clock() >= objective.savedUntil then
+				savedFrame.Visible = false
+			end
+			if objective.abandonUntil > 0 and os.clock() >= objective.abandonUntil then
+				objective.abandonUntil = 0
+				paintAbandon()
+			end
 			for _, entry in abilityButtons do
 				if entry.readyIn <= 0 then
 					continue
@@ -991,13 +1113,16 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		end)
 	)
 
-	table.insert(
-		connections,
-		readyButton.Activated:Connect(function()
-			SoundController.Play("uiClick")
-			deps.onReady()
-		end)
-	)
+	local onMap = deps.onMap
+	if onMap ~= nil then
+		table.insert(
+			connections,
+			mapButton.Activated:Connect(function()
+				SoundController.Play("uiClick")
+				onMap()
+			end)
+		)
+	end
 	table.insert(
 		connections,
 		returnButton.Activated:Connect(function()
@@ -1005,6 +1130,24 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			deps.onLeave()
 		end)
 	)
+	local onAbandon = deps.onAbandon
+	if onAbandon ~= nil then
+		table.insert(
+			connections,
+			abandonButton.Activated:Connect(function()
+				SoundController.Play("uiClick")
+				-- It asks twice, with no dialog: only a second press inside the window sends.
+				if os.clock() < objective.abandonUntil then
+					objective.abandonUntil = 0
+					paintAbandon()
+					onAbandon()
+				else
+					objective.abandonUntil = os.clock() + Theme.COMBAT_ABANDON_CONFIRM_SECONDS
+					paintAbandon()
+				end
+			end)
+		)
+	end
 	table.insert(
 		connections,
 		stanceButton.Activated:Connect(function()
@@ -1075,7 +1218,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		SetLayout = function(scale: number, viewportSize: Vector2)
 			topScale.Scale = scale
 			walletScale.Scale = scale
-			bossScale.Scale = scale
+			savedScale.Scale = scale
 			partyScale.Scale = scale
 			hpScale.Scale = scale
 			buttonScale.Scale = scale
@@ -1104,7 +1247,8 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 					margin + (Theme.TOP_BAR_HEIGHT + Theme.SCREEN_MARGIN) * scale
 				)
 			end
-			local bossTop = margin
+			-- "Progress saved" hangs under the wallet, on the header's side of the screen.
+			local savedTop = margin
 				+ (
 						Theme.TOP_BAR_HEIGHT
 						+ Theme.SCREEN_MARGIN
@@ -1112,16 +1256,17 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 						+ Theme.SCREEN_MARGIN
 					)
 					* scale
-			bossFrame.Position = UDim2.new(0.5, 0, 0, bossTop)
+			savedFrame.AnchorPoint = if landscape then Vector2.new(0, 0) else Vector2.new(0.5, 0)
+			savedFrame.Position = if landscape
+				then UDim2.fromOffset(margin, savedTop)
+				else UDim2.new(0.5, 0, 0, savedTop)
 			-- Portrait stacks header, wallet and boss down the middle, so the party list
 			-- starts below all three; landscape parks them at the left and the list can
-			-- sit beside them at the top-right corner. P5: in a crowd mission the boss row
-			-- is the range's boss bar at its tallest (plate row included).
-			local bossBlock = if actions
-				then Theme.COMBAT_BOSS_LABEL_HEIGHT + Theme.COMBAT_BOSS_BAR_HEIGHT
-				else Theme.COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT
-					+ Theme.COMBAT_RANGE_BOSS_BAR_PLATE_GAP
-					+ Theme.COMBAT_RANGE_BOSS_BAR_HEIGHT
+			-- sit beside them at the top-right corner. The boss row is the range's boss bar
+			-- at its tallest (plate row included).
+			local bossBlock = Theme.COMBAT_RANGE_BOSS_BAR_PLATE_HEIGHT
+				+ Theme.COMBAT_RANGE_BOSS_BAR_PLATE_GAP
+				+ Theme.COMBAT_RANGE_BOSS_BAR_HEIGHT
 			local headerBlock = Theme.TOP_BAR_HEIGHT
 				+ Theme.COMBAT_WALLET_HEIGHT
 				+ bossBlock
@@ -1194,7 +1339,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			table.clear(connections)
 			topFrame:Destroy()
 			walletFrame:Destroy()
-			bossFrame:Destroy()
+			savedFrame:Destroy()
 			partyFrame:Destroy()
 			hpFrame:Destroy()
 			buttonRow:Destroy()

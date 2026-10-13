@@ -3,6 +3,9 @@ Armory, Tuning, CrowdBrain, ThreatField, StrikeTally, CrowdService and VitalsSer
 with stubbed Roblox globals and runs the tests_*.luau cases under the plain luau interpreter.
 P5 adds tests_p5.luau: the mission scales, kill info, KillAll, VitalsService.SetMission and
 the pure PositionRing (the server's own reading of a player's speed).
+L1 adds the pure rules of a run through a level: StageFlow (tests_l1.luau, with Combat and
+Economy, which it is checked against) and LevelGeometry (tests_l1_world.luau). The Village
+mission and Combat.json are injected as FIXTURES, the way Armory.json is.
 It proves the logic, not Roblox behaviour. RangeService is not loadable here.
 Usage: py tools/crowd_harness/run_harness.py [repo root] [luau.exe]
 (defaults: this repo, tools/bin/luau.exe, which tools/check_mirror.py fetches)."""
@@ -19,7 +22,9 @@ luau = sys.argv[2] if len(sys.argv) > 2 else str(here.parents[1] / "tools" / "bi
 SOURCES = {
     "CrowdCodec": "src/shared/CrowdCodec.luau",
     "HitShapes": "src/shared/HitShapes.luau",
+    "Economy": "src/shared/Economy.luau",
     "Armory": "src/shared/Armory.luau",
+    "Combat": "src/shared/Combat.luau",
     "Tuning": "src/shared/Tuning.luau",
     "CrowdBrain": "src/combat/server/Services/CrowdBrain.luau",
     "ThreatField": "src/combat/server/Services/ThreatField.luau",
@@ -27,6 +32,8 @@ SOURCES = {
     "PositionRing": "src/combat/server/Services/PositionRing.luau",
     "CrowdService": "src/combat/server/Services/CrowdService.luau",
     "VitalsService": "src/combat/server/Services/VitalsService.luau",
+    "LevelGeometry": "src/combat/server/Services/LevelGeometry.luau",
+    "StageFlow": "src/combat/server/Services/StageFlow.luau",
 }
 
 
@@ -43,14 +50,31 @@ def to_luau(value) -> str:
 
 
 armory = json.loads((repo / "src/shared/Config/Armory.json").read_text(encoding="utf-8"))
-parts = [f"local ARMORY: any = {to_luau(armory)}\n", "local SOURCES = {}\n"]
+# One local for every other config a test reads (the bundle is one chunk of at most 200 locals).
+fixtures = {
+    "village": json.loads((repo / "src/shared/Config/Missions/1_Village.json").read_text(encoding="utf-8")),
+    "combat": json.loads((repo / "src/shared/Config/Combat.json").read_text(encoding="utf-8")),
+}
+parts = [
+    f"local ARMORY: any = {to_luau(armory)}\n",
+    f"local FIXTURES: any = {to_luau(fixtures)}\n",
+    "local SOURCES = {}\n",
+]
 for name, rel in SOURCES.items():
     text = (repo / rel).read_text(encoding="utf-8")
     text = re.sub(r"(?m)^export type", "type", text)
     parts.append(f"SOURCES.{name} = function(game, script, require, Vector3, os, task, warn, RaycastParams, Enum)\n{text}\nend\n")
 # One bundle, in this order: each file sees every local of the files before it. Only the last
 # file's verdict line is kept, so the bundle prints one HARNESS line, after every case has run.
-TESTS = ["tests.luau", "tests_w2.luau", "tests_s2.luau", "tests_s3.luau", "tests_p5.luau"]
+TESTS = [
+    "tests.luau",
+    "tests_w2.luau",
+    "tests_s2.luau",
+    "tests_s3.luau",
+    "tests_p5.luau",
+    "tests_l1_world.luau",
+    "tests_l1.luau",
+]
 VERDICT = 'print(if failures == 0 then "HARNESS: PASS" else `HARNESS: FAIL ({failures})`)'
 for index, name in enumerate(TESTS):
     text = (here / name).read_text(encoding="utf-8")

@@ -39,9 +39,15 @@ and the CrowdWave mirror. The fights themselves (both bosses at the mission's sc
 whole run, wave by wave) are measured by `tools/sim_range.py`, which this file imports for them.
 The legacy run assertions (3, 7, 8, 10, 11, 14) skip a crowd mission.
 
+L1 ("Forest Road in grey", docs/INTERFACES.md "L1 contracts"): a mission is a level, and the
+Village arena is the level "Raider Arena" behind two adapters. This file mirrors the pure
+`Combat.CampWave`, `Combat.CampReward` and `Combat.BurstSeconds` (CrowdWave, CrowdReward and
+BurstInterval are now their callers, as in the Luau) and asserts: the adapter gives the
+mission's own waves (19), the level gates (20) and what each difficulty of a level pays (21).
+
 Usage:
   py tools/sim_combat.py                  # unlock table + Village run report
-  py tools/sim_combat.py --check          # the eighteen C0-P5 assertions; exit 1 on any
+  py tools/sim_combat.py --check          # the twenty-one C0-L1 assertions; exit 1 on any
   py tools/sim_combat.py --era 1          # only that era's mission
   py tools/sim_combat.py --power 84       # model the run at a given Gear Power
   py tools/sim_combat.py --party 4        # party size for the modelled run
@@ -116,6 +122,15 @@ CROWD_TARGET_MINUTES_SLACK = 1.5
 # simulator's this many times the mission's targetMinutes (C1 shipped 1200 s against 8 minutes,
 # x2.5), or it cuts off runs that are merely slow.
 CROWD_RUN_CAP_RATIO = 2.0
+# L1 levels (docs/INTERFACES.md "L1 contracts" -> "Balance bands"). What a first clear of a level
+# pays on Normal at the recommended gear (placeholders in proportion to the arena run by time:
+# 144,250 cash and 258 Timber in about 11.65 minutes, so 7 minutes is 87,000 and 155), its Valor
+# exactly, and how many times Normal a whole clear pays on the harder difficulties (the extra
+# bodies pay too). `rewardMult` itself is exact.
+LEVEL_PAY_TARGETS = {"forestRoad": {"cash": 87000, "materials": 155, "valor": 10}}
+LEVEL_PAY_TOLERANCE = 0.10
+LEVEL_PAY_TIMES = {"hard": (2.0, 3.0), "brutal": (4.0, 6.0)}
+LEVEL_REWARD_MULT = {"normal": 1, "hard": 2, "brutal": 4}
 # The legacy run model's assertions (3, 7, 8, 10, 11, 14) judge the C1 Humanoid waves. A mission
 # with a `crowd` block no longer plays them (P5 ruling 27 and the Wave 1 boot), and its
 # targetWaveSeconds is re-tuned for crowds, so they skip it; 15-18 judge its crowd instead.
@@ -633,64 +648,99 @@ def should_merge(tempo_value, dead_fraction, director):
 
 
 # --------------------------------------------------------------------------
-# src/shared/Combat.luau mirror -- P5 crowd missions (docs/INTERFACES.md
-# "P5 contracts" -> "Server modules", B). tools/sim_range.py drives a whole
-# mission through these, so both tools read one copy.
+# src/shared/Combat.luau mirror -- P5 crowd missions and L1 camps (docs/INTERFACES.md
+# "P5 contracts" -> "Server modules", B, and "L1 contracts" -> "B -- the run").
+# CampWave, CampReward and BurstSeconds are the rules a run reads; CrowdWave,
+# CrowdReward and BurstInterval are their mission-shaped callers, as in the Luau.
+# tools/sim_range.py drives a whole level through these, so both tools read one copy.
 # --------------------------------------------------------------------------
 
 
-def crowd_wave(mission, wave, party_size, overdrive, combat_cfg):
-    """Combat.CrowdWave -- None when the mission has no `crowd` block or no such wave.
-    Group count = round(count x (1 + (perExtra or countPerExtraPlayer) x extras) x
-    (countMult under Overdrive)), floored at 0; extras = max(party, 1) - 1. hpScale and
-    damageScale take Overdrive's hpMult and damageMult; plateScale and regenShare do not."""
-    crowd = mission.get("crowd")
-    if crowd is None or not 1 <= wave <= len(crowd["waves"]):
-        return None
-    definition = crowd["waves"][wave - 1]
-    od = combat_cfg["overdrive"]
+def camp_wave(wave_def, regen_share, scales, rank, ranks, party_size, combat_cfg):
+    """Combat.CampWave (L1) -- one wave of a camp, resolved for a difficulty and a party. A group
+    is fielded when it names no minDifficulty, or one whose rank is at or under the played `rank`
+    (an unknown name fields nothing). count = max(round(count x (1 + (perExtra or
+    countPerExtraPlayer) x extras) x countMult), 0); extras = max(party, 1) - 1. `wave` is 0:
+    the caller numbers it."""
     extras = max(party_size, 1) - 1
-    count_mult = od["countMult"] if overdrive else 1
     groups = []
     total = 0
-    for group in definition["groups"]:
+    for group in wave_def["groups"]:
+        needs = group.get("minDifficulty")
+        if needs is not None and (ranks.get(needs) is None or ranks[needs] > rank):
+            continue
         per_extra = group.get("perExtra")
         if per_extra is None:
             per_extra = combat_cfg["coop"]["countPerExtraPlayer"]
-        count = max(luau_round(group["count"] * (1 + per_extra * extras) * count_mult), 0)
+        count = max(luau_round(group["count"] * (1 + per_extra * extras) * scales["countMult"]), 0)
         groups.append({"kind": group["kind"], "count": count})
         total += count
     return {
-        "wave": wave,
+        "wave": 0,
         "groups": groups,
         "total": total,
-        "boss": definition.get("boss"),
+        "boss": wave_def.get("boss"),
         "bossHpMult": 1 + combat_cfg["coop"]["bossHpPerExtraPlayer"] * extras,
-        "hpScale": crowd["hpScale"] * (od["hpMult"] if overdrive else 1),
-        "plateScale": crowd["plateScale"],
-        "damageScale": crowd["damageScale"] * (od["damageMult"] if overdrive else 1),
-        "regenShare": crowd["regenShare"],
-        "rewardMult": od["rewardMult"] if overdrive else 1,
+        "hpScale": scales["hpScale"],
+        "plateScale": scales["plateScale"],
+        "damageScale": scales["damageScale"],
+        "regenShare": regen_share,
+        "rewardMult": scales["rewardMult"],
     }
 
 
-def crowd_reward(mission, kind, spec):
-    """Combat.CrowdReward -- (round(cash x rewardMult), round(materials x rewardMult)) for one
+def camp_reward(rewards, kind, spec):
+    """Combat.CampReward -- (round(cash x rewardMult), round(materials x rewardMult)) for one
     kill of `kind`; a kind with no rewards entry pays (0, 0)."""
-    crowd = mission.get("crowd")
-    reward = crowd["rewards"].get(kind) if crowd is not None else None
+    reward = rewards.get(kind)
     if reward is None:
         return 0, 0
     return luau_round(reward["cash"] * spec["rewardMult"]), luau_round(reward["materials"] * spec["rewardMult"])
 
 
-def burst_interval(mission, bursts, tempo_value, overdrive, combat_cfg):
-    """Combat.BurstInterval -- targetWaveSeconds / bursts / tempo / (spawnRateMult under
-    Overdrive); targetWaveSeconds when bursts <= 0 or tempo <= 0."""
+def burst_seconds(target_wave_seconds, bursts, tempo_value):
+    """Combat.BurstSeconds -- targetWaveSeconds / bursts / tempo; targetWaveSeconds when
+    bursts <= 0 or tempo <= 0."""
     if bursts <= 0 or tempo_value <= 0:
-        return mission["targetWaveSeconds"]
+        return target_wave_seconds
+    return target_wave_seconds / bursts / tempo_value
+
+
+def crowd_wave(mission, wave, party_size, overdrive, combat_cfg):
+    """Combat.CrowdWave -- CampWave on a mission's `crowd` block (None when the mission has none
+    or no such wave), with no difficulty rank. hpScale and damageScale take Overdrive's hpMult
+    and damageMult, counts its countMult, rewards its rewardMult; plateScale and regenShare do
+    not change."""
+    crowd = mission.get("crowd")
+    if crowd is None or not 1 <= wave <= len(crowd["waves"]):
+        return None
+    od = combat_cfg["overdrive"]
+    spec = camp_wave(crowd["waves"][wave - 1], crowd["regenShare"], {
+        "hpScale": crowd["hpScale"] * (od["hpMult"] if overdrive else 1),
+        "damageScale": crowd["damageScale"] * (od["damageMult"] if overdrive else 1),
+        "plateScale": crowd["plateScale"],
+        "countMult": od["countMult"] if overdrive else 1,
+        "rewardMult": od["rewardMult"] if overdrive else 1,
+    }, 0, {}, party_size, combat_cfg)
+    spec["wave"] = wave
+    return spec
+
+
+def crowd_reward(mission, kind, spec):
+    """Combat.CrowdReward -- CampReward on the mission's rewards; (0, 0) with no crowd block."""
+    crowd = mission.get("crowd")
+    if crowd is None:
+        return 0, 0
+    return camp_reward(crowd["rewards"], kind, spec)
+
+
+def burst_interval(mission, bursts, tempo_value, overdrive, combat_cfg):
+    """Combat.BurstInterval -- BurstSeconds, divided by spawnRateMult under Overdrive."""
+    seconds = burst_seconds(mission["targetWaveSeconds"], bursts, tempo_value)
+    if bursts <= 0 or tempo_value <= 0:
+        return seconds
     rate = combat_cfg["overdrive"]["spawnRateMult"] if overdrive else 1
-    return mission["targetWaveSeconds"] / bursts / tempo_value / rate
+    return seconds / rate
 
 
 def crowd_bursts(spec, burst):
@@ -2368,6 +2418,147 @@ def crowd_summon_kills(proving, report):
     return found
 
 
+def level_fieldable(level, kinds):
+    """Every kind a level can put on the floor at any difficulty: its groups, its bosses, and
+    whatever any of those calls, followed to the end."""
+    todo = []
+    for stage in level["stages"]:
+        for wave in stage.get("waves") or []:
+            todo += [group["kind"] for group in wave["groups"]]
+            if wave.get("boss"):
+                todo.append(wave["boss"]["kind"])
+    if level["crowd"].get("eliteKind"):
+        todo.append(level["crowd"]["eliteKind"])
+    found = []
+    while todo:
+        name = todo.pop(0)
+        if name in found:
+            continue
+        found.append(name)
+        for attack in (kinds.get(name) or {}).get("attacks") or []:
+            if attack["shape"] == "summon" and attack.get("summon"):
+                todo.append(attack["summon"])
+    return found
+
+
+def level_gates(file, level, layout, expeditions, proving, combat_cfg):
+    """The contract's gates on one level file (assertion 20); returns the problems found."""
+    kinds = proving["crowd"]["kinds"]
+    names = expeditions["difficulties"]
+    problems = []
+    if level is None:
+        return [f"{file['id']} does not resolve (no stages, difficulties or crowd block, or no such mission)"]
+    for kind in level_fieldable(level, kinds):
+        if kind not in level["crowd"]["rewards"]:
+            problems.append(f"{kind} can be fielded but has no rewards entry")
+        if kind not in kinds:
+            problems.append(f"{kind} is no crowd kind")
+    for name in level["difficulties"]:
+        if name not in names:
+            problems.append(f"difficulty {name} is not in Expeditions.json")
+    if not file.get("mission"):
+        missing = [name for name in names if name not in level["difficulties"]]
+        if missing:
+            problems.append(f"lacks the difficulties {missing}")
+        for name, mult in LEVEL_REWARD_MULT.items():
+            if name in level["difficulties"] and level["difficulties"][name]["rewardMult"] != mult:
+                problems.append(f"{name} rewardMult {level['difficulties'][name]['rewardMult']} is not {mult}")
+    stages = level["stages"]
+    for index, stage in enumerate(stages):
+        if stage["kind"] not in ("travel", "camp"):
+            problems.append(f"stage {index + 1} is a {stage['kind']}")
+        if index > 0 and stages[index - 1]["kind"] == stage["kind"]:
+            problems.append(f"stages {index} and {index + 1} are both {stage['kind']}")
+        for wave in stage.get("waves") or []:
+            for group in wave["groups"]:
+                needs = group.get("minDifficulty")
+                if needs is not None and needs not in names:
+                    problems.append(f"minDifficulty {needs} is no difficulty")
+    if not stages or stages[-1]["kind"] != "camp":
+        problems.append("its last stage is not a camp")
+    zones = {camp["id"] for camp in layout["camps"]} if layout is not None else set()
+    for stage in stages:
+        if stage["kind"] == "camp" and stage.get("zone") not in zones:
+            problems.append(f"camp stage {stage['name']} names the zone {stage.get('zone')}, which the layout lacks")
+    if level["runCapSeconds"] < CROWD_RUN_CAP_RATIO * level["targetMinutes"] * 60:
+        problems.append(f"runCapSeconds {level['runCapSeconds']} is under {CROWD_RUN_CAP_RATIO:g} x targetMinutes")
+    return problems
+
+
+def level_pay(level, difficulty, ranks, combat_cfg, summon_kills):
+    """What a whole solo clear of a level pays at a difficulty (Combat.CampReward per kill):
+    every configured body, every boss with its Valor, and `summon_kills` {boss kind: {kind:
+    kills}} of what the bosses call. Returns (totals, per-stage rows, kills by kind)."""
+    scales = level["difficulties"][difficulty]
+    totals = {"cash": 0, "materials": 0, "valor": 0}
+    rows = []
+    kills = {}
+    for stage in level["stages"]:
+        if stage["kind"] != "camp":
+            continue
+        cash = materials = valor = bodies = 0
+        for wave in stage.get("waves") or []:
+            spec = camp_wave(wave, level["crowd"]["regenShare"], scales, ranks[difficulty], ranks, 1, combat_cfg)
+            fielded = [(group["kind"], group["count"]) for group in spec["groups"]]
+            boss = spec["boss"]
+            if boss is not None:
+                fielded.append((boss["kind"], 1))
+                fielded += list((summon_kills.get(boss["kind"]) or {}).items())
+                valor += luau_round(boss["valor"] * spec["rewardMult"])
+            for kind, count in fielded:
+                c, m = camp_reward(level["crowd"]["rewards"], kind, spec)
+                cash += c * count
+                materials += m * count
+                bodies += count
+                kills[kind] = kills.get(kind, 0) + count
+        rows.append((stage["name"], bodies, cash, materials, valor))
+        totals["cash"] += cash
+        totals["materials"] += materials
+        totals["valor"] += valor
+    return totals, rows, kills
+
+
+def forest_summons(proving, report):
+    """{difficulty: {boss kind: {called kind: kills}}} from the reacting player's boss fights at
+    each difficulty's gear: what the boss called less what was dismissed with it."""
+    import sim_range as sr
+
+    found = {}
+    for difficulty, row in report["difficulties"].items():
+        boss = row["boss"]
+        called = [a.get("summon") for a in proving["crowd"]["kinds"][sr.FOREST_BOSS]["attacks"] if a["shape"] == "summon"]
+        found[difficulty] = {sr.FOREST_BOSS: {called[0]: boss["kills"] - 1}} if boss is not None and called else {}
+    return found
+
+
+def print_level(level_id, combat_cfg):
+    """A level's camps and what a clear pays at each difficulty, and its measured clears."""
+    import sim_range as sr
+
+    proving = sr.load_config(sr.CONFIG_PATH)
+    report = sr.forest_report(proving, careless=False, level_id=level_id)
+    if report is None:
+        return
+    level, ctx = report["level"], report["ctx"]
+    summons = forest_summons(proving, report)
+    names = ctx["expeditions"]["difficultyNames"]
+    print(f"{level['name']} ({level['id']}) -- LEVEL, solo; targetMinutes {level['targetMinutes']}, run cap "
+          f"{level['runCapSeconds']} s, burst {level['crowd']['burst']}")
+    normal = None
+    for difficulty, row in report["difficulties"].items():
+        pay, rows, kills = level_pay(level, difficulty, ctx["ranks"], combat_cfg, summons[difficulty])
+        normal = normal or pay
+        clears = ", ".join(f"{r['end']} {se.fmt_time(r['at'])}" for r in row["runs"])
+        print(f"  {names.get(difficulty, difficulty)} (recommended tier {row['scales']['recommendedTier']}, measured at "
+              f"gear {row['gear']['melee']}/{row['gear']['ranged']}): {pay['cash']:,.0f} cash (x{pay['cash'] / normal['cash']:.2f}), "
+              f"{pay['materials']:.0f} {level['material']} (x{pay['materials'] / normal['materials']:.2f}), {pay['valor']} Valor; "
+              f"clears {clears}")
+        for name, bodies, cash, materials, valor in rows:
+            print(f"    {name:<22} {bodies:>4.0f} bodies  {cash:>9,.0f} cash  {materials:>5.0f} {level['material']}  {valor:>3} Valor")
+        print("    kills: " + ", ".join(f"{kind} {count:.0f}" for kind, count in kills.items()))
+    print()
+
+
 def print_crowd(mission, armory, combat_cfg, curves):
     """The crowd run of a mission: what each wave holds and pays, where the summons come from,
     and the reacting player's measured clear (sim_range)."""
@@ -2435,7 +2626,7 @@ class Checks:
 
 def run_checks(armory, combat_cfg, places, missions, game, eras):
     checks = Checks()
-    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 + P5 contracts, eighteen assertions)")
+    print("sim_combat --check (docs/INTERFACES.md C0 + C1 + C2 + C2.5 + P5 + L1 contracts, twenty-one assertions)")
     curves = greedy_curves(game, eras)
     # P5: the crowd missions are measured once, by sim_range (bosses and the whole run).
     crowd = {}
@@ -2972,11 +3163,139 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
         f"party, Overdrive scales HP and damage only, bursts hold every body over targetWaveSeconds",
     )
 
+    # 19. L1 ruling 27: the Raider Arena is its mission behind an adapter. For every wave and
+    #     party size, Combat.CampWave on the resolved level equals Combat.CrowdWave on the
+    #     mission; the level is one camp "arena" that merges, takes the director's breather and
+    #     banks at every wave; its rewards, regen and density are the mission's own.
+    expeditions = sr.load_config(sr.EXPEDITIONS_PATH)
+    ranks = sr.difficulty_ranks(expeditions)
+    level_files = sr.load_level_files()
+    by_mission = {m["id"]: m for m in missions.values()}
+    below = combat_cfg["player"]["rescue"]["below"]
+    problems = []
+    notes = []
+    for file in level_files:
+        if not file.get("mission"):
+            continue
+        mission = by_mission.get(file["mission"])
+        level = sr.resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"])
+        if mission is None or level is None:
+            problems.append(f"{file['id']} names the mission {file['mission']}, which has no crowd block")
+            continue
+        stage = level["stages"][0]
+        block = mission["crowd"]
+        if (len(level["stages"]) != 1 or stage["kind"] != "camp" or stage["zone"] != "arena" or not stage["merge"]
+                or not stage["bankEachWave"] or stage["breatherSeconds"] is not None
+                or stage["targetWaveSeconds"] != mission["targetWaveSeconds"]):
+            problems.append(f"{file['id']} is not one merging camp that banks each wave on the director's breather")
+        if (level["crowd"]["rewards"] is not block["rewards"] or level["crowd"]["regenShare"] != block["regenShare"]
+                or level["crowd"]["maxAlive"] != block["maxAlive"] or level["crowd"]["burst"] != block["burst"]
+                or level["material"] != mission["material"]
+                or level["runCapSeconds"] != combat_cfg["director"]["runCapSeconds"]):
+            problems.append(f"{file['id']} does not carry the mission's rewards, regen, density, material and cap")
+        compared = 0
+        for wave in range(1, len(block["waves"]) + 1):
+            for party in range(1, combat_cfg["coop"]["maxParty"] + 1):
+                ours = camp_wave(stage["waves"][wave - 1], level["crowd"]["regenShare"], level["difficulties"]["normal"],
+                                 ranks["normal"], ranks, party, combat_cfg)
+                ours["wave"] = wave
+                compared += 1
+                if ours != crowd_wave(mission, wave, party, False, combat_cfg):
+                    problems.append(f"{file['id']} wave {wave} party {party}: CampWave differs from CrowdWave")
+        notes.append(f"{file['id']} = {mission['id']}: {compared} wave/party specs equal, one camp of "
+                     f"{len(stage['waves'])} waves")
+    checks.verdict(not problems, "19 arena adapter   ", "; ".join(problems[:4]) if problems else "; ".join(notes))
+
+    # 20. The level gates: every kind a level fields (summons included) is priced; every
+    #     difficulty and minDifficulty is one of Expeditions.json's, all three present, with
+    #     rewardMult 1, 2 and 4; stages are travel and camp in turn and end in a camp; every
+    #     camp stage names a camp of the layout; runCapSeconds is at least twice targetMinutes;
+    #     every map node with a level names a level file and every from / requires.node a node;
+    #     levels.gateSeconds is at least 1.
+    problems = []
+    notes = []
+    levels = {}
+    for file in level_files:
+        mission = by_mission.get(file.get("mission")) if file.get("mission") else None
+        level = sr.resolve_level(file, mission, combat_cfg["director"]["runCapSeconds"])
+        try:
+            layout = sr.load_level_layout(file["layout"], below)
+        except FileNotFoundError:
+            layout = None
+            problems.append(f"{file['id']}: no layout {file['layout']}")
+        levels[file["id"]] = (file, level, layout)
+        found = level_gates(file, level, layout, expeditions, sr.load_config(sr.CONFIG_PATH), combat_cfg)
+        problems += [f"{file['id']}: {text}" for text in found]
+        if level is not None:
+            notes.append(f"{file['id']} {len(level['stages'])} stage(s), "
+                         f"{'/'.join(level['difficulties'])}, cap {level['runCapSeconds']} s")
+    node_ids = [node["id"] for node in expeditions["nodes"]]
+    for node in expeditions["nodes"]:
+        if node.get("level") and node["level"] not in levels:
+            problems.append(f"map node {node['id']} names the level {node['level']}, which has no file")
+        for other in (node.get("from"), (node.get("requires") or {}).get("node")):
+            if other is not None and other not in node_ids:
+                problems.append(f"map node {node['id']} names the node {other}, which is not on the map")
+    if combat_cfg["levels"]["gateSeconds"] < 1:
+        problems.append(f"levels.gateSeconds {combat_cfg['levels']['gateSeconds']} is under 1")
+    checks.verdict(not problems, "20 level gates     ", "; ".join(problems[:6]) if problems else "; ".join(notes)
+                   + f"; {len(node_ids)} map nodes; gateSeconds {combat_cfg['levels']['gateSeconds']:g}")
+
+    # 21. What each difficulty of a level pays. Normal: cash and materials within
+    #     LEVEL_PAY_TOLERANCE of the target and exactly its Valor. Hard and Brutal: the Valor is
+    #     Normal's times rewardMult, and the whole clear pays LEVEL_PAY_TIMES of Normal (summons
+    #     at the counts sim_range reports for the reacting player's boss fight at each
+    #     difficulty's gear). targetMinutes lies within CROWD_TARGET_MINUTES_SLACK of the mean
+    #     measured clear on Normal.
+    details = []
+    ok21 = True
+    proving_cfg = sr.load_config(sr.CONFIG_PATH)
+    for level_id, target in LEVEL_PAY_TARGETS.items():
+        report = sr.forest_report(proving_cfg, careless=False, level_id=level_id)
+        if report is None:
+            ok21 = False
+            details.append(f"{level_id} has no level file")
+            continue
+        level = report["level"]
+        summons = forest_summons(proving_cfg, report)
+        pays = {d: level_pay(level, d, ranks, combat_cfg, summons[d])[0] for d in report["difficulties"]}
+        normal = pays["normal"]
+        good = (abs(normal["cash"] / target["cash"] - 1) <= LEVEL_PAY_TOLERANCE
+                and abs(normal["materials"] / target["materials"] - 1) <= LEVEL_PAY_TOLERANCE
+                and normal["valor"] == target["valor"])
+        parts = [f"{level_id} Normal {normal['cash']:,.0f} cash ({100 * (normal['cash'] / target['cash'] - 1):+.1f}% of "
+                 f"{target['cash']:,}), {normal['materials']:.0f} {level['material']} "
+                 f"({100 * (normal['materials'] / target['materials'] - 1):+.1f}% of {target['materials']}), "
+                 f"{normal['valor']} Valor (needs {target['valor']})"]
+        for difficulty, (lo, hi) in LEVEL_PAY_TIMES.items():
+            pay = pays.get(difficulty)
+            if pay is None:
+                good = False
+                parts.append(f"{difficulty} missing")
+                continue
+            cash_times = pay["cash"] / normal["cash"]
+            mat_times = pay["materials"] / normal["materials"]
+            valor = normal["valor"] * LEVEL_REWARD_MULT[difficulty]
+            good = good and lo <= cash_times <= hi and lo <= mat_times <= hi and pay["valor"] == valor
+            parts.append(f"{difficulty} {pay['cash']:,.0f} cash (x{cash_times:.2f}), {pay['materials']:.0f} "
+                         f"{level['material']} (x{mat_times:.2f}), {pay['valor']} Valor (needs {valor}; x{lo:g}-x{hi:g})")
+        runs = report["difficulties"]["normal"]["runs"]
+        clears = [r["at"] for r in runs if r["end"] == "cleared"]
+        mean = sum(clears) / len(clears) / 60 if clears else math.inf
+        banked = {(r["banked"]["cash"], r["banked"]["materials"], r["banked"]["valor"]) for r in runs}
+        honest = abs(level["targetMinutes"] - mean) <= CROWD_TARGET_MINUTES_SLACK
+        good = good and honest
+        parts.append(f"targetMinutes {level['targetMinutes']} against a mean clear of {mean:.1f} min; the measured "
+                     f"runs banked " + ", ".join(f"{c:,}/{m}/{v}" for c, m, v in sorted(banked)))
+        ok21 = ok21 and good
+        details.append("; ".join(parts))
+    checks.verdict(ok21, "21 level pay       ", " | ".join(details) + f" (tolerance {LEVEL_PAY_TOLERANCE:.0%})")
+
     print()
     print(
         "CHECK: "
         + (
-            "PASS -- all eighteen assertions hold"
+            "PASS -- all twenty-one assertions hold"
             if checks.failed == 0
             else f"FAIL -- {checks.failed} assertion(s)"
         )
@@ -2993,7 +3312,7 @@ def run_checks(armory, combat_cfg, places, missions, game, eras):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="run the eighteen C0-P5 assertions")
+    parser.add_argument("--check", action="store_true", help="run the twenty-one C0-L1 assertions")
     parser.add_argument(
         "--trace", action="store_true", help="print the wave timeline of the simulated run"
     )
@@ -3070,6 +3389,12 @@ def main():
         print_cash_ratio(mission, armory, curves, first[1])
         print_survivability(combat_cfg, first[0], first[1])
         print_coop(mission, armory, combat_cfg, args.overdrive)
+    if args.era is None:
+        import sim_range as sr
+
+        for file in sr.load_level_files():
+            if not file.get("mission"):
+                print_level(file["id"], combat_cfg)
     print_helpers(armory, combat_cfg, game, shop)
     sys.exit(0)
 

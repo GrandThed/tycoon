@@ -38,6 +38,13 @@
 -- the ProvingGrounds config ships, as WeaponService does; ADS, the pivot lag and the leap
 -- follow belong to it. The phase rules apply in missions only, as before.
 --
+-- L1 (docs/INTERFACES.md "L1 contracts"): the server moves a body several hundred studs in one
+-- frame (the lobby camp to a level and back, a camp's entry, a rescue). The pivot's lag is
+-- clamped to movement.cameraMaxLag, so the view never swept across the map, but it would still
+-- glide those last studs: a root that jumps more than Theme.COMBAT_CAMERA_SNAP_STUDS in a
+-- frame drops every lag, and the camera is simply there. No phase rule changed: `travel` and
+-- `gate` are not in camera.freeCursorPhases, so they lock the cursor like a fight.
+--
 -- P3 (docs/INTERFACES.md "P3 contracts"): during a Leap Smash or an Impale Dash
 -- (MovementController.BeginMotion) the pivot's horizontal position trails the character by
 -- the same clamped lag the height uses, so a 60-100 stud/s burst reads as speed instead of
@@ -106,6 +113,8 @@ local pivotHeight: number? = nil
 local motionUntil = 0
 local flatLag = Vector3.zero
 local lastRootFlat: Vector3? = nil
+-- L1: where the root stood last frame, to tell a move by the server from a move by the player.
+local lastRoot: Vector3? = nil
 local fovKick = 0
 local fovKickShown = 0
 local boundHumanoid: Humanoid? = nil
@@ -245,6 +254,7 @@ local function deactivate(): ()
 	motionUntil = 0
 	flatLag = Vector3.zero
 	lastRootFlat = nil
+	lastRoot = nil
 	fovKick = 0
 	fovKickShown = 0
 end
@@ -257,6 +267,7 @@ local function bindHumanoid(rig: Rig): ()
 	motionUntil = 0
 	flatLag = Vector3.zero
 	lastRootFlat = nil
+	lastRoot = nil
 end
 
 local function activate(camera: Camera, rig: Rig): ()
@@ -537,6 +548,18 @@ local function update(deltaTime: number): ()
 	local yawFrame = CFrame.Angles(0, yaw, 0)
 	local rotation = yawFrame * CFrame.Angles(pitch, 0, 0)
 	local rootPosition = rig.root.Position
+	local rootBefore = lastRoot
+	lastRoot = rootPosition
+	if
+		rootBefore ~= nil
+		and (rootPosition - rootBefore).Magnitude > Theme.COMBAT_CAMERA_SNAP_STUDS
+	then
+		-- The server moved the body: no lag is carried over the jump.
+		pivotHeight = nil
+		motionUntil = 0
+		flatLag = Vector3.zero
+		lastRootFlat = nil
+	end
 	local flatPivot = followFlat(rootPosition, deltaTime)
 	local pivot = Vector3.new(
 		flatPivot.X,

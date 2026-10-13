@@ -360,7 +360,7 @@ function BossBar.new(parent: Instance, deps: BossBarDeps): BossBarHandle
 				width = math.min(width, band)
 				-- Not math.clamp: squeezed to the band the two bounds are the same number, and
 				-- rounding can leave the lower a hair above the upper, which math.clamp throws
-				-- on. Max first, so the lower bound wins when they cross.
+				-- on. This cannot: crossed by a hair, either bound is the answer.
 				centreX =
 					math.min(math.max(centreX, margin + width / 2), panelLeft - margin - width / 2)
 			else

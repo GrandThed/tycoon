@@ -1,0 +1,22 @@
+{
+	"version": 1,
+	"start": { "x": 0, "y": 0, "z": -340 },
+	"spawns": [
+		{ "x": -6, "y": 0, "z": -346 },
+		{ "x": 6, "y": 0, "z": -346 },
+		{ "x": 6, "y": 0, "z": -334 },
+		{ "x": -6, "y": 0, "z": -334 }
+	],
+	"killY": -40,
+	"camps": [],
+	"blocks": [
+		{ "name": "LobbyFloor", "look": "lobby", "x": 0, "y": -1, "z": -340, "sx": 48, "sy": 2, "sz": 48 },
+		{ "name": "LobbyWallNorth", "look": "wall", "x": 0, "y": 1.5, "z": -364.5, "sx": 50, "sy": 3, "sz": 1 },
+		{ "name": "LobbyWallSouth", "look": "wall", "x": 0, "y": 1.5, "z": -315.5, "sx": 50, "sy": 3, "sz": 1 },
+		{ "name": "LobbyWallWest", "look": "wall", "x": -24.5, "y": 1.5, "z": -340, "sx": 1, "sy": 3, "sz": 48 },
+		{ "name": "LobbyWallEast", "look": "wall", "x": 24.5, "y": 1.5, "z": -340, "sx": 1, "sy": 3, "sz": 48 },
+		{ "name": "MapSign", "look": "sign", "x": 0, "y": 6, "z": -362.5, "sx": 16, "sy": 6, "sz": 1, "collide": false, "text": "MAP - press M" }
+	],
+	"secrets": [],
+	"route": []
+}

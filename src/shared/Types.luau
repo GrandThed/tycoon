@@ -157,7 +157,8 @@ export type ActionResult = {
 		| "ascend"
 		| "expedition"
 		| "joinRun"
-		| "party",
+		| "party"
+		| "startLevel",
 	slotId: string,
 	ok: boolean,
 	-- C0 adds `unavailable`: place id 0, Studio, a teleport that failed after its retries, or a
@@ -166,6 +167,8 @@ export type ActionResult = {
 	-- C2 (slotId = the other player's userId as a string for "party"): full = party or run at
 	-- maxParty; over = run past joinUntilWave or ended; busy = invitee already in a party or
 	-- departing; expired = invite timed out or withdrawn; notLeader = only the leader may do that.
+	-- L1 "startLevel" (slotId = the level id): notLeader, busy (not the lobby, the cooldown, the
+	-- party not in, a body missing), locked (the node is not open), unavailable (no such level).
 	reason: (
 		"insufficientFunds"
 		| "locked"
@@ -1254,8 +1257,12 @@ export type CombatDebugConfig = {
 	fakeInviteAttribute: string,
 	-- P5 wave 1: what `proving.rbxl` boots into, and the baked test player's gear.
 	provingBoots: string, -- "mission" | "range"
-	provingMission: string,
-	provingStartWave: number,
+	-- L1: what the map opens on in a proving build, and whether the server starts it by itself.
+	provingLevel: string,
+	provingDifficulty: string,
+	provingAutoStart: boolean,
+	-- L1 ruling 33: the gear the G key steps through (a Studio-only session override).
+	gearPresets: { { name: string, melee: number, ranged: number } },
 	provingStartDelay: number,
 	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
 	perfLogSeconds: number,
@@ -1297,6 +1304,8 @@ export type CombatConfig = {
 	feel: CombatFeelConfig,
 	-- P5 ruling 2: the one 10-wave skeleton every era's `crowd` block follows.
 	crowdSkeleton: { CrowdSkeletonWave },
+	-- L1: the rules every level shares (gates, triggers, the start, the build's size).
+	levels: CombatLevelsConfig,
 }
 
 -- Missions/<eraIndex>_<EraName>.json v1, resolved by numeric prefix like era configs.
@@ -1407,7 +1416,16 @@ export type ArenaLayout = {
 
 -- Combat place run state (server to client on the RunState event). One authoritative payload for
 -- the whole HUD, so the client never derives a phase.
-export type RunPhase = "lobby" | "wave" | "breather" | "boss" | "summary" | "ended"
+-- L1: `travel` (on the road) and `gate` (a camp's countdown) join the C1 phases.
+export type RunPhase =
+	"lobby"
+	| "travel"
+	| "gate"
+	| "wave"
+	| "breather"
+	| "boss"
+	| "summary"
+	| "ended"
 export type EnemyState = "idle" | "chasing" | "attacking" | "stunned" | "dead"
 -- One row of the HUD party list. `bot` rows are Studio debug rigs: they scale the wave and take
 -- aggro, but their reward share is discarded. `abilityReadyIn` is SECONDS remaining, so the
@@ -1478,8 +1496,8 @@ export type RunSummary = {
 export type RunState = {
 	kind: "run",
 	phase: RunPhase,
-	missionId: string,
 	overdrive: boolean,
+	-- L1: `wave` and `waves` count inside the live camp.
 	wave: number,
 	waves: number,
 	alive: number,
@@ -1490,12 +1508,33 @@ export type RunState = {
 	merged: boolean,
 	party: { PartyMember },
 	breatherEndsIn: number?,
-	-- Seconds left before director.runCapSeconds ends the run.
+	-- Seconds left before the level's run cap ends the run.
 	runEndsIn: number,
-	boss: { name: string, hp: number, maxHp: number }?,
 	summary: RunSummary?,
-	-- C2: seconds until the group return home during "summary"; nil otherwise.
+	-- Seconds until the party is back in the lobby camp during "summary"; nil otherwise.
 	returnIn: number?,
+	-- L1 (built only by ArenaService). The level being played: "" in the lobby.
+	levelId: string,
+	levelName: string,
+	difficulty: string,
+	material: string,
+	-- The current stage: 0 and "" in the lobby.
+	stage: number,
+	stages: number,
+	stageKind: string,
+	stageName: string,
+	campsCleared: number,
+	camps: number,
+	-- Bodies left in the live camp.
+	left: number,
+	bossName: string?,
+	gateIn: number?,
+	-- Checkpoints banked this run.
+	banked: number,
+	floor: RunFloor?,
+	maxAlive: number,
+	leaderUserId: number,
+	result: RunResult?,
 }
 
 -- Presentation events, batched per Heartbeat frame into one list per client. Damage numbers,
@@ -1598,6 +1637,8 @@ export type CombatFx =
 	| CombatFxEnemyShot
 	| CombatFxEnemyShotEnd
 	| CombatFxArea
+	| CombatFxCamp
+	| CombatFxNotice
 
 -- A run advertised in the MemoryStore registry. `accessCode` is server-only: the hub never sends
 -- an ActiveRun to a client (it sends RunListEntry), so a client can never teleport itself into a
@@ -2380,7 +2421,13 @@ export type SlotTiers = { melee: number, ranged: number }
 
 -- Missions/<n>_<Era>.json `crowd` block. Counts are per solo run; party size scales them
 -- (Combat.CrowdWave). Scales multiply ProvingGrounds.json's tier-1 kind numbers.
-export type MissionCrowdGroup = { kind: string, count: number, perExtra: number? }
+-- L1: minDifficulty = the lowest difficulty that fields the group (nil = every one).
+export type MissionCrowdGroup = {
+	kind: string,
+	count: number,
+	perExtra: number?,
+	minDifficulty: string?,
+}
 export type MissionCrowdBoss = { kind: string, at: { number }, valor: number } -- at = { x, z }
 export type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
 export type MissionCrowdReward = { cash: number, materials: number }
@@ -2400,5 +2447,207 @@ export type MissionCrowdConfig = {
 -- Combat.json `crowdSkeleton` (ruling 2): wave i may hold the kinds introduced in waves 1..i
 -- (bosses excepted) and must hold its own `introduces`.
 export type CrowdSkeletonWave = { introduces: { string }, boss: string? }
+
+-- L1 (docs/INTERFACES.md "L1 contracts")
+
+-- Config/Levels/<n>_<Name>.json. LevelFile is the file as decoded (one with `mission` holds only
+-- the keys of its first two lines); LevelConfig is what StageFlow.Resolve returns.
+export type LevelDifficulty = {
+	hpScale: number,
+	damageScale: number,
+	plateScale: number,
+	countMult: number,
+	rewardMult: number,
+	recommendedTier: number,
+}
+-- MissionCrowdBoss.at is { x, z } from the camp's centre. A camp's waves are MissionCrowdWave, as
+-- the arena's.
+export type LevelCrowdConfig = {
+	regenShare: number,
+	maxAlive: number,
+	burst: number,
+	burstSpacing: number,
+	eliteKind: string?,
+	rewards: { [string]: MissionCrowdReward },
+}
+export type LevelStage = {
+	-- kind: "travel" | "camp"
+	kind: string,
+	name: string,
+	-- camp: the layout camp's id
+	zone: string?,
+	waves: { MissionCrowdWave }?,
+	targetWaveSeconds: number?,
+	-- nil = the director's
+	breatherSeconds: number?,
+	merge: boolean?,
+	bankEachWave: boolean?,
+	maxAlive: number?,
+}
+export type LevelFile = {
+	version: number,
+	id: string,
+	name: string,
+	layout: string,
+	mission: string?,
+	recommendedTier: number?,
+	material: string?,
+	targetMinutes: number?,
+	runCapSeconds: number?,
+	difficulties: { [string]: LevelDifficulty }?,
+	crowd: LevelCrowdConfig?,
+	stages: { LevelStage }?,
+}
+export type LevelConfig = {
+	version: number,
+	id: string,
+	name: string,
+	layout: string,
+	mission: string?,
+	material: string,
+	targetMinutes: number,
+	runCapSeconds: number,
+	difficulties: { [string]: LevelDifficulty },
+	crowd: LevelCrowdConfig,
+	stages: { LevelStage },
+}
+
+-- Layouts/Levels/<Name>.json. World coordinates, studs. A file with `arena` holds nothing else.
+export type LevelBlock = {
+	name: string?,
+	look: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+	collide: boolean?,
+	text: string?,
+}
+-- side "north" (-Z) | "south" | "west" (-X) | "east"; at = offset from the side's middle
+export type LevelGate = { side: string, at: number, width: number }
+export type LevelCamp = {
+	-- The floor's top centre; its size.
+	id: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sz: number,
+	floor: ArenaSurface?,
+	fence: { height: number, material: string?, color: { number }? }?,
+	-- entry first, exit second; may be empty
+	gates: { LevelGate },
+	entry: ArenaPoint,
+	exit: ArenaPoint,
+	checkpoint: ArenaPoint?,
+	spawns: { ArenaPoint },
+	obstacles: { ArenaObstacle }?,
+}
+export type LevelSecret = {
+	id: string,
+	-- "doubleJump" | "fire" | "ice"
+	needs: string,
+	x: number,
+	y: number,
+	z: number,
+	sx: number,
+	sy: number,
+	sz: number,
+	sign: { x: number, y: number, z: number, text: string },
+}
+-- via: nil = walk | "climb" | "gap" | "camp"
+export type LevelRoutePoint = { x: number, y: number, z: number, via: string? }
+export type LevelBarrier = { height: number, thickness: number }
+export type LevelLayout = {
+	version: number,
+	arena: string?,
+	start: { x: number, y: number, z: number },
+	-- the lobby's points
+	spawns: { { x: number, y: number, z: number } }?,
+	killY: number,
+	barrier: LevelBarrier?,
+	camps: { LevelCamp },
+	blocks: { LevelBlock },
+	secrets: { LevelSecret },
+	route: { LevelRoutePoint },
+}
+
+-- Config/Expeditions.json
+export type LevelLook = { material: string, color: { number }, transparency: number? }
+export type MapNode = {
+	id: string,
+	name: string,
+	theme: string,
+	x: number,
+	y: number,
+	-- "level" | "bonus"
+	kind: string,
+	level: string?,
+	from: string?,
+	requires: { node: string?, stars: number? }?,
+}
+export type ExpeditionsConfig = {
+	version: number,
+	name: string,
+	-- the order is the rank
+	difficulties: { string },
+	difficultyNames: { [string]: string },
+	lobby: { layout: string },
+	nodes: { MapNode },
+	themes: { [string]: { color: { number } } },
+	looks: { [string]: LevelLook },
+	-- size = a secret sign's block, { x, y, z } studs (nil = no sign is built).
+	sign: { textColor: { number }, pixelsPerStud: number, size: { number }? },
+}
+
+-- Combat.json `levels`
+export type CombatLevelsConfig = {
+	gateSeconds: number,
+	triggerInset: number,
+	triggerHeight: number,
+	startSpacing: number,
+	startCooldownSeconds: number,
+	fenceThickness: number,
+	boxMargin: number,
+	maxParts: number,
+	-- A checkpoint marker's block, { x, y, z } studs (nil = no marker is built).
+	checkpointSize: { number }?,
+	-- When a camp's gates close, a fighter whose root is not at least this far inside the floor's
+	-- edge is moved to the camp's entry: the gate and the invisible wall turn solid on that edge.
+	closeInset: number,
+}
+
+-- RunState (built only by ArenaService)
+export type RunFloor = { x: number, y: number, z: number, hx: number, hz: number }
+export type RunResult = {
+	levelId: string,
+	levelName: string,
+	difficulty: string,
+	-- "cleared" | "down" | "wipe" | "abandoned" | "runCap" | "leave"
+	reason: string,
+	campsCleared: number,
+	camps: number,
+	-- the stage name of the last bank; "" = nothing was banked
+	savedAt: string,
+	-- this run gave this player a new star
+	star: boolean,
+}
+
+-- The MapState event (rulings 25 and 28)
+export type MapNodeState = {
+	id: string,
+	open: boolean,
+	reason: string?,
+	needs: string?,
+	stars: { string },
+}
+export type MapState = { kind: "map", leaderUserId: number, nodes: { MapNodeState } }
+
+-- CombatFx gains two kinds. event: "closed" | "cleared"
+export type CombatFxCamp = { kind: "camp", event: string, name: string, saved: boolean }
+-- Studio levers
+export type CombatFxNotice = { kind: "notice", text: string }
 
 return {}

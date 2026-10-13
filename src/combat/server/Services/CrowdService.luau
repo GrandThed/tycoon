@@ -185,6 +185,12 @@ local accumulator = 0
 local lastStepMs = 0
 
 local boundsCenter = Vector3.zero
+-- L1 ruling 12: every snapshot is encoded against the world origin, for good. The bounds (and
+-- with them the floor) move from camp to camp while the server lives, and a client that learnt
+-- a new origin late would misplace every body by the distance between two camps. Every camp of
+-- every level lies within the wire's reach of this point (StageFlow.Validate).
+local WIRE_ORIGIN = Vector3.zero
+local warnedBoundsAlive = false
 local boundsHalf = DEFAULT_HALF_SIZE
 
 local grid: { [number]: { Enemy } } = {}
@@ -844,7 +850,7 @@ local function sendSnapshot(serverTime: number): ()
 		if count == CrowdCodec.MAX_ENTRIES then
 			RemoteService.FireAllUnreliable(
 				SNAPSHOT_EVENT,
-				CrowdCodec.Encode(chunk, boundsCenter, serverTime)
+				CrowdCodec.Encode(chunk, WIRE_ORIGIN, serverTime)
 			)
 			table.clear(chunk)
 			count = 0
@@ -853,7 +859,7 @@ local function sendSnapshot(serverTime: number): ()
 	if count > 0 then
 		RemoteService.FireAllUnreliable(
 			SNAPSHOT_EVENT,
-			CrowdCodec.Encode(chunk, boundsCenter, serverTime)
+			CrowdCodec.Encode(chunk, WIRE_ORIGIN, serverTime)
 		)
 		table.clear(chunk)
 	end
@@ -967,19 +973,30 @@ end
 
 local CrowdService = {}
 
--- center = the arena origin: the floor's top face and the XZ centre. halfSize.X/Z = the
+-- center = the floor the crowd stands on: its top face and its XZ centre. halfSize.X/Z = the
 -- footprint's half extents (bodies stay wholly inside); halfSize.Y = the highest a launch can
--- carry a body above the floor. center is also the CrowdCodec origin of every snapshot, so the
--- client must decode against the same point (every arena is built at the world origin).
-function CrowdService.SetBounds(center: Vector3, halfSize: Vector3): ()
+-- carry a body above the floor. L1 (rulings 11 and 12): a level sets this at every camp's
+-- trigger, so the floor may move and change height while the server lives; the snapshots' origin
+-- does not move with it (WIRE_ORIGIN). Refused, with false, while a body is alive: every living
+-- body would be clamped into a rectangle it never stood in and judged against a floor it is not
+-- on. The caller clears the crowd first.
+function CrowdService.SetBounds(center: Vector3, halfSize: Vector3): boolean
 	if not isFiniteVector(center) or not isFiniteVector(halfSize) then
 		warn("[CrowdService] SetBounds ignored: non-finite bounds")
-		return
+		return false
+	end
+	if aliveCount > 0 then
+		if not warnedBoundsAlive then
+			warnedBoundsAlive = true
+			warn("[CrowdService] SetBounds refused: a body is alive (clear the crowd first)")
+		end
+		return false
 	end
 	boundsCenter = center
 	boundsHalf = Vector3.new(math.abs(halfSize.X), math.abs(halfSize.Y), math.abs(halfSize.Z))
 	CrowdBrain.SetArena(boundsCenter, boundsHalf)
 	ensureRunning()
+	return true
 end
 
 -- Until they are set, fighting enemies go for every living player and their impacts are dropped.

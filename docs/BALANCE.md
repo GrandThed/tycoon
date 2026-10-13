@@ -3252,6 +3252,10 @@ runs 3.14. A ten-minute crowd run is chaotic: a last-digit float difference can 
 At the shipped values both interpreters give the same clear times to 0.01 min, and every gate
 passes on both. With `burst` 12 they differed by up to half a minute.
 
+**Corrected in L1 (2026-10-13).** The three seeds this part reports (11.5 to 11.8 min) did not
+merge their early waves, and that was luck. Over twelve seeds the same simulator gives 10.1 to
+11.8 min. See "L1: the Raider Arena" at the end of this file.
+
 ## P5: values
 
 `src/shared/Config/Missions/1_Village.json`:
@@ -3492,3 +3496,348 @@ The whole run, seed 11:
   regen.
 - **Bows on bosses** are slower still in a mission (see the rules above). It is the open P3
   question.
+
+# L1 — Forest Road in grey
+
+A mission is now a **level**: a road, flat camps along it whose gates close for the fight, a
+boss in the last camp, and three difficulties the player picks (contract: `docs/INTERFACES.md`
+"L1 contracts"; plan: `docs/MISSIONS_DESIGN.md` §5, §6, §12). This part covers Forest Road, the
+first level, built in grey blocks from `Layouts/Levels/ForestRoad.json`, and what moved for the
+ten-wave Village arena, which stays playable as the level "Raider Arena".
+
+Everything is measured as in P5: gear melee 2 / ranged 1 (a bar of 145), no Ascension, the
+Broadsword, solo, the simulator's reacting player. Hard and Brutal are also measured at their
+recommended tiers: melee 4 / ranged 3 (a bar of 210) and melee 6 / ranged 5 (a bar of 350).
+
+Targets, from the contract:
+- Normal, a first clear: 6 to 8 minutes from the start point to the Colossus's fall, walking
+  and countdowns included;
+- the Colossus in camp C: 64 to 90 s (Ben called about 76 s "about right");
+- no enemy hit over 25% of the bar; standing still in camp A, down in 6 to 12 s from the gates'
+  closing;
+- a Normal clear pays 87,000 cash and 155 Timber, each within ±10%, and exactly 10 Valor;
+- Hard and Brutal pay ×2 and ×4 per kill, and ×2 to ×3 and ×4 to ×6 for the whole clear;
+- Hard and Brutal are clearly beyond gear 2/1, and clearable at their recommended tiers (6 to 9
+  minutes, the Colossus in 64 to 100 s, no hit over 30% of that gear's bar).
+
+## L1: how the numbers were measured
+
+**`py tools/check_levels.py` (new)** proves the layouts on paper, because nobody sees a level in
+Studio before the owner does. It walks each level's `route` over the layout's boxes as a player
+with one jump would, checks every gate of the contract's constraint table, and prints a plan
+and a side view of each level in plain characters. It makes 109 checks. Each gate was proved by
+a layout or config broken for it: 68 such changes, and every one is caught.
+
+**`py tools/sim_range.py`** plays a level instead of a mission. `LevelRun` mirrors
+`StageFlow.Advance` row for row and fights each camp on that camp's own floor: its rectangle,
+its spawn points, bursts whose rows step toward its centre. It follows the server as engineer B
+built it (checked against `StageFlow.luau` and `WaveService.luau` on 2026-10-13):
+- the player walks the route at walk speed; a camp triggers when he is inside its floor inset
+  by `levels.triggerInset`; `levels.gateSeconds` later the gates close;
+- at the close a fighter outside the floor inset by `levels.closeInset` is put on the entry
+  point; the tempo goes back to 1, the kill stamps are cleared, and the director's warmup
+  counts from that moment;
+- one spawn cursor runs over the whole run, round-robin over each camp's own points;
+- between two waves of a camp comes the stage's `breatherSeconds`, or the director's breather
+  when the stage names none; waves merge only in a stage with `merge`;
+- only a checkpoint pays: a camp's clear banks the pool, and a stage with `bankEachWave` banks
+  at every wave clear; whatever else ends the run drops what was not banked;
+- a level with no run cap of its own runs under the director's.
+
+Two things are the simulator's own choice. During a camp's countdown the reacting player walks
+on to the camp's middle, and the player who stands still stops where he triggered it. After a
+camp he walks from where its last body fell to its exit and on.
+
+**`py tools/sim_combat.py`** mirrors `Combat.CampWave`, `Combat.CampReward` and
+`Combat.BurstSeconds`, and gains three assertions: the Raider Arena's adapter gives the
+mission's own waves (19), the level gates (20), and what each difficulty pays (21).
+
+**Seeds.** The gates use the three seeds of P5. Forest Road was also run over twelve seeds, and
+those spreads are given beside the three-seed numbers. Its camps do not merge, so its runs are
+steady: both interpreters agree to within 0.1 min.
+
+## L1: the layout
+
+North is up; one character is 4 studs across and 8 down. `=` road, `%` the lookout's ledge,
+`~` water, `.` camp floor, `#` fence, `|` gate, `x` spawn point, `o` obstacle, `c` checkpoint,
+`?` secret site, `i` sign, `S` start, `B` the boss's spot.
+
+```
+  x -272      -232      -192      -152      -112      -72       -32       8         48        88        128       168       208       248
+ -88                                                                              ##########################
+ -80                                                                              #.........x.......x......#         #####################
+ -72                                                    ################          #...oooo...........ooo...#         #.......x.....oooo..#
+ -64                                           %%%%%%   #.oo...x.......#          #....oo............ooo...#         #.............ooooo.#
+ -56                                           %%??%%   #............x.#          #......................x.#         #.............oooo..#
+ -48                            ==============i%%%%%%===|.............c|==========|.......................c|=========|..................c|====
+ -40                            ========================|.......A....x.|==========|............B...........|=========|.........C...B.....|====
+ -32                     ~~~~~~ ========================|..............|==========|........................|=========|...................|====
+ -24                     ~~~~~~ =====                   #..............#          #........................#  ===    #................x..#
+ -16 =====i              ~~~~~~ =====                   #.oo...x.....x.#          #....oo............ooo.x.#  === i  #...................#
+  -8 =====i========  ================                   ################          #...oooo...........ooo...#  ???    #.......x........x..#
+   0 ===S==========  ================                                             #.........x.......x......#  ???    #####################
+   8 ======              ~~~~~~i                                                  ##########################  ???
+  16                     ~~~~~~
+  24 to 48               ~~~~~~              (the creek runs on south)
+  56                 ~~~~~~~~~~~~~~
+  64                 ~~~~~~~~~~~~~~
+  72                 ~~~~~????~~~~~          (the island shrine in its pond)
+  80                 ~~~~~????~~~~~
+  88                 ~~~~~~~~~~~~~~
+```
+
+The route from the side, one column per 4 studs walked and one row per 4 studs of height
+(`_` the gap, `^` a climb, `.` inside a camp):
+
+```
+  12                                                                                                                    ^=====.................
+   8                                             ^==============............==============......................========#######################
+   4                                             ##############################################################################################
+   0 ==========   ===============================##############################################################################################
+```
+
+| Piece | Number | Why |
+|---|---|---|
+| Route | 549 studs: 308 on the road, 205 through the camps, 36 on the camps' aprons | Inside the contract's 500–600. |
+| Road | 16 wide everywhere | Four studs over the 12 the contract asks; a gate is 16 wide too. |
+| The gap | 12 studs, 42 studs from the start, landing level | One jump carries 17.1 studs, so the take-off has 5 studs of room. It comes first so that a fall costs a 2-second walk back from the start, not the whole road. |
+| The creek | a bridge of road over water 1 stud lower, 20 studs wide, with a pond to the south | The road stays continuous. The island shrine stands in the pond, 82 studs south of the road. Water is solid in L1. |
+| The first ledge | 8 studs up, 50 studs before camp A's gate | One jump (18) clears it. It puts camps A and B on a floor at height 8, which tests a crowd floor that is not at height 0. |
+| The second ledge | 4 studs up, between B and C | Camp C stands at height 12: a second floor height. |
+| The lookout | a ledge 24 studs above the road beside it, 15 studs off the route | Over one jump (18) and under jump plus double jump (30). A camp's fence is 5 high, so its top is still 19 under the ledge: no single jump reaches it from anything. |
+| Camp fences | 5 studs high | See the lookout. |
+| The cache | a marked block at the end of a 26-stud spur off the B-to-C road | "Off camp B" in the owner's picture. It stands clear of both camps' invisible walls: 1 stud from B's band and 9 from C's. Nothing stands beside a camp. |
+| Camp entry and exit points | 6 studs inside each gate | Clear of `closeInset` (2) with room to spare; `StageFlow.Plan` refuses a level whose entry is not. |
+| Spawn points | 5 in A, 6 in B, 4 in C, 31 studs or more from the entry | They sit 6 to 13 studs inside the fence, on the sides and the far end, never by the entry. |
+| `killY` | −40 | 36 under the lowest block. A fall takes two thirds of a second. |
+| The lobby | 48 × 48 at z −340 | 223 studs from Forest Road's bounds and 251 from the arena's. |
+| Parts | 70 | Of `levels.maxParts` 600. |
+
+`Combat.json levels`: `gateSeconds` 3, `triggerInset` 4, `closeInset` 2, `triggerHeight` 30,
+`startSpacing` 4, `startCooldownSeconds` 2, `fenceThickness` 1, `boxMargin` 40, `maxParts` 600,
+`checkpointSize` [2, 10, 2]. `coop.returnGroupSeconds` 15 → 10 (the summary's length).
+`Expeditions.json sign.size` [6, 4, 6].
+
+## L1: values
+
+`Config/Levels/1_ForestRoad.json`:
+
+| Key | Normal | Hard | Brutal | Why |
+|---|---|---|---|---|
+| `hpScale` | 1.5 | 5.2 | 11.5 | Normal is the arena's: the melee scale at 2/1, so the Colossus is the range's fight. Hard and Brutal sit 4% and 6% over the melee scale of their recommended tier (×5 and ×10.83), so the same fight takes 79 s and 81 s there. |
+| `damageScale` | 1.12 | 1.8 | 3.1 | Normal is the arena's. The ceiling at the recommended gear is the Colossus's charge at 30% of the bar: 1.98 on Hard and 3.29 on Brutal. 1.8 gives 27.6% and 3.1 gives 28.3%. |
+| `plateScale` | 1 | 1 | 1 | Plates are counted in heavy hits, whatever the tier. |
+| `countMult` | 1 | 1.2 | 1.35 | With the Hard-only groups, the bodies are ×1.21 and ×1.37 of Normal. Higher values take the whole clear's pay over ×3 and ×6. |
+| `rewardMult` | 1 | 2 | 4 | The contract's. Valor is 10, 20, 40. |
+| `recommendedTier` | 2 | 4 | 6 | The contract's placeholders. |
+
+| Key | Value | Why |
+|---|---|---|
+| `crowd.regenShare` | 0.077 | The arena's and the range's: 10/130 of the bar a second. |
+| `crowd.burst`, `burstSpacing` | 8, 3.5 | Camp A holds 16 at once, so a burst is half of that. |
+| `maxAlive` | A 16, B 40, C 30 | Under each floor's area ÷ 200 (18, 47, 32). The reacting player never sees more than 15 alive on Normal and 21 on Brutal. |
+| `targetWaveSeconds` | A 36, B 36, C 34 | Camp B's length is set by killing brutes and chasing shooters, not by this: 30 and 36 gave the same 154 s. A's and C's follow it. |
+| `breatherSeconds` | 3 in every camp | A short beat between two waves of one camp. |
+| `targetMinutes` | 7 | The mean measured clear is 6.5 min; a real player is slower. |
+| `runCapSeconds` | 1050 | 2.5 times the target, the ratio P5 settled on. |
+| Colossus `boss.at` | (14, 0) from camp C's centre | In front of where the chief's tent stands, 48 studs from the entry. Moved 30 studs nearer, every band still holds. |
+
+**The waves.** Counts are Normal's. *Hard* marks a group only Hard and Brutal field.
+
+| Camp | Wave | Groups, in order |
+|---|---|---|
+| A, Pickets | 1 | 16 fodder, *Hard: 2 slingers*, 8 fodder |
+| | 2 | 8 fodder, *Hard: 1 armoured*, 3 slingers, 16 fodder |
+| | 3 | 16 fodder, *Hard: 2 armoured*, 4 slingers, 8 fodder |
+| B, Main Camp | 1 | 16 fodder, 3 slingers, 16 fodder |
+| | 2 | 16 fodder, 2 brutes, 3 slingers, 16 fodder |
+| | 3 | 16 fodder, 2 brutes, 1 lobber, 4 slingers, *Hard: 2 marksmen*, 16 fodder |
+| | 4 | 16 fodder, 3 brutes, 4 slingers, *Hard: 3 armoured*, *Hard: 2 marksmen*, 16 fodder |
+| C, The Chief's Clearing | 1 | 16 fodder, 2 brutes, *Hard: 2 armoured*, 16 fodder, 1 brute |
+| | 2 | the Colossus (it calls 48 fodder in the fight) |
+
+This is the owner's plan: A is fodder and slingers; B is fodder, slingers, brutes and one
+lobber; Hard adds marksmen and plated elites. Camp C's first wave, the chief's guard, is mine:
+it makes the clearing a camp before the boss rises, and brings the camp to about two minutes.
+
+## L1: who fits where
+
+The lead asked that every ranged kind be checked against its camp's short side. The contract's
+gate (a kind's `bandMin` at most 0.45 of the short side) passes for all of them: slingers (18)
+in A (27), and slingers, the lobber (22) and marksmen (28) in B (42). Marksmen are kept out of
+A, and no ranged kind stands in C. The gate is not the whole answer, so I measured what the
+shooters do in the reacting player's runs:
+
+| Floor | Kind | Lives | Inside its `bandMin` | Jammed on the fence |
+|---|---|---|---|---|
+| Raider Arena, 110 × 110 | slinger | 13.8 s | 18% of its life | 2% |
+| | marksman | 15.3 s | 22% | 4% |
+| | lobber | 12.8 s | 31% | 5% |
+| Camp B, 100 × 94, Normal | slinger | 10.7 s | 23% | 4% |
+| | lobber | 16.6 s | 11% | 1% |
+| Camp B, Hard at 4/3 | marksman | 18.2 s | 16% | 3% |
+| Camp A, 60 × 60, Normal | slinger | **0.9 s** | 100% | **33%** |
+| Camp A, Hard at 4/3 | slinger | 2.4 s | 57% | 18% |
+
+- **Camp B has room.** Its shooters behave as in the arena.
+- **Order matters more than size.** With the lobber's group after the fodder it lived 1.9 s:
+  it arrived alone and the player walked straight at it. Placed right after the brutes it
+  lives 16.6 s, because the player is busy. The marksmen on Hard are placed the same way.
+- **Camp A is too small for a shooter to keep its distance,** and no allowed size changes
+  that. From the middle of a 60-stud yard every spawn point is within 28 studs, and the sword
+  reaches 12.8, so a slinger is under a second from a player who walks at it. At the largest
+  size the contract allows (66) it is still one second.
+- **What I chose:** camp A stays 60 × 60 with the owner's mix. Its slingers are sentries at the
+  fence that a player runs down, which suits the first yard of the first level. On Hard they
+  come behind the plated elites and live nearly three times as long, and they are what puts an
+  under-geared player down there. The playtest should ask whether camp A is too easy.
+
+## L1: results
+
+| | Normal at 2/1 | Hard at 4/3 | Brutal at 6/5 |
+|---|---|---|---|
+| The whole clear, three seeds | **6.44–6.60 min** | 7.45–7.63 min | 7.35–7.72 min |
+| The same, twelve seeds | 6.43–6.86 min | 7.32–7.63 min | 7.29–7.72 min |
+| Hits the reacting player took | 0 | 0 | 0 or 1 |
+| The Colossus alone in camp C | **76.3 s** (75.0–77.6) | 79.3 s (77.9–80.1) | 80.8 s (79.5–81.6) |
+| The Colossus in the run | 74.8–75.9 s (74.0–77.1 over twelve seeds) | 75.5–77.7 s | 77.8–80.6 s |
+| The worst hit | 36 = 24.8% | 58 = 27.6% | 99 = 28.3% |
+| Most bodies alive at once | 15 | 17 | 21 |
+| Bodies killed | 313 | 380 | 430 |
+
+A Normal run, seed 11:
+
+| Part | Gates close | Cleared | Length | Waves |
+|---|---|---|---|---|
+| The road to camp A | | | 11.7 s + 3 s countdown | the gap, the creek, the ledge |
+| A, Pickets | 14.7 s | 107.1 s | 92.3 s | 24 in 26.1 s, 27 in 32.0 s, 28 in 28.3 s |
+| B, Main Camp | 113.6 s | 275.4 s | 161.8 s | 35 in 34.4 s, 37 in 42.3 s, 39 in 32.7 s, 39 in 43.4 s |
+| C, The Chief's Clearing | 282.1 s | 395.8 s | 113.7 s | the guard, 35 in 35.5 s; the Colossus in 75.2 s |
+
+- **The owner's timeline was 1.5, 2.5 and 2 minutes for the three camps.** The run gives 92 s,
+  162 s and 114 s. Over twelve seeds camp B takes 150 to 175 s, which is most of the spread.
+- **The walking is 486 studs in all** (the road, into each camp's middle, back to each exit):
+  24 s, plus 9 s of countdowns.
+- **Standing still in camp A:** first hit at 2.6 s, down at **9.9–10.1 s** from the gates'
+  closing (9.9–10.7 s over twelve seeds).
+- **A player who never dodges, Normal:** down in the Main Camp at 4.3 min, to brute charges.
+  He keeps camp A's 10,700 cash and loses the 24,900 he had earned in B: the checkpoint rule.
+
+**Against gear 2/1, the harder difficulties are clearly beyond it:**
+
+| | Hard | Brutal |
+|---|---|---|
+| The worst hit on a bar of 145 | 58 = 40% | 99 = 68% |
+| The Colossus alone | not killed inside 240 s; 31% of its health left | 79% left |
+| The player who never dodges | down in camp A at 1.3–1.5 min, all twelve seeds | down in camp A at 0.7 min |
+
+## L1: rewards
+
+| Kind | Cash | Timber | | Normal | Hard | Brutal |
+|---|---|---|---|---|---|---|
+| fodder | 100 | 0 | kills | 280 | 325 | 367 |
+| slinger | 500 | 1 | | 21 | 29 | 30 |
+| brute | 2,000 | 6 | | 10 | 11 | 14 |
+| lobber | 700 | 4 | | 1 | 1 | 1 |
+| marksman | 600 | 1 | | 0 | 4 | 6 |
+| armoured | 1,200 | 2 | | 0 | 9 | 11 |
+| colossus | 29,000 | 70 | | 1 | 1 | 1 |
+
+| | Normal | Hard | Brutal |
+|---|---|---|---|
+| Camp A | 10,700 cash, 7 Timber | 35,600, 34 | 82,800, 80 |
+| Camp B | 34,500, 60 | 96,200, 164 | 222,800, 384 |
+| Camp C | 43,000, 88, 10 Valor | 92,000, 184, 20 Valor | 199,200, 400, 40 Valor |
+| **The clear** | **88,200 cash, 155 Timber, 10 Valor** | **223,800, 382, 20** | **504,800, 864, 40** |
+| Against Normal | +1.4% and +0.0% of the targets | ×2.54 cash, ×2.46 Timber | ×5.72 cash, ×5.57 Timber |
+
+- The fodder count includes the 48 the Colossus calls in the reacting player's fight, at every
+  difficulty. The measured runs banked exactly these totals.
+- **Where the cash is banked on Normal:** 12% in camp A, 39% in B and 49% in C. A player who
+  falls to the boss keeps half the run's cash and no Valor.
+- **The Hard-only elites are priced under the brutes** (1,200 against 2,000). They pay ×2 and
+  ×4 on top of the count, and at the brute's price Brutal's Timber passes ×6.
+- **Cash per minute** is 13,600 on Normal. The arena pays 144,250 in 10.2 to 12.0 minutes: 12,000 to 14,100.
+
+## L1: bands (`--check`)
+
+| Band | Where | Value | Now | Fails at |
+|---|---|---|---|---|
+| Normal: no hit over | sim_range | 25% of 145 | 24.8% | `damageScale` 1.15: 25.5% |
+| Still in camp A: down | sim_range | 6–12 s from the close | 9.9–10.1 s | camp A opening with 4 fodder: 12.1 s; `maxAlive` 4: 12.3 s |
+| Normal: the Colossus alone, every seed | sim_range | 64–90 s | 75.0–77.6 s | `hpScale` 1.25: 63.7 s; 1.8: 91–95 s |
+| Normal: the Colossus in the run, every seed | sim_range | 64–90 s | 74.8–75.9 s | |
+| Normal: the clear, every seed | sim_range | 6–8 min | 6.44–6.60 min | camp B without its last two waves: 5.2 min; its waves twice over: 8.7 min |
+| `regenShare` | sim_range | within 10% of 10/130 | 0.077 | 0.09 |
+| A camp never holds more than its `maxAlive`; a cleared run banks once per camp | sim_range | | 3 banks, nothing dropped | |
+| Hard at 4/3, Brutal at 6/5: no hit over | sim_range | 30% of the bar | 27.6%, 28.3% | `damageScale` 2.1: 31.9%; 3.4: 31.1% |
+| The same: the Colossus alone | sim_range | 64–100 s | 77.9–80.1 s, 79.5–81.6 s | Hard `hpScale` 7: 115.8 s |
+| The same: the clear, every seed | sim_range | 6–9 min | 7.45–7.63, 7.35–7.72 | |
+| Hard at 2/1: the Colossus alone takes over | sim_range | 135 s | not killed in 240 s | `hpScale` 2.5: 128 s |
+| Brutal at 2/1: the same | sim_range | 200 s | not killed in 240 s | `hpScale` 3.5: 197 s |
+| Hard at 2/1: never dodging, down in camp A | sim_range | every seed | all three (all twelve) | Hard with Normal's scales: down in B |
+| The arena behind its adapter is its mission | sim_combat 19 | | 40 wave and party specs equal | |
+| Level gates | sim_combat 20 | | both levels | no price for a fielded kind; a difficulty that is none; no Brutal; `rewardMult` 3; a cap of 600 s; a zone the layout lacks; a level ending on the road |
+| Normal pays | sim_combat 21 | 87,000 and 155 ±10%; Valor 10 | +1.4%, +0.0%; 10 | fodder at 140: +14%; brutes at 9 Timber: +19%; a boss Valor of 12 |
+| Hard and Brutal pay | sim_combat 21 | ×2–×3; ×4–×6; Valor 20, 40 | ×2.54 and ×2.46; ×5.72 and ×5.57 | Hard `countMult` 1.5: ×3.16; Brutal 1.6: ×6.44; elites at 5 Timber: ×6.43 |
+| The layout | check_levels | the contract's table | 109 checks | 68 changes, each caught |
+
+## L1: the Raider Arena
+
+Its numbers stay where they are (`Missions/1_Village.json`, `Layouts/Arenas/Village.luau`). It
+is read through mirrors of the two adapters, and its P5 checks pass: the bosses alone (76.8 s
+and 97.7 s), the hit shares, the still player (10.6–10.8 s) are the same to the digit. Two
+things moved, and one earlier claim of mine was wrong.
+
+- **A run now begins with the 3-second countdown.** The gates close 3 s after the start, and
+  wave 1 begins then.
+- **Ruling 15: only a checkpoint pays.** The arena banks at every wave clear. A cleared run
+  banks all 144,250 cash, 258 Timber and 35 Valor, as before. A failed run no longer pays for
+  the wave in progress.
+- **A merged group banks once, when it is beaten.** When the director folds waves 2, 3 and 4
+  into wave 1, the four clear together. The player who never dodges then goes down in wave 4
+  with nothing banked and 16,800 cash dropped. So "it loses at most one wave's kills" holds
+  only for waves that did not merge.
+- **Correction to P5: the arena's clear is 10 to 12 minutes, not 11.5 to 11.8.** P5 reported
+  three seeds, none of which merged the early waves. Whether a wave merges turns on its last
+  swing: if it kills every body left, the wave clears; if it leaves one, the tempo that swing
+  just raised passes `mergeTempo` and the next wave folds in. Over twelve seeds the P5
+  simulator gives 10.1 to 11.8 min (mean 11.0), and half the seeds merge waves 2 to 4. With
+  the countdown the same twelve give 9.9 to 12.0 min (mean 10.5); one is under the 10-minute
+  floor. The three gated seeds give 10.19, 10.35 and 11.97 min and pass.
+- **What that means.** The arena's 10-minute floor is met by the gate's seeds and not by every
+  seed. Nothing in L1 may change it: the arena's numbers and the director are frozen. When its
+  numbers move into its level file (L4), either the merge rule or `targetWaveSeconds` should
+  be re-tuned, or the floor lowered to 9.5.
+
+## L1: rules these numbers hang on
+
+- **The warmup counts from each camp's close.** If it counted from the run's start, every camp
+  after the first would open at `tempoMin` and its first bursts would come 1.43 times further
+  apart.
+- **A camp's bursts take the next spawn point of a cursor that runs over the whole run.** Which
+  point a camp's first burst rises at depends on how many bursts came before it.
+- **The reacting player walks to the camp's middle during the countdown.** A player who stops
+  at the gate meets the first burst about a second later.
+- **A group arrives one burst interval after the group before it, at another spawn point.** That
+  is why order decides how long a shooter lives.
+- **The Colossus calls the same 48 fodder at every difficulty** in the reacting player's fight,
+  because the fight lasts about as long. A slower player lets it call more, at 100 cash each.
+
+## L1: flags for the owner
+
+- **The simulator's player is ideal.** He takes no hit in a Normal run. A real first clear
+  will be slower than 6.5 minutes and will cost health. The 6-to-8 band leaves 1.4 minutes
+  above him.
+- **Camp A is the level's soft spot:** its slingers die on arrival. See "who fits where".
+- **The lookout opens to Leap Smash.** One jump and a Leap Smash rise 28 studs, and the ledge
+  must stay under 26 for the double jump. L2 has to rule on it; no height fixes both.
+- **A boss's second phase cannot come earlier on Brutal.** The plan asks for it, and `enrage.at`
+  is a number of the kind, not of the difficulty. Brutal is tougher by health, damage and
+  count only.
+- **A camp cannot set its own burst size.** `crowd.burst` is the level's. Eight suits camp A;
+  camp B could take twelve.
+- **Recommended tiers and every reward are placeholders,** as the contract says. The Armory of
+  L3 decides what tiers 4 and 6 mean.
+- **Never measured, as the contract lists:** the gap on a touch screen, the crowd on a floor at
+  height 8 and 12 in play, the camera at a camp's wall.

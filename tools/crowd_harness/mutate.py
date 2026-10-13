@@ -18,10 +18,19 @@ FIELD = "src/combat/server/Services/ThreatField.luau"
 TALLY = "src/combat/server/Services/StrikeTally.luau"
 TUNING = "src/shared/Tuning.luau"
 RING = "src/combat/server/Services/PositionRing.luau"
+FLOW = "src/combat/server/Services/StageFlow.luau"
+GEOMETRY = "src/combat/server/Services/LevelGeometry.luau"
+COMBAT = "src/shared/Combat.luau"
 FILES = [
     TALLY,
     TUNING,
     RING,
+    FLOW,
+    GEOMETRY,
+    COMBAT,
+    "src/shared/Economy.luau",
+    "src/shared/Config/Combat.json",
+    "src/shared/Config/Missions/1_Village.json",
     "src/shared/CrowdCodec.luau",
     "src/shared/HitShapes.luau",
     "src/shared/Armory.luau",
@@ -840,6 +849,306 @@ MUTATIONS = {
         "return true",
     ),
 }
+
+# L1: the run's rules (StageFlow, tests_l1.luau), Combat's camp functions, CrowdService's floor.
+L1_MUTATIONS = {
+    "l1: a camp triggers with nobody inside": (
+        FLOW,
+        "\t\t\treturn true\n\t\tend\n\tend\n\treturn false\nend\n\n-- The stage index of the camp that may trigger now",
+        "\t\t\treturn true\n\t\tend\n\tend\n\treturn true\nend\n\n-- The stage index of the camp that may trigger now",
+    ),
+    "l1: the trigger ignores height": (
+        FLOW,
+        "\t\t\tabove >= -TRIGGER_BELOW\n\t\t\tand above <= triggerHeight\n\t\t\tand inRect(zone.trigger, root.X, root.Z)",
+        "\t\t\tinRect(zone.trigger, root.X, root.Z)",
+    ),
+    "l1: the trigger is the whole floor": (FLOW, "trigger = inset(rect, rules.triggerInset),", "trigger = rect,"),
+    "l1: a camp that is not next triggers": (
+        FLOW,
+        'elseif state.step == "travel" then state.stage + 1',
+        'elseif state.step == "travel" then state.stage + 3',
+    ),
+    "l1: the gates close at once": (FLOW, "if input.now >= state.gateAt then", "if true then"),
+    "l1: the countdown is not gateSeconds": (FLOW, "state.gateAt = now + rules.gateSeconds", "state.gateAt = now + 1"),
+    "l1: a clear with a boss still pending": (
+        FLOW,
+        "if stage == nil or not input.spawningDone then",
+        "if stage == nil then",
+    ),
+    "l1: a camp clear without bank": (
+        FLOW,
+        "if lastWave or stage.bankEachWave then",
+        "if stage.bankEachWave then",
+    ),
+    "l1: bankEachWave ignored": (FLOW, "if lastWave or stage.bankEachWave then", "if lastWave then"),
+    "l1: a bank counts one wave whatever it covers": (FLOW, "count = wave - state.settled,", "count = 1,"),
+    "l1: the last camp does not end the run": (
+        FLOW,
+        '\t\ttable.insert(actions, over(state, "cleared"))\n\t\treturn\n',
+        '\t\tover(state, "cleared")\n\t\treturn\n',
+    ),
+    "l1: a merge into a boss wave": (FLOW, "\t\t\tand not stage.boss[wave + 1]\n", ""),
+    "l1: a merge out of a boss wave": (FLOW, "\t\t\tand not stage.boss[wave]\n", ""),
+    "l1: a merge in a stage that does not merge": (
+        FLOW,
+        "\t\t\tstage.merge\n\t\t\tand wave < stage.waves\n",
+        "\t\t\twave < stage.waves\n",
+    ),
+    "l1: the stage's own breather ignored": (
+        FLOW,
+        "input.now + (stage.breatherSeconds or input.breatherSeconds)",
+        "input.now + input.breatherSeconds",
+    ),
+    "l1: fallen wins on a clear field": (
+        FLOW,
+        "if fallen ~= nil and not input.fieldClear then",
+        "if fallen ~= nil then",
+    ),
+    "l1: an end that banks": (
+        FLOW,
+        "\t\ttable.insert(actions, over(state, fallen))\n",
+        '\t\ttable.insert(actions, { kind = "bank", stage = state.stage, wave = state.wave, count = 1 })\n\t\ttable.insert(actions, over(state, fallen))\n',
+    ),
+    "l1: the run cap banks": (
+        FLOW,
+        '\t\ttable.insert(actions, over(state, "runCap"))\n',
+        '\t\ttable.insert(actions, { kind = "bank", stage = state.stage, wave = state.wave, count = 1 })\n\t\ttable.insert(actions, over(state, "runCap"))\n',
+    ),
+    "l1: a skip that banks": (
+        FLOW,
+        '\t\t\ttable.insert(actions, { kind = "drop", stage = state.stage })\n\t\t\ttable.insert(actions, { kind = "boundary", stage = state.stage })\n',
+        '\t\t\ttable.insert(actions, { kind = "drop", stage = state.stage })\n\t\t\ttable.insert(actions, { kind = "bank", stage = state.stage, wave = state.wave, count = 1 })\n\t\t\ttable.insert(actions, { kind = "boundary", stage = state.stage })\n',
+    ),
+    "l1: a boss skip credits the waves it passed": (
+        FLOW,
+        "\tstate.firstWave = 1\n\tstate.step = \"fight\"\n\tstate.wave = first\n\tstate.settled = first - 1\n",
+        "\tstate.firstWave = 1\n\tstate.step = \"fight\"\n\tstate.wave = first\n\tstate.settled = 0\n",
+    ),
+    "l1: SafePoint of a live camp is the start": (
+        FLOW,
+        "\t\tif zone ~= nil then\n\t\t\treturn zone.entry\n\t\tend\n",
+        "\t\tif zone ~= nil then\n\t\t\treturn plan.start\n\t\tend\n",
+    ),
+    "l1: SafePoint forgets the cleared camp": (
+        FLOW,
+        "\tif zone ~= nil then\n\t\treturn zone.exit\n\tend\n",
+        "",
+    ),
+    "l1: IsOut uses the level box in a closed camp": (
+        FLOW,
+        '\tlocal step = state.step\n\tif step == "fight" or step == "breather" then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\tlocal rect = zone.rect',
+        '\tlocal step = state.step\n\tif false then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\tlocal rect = zone.rect',
+    ),
+    "l1: a closed camp's kill height is the level's": (
+        FLOW,
+        "return position.Y < zone.floorY - rescue.below",
+        "return position.Y < plan.killY",
+    ),
+    "l1: the close moves only who is off the floor": (
+        FLOW,
+        "local inner = inset(rect, rules.closeInset or 0)",
+        "local inner = rect",
+    ),
+    "l1: an entry in the close's band is planned": (
+        FLOW,
+        "if not inRect(inner, camp.entry.x, camp.entry.z) then",
+        "if false then",
+    ),
+    "l1: an unbuilt node opens": (
+        FLOW,
+        "if levelId == nil or built[levelId] ~= true then",
+        "if false then",
+    ),
+    "l1: a node opens by the member's own stars": (
+        FLOW,
+        "if not hasStar(leader, if required ~= nil then required.level else nil) then",
+        "if not hasStar(own, if required ~= nil then required.level else nil) then",
+    ),
+    "l1: needsStars is never asked": (
+        FLOW,
+        "if needsStars ~= nil and starCount(leader) < needsStars then",
+        "if false then",
+    ),
+    "l1: a star for a difficulty that was not played": (
+        FLOW,
+        "\town[difficulty] = true\n\treturn true\n",
+        "\town[difficulty] = true\n\town.normal = true\n\treturn true\n",
+    ),
+    "l1: the arena adapter without bankEachWave": (FLOW, "\t\tbankEachWave = true,\n", "\t\tbankEachWave = false,\n"),
+    "l1: the arena adapter without merging": (FLOW, "\t\tmerge = true,\n", "\t\tmerge = false,\n"),
+    "l1: burst rows stepping outward": (
+        FLOW,
+        "local inward = Vector3.new(zone.rect.x - at.X, 0, zone.rect.z - at.Z)",
+        "local inward = Vector3.new(at.X - zone.rect.x, 0, at.Z - zone.rect.z)",
+    ),
+    "l1: boss.at is read from the world origin": (
+        FLOW,
+        "return Vector3.new(zone.rect.x + (at[1] or 0), zone.floorY, zone.rect.z + (at[2] or 0))",
+        "return Vector3.new(at[1] or 0, zone.floorY, at[2] or 0)",
+    ),
+    "l1: a stage's cap is always the level's": (
+        FLOW,
+        "maxAlive = stage.maxAlive or level.crowd.maxAlive,",
+        "maxAlive = level.crowd.maxAlive,",
+    ),
+    "l1: Validate lets a level end on a road": (
+        FLOW,
+        "if last ~= nil and last.kind ~= KIND_CAMP then",
+        "if false then",
+    ),
+    "l1: Validate lets a boss stand off the floor": (
+        FLOW,
+        "if camp ~= nil and not onFloor(camp, camp.x + x, camp.z + z, radius) then",
+        "if false then",
+    ),
+    "l1: minDifficulty ignored": (
+        COMBAT,
+        "if needs ~= nil and (needsRank == nil or needsRank > rank) then",
+        "if false then",
+    ),
+    "l1: countMult floors instead of rounding": (
+        COMBAT,
+        "math.max(math.round(group.count * (1 + perExtra * extras) * scales.countMult), 0)",
+        "math.max(math.floor(group.count * (1 + perExtra * extras) * scales.countMult), 0)",
+    ),
+    "l1: the wire origin following the bounds": (
+        CROWD,
+        "\t\t\tCrowdCodec.Encode(chunk, WIRE_ORIGIN, serverTime)\n\t\t)\n\t\ttable.clear(chunk)\n\tend\nend",
+        "\t\t\tCrowdCodec.Encode(chunk, boundsCenter, serverTime)\n\t\t)\n\t\ttable.clear(chunk)\n\tend\nend",
+    ),
+    "l1: SetBounds accepted with a body alive": (
+        CROWD,
+        "\tif aliveCount > 0 then\n\t\tif not warnedBoundsAlive then",
+        "\tif false then\n\t\tif not warnedBoundsAlive then",
+    ),
+}
+MUTATIONS.update(L1_MUTATIONS)
+
+# L1, from engineer A (the world): LevelGeometry, tests_l1_world.luau. Copied from A's handover
+# file as it stood; the comment over each entry names a check that fails.
+WORLD_MUTATIONS = {
+    # caught by: the wall is closed all the way round, corners included
+    "world: the invisible wall's corners are open": (
+        GEOMETRY,
+        "sx = (outerX + depth) * 2,",
+        "sx = outerX * 2,",
+    ),
+    # caught by: each inner face is on the fence's outer face
+    "world: the wall's inner face is off the fence (north and south)": (
+        GEOMETRY,
+        "z = camp.z + side.sign * (outerZ + depth / 2),",
+        "z = camp.z + side.sign * (outerZ + depth),",
+    ),
+    # caught by: each inner face is on the fence's outer face
+    "world: the wall's inner face is off the fence (west and east)": (
+        GEOMETRY,
+        "x = camp.x + side.sign * (outerX + depth / 2),",
+        "x = camp.x + side.sign * (outerX + depth),",
+    ),
+    # caught by: and it does not reach inside the fence's outer face
+    "world: the wall starts at the floor's edge, inside the fence": (
+        GEOMETRY,
+        "local outerX = camp.sx / 2 + fence",
+        "local outerX = camp.sx / 2",
+    ),
+    # caught by: a wall thinner than the fence is made as deep as the fence
+    "world: the wall may be thinner than the fence": (
+        GEOMETRY,
+        "local depth = math.max(barrier.thickness, fence)",
+        "local depth = barrier.thickness",
+    ),
+    # caught by: each stands from the floor's top (12) up to barrier.height above it (92)
+    "world: the wall stands from height 0, not from the camp's floor": (
+        GEOMETRY,
+        "local outerZ = camp.sz / 2 + fence\n\tlocal y = camp.y + height / 2",
+        "local outerZ = camp.sz / 2 + fence\n\tlocal y = height / 2",
+    ),
+    # caught by: fence and gates cover every side once, end to end: the gate fills the cut
+    "world: a gate is not cut from the fence": (
+        GEOMETRY,
+        "if gate.side == name then",
+        "if false then",
+    ),
+    # caught by: a gate past the end of its side is held to the floor's edge
+    "world: a gate runs past the end of its side": (
+        GEOMETRY,
+        "local to = math.min(gate.at + gate.width / 2, half)",
+        "local to = gate.at + gate.width / 2",
+    ),
+    # caught by: a gate inside a wider one: the fence stays cut for the whole of the wider gate
+    "world: a gate inside a wider one puts the fence back": (
+        GEOMETRY,
+        "standing = math.max(standing, cut[2])",
+        "standing = cut[2]",
+    ),
+    # caught by: with no gate the fence is the C1 arena's four boxes
+    "world: the fence's corners are open": (
+        GEOMETRY,
+        "local reach = if side.alongX then half + thickness else half",
+        "local reach = half",
+    ),
+    # caught by: no fence, gate or wall box reaches inside it, in three camps
+    "world: the north and south fence stand inside the floor's edge": (
+        GEOMETRY,
+        "z = camp.z + side.sign * (camp.sz / 2 + thickness / 2),",
+        "z = camp.z + side.sign * (camp.sz / 2 - thickness / 2),",
+    ),
+    # caught by: the floor is 1 stud thick with its top at camp.y
+    "world: the floor's top is not at camp.y": (
+        GEOMETRY,
+        "y = camp.y - FLOOR_THICKNESS / 2,",
+        "y = camp.y,",
+    ),
+    # caught by: a secret's block is where the layout puts it; its sign rises from the sign's point
+    "world: a sign hangs centred on its point": (
+        GEOMETRY,
+        "y = sign.y + size.sy / 2,",
+        "y = sign.y,",
+    ),
+    # caught by: a camp alone: its floor, a stud under the top, and the fence's height above it
+    "world: Bounds forgets the fence's height": (
+        GEOMETRY,
+        "\t\tif height > 0 then\n",
+        "\t\tif false then\n",
+    ),
+    # caught by: the party enters at the first player spawn and leaves at the pad
+    "world: the arena's entry is its pad": (
+        GEOMETRY,
+        "local first = listOf(arena.playerSpawns)[1] or pad",
+        "local first = pad",
+    ),
+    # caught by: every table is new: changing the level leaves the arena's module untouched
+    "world: the level shares the arena's obstacle tables": (
+        GEOMETRY,
+        "table.insert(obstacles, table.clone(obstacle))",
+        "table.insert(obstacles, obstacle)",
+    ),
+    # caught by: a camp with gates and no fence is refused, by name
+    "world: gates with no fence are built": (
+        GEOMETRY,
+        "if fence == nil and #listOf(camp.gates) > 0 then",
+        "if false then",
+    ),
+    # caught by: at most maxParts Parts: 19 of 19 builds, 19 of 18 does not
+    "world: maxParts is not checked": (
+        GEOMETRY,
+        "if #pieces > maxParts then",
+        "if false then",
+    ),
+    # caught by: a block with no height, or a position that is not a number, is refused by name
+    "world: a size of 0 is built": (
+        GEOMETRY,
+        "if not isSound(piece.box) then",
+        "if false then",
+    ),
+    # caught by: collide = false and text are carried
+    "world: a block's collide = false is ignored": (
+        GEOMETRY,
+        "collide = block.collide ~= false,",
+        "collide = true,",
+    ),
+}
+MUTATIONS.update(WORLD_MUTATIONS)
 
 vacuous = []
 ran = 0

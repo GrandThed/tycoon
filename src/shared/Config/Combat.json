@@ -47,7 +47,7 @@
 		"inviteCooldownSeconds": 10,
 		"declineBlockSeconds": 60,
 		"lobbyWaitSeconds": 30,
-		"returnGroupSeconds": 15,
+		"returnGroupSeconds": 10,
 		"reformSeconds": 60,
 		"publicByDefault": true
 	},
@@ -116,11 +116,29 @@
 		"fakePartyAttribute": "DebugFakeParty",
 		"fakeInviteAttribute": "DebugFakeInvite",
 		"provingBoots": "mission",
-		"provingMission": "village",
-		"provingStartWave": 1,
+		"provingLevel": "forestRoad",
+		"provingDifficulty": "normal",
+		"provingAutoStart": false,
 		"provingStartDelay": 3,
 		"provingGear": { "melee": 2, "ranged": 1 },
+		"gearPresets": [
+			{ "name": "2 / 1", "melee": 2, "ranged": 1 },
+			{ "name": "4 / 3", "melee": 4, "ranged": 3 },
+			{ "name": "6 / 5", "melee": 6, "ranged": 5 }
+		],
 		"perfLogSeconds": 10
+	},
+	"levels": {
+		"gateSeconds": 3,
+		"triggerInset": 4,
+		"closeInset": 2,
+		"triggerHeight": 30,
+		"startSpacing": 4,
+		"startCooldownSeconds": 2,
+		"fenceThickness": 1,
+		"boxMargin": 40,
+		"maxParts": 600,
+		"checkpointSize": [2, 10, 2]
 	},
 	"crowdSkeleton": [
 		{ "introduces": ["fodder"] },

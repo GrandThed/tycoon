@@ -1237,6 +1237,32 @@ local function onRefused(fx: { [string]: any }): ()
 	toast(WAITING_TEXT)
 end
 
+-- L1: a camp's gates closed behind the party (the banner is its name) or it was cleared, which
+-- is also the checkpoint that banks the pool. No sound: the banner is the cue.
+local function onCamp(fx: { [string]: any }): ()
+	local name = fx.name
+	if typeof(name) ~= "string" or name == "" then
+		return
+	end
+	if fx.event == "closed" then
+		showBanner(name, "", bannerSeconds())
+	elseif fx.event == "cleared" then
+		showBanner(
+			name .. " cleared",
+			if fx.saved == true then "Progress saved" else "",
+			bannerSeconds()
+		)
+	end
+end
+
+-- L1: a line from a Studio lever (the gear the G key just set).
+local function onNotice(fx: { [string]: any }): ()
+	local text = fx.text
+	if typeof(text) == "string" and text ~= "" then
+		toast(text)
+	end
+end
+
 local function applyFx(fx: any): ()
 	if typeof(fx) ~= "table" or typeof(fx.kind) ~= "string" then
 		return
@@ -1267,6 +1293,10 @@ local function applyFx(fx: any): ()
 		onMentor(payload)
 	elseif kind == "refused" then
 		onRefused(payload)
+	elseif kind == "camp" then
+		onCamp(payload)
+	elseif kind == "notice" then
+		onNotice(payload)
 	end
 end
 
