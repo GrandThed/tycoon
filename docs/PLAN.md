@@ -2558,13 +2558,13 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 | Wave | Scope |
 |---|---|
-| 1 | Crowd in a mission: Village, solo, the range loadout. **Merged 2026-10-13; second-review fixes pending merge.** |
+| 1 | Crowd in a mission: Village, solo, the range loadout. **Merged 2026-10-13, second-review fixes merged the same day (bf074f3).** |
 | 2 | Loadout and progression: variant styles in the Armory, profile schema v7. |
 | 3 | All four eras, both bosses everywhere, reward garnish; old mission code deleted. |
 | 4 | Co-op: revive by a teammate, party scaling checked, debug bots as crowd targets. |
 
 **Where it is (2026-10-13):**
-- **Wave 1 merged 2026-10-13; second-review fixes pending merge.**
+- **Wave 1 merged 2026-10-13; the second-review fixes merged the same day (bf074f3), the six place files rebuilt.**
 - Wave 1 is on `main` (`7968a24`; the six place files rebuilt in `1bd191e`). Ben chose
   "Merge now"; the same OK covers later P5 waves once they pass review and QA.
 - Ben then asked for a review with Opus. It found 2 Major. Every fix is done on
@@ -2798,8 +2798,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - [x] Wave 1 built and reviewed (INTERFACES "Wave 1 — crowd in a mission" with its review round)
 - [x] Second review (Opus): fixes built on `p5-missions` (INTERFACES "Second review round
   (2026-10-13)")
-- [ ] Wave 1 merged to `main` (lead): Wave 1 merged 2026-10-13; second-review fixes pending
-  merge
+- [x] Wave 1 merged to `main` (lead): Wave 1 merged 2026-10-13; second-review fixes merged the same day (bf074f3).
 - [ ] Wave 1 playtest (Ben)
 - [ ] Wave 2 — loadout and progression
 - [ ] Wave 3 — all four eras

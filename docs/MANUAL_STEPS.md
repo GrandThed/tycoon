@@ -1680,7 +1680,7 @@ plays only the Village mission; the other three eras refuse to start ("locked").
 
 - [ ] 0. (Lead) Merge, rebuild, tell Ben.
       - [x] Wave 1 merged to `main`, the six place files rebuilt (2026-10-13).
-      - [ ] Second-review fixes merged to `main`, the six place files rebuilt.
+      - [x] Second-review fixes merged to `main`, the six place files rebuilt.
 - [ ] 1. Build as the block above says.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save), then open the file named
       in the block above.
