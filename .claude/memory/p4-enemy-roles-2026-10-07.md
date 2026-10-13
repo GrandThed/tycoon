@@ -21,7 +21,18 @@ Contract: `docs/INTERFACES.md` "P4 contracts" (on the branch until its first mer
   T + lag against the server's root (where their own screen had them at T); an i-frame that
   covered any of that window voids the hit; no client-claimed dodge position.
 
-**Where:** worktree `C:\Users\benja\Desktop\tycoon-p4`, branch `p4-enemy-roles`.
+**Session closed 2026-10-12; P5 starts in a NEW session from `docs/prompts/p5-missions.md`.**
+- Everything of P4 is on `main`. The worktree `tycoon-p4` is removed and the branch
+  `p4-enemy-roles` deleted (fully merged); P5 gets a new worktree.
+- **Stop 3 (the Warlord) was merged but never played:** Studio's log shows no session on that
+  build when the session ended, and Ben said "we are continuing to P5 in a new session". P4's
+  last box is open; ask him first thing. The `fight` set is also unseen.
+- The server engineer's scratch harness is kept as `tools/crowd_harness/` (`run_harness.py`,
+  492 checks on the real crowd modules under `tools/bin/luau.exe`; `mutate.py` proves them).
+  It is a gate from P5 on. The other agents' scratch (the client's models, the designer's
+  probes) went with the session.
+
+**Where it was built:** worktree `C:\Users\benja\Desktop\tycoon-p4`, branch `p4-enemy-roles` (gone).
 - **Wave 1 is committed there (e14c4cb, 2026-10-07, local only):** review 2 Critical, 1 Major,
   10 Minor, all fixed or ruled; QA green; docs written (PLAN "P4", PLAYTEST and MANUAL_STEPS
   "P4 wave 1", a 10-step optional quick look that opens with the P3.1 melee check). Merged to
