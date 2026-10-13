@@ -8723,3 +8723,653 @@ His sign-off was a look, not the checklist: the lettered questions (the garden w
 them), phone, low graphics, two players and the measurement are unanswered. Open after the merge:
 `docs/MANUAL_STEPS.md` §21 step 92 (the 12 uploaded Orbital props nothing draws, the unused GLBs in
 the shared kit folders) and the follow-ups in `docs/PLAN.md` wave 4.
+
+# P5 contracts — back into the missions (Ben, 2026-10-12)
+
+Plan of record: `docs/COMBAT_DESIGN.md` §9 and §10 step 6. Branch `p5-missions`, worktree
+`C:\Users\benja\Desktop\tycoon-p5`. The range's combat (crowd enemies with no Humanoid, the 13
+weapon families, abilities, the player's body) replaces the old mission combat (`EnemyService`,
+`CombatService`). Four waves, each ending in a playtest stop:
+
+| Wave | Scope |
+|---|---|
+| 1 | **Crowd in a mission:** Village, solo, the range loadout. This section. |
+| 2 | Loadout and progression: free variant styles in the Armory, profile schema v7 (`combat.loadout`). |
+| 3 | All four eras, both bosses everywhere, reward garnish; `EnemyService`, `CombatService` and the old mission client paths deleted. |
+| 4 | Co-op: revive by a teammate, party scaling checked, debug bots as crowd targets. |
+
+**Gate protocol.** Ben opens `tycoon\build\proving.rbxl` after "Build all" in the main checkout,
+so a wave he must judge is merged to `main` once review and QA are green, and the place files are
+rebuilt there. He authorised that for P4 ("Merge each ready wave"); the lead asks once whether it
+holds for P5 before the first merge.
+
+**Publish freeze.** From the Wave 1 merge until Wave 3, the Expeditions place on `main` plays only
+missions that carry a `crowd` block (Village). Do not publish the Expeditions place from `main`
+until Wave 3 is merged. `docs/MANUAL_STEPS.md` says so in its P5 section.
+
+## Rulings (Ben, 2026-10-12)
+
+1. **Variants: free styles in the Armory.** Every owned family offers all its variants; switching
+   happens only in the lobby and between waves. (Wave 2. Wave 1 plays the range's loadout.)
+2. **One 10-wave skeleton for every era,** scaled per era by config: fodder in waves 1–2, the
+   slinger in 3, the brute in 4, the **Colossus** as the boss of wave 5, marksman and lobber in
+   6–7, plated elites in 8–9, the **Warlord and his guard** as the boss of wave 10.
+3. **Going down: a teammate standing near revives you,** with no button. Solo, the first down
+   ends the run. (The revive is Wave 4. Wave 1 ships the solo rule and the seam: one
+   `WaveService.OnDown` rule function and a `PartyMember.down` field.)
+4. **`proving.rbxl` boots into a mission.** The range stays as a Studio-only bench behind a
+   config switch.
+
+## Wave 1 — crowd in a mission (Village, solo)
+
+**Goal.** Play opens on Raider Woods, wave 1, fought with the range's weapons against crowd
+enemies. All ten waves run, with the Colossus at wave 5 and the Warlord at wave 10. Rewards are
+paid per kind into the existing pool, split and flush. Health and damage follow the player's
+Armory tiers. Solo, the first down ends the run. Every number is config.
+
+### What the study got right, and what the code corrected (lead, checked 2026-10-12)
+
+- **Right:** the crowd modules (`CrowdService`, `CrowdBrain`, `ThreatField`, `CrowdCodec`,
+  `HitShapes`) are place-agnostic. The gates are `RangeService.Configure`, `RangeService.IsActive`
+  (read by `AbilityService.Start`/`AddPlayer`/`OnCast`) and `CameraController.IsRange()` (eight
+  client modules). `VitalsService.Start` is called only by `RangeService.Start`.
+- **Corrected: there is one strike choke point, not two.** `RangeService.Strike` (the ability
+  hook) resolves through the same local `strike()` as every weapon hit, projectile, chain jump and
+  the slam. `strike()` is the only caller of `CrowdService.Damage`.
+- **Corrected: `CombatService` is more than hits.** It also batches the mission effects
+  (`PushFx`: `wave`, `bossDown`, `mentor`, `kill`), keeps the damage tally that the contribution
+  split reads, and is `ArenaService`'s share source (`SetShareSource`). Unmounting it moves those
+  to `RunFx` (new) and `WaveService`.
+- **Corrected: `EnemyService` cannot simply leave the tree.** `ArenaService` requires it for the
+  arena geometry setters, the collision group and the bot rig builder, and `DebugService` for the
+  bots. In Wave 1 both modules stay in the tree and are required, but **never Init'd or Started**,
+  and nothing in the mission path calls their run functions.
+- **Corrected: two writers of MaxHealth.** `ArenaService.applyMaxHp` writes the profile's
+  `Armory.MaxHp`, and `VitalsService.PrepareCharacter` pins tier 1 (range ruling 17). In
+  missions `VitalsService` becomes the only writer of a human's MaxHealth.
+- **Corrected: scales need an API.** `CrowdService.Spawn` reads HP and plate from the kind def
+  only. A boss's summons are raised inside `CrowdService` (`summon()`), not by `WaveService`. So
+  the mission scales must be crowd-wide, set once per run (`SetScales`), and not passed per spawn.
+- **Corrected: armour is a flat tier-1 number too** (`max(amount - armor, amount * armorFloor)`).
+  It is judged on the unscaled amount like `heavyHit` and plates, or it would fade with tier.
+- **Corrected: "recommended power" is gear 2/1, not tier 1.** In `docs/BALANCE.md`, Raider Woods
+  is "60 (2/1, 57)": melee tier 2 and ranged tier 1 give power 57. The reward band comes from the
+  same line: 142,185 cash, 256 Timber, 35 Valor, 8:32.
+- **Corrected: a run's end kicks in Studio.** The summary's group return uses the Studio bridge,
+  which kicks the player. A proving mission therefore restarts in place instead (ruling 19).
+
+### Rulings (lead)
+
+| # | Ruling | Why |
+|---|---|---|
+| 5 | **One mode value, decided once at boot:** `CombatMode.Get()` returns `"range"` or `"mission"`. It is `"range"` only in Studio, with `Workspace.DebugProving` true, `Combat.json debug.provingBoots == "range"` and `Tuning.IsAvailable()`. In every other case it is `"mission"`. Server and client compute it with the same function (`src/shared/CombatMode.luau`). | The client gate `CameraController.IsRange()` becomes this value. Range controllers run in both modes, and only the range's bench UI is range-only. |
+| 6 | **`RangeService` splits.** The new place-agnostic **`WeaponService`** takes attacks, draws, projectiles, dash, slam, aim checks, i-frames, the AbilityService hooks (`Strike`, `FireProjectile`, buffs, locks), the shooter record, `TuneState` (loadout) and `RangeStats` (refusals and attack readouts). `RangeService` keeps dummy sets, respawns, `OnTune`, `OnCommand` and the range-only readout fields. | Missions need the weapons and nothing of the bench. |
+| 7 | **`claimSlack` uses the server's own position history:** speed = the server root's displacement over the last `shooting.originLagMaxSeconds` ÷ that window. It no longer reads the replicated `AssemblyLinearVelocity`. It is still capped at `Tuning.FastestMove`, and slack = pad + speed × `CommitLag`. | Carried from P3.1. The client must not buy slack in a place with rewards. |
+| 8 | **Weapon damage follows the Armory tier at the choke point.** `strike()` passes the family's tier-1 amount *and* a scale: `Armory.DamageScale(cfg, slot, tier, ascension, ability)` = the slot's `WeaponDamage(tier, asc)` ÷ `WeaponDamage(tier 1, asc 0)`. For an ability, the level's `abilityMult` replaces `damageMult`. The scale is computed once per resolved attack (carried on the `Tally`). The slot is the family's `weapons[family].slot`, and the slam uses melee. In the range the scale is always 1. | Weapon numbers in `ProvingGrounds.json` are tier-1 values (range ruling 17). The ladder is ×0.67 (starter) to ×267 (tier 12). |
+| 9 | **Heavy, plate and armour are judged on the unscaled amount.** `CrowdService.Damage(id, amount, byUserId, push, launch, scale)`: `amount` stays the tier-1 number. `heavyHit`, the plate test, the plate's loss, the interrupt and armour all read `amount`. Only the HP loss is multiplied: `hpLoss = max(amount - armor, amount * armorFloor) * scale`. A plate hit returns the plate loss (unscaled), so the number and the plate bar agree. | Plates and interrupts are a mechanic (how many heavy hits), not a damage race. `heavyHit` would stop meaning anything at tier 3 (BALANCE "What scales with weapon tier"). |
+| 10 | **Enemy stats get mission scales** from the mission's `crowd` block: `hpScale` (HP of every body, summons included), `plateScale` (plate HP, in unscaled units), `damageScale` (every enemy hit on a player), `regenShare` (player regen as a share of MaxHealth per second, after `player.regenDelay`). Overdrive multiplies `hpScale` and `damageScale` by its `hpMult` and `damageMult`. Wired in Wave 1 but not tuned. | Enemy damage must grow with player tier (BALANCE: ×1.8 at tier 4 … ×17 at tier 12). Per era is the unit, because a mission's recommended power is per era. |
+| 11 | **Player health in missions = `Armory.MaxHp` of the player's gear** (`WeaponService.GearOf`), not pinned to tier 1. `VitalsService` is told it is in mission mode (`SetMission`). In mission mode it writes MaxHealth, and `ArenaService.applyMaxHp` keeps only its bot branch. | Range ruling 17 said "P5 returns to the profile". |
+| 12 | **The baked test player's gear.** In a proving mission (Studio, `DebugProving` true, mode `mission`), `Combat.json debug.provingGear` (when present) replaces the profile's tiers for health and the damage scale. It is never written to the profile. Default `{ melee = 2, ranged = 1 }`, ascension 0: recommended power for Village. | Ben's Studio profile holds whatever earlier tests left. The playtest must be at the power the bands are measured at. |
+| 13 | **Who enemies may target, and whom their shapes may hit, is one filter.** In missions it is `ArenaService.IsFighting(member)` (admitted, not waiting on the pad, alive), and not down. A player the filter rejects is neither a target nor judged by any shape, lobs and rings included. | The Village lobby pad is the arena centre: waiting members stand inside the fight. |
+| 14 | **Kills carry what the run needs.** `CrowdService.OnKilled(callback(id, byUserId, info))`, with `info = CrowdKillInfo { id, kind, boss, position, byUserId, damageBy }`. `damageBy` is HP removed from that body per userId, each hit capped at the HP it had left (plate loss is not counted). Bodies removed without a kill (a boss's summons when it dies, `Clear`) pay nothing and count nothing. | `WaveService` pays fixed cash and materials per kind and keeps `ContributionShares`, `SplitPool`, `MentorBonus` and `DamageShare` from `damageBy`. |
+| 15 | **Waves are crowd groups.** `WaveService` reads `mission.crowd.waves[wave]` through the pure `Combat.CrowdWave`. Each group is queued as bursts of up to `crowd.burst` bodies. A burst spawns at the next rim point (`ArenaService.EnemySpawnPoints`, round-robin), in a grid of pitch `crowd.burstSpacing`, with `CrowdService.Spawn(kind, pos, "fight", arenaCentre)`. Bursts are paced by `Combat.BurstInterval` (the old `SpawnInterval` over bursts instead of bodies). A boss spawns first, at `boss.at`, with `hpMult = bossHpMult`. The queue holds while `CrowdService.AliveCount() >= crowd.maxAlive`, and a refused body stays queued. | Burst spawning lets 30–60 bodies arrive as a crowd, not as a drip. |
+| 16 | **Boss HP × party.** The boss body takes `Combat.WaveSpec`'s `bossHpMult` (`1 + coop.bossHpPerExtraPlayer × extras`). Its summons do not. Ordinary groups scale by count only: `count × (1 + (perExtra or coop.countPerExtraPlayer) × extras)`. | C2 ruling, unchanged. Solo in Wave 1 means both are 1, but they are wired. |
+| 17 | **The director measures crowds.** Kill stamps come from crowd kills, summons included. The expected pace is `spec.total / targetWaveSeconds`. Merges and the extra elite (`crowd.eliteKind`, optional) work as before, except that **a boss wave is never merged into or out of**. `crowd.maxAlive` (per mission, ≤ `ProvingGrounds.json crowd.maxAlive`) gates the spawn queue. `director.maxAlive` (24, the Humanoid budget) is not read by crowd missions; it goes with `EnemyService` in Wave 3. | The bosses are judged as whole fights. |
+| 18 | **Going down in a mission.** A down does not end by itself (no get-up timer; `hurt.upAt` is absent). `VitalsService` calls the `onDown` hook once per down, after that frame's batch is raised. `WaveService.OnDown(player)` is the one rule function. In Wave 1: when no fighting human is left standing, it calls `ArenaService.MarkDied(userId)` for each and `EndRun("down")`. Solo, that is the first down. A downed player in a run that goes on (two humans in Studio) is stood up at full health at the next wave boundary (`VitalsService.StandUp`). This stand-in is replaced by the Wave 4 revive. | The ruling-3 seam. The old 8 s Roblox respawn is gone from missions. |
+| 19 | **A proving mission plays in a loop.** When `CombatMode.IsProving()` and the mode is `"mission"`: the run starts `debug.provingStartDelay` seconds after the first human is admitted, with no Ready button. It starts at `debug.provingStartWave`. After the summary's `coop.returnGroupSeconds`, it resets and starts again, instead of sending anyone home. Rewards are paid to the Studio profile as in any mission. | Ben does not use panels, and the Studio return kicks. |
+| 20 | **Old remotes retired from use.** `RequestAttack`, `RequestFire`, `RequestDraw` and `RequestAbility` lose their handlers in `Main`. Their definitions stay in `CombatRemotes` until Wave 3, and no client sends them. Missions use `RequestRangeAttack`, `RequestRangeDraw`, `RequestRangeAbility`, `RequestDash` and `RequestSlam` (names unchanged). `RequestTune` and `RequestRangeCommand` stay range-only. | No new remote in Wave 1. |
+| 21 | **Who may act.** In missions, `WeaponService` and `AbilityService` refuse an intent unless `ArenaService.InRun()` and the member is fighting and not down. A refused attack is answered with `RangeStats.refusedSeq`, as today. | The old `CombatService` lobby and waiting refusals, kept. |
+| 22 | **Mission HUD has no attack button.** The touch controls are the range's (auto-fire, auto-swing, ability and slot buttons). The old Attack, stance and ability cluster of `CombatHud` is not shown in missions. The boss bar is `BossBar` (`CrowdRenderer.GetBoss`). `RunState.boss` is nil in crowd missions, so the old bar never shows. No sound. | COMBAT_DESIGN §3 and Ben's phone rule. |
+| 23 | **No per-kill `kill` effect** in crowd missions (5–10× the kills; `CrowdRenderer` draws the deaths). `wave`, `bossDown` (name = the kind's `name`) and `mentor` are still sent, through `RunFx`. Per-kill reward pops are Wave 3 garnish. | Effect volume. |
+| 24 | **Debug bots are unsupported in crowd missions until Wave 4.** The crowd targets `Player`s only. The `bots` lever warns once and does nothing. | Bots are Humanoid rigs. |
+| 25 | **Studio levers re-pointed at the crowd:** `wave` → `WaveService.ForceWave` (clears the crowd and its threats, starts that wave at once, credits nothing skipped); new `skip` (`"next"` or `"boss"`); `spawn` (a crowd kind, at the next rim point, with the run's scales); `godMode` → `VitalsService.SetGod`; `killAll` → `CrowdService.KillAll(0)` (rewards paid, credit to nobody); `setGear` writes the profile as before, then `VitalsService.RefreshMaxHp`. Every lever is still dead outside Studio and in the range. | C1's lever contract, same two entry points. |
+| 26 | **A Studio-only perf line.** `CrowdService` prints `[Perf] crowd step p50 X.XX ms p95 Y.YY ms (N steps, peak alive M)` every `debug.perfLogSeconds` (10), in Studio, in both modes, over the steps since the last line. Nothing prints in a frame with no step. | The lead reads server step time from Studio's log (`%LOCALAPPDATA%\Roblox\logs`). Ben never has to read the panel. |
+| 27 | **A mission without a `crowd` block is refused** with `"locked"` at arrival, with one warn naming it. In Wave 1 that is Boomtown, Metropolis and Orbital. | Hence the publish freeze above. |
+| 28 | **Hard rules, unchanged:** nothing in the crowd step or a Heartbeat run loop yields; the server owns all state; every remote is validated and rate-limited; every constant is in Config JSON; `src/shared/Economy.luau` is untouched; `sim_economy.py --check` stays green unchanged. | |
+
+**Known limits carried into Wave 1 (told to Ben, not fixed):**
+- The crowd walks through the arena's boulders and fence posts, as in the range.
+- The keepAway bands (marksman 28–45) were tuned in a 220-stud arena. In 110 they span most of the
+  floor, and the brain stops at the bound.
+- Kiting a circle still avoids most hits, though a 110-stud arena makes it harder.
+
+### Boot sequence (`src/combat/server/Main.server.luau`)
+
+```
+mode = CombatMode.Get()                         -- once, before anything
+RemoteService.Configure(CombatRemotes)
+WeaponService.Configure(mode)                   -- active in both modes when Tuning is available
+RangeService.Configure(mode == "range")
+ArenaService.SetSnapshotSender(sendSnapshot)
+ordered Init, then Start:
+  DataService, RemoteService, RunRegistry,
+  ArenaService,
+  WeaponService     -- Start: VitalsService.Start(i-frame hooks); its Heartbeat (projectiles, air, i-frames)
+  RangeService      -- range only: proving arena, CrowdService.SetBounds, WeaponService.SetArena, default set
+  AbilityService    -- both modes (gate: WeaponService.IsActive())
+  waveBoot          -- WaveService.Init (mission hooks; inert in the range) + Boot (its loop)
+  DebugService
+  returnBoot
+```
+
+- **No `EnemyService` and no `CombatService` in the list.** Main no longer requires them.
+- **`runJoinSequence`, range:** `RangeService.AddPlayer` (which calls `WeaponService.AddPlayer`),
+  `AbilityService.AddPlayer`, snapshot. Unchanged otherwise.
+- **`runJoinSequence`, mission:** as today up to `ArenaService.Admit`, then
+  `WeaponService.AddPlayer(player)`, `AbilityService.AddPlayer(player)`, snapshot. A mission with
+  `crowd == nil` is refused before `EnsureRun` (ruling 27).
+- **Character:** in missions, `ArenaService`'s CharacterAdded handler ends with the character hook
+  (`ArenaService.SetCharacterHook`). `WaveService.Init` points that hook at
+  `WeaponService.PrepareCharacter`, which resets the shooter's air state and calls
+  `VitalsService.PrepareCharacter`. In the range, `RangeService` places the body and then calls
+  `WeaponService.PrepareCharacter`.
+- **`releasePlayer`:** `AbilityService.RemovePlayer`, `RangeService.RemovePlayer` (range),
+  `WeaponService.RemovePlayer`, then `ArenaService.Remove` etc. as today.
+- **Handlers:** `RequestRangeAttack` → `WeaponService.OnAttack`, `RequestRangeDraw` →
+  `WeaponService.OnDraw`, `RequestDash` → `WeaponService.OnDash`, `RequestSlam` →
+  `WeaponService.OnSlam`, `RequestRangeAbility` → `AbilityService.OnCast`, `RequestTune` /
+  `RequestRangeCommand` → `RangeService` (inert outside the range). `RequestReady`: ignored when
+  `RangeService.IsActive()` and also in a proving mission (ruling 19). The four old handlers are
+  removed.
+- **Run start (`WaveService.Start`):** reads `Combat.CrowdWave(mission, startWave, …)` and calls
+  `CrowdService.SetScales({ hp = spec.hpScale, plate = spec.plateScale })`,
+  `VitalsService.SetMission(rules)` (ruling 11, with `damageScale` and `regenShare` from the spec),
+  `WeaponService.SetArena(ArenaService.ArenaBounds())` and `CrowdService.SetBounds(...)` (the
+  first run only; the arena is built at the world origin like every arena). Every member then
+  stands up at full health.
+- **Boot print:** `[Combat] booted — mission (crowd)`, `— mission (crowd, proving: <missionId> from wave <n>)`
+  or `— Proving Grounds (range)`.
+
+### `CombatMode` and the proving switch
+
+- `src/shared/CombatMode.luau` (new; uses `RunService`, `Workspace`, `Catalog`, `Tuning`; not
+  pure, and it must not be required by `CrowdService` or `VitalsService`, which the harness
+  loads):
+  - `CombatMode.Get(): Types.CombatMode`, cached after the first call. On a client it first
+    waits for `game.Loaded` in Studio, exactly as `CameraController.detectRange` does today.
+  - `CombatMode.IsProving(): boolean` = Studio and `Workspace[debug.provingAttribute] == true`.
+- `tools/proving_project.py` keeps baking `DebugProving = true`, and also bakes
+  `DebugMission = debug.provingMission` (the existing `missionAttribute`, which also bypasses the
+  era lock in Studio).
+- **The switches, all in `Combat.json debug`, flipped by the lead and followed by "Build all":**
+  - `provingBoots`: `"mission"` (P5 default) or `"range"` (the bench, every P1–P4 set as before).
+  - `provingMission`: `"village"`.
+  - `provingStartWave`: `1`. Set it to 5 or 10 for a boss-only build.
+  - `provingStartDelay`: `3` seconds.
+  - `provingGear`: `{ "melee": 2, "ranged": 1 }`. Optional `ascension` `{ melee, ranged }`.
+- **In play (Studio only, mission mode):** **B** skips to the next boss wave (5, then 10), and
+  **N** skips to the next wave. Both go through `RequestDebug("skip", "boss" | "next")`. A small
+  Studio-only hint in the HUD corner reads `B boss · N next wave`.
+
+### Server modules (luau-engineer; run as two instances A and B with the disjoint files below)
+
+**A — weapons.**
+
+- **`WeaponService.luau` (new)**, moved from `RangeService` with the behaviour unchanged except
+  rulings 7, 8 and 21. It must stay at ≤ 180 top-level locals; group constants and state into
+  tables from the start. Public API:
+  ```luau
+  WeaponService.Configure(mode: Types.CombatMode): ()
+  WeaponService.IsActive(): boolean
+  WeaponService.Mode(): Types.CombatMode
+  WeaponService.Init(): ()
+  WeaponService.Start(): ()            -- VitalsService.Start({ iframeWindow, grantIframes }); Heartbeat
+  WeaponService.SetArena(center: Vector3, halfSize: Vector3): ()
+  WeaponService.SetActGate(gate: ((player: Player) -> boolean)?): ()   -- ruling 21; nil = always
+  WeaponService.SetStatsProvider(provider: ((player: Player, stats: Types.RangeStats) -> ())?): ()
+  WeaponService.AddPlayer(player: Player): ()        -- loadout = ProvingGrounds.json loadout (Wave 1)
+  WeaponService.RemovePlayer(player: Player): ()
+  WeaponService.PrepareCharacter(player: Player, character: Model): ()
+  WeaponService.GearOf(player: Player): (Types.SlotTiers, Types.SlotTiers)  -- (gear, ascension), ruling 12
+  WeaponService.DamageScale(player: Player, slot: string, ability: boolean): number  -- 1 in the range
+  WeaponService.AbandonProjectiles(): ()
+  WeaponService.OnAttack / OnDraw / OnDash / OnSlam   -- signatures as RangeService's today
+  WeaponService.IsInvulnerable / IframeWindow / GrantIframes
+  -- AbilityService hooks, signatures unchanged from RangeService:
+  WeaponService.LoadoutOf / RootOf / CheckAim / GroundPoint / FloorBelow / SeedFor
+  WeaponService.Strike / FireProjectile / SetAttackBuff / SetAbilityLock / OnLoadoutChanged
+  ```
+  - `GearOf` in the range returns tier 1 in both slots and ascension 0. In a proving mission it
+    returns `debug.provingGear` when present. Otherwise it returns the profile's
+    `combat.gear` and `combat.ascension`.
+  - `RangeStats` is assembled here (refusals, `lastHits`, `lastKills`, `dps`, ability totals). The
+    provider (set by `RangeService`) fills `clearSeconds`, `alive`, `serverFrameMs`,
+    `damageTaken`, `downs` and `god`. In missions it is still sent, because the client needs
+    `refusedSeq`.
+  - `TuneState` (overrides + loadout) is sent at `AddPlayer` in both modes. Overrides are always
+    empty in missions.
+- **`RangeService.luau`**: keeps `Configure`, `IsActive`, `AddPlayer`/`RemovePlayer` (wrapping
+  `WeaponService`), `Start`, the sets, respawns, `OnTune`, `OnCommand` and the stats provider. Its
+  header documents what moved. The behaviour in the range is byte-for-byte that of P4.
+- **`AbilityService.luau`**: requires `WeaponService` instead of `RangeService`. Its gate is
+  `WeaponService.IsActive()`. `OnCast` also honours the act gate. Kill refunds use the unchanged
+  `(id, byUserId)` of `OnKilled`.
+- **`StrikeTally.luau`**: `StrikeTally.New(scale: number?)`, and `Tally.scale` (default 1) is
+  what `strike()` passes to `CrowdService.Damage`.
+- **`src/shared/Armory.luau`**: adds the pure `Armory.DamageScale(cfg, slot, tier, ascLevel,
+  ability): number`. It is 1 when the tier-1 damage is 0 or the slot is unknown, and it is mirrored
+  in `tools/sim_range.py` and `tools/sim_combat.py`.
+
+**B — the mission.**
+
+- **`CrowdService.luau`**:
+  ```luau
+  export type CrowdScales = { hp: number, plate: number }
+  export type CrowdKillInfo = {
+  	id: number, kind: string, boss: boolean, position: Vector3,
+  	byUserId: number, damageBy: { [number]: number },
+  }
+  CrowdService.SetScales(scales: CrowdScales): ()        -- default { hp = 1, plate = 1 }; the range never calls it
+  CrowdService.Spawn(kind, position, behaviour, anchor: Vector3?, hpMult: number?): number
+  	-- maxHp = max(def.hp * scales.hp * (hpMult or 1), 1); plate = (def.plate or 0) * scales.plate
+  	-- summon() spawns take scales.hp and no hpMult
+  CrowdService.Damage(id, amount, byUserId, push?, launch?, scale: number?): (number, boolean, Verdict?)
+  	-- ruling 9; scale nil = 1; the guarded test is unchanged
+  CrowdService.OnKilled(callback: (id: number, byUserId: number, info: CrowdKillInfo) -> ()): ()
+  CrowdService.KillAll(byUserId: number): number         -- every living body dies through the death path
+  ```
+  - `damageBy` lives on the record and is built in `Damage`.
+  - Perf line: ruling 26. Use a fixed ring of step times, no allocation per step, and sort a copy
+    only when printing.
+  - In the range, every value with `scale = 1` and `scales = {1, 1}` is identical to P4. The
+    harness proves it.
+- **`VitalsService.luau`**:
+  ```luau
+  export type MissionRules = {
+  	mayJudge: (player: Player) -> boolean,   -- ruling 13: targeting AND judging
+  	onDown: (player: Player) -> (),          -- ruling 18; called once per down, after the frame's batch
+  	maxHpOf: (player: Player) -> number?,    -- Armory.MaxHp(GearOf); nil = leave the Humanoid's
+  	damageScale: number,
+  	regenShare: number,
+  }
+  VitalsService.SetMission(rules: MissionRules?): ()   -- nil = range rules (P4, unchanged)
+  VitalsService.SetGod(player: Player, on: boolean): ()
+  VitalsService.StandUp(player: Player): ()            -- ends a down, full health, getUpIframes
+  VitalsService.RefreshMaxHp(player: Player): ()       -- keeps the health share
+  VitalsService.ClearThreats(): ()                     -- OnSetLoaded's clearing half; OnSetLoaded calls it
+  ```
+  - In mission mode:
+    - The damage of a landed hit is `math.max(math.round(attack.damage * damageScale), 1)` for any
+      `attack.damage > 0`. This happens at the one place an attack's damage is read, the queue and
+      travelling contacts alike.
+    - Regen is `regenShare * MaxHealth` per second after `player.regenDelay`.
+    - A down never ends by itself.
+    - `PrepareCharacter` writes MaxHealth from `maxHpOf` and fills the health.
+    - The `canTarget` threat hook is `not down and mayJudge(player)`.
+  - The module still requires no `ArenaService`, `WaveService` or `CombatMode`: it learns all of
+    it through `SetMission`.
+- **`WaveService.luau`**: requires `CrowdService`, `VitalsService`, `WeaponService` and `RunFx`.
+  It no longer requires `EnemyService` or `CombatService`.
+  - **Init:** in mission mode only:
+    - `CrowdService.OnKilled(onCrowdKilled)`
+    - `ArenaService.SetShareSource` (run damage map)
+    - `ArenaService.SetDownSource(VitalsService.IsDown by userId)`
+    - `ArenaService.SetCharacterHook(WeaponService.PrepareCharacter)`
+    - `WeaponService.SetActGate`
+    - `ArenaService.SetResetHook(WaveService.Reset)`
+  - **Spawning:** rulings 15–17.
+  - **Wave clear:** the queue is empty and `CrowdService.AliveCount() == 0`.
+  - **Phase:** `"boss"` while the boss body lives.
+  - **`onCrowdKilled(id, byUserId, info)`:**
+    - adds `Combat.CrowdReward(mission, info.kind, spec)` to the pool;
+    - adds `info.damageBy` to the flush tally and the run map;
+    - counts the kill for `byUserId` when it is a member;
+    - stamps the tempo;
+    - when `info.boss`, adds the boss's `valor × rewardMult` and pushes `bossDown`.
+  - The flush, `ContributionShares`, `SplitPool`, `CombatCashMult`, `payMentors`, the mission
+    record and the snapshot are unchanged.
+  - **`EndRun`:** `CrowdService.Clear()`, `VitalsService.ClearThreats()`,
+    `WeaponService.AbandonProjectiles()`, then as today.
+  - **Breather:** no flat breather regen in crowd missions (`VitalsService` regen is the only
+    healing). At every wave boundary, downed members stand up (ruling 18).
+  - **New public functions:** `WaveService.OnDown(player)` (ruling 18) and
+    `WaveService.Skip(which: "next" | "boss")`. `ForceWave`, `SpawnOne(kind)`, `KillAll` and
+    `Reset` are rewritten for the crowd.
+  - **Proving loop:** ruling 19 (`tickSummary` branches on `CombatMode.IsProving()`).
+  - **`RunFields`:** `alive` = `CrowdService.AliveCount()`; `remaining` = queued bodies;
+    `boss = nil`.
+- **`ArenaService.luau`**:
+  - adds `ArenaBounds(): (Vector3, Vector3)` (floor top centre; half extents with the same
+    `BOUNDS_HALF_HEIGHT` as the range);
+  - adds `EnemySpawnPoints(): { Vector3 }`;
+  - adds `SetCharacterHook(hook)`, called last in its CharacterAdded handling;
+  - adds `SetDownSource(source: (userId: number) -> boolean)`, which fills `PartyMember.down`;
+  - `applyMaxHp` keeps only its bot branch (ruling 11).
+  - Its `EnemyService` require and setter calls stay until Wave 3.
+- **`RunFx.luau` (new)**: `CombatService.PushFx` and its per-frame batching, moved verbatim, as
+  `RunFx.Push(fx)` and `RunFx.PushTo(player, fx)`, with one `FireClient` per player per
+  Heartbeat. It is used by `WaveService` and `DebugService`.
+- **`DebugService.luau`**: ruling 25, plus the lever `skip`. The bot tick is a no-op in crowd
+  missions.
+- **`Main.server.luau`**: the boot sequence above.
+- **`src/shared/Combat.luau`** (pure; mirrored in `tools/sim_combat.py` by the economy-designer):
+  ```luau
+  export type CrowdWaveSpec = {
+  	wave: number,
+  	groups: { { kind: string, count: number } },   -- counts resolved for party size and Overdrive
+  	total: number,                                -- sum of group counts (boss not included)
+  	boss: Types.MissionCrowdBoss?,
+  	bossHpMult: number,
+  	hpScale: number, plateScale: number, damageScale: number, regenShare: number,
+  	rewardMult: number,                           -- overdrive.rewardMult or 1
+  }
+  Combat.CrowdWave(mission, wave, partySize, overdrive, combatCfg): CrowdWaveSpec?  -- nil: no crowd block / no such wave
+  Combat.CrowdReward(mission, kind, spec): (number, number)   -- round(cash*rewardMult), round(materials*rewardMult); unknown kind = 0, 0
+  Combat.BurstInterval(mission, bursts, tempo, overdrive, combatCfg): number
+  	-- targetWaveSeconds / bursts / tempo / (overdrive and spawnRateMult or 1); targetWaveSeconds when bursts <= 0 or tempo <= 0
+  ```
+  - Group count: `round(count × (1 + (perExtra or coop.countPerExtraPlayer) × extras) ×
+    (overdrive and countMult or 1))`, floored at 0. `extras = max(partySize, 1) - 1`.
+  - `hpScale` and `damageScale` take Overdrive's `hpMult` and `damageMult`. `plateScale` and
+    `regenShare` do not.
+- **`src/shared/CombatMode.luau` (new)** and **`src/shared/Types.luau`** (the block below,
+  applied verbatim as B's first edit).
+- **`tools/proving_project.py`**: also bakes `DebugMission` (see above).
+- **`tools/crowd_harness/`**: a new `tests_p5.luau`, registered in `run_harness.py`, with at least
+  these cases:
+  - `SetScales` and the `hpMult` maths, summons included;
+  - `Damage` with `scale`: heavy, plate and armour judged on `amount`, HP loss scaled, plate loss
+    unscaled;
+  - `damageBy` capped at the HP left, and not counted for plate loss;
+  - `OnKilled` info (kind, boss flag), and no callback for bodies dismissed with a boss;
+  - `KillAll`;
+  - `SetMission`: `mayJudge` keeps a rejected player out of targeting and out of a lob's circle;
+    `damageScale` rounding; `regenShare`; a down that never ends, and `onDown` called exactly once;
+    `StandUp`;
+  - range rules unchanged with no `SetMission`.
+
+  Extend `mutate.py` with at least three mutations these cases must catch: plate loss scaled,
+  `damageBy` uncapped, and `mayJudge` skipped for areas.
+
+### Client (ui-engineer)
+
+- **One mode gate.** Every `CameraController.IsRange()` call site reads `CombatMode.Get()`.
+  - `CrowdRenderer`, `FeedbackController`, `AbilityFx`, `ThreatFx`, `VitalsController` and
+    `MovementController` run in **both** modes.
+  - `InputController` uses its range bindings (`RequestRangeAttack` and the rest) in both modes.
+    The C1 mission bindings stay unbound until Wave 3 deletes them.
+  - `CameraController.IsRange()` stays as `CombatMode.Get() == "range"` for the range-only
+    pieces.
+- **`CameraController`**: ADS, the pivot lag and the leap follow apply in both modes. The phase
+  rules (`camera.freeCursorPhases`) apply in missions only, as before.
+- **`InputController`**: no attacks or abilities while the run phase is `lobby`, `summary` or
+  `ended`, or while the player is down. The server refuses them anyway; this keeps the client from
+  drawing swings that will be taken back.
+- **`CombatUIController`**: a third boot, `bootMission`. It mounts the range HUD pieces
+  (`Crosshair`, the Feedback overlay, `AbilityBar`, the `VitalsHud`, `BossBar`, the range's touch
+  buttons) and the run layer of `CombatHud`: wave and phase banner, breather timer, wallet, party
+  list, Ready/Leave, `SummaryCard`, the safe-mode card.
+  - `CombatHud` gains a `deps` flag (for example `actions = false`) that leaves out its
+    Attack/stance/ability cluster, its HP bar and its boss bar.
+  - The Studio-only `B` / `N` keys and their corner hint (above) live here.
+  - `RangePanel` is range-only.
+- **`VitalsHud` / `VitalsController`**: a `hurt` with `down = true` and no `upAt` shows a "DOWN"
+  banner with no countdown. Solo, the summary card follows within a frame or two.
+- **`CombatFxController`**: unchanged; it keeps `wave`, `bossDown` and `mentor`. Verify it
+  ignores the range kinds as today.
+- **Locals.** `FeedbackController` (159) and `CrowdRenderer` (151): group their state into tables
+  before adding anything. Prefer new behaviour in new modules. `py tools/check_compile.py` is in
+  every verify.
+- `src/client/UI/Theme.luau`: add only.
+
+### Types (applied verbatim by luau-engineer B in `src/shared/Types.luau`)
+
+```luau
+-- P5 wave 1 (docs/INTERFACES.md "P5 contracts")
+export type CombatMode = "range" | "mission"
+
+-- Missions/<n>_<Era>.json `crowd` block. Counts are per solo run; party size scales them
+-- (Combat.CrowdWave). Scales multiply ProvingGrounds.json's tier-1 kind numbers.
+export type MissionCrowdGroup = { kind: string, count: number, perExtra: number? }
+export type MissionCrowdBoss = { kind: string, at: { number }, valor: number }  -- at = { x, z }
+export type MissionCrowdWave = { groups: { MissionCrowdGroup }, boss: MissionCrowdBoss? }
+export type MissionCrowdReward = { cash: number, materials: number }
+export type MissionCrowdConfig = {
+	hpScale: number,
+	plateScale: number,
+	damageScale: number,
+	regenShare: number,
+	maxAlive: number,
+	burst: number,
+	burstSpacing: number,
+	eliteKind: string?,
+	waves: { MissionCrowdWave },
+	rewards: { [string]: MissionCrowdReward },
+}
+-- MissionConfig gains:
+--	crowd: MissionCrowdConfig?,
+
+-- Combat.json `crowdSkeleton` (ruling 2): wave i may hold the kinds introduced in waves 1..i
+-- (bosses excepted) and must hold its own `introduces`.
+export type CrowdSkeletonWave = { introduces: { string }, boss: string? }
+-- CombatConfig gains:
+--	crowdSkeleton: { CrowdSkeletonWave },
+
+-- CombatDebugConfig gains:
+--	provingBoots: string,          -- "mission" | "range"
+--	provingMission: string,
+--	provingStartWave: number,
+--	provingStartDelay: number,
+--	provingGear: { melee: number, ranged: number, ascension: { melee: number, ranged: number }? }?,
+--	perfLogSeconds: number,
+
+-- PartyMember gains:
+--	down: boolean,                 -- ruling 18; false for bots
+```
+
+`CrowdWaveSpec` lives in `Combat.luau`; `CrowdScales` and `CrowdKillInfo` in `CrowdService`;
+`MissionRules` in `VitalsService`. They are exported from their modules, not from `Types`.
+
+### Config (economy-designer owns the files; the shapes are fixed here)
+
+`Combat.json`:
+
+```json
+"crowdSkeleton": [
+	{ "introduces": ["fodder"] },
+	{ "introduces": [] },
+	{ "introduces": ["slinger"] },
+	{ "introduces": ["brute"] },
+	{ "introduces": [], "boss": "colossus" },
+	{ "introduces": ["marksman", "lobber"] },
+	{ "introduces": [] },
+	{ "introduces": ["armoured"] },
+	{ "introduces": [] },
+	{ "introduces": [], "boss": "warlord" }
+],
+"debug": { "...existing keys...",
+	"provingBoots": "mission", "provingMission": "village", "provingStartWave": 1,
+	"provingStartDelay": 3, "provingGear": { "melee": 2, "ranged": 1 }, "perfLogSeconds": 10 }
+```
+
+`Missions/1_Village.json` gains a `crowd` block. The old `enemies`, `waveTable` and `bosses`
+blocks stay untouched until Wave 3. `waves`, `bossWaves`, `recommendedPower` and `targetMinutes`
+keep their meaning; `targetWaveSeconds` is re-tuned for crowds.
+
+```json
+"crowd": {
+	"hpScale": 0, "plateScale": 0, "damageScale": 0, "regenShare": 0,
+	"maxAlive": 0, "burst": 0, "burstSpacing": 0,
+	"waves": [
+		{ "groups": [{ "kind": "fodder", "count": 0 }] },
+		"... ten entries, one per skeleton wave ...",
+		{ "groups": [], "boss": { "kind": "colossus", "at": [0, 0], "valor": 10 } },
+		"...",
+		{ "groups": [], "boss": { "kind": "warlord", "at": [0, 0], "valor": 25 } }
+	],
+	"rewards": {
+		"fodder": { "cash": 0, "materials": 0 }, "slinger": {}, "brute": {}, "marksman": {},
+		"lobber": {}, "armoured": {}, "guard": {}, "colossus": {}, "warlord": {}
+	}
+}
+```
+
+The zeros are placeholders for the designer's values. Valor stays 10 + 25 = 35. `boss.at` must
+lie inside the 110 × 110 floor less the kind's radius. `ProvingGrounds.json` needs no change in
+Wave 1. If tuning a mission needs a kind number changed, the range and both bosses must be
+re-checked (`sim_range.py --check`).
+
+### Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "P5")
+
+All bands are at recommended power: gear 2/1, ascension 0, the range's default loadout
+(Broadsword + Longbow), solo, no Overdrive.
+
+- **Rewards per full run** (all ten waves, boss summons included at the count `sim_range.py`
+  reports for the reacting player's boss fights):
+  - cash within ±10% of **142,185**;
+  - Timber within ±10% of **256**;
+  - Valor exactly **35**.
+
+  This holds even though the kills are 5–10× today's. Cash is before `CombatCashMult`, as in
+  BALANCE's table.
+- **Clear time:** a reacting player clears all ten waves in **10–15 minutes**, breathers
+  included. The method (per-wave spawn time against kill time from `sim_range.py`'s DPS) is
+  documented in BALANCE.
+- **Bosses at Village scales:**
+  - the **Colossus** with the default sword takes **64–90 s** (Ben called about 76 s "about
+    right");
+  - the **Warlord** takes **77–101 s** (guard, plate, duel as in Stop 3).
+  - Expect `hpScale` ≈ the melee `DamageScale` at gear 2/1 (×1.5), which keeps the range's hits
+    to kill.
+- **Threat at recommended health** (145):
+  - no single enemy hit over 25% of the bar;
+  - a player standing still in a fodder wave goes down in 6–12 s;
+  - `regenShare` close to the range's 10/130 a second.
+- **Gates:**
+  - every kind a wave can field (summons `fodder` and `guard` included) has a `rewards` entry;
+  - every wave matches `crowdSkeleton`;
+  - `#crowd.waves == waves`, and `bossWaves` equals the indices with a boss;
+  - `boss.at` lies inside the floor.
+
+### Remotes
+
+**None new, none removed.** Ruling 20 lists what changes in use. `RequestDebug` gains the lever
+string `skip` (value `"next"` or `"boss"`); its validator already admits it. `CombatFx` carries
+the same kinds as P4, plus `wave`, `bossDown` and `mentor` from `RunFx`. `hurt.upAt` is absent in
+missions. `RunState` is unchanged except `PartyMember.down`.
+
+### Ownership (Wave 1, disjoint)
+
+| Owner | Files |
+|---|---|
+| luau-engineer **A** (weapons) | new `src/combat/server/Services/WeaponService.luau`; `RangeService.luau`, `AbilityService.luau`, `StrikeTally.luau` (same folder); `src/shared/Armory.luau` |
+| luau-engineer **B** (mission) | `src/shared/Types.luau` (first), new `src/shared/CombatMode.luau`, `src/shared/Combat.luau`; `src/combat/server/Services/` `CrowdService.luau`, `VitalsService.luau`, `WaveService.luau`, `ArenaService.luau`, `DebugService.luau`, new `RunFx.luau`; `src/combat/server/Main.server.luau`; `tools/proving_project.py`; `tools/crowd_harness/run_harness.py`, `mutate.py`, new `tests_p5.luau` |
+| ui-engineer | `src/combat/client/Controllers/` `CameraController.luau`, `InputController.luau`, `MovementController.luau`, `CrowdRenderer.luau`, `FeedbackController.luau`, `VitalsController.luau`, `CombatUIController.luau`, `CombatFxController.luau` (only if needed), `AbilityFx/init.luau`, `ThreatFx/init.luau`; `src/combat/client/UI/` `CombatHud.luau`, `VitalsHud.luau`, `BossBar.luau` (only if needed), new files there; `src/combat/client/Main.client.luau`; `src/client/UI/Theme.luau` (add only) |
+| economy-designer | `src/shared/Config/Combat.json`, `src/shared/Config/Missions/1_Village.json` (values; shapes above), `src/shared/Config/ProvingGrounds.json` (only with the lead's OK); `tools/sim_combat.py`, `tools/sim_range.py`; `docs/BALANCE.md` "P5" |
+| lead | this section; `docs/COMBAT_DESIGN.md`; merges; the questions to Ben |
+| untouched | `EnemyService.luau`, `CombatService.luau`, `CombatRemotes.luau`, `CrowdBrain.luau`, `ThreatField.luau`, `CrowdCodec.luau`, `HitShapes.luau`, `Tuning.luau`, `Economy.luau`, `tools/sim_economy.py`, everything in the hub |
+
+- A and B meet at the `WeaponService` API above. B's `Main` and `WaveService` code against it
+  before A lands it, and each reports any difference "for the other owner".
+- If an engineer needs a change in a file it does not own, it reports it and the lead routes it.
+- No agent writes git, and none kills a process by image name.
+
+### Gates (every QA pass; PATH line `export PATH="$HOME/.rokit/bin:$PATH"`, Python is `py`)
+
+1. `stylua --check src`.
+2. `selene src`: one old `LegacyPanel` warning is expected.
+3. `rojo sourcemap default.project.json -o sourcemap.json` and `rojo sourcemap
+   combat.project.json -o sourcemap.combat.json`.
+4. Run `luau-lsp analyze` twice: `src/shared src/server src/client` on the hub sourcemap, and
+   `src/combat` on the combat sourcemap. Both use `--definitions=tools/types/globalTypes.d.luau`
+   and ignore `Packages/**` and `ServerPackages/**`.
+5. `py tools/check_compile.py`: Studio's limit of 200 locals; keep every module at about 180 top-level locals or fewer.
+6. `rojo build default.project.json -o build/test.rbxl`, `rojo build combat.project.json -o
+   build/combat.rbxl`, and `py tools/proving_project.py` followed by `rojo build .proving.project.json -o
+   build/proving.rbxl`.
+7. `py tools/sim_economy.py --check` (must stay unchanged and green).
+8. `py tools/sim_combat.py --check` with the new crowd section.
+9. `py tools/sim_range.py --check` with the existing 353 checks green plus the mission-scale cases.
+10. `py tools/crowd_harness/run_harness.py` (the 492 existing checks plus `tests_p5`) and
+    `py tools/crowd_harness/mutate.py`.
+
+### Definition of done (Wave 1)
+
+- Every gate above is green. In the range (`provingBoots: "range"`), every P1–P4 set behaves as
+  at P4: same numbers, same tells, the harness unchanged.
+- **`build/proving.rbxl`, Play:**
+  - the player stands in Raider Woods;
+  - the run starts by itself at wave 1 after about 3 s;
+  - fodder arrive from the rim in bursts;
+  - the loadout is Broadsword + Longbow;
+  - health is 145 (gear 2/1);
+  - there is no Attack button on the phone emulator.
+- The waves follow the skeleton:
+  - breathers between waves, with no healing beyond regen;
+  - the Colossus at wave 5 and the Warlord with his guard at wave 10, both with their bars and
+    tells as in the range;
+  - **B** and **N** skip as described.
+- A down ends the solo run. The summary card shows cash, Timber, Valor and kills, and the profile
+  gets them. About 15 s later the run starts again.
+- Waiting and downed players are never targeted or hit. A refused swing is taken back.
+- The `[Perf]` line appears in Studio's log every 10 s, and its p95 is under 2 ms in waves 1–4
+  (the lead reads it).
+- `build/combat.rbxl` with no attributes plays Village through the Ready button and returns home
+  through the Studio bridge, as at C1.
+
+### Playtest checklist (Ben; key-only, about 15 minutes; docs-keeper copies it into PLAYTEST "P5 Wave 1")
+
+File: `tycoon\build\proving.rbxl`, after "Build all". **You have the new build if** Play puts you
+in a grassy arena with a wooden fence and a **WAVE 1** banner, not in the big grey range.
+
+Keys: **1** melee, **2** ranged, **Space** jump, **Left Shift** dash, **C** in the air = slam,
+**B** = skip to the next boss, **N** = skip to the next wave.
+
+1. **Play** → after about 3 s the **WAVE 1** banner; red fodder come in from the fence in groups.
+   Your health bar shows 145. No Attack button. Bug: a range panel, an Attack button, or nothing
+   spawns.
+2. Fight waves 1–3 (no keys) → between waves a short breather with a timer; wave 3 adds
+   slingers (glowing shots). Your wallet grows at each wave's end. Bug: a wave never ends with
+   the floor empty; the wallet does not move.
+3. **B** → wave 5: the **COLOSSUS** bar at the top, his slam rings, charge and fodder calls as in
+   the range. Kill him → the bar folds, a **boss down** banner with +10 Valor. About as long as
+   in the range (a minute and a bit). Bug: two boss bars; he melts in seconds or takes minutes.
+4. **N** a few times → waves 6–9: marksmen (warning line), lobbers (circles), plated elites
+   (BLOCKED, then PLATE BROKEN on a heavy hit).
+5. **B** → wave 10: the **WARLORD**, guard first, then the duel, as in Stop 3.
+6. Stand still and let them hit you → you go **DOWN** and the run ends: the summary card with
+   cash, Timber, Valor and kills. About 15 s later a new run starts at wave 1. Bug: you get up
+   by yourself; Studio stops or kicks you.
+7. Optional: the phone emulator → auto-swing and auto-fire work, the ability and slot buttons
+   show, and there is no Attack button.
+
+Asked afterwards, as click questions: does it feel like a mission or like the range; too easy,
+about right or too hard at wave 9; was the run's length right.
+
+### Open for later waves
+
+- **Wave 2:**
+  - loadout and free variant styles chosen in the lobby and between waves;
+  - profile schema v6 → v7 (`combat.loadout`);
+  - the Armory shows families and variants;
+  - `WeaponService.AddPlayer` reads the profile's loadout instead of `ProvingGrounds.json`;
+  - a cooldown carried across a family switch.
+- **Wave 3:**
+  - all four eras get `crowd` blocks from the one skeleton (lift the publish freeze);
+  - bosses everywhere;
+  - era tuning of `hpScale`, `damageScale`, `plateScale` and `regenShare` against each era's
+    recommended power;
+  - the Overdrive numbers;
+  - delete `EnemyService`, `CombatService`, the four old remotes, the C1 mission paths in
+    `InputController` and `CombatHud`, the old mission JSON blocks (`enemies`, `waveTable`,
+    `bosses`) and `director.maxAlive`;
+  - remove `ArenaService`'s and `DebugService`'s requires of `EnemyService`;
+  - late-era reward garnish (per-kill reward pops, big-kill callouts);
+  - decide whether `ProvingGrounds.json` is renamed now that it ships.
+- **Wave 4:**
+  - co-op: revive by a teammate standing near, with no button (server state, client cue,
+    simulator); `WaveService.OnDown` and `PartyMember.down` are the seams, and
+    `VitalsService.StandUp` replaces the boundary stand-in;
+  - party scaling checked in play;
+  - debug bots as crowd targets (or retired);
+  - a two-account published round trip.
+- **Carried, unscheduled:**
+  - melee abilities still resolve at the server's position;
+  - the client's early drawing of its own shots and ability visuals;
+  - refunds re-measured against chasing crowds;
+  - cover and stairs are not in the simulator, and the crowd walks through world geometry;
+  - the keepAway bands in a 110 arena;
+  - kiting (objectives, a timer or a faster enemy);
+  - phone measurements of the melee follow and the ground marks;
+  - Ben's open P3 questions (A or B for SMG/Beam/Chain Gun, cross-slot refunds, bows on bosses);
+  - his Stop 3 and `fight`-set verdicts, which are still owed.
