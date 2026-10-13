@@ -66,3 +66,4 @@ Learned facts that don't belong in the spec live in `.claude/memory/` so they tr
 @.claude/memory/orbital-growth-2026-10-05.md
 @.claude/memory/p4-enemy-roles-2026-10-07.md
 @.claude/memory/p5-missions-2026-10-12.md
+@.claude/memory/missions-replan-2026-10-13.md
