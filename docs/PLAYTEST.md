@@ -4613,6 +4613,117 @@ Asked afterwards as click questions:
 
 Also, if you have a view: anything wrong, by step number, PC or phone.
 
+## L1b Wave 1 — the camp is alive
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Only after the lead says L1b Wave 1 is merged.** Then VS Code, **Ctrl+Shift+B** →
+  **"Build all"**.
+- Close any `proving.rbxl` open in Studio (don't save), then open the file again. **A copy that
+  was open before "Build all" is the old one.**
+- **You have the new build if** raiders are already sitting and standing in the first camp
+  when you walk up the road.
+<!-- FILE TO OPEN: end -->
+
+**Goal:** judge whether the camps feel alive.
+- Same grey Forest Road, same camp sizes. Raiders are already there, resting.
+- Only the Chief's Clearing (the boss's room) locks.
+- Every kill pays at once.
+- **About 8 minutes. Keys only, no panel.** Grey blocks, no sound.
+
+**Status 2026-10-14:** built, reviewed, fixed, QA green. **Wait for the lead's merge word, then
+"Build all".**
+
+Setup: `docs/MANUAL_STEPS.md` "L1b Wave 1".
+
+**Keys:**
+- **Enter** = Depart / Back to camp; **arrows** = level and difficulty.
+- **1** / **2** = weapons.
+- **Space** jump, **Left Shift** dash.
+- **Backspace** twice = Abandon.
+- Studio only: **N** = finish this part, **B** = jump to the boss, **G** = stronger gear.
+
+Press **Play**: the map is open on Forest Road, Normal.
+
+**Good to know:**
+- Raiders see through the palisade and through cover. Their sight is distance only, so walls do
+  not hide you.
+- You can only hurt a camp's raiders while you are close enough for them to fight back. A hit
+  from farther out reads "BLOCKED" (it still wakes them).
+
+### The run (no panel)
+
+- [ ] 1. **They are already there.**
+      - **Enter** (Depart) and walk the road to the first camp.
+      - Before you reach it you see raiders already there: some sitting round a fire, some
+        standing guard (one group walks a loop, in this camp or the next).
+      - Nobody comes for you yet.
+      - Bug: the camp is empty; raiders rush you from far away.
+- [ ] 2. **The wake.**
+      - Walk in toward the sitters.
+      - A "!" pops over the group that saw you; the sitters stand up slowly and you can hit one
+        first.
+      - Kill a few: your cash rises with every kill.
+      - Bug: no "!"; they stand at once; cash does not move until later.
+- [ ] 3. **Run away.**
+      - Run back out along the road, well past where the slingers' shots reach (about 35 studs,
+        a few seconds' run).
+      - They chase you to the edge of their camp and stop there; a slinger keeps shooting while
+        you are close.
+      - Wait a few seconds: they walk back to their places.
+      - Hit one on its way: "BLOCKED".
+      - Bug: they follow you down the road; one keeps chasing forever.
+- [ ] 4. **The camp stays as you left it.**
+      - Walk back in. The survivors are at full health again; the ones you killed are still
+        gone.
+      - Then walk out through the far side: no gate ever closes in this camp or the next.
+      - Bug: dead raiders are back; a gate closes.
+- [ ] 5. **The boss's room locks.**
+      - **N** puts you just inside the Chief's Clearing with "Gates close in 3" already
+        running.
+      - Its raiders stand still until the gates shut, then they wake, and the Colossus comes as
+        before.
+      - **G** if you like, then kill him.
+      - The summary says Cleared, lists what you earned, and has no "Saved at" line.
+      - **Enter**.
+      - Bug: the gates never close; you can hit them before the close; the summary is empty.
+- [ ] 6. **A down keeps your kills.**
+      - **Up arrow** (Hard), **Enter**.
+      - In the first camp let a group hit you until you go **DOWN**: the run ends, and your cash
+        keeps every kill you made.
+      - Bug: cash goes back to what it was.
+
+**Optional, not one of the six:**
+- **Phone.** Test (Prueba) → Device (Dispositivo) → a 375×667 phone, turned to landscape
+  (667×375) → Play → Depart.
+  - From the road, auto-fire does not shoot at a resting camp. Walk in: auto-swing and
+    auto-fire fight the group.
+  - The "!" and the sitting raiders read from a distance.
+  - The top line reads "Camps 1 / 3", not cut off.
+  - Abandon hides while you fight a camp and does not flicker at its edge.
+  - Bug: auto-fire wakes a camp from the road; an Attack button; Abandon under your thumb in a
+    fight.
+- **Two players.** Test (Prueba) → **Local Server** (Servidor local), **2 players**
+  (2 jugadores) → **Start** (Iniciar). In the other window press **Enter** → both land on the
+  road.
+  - Both kill raiders in camp A: each window's cash rises with the kills.
+  - One player goes **DOWN** in camp A; the other walks out until the raiders go home.
+  - → the downed player stands up at the start of the road or the last checkpoint passed.
+  - Bug: the downed player stays down all the way to the boss.
+  - Parties in a level come in L5: anything else odd, note it and don't hunt it.
+
+### What to tell Claude
+
+Asked afterwards, as click questions:
+- Do the camps feel alive?
+- Is walking out and back in right (the chase, the walk home, the heal)?
+- Does a small bonus for clearing a whole camp matter to you (it is 0 now)?
+- After the "!", is the time before they fight right?
+
+Timber per minute is about 42 against L1's 24 (fewer raiders, same pay per kill); Wave 2 rebalances.
+
+Also, if you have a view: anything wrong, by step number, PC or phone.
+
 ## M12 — Village growing city
 
 **Goal:** Village grows as one town around your landmarks: woods first, then building sites, then

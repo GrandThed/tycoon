@@ -12662,3 +12662,143 @@ Asked afterwards, as click questions: do the camps feel alive; is walking out an
    camps' checkpoints move off their floors and out of sight.
 8. **Hard and Brutal are reported, not gated, in Wave 1.**
 9. **Fire markers** are grey-box Parts (look `fire`), so Ben can see where a group sits.
+
+## Review round and state (2026-10-14)
+
+Wave 1 as built on `l1b-living-road`: built `55dcca0` + `e2479c3`, reviewed `9deef26`, fixed
+`5ff333b`, fix-diff Minors and QA `18a25fe`. Reports: `docs/prompts/l1b-w1-reports/` (the lead's
+rulings in order: `lead-routing.md`); findings: `docs/prompts/l1b-w1-review/`.
+
+### The review: four Opus slices, 0 Critical, 4 Major, 15 Minor
+
+| Slice | Critical | Major | Minor | File |
+|---|---|---|---|---|
+| The crowd | 0 | 1 | 2 | `crowd.md` |
+| The run | 0 | 1 | 2 | `run.md` |
+| The client | 0 | 2 | 3 | `client.md` |
+| The data and tests | 0 | 0 | 8 | `data.md` |
+
+**Majors, each with the lead's ruling:**
+1. **Crowd: square in-play corners.** Off a camp's corner a player could hurt residents that
+   could not reach him (a clamped fodder stands √2 × (margin + radius) away). **Fixed:**
+   `CampBrain.InPlay` measures the flat distance from the root to the floor rectangle (0 inside)
+   against `chaseMargin` (rounded corners). `chaseMargin` 3 → **2.5**; `check_levels.py` gates
+   `chaseMargin ≤ reach − √2 × radius` for every resident rusher at every difficulty (fodder
+   2.66).
+2. **Run: a downed party member stayed down the whole road** (no `boundary` before the boss
+   room). **Fixed:** new pure `StageFlow.StandsUp`; in `travel`, `armed` and `gate`, when
+   `FieldClear` holds and a fighter is down, `WaveService.standUpOnRoad` stands every downed
+   fighting member up **at the safe point** (not where they fell: the group beside them would
+   wake again). Revive by a teammate stays L5.
+3. **Client: phone auto-fire woke camps from range** and looped "BLOCKED". L1b-4 stands; the fix
+   is client-side: auto-target takes a camp body only while the local root is in play for it
+   (`InputController.campInPlay`: the height band, and the flat distance to its floor rectangle
+   at most `chaseMargin`, read from `Combat.json`). Deliberate shots are untouched.
+4. **Client: the header text was cut off.** It reads **"Camps 1 / 3"**.
+
+**Minors:**
+- Crowd 1: a fall out of a fight was not "engaged", so the rescue granted get-up i-frames.
+  **Fixed:** `CampBrain.Engaged` holds for `camps.engagedHoldSeconds` (1.5).
+- Crowd 2: no case read `Awake`, `Busy` or `Engaged` while a group walks home. **Fixed:** cases
+  in `leashTests` and three mutations.
+- Run 1: a Studio skip paid the clear bonus and `stats.wavesCleared`. **Fixed:**
+  `Action.skipped` on `open`; a skipped open sets the camp and shows the banner only.
+- Run 2: "progress runs in every live step" was pinned by no gate. **Fixed:** cases in C's
+  countdown, fight and breather, and the reviewer's mutation.
+- Client 3: Abandon flickered at a camp's edge. **Fixed** by `engagedHoldSeconds` (no client
+  change).
+- Client 4: `CampFx` kept its Heartbeat. **Fixed:** released when no mark is left.
+- Client 5: a late "Checkpoint" notice showed on the summary or in the lobby. **Fixed:** the
+  notice is cleared in `summary`, `ended` and `lobby`, and ignored outside a live phase.
+- Data 1: A's checkpoint lay inside B.fire1's Hard marksman's reach (44.6 of 48). **Fixed in
+  three places:** `StageFlow.SafePoint` skips a checkpoint a rising or fighting body reaches; a
+  `check_levels.py` gate keeps every open camp's checkpoint out of every resident shooter's reach
+  from its post, at every difficulty; B's shooters moved inward (below).
+- Data 2: the `chaseMargin` gate checked straight edges only. **Fixed** with Major 1, plus a perch
+  gate: any standable top within the margin and in the height band stands at most 4.5 over the
+  floor (the fence is 4).
+- Data 3: the clear bonus was mirrored by half. **Fixed:** `sim_range.on_open` and
+  `sim_combat.level_pay` pay it fully, never on a skip; proved with a bonus above 0 in scratch.
+- Data 4: BALANCE "L1b" was stale against the band ruling. **Fixed.**
+- Data 5: no checkpoint before camp A. **Accepted:** the start is the safe point.
+- Data 6: on Hard, B's patrol mixed speeds. **Fixed in data:** the loop is 5 fodder; its plated
+  elite moved to B.fire1.
+- Data 7: posts are kept apart only round fires. **Carried to Wave 2** (economy-designer).
+- Data 8: Timber per minute is about 75% over L1's. **Told to Ben at the stop** (PLAYTEST).
+
+### The fix-diff review: 0 Critical, 0 Major, 2 Minor (fixed by the lead)
+
+1. On a phone, auto-fire refused a fight the server accepts (a slinger's reach keeps a player in
+   play past the margin). **Fixed:** auto-target skips the camp test while the local member is
+   `engaged`, through `InputController.SetPhase(phase, waiting, engaged)`.
+2. `sim_range` stood a downed player up in `travel` and `armed` only. **Fixed:** in `gate` too, as
+   `StageFlow.StandsUp` does. `check_stage_mirror.py` comparing `StandsUp` itself is carried to
+   Wave 2 (economy-designer).
+
+### QA (qa-runner, `18a25fe`): ALL GREEN
+
+- `HARNESS: PASS (1,571 checks, …)`; `MUTATIONS: 513 run, 0 not caught`.
+- `check_levels.py` PASS (population 93 on Normal, 103 on Hard and Brutal, of 160; 67 Parts).
+- `check_stage_mirror.py` PASS; `sim_range.py --check` PASS; `sim_combat.py --check` 23 / 23;
+  `sim_economy.py --check` PASS; `check_compile.py` PASS; stylua, selene, luau-lsp (hub and
+  combat), the three builds; `gen_asset_manifest.py --check` up to date.
+- After the lead's two fix-diff fixes: stylua, selene, `check_compile.py`, luau-lsp (combat),
+  `check_stage_mirror.py` and `sim_range.py --check` re-run, all PASS.
+
+### Contract amendments (these win over the text above)
+
+- **`StageFlow.SafePoint(plan, state, busy?, threats?: { CampBrain.Shooter }?)`.** Outside the
+  locking camp's `gate`, `fight` and `breather`, a checkpoint within a threat's reach (flat, edge
+  included) is skipped like a busy one. `WaveService` keeps `run.awakeGroups` from
+  `DrainGroupEvents` and builds the threats from the living members of groups in `rise` or
+  `fight`; one `safePoint()` helper serves every call site.
+- **`StageFlow.LongestReach(def?): number`** (new, pure): the longest reach over every attack of
+  a kind, the whole list.
+- **`StageFlow.StandsUp(plan, state, input): boolean`** (new, pure): true in `travel`, `armed` and
+  `gate` when `FieldClear` holds and a fighter is down. A query, not an action.
+- **`Action.skipped: boolean?`** on `open`: set by `Skip` (the stage skip's open, and every camp a
+  boss skip passes). A skipped open pays no clear bonus and adds nothing to `stats.wavesCleared`.
+- **`CampBrain.Engaged(lastAt: number?, now: number, rules): boolean`** (new, pure):
+  `lastAt ~= nil and now − lastAt <= engagedHoldSeconds` (edge included). `CrowdService` stamps
+  each userId in play for a living group in `rise` or `fight` at every camp step;
+  `CrowdService.Engaged` asks `CampBrain.Engaged`. L1b-7's damage rule (`inPlay`) is not held.
+- **`Combat.json camps.engagedHoldSeconds` 1.5** (`CampRulesConfig` gains it; `Problems` reports
+  it missing, non-finite or negative).
+- **`camps.chaseMargin` 2.5, in play with rounded corners** (Major 1). The Wave 1 table's
+  `chaseMargin` row reads `reach − √2 × radius` (fodder 2.66), plus the perch gate and the
+  checkpoint-out-of-shooter-reach gate (Data 1, 2).
+- **`StageFlow.Plan(level, layout, difficulty, rules, bounds, ranks?)`**: a sixth argument, the
+  difficulty ranks `minDifficulty` needs.
+- **`Types.PartyMember.engaged: boolean?`** (routed during the build): `ArenaService` fills it
+  through `SetEngagedSource`, which `WaveService.Init` wires to "a live phase and
+  `CrowdService.Engaged`". `CombatHud` hides Abandon on touch while the local member is engaged
+  (it used to hide only in `wave` and `boss`).
+- **Client files beyond "Not changed":** `InputController` (`campInPlay`,
+  `SetPhase(phase, waiting, engaged)`) and `CrowdRenderer.CampFloor(id)`. The lead also dropped
+  the stale `savedAt = ""` in `ReturnService.luau` (`RunResult` lost it).
+- **Wave 1's Normal first-clear band is 2.5–4 min** (was 5–8; the lead's option c). L1's camp
+  sizes cap the residents, so a clear is about 3 min (3.00–3.13); Wave 2's size brings the
+  ~10-minute band back. Forest Road `targetMinutes` 3.
+- **B's residents moved** (totals unchanged: B 28 on Normal, 34 on Hard): B.fire1 keeps 4 fodder
+  and a slinger, and Hard adds a plated elite (was a marksman); the loop is 5 fodder (its Hard
+  plated elite went to fire1); B.fire2 is 4 fodder and a slinger (the lobber and the Hard marksman
+  left); B.southWatch gains two guard points at (96, −2) and (80, −2) and two Hard marksmen;
+  B.fire3 gains the lobber (radius 6, centre (100, −64.5)). Nearest shooter to a checkpoint: 40.0
+  from A's, 34.1 from B's (slinger reach 32).
+- **Accepted as built** (routed during the build): `Busy` and `Engaged` count only groups with a
+  living member; a member stops at half `homeTolerance`; a held group's release takes its own
+  step; `CampBrain` runs on the crowd's `simTime`; `SetCampRules` refuses rules `Problems`
+  objects to; "Checkpoint" shows on the HUD notice line, not as a toast; a shot at a seated
+  raider's drawn head scores a body hit (carried to L4).
+- **The playtest checklist** above is final as written: step 3 says to run well past a slinger's
+  reach (about 35 studs); step 5 says N puts you just inside the Chief's Clearing with "Gates
+  close in 3" already running. Step 1's "one group walks a loop, in this camp or the next" is
+  still right after the move: the only patrol is in the Main Camp (B). For the same reason, "What
+  Ben gets in Wave 1"'s "before camp A … one group walking a loop" is loose; PLAYTEST follows
+  step 1.
+
+### State
+
+- QA green on `18a25fe`. Under Ben's §16.7 rule the lead merges `l1b-living-road` to `main` and
+  rebuilds the six place files; then Ben's look (PLAYTEST "L1b Wave 1 — the camp is alive").
+- Carried items with owners: PLAN "L1b — the living road" → "Carried".

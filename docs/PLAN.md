@@ -3101,6 +3101,156 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - [x] L1 merged to `main`, six place files rebuilt (lead)
 - [x] L1 playtest (Ben), 2026-10-14: one Normal run in Studio (down in camp A about two minutes in); "looks good" as a technical demo. He wants enemies already in the camps, camps that do not lock (only the boss's room), bigger camps and longer roads: MISSIONS_DESIGN §15. Next: L1b "the living road", in a new session from `docs/prompts/l1b-living-road.md`.
 
+## L1b — the living road
+
+**Goal:** Forest Road's camps are alive.
+- Raiders are already there when you arrive, resting.
+- Camps never lock; only the boss's room does.
+- Every kill pays at once.
+- Then (Wave 2) bigger camps and a longer road.
+- **No sound. Phones must work.**
+
+**Documents:**
+- Plan of record: `docs/MISSIONS_DESIGN.md` §15 (Ben's L1 verdict), §16 (his six decisions).
+- Study: `docs/prompts/l1b-study-report.md` (all fifteen recommendations taken).
+- Contract: `docs/INTERFACES.md` "L1b contracts — the living road" (rulings L1b-1 to L1b-24),
+  with "Review round and state (2026-10-14)" at its end (amendments win).
+- Reports and the lead's rulings: `docs/prompts/l1b-w1-reports/` (`lead-routing.md`); review
+  findings: `docs/prompts/l1b-w1-review/`.
+- Values: `docs/BALANCE.md` "L1b".
+- Branch `l1b-living-road`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+
+**Ben's decisions (2026-10-14; MISSIONS_DESIGN §16):**
+1. Running away: raiders chase to the camp's edge, walk back to their posts and heal. Slingers
+   still shoot while you are in range.
+2. At rest: guards at posts, patrols on loops, groups at fires (slow to stand). They wake on
+   sight, on a hit, or when a raider of their group wakes.
+3. Sneaking past a camp is allowed.
+4. Rewards come from kills, kept the moment each falls. A down loses nothing earned. A
+   checkpoint banks nothing. The boss still pays on a win.
+5. A camp stays as you left it: the dead stay dead, survivors heal, no refills.
+6. Size: three camps about twice L1's floor, a road of about 1,000 studs, a first Normal clear of
+   about 10 minutes, 100 to 120 raiders (Wave 2).
+7. Each wave that passes review and QA is merged to `main` and the place files rebuilt.
+- Still standing from §15: only the boss's room locks.
+
+**Waves:**
+
+| Wave | Scope | State |
+|---|---|---|
+| 1 "the camp is alive" | Today's road and camp sizes, residents, open camps, per-kill pay | **Built, reviewed, fixed, QA green 2026-10-14 (`18a25fe`); merge next** |
+| 2 "the long road" | 1,000-stud road, camps ×2, 100–120 raiders, tents, dormancy, sneak path, ~10 min | Not started (own contract) |
+| 3 | Numbers only, if Wave 2's stop asks | Not planned |
+
+**Wave 1, what shipped (`build/proving.rbxl`, Play, Depart on Forest Road):**
+- **Residents:** placed at the start, all alive.
+  - Normal 49 (A 14, B 28, C 7); Hard and Brutal 60 (18 / 34 / 8).
+  - Groups by posture: `guard`, `patrol`, `fire`. Group states: `rest`, `rise`, `fight`, `home`.
+  - Sitters take 1.5 s to stand: a first strike lands.
+  - A "!" over every body of a group that wakes.
+  - Raiders see by distance only: through the palisade and through cover.
+- **Open camps A (Pickets) and B (Main Camp):** no gates, no wall, no stage.
+  - Out of play (past `chaseMargin` 2.5, rounded corners) a hit reads **BLOCKED** and still
+    wakes the group.
+  - After 3 s with nobody in play the group walks home, takes no damage, and heals at its posts
+    (HP, plate, damage book).
+- **C, the Chief's Clearing, locks** as in L1. Its residents stand held and cannot be hurt until
+  the gates close; then they wake, the wave and the Colossus follow.
+- **Pay:** every kill pays at once in every live phase (`Combat.KillReward`, `Combat.SplitCarry`
+  with a per-run carry). The wallet goes out at most once a second. "Progress saved" and
+  "Nothing was saved" are gone. Clear bonus 0 (config).
+- **Checkpoints** of A and B stand on the road past each exit. Reaching one shows "Checkpoint".
+  The safe point is the furthest reached checkpoint whose camp is quiet and that no awake shooter
+  reaches.
+- **Downed and rescue:** solo, a down in a resident fight ends the run. A downed party member
+  stands up at the safe point once the road is quiet. A rescue next to a live fight gives no
+  get-up i-frames.
+- **HUD:** "Follow the road", then the Chief's Clearing as L1; "Camps 1 / 3". On touch, Abandon
+  hides while you are engaged. Phone auto-fire never wakes a camp from range.
+- **Parts:** 67 (L1's 73, less the gates and walls of two open camps, plus six fire markers).
+
+**Server:** new pure `CampBrain.luau`; `CrowdService` and `CrowdBrain` with one floor per camp,
+groups, the camp step and the heal; `CrowdCodec` states `rest` and `rise`; `StageFlow` (zones for
+every camp, `FieldClear`, `SafePoint`, `StandsUp`, `LongestReach`, `RescueGrace`, `reach` and
+`campClear` actions, `bank` gone); `Combat` (`KillReward`, `SplitCarry`; `SplitPool` gone);
+`LevelGeometry`, `LevelService`, `WaveService`, `ArenaService` (`RunState.floors`,
+`PartyMember.engaged`).
+
+**Client:** `CrowdRenderer` (floors, seated and rising poses, `CampFloor`), new `CampFx.luau`
+("!" marks), `CombatHud`, `SummaryCard`, `CombatUIController`, `InputController` (auto-target
+camp rule), `Theme` (add only).
+
+**Config:** `Combat.json` `camps` (incl. `engagedHoldSeconds` 1.5) and four `levels` keys;
+`Expeditions.json looks.fire`; `Levels/1_ForestRoad.json` (one travel stage, C the only camp
+stage, residents, `targetMinutes` 3); `Layouts/Levels/ForestRoad.json` (C `locks`, spots,
+checkpoints on the road).
+
+**Review** (INTERFACES "Review round and state (2026-10-14)"):
+- Four Opus slices (crowd, run, client, data and tests): **0 Critical, 4 Major, 15 Minor.**
+- Majors, all fixed: square in-play corners; a downed party member stuck all road; phone
+  auto-fire woke camps from range; the header was cut off.
+- Fix-diff check: **0 Critical, 0 Major, 2 Minor**, fixed by the lead.
+
+**Gates (QA ALL GREEN on `18a25fe`):**
+- `run_harness.py`: `HARNESS: PASS (1,571 checks, …)`.
+- `mutate.py`: 513 mutations, 0 not caught.
+- `check_levels.py` PASS: population 93 / 103 / 103 of 160; 67 Parts.
+- `check_stage_mirror.py`, `sim_range.py --check`, `sim_combat.py --check` (23 / 23),
+  `sim_economy.py --check`, `check_compile.py`, stylua, selene, luau-lsp, the three builds,
+  `gen_asset_manifest.py --check`: all PASS.
+- **Checked by reading only:** `WaveService`, `ArenaService`, every client file.
+
+**Balance (`docs/BALANCE.md` "L1b"), Normal at 2 / 1:**
+- First clear 3.00–3.13 min, band **2.5–4 min** (the lead's ruling for Wave 1's size).
+- The Colossus 75–78 s; worst hit 24.8%; standing still in a woken group, down in 9.7–9.8 s.
+- First strike on every fire group; the leash and the edge policies pass (edge: 228 BLOCKED, 0
+  paid).
+- A Normal clear pays 60,800 cash, 129 Timber, 10 Valor (L1: 88,200 / 155 / 10), but about 42
+  Timber a minute against L1's 24.
+- Raider Arena unchanged, except a failed run now keeps every kill.
+
+**Carried:**
+- **Publish freeze (owner: lead):** no Expeditions publish from `main` until L4.
+- **Wave 2 (its own contract):**
+  - **luau-engineer A:** dormancy and the tent's reinforcements; skip dormant bodies in the step
+    and the snapshot; spawn infos with position, yaw and state.
+  - **luau-engineer B:** tents in `Validate` and the population; the tent executor; the
+    director's merge test reads too few dead bodies while the boss room's residents live.
+  - **ui-engineer:** a body drawn from its spawn info without a snapshot; the long road on a
+    phone.
+  - **ui-engineer + luau-engineer A:** phone auto-fire can target held residents in the boss
+    room's countdown (a cosmetic BLOCKED); one shared pure "flat distance to a rectangle" helper
+    for `CampBrain` and `InputController`.
+  - **economy-designer:** the 1,000-stud road; camps of about twice L1's area (a render for Ben
+    first); 100 to 120 residents; the sneak-path gate; the ~10-minute band; Hard and Brutal gated
+    again; the pay bands back plus a per-minute pay band; post spacing gated beyond fires;
+    `check_stage_mirror.py` compares `StandsUp`; Brutal's own `minDifficulty` units.
+  - **lead:** Ben's `[Perf]` number in the boss room, asked as a click question.
+- **L4 (owner: ui-engineer + luau-engineer A):** a shot at a seated raider's drawn head scores a
+  body hit, and aim assist pulls to standing height.
+- **L4 or later (owner: luau-engineer A):** sight through walls (no ray in the crowd's step).
+- **L5 (owner: lead):** residents do not scale with party size; revive by a teammate.
+- **Before any publish (owner: luau-engineer):** `OnDash` grants i-frames on the request alone;
+  chasing residents make the dash the main escape.
+- **Ben:** whether a clear bonus matters (it is 0; a config change).
+- Every L1 carried item above stands.
+- **Never measured, said plainly:** the crowd step with 49–60 residents alive (`[Perf]` p95,
+  budget 2 ms, the lead reads Studio's log); snapshot bytes with every resident sent (about 13
+  KB/s a player); the "!" and the seated pose on a real phone (emulator only).
+
+**Next:**
+1. The lead merges `l1b-living-road` to `main` and rebuilds the six place files.
+2. **Ben's Wave 1 look:** `docs/PLAYTEST.md` "L1b Wave 1 — the camp is alive"; setup
+   `docs/MANUAL_STEPS.md` "L1b Wave 1".
+3. The lead reads the `[Perf]` lines from Studio's log.
+4. Wave 2 "the long road", its own contract, only on Ben's word.
+
+- [x] Wave 1 built (`55dcca0`, `e2479c3`)
+- [x] Wave 1 reviewed, fix round done (`5ff333b`, `18a25fe`; INTERFACES "Review round and state (2026-10-14)")
+- [x] Wave 1 QA green (`18a25fe`)
+- [ ] Wave 1 merged to `main`, six place files rebuilt (lead)
+- [ ] Ben's Studio look at Wave 1
+
 ## M12 — Growing city
 
 **Goal:** the city should feel "alive and like a growing city, not a grid being filled" (Ben,

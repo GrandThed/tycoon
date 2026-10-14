@@ -1784,6 +1784,43 @@ Raider Arena can be played.
 - The camps' invisible walls and their collision groups need no Studio setup: the server
   builds them.
 
+## L1b Wave 1
+
+**Studio only.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- Still silent (no audio step).
+- About 8 minutes with the checklist, keys only, no panel.
+
+**Do NOT publish the Expeditions place from `main` until L4.** The freeze from L1 holds.
+
+**Status 2026-10-14:**
+- Built, reviewed, fixed and QA green on branch `l1b-living-road` (`18a25fe`).
+- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L1b Wave 1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Wait for the lead's word first.** Before the merge, "Build all" gives L1's camps.
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** raiders already sit and stand in the first camp when you walk up
+  the road.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [x] QA green on `18a25fe`.
+      - [ ] `l1b-living-road` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L1b Wave 1 is merged, Build all".
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save).
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Press **Play**: the lobby camp, the map open on **Forest Road** at **Normal**.
+- [ ] 5. Run `docs/PLAYTEST.md` "L1b Wave 1 — the camp is alive" (six steps, plus an optional
+      phone and two-player check).
+- [ ] 6. Close Studio without saving `proving.rbxl`. Tell Claude when you are done. The lead
+      reads the `[Perf]` lines from Studio's log; nothing to copy.
+
 ## M10 — Icon, store icons, thumbnails
 
 Everything here is Creator Hub or Studio work; the art is generated offline and lives under the
