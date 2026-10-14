@@ -318,8 +318,7 @@ and only the Village arena can be played.
 
 Studio's log: he opened the rebuilt `proving.rbxl` at 00:22, played Forest Road on Normal once, and
 the run ended "down" in stage 2 (camp A) about two minutes after boot. He did not reach camp B, the
-boss, Hard, the Raider Arena or the phone check. (The simulator's human-reaction player never goes
-down on Normal: ask him what happened in camp A.)
+boss, Hard, the Raider Arena or the phone check. Asked afterwards: **"balance feels good"**.
 
 In his words: *"looks good! one thing i was ambisioning that wasnt in this build is that i was
 hopping for the enemies to already be there all the time, with bigger camp sites, and longer roads,

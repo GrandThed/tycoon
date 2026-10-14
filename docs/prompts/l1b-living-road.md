@@ -55,8 +55,8 @@ and `.claude/memory/p5-missions-2026-10-12.md`. Then read, in this order:
 
 Studio's log for that look: he opened `tycoon\build\proving.rbxl` at 00:22, played Forest Road on
 Normal once, and the run ended "down" in stage 2 (camp A) about two minutes after boot. He did not
-reach camp B, the boss, Hard, the Raider Arena or the phone check. The simulator's human-reaction
-player never goes down on Normal: ask him what happened in camp A before trusting the bands.
+reach camp B, the boss, Hard, the Raider Arena or the phone check. Asked about it afterwards, he said
+**"balance feels good"**: keep L1's numbers as the starting point for L1b's camps.
 
 **What it means:**
 1. **Enemies are already there.** A camp is inhabited when you arrive; you see the raiders before

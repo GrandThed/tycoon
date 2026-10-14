@@ -119,5 +119,5 @@ enemies, open camps, only the boss room locks, bigger camps, longer roads. It re
 and because closed camps stop kiting). Next step **L1b "the living road"**, in a NEW session from
 `docs/prompts/l1b-living-road.md` (study first: several live camps need a floor per body or group, a resting and
 leashed brain, dormant far bodies, a codec range for longer roads; then his six decisions; then contracts).
-Lesson: he judged the camp mechanic within two minutes of play, so a mock of how a camp BEHAVES (not only how the
+Asked afterwards about going down in camp A, he said "balance feels good": L1's numbers are the starting point for L1b. Lesson: he judged the camp mechanic within two minutes of play, so a mock of how a camp BEHAVES (not only how the
 level looks from above) would have caught this before the build: offer one for L1b.
