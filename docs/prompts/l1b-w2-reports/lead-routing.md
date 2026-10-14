@@ -141,3 +141,6 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
   group to fight nobody. Rouses by sight, a hit or the join-in chain are unchanged. If a seed still
   sits under 37.8 after that, the smallest data retune (tent bodies' Timber), written in BALANCE;
   the band is not widened.
+- **Fix tail done (fix-tail.md):** `CampBrain.TentRouse` (pure) decides every tent-caused rouse;
+  every gate green (harness 1,995, mutate 619 / 0, mirror mutants 46 / 46, sims, check_levels,
+  stage mirror); no data retune. Normal 2/2 Timber 40.7 / 39.2 / 40.3 a minute.

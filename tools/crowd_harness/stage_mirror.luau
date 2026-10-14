@@ -679,6 +679,11 @@ for _, case in data.campCases do
 			group.hit = true
 			local ret = Brain.Rouse(group, 4.5, case.playerInPlay == true)
 			return { ret = ret, group = C.snapshot(group) }
+		elseif op == "tentRouse" then
+			local group = C.group(case.def, case.state, case.held)
+			group.hit = true
+			local ret = Brain.TentRouse(group, 4.5, case.playerInPlay == true)
+			return { ret = ret, group = C.snapshot(group) }
 		elseif op == "tent" then
 			local tent = Brain.NewTent(case.stock)
 			local rows = {}

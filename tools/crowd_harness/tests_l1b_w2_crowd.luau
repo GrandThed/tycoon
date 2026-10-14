@@ -731,6 +731,22 @@ function W2A.joinTests(): ()
 	roused[7].held = true
 	check(not CB.Rouse(roused[7], 7, true) and roused[7].state == "home", "(held and home: nothing)")
 
+	print(" CampBrain.TentRouse")
+	-- The lead's ruling (i): a tent's rouse needs a player in play, from rest or from home.
+	local tentRoused = W2A.groups({ "tent", "tent", "tent", "tent", "tent", "tent" })
+	check(not CB.TentRouse(tentRoused[1], 7, false) and tentRoused[1].state == "rest", "rest, nobody in play: nothing, false (a tent never wakes a group to fight nobody)")
+	tentRoused[2].hit = true
+	check(CB.TentRouse(tentRoused[2], 7, true) and tentRoused[2].state == "rise" and tentRoused[2].since == 7 and tentRoused[2].hit == false, "rest, a player in play: rise, since now, hit cleared, true")
+	tentRoused[3].state = "home"
+	check(not CB.TentRouse(tentRoused[3], 7, false) and tentRoused[3].state == "home", "home, nobody in play: nothing, false")
+	tentRoused[4].state = "home"
+	check(CB.TentRouse(tentRoused[4], 7, true) and tentRoused[4].state == "rise", "home, a player in play: rise")
+	tentRoused[5].held = true
+	check(not CB.TentRouse(tentRoused[5], 7, true) and tentRoused[5].held, "held: nothing, a player in play or not")
+	tentRoused[6].state = "fight"
+	tentRoused[6].since = 1
+	check(not CB.TentRouse(tentRoused[6], 7, true) and tentRoused[6].since == 1, "fight: nothing")
+
 	print(" CampBrain: the tent rule")
 	check(CB.TentActive(true, 5) and CB.TentActive(false, 0) and CB.TentActive(false, -1) and not CB.TentActive(false, 3), "TentActive: busy, or no resident alive")
 	local fresh = CB.NewTent(8)
@@ -1028,7 +1044,8 @@ function W2A.restingTests(): ()
 	check(sent[heldIds[1]] ~= nil and sent[heldIds[1]].resting == true, "a held group's body is announced resting")
 	check(sent[wave] ~= nil and sent[wave].resting == nil, "a wave body (no group) never carries resting")
 	W2A.clearSent()
-	Crowd.RouseGroup(group)
+	-- Woken by a lever hit: nobody is in play here, so a tent's rouse would do nothing (ruling (i)).
+	Crowd.Damage(ids[1], 1, 0, nil, nil)
 	step2()
 	local roused, otherSent = W2A.sentSince(ids)
 	check(roused[ids[1]] ~= nil and roused[ids[1]].resting == nil and roused[ids[2]] ~= nil and roused[ids[2]].resting == nil, "once its group wakes, the next batch re-announces it, not resting")
@@ -1055,7 +1072,7 @@ function W2A.restingTests(): ()
 	-- A body that leaves before the re-announce is ended, not announced.
 	W2A.clearSent()
 	Crowd.Remove(ids[2])
-	Crowd.RouseGroup(group)
+	Crowd.Damage(ids[1], 1, 0, nil, nil)
 	step2()
 	local after, _, removed = W2A.sentSince({ ids[2] })
 	check(removed and after[ids[2]] == nil, "a body removed while its group's re-announce is due gets its CrowdRemove and no announce")
@@ -1243,9 +1260,16 @@ function W2A.tentDoorTests(): ()
 	step2(20)
 	local walked = Crowd.Get(ids[1]).position
 	check((walked - start).Magnitude > 2, "(the patroller walked off its post)")
+	-- The lead's ruling (i): nobody in play for its camp, so a tent's rouse leaves it at rest.
 	Crowd.RouseGroup(group)
 	step2()
-	L1BC.events()
+	local still = L1BC.events()
+	check(#still == 0 and seen(ids[1]).state ~= "rise", `ruling (i): with nobody in play, a resting group is not roused ({#still} events)`)
+	-- Woken by a lever hit instead (byUserId 0 lands and wakes, ruling L1b-7).
+	Crowd.Damage(ids[1], 1, 0, nil, nil)
+	step2()
+	local struck = L1BC.events()
+	check(#struck == 1 and struck[1].from == "rest" and struck[1].to == "rise", "(a lever hit wakes it: sight and hits are untouched by the ruling)")
 	local homeward = false
 	for _ = 1, 400 do
 		step2()

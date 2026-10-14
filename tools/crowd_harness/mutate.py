@@ -3032,15 +3032,32 @@ L1B_W2_FIX_TAIL_MUTATIONS = {
         '(group.state == "home" and inPlay)',
         '(group.state == "home")',
     ),
+    # Re-aimed by the lead's ruling (i) (the tent's rouse goes through CampBrain.TentRouse): same rules.
     "l1b w2 fix tail: the tent's rouse is told a player is always in play": (
         CROWD,
-        "CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil)",
-        "CampBrain.Rouse(brain, simTime, true)",
+        "CampBrain.TentRouse(brain, simTime, next(brain.inPlay) ~= nil)",
+        "CampBrain.TentRouse(brain, simTime, true)",
     ),
     "l1b w2 fix tail: the tent's rouse is told nobody is ever in play": (
         CROWD,
-        "CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil)",
-        "CampBrain.Rouse(brain, simTime, false)",
+        "CampBrain.TentRouse(brain, simTime, next(brain.inPlay) ~= nil)",
+        "CampBrain.TentRouse(brain, simTime, false)",
+    ),
+    # The lead's ruling (i): a tent's rouse needs a player in play, from rest or from home.
+    "l1b w2 fix tail: TentRouse with nobody in play rouses": (
+        CAMP,
+        "if not inPlay then\n\t\treturn false\n\tend\n\treturn CampBrain.Rouse(group, now, inPlay)",
+        "if false then\n\t\treturn false\n\tend\n\treturn CampBrain.Rouse(group, now, inPlay)",
+    ),
+    "l1b w2 fix tail: TentRouse never lifts a homeward group": (
+        CAMP,
+        "return CampBrain.Rouse(group, now, inPlay)",
+        "return CampBrain.Rouse(group, now, false)",
+    ),
+    "l1b w2 fix tail: the tent's rouse is a plain Rouse": (
+        CROWD,
+        "if CampBrain.TentRouse(brain, simTime, next(brain.inPlay) ~= nil) then",
+        "if CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil) then",
     ),
     "l1b w2 fix tail: a rouse's event says it left rest": (
         CROWD,

@@ -611,6 +611,18 @@ function CampBrain.Rouse(group: Group, now: number, inPlay: boolean): boolean
 	return true
 end
 
+-- A tent's rouse (CrowdService.RouseGroup: the body it has just sent, or a rouse it still owes,
+-- StageFlow.TentOwesRouse): only while a player is in play for its camp (`inPlay`, as for Rouse),
+-- from rest or from the walk home. The lead's ruling (i) on the fix round's B-3: a tent never
+-- wakes a group to fight nobody, which would only leash again. Sight, hits and the join-in chain
+-- wake through Step and Rouse, untouched.
+function CampBrain.TentRouse(group: Group, now: number, inPlay: boolean): boolean
+	if not inPlay then
+		return false
+	end
+	return CampBrain.Rouse(group, now, inPlay)
+end
+
 -- L1b-W2-7: a tent's stock, its first body due at once.
 function CampBrain.NewTent(stock: number): TentState
 	return { left = stock, nextAt = -math.huge }

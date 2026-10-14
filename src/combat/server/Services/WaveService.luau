@@ -1593,8 +1593,9 @@ end
 -- yields.
 -- The fix round: a body that joins a group already up is a threat for the safe point at once
 -- (B-1: its group's state does not change, so no event lists it), and a body sent while its camp
--- fights keeps its group roused until the group is up (B-3: one walking home rises at once while
--- a player is in play for it, else once home).
+-- fights keeps its group roused until the group is up (B-3). Every rouse a tent asks for acts only
+-- while a player is in play for its group (CampBrain.TentRouse): a tent never wakes a group to
+-- fight nobody.
 local function tickTents(): ()
 	local plan = run.plan
 	if plan == nil or #run.tents == 0 then

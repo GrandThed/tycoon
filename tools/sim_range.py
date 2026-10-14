@@ -5912,6 +5912,14 @@ def cb_rouse(group, now, in_play):
     return True
 
 
+def cb_tent_rouse(group, now, in_play):
+    """CampBrain.TentRouse (the lead's ruling (i) on B-3): a tent's rouse acts only while a player
+    is in play for the group, then as cb_rouse."""
+    if not in_play:
+        return False
+    return cb_rouse(group, now, in_play)
+
+
 def tent_owes_rouse(owed, camp_busy, group_awake):
     """StageFlow.TentOwesRouse (the fix round's B-3)."""
     return owed and camp_busy and not group_awake
@@ -6286,7 +6294,8 @@ class LevelRun(ThreatRun):
         roused at the next camp step, and the clock moves on. A refused spawn (the cap) counts as
         sent. A body sent while its camp is busy and its group is not up leaves a debt (B-3,
         StageFlow.TentOwesRouse) that rouses the group every tick until it is up or the camp is
-        quiet: a homeward group rises only while the player is in play for it (cb_rouse)."""
+        quiet. Every rouse a tent asks for acts only while the player is in play for the group,
+        from rest or home (cb_tent_rouse, the lead's ruling (i))."""
         if not self.tents:
             return
         busy = self.busy()
@@ -6419,7 +6428,7 @@ class LevelRun(ThreatRun):
                 # names the state it left (the fix round's B-3: a group walking home rises too).
                 self.rouse_pending.discard(index)
                 left = group["state"]
-                if cb_rouse(group, now, any(group["inPlay"].values())):
+                if cb_tent_rouse(group, now, any(group["inPlay"].values())):
                     self.note(now, index, left, "rise", False, "tent")
         self.wake_floors = set()
         if woke:

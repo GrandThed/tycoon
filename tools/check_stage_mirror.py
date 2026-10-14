@@ -122,7 +122,7 @@ NEEDED = {"Combat": ("CampWave", "CampReward", "KillReward", "SplitCarry", "Burs
           "StageFlow": ("Resolve", "Validate", "Plan", "Begin", "Advance", "Skip", "Force", "BurstPoint", "BossPoint",
                         "Directs", "StillClosing", "EarnsStar", "FieldClear", "SafePoint", "StandsUp", "BossReserve"),
           "CampBrain": ("Problems", "NewGroup", "Posts", "Sees", "InPlay", "AtPost", "Step", "Release", "Evades",
-                        "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "NewTent",
+                        "Struck", "Goal", "Shows", "Engaged", "Dormant", "Gap", "JoinIn", "Rouse", "TentRouse", "NewTent",
                         "TentActive", "TentDue", "TentSent"),
           "HitShapes": ("RayUpright", "CrowdRay", "FlatToRect", "Ray"),
           "SwingGate": ("New", "IsAir", "Allows", "Took", "Landed")}
@@ -969,6 +969,15 @@ def wave2_camp_cases(data, expected, rules, plans):
             data["campCases"].append({"id": case, "op": "rouse", "def": def_row(guard), "state": state, "held": held,
                                       "playerInPlay": in_play})
             expected[case] = ("CampBrain.Rouse", f"{state}{' held' if held else ''}{' in play' if in_play else ''}",
+                              {"ret": ret, "group": group_row(group)})
+            # A tent's rouse (the lead's ruling (i)): only with a player in play, then as Rouse.
+            group = sr.cb_new_group(guard, 0.0)
+            group["state"], group["held"], group["hit"] = state, held, True
+            ret = sr.cb_tent_rouse(group, 4.5, in_play)
+            case = f"camp.tentRouse.{state}.{held}.{in_play}"
+            data["campCases"].append({"id": case, "op": "tentRouse", "def": def_row(guard), "state": state,
+                                      "held": held, "playerInPlay": in_play})
+            expected[case] = ("CampBrain.TentRouse", f"{state}{' held' if held else ''}{' in play' if in_play else ''}",
                               {"ret": ret, "group": group_row(group)})
     # The tent rule on timelines: wake at 0 (0, 6, 12), a pause from 13 to 40 (the next at 40),
     # the residents dead with the camp at rest (it keeps sending), the stock spent (never).

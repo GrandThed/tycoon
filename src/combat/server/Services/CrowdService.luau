@@ -1053,13 +1053,13 @@ local function campStep(kinds: { [string]: Types.CrowdKindDef }): ()
 				end
 			end
 		end
-		-- After the step, as a release is, so even a rise of 0 shows. A tent's rouse may bring a
-		-- group back from its walk home while a player is in play for it (B-3; the in-play set
-		-- this step's Step wrote): the event names the state it left, so a homeward group is
-		-- neither re-announced nor alerted as a fresh wake.
+		-- After the step, as a release is, so even a rise of 0 shows. A tent's rouse acts only
+		-- while a player is in play for the group (CampBrain.TentRouse; the in-play set this
+		-- step's Step wrote), and may bring it back from its walk home (B-3): the event names the
+		-- state it left, so a homeward group is neither re-announced nor alerted as a fresh wake.
 		if rouse[index] then
 			local before: Types.CampGroupState = brain.state
-			if CampBrain.Rouse(brain, simTime, next(brain.inPlay) ~= nil) then
+			if CampBrain.TentRouse(brain, simTime, next(brain.inPlay) ~= nil) then
 				queueEvent(index, group, before, "rise", false)
 			end
 		end
@@ -2135,8 +2135,8 @@ function CrowdService.SpawnResident(
 	return id
 end
 
--- L1b-W2-7: a tent's group rises at the next camp step (CampBrain.Rouse: from an unheld rest, or
--- from its walk home while a player is in play for it).
+-- L1b-W2-7: a tent's group rises at the next camp step, from an unheld rest or its walk home, and
+-- only while a player is in play for it (CampBrain.TentRouse); otherwise the call does nothing.
 function CrowdService.RouseGroup(group: number): ()
 	if typeof(group) == "number" and camp.groups[group] ~= nil then
 		camp.rouse[group] = true
