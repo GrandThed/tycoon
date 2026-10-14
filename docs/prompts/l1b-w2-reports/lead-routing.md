@@ -124,3 +124,7 @@ Branch `l1b-wave2` in the worktree `C:\Users\benja\Desktop\tycoon-p5`, made from
 - **econ fix done (fix-econ.md):** E-1 to E-3, plus the mirror of B-2 / B-4 (doors, rings at every
   difficulty) taken unrouted in its own files: confirmed. `py tools/crowd_harness/mirror_mutants.py`
   (42 of 42) joins gate 10; never beside `mutate.py`.
+- **B fix done (fix-B.md):** harness 1,969 PASS, mutate 606 / 0 not caught, stage mirror PASS. Its
+  decisions confirmed (owed rouse, door never past its post, problem lines without difficulty).
+  Its requests 1–3 (A, ui) are **taken** and go to one fresh agent: `docs/prompts/l1b-w2-fix-tail.md`
+  (every owner has finished, so one agent may touch the four files).

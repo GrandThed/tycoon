@@ -1,9 +1,15 @@
 # L1b Wave 2 fix round — luau-engineer B (the run, the level, the tests)
 
-Status: B-1, B-2, B-3 done; B-4 done in my files (the door is planned and tested), its last line
-in `WaveService` waits for A's `SpawnResident` argument (below). ui-engineer's `CampAim` source,
-12 cases and 6 mutations registered. A's mutations: waiting for `fix-A.md` to list them. The
-final harness and `mutate.py` runs are the last step.
+Status: **done.** B-1, B-2, B-3 done. B-4 is done in my files: the door is planned and tested.
+Its last line in `WaveService` waits for A's `SpawnResident` argument and the `rises` flag
+(requests 1 and 2 below, not routed yet). Registered: the ui-engineer's `CampAim` source, its 12
+cases and 6 mutations, and A's 15 mutations (`L1B_W2_FIX_A_MUTATIONS`, texts verbatim from
+fix-A.md). The final runs were on the final state, after A's and econ's work was in the tree, one
+after the other:
+
+- `run_harness.py`: **`HARNESS: PASS (1,969 checks, C:\Users\benja\Desktop\tycoon-p5\tools\crowd_harness)`**
+- `mutate.py`: **`MUTATIONS: 606 run, 0 not caught`** (its baseline is the same 1,969 PASS)
+- `check_stage_mirror.py`: `CHECK: PASS` (econ mirrored `doors` and the every-difficulty check)
 
 ## Done
 
@@ -46,17 +52,18 @@ final harness and `mutate.py` runs are the last step.
   its widest kind over the edge" and "l1b w2: Validate lets a ring post hang its widest kind over
   the edge" (same rules, new indentation). New `W2_FIX_B_MUTATIONS` (13) and
   `W2_FIX_UI_MUTATIONS` (6, the ui-engineer's texts verbatim, `CAMP_AIM` appended to `FILES`).
-  591 mutations, every text occurring exactly once.
+  With A's 15 (`L1B_W2_FIX_A_MUTATIONS`, after `L1B_W2_CROWD_REPLACED`): 606 mutations, every
+  text occurring exactly once.
 
 ## Gates (my files)
 
 - stylua, selene on StageFlow, LevelGeometry, WaveService: clean.
 - luau-lsp analyze (combat sourcemap in my scratch): exit 0, no error.
 - `py tools/check_compile.py`: PASS (156 files).
-- Harness mid-round: my 30 cases and the ui-engineer's 12 all `ok`; the only failures were 4 of
-  A's SwingGate cases while A was still working.
-- `check_stage_mirror.py`: `FAIL (3)`, all three `StageFlow.Plan ... .plan.tents[1].doors ... /
-  absent`: the Python side has no doors yet (request 3 below, the economy-designer's).
+- Harness mid-round: my cases and the ui-engineer's 12 all `ok`; 4 of A's SwingGate cases
+  failed while A was still working. Green once A finished (final numbers above).
+- `check_stage_mirror.py`: `FAIL (3)` on `.plan.tents[1].doors` before econ's mirror, `PASS` at
+  the end.
 
 ## For the other owner
 
@@ -123,8 +130,8 @@ final harness and `mutate.py` runs are the last step.
    (`onGroupEvent` alerts only `from == "rest"`, so a home group roused back shows no second
    "!"; the JoinIn branch keeps its literal "rest".) Without this, B-3 still holds with a delay of
    the walk home.
-4. **economy-designer, `tools/sim_range.py` and `tools/check_stage_mirror.py` (the mirror of
-   B-2 and B-4; `check_stage_mirror.py` is red on `doors` until then):**
+4. **(The economy-designer has done this; kept for the record.) `tools/sim_range.py` and
+   `tools/check_stage_mirror.py`, the mirror of B-2 and B-4:**
    - `sim_range.py`, a mirror of `LevelGeometry.TentDoor`:
 
      ```python
