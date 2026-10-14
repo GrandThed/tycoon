@@ -1,8 +1,9 @@
 # Expeditions: levels, secrets and the Armory (design)
 
-**Status: draft for Ben, 2026-10-13. Nothing in this document is built.** It becomes the plan of
-record for the mission side once Ben approves it. `docs/COMBAT_DESIGN.md` stays the plan of record
-for the fighting itself (weapons, enemies, bosses, health), which is kept.
+**Status (2026-10-13): the plan of record for the mission side, approved by Ben in pieces (§2).
+L1 (Forest Road in grey) is built, reviewed and fixed 2026-10-13; merging. Nothing after L1 is
+built.** `docs/COMBAT_DESIGN.md` stays the plan of record for the fighting itself (weapons,
+enemies, bosses, health), which is kept.
 
 Marks used below: **[Ben]** = decided by Ben on 2026-10-13. **[proposed]** = the lead's proposal,
 not yet approved. **[open]** = a question for Ben, listed again in §11.
@@ -301,7 +302,7 @@ of the five. Scenery is generated.
 | Step | What Ben gets to look at |
 |---|---|
 | **L0. Pictures** | A picture of the map screen, a top-down plan of Forest Road, a picture of the Armory screen. No code. |
-| **L1. Forest Road in grey** | Play opens in the dungeon place's lobby camp with the map; one node is playable. Forest Road in plain blocks: path, the three camp parts with gates, checkpoints, a stand-in boss, the difficulty choice, and back to the lobby at the end. Today's enemies. Stars last for the session only. **Started 2026-10-13.** |
+| **L1. Forest Road in grey** | Play opens in the dungeon place's lobby camp with the map; one node is playable. Forest Road in plain blocks: path, the three camp parts with gates, checkpoints, a stand-in boss, the difficulty choice, and back to the lobby at the end. Today's enemies. Stars last for the session only. **Built, reviewed and fixed 2026-10-13; merging.** |
 | **L2. Secrets and keys** | Double jump as a purchase and the lookout; the Flamethrower and the bramble cave; the frost weapon and the creek. |
 | **L3. The Armory** | Per-weapon tiers, the upgrade loop with Forest drops, the new screen, weapon models. |
 | **L4. The real forest** | Scenery, the Camp Chief, the map in the hub, rewards balanced. First version that can be published. |

@@ -47,6 +47,9 @@
 		},
 		"Workspace": {
 			"$className": "Workspace",
+			"$properties": {
+				"StreamingEnabled": false
+			},
 			"$ignoreUnknownInstances": true
 		},
 		"StarterPlayer": {
@@ -62,7 +65,8 @@
 						"Motion": { "$path": "src/client/UI/Motion.luau" },
 						"Toast": { "$path": "src/client/UI/Toast.luau" },
 						"LoadScreen": { "$path": "src/client/UI/LoadScreen.luau" },
-						"Theme": { "$path": "src/client/UI/Theme.luau" }
+						"Theme": { "$path": "src/client/UI/Theme.luau" },
+						"MapScreen": { "$path": "src/client/UI/MapScreen.luau" }
 					},
 					"Controllers": {
 						"$path": "src/combat/client/Controllers",

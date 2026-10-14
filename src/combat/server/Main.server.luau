@@ -14,8 +14,14 @@
 -- P5 (docs/INTERFACES.md "P5 contracts" → "Boot sequence"): one mode, decided once by
 -- CombatMode. Missions fight with the range's weapons (WeaponService, AbilityService) against
 -- the crowd (WaveService); EnemyService and CombatService are no longer booted here, and the
--- four C1 hit intents have no handlers. A proving build boots into a mission unless Combat.json
--- debug.provingBoots says "range".
+-- four C1 hit intents have no handlers.
+--
+-- L1 (docs/INTERFACES.md "L1 contracts" → "Flow"): the place boots into a lobby camp. Any
+-- admitted party lands there, whatever mission its hub departure named: that id and the Overdrive
+-- flag are read as before and used for one thing, the key the hub's ticket is verified against.
+-- The party's leader starts a level (RequestStartLevel); every run ends back in the lobby camp;
+-- the only way to the city is the player's own Return. A proving build boots the same lobby
+-- unless Combat.json debug.provingBoots says "range".
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,6 +51,7 @@ local WeaponService = require(combatFolder:WaitForChild("WeaponService"))
 local AbilityService = require(combatFolder:WaitForChild("AbilityService"))
 local CrowdService = require(combatFolder:WaitForChild("CrowdService"))
 local VitalsService = require(combatFolder:WaitForChild("VitalsService"))
+local LevelService = require(combatFolder:WaitForChild("LevelService"))
 
 type Service = {
 	Init: () -> (),
@@ -54,12 +61,13 @@ type Service = {
 type Loader = (player: Player) -> Types.PlayerState?
 -- "arrival" = a fresh join or a safe-mode retry (admission applies); "rejoin" = a player who was
 -- a member moments ago and whose trip home failed. Re-running admission on a rejoin could refuse
--- them (the run moved past joinUntilWave) and bounce them through the failing teleport forever.
+-- them (`over`: a run is live and they are not on the ticket's expected list; `full`: their seat
+-- was taken meanwhile) and bounce them through the failing teleport forever.
 type JoinKind = "arrival" | "rejoin"
 
--- Studio (or a standalone boot with no teleport data) plays the first mission unless the
--- DebugMission attribute says otherwise.
-local DEFAULT_DEBUG_MISSION_ID = "village"
+-- The session key of an arrival that carries no hint at all (Studio, a standalone boot): no
+-- mission, so the session is private.
+local NO_MISSION = ""
 -- The away clock ticks once a second (the Studio levers moved to DebugService in C1).
 local TICK_INTERVAL_SECONDS = 1
 
@@ -68,8 +76,9 @@ local tickAccumulator = 0
 -- Ruling 5: decided once, before anything else; flipping an attribute mid-session must not turn
 -- a live mission into a range.
 local mode: Types.CombatMode = CombatMode.Get()
--- Ruling 19: a proving build that boots a mission loops it in place, with no Ready button.
-local provingMission = mode == "mission" and CombatMode.IsProving()
+-- A proving build's lobby (L1 ruling 22): the trip home is the Studio bridge's kick, so
+-- RequestLeave is ignored there.
+local provingLobby = mode == "mission" and CombatMode.IsProving()
 
 -- The combat place sends the same Snapshot shape as the hub so the client model is identical,
 -- with the city fields zeroed: there is no plot and no income here. persistedIncomePerSecond is
@@ -85,12 +94,12 @@ local function sendSnapshot(player: Player): ()
 		end
 		return
 	end
-	local mission = ArenaService.GetMission()
 	local armoryConfig = Catalog.GetArmoryConfig()
 	local snapshot: Types.Snapshot = {
 		kind = "snapshot",
 		plotIndex = 0,
-		eraName = if mission ~= nil then mission.eraName else "",
+		-- Nothing in the dungeon place is tied to an era (L1).
+		eraName = "",
 		state = state,
 		incomePerSecond = 0,
 		persistedIncomePerSecond = state.incomeAtSave,
@@ -145,42 +154,19 @@ local function readArrival(player: Player): (string?, boolean, number?)
 	return missionId, data.overdrive == true, hostUserId
 end
 
--- Resolution order: live teleport data, then the Studio handoff record, then the Workspace
--- attributes, then the default mission — so build/combat.rbxl still plays on its own with no
--- hub, no teleport and no record. The fourth result is true only when the mission was named by
--- the DebugMission attribute in Studio: that run may skip the era lock (ArenaService).
-local function resolveRun(player: Player): (Types.MissionConfig?, boolean, number, boolean)
-	local combatConfig = Catalog.GetCombatConfig()
-	local missionId, overdrive, hintHostUserId = readTeleportHint(player)
-	if combatConfig == nil then
-		return nil, false, player.UserId, false
+-- The hub departure's hint: live teleport data, then the Studio handoff record. With neither
+-- (Studio, build/combat.rbxl on its own) there is no mission, no Overdrive, and this player is the
+-- host of the session they open. L1 ruling 4: the hint chooses nothing here; it is the key the
+-- hub's ticket is verified against (ArenaService.OpenSession).
+local function readHint(player: Player): (string, boolean, number)
+	local missionId, overdrive, hostUserId = readTeleportHint(player)
+	if missionId == nil then
+		missionId, overdrive, hostUserId = readArrival(player)
 	end
 	if missionId == nil then
-		local bridgeId, bridgeOverdrive, bridgeHost = readArrival(player)
-		if bridgeId ~= nil then
-			missionId = bridgeId
-			overdrive = bridgeOverdrive
-			hintHostUserId = bridgeHost
-		end
+		return NO_MISSION, false, player.UserId
 	end
-	local resolvedId = missionId or ""
-	local fromDebugAttribute = false
-	if missionId == nil then
-		local debugConfig = combatConfig.debug
-		local missionAttribute = workspace:GetAttribute(debugConfig.missionAttribute)
-		fromDebugAttribute = RunService:IsStudio()
-			and typeof(missionAttribute) == "string"
-			and missionAttribute ~= ""
-		resolvedId = if typeof(missionAttribute) == "string" and missionAttribute ~= ""
-			then missionAttribute
-			else DEFAULT_DEBUG_MISSION_ID
-		overdrive = workspace:GetAttribute(debugConfig.overdriveAttribute) == true
-	end
-	-- No hint (Studio or a standalone boot): this player is the host of whatever starts here.
-	return Catalog.GetMissionById(resolvedId),
-		overdrive,
-		hintHostUserId or player.UserId,
-		fromDebugAttribute
+	return missionId, overdrive, hostUserId or player.UserId
 end
 
 -- Shared by the first join (LoadAsync), a safe-mode retry (RetryLoadAsync) and a rejoin after a
@@ -207,29 +193,23 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	end
 	Combat.TouchHighestEra(state)
 
-	local mission, overdrive, hostUserId, debugMission = resolveRun(player)
-	if mission == nil or Catalog.GetCombatConfig() == nil then
-		-- The hint named no mission this build knows (or the configs are missing).
+	local missionId, overdrive, hostUserId = readHint(player)
+	if Catalog.GetCombatConfig() == nil then
+		-- Without Combat.json there is no session to open.
 		ReturnService.Refuse(player, "locked")
 		return
 	end
-	if mission.crowd == nil then
-		-- Ruling 27: only crowd missions play until Wave 3 gives every era its crowd block.
-		warn(`[Combat] mission {mission.id} has no crowd block; refused as locked`)
-		ReturnService.Refuse(player, "locked")
-		return
-	end
-	-- The first arrival opens the run it asked for and reads the hub's ticket; everyone else
-	-- joins the run already here. Yields on that MemoryStore read.
-	ArenaService.EnsureRun(mission, overdrive, hostUserId, player.Name, debugMission)
+	-- The first arrival opens the session and reads the hub's ticket; everyone else joins the
+	-- session already here. Yields on that MemoryStore read.
+	ArenaService.OpenSession(missionId, overdrive, hostUserId, player.Name)
 	if not player:IsDescendantOf(Players) then
 		-- Left during the ticket read: PlayerRemoving has already run, so undo what it could not.
 		ArenaService.ResetIfEmpty()
 		DataService.Release(player)
 		return
 	end
-	-- The bypass is only for someone who really was a member of THIS run a moment ago; anyone
-	-- else (a refused arrival, or a rejoin into a run that reset meanwhile) is judged afresh.
+	-- The bypass is only for someone who really was a member of THIS session a moment ago; anyone
+	-- else (a refused arrival, or a rejoin into a session that ended meanwhile) is judged afresh.
 	if kind == "arrival" or not ArenaService.WasAdmitted(player.UserId) then
 		local verdict = ArenaService.CheckAdmission(player, { probe = false })
 		if verdict ~= "ok" then
@@ -238,7 +218,7 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 		end
 	end
 	-- A down belongs to the run that caused it: a rejoin after a failed trip home still holds its
-	-- body record, and must not come back lying down (in a live wave they wait on the pad).
+	-- body record, and must not come back lying down (in a live fight they wait in the lobby camp).
 	-- Before the admit, so the first RunState it announces already says so.
 	if VitalsService.IsDown(player) then
 		VitalsService.StandUp(player)
@@ -250,6 +230,9 @@ local function runJoinSequence(player: Player, loader: Loader, kind: JoinKind): 
 	WeaponService.AddPlayer(player)
 	AbilityService.AddPlayer(player)
 	sendSnapshot(player)
+	-- The map, after the snapshot: this player's own stars, and to everyone, since an arrival
+	-- may change who leads.
+	WaveService.OnAdmitted(player)
 end
 
 -- Configure before Init: RemoteService refuses to create any remote without its definitions.
@@ -277,22 +260,39 @@ local returnBoot: Service = {
 	Start = ReturnService.Start,
 }
 
--- WaveService.Start() is "the lobby is ready, go", not a boot hook, so the boot pass gets its
--- own adapter (same shape as returnBoot above).
+-- WaveService's loop is its Boot, not a Start, so the boot pass gets its own adapter (same shape
+-- as returnBoot above).
 local waveBoot: Service = {
 	Init = WaveService.Init,
 	Start = WaveService.Boot,
 }
 
--- Boot order per contract (P5): data, remotes, registry, arena, weapons, range, abilities,
--- waves, debug, return. WeaponService starts VitalsService (the body) in both modes; RangeService
--- builds the range arena over ArenaService's fallback pad (range only); AbilityService needs
--- WeaponService's hooks; WaveService wires the mission hooks (inert in the range).
+-- L1: the lobby camp, mission mode only (the range builds its own arena through ArenaService).
+-- Built in the Init pass, before any service above it reads it, and before any player is in.
+local levelBoot: Service = {
+	Init = function()
+		if mode ~= "mission" then
+			return
+		end
+		LevelService.Init()
+		LevelService.BuildLobby()
+		ArenaService.SetLobby(LevelService.LobbySpawn())
+	end,
+	Start = function() end,
+}
+
+-- Boot order per contract (L1): data, remotes, registry, arena, the lobby, weapons, range,
+-- abilities, the run, debug, return. In mission mode ArenaService builds nothing (the fallback
+-- arena is the range's) and LevelService builds the lobby camp; WeaponService starts
+-- VitalsService (the body) in both modes; RangeService builds the range arena (range only);
+-- AbilityService needs WeaponService's hooks; WaveService wires the run's hooks and the placer
+-- (inert in the range).
 local orderedServices: { Service } = {
 	DataService,
 	RemoteService,
 	RunRegistry,
 	ArenaService,
+	levelBoot,
 	WeaponService,
 	RangeService,
 	AbilityService,
@@ -311,6 +311,9 @@ end
 
 RemoteService.SetHandler("RequestSnapshot", function(player: Player)
 	sendSnapshot(player)
+	-- The map rides with it: the client listens for MapState from boot but cannot ask for it,
+	-- so a client that booted late or reloaded its UI gets its stars here.
+	WaveService.SendMap(player)
 end)
 
 -- Safe-mode retry. Silent drops here are a courtesy; RetryLoadAsync re-checks the same
@@ -324,39 +327,41 @@ RemoteService.SetHandler("RequestRetryLoad", function(player: Player)
 	end)
 end)
 
--- Ready is a toggle. The run starts by the C2 lobby rule (ArenaService.CanStart): everyone here
--- ready AND the whole departing party in, or lobbyWaitSeconds after the first arrival. The
--- timeout half is polled by WaveService; this handler gives the instant start. Deliberately here
--- rather than in ArenaService: the roster service sits below WaveService in the boot order and
--- may not require it.
-RemoteService.SetHandler("RequestReady", function(player: Player)
-	-- Both halves are guarded on the lobby: ArenaService ignores the toggle once the run is
-	-- under way, and nothing here may restart a run that is already going. The range has no run,
-	-- and a proving mission starts itself (ruling 19).
-	if RangeService.IsActive() or provingMission or WaveService.GetPhase() ~= "lobby" then
+-- L1 ruling 7: the leader starts a level. RequestReady has no handler any more (its definition
+-- stays in CombatRemotes until L4, and no client sends it). Every check is WaveService's; the
+-- range has no run.
+RemoteService.SetHandler(
+	"RequestStartLevel",
+	function(player: Player, levelId: string, difficulty: string)
+		if RangeService.IsActive() then
+			return
+		end
+		WaveService.OnStartLevel(player, levelId, difficulty)
+	end
+)
+
+-- L1 ruling 21: end the live run with what was banked, or cut the summary's wait short.
+RemoteService.SetHandler("RequestAbandon", function(player: Player)
+	if RangeService.IsActive() then
 		return
 	end
-	ArenaService.SetReady(player)
-	if ArenaService.CanStart() then
-		WaveService.Start()
-	end
+	WaveService.OnAbandon(player)
 end)
 
--- Yields (the teleport retries), so it gets its own thread. Goes home alone, before or
--- instead of the group return.
+-- L1 ruling 22: to the city alone, as before. Ignored from a fighting member of a live run (the
+-- client shows Abandon there) and in a proving build, where the trip home is the Studio
+-- bridge's kick. Yields (the teleport retries), so it gets its own thread.
 RemoteService.SetHandler("RequestLeave", function(player: Player)
-	-- Lead ruling (P5): a proving mission never sends anyone home. In Studio that trip is the
-	-- bridge's kick; the run restarts in place instead (ruling 19).
-	if provingMission then
+	if provingLobby or not WaveService.MayLeave(player) then
 		return
 	end
 	task.spawn(ReturnService.SendHome, player, "leave")
 end)
 
--- Ruling 20: RequestAttack, RequestFire, RequestDraw and RequestAbility have no handler any more
--- (their definitions stay in CombatRemotes until Wave 3). Every attack, in the range and in a
--- mission, is one of the intents below. WeaponService and AbilityService refuse them outside a
--- run, from a member on the pad and from a downed player (ruling 21); tune and command stay
+-- P5 ruling 20: RequestAttack, RequestFire, RequestDraw and RequestAbility have no handler any
+-- more (their definitions stay in CombatRemotes until L4). Every attack, in the range and in a
+-- run, is one of the intents below. WeaponService and AbilityService refuse them outside the
+-- five live phases, from a member who waits and from a downed player; tune and command stay
 -- RangeService's, inert outside the range and outside Studio.
 RemoteService.SetHandler(
 	"RequestRangeAttack",
@@ -453,8 +458,8 @@ local function releasePlayer(player: Player): ()
 	RangeService.RemovePlayer(player)
 	WeaponService.RemovePlayer(player)
 	ArenaService.Remove(player)
-	-- A refused first arrival opened a run but was never a member, so Remove did nothing. Either
-	-- reset also puts the wave machine back in the lobby (ArenaService's reset hook).
+	-- A refused first arrival opened a session but was never a member, so Remove did nothing.
+	-- Either reset also puts the run machine back in the lobby (ArenaService's reset hook).
 	ArenaService.ResetIfEmpty()
 	DataService.Release(player)
 end
@@ -493,13 +498,30 @@ if RunService:IsStudio() and combatConfig ~= nil then
 	CrowdService.SetPerfLog(combatConfig.debug.perfLogSeconds)
 end
 
+-- The levels this build can play, in the map's order (a node with a level file); without a map,
+-- in the order of the files.
+local function playableLevels(): { string }
+	local expeditions = Catalog.GetExpeditionsConfig()
+	if expeditions == nil then
+		return Catalog.GetLevelIds()
+	end
+	local ids: { string } = {}
+	for _, node in expeditions.nodes do
+		local levelId = node.level
+		if levelId ~= nil and Catalog.GetLevelFile(levelId) ~= nil then
+			table.insert(ids, levelId)
+		end
+	end
+	return ids
+end
+
 if RangeService.IsActive() then
 	print("[Combat] booted — Proving Grounds (range)")
-elseif provingMission and combatConfig ~= nil then
-	local debugConfig = combatConfig.debug
-	print(
-		`[Combat] booted — mission (crowd, proving: {debugConfig.provingMission} from wave {debugConfig.provingStartWave})`
-	)
 else
-	print("[Combat] booted — mission (crowd)")
+	local line = `[Combat] booted — lobby (levels: {table.concat(playableLevels(), ", ")})`
+	if provingLobby and combatConfig ~= nil then
+		local debugConfig = combatConfig.debug
+		line ..= `; proving: {debugConfig.provingLevel} {debugConfig.provingDifficulty},` .. ` autoStart {debugConfig.provingAutoStart}`
+	end
+	print(line)
 end

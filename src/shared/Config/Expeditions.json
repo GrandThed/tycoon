@@ -1,0 +1,37 @@
+{
+	"version": 1,
+	"name": "Expeditions",
+	"difficulties": ["normal", "hard", "brutal"],
+	"difficultyNames": { "normal": "Normal", "hard": "Hard", "brutal": "Brutal" },
+	"lobby": { "layout": "Lobby" },
+	"nodes": [
+		{ "id": "forestRoad", "name": "Forest Road", "theme": "forest", "x": 0.12, "y": 0.73, "kind": "level", "level": "forestRoad" },
+		{ "id": "raiderArena", "name": "Raider Arena", "theme": "bonus", "x": 0.17, "y": 0.31, "kind": "bonus", "level": "raiderArena", "from": "forestRoad" },
+		{ "id": "castle", "name": "Castle", "theme": "castle", "x": 0.32, "y": 0.37, "kind": "level", "from": "forestRoad", "requires": { "node": "forestRoad" } },
+		{ "id": "underworld", "name": "Underworld", "theme": "underworld", "x": 0.52, "y": 0.69, "kind": "level", "from": "castle", "requires": { "node": "castle" } },
+		{ "id": "planet", "name": "Another Planet", "theme": "planet", "x": 0.72, "y": 0.33, "kind": "level", "from": "underworld", "requires": { "node": "underworld" } },
+		{ "id": "dream", "name": "The Dream", "theme": "dream", "x": 0.9, "y": 0.63, "kind": "level", "from": "planet", "requires": { "node": "planet" } }
+	],
+	"themes": {
+		"forest": { "color": [70, 182, 101] },
+		"bonus": { "color": [255, 200, 61] },
+		"castle": { "color": [143, 163, 199] },
+		"underworld": { "color": [242, 106, 63] },
+		"planet": { "color": [148, 120, 242] },
+		"dream": { "color": [255, 142, 196] }
+	},
+	"looks": {
+		"ground": { "material": "SmoothPlastic", "color": [108, 110, 116] },
+		"path": { "material": "SmoothPlastic", "color": [156, 158, 162] },
+		"campFloor": { "material": "SmoothPlastic", "color": [134, 136, 140] },
+		"wall": { "material": "SmoothPlastic", "color": [84, 86, 92] },
+		"gate": { "material": "SmoothPlastic", "color": [226, 96, 58] },
+		"checkpoint": { "material": "SmoothPlastic", "color": [255, 200, 61] },
+		"checkpointDone": { "material": "SmoothPlastic", "color": [70, 182, 101] },
+		"secret": { "material": "SmoothPlastic", "color": [176, 96, 224] },
+		"sign": { "material": "SmoothPlastic", "color": [52, 54, 62] },
+		"water": { "material": "SmoothPlastic", "color": [122, 138, 152], "transparency": 0.2 },
+		"lobby": { "material": "SmoothPlastic", "color": [124, 126, 132] }
+	},
+	"sign": { "textColor": [243, 246, 255], "pixelsPerStud": 20, "size": [6, 4, 6] }
+}

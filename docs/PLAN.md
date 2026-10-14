@@ -2563,6 +2563,12 @@ families, abilities and the player's body go into the Expeditions missions, era 
 | 3 | All four eras, both bosses everywhere, reward garnish; old mission code deleted. |
 | 4 | Co-op: revive by a teammate, party scaling checked, debug bots as crowd targets. |
 
+**Superseded 2026-10-13 by the missions re-plan (`docs/MISSIONS_DESIGN.md` §2):**
+- Waves 2 to 4 as planned are suspended.
+- L1 replaces the mission layer (section "L1 — Forest Road in grey" below).
+- Wave 1's ten-wave arena stays as the map's "Raider Arena" node.
+- The publish freeze now holds until L4.
+
 **Where it is (2026-10-13):**
 - **Wave 1 merged 2026-10-13; the second-review fixes merged the same day (bf074f3), the six place files rebuilt.**
 - Wave 1 is on `main` (`7968a24`; the six place files rebuilt in `1bd191e`). Ben chose
@@ -2704,6 +2710,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - **A run pays 144,250 cash (+1.5%), 258 Timber (+0.8%) and 35 Valor.** Target 142,185 / 256 /
   35.
 - **A reacting player clears all ten waves in 11.5 to 11.8 min** (target 10–15).
+  *Corrected in L1 (2026-10-13): that was three seeds. Over twelve seeds the same simulator
+  gives 10.1 to 11.8 min (`docs/BALANCE.md` P5 and "L1: the Raider Arena").*
 - **The Colossus alone: 76.8 s. The Warlord alone: 97.7 s.** Both as in the range. No hit taken.
 - **Standing still in wave 1: down at 10.6 to 10.8 s** (target 6–12).
 - **No hit over 25%:** the worst is the Colossus's charge, 36 of 145 (24.8%).
@@ -2735,7 +2743,8 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 **Carried:**
 - **Publish freeze (owner: lead):** do not publish the Expeditions place from `main` until
-  Wave 3 is merged. Until then it plays only Village.
+  Wave 3 is merged. Until then it plays only Village. *Replaced 2026-10-13: until L4 (see
+  "L1").*
 - **To Wave 2 (owner: lead; luau-engineer, ui-engineer):** loadout and variant styles in the
   lobby and between waves; profile schema v7 (`combat.loadout`); the cooldown carried across a
   family switch.
@@ -2799,10 +2808,298 @@ families, abilities and the player's body go into the Expeditions missions, era 
 - [x] Second review (Opus): fixes built on `p5-missions` (INTERFACES "Second review round
   (2026-10-13)")
 - [x] Wave 1 merged to `main` (lead): Wave 1 merged 2026-10-13; second-review fixes merged the same day (bf074f3).
-- [ ] Wave 1 playtest (Ben)
-- [ ] Wave 2 — loadout and progression
-- [ ] Wave 3 — all four eras
-- [ ] Wave 4 — co-op
+- [ ] Wave 1 playtest (Ben). From the L1 merge on, the arena is the map's Raider Arena node
+  (PLAYTEST "L1" step 8).
+- [ ] Wave 2 — loadout and progression (suspended 2026-10-13; the loadout moves to L3)
+- [ ] Wave 3 — all four eras (suspended 2026-10-13)
+- [ ] Wave 4 — co-op (suspended 2026-10-13; parties and revive move to L5)
+
+## L1 — Forest Road in grey
+
+**Goal:** levels replace the mission layer.
+- The dungeon place boots into a **lobby camp** with a **map**.
+- The leader departs to a level.
+- Every run ends in a summary, then the lobby.
+- The first level is **Forest Road**, in plain grey blocks.
+- **No sound. Phones must work.**
+
+**Documents:**
+- Plan of record: `docs/MISSIONS_DESIGN.md` §2, §4 "Where it runs", §5, §6, §12, §14.
+- Contracts: `docs/INTERFACES.md` "L1 contracts — Forest Road in grey" (rulings 1–35), with
+  "Review round and state (2026-10-13)" at its end.
+- Fix list with the lead's rulings: `docs/prompts/l1-fix-round.md`.
+- Values: `docs/BALANCE.md` "L1".
+- Branch `l1-forest-road`, worktree `C:\Users\benja\Desktop\tycoon-p5`.
+
+**Ben's rulings (2026-10-13; MISSIONS_DESIGN §2):**
+1. A level is camps along a path. Fights happen only in flat camps whose gates close.
+2. All dungeons are in one Roblox place. The player is moved to the level inside it.
+3. After a level you stay in the dungeon place, in a lobby camp. Return goes to the city.
+4. One party per server, one level at a time.
+5. Solo, a down ends the run. You keep what the checkpoints banked.
+6. The map is its own path: one screen for all five levels.
+7. The player picks the difficulty; harder pays more.
+8. "Go for L1". Each step that passes review and QA is merged to `main`, as in P5.
+
+**Steps (MISSIONS_DESIGN §14):**
+
+| Step | Scope | State |
+|---|---|---|
+| L0 | Pictures: the map, Forest Road's plan, the Armory | Done 2026-10-13 |
+| L1 | Forest Road in grey: lobby camp, map, three camp parts, stand-in boss, difficulties | **Built, reviewed and fixed 2026-10-13; merging after QA** |
+| L2 | Secrets and keys: Double Jump bought, the Flamethrower, the frost weapon | Not started |
+| L3 | The Armory: per-weapon tiers, the profile shape, weapon models | Not started |
+| L4 | The real forest: scenery, the Camp Chief, the map in the hub, rewards balanced. First version that may be published | Not started |
+| L5 | Friends: parties and revive in a level | Not started |
+
+**Where it is (2026-10-13):**
+- Built `fc43816`. Reviewed: 0 Critical, 9 Major, 44 Minor. Fixed `de03e36`. QA is running.
+- **Not merged yet.** After QA the lead merges `l1-forest-road` to `main` and rebuilds the six
+  place files.
+- Then Ben's playtest: `docs/PLAYTEST.md` "L1 — Forest Road in grey"; setup in
+  `docs/MANUAL_STEPS.md` "L1".
+
+**What shipped (`build/proving.rbxl`, Play):**
+- **The lobby camp:**
+  - a small grey camp, 48 × 48, with the map open;
+  - Forest Road is selected at Normal;
+  - Raider Arena is open;
+  - Castle, Underworld, Another Planet and The Dream are locked: "Not built yet".
+- **Keys:**
+  - **Enter** = Depart / Back to camp;
+  - **M** = map;
+  - **arrows** = level and difficulty;
+  - **1** melee, **2** ranged;
+  - **Space** jump, **Left Shift** dash, **C** in the air = slam;
+  - **Backspace twice** = abandon.
+  - Studio only: **N** = finish this part, **B** = jump to the boss, **G** = stronger gear.
+- **Forest Road** (`Layouts/Levels/ForestRoad.json`, 73 Parts):
+  - a 549-stud route on a 16-wide road: a 12-stud gap, a creek bridge, ledges of 8 and 4 studs;
+  - **A, Pickets**: 60 × 60, three waves of fodder and slingers;
+  - **B, Main Camp**: 100 × 94, four waves; brutes and one lobber join;
+  - **C, The Chief's Clearing**: 81 × 81, a guard wave, then the **Colossus** (the stand-in for
+    the Camp Chief);
+  - Hard adds marksmen and plated elites.
+- **A camp:**
+  - Walking into its fenced rectangle (a gateway counts) starts "Gates close in 3".
+  - The gates then shut and an invisible wall stands at the floor's edge.
+  - Raiders come in bursts.
+  - The last kill opens the gates. Its checkpoint banks: "Progress saved".
+- **Difficulties** Normal, Hard, Brutal: recommended tiers 2 / 4 / 6, rewards ×1 / ×2 / ×4.
+- **The summary:**
+  - "Cleared", "You went down", "Abandoned" or "Out of time";
+  - a star for a new difficulty cleared;
+  - "Back to camp in 10"; Enter goes at once.
+  - Back in the lobby everyone is healed. Stars last for the session only.
+- **Raider Arena**: P5 Wave 1's ten waves, unchanged, read through two adapters. It banks at
+  every wave.
+- **Phone**: the map laid out for 667 × 375 landscape; auto-swing and auto-fire; no Attack
+  button. Abandon is hidden while you fight a wave or a boss.
+
+**Server:**
+- **New pure modules:**
+  - `StageFlow.luau`: every rule of a run (trigger, gates, clears, banks, ends, rescue, skips,
+    map nodes, stars);
+  - `LevelGeometry.luau`: every box a layout becomes.
+  - The crowd harness and `mutate.py` load both.
+- **New services:**
+  - `LevelService.luau`: builds the lobby and the level as anchored grey Parts;
+  - `BarrierGroups.luau`: the wall's collision groups, moved out of `ArenaService`.
+- **`WaveService`** is rewritten round `StageFlow` and only executes its actions.
+- **`ArenaService`:**
+  - keeps the session (host, ticket, roster, admission, summaries);
+  - `MoveMember` is the one body move, and tells the client through `Placed` / `PlacedSeq`.
+- **`CrowdService`:** a fixed wire origin; `SetBounds` refuses while a body lives.
+- **Smaller changes:**
+  - `WeaponService.SetGearOverride`, Studio only;
+  - `DebugService`: skips `stage` / `boss` and the `gear` lever;
+  - `ReturnService`: the session's card on the way home;
+  - `Main`: the lobby boot and the join;
+  - `Catalog`: level, layout and map getters;
+  - `Combat`: `CampWave`, `CampReward`, `BurstSeconds`.
+- **Remotes:**
+  - new `RequestStartLevel`, `RequestAbandon` and the `MapState` event;
+  - `RequestReady` has no handler.
+
+**Client:**
+- New shared `src/client/UI/MapScreen.luau` (the hub mounts it in L4).
+- `CombatUIController.bootMission`: the map, its keys, Backspace, facing along the route after a
+  far server move.
+- `CombatHud`:
+  - the objective line ("Follow the road", "Gates close in 3", "Pickets: 14 left");
+  - "Camp 2 / 3", "Progress saved", the difficulty chip;
+  - Map / Return / Abandon.
+- `SummaryCard`, `CrowdRenderer.SetFloor`, `CombatFxController` (`camp`, `notice`),
+  `DebugPanel`.
+- `CameraController` (`OnPlaced`, `LookToward`, `KeepAltFree`); `MovementController` (the
+  settle after a move).
+
+**Config:**
+- `Combat.json`: `levels` (13 keys) and the debug keys `provingLevel`, `provingDifficulty`,
+  `provingAutoStart`, `gearPresets`; `coop.returnGroupSeconds` 10.
+- New `Expeditions.json` (the map, its looks, `sign`).
+- New `Levels/0_RaiderArena.json`, `Levels/1_ForestRoad.json`.
+- New `Layouts/Levels/Lobby.json`, `ForestRoad.json`, `RaiderArena.json`.
+- `combat.project.json`: maps `MapScreen`; `StreamingEnabled = false`.
+
+**Tools:**
+- new `check_levels.py` (layout and map gates, 123 checks);
+- new `check_stage_mirror.py` (the real Luau against the simulators);
+- `sim_range.py` `LevelRun` and four players;
+- `sim_combat.py` 19–21;
+- `tests_l1.luau`, `tests_l1_world.luau`, `stage_mirror.luau`;
+- `run_harness.py` and `mutate.py` extended;
+- `proving_project.py` merges Workspace attributes.
+
+**Review outcome, L1** (INTERFACES "Review round and state (2026-10-13)"):
+- Four Opus reviewers, one slice each: the run, the world, the client, the data and tests.
+  **0 Critical, 9 Major, 44 Minor.**
+- The nine Majors, all fixed:
+  1. During the summary the rescue pulled lobby bodies into the dead level → `StageFlow.Rescue`.
+  2. The trigger was the floor inset by 4 → the whole fenced rectangle.
+  3. `maxAlive: 0` never spawned → `Validate` refuses every zero or empty value.
+  4. Three reward and burst rules were tested only against their own wrappers → hand-worked
+     cases, three mutations, `check_stage_mirror.py`.
+  5. A missing key threw and the leader got no answer → `Validate` names it, a pcall nets it,
+     the answer is `unavailable`.
+  6. The invisible wall stood outside the fence (a fence top was a perch) → its inner face is
+     the floor's edge.
+  7. Abandon could not be clicked on a PC → Backspace pressed twice.
+  8. Tall cover was a perch the boss could not hit → every obstacle 3.5 tall.
+  9. No band could see damage → a human-reaction player gates Hard and Brutal.
+- The fix round ran from `docs/prompts/l1-fix-round.md`. The session limit cut it off once;
+  fresh engineers finished it from the file.
+- An independent check of the fix diff: **0 Critical, 0 Major, 6 Minor**, all fixed.
+- **Also changed in the round:**
+  - A reset during a countdown keeps the run: the camp re-arms.
+  - The close is judged again for 0.5 s.
+  - A skip pays nothing.
+  - Everyone is healed in the lobby.
+  - The star goes to those fighting before the last boundary.
+  - The director's tempo runs through breathers again.
+  - Floors are 4 deep; `killY` is −13; the signs stand on pads; fences are 4; the lookout's top
+    is 34.
+  - The G presets are 2 / 1, 4 / 4, 6 / 6.
+  - A Depart pressed in the 2 s after a return is held and sent.
+  - One message per camp clear.
+
+**Gates** (as reported by the engineers; QA was running when this was written):
+- `run_harness.py`: `HARNESS: PASS (1,292 checks, …)`.
+- `mutate.py`: baseline first, 417 mutations, 0 not caught.
+- `check_levels.py`: 123 checks.
+- `check_stage_mirror.py`: about 5,600 comparisons, all equal.
+- `sim_range.py --check` and `sim_combat.py --check`: every L1 and P5 band.
+- `gen_asset_manifest.py --check`: up to date.
+- **New gates from L1 on:** `py tools/check_levels.py` and `py tools/check_stage_mirror.py`.
+- **Checked by reading only:** `WaveService`, `ArenaService`, `Main`, `LevelService`'s
+  Instances, every client file.
+
+**Balance (`docs/BALANCE.md` "L1"):**
+- **Normal at 2 / 1, the reacting player:**
+  - he clears in 6.30–6.79 min with no hit;
+  - the Colossus takes about 76 s;
+  - the worst hit is 24.8% of 145;
+  - standing still in camp A, you are down at 9.8 s.
+- **Hard and Brutal are gated by a player with a human's reaction (0.55 s):**
+  - At the recommended gear (4 / 4, 6 / 6) he clears without going down: about 6.6 min on
+    Normal, 7.3 on Hard, 7.2 on Brutal.
+  - One preset below, he goes down or takes ×1.8 (Hard) / ×1.4 (Brutal) as long.
+  - The Colossus alone there outlasts 135 s / 180 s.
+  - He is only ever hit by slinger shots, so his gate measures slingers × `damageScale`.
+- **Skill beats gear:** the ideal player clears Hard at 2 / 1 in about 16 minutes with no hit.
+- **Pay:**
+  - Normal pays 88,200 cash, 155 Timber, 10 Valor.
+  - Hard pays about ×2.5, Brutal about ×5.7.
+  - Cash per minute on Normal is 13,400.
+- **Raider Arena:** 9.9 to 12.0 min over twelve seeds, one under its 10-minute floor;
+  unchanged by the fix round. *Correction: P5's "11.5 to 11.8 min" was three seeds; over
+  twelve it was 10.1 to 11.8.*
+- Nothing was tuned in real play.
+
+**Known limits at L1 (told to Ben):**
+- Grey blocks only; no scenery, no secrets that work, no abilities shop, no Armory change.
+- Stars last for the session only (no profile change).
+- The Colossus stands in for the Camp Chief.
+- The city's Expedition panel still lists four old missions; any of them lands in the lobby.
+- On a phone there is no way out of a boss fight but going down (Abandon is hidden in a fight).
+- The crowd walks through the palisade and through cover. Kiting still avoids most hits.
+- Camp A's slingers die on arrival (60 × 60 is too small to keep away): is camp A too easy?
+- A party in a level is unchecked (L5).
+- **Never measured:**
+  - a move of several hundred studs on a phone;
+  - the level's Parts on a phone;
+  - the gap on a touch screen;
+  - the camera at a camp's wall;
+  - the crowd on floors at 8 and 12;
+  - the `[Perf]` step time in camps A and B (budget p95 under 2 ms; the lead reads Studio's
+    log).
+
+**Carried:**
+- **Publish freeze (owner: lead):** the Expeditions place must not be published from `main`
+  until L4. This replaces P5's "until Wave 3".
+- **Before any publish of the Expeditions place:**
+  - **Owner: luau-engineer.** The dash i-frame exploit, from P5. `OnDash` grants i-frames on
+    the request alone, so a stationary modified client voids about half of enemy hits. Judge
+    the dash against the position ring at hit time.
+  - **Owner: lead + economy-designer.** The free rescue gives the get-up i-frames. A level
+    with enemies near an open edge needs a rescue cooldown (INTERFACES L1 "Open for later").
+- **L2, owner: lead (rulings), economy-designer (layout), luau-engineer and ui-engineer
+  (code):**
+  - The lookout against Leap Smash: one jump plus Leap Smash rises 28 (31 with the step-up);
+    the ledge is 26 above the road.
+  - Secrets and their keys.
+  - Double Jump as a purchase.
+- **L3, owner: lead; economy-designer for the numbers:**
+  - The Armory and the profile shape (levels, stars, secrets, weapons, abilities).
+  - Hard's and Brutal's rewards are placeholders: Village-scale cash and Timber for gear far
+    beyond the Village.
+- **L4:**
+  - **Owner: economy-designer.** The arena's clear time (one seed in twelve under 10 min)
+    and its merged waves banking once.
+  - **Owner: economy-designer.** A better simulated human: slow on several threats, misreads
+    tells, hit by melee.
+  - **Owner: lead, with the asset builders.** Scenery and the Camp Chief.
+  - **Owner: luau-engineer + ui-engineer.** Delete dead code: `EnemyService`, `CombatService`,
+    the three era missions without crowd waves, the C1 client boot (the full list is in
+    INTERFACES L1 "Open for later").
+  - **Owner: lead, with Ben in Studio.** Phone measurements.
+- **L5:**
+  - **Owner: luau-engineer.** Party leadership is taken from the first arrival's unverified
+    hint. Also: parties in a level, revive by a teammate, joining late.
+  - **Owner: ui-engineer.** A gamepad key for the map and for Abandon; a way out of a boss
+    fight on touch.
+- **Any step:**
+  - **Owner: ui-engineer.** The map at 568 × 320 and in portrait.
+  - **Owner: economy-designer + luau-engineer.** A per-camp burst size (`crowd.burst` is the
+    level's; camp B could take 12).
+  - **Owner: lead.** Brutal's earlier second phase. It is not expressible: enrage belongs to
+    the kind, not the difficulty.
+  - **Owner: luau-engineer.** CrowdService's `DEFAULT_HALF_SIZE` literal.
+  - **Owner: luau-engineer.** Two older mutants are caught only by the bundle stopping
+    (`tests_s3` / `tests_p5`).
+  - **Owner: luau-engineer.** RangeService places bodies without the `Placed` attributes.
+- **Still carried from P5** (owners in "P5" → "Carried"):
+  - Mag Dump's scale;
+  - a dropped boss counts as a clear;
+  - no timeout on the wait for a body;
+  - a plate break earns no share;
+  - a same-wave `ForceWave` leaves circles;
+  - the Longbow on bosses;
+  - Ben's open P3 questions;
+  - his verdicts on the Warlord, the `fight` set and P5 Wave 1.
+
+**Next:**
+1. QA finishes on `de03e36`.
+2. The lead merges `l1-forest-road` to `main` and rebuilds the six place files.
+3. **Ben's L1 playtest** (`docs/PLAYTEST.md` "L1 — Forest Road in grey"; setup in
+   `docs/MANUAL_STEPS.md` "L1"). Not before step 2.
+4. The lead reads the `[Perf]` lines from Studio's log.
+5. L2 only on Ben's word.
+
+- [x] L1 built (`fc43816`)
+- [x] L1 reviewed, fix round done (`de03e36`; INTERFACES "Review round and state (2026-10-13)")
+- [ ] L1 merged to `main`, six place files rebuilt (lead)
+- [ ] L1 playtest (Ben)
 
 ## M12 — Growing city
 

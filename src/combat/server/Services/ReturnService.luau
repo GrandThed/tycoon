@@ -10,6 +10,12 @@
 -- Nothing here writes cash, lastSeen, incomeAtSave or slots: the hub owns the city economy, and
 -- a combat server must never be able to restamp it.
 --
+-- L1 (docs/INTERFACES.md "L1 contracts", rulings 20 and 22): a run no longer ends in a trip
+-- home. It ends in the lobby camp, and the only way to the city is the player's own Return
+-- (SendHome). The card that travels is therefore the SESSION's: everything credited since the
+-- admit, under the map's name. SendHomeGroup stays in the file, uncalled, until L5 decides how a
+-- party goes home together.
+--
 -- Like the hub's handoff, this releases the session before it teleports, so every failure path
 -- (a thrown call OR an asynchronous refusal on TeleportInitFailed) has to get the profile back.
 
@@ -56,16 +62,17 @@ local function sendUnavailable(player: Player): ()
 	RemoteService.FireClient(player, "ActionResult", result)
 end
 
--- A player who was never admitted (a refused arrival pressing Return) still goes home, with a
--- zeroed card, and without creating a summary entry for a non-member.
+-- The session's card: everything credited since the admit (L1). A player who was never admitted
+-- (a refused arrival pressing Return) still goes home, with a zeroed card, and without creating
+-- a summary entry for a non-member.
 local function buildSummary(player: Player): Types.RunSummary
 	if ArenaService.IsAdmitted(player) then
-		return ArenaService.GetSummary(player.UserId)
+		return ArenaService.GetSessionSummary(player.UserId)
 	end
-	local mission = ArenaService.GetMission()
+	local expeditions = Catalog.GetExpeditionsConfig()
 	return {
-		missionId = if mission ~= nil then mission.id else "",
-		overdrive = ArenaService.IsOverdrive(),
+		missionId = if expeditions ~= nil then expeditions.name else "",
+		overdrive = false,
 		wavesCleared = 0,
 		bestWave = 0,
 		died = false,
@@ -157,8 +164,20 @@ end
 -- was decided BEFORE ArenaService.Remove, while membership could still be read.
 local function trySendHome(player: Player, reason: string, kind: LeaveKind): boolean
 	local summary = buildSummary(player)
-	local summaryState = ArenaService.BuildRunState("summary", summary)
-	-- Going alone: the group countdown does not apply to this card.
+	-- The card on the way home: reason "leave" tells the client it is the session's totals, with
+	-- no countdown and no button.
+	local leaveResult: Types.RunResult = {
+		levelId = "",
+		levelName = summary.missionId,
+		difficulty = "",
+		reason = "leave",
+		campsCleared = 0,
+		camps = 0,
+		savedAt = "",
+		star = false,
+	}
+	local summaryState = ArenaService.BuildRunState("summary", summary, leaveResult)
+	-- Going alone: no countdown applies to this card.
 	summaryState.returnIn = nil
 	RemoteService.FireClient(player, "RunState", summaryState)
 

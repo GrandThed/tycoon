@@ -18,10 +18,15 @@
 -- commands (RequestRangeCommand, RangeService).
 --
 -- P5 (docs/INTERFACES.md "P5 contracts", ruling 25): the levers point at the crowd. `wave`
--- starts that wave at once, `skip` ("next" | "boss") is the B and N keys, `spawn` raises a crowd
--- kind at the rim, `godMode` and `setGear` go through VitalsService, `killAll` kills the crowd
--- with its rewards. Debug bots are Humanoid rigs the crowd cannot target: until Wave 4 the
--- `bots` lever only warns.
+-- forces a wave of the live camp, `spawn` raises a crowd kind at the camp's next spawn point,
+-- `godMode` and `setGear` go through VitalsService, `killAll` kills the crowd with its rewards.
+-- Debug bots are Humanoid rigs the crowd cannot target: the `bots` lever only warns.
+--
+-- L1 (docs/INTERFACES.md "L1 contracts", rulings 33 and 34): `skip` takes "stage" (the N key:
+-- finish this part of the level) and "boss" (the B key); `gear` "next" (the G key) steps the
+-- caller through Combat.json debug.gearPresets as a Studio-only session override, which is also
+-- what `setGear` sets in a proving build (there the baked gear wins over the profile, so writing
+-- the profile changed nothing where Ben plays).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -31,6 +36,7 @@ local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
 local Armory = require(sharedFolder:WaitForChild("Armory"))
 local Catalog = require(sharedFolder:WaitForChild("Catalog"))
+local CombatMode = require(sharedFolder:WaitForChild("CombatMode"))
 
 local servicesFolder = script.Parent.Parent:WaitForChild("Services")
 local DataService = require(servicesFolder:WaitForChild("DataService"))
@@ -39,6 +45,8 @@ local ArenaService = require(script.Parent:WaitForChild("ArenaService"))
 local WaveService = require(script.Parent:WaitForChild("WaveService"))
 local RangeService = require(script.Parent:WaitForChild("RangeService"))
 local VitalsService = require(script.Parent:WaitForChild("VitalsService"))
+local WeaponService = require(script.Parent:WaitForChild("WeaponService"))
+local RunFx = require(script.Parent:WaitForChild("RunFx"))
 
 local TICK_INTERVAL_SECONDS = 1
 
@@ -50,6 +58,8 @@ local warnedBots = false
 -- The godMode attribute is a state, applied when it changes, so the remote lever's own setting
 -- for one player is not overwritten by the poll a second later.
 local lastGodAttribute: boolean? = nil
+-- The `gear` lever: which of debug.gearPresets each player holds (0 = none yet).
+local gearPreset: { [Player]: number } = {}
 
 local DebugService = {}
 
@@ -69,14 +79,16 @@ local function eachState(player: Player?, apply: (Player, Types.PlayerState) -> 
 	end
 end
 
+-- The live level's material; nothing in the lobby, where no level says which one.
 local function grantMaterials(player: Player?, amount: number): ()
-	local mission = ArenaService.GetMission()
-	if mission == nil or amount <= 0 then
+	local level = ArenaService.GetLevel()
+	if level == nil or level.material == "" or amount <= 0 then
 		return
 	end
+	local material = level.material
 	eachState(player, function(target: Player, state: Types.PlayerState)
-		local owned = state.combat.materials[mission.material] or 0
-		state.combat.materials[mission.material] = owned + amount
+		local owned = state.combat.materials[material] or 0
+		state.combat.materials[material] = owned + amount
 		ArenaService.SendSnapshot(target)
 	end)
 end
@@ -112,18 +124,68 @@ local function setGear(player: Player?, spec: string): ()
 	if next(wanted) == nil then
 		return
 	end
+	local proving = CombatMode.IsProving()
 	eachState(player, function(target: Player, state: Types.PlayerState)
-		if wanted.melee ~= nil then
-			state.combat.gear.melee = wanted.melee
+		if proving then
+			-- L1 ruling 34: the session override, never the profile. A slot the lever did not
+			-- name keeps the gear the player fights at now.
+			local gear, ascension = WeaponService.GearOf(target)
+			WeaponService.SetGearOverride(target, {
+				melee = wanted.melee or gear.melee,
+				ranged = wanted.ranged or gear.ranged,
+			}, ascension)
+		else
+			if wanted.melee ~= nil then
+				state.combat.gear.melee = wanted.melee
+			end
+			if wanted.ranged ~= nil then
+				state.combat.gear.ranged = wanted.ranged
+			end
 		end
-		if wanted.ranged ~= nil then
-			state.combat.gear.ranged = wanted.ranged
-		end
-		-- Weapons decide max HP: VitalsService, the bar's only writer, resizes it from the new
-		-- gear (a proving mission keeps its baked gear, ruling 12).
+		-- Weapons decide max HP: VitalsService, the bar's only writer, resizes it from the gear.
 		VitalsService.RefreshMaxHp(target)
 		ArenaService.SendSnapshot(target)
 	end)
+end
+
+-- L1 ruling 33, the G key: the caller's next entry of debug.gearPresets becomes their session
+-- gear, and the party is told which.
+local function nextGear(player: Player?): ()
+	local combatConfig = Catalog.GetCombatConfig()
+	local armoryConfig = Catalog.GetArmoryConfig()
+	if player == nil or combatConfig == nil or armoryConfig == nil then
+		return
+	end
+	local presets = combatConfig.debug.gearPresets
+	if presets == nil or #presets == 0 then
+		return
+	end
+	-- The first press steps past the preset the player already holds (a proving build starts on
+	-- the first one), so every press is a visible change.
+	local current = gearPreset[player]
+	if current == nil then
+		current = 0
+		local gear = WeaponService.GearOf(player)
+		for at, entry in presets do
+			if entry.melee == gear.melee and entry.ranged == gear.ranged then
+				current = at
+				break
+			end
+		end
+	end
+	local index = current % #presets + 1
+	local preset = presets[index]
+	if
+		Armory.TierDef(armoryConfig, "melee", preset.melee) == nil
+		or Armory.TierDef(armoryConfig, "ranged", preset.ranged) == nil
+	then
+		warn(`[DebugService] gear preset "{preset.name}" names a tier the Armory lacks`)
+		return
+	end
+	gearPreset[player] = index
+	WeaponService.SetGearOverride(player, { melee = preset.melee, ranged = preset.ranged }, nil)
+	VitalsService.RefreshMaxHp(player)
+	RunFx.Push({ kind = "notice", text = "Gear " .. preset.name })
 end
 
 local function setGodMode(player: Player?, enabled: boolean): ()
@@ -139,11 +201,11 @@ local function setGodMode(player: Player?, enabled: boolean): ()
 	end
 end
 
--- Ruling 24: the crowd targets Players only, so a bot would stand in the arena doing nothing.
+-- P5 ruling 24: the crowd targets Players only, so a bot would stand in a camp doing nothing.
 local function refuseBots(): ()
 	if not warnedBots then
 		warnedBots = true
-		warn("[DebugService] debug bots are not supported in crowd missions until Wave 4")
+		warn("[DebugService] debug bots are not supported against the crowd (L5 decides)")
 	end
 end
 
@@ -189,8 +251,10 @@ local function applyLever(player: Player?, lever: string, value: any): ()
 	end
 	if lever == "wave" and typeof(value) == "number" then
 		WaveService.ForceWave(value)
-	elseif lever == "skip" and (value == "next" or value == "boss") then
+	elseif lever == "skip" and (value == "stage" or value == "boss") then
 		WaveService.Skip(value)
+	elseif lever == "gear" and value == "next" then
+		nextGear(player)
 	elseif lever == "spawn" and typeof(value) == "string" and value ~= "" then
 		WaveService.SpawnOne(value)
 	elseif lever == "godMode" then
@@ -279,7 +343,11 @@ local function pollAttributes(debugConfig: Types.CombatDebugConfig): ()
 	end
 end
 
-function DebugService.Init(): () end
+function DebugService.Init(): ()
+	Players.PlayerRemoving:Connect(function(player: Player)
+		gearPreset[player] = nil
+	end)
+end
 
 function DebugService.Start(): ()
 	if not isStudio or levelConnection ~= nil then

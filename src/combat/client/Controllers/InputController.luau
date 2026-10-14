@@ -404,9 +404,14 @@ end
 -- Only phases where a swing can possibly land. The server refuses the rest anyway; not
 -- sending keeps the attack bucket for real swings.
 local function inPlay(): boolean
-	return missionState.phase == "wave"
-		or missionState.phase == "breather"
-		or missionState.phase == "boss"
+	-- L1 ruling 8: the five live phases. The road (`travel`) and a camp's countdown (`gate`)
+	-- are play too; IDLE_PHASES, the range path's own gate, already leaves them out.
+	local phase = missionState.phase
+	return phase == "travel"
+		or phase == "gate"
+		or phase == "wave"
+		or phase == "breather"
+		or phase == "boss"
 end
 
 -- Range path: no attack, draw, cast or slot switch now. Knocked down (P4), or (P5) a mission

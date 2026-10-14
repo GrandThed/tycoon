@@ -6,18 +6,19 @@
 --
 -- The panel holds no game knowledge: the wave it increments and the gear tier it raises
 -- come from the RunState and the Snapshot that CombatUIController pushes in, and the spawn
--- keys come from the mission config. Nothing here is a constant that belongs in JSON.
+-- keys are the level's rewarded crowd kinds, which it is handed. Nothing here is a constant
+-- that belongs in JSON.
+--
+-- L1 (docs/INTERFACES.md "L1 contracts", ruling 33): the three Studio keys have a button each
+-- (N = skip the stage, B = skip to the boss, G = the next gear preset), so the phone emulator,
+-- which has no keys, can do what the keys do. The wave stepper stays and forces a wave of the
+-- live camp.
 --
 -- Geometry matches the hub's DebugPanel: 48 design px buttons (the 44 physical px tap
 -- target at MIN_SCALE) wrapped into two columns. A short landscape viewport makes the body
 -- SCROLL rather than shrink, because a lever that is 27 px tall is a lever no one can hit.
 -- It parks in the left column between the run header and the bottom-left controls, the one
 -- band no other HUD element uses in either orientation, and collapses to a single tab.
-
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
-local Types = require(sharedFolder:WaitForChild("Types"))
 
 local Create = require(script.Parent:WaitForChild("Create"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
@@ -29,9 +30,15 @@ export type Deps = {
 }
 
 export type DebugPanelHandle = {
-	SetMission: (mission: Types.MissionConfig?) -> (),
+	-- The crowd kinds the spawn buttons name: the live level's rewarded kinds, sorted; none
+	-- in the lobby.
+	SetKinds: (kinds: { string }) -> (),
 	SetWave: (wave: number) -> (),
 	SetGear: (melee: number, ranged: number) -> (),
+	-- false = the whole strip, its tab included, is off the screen (the map is open: it is a
+	-- full-screen sheet of the strip's own ZIndex tier, and the tab drew over it). What was open
+	-- is open again when it comes back.
+	SetVisible: (visible: boolean) -> (),
 	SetLayout: (scale: number, viewportSize: Vector2) -> (),
 	Destroy: () -> (),
 }
@@ -181,9 +188,18 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	leverButton("Wave +1", function()
 		deps.onLever("wave", wave + 1)
 	end)
-	-- Spawn buttons are created up front and named from the mission config, so the enemy
+	leverButton("Skip stage (N)", function()
+		deps.onLever("skip", "stage")
+	end)
+	leverButton("To boss (B)", function()
+		deps.onLever("skip", "boss")
+	end)
+	leverButton("Gear next (G)", function()
+		deps.onLever("gear", "next")
+	end)
+	-- Spawn buttons are created up front and named from the level's config, so the kind
 	-- keys stay in JSON where they belong.
-	for _ = 1, Theme.COMBAT_DEBUG_MAX_SPAWN_KEYS do
+	for _ = 1, Theme.COMBAT_DEBUG_MAX_KIND_KEYS do
 		local button = leverButton("Spawn —", function(source: TextButton)
 			local key = source:GetAttribute("EnemyKey")
 			if typeof(key) == "string" then
@@ -229,15 +245,10 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 	end)
 
 	local handle: DebugPanelHandle = {
-		SetMission = function(mission: Types.MissionConfig?)
-			local keys: { string } = {}
-			if mission ~= nil then
-				for key in mission.enemies do
-					table.insert(keys, key)
-				end
-				-- Sorted so the buttons never swap places between two identical sessions.
-				table.sort(keys)
-			end
+		SetKinds = function(kinds: { string })
+			-- Sorted so the buttons never swap places between two identical sessions.
+			local keys = table.clone(kinds)
+			table.sort(keys)
 			for index, button in spawnButtons do
 				local key = keys[index]
 				button.Visible = key ~= nil
@@ -253,6 +264,9 @@ function DebugPanel.new(parent: Instance, deps: Deps): DebugPanelHandle
 		SetGear = function(melee: number, ranged: number)
 			meleeTier = melee
 			rangedTier = ranged
+		end,
+		SetVisible = function(visible: boolean)
+			root.Visible = visible
 		end,
 		SetLayout = function(scale: number, viewportSize: Vector2)
 			uiScale.Scale = scale

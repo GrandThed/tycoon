@@ -421,4 +421,131 @@ function Catalog.GetValleyPlan(): Types.ValleyPlan?
 	return cached
 end
 
+-- L1 (docs/INTERFACES.md "L1 contracts"): the dungeon place's map, its levels and their layouts.
+-- All of them are optional in the Assets.json sense, nil being the signal: without
+-- Expeditions.json the place stays in its lobby, and a level whose file or layout is missing is
+-- simply not built. Re-checked per call until the module shows up, cached from then on.
+local levels = {
+	expeditions = nil :: Types.ExpeditionsConfig?,
+	filesById = {} :: { [string]: Types.LevelFile },
+	layouts = {} :: { [string]: Types.LevelLayout },
+	arenas = {} :: { [string]: Types.ArenaLayout },
+}
+
+function Catalog.GetExpeditionsConfig(): Types.ExpeditionsConfig?
+	local cached = levels.expeditions
+	if cached ~= nil then
+		return cached
+	end
+	local module = configFolder:FindFirstChild("Expeditions")
+	if module == nil or not module:IsA("ModuleScript") then
+		return nil
+	end
+	local config = require(module) :: Types.ExpeditionsConfig
+	levels.expeditions = config
+	return config
+end
+
+-- Level modules are named "<n>_<Name>" under Config/Levels and found by their `id`, the way
+-- missions are: the id is what the client sends and the map names.
+local function scanLevelFiles(): ()
+	local folder = configFolder:FindFirstChild("Levels")
+	if folder == nil then
+		return
+	end
+	for _, child in folder:GetChildren() do
+		if child:IsA("ModuleScript") and string.match(child.Name, "^%d+_") ~= nil then
+			local file = require(child) :: Types.LevelFile
+			if typeof(file) == "table" and typeof(file.id) == "string" then
+				levels.filesById[file.id] = file
+			end
+		end
+	end
+end
+
+function Catalog.GetLevelFile(id: string): Types.LevelFile?
+	local cached = levels.filesById[id]
+	if cached ~= nil then
+		return cached
+	end
+	-- A miss rescans next call: the folder may still be replicating on a client.
+	scanLevelFiles()
+	return levels.filesById[id]
+end
+
+-- Every level id this build has a file for, in the order of the files' numeric prefixes.
+function Catalog.GetLevelIds(): { string }
+	local folder = configFolder:FindFirstChild("Levels")
+	if folder == nil then
+		return {}
+	end
+	local entries: { { order: number, name: string, id: string } } = {}
+	for _, child in folder:GetChildren() do
+		local prefix = string.match(child.Name, "^(%d+)_")
+		if child:IsA("ModuleScript") and prefix ~= nil then
+			local file = require(child) :: Types.LevelFile
+			if typeof(file) == "table" and typeof(file.id) == "string" then
+				levels.filesById[file.id] = file
+				table.insert(entries, {
+					order = tonumber(prefix) or 0,
+					name = child.Name,
+					id = file.id,
+				})
+			end
+		end
+	end
+	table.sort(entries, function(a, b): boolean
+		if a.order == b.order then
+			return a.name < b.name
+		end
+		return a.order < b.order
+	end)
+	local ids: { string } = {}
+	for _, entry in entries do
+		table.insert(ids, entry.id)
+	end
+	return ids
+end
+
+local function layoutModule(folderName: string, name: string): ModuleScript?
+	local layoutsFolder = sharedFolder:FindFirstChild("Layouts")
+	local folder = if layoutsFolder ~= nil then layoutsFolder:FindFirstChild(folderName) else nil
+	local module = if folder ~= nil then folder:FindFirstChild(name) else nil
+	if module ~= nil and module:IsA("ModuleScript") then
+		return module
+	end
+	return nil
+end
+
+-- Layouts/Levels/<name> (JSON, world coordinates). A file with `arena` holds nothing else: the
+-- caller turns that arena into a level layout (LevelGeometry.FromArena).
+function Catalog.GetLevelLayout(name: string): Types.LevelLayout?
+	local cached = levels.layouts[name]
+	if cached ~= nil then
+		return cached
+	end
+	local module = layoutModule("Levels", name)
+	if module == nil then
+		return nil
+	end
+	local layout = require(module) :: Types.LevelLayout
+	levels.layouts[name] = layout
+	return layout
+end
+
+-- Layouts/Arenas/<name>: the C1 arena layouts, read here for LevelGeometry.FromArena.
+function Catalog.GetArenaLayout(name: string): Types.ArenaLayout?
+	local cached = levels.arenas[name]
+	if cached ~= nil then
+		return cached
+	end
+	local module = layoutModule("Arenas", name)
+	if module == nil then
+		return nil
+	end
+	local layout = require(module) :: Types.ArenaLayout
+	levels.arenas[name] = layout
+	return layout
+end
+
 return Catalog

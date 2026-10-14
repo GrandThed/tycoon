@@ -37,6 +37,10 @@ local MAX_COMMAND_ARG_LENGTH = 32
 -- P2: a weapon family id (broadsword, longbow, ...); RangeService checks it names a real family
 -- that the player holds in that slot.
 local MAX_FAMILY_LENGTH = 24
+-- L1 (docs/INTERFACES.md "L1 contracts" → "Remotes"): a level id and a difficulty key. Shape
+-- only: WaveService.OnStartLevel resolves both against the level files and the map.
+local MAX_LEVEL_ID_LENGTH = 32
+local MAX_DIFFICULTY_LENGTH = 12
 
 local combatConfig = Catalog.GetCombatConfig()
 local maxTargets = if combatConfig ~= nil
@@ -108,7 +112,25 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 				return args.n == 0
 			end,
 		},
+		-- L1 ruling 7: no handler any more (the leader starts a level with RequestStartLevel) and
+		-- no client sends it; the definition stays until L4.
 		RequestReady = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 0
+			end,
+		},
+		-- L1: the leader picks what is played. Two names, nothing else: no amount, no position.
+		RequestStartLevel = {
+			bucket = "calls",
+			validate = function(args: RemoteService.PackedArgs): boolean
+				return args.n == 2
+					and isShortString(args[1], MAX_LEVEL_ID_LENGTH)
+					and isShortString(args[2], MAX_DIFFICULTY_LENGTH)
+			end,
+		},
+		-- L1 ruling 21: end the live run with what was banked, or cut the summary's wait short.
+		RequestAbandon = {
 			bucket = "calls",
 			validate = function(args: RemoteService.PackedArgs): boolean
 				return args.n == 0
@@ -277,6 +299,8 @@ local CombatRemotes: RemoteService.RemoteDefs = {
 		"StateChanged",
 		"ActionResult",
 		"RunState",
+		-- L1: the map's node states and the receiver's own stars (rulings 25 and 28).
+		"MapState",
 		"CombatFx",
 		"CrowdSpawn",
 		"CrowdRemove",

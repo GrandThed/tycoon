@@ -1656,7 +1656,9 @@ on the Warlord: pick **colossus** in the panel to see the Colossus again.
 step). About 15 minutes with the checklist, keys only, no panel.
 
 **Do NOT publish the Expeditions place from `main` until P5 Wave 3 is merged.** Until then it
-plays only the Village mission; the other three eras refuse to start ("locked").
+plays only the Village mission; the other three eras refuse to start ("locked"). *Replaced
+2026-10-13: the freeze now holds until L4 (see "L1 — Forest Road in grey" below). From the L1
+merge on, Play opens the L1 lobby camp; this arena is the map's Raider Arena node.*
 
 **Status 2026-10-13:**
 - Wave 1 is on `main` (merged 2026-10-13).
@@ -1714,6 +1716,73 @@ plays only the Village mission; the other three eras refuse to start ("locked").
 - Rewards land in your Studio save, as in any mission.
 - The invisible wall needs no Studio setup. The server builds it and its two collision groups
   (`ArenaBarrier`, `ArenaPlayers`) by itself. Only the Village arena has one today.
+
+## L1 — Forest Road in grey
+
+**Studio only.**
+- No Creator Hub work, no uploads, no harvest paste, no new Studio setup.
+- Still silent (no audio step).
+- About 10 minutes with the checklist, keys only, no panel.
+
+**Do NOT publish the Expeditions place from `main` until L4.** This replaces the freeze "until
+P5 Wave 3". The old combat is unmounted: only the lobby camp, Forest Road in grey and the
+Raider Arena can be played.
+
+**Status 2026-10-13:**
+- Built, reviewed and fixed on branch `l1-forest-road` (`de03e36`). QA is running.
+- **Not merged yet.** Wait for the lead's word (step 0) before step 1.
+
+<!-- FILE TO OPEN: start. Lead: if L1 is not merged to `main`, change only this block. -->
+**File to open:** `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`
+- **Wait for the lead's word first.** The lead merges L1 to `main` before the look, so "Build
+  all" builds it. Before that, "Build all" gives P5's arena.
+- **Build it:** VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- **A `proving.rbxl` that was open in Studio before "Build all" is the old one.**
+- **You have the new build if** Play puts you in a small grey camp with a map on the screen,
+  not in the grassy arena.
+<!-- FILE TO OPEN: end -->
+
+**Steps:**
+
+- [ ] 0. (Lead) Merge, rebuild, tell Ben.
+      - [ ] QA green on `de03e36`.
+      - [ ] `l1-forest-road` merged to `main`; the six place files rebuilt.
+      - [ ] Ben told: "L1 is merged, Build all".
+- [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
+- [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save). Saving would write the
+      old version over the new file.
+- [ ] 3. Open `C:\Users\benja\Desktop\tycoon\build\proving.rbxl`.
+- [ ] 4. Press **Play**. What Play shows:
+      - Output (Salida) prints
+        `[Combat] booted — lobby (levels: forestRoad, raiderArena); proving: forestRoad normal, autoStart false`.
+      - You stand in a small grey camp, and the map is open on **Forest Road** at **Normal**.
+      - A small hint in a corner reads `N stage · B boss · G gear`.
+      - If you see the grassy arena with a **WAVE 1** banner, or the big grey range, it is the
+        old file: go back to step 2.
+- [ ] 5. Keys while playing:
+      - **Enter** = Depart / Back to camp; **M** = map; **arrows** = level (left, right) and
+        difficulty (up, down).
+      - **1** melee, **2** ranged.
+      - **Space** jump, **Left Shift** dash, **C** in the air = slam.
+      - **Backspace twice** = abandon.
+      - Studio only: **N** = finish this part, **B** = jump to the boss, **G** = stronger gear
+        (2 / 1 → 4 / 4 → 6 / 6 → round again).
+- [ ] 6. Run `docs/PLAYTEST.md` "L1 — Forest Road in grey" (nine steps, plus an optional
+      two-player check).
+- [ ] 7. Close Studio without saving `proving.rbxl`. Tell Claude when you are done. The lead
+      reads the `[Perf]` lines from Studio's log; nothing to copy.
+
+**Notes:**
+- **The old range bench** (every P1–P4 set and the panel): the lead sets
+  `src/shared/Config/Combat.json` → `debug.provingBoots` to `"range"`, then "Build all". To
+  come back, set it to `"mission"`.
+- Rewards (cash, Timber, Valor) land in your Studio save. Stars do not: they last for the
+  Studio session only.
+- Optional, not needed for the look: `C:\Users\benja\Desktop\tycoon\build\combat.rbxl` boots
+  into the same lobby. Its **Return to your city** goes home through the Studio bridge: it
+  kicks you, as at C1, and needs "Enable Studio Access to API Services".
+- The camps' invisible walls and their collision groups need no Studio setup: the server
+  builds them.
 
 ## M10 — Icon, store icons, thumbnails
 

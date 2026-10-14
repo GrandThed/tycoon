@@ -238,6 +238,9 @@ local state = {
 	worldParams = nil :: RaycastParams?,
 	worldStale = true,
 	characterConnections = {} :: { [Player]: { RBXScriptConnection } },
+	-- L1 ruling 34: a Studio-only gear for the session, read before everything but the range's
+	-- tier 1. Never written to a profile; always empty outside Studio.
+	gearOverride = {} :: { [Player]: { gear: SlotTiers, ascension: SlotTiers } },
 }
 
 local WeaponService = {}
@@ -505,6 +508,10 @@ end
 local function gearOf(player: Player): (SlotTiers, SlotTiers)
 	if state.mode == "range" then
 		return table.clone(CONST.RANGE_GEAR), table.clone(CONST.NO_ASCENSION)
+	end
+	local override = state.gearOverride[player]
+	if override ~= nil then
+		return table.clone(override.gear), table.clone(override.ascension)
 	end
 	local combatConfig = Catalog.GetCombatConfig()
 	local proving = if combatConfig ~= nil and CombatMode.IsProving()
@@ -1988,6 +1995,7 @@ function WeaponService.RemovePlayer(player: Player): ()
 		return
 	end
 	state.shooters[player] = nil
+	state.gearOverride[player] = nil
 	VitalsService.RemovePlayer(player)
 	local survivors: { Projectile } = {}
 	for _, projectile in state.projectiles do
@@ -2011,10 +2019,34 @@ function WeaponService.PrepareCharacter(player: Player, character: Model): ()
 	VitalsService.PrepareCharacter(player, character)
 end
 
--- Ruling 12: (gear, ascension). Tier 1 and no Ascension in the range; `debug.provingGear` in a
--- proving mission; otherwise the profile's (tier 1 until it has loaded). Fresh tables.
+-- Ruling 12: (gear, ascension). Tier 1 and no Ascension in the range; then the Studio session
+-- override (L1 ruling 34); `debug.provingGear` in a proving build; otherwise the profile's (tier
+-- 1 until it has loaded). Fresh tables.
 function WeaponService.GearOf(player: Player): (SlotTiers, SlotTiers)
 	return gearOf(player)
+end
+
+-- L1 ruling 34: the gear this player fights at for the rest of the session, whatever the profile
+-- or the proving build says; nil clears it. Studio only: outside Studio it does nothing, and it
+-- is never written to a profile. The caller refreshes the body (VitalsService.RefreshMaxHp).
+function WeaponService.SetGearOverride(
+	player: Player,
+	gear: Types.SlotTiers?,
+	ascension: Types.SlotTiers?
+): ()
+	if not RunService:IsStudio() then
+		return
+	end
+	if gear == nil then
+		state.gearOverride[player] = nil
+		return
+	end
+	state.gearOverride[player] = {
+		gear = { melee = gear.melee, ranged = gear.ranged },
+		ascension = if ascension ~= nil
+			then { melee = ascension.melee, ranged = ascension.ranged }
+			else table.clone(CONST.NO_ASCENSION),
+	}
 end
 
 -- Ruling 8: Armory.DamageScale at the player's gear; 1 in the range.

@@ -1,20 +1,26 @@
 --!strict
--- Run summary card (C1 contract, docs/INTERFACES.md "Combat client"): shown when RunState
--- arrives with phase "summary". Waves cleared, best wave, cash, materials, Valor, kills,
--- time, and a "died" line when the run ended on the floor. Every number is the server's —
--- rewards were already flushed to the profile at each wave clear, so this card only reads
--- the RunSummary back. Nothing is computed here; a missing summary renders dashes rather
--- than inventing numbers.
+-- Run summary card (C1 contract, docs/INTERFACES.md "Combat client"), rewritten for levels
+-- (docs/INTERFACES.md "L1 contracts" -> Client). Shown for a RunState that carries a `result`:
+-- the level and its difficulty, how the run ended, how far it got, what it paid, and where the
+-- party goes next. Every number is the server's. Only a checkpoint pays (ruling 15), so the
+-- rows are what was banked, and the card says where the last bank was, or that there was none.
+-- Nothing is computed here; a missing summary renders dashes rather than inventing numbers.
 --
--- C2 adds the damage share (co-op only), the Mentor line and the group-return countdown
--- (RunState.returnIn). The Return button still sends RequestLeave, which goes home alone.
+-- Every run ends in the lobby camp, never in the city (ruling 20): the countdown reads "Back
+-- to camp in 8". Back to camp ends the wait at once (the leader or a solo player; ruling 21),
+-- and Return to your city goes home alone (ruling 22; not offered in a proving build, where
+-- the trip home kicks from Studio).
 --
--- P5 (ruling 19): a proving mission sends nobody home; at the end of the same countdown the
--- server starts the run again. With `deps.nextRun` set the card has no Return button (the
--- server ignores RequestLeave there) and the countdown line names the next run instead.
+-- A result whose reason is `leave` is the trip home itself: the title is the map's name, the
+-- rows are the session's totals, and there is no countdown and no button.
+--
+-- The card must fit a 640x360 phone under a 58 px top bar (329 design px of height), with a
+-- party's two extra lines: so the lines sit COMBAT_SUMMARY_LINE_GAP apart and the two buttons
+-- share one row. On that phone a solo card is about 271 design px tall and a party's 313.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
 local Types = require(sharedFolder:WaitForChild("Types"))
@@ -25,33 +31,59 @@ local Theme = require(script.Parent:WaitForChild("Theme"))
 local SoundController =
 	require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("SoundController"))
 
--- nextRun (P5): true in a proving mission, where the run restarts in place (see the header).
-export type Deps = { onReturn: () -> (), nextRun: boolean? }
+export type Deps = {
+	-- "Back to camp": RequestAbandon during the summary.
+	onBack: () -> (),
+	-- "Return to your city": RequestLeave.
+	onReturn: () -> (),
+	-- false = no Return button (a proving build).
+	canReturn: boolean,
+}
 
--- C2 context from the RunState around the summary: `partySize` decides whether a damage
--- share is worth a line, `returnIn` (seconds) drives the group-return countdown.
-export type ShowInfo = { partySize: number, returnIn: number? }
+-- What the RunState round the result adds. `canBack` = the local player may end the wait (the
+-- leader, or the only human). `waves` = the waves of the level's one camp, for a level whose
+-- progress is counted in waves. `difficultyName` and `mapName` are the map's display names.
+export type ShowInfo = {
+	partySize: number,
+	returnIn: number?,
+	canBack: boolean,
+	waves: number,
+	difficultyName: string,
+	mapName: string,
+}
 
 export type SummaryCardHandle = {
-	Show: (summary: Types.RunSummary?, info: ShowInfo) -> (),
+	Show: (summary: Types.RunSummary?, result: Types.RunResult, info: ShowInfo) -> (),
 	Hide: () -> (),
 	IsVisible: () -> boolean,
+	-- True while Back to camp is offered: the host's Enter key asks before it sends.
+	CanBack: () -> boolean,
 	SetScale: (scale: number) -> (),
 	Destroy: () -> (),
 }
 
 local BLANK = "—"
 local PERCENT = 100
-local RETURN_ALONE_TEXT = "Return now (alone)"
+local STAR = "★ "
+local BACK_TEXT = "Back to camp"
 local RETURN_TEXT = "Return to your city"
-local GROUP_RETURN_TEXT = "Returning together in "
-local NEXT_RUN_TEXT = "Next run in "
+local COUNTDOWN_TEXT = "Back to camp in "
+-- Keyboards only, and only for whoever may end the wait: the key the host binds to it.
+local BACK_KEY_HINT = " · Enter to go now"
+local LEAVE_REASON = "leave"
+-- How a run ended, in the player's words. An unknown reason shows nothing rather than a guess.
+local REASON_TEXT: { [string]: string } = {
+	cleared = "Cleared",
+	down = "You went down",
+	wipe = "You went down",
+	abandoned = "Abandoned",
+	runCap = "Out of time",
+}
 
 local SummaryCard = {}
 
 function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 	local connections: { RBXScriptConnection } = {}
-	local nextRun = deps.nextRun == true
 
 	-- A Frame, not a TextButton: the dim must never swallow the camera drag behind it.
 	local scrim = Create("Frame", {
@@ -87,7 +119,7 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 		Parent = card,
 	})
 	Create("UIListLayout", {
-		Padding = UDim.new(0, Theme.DIALOG_LINE_GAP),
+		Padding = UDim.new(0, Theme.COMBAT_SUMMARY_LINE_GAP),
 		SortOrder = Enum.SortOrder.LayoutOrder,
 		Parent = card,
 	})
@@ -111,131 +143,210 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 		}) :: TextLabel
 	end
 
+	-- Both buttons share one row at the foot of the card; one alone takes all of it.
+	local buttonRow: Frame
+	local function button(name: string, slot: number, accent: boolean): TextButton
+		local item = Create("TextButton", {
+			Name = name,
+			LayoutOrder = slot,
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = if accent then Theme.COLOR_ACCENT else Theme.COLOR_BG_LIGHT,
+			BorderSizePixel = 0,
+			Font = Theme.FONT_BOLD,
+			TextSize = Theme.COMBAT_RUN_BUTTON_TEXT,
+			TextColor3 = if accent then Theme.COLOR_TEXT_DARK else Theme.COLOR_TEXT,
+			TextWrapped = true,
+			Text = "",
+			Visible = false,
+			Parent = buttonRow,
+		}) :: TextButton
+		Create("UICorner", { CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = item })
+		return item
+	end
+
 	local titleLabel = line("Title", Theme.FONT_BOLD, Theme.TEXT_LARGE, Theme.COLOR_TEXT)
-	titleLabel.Text = "Expedition over"
-	local wavesLabel = line("Waves", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
+	local outcomeLabel = line("Outcome", Theme.FONT_BOLD, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
+	local progressLabel = line("Progress", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
 	local killsLabel = line("Kills", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_TEXT)
 	local rewardLabel = line("Reward", Theme.FONT, Theme.TEXT_MEDIUM, Theme.COLOR_ACCENT)
 	local materialsLabel = line("Materials", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT_DIM)
-	-- Only shown when the run ended with the player down: it explains why the summary
-	-- arrived early, and the rewards above it are kept either way.
-	local diedLabel = line("Died", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_ERROR)
+	-- Where the last checkpoint banked, or that nothing was: it explains the rows above.
+	local savedLabel = line("Saved", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_TEXT)
 	-- C2 lines, each hidden when it does not apply.
 	local shareLabel = line("Share", Theme.FONT, Theme.TEXT_SMALL, Theme.COLOR_TEXT)
 	local mentorLabel = line("Mentor", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_HIGHLIGHT)
-	local groupLabel =
-		line("GroupReturn", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_ACCENT_ALT)
-	shareLabel.Visible = false
-	mentorLabel.Visible = false
-	groupLabel.Visible = false
-	-- os.clock() the group teleport is due; nil while no group return is pending. The
+	local countdownLabel =
+		line("Countdown", Theme.FONT_BOLD, Theme.TEXT_SMALL, Theme.COLOR_ACCENT_ALT)
+	order += 1
+	buttonRow = Create("Frame", {
+		Name = "Buttons",
+		LayoutOrder = order,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, Theme.DIALOG_BUTTON_HEIGHT),
+		Visible = false,
+		Parent = card,
+	}) :: Frame
+	Create("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		Padding = UDim.new(0, Theme.DIALOG_LINE_GAP),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Parent = buttonRow,
+	})
+	local backButton = button("Back", 1, true)
+	backButton.Text = BACK_TEXT
+	local returnButton = button("Return", 2, false)
+	returnButton.Text = RETURN_TEXT
+	local keyHint = if UserInputService.KeyboardEnabled then BACK_KEY_HINT else ""
+	local canBack = false
+
+	local function showButtons(back: boolean, home: boolean): ()
+		canBack = back
+		backButton.Visible = back
+		returnButton.Visible = home
+		buttonRow.Visible = back or home
+		local size = if back and home
+			then UDim2.new(0.5, -Theme.DIALOG_LINE_GAP / 2, 1, 0)
+			else UDim2.fromScale(1, 1)
+		backButton.Size = size
+		returnButton.Size = size
+	end
+
+	-- os.clock() the party is due back in the camp; nil while no return is pending. The
 	-- countdown ticks locally between RunStates and every RunState re-anchors it.
 	local returnAt: number? = nil
 	local tickAccumulator = 0
 
-	local returnButton = Create("TextButton", {
-		Name = "Return",
-		LayoutOrder = 1000,
-		Size = UDim2.new(1, 0, 0, Theme.DIALOG_BUTTON_HEIGHT),
-		BackgroundColor3 = Theme.COLOR_ACCENT,
-		BorderSizePixel = 0,
-		Font = Theme.FONT_BOLD,
-		TextSize = Theme.TEXT_HEADER,
-		TextColor3 = Theme.COLOR_TEXT_DARK,
-		Text = RETURN_TEXT,
-		Visible = not nextRun,
-		Parent = card,
-	}) :: TextButton
-	Create(
-		"UICorner",
-		{ CornerRadius = UDim.new(0, Theme.ROW_CORNER_RADIUS), Parent = returnButton }
-	)
-
-	local function paintGroupReturn(): ()
+	local function paintCountdown(): ()
 		local dueAt = returnAt
 		if dueAt == nil then
-			groupLabel.Visible = false
+			countdownLabel.Visible = false
 			return
 		end
 		local left = math.max(math.ceil(dueAt - os.clock()), 0)
-		groupLabel.Text = (if nextRun then NEXT_RUN_TEXT else GROUP_RETURN_TEXT)
+		countdownLabel.Text = COUNTDOWN_TEXT
 			.. Format.Duration(left)
-		groupLabel.Visible = true
+			.. (if canBack then keyHint else "")
+		countdownLabel.Visible = true
 	end
 
-	local function show(summary: Types.RunSummary?, info: ShowInfo): ()
+	local function paintRewards(summary: Types.RunSummary?, partySize: number): ()
+		if summary == nil then
+			killsLabel.Text = "Kills " .. BLANK
+			rewardLabel.Text = ""
+			materialsLabel.Text = ""
+			shareLabel.Visible = false
+			mentorLabel.Visible = false
+			return
+		end
+		-- C2 fields are read defensively so an older server's summary still renders.
+		local share = (summary :: any).damageShare
+		shareLabel.Visible = partySize > 1 and typeof(share) == "number"
+		if typeof(share) == "number" then
+			shareLabel.Text = "Your damage share "
+				.. Format.Cash(math.round(math.clamp(share, 0, 1) * PERCENT))
+				.. "%"
+		end
+		local mentorValor = (summary :: any).mentorValor
+		local mentoring = typeof(mentorValor) == "number" and mentorValor > 0
+		mentorLabel.Visible = mentoring
+		if mentoring then
+			mentorLabel.Text = "Mentor bonus +"
+				.. Format.Cash(mentorValor)
+				.. " Valor (included above)"
+		end
+		killsLabel.Text = "Kills "
+			.. Format.Cash(summary.kills)
+			.. " · "
+			.. Format.Duration(summary.seconds)
+		rewardLabel.Text = "+$"
+			.. Format.Cash(summary.cash)
+			.. " · "
+			.. Format.Cash(summary.valor)
+			.. " Valor"
+		-- Sorted BY MATERIAL NAME, the same ordering the hub's ExpeditionSummaryCard uses: the
+		-- table arrives over the network, so its iteration order is undefined and the same
+		-- run would otherwise read differently twice.
+		local names: { string } = {}
+		for material, amount in summary.materials do
+			if typeof(material) == "string" and typeof(amount) == "number" and amount > 0 then
+				table.insert(names, material)
+			end
+		end
+		table.sort(names)
+		local parts: { string } = {}
+		for _, material in names do
+			table.insert(parts, Format.Cash(summary.materials[material]) .. " " .. material)
+		end
+		materialsLabel.Text = if #parts > 0 then table.concat(parts, " · ") else "No materials"
+	end
+
+	local function show(summary: Types.RunSummary?, result: Types.RunResult, info: ShowInfo): ()
+		local leaving = result.reason == LEAVE_REASON
+		paintRewards(summary, info.partySize)
+		if leaving then
+			-- The trip home: the session's totals under the map's name, and nothing to press.
+			titleLabel.Text = info.mapName
+			outcomeLabel.Visible = false
+			progressLabel.Visible = false
+			savedLabel.Visible = false
+			returnAt = nil
+			showButtons(false, false)
+			paintCountdown()
+			scrim.Visible = true
+			return
+		end
+		titleLabel.Text = if info.difficultyName ~= ""
+			then result.levelName .. " · " .. info.difficultyName
+			else result.levelName
+		local cleared = result.reason == "cleared"
+		local reasonText = REASON_TEXT[result.reason]
+		outcomeLabel.Visible = reasonText ~= nil
+		if reasonText ~= nil then
+			outcomeLabel.Text = if result.star then STAR .. reasonText else reasonText
+			outcomeLabel.TextColor3 = if cleared
+				then (if result.star then Theme.COLOR_HIGHLIGHT else Theme.COLOR_ACCENT)
+				elseif result.reason == "down" or result.reason == "wipe" then Theme.COLOR_ERROR
+				else Theme.COLOR_TEXT_DIM
+		end
+		-- A level of several camps counts camps; a level of one camp (the arena) counts waves.
+		progressLabel.Visible = true
+		if result.camps > 1 then
+			progressLabel.Text = "Camps cleared "
+				.. Format.Cash(result.campsCleared)
+				.. " / "
+				.. Format.Cash(result.camps)
+		elseif summary ~= nil and info.waves > 0 then
+			progressLabel.Text = "Waves cleared "
+				.. Format.Cash(summary.wavesCleared)
+				.. " / "
+				.. Format.Cash(info.waves)
+		else
+			progressLabel.Text = "Waves cleared " .. BLANK
+		end
+		savedLabel.Visible = true
+		if result.savedAt ~= "" then
+			savedLabel.Text = "Saved at: " .. result.savedAt
+			savedLabel.TextColor3 = Theme.COLOR_ACCENT
+		else
+			savedLabel.Text = "Nothing was saved"
+			savedLabel.TextColor3 = Theme.COLOR_TEXT_DIM
+		end
 		local returnIn = info.returnIn
 		returnAt = if typeof(returnIn) == "number" and returnIn > 0
 			then os.clock() + returnIn
 			else nil
-		paintGroupReturn()
-		-- With a group return pending the button is the way to leave early, on your own.
-		returnButton.Text = if returnAt ~= nil and info.partySize > 1
-			then RETURN_ALONE_TEXT
-			else RETURN_TEXT
-		if summary == nil then
-			wavesLabel.Text = "Waves cleared " .. BLANK
-			killsLabel.Text = ""
-			rewardLabel.Text = ""
-			materialsLabel.Text = ""
-			diedLabel.Visible = false
-			shareLabel.Visible = false
-			mentorLabel.Visible = false
-		else
-			-- C2 fields are read defensively so a C1 server's summary still renders.
-			local share = (summary :: any).damageShare
-			shareLabel.Visible = info.partySize > 1 and typeof(share) == "number"
-			if typeof(share) == "number" then
-				shareLabel.Text = "Your damage share "
-					.. Format.Cash(math.round(math.clamp(share, 0, 1) * PERCENT))
-					.. "%"
-			end
-			local mentorValor = (summary :: any).mentorValor
-			local mentoring = typeof(mentorValor) == "number" and mentorValor > 0
-			mentorLabel.Visible = mentoring
-			if mentoring then
-				mentorLabel.Text = "Mentor bonus +"
-					.. Format.Cash(mentorValor)
-					.. " Valor (included above)"
-			end
-			wavesLabel.Text = "Waves cleared "
-				.. Format.Cash(summary.wavesCleared)
-				.. " · Best wave "
-				.. Format.Cash(summary.bestWave)
-			killsLabel.Text = "Kills "
-				.. Format.Cash(summary.kills)
-				.. " · "
-				.. Format.Duration(summary.seconds)
-			rewardLabel.Text = "+$"
-				.. Format.Cash(summary.cash)
-				.. " · "
-				.. Format.Cash(summary.valor)
-				.. " Valor"
-				.. (if summary.overdrive then " · Overdrive" else "")
-			diedLabel.Text = "You went down — the rewards above are already banked"
-			diedLabel.Visible = summary.died
-			-- Sorted BY MATERIAL NAME, the same ordering the hub's ExpeditionSummaryCard
-			-- uses: the table arrives over the network, so its iteration order is
-			-- undefined and the same run would otherwise read differently twice. Sorting
-			-- the rendered strings instead would order by the leading digit of the amount.
-			local names: { string } = {}
-			for material, amount in summary.materials do
-				if typeof(material) == "string" and typeof(amount) == "number" and amount > 0 then
-					table.insert(names, material)
-				end
-			end
-			table.sort(names)
-			local parts: { string } = {}
-			for _, material in names do
-				table.insert(parts, Format.Cash(summary.materials[material]) .. " " .. material)
-			end
-			materialsLabel.Text = if #parts > 0
-				then table.concat(parts, " · ")
-				else "No materials this run"
-		end
+		showButtons(info.canBack, deps.canReturn)
+		paintCountdown()
 		scrim.Visible = true
 	end
 
+	table.insert(
+		connections,
+		backButton.Activated:Connect(function()
+			SoundController.Play("uiClick")
+			deps.onBack()
+		end)
+	)
 	table.insert(
 		connections,
 		returnButton.Activated:Connect(function()
@@ -254,7 +365,7 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 				return
 			end
 			tickAccumulator = 0
-			paintGroupReturn()
+			paintCountdown()
 		end)
 	)
 
@@ -266,6 +377,9 @@ function SummaryCard.new(parent: Instance, deps: Deps): SummaryCardHandle
 		end,
 		IsVisible = function()
 			return scrim.Visible
+		end,
+		CanBack = function()
+			return scrim.Visible and canBack
 		end,
 		SetScale = function(scale: number)
 			uiScale.Scale = scale

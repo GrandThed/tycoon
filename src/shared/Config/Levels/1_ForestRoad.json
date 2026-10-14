@@ -1,0 +1,58 @@
+{
+	"version": 1,
+	"id": "forestRoad",
+	"name": "Forest Road",
+	"layout": "ForestRoad",
+	"material": "Timber",
+	"targetMinutes": 7,
+	"runCapSeconds": 1050,
+	"difficulties": {
+		"normal": { "hpScale": 1.5, "damageScale": 1.12, "plateScale": 1, "countMult": 1, "rewardMult": 1, "recommendedTier": 2 },
+		"hard": { "hpScale": 5.2, "damageScale": 2.0, "plateScale": 1, "countMult": 1.2, "rewardMult": 2, "recommendedTier": 4 },
+		"brutal": { "hpScale": 11.5, "damageScale": 3.35, "plateScale": 1, "countMult": 1.35, "rewardMult": 4, "recommendedTier": 6 }
+	},
+	"crowd": {
+		"regenShare": 0.077,
+		"maxAlive": 40,
+		"burst": 8,
+		"burstSpacing": 3.5,
+		"rewards": {
+			"fodder": { "cash": 100, "materials": 0 },
+			"slinger": { "cash": 500, "materials": 1 },
+			"brute": { "cash": 2000, "materials": 6 },
+			"lobber": { "cash": 700, "materials": 4 },
+			"marksman": { "cash": 600, "materials": 1 },
+			"armoured": { "cash": 1200, "materials": 2 },
+			"colossus": { "cash": 29000, "materials": 70 }
+		}
+	},
+	"stages": [
+		{ "kind": "travel", "name": "Follow the road" },
+		{
+			"kind": "camp", "zone": "A", "name": "Pickets", "targetWaveSeconds": 36, "breatherSeconds": 3, "maxAlive": 16,
+			"waves": [
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "slinger", "count": 2, "minDifficulty": "hard" }, { "kind": "fodder", "count": 8 }] },
+				{ "groups": [{ "kind": "fodder", "count": 8 }, { "kind": "armoured", "count": 1, "minDifficulty": "hard" }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 16 }] },
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "armoured", "count": 2, "minDifficulty": "hard" }, { "kind": "slinger", "count": 4 }, { "kind": "fodder", "count": 8 }] }
+			]
+		},
+		{ "kind": "travel", "name": "On to the main camp" },
+		{
+			"kind": "camp", "zone": "B", "name": "Main Camp", "targetWaveSeconds": 36, "breatherSeconds": 3, "maxAlive": 40,
+			"waves": [
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 16 }] },
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "brute", "count": 2 }, { "kind": "slinger", "count": 3 }, { "kind": "fodder", "count": 16 }] },
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "brute", "count": 2 }, { "kind": "lobber", "count": 1 }, { "kind": "slinger", "count": 4 }, { "kind": "marksman", "count": 2, "minDifficulty": "hard" }, { "kind": "fodder", "count": 16 }] },
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "brute", "count": 3 }, { "kind": "slinger", "count": 4 }, { "kind": "armoured", "count": 3, "minDifficulty": "hard" }, { "kind": "marksman", "count": 2, "minDifficulty": "hard" }, { "kind": "fodder", "count": 16 }] }
+			]
+		},
+		{ "kind": "travel", "name": "To the chief's clearing" },
+		{
+			"kind": "camp", "zone": "C", "name": "The Chief's Clearing", "targetWaveSeconds": 34, "breatherSeconds": 3, "maxAlive": 30,
+			"waves": [
+				{ "groups": [{ "kind": "fodder", "count": 16 }, { "kind": "brute", "count": 2 }, { "kind": "armoured", "count": 2, "minDifficulty": "hard" }, { "kind": "fodder", "count": 16 }, { "kind": "brute", "count": 1 }] },
+				{ "groups": [], "boss": { "kind": "colossus", "at": [14, 0], "valor": 10 } }
+			]
+		}
+	]
+}
