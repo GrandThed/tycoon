@@ -1746,8 +1746,8 @@ Raider Arena can be played.
 
 - [ ] 0. (Lead) Merge, rebuild, tell Ben.
       - [ ] QA green on `de03e36`.
-      - [ ] `l1-forest-road` merged to `main`; the six place files rebuilt.
-      - [ ] Ben told: "L1 is merged, Build all".
+      - [x] `l1-forest-road` merged to `main`; the six place files rebuilt.
+      - [x] Ben told: "L1 is merged, Build all".
 - [ ] 1. VS Code, **Ctrl+Shift+B** → **"Build all"**.
 - [ ] 2. If a `proving.rbxl` is open in Studio, close it (don't save). Saving would write the
       old version over the new file.

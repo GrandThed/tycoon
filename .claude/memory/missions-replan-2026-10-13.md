@@ -92,3 +92,18 @@ face is the floor's edge; cover in a camp is at most 3.5 studs (a taller block i
 hit); Abandon's key is Backspace twice; a skip pays nothing; everyone is healed in the lobby; the G presets
 are 2/1, 4/4, 6/6; a third simulated player with a human reaction becomes the gate for Hard and Brutal
 (the ideal one clears Hard at 2/1 in 16 minutes without a hit).
+
+**L1 merged to `main` on 2026-10-14** (merge 736a98a; branch at ee6d9f7), the six place files rebuilt; waiting
+on Ben's Studio playtest (PLAYTEST "L1 — Forest Road in grey", nine key-only steps; Abandon is Backspace twice).
+The fix round: all four parts done by FRESH agents from `docs/prompts/l1-fix-round.md`; a check of the fix diff
+found 0 Critical, 0 Major, 6 Minor, all fixed (the camera turned on the close's short nudge; the grace moved
+players who were inside; a downed body re-armed a camp forever; the last clear pulled waiting members into the
+level; the harness could read green from another checkout; `rearm` missing from the tests' list). Additions the
+lead made during the round: the server tells the client when it moves a body (`Placed` / `PlacedSeq` on the
+character) and the client turns the view only on a far move; at the end of a run nobody is put into the level;
+the slinger swarm the designer added to make the human gate go down was reverted and the gate relaxed (one preset
+below: down OR x1.8 the time on Hard, x1.4 on Brutal, the Colossus alone 135 s / 180 s). Gates at the merge:
+harness 1,292 checks (its verdict line names the count and the folder), 417 mutations, `check_levels.py` 123,
+`check_stage_mirror.py` about 5,600 comparisons of the real StageFlow / Combat / LevelGeometry against the
+simulators, sims green. The publish freeze holds until L4. Next: Ben's look, then L2 (secrets, keys, bought
+double jump) only on his word; the carried list with owners is PLAN "L1".

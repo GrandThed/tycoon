@@ -3098,7 +3098,7 @@ families, abilities and the player's body go into the Expeditions missions, era 
 
 - [x] L1 built (`fc43816`)
 - [x] L1 reviewed, fix round done (`de03e36`; INTERFACES "Review round and state (2026-10-13)")
-- [ ] L1 merged to `main`, six place files rebuilt (lead)
+- [x] L1 merged to `main`, six place files rebuilt (lead)
 - [ ] L1 playtest (Ben)
 
 ## M12 — Growing city
