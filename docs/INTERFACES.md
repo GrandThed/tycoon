@@ -4264,7 +4264,8 @@ PC **and phone**, and 100+ crowd enemies run smoothly.
 1. **Crowd enemies are not Humanoids.** The server simulates them as plain Luau records
    (position, velocity, yaw, state, hp) and never creates an Instance for them. Hit tests use a
    body sphere (centre `height/2`, `radius`) plus a head sphere (top, `headRadius`, the crit weak
-   point). Clients learn of an enemy on `CrowdSpawn` (reliable), receive positions on
+   point). **Amended by L1b-W2-17:** rays test `HitShapes.CrowdRay` (an upright body capsule OR
+   the head, padded; a crit on the unpadded head). Clients learn of an enemy on `CrowdSpawn` (reliable), receive positions on
    `CrowdSnapshot` (an **UnreliableRemoteEvent** carrying a `buffer` from `CrowdCodec`) at
    `crowd.snapshotHz`, interpolate ~1 snapshot behind, and draw pooled placeholder bodies.
    `CrowdRemove` (reliable) ends one. Budget: 160 alive at 15 Hz under 1.5 ms server step.
@@ -12802,3 +12803,1298 @@ rulings in order: `lead-routing.md`); findings: `docs/prompts/l1b-w1-review/`.
 - QA green on `18a25fe`. Under Ben's §16.7 rule the lead merges `l1b-living-road` to `main` and
   rebuilds the six place files; then Ben's look (PLAYTEST "L1b Wave 1 — the camp is alive").
 - Carried items with owners: PLAN "L1b — the living road" → "Carried".
+
+## Wave 2 — the long road (2026-10-14)
+
+**Status: [draft] for the lead, not yet confirmed.** Branch `l1b-wave2`, worktree
+`C:\Users\benja\Desktop\tycoon-p5`, made from `main` at 1fc4612. Written from the code on the branch
+the same day.
+
+Plan of record, in the order that wins:
+1. `docs/prompts/l1b-w2-reports/lead-routing.md`: Ben's rulings of this session (1–5) and the
+   lead's (1, 2(1)–2(16)).
+2. `docs/MISSIONS_DESIGN.md` §16 (Ben's L1b decisions) and §17 (his verdict on Wave 1 and its
+   four notes, all folded into this wave).
+3. The Wave 1 contract above ("L1b contracts — the living road"), with its "Contract amendments".
+   Every Wave 1 ruling and amendment stands where this section does not replace it.
+4. The reports `docs/prompts/l1b-w2-reports/headshot.md` and `layout.md`, and the drafts
+   `docs/prompts/l1b-w2-layout/winding.level.json` and `winding.layout.json`.
+
+Where this section and a report differ, this section wins, and the difference is named where it is
+made. A ruling marked **[draft]** is this draft's answer where the rulings left a choice; every one
+is listed again in "Draft points for the lead" at the end.
+
+**Gate protocol** (lead-routing ruling 3, as Wave 1): once Wave 2 has passed review and QA it is
+merged to `main` and the six place files are rebuilt. **Publish freeze:** the Expeditions place must
+not be published from `main` until L4 (unchanged).
+
+**What Ben gets in Wave 2.** Play: the map is open on Forest Road, Normal, with gear 2 / 2. Depart:
+a winding road of about 1,055 studs, west to east. The trailhead, the 12-stud gap, the creek bridge
+with the shrine's pond to the south, a jog north and the climb by the lookout come first. Then the
+road runs along the north side of the Pickets (A, 85 × 85) and of the Main Camp (B, 141 × 133), with
+a shallow bend between them, and climbs into the Chief's Clearing (C, 115 × 115) at the east end.
+- Every raider of the level is drawn from the moment he arrives, standing or sitting where it rests:
+  112 on Normal, 124 on Hard and Brutal.
+- A careless walk down the road wakes the fires beside it. A careful player who keeps to the inside
+  of the north fence passes both open camps and wakes nobody.
+- When a group wakes, its resting neighbours join in.
+- Once a camp is awake, its tent sends a raider every 6 s, eight in all, then runs out.
+- Clearing a camp pays a small bonus on top of the kills.
+- A sword swings once per jump.
+- Headshots land on the big bodies, and a shot at a brute's legs counts.
+- In Studio, a grey "Server" number shows the crowd's step time.
+- A first clear takes him about 9 to 10.5 minutes.
+
+### Rulings (L1b-W2-n)
+
+Numbered L1b-W2-1 onward. "LR n" names lead-routing's Ben ruling n; "LR lead n" its lead ruling n.
+
+**The road and its gates**
+
+- **L1b-W2-1. The winding road is Forest Road** (LR 4). The economy-designer copies
+  `winding.level.json` into `Config/Levels/1_ForestRoad.json` and `winding.layout.json` into
+  `Layouts/Levels/ForestRoad.json`, with only these changes:
+  - every layout `tent` block gains `radius` (L1b-W2-6);
+  - `crowd.clearBonus` becomes `{ "share": 0.1 }`, losing `cash` and `materials` (L1b-W2-21);
+  - `targetMinutes` and `runCapSeconds` follow L1b-W2-22;
+  - the residents and tent stocks may move under L1b-W2-22's levers (brutes for fodder;
+    `rewards.brute.materials` 6 → 4).
+  `layout.sneak` stays in the file as tool-only data (L1b-W2-3). Camp C keeps `locks`; A and B are
+  open. The three secrets keep their kinds and signs.
+- **L1b-W2-2. Sizes and the wire.** Camps A about 85 × 85, B about 141 × 133, C about 115 × 115
+  (±10%). The route is 900–1,100 studs. Residents at the highest difficulty: A 30–36, B 40–50, C
+  at least 4 and fewer than its stage's `maxAlive`. Every camp, its floor and its wall stay inside
+  the wire's ±1,000 studs (the existing `Validate` and `ORIGIN_LIMIT` gates; the draft's furthest
+  edge is 379). Parts at most `levels.maxParts` (600); the draft builds 82. L1's Part formula
+  (`partsL1`, "73 less 6 per open camp plus one per fire") is dropped.
+- **L1b-W2-3. The sneak path** (Ben §16.3, LR lead 2(2), 2(3)). `layout.sneak` is a polyline of
+  `{ x, z }` points, read only by `tools/check_levels.py` and the simulators; the game never reads
+  it. It is gated, for every difficulty:
+  - it runs from `layout.start` to the locking camp's `entry`, and every point along it at 2-stud
+    steps stands on a standable top (a ground block or a camp floor), with the route's own rules for
+    legs that climb or jump the gap;
+  - the flat distance from the polyline to every resting place of every group of an open camp is
+    greater than that group's posture `sight`, cones ignored. A resting place is a member's post,
+    and for a patrol anywhere on its loop. The cone-aware margin is reported.
+  - The road itself is not gated: a careless walker waking the road fires is the design.
+- **L1b-W2-4. Post spacing** (LR lead 2(16), BALANCE "L1b: open" item 1). For every camp and every
+  difficulty, any two posts of the camp (any groups, the tent's ring included) are at least
+  `r_a + r_b + 0.5` apart on the flat, where r is each post's member's kind radius. A patrol's loop
+  is held to the same distance from every other group's post. The fire rule of Wave 1 (neighbours
+  on one circle) is a case of it.
+- **L1b-W2-5. The population rule** (LR lead 2(4)). For every difficulty:
+  `residents + Σ tent stock + max over locking camps of max(stage.maxAlive − that camp's residents, 0)
+  + the boss reserve ≤ ProvingGrounds.json crowd.maxAlive` (160).
+  - The **boss reserve** is, over the locking camps' bosses, the largest `1 + the largest count of
+    any of its kind's "summon" attacks` (the Colossus: 1 + 12 = 13). **[draft]** It is derived from
+    `ProvingGrounds.json`, so no number is written twice.
+  - `levels.populationReserve` goes (key, type field and every reader). **[draft]**
+  - `StageFlow.Validate` and `check_levels.py` refuse a level that breaks it, naming the difficulty
+    and both sides. `Plan.population` is the left side at the played difficulty; the client
+    prewarms its pool with it. The draft's left side: 147 on Normal, 157 on Hard and Brutal.
+
+**Tents** (LR 5, LR lead 2(6), 2(7), 2(8))
+
+- **L1b-W2-6. A tent is a stock and a group of its own.**
+  - A level camp may carry `tent: { every, units }`. `units` are `MissionCrowdGroup`s as residents
+    (`kind`, `count`, `minDifficulty`; `perExtra` is not read), filtered by the played difficulty and
+    never scaled by `countMult` or the party (L1b-10). The stock is the units expanded in file
+    order: the designer orders or splits units to mix the kinds. Draft stocks: A 4 fodder, 2
+    slingers, 2 brutes; B 2 fodder, 2 slingers, 4 brutes; one body every 6 s.
+  - The layout camp then carries `tent: { x, y, z, sx, sy, sz, radius }`: the marker block (centre
+    and size, as a `LevelBlock`) and `radius`, the ring the tent's bodies stand on. `radius` is new
+    against the draft; the designer sets it so the ring clears the marker, the floor's edge, every
+    obstacle and every other post (L1b-W2-4).
+  - **A locking camp has no tent stock** (LR 5: C's tent is only where its stage waves come out).
+    Its layout `tent` is a marker only, and its waves keep L1's `spawns`, which the draft places by
+    the marker.
+  - Each tent stock is **one group of its camp, posture `tent`** **[draft]**. Its def is built like
+    a resident group's (`id = "<camp>.tent"`, the camp's floor and rectangle, `points` = the
+    marker's centre at the floor's height, `radius` = the layout's, `held = false`, `units` = the
+    stock). Its posts are `CampBrain.Posts(def, #stock)`: the fire's circle, but each yaw faces
+    **away** from the centre. Member k of the stock stands on post k.
+  - Its rules are `Combat.json camps.tent` (`sight`, `cone`, `rise`, as the other postures). At rest
+    it shows `idle` (standing round the tent), never seated.
+- **L1b-W2-7. When a tent sends** (the pure rule in `CampBrain`; the executor in `WaveService`).
+  - A tent is **active** while a group of its camp, its own included, is in `rise` or `fight`
+    (`CrowdService.Busy()[floor]`), **or** once no resident of its camp is alive (its own bodies not
+    counted), whatever the camp's state. The second clause means a camp can always be cleared.
+  - While active and stock is left, a body is due when the clock reaches `nextAt`. `nextAt` starts
+    at minus infinity, so the first body comes out on the tick the camp wakes. After each body,
+    `nextAt = now + every`.
+  - A pause keeps both the stock and `nextAt`, so after a long rest the next body comes at once.
+  - **[draft]** At most one body per tent per tick. A refused spawn (the cap: the population rule
+    makes it a bug) warns once per run and **counts as sent**, so the camp can still clear.
+  - A body sent spawns on its own ring post (`CrowdService.SpawnResident(kind, tentGroup, post)`),
+    and the tent's group is roused (`CrowdService.RouseGroup`): a resting group goes to `rise`, so
+    the new body joins the fight. A roused group pushes the `alert` CombatFx like any wake.
+  - From then on it is an ordinary group: it fights players in play for its camp, leashes, walks
+    home to the ring, heals and rests. It wakes by sight, by a hit, by a neighbour (L1b-W2-12) and
+    by the next rouse.
+  - A tent is never destroyed and never refills (Ben §16.5).
+- **L1b-W2-8. A camp's clear with a tent.** An open camp is cleared when no body on its floor lives
+  **and** its tent's stock is spent (`Input.tentLeft[i] == 0`). Before the stock is spent, the
+  "no resident alive" clause of L1b-W2-7 keeps the tent sending. Everything else in L1b-17 stands.
+- **L1b-W2-9. The tent's marker** (LR lead 2(8)). `LevelGeometry` builds one Part per layout `tent`
+  block: look `tent` (a 13th `Expeditions.json looks` key), the block's centre and size, `collide =
+  false`. `LevelService` turns every non-colliding piece `CanQuery = false`, so the marker is walk-
+  through, stops no shot or camera ray, and is neither cover nor a perch. `check_levels.py`'s cover
+  and perch gates skip it.
+
+**Dormancy, spawn infos and waking neighbours**
+
+- **L1b-W2-10. Dormant groups** (the Wave 1 outline; study §4).
+  - `CampBrain.Dormant(group, roots, rules)` is true when the group is at `rest` (held or not) and
+    every root in `roots` is farther than `camps.dormantRadius` from its camp's floor rectangle (flat,
+    `HitShapes.FlatToRect`). A group in `rise`, `fight` or `home` is never dormant.
+  - `roots` are those of every player whose character has a root, down or not **[draft]**.
+  - It is judged per group at every camp step, after `Step`, the join-in and any rouse. Every group of
+    one camp therefore shares its dormancy.
+  - **A dormant group's bodies** are not integrated, not separated (they neither move nor push), not
+    clamped, do not walk to a goal and are **not put in snapshots**.
+  - They stay in the grid, so `Query` finds them, and a shot or a swing that reaches one is judged as
+    on any resident (`Struck`: blocked out of play, and the hit wakes the group). The group itself is
+    still stepped by `CampBrain.Step`, which is cheap and per group, so that wake is seen.
+  - A patroller freezes mid-loop, where nobody is near enough to see it.
+  - `camps.dormantRadius` is at least every posture's `sight` plus one snapshot of the fastest move
+    (`Tuning.FastestMove / crowd.snapshotHz`); `CampBrain.Problems` checks the first part and
+    `check_levels.py` both. Start value 120 (the draft's floors are 109 and 185 apart).
+- **L1b-W2-11. Spawn infos carry the body** (study §4). `CrowdSpawnInfo` gains `at` (feet), `yaw`
+  and `state` (the wire state).
+  - `CrowdService` writes the three fields into the body's stored info **at every send**: the
+    lifecycle flush and a late joiner's batch (`onPlayerAdded`), refreshed in place without a new
+    table.
+  - The client draws a body from its spawn info until its first snapshot ("Client"),
+    and a dormant body that it never had a snapshot of.
+  - At Depart every resident goes out in the first flush, so the whole level is drawn on arrival:
+    "you see the raiders before they see you".
+- **L1b-W2-12. Nearby groups join in** (Ben §17.4, LR lead 2(1)).
+  - When a group goes from `rest` to `rise` by sight or by a hit (not by a release, not by a rouse),
+    every resting group of the same camp whose **gap** to it is at most `camps.joinFactor` (2) × the
+    **waking** group's posture `sight` wakes too, in the same camp step.
+  - A group woken that way wakes, in turn, its own resting neighbours within `joinFactor` × **its own**
+    sight. The chain is directed (a fire's 16 reaches 32, a guard's 30 reaches 60) and runs until no
+    group is added.
+  - **The gap** between two groups is the least flat distance between a post of one and a post of the
+    other **[draft]**: posts at the played difficulty, a patrol's posts spaced along its loop (not
+    the whole loop). Posts never move, so `CrowdService` works every gap out once, at `AddGroup`.
+  - Held groups, groups in `home`, groups with no living member and groups of other camps never join.
+  - Each joined group pushes its own `alert` (a "!" over its bodies) and rises for its own posture's
+    `rise`.
+  - Judged once per wake, never again while the group fights. The pure rule is `CampBrain.JoinIn`.
+
+**One swing per jump** (Ben §17.1)
+
+- **L1b-W2-13. The server's gate, at the strike gate.** `WeaponService.OnAttack`, for a melee
+  variant, after the rate credit is checked and before anything is spent:
+  - The swing is **airborne** when its resolved origin (`meleeOrigin`: P3.1's claimed position,
+    clamped by the claim slack) stands more than `standingOffset + AIRBORNE_MARGIN_STUDS` over the
+    floor under it (`floorUnder`), with the margin `trackAir` uses **[draft]**. That margin (0.75)
+    moves from `WeaponService`'s `CONST.AIRBORNE_MARGIN_STUDS` into `SwingGate.AIR_MARGIN_STUDS`,
+    which `WeaponService` reads, so the client and the server share one number. Judging
+    at the swing's own origin, not at the server's lagging copy, means:
+    - a swing on the take-off frame counts as airborne;
+    - a swing on the landing frame counts as grounded;
+    - so an honest player is never refused.
+  - The shooter keeps `airSwing: SwingGate.State`. An airborne swing while `airSwing.used` is
+    refused with `sendRefused(shooter, seq)` (no credit spent, no combo step, the client's early
+    effects taken back).
+  - An accepted airborne swing sets `used`. Two things clear it: a grounded swing, and the server
+    seeing the landing (`trackAir`'s airborne-to-grounded branch). A new character starts clear
+    (`resetAir`).
+  - **The double jump does not reset it**: "the next needs a landing".
+  - **Unchanged:** the ground slam (`OnSlam`, its own intent), the slam's landing grace, an airborne
+    swing's `reachDown`, every ability (abilities do not pass `OnAttack`) **[draft]**, and every
+    ranged attack.
+  - What a cheat can do: claim a grounded origin inside the claim slack (about 4 studs and the lag's
+    worth) while in the air, which buys extra swings on low hops only. P3.1 accepted the same bound
+    for where a swing lands.
+  - The pure rule is `src/shared/SwingGate.luau`, so the client asks the same questions.
+- **L1b-W2-14. The client never sends a swing the server would refuse.** `InputController` keeps its
+  own `SwingGate.State`.
+  - Before a melee swing is predicted and sent, it asks `SwingGate.IsAir` of the local root's height
+    over the floor under it. It probes as the server's `floorUnder` does (`HitShapes.GROUND_PROBE_LIFT`
+    and `GROUND_PROBE_DEPTH`) and uses the same standing offset (`HipHeight` + half the root's
+    height) and the same margin (`SwingGate.AIR_MARGIN_STUDS`).
+  - An airborne swing while `used` is **dropped**: no early effect, no send, nothing queued for the
+    landing. A held button or the phone's auto-swing simply swings again at its normal rate once the
+    character is grounded.
+  - `used` clears on a grounded swing and when the local Humanoid lands.
+  - Phones: the auto-swing (touch `autoFire` on a melee family) runs through the same gate, so a jump
+    on a phone gives one auto swing. No attack button is added.
+
+**Headshots and the body's shape** (Ben §17.2, LR lead 1, report `headshot.md`)
+
+- **L1b-W2-15. `HitShapes.CrowdRay`, the crowd's ray rule.** A ray (a bullet, a beam tick, every
+  arrow step: everything through `WeaponService.rayCandidates`) hits a crowd body when the padded
+  ray (`width/2 + pad`) touches its **body or its head**.
+  - Its entry is the smaller of the two entries (pierce order).
+  - It **crits** when the ray with pad 0 (still `width/2`) touches the head sphere: the pad forgives
+    a miss, it never makes a headshot (P1's rule, kept).
+  - `rayCandidates` becomes one `CrowdRay` call per candidate. The cone's crit line is unchanged.
+  - `CrowdService.Query`'s broad phase (a sphere of `max(radius, height/2)` round half height)
+    already contains the head and the capsule below, so it is unchanged. A's harness case proves it
+    for every kind.
+- **L1b-W2-16. The body is a vertical capsule for rays** (LR lead 1).
+  - The body is every point within `radius` of the vertical segment from `feet + (0, radius, 0)` to
+    `feet + (0, top − radius, 0)`, where `top = max(height − 2 × headRadius, height / 2 + radius)`.
+    So its bottom is the ground, its top is the head's base or today's sphere top, whichever is
+    higher. **[draft]** That top makes the capsule contain today's body sphere for every kind: no
+    ray that hits today misses after.
+  - Colossus: 0 to 11 (today 3 to 11), so its legs are hittable. Fodder: 0 to 3.8.
+  - **Melee and area shapes keep the body sphere** (`Arc`, `Sphere`, `Capsule`, `Cone`, `Lane`, the
+    chain, the slam) **[draft]**: Ben's complaint was shots, and moving every melee test would
+    re-tune every boss.
+  - The capsule's ray test is `HitShapes.RayUpright`.
+- **L1b-W2-17. P1 decision 1 is amended** (INTERFACES "P1 contracts" → "Architecture decisions" 1).
+  For crowd hit tests read:
+  - **rays:** "a ray hits a crowd body if it touches the body capsule (L1b-W2-16) or the head
+    sphere, both padded; it crits if it touches the head sphere unpadded";
+  - **every other shape:** "tests the body sphere (centre `height/2`, `radius`)", as before.
+  The lead adds a one-line pointer at P1 decision 1 when this contract is confirmed (this draft
+  edits nothing above this section).
+- **L1b-W2-18. The mirrors agree.**
+  - `tools/sim_range.py`'s `"ray"` shape (and every arrow step that uses it) mirrors `CrowdRay` and
+    `RayUpright` exactly. `measure_boss(head=True)` then measures what it says.
+  - `check_stage_mirror.py` compares the Luau with the Python on a grid of kinds, origins and widths.
+  - Phone auto-fire already treats the head as a target (`InputController.enemyInSights`); now the
+    server agrees.
+  - Not in Wave 2 (carried): rewinding enemies for shots; the lean of the drawn head in a windup or a
+    stagger.
+- **L1b-W2-19. A crit on a plate shows as a crit** (report, ui Minor). `FeedbackController`: a strike
+  entry with `crit` draws in crit yellow at crit size even when it hit a plate. A plate hit without a
+  crit keeps the plate colour. `FeedbackController` is at 159 top-level locals: no new top-level
+  local.
+
+**Gear, the clear bonus and the bands**
+
+- **L1b-W2-20. The starting preset is 2 / 2** (Ben §17.3).
+  - `Combat.json debug.provingGear` becomes `{ melee 2, ranged 2 }`.
+  - `debug.gearPresets` becomes `2 / 2`, `4 / 4`, `6 / 6`, so G walks 2 / 2 → 4 / 4 → 6 / 6.
+  - **No weapon number changes** (`ProvingGrounds.json` untouched, a gate), so the bosses keep their
+    tuning.
+  - Every band below is measured at 2 / 2 where Wave 1 measured at 2 / 1. "One preset below" Hard's
+    recommended 4 / 4 is now 2 / 2.
+  - The economy-designer re-reads the bosses after L1b-W2-15 and -16 (bows and rifles now crit the
+    big bodies). The Colossus and Warlord bands are re-checked, not re-tuned. A band that breaks is
+    reported to the lead with the numbers, and nothing is moved to meet it.
+- **L1b-W2-21. The clear bonus** (LR 2, LR lead 2(5)).
+  - `crowd.clearBonus` is `{ share }` (0.1).
+  - A camp's bonus is `share` × what its **whole stock** pays at the difficulty's price:
+    - an open camp: its residents and its tent's stock, at the played difficulty;
+    - the locking camp: its residents and every body its stage's waves queued in this run (the
+      director's extra elites included, the boss and its calls not) **[draft]**.
+  - What this party happened to kill does not enter, so sneaking past a camp loses its kills and its
+    bonus, and costs nothing more.
+  - `Combat.ClearBonus` prices it: `math.round(share × Σ count × KillReward)`, cash and materials
+    each.
+  - It is paid **the moment the camp clears**: at `campClear` for an open camp (the tick its last
+    body falls with the stock spent), at `open` for the locking camp. It is split evenly among the
+    fighting humans through `SplitCarry` and kept at once, like a kill.
+  - Never on a skip (Wave 1's `Action.skipped` stands).
+- **L1b-W2-22. The bands** (LR lead 2(10), 2(14); full table in "Balance bands").
+  - **The first Normal clear:** the reacting player at 2 / 2, every seed, takes **7–8 min**. That
+    puts Ben at about 9–10.5.
+  - **Hard and Brutal** are gated again by L1's human-reaction player and its "clearly beyond the
+    gear below" gates.
+  - **The pay bands come back**, with a per-minute band: Normal **Timber per minute within ±10% of
+    Wave 1's 42** (37.8–46.2). The designer's lever is `rewards.brute.materials` 6 → 4, and brutes
+    may be swapped for fodder to meet the clear band.
+  - **`targetMinutes`** is the simulator's mean first Normal clear, rounded (Wave 1's rule).
+  - **`runCapSeconds`** is at least twice the human policy's slowest Normal clear and at least
+    1,260 (twice Ben's 10.5 min). The draft's 1,500 holds both. **[draft]**
+- **L1b-W2-23. The `[Perf]` number Ben reads** (the Wave 1 outline: "Ben's one number").
+  - Every time `CrowdService` prints its `[Perf]` line (Studio only, every `debug.perfLogSeconds`
+    while a body lives), it also sets the Workspace number attribute named by
+    `Combat.json debug.perfAttribute` (`"CrowdPerfMs"`) to that line's p95 in ms **[draft]**.
+  - `CombatHud` shows it, in Studio only, as a dim line `Server 1.4 ms` in every live phase. It is
+    hidden when the attribute is missing.
+  - No remote; no number on a live server (the line is off outside Studio, so the attribute is
+    never set).
+  - Ben is asked, as a click question, what it reads in the Chief's Clearing with the Colossus up:
+    under 1 ms / 1–2 / 2–4 / over 4 / did not see it. The budget is 2 ms (P4). The lead also reads
+    the `[Perf]` lines with their peak alive from Studio's log.
+- **L1b-W2-24. One flat-distance-to-a-rectangle helper** (PLAN "L1b" carried, ui + A).
+  `HitShapes.FlatToRect(x, z, cx, cz, hx, hz): number` is the flat distance from a point to a
+  rectangle (0 inside or on its edge). `CampBrain.InPlay`, `CampBrain.Dormant`, `InputController`'s
+  `campInPlay`, `check_levels.py` and `sim_range.py` all use it (or its exact mirror). It is a pure
+  rule with a harness case and a mutation.
+- **L1b-W2-25. Phone auto-fire in the countdown** (PLAN carried). While the client's phase is
+  `gate` (the boss room's countdown), auto-target takes **no body that has a camp floor**
+  **[draft]**. Every body in reach then is a held resident whose hit would read "BLOCKED".
+  Deliberate shots are untouched.
+- **L1b-W2-26. The director's merge test with residents alive** (PLAN carried, B).
+  - The dead fraction counts only bodies the waves queued: `Combat.DeadFraction(spawned, queuedAlive)`
+    with `queuedAlive = AliveOn(floor) − GroupedOn(floor)`. `GroupedOn` counts the living bodies of
+    that floor that belong to a group: residents and tent bodies.
+  - It is a pure rule. Forest Road's C does not merge, so nothing plays differently; it is fixed
+    before a merging stage gets residents.
+- **L1b-W2-27. The mirrors compare what Wave 1 carried.** `check_stage_mirror.py` compares
+  `StageFlow.StandsUp` against `sim_range.py`'s stand-up (in `travel`, `armed` and `gate`), and
+  every new pure rule of this wave ("Gates").
+- **L1b-W2-28. Kept carried, with owners** (not in Wave 2):
+  - **Residents do not scale with party size** (L1b-10): L5 (lead).
+  - **`OnDash` grants i-frames on the request alone:** before the publish freeze lifts
+    (luau-engineer A, its own contract). Chasing residents make the dash the main escape, and P5's
+    note stands: it must be judged against the position ring.
+  - **Sight through walls:** L4 or later (A).
+  - **A shot at a seated raider's drawn head scores a body hit:** L4 (ui + A).
+  - **Revive by a teammate:** L5.
+  - **The end screen:** L4 (Ben §17.5).
+  - **Brutal's own `minDifficulty` units:** carried. The cap leaves no room: the draft's Hard is at
+    157 of 160. The lead decides whether Brutal ever differs from Hard by more than its scales.
+- **L1b-W2-29. Kept unchanged:** everything L1b-24 lists, plus every Wave 1 ruling and amendment
+  this list does not replace. That includes the boss room (held residents, the close, the waves, the
+  Colossus at `[14, 0]` with Valor 10), the leash and the heal, in play with rounded corners and
+  `chaseMargin` 2.5, `engagedHoldSeconds`, the safe point and its threats, the stand-up, per-kill
+  pay with the carry, the wallet send, the Raider Arena's numbers, no sound and no attack button.
+
+### What the code says (checked 2026-10-14, on `l1b-wave2`)
+
+Read, not assumed. Line numbers drift by a few.
+- **The ray rule.** `WeaponService.rayCandidates` (about :1067) tests `HitShapes.Ray` against the
+  body sphere first and checks the head only after a body hit. Rays and every arrow step
+  (`stepProjectile`) go through it. `gather` (about :672) builds `body = feet + (0, height/2, 0)` and
+  `head = feet + (0, height − headRadius, 0)` from the kind's def. The mirror is
+  `tools/sim_range.py` (the `"ray"` shape, about :757).
+- **Air.** `trackAir` (about :1770) sets `shooter.airborne` from `floorBelow(root)` against
+  `standingOffset + CONST.AIRBORNE_MARGIN_STUDS` (0.75) and stamps `landedAt` on the landing.
+  `resolveMelee` treats a claim lifted above the server's copy as airborne too (`lifted`). `OnAttack`
+  refuses with `sendRefused(shooter, seq)` before it spends the credit. `floorUnder(position)` probes
+  from `GROUND_PROBE_LIFT` above a point.
+- **The crowd.** `campStep` (CrowdService, about :932) steps every group, releases a held group after
+  stepping it, and stamps `engaged`. `simulate` integrates, separates and clamps every record in
+  `order`. `sendSnapshot` sends every record. `spawnInfo` is built once in `Spawn` (`id kind maxHp
+  floor`); `flushLifecycle` and `onPlayerAdded` send that stored table. `Busy()` builds a new table
+  per call. `notePerf` prints `[Perf] crowd step p50 … p95 … (n steps, peak alive k)` every
+  `perf.every` seconds while a body lives. `Main.server.luau` turns it on with
+  `CrowdService.SetPerfLog(combatConfig.debug.perfLogSeconds)`.
+- **Summons.** The Colossus's `summon` attack carries `count` 12 of `fodder`; the Warlord's 4
+  `guard`.
+- **Levels.** `LevelService` sets `CanQuery = false` on every piece built with `collide = false`;
+  `WeaponService.worldParams` respects `CanCollide`. `levels.populationReserve` is read by
+  `StageFlow`, `check_levels.py`, `check_stage_mirror.py`, `sim_combat.py`, `tests_l1.luau`,
+  `tests_l1b.luau` and `mutate.py`. `crowd.clearBonus` is read by `StageFlow.Validate` (about :494),
+  `WaveService.campCleared` (about :750), `sim_range.py` and `sim_combat.py`.
+- **Gear.** `Combat.json debug.provingGear` is `{ melee 2, ranged 1 }` and `gearPresets` is
+  `2 / 1, 4 / 4, 6 / 6`. `WeaponService.gearOf` reads `provingGear` in a proving build, and
+  `sim_range.py` `mission_gear()` reads it too.
+- **The director.** `WaveService.advance` (about :1368) computes
+  `deadFraction = (spawnedThisGroup − alive) / spawnedThisGroup` from the live floor's `alive`, which
+  counts that camp's residents.
+- **The client.** `InputController.campInPlay` (about :1077) computes the flat distance to the floor
+  rectangle inline. `enemyInSights` and `enemyInReach` test both the body and the head spheres.
+  `FeedbackController` draws a plate hit in the plate colour even when it is a crit (about :1723).
+- **The harness** loads `SOURCES` from `run_harness.py` (HitShapes, CampBrain, CrowdService,
+  StageFlow, Combat, LevelGeometry and others; **not** `WeaponService`), and the test files in
+  `TESTS` order as one chunk of at most 200 locals.
+- **Top-level locals** (`py tools/check_compile.py --counts`): `FeedbackController` 159,
+  `CrowdRenderer` 152, `InputController` 147, `CombatFxController` 126, `MovementController` 102.
+  Every server file is under 100.
+
+### Flow (what changes in Wave 1's "Flow")
+
+**Start** (`WaveService` `startLevel`, after `LevelService.Build`), Wave 1's steps 1–6 with:
+- step 5, after the resident groups: for each `plan.tents[t]`, in order,
+  `CrowdService.AddGroup(tent.def)`, which must answer `#plan.groups + t`. Then
+  `run.tents[t] = { group = <that index>, sent = 0, state = CampBrain.NewTent(#tent.kinds) }`. No
+  tent body is spawned at the start.
+- `StageFlow.Plan` gets its seventh argument, `kinds` (`Tuning.Get().crowd.kinds`), for the boss
+  reserve.
+
+**A run** (`WaveService.tick`), Wave 1's order with:
+- **Tents, before `advance`:**
+  - `busy = CrowdService.Busy()`, once per tick.
+  - For each tent: `residentsAlive = CrowdService.AliveOn(floor) − CrowdService.GroupAlive(group)`
+    and `active = CampBrain.TentActive(busy[floor] == true, residentsAlive)`.
+  - If `CampBrain.TentDue(state, active, now)`: spawn `kinds[sent + 1]` on `posts[sent + 1]`
+    (`CrowdService.SpawnResident`), `CrowdService.RouseGroup(group)`,
+    `CampBrain.TentSent(state, now, every)`, `sent += 1`.
+- **`advance`'s input** gains `tentLeft` (per zone index, `state.left` of its tent, else 0).
+  `mergeOk` reads `Combat.DeadFraction(run.spawnedThisGroup, alive − CrowdService.GroupedOn(floor))`.
+- **The clear bonus** is paid in `campClear` and on the locking camp's `open` (L1b-W2-21).
+  `queueWave` adds each queued body's kind to `run.waveStock`.
+
+**The camp step** (`CrowdService.campStep`), in this order for each group in index order:
+1. A pending `WakeFloor` releases a held group, as in Wave 1.
+2. Otherwise `CampBrain.Step`.
+3. Then a pending `RouseGroup`: `CampBrain.Rouse`, after the step as a release is (so even a rise of
+   0 shows).
+4. After every group, `CampBrain.JoinIn` over the groups that went `rest → rise` by `Step` this step;
+   each answer is `Rouse`d and queues its `GroupEvent`.
+5. Then `CampBrain.Dormant` for every group, marking its bodies.
+6. Then the engaged set, as in Wave 1.
+
+### Server modules
+
+Two luau-engineer instances, **A (the crowd and the hit shapes)** and **B (the run, the level and the
+tests)**, with the disjoint files of "Ownership". **A lands the whole "Types" block below in
+`src/shared/Types.luau` as its first edit, and the new exports of `HitShapes`, `SwingGate` and
+`CampBrain` (signatures with bodies, cases to follow) as its second, then tells the lead.** B codes
+against those APIs. An owner who needs a change in a file it does not own lists it "for the other
+owner" in its report, and the lead routes it.
+
+#### A — `src/shared/HitShapes.luau` (pure, existing)
+
+```luau
+HitShapes.RayUpright(
+	origin: Vector3, direction: Vector3, reach: number, width: number, pad: number,
+	feet: Vector3, low: number, high: number, radius: number
+): number?
+	-- the distance along the ray at which the ray grown by width/2 + pad first touches the set of
+	-- points within `radius` of the vertical segment feet + (0, low, 0) .. feet + (0, high, 0)
+	-- (0 when it starts inside), nil for a miss or past `reach`. low <= high; low == high is a sphere
+	-- and must answer exactly what HitShapes.Ray answers for it.
+HitShapes.CrowdRay(
+	origin: Vector3, direction: Vector3, reach: number, width: number, pad: number,
+	feet: Vector3, radius: number, height: number, headRadius: number
+): (number?, boolean)
+	-- L1b-W2-15/16: entry = min(RayUpright(... feet, radius, top - radius, radius),
+	-- Ray(... feet + (0, height - headRadius, 0), headRadius)), top = max(height - 2 * headRadius,
+	-- height / 2 + radius); crit = Ray(origin, direction, reach, width, 0, head, headRadius) ~= nil.
+	-- (nil, false) for a miss. A crit is only ever reported with an entry.
+HitShapes.FlatToRect(x: number, z: number, cx: number, cz: number, hx: number, hz: number): number
+	-- sqrt(max(|x - cx| - hx, 0)^2 + max(|z - cz| - hz, 0)^2); 0 inside or on the edge
+```
+
+#### A — `src/shared/SwingGate.luau` (new, pure; no Instance, no clock)
+
+```luau
+export type State = { used: boolean }    -- an airborne swing was taken since the last landing
+SwingGate.AIR_MARGIN_STUDS: number       -- 0.75, moved here from WeaponService's CONST
+SwingGate.New(): State                                         -- used = false
+SwingGate.IsAir(height: number?, standOffset: number): boolean
+	-- height = the swing origin's Y over the floor under it (nil = no floor: airborne);
+	-- true when height > standOffset + AIR_MARGIN_STUDS
+SwingGate.Allows(state: State, airborne: boolean): boolean     -- not (airborne and state.used)
+SwingGate.Took(state: State, airborne: boolean): ()            -- used = airborne
+SwingGate.Landed(state: State): ()                             -- used = false
+```
+
+#### A — `src/combat/server/Services/CampBrain.luau` (pure, existing)
+
+```luau
+export type TentState = { left: number, nextAt: number }
+
+-- Changed:
+CampBrain.Posts(def, count)        -- posture "tent": the fire's circle round points[1] at def.radius,
+                                   -- member k at bearing 2π(k − 1)/count, yaw facing AWAY from the
+                                   -- centre (θ, wrapped into (−π, π]); leg 0
+CampBrain.Shows(group, moving)     -- "tent" at rest, held or home: "move" when moving, else "idle"
+CampBrain.Problems(rules)          -- also: `tent` posture rules as the others; `joinFactor` a finite
+                                   -- number above 0; `dormantRadius` finite and above every posture's sight
+CampBrain.InPlay(...)              -- unchanged rule, the rectangle distance through HitShapes.FlatToRect
+
+-- New:
+CampBrain.Dormant(group: Group, roots: { Vector3 }, rules: Types.CampRulesConfig): boolean
+	-- state "rest" (held or not) and every root farther (flat) than rules.dormantRadius from
+	-- group.def.rect; an empty `roots` is dormant
+CampBrain.Gap(a: { Post }, b: { Post }): number
+	-- the least flat distance between a post of a and a post of b; math.huge if either is empty
+CampBrain.JoinIn(
+	groups: { Group }, living: { number }, gaps: { [number]: { [number]: number } },
+	woke: { number }, rules: Types.CampRulesConfig
+): { number }
+	-- L1b-W2-12. Breadth first from `woke` in its order; for each waker X, every Y in index order
+	-- with gaps[X][Y] ~= nil (same camp, Y ≠ X), groups[Y].state == "rest", not held, living[Y] > 0,
+	-- not yet in woke or the answer, and gaps[X][Y] <= rules.joinFactor * rules[X's posture].sight
+	-- (edge included) is appended and becomes a waker. Mutates nothing; never answers an index in woke.
+CampBrain.Rouse(group: Group, now: number): boolean
+	-- rest and not held: state "rise", since = now, hit = false; true. Otherwise nothing; false.
+CampBrain.NewTent(stock: number): TentState                     -- left = stock, nextAt = -math.huge
+CampBrain.TentActive(busy: boolean, residentsAlive: number): boolean   -- busy or residentsAlive <= 0
+CampBrain.TentDue(tent: TentState, active: boolean, now: number): boolean
+	-- active and tent.left > 0 and now >= tent.nextAt - 1e-6
+CampBrain.TentSent(tent: TentState, now: number, every: number): ()
+	-- left = max(left - 1, 0), nextAt = now + every
+```
+
+Each new rule has a harness case and a mutation (below). `Rouse` is the one way a group wakes outside
+`Step` and `Release`, so the tent and the join-in share it.
+
+#### A — `src/combat/server/Services/CrowdService.luau` (executor, harness-loaded)
+
+```luau
+CrowdService.AddGroup(def)            -- also works out the group's posts (CampBrain.Posts at the sum of
+                                      -- def.units' counts) and its gap to every earlier group of the
+                                      -- same def.camp (CampBrain.Gap), kept for JoinIn
+CrowdService.RouseGroup(group: number): ()     -- CampBrain.Rouse at the next camp step (L1b-W2-7)
+CrowdService.GroupAlive(group: number): number -- living members of that group
+CrowdService.GroupedOn(floor: number): number  -- living bodies of that floor that belong to a group;
+                                               -- a kept count, as AliveOn, never a scan
+CrowdService.SetPerfLog(seconds: number, attribute: string?): ()
+	-- as today, plus: with an attribute name, each [Perf] line also sets
+	-- Workspace:SetAttribute(attribute, p95) (L1b-W2-23); nil = no attribute
+```
+
+What the executor does:
+- **The camp step** runs in "Flow"'s order. A `GroupEvent` from a join-in or a rouse has
+  `from = "rest"`, `to = "rise"`, `held = false`.
+- **Dormancy.** Each resident record carries `dormant: boolean`, set from its group at every camp
+  step. `simulate` skips a dormant record in `integrate`, in `separate` (it neither moves nor
+  pushes), in the clamp and in the walk to its goal. `sendSnapshot` skips it. It stays in the grid.
+  `Damage` on it is unchanged (Wave 1's `Struck`). `roots` are gathered once per step from
+  `Players`, from every character with a root, down or not.
+- **Spawn infos.** `refreshInfo(enemy)` writes `at = enemy.position`, `yaw = enemy.yaw` and
+  `state = enemy.state` into the stored `spawnInfo` before it goes in any batch (`flushLifecycle`,
+  `onPlayerAdded`). It writes in place, with no new table.
+- **The `[Perf]` attribute** is set only where the line is printed. `src/combat/server/Main.server.luau`
+  passes `combatConfig.debug.perfAttribute` as the second argument (A's one line there).
+- No yield, no raycast and no per-body allocation in the camp step, the join-in or the dormancy pass
+  (C1's and L1 ruling 35's rule). `JoinIn` runs only on a step where a group woke.
+
+#### A — `src/combat/server/Services/WeaponService.luau` (executor, read by review)
+
+- `rayCandidates` makes one `HitShapes.CrowdRay(origin, direction, reach, width, pad, feet, def.radius,
+  def.height, def.headRadius)` call per candidate. `gather` hands the test the feet too, which is a
+  signature change local to the file.
+- The shooter gains `airSwing: SwingGate.State` (`SwingGate.New()` in `AddPlayer` and `resetAir`).
+  `trackAir`'s landing branch calls `SwingGate.Landed`.
+- **`OnAttack`, melee only, after the credit test** (L1b-W2-13):
+  - `origin = meleeOrigin(...)`;
+  - `floor = floorUnder(origin, worldParams())`;
+  - `airborne = SwingGate.IsAir(if floor then origin.Y − floor else nil, standingOffset(root, humanoid))`;
+  - if not `SwingGate.Allows(shooter.airSwing, airborne)`: `sendRefused(shooter, seq)` and return;
+  - else, once the swing is accepted, `SwingGate.Took(shooter.airSwing, airborne)`.
+  `resolveMelee` takes that origin instead of building it again; its `reachDown` rule is unchanged.
+- `CONST.AIRBORNE_MARGIN_STUDS` reads `SwingGate.AIR_MARGIN_STUDS`.
+- Nothing else in `WeaponService` changes (the cone's crit line, `OnSlam`, `OnDash`, abilities).
+
+#### A — `tools/crowd_harness/tests_l1b_w2_crowd.luau` (new; B registers it)
+
+At least:
+- **`CrowdRay`**, for every kind of the real `FIXTURES.proving.crowd.kinds`, origin `(0, 5, 30)`
+  toward the body, Longbow A's width and pad (report `headshot.md`):
+  - (a) aimed at `feet + (0, height − 0.25 × headRadius, 0)`: an entry and a crit;
+  - (b) at the head's centre: a crit (the Colossus fails this today);
+  - (c) `headRadius + width/2 + pad + 0.3` above the head's top: nil;
+  - (d) at the body's centre: an entry, no crit;
+  - (e) grazing the head only within `pad`: an entry, no crit;
+  - (f) at `feet + (0, 0.5, 0)` (the shins): an entry, no crit (today a miss on the Colossus and the
+    brute);
+  - (g) beside the capsule at `radius + width/2 + pad + 0.01`, level with its middle: nil;
+  - (h) the entry is the nearer of the body's and the head's;
+  - (i) every ray that hits today's body sphere (a seeded grid of 400 rays a kind) hits the capsule.
+- **`RayUpright`**: `low == high` equals `Ray` on 200 seeded rays; a ray starting inside answers 0;
+  a vertical ray down the axis; a ray stopping short of `reach`; a ray along a cap.
+- **`FlatToRect`**: inside, each edge, a corner at distance 5 (3-4-5).
+- **`Query` holds the shape**: for every kind, the capsule's and the head's farthest points lie inside
+  `Query`'s bounding sphere.
+- **`SwingGate`**: `IsAir` at the margin exactly and just past it, nil height; the sequence ground
+  swing, airborne swing (allowed), airborne swing (refused), `Landed`, airborne swing (allowed),
+  grounded swing (clears), airborne swing (allowed).
+- **`CampBrain`**:
+  - `Posts` for a tent of 8 (bearings, radius, outward yaw); `Shows` for a tent at rest; `Problems`
+    (a missing `tent`, `joinFactor` 0, `dormantRadius` at a sight exactly);
+  - `Dormant`: a root at `dormantRadius` exactly (not dormant) and just past it; a fight, a home and
+    a rise are never dormant; a held rest is; no roots;
+  - `Gap`; `JoinIn`: a chain of three where the third is in reach of the second only; directed (a
+    guard reaches a fire that cannot reach back); held, home, empty and other-camp groups skipped; the
+    factor's edge; no answer repeats or appears in `woke`;
+  - `Rouse` (rest, held, rise, fight, home); `TentActive`; `TentDue` and `TentSent` over a timeline
+    (wake at 0: 0, 6, 12; a pause from 13 to 40: the next at 40; residents dead with the camp at rest:
+    it keeps sending; the stock spent: never).
+- **`CrowdService`** (two floors, as Wave 1's fixtures):
+  - a group with every root beyond `dormantRadius` is not integrated (a patroller's position does not
+    move over 30 steps) and is absent from every snapshot; a root walking in wakes it into snapshots;
+  - a dormant body hit by a lever (`Damage`) wakes its group;
+  - a spawn info carries `at`, `yaw` and `state`, refreshed for a late joiner after the body moved;
+  - a wake by sight joins a neighbour inside `joinFactor × sight` and not one outside; one
+    `GroupEvent` each;
+  - `RouseGroup` rises a resting tent group at the next step, and does nothing to a fighting one;
+  - `GroupAlive` and `GroupedOn` follow spawns and kills;
+  - the `[Perf]` attribute is set when the line prints (with a stub Workspace), and never with no name.
+
+**Mutations (A hands them to B for `mutate.py`), at least:**
+- `CrowdRay`: the head term dropped from the hit test (a, b fail); the crit test padded (e fails); the
+  head centre at `height / 2` (a fails); the body back to a sphere (f fails); the entry taken from the
+  head always (h fails); `top` without the `max` (i fails).
+- `RayUpright` drops a cap. `FlatToRect` with square corners.
+- `SwingGate`: `Took` ignores `airborne`; `Landed` does nothing; `Allows` ignores `used`; `IsAir` with
+  `>=`.
+- `Dormant`: true while in `home`; ignores `dormantRadius`.
+- `JoinIn`: does not chain; uses the first waker's sight for the whole chain; joins a held group;
+  joins across camps.
+- `Rouse` wakes a held group. `TentActive` ignores the dead residents. `TentDue` ignores `active`.
+  `TentSent` does not move `nextAt`.
+- `CrowdService`: integrates a dormant body; sends a dormant body; skips the info refresh.
+
+A also lists every existing mutation in `mutate.py` whose text its edits change (`mutate.py` refuses a
+stale one), with the new text, for B. Some existing cases in `tests.luau`, `tests_w2`, `tests_s2`,
+`tests_s3`, `tests_p5` or `tests_l1b_crowd` may pin the old ray rule (a head-only ray as a miss, a
+body-only crit count). A updates each one in its own files, and lists the ones in B's files "for the
+other owner", each with the old and the new expectation.
+
+#### B — `src/combat/server/Services/StageFlow.luau` (pure, existing)
+
+```luau
+-- Zone gains:
+	stock: { [string]: number },   -- residents + the tent's stock at the played difficulty, by kind
+	                               -- (the locking camp: its residents only; the run adds its waves)
+	tentStock: number,             -- the tent's stock at the played difficulty; 0 for none
+-- Plan gains:
+	tents: { PlanTent },           -- one per open camp with a tent stock, in layout order
+export type PlanTent = {
+	zone: number,                   -- the zone index (= its floor index)
+	def: Types.CampGroupDef,        -- posture "tent", id "<camp>.tent" (L1b-W2-6)
+	kinds: { string },              -- the stock in file order, filtered by minDifficulty
+	posts: { CampBrain.Post },      -- CampBrain.Posts(def, #kinds); kinds[k] stands on posts[k]
+	every: number,
+}
+-- Input gains:
+	tentLeft: { number },           -- per zone index: stock not sent yet (0 where none)
+
+StageFlow.Plan(level, layout, difficulty, rules, bounds, ranks?, kinds?)
+	-- kinds = ProvingGrounds.json crowd.kinds, for the boss reserve; nil = a reserve of 1 (the boss)
+StageFlow.BossReserve(level: Types.LevelConfig, kinds: { [string]: Types.CrowdKindDef }?): number
+	-- L1b-W2-5: over the locking camps' bosses, the largest 1 + the largest `count` of its kind's
+	-- "summon" attacks (an unknown kind: 1); 0 when no stage has a boss
+StageFlow.Validate(level, layout, kinds, ranks, rules, crowdMax)   -- signature unchanged
+```
+
+- **`Plan`** builds each tent's `PlanTent`: units filtered by `minDifficulty` against the played rank,
+  never by `countMult`. A tent whose units all drop is left out. Every zone gets `stock` and
+  `tentStock`. `population` is L1b-W2-5's left side at the played difficulty. Wave 1's
+  `levels.populationReserve` term goes.
+- **`Validate`** keeps every Wave 1 refusal except the `populationReserve` one and the flat
+  `clearBonus` one, and adds one line for each of:
+  - a level camp `tent` with no `every`, an `every` not finite or not above 0, no units, or units
+    broken in any way a resident unit can be (no kind, an unknown or unpriced kind, a count that is
+    not a whole number of at least 1, an unknown `minDifficulty`);
+  - a `tent` stock on a locking camp; a `tent` stock on a camp with no residents; a `tent` stock
+    whose layout camp has no `tent` block; a layout `tent` block with a non-finite value, a size or
+    `radius` of 0 or less, or its centre outside its camp's floor;
+  - a tent's ring post not inside its floor less its kinds' largest radius (asked of `CampBrain.Posts`
+    at the highest difficulty, as Wave 1 does for resident posts);
+  - `crowd.clearBonus` present with a `share` that is missing, not finite, or outside [0, 1];
+  - L1b-W2-5's population rule broken at any difficulty (the line names the difficulty and both
+    numbers).
+- **`Advance`** step 5 (open camps) also needs `(input.tentLeft[i] or 0) == 0` before a
+  `campClear` (L1b-W2-8). Nothing else in `Advance`, `FieldClear`, `SafePoint` or `StandsUp`
+  changes. A tent body's group is an ordinary group, so `awake` and `busy` already see it.
+
+#### B — `src/shared/Combat.luau` (pure; the economy-designer mirrors it in `tools/sim_combat.py`)
+
+```luau
+Combat.ClearBonus(
+	stock: { [string]: number }, rewards: { [string]: MissionCrowdReward },
+	rewardMult: number, share: number
+): (number, number)
+	-- math.round(share * Σ stock[kind] * cash), math.round(share * Σ stock[kind] * materials), with
+	-- cash, materials = Combat.KillReward(rewards, kind, rewardMult) for each kind (an unpriced kind
+	-- adds 0). A share of 0 or a stock of nothing answers 0, 0.
+Combat.DeadFraction(spawned: number, queuedAlive: number): number
+	-- 0 when spawned <= 0; else math.min(math.max((spawned - math.max(queuedAlive, 0)) / spawned, 0), 1)
+```
+
+#### B — `src/combat/server/Services/LevelGeometry.luau` (pure, existing)
+
+- `Pieces` builds one marker per layout camp `tent` block: role `"tent"`, look `"tent"`, the block's
+  centre and size, `collide = false`, its camp named. No other piece changes.
+- `Sizes` is unchanged (the block carries its own size).
+
+#### B — `src/combat/server/Services/WaveService.luau` (executor, read by review)
+
+- **Start** and **the tick** as "Flow". The run gains:
+  - `tents: { { group: number, sent: number, state: CampBrain.TentState } }`;
+  - `waveStock: { [string]: number }`, the bodies queued by the live locking camp's waves, by kind,
+    emptied when a new locking camp's waves begin.
+- **`campCleared`** (the open camp's `campClear`) pays
+  `Combat.ClearBonus(zone.stock, level.crowd.rewards, scales.rewardMult, bonus.share)`. The locking
+  camp's `open` pays the same over `zone.stock` plus `run.waveStock`. Both split evenly among the
+  fighting humans through `SplitCarry`, mark the wallets dirty, and pay nothing on a skipped `open`
+  (Wave 1's `Action.skipped`). No `clearBonus` (or `share` 0) pays nothing.
+- **The merge test** reads `Combat.DeadFraction` (L1b-W2-26).
+- `StageFlow.Plan` is called with `kinds`. A tent's refused spawn warns once per run and still counts
+  as sent (L1b-W2-7).
+- No yield anywhere in the tick (unchanged).
+
+#### B — `src/combat/server/Services/LevelService.luau`
+
+Only if the `"tent"` role needs anything beyond the generic piece build (it should not: the look
+comes from `Expeditions.json looks`). B's report says which.
+
+#### B — `tools/crowd_harness/`
+
+- `run_harness.py`: `SwingGate` added to `SOURCES` (before `CampBrain`); `tests_l1b_w2_crowd.luau`
+  (A's) and `tests_l1b_w2.luau` (B's) appended to `TESTS`. The bundle stays one chunk of at most 200
+  locals: B checks and says the count.
+- `mutate.py`: `SwingGate.luau` added to `FILES`; A's mutations and B's. Each mutation of Wave 1 that
+  names `populationReserve`, the flat `clearBonus` or the old ray rule is replaced by the new rule's
+  own, never deleted silently. B's report lists each one with its replacement.
+- `tests_l1.luau`, `tests_l1_world.luau`, `tests_l1b.luau`: updated where this wave changed a case.
+  That covers the population reserve, the flat bonus, and the real files' Part count, now the new
+  Forest Road's. B's report lists each changed case.
+
+#### B — `tools/crowd_harness/tests_l1b_w2.luau` (new, B's), at least
+
+- **`Validate`:** every new refusal fires on a level broken for it, and none fires on the shipped
+  files. The population rule at each difficulty, with numbers worked by hand (the shipped Normal 147,
+  Hard 157 from the draft, or whatever the final files give), and one level one body over 160.
+- **`BossReserve`:** the Colossus 13; the Warlord 5; an unknown kind 1; no boss 0.
+- **`Plan`:**
+  - tents only for open camps with stock, filtered by `minDifficulty` and never by `countMult`;
+  - `kinds` and `posts` paired;
+  - `zone.stock` and `zone.tentStock` by hand;
+  - `population` with and without `kinds`.
+- **`Advance`:** no `campClear` while `tentLeft > 0` with every body dead; one once it is 0; never
+  twice; a skipped `open` carries `skipped`.
+- **`Combat`:** `ClearBonus` on the shipped A at each difficulty by hand; share 0; an unpriced kind;
+  rounding at .5. `DeadFraction`: none spawned; all alive; more alive than spawned (0); residents left
+  out.
+- **`LevelGeometry`:** a tent marker per tent block (`collide` false, look `tent`); none without a
+  block; the shipped Forest Road's Part count.
+
+**Mutations (B), at least:**
+- `campClear` with tent stock left;
+- the tent stock left out of the population, or the boss reserve left out;
+- `BossReserve` reads the smallest summon;
+- `countMult` applied to a tent's stock; `minDifficulty` ignored for a tent;
+- a tent allowed on a locking camp;
+- `clearBonus.share` above 1 passes;
+- `ClearBonus`: floors instead of rounding; ignores `rewardMult`; counts the boss;
+- `DeadFraction` counts residents;
+- the tent marker built colliding.
+
+### Client (ui-engineer)
+
+Every client file is an executor, read by review, and `py tools/check_compile.py` is in every verify.
+`CrowdRenderer` (152), `InputController` (147) and `FeedbackController` (159) take no new top-level
+local one by one: new state goes into their existing state tables, and new code into a new module
+beside them where it is more than a few lines.
+
+- **`CrowdRenderer`** (L1b-W2-11):
+  - A spawn info with `at` seeds the body's first sample: position `at`, yaw `yaw`, state `state`, a
+    full bar (its plate's if the kind has one), stamped at the client's current render time. The
+    body is then drawn at once, held there, and a snapshot replaces the sample as usual.
+  - A spawn info without `at` (the range's bodies) keeps today's rule (not drawn before its first
+    sample).
+  - A dormant body simply gets no snapshot. Today's "extrapolate 0.12 s, then hold" stands, and
+    absence never removes a body.
+  - `rest` draws seated and `rise` blends as in Wave 1. A tent group at rest arrives as `idle`
+    (standing).
+  - `Prewarm(run.maxAlive)` as in Wave 1 (up to 160 on Hard).
+  - **The phone check:** in Studio's emulator at 667 × 375, at Depart, with every resident drawn, the
+    report gives the client frame time on the road between A and B and in B. No culling is added in
+    Wave 2: if the frame time is bad, the report says so and the lead rules.
+- **`InputController`:**
+  - `campInPlay` computes its distance with `HitShapes.FlatToRect` (L1b-W2-24).
+  - In phase `gate`, auto-target skips every body with a camp floor (L1b-W2-25).
+  - The air-swing gate (L1b-W2-14) uses `SwingGate`. The floor probe is one ray per melee swing
+    attempt, never per frame. `used` clears on the local Humanoid's landing (its `StateChanged` to
+    `Landed`, or `FloorMaterial` leaving `Air`), and on a grounded swing.
+  - A dropped swing makes no early effect and sends nothing.
+  - On touch the auto-swing waits through the gate without queueing.
+- **`FeedbackController`** (L1b-W2-19): a crit on a plate draws in crit yellow at crit size. A plate
+  hit without a crit is unchanged.
+- **`CombatHud`** (L1b-W2-23): in Studio only (`RunService:IsStudio()`), in every live phase, one dim
+  line `Server <p95> ms` from the Workspace attribute named by `Combat.json debug.perfAttribute`,
+  rounded to 0.1. It is hidden while the attribute is missing. It must not cover the boss bar, the
+  objective line or "Camps 1 / 3", on a PC or at 667 × 375.
+- **`src/client/UI/Theme.luau`** (add only): the perf line's text size and transparency
+  (`COMBAT_PERF_TEXT_SIZE`, `COMBAT_PERF_TRANSPARENCY`).
+- **Not changed:** `CombatFxController` and `CampFx` (a join-in or a rouse is an ordinary `alert`),
+  `CombatUIController`, `SummaryCard` (the bonus is in the reward rows already), `MapScreen`,
+  `MovementController`, `CameraController`, `VitalsController`, `DebugPanel`, `combat.project.json`.
+
+### Types (applied verbatim by luau-engineer A in `src/shared/Types.luau`, as its first edit)
+
+No required field is added to a type that hub code builds. `CombatDebugConfig` gains a required
+field: only `Combat.json` fills it.
+
+```luau
+-- L1b Wave 2 (docs/INTERFACES.md "Wave 2 — the long road")
+
+-- CrowdSpawnInfo, replacing the type. at, yaw and state: the body as it stood when this info was
+-- sent (CrowdService refreshes them at every send), so a client draws a body with no snapshot.
+export type CrowdSpawnInfo = {
+	id: number,
+	kind: string,
+	maxHp: number,
+	summonerId: number?,
+	floor: number?,
+	at: Vector3?,
+	yaw: number?,
+	state: CrowdState?,
+}
+
+-- CampPosture, replacing the line. "tent": a tent stock's own group, standing on a ring round the tent.
+export type CampPosture = "guard" | "patrol" | "fire" | "tent"
+
+-- CampRulesConfig, replacing the type.
+export type CampRulesConfig = {
+	guard: CampPostureRules,
+	patrol: CampPostureRules,
+	fire: CampPostureRules,
+	tent: CampPostureRules,
+	sightBelow: number, -- studs a root may be under the camp's floor and still be seen or in play
+	sightAbove: number, -- studs a root may be over it
+	chaseMargin: number, -- studs (flat, to the floor rectangle) a root may be past its edge and in play
+	leashSeconds: number,
+	homePace: number, -- x the kind's speed: walking home, and a resting body drifting back
+	patrolPace: number, -- x the kind's speed: a patrol at rest
+	homeTolerance: number, -- studs from its post that count as at its post
+	engagedHoldSeconds: number, -- seconds a player stays engaged after last in play for a group in rise or fight
+	joinFactor: number, -- x the waking group's sight: a resting group of its camp this near (post to post) wakes too
+	dormantRadius: number, -- studs (flat) from a camp's floor rectangle: no player root nearer = its resting groups are dormant
+}
+
+-- Layouts/Levels/<Name>.json.
+-- LevelCamp gains:    tent: LevelTentBlock?
+-- LevelLayout gains:  sneak: { ArenaPoint }?   -- tool-only (check_levels.py, the simulators); the game never reads it
+-- A tent's marker (centre and size, as a LevelBlock) and the ring its bodies stand on.
+export type LevelTentBlock = { x: number, y: number, z: number, sx: number, sy: number, sz: number, radius: number }
+
+-- Config/Levels/<n>_<Name>.json.
+-- units: as residents (perExtra is not read); every: seconds between two bodies.
+export type LevelTentConfig = { every: number, units: { MissionCrowdGroup } }
+-- LevelCampConfig, replacing the type.
+export type LevelCampConfig = { id: string, name: string, residents: { LevelResidentGroup }, tent: LevelTentConfig? }
+-- share of what a camp's whole stock pays at the difficulty's price (L1b-W2-21)
+export type LevelClearBonus = { share: number }
+-- LevelCrowdConfig.clearBonus, replacing the field:  clearBonus: LevelClearBonus?
+
+-- Combat.json
+-- CombatLevelsConfig loses:  populationReserve
+-- CombatDebugConfig gains:   perfAttribute: string,  -- L1b-W2-23: Workspace number attribute set to each [Perf] line's p95 (Studio only)
+```
+
+`TentState` is exported from `CampBrain`, `State` from `SwingGate`, `PlanTent` from `StageFlow`.
+
+### Config (economy-designer owns the files; the shapes are fixed here)
+
+Every number below is a starting value for the designer to set, unless marked fixed. **The
+designer's first edit is `Combat.json` and `Expeditions.json`** (the new keys), so A's `Problems` and
+B's `Validate` read real keys from the start. The level and the layout follow.
+
+**`Combat.json`:**
+
+```json
+"camps": {
+	"guard":  { "sight": 30, "cone": 140, "rise": 0 },
+	"patrol": { "sight": 24, "cone": 360, "rise": 0 },
+	"fire":   { "sight": 16, "cone": 360, "rise": 1.5 },
+	"tent":   { "sight": 24, "cone": 360, "rise": 0 },
+	"sightBelow": 4, "sightAbove": 30, "chaseMargin": 2.5, "leashSeconds": 3,
+	"homePace": 1, "patrolPace": 0.5, "homeTolerance": 1, "engagedHoldSeconds": 1.5,
+	"joinFactor": 2,
+	"dormantRadius": 120
+},
+"levels": { "...": "as Wave 1, less populationReserve" },
+"debug": { "...": "as Wave 1, and:",
+	"provingGear": { "melee": 2, "ranged": 2 },
+	"gearPresets": [
+		{ "name": "2 / 2", "melee": 2, "ranged": 2 },
+		{ "name": "4 / 4", "melee": 4, "ranged": 4 },
+		{ "name": "6 / 6", "melee": 6, "ranged": 6 }
+	],
+	"perfAttribute": "CrowdPerfMs" }
+```
+
+- Fixed: `joinFactor` 2 (Ben's "at least double"); `provingGear` and `gearPresets` as written
+  (L1b-W2-20); `perfAttribute`'s name is free.
+- `dormantRadius`: at least every `sight` plus `Tuning.FastestMove / crowd.snapshotHz`, a
+  `check_levels.py` gate.
+
+**`Expeditions.json`:** `looks` gains `tent` (a canvas or hide colour that reads from 60 studs and is
+not the fire's), so it has thirteen required keys.
+
+**`ProvingGrounds.json`:** unchanged (gate 13). No kind, weapon or movement number moves in Wave 2.
+
+**`Levels/1_ForestRoad.json`:** `winding.level.json`, with:
+
+```json
+"crowd": { "...": "as the draft", "clearBonus": { "share": 0.1 } },
+"camps": [
+	{ "id": "A", "name": "Pickets", "residents": [ "...the draft's four groups..." ],
+		"tent": { "every": 6, "units": [ { "kind": "fodder", "count": 4 }, { "kind": "slinger", "count": 2 }, { "kind": "brute", "count": 2 } ] } },
+	{ "id": "B", "name": "Main Camp", "residents": [ "...six groups..." ],
+		"tent": { "every": 6, "units": [ { "kind": "fodder", "count": 2 }, { "kind": "slinger", "count": 2 }, { "kind": "brute", "count": 4 } ] } },
+	{ "id": "C", "name": "The Chief's Clearing", "residents": [ "...four groups..." ] }
+]
+```
+
+- `targetMinutes`, `runCapSeconds` by L1b-W2-22.
+- The stage of C (two waves and the Colossus at `[14, 0]`, Valor 10, fixed), `maxAlive` 42 and the
+  difficulties stay as the draft.
+- The levers for the bands are named in "Balance bands". A unit's mix or count may move; a kind's
+  reward may move only as named.
+
+**`Layouts/Levels/ForestRoad.json`:** `winding.layout.json`, with `radius` on each `tent` block (A,
+B and C; C's is a marker only and its `radius` is read by nothing but the gates). Its `sneak`, camps,
+spots, gates, checkpoints, secrets, blocks, `killY` and `barrier` stay as drafted, moved only to pass
+a gate. **Known before building:** A's tent ring at a radius near 8 would stand within 2 studs of
+A.loop's patrol (x −191.5). Post spacing (L1b-W2-4) fails there, so the designer moves the loop, the
+tent or the ring. The drafts' +0.07 spacing margin did not include tent rings.
+
+**Gates of `tools/check_levels.py` for Wave 2** (new or changed; every Wave 1 gate not named stays):
+
+| Constraint | Number |
+|---|---|
+| Camp floors | A 85 × 85, B 141 × 133, C 115 × 115, ±10% (was L1's sizes) |
+| Route | 900–1,100 studs (was 500–600) |
+| Residents per camp, highest difficulty | A 30–36, B 40–50, C at least 4 and under its stage's `maxAlive`; every camp at most its floor area / 200 |
+| The wire | every camp, its floor and wall within ±1,000 of the origin (unchanged gate) |
+| Parts | at most `levels.maxParts` (600), and equal to `LevelGeometry.Pieces`' count; `partsL1` dropped |
+| The sneak path | L1b-W2-3: from `start` to the locking camp's `entry`, standable at every 2 studs (route rules for climbs and the gap), farther than `sight` from every resting place of every open-camp group at every difficulty; the cone-aware margins reported |
+| Post spacing | L1b-W2-4, every camp, every difficulty, tent rings and patrol loops included |
+| Population | L1b-W2-5 at every difficulty (the boss reserve from `ProvingGrounds.json`) |
+| Tents | a stock only on an open camp with residents and a layout `tent` block; the block's centre on its floor; its ring posts inside the floor less the largest radius and clear of obstacles by that radius + 1 (as resident posts); `every` above 0 |
+| Tent markers | not counted as cover or a perch (they do not collide) |
+| Looks | the thirteen keys of `Expeditions.json looks` |
+| `dormantRadius` | at least every posture's `sight` + `Tuning.FastestMove / crowd.snapshotHz` |
+| `joinFactor` | above 0; the chain's reach per group reported (the layout report's last column) |
+| Checkpoints | Wave 1's three gates (outside the floor, unseen at rest, out of every resting shooter's reach), on the new positions, tent groups' posts included |
+
+### Balance bands (economy-designer; checked by the simulators, written up in `docs/BALANCE.md` "L1b Wave 2")
+
+Measured as Wave 1, but at **gear 2 / 2** (`debug.provingGear`): no Ascension, Broadsword +
+Longbow, solo, the reacting player of `sim_range.py` (policy `mission`), unless a band names another.
+The ray rule (L1b-W2-15, -16) and the join-in, tents and dormancy are mirrored before any band is
+read.
+
+| Band | Where | Value |
+|---|---|---|
+| **Normal: the first clear, every seed** | sim_range | **7–8 min**, start point to the Colossus's fall, walking included |
+| Normal: the Colossus alone, and in the run | sim_range | 64–90 s (unchanged band, now at 2 / 2 with headshots; a break is reported, not tuned: L1b-W2-20) |
+| Normal: no hit over | sim_range | 25% of the bar (unchanged) |
+| Still in a woken group of camp A | sim_range | down in 6–12 s from the wake (unchanged band, on the new A) |
+| A first strike on every fire group | sim_range | his hit before any windup (unchanged band, every fire of A and B) |
+| The leash (`kite`) | sim_range | whole on return, the dead dead, paid only for kills; **and the tent paused**: its stock left is the same when he returns as when the camp went home |
+| The edge (`edge`) | sim_range | 0 from that group (unchanged) |
+| **The sneak** (new policy `sneak`: walk `layout.sneak` to C's entry, never attack) | sim_range | wakes no group of A or B, every seed; the walk's length reported |
+| **The careless road** (the `mission` walk with no fight until C) | sim_range | reported: which groups wake (the drafts say A's and B's road fires, 16 each, with their join-ins) |
+| **The join-in** | sim_range | the groups each first wake brings in equal `check_levels.py`'s chain table, every seed |
+| **A tent** | sim_range | sends `every` apart from the wake (A: 8 out in 42 s); pauses while its camp rests; empties after the camp's residents die even at rest; never after the stock is spent |
+| **Every kill paid once, at once; Valor exact** | sim_range, sim_combat 21 | as Wave 1 (Normal 10, Hard 20, Brutal 40) |
+| **The clear bonus** | sim_combat 21, sim_range | each camp's bonus equals `Combat.ClearBonus` on its stock by hand; never on a skip; 5–10% of a Normal clear |
+| **Normal pays a minute** (new) | sim_range | Timber **37.8–46.2** a minute (Wave 1's 42 ± 10%); cash reported against Wave 1's 19,800 a minute |
+| Normal pays a clear | sim_combat 21 | reported against the draft's 152,820 cash, 373 Timber, 10 Valor |
+| Hard and Brutal pay | sim_combat 21 | ×2–×3 and ×4–×6 of Normal (L1's bands back) |
+| Hard at 4 / 4, Brutal at 6 / 6: no hit over | sim_range | 30% of the bar |
+| The same: the Colossus alone | sim_range | 64–100 s |
+| The human clears without going down, at the recommended gear, every seed | sim_range | Normal, Hard, Brutal (L1's gate back) |
+| The player who never dodges does not clear, at the recommended gear | sim_range | Normal, Hard, Brutal (L1's gate back) |
+| Clearly beyond the gear below, the human | sim_range | one preset below (Hard at 2 / 2, Brutal at 4 / 4) he goes down, or takes ×1.8 (Hard) and ×1.4 (Brutal) as long as his slowest clear at the recommended gear (L1's gate back) |
+| Clearly beyond the gear below, the Colossus alone | sim_range | not killed inside 135 s (Hard at 2 / 2) and 180 s (Brutal at 4 / 4) |
+| Under-gearing never pays better | sim_range | one preset below, the clear pays less cash a minute (L1's gate back) |
+| The boss's calls pay under half the clear's rate | sim_combat 21 | (L1's gate back) |
+| SplitCarry fuzz; population = Validate's | sim_combat 22, 23 | as Wave 1; 23 with tents and the boss reserve |
+| **The bow at 2 / 2** | sim_range | reported, not banded: the Longbow alone against a brute, the Colossus and a plated elite, today's rule against the new one, for Ben's bow question |
+| **The Raider Arena** | sim_range | every L1 band, re-run at 2 / 2 and with the new ray rule; its file numbers stay frozen; a band that breaks is reported to the lead |
+
+**The levers, in order** (lead routing 2(10), 2(14)):
+1. Brutes for fodder. One swap is worth about 4.2 s of the simulated clear.
+2. `rewards.brute.materials` 6 → 4 for Timber a minute.
+3. A tent's `every`.
+4. The residents' mix.
+No weapon number, no boss's `hpScale` or `damageScale`, and no `ProvingGrounds.json` value moves.
+
+`targetMinutes` is the measured mean first Normal clear, rounded. `runCapSeconds` follows L1b-W2-22.
+BALANCE records:
+- residents per camp and per difficulty; the tents' stocks; the population at each difficulty; the
+  Part count;
+- the first clear's length and its split (walk, A, B, C, the Colossus); the Colossus; the worst hit;
+- the sneak's margins; the chain table;
+- what a clear pays and pays a minute; Hard and Brutal; the bow at 2 / 2; the Raider Arena's re-run.
+
+**Simulators and mirrors:**
+- **`tools/sim_range.py`:**
+  - `LevelRun` reads the tents, the join-in (on the same post gaps), dormancy (a patrol frozen while
+    dormant, so its positions agree) and the ray rule.
+  - The `"ray"` shape and every arrow step mirror `HitShapes.CrowdRay` exactly.
+  - `measure_boss(head=True)` then measures heads.
+  - Policies `mission`, `human`, `rampage`, `still`, `kite` and `edge` as today, plus `sneak`.
+  - `FOREST_*` constants follow the bands above. `mission_gear()` reads 2 / 2.
+- **`tools/sim_combat.py`:** mirrors `ClearBonus`, `DeadFraction` and the population with tents and the
+  boss reserve.
+  - 21 pays the bonus on each clear.
+  - 23's population is Wave 2's rule.
+- **`tools/check_stage_mirror.py`** (with `stage_mirror.luau`) also compares, on the shipped files and
+  on grids, against the Python mirrors:
+  - `HitShapes.CrowdRay`, `RayUpright` and `FlatToRect`;
+  - `CampBrain.Dormant`, `Gap`, `JoinIn`, `Rouse`, `TentActive`, `TentDue` and `TentSent` (scripted
+    timelines), and the tent posture's `Posts` and `Shows`;
+  - `SwingGate`;
+  - `Combat.ClearBonus` and `DeadFraction`;
+  - `StageFlow.StandsUp` (L1b-W2-27), `BossReserve`, `Plan`'s tents, stock and population, the new
+    `Validate` refusals, and scripted `Advance` runs where `tentLeft` holds a `campClear`.
+  - Each new comparison is proved by a Luau mutant it catches.
+
+### Remotes
+
+No new remote; no intent carries an amount, a position or a reward.
+
+| Remote | Change |
+|---|---|
+| `CrowdSpawn` | each info carries `at`, `yaw` and `state`, refreshed at every send |
+| `CrowdSnapshot` | a dormant body is in no snapshot; bytes per entry unchanged; fewer entries far from players |
+| `CombatFx` | `camp` `alert` also for a group that joined in or was roused by its tent (one event per group) |
+| `RequestAttack` | unchanged payload; a second airborne melee swing before a landing is refused (`RangeStats` naming its `seq`, as any refusal) |
+| Workspace attribute `debug.perfAttribute` | Studio only: a number, the last `[Perf]` line's p95 in ms (not a remote) |
+
+Everything else (`RunState`, `RequestStartLevel`, `RequestAbandon`, `RequestLeave`, `RequestDebug`,
+`MapState`, `CrowdRemove`, the wallet send) is unchanged.
+
+### Ownership (L1b Wave 2, disjoint)
+
+| Owner | Files |
+|---|---|
+| luau-engineer **A** (the crowd and the hit shapes) | `src/shared/Types.luau` (**first**, the whole "Types" block); `src/shared/HitShapes.luau`; new `src/shared/SwingGate.luau`; `src/combat/server/Services/` `CampBrain.luau`, `CrowdService.luau`, `WeaponService.luau`; `src/combat/server/Main.server.luau` (only the `SetPerfLog` call); new `tools/crowd_harness/tests_l1b_w2_crowd.luau`; in `tools/crowd_harness/` `tests.luau`, `tests_w2.luau`, `tests_s2.luau`, `tests_s3.luau`, `tests_p5.luau`, `tests_l1b_crowd.luau` only the cases that pinned the old ray rule or call a changed signature |
+| luau-engineer **B** (the run, the level, the tests) | `src/combat/server/Services/` `StageFlow.luau`, `LevelGeometry.luau`, `WaveService.luau`, `LevelService.luau` (only if needed); `src/shared/Combat.luau`; `tools/crowd_harness/` `run_harness.py`, `mutate.py`, `tests_l1.luau`, `tests_l1_world.luau`, `tests_l1b.luau`, new `tests_l1b_w2.luau` |
+| ui-engineer | `src/combat/client/Controllers/` `CrowdRenderer.luau`, `InputController.luau`, `FeedbackController.luau`, and any new module beside them; `src/combat/client/UI/CombatHud.luau`; `src/client/UI/Theme.luau` (add only) |
+| economy-designer | `src/shared/Config/Combat.json` and `Config/Expeditions.json` (**first**, the new keys), `Config/Levels/1_ForestRoad.json`; `src/shared/Layouts/Levels/ForestRoad.json`; `tools/sim_range.py`, `tools/sim_combat.py`, `tools/check_levels.py`, `tools/check_stage_mirror.py`, `tools/crowd_harness/stage_mirror.luau`; `docs/BALANCE.md` "L1b Wave 2" |
+| lead | this section; `docs/MISSIONS_DESIGN.md`; the one-line pointer at P1 decision 1 (L1b-W2-17); merges; the questions to Ben |
+| untouched | everything under `src/server`; everything under `src/client` but `Theme.luau`; `CrowdBrain`, `CrowdCodec`, `VitalsService`, `ThreatField`, `RangeService`, `AbilityService`, `PositionRing`, `StrikeTally`, `ArenaService`, `DebugService`, `RunRegistry`, `RunFx`, `EnemyService`, `CombatService`, `ReturnService`, `CombatRemotes`; `Tuning`, `Armory`, `Economy`, `Catalog`, `CombatMode`; `Config/ProvingGrounds.json`, `Config/Armory.json`, `Config/Missions/*`, `Config/Levels/0_RaiderArena.json`, `Layouts/Levels/RaiderArena.json`, `Layouts/Levels/Lobby.json`, `Layouts/Arenas/*`; `CombatUIController`, `CombatFxController`, `CampFx`, `SummaryCard`, `MapScreen`, `MovementController`, `CameraController`; `combat.project.json`; `tools/sim_economy.py`, `tools/proving_project.py`; `docs/prompts/l1b-w2-layout/*` (the drafts stay as the record) |
+
+**Who goes first:**
+1. **A lands `Types.luau`** and tells the lead. In parallel, **the economy-designer lands the
+   `Combat.json` and `Expeditions.json` keys.**
+2. **A lands the new `HitShapes`, `SwingGate` and `CampBrain` exports**, with bodies. B, the
+   ui-engineer and the economy-designer's mirrors start from those.
+3. B registers A's test file and mutations in `run_harness.py` and `mutate.py`.
+4. The economy-designer lands the level and the layout before B's real-file cases (Part count,
+   population, `Validate` clean) are run. Until then B runs them on the drafts copied into a scratch
+   folder of its own.
+
+Rules for every owner:
+- **A's mutations go to B,** with their exact texts, and so does A's list of stale mutations.
+- **Cross-owner requests go through the lead:** an owner lists them "for the other owner". Nobody
+  edits another owner's file.
+- No agent writes git or kills a process by image name (kill only your own PIDs). Each agent keeps
+  its scratch in a subfolder of its own.
+- **Big modules:** `WeaponService` (2,746 lines), `CrowdService` (2,003), `WaveService` (1,940),
+  `StageFlow` (1,889) and the three client controllers above are near their size. New logic of more
+  than a few lines goes in a new module beside them, or in the pure modules named here.
+  `py tools/check_compile.py` (about 180 top-level locals) is in every owner's verify.
+
+### Gates (every QA pass; PATH line `export PATH="$HOME/.rokit/bin:$PATH"`, Python is `py`)
+
+Wave 1's fourteen, with these changes:
+- **7.** `py tools/sim_combat.py --check`: assertions 1–23, with 21 paying the bonus by
+  `ClearBonus` and 23 counting population by L1b-W2-5.
+- **8.** `py tools/sim_range.py --check`:
+  - the range's passes are green;
+  - the numbers that move with the ray rule (bows and rifles on tall kinds) are reported against
+    `main`'s;
+  - the Raider Arena at 2 / 2;
+  - the Wave 2 bands.
+- **9.** `py tools/check_levels.py`: Wave 1's gates as amended, plus the Wave 2 table.
+- **10.** `py tools/check_stage_mirror.py`: every comparison equal, the new ones included, each proved
+  by its mutant.
+- **11.** `py tools/crowd_harness/run_harness.py`, **then** `py tools/crowd_harness/mutate.py`, one
+  after the other, never in parallel. The worktree has no `tools/bin/luau.exe`: pass the worktree's
+  root and `C:\Users\benja\Desktop\tycoon\tools\bin\luau.exe`. Both verdicts and their counts go in
+  the report.
+- **13.** `git diff main -- src/shared/Config/ProvingGrounds.json src/shared/Config/Missions
+  src/shared/Layouts/Arenas src/shared/Config/Levels/0_RaiderArena.json
+  src/shared/Layouts/Levels/RaiderArena.json` is empty: no weapon number moves and the arena is
+  frozen.
+  - `tests.luau`, `tests_w2`, `tests_s2`, `tests_s3` and `tests_p5` differ from `main` only in the
+    cases A listed, and pass.
+
+New:
+- **15.** `rg -n "populationReserve" src tools` finds nothing (the key is gone everywhere).
+- **16.** `py tools/check_levels.py` prints these, and QA copies them into its report:
+  - the population at each difficulty;
+  - the Part count;
+  - the route's length;
+  - the sneak path's tightest margins;
+  - the join-in chain table.
+
+`streetplan.py` and `check_mirror.py` are skipped, as in Wave 1. qa-runner must end with its report
+even when every command passes.
+
+### Definition of done (Wave 2)
+
+**luau-engineer A:**
+- The Types block is in `Types.luau`, first, verbatim; the lead was told.
+- `HitShapes` (`RayUpright`, `CrowdRay`, `FlatToRect`), `SwingGate` and `CampBrain` (tent posture,
+  `Dormant`, `Gap`, `JoinIn`, `Rouse`, the tent rule, `Problems`) implement every rule above with the
+  signatures given.
+- `CrowdService` carries the camp step order, dormancy (step and snapshot), refreshed spawn infos,
+  `RouseGroup`, `GroupAlive`, `GroupedOn` and the perf attribute. `WeaponService` makes the
+  `CrowdRay` call and runs the air-swing gate; `Main` passes the attribute name.
+- `tests_l1b_w2_crowd.luau` holds every case listed and passes under B's harness. The mutations, the
+  stale-mutation list and the changed old cases are handed to B with their texts.
+- Gates 1–4, 11 and 13 green on A's files. Nothing in the camp step, the join-in or the dormancy pass
+  yields, raycasts or allocates per body.
+- The report lists anything "for the other owner".
+
+**luau-engineer B:**
+- `StageFlow` (tents in `Plan`, `stock`, `tentStock`, `BossReserve`, the population, the new
+  `Validate` lines, `tentLeft` in `Advance`), `Combat` (`ClearBonus`, `DeadFraction`), `LevelGeometry`
+  (the tent marker) and `WaveService` (the tent executor, the bonus, `waveStock`, the merge test,
+  `Plan`'s `kinds`), as "B" and "Flow" say.
+- `tests_l1b_w2.luau` holds every case listed. `run_harness.py` and `mutate.py` register A's and B's
+  files, and every mutation is caught.
+- The report lists each Wave 1 case and mutation that was changed or replaced, and by what. It
+  quotes the lines where a tent sends and where the bonus is paid.
+- Gates 1–5, 11–13 and 15 green.
+
+**ui-engineer:**
+- Every point of "Client" is done. These read on a PC and in the phone emulator at 667 × 375, with
+  one screenshot each in the report:
+  - a whole camp drawn on arrival from spawn infos alone;
+  - the perf line;
+  - a crit on a plate.
+- The phone frame time with every resident drawn is reported.
+- No client file passes about 180 top-level locals.
+- Gates 1–5 and 12 green on the client files.
+
+**economy-designer:**
+- The config, the level file and the layout as in "Config", every number set, every gate of the Wave
+  2 table green.
+- `check_levels.py`, `sim_range.py`, `sim_combat.py`, `check_stage_mirror.py` and `stage_mirror.luau`
+  learn what "Balance bands" and the table say. Every band passes, or is reported where this contract
+  says "reported".
+- `docs/BALANCE.md` "L1b Wave 2" records what "Balance bands" lists.
+- Gates 6–10 and 16 green.
+
+**The wave as a whole:**
+- Every gate above is green. With `debug.provingBoots` `"range"`, every P1–P4 set behaves as at P5,
+  except that rays now hit heads and legs (said in BALANCE).
+- **`build/proving.rbxl`, Play:** the checklist below plays as written. Beyond it:
+  - no body pops in or freezes where a player can see it;
+  - a tent never sends while its camp rests with residents alive;
+  - a camp whose residents are all dead clears once its tent is empty;
+  - the bonus is paid once per camp and never on N;
+  - the second sword swing of a jump never shows an effect;
+  - the Raider Arena plays as in Wave 1.
+- The `[Perf]` lines in camps A and B with every resident alive, and in C with the Colossus, have a
+  p95 under 2 ms. The lead reads them from Studio's log.
+- docs-keeper has written `docs/PLAYTEST.md` "L1b Wave 2", `docs/MANUAL_STEPS.md` "L1b Wave 2" (the
+  publish freeze until L4) and `docs/PLAN.md` "L1b" (Wave 2's row, its carried list).
+
+### Playtest checklist (Ben; about 10 minutes; docs-keeper copies it into PLAYTEST "L1b Wave 2")
+
+File: `tycoon\build\proving.rbxl`, after "Build all". Press **Play**: the map is open on Forest Road,
+Normal, and your gear is **2 / 2**. Keys:
+- **Enter** = Depart / Back to camp; **arrows** = level and difficulty;
+- **1** / **2** = sword / bow; **Space** jump (twice = double jump); **C** in the air = slam;
+  **Left Shift** dash;
+- **N** = finish this part; **B** = jump to the boss; **G** = stronger gear;
+- **Backspace** twice = Abandon.
+
+**Good to know:**
+- Raiders still see by distance only, through fences and cover.
+- The grey **Server** number in a corner is for one question at the end.
+
+1. **Enter** (Depart). The road is long now: the gap, the bridge, the climb by the lookout, about a
+   minute's walk. As soon as you arrive you can see raiders far ahead: two fires beside the road,
+   a line of guards and a patrol by a tent. *Bug: the camp is empty until you are close; raiders
+   pop in; a raider stands frozen while you watch.*
+2. **One swing per jump:** jump and click as fast as you can: one swing in the air, then nothing
+   until you land. On the ground the combo is as before; **Space** then **C** still slams. *Bug: two
+   or three swings in one jump; a swing that shows and then vanishes.*
+3. **Pickets, the noisy way:** walk the road into the first camp. A "!" pops over the fire nearest
+   the road, and the other fire joins in with its own "!". Once the camp is up, a raider walks out of the tent
+   about every 6 seconds (eight in all). Kill everything: the banner "Pickets cleared", and your cash
+   jumps a little more than a kill (the camp bonus). *Bug: the tent never sends; it keeps sending
+   forever; no banner.*
+4. **Headshots:** **2** for the bow. In the next camp, shoot a brute in the head: a yellow crit
+   number. Shoot one in the legs: it counts. A plated raider's headshot is yellow too. *Bug: a head
+   shot does nothing; a legs shot does nothing.*
+5. **Main Camp, the quiet way:** go in by the gate on the road, then turn left (north) at once to
+   the fence. Walk east along the inside of it, close to it, to the far gate, and step back onto the
+   road. Nobody wakes. *Bug: a "!"
+   while you hug the fence.*
+6. Then wake it if you like (walk into the middle): each group that wakes brings its neighbours.
+   Clear it, or leave it and walk on: they chase to the edge, go home and heal, as in Wave 1.
+7. **The Chief's Clearing:** walk in (or **N**). The gates close and the waves and the **Colossus**
+   come as before. While he is up, look at the grey **Server** number for a few seconds. Kill him
+   (**G** if you need it): the summary lists your kills and the camp bonuses. **Enter**. *Bug: the
+   summary is empty; a bonus is paid for a camp you skipped with N.*
+
+Asked afterwards, as click questions:
+- Did the whole road feel the right length (too short / about right / too long)?
+- Are the tents right (too many / about right / too few)?
+- Is one swing per jump right?
+- **What did the grey Server number read with the Colossus up, most of the time?** Under 1 ms / 1–2 /
+  2–4 / over 4 / did not see it.
+- **At 2 / 2, how does the bow feel against the sword now?** Much weaker / a bit weaker / about even /
+  stronger.
+
+### Open for later
+
+- **Wave 3** (only if Wave 2's stop asks): numbers only (sight, leash, rise, `joinFactor`,
+  `dormantRadius`, the tents' stock and pace, the camps' mixes).
+- **Carried, with owners** (L1b-W2-28):
+  - parties and residents: L5;
+  - `OnDash`: before any publish (A);
+  - sight through walls: L4 or later (A);
+  - the seated head: L4 (ui + A);
+  - revive: L5;
+  - the end screen: L4;
+  - Brutal's own units (lead).
+- **Carried from this wave's choices:**
+  - the capsule for melee and area shapes, if Ben asks for it after his look (A + economy-designer:
+    it moves every boss);
+  - rewinding enemies for shots (A);
+  - the drawn head's lean in a windup or stagger: about 2.7 studs on the Colossus (ui);
+  - distance culling of drawn bodies on phones, if the phone frame time asks (ui);
+  - a cheat that claims a grounded origin inside the claim slack can swing a few times in a low hop
+    (A, judged with `OnDash` before any publish).
+- **Never measured, said plainly:**
+  - the crowd step with 110 to 160 bodies, most of them dormant (Wave 2's `[Perf]` read is the first);
+  - the client's frame with every resident drawn on a real phone (emulator only);
+  - snapshot bytes on the long road (estimated: one or two camps' bodies a snapshot, against Wave 1's
+    every body).
+
+### Draft points for the lead (decisions this draft took that the rulings did not cover)
+
+1. **L1b-W2-5, the boss reserve is derived** (1 + the boss kind's largest summon `count`: 13), and
+   `levels.populationReserve` is removed everywhere. `StageFlow.Plan` takes `kinds` as a seventh
+   argument for it.
+2. **L1b-W2-6, a tent is a group of posture `tent`.** Its posts sit on a ring of a new layout `radius`
+   round the marker, facing outward, standing at rest. `Combat.json camps.tent` is sight 24, cone
+   360, rise 0. A locking camp may have a marker but never a stock.
+3. **L1b-W2-6, the stock comes out in file order**, each body on its own ring post.
+4. **L1b-W2-7, a tent is active while any group of its camp, its own included, is in `rise` or
+   `fight`** (`home` does not count). It sends its first body on the tick the camp wakes, at most one
+   a tick, and a refused spawn counts as sent.
+5. **L1b-W2-10, dormancy reads every player root, down or not**, against the camp's rectangle.
+   `dormantRadius` is 120. A dormant group is still stepped; only its bodies are skipped.
+6. **L1b-W2-12, the join-in's gap is post to post** (a patrol's member posts, not its whole loop),
+   worked out once at `AddGroup`. `joinFactor` 2 is a config key. A release or a tent's rouse never
+   starts a chain.
+7. **L1b-W2-13, the air swing is judged at the swing's own (claimed, clamped) origin** against the
+   floor under it, with `trackAir`'s margin, which moves into `SwingGate`. A grounded swing or the
+   server's landing clears it; the double jump does not. Abilities and the slam are not gated. The
+   cheat bound is the claim slack.
+8. **L1b-W2-14, the client drops the second air swing** (no effect, no send, nothing queued) rather
+   than sending it for the server to refuse.
+9. **L1b-W2-16, the capsule's top is the higher of the head's base and today's sphere top**, so it
+   contains today's sphere. It is used for rays only: melee and area shapes keep the sphere.
+10. **L1b-W2-21, `clearBonus` becomes `{ share }`** (the flat `cash` and `materials` are gone). C's
+    stock counts every body its waves queued in the run, the director's elites included, priced with
+    `math.round`. The bonus is split evenly among the fighting humans.
+11. **L1b-W2-22, `runCapSeconds` is at least twice the human's slowest Normal clear and at least
+    1,260** (draft 1,500). `targetMinutes` is the simulator's mean, as in Wave 1, not Ben's estimate
+    of 9.
+12. **L1b-W2-22, the per-minute band** is Timber only (37.8–46.2); cash a minute is reported. Hard
+    and Brutal pay keeps L1's ×2–×3 and ×4–×6. The bonus must be 5–10% of a Normal clear.
+13. **L1b-W2-20, the Raider Arena's bands are re-run at 2 / 2** with its files frozen; a break is
+    reported, not tuned. The same goes for the Colossus's 64–90 s if headshots push it under.
+14. **L1b-W2-23, the perf number reaches Ben as a Workspace attribute** (`debug.perfAttribute`) and
+    a dim Studio-only HUD line in every live phase. There is no remote, and `SetPerfLog` gains an
+    argument (A's one line in `Main`).
+15. **L1b-W2-25, in the countdown (`gate`) phone auto-target skips every camp body**, not only the
+    held ones (the client cannot tell them apart).
+16. **L1b-W2-26, the merge test leaves out every grouped body** (residents and tent bodies) through
+    `CrowdService.GroupedOn`.
+17. **The playtest is one Normal run** (about 10 minutes, no Hard step). It sneaks Main Camp and
+    fights the Pickets, so Ben sees both ways.
+18. **Ownership:** `WeaponService` and the one `SetPerfLog` line in `Main.server.luau` go to A; the
+    range test files (`tests.luau`, `tests_w2`, `s2`, `s3`, `p5`) may change only where they pinned
+    the old ray rule.
+
+### Lead's answers to the draft points (2026-10-14; these win over the body)
+
+All 18 draft points are **confirmed as written**. Readings worth stating:
+- **(7)** The double jump does not reset the air swing: Ben's words were "the next needs a landing".
+- **(13)** If head crits on tall kinds bring the Colossus under its 64–90 s band with bows or rifles,
+  that is reported, not tuned: Ben judges the bow at 2 / 2 in the playtest.
+- **(15)** Confirmed: during `gate` the phone auto-target skips every body with a camp floor.
+- **The tent ring against A.loop:** the economy-designer moves the patrol loop or the tent's ring (its
+  choice; Ben's picture stays recognisable), and the post-spacing gate must pass on every difficulty.
