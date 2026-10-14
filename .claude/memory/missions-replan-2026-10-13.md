@@ -121,3 +121,11 @@ and because closed camps stop kiting). Next step **L1b "the living road"**, in a
 leashed brain, dormant far bodies, a codec range for longer roads; then his six decisions; then contracts).
 Asked afterwards about going down in camp A, he said "balance feels good": L1's numbers are the starting point for L1b. Lesson: he judged the camp mechanic within two minutes of play, so a mock of how a camp BEHAVES (not only how the
 level looks from above) would have caught this before the build: offer one for L1b.
+
+**L1b decisions, 2026-10-14 (new session; Ben chose "decisions first", before the study):** recorded in
+MISSIONS_DESIGN §16. Raiders chase to the camp edge, go home and heal; at rest all three mixed (guards,
+patrols, fires; as foreseen, offered alternatives he took all); sneaking past allowed; **rewards per kill,
+kept at once** (his own words "by the amount killed by the party, disregarding clearing status": L1's
+"only a checkpoint pays" is dead); camps never refill; three camps twice L1's size on a ~1,000-stud road,
+~10 min. Merge rule holds for L1b. Work on branch `l1b-living-road` in `tycoon-p5`; the study brief is
+`docs/prompts/l1b-study.md`, its report `docs/prompts/l1b-study-report.md`.
