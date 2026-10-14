@@ -38,3 +38,40 @@ Filled as owners report; routed after A and B finish (both edit Types/run files)
   `sim_range --check` PASS after the change.
 - Noted for Wave 2's balance: a Normal clear pays 60,800 cash / 129 Timber / 10 Valor (L1 88,200 /
   155 / 10) because fewer raiders exist; per-kill pay is unchanged.
+
+## Review rulings (2026-10-14)
+### Client slice (0 Critical, 2 Major, 3 Minor; docs/prompts/l1b-w1-review/client.md)
+- Major 1 (phone auto-fire wakes camps from range, BLOCKED loop): **fix on the client**, L1b-4
+  stands (a deliberate far shot that wakes a camp is the player's choice; auto-fire is not).
+  Auto-target picks a camp body only when the local player stands in that body's floor rectangle
+  grown by `camps.chaseMargin` (in-play), never a `rest`/`rise` body otherwise.
+- Major 2 (header cut off): text becomes "Camps 1 / 3".
+- Minors: fix all three (Abandon flicker at the edge: a short hold before it reappears; release
+  CampFx's Heartbeat connection; clear the Checkpoint notice on summary/lobby).
+### Run slice (0 Critical, 1 Major, 2 Minor; docs/prompts/l1b-w1-review/run.md)
+- Major (a downed party member stays down the whole road): **a downed member stands up when the
+  road's field is clear** (L1b-19's definition: no group in `rise`/`fight`/`home`, nothing queued),
+  outside the locking camp's fight; pure rule in StageFlow with a harness case and a mutation.
+  Revive by a teammate stays L5.
+- Minor (a skip runs `campCleared`): fix: a Studio skip's `open` neither pays the clear bonus nor
+  adds to `stats.wavesCleared` ("a skip pays nothing").
+- Minor (no gate pins progress in every live phase): add the harness case + mutation that limiting
+  `progress()` to travel/armed is caught.
+- Passed to the crowd slice: a group whose mind stays "striking" could keep a floor busy for good.
+### Data and tests slice (0 Critical, 0 Major, 8 Minor; docs/prompts/l1b-w1-review/data.md)
+- Minor 1 (A's checkpoint 44.6 studs from B.fire1's Hard marksman): **B:** `StageFlow.SafePoint`
+  skips a checkpoint within the longest attack reach of a living member of any group in
+  `rise`/`fight` (harness case + mutation). **economy-designer:** a `check_levels.py` gate that
+  every checkpoint lies outside every resident shooter's reach from its post, at every difficulty.
+- Minor 2 (chaseMargin gate edges only): fix now, corners included (reach − radius measured on
+  the diagonal); perches inside the margin gated too.
+- Minor 3 (clearBonus mirrored half): mirror it fully in `sim_range.on_open` and
+  `sim_combat.level_pay`; prove it with clearBonus > 0 in a scratch run.
+- BALANCE "L1b": show the 2.5–4 min band as the lead's ruling and PASS.
+- Hard patrol mixing speeds: walk a patrol at its slowest member's pace (economy-designer: data or
+  report to B if the executor needs it).
+- No checkpoint before camp A: accepted (the start is the safe point).
+- Post spacing gated only round fires: carried to Wave 2 (economy-designer).
+- Timber per minute up ~75% on L1: told to Ben at the stop.
+- Checklist steps 3 and 5: the lead edits INTERFACES (step 3: run well past a slinger's 32 studs;
+  step 5: N puts you inside the Chief's Clearing with the countdown running).

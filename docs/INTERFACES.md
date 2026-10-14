@@ -12592,14 +12592,15 @@ for them to fight back: a hit from farther out reads "BLOCKED" (it still wakes t
 2. Walk in toward the sitters. A "!" pops over the group that saw you; the sitters stand up slowly
    and you can hit one first. Kill a few: your cash rises with every kill. *Bug: no "!"; they stand
    at once; cash does not move until later.*
-3. Run back out along the road. They chase you to the edge of their camp and stop there; a slinger
-   in the group keeps shooting while you are close. Wait a few seconds: they walk back to their places. Hit one on
-   its way: "BLOCKED". *Bug: they follow you down the road; one keeps chasing forever.*
+3. Run back out along the road, well past where the slingers' shots reach (about 35 studs, a few
+   seconds' run). They chase you to the edge of their camp and stop there; a slinger keeps shooting
+   while you are close. Wait a few seconds: they walk back to their places. Hit one on its way:
+   "BLOCKED". *Bug: they follow you down the road; one keeps chasing forever.*
 4. Walk back in. The survivors are at full health again; the ones you killed are still gone. Then
    walk out through the far side: no gate ever closes in this camp or the next. *Bug: dead raiders
    are back; a gate closes.*
-5. **N** takes you to the Chief's Clearing. Its raiders stand still behind the gate. Step in: "Gates
-   close in 3", the gates shut, they wake, and the Colossus comes as before. **G** if you like, then
+5. **N** puts you just inside the Chief's Clearing with "Gates close in 3" already running. Its
+   raiders stand still until the gates shut, then they wake, and the Colossus comes as before. **G** if you like, then
    kill him: the summary says Cleared, lists what you earned, and has no "Saved at" line. **Enter**.
    *Bug: the gates never close; you can hit them before the close; the summary is empty.*
 6. **Up arrow** (Hard), **Enter**. In the first camp let a group hit you until you go **DOWN**: the
