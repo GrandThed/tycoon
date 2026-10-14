@@ -372,3 +372,25 @@ contract:** whether a camp's clear gives anything at all (Ben's words suggest no
 checkpoint still means (nothing banks there now; it may only mark progress for the summary and
 for co-op later); the Raider Arena stays a closed one-camp node with its own numbers, frozen until
 L4.
+
+## 17. Ben's verdict on L1b Wave 1 (2026-10-14)
+
+Studio's log: "Build all" at 11:12 on `main` (the merge), `proving.rbxl` opened at 11:13, one Forest
+Road run on Normal, **cleared** in about four minutes. His words: *"feels really good right now!"*
+Notes he gave, and how they were settled (click questions, same day):
+
+1. *"you should be able to swing just once in a jump"*: **one sword swing per jump**; the next needs
+   a landing; the ground slam is unchanged. **[Ben]**
+2. *"i coundnt land a single headshot to the big guys"*: a bug to find (likely the head hit shape
+   against the drawn model of brutes and the Colossus). **[lead, Wave 2]**
+3. *"the bow seems way to underpower compared to the sword"*: he played at gear 2 / 1 (Broadsword
+   tier 2, Longbow tier 1). **The starting preset becomes 2 / 2**; weapon numbers stay, so the bosses
+   keep their tuning; he judges the bow again after. **[Ben]**
+4. *"the agro range needs to be at least double if you are already agroed"*: read with him as
+   **nearby groups join in**: when a group wakes, every resting group of the same camp within twice
+   its own sight wakes too. **[Ben]**
+5. *"we can do better with the end screen, animating coins entering your inventory, items piling
+   up"*: good enough for a prototype; **moved to L4** (the polish step). **[Ben]**
+
+**All of 1–4 are folded into Wave 2 "the long road"** (his choice over a separate small wave).
+Not answered yet: whether a camp's clear should pay a bonus (0 today).

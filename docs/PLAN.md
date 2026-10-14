@@ -3249,7 +3249,7 @@ checkpoints on the road).
 - [x] Wave 1 reviewed, fix round done (`5ff333b`, `18a25fe`; INTERFACES "Review round and state (2026-10-14)")
 - [x] Wave 1 QA green (`18a25fe`)
 - [x] Wave 1 merged to `main` (5423937), six place files rebuilt (lead)
-- [ ] Ben's Studio look at Wave 1
+- [x] Ben's Studio look at Wave 1 (2026-10-14, cleared Normal: "feels really good right now!"; four notes folded into Wave 2, the end screen to L4: MISSIONS_DESIGN §17)
 
 ## M12 — Growing city
 

@@ -144,3 +144,9 @@ in play (L1b-7, else kills from outside the fence are free); in-play has ROUNDED
 Abandon flicker at once); phone auto-fire never targets a camp you are not in play for; Wave 1 clear band
 2.5–4 min (Wave 2 brings ~10 back). All carried items with owners: PLAN "L1b". Next: Ben's look, then Wave 2
 "the long road" (its own contract) on his word.
+**Ben's look at L1b Wave 1 (2026-10-14, a real Studio run: cleared Normal in ~4 min): "feels really good
+right now!"** Notes, settled by click questions (MISSIONS_DESIGN §17): one sword swing per jump; no
+headshot lands on big bodies (a bug to find); the bow felt weak but he played at 2 / 1, so the start
+preset becomes 2 / 2 (no weapon-number change, bosses keep their tuning); "agro range double" = nearby
+resting groups of the same camp within 2× sight wake with a group; a nicer end screen → L4. All folded
+into Wave 2 (he chose that over a separate small wave). Clear bonus still unanswered.
