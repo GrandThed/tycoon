@@ -4069,3 +4069,164 @@ and 97.7 s), the hit shares, the still player (10.6–10.8 s) are the same to th
   L3 decides what tiers 4 and 6 mean.
 - **Never measured, as the contract lists:** the gap on a touch screen, the crowd on a floor at
   height 8 and 12 in play, the camera at a camp's wall.
+
+## L1b: the living road, Wave 1 (2026-10-14)
+
+Contract: `docs/INTERFACES.md` "L1b contracts — the living road". Today's road and camp sizes;
+camps A and B are open and inhabited, only C (the Chief's Clearing) locks. Measured as L1: gear
+2/1, Broadsword + Longbow, solo, the reacting player of `sim_range.py` (policy `mission`), three
+seeds, the gate's Python (64-bit 3.12). L1's numbers are the starting point (Ben, after L1:
+"balance feels good").
+
+### L1b: values
+
+| Key | Value | Why |
+|---|---|---|
+| `camps.guard` | sight 30, cone 140°, rise 0 | contract start; a guard faces the way in |
+| `camps.patrol` | sight 24, cone 360°, rise 0 | contract start |
+| `camps.fire` | sight 16, cone 360°, rise 1.5 s | sitters are slow to stand: the first strike lands 1.3–1.5 s before any windup |
+| `sightBelow` / `sightAbove` | 4 / 30 | contract start |
+| `chaseMargin` | 3 | at most the fodder's lunge reach − radius, 4.5 − 1.3 = 3.2 (a `check_levels.py` gate) |
+| `leashSeconds` | 3 | contract start; the kiting player finds a group at rest again 4.5 s after he steps out |
+| `homePace` / `patrolPace` / `homeTolerance` | 1 / 0.5 / 1 | contract start |
+| `levels.checkpointReach` | 8 | contract start |
+| `levels.populationReserve` | 21 (fixed) | the boss, 12 summons, 8 for Wave 2's tents |
+| `levels.walletSendSeconds` | 1 (fixed) | L1b-16 |
+| `levels.fireMarkerSize` | 3 × 1 × 3 | a grey-box marker per fire |
+| `looks.fire` | Neon (255, 150, 30) | a warm colour that reads at 60 studs |
+| Forest Road `targetMinutes` | **7 → 3** | the contract sets it to the measured first clear (mean 3.1 min) |
+| Forest Road `runCapSeconds` | 1050 (unchanged) | ×5.8 of the target, ×3.3 of the slowest clear |
+| `crowd.clearBonus` | 0 / 0 | Ben's "disregarding clearing status"; a config change if he asks for one |
+
+Nothing else moved: the difficulties, rewards, `regenShare`, `burst` and C's stage are L1's
+(C keeps its one wave of 35 and the Colossus at `[14, 0]`, Valor 10).
+
+### L1b: who lives where
+
+| Camp | Group | Posture | Normal | Hard and Brutal add |
+|---|---|---|---|---|
+| A, Pickets | fire1 (r 4) | fire | 4 fodder, 1 slinger | 1 slinger |
+| | eastGate | guard, faces west | 4 fodder | 1 plated elite |
+| | fire2 (r 5) | fire | 4 fodder, 1 slinger | 1 plated elite, 1 slinger |
+| B, Main Camp | fire1 (r 4) | fire | 4 fodder, 1 slinger | 1 marksman |
+| | loop (32 × 36) | patrol | 5 fodder | 1 plated elite |
+| | southWatch | guard, faces north | 2 slingers, 2 fodder, 1 brute | |
+| | fire3 (r 5.5) | fire | 1 brute, 3 fodder, 1 slinger | 1 marksman |
+| | fire2 (r 5) | fire | 4 fodder, 1 lobber, 1 slinger | 1 marksman |
+| | eastGate | guard, faces west | 2 brutes | 2 plated elites |
+| C, Chief's Clearing (held) | gate | guard, faces west | 4 fodder | |
+| | chiefFire (r 4) | fire | 1 brute, 2 fodder | 1 plated elite |
+
+| | Normal | Hard | Brutal |
+|---|---|---|---|
+| Residents A / B / C | 14 / 28 / 7 = 49 | 18 / 34 / 8 = 60 | 18 / 34 / 8 = 60 |
+| Bands at the highest difficulty | | A 12–18, B 30–40, C ≥ 4 and < 30 | (the same) |
+| **Population (L1b-11)** | **93** = 49 + 23 + 21 | **103** = 60 + 22 + 21 | **103** |
+| `crowd.maxAlive` | 160 | 160 | 160 |
+
+- Residents never scale with `countMult` or the party (L1b-10): Hard and Brutal differ only by
+  their `minDifficulty` units, so Brutal's residents equal Hard's; C's wave still scales.
+- **Parts: 67** = L1's 73, less 6 for each open camp (two gates, four barrier boxes), plus six
+  fire markers. `check_levels.py` holds that sum.
+- The checkpoints of A and B stand on the road beyond each exit, (16, −42) and (150, −42), on
+  ground whose top is 8 = the floors' height. The nearest resting eye is a guard of the east
+  gate, 28.1 and 20.1 studs off, inside its sight but behind its 140° cone (gated: no resting
+  member sees a checkpoint, a patrol anywhere on its loop).
+
+### L1b: results
+
+| | Normal at 2/1 | Hard at 4/4 | Brutal at 6/6 |
+|---|---|---|---|
+| **The reacting player's first clear** | **2.98–3.18 min** (band 5–8: **fails**) | 3.44–3.46 min (reported) | 3.46–3.52 min (reported) |
+| Hits he took | 0 | 0 | 0 |
+| The human's clear (reported) | 2.95–3.04 min, 2–3 hits | 3.30–3.47 min, 4–7 hits | 3.31–3.53 min, 4–7 hits |
+| The player who never dodges | down in the Main Camp at 0.66–0.83 min | down in the Main Camp at 0.71–0.75 min | the same |
+| The Colossus alone in camp C | **76.3 s** (75.0–77.6) | 79.3 s | 80.8 s |
+| The Colossus in the run | 73.7–75.6 s | 76.7–79.0 s | 78.6–80.6 s |
+| The worst hit | the Colossus's lane, 36 = **24.8%** | 64 = 27.8% | 107 = 28.2% |
+| Bodies killed | 131–133 | | 160 |
+| Most alive at once | 15 | | 16 |
+
+A Normal run, seed 11: the road and camp A 19.7 s (A's 14 residents fall in about 9 s), B
+cleared at 59.5 s, C's gates close at 66.9 s and it clears at 178.8 s (its wave of 35, then the
+Colossus in 74.6 s). 422 studs walked outside the fights = 21 s.
+
+**The Wave 1 scenarios, Normal, every seed:**
+- **Standing still where a group first wakes** (A's fire1, as he crosses the Pickets): woken at
+  11.7–11.8 s, down **9.7–9.8 s** later (band 6–12 s).
+- **A first strike**, each of the five fire groups of A and B alone, walked up to from the
+  road: woken by sight, his first hit 0.12–0.17 s after the wake, their first windup 1.4–1.6 s
+  after it (one seed of A.fire2 never wound up). Passes.
+- **The leash** (`kite`: two kills in A, out to the road, wait, back): out at 12.6–13.5 s with
+  11–12 alive (2–3 hurt), the groups at rest again 4.5 s later, back in after 2.3 s: every
+  survivor whole, the dead still dead, one leash each; then a normal clear. Passes.
+- **The edge** (`edge`, 3.1 studs outside A's east edge by its gate guards, 30 s): 152 hits,
+  every one "blocked", 10 wakes, 0 kills, 0 paid. Passes.
+
+### L1b: what a clear pays (reported, not banded)
+
+| | Normal | Hard | Brutal |
+|---|---|---|---|
+| Residents of A | 2,200 cash, 2 Timber | 11,200, 16 | 22,400, 32 |
+| Residents of B | 13,000, 33 | 36,800, 84 | 73,600, 168 |
+| Residents of C | 2,600, 6 | 7,600, 16 | 15,200, 32 |
+| C's wave, the Colossus and its 48 calls | 43,000, 88, 10 Valor | 92,000, 184, 20 Valor | 199,200, 400, 40 Valor |
+| **The clear** | **60,800 cash, 129 Timber, 10 Valor** | **147,600, 300, 20** | **310,400, 632, 40** |
+| Against L1's Normal (88,200 / 155 / 10) | −31.1% cash, −16.8% Timber | ×2.43 cash, ×2.33 Timber of Normal | ×5.11, ×4.90 |
+
+- Every run of every policy was paid exactly the sum of its kills' rewards (solo, the carry never
+  holds a fraction at a multiplier of 1), and every lost run kept every kill (`sim_range.py`,
+  33 Normal runs, 18 each on Hard and Brutal). Valor is exactly 10, 20 and 40.
+- **By the minute the clear pays more than L1:** about 19,800 cash a minute on Normal against
+  L1's 13,400, because the residents' fights have no `targetWaveSeconds` spreading them.
+- The boss's calls pay 67 cash/s against the clear's 330 on Normal (20%): standing at the boss
+  to farm its calls still never pays.
+
+### L1b: bands (`--check`)
+
+| Band | Where | Value | Now |
+|---|---|---|---|
+| **Normal: the first clear, every seed** | sim_range | **5–8 min** | **2.98–3.18 min: FAILS** (see the flag) |
+| Normal: the Colossus alone / in the run | sim_range | 64–90 s | 75.0–77.6 / 73.7–75.6 s |
+| Normal: no hit over | sim_range | 25% of 145 | 24.8% |
+| Still in a woken group of camp A | sim_range | 6–12 s from the wake | 9.7–9.8 s |
+| A first strike on every fire group | sim_range | his hit before any windup | 15 of 15 |
+| The leash (`kite`) | sim_range | whole on return, the dead dead, paid only for kills | 3 of 3 |
+| The edge (`edge`) | sim_range | 0 from that group | 0, 152 blocked |
+| Every kill paid once, at once; Valor exact | sim_range, sim_combat 21 | solo exact | exact |
+| Hard and Brutal: hit ceiling, the Colossus | sim_range | 30%; 64–100 s | 27.8%, 28.2%; 76.7–80.6 s |
+| Hard and Brutal: the clears, the human gates | sim_range | reported (draft point 8) | above |
+| SplitCarry fuzz | sim_combat 22 | never over the shares, never a unit under, carry < 1 | 400 runs × 60 kills |
+| Population = Validate's | sim_combat 23 | by hand = Plan, ≤ 160 | 93, 103, 103 |
+| The Wave 1 layout table | check_levels | the contract's table | pass; 22 of 23 data mutations caught (the miss left B inside its band) |
+| The mirrors are the Luau | check_stage_mirror | CampBrain, KillReward, SplitCarry, FieldClear, SafePoint, Plan's zones, groups and population, the L1b refusals, scripted runs with checkpoints and open camps | all equal; 28 of 28 Luau mutants caught |
+
+### L1b: the Raider Arena
+
+Its numbers are frozen and every L1 band holds: the Colossus alone 76.8 s, the Warlord 97.7 s,
+still in wave 1 down at 10.6–10.8 s, clears at 10.19, 10.35 and 11.97 min, the worst hit 24.8%.
+**What moves is L1b-15: a failed arena run now keeps every kill** (the player who never dodges
+keeps 16,800 to 24,960 cash where L1 dropped the wave in progress). A cleared run pays the same
+144,250 cash, 258 Timber and 35 Valor: solo at a cash multiplier of 1 the carry changes nothing.
+
+### L1b: flags for the owner
+
+- **The first-clear band (5–8 min) cannot be met at Wave 1's size, and I did not force it.** The
+  residents replace the waves of A and B: L1 fought 79 bodies in A and 149 in B, spread over
+  `targetWaveSeconds`; Wave 1 holds 14 and 28 (the gates allow at most 18 and 40), and a
+  reacting player kills a fodder in about a second. Road 21 s + A 9 s + B 40 s + C 112 s = 3
+  min; at the gates' maxima about 3.3 min. The one lever that reaches 5 min is more waves in the
+  boss room: three of L1's B waves added to C give 4.96–5.35 min (measured), but C then takes
+  four minutes of the run and "the waves and the Colossus follow as in L1" no longer holds.
+  **The lead must choose:** (a) the band is reported in Wave 1 and comes back at Wave 2's size
+  (about 10 min, 100–120 residents), which I recommend; (b) C gains waves; or (c) a Wave 1 band
+  of 2.5–4 min. Either (a) or (c) is one line in `sim_range.py` (`FOREST_CLEAR_SECONDS` or
+  `check_forest`).
+- **The pay drops with the time:** 60,800 cash on Normal against L1's 88,200, though more by the
+  minute. It returns with Wave 2's residents.
+- **The simulated player is never hit by a resident** on Normal. Residents rise into a fight he
+  starts; real play will cost more than the 2–3 slinger hits his human twin takes.
+- **The edge player's blocked hits wake the gate guards 10 times in 30 s**, each wake a 3-second
+  leash and a walk home, each a "!" on his screen. Ben may find that noisy.
+- **Hard and Brutal residents are the same 60 bodies.** Brutal differs in the open camps only by
+  health and damage. Wave 2 can give Brutal its own `minDifficulty` units.

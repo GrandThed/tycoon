@@ -4,7 +4,7 @@
 	"name": "Forest Road",
 	"layout": "ForestRoad",
 	"material": "Timber",
-	"targetMinutes": 7,
+	"targetMinutes": 3,
 	"runCapSeconds": 1050,
 	"difficulties": {
 		"normal": { "hpScale": 1.5, "damageScale": 1.12, "plateScale": 1, "countMult": 1, "rewardMult": 1, "recommendedTier": 2 },

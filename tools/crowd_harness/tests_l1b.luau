@@ -362,6 +362,16 @@ function L1B.planTests(): ()
 	check(near(gate.yaw, 0) and near(throne.yaw, math.pi) and normal["B.post"].radius == 0 and near(hard["B.lookout"].yaw, math.pi / 2), "facing in degrees becomes yaw in radians (0, 180, 90); a spot that is no fire has radius 0")
 	check(not fire.held and not gate.held and throne.held, "only the boss room's groups are held (L1b-13)")
 	check(gate.points[3].Y == 8 and throne.points[1].Y == 4, "every point at its floor's height")
+
+	print(" Resolve: a level file's camps reach the plan")
+	local file = L1B.level()
+	local resolved = L1B.Flow.Resolve(file, nil, 1200, "normal")
+	check(resolved ~= nil and resolved.camps == file.camps and #resolved.camps == 3, "a level file's resident camps are kept as they stand")
+	local fromFile = if resolved ~= nil then L1B.plan(resolved) else nil
+	check(fromFile ~= nil and #fromFile.groups == 6 and fromFile.population == 68, "and Plan places their groups (6 on Normal, population 68)")
+	file.camps = nil
+	local bare = L1B.Flow.Resolve(file, nil, 1200, "normal")
+	check(bare ~= nil and type(bare.camps) == "table" and #bare.camps == 0, "a file with no camps resolves to none ({}), never nil")
 end
 L1.group("l1b planTests", L1B.planTests)
 

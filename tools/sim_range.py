@@ -4765,8 +4765,9 @@ GATE_PYTHON = (3, 12)  # the interpreter the bands are measured on: see interpre
 FOREST_LEVEL = "forestRoad"
 FOREST_BOSS = "colossus"
 # L1b: Normal's first clear, from the start point to the Colossus's fall, walking included.
-# Hard's and Brutal's clears are reported, not banded, in Wave 1.
-FOREST_CLEAR_SECONDS = (300.0, 480.0)
+# Hard's and Brutal's clears are reported, not banded, in Wave 1. Wave 1 keeps L1's camp sizes,
+# whose resident caps hold a clear near 3 minutes (lead ruling); Wave 2's size brings ~10 back.
+FOREST_CLEAR_SECONDS = (150.0, 240.0)
 # L1b: standing still in the group of camp A that wakes first, down this long after its wake.
 FOREST_STILL_DOWN = (6.0, 12.0)
 FOREST_BOSS_SECONDS = {"normal": (64.0, 90.0), "hard": (64.0, 100.0), "brutal": (64.0, 100.0)}
@@ -5754,6 +5755,7 @@ class LevelRun(ThreatRun):
         self.wake_floors = set()  # CrowdService.WakeFloor: released at the next step
         self.engaged = False
         self.stood_at = None
+        self.crossing = None  # the still player: the open camp he is walking across
         self.kite = None
         # The residents (WaveService's start: AddGroup, Posts, SpawnResident).
         self.groups = []
@@ -5966,6 +5968,16 @@ class LevelRun(ThreatRun):
                 self.path = []
             return
         if self.mode == "road":
+            if self.still and self.policy.get("stop"):
+                # The still player never clears: he walks on across each open camp, entry to exit,
+                # until a group wakes (note() stops him there for good).
+                if not self.path:
+                    if self.crossing != floor:
+                        self.crossing = floor
+                        self.path = [(zone["exit"][0], zone["exit"][1], zone["floorY"])]
+                    else:
+                        self.leave_zone(floor)
+                return
             if not self.residents_left(floor):
                 if self.path and self.near(zone):
                     return  # walking through a camp that is empty: on to its entry, then on

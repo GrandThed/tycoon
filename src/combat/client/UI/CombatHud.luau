@@ -44,7 +44,7 @@
 --    Theme.COMBAT_ABANDON_CONFIRM_SECONDS. There is no Ready (the leader departs from the map)
 --    and no Return in a run.
 --  * On a touch device Abandon is not there while the local player fights in a `wave` or
---    `boss` phase (lead ruling, 2026-10-13). That corner is the left thumb's: a thumb that
+--    `boss` phase (lead ruling, 2026-10-13), or is engaged by a resident camp group (L1b). That corner is the left thumb's: a thumb that
 --    lands on the button to move does not move, lifts and presses the same spot again, and
 --    the second press would abandon the run, so asking twice does not protect it. It shows on
 --    the road, in a camp's countdown and in a breather, and all along for a player who is
@@ -1099,6 +1099,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		local localUserId = Players.LocalPlayer.UserId
 		local localWaiting = false
 		local localDown = false
+		local localEngaged = false
 		local humans = 0
 		-- A share only means something with company; solo it would always read 100%.
 		local showShare = #run.party > 1 and phase ~= "lobby"
@@ -1129,6 +1130,10 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 			local down = not member.alive or member.down == true
 			if down and member.userId == localUserId then
 				localDown = true
+			end
+			-- L1b: a resident camp's fight runs in `travel`, so the phase alone cannot say it.
+			if member.engaged == true and member.userId == localUserId then
+				localEngaged = true
 			end
 			local suffix = if down then " · DOWN" elseif member.bot then " · BOT" else ""
 			row.nameLabel.Text = (if member.host == true then HOST_MARK else "")
@@ -1174,7 +1179,7 @@ function CombatHud.new(parent: Instance, deps: Deps): CombatHudHandle
 		-- No Abandon under the left thumb of a player in the middle of a fight (see the
 		-- header). One who is waiting or down is not fighting, and may want to leave.
 		local underThumb = touchDevice
-			and (phase == "wave" or phase == "boss")
+			and (phase == "wave" or phase == "boss" or localEngaged)
 			and not localWaiting
 			and not localDown
 		-- Fix round: who may abandon is one question and whether the button shows is another.

@@ -173,7 +173,6 @@ local function trySendHome(player: Player, reason: string, kind: LeaveKind): boo
 		reason = "leave",
 		campsCleared = 0,
 		camps = 0,
-		savedAt = "",
 		star = false,
 	}
 	local summaryState = ArenaService.BuildRunState("summary", summary, leaveResult)

@@ -1149,10 +1149,8 @@ L1_MUTATIONS = {
     ),
     "l1: a stage's cap is always the level's": (
         FLOW,
-        "local cap = stage.maxAlive or level.crowd.maxAlive
-		caps[zone.id] = cap",
-        "local cap = level.crowd.maxAlive
-		caps[zone.id] = cap",
+        "local cap = stage.maxAlive or level.crowd.maxAlive\n\t\tcaps[zone.id] = cap",
+        "local cap = level.crowd.maxAlive\n\t\tcaps[zone.id] = cap",
     ),
     "l1: Plan carries a missing name to the client": (
         FLOW,
@@ -2324,6 +2322,52 @@ L1B_RUN_MUTATIONS = {
         GEOMETRY,
         "x = centre.x,\n\t\ty = camp.y + size.sy / 2,\n\t\tz = centre.z,",
         "x = centre.z,\n\t\ty = camp.y + size.sy / 2,\n\t\tz = centre.x,",
+    ),
+    # Added by the second B (the continuation, 2026-10-14): Validate's other new refusals, the
+    # reach's once-only rule, the countdown's safe point and the minDifficulty rank edge.
+    "l1b: Validate without the population gate": (FLOW, "if population > crowdMax then", "if false then"),
+    "l1b: a locking camp no stage names passes Validate": (
+        FLOW,
+        "if camp.locks == true and times ~= 1 then",
+        "if camp.locks == true and times > 1 then",
+    ),
+    "l1b: Validate takes a checkpointReach of 0": (
+        FLOW,
+        'if type(value) == "number" and not (value > 0) then',
+        "if false then",
+    ),
+    "l1b: Validate takes a negative populationReserve": (
+        FLOW,
+        'if type(reserve) == "number" and not (reserve >= 0) then',
+        "if false then",
+    ),
+    "l1b: Validate takes two camps entries for one camp": (FLOW, "elseif entries[id] then", "elseif false then"),
+    "l1b: Validate takes a spot id used twice": (FLOW, "elseif seen[id] then", "elseif false then"),
+    "l1b: Validate takes a fire of radius 0": (
+        FLOW,
+        'if posture == "fire" and not (type(spot.radius) == "number" and spot.radius > 0) then',
+        "if false then",
+    ),
+    "l1b: a minDifficulty unit joins one difficulty late": (
+        FLOW,
+        "if needs ~= nil and (needsRank == nil or needsRank > rank) then",
+        "if needs ~= nil and (needsRank == nil or needsRank >= rank) then",
+    ),
+    "l1b: a zone counts no residents": (FLOW, "residents = residents[camp.id] or 0,", "residents = 0,"),
+    "l1b: a checkpoint at the world's height": (
+        FLOW,
+        "checkpoint = if mark ~= nil then Vector3.new(mark.x, camp.y, mark.z) else nil,",
+        "checkpoint = if mark ~= nil then Vector3.new(mark.x, 0, mark.z) else nil,",
+    ),
+    "l1b: reach twice": (
+        FLOW,
+        "if mark == nil or state.reached[index] then",
+        "if mark == nil then",
+    ),
+    "l1b: SafePoint in the countdown is a checkpoint": (
+        FLOW,
+        'if step == "gate" or step == "fight" or step == "breather" then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\treturn zone.entry',
+        'if step == "fight" or step == "breather" then\n\t\tlocal stage = plan.stages[state.stage]\n\t\tlocal zone = if stage ~= nil then stage.zone else nil\n\t\tif zone ~= nil then\n\t\t\treturn zone.entry',
     ),
 }
 MUTATIONS.update(L1B_RUN_MUTATIONS)
